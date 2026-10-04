@@ -22,7 +22,6 @@ let update_checksum : (string -> tx_report -> unit) ref =
 let persist_local_tx : (string -> tx_report -> unit) ref =
   ref (fun _ _ -> ())
 
-let kw s = Wire.Keyword s
 
 (* perf-time-ms — float ms *)
 let perf_time_ms () = Int64.to_float (Date_time_util.time_ms ())
@@ -104,7 +103,7 @@ let log_tx_outliner_op_perf (data : Wire.t) =
           Wire.Map
             (List.filter
                (fun (k, _) ->
-                 k = kw "op-names" || k = kw "worker-apply-ms")
+                 k = Wire.keyword "op-names" || k = Wire.keyword "worker-apply-ms")
                (Wire.as_map data'))
         in
         Worker_log.info ":db-worker/outliner-op-perf"
@@ -130,7 +129,7 @@ let log_outliner_op_perf (data : Wire.t) =
   else ()
 
 let perf_wire (data : (string * Wire.t) list) : Wire.t =
-  Wire.Map (List.map (fun (k, v) -> (kw k, v)) data)
+  Wire.Map (List.map (fun (k, v) -> (Wire.keyword k, v)) data)
 
 let ms_wire (ms : float) : Wire.t = Wire.Float ms
 
@@ -151,7 +150,7 @@ let renderer_tx_meta (tx_meta : tx_meta) : Wire.t =
     (List.filter_map
        (fun (a, v) ->
           if List.mem a renderer_tx_meta_keys then
-            Some (kw a, Ds_wire.transit_of_value v)
+            Some (Wire.keyword a, Ds_wire.transit_of_value v)
           else None)
        tx_meta)
 
@@ -241,12 +240,12 @@ let renderer_route_candidates (_db : db) (blocks : entity list)
     (List.filter_map Fun.id
        [ (if task_ids <> [] then
             Some
-              ( kw "task-route-candidate-ids"
+              ( Wire.keyword "task-route-candidate-ids"
               , Wire.Array (List.map (fun i -> Wire.Int i) task_ids) )
           else None)
        ; (if comment_ids <> [] then
             Some
-              ( kw "comment-route-candidate-ids"
+              ( Wire.keyword "comment-route-candidate-ids"
               , Wire.Array (List.map (fun i -> Wire.Int i) comment_ids) )
           else None) ])
 
@@ -305,9 +304,9 @@ let main_thread_sync_result (repo : string) (conn : conn)
     in
     let payload =
       Wire.Map
-        ([ kw "repo", Wire.String repo
-         ; kw "tx-meta", renderer_tx_meta r.tx_meta
-         ; kw "delta", delta ]
+        ([ Wire.keyword "repo", Wire.String repo
+         ; Wire.keyword "tx-meta", renderer_tx_meta r.tx_meta
+         ; Wire.keyword "delta", delta ]
          @ Wire.as_map route)
     in
     (match tx_meta_string r "ui/perf-id" with
@@ -329,7 +328,7 @@ let broadcast_main_thread_sync (r : tx_report) (s : sync_result) : unit =
   Broadcast.to_clients ~kind:"sync-db-changes"
     ~transit_payload:
       (Transit_codec.to_string
-         (Wire.Array [ kw "sync-db-changes"; s.sync_payload ]));
+         (Wire.Array [ Wire.keyword "sync-db-changes"; s.sync_payload ]));
   let perf_id =
     match tx_meta_v r "ui/perf-id" with
     | Some v -> Ds_wire.transit_of_value v
@@ -337,11 +336,11 @@ let broadcast_main_thread_sync (r : tx_report) (s : sync_result) : unit =
   in
   log_outliner_op_perf
     (perf_wire
-       [ "stage", kw "sync-db-to-main-thread"
+       [ "stage", Wire.keyword "sync-db-to-main-thread"
        ; "perf-id", perf_id
        ; ( "outliner-op"
          , match outliner_op_of r.tx_meta with
-           | Some o -> kw o
+           | Some o -> Wire.keyword o
            | None -> Wire.Nil )
        ; "tx-count", Wire.Int (List.length s.sync_tx_report.tx_data)
        ; "pipeline-ms", ms_wire (elapsed_ms s.sync_pipeline_at s.sync_started_at)
@@ -359,18 +358,18 @@ let report_post_commit_error repo (tx_meta : tx_meta) stage exn =
        ~transit_payload:
          (Transit_codec.to_string
             (Wire.Array
-               [ kw "capture-error"
+               [ Wire.keyword "capture-error"
                ; Wire.Map
-                   [ kw "error"
+                   [ Wire.keyword "error"
                    , Wire.String (Printexc.to_string exn)
-                   ; ( kw "payload"
+                   ; ( Wire.keyword "payload"
                      , Wire.Map
                          (List.filter_map Fun.id
-                            [ Some (kw "repo", Wire.String repo)
-                            ; Some (kw "stage", kw stage)
+                            [ Some (Wire.keyword "repo", Wire.String repo)
+                            ; Some (Wire.keyword "stage", Wire.keyword stage)
                             ; (match outliner_op_of tx_meta with
                                | Some o ->
-                                   Some (kw "outliner-op", kw o)
+                                   Some (Wire.keyword "outliner-op", Wire.keyword o)
                                | None -> None) ]) ) ] ]))
    with report_error ->
      Worker_log.error "db-worker/report-post-commit-handler-failed"
@@ -444,11 +443,11 @@ let process_committed_tx ~persist_enabled ~checksum_enabled
   in
   log_outliner_op_perf
     (perf_wire
-       [ "stage", kw "db-listener-complete"
+       [ "stage", Wire.keyword "db-listener-complete"
        ; "perf-id", perf_id
        ; ( "outliner-op"
          , match outliner_op_of r.tx_meta with
-           | Some o -> kw o
+           | Some o -> Wire.keyword o
            | None -> Wire.Nil )
        ; "tx-count", Wire.Int (List.length r.tx_data)
        ; "checksum-ms", ms_wire (checksum_at -. started_at)
@@ -458,7 +457,7 @@ let process_committed_tx ~persist_enabled ~checksum_enabled
          , Wire.Array
              (List.map
                 (fun (k, ms) ->
-                   Wire.Array [ kw k; ms_wire ms ])
+                   Wire.Array [ Wire.keyword k; ms_wire ms ])
                 !handler_timings) )
        ; "total-ms", ms_wire (perf_time_ms () -. started_at) ])
 
@@ -545,11 +544,11 @@ let capture_error (api : string) (payload : Wire.t) (extra : Wire.t) : unit =
     ~transit_payload:
       (Transit_codec.to_string
          (Wire.Array
-            [ kw "capture-error"
+            [ Wire.keyword "capture-error"
             ; Wire.Map
-                [ kw "error", Wire.String api
-                ; kw "payload", payload
-                ; kw "extra", extra ] ]))
+                [ Wire.keyword "error", Wire.String api
+                ; Wire.keyword "payload", payload
+                ; Wire.keyword "extra", extra ] ]))
 
 (* sync-deps: capture-error reporting *)
 let () = Sync_deps.capture_error := Some capture_error

@@ -3,7 +3,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let pulled_parent_id (p : pulled_entity) : entity_id option =
   match List.assoc_opt (Keyword "block/parent") p.pulled_attrs with
@@ -18,9 +17,9 @@ let pulled_order (p : pulled_entity) : string =
   | _ -> ""
 
 let drop_key (k : string) (pairs : (Wire.t * Wire.t) list) =
-  List.filter (fun (key, _) -> key <> kw k) pairs
+  List.filter (fun (key, _) -> key <> Wire.keyword k) pairs
 
-let assoc_wire k v pairs = (kw k, v) :: pairs
+let assoc_wire k v pairs = (Wire.keyword k, v) :: pairs
 
 (* otree/blocks->vec-tree-data — recursive :block/children assembly on
    pulled maps; emits transit-ready wire maps. cljs opt
@@ -63,7 +62,7 @@ let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
        |> assoc_wire "block/level" (Wire.Int level)
        |> assoc_wire "block/children" (Wire.List children)
        |> assoc_wire "block/parent"
-            (Wire.Map [ (kw "db/id", Wire.Int parent) ]))
+            (Wire.Map [ (Wire.keyword "db/id", Wire.Int parent) ]))
   and children_of (parent : entity_id) (level : int) : Wire.t list =
     List.map (fun m -> block_wire m parent level) (sorted_children parent)
   in

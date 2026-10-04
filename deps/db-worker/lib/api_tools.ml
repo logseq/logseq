@@ -6,7 +6,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 exception Api_error = Dispatcher.Exn_info
 
@@ -50,14 +49,14 @@ let validate_uuid_list field_name (xs : string list) =
            (Printf.sprintf
               "Tool arguments are invalid:\n%s must be a uuid string"
               field_name)
-           [ (kw "errors", Wire.String field_name) ])
+           [ (Wire.keyword "errors", Wire.String field_name) ])
     xs
 
 let validate_operation (op : Wire.t) =
   let et = entity_type op and oper = operation op in
   let invalid msg =
     fail_api (Printf.sprintf "Tool arguments are invalid:\n%s" msg)
-      [ (kw "errors", Wire.String msg) ]
+      [ (Wire.keyword "errors", Wire.String msg) ]
   in
   if not (List.mem oper [ "add"; "edit" ]) then
     invalid "operation must be \"add\" or \"edit\"";
@@ -138,11 +137,11 @@ let operations_idents (db : db) (operations : Wire.t list) : op_idents =
            | Some e, Some id ->
                let card =
                  match Ldb.value e "db/cardinality" with
-                 | Some v -> [ (kw "db/cardinality", Ds_wire.transit_of_value v) ]
+                 | Some v -> [ (Wire.keyword "db/cardinality", Ds_wire.transit_of_value v) ]
                  | None -> []
                and ty =
                  match Ldb.value e "logseq.property/type" with
-                 | Some v -> [ (kw "logseq.property/type", Ds_wire.transit_of_value v) ]
+                 | Some v -> [ (Wire.keyword "logseq.property/type", Ds_wire.transit_of_value v) ]
                  | None -> []
                in
                existing_properties := (id, Wire.Map (card @ ty)) :: !existing_properties
@@ -210,13 +209,13 @@ let operations_idents (db : db) (operations : Wire.t list) : op_idents =
 (* --- op -> import-edn fragments --- *)
 
 let build_add_block (op : Wire.t) (idents : op_idents) : Wire.t =
-  let base = [ (kw "block/title", Wire.String (Option.value (data_str op "title") ~default:"")) ] in
+  let base = [ (Wire.keyword "block/title", Wire.String (Option.value (data_str op "title") ~default:"")) ] in
   match data_str_list op "tags" with
   | [] -> Wire.Map base
   | tags ->
       Wire.Map
         ( base
-        @ [ ( kw "build/tags"
+        @ [ ( Wire.keyword "build/tags"
             , Wire.Array (List.map (get_ident_w idents.class_idents) tags) ) ] )
 
 let ops_new_page_ids (operations : Wire.t list) : (string, unit) Hashtbl.t =
@@ -247,14 +246,14 @@ let assert_add_block_page_ids (db : db) (operations : Wire.t list) : unit =
                   (Printf.sprintf
                      "Block page-id %S must be a page uuid or the id of a page added in the same call"
                      page_id)
-                  [ (kw "page-id", Wire.String page_id) ];
+                  [ (Wire.keyword "page-id", Wire.String page_id) ];
               match entity db (Lookup_ref ("block/uuid", Uuid page_id)) with
               | Some ent when Entity_util.page ent -> ()
               | _ ->
                   fail_api
                     (Printf.sprintf "Block page-id %S is not an existing page"
                        page_id)
-                    [ (kw "page-id", Wire.String page_id) ])
+                    [ (Wire.keyword "page-id", Wire.String page_id) ])
         | None -> ())
     operations
 
@@ -301,19 +300,19 @@ let ops_existing_pages_and_blocks (db : db) (operations : Wire.t list)
         List.filter_map (fun (p, op) -> if p = pid then Some op else None) pairs
       in
       Wire.Map
-        [ (kw "page", Wire.Map [ (kw "block/uuid", Wire.Uuid pid) ])
-        ; ( kw "blocks"
+        [ (Wire.keyword "page", Wire.Map [ (Wire.keyword "block/uuid", Wire.Uuid pid) ])
+        ; ( Wire.keyword "blocks"
           , Wire.Array
               (List.map
                  (fun op ->
                    if operation op = "add" then build_add_block op idents
                    else
                      let base =
-                       [ ( kw "block/uuid"
+                       [ ( Wire.keyword "block/uuid"
                          , Wire.Uuid (Option.value (field_str op "id") ~default:"") ) ]
                      in
                      match data_str op "title" with
-                     | Some t -> Wire.Map (base @ [ (kw "block/title", Wire.String t) ])
+                     | Some t -> Wire.Map (base @ [ (Wire.keyword "block/title", Wire.String t) ])
                      | None -> Wire.Map base)
                  ops) ) ])
     page_ids
@@ -345,8 +344,8 @@ let ops_pages_and_blocks (db : db) (operations : Wire.t list)
             title
         with
         | Some journal_day ->
-            (kw "page", Wire.Map [ (kw "build/journal", Wire.Int journal_day) ])
-        | None -> (kw "page", Wire.Map [ (kw "block/title", Wire.String title) ])
+            (Wire.keyword "page", Wire.Map [ (Wire.keyword "build/journal", Wire.Int journal_day) ])
+        | None -> (Wire.keyword "page", Wire.Map [ (Wire.keyword "block/title", Wire.String title) ])
       in
       let op_id = field_str op "id" in
       let blocks =
@@ -359,7 +358,7 @@ let ops_pages_and_blocks (db : db) (operations : Wire.t list)
       in
       match blocks with
       | [] -> Wire.Map [ page_entry ]
-      | _ -> Wire.Map [ page_entry; (kw "blocks", Wire.Array blocks) ])
+      | _ -> Wire.Map [ page_entry; (Wire.keyword "blocks", Wire.Array blocks) ])
     new_pages
   @ ops_existing_pages_and_blocks db operations idents
 
@@ -374,27 +373,27 @@ let ops_classes (operations : Wire.t list) (idents : op_idents)
     List.filter_map
       (fun (title, ident) ->
         if List.mem ident idents.existing_classes then None
-        else Some (Wire.String ident, Wire.Map [ (kw "block/title", Wire.String title) ]))
+        else Some (Wire.String ident, Wire.Map [ (Wire.keyword "block/title", Wire.String title) ]))
       idents.class_idents
   in
   let fresh =
     List.map
       (fun op ->
         let title = Option.value (data_str op "title") ~default:"" in
-        let entries = ref [ (kw "block/title", Wire.String title) ] in
+        let entries = ref [ (Wire.keyword "block/title", Wire.String title) ] in
         (match data_str_list op "class-extends" with
          | [] -> ()
          | xs ->
              entries :=
                !entries
-               @ [ ( kw "build/class-extends"
+               @ [ ( Wire.keyword "build/class-extends"
                    , Wire.Array (List.map (get_ident_w idents.class_idents) xs) ) ]);
         (match data_str_list op "class-properties" with
          | [] -> ()
          | xs ->
              entries :=
                !entries
-               @ [ ( kw "build/class-properties"
+               @ [ ( Wire.keyword "build/class-properties"
                    , Wire.Array (List.map (get_ident_w idents.property_idents) xs) ) ]);
         (get_ident_w idents.class_idents title, Wire.Map !entries))
       new_classes
@@ -415,23 +414,23 @@ let ops_properties (operations : Wire.t list) (idents : op_idents)
     List.map
       (fun op ->
         let title = Option.value (data_str op "title") ~default:"" in
-        let entries = ref [ (kw "block/title", Wire.String title) ] in
+        let entries = ref [ (Wire.keyword "block/title", Wire.String title) ] in
         (match data_str op "property-type" with
          | Some pt when List.mem pt user_built_in_property_types ->
-             entries := !entries @ [ (kw "logseq.property/type", kw pt) ]
+             entries := !entries @ [ (Wire.keyword "logseq.property/type", Wire.keyword pt) ]
          | _ -> ());
         (match data_str op "property-cardinality" with
          | Some "many" ->
-             entries := !entries @ [ (kw "db/cardinality", kw "db.cardinality/many") ]
+             entries := !entries @ [ (Wire.keyword "db/cardinality", Wire.keyword "db.cardinality/many") ]
          | _ -> ());
         (match data_str_list op "property-classes" with
          | [] -> ()
          | xs ->
              entries :=
                !entries
-               @ [ ( kw "build/property-classes"
+               @ [ ( Wire.keyword "build/property-classes"
                    , Wire.Array (List.map (get_ident_w idents.class_idents) xs) )
-                 ; (kw "logseq.property/type", kw "node") ]);
+                 ; (Wire.keyword "logseq.property/type", Wire.keyword "node") ]);
         (get_ident_w idents.property_idents title, Wire.Map !entries))
       new_properties
   in
@@ -467,9 +466,9 @@ let validate_one etype title (m : Wire.t) =
         fail_api
           (Printf.sprintf "%s %s is invalid: %s" (entity_type_name etype)
              (Printf.sprintf "%S" title) msg)
-          [ (kw "entity-type", kw etype)
-          ; (kw "title", Wire.String title)
-          ; (kw "entity-map", m) ]
+          [ (Wire.keyword "entity-type", Wire.keyword etype)
+          ; (Wire.keyword "title", Wire.String title)
+          ; (Wire.keyword "entity-map", m) ]
     | Api_error (msg, data) ->
         fail_api
           (Printf.sprintf "%s %s is invalid: %s" (entity_type_name etype)
@@ -543,7 +542,7 @@ let build_upsert_nodes_edn (db : db) (operations : Wire.t list) : Wire.t =
                   let d = data_of op in
                   let d' =
                     Wire.Map
-                      (wire_map_entries d @ [ (kw "title", Wire.String name) ])
+                      (wire_map_entries d @ [ (Wire.keyword "title", Wire.String name) ])
                   in
                   Wire.Map
                     (List.map
@@ -564,14 +563,14 @@ let build_upsert_nodes_edn (db : db) (operations : Wire.t list) : Wire.t =
     Wire.Map
       ( (match pages_and_blocks with
          | [] -> []
-         | xs -> [ (kw "pages-and-blocks", Wire.Array xs) ])
+         | xs -> [ (Wire.keyword "pages-and-blocks", Wire.Array xs) ])
       @ (match classes with
          | [] -> []
-         | xs -> [ (kw "classes", Wire.Map xs) ])
+         | xs -> [ (Wire.keyword "classes", Wire.Map xs) ])
       @
       match properties with
       | [] -> []
-      | xs -> [ (kw "properties", Wire.Map xs) ] )
+      | xs -> [ (Wire.keyword "properties", Wire.Map xs) ] )
   in
   validate_import_edn import_edn;
   import_edn

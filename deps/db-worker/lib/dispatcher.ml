@@ -41,10 +41,9 @@ let exn_message = function
       Printf.sprintf "Assert failed: %s %d:%d" file line col
   | exn -> Printexc.to_string exn
 
-let kw s = Wire.Keyword s
 
 let error_payload message data =
-  Wire.Map [ (kw "message", Wire.String message); (kw "data", data) ]
+  Wire.Map [ (Wire.keyword "message", Wire.String message); (Wire.keyword "data", data) ]
 
 let encode_error _name exn =
   match exn with
@@ -67,7 +66,7 @@ let encode_error _name exn =
   | _ ->
       Wire.Tagged
         ( "js/Error",
-          Wire.Map [ (kw "message", Wire.String (exn_message exn)) ] )
+          Wire.Map [ (Wire.keyword "message", Wire.String (exn_message exn)) ] )
 
 let invoke_transit name transit_args =
   let open Db_worker_effect.Infix in

@@ -369,7 +369,6 @@ let block_class_property_idents db (eid : entity_id) : string list =
 
 (* ---------- write path (outliner/property.cljs) ---------- *)
 
-let kw s = Wire.Keyword s
 
 (* Entity-based helpers mirroring the map versions above *)
 let ent_property_type (e : entity) : string option =
@@ -440,17 +439,17 @@ let throw_error_if_deleting_protected_property (entity_idents : string list)
     raise
       (Outliner_validate.Notification
          (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
+            [ (Wire.keyword "type", Wire.keyword "notification")
+            ; (Wire.keyword "payload",
                Wire.Map
-                 [ (kw "type", kw "error")
-                 ; (kw "message",
+                 [ (Wire.keyword "type", Wire.keyword "error")
+                 ; (Wire.keyword "message",
                     Wire.String "Property is protected and can't be deleted.")
-                 ; (kw "i18n-key", kw "property.validation/protected")
-                 ; (kw "entity-idents",
+                 ; (Wire.keyword "i18n-key", Wire.keyword "property.validation/protected")
+                 ; (Wire.keyword "entity-idents",
                     Wire.Array
                       (List.map (fun i -> Wire.Keyword i) entity_idents))
-                 ; (kw "property", Wire.Keyword property_ident) ]) ]))
+                 ; (Wire.keyword "property", Wire.Keyword property_ident) ]) ]))
 
 (* throw-error-if-removing-private-tag *)
 let throw_error_if_removing_private_tag (entities : entity list) : unit =
@@ -473,16 +472,16 @@ let throw_error_if_removing_private_tag (entities : entity list) : unit =
       raise
         (Outliner_validate.Notification
            (Wire.Map
-              [ (kw "type", kw "notification")
-              ; (kw "payload",
+              [ (Wire.keyword "type", Wire.keyword "notification")
+              ; (Wire.keyword "payload",
                  Wire.Map
-                   [ (kw "message",
+                   [ (Wire.keyword "message",
                       Wire.String ("Can't remove private tags: " ^ joined ^ "."))
-                   ; (kw "i18n-key",
-                      kw "class.validation/cant-remove-private-tags")
-                   ; (kw "i18n-args", Wire.Array [ Wire.String joined ])
-                   ; (kw "type", kw "error") ])
-              ; (kw "property-id", kw "block/tags") ]))
+                   ; (Wire.keyword "i18n-key",
+                      Wire.keyword "class.validation/cant-remove-private-tags")
+                   ; (Wire.keyword "i18n-args", Wire.Array [ Wire.String joined ])
+                   ; (Wire.keyword "type", Wire.keyword "error") ])
+              ; (Wire.keyword "property-id", Wire.keyword "block/tags") ]))
 
 (* throw-error-if-deleting-required-property *)
 let throw_error_if_deleting_required_property (property_ident : string) : unit =
@@ -490,15 +489,15 @@ let throw_error_if_deleting_required_property (property_ident : string) : unit =
     raise
       (Outliner_validate.Notification
          (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
+            [ (Wire.keyword "type", Wire.keyword "notification")
+            ; (Wire.keyword "payload",
                Wire.Map
-                 [ (kw "message",
+                 [ (Wire.keyword "message",
                     Wire.String "Can't remove required property.")
-                 ; (kw "i18n-key",
-                    kw "property.validation/cant-remove-required")
-                 ; (kw "type", kw "error") ])
-            ; (kw "property-id", Wire.Keyword property_ident) ]))
+                 ; (Wire.keyword "i18n-key",
+                    Wire.keyword "property.validation/cant-remove-required")
+                 ; (Wire.keyword "type", Wire.keyword "error") ])
+            ; (Wire.keyword "property-id", Wire.Keyword property_ident) ]))
 
 (* validate-batch-deletion-of-property *)
 let validate_batch_deletion_of_property db (entities : entity list)
@@ -590,8 +589,8 @@ let direct_extends_retraction_tx_data (class_ : entity)
          if List.mem parent.id redundant_parent_ids then
            Some
              (Wire.Array
-                [ kw "db/retract"; Wire.Int class_.id
-                ; kw "logseq.property.class/extends"; Wire.Int parent.id ])
+                [ Wire.keyword "db/retract"; Wire.Int class_.id
+                ; Wire.keyword "logseq.property.class/extends"; Wire.Int parent.id ])
          else None)
       (Ldb.ref_ents class_ "logseq.property.class/extends")
   else []
@@ -656,25 +655,25 @@ let build_property_value_tx_data conn (block : entity) (property_id : string)
       let update_block_tx =
         let m =
           Wire.Map
-            [ (kw "db/id", Wire.Int block.id)
-            ; (kw "block/updated-at",
+            [ (Wire.keyword "db/id", Wire.Int block.id)
+            ; (Wire.keyword "block/updated-at",
                Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
         in
         let m = Cljs_map.assoc m property_id tx_value in
         let m =
           if should_add_task_tag_for_property block property_id then
-            Cljs_map.assoc m "block/tags" (kw "logseq.class/Task")
+            Cljs_map.assoc m "block/tags" (Wire.keyword "logseq.class/Task")
           else m
         in
         if property_id = "logseq.property/template-applied-to" then
-          Cljs_map.assoc m "block/tags" (kw "logseq.class/Template")
+          Cljs_map.assoc m "block/tags" (Wire.keyword "logseq.class/Template")
         else m
       in
       (* cljs multiple-values-empty? is dead: (sequential? old-value) is
          false on the set/scalar an entity attr read yields — the
          empty-placeholder retract is never emitted there either. *)
       (if retract_multiple_values then
-           [ Wire.Array [ kw "db/retract"; Wire.Int block.id; kw property_id ] ]
+           [ Wire.Array [ Wire.keyword "db/retract"; Wire.Int block.id; Wire.keyword property_id ] ]
          else [])
       @ (if extends_ then
            redundant_extends_retraction_tx_data db block value
@@ -722,8 +721,8 @@ let validate_property_value_aux db ~(new_closed_value : bool)
       in
       let pwire =
         Wire.Map
-          [ (kw "db/valueType",
-             (if ent_ref_type property then kw "db.type/ref" else Wire.Nil)) ]
+          [ (Wire.keyword "db/valueType",
+             (if ent_ref_type property then Wire.keyword "db.type/ref" else Wire.Nil)) ]
       in
       let valid =
         validate_property_value_in_tuple db ~validate_fn:(pred db) pwire v
@@ -745,16 +744,16 @@ let fail_parse_double (v_str : string) : float =
       raise
         (Outliner_validate.Notification
            (Wire.Map
-              [ (kw "type", kw "notification")
-              ; (kw "payload",
+              [ (Wire.keyword "type", Wire.keyword "notification")
+              ; (Wire.keyword "payload",
                  Wire.Map
-                   [ (kw "message",
+                   [ (Wire.keyword "message",
                       Wire.String
                         ("Can't convert \"" ^ v_str ^ "\" to a number."))
-                   ; (kw "i18n-key",
-                      kw "property.validation/cant-convert-to-number")
-                   ; (kw "i18n-args", Wire.Array [ Wire.String v_str ])
-                   ; (kw "type", kw "error") ]) ]))
+                   ; (Wire.keyword "i18n-key",
+                      Wire.keyword "property.validation/cant-convert-to-number")
+                   ; (Wire.keyword "i18n-args", Wire.Array [ Wire.String v_str ])
+                   ; (Wire.keyword "type", Wire.keyword "error") ]) ]))
 
 (* convert-property-input-string — block-type is the block's
    :logseq.property/type (string option) *)
@@ -822,19 +821,19 @@ let update_datascript_schema (property : entity) (schema : Wire.t) : Wire.t list
   let base =
     let m =
       Wire.Map
-        [ (kw "db/ident",
+        [ (Wire.keyword "db/ident",
            (match ident with Some i -> Wire.Keyword i | None -> Wire.Nil))
-        ; (kw "db/cardinality", kw cardinality)
-        ; (kw "block/updated-at",
+        ; (Wire.keyword "db/cardinality", Wire.keyword cardinality)
+        ; (Wire.keyword "block/updated-at",
            Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
     in
-    if ref_type then Cljs_map.assoc m "db/valueType" (kw "db.type/ref") else m
+    if ref_type then Cljs_map.assoc m "db/valueType" (Wire.keyword "db.type/ref") else m
   in
   [ base ]
   @ (match new_type with
      | Some _ when old_ref_type && not ref_type ->
          [ Wire.Array
-             [ kw "db/retract"; Wire.Int property.id; kw "db/valueType" ] ]
+             [ Wire.keyword "db/retract"; Wire.Int property.id; Wire.keyword "db/valueType" ] ]
      | _ -> [])
 
 (* validate-property-name-update *)
@@ -855,15 +854,15 @@ let throw_disallowed_many_to_one () : 'a =
   raise
     (Outliner_validate.Notification
        (Wire.Map
-          [ (kw "type", kw "notification")
-          ; (kw "payload",
+          [ (Wire.keyword "type", Wire.keyword "notification")
+          ; (Wire.keyword "payload",
              Wire.Map
-               [ (kw "message",
+               [ (Wire.keyword "message",
                   Wire.String
                     "This property can't change from multiple values to one \
                      value because it has existing data.")
-               ; (kw "i18n-key", kw "property.validation/many-to-one")
-               ; (kw "type", kw "warning") ]) ]))
+               ; (Wire.keyword "i18n-key", Wire.keyword "property.validation/many-to-one")
+               ; (Wire.keyword "type", Wire.keyword "warning") ]) ]))
 
 (* schema-for-update — drop an unsafe many→one cardinality restore when other
    schema fields are being replayed; a cardinality-only many→one with data
@@ -932,8 +931,8 @@ let update_property conn (db_ident : string) (property : entity)
      | attrs ->
          [ Cljs_map.merge
              (Wire.Map
-                [ (kw "db/ident", kw db_ident)
-                ; (kw "block/updated-at",
+                [ (Wire.keyword "db/ident", Wire.keyword db_ident)
+                ; (Wire.keyword "block/updated-at",
                    Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ])
              (Wire.Map
                 (List.map (fun (k, v) -> (Wire.Keyword k, v)) attrs)) ])
@@ -963,7 +962,7 @@ let update_property conn (db_ident : string) (property : entity)
        | _ -> false
      in
      let default_ref_missing =
-       Cljs_map.get schema "logseq.property/type" = Some (kw "default")
+       Cljs_map.get schema "logseq.property/type" = Some (Wire.keyword "default")
        && not (ent_ref_type property)
      in
      let has_closed_values = closed_values_of property <> [] in
@@ -988,14 +987,14 @@ let update_property conn (db_ident : string) (property : entity)
     raise
       (Outliner_validate.Notification
          (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
+            [ (Wire.keyword "type", Wire.keyword "notification")
+            ; (Wire.keyword "payload",
                Wire.Map
-                 [ (kw "message",
+                 [ (Wire.keyword "message",
                     Wire.String
                       "This property's type can't be changed because it has \
                        existing data.")
-                 ; (kw "type", kw "error") ]) ]));
+                 ; (Wire.keyword "type", Wire.keyword "error") ]) ]));
   if tx_data <> [] then
     Db_transact.transact conn tx_data
       [ ("outliner-op", Keyword "update-property")
@@ -1025,20 +1024,20 @@ let validate_bang (db : db) (property : entity) (value : value)
         raise
           (Outliner_validate.Notification
              (Wire.Map
-                [ (kw "type", kw "notification")
-                ; (kw "payload",
+                [ (Wire.keyword "type", Wire.keyword "notification")
+                ; (Wire.keyword "payload",
                    Wire.Map
-                     [ (kw "message", Wire.String error_msg)
-                     ; (kw "i18n-key", kw "property.validation/invalid-value")
-                     ; (kw "i18n-args",
+                     [ (Wire.keyword "message", Wire.String error_msg)
+                     ; (Wire.keyword "i18n-key", Wire.keyword "property.validation/invalid-value")
+                     ; (Wire.keyword "i18n-args",
                         Wire.Array [ Wire.String title; Wire.String msg ])
-                     ; (kw "type", kw "warning") ])
-                ; (kw "property",
+                     ; (Wire.keyword "type", Wire.keyword "warning") ])
+                ; (Wire.keyword "property",
                    (match Ldb.ident_of property with
                     | Some i -> Wire.Keyword i
                     | None -> Wire.Nil))
-                ; (kw "value", Ds_wire.transit_of_value value)
-                ; (kw "errors", Wire.Array [ Wire.String msg ]) ]))
+                ; (Wire.keyword "value", Ds_wire.transit_of_value value)
+                ; (Wire.keyword "errors", Wire.Array [ Wire.String msg ]) ]))
 
 (* throw-error-if-invalid-property-value *)
 let throw_error_if_invalid_property_value db (property : entity) (value : value)
@@ -1067,7 +1066,7 @@ let throw_error_if_invalid_new_property_value db (property : entity)
 (* ->eid — uuid → lookup ref, other → as-is *)
 let to_eid (v : Wire.t) : Wire.t =
   match v with
-  | Wire.Uuid _ -> Wire.Array [ kw "block/uuid"; v ]
+  | Wire.Uuid _ -> Wire.Array [ Wire.keyword "block/uuid"; v ]
   | _ -> v
 
 let entity_of_eid db (eid : Wire.t) : entity option =
@@ -1159,20 +1158,20 @@ let create_property_text_block conn ~(block_id : Wire.t option)
   let new_value_block =
     let m =
       Wire.Map
-        [ (kw "block/uuid",
+        [ (Wire.keyword "block/uuid",
            (match new_block_id with
             | Some u -> Wire.Uuid u
             | None -> Wire.Uuid (Uuid_gen.uuid ())))
-        ; (kw "block/page", page_ref)
-        ; (kw "block/parent", block_ref)
-        ; (kw "logseq.property/created-from-property",
+        ; (Wire.keyword "block/page", page_ref)
+        ; (Wire.keyword "block/parent", block_ref)
+        ; (Wire.keyword "logseq.property/created-from-property",
            (if Ldb.ident_of property = Some "logseq.property/default-value"
             then block_ref
             else
               match Ldb.ident_of property with
               | Some i -> Wire.Keyword i
               | None -> Wire.Int property.id))
-        ; (kw "block/order", Wire.String (Db_order.gen_key_from_max ())) ]
+        ; (Wire.keyword "block/order", Wire.String (Db_order.gen_key_from_max ())) ]
     in
     let m = Cljs_map.assoc m value_key value' in
     Sqlite_util.block_with_timestamps m
@@ -1365,12 +1364,12 @@ let convert_ref_property_values conn (property_id : string) (value : Wire.t)
          raise
            (Outliner_validate.Notification
               (Wire.Map
-                 [ (kw "type", kw "notification")
-                 ; (kw "property-id", Wire.Keyword property_id)
-                 ; (kw "property-type", Wire.Keyword property_type)
-                 ; (kw "value", value)
-                 ; (kw "many?", Wire.Bool many)
-                 ; (kw "message",
+                 [ (Wire.keyword "type", Wire.keyword "notification")
+                 ; (Wire.keyword "property-id", Wire.Keyword property_id)
+                 ; (Wire.keyword "property-type", Wire.Keyword property_type)
+                 ; (Wire.keyword "value", value)
+                 ; (Wire.keyword "many?", Wire.Bool many)
+                 ; (Wire.keyword "message",
                     Wire.String
                       ("Failed to convert many property values: "
                        ^ Printexc.to_string e)) ])))
@@ -1399,15 +1398,15 @@ let throw_error_if_self_value (block : entity) (value : Wire.t) (ref_ : bool)
     raise
       (Outliner_validate.Notification
          (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
+            [ (Wire.keyword "type", Wire.keyword "notification")
+            ; (Wire.keyword "payload",
                Wire.Map
-                 [ (kw "message",
+                 [ (Wire.keyword "message",
                     Wire.String
                       "Can't set this block itself as own property value.")
-                 ; (kw "i18n-key",
-                    kw "property.validation/cant-set-self-value")
-                 ; (kw "type", kw "error") ]) ]))
+                 ; (Wire.keyword "i18n-key",
+                    Wire.keyword "property.validation/cant-set-self-value")
+                 ; (Wire.keyword "type", Wire.keyword "error") ]) ]))
 
 (* remove-status! *)
 let remove_status conn (block_ids : Wire.t list)
@@ -1467,20 +1466,20 @@ let remove_status conn (block_ids : Wire.t list)
              if empty_placeholder then []
              else if remove_task then
                [ Wire.Array
-                   [ kw "db/retract"; Wire.Int block.id
-                   ; kw "logseq.property/status" ]
+                   [ Wire.keyword "db/retract"; Wire.Int block.id
+                   ; Wire.keyword "logseq.property/status" ]
                ; Wire.Array
-                   [ kw "db/retract"; Wire.Int block.id; kw "block/tags"
-                   ; kw "logseq.class/Task" ] ]
+                   [ Wire.keyword "db/retract"; Wire.Int block.id; Wire.keyword "block/tags"
+                   ; Wire.keyword "logseq.class/Task" ] ]
              else if status_provided then
                [ Cljs_map.assoc
-                   (Wire.Map [ (kw "db/id", Wire.Int block.id) ])
+                   (Wire.Map [ (Wire.keyword "db/id", Wire.Int block.id) ])
                    "logseq.property/status"
-                   (kw "logseq.property/empty-placeholder") ]
+                   (Wire.keyword "logseq.property/empty-placeholder") ]
              else if direct_status then
                [ Wire.Array
-                   [ kw "db/retract"; Wire.Int block.id
-                   ; kw "logseq.property/status" ] ]
+                   [ Wire.keyword "db/retract"; Wire.Int block.id
+                   ; Wire.keyword "logseq.property/status" ] ]
              else [])
           blocks
       in
@@ -1542,7 +1541,7 @@ let batch_remove_property conn (block_ids : Wire.t list) (property_id : string)
                    else []
                  in
                  [ Wire.Array
-                     [ kw "db/retract"; Wire.Int block.id; kw property_id ] ]
+                     [ Wire.keyword "db/retract"; Wire.Int block.id; Wire.keyword property_id ] ]
                  @ retract_blocks_tx)
               blocks
           in
@@ -1625,12 +1624,12 @@ let throw_error_if_invalid_alias db (source_block : entity) (alias_id : entity_i
     raise
       (Outliner_validate.Notification
          (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
+            [ (Wire.keyword "type", Wire.keyword "notification")
+            ; (Wire.keyword "payload",
                Wire.Map
-                 [ (kw "type", kw "error")
-                 ; (kw "i18n-key", kw "page.validation/alias-self")
-                 ; (kw "message",
+                 [ (Wire.keyword "type", Wire.keyword "error")
+                 ; (Wire.keyword "i18n-key", Wire.keyword "page.validation/alias-self")
+                 ; (Wire.keyword "message",
                     Wire.String "Alias can't be the page itself.") ]) ]));
   (match Ldb.ent_of_id db alias_id with
    | Some alias_entity ->
@@ -1644,13 +1643,13 @@ let throw_error_if_invalid_alias db (source_block : entity) (alias_id : entity_i
             raise
               (Outliner_validate.Notification
                  (Wire.Map
-                    [ (kw "type", kw "notification")
-                    ; (kw "payload",
+                    [ (Wire.keyword "type", Wire.keyword "notification")
+                    ; (Wire.keyword "payload",
                        Wire.Map
-                         [ (kw "type", kw "error")
-                         ; (kw "i18n-key",
-                            kw "page.validation/alias-duplicate-owner")
-                         ; (kw "message",
+                         [ (Wire.keyword "type", Wire.keyword "error")
+                         ; (Wire.keyword "i18n-key",
+                            Wire.keyword "page.validation/alias-duplicate-owner")
+                         ; (Wire.keyword "message",
                             Wire.String
                               "This page is already an alias of another page.") ]) ]))
         | _ -> ());
@@ -1658,13 +1657,13 @@ let throw_error_if_invalid_alias db (source_block : entity) (alias_id : entity_i
          raise
            (Outliner_validate.Notification
               (Wire.Map
-                 [ (kw "type", kw "notification")
-                 ; (kw "payload",
+                 [ (Wire.keyword "type", Wire.keyword "notification")
+                 ; (Wire.keyword "payload",
                     Wire.Map
-                      [ (kw "type", kw "error")
-                      ; (kw "i18n-key",
-                         kw "page.validation/alias-owns-aliases")
-                      ; (kw "message",
+                      [ (Wire.keyword "type", Wire.keyword "error")
+                      ; (Wire.keyword "i18n-key",
+                         Wire.keyword "page.validation/alias-owns-aliases")
+                      ; (Wire.keyword "message",
                          Wire.String
                            "A page that has aliases can't be used as an alias.") ]) ]))
    | None -> ());
@@ -1676,13 +1675,13 @@ let throw_error_if_invalid_alias db (source_block : entity) (alias_id : entity_i
     raise
       (Outliner_validate.Notification
          (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
+            [ (Wire.keyword "type", Wire.keyword "notification")
+            ; (Wire.keyword "payload",
                Wire.Map
-                 [ (kw "type", kw "error")
-                 ; (kw "i18n-key",
-                    kw "page.validation/alias-source-is-alias")
-                 ; (kw "message",
+                 [ (Wire.keyword "type", Wire.keyword "error")
+                 ; (Wire.keyword "i18n-key",
+                    Wire.keyword "page.validation/alias-source-is-alias")
+                 ; (Wire.keyword "message",
                     Wire.String
                       "A page that is an alias of another page can't have its \
                        own aliases.") ]) ]))
@@ -1694,13 +1693,13 @@ let throw_error_if_batch_alias_targets (block_eids : Wire.t list)
     raise
       (Outliner_validate.Notification
          (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
+            [ (Wire.keyword "type", Wire.keyword "notification")
+            ; (Wire.keyword "payload",
                Wire.Map
-                 [ (kw "type", kw "error")
-                 ; (kw "i18n-key",
-                    kw "page.validation/alias-batch-multiple-owners")
-                 ; (kw "message",
+                 [ (Wire.keyword "type", Wire.keyword "error")
+                 ; (Wire.keyword "i18n-key",
+                    Wire.keyword "page.validation/alias-batch-multiple-owners")
+                 ; (Wire.keyword "message",
                     Wire.String
                       "Aliases can't be batch-set on multiple pages.") ]) ]))
 
@@ -1844,23 +1843,23 @@ let remove_block_property conn (eid : Wire.t) (property_id : string) : unit =
         if default_value_matches then
           Db_transact.transact conn
             [ Cljs_map.assoc
-                (Wire.Map [ (kw "db/id", Wire.Int b.id) ])
-                property_id (kw "logseq.property/empty-placeholder") ]
+                (Wire.Map [ (Wire.keyword "db/id", Wire.Int b.id) ])
+                property_id (Wire.keyword "logseq.property/empty-placeholder") ]
             tx_meta
           |> ignore
         else if Ldb.is_class b && property_id = "logseq.property.class/extends" then
           Db_transact.transact conn
             [ Wire.Array
-                [ kw "db/retract"; Wire.Int b.id
-                ; kw "logseq.property.class/extends" ]
+                [ Wire.keyword "db/retract"; Wire.Int b.id
+                ; Wire.keyword "logseq.property.class/extends" ]
             ; Wire.Array
-                [ kw "db/add"; Wire.Int b.id
-                ; kw "logseq.property.class/extends"; kw "logseq.class/Root" ] ]
+                [ Wire.keyword "db/add"; Wire.Int b.id
+                ; Wire.keyword "logseq.property.class/extends"; Wire.keyword "logseq.class/Root" ] ]
             tx_meta
           |> ignore
         else if List.mem property_id Db_schema.db_attribute_properties then
           Db_transact.transact conn
-            [ Wire.Array [ kw "db/retract"; Wire.Int b.id; kw property_id ] ]
+            [ Wire.Array [ Wire.keyword "db/retract"; Wire.Int b.id; Wire.keyword property_id ] ]
             tx_meta
           |> ignore
         else batch_remove_property conn [ eid' ] property_id ()
@@ -1893,12 +1892,12 @@ let set_block_db_attribute conn (block : entity) (property : entity option)
        alias_ids);
   let tx_data =
     [ Cljs_map.assoc
-        (Wire.Map [ (kw "db/id", Wire.Int block.id) ])
+        (Wire.Map [ (Wire.keyword "db/id", Wire.Int block.id) ])
         property_id tx_v ]
     @ (if property_id = "logseq.property.class/extends" then
          [ Wire.Array
-             [ kw "db/retract"; Wire.Int block.id
-             ; kw "logseq.property.class/extends"; kw "logseq.class/Root" ] ]
+             [ Wire.keyword "db/retract"; Wire.Int block.id
+             ; Wire.keyword "logseq.property.class/extends"; Wire.keyword "logseq.class/Root" ] ]
        else [])
   in
   Db_transact.transact conn tx_data
@@ -1991,7 +1990,7 @@ let set_block_property conn (block_eid : Wire.t) (property_id : string)
                then existing_ids = new_ids
                else
                  (* cljs compares (= existing-value v') where existing-value
-                    is the entity object (or set of entities) — an int/kw/vector
+                    is the entity object (or set of entities) — an int/Wire.keyword/vector
                     v' is never equal; only a de/entity with the same eid is *)
                  (match v', Ldb.value block property_id with
                   | Wire.Tagged ("datascript/Entity", Wire.Map kvs), Some (Ref id) ->
@@ -2029,15 +2028,15 @@ let upsert_property conn (property_id : string option) (schema : Wire.t)
                 raise
                   (Outliner_validate.Notification
                      (Wire.Map
-                        [ (kw "type", kw "notification")
-                        ; (kw "payload",
+                        [ (Wire.keyword "type", Wire.keyword "notification")
+                        ; (Wire.keyword "payload",
                            Wire.Map
-                             [ (kw "message",
+                             [ (Wire.keyword "message",
                                 Wire.String
                                   "Property failed to create. Please try a \
                                    different property name.")
-                             ; (kw "i18n-key", kw "property/create-error")
-                             ; (kw "type", kw "error") ]) ])))
+                             ; (Wire.keyword "i18n-key", Wire.keyword "property/create-error")
+                             ; (Wire.keyword "type", Wire.keyword "error") ]) ])))
          | None -> failwith "property-id or property-name required")
   in
   if not (String.contains db_ident '/') then
@@ -2094,8 +2093,8 @@ let upsert_property conn (property_id : string option) (schema : Wire.t)
         @ (match db_id with
            | Some id ->
                [ Wire.Array
-                   [ kw "db/retract"; Wire.Int id; kw "block/tags"
-                   ; kw "logseq.class/Page" ] ]
+                   [ Wire.keyword "db/retract"; Wire.Int id; Wire.keyword "block/tags"
+                   ; Wire.keyword "logseq.class/Page" ] ]
            | None -> [])
       in
       Db_transact.transact conn tx_data
@@ -2180,7 +2179,7 @@ let batch_delete_property_value conn (block_eids : Wire.t list)
                  List.map
                    (fun e ->
                       Wire.Array
-                        [ kw "db/retract"; e; kw property_id; property_value ])
+                        [ Wire.keyword "db/retract"; e; Wire.keyword property_id; property_value ])
                    (List.filter_map
                       (fun e ->
                          match entity_of_eid db e with
@@ -2227,8 +2226,8 @@ let batch_delete_property_value conn (block_eids : Wire.t list)
                          | Some v ->
                              Db_transact.transact conn
                                [ Wire.Array
-                                   [ kw "db/retract"; Wire.Int block.id
-                                   ; kw property_id
+                                   [ Wire.keyword "db/retract"; Wire.Int block.id
+                                   ; Wire.keyword property_id
                                    ; Ds_wire.transit_of_value
                                        (match_value_of v) ] ]
                                [ ("outliner-op", Keyword "save-block") ]
@@ -2284,9 +2283,9 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
     | Some _ ->
         let m =
           Wire.Map
-            [ (kw "block/uuid", Wire.Uuid block_id)
-            ; (kw "block/closed-value-property", Wire.Int property.id)
-            ; (kw "block/updated-at",
+            [ (Wire.keyword "block/uuid", Wire.Uuid block_id)
+            ; (Wire.keyword "block/closed-value-property", Wire.Int property.id)
+            ; (Wire.keyword "block/updated-at",
                Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
         in
         let m = Cljs_map.assoc m value_key resolved_value in
@@ -2307,25 +2306,25 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
         let new_block =
           let m =
             Wire.Map
-              [ (kw "block/uuid", Wire.Uuid block_id)
-              ; (kw "block/page",
+              [ (Wire.keyword "block/uuid", Wire.Uuid block_id)
+              ; (Wire.keyword "block/page",
                  (match Ldb.ident_of property with
                   | Some i -> Wire.Keyword i
                   | None -> Wire.Int property.id))
-              ; (kw "block/closed-value-property",
+              ; (Wire.keyword "block/closed-value-property",
                  (match Ldb.ident_of property with
                   | Some i -> Wire.Keyword i
                   | None -> Wire.Int property.id))
-              ; (kw "logseq.property/created-from-property",
+              ; (Wire.keyword "logseq.property/created-from-property",
                  (if
                     Ldb.ident_of property
                     = Some "logseq.property/default-value"
-                  then Wire.Array [ kw "block/uuid"; Wire.Uuid block_id ]
+                  then Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid block_id ]
                   else
                     match Ldb.ident_of property with
                     | Some i -> Wire.Keyword i
                     | None -> Wire.Int property.id))
-              ; (kw "block/parent",
+              ; (Wire.keyword "block/parent",
                  (match Ldb.ident_of property with
                   | Some i -> Wire.Keyword i
                   | None -> Wire.Int property.id)) ]
@@ -2341,8 +2340,8 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
         in
         [ new_block
         ; Wire.Map
-            [ (kw "db/id", Wire.Int property.id)
-            ; (kw "block/updated-at",
+            [ (Wire.keyword "db/id", Wire.Int property.id)
+            ; (Wire.keyword "block/updated-at",
                Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ] ]
   in
   let tx_data' =
@@ -2350,14 +2349,14 @@ let build_closed_value_tx db (property : entity) (resolved_value : Wire.t)
     | Some b when icon' = Wire.Nil ->
         tx_data
         @ [ Wire.Array
-              [ kw "db/retract"; Wire.Int b.id; kw "logseq.property/icon" ] ]
+              [ Wire.keyword "db/retract"; Wire.Int b.id; Wire.keyword "logseq.property/icon" ] ]
     | _ -> tx_data
   in
   tx_data'
   @ (if scoped_class_id <> Wire.Nil then
        [ Wire.Array
-           [ kw "db/add"; Wire.Array [ kw "block/uuid"; Wire.Uuid block_id ]
-           ; kw "logseq.property/choice-classes"; scoped_class_id ] ]
+           [ Wire.keyword "db/add"; Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid block_id ]
+           ; Wire.keyword "logseq.property/choice-classes"; scoped_class_id ] ]
      else [])
 
 (* upsert-closed-value! *)
@@ -2415,13 +2414,13 @@ let upsert_closed_value conn (property_id : string)
          raise
            (Outliner_validate.Notification
               (Wire.Map
-                 [ (kw "error", kw "value-exists")
-                 ; (kw "type", kw "notification")
-                 ; (kw "payload",
+                 [ (Wire.keyword "error", Wire.keyword "value-exists")
+                 ; (Wire.keyword "type", Wire.keyword "notification")
+                 ; (Wire.keyword "payload",
                     Wire.Map
-                      [ (kw "message", Wire.String "Choice already exists.")
-                      ; (kw "i18n-key", kw "property.choice/already-exists")
-                      ; (kw "type", kw "warning") ]) ]));
+                      [ (Wire.keyword "message", Wire.String "Choice already exists.")
+                      ; (Wire.keyword "i18n-key", Wire.keyword "property.choice/already-exists")
+                      ; (Wire.keyword "type", Wire.keyword "warning") ]) ]));
        (match validate_message with
         | Some msg ->
             let vstr =
@@ -2430,19 +2429,19 @@ let upsert_closed_value conn (property_id : string)
             raise
               (Outliner_validate.Notification
                  (Wire.Map
-                    [ (kw "error", kw "value-invalid")
-                    ; (kw "type", kw "notification")
-                    ; (kw "payload",
+                    [ (Wire.keyword "error", Wire.keyword "value-invalid")
+                    ; (Wire.keyword "type", Wire.keyword "notification")
+                    ; (Wire.keyword "payload",
                        Wire.Map
-                         [ (kw "message",
+                         [ (Wire.keyword "message",
                             Wire.String
                               ("Invalid choice \"" ^ vstr
                                ^ "\" for this property: " ^ msg ^ "."))
-                         ; (kw "i18n-key", kw "property.choice/invalid")
-                         ; (kw "i18n-args",
+                         ; (Wire.keyword "i18n-key", Wire.keyword "property.choice/invalid")
+                         ; (Wire.keyword "i18n-args",
                             Wire.Array
                               [ Wire.String vstr; Wire.String msg ])
-                         ; (kw "type", kw "warning") ]) ]))
+                         ; (Wire.keyword "type", Wire.keyword "warning") ]) ]))
         | None -> ());
        (match resolved_value with
         | Wire.Nil -> ()
@@ -2473,7 +2472,7 @@ let upsert_closed_value conn (property_id : string)
                       | Some de ->
                           Db_transact.transact conn
                             [ Cljs_map.assoc_list
-                                (Wire.Map [ (kw "db/id", Wire.Int de.id) ])
+                                (Wire.Map [ (Wire.keyword "db/id", Wire.Int de.id) ])
                                 [ "block/title", Wire.String desc
                                 ; "block/updated-at",
                                   Ds_wire.wire_int64
@@ -2493,7 +2492,7 @@ let upsert_closed_value conn (property_id : string)
                                  | _ -> "")
                           in
                           set_block_property conn
-                            (Wire.Array [ kw "block/uuid"; Wire.Uuid target ])
+                            (Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid target ])
                             "logseq.property/description"
                             (Wire.String desc))
                  | _ -> ())))
@@ -2520,17 +2519,17 @@ let add_existing_values_to_closed_values conn (property_id : string)
                List.map
                  (fun (v : entity) ->
                     Wire.Map
-                      [ (kw "db/id", Wire.Int v.id)
-                      ; (kw "block/closed-value-property",
+                      [ (Wire.keyword "db/id", Wire.Int v.id)
+                      ; (Wire.keyword "block/closed-value-property",
                          Wire.Int property_db_id)
-                      ; (kw "block/parent", Wire.Int property_db_id)
-                      ; (kw "block/page", Wire.Int property_db_id) ])
+                      ; (Wire.keyword "block/parent", Wire.Int property_db_id)
+                      ; (Wire.keyword "block/page", Wire.Int property_db_id) ])
                  ents
              in
              let property_tx =
                Wire.Map
-                 [ (kw "db/id", Wire.Int property_db_id)
-                 ; (kw "block/updated-at",
+                 [ (Wire.keyword "db/id", Wire.Int property_db_id)
+                 ; (Wire.keyword "block/updated-at",
                     Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ]
              in
              Db_transact.transact conn (property_tx :: value_tx)
@@ -2556,21 +2555,21 @@ let delete_closed_value conn (property_id : string) (value_block_id : string)
         raise
           (Outliner_validate.Notification
              (Wire.Map
-                [ (kw "type", kw "notification")
-                ; (kw "payload",
+                [ (Wire.keyword "type", Wire.keyword "notification")
+                ; (Wire.keyword "payload",
                    Wire.Map
-                     [ (kw "message",
+                     [ (Wire.keyword "message",
                         Wire.String
                           "The choice can't be deleted because it's built-in.")
-                     ; (kw "i18n-key",
-                        kw "property.choice/cant-delete-built-in")
-                     ; (kw "type", kw "warning") ]) ]))
+                     ; (Wire.keyword "i18n-key",
+                        Wire.keyword "property.choice/cant-delete-built-in")
+                     ; (Wire.keyword "type", Wire.keyword "warning") ]) ]))
       else begin
         let tx_data =
           Outliner_blocks.delete_blocks db [ value_block ]
           @ [ Wire.Map
-                [ (kw "db/id", Wire.Int property.id)
-                ; (kw "block/updated-at",
+                [ (Wire.keyword "db/id", Wire.Int property.id)
+                ; (Wire.keyword "block/updated-at",
                    Ds_wire.wire_int64 (Time.epoch_ms_to_int64 (Time.now ()))) ] ]
         in
         Db_transact.transact conn tx_data
@@ -2599,8 +2598,8 @@ let class_add_property conn (class_id : string) (property_id : string) : unit =
           | Some property when Ldb.is_property property ->
               Db_transact.transact conn
                 [ Wire.Array
-                    [ kw "db/add"; Wire.Int class_.id
-                    ; kw "logseq.property.class/properties"; kw property_id ] ]
+                    [ Wire.keyword "db/add"; Wire.Int class_.id
+                    ; Wire.keyword "logseq.property.class/properties"; Wire.keyword property_id ] ]
                 [ ("outliner-op", Keyword "class-add-property") ]
               |> ignore
           | _ -> ()
@@ -2617,8 +2616,8 @@ let class_remove_property conn (class_id : string) (property_id : string) : unit
            if not (Db_class.built_in_class_property class_ property) then
              Db_transact.transact conn
                [ Wire.Array
-                   [ kw "db/retract"; Wire.Int class_.id
-                   ; kw "logseq.property.class/properties"; kw property_id ] ]
+                   [ Wire.keyword "db/retract"; Wire.Int class_.id
+                   ; Wire.keyword "logseq.property.class/properties"; Wire.keyword property_id ] ]
                [ ("outliner-op", Keyword "class-remove-property") ]
              |> ignore
        | _ -> ())

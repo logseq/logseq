@@ -7,7 +7,6 @@ open Datascript
 
 exception Notification of Wire.t
 
-let kw s = Wire.Keyword s
 
 let pr_str_title (t : string option) : string =
   (* cljs (pr-str s) for a plain string adds quotes *)
@@ -18,13 +17,13 @@ let pr_str_title (t : string option) : string =
 (* cljs ex-data shape: {:type :notification :payload {...}} *)
 let notification_payload ~message ~i18n_key ~i18n_args : Wire.t =
   Wire.Map
-    [ (kw "type", Wire.Keyword "notification")
-    ; (kw "payload",
+    [ (Wire.keyword "type", Wire.Keyword "notification")
+    ; (Wire.keyword "payload",
        Wire.Map
-         [ (kw "message", Wire.String message)
-         ; (kw "i18n-key", Wire.Keyword i18n_key)
-         ; (kw "i18n-args", Wire.Array i18n_args)
-         ; (kw "type", Wire.Keyword "warning") ]) ]
+         [ (Wire.keyword "message", Wire.String message)
+         ; (Wire.keyword "i18n-key", Wire.Keyword i18n_key)
+         ; (Wire.keyword "i18n-args", Wire.Array i18n_args)
+         ; (Wire.keyword "type", Wire.Keyword "warning") ]) ]
 
 (* entity predicates over an effective tag set — the endpoint calls this
    with the block's tags plus the candidate tag, mirroring cljs
@@ -228,13 +227,13 @@ let notif ?(i18n_key = "") ?(i18n_args = []) ?(kind = "error") (message : string
     : exn =
   Notification
     (Wire.Map
-       [ (kw "type", Wire.Keyword "notification")
-       ; (kw "payload",
+       [ (Wire.keyword "type", Wire.Keyword "notification")
+       ; (Wire.keyword "payload",
           Wire.Map
-            [ (kw "message", Wire.String message)
-            ; (kw "i18n-key", Wire.Keyword i18n_key)
-            ; (kw "i18n-args", Wire.Array i18n_args)
-            ; (kw "type", Wire.Keyword kind) ]) ])
+            [ (Wire.keyword "message", Wire.String message)
+            ; (Wire.keyword "i18n-key", Wire.Keyword i18n_key)
+            ; (Wire.keyword "i18n-args", Wire.Array i18n_args)
+            ; (Wire.keyword "type", Wire.Keyword kind) ]) ])
 
 (* outliner-validate/validate-page-title-no-hashtag *)
 let validate_page_title_no_hashtag (page_title : string) : unit =
@@ -312,18 +311,18 @@ let validate_editing_built_in_property (entity : entity)
         raise
           (Notification
              (Wire.Map
-                [ (kw "type", Wire.Keyword "notification")
-                ; (kw "payload",
+                [ (Wire.keyword "type", Wire.Keyword "notification")
+                ; (Wire.keyword "payload",
                    Wire.Map
-                     [ (kw "message",
+                     [ (Wire.keyword "message",
                         Wire.String
                           "Can't change the given attributes for a built-in property")
-                     ; (kw "type", Wire.Keyword "error") ])
-                ; (kw "property",
+                     ; (Wire.keyword "type", Wire.Keyword "error") ])
+                ; (Wire.keyword "property",
                    (match Ldb.ident_of entity with
                     | Some s -> Wire.Keyword s
                     | None -> Wire.Nil))
-                ; (kw "disallowed-attributes",
+                ; (Wire.keyword "disallowed-attributes",
                    Wire.Set (List.map (fun k -> Wire.Keyword k) disallowed)) ]))
   end
 
@@ -436,18 +435,18 @@ let disallow_node_cant_tag_with_private_tags ?(delete = false) db
     raise
       (Notification
          (Wire.Map
-            [ (kw "type", Wire.Keyword "notification")
-            ; (kw "payload",
+            [ (Wire.keyword "type", Wire.Keyword "notification")
+            ; (Wire.keyword "payload",
                Wire.Map
-                 [ (kw "message", Wire.String msg)
-                 ; (kw "i18n-key",
+                 [ (Wire.keyword "message", Wire.String msg)
+                 ; (Wire.keyword "i18n-key",
                     Wire.Keyword
                       (if delete then "class.validation/cant-remove-tag-built-in"
                        else "class.validation/cant-set-tag-built-in"))
-                 ; (kw "i18n-args", Wire.Array [ Wire.String tag_title ])
-                 ; (kw "type", Wire.Keyword "error") ])
-            ; (kw "property-id", Wire.Keyword "block/tags")
-            ; (kw "property-value", Wire.Int v) ]))
+                 ; (Wire.keyword "i18n-args", Wire.Array [ Wire.String tag_title ])
+                 ; (Wire.keyword "type", Wire.Keyword "error") ])
+            ; (Wire.keyword "property-id", Wire.Keyword "block/tags")
+            ; (Wire.keyword "property-value", Wire.Int v) ]))
 
 (* outliner-validate/disallow-removing-page-tag *)
 let disallow_removing_page_tag db (eids : entity_id list) (v : entity_id) : unit =
@@ -476,40 +475,40 @@ let disallow_removing_page_tag db (eids : entity_id list) (v : entity_id) : unit
                     raise
                       (Notification
                          (Wire.Map
-                            [ (kw "type", Wire.Keyword "notification")
-                            ; (kw "payload",
+                            [ (Wire.keyword "type", Wire.Keyword "notification")
+                            ; (Wire.keyword "payload",
                                Wire.Map
-                                 [ (kw "message",
+                                 [ (Wire.keyword "message",
                                     Wire.String
                                       ("Page \"" ^ title
                                        ^ "\" cannot be converted to a block"))
-                                 ; (kw "type", Wire.Keyword "error")
-                                 ; (kw "i18n-key",
+                                 ; (Wire.keyword "type", Wire.Keyword "error")
+                                 ; (Wire.keyword "i18n-key",
                                     Wire.Keyword "page.convert/cant-be-block")
-                                 ; (kw "i18n-args", Wire.Array [ Wire.String title ])
-                                 ; (kw "property", Wire.Keyword "block/tags") ]) ]))
+                                 ; (Wire.keyword "i18n-args", Wire.Array [ Wire.String title ])
+                                 ; (Wire.keyword "property", Wire.Keyword "block/tags") ]) ]))
                 | Some _ ->
                     (match library_page, Ldb.ref_ent entity "block/parent" with
                      | Some lp, Some p when lp.id = p.id ->
                          raise
                            (Notification
                               (Wire.Map
-                                 [ (kw "type", Wire.Keyword "notification")
-                                 ; (kw "payload",
+                                 [ (Wire.keyword "type", Wire.Keyword "notification")
+                                 ; (Wire.keyword "payload",
                                     Wire.Map
-                                      [ (kw "message",
+                                      [ (Wire.keyword "message",
                                          Wire.String
                                            ("Page \"" ^ title
                                             ^ "\" cannot be converted to a \
                                                block, please move it to another \
                                                page first"))
-                                      ; (kw "type", Wire.Keyword "error")
-                                      ; (kw "i18n-key",
+                                      ; (Wire.keyword "type", Wire.Keyword "error")
+                                      ; (Wire.keyword "i18n-key",
                                          Wire.Keyword
                                            "page.convert/cant-be-block-move-first")
-                                      ; (kw "i18n-args",
+                                      ; (Wire.keyword "i18n-args",
                                          Wire.Array [ Wire.String title ])
-                                      ; (kw "property",
+                                      ; (Wire.keyword "property",
                                          Wire.Keyword "block/tags") ]) ]))
                      | _ ->
                          (* has page children? (:block/_parent) *)
@@ -523,22 +522,22 @@ let disallow_removing_page_tag db (eids : entity_id list) (v : entity_id) : unit
                            raise
                              (Notification
                                 (Wire.Map
-                                   [ (kw "type", Wire.Keyword "notification")
-                                   ; (kw "payload",
+                                   [ (Wire.keyword "type", Wire.Keyword "notification")
+                                   ; (Wire.keyword "payload",
                                       Wire.Map
-                                        [ (kw "message",
+                                        [ (Wire.keyword "message",
                                            Wire.String
                                              ("Page \"" ^ title
                                               ^ "\" cannot be converted to a \
                                                  block because it has page \
                                                  children"))
-                                        ; (kw "type", Wire.Keyword "error")
-                                        ; (kw "i18n-key",
+                                        ; (Wire.keyword "type", Wire.Keyword "error")
+                                        ; (Wire.keyword "i18n-key",
                                            Wire.Keyword
                                              "page.convert/cant-be-block-has-children")
-                                        ; (kw "i18n-args",
+                                        ; (Wire.keyword "i18n-args",
                                            Wire.Array [ Wire.String title ])
-                                        ; (kw "property",
+                                        ; (Wire.keyword "property",
                                            Wire.Keyword "block/tags") ]) ]))))
              end)
       eids
@@ -556,15 +555,15 @@ let validate_page_to_property_conversion (page : entity option) : unit =
       raise
         (Notification
            (Wire.Map
-              [ (kw "type", Wire.Keyword "notification")
-              ; (kw "payload",
+              [ (Wire.keyword "type", Wire.Keyword "notification")
+              ; (Wire.keyword "payload",
                  Wire.Map
-                   [ (kw "message",
+                   [ (Wire.keyword "message",
                       Wire.String "Namespaced pages can't be properties")
-                   ; (kw "i18n-key",
+                   ; (Wire.keyword "i18n-key",
                       Wire.Keyword
                         "page.convert/page-to-property-namespaced")
-                   ; (kw "type", Wire.Keyword "error") ]) ]))
+                   ; (Wire.keyword "type", Wire.Keyword "error") ]) ]))
   | _ -> ()
 
 (* outliner-validate/validate-block-can-tag-with-page-tag *)
@@ -603,12 +602,12 @@ let validate_block_can_tag_with_page_tag db (eids : entity_id list)
                     raise
                       (Notification
                          (Wire.Map
-                            [ (kw "type", Wire.Keyword "notification")
-                            ; (kw "payload",
+                            [ (Wire.keyword "type", Wire.Keyword "notification")
+                            ; (Wire.keyword "payload",
                                Wire.Map
-                                 [ (kw "message", Wire.String message)
-                                 ; (kw "i18n-key", Wire.Keyword i18n_key)
-                                 ; (kw "type", Wire.Keyword "error") ]) ]))
+                                 [ (Wire.keyword "message", Wire.String message)
+                                 ; (Wire.keyword "i18n-key", Wire.Keyword i18n_key)
+                                 ; (Wire.keyword "type", Wire.Keyword "error") ]) ]))
                   end
               | None -> ()))
       eids

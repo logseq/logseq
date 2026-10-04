@@ -3,7 +3,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let wire_truthy = function
   | Wire.Nil | Wire.Bool false -> false
@@ -18,7 +17,7 @@ let require_repo (args : Wire.t list) : string =
 let missing_connection repo =
   Dispatcher.Exn_info
     ( "Missing worker graph connection",
-      [ (kw "type", kw "db/missing-connection"); (kw "repo", Wire.String repo) ] )
+      [ (Wire.keyword "type", Wire.keyword "db/missing-connection"); (Wire.keyword "repo", Wire.String repo) ] )
 
 let require_conn repo : conn =
   match Worker_state.datascript_conn repo with
@@ -170,7 +169,7 @@ let broadcast_notification (payload : Wire.t) =
   in
   let msg =
     Wire.Array
-      [ kw "notification"
+      [ Wire.keyword "notification"
       ; Wire.Array
           [ get "message"; get "type"; get "clear?"; get "uid"; get "timeout"
           ; Wire.Map i18n ] ]
@@ -278,7 +277,7 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
                  (* {:blocks {uuid row}} -> rows for the requested uuids *)
                  match
                    List.find_opt
-                     (fun (k, _) -> k = kw "blocks")
+                     (fun (k, _) -> k = Wire.keyword "blocks")
                      kvs
                  with
                  | Some (_, Wire.Map rows) ->
@@ -294,16 +293,16 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
          | None -> Wire.Map []
      in
      let response =
-       [ (kw "result", operation_result) ]
+       [ (Wire.keyword "result", operation_result) ]
        |> (fun m ->
           match delta with
-          | Some d -> m @ [ (kw "delta", d) ]
+          | Some d -> m @ [ (Wire.keyword "delta", d) ]
           | None -> m)
        |> fun m ->
        if editor_row_uuids <> [] then
          m
-         @ [ (kw "editor-row-uuids", Wire.Array editor_row_uuids)
-           ; (kw "editor-rows", editor_rows) ]
+         @ [ (Wire.keyword "editor-row-uuids", Wire.Array editor_row_uuids)
+           ; (Wire.keyword "editor-rows", editor_rows) ]
        else m
      in
      let plain_at = perf_time_ms () in
@@ -323,14 +322,14 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
      Db_listener.log_tx_outliner_op_perf
        (Wire.Map
           ((List.filter (fun (k, _) -> k <> "listener") perf_data
-            |> List.map (fun (k, v) -> (kw k, v)))
-           @ [ kw "perf-id"
+            |> List.map (fun (k, v) -> (Wire.keyword k, v)))
+           @ [ Wire.keyword "perf-id"
              , (match perf_id_w with Some w -> w | None -> Wire.Nil)
-             ; kw "op-names", op_names
-             ; kw "op-count", Wire.Int (List.length op_list) ]));
+             ; Wire.keyword "op-names", op_names
+             ; Wire.keyword "op-count", Wire.Int (List.length op_list) ]));
      let response =
        if !Sync_state.dev_or_test then
-         response @ [ (kw "perf", Wire.Map (List.map (fun (k, v) -> (kw k, v)) perf_data)) ]
+         response @ [ (Wire.keyword "perf", Wire.Map (List.map (fun (k, v) -> (Wire.keyword k, v)) perf_data)) ]
        else response
      in
      Db_worker_effect.pure (Wire.Map response)

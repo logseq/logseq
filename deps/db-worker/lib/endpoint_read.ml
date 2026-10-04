@@ -4,7 +4,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let repo_arg args =
   match List.nth_opt args 0 with
@@ -30,7 +29,7 @@ let plain_map_wire db (e : entity) : Wire.t =
 let page_summary db (page : entity) : Wire.t =
   let field k v =
     match v with
-    | Some v -> [ (kw k, Ds_wire.transit_of_value v) ]
+    | Some v -> [ (Wire.keyword k, Ds_wire.transit_of_value v) ]
     | None -> []
   in
   Wire.Map
@@ -156,7 +155,7 @@ let get_block_page_info args =
               | Some page ->
                   let f k v =
                     match v with
-                    | Some v -> [ (kw k, Ds_wire.transit_of_value v) ]
+                    | Some v -> [ (Wire.keyword k, Ds_wire.transit_of_value v) ]
                     | None -> []
                   in
                   Wire.Map
@@ -231,7 +230,7 @@ let get_route_title args =
                     | Some v -> Ds_wire.transit_of_value v
                     | None -> Wire.Nil
                   in
-                  Wire.Map [ (kw "page-title", t) ]
+                  Wire.Map [ (Wire.keyword "page-title", t) ]
               | _ ->
                   if Ldb.is_uuid_string route then
                     match
@@ -243,7 +242,7 @@ let get_route_title args =
                           | Some v -> Ds_wire.transit_of_value v
                           | None -> Wire.Nil
                         in
-                        Wire.Map [ (kw "block-title", t) ]
+                        Wire.Map [ (Wire.keyword "block-title", t) ]
                     | None -> Wire.nil
                   else
                     Wire.nil)))
@@ -449,9 +448,9 @@ let get_block_parents args =
                                 | w -> [ (Wire.nil, w) ]
                               in
                               let m =
-                                ( kw "db/id",
+                                ( Wire.keyword "db/id",
                                   Wire.Int p.id )
-                                :: ( kw "block/title",
+                                :: ( Wire.keyword "block/title",
                                      Ds_wire.transit_of_value
                                        (Option.value
                                           (Ldb.value p "block/title")
@@ -499,9 +498,9 @@ let get_bidirectional_properties args =
                (List.map
                   (fun (g : Ldb.bidirectional_group) ->
                     Wire.Map
-                      [ ( kw "title", Wire.String g.title )
-                      ; ( kw "class", Ds_wire.entity_map_wire g.class_ )
-                      ; ( kw "entities",
+                      [ ( Wire.keyword "title", Wire.String g.title )
+                      ; ( Wire.keyword "class", Ds_wire.entity_map_wire g.class_ )
+                      ; ( Wire.keyword "entities",
                           Wire.List
                             (List.map
                                (fun (e : entity) ->
@@ -526,17 +525,17 @@ let get_page_route_info args =
               | None -> Wire.nil
               | Some page ->
                   let base =
-                    [ ( kw "page-id", Wire.Int page.id )
-                    ; ( kw "page-uuid",
+                    [ ( Wire.keyword "page-id", Wire.Int page.id )
+                    ; ( Wire.keyword "page-uuid",
                         Ds_wire.transit_of_value
                           (Option.value (Ldb.value page "block/uuid") ~default:Nil) )
-                    ; ( kw "page-title",
+                    ; ( Wire.keyword "page-title",
                         Ds_wire.transit_of_value
                           (Option.value (Ldb.value page "block/title") ~default:Nil) )
-                    ; ( kw "hidden?", Wire.Bool (Ldb.hidden page) )
-                    ; ( kw "property?", Wire.Bool (Ldb.is_property page) )
-                    ; ( kw "built-in?", Wire.Bool (Ldb.built_in page) )
-                    ; ( kw "private-built-in?",
+                    ; ( Wire.keyword "hidden?", Wire.Bool (Ldb.hidden page) )
+                    ; ( Wire.keyword "property?", Wire.Bool (Ldb.is_property page) )
+                    ; ( Wire.keyword "built-in?", Wire.Bool (Ldb.built_in page) )
+                    ; ( Wire.keyword "private-built-in?",
                         Wire.Bool
                           (Ldb.built_in page && Ldb.private_built_in_page page) )
                     ]
@@ -555,10 +554,10 @@ let get_page_route_info args =
                         | None -> None
                       in
                       base
-                      @ [ ( kw "block-page-name",
+                      @ [ ( Wire.keyword "block-page-name",
                             Ds_wire.transit_of_value
                               (Option.value page_name ~default:Nil) )
-                        ; ( kw "block-route-name",
+                        ; ( Wire.keyword "block-route-name",
                             match route_name with
                             | Some s -> Wire.String s
                             | None -> Wire.nil )
@@ -570,8 +569,8 @@ let get_page_route_info args =
                     match Ldb.get_alias_source_page db page.id with
                     | Some src ->
                         base
-                        @ [ ( kw "alias-source-id", Wire.Int src.id )
-                          ; ( kw "alias-source-uuid",
+                        @ [ ( Wire.keyword "alias-source-id", Wire.Int src.id )
+                          ; ( Wire.keyword "alias-source-uuid",
                               Ds_wire.transit_of_value
                                 (Option.value
                                    (Ldb.value src "block/uuid")
@@ -621,13 +620,13 @@ let block_index_entry (b : entity) (parent_ids : IntSet.t) (level : int)
     | None -> Wire.Nil
   in
   Wire.Map
-    [ (kw "db/id", Wire.Int b.id)
-    ; (kw "block/uuid", attr "block/uuid")
-    ; (kw "block/parent", Wire.Map [ (kw "db/id", parent_id) ])
-    ; (kw "block/order", attr "block/order")
-    ; (kw "block/collapsed?", Wire.Bool (Ldb.truthy (Ldb.value b "block/collapsed?")))
-    ; (kw "block/level", Wire.Int level)
-    ; (kw "block.temp/has-children?", Wire.Bool (IntSet.mem b.id parent_ids))
+    [ (Wire.keyword "db/id", Wire.Int b.id)
+    ; (Wire.keyword "block/uuid", attr "block/uuid")
+    ; (Wire.keyword "block/parent", Wire.Map [ (Wire.keyword "db/id", parent_id) ])
+    ; (Wire.keyword "block/order", attr "block/order")
+    ; (Wire.keyword "block/collapsed?", Wire.Bool (Ldb.truthy (Ldb.value b "block/collapsed?")))
+    ; (Wire.keyword "block/level", Wire.Int level)
+    ; (Wire.keyword "block.temp/has-children?", Wire.Bool (IntSet.mem b.id parent_ids))
     ]
 
 (* handler/page.cljs visible-index-entries — walks the index, hiding
@@ -737,9 +736,9 @@ let get_page_block_index db (ref_t : Wire.t) (initial_limit : Wire.t) : Wire.t =
       let blocks = List.map block_of initial_ids in
       let block = block_of root.id in
       Wire.Map
-        [ (kw "block", block)
-        ; (kw "index", Wire.Array index)
-        ; (kw "blocks", Wire.Array blocks)
+        [ (Wire.keyword "block", block)
+        ; (Wire.keyword "index", Wire.Array index)
+        ; (Wire.keyword "blocks", Wire.Array blocks)
         ]
 
 (* :thread-api/get-page-blocks-tree *)
@@ -813,7 +812,6 @@ let favorite_block db (page_block_uuid : string) : entity option =
 (* :thread-api/set-page-favorite / :thread-api/reorder-favorites —
    handler/graph.cljs write side *)
 
-let kw' s = Wire.Keyword s
 
 let favorite_page_ops db (page_block_uuid : string) : Wire.t =
   match
@@ -823,9 +821,9 @@ let favorite_page_ops db (page_block_uuid : string) : Wire.t =
   | Some _, Some page ->
       let fav =
         Wire.Map
-          [ (kw' "block/link",
-             Wire.Array [ kw' "block/uuid"; Wire.Uuid page_block_uuid ])
-          ; (kw' "block/title", Wire.String "") ]
+          [ (Wire.keyword "block/link",
+             Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid page_block_uuid ])
+          ; (Wire.keyword "block/title", Wire.String "") ]
       in
       let page_uuid =
         match Ldb.value page "block/uuid" with
@@ -834,7 +832,7 @@ let favorite_page_ops db (page_block_uuid : string) : Wire.t =
       in
       Wire.Array
         [ Wire.Array
-            [ kw' "insert-blocks"
+            [ Wire.keyword "insert-blocks"
             ; Wire.Array
                 [ Wire.Array [ fav ]; page_uuid; Wire.Map [] ] ] ]
   | _ -> Wire.Array []
@@ -849,7 +847,7 @@ let unfavorite_page_ops db (page_block_uuid : string) : Wire.t =
       in
       Wire.Array
         [ Wire.Array
-            [ kw' "delete-blocks"
+            [ Wire.keyword "delete-blocks"
             ; Wire.Array [ Wire.Array [ uuid ]; Wire.Map [] ] ] ]
   | _ -> Wire.Array []
 
@@ -946,7 +944,7 @@ let () =
                           in
                           Some
                             (Wire.Array
-                               [ kw' "save-block"
+                               [ Wire.keyword "save-block"
                                ; Wire.Array [ m; Wire.Nil ] ])
                         else None)
                       (List.combine page_block_ids current

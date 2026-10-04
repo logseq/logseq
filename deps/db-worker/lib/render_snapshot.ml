@@ -3,7 +3,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let fail_render_read message data =
   raise (Dispatcher.Exn_info (message, data))
@@ -22,7 +21,7 @@ let render_basis_rev (db : db) : int =
   if db.max_tx >= 0 then db.max_tx
   else
     fail_render_read "Invalid renderer basis revision"
-      [ (kw "basis-rev", Wire.Int db.max_tx) ]
+      [ (Wire.keyword "basis-rev", Wire.Int db.max_tx) ]
 
 (* per-batch memo tables — every lookup below depends only on
    (db, attr/eid), and one render-snapshots call re-reads the same
@@ -549,8 +548,8 @@ let canonical_block ~(cache : batch_cache) (db : db)
      ids); on storage-backed indexes each is a real read *)
   let tbl : (Wire.t, Wire.t) Hashtbl.t = Hashtbl.create 17 in
   let many_tbl : (Wire.t, Wire.t list ref) Hashtbl.t = Hashtbl.create 7 in
-  let key_order = ref [ kw "db/id" ] in
-  Hashtbl.replace tbl (kw "db/id") (Wire.Int entity_id);
+  let key_order = ref [ Wire.keyword "db/id" ] in
+  Hashtbl.replace tbl (Wire.keyword "db/id") (Wire.Int entity_id);
   let uuid_v = ref None
   and tx_v = ref None
   and title_v = ref None
@@ -583,12 +582,12 @@ let canonical_block ~(cache : batch_cache) (db : db)
               in
               Wire.Map
                 (List.map
-                   (fun (a, v) -> (kw a, Ds_wire.transit_of_value v))
+                   (fun (a, v) -> (Wire.keyword a, Ds_wire.transit_of_value v))
                    pairs)
           | None -> Ds_wire.transit_of_value d.v)
       | _ -> Ds_wire.transit_of_value d.v
     in
-    let key = kw d.a in
+    let key = Wire.keyword d.a in
     match card with
     | Some Many -> (
         match Hashtbl.find_opt many_tbl key with
@@ -662,12 +661,12 @@ let canonical_block ~(cache : batch_cache) (db : db)
    | Some _ -> ()
    | None ->
        fail_render_read "Invalid canonical block UUID"
-         [ (kw "db-id", Wire.Int entity_id) ]);
+         [ (Wire.keyword "db-id", Wire.Int entity_id) ]);
   if not (valid_revision block_tx_id) then
     fail_render_read "Invalid canonical block transaction ID"
-      [ (kw "db-id", Wire.Int entity_id)
-      ; (kw "block-uuid", Wire.Uuid (Option.value block_uuid ~default:""))
-      ; (kw "block-tx-id", Ds_wire.transit_of_value block_tx_id) ];
+      [ (Wire.keyword "db-id", Wire.Int entity_id)
+      ; (Wire.keyword "block-uuid", Wire.Uuid (Option.value block_uuid ~default:""))
+      ; (Wire.keyword "block-tx-id", Ds_wire.transit_of_value block_tx_id) ];
   let block_tx_id =
     match block_tx_id with Int64 n -> n | _ -> assert false
   in
@@ -690,7 +689,7 @@ let canonical_block ~(cache : batch_cache) (db : db)
   let has_children = Wire.Bool (block_has_children db entity_id) in
   let class_idents =
     Wire.Set
-      (List.map kw
+      (List.map Wire.keyword
          ((classes_properties_of ~cache db tag_ids entity_id)
             .classes_properties
           |> List.filter_map (entity_ident_of ~cache)
@@ -700,7 +699,7 @@ let canonical_block ~(cache : batch_cache) (db : db)
     Wire.Map
       (List.map
          (fun (position, idents) ->
-           ( kw position
+           ( Wire.keyword position
            , Wire.Array
                (List.filter_map
                   (fun ident ->
@@ -714,23 +713,23 @@ let canonical_block ~(cache : batch_cache) (db : db)
             ~direct_value:(Hashtbl.find_opt attr_first) db entity_id))
   in
   let block' =
-    assoc (kw "block/tx-id") (Ds_wire.wire_int64 block_tx_id)
+    assoc (Wire.keyword "block/tx-id") (Ds_wire.wire_int64 block_tx_id)
       (assoc
-         (kw "block.temp/refs-count") refs_count
+         (Wire.keyword "block.temp/refs-count") refs_count
          (assoc
-            (kw "block.temp/has-children?") has_children
+            (Wire.keyword "block.temp/has-children?") has_children
             (assoc
-               (kw "block.temp/class-property-idents") class_idents
+               (Wire.keyword "block.temp/class-property-idents") class_idents
                (assoc
-                  (kw "block.temp/positioned-properties") positioned
+                  (Wire.keyword "block.temp/positioned-properties") positioned
                   attrs))))
   in
   (* view-for + no sort-groups-desc? -> default true *)
   let block' =
     if
-      List.mem_assoc (kw "logseq.property/view-for") block'
-      && not (List.mem_assoc (kw "logseq.property.view/sort-groups-desc?") block')
-    then assoc (kw "logseq.property.view/sort-groups-desc?") (Wire.Bool true) block'
+      List.mem_assoc (Wire.keyword "logseq.property/view-for") block'
+      && not (List.mem_assoc (Wire.keyword "logseq.property.view/sort-groups-desc?") block')
+    then assoc (Wire.keyword "logseq.property.view/sort-groups-desc?") (Wire.Bool true) block'
     else block'
   in
   let block' =
@@ -738,7 +737,7 @@ let canonical_block ~(cache : batch_cache) (db : db)
       let closed_values =
         match
           List.find_opt
-            (fun (k, _) -> k = kw "property/closed-values")
+            (fun (k, _) -> k = Wire.keyword "property/closed-values")
             (match Property_maps.display_property_map db block with
              | Wire.Map kvs -> kvs
              | _ -> [])
@@ -746,24 +745,24 @@ let canonical_block ~(cache : batch_cache) (db : db)
         | Some (_, v) -> v
         | None -> Wire.Array []
       in
-      assoc (kw "property/closed-values") closed_values block'
+      assoc (Wire.keyword "property/closed-values") closed_values block'
     else block'
   in
   let block' =
     match raw_title with
-    | Some t -> assoc (kw "block/raw-title") (Wire.String t) block'
+    | Some t -> assoc (Wire.keyword "block/raw-title") (Wire.String t) block'
     | None -> block'
   in
   let block' =
     match display_title with
-    | Some t -> assoc (kw "block/title") (Wire.String t) block'
+    | Some t -> assoc (Wire.keyword "block/title") (Wire.String t) block'
     | None -> block'
   in
   let block' =
     match order_list_type with
     | Some lt ->
         assoc
-          (kw "block.temp/order-list-index")
+          (Wire.keyword "block.temp/order-list-index")
           (match Plain_value.order_list_index block lt with
            | Some w -> w
            | None -> Wire.Nil)
@@ -799,9 +798,9 @@ let canonical_blocks (db : db) ?cache (block_uuids : Wire.t list) : Wire.t =
       requested
   in
   Wire.Map
-    [ (kw "basis-rev", Wire.Int (render_basis_rev db))
-    ; (kw "groups", Wire.Map groups)
-    ; (kw "blocks", Wire.Map blocks) ]
+    [ (Wire.keyword "basis-rev", Wire.Int (render_basis_rev db))
+    ; (Wire.keyword "groups", Wire.Map groups)
+    ; (Wire.keyword "blocks", Wire.Map blocks) ]
 
 let () =
   Sync_deps.canonical_blocks_fn :=

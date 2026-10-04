@@ -4,7 +4,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let arg args i = List.nth_opt args i
 
@@ -124,7 +123,7 @@ let block_positioned_properties_map db (block : entity) : Wire.t =
   Wire.Map
     (List.map
        (fun (position, idents) ->
-         ( kw position
+         ( Wire.keyword position
          , Wire.Array
              (List.filter_map
                 (fun ident ->
@@ -159,10 +158,10 @@ let block_reactions db (block_id : entity_id) : Wire.t =
 
 let empty_render_display_properties =
   Wire.Map
-    [ (kw "full-properties", Wire.Array [])
-    ; (kw "hidden-properties", Wire.Array [])
-    ; (kw "description-property", Wire.Nil)
-    ; (kw "class-properties-property", Wire.Nil) ]
+    [ (Wire.keyword "full-properties", Wire.Array [])
+    ; (Wire.keyword "hidden-properties", Wire.Array [])
+    ; (Wire.keyword "description-property", Wire.Nil)
+    ; (Wire.keyword "class-properties-property", Wire.Nil) ]
 
 let display_properties_empty_ctx db (block : entity) : Wire.t =
   Display_properties.display_properties db block ~gallery_view:false
@@ -206,9 +205,9 @@ let bidirectional_properties_wire (groups : Ldb.bidirectional_group list) :
     (List.map
        (fun (g : Ldb.bidirectional_group) ->
          Wire.Map
-           [ (kw "title", Wire.String g.title)
-           ; (kw "class", Ds_wire.entity_map_wire g.class_)
-           ; ( kw "entities"
+           [ (Wire.keyword "title", Wire.String g.title)
+           ; (Wire.keyword "class", Ds_wire.entity_map_wire g.class_)
+           ; ( Wire.keyword "entities"
              , Wire.List
                  (List.map
                     (fun (e : entity) ->
@@ -318,7 +317,7 @@ let get_block_and_children db (id_or_page_name : value) (opts : gb_opts) :
                    (child_map |> Wire.as_map
                     |> Plain_value.assoc "block.temp/property-keys"
                          (Wire.Array
-                            (List.map kw
+                            (List.map Wire.keyword
                                (Display_properties.block_property_keys db
                                   child)))
                     |> Plain_value.assoc "block.temp/has-children?"
@@ -358,7 +357,7 @@ let get_block_and_children db (id_or_page_name : value) (opts : gb_opts) :
           Wire.Map
             (Plain_value.assoc "block.temp/property-keys"
                (Wire.Array
-                  (List.map kw
+                  (List.map Wire.keyword
                      (Display_properties.block_property_keys db block)))
                (Wire.as_map merged))
       in
@@ -404,10 +403,10 @@ let get_block_and_children db (id_or_page_name : value) (opts : gb_opts) :
         Wire.Map m
       in
       Wire.Map
-        ((kw "block", block')
+        ((Wire.keyword "block", block')
          ::
          (match children' with
-          | Some cs -> [ (kw "children", Wire.List cs) ]
+          | Some cs -> [ (Wire.keyword "children", Wire.List cs) ]
           | None -> []))
 
 (* ---------------------------------------------------------------
@@ -465,13 +464,13 @@ let comment_thread_block_uuids db (block_uuids : string list) : string list =
 
 let conflict_wire (c : Sync_client_op.sync_conflict) : Wire.t =
   Wire.Map
-    [ (kw "id", Wire.Int c.id)
-    ; (kw "block-uuid", Wire.Uuid c.block_uuid)
-    ; (kw "attr", Wire.Keyword c.attr)
-    ; (kw "value", Wire.String c.value)
-    ; ( kw "remote-t"
+    [ (Wire.keyword "id", Wire.Int c.id)
+    ; (Wire.keyword "block-uuid", Wire.Uuid c.block_uuid)
+    ; (Wire.keyword "attr", Wire.Keyword c.attr)
+    ; (Wire.keyword "value", Wire.String c.value)
+    ; ( Wire.keyword "remote-t"
       , match c.remote_t with Some t -> Wire.Int t | None -> Wire.Nil )
-    ; (kw "created-at", Ds_wire.wire_int64 (Time.epoch_ms_to_int64 c.created_at)) ]
+    ; (Wire.keyword "created-at", Ds_wire.wire_int64 (Time.epoch_ms_to_int64 c.created_at)) ]
 
 let remove_nils (kvs : (Wire.t * Wire.t) list) =
   List.filter (fun (_, v) -> v <> Wire.Nil) kvs
@@ -637,9 +636,9 @@ let get_blocks_response repo (requests : Wire.t) : Wire.t option =
               (* cljs (assoc result :id id) — on a nil result this is
                  {:id id}, not {:id id :block nil} *)
               match result, id with
-              | Wire.Map kvs, Some idw -> Wire.Map ((kw "id", idw) :: kvs)
+              | Wire.Map kvs, Some idw -> Wire.Map ((Wire.keyword "id", idw) :: kvs)
               | m, Some idw when m = Wire.Nil ->
-                  Wire.Map [ (kw "id", idw) ]
+                  Wire.Map [ (Wire.keyword "id", idw) ]
               | m, _ -> m
             in
             (req, result))
@@ -842,15 +841,15 @@ let membership_row (parent_uuid : string) (parent_recycled : bool)
                }
          | Some _ ->
              fail_render_read "Invalid direct-child order"
-               [ (kw "parent-uuid", Wire.Uuid parent_uuid)
-               ; (kw "block-uuid", Wire.Uuid u)
-               ; ( kw "block-order"
+               [ (Wire.keyword "parent-uuid", Wire.Uuid parent_uuid)
+               ; (Wire.keyword "block-uuid", Wire.Uuid u)
+               ; ( Wire.keyword "block-order"
                  , Option.value order ~default:Nil
                    |> Ds_wire.transit_of_value ) ])
      | _ ->
          fail_render_read "Invalid direct-child UUID"
-           [ (kw "parent-uuid", Wire.Uuid parent_uuid)
-           ; ( kw "block-uuid"
+           [ (Wire.keyword "parent-uuid", Wire.Uuid parent_uuid)
+           ; ( Wire.keyword "block-uuid"
              , Option.value child_uuid ~default:Nil
                |> Ds_wire.transit_of_value ) ])
 
@@ -863,15 +862,15 @@ let resolve_parent_id db (parent_uuid : string) : entity_id =
   | Some (d, _) -> d.e
   | None ->
       fail_render_read "Missing direct-children parent"
-        [ (kw "parent-uuid", Wire.Uuid parent_uuid) ]
+        [ (Wire.keyword "parent-uuid", Wire.Uuid parent_uuid) ]
 
 let parent_membership db (parent_uuid : string) (parent_id : entity_id)
     (parent_recycled : bool) : int * membership_child list =
   let parent_tx_id = Render_snapshot.block_revision db parent_id in
   if not (Render_snapshot.valid_revision parent_tx_id) then
     fail_render_read "Invalid direct-children parent transaction ID"
-      [ (kw "parent-uuid", Wire.Uuid parent_uuid)
-      ; (kw "block-tx-id", Ds_wire.transit_of_value parent_tx_id) ];
+      [ (Wire.keyword "parent-uuid", Wire.Uuid parent_uuid)
+      ; (Wire.keyword "block-tx-id", Ds_wire.transit_of_value parent_tx_id) ];
   let parent_tx_id =
     match parent_tx_id with
     | Int64 n -> Datascript.Util.int64_to_int_exn "block tx id" n
@@ -910,9 +909,9 @@ let direct_children_membership db (parent_uuid : string) : Wire.t =
       (recycled_chain db parent_id)
   in
   Wire.Map
-    [ (kw "basis-rev", Wire.Int (Render_snapshot.render_basis_rev db))
-    ; (kw "parent-tx-id", Wire.Int parent_tx_id)
-    ; (kw "items", items_wire rows) ]
+    [ (Wire.keyword "basis-rev", Wire.Int (Render_snapshot.render_basis_rev db))
+    ; (Wire.keyword "parent-tx-id", Wire.Int parent_tx_id)
+    ; (Wire.keyword "items", items_wire rows) ]
 
 (* open-children-tree — {uuid {:parent-tx-id :items}} *)
 let open_children_tree db (root_uuid : string) ?(node_limit : int option)
@@ -997,18 +996,18 @@ let open_block_tree db (root_uuid : string) : Wire.t =
   let root_membership =
     match List.assoc_opt root_uuid children with
     | Some (tx_id, rows) ->
-        [ (kw "parent-tx-id", Wire.Int tx_id); (kw "items", items_wire rows) ]
+        [ (Wire.keyword "parent-tx-id", Wire.Int tx_id); (Wire.keyword "items", items_wire rows) ]
     | None -> []
   in
   Wire.Map
     (root_membership
-     @ [ (kw "blocks", blocks)
-       ; ( kw "children"
+     @ [ (Wire.keyword "blocks", blocks)
+       ; ( Wire.keyword "children"
          , Wire.Map
              (List.map
                 (fun (u, (tx_id, rows)) ->
                   ( Wire.Uuid u
                   , Wire.Map
-                      [ (kw "parent-tx-id", Wire.Int tx_id)
-                      ; (kw "items", items_wire rows) ] ))
+                      [ (Wire.keyword "parent-tx-id", Wire.Int tx_id)
+                      ; (Wire.keyword "items", items_wire rows) ] ))
                 children) ) ])

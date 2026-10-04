@@ -288,17 +288,16 @@ and transit_of_serializable_db (db : serializable_db) : Wire.t =
         ] )
 
 and transit_of_schema (schema : schema) : Wire.t =
-  let kw s = Wire.Keyword s in
-  Wire.Map
+    Wire.Map
     (List.map
        (fun (a, sa) ->
           let fields =
             [
-              ( if sa.cardinality = Many then Some ("db/cardinality", kw "db.cardinality/many")
+              ( if sa.cardinality = Many then Some ("db/cardinality", Wire.keyword "db.cardinality/many")
                 else None );
               ( match sa.unique with
-              | Some Value -> Some ("db/unique", kw "db.unique/value")
-              | Some Identity -> Some ("db/unique", kw "db.unique/identity")
+              | Some Value -> Some ("db/unique", Wire.keyword "db.unique/value")
+              | Some Identity -> Some ("db/unique", Wire.keyword "db.unique/identity")
               | None -> None );
               (if sa.indexed then Some ("db/index", Wire.Bool true) else None);
               (if sa.is_component then Some ("db/isComponent", Wire.Bool true) else None);
@@ -307,17 +306,17 @@ and transit_of_schema (schema : schema) : Wire.t =
               | Some doc -> Some ("db/doc", Wire.String doc)
               | None -> None );
               ( match sa.value_type with
-              | Some RefType -> Some ("db/valueType", kw "db.type/ref")
-              | Some TupleType -> Some ("db/valueType", kw "db.type/tuple")
-              | Some StringType -> Some ("db/valueType", kw "db.type/string")
-              | Some KeywordType -> Some ("db/valueType", kw "db.type/keyword")
-              | Some NumberType -> Some ("db/valueType", kw "db.type/number")
-              | Some UuidType -> Some ("db/valueType", kw "db.type/uuid")
-              | Some InstantType -> Some ("db/valueType", kw "db.type/instant")
+              | Some RefType -> Some ("db/valueType", Wire.keyword "db.type/ref")
+              | Some TupleType -> Some ("db/valueType", Wire.keyword "db.type/tuple")
+              | Some StringType -> Some ("db/valueType", Wire.keyword "db.type/string")
+              | Some KeywordType -> Some ("db/valueType", Wire.keyword "db.type/keyword")
+              | Some NumberType -> Some ("db/valueType", Wire.keyword "db.type/number")
+              | Some UuidType -> Some ("db/valueType", Wire.keyword "db.type/uuid")
+              | Some InstantType -> Some ("db/valueType", Wire.keyword "db.type/instant")
               | None -> None );
               ( match sa.tuple_attrs with
               | Some attrs ->
-                  Some ("db/tupleAttrs", Wire.Array (List.map kw attrs))
+                  Some ("db/tupleAttrs", Wire.Array (List.map Wire.keyword attrs))
               | None -> None );
               ( match sa.tuple_types with
               | Some types ->
@@ -330,7 +329,7 @@ and transit_of_schema (schema : schema) : Wire.t =
                     | UuidType -> "db.type/uuid"
                     | InstantType -> "db.type/instant"
                   in
-                  Some ("db/tupleTypes", Wire.Array (List.map (fun t -> kw (type_kw t)) types))
+                  Some ("db/tupleTypes", Wire.Array (List.map (fun t -> Wire.keyword (type_kw t)) types))
               | None -> None );
             ]
           in

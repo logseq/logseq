@@ -9,7 +9,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let arg args i = List.nth_opt args i
 
@@ -28,11 +27,11 @@ let kw_or_string = function
   | Wire.Keyword s | Wire.String s -> Some s
   | _ -> None
 
-(* entity-util/entity->map: {:db/id, <kw attrs> -> raw values}, as wire *)
+(* entity-util/entity->map: {:db/id, <Wire.keyword attrs> -> raw values}, as wire *)
 let entity_map_wire (e : entity) : (Wire.t * Wire.t) list =
-  (kw "db/id", Wire.Int e.id)
+  (Wire.keyword "db/id", Wire.Int e.id)
   :: List.map
-       (fun (d : datom) -> (kw d.a, Ds_wire.transit_of_value d.v))
+       (fun (d : datom) -> (Wire.keyword d.a, Ds_wire.transit_of_value d.v))
        (List.of_seq (datoms e.db Eavt ~e:e.id ()))
 
 let wire_key_eq (key : Wire.t) (k : string) : bool =
@@ -161,15 +160,15 @@ let view_filter_data (db : db) (option : Wire.t) : Wire.t =
     | _ -> Wire.Nil
   in
   Wire.Map
-    [ ( kw "operators",
-        Wire.Array (List.map kw (operators_of prop_ident prop_type)) )
-    ; ( kw "value-source",
+    [ ( Wire.keyword "operators",
+        Wire.Array (List.map Wire.keyword (operators_of prop_ident prop_type)) )
+    ; ( Wire.keyword "value-source",
         match value_source with
         | Some s -> Wire.Keyword s
         | None -> Wire.Nil )
-    ; (kw "many?", Wire.Bool (filter_many prop_type operator))
-    ; (kw "values", values)
-    ; ( kw "value-after-operator-change",
+    ; (Wire.keyword "many?", Wire.Bool (filter_many prop_type operator))
+    ; (Wire.keyword "values", values)
+    ; ( Wire.keyword "value-after-operator-change",
         value_after_operator_change operator value ) ]
 
 let get_view_filter_data args =
