@@ -84,6 +84,61 @@ let rec value_of_rt = function
 
 (* ---- value semantics (cljs core) ---- *)
 
+(* Hash consistent with [Util.value_equal]: equal values always land in the
+   same bucket (NaN and -0.0 normalize like [value_equal] does), collisions
+   are then checked with [value_equal]. Bucketed membership turns the
+   seen-list dedups below from O(n²) compares into ~O(n). *)
+let rec value_hash (v : value) : int =
+  let h = Hashtbl.hash in
+  match v with
+  | Nil -> h 0
+  | Int64 i -> h (1, i)
+  | Float f ->
+      if classify_float f = FP_nan then h (2, 0)
+      else if f = 0.0 then h (2, 1)
+      else h (2, f)
+  | String s -> h (3, s)
+  | Symbol s -> h (4, s)
+  | Bool b -> h (5, b)
+  | Keyword s -> h (6, s)
+  | Uuid s -> h (7, s)
+  | Instant i -> h (8, i)
+  | Regex s -> h (9, s)
+  | Ref e -> h (10, e)
+  | List xs -> h (11, List.map value_hash xs)
+  | Vector xs -> h (12, List.map value_hash xs)
+  | Map kvs -> h (13, List.map (fun (k, x) -> (value_hash k, value_hash x)) kvs)
+  | Set xs -> h (14, List.map value_hash xs)
+  | Tuple xs -> h (15, List.map (Option.map value_hash) xs)
+  | TxRef -> h 16
+  | Ref_to r -> h (17, entity_ref_hash r)
+and entity_ref_hash (r : entity_ref) : int =
+  let h = Hashtbl.hash in
+  match r with
+  | Entity_id e -> h (0, e)
+  | Temp_id s -> h (1, s)
+  | CurrentTx -> h 2
+  | Ident s -> h (3, s)
+  | Lookup_ref (a, v) -> h (4, a, value_hash v)
+
+(* Order-preserving dedup of [vs] — keeps the first element of each
+   [Util.value_equal] class, same result as a [seen]-list scan.
+   [~seed] members pre-mark the buckets without entering the result (set
+   conj/into keep their existing elements verbatim). *)
+let dedup_values ?(seed : value list = []) (vs : value list) : value list =
+  let buckets : (int, value list) Hashtbl.t = Hashtbl.create 64 in
+  let mark v =
+    let h = value_hash v in
+    let seen = Option.value ~default:[] (Hashtbl.find_opt buckets h) in
+    if List.exists (Util.value_equal v) seen then false
+    else begin
+      Hashtbl.replace buckets h (v :: seen);
+      true
+    end
+  in
+  List.iter (fun v -> ignore (mark v)) seed;
+  List.filter mark vs
+
 let truthy = function
   | V Nil | V (Bool false) -> false
   | _ -> true
@@ -879,14 +934,14 @@ and build_core_fns () =
           | V (List es) -> Seq (List.rev xs @ List.map (fun v -> V v) es)
           | Seq es -> Seq (List.rev xs @ es)
           | V (Set es) ->
+              (* cljs conj onto a set keeps the existing items and adds the
+                 unseen new ones — same contents here: dedup'd newcomers
+                 cons'd on in fold order (front, reversed). *)
               V
                 (Set
-                   (List.fold_left
-                      (fun a x ->
-                        let xv = value_of_rt x in
-                        if List.exists (fun y -> Util.value_equal y xv) a then a
-                        else xv :: a)
-                      es xs))
+                   (List.rev
+                      (dedup_values ~seed:es (List.map value_of_rt xs))
+                   @ es))
           | V (Map kvs) ->
               List.fold_left
                 (fun acc x ->
@@ -901,15 +956,20 @@ and build_core_fns () =
   reg "concat" (fun args -> Seq (List.concat_map elems_of_rt args));
   reg "reverse" (fun args -> Seq (List.rev (elems_of_rt (one args))));
   reg "distinct" (fun args ->
-      let seen = ref [] in
+      (* cljs distinct is hash-based; value-hash buckets mirror it while
+         still emitting the original rt values. *)
+      let buckets : (int, value list) Hashtbl.t = Hashtbl.create 64 in
       Seq
         (List.filter_map
            (fun x ->
              let v = value_of_rt x in
-             if List.exists (fun y -> Util.value_equal y v) !seen then None
-             else (
-               seen := v :: !seen;
-               Some x))
+             let h = value_hash v in
+             let seen = Option.value ~default:[] (Hashtbl.find_opt buckets h) in
+             if List.exists (Util.value_equal v) seen then None
+             else begin
+               Hashtbl.replace buckets h (v :: seen);
+               Some x
+             end)
            (elems_of_rt (one args))));
   reg "dedupe" (fun args ->
       let rec go acc prev = function
@@ -1511,18 +1571,14 @@ and build_core_fns () =
   reg "list" (fun args -> V (List (List.map value_of_rt args)));
   reg "hash-map" (fun args ->
       let rec go acc = function
-        | k :: v :: rest -> go (acc @ [ (value_of_rt k, value_of_rt v) ]) rest
-        | [] -> acc
+        | k :: v :: rest -> go ((value_of_rt k, value_of_rt v) :: acc) rest
+        | [] -> List.rev acc
         | _ -> eval_error "hash-map wants even args"
       in
       V (Map (go [] args)));
   reg "set" (fun args ->
       let xs = List.map value_of_rt (elems_of_rt (one args)) in
-      V
-        (Set
-           (List.fold_left
-              (fun a x -> if List.exists (fun y -> Util.value_equal y x) a then a else a @ [ x ])
-              [] xs)));
+      V (Set (dedup_values xs)));
   reg "into" (fun args ->
       match args with
       | [ to_; from ] -> (
@@ -1531,11 +1587,7 @@ and build_core_fns () =
           | V (Vector xs) -> V (Vector (xs @ List.map value_of_rt elems))
           | V (List xs) -> V (List (xs @ List.map value_of_rt elems))
           | V (Set xs) ->
-              V
-                (Set
-                   (List.fold_left
-                      (fun a x -> if List.exists (fun y -> Util.value_equal y x) a then a else a @ [ x ])
-                      xs (List.map value_of_rt elems)))
+              V (Set (xs @ dedup_values ~seed:xs (List.map value_of_rt elems)))
           | V (Map kvs) ->
               List.fold_left
                 (fun acc x ->

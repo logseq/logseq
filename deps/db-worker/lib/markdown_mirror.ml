@@ -818,21 +818,22 @@ let mirrorable_pages db : entity list =
   |> Seq.filter_map (fun (d : datom) -> Ldb.ent_of_id db d.e)
   |> List.of_seq
   |> List.filter mirrorable_page
-  |> List.stable_sort (fun (a : entity) (b : entity) ->
-         let day e =
-           match Ldb.value e "block/journal-day" with
+  (* sort keys computed once per page — the comparator would otherwise
+     re-read attrs per comparison (O(n log n) seeks) *)
+  |> List.map (fun (page : entity) ->
+         let day =
+           match Ldb.value page "block/journal-day" with
            | Some (Int64 n) -> Int64.to_string n
            | _ -> ""
          in
-         let title e =
+         let title =
            Unicode.lowercase
-             (Option.value ~default:"" (Ldb.string_value e "block/title"))
+             (Option.value ~default:"" (Ldb.string_value page "block/title"))
          in
-         compare
-           ( (if Ldb.is_journal a then 0 else 1),
-             day a, title a, uuid_of a )
-           ( (if Ldb.is_journal b then 0 else 1),
-             day b, title b, uuid_of b ))
+         ( page
+         , ( (if Ldb.is_journal page then 0 else 1), day, title, uuid_of page ) ))
+  |> List.stable_sort (fun (_, key_a) (_, key_b) -> compare key_a key_b)
+  |> List.map fst
 
 (* ---------- jobs / writes ---------- *)
 
