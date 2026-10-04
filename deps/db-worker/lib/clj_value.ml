@@ -161,3 +161,29 @@ let map_entries_named (m : value) : (attr * value) list =
   List.filter_map
     (fun (k, v) -> match k with Keyword s | String s -> Some (s, v) | _ -> None)
     (map_entries m)
+
+(* cljs clojure.walk/postwalk: children first, then f on the rebuilt
+   node. Map entries are walked as 2-element vectors — f sees [k' v']
+   like cljs sees a MapEntry, so both keys and values are transformed —
+   and f must answer a 2-element collection for them. Tuple children are
+   walked too, skipping None slots. *)
+let rec postwalk (f : value -> value) (v : value) : value =
+  let v' =
+    match v with
+    | Map kvs ->
+        Map
+          (List.map
+             (fun (k, x) ->
+               match postwalk f (Vector [ k; x ]) with
+               | Vector [ k'; x' ] | List [ k'; x' ] -> (k', x')
+               | _ ->
+                   invalid_arg
+                     "postwalk: f must return a 2-element coll for map entries")
+             kvs)
+    | Vector vs -> Vector (List.map (postwalk f) vs)
+    | List vs -> List (List.map (postwalk f) vs)
+    | Set vs -> Set (List.map (postwalk f) vs)
+    | Tuple vs -> Tuple (List.map (Option.map (postwalk f)) vs)
+    | _ -> v
+  in
+  f v'

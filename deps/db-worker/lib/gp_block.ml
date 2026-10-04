@@ -486,18 +486,10 @@ let get_page_ref_names_from_properties (properties : (value * value * value) lis
   |> List.filter (fun s -> Unicode.trim s <> "")
   |> Common_util.distinct_by Fun.id
 
-(* clojure.walk/postwalk over values *)
-let rec postwalk (f : value -> value) (x : value) : value =
-  let inner =
-    match x with
-    | Vector xs -> Vector (List.map (postwalk f) xs)
-    | List xs -> List (List.map (postwalk f) xs)
-    | Set xs -> Set (List.map (postwalk f) xs)
-    | Map kvs -> Map (List.map (fun (k, v) -> (postwalk f k, postwalk f v)) kvs)
-    | Tuple vs -> Tuple (List.map (Option.map (postwalk f)) vs)
-    | other -> other
-  in
-  f inner
+(* clojure.walk/postwalk over values — shared implementation in
+   Clj_value (walks map entries as 2-vectors like cljs, so f sees both
+   keys and values plus each entry itself). *)
+let postwalk = Clj_value.postwalk
 
 let rec prewalk (f : value -> value) (x : value) : value =
   match f x with
