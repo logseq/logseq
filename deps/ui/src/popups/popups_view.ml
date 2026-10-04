@@ -659,17 +659,21 @@ let cm_popover (st : S.t) : t =
          (fun (v : S.view) ->
            match v.S.cm with
            | Some m ->
+               (* block-tag popups use w-60 (240px) content in cljs;
+                  the block context menu is 280px *)
+               let w = if m.S.tag <> None then 240. else 280. in
                attrs_v
                  [ ( "style"
                    , Printf.sprintf
                        "position: fixed; left: %.0fpx; top: %.0fpx; \
-                        z-index: 999; --available-height: calc(100vh - %.0fpx)"
+                        width: %.0fpx; z-index: 999; \
+                        --available-height: calc(100vh - %.0fpx)"
                        (* cljs anchors a 1px point at the click and the
-                          base-ui dropdown centers the 280px content on it *)
+                          base-ui dropdown centers the content on it *)
                        (Float.max 8.
-                          (Float.min (m.S.cx -. 140.)
-                             (Dom_ext.window_inner_width -. 288.)))
-                       m.S.cy (m.S.cy +. 8.) )
+                          (Float.min (m.S.cx -. (w /. 2.))
+                             (Dom_ext.window_inner_width -. (w +. 8.))))
+                       m.S.cy w (m.S.cy +. 8.) )
                  ; ("role", "menu") ]
            | None -> attrs_v [])
          st.S.vs.Signal.state_signal)
