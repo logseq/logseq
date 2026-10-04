@@ -121,7 +121,7 @@ let download_binary ~(filename : string) ~(mime : string)
 
 let confirm (_ : string) : bool = false
 
-let fmt_time (_ : float) : string = ""
+let fmt_time (ms : float) : string = Dates.short_date_of_ts ms
 
 (* file inputs / drag-drop payloads — JSON File snapshots carry
    {name,size,path} the host fills in *)

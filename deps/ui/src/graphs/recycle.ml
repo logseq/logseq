@@ -76,12 +76,13 @@ and delete_forever uuid title is_page host =
     if is_page then T.recycle_delete_confirm_page
     else T.recycle_delete_confirm_block
   in
-  if B.confirm msg then
-    ignore
-      (let* _ = (outliner_op "recycle-delete-permanently" uuid) in
-      Toast.success title;
-      refresh host;
-      Js.Promise.resolve ())
+  Dialogs_state.ask ~title:T.delete ~desc:msg ~on_confirm:(fun () ->
+      ignore
+        (let* _ = (outliner_op "recycle-delete-permanently" uuid) in
+        Toast.success title;
+        refresh host;
+        Js.Promise.resolve ()))
+    ()
 
 and ghost_btn label on_click =
   let b = B.create "button" in
