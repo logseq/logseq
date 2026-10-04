@@ -1,41 +1,92 @@
-(* Native twin of graphs/browser_ui.ml — file pickers + downloads go
-   through host requests; document queries return None. *)
+(* Native twin of graphs/browser_ui.ml — imperative elements materialize
+   as LUI extension nodes via Editor_dom/Imperative_dom, so imperative
+   views (graphs, recycle) render through the same element pipeline;
+   file pickers + downloads go through host requests. *)
 
 open Promise_ext
-module E = Webapi.Dom.Element
+
+(* element handle = LUI element payload (snapshot or {#new} imperative
+   node); matches the shared callers' B.E.t annotations *)
+module E = struct
+  type t = Js.Json.t
+end
 
 type rect = Js.Json.t
 type el = E.t
 
-let el_counter = ref 0
-let new_el () = incr el_counter; !el_counter
+type el_ops =
+  { qs : string -> el option
+  ; qs_in : el -> string -> el option
+  ; create : string -> el
+  ; append : el -> el -> unit
+  ; remove : el -> unit
+  ; set_attr : el -> string -> string -> unit
+  ; get_attr : el -> string -> string option
+  ; set_text : el -> string -> unit
+  ; set_class : el -> string -> unit
+  ; remove_attr : el -> string -> unit
+  ; add_class : el -> string -> unit
+  ; rm_class : el -> string -> unit
+  ; focus : el -> unit
+  ; value : el -> string
+  ; set_value : el -> string -> unit
+  ; click : el -> unit
+  ; add_listener : el -> string -> (Js.Json.t -> unit) -> unit
+  }
 
-let qs (_ : string) : el option = None
-let qs_in (_ : el) (_ : string) : el option = None
-let create (_ : string) : el = new_el ()
-let append (_ : el) (_ : el) : unit = ()
-let remove (_ : el) : unit = ()
-let set_attr (_ : el) (_ : string) (_ : string) : unit = ()
-let get_attr (_ : el) (_ : string) : string option = None
-let set_text (_ : el) (_ : string) : unit = ()
-let set_class (_ : el) (_ : string) : unit = ()
-let inner_html_set (_ : el) (_ : string) : unit = ()
-let remove_attr (_ : el) (_ : string) : unit = ()
-let add_class (_ : el) (_ : string) : unit = ()
-let rm_class (_ : el) (_ : string) : unit = ()
-let focus (_ : el) : unit = ()
-let value (_ : el) : string = ""
-let set_value (_ : el) (_ : string) : unit = ()
-let click (_ : el) : unit = ()
+(* imperative_dom sits above this module (it calls Runtime, which calls
+   here), so the element ops can't be linked in directly — editor_dom
+   installs them at init, the same hook pattern it uses for
+   Imperative_dom.lui_snapshot_by_node_id *)
+let el_ops : el_ops option ref = ref None
+
+let ops () =
+  match !el_ops with
+  | Some o -> o
+  | None -> invalid_arg "Browser_ui.el_ops not installed"
+
+let qs (sel : string) : el option = (ops ()).qs sel
+
+let qs_in (root : el) (sel : string) : el option = (ops ()).qs_in root sel
+
+let create (tag : string) : el = (ops ()).create tag
+
+let append (parent : el) (child : el) : unit = (ops ()).append parent child
+
+let remove (el : el) : unit = (ops ()).remove el
+
+let set_attr (el : el) (name : string) (v : string) : unit =
+  (ops ()).set_attr el name v
+
+let get_attr (el : el) (name : string) : string option =
+  (ops ()).get_attr el name
+
+let set_text (el : el) (v : string) : unit = (ops ()).set_text el v
+
+let set_class (el : el) (c : string) : unit = (ops ()).set_class el c
+
+let inner_html_set (el : el) (v : string) : unit = (ops ()).set_text el v
+
+let remove_attr (el : el) (name : string) : unit =
+  (ops ()).remove_attr el name
+
+let add_class (el : el) (c : string) : unit = (ops ()).add_class el c
+
+let rm_class (el : el) (c : string) : unit = (ops ()).rm_class el c
+
+let focus (el : el) : unit = (ops ()).focus el
+let value (el : el) : string = (ops ()).value el
+let set_value (el : el) (v : string) : unit = (ops ()).set_value el v
+let click (el : el) : unit = (ops ()).click el
 
 (* The macOS shell shows no window title — the breadcrumb carries the
    page name in the toolbar. Keep the dom-op out so "Logseq" never
    renders in the titlebar. *)
 let set_document_title (_ : string) : unit = ()
 
-let add_listener (_ : el) (name : string) (f : Js.Json.t -> unit)
+let add_listener (el : el) (name : string) (f : Js.Json.t -> unit)
     : unit =
-  Platform.add_event_listener name f
+  (ops ()).add_listener el name f
 
 let on_document (name : string) (f : Js.Json.t -> unit) : unit =
   Platform.add_event_listener name f
@@ -53,7 +104,7 @@ let location_origin () : string = "logseq://app"
 let location_pathname () : string = "/"
 let reload_page () : unit = ()
 
-let rect_of (_ : el) : rect = Js.Json.JObject []
+let rect_of (el : el) : rect = Dom_ext.bounding_rect el
 
 let rect_left (r : rect) : float = Dom_ext.rect_left r
 let rect_bottom (r : rect) : float = Dom_ext.rect_bottom r

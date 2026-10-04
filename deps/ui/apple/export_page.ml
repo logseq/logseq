@@ -15,7 +15,7 @@ let canvas_to_blob (_ : canvas) (_ : 'a -> unit) (_ : string) : unit = ()
 let computed_style (_ : B.E.t) : Js.Json.t = Js.Json.JObject []
 let css_prop (_ : Js.Json.t) (_ : string) : string = ""
 let el_scroll_height (_ : B.E.t) : float = 0.
-let body_el : B.E.t = 0
+let body_el : B.E.t = Js.Json.JObject []
 let blob_as_file (b : Webapi.Blob.t) : Webapi.File.t = b
 let clipboard_write_png (_ : Webapi.Blob.t) : unit Js.Promise.t =
   Js.Promise.resolve ()

@@ -162,9 +162,11 @@ let query_in_roots (roots : el list) (sel : string) : el list =
   lui_hits @ shadow_query scope sel
 
 let query_selector (sel : string) : el option =
-  match query_in_roots [ document_element ] sel with
-  | h :: _ -> Some h
-  | [] -> None
+  if String.equal sel "body" then Some document_element
+  else
+    match query_in_roots [ document_element ] sel with
+    | h :: _ -> Some h
+    | [] -> None
 
 let query_selector_all (sel : string) : node_list =
   Js.Json.JArray (Array.of_list (query_in_roots [ document_element ] sel))
@@ -512,7 +514,7 @@ let el_set_value (el : el) (v : string) : unit =
   (match Imperative_dom.id_of el with
    | Some id -> (
        match Imperative_dom.get id with
-       | Some n -> n.Imperative_dom.s_value <- v
+       | Some n -> Imperative_dom.set_attr n "value" v
        | None -> ())
    | None -> (
        match el_dom_id el with
@@ -821,7 +823,7 @@ let el_set_text_content (el : el) (v : string) : unit =
   (match Imperative_dom.id_of el with
    | Some id -> (
        match Imperative_dom.get id with
-       | Some n -> n.Imperative_dom.s_text <- v
+       | Some n -> Imperative_dom.set_text n v
        | None -> ())
    | None -> ());
   Host.dom_op "set-text-content"
@@ -958,3 +960,54 @@ let dt_files (dt : data_transfer) : Js.Json.t array =
       | Some (Js.Json.JArray a) -> a
       | _ -> [||])
   | _ -> [||]
+
+(* install Browser_ui's element ops — imperative_dom is upstream of
+   Browser_ui (via Runtime), so the linkage is a hook record instead of
+   a direct reference *)
+let () =
+  Browser_ui.el_ops :=
+    Some
+      { Browser_ui.qs = (fun sel -> query_selector sel)
+      ; qs_in = (fun root sel -> node_list_item (el_query_all root sel) 0)
+      ; create = (fun tag -> create_element tag)
+      ; append = el_append_child
+      ; remove =
+          (fun el ->
+            match Imperative_dom.id_of el with
+            | Some id -> Imperative_dom.remove id
+            | None -> ())
+      ; set_attr = el_set_attr
+      ; get_attr = el_get_attr
+      ; set_text = el_set_text_content
+      ; set_class = el_set_class
+      ; remove_attr = el_remove_attr
+      ; add_class = el_class_add
+      ; rm_class = el_class_remove
+      ; focus = el_focus
+      ; value = el_value
+      ; set_value = el_set_value
+      ; click =
+          (fun el ->
+            match Imperative_dom.id_of el with
+            | Some id -> Imperative_dom.dispatch id "click" []
+            | None -> ())
+      ; add_listener =
+          (fun el name f ->
+            match Imperative_dom.id_of el with
+            | Some id -> Imperative_dom.add_listener id name f
+            | None -> (
+                (* declarative element: hook its bubble handler — fires
+                   for event names the element already emits *)
+                match Dom_ext.num_prop "node-id" el with
+                | Some nid ->
+                    Platform.register_dom_handler (int_of_float nid)
+                      ~events:name
+                      (fun ev_name payload_str ->
+                        if String.equal ev_name name then
+                          f
+                            (match payload_str with
+                             | Some p -> (
+                                 try Js.Json.parseExn p
+                                 with _ -> Js.Json.JObject [])
+                             | None -> Js.Json.JObject []))
+                | None -> ())) }
