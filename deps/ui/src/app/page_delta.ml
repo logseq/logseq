@@ -395,6 +395,18 @@ let delta_uuids (delta : Wire.t) : string list =
         (SSet.fold (fun u acc -> u :: acc) p.deleted [])
   | None -> []
 
+(* every uuid a delta addresses — canon rows + tombstones + membership
+   patch parents: the owner-detection key set for multi-page views
+   (journals), where the page holding the touched tree must be found
+   before splicing *)
+let delta_keys (delta : Wire.t) : string list =
+  match parse delta with
+  | Some p ->
+      SMap.fold (fun u _ acc -> u :: acc) p.canon
+        (SMap.fold (fun u _ acc -> u :: acc) p.patches
+           (SSet.fold (fun u acc -> u :: acc) p.deleted []))
+  | None -> []
+
 (* apply [delta] to [page]; Some merged page on success, None when the
    delta can't splice onto the current tree (caller refetches).
    [~strict] (broadcast path) requires every membership patch to be

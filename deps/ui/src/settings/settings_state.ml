@@ -51,6 +51,13 @@ let set_tab tab =
   Platform.body_set_data "settingsTab" tab;
   set (fun s -> { s with tab })
 
+(* cljs open-settings! <tab> — the tab the next activate applies.
+   Consumed once; a plain open always lands on general like cljs's
+   :ui/settings-open? = true *)
+let pending_tab : string option ref = ref None
+
+let open_at tab = pending_tab := Some tab
+
 (* common-util/page-name-sanity-lc approximation: lowercase + strip boundary
    slashes (path normalization is not needed for the settings lookups) *)
 let page_name_lc s =
@@ -115,10 +122,13 @@ let load () =
    Uses Signal.set (no flush) — called during mount, the pending render
    picks up the fresh value. *)
 let activate () =
-  Platform.body_set_data "settingsTab" "general";
-  if ready () then (
-    Signal.set (state ()) { (value ()) with tab = "general" };
-    load ())
+  let tab =
+    match !pending_tab with
+    | Some t -> pending_tab := None; t
+    | None -> "general"
+  in
+  Platform.body_set_data "settingsTab" tab;
+  if ready () then (Signal.set (state ()) { (value ()) with tab }; load ())
 
 let deactivate () = Platform.body_rm_data "settingsTab"
 
@@ -247,14 +257,14 @@ let current_accent () =
      unset = no active swatch *)
   match Platform.local_storage_get "radix-color" with
   | Some v -> (
-      let v = Settings_view.unquote v in
+      let v = Platform.storage_unquote v in
       if String.length v > 0 && v.[0] = ':' then
         String.sub v 1 (String.length v - 1)
       else v)
   | None -> ""
 
 let set_accent name =
-  Platform.local_storage_set "radix-color" (Settings_view.quoted (":" ^ name));
+  Platform.local_storage_set "radix-color" (Platform.storage_quote (":" ^ name));
   Platform.document_set_data "color" name;
   poke ()
 
@@ -270,7 +280,7 @@ let default_font_cfg = { ftype = "default"; fglobal = false }
 let current_editor_font () =
   match Platform.local_storage_get "editor-font" with
   | Some v -> (
-      match Edn.parse (Settings_view.unquote v) with
+      match Edn.parse (Platform.storage_unquote v) with
       | Wire.Map kvs ->
           let m = Wire.Map kvs in
           { ftype =
@@ -287,7 +297,7 @@ let current_editor_font () =
 
 let write_editor_font cfg =
   Platform.local_storage_set "editor-font"
-    (Settings_view.quoted
+    (Platform.storage_quote
        (Edn.to_string
           (Wire.Map
              [ (Wire.Keyword "type", Wire.String cfg.ftype)

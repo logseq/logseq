@@ -43,14 +43,14 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
   in
   match uuid_sig with
   | None ->
-      D.el ~tag:"a" ~style_class:cls ~attrs:base
-        [ D.el ~tag:"span" [ D.txt text ] ]
+      (* cljs anchors carry the label as a bare text child *)
+      D.el ~tag:"a" ~style_class:cls ~attrs:base [ D.txt text ]
   | Some u_sig ->
       (* cljs sets :data-uuid on the anchor once the page entity resolves;
          attrs apply is replace-semantic so emit the whole set *)
       D.el ~tag:"a" ~style_class:cls ~attrs:base
         ~attrs_signal_v:(Logseq_dom.attrs_signal u_sig (fun u -> if u = "" then base else ("data-uuid", u) :: base))
-        [ D.el ~tag:"span" [ D.txt text ] ]
+        [ D.txt text ]
 
 (* ---- pull memoization ----
    Every [[name]]/uuid anchor used to fire its own thread-api/pull per
@@ -136,7 +136,7 @@ let prime_ref_metas (metas : (string * string) list) =
   List.iter
     (fun (name, u) -> Hashtbl.replace minted_meta u (name, true))
     metas;
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       let cache = repo_cache repo in
@@ -150,7 +150,7 @@ let prime_ref_metas (metas : (string * string) list) =
 (* same priming for an entity already pulled elsewhere (a resolved
    [[name]] -> uuid lookup) — caches only, no minted entry *)
 let prime_pull_meta ~name ~uuid ~title ~is_page =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       let cache = repo_cache repo in
@@ -381,22 +381,18 @@ let day_diff ~y ~m ~d =
   int_of_float ((t1 -. t0) /. 86400000. +. 0.5)
 
 let date_label y m d =
-  let dt =
-    Js.Date.fromFloat (Js.Date.utc ~year:(float y) ~month:(float (m - 1)) ~date:(float d) ())
-  in
   match day_diff ~y ~m ~d with
   | 0 -> "Today"
   | -1 -> "Yesterday"
   | 1 -> "Tomorrow"
-  | _ -> Dates.journal_title_of dt
+  | _ -> Dates.journal_title_ymd ~y ~m ~d
 
-let datetime_el ~y ~m ~d =
-  let title = Dates.journal_title_of (Js.Date.fromFloat (Js.Date.utc ~year:(float y) ~month:(float (m - 1)) ~date:(float d) ())) in
-  D.el ~tag:"span" ~style_class:"ls-datetime flex flex-row gap-1 items-center"
-    [ D.el ~tag:"a" ~style_class:"relative page-ref"
-        ~attrs:[ ("data-ref", String.lowercase_ascii title); ("tabindex", "0") ]
-        [ D.txt (date_label y m d) ]
-    ]
+(* cljs components/block.cljs timestamp: span.timestamp keeps the
+   literal <YYYY-MM-DD ...> text inline (active attr marks <..> vs [..]) *)
+let timestamp_text_el ~literal =
+  D.el ~tag:"span" ~style_class:"timestamp"
+    ~attrs:[ ("active", "true") ]
+    [ D.txt literal ]
 
 (* ---------- cloze ---------- *)
 
@@ -550,7 +546,7 @@ and try_match ~refs ~self s i : (t * int) option =
   match s.[i] with
   | '[' -> try_bracket ~refs ~self s i
   | '#' -> try_hash ~refs ~self s i
-  | '(' -> try_paren ~refs ~self s i
+  | '(' -> try_paren s i
   | '!' -> try_image s i
   | '`' -> try_code s i
   | '*' -> try_star ~refs ~self s i
@@ -591,10 +587,7 @@ and page_ref ?(tag = false) ~refs ~self name =
   if Wire.is_uuid_string name then
     if List.mem name refs then D.el ~tag:"span" []
     else if tag then resolved_tag_ref ~refs ~self name
-    else
-      D.el ~tag:"span" ~style_class:"page-reference"
-        ~attrs:[ ("data-ref", name) ]
-        [ bracket "[["; preview_link (resolved_ref ~refs ~self name); bracket "]]" ]
+    else resolved_ref ~refs ~self name
   else
     (* cljs data-ref is the resolved entity uuid, not the written name *)
     fun context parent ->
@@ -612,8 +605,11 @@ and page_ref ?(tag = false) ~refs ~self name =
         ; bracket "]]" ]
         context parent
 
-(* ((uuid)) -> resolved block/page title; pages render as plain text,
-   block titles are re-parsed with the ref chain extended *)
+(* [[uuid]] — resolved via thread-api/pull.  cljs drops the
+   .page-reference chrome when the uuid does not resolve: the row is just
+   a bare a.page-ref.broken holding the literal [[uuid]] text.  Resolved
+   pages render their title as plain text; block titles are re-parsed
+   with the ref chain extended. *)
 and resolved_ref ~refs ~self uuid : t =
  fun context parent ->
   let st =
@@ -623,19 +619,33 @@ and resolved_ref ~refs ~self uuid : t =
   let child_refs =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
-  D.el ~tag:"a" ~style_class:"relative page-ref"
-    ~attrs:[ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true") ]
-    ~attrs_signal_v:(Logseq_dom.reactive_attrs
-         (fun n ->
-           [ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true")
-           ; ("data-ref", String.lowercase_ascii n) ])
-         (Signal.map fst (Signal.value st)))
-    [ dyn
-        ~equal:(fun (a : string * bool) b -> a = b)
-        (fun (title, is_page) ->
-          if is_page then D.el ~tag:"span" [ D.txt title ]
-          else D.el ~tag:"span" (parse ~refs:child_refs ~self:uuid title))
-        (Signal.value st) ]
+  dyn
+    ~equal:(fun (a : string * bool) b -> a = b)
+    (fun (title, is_page) ->
+      if title = "" then
+        (* pull in flight — keep the chrome so the row does not shift *)
+        D.el ~tag:"span" ~style_class:"page-reference"
+          ~attrs:[ ("data-ref", uuid) ] []
+      else if title = uuid then
+        D.el ~tag:"a" ~style_class:"relative page-ref broken"
+          ~attrs:[ ("data-uuid", uuid); ("tabindex", "0")
+                 ; ("draggable", "true") ]
+          [ D.txt ("[[" ^ uuid ^ "]]") ]
+      else
+        D.el ~tag:"span" ~style_class:"page-reference"
+          ~attrs:[ ("data-ref", String.lowercase_ascii title) ]
+          [ bracket "[["
+          ; preview_link
+              (D.el ~tag:"a" ~style_class:"relative page-ref"
+                 ~attrs:[ ("data-uuid", uuid); ("tabindex", "0")
+                        ; ("draggable", "true")
+                        ; ("data-ref", String.lowercase_ascii title) ]
+                 [ (if is_page then D.el ~tag:"span" [ D.txt title ]
+                    else
+                      D.el ~tag:"span"
+                        (parse ~refs:child_refs ~self:uuid title)) ])
+          ; bracket "]]" ])
+    (Signal.value st)
     context parent
 
 (* #[[uuid]] — same lazy resolution, rendered as a .tag anchor *)
@@ -665,13 +675,12 @@ and macro_el ~refs:_refs ~self:_self body =
           cloze_el (String.trim (String.sub args 0 j)) (Some cue)
       | _ -> cloze_el (String.trim args) None)
   | "query" ->
-      D.el ~tag:"div" ~style_class:"custom-query-results"
-        [ D.el ~tag:"button"
-            ~style_class:
-              "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6"
-            ~attrs:[ ("type", "button"); ("title", U.t "block/set-query") ]
-            []
-        ]
+      D.el ~tag:"div" ~style_class:"warning"
+        ~text:(U.t "block.macro/query-deprecated") []
+  | "namespace" ->
+      D.el ~tag:"div" ~style_class:"warning"
+        ~text:(U.tf "block.macro/namespace-deprecated" [ U.t "library/title" ])
+        []
   | "embed" ->
       (* cljs: {{embed}} is deprecated — renders a warning, not an embed *)
       D.el ~tag:"div" ~style_class:"warning"
@@ -699,7 +708,8 @@ and try_hash ~refs ~self s i =
     | j when j > i + 3 ->
         let inner = String.sub s (i + 3) (j - i - 3) in
         Some
-          ( (if Wire.is_uuid_string inner then resolved_tag_ref ~refs ~self inner
+          ( (if Wire.is_uuid_string inner
+             then preview_link (resolved_tag_ref ~refs ~self inner)
              else page_ref ~tag:true ~refs ~self inner)
           , j + 2 - i )
     | _ -> None
@@ -734,19 +744,13 @@ and try_hash ~refs ~self s i =
           let st = name_uuid_state context name in
           page_link ~tag:true ~uuid_sig:(Signal.value st) name context parent
         in
-        Some (link, k + 1)
+        Some (preview_link link, k + 1)
 
-(* deprecated ((uuid)) block-ref form — same page-reference rendering
-   as [[uuid]] *)
-and try_paren ~refs ~self s i =
-  if starts_at s i "((" then
-    match find_sub s (i + 2) "))" with
-    | j when j > i + 2 ->
-        Some
-          (page_ref ~refs ~self (String.sub s (i + 2) (j - i - 2)),
-           j + 2 - i)
-    | _ -> None
-  else None
+(* deprecated ((uuid)) block-ref form — cljs db-mode parses it to a
+   Link/Block_ref but renders it back out as literal ((uuid)) text *)
+and try_paren s i =
+  ignore (s, i);
+  None
 
 (* ![alt](src) *)
 and try_image s i =
@@ -875,10 +879,9 @@ and try_date s i =
   then
     match find_sub s (i + 10) ">" with
     | j when j > i + 10 ->
-        let y = int_of_string (String.sub s (i + 1) 4) in
-        let m = int_of_string (String.sub s (i + 6) 2) in
-        let d = int_of_string (String.sub s (i + 9) 2) in
-        Some (datetime_el ~y ~m ~d, j + 1 - i)
+        Some
+          ( timestamp_text_el ~literal:(String.sub s i (j + 1 - i))
+          , j + 1 - i )
     | _ -> None
   else None
 

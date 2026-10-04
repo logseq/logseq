@@ -20,6 +20,12 @@ let journal_title_of (d : Js.Date.t) =
     (ordinal_suffix day)
     (int_of_float (Js.Date.getFullYear d))
 
+(* journal title for a calendar day — ymd stays in wall-clock space;
+   routing it through a UTC-midnight Date and local getters would
+   shift the day in timezones behind UTC *)
+let journal_title_ymd ~y ~m ~d =
+  Printf.sprintf "%s %d%s, %d" month_abbr.(m - 1) d (ordinal_suffix d) y
+
 (* journal-day int YYYYMMDD (cljs date-time-util/date->int) *)
 let journal_day_of (d : Js.Date.t) =
   int_of_float (Js.Date.getFullYear d) * 10000

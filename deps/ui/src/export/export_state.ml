@@ -13,6 +13,8 @@ type t =
   { page_uuid : string option
   ; page_db_id : int option
   ; block_uuids : string list
+  ; has_top_level : bool
+    (* cljs when-not (seq? top-level-uuids) gates the PNG tab *)
   ; fmt : fmt
   ; content : string option
   ; copied : bool
@@ -64,6 +66,7 @@ let defaults () =
   { page_uuid = None
   ; page_db_id = None
   ; block_uuids = []
+  ; has_top_level = false
   ; fmt = Text
   ; content = None
   ; copied = false
@@ -92,12 +95,14 @@ let persist st =
    arms a page, the block context menu arms block uuids (already
    filtered to top-level roots, cljs get-top-level-uuids). *)
 type pending_target =
-  | Pending_page of string * int option
+  | Pending_page of string * int option * bool
   | Pending_blocks of string list
 
 let pending : pending_target option ref = ref None
 
-let arm uuid db_id = pending := Some (Pending_page (uuid, db_id))
+let arm uuid db_id ~has_top_level =
+  pending := Some (Pending_page (uuid, db_id, has_top_level))
+
 let arm_blocks uuids = pending := Some (Pending_blocks uuids)
 
 let st_ref : t Signal.state option ref = ref None
@@ -112,11 +117,11 @@ let st ctx =
 
 let open_ ctx =
   let st = st ctx in
-  let uuid, db_id, block_uuids =
+  let uuid, db_id, block_uuids, has_top_level =
     match !pending with
-    | Some (Pending_page (u, d)) -> (Some u, d, [])
-    | Some (Pending_blocks us) -> (None, None, us)
-    | None -> (None, None, [])
+    | Some (Pending_page (u, d, tl)) -> (Some u, d, [], tl)
+    | Some (Pending_blocks us) -> (None, None, us, us <> [])
+    | None -> (None, None, [], false)
   in
   pending := None;
   (match (Signal.get_state st).png_url with
@@ -127,6 +132,7 @@ let open_ ctx =
         page_uuid = uuid
       ; page_db_id = db_id
       ; block_uuids = block_uuids
+      ; has_top_level
       ; fmt = Text
       ; content = None
       ; copied = false

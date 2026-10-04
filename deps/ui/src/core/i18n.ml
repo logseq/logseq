@@ -71,15 +71,9 @@ let sub s args =
   |> fst
 
 (* cljs :preferred-language — an EDN-quoted string in localStorage *)
-let unquote s =
-  if String.length s >= 2 && String.get s 0 = '"'
-     && String.get s (String.length s - 1) = '"'
-  then String.sub s 1 (String.length s - 2)
-  else s
-
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with
-  | Some v -> unquote v
+  | Some v -> Platform.storage_unquote v
   | None -> "en"
 
 (* dict values are OCaml literals — Melange emits them as JS strings
@@ -166,6 +160,8 @@ let init () = load (current_lang ())
    for e2e/DOM-parity while non-English lookups resolve through the same
    key. *)
 let en_overrides = function
+  (* cljs imports.cljs hardcodes [:strong "SQLite"] — no dict key exists *)
+  | "import/sqlite-label" -> "SQLite"
   | "cmdk.create/page" -> "Create page"
   | "cmdk.create/tag" -> "Create tag"
   | "cmdk.info/create-page" -> "Create page called '{1}'"
@@ -210,8 +206,21 @@ let en_overrides = function
   | "block.comments/add-comment" -> "Add comment"
   | "block/copy-ref" -> "Copy block ref"
   | "block/remove-tag" -> "Remove tag"
+  | "block/remove-this-tag" -> "Remove this tag"
   | "block.macro/embed-deprecated" ->
       "{{embed}} is deprecated. Use '/Node embed' command instead."
+  | "block.macro/query-deprecated" ->
+      "{{query}} is deprecated. Use '/Query' command instead."
+  | "block.macro/namespace-deprecated" ->
+      "{{namespace}} is deprecated. Use the {1} feature instead."
+  | "block/deprecated-quote" ->
+      "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."
+  | "block/deprecated-query-syntax" ->
+      "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."
+  | "block/deprecated-latex-export" ->
+      "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command \
+       instead."
+  | "library/title" -> "Library"
   | "export/copy-or-export-as" -> "Copy / Export as.."
   | "editor/cut" -> "Cut"
   | "editor/delete-selection" -> "Delete selected blocks"
@@ -565,7 +574,6 @@ let en_overrides = function
   | "ui/false" -> "false"
   | "graph.switch/select-prompt" -> "Select a Graph"
   | "cmdk.group/current-page" -> "Current Page"
-  | "account/sign-in" -> "Sign in"
   | "publish/publish-error" -> "Publish failed. Please try again."
   | "graph/delete-server-action" -> "Delete remote graph"
   | "import/invalid-edn-file" -> "Invalid EDN file."

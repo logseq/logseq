@@ -62,7 +62,10 @@ let page_items (p : Model.page) =
     item "exp-page" I18n.export_page (fun () ->
         Runtime.send (Action.Page_menu_set None);
         (match p.page_uuid with
-         | Some u -> Export_state.arm u p.page_db_id
+         | Some u ->
+             (* cljs export-blocks gets [page-uuid] as the selection —
+                top-level-uuids is always non-empty, hiding the PNG tab *)
+             Export_state.arm u p.page_db_id ~has_top_level:true
          | None -> ());
         Sidebar_state.open_dialog "export-page")
   in
@@ -253,18 +256,26 @@ let confirm_view (c : Model.confirm) =
         ]
     ]
 
-(* cljs right-sidebar/get-page: non-page routes resolve the dots-menu
-   page to today's journal — here that's the head of m.journals (only
-   populated on the Journals/Home routes) *)
-let menu_page (m : Model.t) =
-  match m.route_page with
-  | Some p -> Some p
-  | None -> List.nth_opt m.journals 0
+(* cljs right-sidebar/get-current-page falls back to today's journal on
+   every route that isn't :page/:file — the toolbar dots menu always
+   offers the page section *)
+let resolve_menu_page (m : Model.t) uuid =
+  let by_uuid u (p : Model.page) = p.page_uuid = Some u in
+  match uuid, m.route_page with
+  | Some u, Some p when by_uuid u p -> m.route_page
+  | Some u, _ -> List.find_opt (by_uuid u) m.journals
+  | None, Some _ -> m.route_page
+  | None, None ->
+      List.find_opt
+        (fun (p : Model.page) ->
+          p.page_journal_day = Some (Dates.today_journal_day ()))
+        m.journals
 
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
   match m.page_menu with
-  | Some (x, y, with_app) -> view (x, y, with_app) (menu_page m)
+  | Some (x, y, with_app, uuid) ->
+      view (x, y, with_app) (resolve_menu_page m uuid)
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c

@@ -698,11 +698,7 @@ let cm_popover (st : S.t) : t =
 
 (* -- delegated listeners --------------------------------------------- *)
 
-let in_popups el =
-  Dom_ext.closest el
-    ".ui__popover-content, .ls-context-menu-content, .ls-preview-popup"
-  <> None
-;;
+let in_popups el = S.inside (Editor_dom.el_of_json el);;
 
 (* the icon/emoji picker mounts as an overlay outside the menu DOM —
    track it so closing the sub or the whole menu removes it like the

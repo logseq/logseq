@@ -83,10 +83,7 @@ let body (_ms : Model.t Signal.signal) : t =
   let creating = Signal.state ctx.ui_scheduler false in
   let node =
     dom ~key:"new-graph" ~style_class:"new-graph"
-      [ dom ~key:"ng-h" ~tag:"h2"
-          ~style_class:
-            "ui__dialog-title" ~text:T.create_new_graph []
-      ; dom ~key:"ng-in" ~tag:"input"
+      [ dom ~key:"ng-in" ~tag:"input"
           ~style_class:"ui__input"
           ~attrs:
             [ ("placeholder", T.graph_name_placeholder)
@@ -137,11 +134,9 @@ let body (_ms : Model.t Signal.signal) : t =
                        ])
                 ]
             ]
-        else box ~key:"ng-no-rtc" []
+        else box ~key:"ng-no-rtc" ~style_class:"hidden" []
       ; dom ~key:"ng-submit" ~tag:"button" ~text:T.submit ~events:"click"
-          ~style_class:
-            "inline-flex items-center justify-center rounded-md text-sm \
-             font-medium bg-primary text-primary-foreground px-4 py-2"
+          ~style_class:"ui__button ls-btn-primary"
           ~attrs_signal_v:(Logseq_dom.reactive_attrs
                (fun c -> if c then [ ("disabled", "true") ] else [])
                (Signal.value creating))

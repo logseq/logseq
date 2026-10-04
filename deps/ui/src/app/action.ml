@@ -2,11 +2,17 @@
 
 type t =
   | Boot_graph_ready of string
+  | Graph_closed (* the open repo was deleted — no graph remains *)
   | Repos_loaded of string list
   | Page_loaded of Model.page
   | Page_load_failed (* page/block lookup resolved to nothing *)
   | Journals_loaded of Model.page list
+  | Journals_spliced of Model.page list
+  (* in-place delta splice into the journals list — same publish as
+     Journals_loaded but no data_gen bump: the mounted keyed collections
+     repaint only the touched rows instead of remounting the region *)
   | Refs_loaded of Model.block list
+  | Ref_parents_loaded of (string * string list) list
   | Unlinked_loaded of Model.block list
   | Unlinked_exists of bool
   | Navigate_to of Model.route
@@ -18,7 +24,9 @@ type t =
   | Block_content_changed of string * string
   | Title_edit_start
   | Title_edit_done (* value already committed via page op *)
-  | Page_menu_set of (float * float * bool) option
+  | Page_menu_set of (float * float * bool * string option) option
+    (* coords, with_app_items, menu page uuid; uuid None = resolve
+       from the current route like cljs right-sidebar/get-current-page *)
   | Appearance_set of (float * float) option
   | Confirm_set of Model.confirm option
   | Dismiss_all (* Escape / outside click *)

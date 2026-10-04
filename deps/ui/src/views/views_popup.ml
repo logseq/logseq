@@ -4,7 +4,7 @@
    .cp__select*.cp__select-input + .cp__select-results a.menu-link selects,
    and .ui__dialog-content confirm dialogs. *)
 
-module D = Views_dom
+module D = Views_el
 module I = I18n
 
 external document_body : D.el = "document.body"
@@ -15,16 +15,37 @@ external document_body : D.el = "document.body"
    mousedown or Escape *)
 let open_popups : D.el list ref = ref []
 
+(* published popup-open state — the view head dims/lits on this plus
+   hover. Lazily bound to the scheduler of the first view that mounts. *)
+let open_st : bool Signal.state option ref = ref None
+
+let ensure_open_st sched =
+  match !open_st with
+  | Some st -> st
+  | None ->
+      let st = Signal.state sched (!open_popups <> []) in
+      open_st := Some st;
+      st
+
+let open_signal sched = (ensure_open_st sched).Signal.state_signal
+
+let publish_open () =
+  match !open_st with
+  | Some st -> Runtime.signal_set st (!open_popups <> [])
+  | None -> ()
+
 let close_top () =
   match !open_popups with
   | [] -> ()
   | p :: rest ->
       open_popups := rest;
-      D.el_remove p
+      D.el_remove p;
+      publish_open ()
 
 let close_all () =
   List.iter D.el_remove !open_popups;
-  open_popups := []
+  open_popups := [];
+  publish_open ()
 
 let on_doc_keydown ev =
   if Editor_dom.ev_key ev = "Escape" && !open_popups <> [] then begin
@@ -41,30 +62,44 @@ let install_listeners () =
       | Some _ -> ());
   Editor_dom.document_add_listener "keydown" on_doc_keydown true
 
-let push_popup el = open_popups := el :: !open_popups
+let push_popup el =
+  open_popups := el :: !open_popups;
+  publish_open ()
 
 let pop_popup el =
-  open_popups := List.filter (fun p -> not (p == el)) !open_popups
+  open_popups := List.filter (fun p -> not (p == el)) !open_popups;
+  publish_open ()
 
 (* -- positioning: fixed, anchored below trigger -- *)
 
 let position_content ~anchor ~content ~align_end ~submenu =
   let r = D.el_rect anchor in
+  (* fixed first: a static block child of body measures full-width, which
+     would trip the right-edge flip below *)
+  D.el_set_attr content "style" "position:fixed;z-index:50;";
   let style = ref "position:fixed;z-index:50;" in
   (if submenu then begin
      (* opens right of the item, top-aligned; radix shifts the panel up
-        when it would overflow the viewport bottom, and caps its height
-        at the viewport so every option stays inside *)
+        when it would overflow the viewport bottom, flips it to the
+        trigger's left when it would overflow the right edge, and caps its
+        height at the viewport so every option stays inside *)
      let h = D.rect_height (D.el_rect content) in
+     let w = D.rect_width (D.el_rect content) in
      let top =
        Float.max 8.
          (Float.min (D.rect_top r -. 4.)
             (D.window_inner_height -. 8. -. h))
      in
+     let open_right = D.rect_left r +. D.rect_width r -. 4. in
+     let left =
+       if open_right +. w > D.window_inner_width -. 8. then
+         Float.max 8. (D.rect_left r -. w +. 4.)
+       else open_right
+     in
      style := !style
        ^ Printf.sprintf
            "left:%.0fpx;top:%.0fpx;max-height:%.0fpx;overflow-y:auto;"
-           (D.rect_left r +. D.rect_width r -. 4.) top
+           left top
            (D.window_inner_height -. 16.)
    end
    else begin
@@ -306,7 +341,7 @@ let select_item_row it chosen multiple sel_set =
 (* A select popup; on_chosen item selected? -> unit; on_apply for multiple *)
 let show_select ~anchor ~items ~placeholder ?(multiple = false)
     ?(on_apply = fun _ -> ()) ?(extra : (unit -> D.el option) option)
-    ?(wrap_cls = "") ~on_chosen () =
+    ?(wrap_cls = "") ?(align_end = false) ~on_chosen () =
   close_all ();
   let sel_values : string list ref = ref [] in
   let sel_mem s v = List.mem v s in
@@ -437,7 +472,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   D.el_append_child inner results_wrap;
   if multiple then D.el_append_child inner apply_wrap;
   D.el_append_child document_body wrap;
-  position_content ~anchor ~content:wrap ~align_end:false ~submenu:false;
+  position_content ~anchor ~content:wrap ~align_end ~submenu:false;
   push_popup wrap;
   Editor_dom.set_timeout (fun () -> Editor_dom.el_focus input) 0
 

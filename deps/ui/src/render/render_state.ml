@@ -4,7 +4,7 @@
 
 open Promise_ext
 let with_repo f =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | Some r -> f r
   | None ->
       ignore

@@ -80,7 +80,8 @@ let dots_button =
                  (Some
                     ( Dom_ext.rect_right r
                     , Dom_ext.rect_bottom r +. 4.
-                    , true )))
+                    , true
+                    , None )))
         | None -> ())
     [ Icons.icon ~size:20. ~cls:"" "dots" ]
 
@@ -227,15 +228,64 @@ let right_toggle_button ms =
     ()
 
 let header (ms : Model.t Signal.signal) =
+  (* cljs header.cljs sets inline fontSize:50 on .cp__header *)
   Logseq_dom.dom ~key:"head" ~tag:"div" ~id:"head"
     ~style_class:"cp__header drag-region"
+    ~attrs:[ ("style", "font-size: 50px") ]
     [ Logseq_dom.dom ~key:"head-inner"
         ~style_class:"l flex items-center drag-region"
         [ left_menu_button; search_button ]
     ; Logseq_dom.dom ~key:"head-r"
         ~style_class:
           "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
-        [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
+        [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1"
+            [ dyn
+                ~equal:(fun (a : Model.t) (b : Model.t) ->
+                  (* only the zoomed-block trail renders here *)
+                  Option.map
+                    (fun (p : Model.page) ->
+                      List.map
+                        (fun (pb : Model.block) -> pb.Model.block_uuid)
+                        p.Model.page_parents)
+                    a.Model.route_page
+                  = Option.map
+                      (fun (p : Model.page) ->
+                        List.map
+                          (fun (pb : Model.block) -> pb.Model.block_uuid)
+                          p.Model.page_parents)
+                      b.Model.route_page)
+                (fun (m : Model.t) ->
+                  (* cljs header.cljs block-breadcrumb: ancestor trail in
+                     the header only while zoomed into a block (the page
+                     itself carries its own breadcrumb) *)
+                  match m.Model.route_page with
+                  | Some p when p.Model.page_parents <> [] ->
+                      let item key ~href ~text =
+                        Logseq_dom.dom ~key ~tag:"a"
+                          ~style_class:"breadcrumb-item"
+                          ~attrs:[ ("href", href) ]
+                          ~text:text []
+                      in
+                      Logseq_dom.dom ~key:"head-bc"
+                        ~style_class:"breadcrumb"
+                        (List.mapi
+                           (fun i (pb : Model.block) ->
+                             item
+                               ("hbc-" ^ string_of_int i)
+                               ~href:
+                                 ("#/block/"
+                                 ^ Option.value pb.Model.block_uuid
+                                     ~default:"")
+                               ~text:pb.Model.block_title)
+                           p.Model.page_parents
+                        @ [ item "hbc-cur"
+                              ~href:
+                                ("#/block/"
+                                ^ Option.value p.Model.page_uuid
+                                    ~default:"")
+                              ~text:p.Model.page_title ])
+                  | _ -> Logseq_dom.dom ~key:"head-bc-empty" [])
+                ms ]
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
             [ rtc_indicator ms
             ; index_progress ms
@@ -350,6 +400,13 @@ let overlays (ms : Model.t Signal.signal) =
              per-publish deep [=] on the whole route page record *)
           a.page_menu = b.page_menu && a.confirm = b.confirm
           && a.data_gen = b.data_gen
+          && List.map
+               (fun (p : Model.page) -> (p.page_uuid, p.page_journal_day))
+               a.journals
+             = List.map
+                 (fun (p : Model.page) ->
+                   (p.page_uuid, p.page_journal_day))
+                 b.journals
           && Option.map
                (fun (p : Model.page) ->
                  ( p.page_uuid
@@ -542,7 +599,9 @@ let shell (ms : Model.t Signal.signal) : t =
         [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
             ~style_class_signal:
               (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-                   if m.left_sidebar_open then "overflow-hidden"
+                   (* cljs container.cljs: overflow-hidden while RIGHT
+                      sidebar is open *)
+                   if m.right_sidebar_open then "overflow-hidden"
                    else "w-full"))
             [ header ms; main_content ms ]
         ; right_sidebar ms

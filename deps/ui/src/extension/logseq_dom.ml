@@ -26,6 +26,7 @@ let tags =
   ; "video"; "audio"; "iframe"; "small"; "kbd"; "table"; "thead"; "tbody"
   ; "tr"; "td"; "th"; "br"; "hr"; "canvas"; "article"
   ; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"; "i"
+  ; "del"; "ins"; "sub"; "blockquote"
     (* SVG (tabler icons render circle/rect/line/polyline/polygon/g/…
        alongside svg/path) *)
   ; "svg"; "path"; "circle"; "rect"; "line"; "polyline"; "polygon"; "g"
@@ -41,6 +42,7 @@ let schema_of tag =
     [ Lui_extension.property "attrs" Lui_extension.StringScalar false None
     ; Lui_extension.property "events" Lui_extension.StringScalar false None
     ; Lui_extension.property "text" Lui_extension.StringScalar false None
+    ; Lui_extension.property "html" Lui_extension.StringScalar false None
     ; Lui_extension.property "style-class" Lui_extension.StringScalar false
         None
     ; Lui_extension.property "accessibility-identifier"

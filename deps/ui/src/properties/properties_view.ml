@@ -24,7 +24,6 @@ module Dialog = Properties_dialog
 (* ---------- global keys ---------- *)
 
 let last_semi = ref 0.0
-let last_p = ref 0.0
 
 let on_keydown ev =
   if ev_composing ev then ()
@@ -47,13 +46,10 @@ let on_keydown ev =
           prevent_default ev;
           Dialog.open_for_current ())
         else last_semi := t
-    | "p" when not (is_editable_target (ev_target ev)) ->
-        last_p := Js.Date.now ()
-    | "a" when not (is_editable_target (ev_target ev)) ->
-        if Js.Date.now () -. !last_p < 800.0 then (
-          last_p := 0.0;
-          S.toggle_hidden ();
-          S.refresh_all ())
+    (* selection-mode `p <key>` sequences are owned by the chord layer in
+       editor_keys (cljs keymap): p d/s/p/t open the named property's
+       dedicated picker, p i the icon picker, p r the emoji reaction
+       picker, p a toggles hidden — not this generic sheet *)
     | _ -> ()
 
 (* ---------- install ---------- *)

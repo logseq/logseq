@@ -64,6 +64,11 @@ let close_overlays () =
 
 let overlay_open () = !overlays <> []
 
+(* hit-test against mounted overlay roots — registered state, no
+   selector list *)
+let overlay_contains el =
+  List.exists (fun o -> el_contains o.el el) !overlays
+
 (* Escape pops the top overlay; the global keydown handler installs this. *)
 let handle_escape () =
   if overlay_open () then (pop_overlay (); true) else false
@@ -87,18 +92,26 @@ let toggle_hidden () = show_hidden := not !show_hidden
 
 (* ---------- mounted area registry ---------- *)
 
-(* Each mounted area registers (container element, refresh closure).
-   refresh() re-invokes get-display-properties and re-renders inside the
-   container; dead entries are pruned by isConnected. *)
+(* Each mounted area registers (container element, mount key, refresh
+   closure). The key dedups mounting — a container remounts when the key
+   (block/page uuid) it was mounted for changes. refresh() re-invokes
+   get-display-properties and re-renders inside the container; dead
+   entries are pruned by isConnected. *)
 type area =
   { container : Editor_dom.el
+  ; key : string
   ; refresh : unit -> unit Js.Promise.t
   }
 
 let areas : area list ref = ref []
 
-let register_area container refresh =
-  areas := { container; refresh } :: !areas
+let register_area ~key container refresh =
+  areas := { container; key; refresh } :: !areas
+
+let mounted_key el =
+  Option.map
+    (fun a -> a.key)
+    (List.find_opt (fun a -> a.container == el) !areas)
 
 let unregister_area el =
   areas := List.filter (fun a -> a.container != el) !areas
@@ -140,7 +153,7 @@ let refresh_all_now () =
 
 (* sdk apply_ops awaits this before resolving — avoids a
    properties->sdk dependency cycle *)
-let () = Runtime.refresh_property_areas := refresh_all_now
+let () = Runtime.hooks.refresh_property_areas <- refresh_all_now
 
 (* Immediate refresh for flows that must render before the next user
    action (e.g. a pending inline editor must mount before the user can

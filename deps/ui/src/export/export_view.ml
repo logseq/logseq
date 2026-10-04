@@ -268,18 +268,22 @@ let body (_ms : Model.t Signal.signal) : t =
     dom ~key:"export-page" ~style_class:"export resize -m-5"
       [ dom ~key:"export-inner" ~style_class:"p-6"
           [ dom ~key:"export-tabs" ~style_class:"flex pb-3"
-              [ fmt_btn ctx "ft-text" (I18n.t "export/format-text") S.Text "mr-4 w-20"
-              ; fmt_btn ctx "ft-opml" "OPML" S.Opml "mr-4 w-20"
-              ; fmt_btn ctx "ft-html" "HTML" S.Html "mr-4 w-20"
-              ; fmt_btn ctx "ft-png" "PNG" S.Png "mr-4 w-20"
-              ; fmt_btn ctx "ft-edn" "EDN" S.Edn "w-20" ]
+              ([ fmt_btn ctx "ft-text" (I18n.t "export/format-text") S.Text "mr-4 w-20"
+               ; fmt_btn ctx "ft-opml" "OPML" S.Opml "mr-4 w-20"
+               ; fmt_btn ctx "ft-html" "HTML" S.Html "mr-4 w-20" ]
+               (* cljs hides the PNG tab once the export has top-level
+                  uuids *)
+               @ (if (Signal.get_state (S.st ctx)).S.has_top_level then
+                    []
+                  else [ fmt_btn ctx "ft-png" "PNG" S.Png "mr-4 w-20" ])
+               @ [ fmt_btn ctx "ft-edn" "EDN" S.Edn "w-20" ])
           ; dyn ~equal:Stdlib.( = )
               (fun fmt ->
                 match fmt with
                 | S.Png -> png_preview ctx
                 | _ ->
                     dom ~key:"export-preview" ~tag:"textarea"
-                      ~style_class:"overflow-y-auto h-96"
+                      ~style_class:"overflow-y-auto h-96 w-full"
                       ~attrs:[ ("readonly", "") ]
                       ~text_signal:(Logseq_dom.reactive_text
                            (fun (st : S.t) ->

@@ -129,6 +129,14 @@ let commit_or_cancel ctx row value =
       match Float.of_string_opt (String.trim value) with
       | Some n -> set_scalar ctx ~ident ~value:(W.Float n)
       | None -> ())
+  | "string" | "json" ->
+      (* non-ref scalar types: set/remove the raw string — no value
+         block (cljs single-string-input) *)
+      if String.trim value = "" then (
+        D.remove_block_property ~block_uuid:ctx.block_uuid ~ident
+        |> ignore;
+        S.refresh_all ())
+      else set_scalar ctx ~ident ~value:(W.String value)
   | _ -> save_text_value ctx row value;
   ctx.refresh ()
 
@@ -157,14 +165,18 @@ let arrow_svg_el () =
   el_append_child svg p;
   svg
 
-(* cljs mounts the property-value editor as a whole .ls-block skeleton
+(* cljs mounts the property-value cell as a whole .ls-block skeleton
    (components/property.cljs property-value renders an inline block
-   editor): .ls-block.is-blank > .block-main-container >
+   editor): .ls-block > .block-main-container >
    .block-control-wrap (arrow + bullet) + .block-main-content >
-   .block-content-or-editor-wrap > .block-row > .editor-wrapper *)
-let block_editor_frame u cell wrap =
+   .block-content-or-editor-wrap > .block-row > content.  The same
+   skeleton wraps the read-only value — blank toggles is-blank, and the
+   right side carries .opacity-70.hover:opacity-100 in view mode vs
+   .ls-hover-lit while editing. *)
+let block_frame ?(blank = true) u cell wrap =
   let blk =
-    mk ~cls:"is-blank ls-block swipe-item" "div"
+    mk ~cls:((if blank then "is-blank " else "") ^ "ls-block swipe-item")
+      "div"
       ~attrs:
         [ ("data-block-title", ""); ("haschild", "false")
         ; ("data-comment-item", "false"); ("data-comments-area", "false")
@@ -208,10 +220,15 @@ let block_editor_frame u cell wrap =
   in
   el_append_child brow wrap;
   let right =
-    mk ~cls:"ls-block-right"
+    mk
+      ~cls:
+        (if blank then "ls-block-right"
+         else "ls-block-right flex flex-row items-center self-start gap-1")
       "div"
   in
-  el_append_child right (mk ~cls:"ls-hover-lit" "div");
+  el_append_child right
+    (mk ~cls:(if blank then "ls-hover-lit" else "opacity-70 hover:opacity-100")
+       "div");
   el_append_child brow right;
   el_append_child boei brow;
   el_append_child boew boei;
@@ -256,7 +273,7 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
   el_append_child inner mt;
   el_append_child inner uploader;
   el_append_child wrap inner;
-  block_editor_frame vu cell wrap;
+  block_frame vu cell wrap;
   el_set_value ta initial;
   (* single editing surface: commit the property editor still open
      elsewhere before this one registers — the previous commit's row
@@ -326,31 +343,71 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
   el_listen ta "input" (fun _ -> set_edit_buffer ctx row (el_value ta))
     true
 
+(* cljs view-mode value: the property-block-container holds a real
+   block row — .ls-block.swipe-item > .block-main-container >
+   control-wrap + content chain > .block-row >
+   (.block-content-wrapper > .block-content.inline > .block-content-inner
+   > .block-head-wrap > .w-full.inline > span.block-title-wrap) *)
+let view_value_wrap ?href value_text =
+  let wrap = mk ~cls:"flex flex-1 w-full block-content-wrapper" "div" in
+  let content = mk ~cls:"jtrigger block-content inline" "div" in
+  let inner =
+    mk ~cls:"flex flex-row justify-between block-content-inner" "div"
+  in
+  let head = mk ~cls:"block-head-wrap" "div" in
+  let inl = mk ~cls:"w-full inline" "div" in
+  (match href with
+   | Some href ->
+       (* url values link out like cljs .block-title-wrap > a.external-link *)
+       let tw = mk ~cls:"block-title-wrap" "span" in
+       let a =
+         mk "a" ~cls:"external-link"
+           ~attrs:[ ("target", "_blank"); ("href", href) ]
+       in
+       el_set_text a value_text;
+       el_append_child tw a;
+       el_append_child inl tw
+   | None ->
+       ignore (child_text "span" "block-title-wrap" value_text inl));
+  el_append_child head inl;
+  el_append_child inner head;
+  el_append_child content inner;
+  el_append_child wrap content;
+  el_append_child wrap (mk ~cls:"flex flex-row items-center" "div");
+  wrap
+
 let text_cell ctx row =
   let value = D.row_value row in
   let cell =
-    mk ~cls:"property-block-container content jtrigger" "div"
+    mk ~cls:"property-block-container content w-full jtrigger" "div"
       ~attrs:[ ("tabindex", "-1") ]
   in
+  let vu = Option.value ~default:ctx.block_uuid (D.ref_uuid value) in
   if not (D.value_empty_p value) then
     List.iter
       (fun v ->
-        ignore
-          (child_text "span" "block-title-wrap"
-             (match v with
-              | W.String s -> s
-              | other -> D.ref_title other)
-             cell))
+        let t =
+          match v with
+          | W.String s -> s
+          | other -> D.ref_title other
+        in
+        block_frame ~blank:false vu cell
+          (view_value_wrap
+             ?href:
+               (if D.row_type row = "url" && String.length t > 0 then
+                  Some t
+                else None)
+             t))
       (D.value_elems value);
   on_click cell (fun _ ->
-      edit_text_cell ~steal:true ctx row cell (D.ref_title value));
+      edit_text_cell ~steal:true ctx row cell (D.value_display value));
   cell
 
 (* ---------- number ---------- *)
 
 let number_cell ctx row =
   let value = D.row_value row in
-  let cell = mk ~cls:"ls-number jtrigger" "div" in
+  let cell = mk ~cls:"ls-number flex flex-1 jtrigger" "div" in
   if not (D.value_empty_p value) then
     el_set_text cell (D.value_display value);
   on_click cell (fun _ ->
@@ -359,27 +416,47 @@ let number_cell ctx row =
 
 (* ---------- checkbox ---------- *)
 
+(* cljs shui/checkbox: label.as-scalar-value-wrap > button.ui__checkbox
+   (+ check svg indicator when checked) *)
 let checkbox_cell ctx row =
   let value = D.row_value row in
   let checked = match value with W.Bool b -> b | _ -> false in
+  let label =
+    mk ~cls:
+      "flex w-full items-center as-scalar-value-wrap cursor-pointer"
+      "label"
+  in
   let btn =
     mk "button"
       ~attrs:
         [ ("role", "checkbox")
         ; ("aria-checked", string_of_bool checked)
+        ; ("tabindex", "0")
         ; ("type", "button")
-        ; ( "style"
-          , "width:16px;height:16px;border:1px solid \
-             var(--border-color,#888);border-radius:3px" )
-        ]
-      ~cls:"jtrigger"
+        ; ("style", "width: 16px; min-width: 16px") ]
+      ~cls:
+        "ui__checkbox peer h-4 w-4 shrink-0 cursor-pointer rounded-sm \
+         border border-primary ring-offset-background \
+         focus-visible:outline-none focus-visible:ring-2 \
+         focus-visible:ring-ring focus-visible:ring-offset-2 \
+         disabled:cursor-not-allowed disabled:opacity-50 \
+         data-[checked]:bg-primary data-[checked]:text-primary-foreground \
+         jtrigger flex flex-row items-center"
   in
-  if checked then el_set_text btn "✓";
-  if checked then el_set_attr btn "data-checked" "true";
+  if checked then (
+    el_set_attr btn "data-checked" "";
+    let ind = mk "span" ~attrs:[ ("data-checked", "") ] in
+    (match tabler_svg_el ~size:16. "check" with
+     | Some svg ->
+         el_set_attr svg "class" "tabler-icon tabler-icon-check h-4 w-4";
+         el_append_child ind svg
+     | None -> ());
+    el_append_child btn ind);
   on_click btn (fun _ ->
       let ident = D.row_ident row |> Option.value ~default:"" in
       set_scalar ctx ~ident ~value:(W.Bool (not checked)));
-  btn
+  el_append_child label btn;
+  label
 
 (* ---------- date / datetime ---------- *)
 
@@ -409,19 +486,39 @@ let set_date ctx ident day =
   Js.Promise.resolve ())
   |> ignore
 
-let commit_date_input ctx ident ~is_datetime input =
+(* ?uuids >1 -> cljs batch-set-property! over the block selection *)
+let commit_date_input ?(uuids = []) ctx ident ~is_datetime input =
+  let set_many value =
+    D.batch_set_property ~block_uuids:uuids ~ident ~value |> ignore;
+    S.refresh_all ()
+  in
   let v = String.trim (el_value input) in
   if is_datetime then
     let ms =
       if v = "" then now_ms () else parse_ms v
     in
     (* NaN parse -> no write *)
-    if ms = ms then set_scalar ctx ~ident ~value:(W.Float ms)
+    if ms = ms then
+      (match uuids with
+       | [ _ ] | [] -> set_scalar ctx ~ident ~value:(W.Float ms)
+       | _ -> set_many (W.Float ms))
   else
-    let day = if v = "" then today_day () else Option.value (parse_date v) ~default:(-1) in
-    if day > 0 then set_date ctx ident day
+    let day =
+      if v = "" then today_day ()
+      else Option.value (parse_date v) ~default:(-1)
+    in
+    if day > 0 then
+      (match uuids with
+       | [ _ ] | [] -> set_date ctx ident day
+       | _ ->
+           (let* w = D.journal_page_by_day day in
+            (match D.geti w "db/id" with
+             | Some id -> set_many (W.Int id)
+             | None -> ());
+            Js.Promise.resolve ())
+           |> ignore)
 
-let date_picker ctx row anchor =
+let date_picker ?(uuids = []) ctx row anchor =
   let ident = D.row_ident row |> Option.value ~default:"" in
   let is_datetime = D.row_type row = "datetime" in
   let picker =
@@ -449,7 +546,7 @@ let date_picker ctx row anchor =
       match ev_key ev with
       | "Enter" ->
           prevent_default ev;
-          commit_date_input ctx ident ~is_datetime input;
+          commit_date_input ~uuids ctx ident ~is_datetime input;
           S.pop_overlay ()
       | "Escape" ->
           prevent_default ev;
@@ -473,14 +570,8 @@ let ms_of_value = function
 
 (* datetime cell: .ls-datetime > span.inline-flex > a.page-ref "Today" —
    cljs datetime-value markup *)
-let datetime_content cell ms =
-  let y, m, d = ymd_of_ms ms in
-  let title =
-    Dates.journal_title_of
-      (Js.Date.fromFloat
-         (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
-            ~date:(float d) ()))
-  in
+let datetime_content cell ~y ~m ~d =
+  let title = Dates.journal_title_ymd ~y ~m ~d in
   let wrap = mk ~cls:"ls-datetime" "div" in
   let inner = mk ~cls:"inline-flex" "span" in
   let a =
@@ -494,25 +585,23 @@ let datetime_content cell ms =
   el_append_child cell wrap
 
 (* datetime values arrive as journal-page ref summaries — the day is
-   block/journal-day (yyyymmdd); fall back to a raw ms number *)
-let ms_of_datetime_value (v : W.t) : float option =
+   block/journal-day (yyyymmdd); fall back to a raw ms number. The
+   journal day must render as-is: routing it through a UTC-ms epoch
+   and local getters would shift the day in timezones behind UTC *)
+let ymd_of_datetime_value (v : W.t) : (int * int * int) option =
   match ms_of_value v with
-  | Some ms -> Some ms
+  | Some ms -> Some (ymd_of_ms ms)
   | None -> (
       match W.get v "block/journal-day" with
-      | Some (W.Int d) ->
-          let y = d / 10000 and m = d mod 10000 / 100 and dd = d mod 100 in
-          Some
-            (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
-               ~date:(float dd) ())
+      | Some (W.Int d) -> Some (d / 10000, d mod 10000 / 100, d mod 100)
       | _ -> None)
 
 let date_cell ctx row =
   let value = D.row_value row in
   let cell = mk ~cls:"jtrigger" "div" in
   if not (D.value_empty_p value) then
-    (match D.row_type row = "datetime", ms_of_datetime_value value with
-     | true, Some ms -> datetime_content cell ms
+    (match D.row_type row = "datetime", ymd_of_datetime_value value with
+     | true, Some (y, m, d) -> datetime_content cell ~y ~m ~d
      | _ -> el_set_text cell (D.value_display value));
   on_click cell (fun _ -> date_picker ctx row cell);
   cell
@@ -690,29 +779,58 @@ let closed_value_icon_id value =
       in
       if is_empty_placeholder then Some "line-dashed" else None)
 
-let closed_value_cell ctx row anchor =
+let closed_value_cell ?(icon_only = false) ctx row anchor =
   let value = D.row_value row in
   let cell = mk ~cls:"jtrigger" "div" in
   (* cljs select-item: an empty closed value renders .select-item >
      .empty-btn with the line-dashed icon — keeps the jtrigger
      visible/clickable *)
-  (match closed_value_icon_id value with
-   | Some id ->
-       let item = mk ~cls:"select-item" "div" in
-       el_append_child item (Views_dom.icon id);
-       el_append_child cell item
-   | None ->
-       if D.value_empty_p value then (
-         let item = mk ~cls:"select-item" "div" in
-         let btn = mk ~cls:"empty-btn" "button" ~attrs:[ ("type", "button") ] in
-         el_append_child btn (Views_dom.icon "line-dashed");
-         el_append_child item btn;
-         el_append_child cell item));
-  let txt = D.value_display value in
-  let txt =
-    if txt = "logseq.property/empty-placeholder" then "" else txt
+  let icon_only_chip =
+    (* cljs closed-value-item {:icon? true} at positioned spots: the
+       chip renders the icon alone, wrapped in .ls-icon-color-wrap —
+       no text label *)
+    match closed_value_icon_id value with
+    | Some id when icon_only && id <> "line-dashed" -> (
+        let item = mk ~cls:"select-item cursor-pointer shrink-0" "div" in
+        let wrap =
+          mk ~cls:"inline-flex items-center ls-icon-color-wrap" "span"
+        in
+        let color =
+          Option.bind
+            (D.getf (D.untag value) "logseq.property/icon")
+            (fun icon -> D.gets (D.untag icon) "color")
+        in
+        el_set_attr wrap "style"
+          ("color:" ^ Option.value color ~default:"inherit");
+        el_append_child wrap (Views_el.icon id);
+        el_append_child item wrap;
+        el_append_child cell item;
+        Some ())
+    | _ -> None
   in
-  if txt <> "" then ignore (child_text "span" "" txt cell);
+  (match icon_only_chip with
+   | Some () -> ()
+   | None -> (
+       (match closed_value_icon_id value with
+        | Some id ->
+            let item = mk ~cls:"select-item" "div" in
+            el_append_child item (Views_el.icon id);
+            el_append_child cell item
+        | None ->
+            if D.value_empty_p value then (
+              let item = mk ~cls:"select-item" "div" in
+              let btn =
+                mk ~cls:"empty-btn" "button"
+                  ~attrs:[ ("type", "button") ]
+              in
+              el_append_child btn (Views_el.icon "line-dashed");
+              el_append_child item btn;
+              el_append_child cell item));
+       let txt = D.value_display value in
+       let txt =
+         if txt = "logseq.property/empty-placeholder" then "" else txt
+       in
+       if txt <> "" then ignore (child_text "span" "" txt cell)));
   on_click cell (fun _ ->
       block_tag_ids ctx (fun tag_ids ->
           gather_exclusions tag_ids (fun exclusions ->
@@ -993,11 +1111,44 @@ let editing_cell ctx row inner =
   el_append_child inner cell;
   edit_text_cell ctx row cell (edit_buffer ctx row)
 
-let render ctx row =
+(* icon_only = cljs :icon? — positioned rows (block-left chips,
+   block-below pills) show the closed-value icon without its label *)
+let render ?(icon_only = false) ctx row =
   let inner =
-    mk ~cls:"property-value property-value-panel-inner" "div"
+    mk ~cls:"property-value property-value-panel-inner flex flex-1" "div"
   in
   let ident = D.row_ident row |> Option.value ~default:"" in
+  let ty = D.row_type row in
+  (* cljs components/property/value.cljs: the cell always sits in a
+     .property-value-inner[data-type] carrier (empty-value flag when the
+     row has no value); scalar text/url values add
+     .flex.flex-1 > .flex.flex-1.cursor-text wrappers *)
+  let eff = D.row_with_effective_value row in
+  let empty_p = D.value_empty_p (D.row_value eff) in
+  let value_inner =
+    mk ~cls:("property-value-inner w-full" ^ (if empty_p then " empty-value" else ""))
+      "div"
+  in
+  el_set_attr value_inner "data-type" ty;
+  el_append_child inner value_inner;
+  let text_wrap, text_leaf =
+    let flex1 = mk ~cls:"flex flex-1" "div" in
+    let ct =
+      mk ~cls:"flex flex-1 cursor-text" "div"
+        ~attrs:[ ("tabindex", "0"); ("style", "min-height:24px") ]
+    in
+    el_append_child flex1 ct;
+    (flex1, ct)
+  in
+  let is_text =
+    D.row_closed_values row = []
+    && not
+         (List.mem ty
+            [ "checkbox"; "number"; "date"; "datetime"; "node"; "asset"
+            ; "page"; "class"; "property" ])
+  in
+  if is_text then el_append_child value_inner text_wrap;
+  let leaf = if is_text then text_leaf else value_inner in
   (* cljs keeps a single editing surface: while a block is open in the
      outliner editor a pending/stale value editor must not mount —
      two .editor-wrapper textareas would coexist *)
@@ -1005,14 +1156,13 @@ let render ctx row =
     (take_pending_edit ~block_uuid:ctx.block_uuid ~ident
      || has_active_edit ctx row)
     && Editor_state.editing () = None
-  then editing_cell ctx row inner
+  then editing_cell ctx row leaf
   else (
-    let row = D.row_with_effective_value row in
+    let row = eff in
     let value = D.row_value row in
-    let ty = D.row_type row in
     let cell =
       if D.row_closed_values row <> [] then
-        closed_value_cell ctx row inner
+        closed_value_cell ~icon_only ctx row inner
       else
         match ty with
         | "checkbox" -> checkbox_cell ctx row
@@ -1035,11 +1185,11 @@ let render ctx row =
               in
               on_click empty (fun _ ->
                   let cell = text_cell ctx row in
-                  el_clear inner;
-                  el_append_child inner cell;
+                  el_clear leaf;
+                  el_append_child leaf cell;
                   el_click cell);
               empty)
             else text_cell ctx row
     in
-    el_append_child inner cell);
+    el_append_child leaf cell);
   inner

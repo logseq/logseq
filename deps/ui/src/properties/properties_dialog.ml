@@ -550,7 +550,8 @@ and render_value_edit d body prop =
               ; class_schema = false
               }
             in
-            V.commit_date_input ctx (ident_of prop) ~is_datetime:(ty = "datetime") input;
+            V.commit_date_input ~uuids:d.target.uuids ctx (ident_of prop)
+              ~is_datetime:(ty = "datetime") input;
             close_dlg d
         | "Escape" -> prevent_default ev; stop_propagation ev; close ()
         | _ -> ())
@@ -606,6 +607,13 @@ and render_value_edit d body prop =
                in
                close_dlg d;
                Js.Promise.resolve ()))
+      else if ty = "string" || ty = "json" then
+        (* non-ref scalar types validate value_is_string — set the raw
+           string, no value block *)
+        Some
+          (fun text ->
+            write_prop_value d prop (Some (W.String text));
+            close_dlg d)
       else
         Some
           (fun text ->
@@ -630,9 +638,9 @@ and render_value_edit d body prop =
 
 (* cljs pops the input under the invoking control (popup-show! on the
    click target); callers without an anchor get the centered fallback *)
-let open_dialog ?(remove = false) ?anchor target =
+let open_dialog ?(remove = false) ?anchor ?(phase = Prop_select) target =
   let d =
-    { target; phase = Prop_select; body = None; pending_type = None
+    { target; phase; body = None; pending_type = None
     ; select_overlay = None; remove
     }
   in
@@ -683,8 +691,7 @@ let open_dialog ?(remove = false) ?anchor target =
      second open replaces any popups left over from the previous flow *)
   S.close_overlays ();
   S.push_overlay root ~on_escape:(fun () -> ());
-  render d;
-  d
+  render d
 
 (* ---------- triggers ---------- *)
 
@@ -701,7 +708,7 @@ let current_target () : target option =
           Some { uuid = u; uuids = us; db_id = None; is_tag = false
                ; title = "" }
       | [] -> (
-          match !Runtime.current_page with
+          match (Runtime.model ()).Model.route_page with
           | Some p ->
               let uuid = Option.value ~default:"" p.Model.page_uuid in
               if uuid = "" then None
@@ -712,55 +719,53 @@ let current_target () : target option =
                   }
           | None -> None))
 
-(* open the dialog for a specific block uuid (slash command path). cljs
-   anchors the popover on the editing textarea (#edit-block-<uuid>)
-   with align:start — bottom-left corner, 4px left *)
-let anchor_of uuid =
+(* cljs anchors the popover on the editing textarea
+   (#edit-block-<uuid>) with align:start — bottom-left corner, 4px
+   left; the block element when no editor is live *)
+let block_anchor uuid =
   match get_element_by_id ("edit-block-" ^ uuid) with
   | Some ta ->
       let l, _t, _r, b, _w = el_rect ta in
       Some (l -. 4., b)
   | None -> (
-      (* no live editor: cljs anchors on the block element itself
-         (selection path) — bottom-left of .ls-block *)
       match get_element_by_id ("ls-block-" ^ uuid) with
       | Some blk ->
           let l, _t, _r, b, _w = el_rect blk in
           Some (l, b)
       | None -> None)
 
+(* open the dialog for a specific block uuid (slash command path) *)
 let open_for_block ?anchor uuid =
   let anchor =
-    match anchor with Some _ -> anchor | None -> anchor_of uuid
+    match anchor with Some _ -> anchor | None -> block_anchor uuid
   in
   ignore
     (open_dialog ?anchor
        { uuid; uuids = []; db_id = None; is_tag = false; title = "" })
 
-(* cljs :editor/new-property {:property-key X} — the dialog skips the
-   property picker and lands in X's value editor (the p s/p p/p t
-   chords). [key] matches a property ident or its title ("Tags") *)
-let open_for_block_prop uuid key =
-  let d =
-    open_dialog ?anchor:(anchor_of uuid)
-      { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
-  in
-  ignore
-    ((let* w = D.all_properties (D.uuid_ref d.target.uuid) in
-     (match
-        List.find_opt
-          (fun p -> ident_of p = key || title_of p = key)
-          (W.elems w)
-      with
-      (* leave the prop picker up if the property can't be resolved *)
-      | Some p -> property_chosen d p
-      | None -> ());
-     Js.Promise.resolve ()))
-
 (* open anchored under a DOM element (its bottom-left corner) *)
 let open_for_block_at el uuid =
   let l, _t, _r, b, _w = el_rect el in
   open_for_block ~anchor:(l, b +. 4.) uuid
+
+(* cljs :editor/new-property {:property-key ident}: the dialog jumps
+   straight to the value-editing phase for the named property — a
+   dedicated picker (date input, closed-value select, node select) —
+   across the whole block selection *)
+let open_for_block_with_property ?anchor ~uuids uuid ~ident =
+  (let* prop =
+    D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ])
+  in
+  (match D.untag prop with
+   | W.Map _ as p ->
+       let anchor =
+         match anchor with Some _ -> anchor | None -> block_anchor uuid
+       in
+       open_dialog ?anchor ~phase:(Value_edit p)
+         { uuid; uuids; db_id = None; is_tag = false; title = "" }
+   | _ -> ());
+  Js.Promise.resolve ())
+  |> ignore
 
 let open_for_current () =
   match current_target () with Some t -> ignore (open_dialog t) | None -> ()

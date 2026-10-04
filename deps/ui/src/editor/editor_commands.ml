@@ -13,7 +13,7 @@ module S = Editor_state
 module D = Editor_dom
 module A = Editor_actions
 module Ops = Outliner_ops
-module V = Views_dom
+module V = Views_el
 module W = Wire
 
 (* ---------- event detail ---------- *)
@@ -144,6 +144,7 @@ let focus_day p =
 let close_popup ?focus_caret p =
   V.el_remove p.root;
   active := None;
+  Runtime.editor_popup_root := None;
   match focus_caret with
   | Some c -> (
       match D.textarea_of p.uuid with
@@ -1028,6 +1029,7 @@ let open_cal kind uuid from =
    | None -> ());
   D.el_append_child V.document_body root;
   active := Some p;
+  Runtime.editor_popup_root := Some p.root;
   rebuild_grid p;
   cal_clamp_in_view uuid root;
   (match kind with
@@ -1065,6 +1067,7 @@ let open_link_form image uuid from =
   in
   D.el_append_child V.document_body root;
   active := Some p;
+  Runtime.editor_popup_root := Some p.root;
   D.el_focus url_inp
 
 let submit_link p =
@@ -1196,7 +1199,7 @@ let cycle_todo uuid =
   let row_id e =
     Properties_data.geti (Properties_data.untag e) "db/id"
   in
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -1282,7 +1285,7 @@ let toggle_own_list uuid caret =
    else set all children. Children are read fresh from the worker — the
    model tree can lag a just-applied indent. *)
 let toggle_children_list uuid caret =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -1406,13 +1409,16 @@ let on_command ev =
             | "add-property" ->
                 Properties_dialog.open_for_block uuid
             | "add-property-status" ->
-                Properties_dialog.open_for_block_prop uuid
-                  "logseq.property/status"
+                Properties_dialog.open_for_block_with_property
+                  ~uuids:[ uuid ] uuid
+                  ~ident:"logseq.property/status"
             | "add-property-priority" ->
-                Properties_dialog.open_for_block_prop uuid
-                  "logseq.property/priority"
+                Properties_dialog.open_for_block_with_property
+                  ~uuids:[ uuid ] uuid
+                  ~ident:"logseq.property/priority"
             | "set-tags" ->
-                Properties_dialog.open_for_block_prop uuid "Tags"
+                Properties_dialog.open_for_block_with_property
+                  ~uuids:[ uuid ] uuid ~ident:"block/tags"
             | "set-icon" | "add-reaction" ->
                 (* the pickers live in the popups layer — editor modules
                    cannot reach icon_picker without a module cycle *)

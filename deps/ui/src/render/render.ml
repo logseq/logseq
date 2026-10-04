@@ -70,50 +70,75 @@ let starts_ci s pat =
   && String.lowercase_ascii (String.sub s 0 n)
      = String.lowercase_ascii pat
 
-(* #+BEGIN_QUOTE body [#+END_QUOTE] — directive may wrap the rest of the
-   title inline. *)
-let quote_body s =
-  let prefix = "#+begin_quote" in
-  if starts_ci s prefix then
-    let body =
-      String.trim (String.sub s (String.length prefix)
-                     (String.length s - String.length prefix))
-    in
-    let body =
-      let suffix = "#+end_quote" in
-      let n = String.length body and m = String.length suffix in
-      if n >= m
-         && String.lowercase_ascii (String.sub body (n - m) m) = suffix
-      then String.trim (String.sub body 0 (n - m))
-      else body
-    in
-    Some body
-  else None
+(* #+BEGIN_QUOTE is deprecated in db graphs — cljs renders a
+   .warning notice (t :block/deprecated-quote), not a quote block *)
+let deprecated_quote s = starts_ci s "#+begin_quote"
 
-(* #+BEGIN_SRC lang\n...\n#+END_SRC — code block; plain pre.CodeMirror-line
-   fallback (real CodeMirror mount is a separate editor concern). *)
+(* #+BEGIN_QUERY — same deprecation treatment (cljs
+   :block/deprecated-query-syntax) *)
+let deprecated_query s = starts_ci s "#+begin_query"
+
+(* '#+BEGIN_EXPORT latex' — deprecated in favor of '/Math block' *)
+let deprecated_latex_export s =
+  starts_ci s "#+begin_export"
+  && starts_ci
+       (String.trim
+          (String.sub s (String.length "#+begin_export")
+             (String.length s - String.length "#+begin_export")))
+       "latex"
+
+let deprecated_warning key =
+  D.el ~tag:"div" ~style_class:"warning" ~text:(I18n.t key) []
+
+(* #+BEGIN_SRC lang\n...\n#+END_SRC or a markdown ```lang\n...\n``` fence —
+   code block; plain pre.CodeMirror-line fallback (real CodeMirror mount
+   is a separate editor concern). *)
 let src_block s =
-  let prefix = "#+begin_src" in
-  if starts_ci s prefix then
-    let rest = String.sub s (String.length prefix)
-                 (String.length s - String.length prefix) in
+  if String.length s >= 3 && String.sub s 0 3 = "```" then (
+    let rest = String.sub s 3 (String.length s - 3) in
     match String.index_opt rest '\n' with
     | None -> None
     | Some nl ->
         let lang = String.trim (String.sub rest 0 nl) in
-        let body_start = String.length prefix + nl + 1 in
-        let body = String.sub s body_start (String.length s - body_start) in
         let body =
-          let suffix = "#+end_src" in
-          let n = String.length body and m = String.length suffix in
-          if n >= m
-             && String.lowercase_ascii
-                  (String.sub body (n - m) m) = suffix
-          then String.sub body 0 (n - m)
+          String.sub rest (nl + 1) (String.length rest - nl - 1)
+        in
+        let body =
+          let n = String.length body in
+          if n >= 3 && String.sub body (n - 3) 3 = "```" then
+            let b = String.sub body 0 (n - 3) in
+            if String.length b > 0 && b.[String.length b - 1] = '\n' then
+              String.sub b 0 (String.length b - 1)
+            else b
           else body
         in
-        Some (lang, body)
-  else None
+        Some (lang, body))
+  else
+    let prefix = "#+begin_src" in
+    if starts_ci s prefix then (
+      let rest =
+        String.sub s (String.length prefix)
+          (String.length s - String.length prefix)
+      in
+      match String.index_opt rest '\n' with
+      | None -> None
+      | Some nl ->
+          let lang = String.trim (String.sub rest 0 nl) in
+          let body_start = String.length prefix + nl + 1 in
+          let body =
+            String.sub s body_start (String.length s - body_start)
+          in
+          let body =
+            let suffix = "#+end_src" in
+            let n = String.length body and m = String.length suffix in
+            if n >= m
+               && String.lowercase_ascii (String.sub body (n - m) m)
+                  = suffix
+            then String.sub body 0 (n - m)
+            else body
+          in
+          Some (lang, body))
+    else None
 
 (* blocks tagged logseq.class/Query (created by the /query commands)
    render the outer .custom-query-results + .ls-query-setting shell;
@@ -264,21 +289,52 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
     (Signal.value st)
     context parent
 
-(* {{query ...}} whole-title -> the query shell:
-   .custom-query-results + .ls-query-setting shell; the queries area
-   fills in real results later. *)
-let is_whole_query s =
-  let t = String.trim s in
-  String.length t > 8
-  && String.sub t 0 8 = "{{query "
-  && String.sub t (String.length t - 2) 2 = "}}"
+(* cljs block-title-aux query-setting: class-Query blocks get a ghost
+   settings button next to the title (opacity-0 until the head row is
+   hovered) that toggles the query source editor inside the block's
+   below-row .custom-query-results view *)
+let query_setting_el ~block_uuid =
+  D.el ~key:"qs" ~tag:"button"
+    ~style_class:
+      "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6 \
+       transition-opacity ease-in duration-300 opacity-0"
+    ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ]
+    ~events:"click"
+    ~on_dom_event:(fun name _ ->
+      if name = "click" then Views_view.toggle_query_editor ~block_uuid)
+    [ Icons.icon ~size:14. "settings" ]
 
-let query_shell =
-  D.el ~tag:"div" ~style_class:"custom-query-results"
-    [ D.el ~tag:"button"
-        ~style_class:
-          "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6"
-        ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ] []
+(* cljs cards-block?: logseq.class/Cards tag adds a "Practice" ghost
+   button next to the title that opens the flashcards modal
+   ([:modal/show-cards] -> ls:open-cards) *)
+let practice_el =
+  D.el ~key:"pr" ~tag:"button"
+    ~style_class:"!px-1 text-xs text-muted-foreground"
+    ~attrs:
+      [ ("type", "button"); ("title", I18n.t "block/practice-cards") ]
+    ~events:"click"
+    ~on_dom_event:(fun name _ ->
+      if name = "click" then Platform.dispatch "ls:open-cards" Js.Json.null)
+    [ D.el ~tag:"span" ~text:(I18n.t "block/practice") [] ]
+
+let is_query_block (b : Model.block) =
+  List.mem "logseq.class/Query" b.Model.block_tag_idents
+
+let is_cards_block (b : Model.block) =
+  List.mem "logseq.class/Cards" b.Model.block_tag_idents
+
+(* cljs custom-query*: class-Query blocks render their live query inside
+   .custom-query > .bd > .custom-query-results BELOW .block-main-container
+   (a sibling inside .ls-block) — mounted declaratively as a KQuery view
+   (.views-query-inner + raw-source .CodeMirror when the editor is open) *)
+let query_below_el uuid =
+  D.el ~key:("cq-" ^ uuid) ~tag:"div" ~style_class:"custom-query"
+    [ D.el ~tag:"div" ~style_class:"bd"
+        [ D.el ~tag:"div" ~style_class:"custom-query-results"
+            [ Views_view.view
+                ~kind:(Views_state.KQuery { block_uuid = uuid })
+                ~owner:(Wire.Uuid uuid) ]
+        ]
     ]
 
 (* content for a (possibly quoted) body — headings nest inside quote *)
@@ -312,35 +368,62 @@ let html_body s =
     Some (String.trim (String.sub t 7 (String.length t - 7)))
   else None
 
+(* cljs block-title picks the .block-head-wrap carrier by
+   logseq.property.node/display-type: code -> .flex.flex-1.w-full,
+   math -> bare .math-block (no carrier), text -> .w-full.inline. *)
+let title_outer_class (b : Model.block) =
+  (* cljs block-title-aux: the title wrapper is .inline-flex only for
+     class-Query blocks (title + setting button) *)
+  if is_query_block b then Some "inline-flex"
+  else
+    match b.Model.block_display_type with
+    | Some "code" -> Some "flex flex-1 w-full"
+    | Some "math" -> None
+    | _ ->
+        let s = b.Model.block_title in
+        if src_block s <> None || src_eval_parts s <> None then
+          Some "flex flex-1 w-full"
+        else Some "w-full inline"
+
 (* self: uuid of the block whose title this is — seeds the ref chain
    (cljs :ref-set) that suppresses self/cycle references. is_query:
-   query blocks render the .custom-query-results shell instead of
-   inline content (cljs query view). *)
-let title ?heading ?(is_query = false) ?(self = "")
+   class-Query blocks keep their title and append the query-setting
+   ghost button; the live query shell lives below the block row
+   (query_below_el). is_cards: class-Cards blocks append "Practice". *)
+let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) (s : string) : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
 
-  | None -> (
-      match quote_body s with
-      | Some body ->
-          [ D.el ~key:"rc-quote" ~tag:"div"
-              ~attrs:[ ("data-node-type", "quote") ]
-              [ content ?heading ~self body ] ]
-      | None -> (
-          match src_block s with
-          | Some (lang, code) -> [ code_block ~self lang code ]
-          | None -> (
-              if is_whole_query s || is_query then [ wrap ""; query_shell ]
-              else
-                match ordered_prefix s with
-                | Some (num, rest) ->
-                    [ D.el ~key:"rc-typed-list" ~tag:"span"
-                        ~style_class:"typed-list"
-                        [ D.el ~tag:"label" ~text:num [] ]
-                    ; content ?heading ~self ~wrap_attrs ~prefix rest ]
-                | None ->
-                    [ content ?heading ~self ~wrap_attrs ~prefix s ])))
+  | None ->
+      if deprecated_quote s then
+        [ D.el ~key:"rc-quote" ~tag:"div"
+            ~attrs:[ ("data-node-type", "quote") ]
+            [ deprecated_warning "block/deprecated-quote" ] ]
+      else if deprecated_query s then
+        [ deprecated_warning "block/deprecated-query-syntax" ]
+      else if deprecated_latex_export s then
+        [ deprecated_warning "block/deprecated-latex-export" ]
+      else
+        match src_block s with
+        | Some (lang, code) -> [ code_block ~self lang code ]
+        | None -> (
+            (* {{query}} is a normal inline macro — macro_el renders the
+               deprecation .warning inside .block-title-wrap like cljs *)
+            let tail =
+              (if is_query then [ query_setting_el ~block_uuid:self ]
+               else [])
+              @ if is_cards then [ practice_el ] else []
+            in
+            match ordered_prefix s with
+            | Some (num, rest) ->
+                [ D.el ~key:"rc-typed-list" ~tag:"span"
+                    ~style_class:"typed-list"
+                    [ D.el ~tag:"label" ~text:num [] ]
+                ; content ?heading ~self ~wrap_attrs ~prefix rest ]
+                @ tail
+            | None ->
+                [ content ?heading ~self ~wrap_attrs ~prefix s ] @ tail)
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading.
@@ -377,7 +460,7 @@ let title_block ?(self = "") ?resolved ?(annot = false)
                 [ src_eval_el ~code
                     ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
       | None ->
-          title ?heading
-            ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
-            ~self ~wrap_attrs ~prefix (Option.value resolved ~default:s))
+          title ?heading ~is_query:(is_query_block b)
+            ~is_cards:(is_cards_block b) ~self ~wrap_attrs ~prefix
+            (Option.value resolved ~default:s))
 

@@ -26,14 +26,47 @@ let show_panel_bullet row =
   || (match D.row_type row with "default" | "url" -> false | _ -> true)
   || D.value_empty_p (D.row_value row)
 
+(* cljs property-icon (components/property.cljs): :block/tags -> hash,
+   :plugin.* -> puzzle, else the property type's tabler icon, else a
+   bullet *)
+let property_icon_name row =
+  let ident = D.row_ident row |> Option.value ~default:"" in
+  if ident = "block/tags" || ident = ":block/tags" then Some "hash"
+  else if
+    (String.length ident >= 7 && String.sub ident 0 7 = ":plugin")
+    || (String.length ident >= 6 && String.sub ident 0 6 = "plugin")
+  then Some "puzzle"
+  else
+    match D.row_type row with
+    | "number" -> Some "number"
+    | "date" | "datetime" -> Some "calendar"
+    | "checkbox" -> Some "checkbox"
+    | "url" -> Some "link"
+    | "property" -> Some "letter-p"
+    | "page" -> Some "page"
+    | "node" -> Some "point-filled"
+    | "asset" -> Some "letter-a"
+    | _ -> None
+
 (* the property key (name + icon/bullet), used by both the panel row and
    the bottom pill *)
 let property_key_inner row ~on_key_click =
   let inner = mk ~cls:"property-key-inner jtrigger-view" "div" in
-  let bullet = mk ~cls:"bullet-container" "div" in
-  let b = mk ~cls:"bullet" "span" in
-  el_append_child bullet b;
-  el_append_child inner bullet;
+  (* cljs .property-icon > button.property-m > type icon or bullet *)
+  let icon_wrap = mk ~cls:"property-icon" "div" in
+  let btn =
+    mk "button" ~cls:"flex items-center property-m"
+      ~attrs:[ ("type", "button") ]
+  in
+  (match property_icon_name row with
+   | Some name ->
+       el_append_child btn (ui_icon_el ~size:15. ~cls:"opacity-50" name)
+   | None ->
+       let bc = mk ~cls:"bullet-container" "span" in
+       el_append_child bc (mk ~cls:"bullet" "span");
+       el_append_child btn bc);
+  el_append_child icon_wrap btn;
+  el_append_child inner icon_wrap;
   let a =
     mk "a"
       ~cls:"property-k flex select-none jtrigger w-full"
@@ -137,7 +170,9 @@ let pill_el (ctx : V.ctx) ~owner_is_tag ~owner_title row =
     mk ~cls:"bottom-property-content property-value-container" "div"
       ~attrs:[ ("style", "min-height:20px") ]
   in
-  el_append_child content (V.render ctx row);
+  (* cljs bottom-property-pill-cp passes :icon? true — closed-value
+     pills render icon-only like the block-left chips *)
+  el_append_child content (V.render ~icon_only:true ctx row);
   el_append_child pill content;
   pill
 
@@ -195,15 +230,20 @@ let partition_rows rows =
   (left, below, panel)
 
 (* left chips: .positioned-properties.block-left inline in
-   .block-main-content; one .property-value-inner per row *)
+   .block-main-content; one .property-value-inner per row. cljs emits
+   the utility classes (flex row, h-6 self-start) on the container *)
 let render_left (ctx : V.ctx) ~owner_is_tag ~owner_title host rows =
   remove_all host ":scope > .positioned-properties.block-left";
   if rows <> [] then begin
-    let pos = mk ~cls:"positioned-properties block-left" "div" in
+    let pos =
+      mk ~cls:
+        "positioned-properties flex flex-row gap-1 select-none h-6 \
+         self-start block-left" "div"
+    in
     List.iter
       (fun r ->
         let chip = mk ~cls:"property-value-inner" "div" in
-        el_append_child chip (V.render ctx r);
+        el_append_child chip (V.render ~icon_only:true ctx r);
         el_append_child pos chip)
       rows;
     el_append_child host pos
@@ -262,11 +302,11 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
    renders when the owning surface is the current route page or the
    zoom root block — hidden props on ordinary blocks stay unreachable *)
 let can_toggle_hidden (ctx : V.ctx) ~below_rows =
-  match !Runtime.current_route with
-  | Some (Model.Block_zoom u) ->
+  match Runtime.route () with
+  | Model.Block_zoom u ->
       u = ctx.block_uuid && below_rows = []
   | _ -> (
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some (p : Model.page) -> p.page_uuid = Some ctx.block_uuid
       | None -> false)
 
@@ -445,12 +485,6 @@ let render_block_area ~ind ~left_host (ctx : V.ctx) ~owner_is_tag
 
 (* ---------- block mounts ---------- *)
 
-let block_uuid_of_ls_block el =
-  let id = el_id el in
-  if String.length id > 9 && String.sub id 0 9 = "ls-block-" then
-    Some (String.sub id 9 (String.length id - 9))
-  else None
-
 (* the indent container hosting area + pills: cljs emits ONE
    .ls-block-content-indent per ls-block (direct child, next to the
    block-main-container). The tree view does not emit it — a block
@@ -465,84 +499,80 @@ let ensure_indent_for block_el =
       Some ind
 
 (* register a block's property area — DOM setup is lazy: most blocks
-   have no visible properties, so the per-row mount pays only an attr
-   check until a refresh actually finds content *)
+   have no visible properties, so the per-row mount pays only a registry
+   lookup until a refresh actually finds content *)
 let mount_block_area block_el uuid =
-  match el_get_attr block_el "data-props-mounted" with
-  | Some _ -> () (* already mounted *)
-  | None ->
-      el_set_attr block_el "data-props-mounted" "1";
-      let resolved : (el * el * el option) option ref = ref None in
-      let resolve () =
-        match !resolved with
-        | Some r -> Some r
-        | None -> (
-            let col =
-              match
-                el_query block_el
-                  ".block-main-container .flex.flex-col.w-full"
-              with
-              | Some col -> Some col
-              | None -> el_query block_el ".flex.flex-col.w-full"
-            in
-            match col with
-            | None -> None
-            | Some _ -> (
-                match ensure_indent_for block_el with
-                | None -> None
-                | Some ind ->
-                    (* created detached — render attaches it only when
-                       there is something to show *)
-                    let area =
-                      mk "div"
-                        ~cls:"ls-properties-area ls-block-properties"
-                        ~attrs:[ ("id", uuid); ("tabindex", "0") ]
-                    in
-                    (* block-left chips live inside .block-main-content *)
-                    let left_host =
-                      match
-                        el_query block_el ".block-main-content"
-                      with
-                      | Some bmc -> Some bmc
-                      | None -> el_query block_el ".block-row"
-                    in
-                    let r = (ind, area, left_host) in
-                    resolved := Some r;
-                    Some r))
-      in
-      let rec ctx : V.ctx =
-        { block_uuid = uuid
-        ; block_id = None
-        ; refresh = (fun () -> ignore (refresh ()))
-        ; is_page = false
-        ; class_schema = false
-        }
-      and refresh () =
-        match !resolved with
-        | Some (ind, area, left_host) ->
-            render_block_area ~ind ~left_host ctx ~owner_is_tag:false
-              ~owner_title:"" area
-        | None -> (
-            let* block_wire = D.block_render_data ctx.block_uuid in
-            match block_area_has_content block_wire with
-            | false -> Js.Promise.resolve ()
-            | true -> (
-                match resolve () with
-                | Some (ind, area, left_host) ->
-                    render_block_area_with ~ind ~left_host ctx
-                      ~owner_is_tag:false ~owner_title:"" area block_wire
-                | None -> Js.Promise.resolve ()))
-      in
-      ignore (refresh ());
-      (* register the block row, not the area/indent: the area stays
-         detached when the block has no visible rows, and live_areas
-         prunes detached containers, which would unregister the refresh
-         before a later property tx lands *)
-      S.register_area block_el (fun () ->
-          if el_is_connected block_el then refresh ()
-          else (
-            S.unregister_area block_el;
-            Js.Promise.resolve ()))
+  if S.mounted_key block_el <> Some uuid then (
+    S.unregister_area block_el;
+    let resolved : (el * el * el option) option ref = ref None in
+    let resolve () =
+      match !resolved with
+      | Some r -> Some r
+      | None -> (
+          (* only outliner rows (block-main-container > content column)
+             can host the area — other .ls-block carriers (view-table
+             title rows) share the class/attrs but not that structure *)
+          match
+            el_query block_el
+              ":scope > .block-main-container > .flex.flex-col.w-full"
+          with
+          | None -> None
+          | Some _ -> (
+              match ensure_indent_for block_el with
+              | None -> None
+              | Some ind ->
+                  (* created detached — render attaches it only when
+                     there is something to show *)
+                  let area =
+                    mk "div"
+                      ~cls:"ls-properties-area ls-block-properties"
+                      ~attrs:[ ("id", uuid); ("tabindex", "0") ]
+                  in
+                  (* block-left chips live inside .block-main-content *)
+                  let left_host =
+                    match
+                      el_query block_el ".block-main-content"
+                    with
+                    | Some bmc -> Some bmc
+                    | None -> el_query block_el ".block-row"
+                  in
+                  let r = (ind, area, left_host) in
+                  resolved := Some r;
+                  Some r))
+    in
+    let rec ctx : V.ctx =
+      { block_uuid = uuid
+      ; block_id = None
+      ; refresh = (fun () -> ignore (refresh ()))
+      ; is_page = false
+      ; class_schema = false
+      }
+    and refresh () =
+      match !resolved with
+      | Some (ind, area, left_host) ->
+          render_block_area ~ind ~left_host ctx ~owner_is_tag:false
+            ~owner_title:"" area
+      | None -> (
+          let* block_wire = D.block_render_data ctx.block_uuid in
+          match block_area_has_content block_wire with
+          | false -> Js.Promise.resolve ()
+          | true -> (
+              match resolve () with
+              | Some (ind, area, left_host) ->
+                  render_block_area_with ~ind ~left_host ctx
+                    ~owner_is_tag:false ~owner_title:"" area block_wire
+              | None -> Js.Promise.resolve ()))
+    in
+    ignore (refresh ());
+    (* register the block row, not the area/indent: the area stays
+       detached when the block has no visible rows, and live_areas
+       prunes detached containers, which would unregister the refresh
+       before a later property tx lands *)
+    S.register_area ~key:uuid block_el (fun () ->
+        if el_is_connected block_el then refresh ()
+        else (
+          S.unregister_area block_el;
+          Js.Promise.resolve ())))
 
 (* ---------- page mount ---------- *)
 
@@ -810,13 +840,12 @@ and fill_bidirectional_page (p : Model.page) ~attach_bidi bidi =
       |> ignore
 
 (* idempotent mount — cljs db-properties-cp sits in a plain div inside
-   the title .ls-block, after .block-main-container; registration + the
-   mounted marker live on .page-inner, which stays connected for as long
+   the title .ls-block, after .block-main-container; registration lives
+   on .page-inner, which stays connected for as long
    as the page is mounted (the actions node can be swapped out by an LUI
    re-render) *)
 let mount_page_props page_inner (p : Model.page) uuid =
-  if el_get_attr page_inner "data-props-mounted" <> Some uuid then (
-    el_set_attr page_inner "data-props-mounted" uuid;
+  if S.mounted_key page_inner <> Some uuid then (
     (* a remount (same .page-inner node, different page) must not stack
        a second area on top of the previous page's *)
     (match el_query page_inner ".ls-properties-area" with
@@ -892,7 +921,7 @@ let mount_page_props page_inner (p : Model.page) uuid =
     and refresh () =
       (* resolve the live page each refresh — page_is_tag changes under
          us when a page converts to a tag *)
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some live when live.Model.page_uuid = Some uuid ->
           render_page_area ctx live ~page_inner ~attach_area ~attach_bidi
             ~detach area bidi
@@ -900,7 +929,7 @@ let mount_page_props page_inner (p : Model.page) uuid =
     in
     ignore (refresh ());
     S.unregister_area page_inner;
-    S.register_area page_inner (fun () ->
+    S.register_area ~key:uuid page_inner (fun () ->
         if el_is_connected page_inner then refresh ()
         else (
           S.unregister_area page_inner;
@@ -915,10 +944,10 @@ let mount_page_area page_inner =
     Editor_state.editing_uuid () = p.Model.page_uuid
   in
   let with_page f =
-    (* journals view mounts one .page-inner per journal — current_page is
+    (* journals view mounts one .page-inner per journal — route_page is
        unset there, so resolve the page from the title's block uuid *)
     let page =
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some p -> Some p
       | None -> (
           match el_query page_inner ".ls-page-title [blockid]" with
@@ -926,7 +955,7 @@ let mount_page_area page_inner =
               let bid = el_get_attr title_block "blockid" in
               List.find_opt
                 (fun (j : Model.page) -> j.Model.page_uuid = bid)
-                !Runtime.current_journals
+                (Runtime.model ()).Model.journals
             )
           | None -> None)
     in
@@ -982,14 +1011,13 @@ let mount_page_area page_inner =
    (no .ls-properties-area). *)
 
 (* host is the emitted .ls-properties-area.ls-page-properties div;
-   mounts once per element via the data-props-mounted marker *)
+   mounts once per element via the area registry *)
 let mount_sidebar_area (area : el) =
   match el_get_attr area "data-sb-uuid" with
   | None | Some "" -> ()
   | Some uuid ->
-      if el_get_attr area "data-sb-mounted" = Some "1" then ()
-      else (
-        el_set_attr area "data-sb-mounted" "1";
+      if S.mounted_key area <> Some uuid then (
+        S.unregister_area area;
         let db_id =
           match el_get_attr area "data-sb-db-id" with
           | Some "" | None -> None
@@ -1078,7 +1106,7 @@ let mount_sidebar_area (area : el) =
           Js.Promise.resolve ()
         in
         ignore (refresh ());
-        S.register_area area (fun () ->
+        S.register_area ~key:uuid area (fun () ->
             if el_is_connected area || el_is_connected host then render ()
             else (
               S.unregister_area area;
@@ -1092,12 +1120,12 @@ let ensure_sidebar_areas roots =
    sync-db-changes refresh (~80ms) reaches the DOM, so an sdk caller
    asserting on the page right after the promise resolves would still
    see the stale row. Drop it eagerly — the next refresh re-renders the
-   same state. Scoped to rows owned by the entity: block rows live under
-   .ls-block#ls-block-<uuid>, page/sidebar areas carry id=<uuid>. *)
+   same state. Scoped to rows owned by the entity: block rows carry
+   blockid=<uuid>, page/sidebar areas carry id=<uuid>. *)
 let drop_row ~owner_uuid ~title =
   let in_scope k =
     match el_closest k ".ls-block" with
-    | Some blk -> el_id blk = "ls-block-" ^ owner_uuid
+    | Some blk -> el_get_attr blk "blockid" = Some owner_uuid
     | None -> (
         match el_closest k ".ls-properties-area" with
         | Some a -> el_id a = owner_uuid
@@ -1125,13 +1153,13 @@ let ensure_all roots =
   (* page-level *)
   for_each_touched roots ".page-inner" mount_page_area;
   ensure_sidebar_areas roots;
-  (* block-level *)
+  (* block-level — the blockid attr identifies a row's block *)
   for_each_touched roots ".ls-block" (fun el ->
       if
         not
           (el_matches el ".block-add-button"
            || el_closest el ".ls-page-title" <> None)
       then (
-        match block_uuid_of_ls_block el with
+        match el_get_attr el "blockid" with
         | Some uuid -> mount_block_area el uuid
         | None -> ()))
