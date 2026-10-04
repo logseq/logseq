@@ -2817,7 +2817,15 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
         | _ -> Wire.Nil
       in
       match target with
-      | Wire.Keyword s | Wire.String s -> kv_ident s
+      | Wire.Keyword s -> kv_ident s
+      | Wire.String s ->
+          (* db_absent eid_tempid encodes idents as ":ident" — strip the
+             prefix so a pending-created logseq.kv/* entity is still
+             recognized as bookkeeping *)
+          kv_ident
+            (if String.length s > 0 && s.[0] = ':'
+             then String.sub s 1 (String.length s - 1)
+             else s)
       | Wire.Array [ a ; Wire.Keyword s ] | Wire.List [ a ; Wire.Keyword s ]
       | Wire.Array [ a ; Wire.String s ] | Wire.List [ a ; Wire.String s ]
         when a = kw "db/ident" ->
@@ -2838,6 +2846,25 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
           | Wire.Keyword s | Wire.Symbol s -> Some (s, v')
           | _ -> None)
       | _ -> None
+    in
+    (* attr classification (ref?/card-many?) is schema-level — stable
+       for the whole pass; cache per attr to avoid a counted_entity
+       seek per item *)
+    let attr_class =
+      let cache = Hashtbl.create 32 in
+      fun (db : db) (a : string) ->
+        match Hashtbl.find_opt cache a with
+        | Some r -> r
+        | None ->
+            let r = (Ldb.ref_attr db a, Ldb.many_attr db a) in
+            Hashtbl.replace cache a r;
+            r
+    in
+    let is_retract_entity_item (item : Wire.t) : bool =
+      match item with
+      | Wire.Array (op :: _) | Wire.List (op :: _) ->
+          op = kw "db/retractEntity" || op = kw "db.fn/retractEntity"
+      | _ -> false
     in
     (* a pending delete's reversed re-adds reference the deleted entity
        through [:block/uuid u] — the lookup-ref is unresolvable until
@@ -2861,7 +2888,7 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
                     | a :: v :: _ -> (
                         match a with
                         | Wire.Keyword s | Wire.Symbol s
-                          when Ldb.ref_attr db s -> (
+                          when fst (attr_class db s) -> (
                             match lookup_pair_of v with
                             | Some p when entity_of_wire_ref db v = None
                               -> [ p ]
@@ -3001,22 +3028,35 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
               else (
                 match a_w with
                 | Wire.Keyword a | Wire.Symbol a
-                  when not (Ldb.many_attr db a) ->
+                  when not (snd (attr_class db a)) ->
                     phantom_intact e_w a
                 | _ -> true)
           | _ -> true)
         items
     in
     let any_failed = ref false in
-    Sync_client_op.get_unconfirmed_local_txs repo
+    let stored_items (s : string option) : Wire.t list =
+      match s with
+      | Some s -> tx_items_of (Transit_codec.of_string s)
+      | None -> []
+    in
+    Sync_client_op.get_unconfirmed_tx_data repo
     |> List.rev
-    |> List.iter (fun (e : Sync_client_op.local_tx_entry) ->
+    |> List.iter (fun (e : Sync_client_op.unconfirmed_tx_row) ->
            try
              let db = Conn.db conn in
              match
-               tx_items_of e.reversed_tx
+               stored_items e.un_reversed_tx_data
                |> List.filter (fun i -> not (touches_kv_item i))
-               |> stale_restores db ~forward_items:(tx_items_of e.tx)
+               (* a failed row's reject usually already rolled its
+                  reversed tx back on the durable conn — a second
+                  retractEntity would delete an entity re-created in
+                  between. Every other reversed shape is idempotent
+                  under the stale-restore guards, so strip only these *)
+               |> List.filter (fun i ->
+                      not e.un_failed || not (is_retract_entity_item i))
+               |> stale_restores db
+                    ~forward_items:(stored_items e.un_normalized_tx_data)
              with
              | [] -> ()
              | items ->
@@ -3040,7 +3080,7 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
            with exn ->
              any_failed := true;
              Worker_log.warn "db-sync/unapply-pending-failed"
-               [ "repo", repo; "tx-id", e.tx_id
+               [ "repo", repo; "tx-id", e.un_tx_id
                ; "error", Printexc.to_string exn ]);
     (* a skipped row keeps its phantom datoms on the conn — don't mark
        the pass done so the next open retries it (completed rows are

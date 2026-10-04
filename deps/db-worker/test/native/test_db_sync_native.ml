@@ -14050,6 +14050,152 @@ let test_unapply_forward_retract_restores () =
           check "confirmed rewrite wins over restore"
             (title_on c3_u = Some "confirmed")))
 
+(* a failed row's reject usually already rolled its reversed tx back on
+   the durable conn — re-applying retractEntity would delete an entity
+   that re-materialized (confirmed) afterwards, so failed rows drop
+   retractEntity items while keeping the guarded restores *)
+let test_unapply_failed_row_keeps_entity () =
+  preserve_state (fun () ->
+      let conn, ops, _parent, c1, _c2, _c3 = setup_parent_child () in
+      let c1_u = entity_block_uuid c1 in
+      Worker_state.set_datascript_conn test_repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Sync_client_op.update_local_tx test_repo 0;
+      mark_graph_remote conn;
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1 ~pending:false ~failed:true
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c1_u) "block/uuid" c1_u
+                 ; db_add (block_uuid_lookup c1_u) "block/title"
+                     (Wire.String "child 1") ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_retract_entity (block_uuid_lookup c1_u) ])
+            "tx-failed-create" ];
+      Fun.protect
+        ~finally:(fun () ->
+          Sync_state.drop_server_conn test_repo;
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          Sync_apply.split_off_server_if_remote test_repo;
+          let server =
+            match Sync_state.server_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no server conn after split"
+          in
+          check "recreated entity survives failed-row un-apply"
+            (Datascript.entity (Conn.db server)
+               (Lookup_ref ("block/uuid", Uuid (wire_uuid_str c1_u)))
+             <> None);
+          check "un-apply still completes"
+            (Sync_client_op.pending_unapply_done test_repo)))
+
+(* a row whose reversed items can't transact warns and continues; the
+   done marker is withheld so the next open retries the failed row *)
+let test_unapply_row_failure_blocks_done () =
+  preserve_state (fun () ->
+      let conn, ops, _parent, _c1, _c2, c3 = setup_parent_child () in
+      let c3_u = entity_block_uuid c3 in
+      Worker_state.set_datascript_conn test_repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Sync_client_op.update_local_tx test_repo 0;
+      mark_graph_remote conn;
+      ignore
+        (Db_transact.transact conn
+           [ db_add (block_uuid_lookup c3_u) "block/title"
+               (Wire.String "v9") ]
+           []);
+      (* newest first after List.rev: the malformed row fails first,
+         the well-formed row still applies *)
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c3_u) "block/title"
+                     (Wire.String "v9") ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c3_u) "block/title"
+                     (Wire.String "child 3") ])
+            "tx-good"
+        ; seed_tx ~created_at:2
+            ~reversed_tx_data:(Wire.Array [ Wire.List [ kw "db/add" ] ])
+            "tx-malformed" ];
+      Fun.protect
+        ~finally:(fun () ->
+          Sync_state.drop_server_conn test_repo;
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          Sync_apply.split_off_server_if_remote test_repo;
+          let server =
+            match Sync_state.server_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no server conn after split"
+          in
+          let title_on u =
+            match
+              Datascript.entity (Conn.db server)
+                (Lookup_ref ("block/uuid", Uuid (wire_uuid_str u)))
+            with
+            | Some e -> (
+                match Datascript.entity_attr e "block/title" with
+                | Some (One_value (String s)) -> Some s
+                | _ -> None)
+            | None -> None
+          in
+          check "well-formed row still un-applied"
+            (title_on c3_u = Some "child 3");
+          check "done marker withheld on row failure"
+            (not (Sync_client_op.pending_unapply_done test_repo))))
+
+(* an exempt tx with no stored anchor must not store "": the stored
+   checksum anchors on the pre-tx image — the same value the normal
+   anchor branch computes *)
+let test_exempt_no_anchor_recomputes_before_image () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let db_before = Datascript.db conn in
+          let report =
+            Option.get
+              (Db_transact.transact conn
+                 [ db_add (Wire.Int parent.id) "block/title"
+                     (Wire.String "gc purged") ]
+                 [ "checksum-exempt?", Bool true ])
+          in
+          Sync_client.update_local_sync_checksum test_repo report;
+          check "exempt no-anchor stores the pre-tx image checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some (Db_sync_checksum.recompute_checksum db_before));
+          check "exempt tx persists the flag"
+            (Sync_client_op.checksum_exempted test_repo);
+          check "covered commit still advances"
+            (Sync_client_op.get_local_checksum_covered_tx test_repo
+             = Some report.db_after.max_tx)))
+
+(* while exempted, reconcile advances covered_tx without overwriting
+   the server-image checksum with a local recompute *)
+let test_reconcile_exempted_skips_heal () =
+  preserve_state (fun () ->
+      let conn, ops, _parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          (* stored covered_tx of 0 vs the live max_tx is the "last
+             commit's checksum write never landed" gap — while exempted
+             the checksum is a server image, so heal must only advance
+             covered_tx, not overwrite with a local recompute *)
+          Sync_client_op.update_local_checksum test_repo "server-image" 0;
+          Sync_client_op.mark_checksum_exempted test_repo;
+          Sync_client.reconcile_local_checksum test_repo conn;
+          check "exempted reconcile keeps the server-image checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some "server-image");
+          check "covered commit advances past the gap"
+            (Sync_client_op.get_local_checksum_covered_tx test_repo
+             = Some (Datascript.db conn).max_tx)))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -14785,6 +14931,18 @@ let () =
         ; Alcotest.test_case
             "checksum-exempted-flag-lifecycle-test" `Quick
             test_checksum_exempted_flag_lifecycle
+        ; Alcotest.test_case
+            "unapply-failed-row-keeps-entity-test" `Quick
+            test_unapply_failed_row_keeps_entity
+        ; Alcotest.test_case
+            "unapply-row-failure-blocks-done-test" `Quick
+            test_unapply_row_failure_blocks_done
+        ; Alcotest.test_case
+            "exempt-no-anchor-recomputes-before-image-test" `Quick
+            test_exempt_no_anchor_recomputes_before_image
+        ; Alcotest.test_case
+            "reconcile-exempted-skips-heal-test" `Quick
+            test_reconcile_exempted_skips_heal
         ] )
     ; ( "db-sync-upload"
       , Test_db_sync_upload_native.cases ) ]
