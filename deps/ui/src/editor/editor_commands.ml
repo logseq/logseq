@@ -13,7 +13,7 @@ module S = Editor_state
 module D = Editor_dom
 module A = Editor_actions
 module Ops = Outliner_ops
-module V = Views_dom
+module V = Views_el
 module W = Wire
 
 (* ---------- event detail ---------- *)

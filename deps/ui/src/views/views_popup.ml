@@ -4,7 +4,7 @@
    .cp__select*.cp__select-input + .cp__select-results a.menu-link selects,
    and .ui__dialog-content confirm dialogs. *)
 
-module D = Views_dom
+module D = Views_el
 module I = I18n
 
 external document_body : D.el = "document.body"
@@ -15,16 +15,37 @@ external document_body : D.el = "document.body"
    mousedown or Escape *)
 let open_popups : D.el list ref = ref []
 
+(* published popup-open state — the view head dims/lits on this plus
+   hover. Lazily bound to the scheduler of the first view that mounts. *)
+let open_st : bool Signal.state option ref = ref None
+
+let ensure_open_st sched =
+  match !open_st with
+  | Some st -> st
+  | None ->
+      let st = Signal.state sched (!open_popups <> []) in
+      open_st := Some st;
+      st
+
+let open_signal sched = (ensure_open_st sched).Signal.state_signal
+
+let publish_open () =
+  match !open_st with
+  | Some st -> Runtime.signal_set st (!open_popups <> [])
+  | None -> ()
+
 let close_top () =
   match !open_popups with
   | [] -> ()
   | p :: rest ->
       open_popups := rest;
-      D.el_remove p
+      D.el_remove p;
+      publish_open ()
 
 let close_all () =
   List.iter D.el_remove !open_popups;
-  open_popups := []
+  open_popups := [];
+  publish_open ()
 
 let on_doc_keydown ev =
   if Editor_dom.ev_key ev = "Escape" && !open_popups <> [] then begin
@@ -41,10 +62,13 @@ let install_listeners () =
       | Some _ -> ());
   Editor_dom.document_add_listener "keydown" on_doc_keydown true
 
-let push_popup el = open_popups := el :: !open_popups
+let push_popup el =
+  open_popups := el :: !open_popups;
+  publish_open ()
 
 let pop_popup el =
-  open_popups := List.filter (fun p -> not (p == el)) !open_popups
+  open_popups := List.filter (fun p -> not (p == el)) !open_popups;
+  publish_open ()
 
 (* -- positioning: fixed, anchored below trigger -- *)
 

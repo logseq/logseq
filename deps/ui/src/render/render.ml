@@ -276,14 +276,21 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
     context parent
 
 (* blocks tagged logseq.class/Query (is_query) get the query shell:
-   .custom-query-results + .ls-query-setting shell; the queries area
-   fills in real results later. *)
-let query_shell =
+   .custom-query-results + .ls-query-setting button + the query-result
+   view (mounted declaratively — .views-query-inner +
+   raw-source .CodeMirror when open). *)
+let query_shell ~block_uuid =
   D.el ~tag:"div" ~style_class:"custom-query-results"
     [ D.el ~tag:"button"
         ~style_class:
           "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6"
-        ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ] []
+        ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ]
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then Views_view.toggle_query_editor ~block_uuid)
+        []
+    ; Views_view.view ~kind:(Views_state.KQuery { block_uuid })
+        ~owner:(Wire.Uuid block_uuid)
     ]
 
 (* content for a (possibly quoted) body — headings nest inside quote *)
@@ -352,7 +359,7 @@ let title ?heading ?(is_query = false) ?(self = "")
         match src_block s with
         | Some (lang, code) -> [ code_block ~self lang code ]
         | None ->
-            if is_query then [ wrap ""; query_shell ]
+            if is_query then [ wrap ""; query_shell ~block_uuid:self ]
             else
               (* {{query}} is a normal inline macro — macro_el renders the
                  deprecation .warning inside .block-title-wrap like cljs *)

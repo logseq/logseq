@@ -2175,11 +2175,17 @@ let test_views_db () =
 
 (* ---- views_state codecs + query ---- *)
 
-external stub_el : Views_dom.el = "null"
+let test_sched = Signal.scheduler ()
 
 let mk_view_inst feature =
-  Views_state.make ~kind:(Views_state.KQuery { block_uuid = "b1" })
-    ~feature ~owner:Wire.Nil ~container:stub_el
+  Views_state.make ~sched:test_sched
+    ~kind:(Views_state.KQuery { block_uuid = "b1" })
+    ~feature ~owner:Wire.Nil
+
+(* Signal.set stages until stabilize — publish before reading V.get *)
+let vget inst =
+  Signal.stabilize test_sched;
+  Views_state.get inst
 
 let test_views_state () =
   let s =
@@ -2226,21 +2232,24 @@ let test_views_state () =
      = ([], true));
   (* ctx_of: query-result emits row uuids; filters land when set *)
   let inst = mk_view_inst "query-result" in
-  inst.Views_state.sorting <-
-    [ { Views_state.s_id = "p/a"; s_asc = false } ];
-  inst.input <- "q";
-  inst.query_rows <- [ "r1" ];
-  inst.filters <- f;
-  inst.filters_or <- true;
+  Views_state.set inst
+    { (vget inst) with
+      Views_state.sorting = [ { Views_state.s_id = "p/a"; s_asc = false } ]
+    ; input = "q"
+    ; query_rows = [ "r1" ]
+    ; filters = f
+    ; filters_or = true
+    };
+  let vs = vget inst in
   let ctx = Views_state.ctx_of inst in
   check "ctx feature"
     (Wire.get ctx "feature-type" = Some (Wire.Keyword "query-result"));
   check "ctx sorting"
-    (Wire.get ctx "sorting" = Some (Views_state.sorting_to_wire inst.sorting));
+    (Wire.get ctx "sorting" = Some (Views_state.sorting_to_wire vs.sorting));
   check "ctx input" (Wire.get ctx "input" = Some (Wire.String "q"));
   check "ctx filters"
     (Wire.get ctx "filters"
-     = Some (Views_state.filters_to_wire inst.filters inst.filters_or));
+     = Some (Views_state.filters_to_wire vs.filters vs.filters_or));
   check "ctx query rows"
     (Wire.get ctx "query-row-uuids"
      = Some (Wire.Array [ Wire.Uuid "r1" ]));
@@ -2248,7 +2257,9 @@ let test_views_state () =
     (Wire.get ctx "initial-row-count" = None);
   check "ctx group-by"
     (let inst2 = mk_view_inst "x" in
-     inst2.Views_state.group_by <- Some "p/g";
+     Views_state.update inst2 (fun s ->
+         { s with Views_state.group_by = Some "p/g" });
+     Signal.stabilize test_sched;
      Wire.get (Views_state.ctx_of inst2) "group-by-property-ident"
      = Some (Wire.Keyword "p/g"))
 
@@ -2275,7 +2286,7 @@ let test_views_query () =
   (* spec_of *)
   let inst = mk_view_inst "query-result" in
   (match
-     Views_query.spec_of inst (Wire.Map []) "b1" (Views_query.QDsl "(task)")
+     Views_query.spec_of (Wire.Map []) "b1" (Views_query.QDsl "(task)")
    with
    | Ok spec ->
        check "spec dsl kind"
@@ -2289,9 +2300,9 @@ let test_views_query () =
    | Error _ -> check "spec dsl" false);
   check "spec blank error"
     (Result.is_error
-       (Views_query.spec_of inst (Wire.Map []) "b1" Views_query.QBlank));
+       (Views_query.spec_of (Wire.Map []) "b1" Views_query.QBlank));
   (match
-     Views_query.spec_of inst (Wire.Map []) "b1"
+     Views_query.spec_of (Wire.Map []) "b1"
        (Views_query.QDatalog
           (Edn.parse
              "{:query [:find ?e :where [?e :block/title ?t]] :inputs [:today]}"))
@@ -2303,13 +2314,13 @@ let test_views_query () =
    | Error _ -> check "spec datalog" false);
   check "spec datalog missing query"
     (Result.is_error
-       (Views_query.spec_of inst (Wire.Map []) "b1"
+       (Views_query.spec_of (Wire.Map []) "b1"
           (Views_query.QDatalog (wmap [ "x", Wire.Int 1 ]))));
   (* current page title lands in the spec *)
   let saved_page = !Runtime.current_page in
   Runtime.current_page := Some (page []);
   (match
-     Views_query.spec_of inst (Wire.Map []) "b1" (Views_query.QDsl "x")
+     Views_query.spec_of (Wire.Map []) "b1" (Views_query.QDsl "x")
    with
    | Ok spec ->
        check "spec page title"
@@ -2319,21 +2330,25 @@ let test_views_query () =
   (* decode_result *)
   Views_query.decode_result inst
     (wmap [ "error", wmap [ "message", Wire.String "boom" ] ]);
+  let vs1 = vget inst in
   check "decode error"
-    (inst.Views_state.query_error = Some "boom"
-    && inst.query_rows = [] && inst.query_scalar_rows = []);
+    (vs1.Views_state.query_error = Some "boom"
+    && vs1.query_rows = [] && vs1.query_scalar_rows = []);
   Views_query.decode_result inst
     (wmap [ "rows", Wire.Array [ Wire.Uuid "u1"; Wire.Uuid "u2" ] ]);
+  let vs2 = vget inst in
   check "decode rows"
-    (inst.query_error = None && inst.query_rows = [ "u1"; "u2" ]
-    && inst.query_scalar_rows = []);
+    (vs2.query_error = None && vs2.query_rows = [ "u1"; "u2" ]
+    && vs2.query_scalar_rows = []);
   Views_query.decode_result inst (Wire.Array [ Wire.Int 1; Wire.Int 2 ]);
+  let vs3 = vget inst in
   check "decode scalar rows"
-    (inst.query_rows = []
-    && inst.query_scalar_rows = [ Wire.Int 1; Wire.Int 2 ]);
+    (vs3.query_rows = []
+    && vs3.query_scalar_rows = [ Wire.Int 1; Wire.Int 2 ]);
   (* mixed uuid+scalar goes to scalar rows *)
   Views_query.decode_result inst (Wire.Array [ Wire.Uuid "u1"; Wire.Int 2 ]);
-  check "decode mixed -> scalars" (inst.query_scalar_rows <> []);
+  check "decode mixed -> scalars"
+    ((vget inst).Views_state.query_scalar_rows <> []);
   (* query_value_block *)
   let parent =
     wmap
@@ -3042,7 +3057,8 @@ let test_views_pinned () =
    | None -> check "vpinned decodes idents only" false);
   let inst = mk_view_inst "x" in
   (match Views_wire.decode_view_ent ent with
-   | Some v -> Views_state.apply_view_entity inst v
+   | Some v ->
+       Views_state.update inst (fun s -> Views_state.apply_view_entity s v)
    | None -> check "pinned applied" false);
   let col id =
     { Views_state.c_id = id; c_name = ""; c_type = "default"
@@ -3050,12 +3066,12 @@ let test_views_pinned () =
   in
   (* select/id are always pinned, the rest come from inst.pinned *)
   check "is_pinned select/id always"
-    (Views_table.is_pinned inst (col "select")
-    && Views_table.is_pinned inst (col "id"));
+    (Views_table.is_pinned (vget inst) (col "select")
+    && Views_table.is_pinned (vget inst) (col "id"));
   check "is_pinned member"
-    (Views_table.is_pinned inst (col "user/rating"));
+    (Views_table.is_pinned (vget inst) (col "user/rating"));
   check "is_pinned non-member"
-    (not (Views_table.is_pinned inst (col "p/other")))
+    (not (Views_table.is_pinned (vget inst) (col "p/other")))
 
 (* ---- edn/wire edge cases ---- *)
 

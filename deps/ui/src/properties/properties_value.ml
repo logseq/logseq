@@ -764,7 +764,7 @@ let closed_value_cell ?(icon_only = false) ctx row anchor =
         in
         el_set_attr wrap "style"
           ("color:" ^ Option.value color ~default:"inherit");
-        el_append_child wrap (Views_dom.icon id);
+        el_append_child wrap (Views_el.icon id);
         el_append_child item wrap;
         el_append_child cell item;
         Some ())
@@ -776,7 +776,7 @@ let closed_value_cell ?(icon_only = false) ctx row anchor =
        (match closed_value_icon_id value with
         | Some id ->
             let item = mk ~cls:"select-item" "div" in
-            el_append_child item (Views_dom.icon id);
+            el_append_child item (Views_el.icon id);
             el_append_child cell item
         | None ->
             if D.value_empty_p value then (
@@ -785,7 +785,7 @@ let closed_value_cell ?(icon_only = false) ctx row anchor =
                 mk ~cls:"empty-btn" "button"
                   ~attrs:[ ("type", "button") ]
               in
-              el_append_child btn (Views_dom.icon "line-dashed");
+              el_append_child btn (Views_el.icon "line-dashed");
               el_append_child item btn;
               el_append_child cell item));
        let txt = D.value_display value in

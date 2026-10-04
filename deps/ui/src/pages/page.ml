@@ -1360,6 +1360,40 @@ let refs_wrap (m : Model.t) : t =
                  [ unlinked_references_view m ])
           ])
 
+(* cljs page-inner (show-tabs?): class/property pages render
+   .page-tabs > .w-full > .ui__tabs-content > .ml-1 hosting the objects
+   view — the view mounts declaratively on the current route page *)
+let page_tabs_el (m : Model.t) : t =
+  match m.Model.route_page with
+  | Some p when p.Model.page_is_tag || p.Model.page_is_property -> (
+      match p.Model.page_uuid with
+      | None -> Logseq_dom.nothing
+      | Some uuid ->
+          let kind =
+            if p.Model.page_is_tag then Views_state.KTagPage uuid
+            else Views_state.KPropertyPage uuid
+          in
+          dom ~key:("ptabs-" ^ uuid) ~style_class:"page-tabs"
+            [ dom ~style_class:"w-full"
+                ~attrs:
+                  [ ("data-orientation", "horizontal")
+                  ; ("data-activation-direction", "none") ]
+                [ dom
+                    ~style_class:
+                      "ui__tabs-content mt-2 ring-offset-background \
+                       focus-visible:outline-none \
+                       focus-visible:ring-2 focus-visible:ring-ring \
+                       focus-visible:ring-offset-2"
+                    ~attrs:
+                      [ ("data-orientation", "horizontal")
+                      ; ("role", "tabpanel"); ("tabindex", "0")
+                      ; ("data-index", "0") ]
+                    [ dom ~style_class:"ml-1"
+                        [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
+                ]
+            ])
+  | _ -> Logseq_dom.nothing
+
 let page_view_ms (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let m0 = Signal.get ms in
@@ -1381,6 +1415,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
         [ Logseq_dom.dyn ~equal:top_eq top_view ms
+        ; page_tabs_el m0
         ; blocks_area ~scope ~library ?puuid ms
         ]
     ; Logseq_dom.dyn ~equal:refs_eq refs_wrap ms
@@ -1418,8 +1453,13 @@ let region (ms : Model.t Signal.signal) : t =
           dom ~key:"journals-root"
             [ journals_view_ms ms; Selection_bar.view () ]
       | Model.Ready, Model.Not_found n -> not_found_view n
-      | Model.Ready, (Model.All_graphs | Model.All_pages) ->
-          box ~key:"graphs-view" [] (* renders via its own view *)
+      | Model.Ready, Model.All_pages ->
+          (* cljs all_pages.cljs renders .ls-all-pages inside the page
+             wrapper — the objects view mounts declaratively here *)
+          dom ~key:"graphs-view" ~style_class:"ls-all-pages w-full mx-auto"
+            [ Views_view.view ~kind:Views_state.KAllPages
+                ~owner:(Wire.String "$$$views") ]
+      | Model.Ready, Model.All_graphs -> box ~key:"graphs-view" []
       | Model.Ready, Model.Settings -> Settings_page.view m
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, _ -> (

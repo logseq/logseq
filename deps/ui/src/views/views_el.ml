@@ -1,7 +1,11 @@
-(* Imperative DOM helpers for views. Reuses Editor_dom's abstract element
-   type and document-level listeners; adds the element operations views
-   need (children traversal, remove, rects, focus/blur, checked, event
-   dispatch) plus a small `h` builder so view trees read declaratively. *)
+(* Imperative element toolkit for the views overlay layer — dropdown
+   menus, pickers, dialogs and other portals that mount outside the LUI
+   tree (document.body-level surfaces). View trees themselves are
+   declarative (Logseq_dom/Lui_elements) and never touch this module;
+   the apple #new/#ref bridge uses it only as the platform renderer behind
+   an explicit mount node. Reuses Editor_dom's abstract element type and
+   document-level listeners; adds the element operations the overlays need
+   plus a small `h` builder. *)
 
 type el = Editor_dom.el
 type ev = Editor_dom.ev
@@ -65,6 +69,8 @@ external el_client_height : el -> float = "clientHeight" [@@mel.get]
 external el_client_width : el -> float = "clientWidth" [@@mel.get]
 
 external el_inner_html_set : el -> string -> unit = "innerHTML" [@@mel.set]
+
+external el_inner_html : el -> string = "innerHTML" [@@mel.get]
 
 type rect
 

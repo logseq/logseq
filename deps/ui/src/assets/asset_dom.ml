@@ -10,7 +10,7 @@ module S = Editor_state
 module W = Wire
 module B = Browser_ui
 module A = Asset_store
-module D = Views_dom
+module D = Views_el
 
 open Lui_elements
 
@@ -713,8 +713,10 @@ let block_view uuid (b : Model.block) : t =
             ~text:b.Model.block_title [] ] ]
 
 (* File-column cell for the Asset class tag page (cljs objects.cljs
-   build-class-object-columns :file) *)
-let file_cell (w : W.t) : D.el =
+   build-class-object-columns :file). The object-url resolves async —
+   src binds through a mount-scoped signal instead of an attr poke. *)
+let file_cell_el (w : W.t) : t =
+ fun ctx parent ->
   let uuid = Option.value (W.map_get_uuid w "block/uuid") ~default:"" in
   let ext =
     Option.value
@@ -722,18 +724,25 @@ let file_cell (w : W.t) : D.el =
       ~default:""
   in
   let file = uuid ^ "." ^ ext in
-  let img = D.h ~tag:"img" ~attrs:[ ("title", file) ] () in
+  let src = Signal.state ctx.Lui_ui.ui_scheduler "" in
   (match Hashtbl.find_opt A.url_cache file with
-   | Some url -> D.el_set_attr img "src" url
+   | Some url -> Runtime.signal_set src url
    | None ->
        ignore
          ((let* url = A.object_url ~repo:(repo ()) ~name:file ~mime:(mime_of_ext ext) in
-          D.el_set_attr img "src" url;
+          Runtime.signal_set src url;
           Js.Promise.resolve ())
           |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())));
-  D.h ~cls:"block-content overflow-hidden"
+  dom ~style_class:"block-content overflow-hidden"
     ~attrs:[ ("style", "max-height: 30px") ]
-    ~children:[ img ] ()
+    [ dom ~tag:"img"
+        ~attrs_signal_v:
+          (Logseq_dom.attrs_signal src.Signal.state_signal (fun u ->
+               ("title", file)
+               :: (if u = "" then [] else [ ("src", u) ])))
+        []
+    ]
+    ctx parent
 
 (* ---------- command hookup ---------- *)
 

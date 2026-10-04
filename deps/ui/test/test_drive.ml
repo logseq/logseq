@@ -429,30 +429,36 @@ let test_not_found () =
 
 (* ---------------- views table (stretch) ---------------- *)
 
-(* Views render imperatively into a DOM container and emit nothing into
-   the LUI tree -- Drive.Model can't see them. We mount a real instance
-   against the stub DOM and check the produced element structure there. *)
-(* the views layer drives the DOM directly; the stub element is a plain
-   JS object, so the container crosses via a marked identity cast *)
-external el_of_json : Js.Json.t -> Editor_dom.el = "%identity"
+(* Views render through the declarative LUI tree now -- mount a session
+   whose root view is the views element itself and assert on the Drive
+   tree once worker snapshots resolve. *)
 
 let view_uuid = "11111111-2222-3333-4444-555555555555"
 let row_uuid_1 = "aaaaaaaa-0000-0000-0000-000000000001"
 let row_uuid_2 = "aaaaaaaa-0000-0000-0000-000000000002"
 
-(* the views container is asserted in the async stage once snapshots
+(* the views session is asserted in the async stage once snapshots
    and block pulls have resolved *)
-let views_container : Js.Json.t option ref = ref None
+let views_session : (Model.t, Action.t) S.t option ref = ref None
 
 let test_views_table () =
-  let container_j = Stub_dom.make_element "div" in
-  let container = el_of_json container_j in
-  let inst =
-    Views_view.mount ~kind:Views_state.KAllPages
-      ~owner:(W.String "$$$views") ~container
+  let registry = Lui_extension.registry () in
+  Logseq_dom.register registry;
+  let vs =
+    S.mount ~registry ~profile:Logseq_dom.web_profile ~initial:Model.initial
+      ~reducer:Update.update
+      ~view:(fun _ctx _ms _send ->
+        Logseq_dom.dom
+          [ Views_view.view ~kind:Views_state.KAllPages
+              ~owner:(W.String "$$$views") ])
+      ()
   in
-  check "views inst created" (inst.Views_state.id >= 0);
-  views_container := Some container_j
+  views_session := Some vs;
+  (* the views element owns signals on this session's scheduler, so flush
+     it alongside the main app's *)
+  let flush0 = !Runtime.app_flush in
+  Runtime.app_flush :=
+    (fun () -> flush0 (); ignore (Lui_app.flush vs.S.app))
 
 (* vendored-libs markup: katex shell (cljs latex.latex-inline/.latex +
    .opacity-0 holder), youtube-timestamp link, youtube embed iframe
@@ -645,18 +651,19 @@ let async_checks () =
   check "right sidebar items non-empty" (items <> []);
   (* views table: snapshots -> view ents -> view-data -> rows/props
      -> render *)
-  match !views_container with
-  | Some c ->
+  match !views_session with
+  | Some vs ->
+      let nodes = M.all_nodes vs.S.tree in
       check "views .ls-table rendered"
-        (Stub_dom.query_selector_all c ".ls-table" <> []);
+        (List.exists (fun n -> has_tok n "ls-table") nodes);
       check "views header cells"
-        (Stub_dom.query_selector_all c ".ls-table-header-cell" <> []);
+        (List.exists (fun n -> has_tok n "ls-table-header-cell") nodes);
       check "views rows"
-        (Stub_dom.query_selector_all c ".ls-table-row" <> []);
+        (List.exists (fun n -> has_tok n "ls-table-row") nodes);
       check "views cells"
-        (Stub_dom.query_selector_all c ".ls-table-cell" <> []);
+        (List.exists (fun n -> has_tok n "ls-table-cell") nodes);
       check "views sticky-columns"
-        (Stub_dom.query_selector_all c ".sticky-columns" <> [])
+        (List.exists (fun n -> has_tok n "sticky-columns") nodes)
   | None -> ()
 
 (* ---------------- runner ---------------- *)
