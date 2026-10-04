@@ -782,7 +782,9 @@ let pv_open st (wrap : Dom_ext.element) =
         Dom_ext.rect_left r +. (Dom_ext.rect_width r /. 2.0) -. 305.0
       and y = Dom_ext.rect_bottom r in
       ignore
-        (let* (title, blocks) = S.fetch_preview (Router.repo ()) name in
+        (let* (title, page, blocks) =
+            S.fetch_preview (Router.repo ()) name
+        in
         (match !pv_pending with
          | Some el when el == wrap ->
              S.set_pv st
@@ -790,8 +792,26 @@ let pv_open st (wrap : Dom_ext.element) =
                   { S.pv_x = x
                   ; S.pv_y = y
                   ; S.pv_title = title
+                  ; S.pv_page = page
                   ; S.pv_blocks = blocks
-                  })
+                  });
+             (* cljs page-preview renders page-cp with-actions? => the
+                .ls-page-title-actions buttons (Add icon / Set property)
+                mount inside .block-content-wrapper — insert them into
+                the freshly flushed popover the same way
+                mount_page_area does for a real page *)
+             (match page with
+              | Some p -> (
+                  match
+                    Properties_dom.doc_query
+                      ".ls-preview-popup .ls-page-title \
+                       .block-content-wrapper"
+                  with
+                  | Some cw ->
+                      Properties_dom.el_insert_adjacent cw "afterbegin"
+                        (Properties_area.title_actions p)
+                  | None -> ())
+              | None -> ())
          | _ -> ());
         Js.Promise.resolve ())
 
@@ -842,8 +862,15 @@ let pv_popover (p : S.pv) : t =
             [ Logseq_dom.dom ~key:"pvt"
                 ~style_class:"ls-page-title content title"
                 ~attrs:[ ("data-testid", "page title") ]
-                [ Logseq_dom.dom ~key:"pvtw" ~style_class:"block-title-wrap"
-                    ~text:p.S.pv_title [] ]
+                [ Logseq_dom.dom ~key:"pvtc"
+                    ~style_class:"ls-page-title-container"
+                    [ Logseq_dom.dom ~key:"pvtcw"
+                        ~style_class:"block-content-wrapper relative"
+                        [ Logseq_dom.dom ~key:"pvtw"
+                            ~style_class:"block-title-wrap"
+                            ~text:p.S.pv_title [] ]
+                    ]
+                ]
             ; Logseq_dom.dom ~key:"pvb" ~style_class:"ls-page-blocks"
                 [ Logseq_dom.dom ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
