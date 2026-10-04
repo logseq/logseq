@@ -167,6 +167,23 @@ let rec value_of_transit (t : Wire.t) : value =
   | Wire.Tagged ("datascript/Datom", rep) -> Vector [ Symbol "datascript/Datom"; value_of_transit rep ]
   | Wire.Tagged (tag, rep) -> Vector [ String ("#" ^ tag); value_of_transit rep ]
 
+(* byte payload decode: a vector of ints arrives as a value list; each
+   element must be Int64 (or Float for cljs number payloads). O(n) via
+   Bytes — a String.init + List.nth decode is O(n^2) on import-sized
+   payloads. Malformed elements fail instead of decoding to NULs. *)
+let bytes_of_values (vs : value list) : string =
+  let b = Bytes.create (List.length vs) in
+  List.iteri
+    (fun i v ->
+      Bytes.set b i
+        (Char.chr
+           (match v with
+            | Int64 n -> Int64.to_int (Int64.logand n 255L)
+            | Float f -> int_of_float f land 0xff
+            | _ -> invalid_arg "bytes_of_values: non-byte element")))
+    vs;
+  Bytes.unsafe_to_string b
+
 let entity_ref_of_transit (t : Wire.t) : entity_ref =
   match t with
   | Wire.Int n -> Entity_id n

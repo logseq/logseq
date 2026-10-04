@@ -95,15 +95,7 @@ let import_file_payload (v : Datascript.value option) : string option =
   match v with
   | Some (String s) -> Some s
   | Some (Vector vs) | Some (List vs) | Some (Set vs) ->
-    (try
-       Some
-         (String.init (List.length vs) (fun i ->
-              Char.chr
-                (match List.nth vs i with
-                 | Int64 n -> Int64.(to_int (logand n 0xffL))
-                 | Float f -> int_of_float f land 0xff
-                 | _ -> 0)))
-     with _ -> None)
+    (try Some (Ds_wire.bytes_of_values vs) with _ -> None)
   | _ -> None
 
 (* <read-import-asset-payload *)

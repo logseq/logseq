@@ -55,12 +55,10 @@ let truthy = function Nil | Bool false -> false | _ -> true
 let select_keys (m : BM.t) (ks : attr list) : BM.t =
   List.filter (fun (k, _) -> List.mem k ks) m
 
-let rec distinct_by (f : 'a -> 'k) (xs : 'a list) : 'a list =
-  match xs with
-  | [] -> []
-  | x :: tl ->
-      if List.exists (fun y -> f y = f x) tl then distinct_by f tl
-      else x :: distinct_by f tl
+(* cljs distinct keeps the FIRST occurrence and is hash-based — shared
+   implementation in Common_util (the local keep-last seen-list version
+   was O(n^2) on export-scale collections). *)
+let distinct_by = Common_util.distinct_by
 
 let distinct xs = distinct_by Fun.id xs
 

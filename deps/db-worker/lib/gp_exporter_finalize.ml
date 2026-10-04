@@ -66,21 +66,37 @@ let missing_placeholder_ref_datoms (db : db) (attr : attr)
         | _ -> [])
       candidate_ref_uuids
   else
-    List.filter_map
+    (* memoize target placeholder-ness/uuid per ref id — one entity
+       seek per distinct target instead of one per datom *)
+    let placeholder_uuid_of : (int, string option) Hashtbl.t = Hashtbl.create 63 in
+    let phd_uuid id =
+      match Hashtbl.find_opt placeholder_uuid_of id with
+      | Some r -> r
+      | None ->
+          let r =
+            match Ldb.ent_of_id db id with
+            | Some e when placeholder_block_ref_ent e -> (
+                match Ldb.value e "block/uuid" with
+                | Some (Uuid u) | Some (String u) -> Some u
+                | _ -> None)
+            | _ -> None
+          in
+          Hashtbl.replace placeholder_uuid_of id r;
+          r
+    in
+    Seq.filter_map
       (fun (d : datom) ->
         match d.v with
-        | Ref id ->
-          (match Ldb.ent_of_id db id with
-           | Some e when placeholder_block_ref_ent e ->
-             (match Ldb.value e "block/uuid" with
-              | Some (Uuid u) | Some (String u) ->
+        | Ref id -> (
+            match phd_uuid id with
+            | Some u ->
                 Some
                   { phd_source_id = d.e; phd_ref_id = id
                   ; phd_ref_uuid = u }
-              | _ -> None)
-           | _ -> None)
+            | None -> None)
         | _ -> None)
-      (List.of_seq (datoms db Aevt ~a:attr ()))
+      (datoms db Aevt ~a:attr ())
+    |> List.of_seq
 
 (* cleanup-missing-block-refs-tx *)
 let cleanup_missing_block_refs_tx (db : db)
@@ -100,13 +116,14 @@ let cleanup_missing_block_refs_tx (db : db)
   let retract_ref_tx =
     Hashtbl.fold
       (fun source_id refs acc ->
-        acc
-        @ List.map
-            (fun r ->
-              Retract
-                (Entity_id source_id, "block/refs", Some (Ref r.phd_ref_id)))
-            refs)
+        List.map
+          (fun r ->
+            Retract
+              (Entity_id source_id, "block/refs", Some (Ref r.phd_ref_id)))
+          refs
+        :: acc)
       refs_by_source []
+    |> List.rev |> List.concat
   in
   let retract_link_tx =
     List.map
@@ -128,10 +145,11 @@ let cleanup_missing_block_refs_tx (db : db)
           in
           (match title', title with
            | Some t', Some t when t' <> t ->
-             acc @ [ Add (Entity_id source_id, "block/title", t') ]
+             Add (Entity_id source_id, "block/title", t') :: acc
            | _ -> acc)
         | None -> acc)
       refs_by_source []
+    |> List.rev
   in
   let placeholder_retract_tx =
     List.sort_uniq
@@ -162,52 +180,53 @@ let set_finishing_import_ui (set : string list -> value -> unit) : unit =
    the worker pipeline so refs are not rebuilt a second time. *)
 let finalize_imported_graph (conn : conn) : tx_report option =
   let db = Conn.db conn in
-  let entity_ids =
-    List.filter_map
+  (* carry the entity forward — one ent_of_id per block instead of a
+     second seek per id in the ops pass *)
+  let blocks =
+    Seq.filter_map
       (fun (d : datom) ->
         match Ldb.ent_of_id db d.e with
         | Some e ->
           if Ldb.value e "block/title" <> None
              && Ldb.value e "block/tx-id" = None
-          then Some d.e
+          then Some e
           else None
         | None -> None)
-      (List.of_seq (datoms db Aevt ~a:"block/uuid" ()))
+      (datoms db Aevt ~a:"block/uuid" ())
+    |> List.of_seq
   in
-  if entity_ids = [] then None
+  if blocks = [] then None
   else
     let tx_id = db.max_tx + 1 in
     let ops =
       List.concat_map
-        (fun id ->
-          match Ldb.ent_of_id db id with
-          | Some block ->
-            let refs =
-              match Ldb.value block "logseq.property.reaction/target" with
-              | Some _ -> []
-              | None -> Outliner_pipeline.db_rebuild_block_refs db block ()
-            in
-            let old_refs =
-              if refs = [] then []
-              else
-                List.filter_map
-                  (fun (d : datom) ->
-                    match d.v with Ref r -> Some r | _ -> None)
-                  (List.of_seq (datoms db Eavt ~e:id ~a:"block/refs" ()))
-            in
-            let missing_in a b =
-              List.filter (fun x -> not (List.mem x b)) a
-            in
-            Add (Entity_id id, "block/tx-id", Int64 (Int64.of_int tx_id))
-            :: List.map
-                 (fun r ->
-                   Retract (Entity_id id, "block/refs", Some (Ref r)))
-                 (missing_in old_refs refs)
-            @ List.map
-                (fun r -> Add (Entity_id id, "block/refs", Ref r))
-                (missing_in refs old_refs)
-          | None -> [])
-        entity_ids
+        (fun (block : entity) ->
+          let id = block.id in
+          let refs =
+            match Ldb.value block "logseq.property.reaction/target" with
+            | Some _ -> []
+            | None -> Outliner_pipeline.db_rebuild_block_refs db block ()
+          in
+          let old_refs =
+            if refs = [] then []
+            else
+              List.filter_map
+                (fun (d : datom) ->
+                  match d.v with Ref r -> Some r | _ -> None)
+                (List.of_seq (datoms db Eavt ~e:id ~a:"block/refs" ()))
+          in
+          let missing_in a b =
+            List.filter (fun x -> not (List.mem x b)) a
+          in
+          Add (Entity_id id, "block/tx-id", Int64 (Int64.of_int tx_id))
+          :: List.map
+               (fun r ->
+                 Retract (Entity_id id, "block/refs", Some (Ref r)))
+               (missing_in old_refs refs)
+          @ List.map
+              (fun r -> Add (Entity_id id, "block/refs", Ref r))
+              (missing_in refs old_refs))
+        blocks
     in
     if ops = [] then None
     else
@@ -303,14 +322,22 @@ let normalize_journal_uuids_tx (db : db) : tx_op list =
       let replacements =
         List.map (fun n -> (n.jn_old, n.jn_new)) normalizations
       in
-      List.filter_map
+      Seq.filter_map
         (fun (d : datom) ->
           match d.v with
-          | String _ | Vector _ | List _ | Set _ | Map _ ->
-            let v' = replace_journal_uuid_refs replacements d.v in
-            if v' <> d.v then Some (Add (Entity_id d.e, d.a, v')) else None
+          | String s ->
+            (* cheap prefilter: replacements only fire on [[ and (( *)
+              if String.contains s '(' || String.contains s '[' then begin
+                let v' = replace_journal_uuid_refs replacements d.v in
+                if v' <> d.v then Some (Add (Entity_id d.e, d.a, v')) else None
+              end
+              else None
+          | Vector _ | List _ | Set _ | Map _ ->
+              let v' = replace_journal_uuid_refs replacements d.v in
+              if v' <> d.v then Some (Add (Entity_id d.e, d.a, v')) else None
           | _ -> None)
-        (List.of_seq (datoms db Eavt ()))
+        (datoms db Eavt ())
+      |> List.of_seq
   in
   uuid_tx @ text_tx
 
