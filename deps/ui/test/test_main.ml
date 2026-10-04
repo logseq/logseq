@@ -2957,10 +2957,10 @@ let test_graphs_ops () =
   Graphs_ops.repos := saved
 
 let test_boot () =
-  eqs "unquote" "x" (Boot.unquote "\"x\"");
-  eqs "unquote bare" "x" (Boot.unquote "x");
-  eqs "unquote empty" "" (Boot.unquote "\"\"");
-  eqs "unquote single" "\"" (Boot.unquote "\"")
+  eqs "unquote" "x" (Platform.storage_unquote "\"x\"");
+  eqs "unquote bare" "x" (Platform.storage_unquote "x");
+  eqs "unquote empty" "" (Platform.storage_unquote "\"\"");
+  eqs "unquote single" "\"" (Platform.storage_unquote "\"")
 
 (* ---- update: Toast_dismiss_key + confirm reset on navigate ---- *)
 

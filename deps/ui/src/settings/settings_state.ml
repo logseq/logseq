@@ -257,14 +257,14 @@ let current_accent () =
      unset = no active swatch *)
   match Platform.local_storage_get "radix-color" with
   | Some v -> (
-      let v = Settings_view.unquote v in
+      let v = Platform.storage_unquote v in
       if String.length v > 0 && v.[0] = ':' then
         String.sub v 1 (String.length v - 1)
       else v)
   | None -> ""
 
 let set_accent name =
-  Platform.local_storage_set "radix-color" (Settings_view.quoted (":" ^ name));
+  Platform.local_storage_set "radix-color" (Platform.storage_quote (":" ^ name));
   Platform.document_set_data "color" name;
   poke ()
 
@@ -280,7 +280,7 @@ let default_font_cfg = { ftype = "default"; fglobal = false }
 let current_editor_font () =
   match Platform.local_storage_get "editor-font" with
   | Some v -> (
-      match Edn.parse (Settings_view.unquote v) with
+      match Edn.parse (Platform.storage_unquote v) with
       | Wire.Map kvs ->
           let m = Wire.Map kvs in
           { ftype =
@@ -297,7 +297,7 @@ let current_editor_font () =
 
 let write_editor_font cfg =
   Platform.local_storage_set "editor-font"
-    (Settings_view.quoted
+    (Platform.storage_quote
        (Edn.to_string
           (Wire.Map
              [ (Wire.Keyword "type", Wire.String cfg.ftype)
