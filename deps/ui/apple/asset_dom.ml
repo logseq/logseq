@@ -6,11 +6,10 @@ open Promise_ext
 
 module S = Editor_state
 module W = Wire
+module B = Browser_ui
 
 let dom = Logseq_dom.dom
 let t = Logseq_dom.dom ~tag:"raw-text" []
-
-let upload_files (_files : Js.Json.t array) : unit = ()
 
 (* ---------- file drop upload ---------- *)
 
@@ -176,13 +175,36 @@ let upload_paths (paths : string list) =
                ignore (Outliner_ops.resync_open_editor ());
              Js.Promise.resolve ())
 
+(* pasted/dropped file objects carry {name,path,size} — the host fills
+   real filesystem paths, so the save path is the same as file-drop *)
+let upload_files (files : Js.Json.t array) =
+  upload_paths
+    (List.filter_map
+       (fun f -> Dom_ext.str_prop "path" f)
+       (Array.to_list files))
+
+(* hidden <input type=file> inside every editor — cljs
+   components/editor.cljs image-uploader; the slash command opens the
+   host file picker, which answers with a "change" dom-event here *)
+let upload_picked () =
+  match B.qs "#upload-file" with
+  | Some el -> upload_files (B.files_of el)
+  | None -> ()
+
 let upload_input key : Lui_elements.t =
   dom ~key ~tag:"input"
     ~attrs:[ ("type", "file"); ("hidden", "") ; ("id", "upload-file") ]
+    ~events:"change"
+    ~on_dom_event:(fun name _ -> if name = "change" then upload_picked ())
     []
 
 let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()
+
+let asset_path ~uuid ~ext =
+  Filename.concat
+    (Asset_store.asset_dir (Runtime.repo ()))
+    (uuid ^ "." ^ ext)
 
 (* minimal asset render — the asset extension tag carries the block
    uuid + stored file path so the Swift renderer can resolve it *)
@@ -193,12 +215,22 @@ let file_cell (w : Wire.t) : Views_dom.el =
     Option.value
       (Wire.map_get_string w "logseq.property.asset/type") ~default:"" in
   Views_dom.h ~tag:"img"
-    ~attrs:[ ("title", uuid ^ "." ^ ext); ("data-asset-file", uuid ^ "." ^ ext) ]
+    ~attrs:
+      [ ("src", asset_path ~uuid ~ext)
+      ; ("title", uuid ^ "." ^ ext)
+      ; ("data-asset-file", uuid ^ "." ^ ext) ]
     ()
+
+let image_exts =
+  [ "png"; "jpg"; "jpeg"; "gif"; "webp"; "bmp"; "svg"; "ico"; "avif"; "heic" ]
+
+let video_exts = [ "mp4"; "mov"; "webm"; "m4v" ]
+let audio_exts = [ "mp3"; "wav"; "m4a"; "ogg"; "flac"; "aac" ]
 
 let block_view uuid (b : Model.block) : Lui_elements.t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let is_pdf = ext = "pdf" in
+  let path = asset_path ~uuid ~ext in
   dom ~key:("asset-" ^ uuid) ~tag:"div"
     ~style_class:
       ("asset-container" ^ if is_pdf then " ls-pdf-asset" else "")
@@ -212,9 +244,25 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
          dom ~tag:"a"
            ~style_class:"ls-pdf-asset-link"
            ~text:(uuid ^ "." ^ ext) []
+       else if List.mem ext image_exts then
+         dom ~tag:"img"
+           ~attrs:
+             [ ("src", path)
+             ; ("title", uuid ^ "." ^ ext)
+             ; ("data-asset-file", uuid ^ "." ^ ext) ]
+           []
+       else if List.mem ext video_exts then
+         dom ~tag:"video"
+           ~attrs:[ ("src", path); ("controls", "") ]
+           []
+       else if List.mem ext audio_exts then
+         dom ~tag:"audio"
+           ~attrs:[ ("src", path); ("controls", "") ]
+           []
        else Logseq_dom.nothing) ]
 
 let install () =
+  S.upload_files := upload_files;
   (* window-level file drop — the Swift host posts
      platform_event "file-drop" {"paths": [...]} when files are dropped
      on the window *)
@@ -227,7 +275,19 @@ let install () =
                 (List.filter_map Js.Json.decodeString
                    (Array.to_list items))
           | _ -> ())
-      | _ -> ())
+      | _ -> ());
+  (* slash "Upload an asset" emits ls:editor-command {command} — cljs
+     :editor/click-hidden-file-input clicks the hidden input; natively
+     the pick goes through the host's NSOpenPanel *)
+  Platform.on_document_event "ls:editor-command" (fun ev ->
+      match Js.Json.decodeObject (Platform.json_prop ev "detail") with
+      | Some d -> (
+          match
+            Option.bind (Js.Dict.get d "command") Js.Json.decodeString
+          with
+          | Some "upload" -> B.pick_files ~on_picked:upload_picked "upload-file"
+          | _ -> ())
+      | None -> ())
 
 let delete_asset uuid =
   let ext =

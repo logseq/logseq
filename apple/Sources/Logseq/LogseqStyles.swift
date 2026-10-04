@@ -404,7 +404,9 @@ import SwiftUI
     case "font-mono", "monospace": isMono = true
     // ---- visibility ----
     case "hidden", "invisible", "sr-only", "!hidden",
-         "display-none", "d-none", "collapse", "scale-0":
+         "display-none", "d-none", "collapse", "scale-0",
+         // lui-hidden inputs (importer file inputs) — display:none on web
+         "ls-hidden-input":
       isHidden = true
     case "opacity-0": alpha = 0
     // ---- layout ----

@@ -54,6 +54,18 @@ final class LogseqBlockTextView: NSTextView {
     super.viewWillMove(toWindow: newWindow)
   }
 
+  /// ⌘V with file URLs or image data on the pasteboard is an asset
+  /// upload, not text — intercept here (only an actual paste action
+  /// reaches `paste(_:)`; a pasteboard-files check in
+  /// shouldChangeTextIn would fire on every keystroke).
+  override func paste(_ sender: Any?) {
+    if let files = LogseqPasteboard.files() {
+      coordinator?.emitPasteFiles(files)
+      return
+    }
+    super.paste(sender)
+  }
+
   /// A `focus` dom-op that lands while this view is unattached silently
   /// fails — `makeFirstResponder` needs the view in a window — and
   /// OCaml's pending-focus loop then re-emits the op every attempt,
@@ -173,6 +185,17 @@ struct LogseqTextArea: NSViewRepresentable {
         "selectionEnd": textView.selectedRange().location
           + textView.selectedRange().length,
       ])
+    }
+
+    /// File/image paste — OCaml's paste handler reads
+    /// `clipboardData.files` as the file-drop {name,path,size} shape
+    /// and routes to the asset upload path.
+    func emitPasteFiles(_ files: [[String: Any]]) {
+      var payload: [String: Any] = ["files": files]
+      if let plain = NSPasteboard.general.string(forType: .string) {
+        payload["text"] = plain
+      }
+      emit("paste", payload: ["clipboardData": payload])
     }
 
     /// Route pastes through OCaml's paste pipeline (web `paste` dom-event →

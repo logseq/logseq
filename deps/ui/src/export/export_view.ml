@@ -240,6 +240,7 @@ let png_preview ctx =
         ~attrs_signal_v:(Logseq_dom.reactive_attrs
              (fun (st : S.t) ->
                [ ("id", "export-preview"); ("alt", I18n.export_preview_alt)
+               ; ("src", Option.value ~default:"" st.png_url)
                ; ( "style"
                  , if st.png = None then "visibility: hidden" else "" ) ])
              (Signal.value (S.st ctx)))

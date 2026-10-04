@@ -7,17 +7,87 @@ module W = Wire
 module S = Export_state
 module F = Export_formats
 
-(* html2canvas has no native port — png export resolves empty *)
-type canvas = unit
-let html2canvas_ (_ : B.E.t) (_ : Js.Json.t) : canvas Js.Promise.t =
-  Js.Promise.resolve ()
-let canvas_to_blob (_ : canvas) (_ : 'a -> unit) (_ : string) : unit = ()
+(* html2canvas has no native port — the "snapshot-png" dom-op snaps
+   the live view into a temp PNG on the host and reports
+   "snapshot-png-done" {req, path} as a platform event. A canvas is the
+   png path; a blob is an int token keyed to that path. *)
+
+let snapshot_waiters : (int, string -> unit) Hashtbl.t =
+  Hashtbl.create 4
+let snapshot_installed = ref false
+let next_req = ref 0
+
+let install_snapshot_listener () =
+  if not !snapshot_installed then begin
+    snapshot_installed := true;
+    Platform.add_event_listener "snapshot-png-done" (fun payload ->
+        match payload with
+        | Js.Json.JObject kvs -> (
+            match List.assoc_opt "req" kvs, List.assoc_opt "path" kvs
+            with
+            | Some (Js.Json.JNumber req), Some (Js.Json.JString path)
+              -> (
+                match
+                  Hashtbl.find_opt snapshot_waiters
+                    (int_of_float req)
+                with
+                | Some f ->
+                    Hashtbl.remove snapshot_waiters (int_of_float req);
+                    f path
+                | None -> ())
+            | _ -> ())
+        | _ -> ())
+  end
+
+let snapshot_png ~(sel : string) : string Js.Promise.t =
+  install_snapshot_listener ();
+  Js.Promise.make (fun ~resolve ~reject:_ ->
+      incr next_req;
+      Hashtbl.replace snapshot_waiters !next_req resolve;
+      Host.dom_op "snapshot-png"
+        (Js.Json.stringify
+           (Js.Json.JObject
+              [ ( "ref"
+                , Js.Json.JObject [ "#ref", Js.Json.JString sel ] )
+              ; ("req", Js.Json.JNumber (float_of_int !next_req)) ])))
+
+type canvas = string
+
+let html2canvas_ (el : B.E.t) (_ : Js.Json.t) : canvas Js.Promise.t =
+  match B.ref_id_of el with
+  | Some sel -> snapshot_png ~sel
+  | None -> Js.Promise.resolve ""
+
+(* blob tokens → png path so clipboard_write_png/download_blob can
+   hand the host a real file *)
+let blob_paths : (int, string) Hashtbl.t = Hashtbl.create 4
+let next_blob = ref 0
+
+let blob_of_path (path : string) : Webapi.Blob.t =
+  incr next_blob;
+  Hashtbl.replace blob_paths !next_blob path;
+  !next_blob
+
+let blob_path (b : Webapi.Blob.t) : string =
+  Option.value (Hashtbl.find_opt blob_paths b) ~default:""
+
+let canvas_to_blob (path : canvas) (cb : 'a Js.Nullable.t -> unit)
+    (_ : string) : unit =
+  if path = "" then cb Js.Nullable.null
+  else cb (Js.Nullable.return (blob_of_path path))
+
 let computed_style (_ : B.E.t) : Js.Json.t = Js.Json.JObject []
 let css_prop (_ : Js.Json.t) (_ : string) : string = ""
 let el_scroll_height (_ : B.E.t) : float = 0.
 let body_el : B.E.t = 0
 let blob_as_file (b : Webapi.Blob.t) : Webapi.File.t = b
-let clipboard_write_png (_ : Webapi.Blob.t) : unit Js.Promise.t =
+
+let clipboard_write_png (b : Webapi.Blob.t) : unit Js.Promise.t =
+  let path = blob_path b in
+  if path <> "" then
+    Host.dom_op "clipboard-write-png"
+      (Js.Json.stringify
+         (Js.Json.JObject [ "path", Js.Json.JString path ]));
   Js.Promise.resolve ()
 
 (* cljs export-common/get-content-config defaults *)
@@ -151,16 +221,12 @@ let export_png (st : S.t Signal.state) =
          (fun blob ->
            match Js.Nullable.toOption blob with
            | Some blob ->
-               (match (Signal.get_state st).png_url with
-                | Some old -> Webapi.Url.revokeObjectURL old
-                | None -> ());
-               let url =
-                 Webapi.Url.createObjectURL (blob_as_file blob)
-               in
+               let url = blob_path blob in
                Signal.update st (fun s ->
                    { s with png = Some blob; png_url = Some url });
                Runtime.flush ();
-               (* cljs sets img#export-preview .src imperatively *)
+               (* cljs sets img#export-preview .src imperatively; the
+                  reactive attrs in export_view also carry it *)
                (match B.qs "#export-preview" with
                 | Some img -> B.set_attr img "src" url
                 | None -> ())
@@ -238,8 +304,14 @@ let copy_png (st : S.t Signal.state) =
   | Some b -> copied_flash st (clipboard_write_png b)
   | None -> ()
 
-let download_blob ~filename (_blob : Webapi.Blob.t) =
-  Host.dom_op "save-file" filename
+let download_blob ~filename (blob : Webapi.Blob.t) =
+  let path = blob_path blob in
+  if path <> "" then
+    Host.dom_op "save-file-binary"
+      (Js.Json.stringify
+         (Js.Json.JObject
+            [ "path", Js.Json.JString path
+            ; "filename", Js.Json.JString filename ]))
 
 (* cljs filename: "logseq_" + (t/now) + ext — txt for text else format *)
 let save_to_file (st : S.t Signal.state) =

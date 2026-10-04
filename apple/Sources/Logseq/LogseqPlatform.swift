@@ -29,6 +29,10 @@ import SwiftUI
 
 extension LogseqElement {
   var isPlaceholder: Bool { false }
+  /// nodeID of the element this handle fronts, when the handle knows
+  /// it — lets ref-resolved dom-ops emit dom-events on the element's
+  /// own context without a full LogseqElement implementation.
+  var emitNodeID: Int? { nil }
   func domFocus() {}
   func domSetValue(_ value: String) {}
   func domSetTextContent(_ text: String) {}
@@ -260,6 +264,26 @@ final class NSReferenceBox {
         }
         if editing && !shift && ["c", "v", "x"].contains(char) {
           return event
+        }
+        if char == "v" && !shift {
+          // The block textarea never holds the first responder — ⌘V
+          // would die in OCaml's keymap, which has no mod+v binding.
+          // Synthesize the web `paste` event instead: file URLs and
+          // image data go to the asset-upload path, plain text splices
+          // via paste_blocks.
+          var cb: [String: Any] = [:]
+          if let files = LogseqPasteboard.files() { cb["files"] = files }
+          if let plain = NSPasteboard.general.string(forType: .string) {
+            cb["text"] = plain
+          }
+          if !cb.isEmpty,
+            let data = try? JSONSerialization.data(
+              withJSONObject: ["clipboardData": cb]),
+            let json = String(data: data, encoding: .utf8)
+          {
+            runtime?.sendPlatformEvent(name: "paste", json: json)
+          }
+          return nil
         }
       }
       self.sendKeyDown(event)
@@ -645,7 +669,12 @@ final class NSReferenceBox {
         "PERF domop t=\(CFAbsoluteTimeGetCurrent()) name=\(name) ref=\(id) hit=\(hit) attempt=\(attempt)\n"
           .data(using: .utf8)!)
     }
-    if dict["ref"] != nil, let id = refID(dict), target(dict) == nil {
+    // pick-files runs without a mounted element: hidden file inputs
+    // (e.g. #upload-file) never register, and the ref is only the pick's
+    // report-back identifier.
+    if dict["ref"] != nil, name != "pick-files", let id = refID(dict),
+      target(dict) == nil
+    {
       pendingDomOps[id, default: []].append((name, dict))
       if attempt == 0 {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
@@ -747,6 +776,37 @@ final class NSReferenceBox {
       }
     case "download-text", "download-binary", "save-file":
       saveFile(name: name, dict: dict)
+    case "pick-files":
+      // NSOpenPanel for an input[type=file] — results report back as a
+      // "file-picked" platform event (see LogseqFilePicker.report).
+      guard let id = refID(dict) else { break }
+      LogseqFilePicker.pick(
+        id: id,
+        accept: dict["accept"] as? String ?? "",
+        multiple: dict["multiple"] as? Bool ?? false,
+        directory: dict["directory"] as? Bool ?? false)
+    case "snapshot-png":
+      snapshotPNG(dict: dict)
+    case "clipboard-write-png":
+      if let path = dict["path"] as? String,
+        let data = try? Data(contentsOf: URL(fileURLWithPath: path))
+      {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setData(data, forType: .png)
+      }
+    case "save-file-binary":
+      // copy an existing temp/rendered file out via NSSavePanel — used
+      // by the export-view PNG download (text goes through saveFile).
+      guard let path = dict["path"] as? String else { break }
+      let filename = (dict["filename"] as? String)
+        ?? (dict["name"] as? String) ?? "export"
+      let panel = NSSavePanel()
+      panel.nameFieldStringValue = filename
+      panel.begin { response in
+        guard response == .OK, let url = panel.url else { return }
+        try? FileManager.default.copyItem(
+          at: URL(fileURLWithPath: path), to: url)
+      }
     case "dump-frames":
       let parts = LogseqFrameStore.entries.sorted(by: { $0.key < $1.key }).map {
         let r = $0.value.rect
@@ -760,6 +820,51 @@ final class NSReferenceBox {
     default:
       logger.debug("unhandled dom-op: \(name)")
     }
+  }
+
+  /// Snapshot the window content region behind a node ref into a temp
+  /// PNG — the native stand-in for export_page's html2canvas. Reports
+  /// "snapshot-png-done" {req, path} on the platform event channel.
+  private func snapshotPNG(dict: [String: Any]) {
+    let req = (dict["req"] as? NSNumber)?.intValue ?? 0
+    var nodeID: Int? = nil
+    if let ref = dict["ref"] as? [String: Any] {
+      nodeID = (ref["node-id"] as? NSNumber)?.intValue
+    }
+    if nodeID == nil {
+      nodeID = target(dict)?.emitNodeID
+    }
+    let rect = nodeID.flatMap { LogseqFrameStore.entries[$0]?.rect }
+    guard let window = NSApp.windows.first, let content = window.contentView
+    else { return }
+    let region = rect ?? content.bounds
+    // frame-store rects are top-left-origin window points; NSView is
+    // bottom-left unless flipped.
+    let flipped = content.isFlipped
+    let bounds =
+      flipped
+      ? region
+      : CGRect(
+        x: region.minX,
+        y: content.bounds.height - region.minY - region.height,
+        width: region.width, height: region.height)
+    guard let rep = content.bitmapImageRepForCachingDisplay(in: bounds)
+    else { return }
+    content.cacheDisplay(in: bounds, to: rep)
+    guard let png = rep.representation(using: .png, properties: [:]) else {
+      return
+    }
+    let path =
+      NSTemporaryDirectory() + "logseq-export-\(req).png"
+    do {
+      try png.write(to: URL(fileURLWithPath: path))
+      if let data = try? JSONSerialization.data(withJSONObject: [
+        "req": req, "path": path,
+      ]), let json = String(data: data, encoding: .utf8)
+      {
+        runtime?.sendPlatformEvent(name: "snapshot-png-done", json: json)
+      }
+    } catch {}
   }
 
   private func saveFile(name: String, dict: [String: Any]) {

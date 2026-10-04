@@ -10,12 +10,113 @@ type el = E.t
 let el_counter = ref 0
 let new_el () = incr el_counter; !el_counter
 
-let qs (_ : string) : el option = None
-let qs_in (_ : el) (_ : string) : el option = None
+(* ---- file picks ----
+
+   The host's pick-files dom-op answers with a "file-picked" platform
+   event {id, files:[{name,path,size}]} followed by a "change" dom-event
+   on the input node — the same object shape a browser's el.files
+   reports. Picks are stashed keyed by the input's "#id" selector so
+   shared code can keep its qs -> files_of pattern: qs resolves a
+   selector to a token element and files_of drains the stash.
+   (file-picked and the change dispatch run on the same OCaml worker
+   queue in emission order, so the stash lands before any handler
+   that reads it.) *)
+
+(* picks land stashed by "#id" selector AND in arrival order: the
+   host's pick-files answer and the "change" dom-event it emits run on
+   the same OCaml worker queue in emission order, so files_of drains
+   the oldest pending pick regardless of which selector it is read
+   through (matching the web's polymorphic files_of signature) *)
+let picked : (string, Js.Json.t array) Hashtbl.t = Hashtbl.create 8
+let picked_order : string Queue.t = Queue.create ()
+let sel_els : (string, el) Hashtbl.t = Hashtbl.create 8
+let el_sel : (el, string) Hashtbl.t = Hashtbl.create 8
+(* caller-supplied pick completions keyed by "#id" — hidden inputs
+   never mount an element to emit "change", so the file-picked event
+   itself fires the subscriber *)
+let change_subs : (string, unit -> unit) Hashtbl.t = Hashtbl.create 8
+
+let pick_listener_installed = ref false
+
+let install_pick_listener () =
+  if not !pick_listener_installed then begin
+    pick_listener_installed := true;
+    Platform.add_event_listener "file-picked" (fun payload ->
+        match payload with
+        | Js.Json.JObject kvs -> (
+            match List.assoc_opt "id" kvs, List.assoc_opt "files" kvs with
+            | Some (Js.Json.JString id), Some (Js.Json.JArray files) ->
+                let sel = "#" ^ id in
+                Hashtbl.replace picked sel files;
+                Queue.add sel picked_order;
+                (match Hashtbl.find_opt change_subs sel with
+                 | Some f ->
+                     Hashtbl.remove change_subs sel;
+                     f ()
+                 | None -> ())
+            | _ -> ())
+        | _ -> ())
+  end
+
+(* opens the host's NSOpenPanel for the file input identified by its
+   DOM id (webkitdirectory maps to a directory pick) *)
+let pick_files ?(accept = "") ?(multiple = false) ?(directory = false)
+    ?(on_picked = fun () -> ()) (id : string) : unit =
+  Hashtbl.replace change_subs ("#" ^ id) on_picked;
+  install_pick_listener ();
+  Host.dom_op "pick-files"
+    (Js.Json.stringify
+       (Js.Json.JObject
+          [ "ref", Js.Json.JObject [ "#ref", Js.Json.JString id ]
+          ; "accept", Js.Json.JString accept
+          ; "multiple", Js.Json.JBoolean multiple
+          ; "directory", Js.Json.JBoolean directory ]))
+
+let el_for_sel (sel : string) : el =
+  match Hashtbl.find_opt sel_els sel with
+  | Some e -> e
+  | None ->
+      let e = new_el () in
+      Hashtbl.replace sel_els sel e;
+      Hashtbl.replace el_sel e sel;
+      e
+
+let qs (sel : string) : el option =
+  install_pick_listener ();
+  match Dom_ext.doc_query_selector sel with
+  | Some _ -> Some (el_for_sel sel)
+  | None when Hashtbl.mem picked sel -> Some (el_for_sel sel)
+  | None -> None
+
+let qs_in (_ : el) (sel : string) : el option =
+  match Dom_ext.doc_query_selector sel with
+  | Some _ -> Some (el_for_sel sel)
+  | None -> None
 let create (_ : string) : el = new_el ()
 let append (_ : el) (_ : el) : unit = ()
 let remove (_ : el) : unit = ()
-let set_attr (_ : el) (_ : string) (_ : string) : unit = ()
+
+(* registry id for a token el — the selector without its leading "#"
+   (dom-op refs resolve against DOM ids, not selector syntax) *)
+let ref_id_of (e : el) : string option =
+  match Hashtbl.find_opt el_sel e with
+  | Some sel ->
+      Some
+        (if String.length sel > 0 && sel.[0] = '#'
+         then String.sub sel 1 (String.length sel - 1)
+         else sel)
+  | None -> None
+
+let set_attr (el : el) (name : string) (v : string) : unit =
+  match ref_id_of el with
+  | Some id ->
+      Host.dom_op "set-attr"
+        (Js.Json.stringify
+           (Js.Json.JObject
+              [ ("ref", Js.Json.JObject [ "#ref", Js.Json.JString id ])
+              ; ("name", Js.Json.JString name)
+              ; ("value", Js.Json.JString v) ]))
+  | None -> ()
 let get_attr (_ : el) (_ : string) : string option = None
 let set_text (_ : el) (_ : string) : unit = ()
 let set_class (_ : el) (_ : string) : unit = ()
@@ -77,9 +178,21 @@ let pairs_json (a : (string * Js.Json.t) array) : Js.Json.t =
   Js.Json.JObject (Array.to_list a)
 let make_blob (_ : Js.Json.t array) (_ : Js.Json.t) : Webapi.Blob.t = 0
 let blob_to_file (b : Webapi.Blob.t) : Webapi.File.t = b
-let u8_of_buffer (_ : Js.Typed_array.ArrayBuffer.t) : string = ""
-let file_text (_ : Js.Json.t) : string Js.Promise.t =
-  Js.Promise.resolve ""
+let u8_of_buffer (buf : Js.Typed_array.ArrayBuffer.t) : string =
+  Bytes.to_string buf
+
+let read_path (path : string) : string =
+  let ic = open_in_bin path in
+  let n = in_channel_length ic in
+  let s = really_input_string ic n in
+  close_in ic;
+  s
+
+let file_text (f : Js.Json.t) : string Js.Promise.t =
+  match Dom_ext.str_prop "path" f with
+  | Some path -> (try Js.Promise.resolve (read_path path)
+                  with e -> Js.Promise.reject e)
+  | None -> Js.Promise.resolve ""
 
 (* ---- downloads / picks ---- *)
 
@@ -121,14 +234,28 @@ let download_binary ~(filename : string) ~(mime : string)
 
 let confirm (_ : string) : bool = false
 
-let fmt_time (_ : float) : string = ""
+(* cljs t/now into a filename-safe stamp *)
+let fmt_time (ms : float) : string =
+  let t = Unix.localtime (ms /. 1000.) in
+  Printf.sprintf "%04d%02d%02d_%02d%02d%02d"
+    (t.Unix.tm_year + 1900)
+    (t.Unix.tm_mon + 1)
+    t.Unix.tm_mday t.Unix.tm_hour t.Unix.tm_min t.Unix.tm_sec
 
 (* file inputs / drag-drop payloads — JSON File snapshots carry
    {name,size,path} the host fills in *)
-(* native file selection goes through the host's NSOpenPanel dom-event
-   (carries real paths), not <input type=file> — files_of on an opaque
-   element yields nothing *)
-let files_of (_ : 'a) : Js.Json.t array = [||]
+(* web signature is polymorphic ('a) — callers pass element snapshots
+   of differing types on each platform; the FIFO above is what
+   actually resolves a pick *)
+let files_of (_ : 'a) : Js.Json.t array =
+  match Queue.take_opt picked_order with
+  | Some sel -> (
+      match Hashtbl.find_opt picked sel with
+      | Some files ->
+          Hashtbl.remove picked sel;
+          files
+      | None -> [||])
+  | None -> [||]
 
 let file_name (f : Js.Json.t) : string =
   match Dom_ext.str_prop "name" f with

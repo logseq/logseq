@@ -360,8 +360,12 @@ struct LogseqElementView: View {
       }
       .background(Group {
         // text inputs register their real coordinator handle themselves —
-        // the generic no-op handle must not clobber it.
-        if tag != "textarea" && tag != "input" {
+        // the generic no-op handle must not clobber it. file inputs have
+        // no coordinator (they may render hidden), so they take the
+        // generic registration to stay ref-addressable for pick-files.
+        let isFileInput =
+          tag == "input" && (attrs["type"] as? String) == "file"
+        if tag != "textarea" && (tag != "input" || isFileInput) {
           LogseqElementRegistration(id: domID, context: context)
         }
       })
@@ -421,9 +425,28 @@ struct LogseqElementView: View {
         .frame(minHeight: codeMinHeight)
         .frame(maxWidth: .infinity)
     case "input":
-      LogseqInputField(
-        context: context, attrs: attrs, style: style,
-        wired: wiredEvents, text: text, domID: domID)
+      if (attrs["type"] as? String) == "file" {
+        LogseqFileInput(context: context, attrs: attrs, domID: domID)
+      } else {
+        LogseqInputField(
+          context: context, attrs: attrs, style: style,
+          wired: wiredEvents, text: text, domID: domID)
+      }
+    case "iframe":
+      LogseqWebEmbed(src: attrs["src"] as? String ?? "")
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 240)
+        .modifier(LogseqStyleModifier(style: style, tag: tag))
+    case "video":
+      LogseqMediaEmbed(src: attrs["src"] as? String ?? "", isAudio: false)
+        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .modifier(LogseqStyleModifier(style: style, tag: tag))
+    case "audio":
+      LogseqMediaEmbed(src: attrs["src"] as? String ?? "", isAudio: true)
+        .frame(height: 54)
+        .frame(maxWidth: .infinity)
+        .modifier(LogseqStyleModifier(style: style, tag: tag))
     // ---- links / buttons ----
     case "a":
       linkBody
@@ -868,7 +891,13 @@ struct LogseqElementView: View {
 
   @ViewBuilder private var imageBody: some View {
     let src = attrs["src"] as? String ?? ""
-    if let url = URL(string: src), url.scheme == "file" || url.scheme == nil {
+    let fileURL =
+      LogseqAssetResolver.url(forSrc: src).flatMap {
+        $0.isFileURL ? $0 : nil
+      } ?? URL(string: src).flatMap {
+        $0.scheme == "file" || $0.scheme == nil ? $0 : nil
+      }
+    if let url = fileURL {
       if let image = NSImage(contentsOfFile: url.path) {
         Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
       } else {
@@ -1698,6 +1727,7 @@ private struct LogseqElementRegistration: View {
 private final class LogseqElementHandle: LogseqElement {
   let isPlaceholder = true
   let nodeID: Int
+  var emitNodeID: Int? { nodeID }
   init(nodeID: Int) { self.nodeID = nodeID }
 
 }
