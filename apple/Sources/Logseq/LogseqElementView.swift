@@ -88,9 +88,10 @@ struct LogseqElementView: View {
       s.applyInline(inline)
     }
     // cmdk rows signal the keyboard/mouse highlight via data-* attrs —
-    // the web stylesheet paints the row bg from them.
-    if (attrs["data-highlighted"] as? String) == "true"
-      || (attrs["data-kb-highlighted"] as? String) == "true"
+    // the web stylesheet paints the row bg from them. Context-menu rows
+    // set data-highlighted="" (presence, not "true").
+    if attrs["data-highlighted"] != nil
+      || attrs["data-kb-highlighted"] != nil
     {
       s.background = LogseqColors.gray(4)
       if s.cornerRadius == nil { s.cornerRadius = 6 }
@@ -124,7 +125,8 @@ struct LogseqElementView: View {
   /// Hit-test layer for LogseqFrameStore: overlay/imperative popups paint
   /// above page content; overlayZ keeps same-layer stacking order.
   private var frameZ: Int {
-    (inOverlay || inImperativeLayer ? 1000 : 0) + style.overlayZ
+    (inOverlay || nestedInOverlay || inImperativeLayer ? 1000 : 0)
+      + style.overlayZ
   }
 
   private func hasClass(_ cls: String) -> Bool {
@@ -281,6 +283,10 @@ struct LogseqElementView: View {
           : (style.fixedRight != nil ? .topTrailing : .topLeading)
         core
           .fixedSize()
+          .modifier(
+            LogseqEdgeClamp(
+              x: style.fixedX, y: style.fixedY,
+              right: style.fixedRight, bottom: style.fixedBottom))
           .padding(.leading, style.fixedX ?? 0)
           .padding(.trailing, style.fixedRight ?? 0)
           .padding(.top, style.fixedY ?? 0)
@@ -309,9 +315,13 @@ struct LogseqElementView: View {
       .onGeometryChange(for: CGRect.self) { g in
         g.frame(in: .global)
       } action: { rect in
-        if (inOverlay || inImperativeLayer) && tag != "path" {
+        if (inOverlay || nestedInOverlay || inImperativeLayer)
+          && tag != "path"
+        {
           LogseqFrameStore.overlayEntries[context.nodeID] =
-            LogseqFrameEntry(rect: rect, tag: tag, z: frameZ)
+            LogseqFrameEntry(
+              rect: rect, tag: tag, z: frameZ,
+              scrim: style.overlayZ < 0 || hasClass("ls-popup-backdrop"))
         }
       }
       .onDisappear {
@@ -388,11 +398,17 @@ struct LogseqElementView: View {
     } else if isRightSidebarContainer {
       contentBody.overlay(alignment: .topLeading) { LogseqSidebarResizer() }
 
-    } else if style.fillsOverlay && !inOverlay && !nestedInOverlay {
+    } else if style.fillsOverlay && !inOverlay
+      && !(nestedInOverlay && !style.isAnchored)
+    {
       // position:fixed layers — the web renders these at window scope; our
       // collapsed overlay containers can't give them bounds, so the element
       // re-renders in LogseqOverlayLayer instead. The anchor/sizing lives in
       // the overlay copy's own body so it stays reactive to style changes.
+      // A fillsOverlay child already inside an overlay stays inline (the
+      // scrim centers its dialog content) UNLESS it carries edge anchors —
+      // those are window-space coords that need their own layer (a
+      // dropdown-menu-sub-content beside its trigger).
       LogseqOverlayPresenter(nodeID: context.nodeID, priority: style.overlayZ) {
         LogseqElementView(tag: tag, context: context, inOverlay: true)
           .environment(\.logseqInOverlay, true)
@@ -646,9 +662,11 @@ struct LogseqElementView: View {
       // Inside the overlay layer a nested fillsOverlay child renders inline
       // (no second hoist) — it participates in the overlay's own layout
       // (e.g. a flex-centered dialog overlay) rather than being pinned.
+      // Anchored children are the exception: their left/top are window
+      // coords, so they still hoist out of the parent's layout.
       .layoutValue(
         key: LogseqOutOfFlowKey.self,
-        value: s.outOfFlow && !(nestedInOverlay && s.fillsOverlay))
+        value: s.outOfFlow && !(nestedInOverlay && s.fillsOverlay && !s.isAnchored))
       .layoutValue(
         key: LogseqOutOfFlowFillYKey.self, value: s.outOfFlowFillY)
       .layoutValue(
@@ -769,6 +787,9 @@ struct LogseqElementView: View {
   private var effectiveText: String {
     if !text.isEmpty { return text }
     if tag == "raw-text" { return attrs["data-raw-text"] as? String ?? "" }
+    if tag == "em-emoji" {
+      return (attrs["data-emoji"] as? String) ?? (attrs["emoji"] as? String) ?? ""
+    }
     return ""
   }
 
@@ -1413,6 +1434,10 @@ struct LogseqFrameEntry: Equatable {
   /// (plus overlayZ stacking). Monitor hit-tests prefer the top layer —
   /// a smaller element UNDER a popup must never steal its hit.
   var z: Int = 0
+  /// A viewport-covering dismiss surface (dialog scrim, popup backdrop):
+  /// real elements always beat it at a shared point, so dialog content
+  /// is clickable while a click outside still lands on the dismiss layer.
+  var scrim = false
 }
 
 @MainActor enum LogseqFrameStore {
@@ -1437,6 +1462,34 @@ struct LogseqFrameEntry: Equatable {
       : baseEntries.merging(overlayEntries) { _, overlay in overlay }
   }
 
+  /// Node id of the LUI surface root (the app root element) — the
+  /// "viewport" OCaml's `position:fixed` px resolve against. Set by
+  /// App.swift once the runtime's rootID is known.
+  static var surfaceNodeID: Int?
+
+  /// The surface fills the NavigationSplitView detail column, offset
+  /// from the window origin by the sidebar + titlebar. Reported frames
+  /// and monitor points are window-space; every coordinate handed to
+  /// OCaml (clientX/Y, snapshot rects, measure-node/dump-frames,
+  /// imperative-rects, window-size) must be surface-local or anchored
+  /// popups land that offset away.
+  static var surfaceOrigin: CGPoint {
+    guard let id = surfaceNodeID, let r = entries[id]?.rect
+    else { return .zero }
+    return r.origin
+  }
+
+  static func surfaceRect(_ r: CGRect) -> CGRect {
+    r.offsetBy(dx: -surfaceOrigin.x, dy: -surfaceOrigin.y)
+  }
+
+  static func surfacePoint(_ p: CGPoint) -> CGPoint {
+    let o = surfaceOrigin
+    return CGPoint(x: p.x - o.x, y: p.y - o.y)
+  }
+
+  static var surfaceSize: CGSize? { entries[surfaceNodeID ?? -1]?.rect.size }
+
   /// Element tag ("textarea", "div", …) for a base-entry node, resolved
   /// lazily from its extension identifier — the backend frame channel
   /// reports every node kind, not just elements.
@@ -1446,6 +1499,52 @@ struct LogseqFrameEntry: Equatable {
       ident.hasPrefix("logseq-")
     else { return nil }
     return String(ident.dropFirst("logseq-".count))
+  }
+
+  /// Whether `ancestor` sits in `node`'s model parent chain — DOM paint
+  /// order puts descendants above ancestors, so an element containing
+  /// the point always out-hits its own scrim/container ancestors
+  /// regardless of stacking numbers. Depth-capped against malformed
+  /// cycles.
+  private static func isAncestor(_ ancestor: Int, of node: Int) -> Bool {
+    guard let context = LogseqElementRegistry.shared.eventAnchor
+    else { return false }
+    var cursor = context.parentID(of: node)
+    var steps = 0
+    while let id = cursor, steps < 64 {
+      if id == ancestor { return true }
+      steps += 1
+      cursor = context.parentID(of: id)
+    }
+    return false
+  }
+
+  /// A menu/dialog/popup layer is up — the key monitor swallows
+  /// navigation keys then so they can't move selection behind it.
+  static var popupOpen: Bool {
+    if !LogseqImperativeStore.shared.attached.isEmpty { return true }
+    return overlayEntries.contains { id, _ in
+      guard let context = LogseqElementRegistry.shared.context(forNode: id),
+        case .string(let cls) = context.childProperty(node: id, "style-class")
+      else { return false }
+      return cls.contains("dropdown-menu") || cls.contains("context-menu")
+        || cls.contains("dialog-overlay") || cls.contains("popover-content")
+        || cls.contains("cmdk") || cls.contains("popup-backdrop")
+    }
+  }
+
+  /// The open cmdk dismiss scrim — Escape and scrim clicks both close the
+  /// palette through this element (its click handler is what OCaml
+  /// listens to).
+  static var cmdkDismiss: (nodeID: Int, context: LUIAppleExtensionViewContext)? {
+    for (id, _) in overlayEntries {
+      guard let context = LogseqElementRegistry.shared.context(forNode: id),
+        case .string(let cls) = context.childProperty(node: id, "style-class"),
+        cls.split(separator: " ").contains("cp__cmdk-dismiss")
+      else { continue }
+      return (id, context)
+    }
+    return nil
   }
 
   /// Deepest element at the point: overlay layer first, then the
@@ -1459,27 +1558,33 @@ struct LogseqFrameEntry: Equatable {
     _ point: CGPoint,
     prefer preferID: Int? = nil
   ) -> (nodeID: Int, tag: String)? {
-    if let preferID {
-      if let overlay = overlayEntries[preferID], overlay.rect.contains(point) {
-        return (preferID, overlay.tag)
+    // Overlay/imperative layer: an ancestor never beats a descendant
+    // (DOM paint order — a menu's container overlayZ can't swallow its
+    // items), scrim surfaces lose to everything else (dialog content
+    // stays clickable), then highest z + smallest area settles siblings.
+    let overlayHits = overlayEntries.filter { $0.value.rect.contains(point) }
+    if !overlayHits.isEmpty {
+      let real = overlayHits.filter { cand in
+        !overlayHits.contains { other in
+          other.key != cand.key && isAncestor(cand.key, of: other.key)
+        }
       }
-      if let base = baseEntries[preferID], base.rect.contains(point),
-        let tag = tag(of: preferID), tag != "path"
-      {
-        return (preferID, tag)
+      let nonScrim = real.filter { !$0.value.scrim }
+      let pool = nonScrim.isEmpty ? real : nonScrim
+      if let best = pool.max(by: { a, b in
+        a.value.z != b.value.z
+          ? a.value.z < b.value.z
+          : a.value.rect.width * a.value.rect.height
+            > b.value.rect.width * b.value.rect.height
+      }) {
+        return (best.key, best.value.tag)
       }
     }
-    var best: (id: Int, z: Int, area: CGFloat)?
-    for (id, entry) in overlayEntries where entry.rect.contains(point) {
-      let area = entry.rect.width * entry.rect.height
-      if best == nil || entry.z > best!.z
-        || (entry.z == best!.z && area < best!.area)
-      {
-        best = (id, entry.z, area)
-      }
-    }
-    if let best, let entry = overlayEntries[best.id] {
-      return (best.id, entry.tag)
+    if let preferID, let base = baseEntries[preferID],
+      base.rect.contains(point),
+      let tag = tag(of: preferID), tag != "path"
+    {
+      return (preferID, tag)
     }
     // Smallest containing element wins; `path` nodes don't hit-test
     // (their parent svg reports the same region), and non-element nodes
@@ -1496,6 +1601,36 @@ struct LogseqFrameEntry: Equatable {
       }
     }
     return nil
+  }
+}
+
+/// Keeps an anchored overlay element inside the window: popups positioned
+/// by `left:`/`top:` near an edge would otherwise draw outside the
+/// overlay layer's bounds (menus clip instead of flipping). Measures the
+/// fixed-size content and shifts it back in with a 4pt margin — the same
+/// offset updates the frame-store entry, so hit resolution stays aligned.
+private struct LogseqEdgeClamp: ViewModifier {
+  let x: CGFloat?
+  let y: CGFloat?
+  let right: CGFloat?
+  let bottom: CGFloat?
+  @State private var size = CGSize.zero
+
+  func body(content: Content) -> some View {
+    content
+      .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+      .offset(clampShift)
+  }
+
+  private var clampShift: CGSize {
+    guard let win = NSApp.mainWindow?.contentView?.bounds.size,
+      win.width > 4, win.height > 4, size.width > 0, size.height > 0
+    else { return .zero }
+    let px = right.map { win.width - $0 - size.width } ?? (x ?? 0)
+    let py = bottom.map { win.height - $0 - size.height } ?? (y ?? 0)
+    return CGSize(
+      width: min(max(px, 4), max(4, win.width - size.width - 4)) - px,
+      height: min(max(py, 4), max(4, win.height - size.height - 4)) - py)
   }
 }
 

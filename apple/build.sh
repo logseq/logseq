@@ -92,6 +92,10 @@ mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$info_plist" "$app_dir/Contents/Info.plist"
 cp "$product_dir/Logseq" "$app_dir/Contents/MacOS/Logseq"
 
+# App icon — Info.plist's CFBundleIconFile resolves against Resources/.
+icns="$repo_root/resources/icons/logseq.icns"
+[[ -f $icns ]] && cp "$icns" "$app_dir/Contents/Resources/logseq.icns"
+
 # Bundle the db-worker binary when it exists, so daemon_client.ml finds it via
 # the Resources/ fallback path without an env var.
 db_worker="$repo_root/deps/db-worker/_build/default/bin/main.exe"

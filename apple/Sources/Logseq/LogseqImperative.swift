@@ -13,10 +13,18 @@ import SwiftUI
   func attach(_ nodeID: Int) {
     guard !attached.contains(nodeID) else { return }
     attached.append(nodeID)
+    if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+      try? "attached: \(attached)".write(
+        toFile: "/tmp/imp-attached.json", atomically: true, encoding: .utf8)
+    }
   }
 
   func detach(_ nodeID: Int) {
     attached.removeAll { $0 == nodeID }
+    if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+      try? "attached: \(attached)".write(
+        toFile: "/tmp/imp-attached.json", atomically: true, encoding: .utf8)
+    }
   }
 }
 

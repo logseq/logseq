@@ -94,7 +94,9 @@ struct LogseqTextArea: NSViewRepresentable {
     textView.delegate = context.coordinator
     textView.isRichText = false
     textView.allowsUndo = true
-    textView.font = .monospacedSystemFont(
+    // Proportional like the web — caret metrics come from AppKit's
+    // firstRect(forCharacterRange:), so no mono assumption is needed.
+    textView.font = .systemFont(
       ofSize: style.fontSize ?? 14, weight: .regular)
     textView.textColor = LogseqColors.grayNS(12)
     textView.backgroundColor = .clear
@@ -458,6 +460,16 @@ struct LogseqInputField: NSViewRepresentable {
     weak var field: NSTextField?
     var owner: LogseqInputField?
 
+    /// `cp__cmdk-search-input` — the palette's query field; Escape there
+    /// dismisses rather than clearing the query.
+    private var isCmdkSearch: Bool {
+      guard let owner,
+        case .string(let cls) = owner.context.childProperty(
+          node: owner.context.nodeID, "style-class")
+      else { return false }
+      return cls.split(separator: " ").contains("cp__cmdk-search-input")
+    }
+
     func control(
       _ control: NSControl, textView: NSTextView,
       doCommandBy commandSelector: Selector
@@ -477,6 +489,15 @@ struct LogseqInputField: NSViewRepresentable {
         key = "ArrowDown"; which = 40
       case #selector(NSResponder.cancelOperation(_:)):
         key = "Escape"; which = 27; swallow = true
+        // First Escape in the cmdk input dismisses the palette — the DOM
+        // keydown path would clear the query first (two presses). Emit
+        // the dismiss scrim's click, the event OCaml's close listens to.
+        if isCmdkSearch, let dismiss = LogseqFrameStore.cmdkDismiss {
+          LogseqPlatform.emitClick(
+            context: dismiss.context, nodeID: dismiss.nodeID,
+            point: CGPoint(x: 1, y: 1))
+          return true
+        }
       case #selector(NSResponder.insertTab(_:)):
         key = "Tab"; which = 9
       case #selector(NSResponder.insertBacktab(_:)):
@@ -499,6 +520,10 @@ struct LogseqInputField: NSViewRepresentable {
     }
 
     func controlTextDidBeginEditing(_ notification: Notification) {
+      if let pending = pendingSelection {
+        pendingSelection = nil
+        field?.currentEditor()?.selectedRange = pending
+      }
       emit("focus")
     }
 
@@ -535,9 +560,19 @@ struct LogseqInputField: NSViewRepresentable {
     }
 
     func domSetSelectionRange(_ start: Int, _ end: Int) {
-      field?.currentEditor()?.selectedRange =
-        NSRange(location: start, length: max(0, end - start))
+      let range = NSRange(location: start, length: max(0, end - start))
+      if let editor = field?.currentEditor() {
+        editor.selectedRange = range
+      } else {
+        // No field editor yet — the palette restores its query selected
+        // before the input takes focus; apply once editing begins.
+        pendingSelection = range
+      }
     }
+
+    /// A selection queued before the field editor existed (see
+    /// domSetSelectionRange). Applied on controlTextDidBeginEditing.
+    var pendingSelection: NSRange?
 
     func emit(_ name: String, payload: [String: Any] = [:]) {
       guard let owner else { return }

@@ -751,9 +751,10 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     var changed: [String] = []
     changed.reserveCapacity(64)
     for (id, rect) in frames where lastReportedRects[id] != rect {
+      let r = LogseqFrameStore.surfaceRect(rect)
       changed.append(
-        "\"\(id)\":{\"left\":\(rect.minX),\"top\":\(rect.minY)"
-          + ",\"right\":\(rect.maxX),\"bottom\":\(rect.maxY)}")
+        "\"\(id)\":{\"left\":\(r.minX),\"top\":\(r.minY)"
+          + ",\"right\":\(r.maxX),\"bottom\":\(r.maxY)}")
     }
     var drop = ""
     let removed = lastReportedRects.keys.filter { frames[$0] == nil }

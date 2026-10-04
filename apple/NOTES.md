@@ -1215,3 +1215,26 @@ zoom!=1 path keeps the reader since it needs the container size.
   "frozen" (menu items, Escape, keyboard dead). It is a tooling
   artifact, not an app bug; dismiss via AXCancel through
   `osascript -e 'tell application "System Events" to ...'`.
+- Coordinate spaces: every OCaml-facing coordinate (event clientX/Y,
+  snapshot `rect`s, measure-node/dump-frames replies, imperative-rects)
+  is in LUI-SURFACE space — the NavigationSplitView detail column, whose
+  window offset is sidebar width + toolbar height (~208,52). `position:fixed`
+  popups anchor against it. `LogseqFrameStore.surface*` helpers convert;
+  `surfaceNodeID` is the runtime root node, set once onAppear. The
+  sidebar's own emitters (SpatialTapGesture in `logseqWindow` space,
+  the right-click Catcher's `windowPoint`) must convert too — an emitted
+  window-space x lands the OCaml menu ~sidebar-width to the right.
+- Two overlay mount paths: `push_overlay` on an imperative el attaches to
+  `LogseqImperativeStore` (window-level layer); on a VDOM el it
+  materializes under the app root node and renders inline out-of-flow
+  pinned by `LogseqAnchorKey`. The icon/emoji picker takes the VDOM
+  path — its `position:fixed;left/top` are surface-local.
+- `em-emoji` elements carry their glyph in `data-emoji`/`emoji` attrs,
+  not the text prop — `effectiveText` falls back to those attrs or the
+  element collapses to 0×0.
+- `pushWindowSize` sends `surfaceSize` (not `window.frame.size`) so
+  OCaml's popup clamp (`window_inner_height`) sees the detail-column
+  viewport, not the whole window.
+- `[host] task raised: Stack overflow` seen in stderr when cm_hover
+  re-triggers a sub_picker while one is open — OCaml-side recursion,
+  harmless to the app but noisy.

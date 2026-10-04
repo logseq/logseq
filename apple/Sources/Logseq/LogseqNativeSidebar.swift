@@ -289,6 +289,7 @@ struct LogseqNativeSidebar: View {
     .onTapGesture {
       if let id = m.graphNodeID { emitClick(id) }
     }
+    .accessibilityLabel("Switch graph")
   }
 
   /// Out's CollapsibleHeader: plain title, trailing chevron (rotates on
@@ -306,11 +307,12 @@ struct LogseqNativeSidebar: View {
           .highPriorityGesture(
             SpatialTapGesture(coordinateSpace: .named("logseqWindow"))
               .onEnded { v in
+                let p = LogseqFrameStore.surfacePoint(v.location)
                 emitClick(
                   more,
                   extra: [
-                    "clientX": Double(v.location.x),
-                    "clientY": Double(v.location.y),
+                    "clientX": Double(p.x),
+                    "clientY": Double(p.y),
                   ])
               })
       }
@@ -352,18 +354,20 @@ struct LogseqNativeSidebar: View {
             .highPriorityGesture(
               SpatialTapGesture(coordinateSpace: .named("logseqWindow"))
                 .onEnded { v in
+                  let p = LogseqFrameStore.surfacePoint(v.location)
                   emit(
                     target: actionsID,
                     extra: [
                       "targetClass": "sidebar-page-actions",
-                      "clientX": Double(v.location.x),
-                      "clientY": Double(v.location.y),
+                      "clientX": Double(p.x),
+                      "clientY": Double(p.y),
                       "shiftKey": false,
                     ])
                 })
         }
       }
       .onHover { hovering = $0 }
+      .overlay(LogseqSidebarContextMenu(item: item, context: context))
     }
 
     private func sfSymbol(for icon: String) -> String {
@@ -395,6 +399,63 @@ struct LogseqNativeSidebar: View {
       try? context.emit(
         on: item.nodeID, name: "dom-event",
         values: ["name": .string("click"), "payload": .string(json)])
+    }
+  }
+
+  /// Right-click passthrough for the native column: the global
+  /// right-click monitor resolves hits through the DOM frame store,
+  /// which has no entries for sidebar rows — this NSView emits the DOM
+  /// `contextmenu` on the row's node so OCaml opens its own lp menu at
+  /// the click point. It only claims rightMouseDown; left clicks pass
+  /// through to the row.
+  private struct LogseqSidebarContextMenu: NSViewRepresentable {
+    let item: Item
+    let context: LUIAppleExtensionViewContext
+
+    func makeNSView(context _: Context) -> Catcher {
+      Catcher(item: item, ext: self.context)
+    }
+
+    func updateNSView(_ nsView: Catcher, context _: Context) {
+      nsView.item = item
+    }
+
+    final class Catcher: NSView {
+      var item: Item
+      let ext: LUIAppleExtensionViewContext
+
+      init(item: Item, ext: LUIAppleExtensionViewContext) {
+        self.item = item
+        self.ext = ext
+        super.init(frame: .zero)
+      }
+
+      @available(*, unavailable)
+      required init?(coder _: NSCoder) { fatalError() }
+
+      override func hitTest(_: NSPoint) -> NSView? {
+        NSApp.currentEvent?.type == .rightMouseDown ? self : nil
+      }
+
+      override func rightMouseDown(with event: NSEvent) {
+        guard let window, let contentView = window.contentView
+        else { return }
+        let point = LogseqFrameStore.surfacePoint(
+          LogseqPlatform.windowPoint(event, in: contentView))
+        var payload: [String: Any] = [
+          "clientX": Double(point.x), "clientY": Double(point.y),
+          "button": 2, "nodeId": item.nodeID,
+        ]
+        payload["target"] = LogseqDOMSnapshot.snapshot(
+          of: item.nodeID, context: ext)
+        guard
+          let data = try? JSONSerialization.data(withJSONObject: payload),
+          let json = String(data: data, encoding: .utf8)
+        else { return }
+        try? ext.emit(
+          on: item.nodeID, name: "dom-event",
+          values: ["name": .string("contextmenu"), "payload": .string(json)])
+      }
     }
   }
 }

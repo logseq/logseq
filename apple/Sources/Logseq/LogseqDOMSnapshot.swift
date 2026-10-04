@@ -51,7 +51,7 @@ enum LogseqDOMSnapshot {
     if !domId.isEmpty { el["#ref"] = domId }
     el["node-id"] = nodeID
     if let frame = LogseqFrameStore.entries[nodeID] {
-      let r = frame.rect
+      let r = LogseqFrameStore.surfaceRect(frame.rect)
       el["rect"] = [
         "left": r.minX, "top": r.minY, "right": r.maxX, "bottom": r.maxY,
         "width": r.width, "height": r.height,

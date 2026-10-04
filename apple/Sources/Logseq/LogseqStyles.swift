@@ -202,6 +202,11 @@ import SwiftUI
   var fixedY: CGFloat?
   var fixedRight: CGFloat?
   var fixedBottom: CGFloat?
+  /// The element carries window-space edge anchors (left/top/right/
+  /// bottom) rather than being a center-placed fillsOverlay layer.
+  var isAnchored: Bool {
+    fixedX != nil || fixedY != nil || fixedRight != nil || fixedBottom != nil
+  }
   /// 1px `--ls-border-color` stroke (popover chrome).
   var hasBorder = false
   /// Clip children at the element's own frame (popover overflow).
@@ -759,6 +764,7 @@ import SwiftUI
       if fontSize == nil { fontSize = 13 }
       padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
       cornerRadius = 4
+      hoverBackground = LogseqColors.gray(4)
     case "menu-separator", "ui__dropdown-menu-separator":
       margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
     case "ui__dropdown-menu-sub-trigger":
@@ -766,6 +772,7 @@ import SwiftUI
       if fontSize == nil { fontSize = 13 }
       padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
       cornerRadius = 4
+      hoverBackground = LogseqColors.gray(4)
     case "ui__dropdown-menu-sub-content":
       minWidth = 160
       background = LogseqColors.grayPair(light: 1, dark: 3)
@@ -782,6 +789,38 @@ import SwiftUI
       cornerRadius = 6
       hasShadow = true
       padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+    // ---- emoji/icon picker (cm "Add reaction ›" / "Set icon ›" opens
+    // this card as a floating overlay: search header, scrollable grid,
+    // tab footer; cells are fixed squares that wrap) ----
+    case "cp__emoji-icon-picker":
+      minWidth = 280; stackSpacing = 4
+      background = LogseqColors.grayPair(light: 1, dark: 3)
+      cornerRadius = 6
+      hasShadow = true
+      padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+    case "search-input": isRow = true; grow = true; stackSpacing = 4
+    case "ui__input", "ls-ep-input":
+      grow = true
+      if fontSize == nil { fontSize = 13 }
+    case "bd": grow = true
+    case "content-pane", "ls-ep-col", "all-pane", "pane-section":
+      stackSpacing = 4
+    case "its": flowWrap = true
+    case "icons-row": isRow = true
+    case "ls-emoji-preview", "ls-emoji-cell":
+      fixedWidth = 28; fixedHeight = 28; centerCross = true; centerMain = true
+      cornerRadius = 4
+      hoverBackground = LogseqColors.gray(4)
+    case "ft": isRow = true; spaceBetween = true; stackSpacing = 4
+    case "ls-ep-tabs": isRow = true; stackSpacing = 2
+    case "ui__button", "tab-item":
+      if fontSize == nil { fontSize = 12 }
+      padding = EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
+      cornerRadius = 4
+      hoverBackground = LogseqColors.gray(4)
+    case "ls-ep-section-title":
+      if fontSize == nil { fontSize = 11 }
+      foreground = LogseqColors.secondaryText
     // ---- cp__select pickers (command-palette-style input + results) ----
     case "cp__select", "cp__select-main", "property-select":
       minWidth = 260; grow = true

@@ -175,6 +175,11 @@ final class NSReferenceBox {
 /// Handles "<op>\n<payload>" envelopes from OCaml's Host.host_op plus
 /// window/appearance events the OCaml side expects on the platform channel.
 @MainActor final class LogseqPlatform {
+  /// Key codes captured while a popup layer is open: Return, Tab,
+  /// Escape, PageUp/PageDown, Home/End, and the arrows.
+  static let popupNavKeys: Set<UInt16> = [
+    36, 48, 53, 115, 116, 119, 121, 123, 124, 125, 126,
+  ]
   weak var runtime: LogseqRuntime?
   private var appearanceObservation: NSKeyValueObservation?
   private var keyMonitor: Any?
@@ -261,8 +266,46 @@ final class NSReferenceBox {
         if editing && !shift && ["c", "v", "x"].contains(char) {
           return event
         }
+        // Menu chords (⌘,, ⇧⌘L, ⌘=, ⌘-, ⌘0, ⌃⌘S…) must reach the
+        // CommandGroups before OCaml sees a keydown — swallowing them
+        // kills every app shortcut. mod+z/a/c/x/v stay forwarded: OCaml's
+        // outliner owns those even where AppKit's Edit menu claims the
+        // same equivalent.
+        if !["z", "a", "c", "x", "v"].contains(char),
+          NSApp.mainMenu?.performKeyEquivalent(with: event) == true
+        {
+          return nil
+        }
+        if shift && char == "l", !event.modifierFlags.contains(.option) {
+          // ⇧⌘L has no CommandGroup (the standard sidebar shortcut is
+          // ⌃⌘S); keep the web binding working via the same platform
+          // event the View-menu item sends.
+          LogseqRuntime.postPlatformEvent(
+            name: "menu-toggle-left-sidebar", json: "{}")
+          return nil
+        }
+      }
+      // First Escape dismisses an open cmdk palette outright — the DOM
+      // keydown path clears the query first (two presses). Emit the
+      // dismiss scrim's click instead, the same event OCaml's close
+      // handler listens for.
+      if !chord, event.keyCode == 53,
+        let dismiss = LogseqFrameStore.cmdkDismiss
+      {
+        LogseqPlatform.emitClick(
+          context: dismiss.context, nodeID: dismiss.nodeID,
+          point: CGPoint(x: 1, y: 1))
+        return nil
       }
       self.sendKeyDown(event)
+      // While a popup/menu/dialog layer is open, navigation keys belong
+      // to it — returning the event would let the sidebar List (or the
+      // focused element behind the menu) move its own selection too.
+      if !chord, LogseqFrameStore.popupOpen,
+        LogseqPlatform.popupNavKeys.contains(event.keyCode)
+      {
+        return nil
+      }
       return chord ? nil : event
     }
     // DOM contextmenu: SwiftUI has no right-click gesture, so resolve the
@@ -309,6 +352,17 @@ final class NSReferenceBox {
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
       let hit = LogseqFrameStore.hitTest(point)
+      if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+        let parts = LogseqFrameStore.overlayEntries.sorted(by: { $0.key < $1.key })
+          .map { kv -> String in
+            let r = kv.value.rect
+            return "\"\(kv.key)\":[\(r.origin.x),\(r.origin.y),\(r.width),\(r.height),\"\(kv.value.tag)\",\(kv.value.z)]"
+          }
+        try? ("{" + parts.joined(separator: ",") + "}").write(
+          toFile: "/tmp/overlay-frames.json", atomically: true, encoding: .utf8)
+        try? "attached: \(LogseqImperativeStore.shared.attached)".write(
+          toFile: "/tmp/imp-attached.json", atomically: true, encoding: .utf8)
+      }
       guard let hit,
         let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
       else { return event }
@@ -327,11 +381,22 @@ final class NSReferenceBox {
       guard let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
-      guard let hit = LogseqFrameStore.hitTest(point),
+      let hit = LogseqFrameStore.hitTest(point)
+      if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+        try? "{ \"hit\": \(hit?.nodeID ?? -1), \"tag\": \"\(hit?.tag ?? "")\", \"x\": \(point.x), \"y\": \(point.y), \"overlays\": \(LogseqFrameStore.overlayEntries.count) }".write(
+          toFile: "/tmp/click-hit.json", atomically: true, encoding: .utf8)
+      }
+      guard let hit,
         let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
       else { return event }
+      // Clicks on a page body's bare tail (below/right of every row —
+      // the web's `.page-inner` cursor:text region) resolve to a bare
+      // container; re-target them to the tree's `.block-add-button` so
+      // an empty journal focuses anywhere like the web add row.
+      let target = LogseqPlatform.addButtonTarget(for: hit, context: context)
+      ?? hit.nodeID
       runOnMainDeferred {
-        LogseqPlatform.emitClick(context: context, nodeID: hit.nodeID, point: point)
+        LogseqPlatform.emitClick(context: context, nodeID: target, point: point)
       }
       return event
     }
@@ -365,7 +430,7 @@ final class NSReferenceBox {
   /// `event.locationInWindow` into the top-left-origin space the frame
   /// store reports in (`.named("logseqWindow")`). `convert(_:from:)`
   /// honors the content view's flippedness — flip only when it doesn't.
-  private static func windowPoint(_ event: NSEvent, in contentView: NSView)
+  static func windowPoint(_ event: NSEvent, in contentView: NSView)
     -> CGPoint
   {
     let p = contentView.convert(event.locationInWindow, from: nil)
@@ -374,7 +439,47 @@ final class NSReferenceBox {
       : CGPoint(x: p.x, y: contentView.bounds.height - p.y)
   }
 
-  private static func emitContextMenu(nodeID: Int, point: CGPoint) {
+  /// Bare page-body containers a click can resolve to in the empty tail
+  /// of a page/journal — anywhere no real element covers the point.
+  private static let pageBodyContainers: Set<String> = [
+    "scrollbar-spacing", "cp__main-content", "main-content-container",
+    "journal-item", "cp__page-inner-wrap", "page-inner",
+    "ls-page-blocks", "page-blocks-inner", "journals",
+  ]
+
+  /// If the hit node is a bare page container holding a
+  /// `.block-add-button`, return that button's node so clicks in the
+  /// empty tail append+focus like the web's add row does.
+  static func addButtonTarget(
+    for hit: (nodeID: Int, tag: String),
+    context: LUIAppleExtensionViewContext
+  ) -> Int? {
+    guard
+      case .string(let cls) = context.childProperty(
+        node: hit.nodeID, "style-class"),
+      cls.split(separator: " ").contains(where: {
+        pageBodyContainers.contains(String($0))
+      })
+    else { return nil }
+    // Breadth-first from the hit: the add row sits at the tail of
+    // .page-blocks-inner — a bounded walk finds it without depending on
+    // a precise path.
+    var queue = context.childIDs(of: hit.nodeID)
+    var seen = 0
+    while !queue.isEmpty, seen < 3000 {
+      let node = queue.removeFirst()
+      seen += 1
+      if case .string(let c) = context.childProperty(node: node, "style-class"),
+        c.contains("block-add-button")
+      {
+        return node
+      }
+      queue.append(contentsOf: context.childIDs(of: node))
+    }
+    return nil
+  }
+
+  static func emitContextMenu(nodeID: Int, point: CGPoint) {
     if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
       var dbg: [String: Any] = [
         "nodeId": nodeID, "x": point.x, "y": point.y,
@@ -398,9 +503,10 @@ final class NSReferenceBox {
     }
     guard let context = LogseqElementRegistry.shared.context(forNode: nodeID)
     else { return }
+    let p = LogseqFrameStore.surfacePoint(point)
     var payload: [String: Any] = [
-      "clientX": Double(point.x),
-      "clientY": Double(point.y),
+      "clientX": Double(p.x),
+      "clientY": Double(p.y),
       "button": 2,
       "nodeId": nodeID,
     ]
@@ -412,9 +518,18 @@ final class NSReferenceBox {
     if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
       try? data.write(to: URL(fileURLWithPath: "/tmp/cm-target.json"))
     }
-    try? context.emit(
-      name: "dom-event",
-      values: ["name": .string("contextmenu"), "payload": .string(json)])
+    do {
+      try context.emit(
+        name: "dom-event",
+        values: ["name": .string("contextmenu"), "payload": .string(json)])
+      if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+        try? "emit-ok".write(toFile: "/tmp/cm-emit.json", atomically: true, encoding: .utf8)
+      }
+    } catch {
+      if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+        try? "emit-fail: \(error)".write(toFile: "/tmp/cm-emit.json", atomically: true, encoding: .utf8)
+      }
+    }
   }
 
   private static func emitMouseMove(
@@ -439,9 +554,10 @@ final class NSReferenceBox {
       try? JSONSerialization.data(withJSONObject: dbg)
         .write(to: URL(fileURLWithPath: "/tmp/mm-hit.json"))
     }
+    let p = LogseqFrameStore.surfacePoint(point)
     var payload: [String: Any] = [
-      "clientX": Double(point.x),
-      "clientY": Double(point.y),
+      "clientX": Double(p.x),
+      "clientY": Double(p.y),
       "nodeId": nodeID,
     ]
     payload["target"] = LogseqDOMSnapshot.snapshot(of: nodeID, context: context)
@@ -449,19 +565,32 @@ final class NSReferenceBox {
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
     else { return }
-    try? context.emit(
-      name: "dom-event",
-      values: ["name": .string("mousemove"), "payload": .string(json)])
+    if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+      try? data.write(to: URL(fileURLWithPath: "/tmp/mm-target.json"))
+    }
+    do {
+      try context.emit(
+        name: "dom-event",
+        values: ["name": .string("mousemove"), "payload": .string(json)])
+      if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+        try? "emit-ok".write(toFile: "/tmp/mm-emit.json", atomically: true, encoding: .utf8)
+      }
+    } catch {
+      if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+        try? "emit-fail: \(error)".write(toFile: "/tmp/mm-emit.json", atomically: true, encoding: .utf8)
+      }
+    }
   }
 
-  private static func emitClick(
+  static func emitClick(
     context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint
   ) {
     // Mirrors the element emit()'s enrichment so a monitor-sourced click
     // is interchangeable with a gesture-sourced one.
+    let p = LogseqFrameStore.surfacePoint(point)
     var payload: [String: Any] = [
-      "clientX": Double(point.x),
-      "clientY": Double(point.y),
+      "clientX": Double(p.x),
+      "clientY": Double(p.y),
       "button": 0,
       "nodeId": nodeID,
     ]
@@ -484,6 +613,9 @@ final class NSReferenceBox {
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
     else { return }
+    if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+      try? data.write(to: URL(fileURLWithPath: "/tmp/click-payload.json"))
+    }
     try? context.emit(
       name: "dom-event",
       values: ["name": .string("click"), "payload": .string(json)])
@@ -492,9 +624,10 @@ final class NSReferenceBox {
   private static func emitMouseDown(
     context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint
   ) {
+    let p = LogseqFrameStore.surfacePoint(point)
     var payload: [String: Any] = [
-      "clientX": Double(point.x),
-      "clientY": Double(point.y),
+      "clientX": Double(p.x),
+      "clientY": Double(p.y),
       "button": 0,
       "nodeId": nodeID,
     ]
@@ -549,8 +682,13 @@ final class NSReferenceBox {
   }
 
   private func pushWindowSize() {
-    guard let window = NSApp.keyWindow ?? NSApp.windows.first else { return }
-    let size = window.frame.size
+    // The viewport OCaml clamps popups to is the LUI surface (the
+    // split-view detail column), not the NSWindow — its window frame
+    // includes the sidebar and titlebar chrome.
+    guard
+      let size = LogseqFrameStore.surfaceSize
+        ?? (NSApp.keyWindow ?? NSApp.windows.first)?.frame.size
+    else { return }
     runtime?.sendPlatformEvent(
       name: "window-size",
       json: "{\"width\":\(size.width),\"height\":\(size.height)}")
@@ -705,7 +843,7 @@ final class NSReferenceBox {
       {
         var body: [String: Any] = ["nodeId": nodeID]
         if let entry = LogseqFrameStore.entries[nodeID] {
-          let r = entry.rect
+          let r = LogseqFrameStore.surfaceRect(entry.rect)
           body["rect"] = [
             "left": Double(r.minX), "top": Double(r.minY),
             "right": Double(r.maxX), "bottom": Double(r.maxY),
@@ -749,7 +887,7 @@ final class NSReferenceBox {
       saveFile(name: name, dict: dict)
     case "dump-frames":
       let parts = LogseqFrameStore.entries.sorted(by: { $0.key < $1.key }).map {
-        let r = $0.value.rect
+        let r = LogseqFrameStore.surfaceRect($0.value.rect)
         return "\"\($0.key)\":[\(r.origin.x),\(r.origin.y),\(r.width),\(r.height)]"
       }
       let out = "{" + parts.joined(separator: ",") + "}"

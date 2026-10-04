@@ -132,7 +132,9 @@ import AppKit
           LogseqRuntime.postPlatformEvent(
             name: "menu-toggle-left-sidebar", json: "{}")
         }
-        .keyboardShortcut("l", modifiers: [.command, .shift])
+        // ⌃⌘S is the standard macOS sidebar shortcut (Finder/Notes); the
+        // web's ⇧⌘L keeps working via the key monitor's platform event.
+        .keyboardShortcut("s", modifiers: [.control, .command])
         Button("Toggle Right Sidebar") {
           LogseqRuntime.postPlatformEvent(
             name: "menu-toggle-right-sidebar", json: "{}")
@@ -250,6 +252,7 @@ private struct LogseqRuntimeHost: View {
               LogseqImperativeLayer()
             }
           }
+          .onAppear { LogseqFrameStore.surfaceNodeID = rootID }
           .coordinateSpace(name: "logseqWindow")
           // File drop → asset upload: OCaml's window "file-drop"
           // listener mirrors the web file-picker path
