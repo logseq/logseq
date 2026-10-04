@@ -331,6 +331,16 @@ private final class ModeBox: @unchecked Sendable {
 
 @MainActor final class LogseqApplicationDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // stderr is unreachable under a launchd `open`; LOGSEQ_PERF_FILE dup2s
+    // fd 2 onto a path so perf/DBG output (Swift + OCaml eprintf alike)
+    // lands in a file without giving up proper event delivery.
+    if let logPath = ProcessInfo.processInfo.environment["LOGSEQ_PERF_FILE"] {
+      let fd = open(logPath, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+      if fd >= 0 {
+        dup2(fd, STDERR_FILENO)
+        close(fd)
+      }
+    }
     NSApplication.shared.activate()
     NSApplication.shared.windows.first?.makeKeyAndOrderFront(nil)
     LogseqPerfMonitor.shared.start()
