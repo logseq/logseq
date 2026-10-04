@@ -94,7 +94,7 @@ struct LogseqTextArea: NSViewRepresentable {
     textView.delegate = context.coordinator
     textView.isRichText = false
     textView.allowsUndo = true
-    textView.font = .monospacedSystemFont(
+    textView.font = .systemFont(
       ofSize: style.fontSize ?? 14, weight: .regular)
     textView.textColor = LogseqColors.grayNS(12)
     textView.backgroundColor = .clear

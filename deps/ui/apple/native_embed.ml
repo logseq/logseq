@@ -209,6 +209,11 @@ let decode_extension_values payload =
         Lui_protocol.String_map.empty fields
   | _ -> Lui_protocol.String_map.empty
 
+let take_patches_dbg where =
+  let out = take_patches () in
+  Printf.eprintf "DBG patches %s bytes=%d\n%!" where (String.length out);
+  out
+
 (* The web runtime feeds registered doc scans from a MutationObserver;
    natively we re-run them after every flush that produced a new tree
    generation, so views mounts (query shells, object views) see fresh
@@ -216,6 +221,12 @@ let decode_extension_values payload =
    per keystroke — the Runtime.scan_gate policy coalesces prop-only
    generations (see runtime.ml). *)
 let scan_gate = Runtime.scan_gate ()
+
+let app_flush_checked app =
+  try ignore (Lui_app.flush app)
+  with e ->
+    Printf.eprintf "[flush] FAILED: %s\n%s\n%!" (Printexc.to_string e)
+      (Printexc.get_backtrace ())
 
 let run_doc_scans_after_flush () =
   match !current_app with
@@ -230,14 +241,14 @@ let run_doc_scans_after_flush () =
         Editor_dom.run_doc_scans ();
         (* scans can materialize nodes — flush again so they ship in the
            same take_patches drain *)
-        ignore (Lui_app.flush app)
+        app_flush_checked app
       end
   | None -> ()
 
 let flush () =
   match !current_app with
   | Some app ->
-      ignore (Lui_app.flush app);
+      app_flush_checked app;
       run_doc_scans_after_flush ()
   | None -> ()
 
@@ -316,7 +327,7 @@ let initialize platform_code host_code (_payload : string) : string =
            with _ -> ())
    | _ -> ());
   let flush_app () =
-    ignore (Lui_app.flush app);
+    app_flush_checked app;
     run_doc_scans_after_flush ()
   in
   Runtime.app_send :=
@@ -371,7 +382,7 @@ let dispatch_lui (event : Lui_protocol.event) : string =
        perf_mark "scans" t2
    | None -> ());
   let t3 = perf_ms () in
-  let out = take_patches () in
+  let out = take_patches_dbg "lui" in
   perf_mark "take_patches" t3;
   perf_mark "total" t0;
   out
@@ -447,7 +458,7 @@ let extension_event node name values : string =
        | None -> ())
    | None -> ());
   let t3 = perf_ms () in
-  let out = take_patches () in
+  let out = take_patches_dbg "ext" in
   perf_mark "ext.take" t3;
   perf_mark "ext.total" t0;
   out
@@ -468,7 +479,7 @@ let pump () : string =
   run_doc_scans_after_flush ();
   perf_mark "pump.scans" t2;
   let t3 = perf_ms () in
-  let out = take_patches () in
+  let out = take_patches_dbg "pump" in
   perf_mark "pump.take" t3;
   perf_mark "pump.total" t0;
   out

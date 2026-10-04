@@ -123,8 +123,45 @@ struct LogseqElementView: View {
 
   /// Hit-test layer for LogseqFrameStore: overlay/imperative popups paint
   /// above page content; overlayZ keeps same-layer stacking order.
+  /// `nestedInOverlay` counts too — it is the env marker descendants of a
+  /// hoisted overlay see (their `inOverlay` ctor flag is false), and dialog
+  /// panel children need z>=1000 to out-hit the window-filling scrim.
+  /// Descendants inherit the top stacking level of their overlay subtree:
+  /// a `z-index:50` dialog scrim must not out-rank its own panel rows —
+  /// same-z smallest-area then resolves hits inside the panel correctly.
+  /// Style of an arbitrary node in this extension tree (hit-test ancestry
+  /// walk reads ancestors' fillsOverlay/outOfFlow/overlayZ from it).
+  private func styleOf(node id: Int) -> LogseqStyle {
+    var s = LogseqStyle()
+    if case .string(let classes) = context.childProperty(
+      node: id, "style-class")
+    {
+      s = LogseqParseMemo.style(classes)
+    }
+    if case .string(let json) = context.childProperty(node: id, "attrs"),
+      let inline = (LogseqParseMemo.attrs(json)["style"]) as? String
+    {
+      s.applyInline(inline)
+    }
+    return s
+  }
+
   private var frameZ: Int {
-    (inOverlay || inImperativeLayer ? 1000 : 0) + style.overlayZ
+    let inLayer = inOverlay || inImperativeLayer || nestedInOverlay
+    var z = (inLayer ? 1000 : 0) + style.overlayZ
+    if inLayer {
+      var id = context.nodeID
+      var hops = 0
+      while let parent = context.parentID(of: id), hops < 32 {
+        let s = styleOf(node: parent)
+        if s.fillsOverlay || s.outOfFlow {
+          z = max(z, 1000 + s.overlayZ)
+        }
+        id = parent
+        hops += 1
+      }
+    }
+    return z
   }
 
   private func hasClass(_ cls: String) -> Bool {
@@ -309,7 +346,9 @@ struct LogseqElementView: View {
       .onGeometryChange(for: CGRect.self) { g in
         g.frame(in: .global)
       } action: { rect in
-        if (inOverlay || inImperativeLayer) && tag != "path" {
+        if (inOverlay || inImperativeLayer || nestedInOverlay)
+          && tag != "path"
+        {
           LogseqFrameStore.overlayEntries[context.nodeID] =
             LogseqFrameEntry(rect: rect, tag: tag, z: frameZ)
         }
@@ -956,6 +995,15 @@ struct LogseqElementView: View {
     }
     // Document listeners decode `target` for closest()/scope resolution.
     enriched["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    // Web MouseEvent modifier fields — SwiftUI gestures don't carry the
+    // triggering event, so read the live modifier state.
+    if name == "click" || name == "mousedown" {
+      let flags = NSEvent.modifierFlags
+      enriched["shiftKey"] = flags.contains(.shift)
+      enriched["metaKey"] = flags.contains(.command)
+      enriched["ctrlKey"] = flags.contains(.control)
+      enriched["altKey"] = flags.contains(.option)
+    }
     guard let data = try? JSONSerialization.data(withJSONObject: enriched),
       let json = String(data: data, encoding: .utf8)
     else { return }

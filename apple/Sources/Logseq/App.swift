@@ -132,7 +132,7 @@ import AppKit
           LogseqRuntime.postPlatformEvent(
             name: "menu-toggle-left-sidebar", json: "{}")
         }
-        .keyboardShortcut("l", modifiers: [.command, .shift])
+        .keyboardShortcut("s", modifiers: [.control, .command])
         Button("Toggle Right Sidebar") {
           LogseqRuntime.postPlatformEvent(
             name: "menu-toggle-right-sidebar", json: "{}")

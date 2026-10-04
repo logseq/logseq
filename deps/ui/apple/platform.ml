@@ -230,6 +230,16 @@ let last_click_ms = ref (-1.)
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
   let now = date_now_ms () in
+  (try
+     Printf.eprintf "DBG emit %s nid=%s dedup=%b\n%!" name
+       (match payload with
+        | Js.Json.JObject kvs -> (
+            match List.assoc_opt "nodeId" kvs with
+            | Some v -> Js.Json.stringify v
+            | None -> "-")
+        | _ -> "?")
+       (name = "click" && now -. !last_click_ms < 60.)
+   with _ -> ());
   if name = "click" && now -. !last_click_ms < 60. then
     ()
   else begin
@@ -248,12 +258,18 @@ let emit_event name payload =
                  if depth < 64 && not !propagation_stopped then begin
                    (match Hashtbl.find_opt dom_handlers id with
                     | Some dhs ->
+                        Printf.eprintf "DBG bubble id=%d handlers=%d\n%!"
+                          id (List.length dhs);
                         List.iter
                           (fun dh ->
                             if
                               (not !propagation_stopped)
                               && event_listed dh.dh_events name
-                            then dh.dh_fn name (Some payload_str))
+                            then
+                              try dh.dh_fn name (Some payload_str)
+                              with e ->
+                                Printf.eprintf "DBG dh THREW id=%d ev=%s: %s\n%!"
+                                  id name (Printexc.to_string e))
                           dhs
                     | None -> ());
                    match !dom_parent_of id with
@@ -266,7 +282,14 @@ let emit_event name payload =
    | _ -> ());
   if not !propagation_stopped then
   match Hashtbl.find_opt window_listeners name with
-  | Some fns -> List.iter (fun f -> f payload) fns
+  | Some fns ->
+      List.iter
+        (fun f ->
+          try f payload
+          with e ->
+            Printf.eprintf "DBG listener THREW ev=%s: %s\n%!" name
+              (Printexc.to_string e))
+        fns
   | None -> ()
   end
 

@@ -261,6 +261,16 @@ final class NSReferenceBox {
         if editing && !shift && ["c", "v", "x"].contains(char) {
           return event
         }
+        // OCaml owns the outliner chords even where the Edit menu carries
+        // the same equivalent (undo, select-all, block copy/cut/paste).
+        // Every other chord a menu item claims goes to AppKit — ⇧⌘L/⇧⌘R
+        // sidebars, ⌘, settings, ⌘=/⌘-/⌘0 zoom are menu shortcuts the
+        // swallow below would otherwise eat.
+        if !["z", "a", "c", "x", "v"].contains(char),
+          LogseqPlatform.menuOwnsChord(event)
+        {
+          return event
+        }
       }
       self.sendKeyDown(event)
       return chord ? nil : event
@@ -305,6 +315,10 @@ final class NSReferenceBox {
     // delivers the click itself.
     mouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) {
       event in
+      if LogseqRuntime.perfLogging {
+        FileHandle.standardError.write(
+          "DBG mu-down t=\(CFAbsoluteTimeGetCurrent())\n".data(using: .utf8)!)
+      }
       guard let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
@@ -312,7 +326,9 @@ final class NSReferenceBox {
       guard let hit,
         let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
       else { return event }
-      LogseqPlatform.emitMouseDown(context: context, nodeID: hit.nodeID, point: point)
+      LogseqPlatform.emitMouseDown(
+        context: context, nodeID: hit.nodeID, point: point,
+        flags: event.modifierFlags)
       return event
     }
     // DOM click: SwiftUI taps only emit from views carrying their own
@@ -324,14 +340,25 @@ final class NSReferenceBox {
     // never consumed.
     mouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) {
       event in
+      if LogseqRuntime.perfLogging {
+        FileHandle.standardError.write(
+          "DBG mu-up t=\(CFAbsoluteTimeGetCurrent())\n".data(using: .utf8)!)
+      }
       guard let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
       guard let hit = LogseqFrameStore.hitTest(point),
         let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
-      else { return event }
+      else {
+        FileHandle.standardError.write(
+          "DBG mouseUp no-hit at \(Int(point.x)),\(Int(point.y))\n"
+            .data(using: .utf8)!)
+        return event
+      }
+      let flags = event.modifierFlags
       runOnMainDeferred {
-        LogseqPlatform.emitClick(context: context, nodeID: hit.nodeID, point: point)
+        LogseqPlatform.emitClick(
+          context: context, nodeID: hit.nodeID, point: point, flags: flags)
       }
       return event
     }
@@ -455,7 +482,8 @@ final class NSReferenceBox {
   }
 
   private static func emitClick(
-    context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint
+    context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint,
+    flags: NSEvent.ModifierFlags = []
   ) {
     // Mirrors the element emit()'s enrichment so a monitor-sourced click
     // is interchangeable with a gesture-sourced one.
@@ -464,6 +492,10 @@ final class NSReferenceBox {
       "clientY": Double(point.y),
       "button": 0,
       "nodeId": nodeID,
+      "shiftKey": flags.contains(.shift),
+      "metaKey": flags.contains(.command),
+      "ctrlKey": flags.contains(.control),
+      "altKey": flags.contains(.option),
     ]
     if case .string(let classes) = context.childProperty(
       node: nodeID, "style-class")
@@ -490,13 +522,18 @@ final class NSReferenceBox {
   }
 
   private static func emitMouseDown(
-    context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint
+    context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint,
+    flags: NSEvent.ModifierFlags = []
   ) {
     var payload: [String: Any] = [
       "clientX": Double(point.x),
       "clientY": Double(point.y),
       "button": 0,
       "nodeId": nodeID,
+      "shiftKey": flags.contains(.shift),
+      "metaKey": flags.contains(.command),
+      "ctrlKey": flags.contains(.control),
+      "altKey": flags.contains(.option),
     ]
     payload["target"] = LogseqDOMSnapshot.snapshot(of: nodeID, context: context)
     guard
@@ -541,6 +578,32 @@ final class NSReferenceBox {
       .replacingOccurrences(of: "\\", with: "\\\\")
       .replacingOccurrences(of: "\"", with: "\\\"")
     return "\"\(escaped)\""
+  }
+
+  /// True when the key window's main menu carries an enabled item whose
+  /// key equivalent matches the chord — used to yield ⌘ chords the OCaml
+  /// layer doesn't own (⇧⌘L sidebar, ⌘, settings, zoom) to AppKit so the
+  /// menu shortcut actually fires.
+  private static func menuOwnsChord(_ event: NSEvent) -> Bool {
+    guard let menu = NSApp.mainMenu else { return false }
+    let chars = (event.charactersIgnoringModifiers ?? "").lowercased()
+    let mods = event.modifierFlags.intersection(
+      [.command, .shift, .control, .option])
+    func owns(_ menu: NSMenu) -> Bool {
+      for item in menu.items {
+        if item.isEnabled, !item.isHidden,
+          !item.keyEquivalent.isEmpty,
+          item.keyEquivalent.lowercased() == chars,
+          item.keyEquivalentModifierMask.intersection(
+            [.command, .shift, .control, .option]) == mods
+        {
+          return true
+        }
+        if let sub = item.submenu, owns(sub) { return true }
+      }
+      return false
+    }
+    return owns(menu)
   }
 
   private func pushAppearance() {

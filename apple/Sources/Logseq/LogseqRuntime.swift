@@ -173,12 +173,20 @@ private func installEventDrainMonitor() {
     runOnMainLock.lock()
     let empty = runOnMainPending.isEmpty
     runOnMainLock.unlock()
+    // Drain before any logging: NSEvent.keyCode throws on non-key
+    // events, so the debug write can never be allowed to skip the
+    // drain for mouse events.
+    if !empty { drainRunOnMainPending(via: "nsev") }
     if LogseqRuntime.perfLogging {
+      let kc: Int
+      switch event.type {
+      case .keyDown, .keyUp, .flagsChanged: kc = Int(event.keyCode)
+      default: kc = -1
+      }
       FileHandle.standardError.write(
-        "PERF nsev t=\(CFAbsoluteTimeGetCurrent()) type=\(event.type.rawValue) kc=\(event.keyCode) pending=\(!empty)\n"
+        "PERF nsev t=\(CFAbsoluteTimeGetCurrent()) type=\(event.type.rawValue) kc=\(kc) pending=\(!empty)\n"
           .data(using: .utf8)!)
     }
-    if !empty { drainRunOnMainPending(via: "nsev") }
     return event
   }
 }
@@ -240,9 +248,19 @@ private func installWakeupSource() {
 /// stalling the queue forever.
 nonisolated(unsafe) private var wakeInFlight = false
 nonisolated(unsafe) private var wakePostedAt: CFAbsoluteTime = 0
-/// Alternates the synthetic flagsChanged's keyCode (61/62) so consecutive
-/// wakes can't coalesce into one delivery.
-nonisolated(unsafe) private var wakeJitter = 0
+/// Own-app AX element for AXUIElementPostKeyboardEvent wakes (the only
+/// synthetic post that reaches the real event connection instantly).
+nonisolated(unsafe) private var wakeAXApp = AXUIElementCreateApplication(getpid())
+private typealias AXPostKeyboardEventFn = @convention(c) (
+  AXUIElement, CGCharCode, CGKeyCode, UInt8
+) -> AXError
+/// AXUIElementPostKeyboardEvent is deprecated out of the SDK headers but
+/// still exported by HIServices — resolve it dynamically.
+nonisolated(unsafe) private let axPostKeyboardEvent: AXPostKeyboardEventFn? = {
+  guard let sym = dlsym(dlopen(nil, RTLD_LAZY), "AXUIElementPostKeyboardEvent")
+  else { return nil }
+  return unsafeBitCast(sym, to: AXPostKeyboardEventFn.self)
+}()
 
 private func postWakeup() {
   guard wakeupPort != mach_port_t(MACH_PORT_NULL) else { return }
@@ -269,13 +287,9 @@ private func postWakeup() {
     FileHandle.standardError.write(
       "PERF wakefail rc=\(rc)\n".data(using: .utf8)!)
   }
-  // The parked _DPSNextEvent wait services NOTHING but events arriving on
-  // the window-server event connection — measured: commonMode timers,
-  // GCD main.async, CFRunLoopWakeUp, CFMachPort source msgs and self-sent
-  // AppleEvents (short-circuit locally, never reach the connection) all
-  // sit for seconds while commonMode sources go unobserved. Post a real
-  // CGEvent to our own pid: it lands on that same connection, the runloop
-  // turns, the queued mach msg runs our order-0 source → drain.
+  // Coalesce wakes: the synthetic key event is still in flight while
+  // wakeInFlight holds, so items queued before it lands reuse the same
+  // post instead of spamming extra events.
   let now = CFAbsoluteTimeGetCurrent()
   runOnMainLock.lock()
   let stale = now - wakePostedAt > 0.5
@@ -302,26 +316,31 @@ private func postWakeup() {
   // it services nothing else (measured: timers, mach msgs, GCD all stall
   // 0.5-1.8s; a custom-class Carbon event posts fine but AppKit drops it
   // before it ever becomes an NSEvent). The one channel that always gets
-  // dispatched is real input, so post a real flagsChanged CGEvent that
-  // preserves the current modifier state: AppKit dispatches it as a
-  // harmless no-op and the .any local monitor drains the queue inline.
-  wakeJitter = (wakeJitter + 1) & 1
-  // Alternate right-option/right-control so two wakes in a row can't
-  // coalesce into one delivery.
-  let keyCode: CGKeyCode = wakeJitter == 0 ? 61 : 62
-  guard
-    let event = CGEvent(
-      keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
-  else { return }
-  event.type = .flagsChanged
-  // A fresh CGEvent's flags snapshot the live HID modifier state — copy
-  // them so the synthesized flagsChanged is a real no-op.
-  event.flags = CGEvent(source: nil)?.flags ?? []
-  // Post straight to our pid's event queue — it always lands on the event
-  // connection _DPSNextEvent waits on, regardless of which window the
-  // cursor is over or whether we hold key focus (cghidEventTap routing
-  // depends on both, and consecutive flagsChanged can coalesce).
-  event.postToPid(getpid())
+  // dispatched is real input.
+  // PostToPid lands straight in the app's NSEvent queue without
+  // generating window-server connection traffic, so a deep-parked
+  // _DPSNextEvent never wakes for it — queued events are only read when
+  // a real hardware event arrives (~1.5-3s measured). HID/session-tap
+  // injected CGEvents (flagsChanged AND a real key pair) get the same
+  // treatment. The one post that DOES wake the parked wait instantly is
+  // AXUIElementPostKeyboardEvent — HIServices routes it through the
+  // trusted event path onto the real event connection (~5ms measured).
+  // F19 (kc=80) is unmapped everywhere: our keyMonitor passes it through
+  // and no app binding exists to swallow it.
+  let downOK = axPostKeyboardEvent?(wakeAXApp, 0, 80, 1) == .success
+  let upOK = axPostKeyboardEvent?(wakeAXApp, 0, 80, 0) == .success
+  if !downOK || !upOK {
+    if let down = CGEvent(
+      keyboardEventSource: nil, virtualKey: 80, keyDown: true)
+    {
+      down.post(tap: .cghidEventTap)
+    }
+    if let up = CGEvent(
+      keyboardEventSource: nil, virtualKey: 80, keyDown: false)
+    {
+      up.post(tap: .cghidEventTap)
+    }
+  }
 }
 
 func runOnMain(_ work: @escaping () -> Void) {
@@ -357,6 +376,15 @@ func runOnMainDeferred(_ work: @escaping () -> Void) {
 }
 
 private func scheduleRunOnMainDrain() {
+  // Belt-and-suspenders: the parked _DPSNextEvent wait services nothing
+  // but real events on the window-server connection — mach msgs,
+  // CFRunLoopPerformBlock, and posted CGEvents all sit for seconds.
+  // DispatchQueue.main.async is measured the same way in most states,
+  // but when it does deliver it beats every other channel; the drain
+  // is idempotent so racing channels are harmless.
+  DispatchQueue.main.async {
+    drainRunOnMainPending(via: "gcd")
+  }
   if wakeupPort != mach_port_t(MACH_PORT_NULL) {
     postWakeup()
   } else {
