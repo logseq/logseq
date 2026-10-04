@@ -254,7 +254,14 @@ let load_nav_tag_titles repo st =
            ; Option.map (fun t -> ("tasks", t)) task ]))
 
 let refresh_favorited repo st =
-  match !Runtime.current_page with
+  (* non-page routes (home/journals) have no current_page — the dots
+     menu resolves today's journal from m.journals instead *)
+  let p =
+    match !Runtime.current_page with
+    | Some p -> Some p
+    | None -> List.nth_opt (!model_ref).Model.journals 0
+  in
+  match p with
   | Some p -> (
       match p.Model.page_uuid with
       | Some u ->
@@ -677,27 +684,37 @@ let refresh_items repo st =
 
 (* ---------- favorites ---------- *)
 
-let toggle_favorite st =
-  match !Runtime.current_page, (!model_ref).Model.repo with
-  | Some p, Some repo -> (
-      match p.Model.page_uuid with
-      | Some u ->
-          (* the cached favorited signal can still hold the previous page's
-             flag right after navigation; ask the worker for this page's
-             state instead of toggling from stale UI state *)
+let toggle_favorite_uuid st u =
+  match (!model_ref).Model.repo with
+  | Some repo ->
+      (* the cached favorited signal can still hold the previous page's
+         flag right after navigation; ask the worker for this page's
+         state instead of toggling from stale UI state *)
+      then_keep
+        (Runtime.invoke2 "thread-api/favorited-page?" (Wire.String repo)
+           (Wire.Uuid u))
+        (fun w ->
+          let fav = Wire.as_bool w = Some true in
           then_keep
-            (Runtime.invoke2 "thread-api/favorited-page?"
-               (Wire.String repo) (Wire.Uuid u))
-            (fun w ->
-              let fav = Wire.as_bool w = Some true in
-              then_keep
-                (Runtime.invoke3 "thread-api/set-page-favorite"
-                   (Wire.String repo) (Wire.Uuid u) (Wire.Bool (not fav)))
-                (fun _ ->
-                  load_favorites repo st;
-                  refresh_favorited repo st))
+            (Runtime.invoke3 "thread-api/set-page-favorite"
+               (Wire.String repo) (Wire.Uuid u) (Wire.Bool (not fav)))
+            (fun _ ->
+              load_favorites repo st;
+              refresh_favorited repo st))
+  | None -> ()
+
+let toggle_favorite st =
+  let p =
+    match !Runtime.current_page with
+    | Some p -> Some p
+    | None -> List.nth_opt (!model_ref).Model.journals 0
+  in
+  match p with
+  | Some p -> (
+      match p.Model.page_uuid with
+      | Some u -> toggle_favorite_uuid st u
       | None -> ())
-  | _ -> ()
+  | None -> ()
 
 let unfavorite st uuid =
   match (!model_ref).Model.repo with

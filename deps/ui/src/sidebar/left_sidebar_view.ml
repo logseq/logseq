@@ -181,7 +181,7 @@ let lp_menu st =
       let items =
         (if recent then []
          else
-           [ item (t "sidebar.left/unfavorite") "star-off" [ "⌘"; "⇧"; "F" ]
+           [ item (t "page/unfavorite") "star-off" [ "⌘"; "⇧"; "F" ]
                (fun () ->
                  if Wire.is_uuid_string target then
                    Sidebar_state.unfavorite st target) ])
