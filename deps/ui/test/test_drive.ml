@@ -363,7 +363,7 @@ let test_dialogs () =
 (* ---------------- page menu / confirm / toasts / help ---------------- *)
 
 let test_page_menu () =
-  send (Action.Page_menu_set (Some (100., 50., true)));
+  send (Action.Page_menu_set (Some (100., 50., true, None)));
   let menus =
     find_where (fun n -> has_tok n "ui__dropdown-menu-content")
   in

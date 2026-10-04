@@ -281,17 +281,17 @@ let test_update_popups () =
   check "title edit done" (not m2.editing_title);
   (* page_menu / appearance / confirm are mutually exclusive *)
   let m3 =
-    Update.update m2 (Action.Page_menu_set (Some (10., 20., true)))
+    Update.update m2 (Action.Page_menu_set (Some (10., 20., true, None)))
   in
-  check "page_menu set" (m3.page_menu = Some (10., 20., true));
+  check "page_menu set" (m3.page_menu = Some (10., 20., true, None));
   let m4 = Update.update m3 (Action.Appearance_set (Some (1., 2.))) in
   check "appearance clears page_menu"
     (m4.appearance = Some (1., 2.) && m4.page_menu = None);
   let m5 =
-    Update.update m4 (Action.Page_menu_set (Some (3., 4., false)))
+    Update.update m4 (Action.Page_menu_set (Some (3., 4., false, None)))
   in
   check "page_menu clears appearance"
-    (m5.page_menu = Some (3., 4., false) && m5.appearance = None);
+    (m5.page_menu = Some (3., 4., false, None) && m5.appearance = None);
   let m6 =
     Update.update m5
       (Action.Confirm_set
@@ -333,7 +333,7 @@ let test_update_popups2 () =
   let dirty =
     { Model.initial with
       Model.editing_title = true
-    ; page_menu = Some (0., 0., true)
+    ; page_menu = Some (0., 0., true, None)
     ; appearance = Some (1., 1.)
     ; unlinked_open = true
     ; unlinked_search = true

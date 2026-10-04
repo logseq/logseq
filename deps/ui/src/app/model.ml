@@ -190,8 +190,10 @@ type t =
   ; left_sidebar_open : bool
   ; right_sidebar_open : bool
   ; editing_title : bool
-  ; page_menu : (float * float * bool) option
-    (* click position + with_app_items (toolbar dots vs page context menu) *)
+  ; page_menu : (float * float * bool * string option) option
+    (* click position + with_app_items (toolbar dots vs page context
+       menu) + the menu page uuid; uuid None = resolve from the current
+       route like cljs right-sidebar/get-current-page *)
   ; appearance : (float * float) option
     (* cljs :ui/toggle-appearance popup anchored to .toolbar-dots-btn *)
   ; confirm : confirm option
