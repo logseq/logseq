@@ -20,10 +20,9 @@ let to_snake_case s =
     raw;
   Buffer.contents out |> String.trim
 
-external json_stringify : 'a -> string = "JSON.stringify"
-[@@mel.scope "JSON"]
+external json_stringify : 'a -> string = "stringify" [@@mel.scope "JSON"]
 
-external json_parse : string -> 'a = "JSON.parse" [@@mel.scope "JSON"]
+external json_parse : string -> 'a = "parse" [@@mel.scope "JSON"]
 
 (** [ls_api_call env "editor.getBlock" args] invokes
     [logseq.api.get_block(...args)] / [logseq.sdk.<ns>.<snake_name>(...args)]
@@ -40,13 +39,15 @@ let ls_api_call env api_keyword args =
   let name1 =
     if is_namespaced then to_snake_case (List.nth parts 1) else api_keyword
   in
+  (* Playwright's evaluate does not pass [arg] to string expressions, so the
+     function is invoked inline with the JSON-encoded args literal. *)
   let estr =
     Printf.sprintf
-      "s => { const args = JSON.parse(s);const o=logseq.%s; return \
-       o['%s']?.apply(null, args || []); }"
-      ns1 name1
+      "(s => { const args = JSON.parse(s);const o=logseq.%s; return \
+       o['%s']?.apply(null, args || []); })(%s)"
+      ns1 name1 (json_stringify (json_stringify args))
   in
-  Pw.eval_js_arg env estr (json_stringify args)
+  Pw.eval_js env estr
 
 (** JSON-field access on values returned by [ls_api_call], the [(get x k)]
     pattern. The return type is untyped like the JS object itself. *)

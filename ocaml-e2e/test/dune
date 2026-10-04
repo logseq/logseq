@@ -4,7 +4,8 @@
  (module_systems commonjs)
  (modules
   test_left_sidebar_basic
-  test_graph)
+  test_graph
+  test_undo_redo)
  (libraries
   logseq_e2e
   melange-fest
@@ -18,6 +19,7 @@
  (deps
   (alias test_node)
   (:left ./test_node/test/test_left_sidebar_basic.js)
-  (:graph ./test_node/test/test_graph.js))
+  (:graph ./test_node/test/test_graph.js)
+  (:undo ./test_node/test/test_undo_redo.js))
  (action
-  (run node --test %{left} %{graph})))
+  (run node --test %{left} %{graph} %{undo})))

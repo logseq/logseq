@@ -6,34 +6,48 @@ open Fest.Promise
     0-width editor does not open the last page block, so skip blocks nested
     under [.property-block-container]. *)
 let last_page_block_content env =
-  let* blocks =
-    Pw.qs env ".ls-page-blocks .page-blocks-inner .ls-block .block-content"
+  (* locator.evaluate treats a string as an expression, so pick the index
+     in-page and take .nth on the locator. *)
+  let sel = ".ls-page-blocks .page-blocks-inner .ls-block .block-content" in
+  let* (idx : int) =
+    Pw.eval_js env
+      ("Array.from(document.querySelectorAll('" ^ sel
+      ^ "')).findLastIndex(el => !el.closest('.property-block-container'))")
   in
-  let rec go i =
-    if i < 0 then Js.Promise.reject (Failure "No page block content")
-    else
-      let el = blocks.(i) in
-      let* outside =
-        Playwright.locator_evaluate el
-          "el => !el.closest('.property-block-container')"
-      in
-      if outside then Js.Promise.resolve el else go (i - 1)
-  in
-  go (Array.length blocks - 1)
+  if idx < 0 then Js.Promise.reject (Failure "No page block content")
+  else Js.Promise.resolve (Playwright.locator_nth (Pw.q env sel) idx)
 
 let rec open_last_block ?(in_retry = false) env =
   let* () = Util.double_esc env in
   let* _ = E2e_assert.in_normal_mode env in
   let* blocks_count = Util.page_blocks_count env in
-  let* last_block =
+  let* () =
     if blocks_count = 0 then
       let* buttons = Pw.qs env ".ls-page-blocks .block-add-button" in
       if Array.length buttons = 0 then
         Js.Promise.reject (Failure "no .block-add-button")
-      else Js.Promise.resolve buttons.(Array.length buttons - 1)
-    else last_page_block_content env
+      else Pw.click_l buttons.(Array.length buttons - 1)
+    else
+      (* Only ever click a non-property [.block-content].  Clicking a raw
+         [.ls-block] row can land on the .block-add-button sibling (it is
+         .ls-block-classed too) and dispatch a real insert-new-block.  An
+         open editor means the last block is already being edited — keep
+         hands off. *)
+      let rec click_last tries =
+        let* editors = Pw.qs env Util.editor_q in
+        if Array.length editors = 1 then Js.Promise.resolve ()
+        else
+          Js.Promise.catch
+            (fun e ->
+              if tries <= 0 then Playwright.throw_error e
+              else
+                let* () = Pw.wait_timeout env 300. in
+                click_last (tries - 1))
+            (let* el = last_page_block_content env in
+             Pw.click_l el)
+      in
+      click_last 80 (* ~24s — .block-content can mount late *)
   in
-  let* () = Pw.click_l last_block in
   if in_retry then E2e_assert.editor_mode env
   else
     Js.Promise.catch
@@ -55,16 +69,15 @@ let focus_new_block env ~previous_editor_id =
     Ls_locator.filter env ".editor-wrapper" ~has:(Pw.q env "textarea")
       ~has_not:(Pw.q env ("#" ^ previous_editor_id))
   in
+  (* Never re-Enter and never re-click: the first Enter's insert op is
+     already applied in the worker, and re-driving the UI here can mint a
+     duplicate empty block or open the previous block's editor — either way
+     the following steps (e.g. paste, which uses the current edit block as
+     target) then operate on the wrong block.  Just wait longer for the new
+     block's editor; if it never mounts that is a real bug to surface. *)
   Js.Promise.catch
-    (fun _ ->
-      let* () = open_last_block env in
-      let* id = Pw.attr env Util.editor_q "id" in
-      if id = Some previous_editor_id then
-        let* () = Util.move_cursor_to_end env in
-        Keyboard.enter env
-      else Js.Promise.resolve ())
-    (E2e_assert.is_visible_l new_editor)
-  |> Js.Promise.then_ (fun () -> E2e_assert.is_visible_l new_editor)
+    (fun _ -> E2e_assert.is_visible_l ~timeout:8000. new_editor)
+    (E2e_assert.is_visible_l ~timeout:12000. new_editor)
 
 let new_block env title =
   let* editor = Util.get_editor env in
