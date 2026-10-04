@@ -479,7 +479,7 @@ let load_nav_tag_titles repo st =
            ; Option.map (fun t -> ("tasks", t)) task ]))
 
 let refresh_favorited repo st =
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some p -> (
       match p.Model.page_uuid with
       | Some u ->
@@ -903,7 +903,7 @@ let refresh_items repo st =
 (* ---------- favorites ---------- *)
 
 let toggle_favorite st =
-  match !Runtime.current_page, (model ()).Model.repo with
+  match (Runtime.model ()).Model.route_page, (model ()).Model.repo with
   | Some p, Some repo -> (
       match p.Model.page_uuid with
       | Some u ->
@@ -1079,7 +1079,7 @@ let on_doc_click st ev =
             if jbool "shiftKey" ev then
               match click_target "[data-testid='page title']" ev with
               | Some _ -> (
-                  match !Runtime.current_page with
+                  match (Runtime.model ()).Model.route_page with
                   | Some p -> (
                       match p.Model.page_uuid with
                       | Some u -> open_uuid st u
@@ -1089,7 +1089,7 @@ let on_doc_click st ev =
       else if jbool "shiftKey" ev then
         match click_target "[data-testid='page title']" ev with
         | Some _ -> (
-            match !Runtime.current_page with
+            match (Runtime.model ()).Model.route_page with
             | Some p -> (
                 match p.Model.page_uuid with
                 | Some u -> open_uuid st u

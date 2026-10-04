@@ -1281,7 +1281,7 @@ let apply_tag t ac ~create title =
     | None -> (
         match Dom_ext.closest ac.editor ".ls-page-title" with
         | Some _ -> (
-            match !Runtime.current_page with
+            match (Runtime.model ()).Model.route_page with
             | Some p -> (p.Model.page_uuid, true)
             | None -> (None, false))
         | None -> (None, false))

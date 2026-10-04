@@ -1,4 +1,4 @@
-(* Drive-based view tests: mounts the real View.view / Update.update app
+(* Drive-based view tests: mounts the real View.view / Update.apply app
    in-process (recording backend, no DOM, no real worker) and asserts on
    the node tree Drive sees -- structure, classes, text, and event-dispatch
    effects. Browser globals come from Stub_dom; worker calls go to
@@ -33,7 +33,7 @@ let mount () =
   in
   let s =
     S.mount ~registry ~profile:Logseq_dom.web_profile ~initial:Model.initial
-      ~reducer:Update.update ~view ()
+      ~reducer:Update.apply ~view ()
   in
   Runtime.app_send :=
     (fun a ->

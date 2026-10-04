@@ -66,7 +66,7 @@ let ensure_all roots =
         match el_get_attr parent "data-pu" with
         | Some u -> Some u
         | None -> (
-            match !Runtime.current_page with
+            match (Runtime.model ()).Model.route_page with
             | Some p -> p.Model.page_uuid
             | None -> None)
       in

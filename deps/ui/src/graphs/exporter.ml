@@ -10,7 +10,7 @@ module T = I18n
 module B = Browser_ui
 
 let repo () =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | Some r -> r
   | None -> "logseq_db_Demo"
 

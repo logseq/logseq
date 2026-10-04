@@ -339,7 +339,7 @@ let drop_own_order_list uuid buf parent_ordered =
 (* cljs insert-as-sibling?: every insert on the Library page lands as a
    sibling *page* — library children are always page-typed *)
 let library_context () =
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some p -> p.Model.page_is_library
   | None -> false
 
@@ -401,7 +401,7 @@ let split_at_cursor uuid =
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
-        (match !Runtime.current_page with
+        (match (Runtime.model ()).Model.route_page with
          | Some page -> (
              match
                Model.split_insert page ~uuid ~before
@@ -448,7 +448,7 @@ let insert_sibling_after uuid =
               [ Ops.block_map ~title:"" ~page:library new_uuid ]
               uuid ~sibling ])
       in
-      (match !Runtime.current_page with
+      (match (Runtime.model ()).Model.route_page with
        | Some page -> (
            match
              Model.split_insert page ~uuid ~before:buf
@@ -867,7 +867,7 @@ let indent_or_outdent ~indent =
       (* optimistic local reparent: the DOM moves in this task instead of
          remounting when the async worker refresh lands (e2e boundingBox
          races that remount). Worker refresh stays authoritative. *)
-      (match !Runtime.current_page, parent_original with
+      (match (Runtime.model ()).Model.route_page, parent_original with
        | Some page, None -> (
            match
              (if indent then Model.indent_blocks else Model.outdent_blocks)
@@ -888,7 +888,7 @@ let move_blocks_up_down up =
   match selected_uuids () with
   | [] -> ()
   | uuids ->
-      (match !Runtime.current_page with
+      (match (Runtime.model ()).Model.route_page with
        | Some page ->
            let page' = Model.move_selected_top_blocks page uuids up in
            Page_delta.mark_own_commit page';
@@ -977,9 +977,9 @@ let drop_dragged_block src tgt move_to =
           | Some (Some p, _) -> p.Model.block_uuid
           | Some (None, _) -> (
               (* top-level block: the parent is the containing page —
-                 journals views keep their pages in current_journals
-                 instead of current_page *)
-              match !Runtime.current_page with
+                 journals views keep their pages in model.journals
+                 instead of route_page *)
+              match (Runtime.model ()).Model.route_page with
               | Some page -> page.Model.page_uuid
               | None ->
                   List.find_map
@@ -991,7 +991,7 @@ let drop_dragged_block src tgt move_to =
                           p.Model.page_blocks
                       then p.Model.page_uuid
                       else None)
-                    !Runtime.current_journals)
+                    (Runtime.model ()).Model.journals)
           | None -> None
         in
         match parent_uuid with
@@ -1268,7 +1268,7 @@ let paste_lines lines =
   match selected_uuids () with
   | [] -> (
       (* nothing selected: append at page end *)
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some p -> (
           match p.Model.page_uuid with
           | None -> ()
@@ -1391,7 +1391,7 @@ let paste_external ev ~text ~html =
              text ~replace_empty:false ~sibling:true)
     | [] -> (
         (* nothing selected: append at page end *)
-        match !Runtime.current_page with
+        match (Runtime.model ()).Model.route_page with
         | Some p -> (
             match List.rev (S.page_blocks ()) with
             | last :: _ -> (
@@ -1616,10 +1616,10 @@ let focus_page_title () =
   (* cljs journal titles aren't editable (protected attrs — a save tx
      throws journal-page-protected-attr-updated) *)
   let journal_title =
-    match !Runtime.current_route with
-    | Some (Model.Journals | Model.Home) -> true
+    match Runtime.route () with
+    | Model.Journals | Model.Home -> true
     | _ -> (
-        match !Runtime.current_page with
+        match (Runtime.model ()).Model.route_page with
         | Some p -> p.Model.page_journal_day <> None
         | None -> false)
   in
@@ -1666,15 +1666,15 @@ let append_block ?for_page ?(scope = "main") () =
   let page =
     match for_page with
     | Some u -> (
-        match !Runtime.current_journals with
+        match (Runtime.model ()).Model.journals with
         | js ->
             List.find_opt
               (fun (p : Model.page) -> p.Model.page_uuid = Some u)
               js)
-    | None -> !Runtime.current_page
+    | None -> (Runtime.model ()).Model.route_page
   in
   let page =
-    match page, !Runtime.current_page with
+    match page, (Runtime.model ()).Model.route_page with
     | Some _ as p, _ -> p
     | None, p -> p
   in
@@ -1754,7 +1754,7 @@ let quick_add_open_dialog puuid blocks =
 (* cljs show-quick-add: ensure an empty block exists on the "Quick add"
    page, then open the dialog *)
 let open_quick_add () =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -1825,7 +1825,7 @@ let move_qa_blocks_to_today repo uuids =
 
 (* cljs quick-add-blocks!: save the live edit, then move everything *)
 let quick_add_blocks_to_today () =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       blur_commit ();
@@ -1875,14 +1875,14 @@ let consume_pending_zoom () =
 let zoom_out () =
   match S.editing_uuid () with
   | Some edit_u -> (
-      match !Runtime.current_route with
-      | Some (Model.Block_zoom uuid) ->
+      match Runtime.route () with
+      | Model.Block_zoom uuid ->
           pending_zoom := Some edit_u;
           ignore
             (let* p =
               Runtime.invoke2 "thread-api/get-block-parent"
                 (Wire.String
-                   (Option.value !Runtime.current_repo ~default:""))
+                   (Option.value (Runtime.model ()).Model.repo ~default:""))
                 (Wire.Uuid uuid)
             in
             (match Wire.map_get_uuid p "block/uuid" with
@@ -2014,7 +2014,7 @@ let save_one_asset repo pfs target_uuid ~empty_target ~first
     Js.Promise.resolve ())
 
 let save_uploaded_files (input : Editor_dom.el) =
-  match (!Runtime.current_repo, S.editing ()) with
+  match ((Runtime.model ()).Model.repo, S.editing ()) with
   | Some repo, Some e -> (
       match Platform.pfs_handle () with
       | Some pfs ->

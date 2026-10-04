@@ -300,11 +300,11 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
    renders when the owning surface is the current route page or the
    zoom root block — hidden props on ordinary blocks stay unreachable *)
 let can_toggle_hidden (ctx : V.ctx) ~below_rows =
-  match !Runtime.current_route with
-  | Some (Model.Block_zoom u) ->
+  match Runtime.route () with
+  | Model.Block_zoom u ->
       u = ctx.block_uuid && below_rows = []
   | _ -> (
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some (p : Model.page) -> p.page_uuid = Some ctx.block_uuid
       | None -> false)
 
@@ -929,7 +929,7 @@ let mount_page_props page_inner (p : Model.page) uuid =
     and refresh () =
       (* resolve the live page each refresh — page_is_tag changes under
          us when a page converts to a tag *)
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some live when live.Model.page_uuid = Some uuid ->
           render_page_area ctx live ~page_inner ~attach_area ~attach_bidi
             ~detach area bidi
@@ -952,10 +952,10 @@ let mount_page_area page_inner =
     Editor_state.editing_uuid () = p.Model.page_uuid
   in
   let with_page f =
-    (* journals view mounts one .page-inner per journal — current_page is
+    (* journals view mounts one .page-inner per journal — route_page is
        unset there, so resolve the page from the title's block uuid *)
     let page =
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some p -> Some p
       | None -> (
           match el_query page_inner ".ls-page-title [blockid]" with
@@ -963,7 +963,7 @@ let mount_page_area page_inner =
               let bid = el_get_attr title_block "blockid" in
               List.find_opt
                 (fun (j : Model.page) -> j.Model.page_uuid = bid)
-                !Runtime.current_journals
+                (Runtime.model ()).Model.journals
             )
           | None -> None)
     in

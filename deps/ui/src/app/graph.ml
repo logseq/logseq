@@ -26,7 +26,7 @@ let init_worker () =
   (* cljs pushes sync-app-state at boot so a stored login reaches
             the worker before any db-sync call *)
   let* _ =
-    Rtc_ops.sync_app_state !Runtime.current_repo;
+    Rtc_ops.sync_app_state (Runtime.model ()).Model.repo;
     Js.Promise.resolve ()
   in
   (* cljs ships a transact context with :dev? = config/dev?

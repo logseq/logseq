@@ -50,8 +50,9 @@ let main root =
   in
   let app =
     Lui_app.create_with_extensions (Lui_web.backend renderer) registry
-      Model.initial Update.update View.view
+      Model.initial Update.apply View.view
   in
+  Runtime.read_model := (fun () -> Lui_app.model app);
   Runtime.app_send :=
     (fun action ->
       let changed = Lui_app.send app action in

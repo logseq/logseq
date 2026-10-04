@@ -598,7 +598,7 @@ let cycle_todo uuid =
   let row_id e =
     Properties_data.geti (Properties_data.untag e) "db/id"
   in
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -684,7 +684,7 @@ let toggle_own_list uuid caret =
    else set all children. Children are read fresh from the worker — the
    model tree can lag a just-applied indent. *)
 let toggle_children_list uuid caret =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore

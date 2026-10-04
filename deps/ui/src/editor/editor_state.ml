@@ -192,16 +192,16 @@ let effective_collapsed ?(scope = "main") (b : Model.block) =
 let anchor () = (read ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
-(* -- model helpers over !Runtime.current_page -- *)
+(* -- model helpers over (Runtime.model ()).Model.route_page -- *)
 
 let page_blocks () =
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some p -> p.Model.page_blocks
   | None ->
       (* journals view renders every journal item's blocks in the same
          page flow *)
       List.concat_map (fun (p : Model.page) -> p.Model.page_blocks)
-        !Runtime.current_journals
+        (Runtime.model ()).Model.journals
 
 (* blocks a row actually displays: a :block/link (embed) block renders the
    linked page's fetched blocks in place of its own children — so lookups

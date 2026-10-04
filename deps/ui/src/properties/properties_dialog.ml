@@ -705,7 +705,7 @@ let current_target () : target option =
           Some { uuid = u; uuids = us; db_id = None; is_tag = false
                ; title = "" }
       | [] -> (
-          match !Runtime.current_page with
+          match (Runtime.model ()).Model.route_page with
           | Some p ->
               let uuid = Option.value ~default:"" p.Model.page_uuid in
               if uuid = "" then None
