@@ -1290,14 +1290,32 @@
         node' node-value]
     (some #(contains? class-ids (if (integer? %) % (:db/id %))) (:block/tags node'))))
 
+(defn- selected-node-property-values
+  "Current node-property values on `block`, including nodes that no longer
+  match `:logseq.property/classes`. These stay in the select/checkbox list so
+  they remain uncheckable."
+  [block property]
+  (let [v (get block (:db/ident property))]
+    (vec
+     (remove (fn [item]
+               (or (nil? item)
+                   (empty-placeholder-value? item)))
+             (if (property-value-collection? v)
+               v
+               (when (some? v)
+                 [v]))))))
+
 (defn- scoped-class-nodes
-  [property classes result structured-children-by-class-id]
-  (let [broad-scope? (broad-scoped-node-property? property classes)]
-    (if (some? result)
-      (let [class-ids (scoped-class-ids classes structured-children-by-class-id)]
-        (filter #(node-matches-scoped-classes? class-ids %) result))
-      (when broad-scope?
-        []))))
+  ([property classes result structured-children-by-class-id]
+   (scoped-class-nodes property classes result structured-children-by-class-id nil))
+  ([property classes result structured-children-by-class-id selected-nodes]
+   (let [broad-scope? (broad-scoped-node-property? property classes)]
+     (if (some? result)
+       (let [class-ids (scoped-class-ids classes structured-children-by-class-id)
+             matching (filter #(node-matches-scoped-classes? class-ids %) result)]
+         (reduce add-initial-node-choice (vec matching) selected-nodes))
+       (when broad-scope?
+         [])))))
 
 (defn- <load-initial-node-choices
   ([repo property non-root-classes]
@@ -1377,7 +1395,8 @@
 	                result
 
                 (seq classes)
-                (scoped-class-nodes property classes result structured-children-by-class-id)
+                (scoped-class-nodes property classes result structured-children-by-class-id
+                                    (selected-node-property-values block property))
 
                 :else
                 (if (empty? result)
