@@ -1,14 +1,6 @@
-(copy_files ../vendor/sqlite3/sqlite3.c)
-
 (executable
  (name main)
  (public_name db-worker-node)
  (modes native)
- (foreign_stubs
-  (language c)
-  (names sqlite3)
-  (flags
-   (:standard -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_RTREE
-    -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_COLUMN_METADATA
-    -DSQLITE_THREADSAFE=1)))
- (libraries logseq_db_worker logseq_db_worker_platform_native))
+ (libraries logseq_db_worker logseq_db_worker_platform_native
+  logseq_db_worker_sqlite_vendored))
