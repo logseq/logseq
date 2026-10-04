@@ -2,6 +2,8 @@
 
 module W = Webapi.Dom
 
+open Promise_ext
+
 (* forward uncaught errors/rejections to console.error so the e2e console
    dumps see them (Playwright's console event misses pageerror) *)
 external add_window_listener : string -> (Js.Json.t -> unit) -> unit =
@@ -81,11 +83,16 @@ let main root =
   Rtc_flows.init ();
   ignore (Boot.run ())
 
+(* gate first render on the active locale: non-English dicts arrive as
+   lazy chunks (en is embedded, resolves immediately) *)
 let () =
   Printexc.record_backtrace true;
   match W.Document.getElementById "root" W.document with
   | None -> ()
-  | Some root -> (
-      try main root
-      with error ->
-        W.Element.setTextContent root (Printexc.to_string error))
+  | Some root ->
+      ignore
+        ((let* () = I18n.init () in
+          (try main root
+           with error ->
+             W.Element.setTextContent root (Printexc.to_string error));
+          Js.Promise.resolve ()))

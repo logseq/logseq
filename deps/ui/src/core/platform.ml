@@ -24,6 +24,10 @@ external search_of : loc -> string = "search" [@@mel.get]
 
 let location_search () = search_of location_obj
 
+external reload_loc : loc -> unit = "reload" [@@mel.send]
+
+let location_reload () = reload_loc location_obj
+
 external get_element_by_id : string -> W.Element.t option
   = "getElementById" [@@mel.scope "document"] [@@mel.return nullable]
 

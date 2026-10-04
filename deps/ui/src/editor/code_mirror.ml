@@ -40,148 +40,55 @@ let cm () : cm_module =
       cm_cache := Some m;
       m
 
-let modes_loaded = ref false
+let core_loaded = ref false
 
-let load_modes () =
-  if not !modes_loaded then begin
-    modes_loaded := true;
+(* core + the addons cljs extensions/code.cljs requires + mode/meta
+   (findModeByName/findModeByExtension drive both mount and the language
+   picker). The ~130 mode files are NOT required here — they ship as
+   per-mode lazy chunks and register on demand via ensure_mode below. *)
+let load_core () =
+  if not !core_loaded then begin
+    core_loaded := true;
     ignore (raw_require "codemirror");
     ignore (raw_require "codemirror/addon/edit/closebrackets");
     ignore (raw_require "codemirror/addon/edit/matchbrackets");
     ignore (raw_require "codemirror/addon/hint/show-hint");
     ignore (raw_require "codemirror/addon/selection/active-line");
-    ignore (raw_require "codemirror/mode/meta");
-    ignore (raw_require "codemirror/mode/apl/apl");
-    ignore (raw_require "codemirror/mode/asciiarmor/asciiarmor");
-    ignore (raw_require "codemirror/mode/asn.1/asn.1");
-    ignore (raw_require "codemirror/mode/asterisk/asterisk");
-    ignore (raw_require "codemirror/mode/brainfuck/brainfuck");
-    ignore (raw_require "codemirror/mode/clike/clike");
-    ignore (raw_require "codemirror/mode/clojure/clojure");
-    ignore (raw_require "codemirror/mode/cmake/cmake");
-    ignore (raw_require "codemirror/mode/cobol/cobol");
-    ignore (raw_require "codemirror/mode/coffeescript/coffeescript");
-    ignore (raw_require "codemirror/mode/commonlisp/commonlisp");
-    ignore (raw_require "codemirror/mode/crystal/crystal");
-    ignore (raw_require "codemirror/mode/css/css");
-    ignore (raw_require "codemirror/mode/cypher/cypher");
-    ignore (raw_require "codemirror/mode/d/d");
-    ignore (raw_require "codemirror/mode/dart/dart");
-    ignore (raw_require "codemirror/mode/diff/diff");
-    ignore (raw_require "codemirror/mode/django/django");
-    ignore (raw_require "codemirror/mode/dockerfile/dockerfile");
-    ignore (raw_require "codemirror/mode/dtd/dtd");
-    ignore (raw_require "codemirror/mode/dylan/dylan");
-    ignore (raw_require "codemirror/mode/ebnf/ebnf");
-    ignore (raw_require "codemirror/mode/ecl/ecl");
-    ignore (raw_require "codemirror/mode/eiffel/eiffel");
-    ignore (raw_require "codemirror/mode/elm/elm");
-    ignore (raw_require "codemirror/mode/erlang/erlang");
-    ignore (raw_require "codemirror/mode/factor/factor");
-    ignore (raw_require "codemirror/mode/fcl/fcl");
-    ignore (raw_require "codemirror/mode/forth/forth");
-    ignore (raw_require "codemirror/mode/fortran/fortran");
-    ignore (raw_require "codemirror/mode/gas/gas");
-    ignore (raw_require "codemirror/mode/gfm/gfm");
-    ignore (raw_require "codemirror/mode/gherkin/gherkin");
-    ignore (raw_require "codemirror/mode/go/go");
-    ignore (raw_require "codemirror/mode/groovy/groovy");
-    ignore (raw_require "codemirror/mode/haml/haml");
-    ignore (raw_require "codemirror/mode/handlebars/handlebars");
-    ignore (raw_require "codemirror/mode/haskell/haskell");
-    ignore (raw_require "codemirror/mode/haskell-literate/haskell-literate");
-    ignore (raw_require "codemirror/mode/haxe/haxe");
-    ignore (raw_require "codemirror/mode/htmlembedded/htmlembedded");
-    ignore (raw_require "codemirror/mode/htmlmixed/htmlmixed");
-    ignore (raw_require "codemirror/mode/http/http");
-    ignore (raw_require "codemirror/mode/idl/idl");
-    ignore (raw_require "codemirror/mode/javascript/javascript");
-    ignore (raw_require "codemirror/mode/jinja2/jinja2");
-    ignore (raw_require "codemirror/mode/jsx/jsx");
-    ignore (raw_require "codemirror/mode/julia/julia");
-    ignore (raw_require "codemirror/mode/livescript/livescript");
-    ignore (raw_require "codemirror/mode/lua/lua");
-    ignore (raw_require "codemirror/mode/markdown/markdown");
-    ignore (raw_require "codemirror/mode/mathematica/mathematica");
-    ignore (raw_require "codemirror/mode/mbox/mbox");
-    ignore (raw_require "codemirror/mode/mirc/mirc");
-    ignore (raw_require "codemirror/mode/mllike/mllike");
-    ignore (raw_require "codemirror/mode/modelica/modelica");
-    ignore (raw_require "codemirror/mode/mscgen/mscgen");
-    ignore (raw_require "codemirror/mode/mumps/mumps");
-    ignore (raw_require "codemirror/mode/nginx/nginx");
-    ignore (raw_require "codemirror/mode/nsis/nsis");
-    ignore (raw_require "codemirror/mode/ntriples/ntriples");
-    ignore (raw_require "codemirror/mode/octave/octave");
-    ignore (raw_require "codemirror/mode/oz/oz");
-    ignore (raw_require "codemirror/mode/pascal/pascal");
-    ignore (raw_require "codemirror/mode/pegjs/pegjs");
-    ignore (raw_require "codemirror/mode/perl/perl");
-    ignore (raw_require "codemirror/mode/php/php");
-    ignore (raw_require "codemirror/mode/pig/pig");
-    ignore (raw_require "codemirror/mode/powershell/powershell");
-    ignore (raw_require "codemirror/mode/properties/properties");
-    ignore (raw_require "codemirror/mode/protobuf/protobuf");
-    ignore (raw_require "codemirror/mode/pug/pug");
-    ignore (raw_require "codemirror/mode/puppet/puppet");
-    ignore (raw_require "codemirror/mode/python/python");
-    ignore (raw_require "codemirror/mode/q/q");
-    ignore (raw_require "codemirror/mode/r/r");
-    ignore (raw_require "codemirror/mode/rpm/rpm");
-    ignore (raw_require "codemirror/mode/rst/rst");
-    ignore (raw_require "codemirror/mode/ruby/ruby");
-    ignore (raw_require "codemirror/mode/rust/rust");
-    ignore (raw_require "codemirror/mode/sas/sas");
-    ignore (raw_require "codemirror/mode/sass/sass");
-    ignore (raw_require "codemirror/mode/scheme/scheme");
-    ignore (raw_require "codemirror/mode/shell/shell");
-    ignore (raw_require "codemirror/mode/sieve/sieve");
-    ignore (raw_require "codemirror/mode/slim/slim");
-    ignore (raw_require "codemirror/mode/smalltalk/smalltalk");
-    ignore (raw_require "codemirror/mode/smarty/smarty");
-    ignore (raw_require "codemirror/mode/solr/solr");
-    ignore (raw_require "codemirror/mode/soy/soy");
-    ignore (raw_require "codemirror/mode/sparql/sparql");
-    ignore (raw_require "codemirror/mode/spreadsheet/spreadsheet");
-    ignore (raw_require "codemirror/mode/sql/sql");
-    ignore (raw_require "codemirror/mode/stex/stex");
-    ignore (raw_require "codemirror/mode/stylus/stylus");
-    ignore (raw_require "codemirror/mode/swift/swift");
-    ignore (raw_require "codemirror/mode/tcl/tcl");
-    ignore (raw_require "codemirror/mode/textile/textile");
-    ignore (raw_require "codemirror/mode/tiddlywiki/tiddlywiki");
-    ignore (raw_require "codemirror/mode/tiki/tiki");
-    ignore (raw_require "codemirror/mode/toml/toml");
-    ignore (raw_require "codemirror/mode/tornado/tornado");
-    ignore (raw_require "codemirror/mode/troff/troff");
-    ignore (raw_require "codemirror/mode/ttcn/ttcn");
-    ignore (raw_require "codemirror/mode/ttcn-cfg/ttcn-cfg");
-    ignore (raw_require "codemirror/mode/turtle/turtle");
-    ignore (raw_require "codemirror/mode/twig/twig");
-    ignore (raw_require "codemirror/mode/vb/vb");
-    ignore (raw_require "codemirror/mode/vbscript/vbscript");
-    ignore (raw_require "codemirror/mode/velocity/velocity");
-    ignore (raw_require "codemirror/mode/verilog/verilog");
-    ignore (raw_require "codemirror/mode/vhdl/vhdl");
-    ignore (raw_require "codemirror/mode/vue/vue");
-    ignore (raw_require "codemirror/mode/wast/wast");
-    ignore (raw_require "codemirror/mode/webidl/webidl");
-    ignore (raw_require "codemirror/mode/xml/xml");
-    ignore (raw_require "codemirror/mode/xquery/xquery");
-    ignore (raw_require "codemirror/mode/yacas/yacas");
-    ignore (raw_require "codemirror/mode/yaml/yaml");
-    ignore (raw_require "codemirror/mode/yaml-frontmatter/yaml-frontmatter");
-    ignore (raw_require "codemirror/mode/z80/z80")
+    ignore (raw_require "codemirror/mode/meta")
   end
 
-(* addon imports — cljs extensions/code.cljs requires the same set *)
+(* -- lazy mode loading --
 
+   shims/lazy_assets.mjs exposes one dynamic-import chunk per
+   codemirror/mode/<name>/<name>.js (the bundler alias resolves it to the
+   same codemirror install the literal requires hit, so modes register
+   on the shared CodeMirror singleton). mode_loads dedups in-flight
+   loads; a rejected load is uncached so the next mount retries, and the
+   editor stays plain-text — same surface an unknown language already
+   gets. *)
 
+external shim_load_cm_mode :
+  Js.Json.t -> string -> Js.Json.t Js.Promise.t = "loadCmMode"
+  [@@mel.send]
 
+let mode_loads : (string, unit Js.Promise.t) Hashtbl.t = Hashtbl.create 8
 
+let ensure_mode file : unit Js.Promise.t =
+  match Hashtbl.find_opt mode_loads file with
+  | Some p -> p
+  | None ->
+      let p =
+        shim_load_cm_mode (raw_require "lui-shims/lazy-assets") file
+        |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+        |> Js.Promise.catch (fun e ->
+               Hashtbl.remove mode_loads file;
+               Platform.console_error
+                 ("codemirror mode load failed", file, e);
+               Js.Promise.resolve ())
+      in
+      Hashtbl.replace mode_loads file p;
+      p
 
-(* mode imports: cljs loads every codemirror/mode/* so findModeByName
-   can resolve any fence language *)
 
 external from_textarea : cm_module -> D.el -> Js.Json.t -> t
   = "fromTextArea" [@@mel.send]
@@ -254,15 +161,28 @@ let normalize_lang = function
   | "edn" | "clj" | "cljc" | "cljs" | "clojurescript" -> "clojure"
   | l -> l
 
+(* meta.js entry for a fence language (name first, then extension) *)
+let mode_info lang =
+  match find_mode_by_name (cm ()) lang with
+  | Some _ as m -> m
+  | None -> find_mode_by_ext (cm ()) lang
+
+(* the CM `mode:` option for a language — its declared mime, or the raw
+   language string when meta.js has no entry *)
 let cm_mode lang =
-  let m =
-    match find_mode_by_name (cm ()) lang with
-    | Some _ as m -> m
-    | None -> find_mode_by_ext (cm ()) lang
-  in
-  match m with
+  match mode_info lang with
   | Some info -> Option.value (json_string info "mime") ~default:lang
   | None -> lang
+
+(* mode file stem (mode/<stem>/<stem>.js) for a language, or None for
+   unknown languages and the "null" mode *)
+let mode_file lang =
+  match mode_info lang with
+  | Some info -> (
+      match json_string info "mode" with
+      | Some "null" | None -> None
+      | file -> file)
+  | None -> None
 
 let lisp_like mode = List.mem mode [ "scheme"; "lisp"; "clojure"; "edn" ]
 
@@ -483,7 +403,21 @@ let mount uuid textarea =
   (* cljs .save()/.refresh() right after mount: textarea value -> doc
      state, then a layout pass while the container is on screen *)
   save c;
-  refresh c
+  refresh c;
+  (* modes ship as lazy chunks — the editor paints plain-text first and
+     gets its real mode once the chunk registers it. Skip the swap if
+     this instance was unmounted meanwhile (stale uuid -> fresh editor) *)
+  match mode_file lang with
+  | Some file ->
+      ignore
+        (ensure_mode file
+         |> Js.Promise.then_ (fun () ->
+                (match instance uuid with
+                 | Some c' when c' == c ->
+                     set_option c "mode" (Js.Json.string mode)
+                 | _ -> ());
+                Js.Promise.resolve ()))
+  | None -> ()
 
 (* cljs sync-editor-code!: a title written by another path (undo, db
    refresh, /code conversion) is pushed into an unfocused editor *)
@@ -536,11 +470,18 @@ let close_picker () =
 
 let pick_lang uuid lang =
   close_picker ();
-  (match (instance uuid, find_mode_by_name (cm ()) lang) with
-   | Some c, Some info -> (
-       match json_string info "mode" with
-       | Some m -> set_option c "mode" (Js.Json.string m)
-       | None -> ())
+  (match (instance uuid, mode_file lang) with
+   | Some c, Some file ->
+       (* fetch the mode chunk first, then swap — same post-load path as
+          mount *)
+       ignore
+         (ensure_mode file
+          |> Js.Promise.then_ (fun () ->
+                 (match instance uuid with
+                  | Some c' when c' == c ->
+                      set_option c "mode" (Js.Json.string file)
+                  | _ -> ());
+                 Js.Promise.resolve ()))
    | _ -> ());
   ignore
     (Ops.apply_and_refresh
@@ -603,7 +544,7 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
-    load_modes ();
+    load_core ();
     (* hooks for editor_actions without a module cycle *)
     S.code_buffer_of := live_value;
     S.code_focus := focus_block;
