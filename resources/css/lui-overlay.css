@@ -1217,7 +1217,8 @@ div[data-keep-selection].menu-links-wrapper {
 .ui__dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  /* cljs shui.css maps the overlay's z-50 utility to z-999 */
+  z-index: 999;
   display: grid;
   place-items: center;
   overflow-y: auto;
@@ -1228,7 +1229,7 @@ div[data-keep-selection].menu-links-wrapper {
 .ui__alert-dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 999;
   background: hsl(var(--background) / 0.8);
   backdrop-filter: blur(4px);
   animation: lui-fade-in 150ms ease-out;
@@ -1238,7 +1239,9 @@ div[data-keep-selection].menu-links-wrapper {
   position: fixed;
   left: 50%;
   top: 50%;
-  z-index: 50;
+  z-index: 999;
+  outline: none;
+  margin: 0;
   display: grid;
   gap: 1rem;
   width: 100%;
@@ -1265,7 +1268,7 @@ div[data-keep-selection].menu-links-wrapper {
   position: fixed;
   left: 50%;
   top: 50%;
-  z-index: 50;
+  z-index: 999;
   display: grid;
   gap: 1rem;
   width: 100%;
@@ -1368,11 +1371,14 @@ div[data-keep-selection].menu-links-wrapper {
   flex-shrink: 0;
 }
 
+/* cljs shui dialog title: text-lg font-semibold leading-none tracking-tight
+   (+ tailwind preflight margin reset) */
 .ui__dialog-title {
   font-size: 1.125rem;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1;
   letter-spacing: -0.01em;
+  margin: 0;
 }
 
 .ui__dialog-close {
@@ -1433,10 +1439,8 @@ div[data-keep-selection].menu-links-wrapper {
   overflow-y: auto;
 }
 
-.ls-dialog-publish-page {
-  width: auto;
-  max-width: 28rem;
-}
+/* cljs shui/dialog-open! on publish-page-dialog uses the default
+   .ui__dialog-content sizing (w-full max-w-2xl, lg:max-w-3xl) */
 
 .ls-dialog-sync-server,
 .ls-dialog-publish-server {
@@ -1456,6 +1460,20 @@ div[data-keep-selection].menu-links-wrapper {
 .ui__dialog-content[label="plugins-dashboard"] {
   width: 90vw;
   max-width: 1246px;
+  max-height: calc(100vh - 50px);
+  overflow-y: hidden;
+}
+
+/* cljs plugins.css .cp__plugins-page.web-platform .cp__plugins-item-lists */
+.cp__plugins-page.web-platform .cp__plugins-item-lists {
+  max-height: 80vh;
+  height: calc(100vh - 320px);
+  overflow-y: auto;
+}
+
+/* cljs :graph/new-db-graph dialog-open! {:style {:max-width "500px"}} */
+.ui__dialog-content[label="new-db-graph"] {
+  max-width: 500px;
 }
 
 /* cljs marks the settings overlay data-align="top", but its dialog-content
@@ -3415,6 +3433,12 @@ select.form-select {
   align-items: center;
 }
 
+/* cljs components/svg.css */
+.ls-info-icon svg.info {
+  fill: var(--ls-primary-text-color);
+  transition: fill 200ms ease-in;
+}
+
 .shui-shortcut-wrap {
   display: inline-flex;
   align-items: center;
@@ -3968,22 +3992,56 @@ select.form-select {
   display: none;
 }
 
+/* cljs onboarding/index.css — article.importer is the gray-03 card;
+   .inner-card pads 55px and centers the h1/h2 header */
 .importer {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 4rem 2rem;
+  background-color: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
+  border-radius: 20px;
+  flex: 1;
 }
 
 .cp__onboarding-setups {
   display: flex;
   flex: 1;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+/* cljs onboarding/index.css centers the card on desktop */
+@media (min-width: 1024px) {
+  .cp__onboarding-setups {
+    justify-content: center;
+    align-items: center;
+  }
 }
 
 .inner-card {
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding-top: 55px;
+}
+
+/* cljs .inner-card > h1 (36px/50.4 computed), > h2 (20px/30, my-20/40) */
+.inner-card > h1.ls-imp-title {
+  font-size: 36px;
+  line-height: 1.4;
+  margin: 0;
+  text-align: center;
+}
+
+.inner-card > h2 {
+  font-size: 20px;
+  line-height: 30px;
+  margin: 20px 0 40px;
+  padding: 0 30px;
+  text-align: center;
 }
 
 .ls-imp-title {
@@ -4645,19 +4703,80 @@ select.form-select {
 }
 
 /* importer internals */
+/* cljs onboarding/index.css label.action-input — gray-06 68px rounded row */
 .action-input {
   display: flex;
   align-items: center;
   margin: 0.5rem;
+  background-color: var(--lx-gray-06, var(--ls-page-inline-code-bg-color));
+  height: 68px;
+  width: 100%;
+  opacity: 0.8;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  cursor: pointer;
+  transition: none;
 }
 
+.action-input:hover {
+  opacity: 1;
+}
+
+.action-input:active {
+  opacity: 0.5;
+}
+
+.action-input strong {
+  font-size: 18px;
+  line-height: 27px;
+}
+
+.action-input small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* cljs .importer section.c header sizes (28px / 19px lh3em) and the
+   icon column inside each action-input row (62px box, pad-4) */
 .importer .c {
   text-align: center;
+}
+
+.importer .c h1 {
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.importer .c h2 {
+  font-size: 19px;
+  line-height: 3em;
+  margin: 0;
 }
 
 .importer .d {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  padding: 20px 0;
+}
+
+.importer .d > label.action-input {
+  width: unset;
+  height: 62px;
+  flex: 1;
+  margin-bottom: 10px;
+}
+
+.action-input .as-flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  padding: 16px;
+  flex-shrink: 0;
 }
 
 .link-block {

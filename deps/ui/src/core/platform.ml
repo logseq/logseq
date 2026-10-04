@@ -187,13 +187,16 @@ let on_document_event name f = add_document_listener name f
 
 external decode_uri : string -> string = "decodeURIComponent"
 
-external js_escape : string -> string = "escape"
-
 (* OCaml source literals hold UTF-8 bytes; Melange hands them to JS as a
-   byte-string so non-ASCII renders mojibake. Percent-encode each byte then
-   UTF-8 decode to obtain the real JS string. Only safe for literals — worker
-   (transit-decoded) strings are already proper JS strings and would throw. *)
-let utf8 s = decode_uri (js_escape s)
+   byte-string so non-ASCII renders mojibake. Copy the byte chars into a
+   Uint8Array and UTF-8 decode to obtain the real JS string. Only safe for
+   literals — worker (transit-decoded) strings are already proper JS strings
+   and would throw. *)
+let utf8 : string -> string =
+  [%mel.raw
+    "function (s) { var u8 = new Uint8Array(s.length); for (var i = 0; i < \
+     s.length; i++) u8[i] = s.charCodeAt(i) & 0xff; return new \
+     TextDecoder().decode(u8) }"]
 
 external navigator_ : Js.Json.t = "navigator"
 external navigator_platform : Js.Json.t -> string = "platform" [@@mel.get]
