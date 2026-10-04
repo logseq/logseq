@@ -907,6 +907,32 @@ div[data-keep-selection].menu-links-wrapper {
   opacity: 0.45;
 }
 
+/* cljs shui TooltipContent: ui__tooltip-content z-50 rounded-md border
+   bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md */
+.ui__tooltip-content {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: max-content;
+  max-width: 20rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  animation: lui-fade-zoom-in 120ms ease-out;
+}
+
+.ls-tooltip-keys {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0.8;
+}
+
 /* cljs shui.css: flat keycap label (no border/bg) */
 .shui-shortcut-key {
   display: flex;

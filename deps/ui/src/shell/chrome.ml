@@ -35,23 +35,36 @@ let ghost_btn_cls ?(mid = "") ?(tail = "") () =
      rounded-md select-none text-sm " ^ tail
   ^ "transition-colors ui__button w-6 whitespace-nowrap"
 
-let icon_btn ~key ~id ~cls ~icon ~on_click =
+(* the trailing () discharges the optionals — without it a call that
+   skips ?tip_keys stays a partial application because the element
+   type t is itself a function type *)
+let icon_btn ?tip ?tip_keys ~key ~id ~cls ~icon ~on_click () =
   Logseq_dom.dom ~key ~tag:"button" ~id
     ~style_class:cls
-    ~attrs:[ ("type", "button") ]
+    ~attrs:
+      ([ ("type", "button") ]
+      @ (match tip with
+         | Some t -> [ ("data-tooltip", t) ]
+         | None -> [])
+      @ (match tip_keys with
+         | Some k -> [ ("data-tooltip-keys", k) ]
+         | None -> []))
     ~events:"click"
     ~on_dom_event:(fun name payload -> if name = "click" then on_click payload)
     [ Icons.icon ~size:20. ~cls:"" icon ]
 
+(* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
 let search_button =
   icon_btn ~key:"search-btn" ~id:"search-button" ~cls:(ghost_btn_cls ())
-    ~icon:"search"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_search)
+    ~icon:"search" ~tip:(I18n.t "nav/search") ~tip_keys:"⌘ K"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_search) ()
 
+(* cljs ui/tooltip (t :header/more) *)
 let dots_button =
   Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
     ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn " ())
-    ~attrs:[ ("type", "button") ]
+    ~attrs:
+      [ ("type", "button"); ("data-tooltip", I18n.t "header/more") ]
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       (* cljs anchors the dropdown to the trigger's right edge, not
@@ -118,11 +131,13 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
             ])
     (Signal.map (fun (m : Model.t) -> m.rtc) ms)
 
+(* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
     ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu " ())
-    ~icon:"menu-2"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
+    ~icon:"menu-2" ~tip:(I18n.t "header/toggle-left-sidebar")
+    ~tip_keys:"T L"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar) ()
 
 (* cljs header.cljs: home button hidden on the :home route and on a
    custom home page *)
@@ -134,9 +149,11 @@ let home_button ms =
       | Model.Home -> Logseq_dom.nothing
       | _ ->
           icon_btn ~key:"home-btn" ~id:"" ~cls:(ghost_btn_cls ())
-            ~icon:"home" ~on_click:(fun _ ->
+            ~icon:"home" ~tip:(I18n.t "nav/home")
+            ~on_click:(fun _ ->
               Platform.set_location_hash "#/";
-              Platform.dispatch "ls:navigate" Js.Json.null))
+              Platform.dispatch "ls:navigate" Js.Json.null)
+            ())
     ms
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
@@ -145,9 +162,11 @@ let right_toggle_button ms =
   icon_btn ~key:"rs-toggle" ~id:""
     ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar " ())
     ~icon:"layout-sidebar-right"
+    ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~tip_keys:"T R"
     ~on_click:(fun _ ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
+    ()
 
 let header (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"head" ~tag:"div" ~id:"head"

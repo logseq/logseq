@@ -1161,7 +1161,8 @@ let install_listeners st =
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)
-  Platform.on_hash_change (fun () -> S.close_pv st)
+  Platform.on_hash_change (fun () -> S.close_pv st);
+  Tooltip.install ()
 ;;
 
 let render (_ms : Model.t Signal.signal) : t =
