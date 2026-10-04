@@ -206,7 +206,7 @@ let query_view_el inst : t =
     [ dom ~style_class:"views-query-inner"
         [ D.dyn ~equal:body_eq
             (fun s ->
-              D.fragment
+              dom
                 [ (* dsl queries (and blank ones) get the builder panel;
                      datalog don't *)
                   (match Views_query.parse_src s.V.qsrc with
@@ -550,22 +550,34 @@ let view ~kind ~owner : t =
               V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
             in
             Hashtbl.replace query_insts block_uuid inst;
-            V.update inst (fun s ->
-                { s with
-                  V.is_advanced =
-                    (let t = String.trim s.V.qsrc in
-                     String.length t > 0 && t.[0] = '{')
-                ; view_uuid = block_uuid
-                });
+            (* staged, not flushed — V.update flushes, and a flush inside
+               the element mount corrupts the pending op stream *)
+            Signal.set inst.V.st
+              { (V.get inst) with
+                V.is_advanced =
+                  (let t = String.trim (V.get inst).V.qsrc in
+                   String.length t > 0 && t.[0] = '{')
+              ; view_uuid = block_uuid
+              };
             (inst, true))
     | _ ->
         (V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner, true)
   in
   Hashtbl.replace live inst.V.id inst;
-  (match kind, fresh with
-   | V.KQuery _, _ -> refresh inst
-   | _, true -> load_views inst ~on_done:(fun () -> ensure_default_view inst)
-   | _ -> ());
+  (* defer to post-mount: refresh flushes signals, which must not run
+     while the mount is still emitting ops (a microtask, so the current
+     mount + its enclosing flush settle first) *)
+  ignore
+    Js.Promise.(
+      resolve ()
+      |> then_ (fun () ->
+          (match kind, fresh with
+           | V.KQuery _, _ -> refresh inst
+           | _, true ->
+               load_views inst ~on_done:(fun () ->
+                   ensure_default_view inst)
+           | _ -> ());
+          resolve ()));
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
       Hashtbl.remove live inst.V.id;
       match inst.V.kind with

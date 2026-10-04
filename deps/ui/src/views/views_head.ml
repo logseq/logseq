@@ -537,7 +537,7 @@ let search_el inst : t =
                   0
               end)
         ; if_ ~test:open_sig
-            (D.fragment
+            (dom
                [ dom ~tag:"input" ~style_class:"ls-search-input"
                    ~attrs:
                      [ ("type", "text"); ("id", input_id)
