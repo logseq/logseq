@@ -172,6 +172,7 @@ type rtc =
   ; rtc_pending_asset : int
   ; rtc_pending_server : int
   ; rtc_online_users : rtc_user list (* online-users *)
+  ; rtc_missing_files : string list (* missing-asset-upload-files :file *)
   }
 
 (* worker :notification broadcast -> toast *)
@@ -218,6 +219,11 @@ type t =
   ; help_open : bool
   ; unlinked_blocks : block list
   ; rtc : rtc option
+  ; (* latest rtc.log/download|upload sub-type activity — the cljs
+       *downloading?/*uploading? atoms behind the header
+       downloading-detail/uploading-detail buttons *)
+    rtc_downloading : bool
+  ; rtc_uploading : bool
   ; data_gen : int (* bumped whenever a block/page-bearing field is
                       reassigned — cheap revision for dyn ~equal so
                       block trees are never structurally compared *)
@@ -254,6 +260,8 @@ let initial =
   ; help_open = false
   ; unlinked_blocks = []
   ; rtc = None
+  ; rtc_downloading = false
+  ; rtc_uploading = false
   ; data_gen = 0
   }
 

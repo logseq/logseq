@@ -151,6 +151,76 @@ external el_contains : B.E.t -> Js.Json.t -> bool = "contains"
 
 external ev_key : Js.Json.t -> string = "key" [@@mel.get]
 
+(* tabler alert-triangle glyph — cljs ui/icon inside the
+   missing-asset-files rows *)
+let alert_triangle_svg () =
+  let s = B.create "span" in
+  B.inner_html_set s
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" \
+     height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" \
+     stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" \
+     stroke-linejoin=\"round\" class=\"tabler-icon \
+     tabler-icon-alert-triangle \"><path d=\"M12 9v4\"/><path \
+     d=\"M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 \
+     1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z\"\
+     /><path d=\"M12 16h.01\"/></svg>";
+  s
+
+(* cljs missing-asset-files: <details.assets-missing-files> listing the
+   files waiting for an upload *)
+let missing_files_details (files : string list) =
+  let det = B.create "details" in
+  B.set_class det "assets-missing-files";
+  let sum = B.create "summary" in
+  B.set_text sum
+    (I18n.t1 "sync/missing-asset-files-count"
+       (string_of_int (List.length files)));
+  B.append det sum;
+  let inner = B.create "div" in
+  B.set_class inner "flex flex-col gap-1 text-sm";
+  List.iter
+    (fun f ->
+      let row = B.create "div" in
+      B.set_class row "flex flex-row gap-1 items-center";
+      B.append row (alert_triangle_svg ());
+      let sp = B.create "span" in
+      B.set_class sp "truncate";
+      B.set_text sp f;
+      B.append row sp;
+      B.append inner row)
+    files;
+  B.append det inner;
+  det
+
+(* cljs assets-progressing rows resolve block titles via <get-blocks;
+   fill each title span when the worker answers *)
+let enrich_asset_title (sp : B.E.t) (repo : string) (asset_id : string) =
+  ignore
+    (let open Promise_ext in
+    let* w =
+      Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+        (Wire.List
+           [ Wire.Map
+               [ (Wire.Keyword "id", Wire.String asset_id)
+               ; ( Wire.Keyword "opts"
+                 , Wire.Map [ (Wire.Keyword "children?", Wire.Bool false) ] )
+               ]
+           ])
+    in
+    (match w with
+     | Wire.Array items | Wire.List items ->
+         List.iter
+           (fun item ->
+             match Wire.get item "block" with
+             | Some b -> (
+                 match Wire.map_get_string b "block/title" with
+                 | Some t when t <> "" -> B.set_text sp t
+                 | _ -> ())
+             | _ -> ())
+           items
+     | _ -> ());
+    Js.Promise.resolve ())
+
 (* one-shot guards: the same click that opened the menu bubbles up to
    document, and the doc listeners themselves can't be unbound *)
 let rtc_doc_hooked = ref false
@@ -206,10 +276,85 @@ let open_rtc_details () =
   and p_server =
     match r with Some r -> r.rtc_pending_server | None -> 0
   in
+  (* cljs asset-status-rows: missing files, remaining pending uploads,
+     live upload/download transfers — each row only while positive *)
+  let missing_files =
+    match r with Some r -> r.rtc_missing_files | None -> []
+  in
+  let missing_count = List.length missing_files in
+  let p_upload = max 0 (p_asset - missing_count) in
+  let n_up, n_down =
+    match (Runtime.model ()).Model.repo with
+    | Some repo -> Asset_progress.transfer_counts repo
+    | None -> (0, 0)
+  in
   B.append info (pend_row "sync/pending-local-changes" p_local);
-  if p_asset > 0 then
-    B.append info (pend_row "sync/pending-asset-uploads" p_asset);
+  if missing_count > 0 then
+    B.append info (pend_row "sync/missing-asset-files" missing_count);
+  if p_upload > 0 then
+    B.append info (pend_row "sync/pending-asset-uploads" p_upload);
+  if n_up > 0 then
+    B.append info (pend_row "sync/assets-uploading" n_up);
+  if n_down > 0 then
+    B.append info (pend_row "sync/assets-downloading" n_down);
   B.append info (pend_row "sync/pending-server-changes" p_server);
+  if missing_files <> [] then
+    B.append info (missing_files_details missing_files);
+  (* cljs assets-progressing: <details> per direction with
+     percent + block title *)
+  let in_flight =
+    match (Runtime.model ()).Model.repo with
+    | Some repo -> Asset_progress.in_flight repo
+    | None -> []
+  in
+  if in_flight <> [] then begin
+    let wrap = B.create "div" in
+    B.set_class wrap "assets-sync-progress flex flex-col gap-2";
+    List.iter
+      (fun (dir, label_key) ->
+        let rows =
+          List.filter
+            (fun (p : Asset_progress.t) ->
+              p.ap_direction = dir)
+            in_flight
+        in
+        if rows <> [] then begin
+          let det = B.create "details" in
+          let sum = B.create "summary" in
+          B.set_text sum
+            (I18n.t1 label_key (string_of_int (List.length rows)));
+          B.append det sum;
+          let inner = B.create "div" in
+          B.set_class inner "flex flex-col gap-1 text-sm";
+          List.iter
+            (fun (p : Asset_progress.t) ->
+              let row = B.create "div" in
+              B.set_class row "flex flex-row gap-1 items-center";
+              let pct = B.create "span" in
+              B.set_class pct "indicator-progress-pie";
+              B.set_text pct
+                (string_of_int
+                   (int_of_float
+                      (100.0 *. Float.of_int p.ap_loaded
+                      /. Float.of_int p.ap_total))
+                ^ "%");
+              B.append row pct;
+              let sp = B.create "span" in
+              B.set_class sp "truncate";
+              B.set_text sp p.ap_id;
+              (match (Runtime.model ()).Model.repo with
+               | Some repo -> enrich_asset_title sp repo p.ap_id
+               | None -> ());
+              B.append row sp;
+              B.append inner row)
+            rows;
+          B.append det inner;
+          B.append wrap det
+        end)
+      [ ("download", "sync/assets-downloading-count")
+      ; ("upload", "sync/assets-uploading-count") ];
+    B.append info wrap
+  end;
   (match !Rtc_flows.last_sync_ms with
    | Some ms ->
        B.append info
@@ -329,6 +474,29 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
               ]
           ]))
     (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)
+
+(* cljs indicator.cljs downloading-detail / uploading-detail — ghost
+   buttons visible while the latest rtc.log download|upload entry's
+   sub-type isn't *-completed; gated on logged-in only (header.cljs) *)
+let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
+    =
+  dyn ~equal:( = )
+    (fun (active : bool) ->
+      if not (Rtc_flows.logged_in () && active) then
+        Logseq_dom.dom ~key:"td-off" ~style_class:"hidden" []
+      else
+        Logseq_dom.dom ~key:"td" ~tag:"button"
+          ~style_class:"ui__button as-ghost opacity-50"
+          ~attrs:[ ("type", "button") ]
+          ~text:
+            (I18n.t
+               (if downloading then "sync/downloading"
+                else "sync/uploading"))
+          [])
+    (Signal.map
+       (fun (m : Model.t) ->
+         if downloading then m.rtc_downloading else m.rtc_uploading)
+       ms)
 
 (* cljs header.cljs local-graph-sync-button — cloud ghost button that
    uploads the open local graph to the sync server. Visible when the
@@ -464,6 +632,8 @@ let header (ms : Model.t Signal.signal) =
                  gate — collaborators then the cloud indicator *)
               Collaborators.widget ms
             ; rtc_indicator ms
+            ; transfer_detail_widget ~downloading:true ms
+            ; transfer_detail_widget ~downloading:false ms
             ; local_graph_sync_button ms
             ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders

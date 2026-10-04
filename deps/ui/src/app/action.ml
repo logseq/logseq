@@ -40,4 +40,9 @@ type t =
   | Help_toggle
   | Rtc_state of Model.rtc (* rtc-sync-state broadcast *)
   | Rtc_state_clear (* a graph's sync is (re)starting — hide stale state *)
+  | Rtc_flow_flags of
+      { downloading : bool
+      ; uploading : bool
+      } (* latest rtc.log sub-type activity — downloading-detail /
+           uploading-detail header buttons *)
   | Noop

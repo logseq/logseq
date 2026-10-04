@@ -721,4 +721,14 @@ let rtc_of_wire (w : Wire.t) : Model.rtc =
   ; rtc_pending_asset = int "pending-asset-ops-count"
   ; rtc_pending_server = int "pending-server-ops-count"
   ; rtc_online_users = online_users
+  ; rtc_missing_files =
+      (match Wire.get w "missing-asset-upload-files" with
+       | Some (Wire.Array xs) | Some (Wire.List xs) ->
+           List.filter_map
+             (fun f ->
+               match Wire.get f "file" with
+               | Some (Wire.String s) -> Some s
+               | _ -> None)
+             xs
+       | _ -> [])
   }

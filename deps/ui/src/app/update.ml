@@ -216,6 +216,10 @@ let update (model : t) (action : Action.t) : t =
   | Help_toggle -> { model with help_open = not model.help_open }
   | Rtc_state rtc -> { model with rtc = Some rtc }
   | Rtc_state_clear -> { model with rtc = None }
+  | Rtc_flow_flags { downloading; uploading } ->
+      { model with rtc_downloading = downloading
+      ; rtc_uploading = uploading
+      }
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model
