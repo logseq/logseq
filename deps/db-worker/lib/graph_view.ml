@@ -1385,8 +1385,9 @@ imadd m pid (ident :: cur))
 imadd m k n
           in
           (* keys are string ids — parse back to int *)
-          let to_id s = try int_of_string s with _ -> 0 in
-          add (to_id a) m |> add (to_id b))
+          match (int_of_string_opt a, int_of_string_opt b) with
+          | Some a, Some b -> add a m |> add b
+          | _ -> m)
         IntMap.empty str_links
     in
     let links = build_links links0 in

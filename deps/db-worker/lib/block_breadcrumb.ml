@@ -7,7 +7,8 @@ module Ev = Entity_view
 
 let load_depth = 16
 
-let fail msg data = failwith (Printf.sprintf "%s %s" msg data)
+let fail msg data =
+  raise (Dispatcher.Exn_info (msg, [ (Wire.String "data", Wire.String data) ]))
 
 let eavt_scalar db (eid : entity_id) (attr : attr) : value option =
   match Seq.uncons (datoms db Eavt ~e:eid ~a:attr ()) with
