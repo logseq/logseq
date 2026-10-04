@@ -103,7 +103,10 @@ let page_items (p : Model.page) =
     with
     | Some "true" | Some "\"true\"" ->
         [ item "dev-page-data" "(Dev) Show page data" (fun () ->
-              Runtime.send (Action.Page_menu_set None)) ]
+              Runtime.send (Action.Page_menu_set None);
+              match p.page_uuid, !(Runtime.current_repo) with
+              | Some u, Some repo -> Dialogs_state.show_entity_data repo u
+              | _ -> ()) ]
     | _ -> []
   in
   fav @ del @ [ export_page; publish_page ] @ convert @ dev

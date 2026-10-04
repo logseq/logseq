@@ -19,6 +19,8 @@ type prompt =
 (* db-worker/ui-request layer: the worker asks the UI for an e2ee
    password (request-e2ee-password). ur_reject reports cancellation
    back to the worker; the resolver lives in ui_requests.ml. *)
+open Promise_ext
+
 type ui_request =
   { ur_id : string
   ; ur_reason : string
@@ -30,9 +32,12 @@ type t =
   ; confirm : confirm option
   ; prompt : prompt option
   ; ui_request : ui_request option
+  ; dump : string (* dev/show-* pulled entity data, entity-data dialog *)
   }
 
-let initial = { dialogs = []; confirm = None; prompt = None; ui_request = None }
+let initial =
+  { dialogs = []; confirm = None; prompt = None; ui_request = None
+  ; dump = "" }
 
 let st : t Signal.state option ref = ref None
 
@@ -94,6 +99,36 @@ let open_ name =
     set (fun d -> { d with dialogs = d.dialogs @ [ name ] });
     touch name)
 
+(* dev/show-*: stash the pulled-entity dump and open its dialog *)
+let dump () = (value ()).dump
+
+let open_dump ~text =
+  if ready () then (
+    set (fun d -> { d with dump = text });
+    open_ "entity-data")
+
+(* cljs show-entity-data: pull [*] and dump it into a dialog *)
+let show_entity_data repo uuid =
+  ignore
+    (let* w =
+       Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+         (Wire.String "[*]")
+         (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+     in
+     open_dump ~text:(Edn.to_string w);
+     Js.Promise.resolve ())
+
+(* cljs show-block-ast: dump the worker-side parse of the block title *)
+let show_block_ast repo uuid title =
+  ignore
+    (let* w =
+       Runtime.invoke2 "thread-api/parse-block" (Wire.String repo)
+         (Wire.Map [ Wire.String "block/title", Wire.String title
+                   ; Wire.String "block/uuid", Wire.Uuid uuid ])
+     in
+     open_dump ~text:(Edn.to_string w);
+     Js.Promise.resolve ())
+
 let close_top () =
   (match value () with
    | { prompt = None; confirm = None; ui_request = Some r; _ } ->
@@ -116,7 +151,9 @@ let close_top () =
 (* cljs close-e2ee-blocking-ui!: a ui-request closes every other layer
    and sits on top until resolved/rejected *)
 let open_ui_request r =
-  set (fun _ -> { dialogs = []; confirm = None; prompt = None; ui_request = Some r })
+  set (fun _ ->
+      { dialogs = []; confirm = None; prompt = None
+      ; ui_request = Some r; dump = "" })
 
 let clear_ui_request () = set (fun d -> { d with ui_request = None })
 
@@ -175,6 +212,10 @@ let init () =
     Platform.on_document_event "ls:open-dialog" (fun ev ->
         match detail_field ev "name" with
         | "" -> ()
+        | "graphs" ->
+            (* the graphs selector is a route, not a dialog — hashchange
+               runs resolve() which closes dialogs and navigates *)
+            Platform.set_location_hash "#/graphs"
         | name -> if known name then open_ name);
     Platform.on_document_event "ls:close-dialog" (fun _ -> close_top ());
     Browser_ui.on_document "keydown" (fun ev ->

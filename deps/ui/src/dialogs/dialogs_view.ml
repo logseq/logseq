@@ -58,6 +58,20 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "publish-page" -> Publish_view.body ms
   | "sync-server" -> Settings_url_view.sync_body ms
   | "publish-server" -> Settings_url_view.publish_body ms
+  | "entity-data" ->
+      (* dev/show-*: pulled entity dump + copy button (cljs notification) *)
+      let text = Dialogs_state.dump () in
+      dom ~key:"edump" ~style_class:"p-4 ls-entity-data"
+        [ dom ~key:"edump-b" ~tag:"button"
+            ~style_class:(btn_style ^ " ls-btn-primary mb-2")
+            ~text:(I18n.t "ui/copy-to-clipboard") ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then Platform.copy_to_clipboard text)
+            []
+        ; dom ~key:"edump-p" ~tag:"pre"
+            ~style_class:"code whitespace-pre-wrap overflow-auto"
+            ~text:text []
+        ]
 
   | "quick-add" -> Quick_add_view.body ms
   | _ -> box ~key:("empty-" ^ name) []
