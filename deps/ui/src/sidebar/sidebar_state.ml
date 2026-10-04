@@ -48,7 +48,15 @@ type t =
   }
 
 let st_ref : t option ref = ref None
-let model_ref : Model.t ref = ref Model.initial
+
+(* the live model signal — stored at init so document-event handlers
+   read current model state without a shadow ref of their own *)
+let model_signal : Model.t Signal.signal option ref = ref None
+
+let model () =
+  match !model_signal with
+  | Some ms -> Signal.get ms
+  | None -> Model.initial
 let hook_installed = ref false
 let loaded_repo : string option ref = ref None
 let last_page_key : string option ref = ref None
@@ -113,7 +121,7 @@ let sync_right_sidebar_width () =
         | None -> "40%"
       in
       set_el_width el
-        (if (!model_ref).Model.right_sidebar_open then width else "0px")
+        (if (model ()).Model.right_sidebar_open then width else "0px")
   | None -> ()
 
 (* ---------- resizers ----------
@@ -236,7 +244,7 @@ let left_touch_y ev i =
 let set_el_style el name v = style_set_prop el name v
 
 let apply_touch_drag sb dx =
-  let open_ = (!model_ref).Model.left_sidebar_open in
+  let open_ = (model ()).Model.left_sidebar_open in
   (match doc_query "#left-sidebar .left-sidebar-inner" with
    | Some inner ->
        let w = el_offset_width inner in
@@ -308,7 +316,7 @@ let on_doc_touchmove ev =
 
 let on_doc_touchend _ev =
   if !touch_pending then begin
-    let open_ = (!model_ref).Model.left_sidebar_open in
+    let open_ = (model ()).Model.left_sidebar_open in
     let dx = !touch_dx in
     (* cljs: >40px rightward opens the closed sidebar; >30px leftward
        closes the open one *)
@@ -551,7 +559,7 @@ let open_dialog name =
 let open_cards () = Platform.dispatch "ls:open-cards" Js.Json.null
 
 let ensure_right_open () =
-  if not (!model_ref).Model.right_sidebar_open then
+  if not (model ()).Model.right_sidebar_open then
     Runtime.send Action.Toggle_right_sidebar
 
 (* ---------- right-sidebar items ---------- *)
@@ -777,7 +785,7 @@ let remove_rest st key =
 
 let clear_items st =
   Runtime.signal_set st.items [];
-  if (!model_ref).Model.right_sidebar_open then
+  if (model ()).Model.right_sidebar_open then
     Runtime.send Action.Toggle_right_sidebar
 ;;
 
@@ -895,7 +903,7 @@ let refresh_items repo st =
 (* ---------- favorites ---------- *)
 
 let toggle_favorite st =
-  match !Runtime.current_page, (!model_ref).Model.repo with
+  match !Runtime.current_page, (model ()).Model.repo with
   | Some p, Some repo -> (
       match p.Model.page_uuid with
       | Some u ->
@@ -917,7 +925,7 @@ let toggle_favorite st =
   | _ -> ()
 
 let unfavorite st uuid =
-  match (!model_ref).Model.repo with
+  match (model ()).Model.repo with
   | Some repo ->
       then_keep
         (Runtime.invoke3 "thread-api/set-page-favorite" (Wire.String repo)
@@ -928,7 +936,7 @@ let unfavorite st uuid =
 (* ---------- model / worker wiring ---------- *)
 
 let on_sync st =
-  match (!model_ref).Model.repo with
+  match (model ()).Model.repo with
   | Some repo ->
       (* the route reload comes from Worker_events.dispatch's debounced
          Router.reload — refetching it here too doubled the work per
@@ -951,7 +959,6 @@ let page_key (p : Model.page) =
   | None -> "d:" ^ string_of_int (Option.value p.Model.page_db_id ~default:0)
 
 let on_model st (m : Model.t) =
-  model_ref := m;
   (match m.Model.repo with
    | Some repo when !loaded_repo <> Some repo ->
        loaded_repo := Some repo;
@@ -1059,7 +1066,7 @@ let on_doc_click st ev =
          navigation target inside the open sidebar closes it *)
       if
         sm_breakpoint ()
-        && (!model_ref).Model.left_sidebar_open
+        && (model ()).Model.left_sidebar_open
       then
         match
           click_target
@@ -1096,7 +1103,7 @@ let on_doc_keydown st ev =
       match Worker_client.json_string k with
       | Some "Escape" ->
           if Signal.get_state st.open_menu <> "" then close_menu st
-          else if (!model_ref).Model.appearance <> None then
+          else if (model ()).Model.appearance <> None then
             Runtime.send (Action.Appearance_set None)
 
       (* mod+shift+f = :page/toggle-favorite (cljs shortcut config) *)
@@ -1122,6 +1129,7 @@ let init (ms : Model.t Signal.signal) : t =
         }
       in
       st_ref := Some st;
+      model_signal := Some ms;
       (* sidebar item blocks are editable: expose them to Editor_state.find
          so click-to-edit works on .cp__right-sidebar block rows *)
       Editor_state.add_block_source (fun uuid ->
