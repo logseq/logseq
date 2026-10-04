@@ -394,7 +394,7 @@ final class NSReferenceBox {
       "button": 2,
       "nodeId": nodeID,
     ]
-    payload["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    payload["target"] = LogseqDOMSnapshot.snapshot(of: nodeID, context: context)
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
@@ -434,7 +434,7 @@ final class NSReferenceBox {
       "clientY": Double(point.y),
       "nodeId": nodeID,
     ]
-    payload["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    payload["target"] = LogseqDOMSnapshot.snapshot(of: nodeID, context: context)
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
@@ -469,7 +469,7 @@ final class NSReferenceBox {
     {
       payload["targetId"] = targetId
     }
-    payload["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    payload["target"] = LogseqDOMSnapshot.snapshot(of: nodeID, context: context)
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
@@ -488,7 +488,7 @@ final class NSReferenceBox {
       "button": 0,
       "nodeId": nodeID,
     ]
-    payload["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    payload["target"] = LogseqDOMSnapshot.snapshot(of: nodeID, context: context)
     guard
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)

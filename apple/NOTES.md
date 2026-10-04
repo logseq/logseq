@@ -1193,3 +1193,25 @@ zoom!=1 path keeps the reader since it needs the container size.
   (`LogseqFrameStore.baseEntries`); only overlay/imperative elements
   keep view-layer `onGeometryChange` reports (`overlayEntries`).
   `hitTest` prefers the last-hit node before scanning.
+- Pitfall: wake-channel exploration — parked `_DPSNextEvent` only
+  services the window-server event connection. Measured dead ends:
+  GCD main.async / CFRunLoopWakeUp / CFMachPort source msgs /
+  self-AppleEvents all stall 0.6-2.9s; commonMode timers tick but only
+  when the loop isn't parked (`mode=none` gaps of 1.8-3.5s during
+  tracking bursts); pthread_kill reaches the wait but interrupts
+  mach_msg_trap inside nested tracking loops and eats real events
+  (frozen menu repro); Carbon PostEventToQueue returns success but
+  AppKit drops the unknown event class before it becomes an NSEvent
+  (zero appDefined sightings). Working carrier: a real `flagsChanged`
+  CGEvent posted to `cghidEventTap` with the current modifier flags —
+  a dispatched no-op the `.any` local monitor drains on, delivered in
+  ~5ms even while `mode=none`. Keep the mach-port msg + 100ms timer as
+  live-loop fast path and backstop.
+- Pitfall: click/mouse payloads snapshotted the whole context
+  (`snapshot(for: context)` = document root + ancestors); emit paths
+  now snapshot just the target node (`snapshot(of: nodeID, context:)`).
+- Note: the computer-use tool on this VM delivers clicks via AXPress —
+  menus opened this way enter tracking with no real input and appear
+  "frozen" (menu items, Escape, keyboard dead). It is a tooling
+  artifact, not an app bug; dismiss via AXCancel through
+  `osascript -e 'tell application "System Events" to ...'`.

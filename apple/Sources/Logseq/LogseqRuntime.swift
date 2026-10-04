@@ -10,9 +10,15 @@ import Observation
 /// the OCaml runtime started by `lui_ocaml_start` on this thread.
 private typealias PatchCallback = @convention(c) (UnsafePointer<CChar>?) -> Void
 private typealias WakeupCallback = @convention(c) () -> Void
+
 private typealias PlatformRequestCallback =
   @convention(c) (UnsafePointer<CChar>?, Int32) -> Void
 
+// Carbon PostEventToQueue was tried as the wake channel: it returns
+// success but AppKit drops the unknown event class before it ever
+// becomes an NSEvent, so it neither wakes the parked wait nor reaches
+// local event monitors. The working carrier is a real flagsChanged
+// CGEvent — see postWakeup().
 @_silgen_name("lui_ocaml_start")
 private func luiOCamlStart(
   _ callback: PatchCallback?,
@@ -139,17 +145,27 @@ private func installModeProbe() {
   }
 }
 
-/// 50ms repeating runloop timer — if it ticks during the stall window,
-/// timers DO fire in the parked event wait and a one-shot timer per
-/// enqueue can replace the lost wakeup.
+/// Adaptive drain timer — the parked _DPSNextEvent wait was measured to
+/// service runloop timers every turn even while no real events exist
+/// (rlphase marks cycle ~50ms), while every other wake channel stalls
+/// (GCD, CFRunLoopWakeUp, mach-port source, postEvent:, posted CGEvents
+/// ~650ms, activate() ~300-800ms, signals delivered but ignored, IOHID
+/// injection filtered). Instead of waking the loop we ride the timer:
+/// enqueue tightens the next fire to ~2ms and the handler drains the
+/// pending queue on that same turn; idle cadence stays 100ms.
+nonisolated(unsafe) private var drainTimer: CFRunLoopTimer?
+
 private func installTickTimer() {
-  let t = CFRunLoopTimerCreateWithHandler(
-    nil, CFAbsoluteTimeGetCurrent() + 0.05, 0.05, 0, 0
+  drainTimer = CFRunLoopTimerCreateWithHandler(
+    nil, CFAbsoluteTimeGetCurrent() + 0.1, 0.1, 0, 0
   ) { _ in
-    FileHandle.standardError.write(
-      "PERF tick t=\(CFAbsoluteTimeGetCurrent())\n".data(using: .utf8)!)
+    drainRunOnMainPending(via: "timer")
+    if LogseqRuntime.perfLogging {
+      FileHandle.standardError.write(
+        "PERF tick t=\(CFAbsoluteTimeGetCurrent())\n".data(using: .utf8)!)
+    }
   }
-  CFRunLoopAddTimer(CFRunLoopGetMain(), t, CFRunLoopMode.commonModes)
+  CFRunLoopAddTimer(CFRunLoopGetMain(), drainTimer, CFRunLoopMode.commonModes)
 }
 
 private func installEventDrainMonitor() {
@@ -159,20 +175,20 @@ private func installEventDrainMonitor() {
     runOnMainLock.unlock()
     if LogseqRuntime.perfLogging {
       FileHandle.standardError.write(
-        "PERF nsev t=\(CFAbsoluteTimeGetCurrent()) type=\(event.type.rawValue) pending=\(!empty)\n"
+        "PERF nsev t=\(CFAbsoluteTimeGetCurrent()) type=\(event.type.rawValue) kc=\(event.keyCode) pending=\(!empty)\n"
           .data(using: .utf8)!)
     }
-    if !empty { drainRunOnMainPending() }
+    if !empty { drainRunOnMainPending(via: "nsev") }
     return event
   }
 }
 
-private func drainRunOnMainPending() {
+private func drainRunOnMainPending(via: String = "?") {
   // Queued work contains MainActor.assumeIsolated — running it off the
   // main thread traps; re-route through the runloop instead.
   guard Thread.isMainThread else {
     CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue) {
-      drainRunOnMainPending()
+      drainRunOnMainPending(via: "block")
     }
     CFRunLoopWakeUp(CFRunLoopGetMain())
     return
@@ -180,7 +196,15 @@ private func drainRunOnMainPending() {
   runOnMainLock.lock()
   let batch = runOnMainPending
   runOnMainPending.removeAll()
+  wakeInFlight = false
   runOnMainLock.unlock()
+  if LogseqRuntime.perfLogging, !batch.isEmpty {
+    let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain())
+      .map { $0.rawValue as String } ?? "none"
+    FileHandle.standardError.write(
+      "PERF drain t=\(CFAbsoluteTimeGetCurrent()) n=\(batch.count) via=\(via) mode=\(mode)\n"
+        .data(using: .utf8)!)
+  }
   for item in batch { item() }
 }
 
@@ -191,32 +215,34 @@ private func drainRunOnMainPending() {
 /// Sending a real mach message to this source's port lands on the same
 /// waitset a real event arrives on, so the handler drains the queue on
 /// the very next turn. CFRunLoopWakeUp, DispatchQueue.main.async,
-/// NSApp.postEvent, synthetic CGEvents and cross-thread timer re-arming
-/// were all measured to sit behind the parked wait for seconds.
+/// NSApp.postEvent, self-AppleEvents and commonMode timers were all
+/// measured to sit behind the parked wait — only a real CGEvent posted
+/// to our own pid reaches it (postWakeup).
 nonisolated(unsafe) private var wakeupPort: mach_port_t = mach_port_t(MACH_PORT_NULL)
 nonisolated(unsafe) private var wakeupSource: CFRunLoopSource?
-nonisolated(unsafe) private var selfAppleEvent: NSAppleEventDescriptor?
 
 private func installWakeupSource() {
   var ctx = CFMachPortContext()
   let port = CFMachPortCreate(
     nil,
-    { _, _, _, _ in drainRunOnMainPending() },
+    { _, _, _, _ in drainRunOnMainPending(via: "port") },
     &ctx,
     nil
   )!
   wakeupPort = CFMachPortGetPort(port)
   wakeupSource = CFMachPortCreateRunLoopSource(nil, port, 0)
   CFRunLoopAddSource(CFRunLoopGetMain(), wakeupSource, CFRunLoopMode.commonModes)
-  let target = NSAppleEventDescriptor(
-    processIdentifier: ProcessInfo.processInfo.processIdentifier)
-  selfAppleEvent = NSAppleEventDescriptor(
-    eventClass: AEEventClass(kAEMiscStandards),
-    eventID: AEEventID(kAEGetData),
-    targetDescriptor: target,
-    returnID: AEReturnID(kAutoGenerateReturnID),
-    transactionID: AETransactionID(kAnyTransactionID))
 }
+
+/// One synthetic event in flight at a time — the drain clears the flag, so
+/// items queued before the wake lands don't spam extra CGEvents. The
+/// timestamp lets a dropped event unlock posting again after 1s instead of
+/// stalling the queue forever.
+nonisolated(unsafe) private var wakeInFlight = false
+nonisolated(unsafe) private var wakePostedAt: CFAbsoluteTime = 0
+/// Alternates the synthetic flagsChanged's keyCode (61/62) so consecutive
+/// wakes can't coalesce into one delivery.
+nonisolated(unsafe) private var wakeJitter = 0
 
 private func postWakeup() {
   guard wakeupPort != mach_port_t(MACH_PORT_NULL) else { return }
@@ -243,6 +269,55 @@ private func postWakeup() {
     FileHandle.standardError.write(
       "PERF wakefail rc=\(rc)\n".data(using: .utf8)!)
   }
+  // The parked _DPSNextEvent wait services NOTHING but events arriving on
+  // the window-server event connection — measured: commonMode timers,
+  // GCD main.async, CFRunLoopWakeUp, CFMachPort source msgs and self-sent
+  // AppleEvents (short-circuit locally, never reach the connection) all
+  // sit for seconds while commonMode sources go unobserved. Post a real
+  // CGEvent to our own pid: it lands on that same connection, the runloop
+  // turns, the queued mach msg runs our order-0 source → drain.
+  let now = CFAbsoluteTimeGetCurrent()
+  runOnMainLock.lock()
+  let stale = now - wakePostedAt > 1.0
+  let inFlight = wakeInFlight && !stale
+  if !inFlight {
+    wakeInFlight = true
+    wakePostedAt = now
+  }
+  runOnMainLock.unlock()
+  if LogseqRuntime.perfLogging {
+    FileHandle.standardError.write(
+      "PERF wake t=\(now) skip=\(inFlight ? 1 : 0)\n"
+        .data(using: .utf8)!)
+  }
+  guard !inFlight else { return }
+  // Tighten the drain timer — the parked wait services timers, so the
+  // next turn (~2ms out) drains this item without needing a real event.
+  if let drainTimer {
+    CFRunLoopTimerSetNextFireDate(
+      drainTimer, CFAbsoluteTimeGetCurrent() + 0.002)
+  }
+  // The parked _DPSNextEvent wait wakes ONLY for events arriving on the
+  // window-server event connection — and during tracking/parked windows
+  // it services nothing else (measured: timers, mach msgs, GCD all stall
+  // 0.5-1.8s; a custom-class Carbon event posts fine but AppKit drops it
+  // before it ever becomes an NSEvent). The one channel that always gets
+  // dispatched is real input, so post a real flagsChanged CGEvent that
+  // preserves the current modifier state: AppKit dispatches it as a
+  // harmless no-op and the .any local monitor drains the queue inline.
+  wakeJitter = (wakeJitter + 1) & 1
+  // Alternate right-option/right-control so two wakes in a row can't
+  // coalesce into one delivery.
+  let keyCode: CGKeyCode = wakeJitter == 0 ? 61 : 62
+  guard
+    let event = CGEvent(
+      keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
+  else { return }
+  event.type = .flagsChanged
+  // A fresh CGEvent's flags snapshot the live HID modifier state — copy
+  // them so the synthesized flagsChanged is a real no-op.
+  event.flags = CGEvent(source: nil)?.flags ?? []
+  event.post(tap: .cghidEventTap)
 }
 
 func runOnMain(_ work: @escaping () -> Void) {
@@ -253,20 +328,16 @@ func runOnMain(_ work: @escaping () -> Void) {
   runOnMainLock.lock()
   runOnMainPending.append(work)
   runOnMainLock.unlock()
+  if LogseqRuntime.perfLogging {
+    FileHandle.standardError.write(
+      "PERF enq t=\(CFAbsoluteTimeGetCurrent())\n"
+        .data(using: .utf8)!)
+  }
   if wakeupPort != mach_port_t(MACH_PORT_NULL) {
     postWakeup()
-    // The parked _DPSNextEvent only services msgs on the window-server event
-    // connection — every other wake path (GCD main queue, CFRunLoopWakeUp,
-    // CFMachPort sources, cross-thread timer re-arms, window-update flags)
-    // was measured to sit for seconds until the next real event. AppleEvents
-    // ARE real events on that connection, so send one to ourselves to wake
-    // the wait; an NSEvent monitor drains pending work during its dispatch.
-    if let desc = selfAppleEvent {
-      try? desc.sendEvent(options: .noReply, timeout: 0)
-    }
   } else {
     CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
-      drainRunOnMainPending()
+      drainRunOnMainPending(via: "block")
     }
     CFRunLoopWakeUp(CFRunLoopGetMain())
   }
@@ -315,6 +386,7 @@ private let receivePatch: PatchCallback = { source in
     }
   }
   guard !decoded.isEmpty else { return }
+  let recvAt = CFAbsoluteTimeGetCurrent()
   patchQueueLock.lock()
   pendingPatchBatches.append(contentsOf: decoded)
   let shouldSchedule = !patchDrainScheduled
@@ -327,6 +399,12 @@ private let receivePatch: PatchCallback = { source in
     pendingPatchBatches.removeAll()
     patchDrainScheduled = false
     patchQueueLock.unlock()
+    if LogseqRuntime.perfLogging {
+      let holdMs = Int((CFAbsoluteTimeGetCurrent() - recvAt) * 1000)
+      FileHandle.standardError.write(
+        "PERF patch-deliver t=\(CFAbsoluteTimeGetCurrent()) gens=\(batch.map { $0.generation }) hold=\(holdMs)ms\n"
+          .data(using: .utf8)!)
+    }
     MainActor.assumeIsolated {
       activeRuntime?.apply(decoded: batch)
       // A patch can create platform views (e.g. an editor textarea) whose
@@ -587,17 +665,35 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   }
 
   nonisolated private func enqueueDispatch(_ event: LUIEvent) {
-    perfLastEvent = (String(describing: event).prefix(48).description,
-                     CFAbsoluteTimeGetCurrent())
+    let queuedAt = CFAbsoluteTimeGetCurrent()
+    perfLastEvent = (String(describing: event).prefix(48).description, queuedAt)
     ocaml.async {
       let t0 = CFAbsoluteTimeGetCurrent()
       _ = LogseqLUIEvents.dispatch(event)
       let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
-      if Self.perfLogging, ms > 4 {
-        FileHandle.standardError.write(
-          "PERF dispatch \(String(describing: event).prefix(40)) dur=\(Int(ms))ms\n"
-            .data(using: .utf8)!)
+      if Self.perfLogging {
+        let waitMs = Int((t0 - queuedAt) * 1000)
+        if ms > 4 || waitMs > 40 {
+          FileHandle.standardError.write(
+            "PERF dispatch \(Self.describeEvent(event)) wait=\(waitMs)ms dur=\(Int(ms))ms\n"
+              .data(using: .utf8)!)
+        }
       }
+    }
+  }
+
+  /// Short, perf-mark-friendly event description — the enum's own
+  /// `describing:` truncates before the extension event name appears.
+  nonisolated private static func describeEvent(_ event: LUIEvent) -> String {
+    switch event {
+    case .extension(let node, _, let name, _):
+      return "ext(node:\(node) \(name))"
+    case .textChanged(let node, let text):
+      return "textChanged(node:\(node) len=\(text.count))"
+    case .press(let node): return "press(node:\(node))"
+    case .appear(let node): return "appear(node:\(node))"
+    default:
+      return String(describing: event).prefix(48).description
     }
   }
 
