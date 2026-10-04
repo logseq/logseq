@@ -336,6 +336,37 @@ struct LogseqElementView: View {
     }
   }
 
+  /// True when this render is inside an overlay/imperative layer — only
+  /// those copies feed LogseqFrameStore.overlayEntries, so the geometry
+  /// probe attaches only there (a preference write + combiner per node
+  /// otherwise shows up on every DOM element's layout).
+  private var reportsOverlayFrame: Bool {
+    (inOverlay || inImperativeLayer || nestedInOverlay) && tag != "path"
+  }
+
+  /// The registration the `.background` used to mount: folded into the
+  /// lifecycle hooks below so a node carries no extra view.
+  private func registerElement() {
+    guard tag != "textarea", tag != "input" else { return }
+    let handle = LogseqElementHandle(nodeID: context.nodeID)
+    LogseqElementRegistry.shared.register("node-\(context.nodeID)", handle)
+    LogseqElementRegistry.shared.registerContext(context)
+    let id = domID
+    guard !id.isEmpty else { return }
+    LogseqElementRegistry.shared.register(id, handle)
+    LogseqElementRegistry.shared.registerAnchor(id, context)
+  }
+
+  private func unregisterElement() {
+    guard tag != "textarea", tag != "input" else { return }
+    LogseqElementRegistry.shared.unregister("node-\(context.nodeID)")
+    LogseqElementRegistry.shared.unregisterContext(context.nodeID)
+    LogseqStyleOverrides.shared.clear(context.nodeID)
+    let id = domID
+    guard !id.isEmpty else { return }
+    LogseqElementRegistry.shared.unregister(id)
+  }
+
   private var core: some View {
     content
       .id(context.nodeID)
@@ -347,19 +378,10 @@ struct LogseqElementView: View {
       // the real overlay/imperative render writes. `path` elements draw
       // their viewBox literally (a 0 0 192 512 arrow reports 192x512)
       // and swallow monitor hit-tests — the parent svg/a reports it.
-      .onGeometryChange(for: CGRect.self) { g in
-        g.frame(in: .global)
-      } action: { rect in
-        if (inOverlay || inImperativeLayer || nestedInOverlay)
-          && tag != "path"
-        {
-          LogseqFrameStore.overlayEntries[context.nodeID] =
-            LogseqFrameEntry(rect: rect, tag: tag, z: frameZ)
-        }
-      }
-      .onDisappear {
-        LogseqFrameStore.overlayEntries.removeValue(forKey: context.nodeID)
-      }
+      .modifier(
+        LogseqOverlayProbe(
+          active: reportsOverlayFrame, nodeID: context.nodeID, tag: tag,
+          z: frameZ))
       .onHover { inside in
         if isTitleHoverRegion {
           LogseqTitleHoverStore.shared.set(context.nodeID, inside: inside)
@@ -375,6 +397,7 @@ struct LogseqElementView: View {
         // announced themselves — its DOM probes (e.g. #ui__ac-inner for an
         // open autocomplete) depend on truthful mount state.
         emitLifecycle("element-mount")
+        registerElement()
         if isLeftSidebarLayout {
           LogseqSidebarStore.shared.open = sidebarOpen
           if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
@@ -386,6 +409,7 @@ struct LogseqElementView: View {
       }
       .onDisappear {
         emitLifecycle("element-unmount")
+        unregisterElement()
         if isLeftSidebarLayout { LogseqSidebarStore.shared.open = false }
         if isTitleHoverRegion {
           LogseqTitleHoverStore.shared.set(context.nodeID, inside: false)
@@ -401,13 +425,6 @@ struct LogseqElementView: View {
           }
         }
       }
-      .background(Group {
-        // text inputs register their real coordinator handle themselves —
-        // the generic no-op handle must not clobber it.
-        if tag != "textarea" && tag != "input" {
-          LogseqElementRegistration(id: domID, context: context)
-        }
-      })
   }
 
   @ViewBuilder private var content: some View {
@@ -458,11 +475,15 @@ struct LogseqElementView: View {
           max(24, CGFloat(text.split(
             separator: "\n", omittingEmptySubsequences: false).count) * 20)
         } ?? 24
-      LogseqTextArea(
-        context: context, attrs: attrs, style: style,
-        wired: wiredEvents, text: text, domID: domID)
-        .frame(minHeight: codeMinHeight)
-        .frame(maxWidth: .infinity)
+      if ProcessInfo.processInfo.environment["LOGSEQ_FAST_TEXT"] != nil {
+        Text(text).frame(maxWidth: .infinity, alignment: .leading)
+      } else {
+        LogseqTextArea(
+          context: context, attrs: attrs, style: style,
+          wired: wiredEvents, text: text, domID: domID)
+          .frame(minHeight: codeMinHeight)
+          .frame(maxWidth: .infinity)
+      }
     case "input":
       LogseqInputField(
         context: context, attrs: attrs, style: style,
@@ -682,6 +703,7 @@ struct LogseqElementView: View {
       context.extensionIdentifier(of: child) == "logseq-textarea"
       || context.extensionIdentifier(of: child) == "logseq-input"
     return context.content(for: child)
+      .layoutValue(key: LogseqNodeIDKey.self, value: child)
       .layoutValue(
         key: LogseqGrowXKey.self,
         value: (s.grow || s.fullWidth || isTextInput) ? 1 : 0)
@@ -719,6 +741,7 @@ struct LogseqElementView: View {
         LogseqRowLayout(
           nodeID: context.nodeID, spacing: style.stackSpacing ?? 0,
           spaceBetween: style.spaceBetween,
+          stamps: { context.measureStamp(of: $0) }, selfRev: context.revision,
           centerMain: style.centerMain, centerCross: style.centerCross) {
           if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
@@ -731,17 +754,20 @@ struct LogseqElementView: View {
           nodeID: context.nodeID, children: children,
           spacing: style.stackSpacing ?? 0, scroll: scrollEnv,
           estimate: spec.est, total: spec.count, emitFirst: spec.first,
-          onRequest: { f, l in emitVirtWindow(first: f, last: l) }
+          onRequest: { f, l in emitVirtWindow(first: f, last: l) },
+          stamps: { context.measureStamp(of: $0) }
         ) { child in AnyView(childView(child)) }
       } else if virtualizable(children) {
         LogseqVirtualColumn(
           nodeID: context.nodeID, children: children,
-          spacing: style.stackSpacing ?? 0, scroll: scrollEnv
+          spacing: style.stackSpacing ?? 0, scroll: scrollEnv,
+          stamps: { context.measureStamp(of: $0) }
         ) { child in AnyView(childView(child)) }
       } else {
         LogseqColumnLayout(
           nodeID: context.nodeID, spacing: style.stackSpacing ?? 0,
-          centerMain: style.centerMain, centerCross: style.centerCross) {
+          centerMain: style.centerMain, centerCross: style.centerCross,
+          stamps: { context.measureStamp(of: $0) }, selfRev: context.revision) {
           if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
           ForEach(children, id: \.self) { child in
@@ -1228,10 +1254,57 @@ private struct LogseqAnchorKey: LayoutValueKey {
 /// `.frame(maxWidth: .infinity)` element sits anywhere inside a nested row
 /// chain. This layout proposes bounded, concrete slices to each child so the
 /// negotiation can't bounce.
+/// The DOM node id a layout child renders — lets parent layouts key their
+/// measure cache by (nodeID, measureStamp) instead of re-walking subtrees.
+private struct LogseqNodeIDKey: LayoutValueKey {
+  static let defaultValue = -1
+}
+
+/// Cross-pass child-measure memoization. `sizes` returns a cached per-child
+/// size list when every child's (nodeID, measureStamp) key — read live, so
+/// a change anywhere in a child's subtree misses — and the width bucket
+/// match a stored entry. Entries survive patch applies, which is what lets
+/// a second mount pass skip re-measuring untouched subtrees.
+final class LogseqMeasureCache: @unchecked Sendable {
+  static let shared = LogseqMeasureCache()
+  private var store: [Int: [UInt64: (keys: [UInt64], sizes: [CGSize])]] = [:]
+
+  func sizes(
+    nodeID: Int, width: CGFloat?, keys: [UInt64], stale: Bool,
+    measure: () -> [CGSize]
+  ) -> [CGSize] {
+    if stale { LogseqLayoutStats.persistBypass += 1; return measure() }
+    let wk = width.map { UInt64(bitPattern: Int64($0)) } ?? UInt64.max
+    if let e = store[nodeID]?[wk], e.keys == keys {
+      LogseqLayoutStats.persistHit += 1
+      return e.sizes
+    }
+    LogseqLayoutStats.persistMiss += 1
+    let s = measure()
+    var b = store[nodeID] ?? [:]
+    if b.count >= 8 { b.removeAll(keepingCapacity: true) }
+    b[wk] = (keys, s)
+    store[nodeID] = b
+    return s
+  }
+
+  /// Key for one child: packs nodeID with the live subtree stamp; `nil`
+  /// (stale) when the stamp is unknown so the parent skips caching.
+  static func childKey(id: Int, stamp: Int) -> UInt64? {
+    guard id >= 0, stamp >= 0 else { return nil }
+    return (UInt64(bitPattern: Int64(id)) << 32)
+      | UInt64(UInt32(truncatingIfNeeded: stamp))
+  }
+}
+
 struct LogseqRowLayout: Layout {
   var nodeID: Int = 0
   var spacing: CGFloat = 0
   var spaceBetween = false
+  /// Live subtree-version lookup — `context.measureStamp(of:)`.
+  var stamps: (Int) -> Int = { _ in -1 }
+  /// Parent content version — covers non-node children (styled text).
+  var selfRev: Int = 0
   /// justify-center — center the packed row horizontally (ignored when a
   /// child grows or space-between already distributes the leftover).
   var centerMain = false
@@ -1265,10 +1338,38 @@ struct LogseqRowLayout: Layout {
     nil
   }
 
+  /// Per-child cache keys: node children pack (nodeID, live measureStamp);
+  /// non-node children (styled text) share one sentinel covered by selfRev.
+  private func childKeys(_ subviews: Subviews) -> ([UInt64], stale: Bool) {
+    var stale = false
+    var keys = subviews.map { sub -> UInt64 in
+      let id = sub[LogseqNodeIDKey.self]
+      if id < 0 { return .max }
+      if let k = LogseqMeasureCache.childKey(id: id, stamp: stamps(id)) {
+        return k
+      }
+      stale = true
+      return .max
+    }
+    keys.append(UInt64(bitPattern: Int64(selfRev)))
+    return (keys, stale)
+  }
+
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
   ) -> CGSize {
-    cache = subviews.map { $0.sizeThatFits(.unspecified) }
+    LogseqLayoutStats.rowCalls += 1
+    LogseqLayoutStats.rowKids += subviews.count
+    if proposal.width == nil { LogseqLayoutStats.rowNilW += 1 }
+    // Child measures are width-independent (.unspecified) — reuse them
+    // across repeated calls and across passes via the shared cache.
+    if cache.count != subviews.count {
+      let (keys, stale) = childKeys(subviews)
+      cache = LogseqMeasureCache.shared.sizes(
+        nodeID: nodeID, width: nil, keys: keys, stale: stale
+      ) { subviews.map { $0.sizeThatFits(.unspecified) } }
+      LogseqLayoutStats.rowRemeasure += 1
+    }
     var width: CGFloat = 0
     var height: CGFloat = 0
     var flowIndex = 0
@@ -1293,7 +1394,10 @@ struct LogseqRowLayout: Layout {
     cache: inout Cache
   ) {
     if cache.count != subviews.count {
-      cache = subviews.map { $0.sizeThatFits(.unspecified) }
+      let (keys, stale) = childKeys(subviews)
+      cache = LogseqMeasureCache.shared.sizes(
+        nodeID: nodeID, width: nil, keys: keys, stale: stale
+      ) { subviews.map { $0.sizeThatFits(.unspecified) } }
     }
     if LogseqPerf.detail,
        nodeID >= 1 && nodeID <= 270 {
@@ -1391,6 +1495,10 @@ struct LogseqColumnLayout: Layout {
   /// items-center — center each child horizontally instead of stretching it
   /// to the container width.
   var centerCross = false
+  /// Live subtree-version lookup — `context.measureStamp(of:)`.
+  var stamps: (Int) -> Int = { _ in -1 }
+  /// Parent content version — covers non-node children (styled text).
+  var selfRev: Int = 0
 
   /// Ideal size per child at a given proposal width, measured once in
   /// `sizeThatFits` and reused by `placeSubviews` — re-measuring inside
@@ -1419,12 +1527,39 @@ struct LogseqColumnLayout: Layout {
     nil
   }
 
+  private func childKeys(_ subviews: Subviews) -> ([UInt64], stale: Bool) {
+    var stale = false
+    var keys = subviews.map { sub -> UInt64 in
+      let id = sub[LogseqNodeIDKey.self]
+      if id < 0 { return .max }
+      if let k = LogseqMeasureCache.childKey(id: id, stamp: stamps(id)) {
+        return k
+      }
+      stale = true
+      return .max
+    }
+    keys.append(UInt64(bitPattern: Int64(selfRev)))
+    return (keys, stale)
+  }
+
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
   ) -> CGSize {
-    cache.width = proposal.width
-    cache.sizes = subviews.map {
-      $0.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+    LogseqLayoutStats.colCalls += 1
+    LogseqLayoutStats.colKids += subviews.count
+    if proposal.width == nil { LogseqLayoutStats.colNilW += 1 }
+    if cache.width != proposal.width || cache.sizes.count != subviews.count {
+      LogseqLayoutStats.colRemeasure += 1
+      let (keys, stale) = childKeys(subviews)
+      let w = proposal.width
+      cache.sizes = LogseqMeasureCache.shared.sizes(
+        nodeID: nodeID, width: w, keys: keys, stale: stale
+      ) {
+        subviews.map {
+          $0.sizeThatFits(ProposedViewSize(width: w, height: nil))
+        }
+      }
+      cache.width = proposal.width
     }
     var idealWidth: CGFloat = 0
     var height: CGFloat = 0
@@ -1458,10 +1593,16 @@ struct LogseqColumnLayout: Layout {
     // Ideal heights first; leftover goes to grow-weighted children so
     // flex-1/h-full content fills the column.
     if cache.width != bounds.width || cache.sizes.count != subviews.count {
-      cache.width = bounds.width
-      cache.sizes = subviews.map {
-        $0.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+      let (keys, stale) = childKeys(subviews)
+      let w = bounds.width
+      cache.sizes = LogseqMeasureCache.shared.sizes(
+        nodeID: nodeID, width: w, keys: keys, stale: stale
+      ) {
+        subviews.map {
+          $0.sizeThatFits(ProposedViewSize(width: w, height: nil))
+        }
       }
+      cache.width = bounds.width
     }
     var heights = [CGFloat]()
     var weights = [Int]()
@@ -1549,6 +1690,34 @@ final class LogseqLayoutProbeDumped: @unchecked Sendable {
   var done = false
 }
 
+/// TEMP instrumentation: layout-measure call counters, dumped once after
+/// launch so the mount's measure amplification is visible in the log.
+final class LogseqLayoutStats: @unchecked Sendable {
+  nonisolated(unsafe) static var rowCalls = 0
+  nonisolated(unsafe) static var rowKids = 0
+  nonisolated(unsafe) static var rowNilW = 0
+  nonisolated(unsafe) static var colCalls = 0
+  nonisolated(unsafe) static var colKids = 0
+  nonisolated(unsafe) static var colNilW = 0
+  nonisolated(unsafe) static var flowCalls = 0
+  nonisolated(unsafe) static var flowKids = 0
+  nonisolated(unsafe) static var rowRemeasure = 0
+  nonisolated(unsafe) static var colRemeasure = 0
+  nonisolated(unsafe) static var persistHit = 0
+  nonisolated(unsafe) static var persistMiss = 0
+  nonisolated(unsafe) static var persistBypass = 0
+  nonisolated(unsafe) static var installed = false
+  static func install() {
+    guard !installed else { return }
+    installed = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+      FileHandle.standardError.write(
+        "PERF layout-stats row=\(rowCalls)/rem=\(rowRemeasure) kids=\(rowKids) nilW=\(rowNilW) col=\(colCalls)/rem=\(colRemeasure) kids=\(colKids) nilW=\(colNilW) flow=\(flowCalls)/\(flowKids) mc=\(persistHit)hit/\(persistMiss)miss/\(persistBypass)byp\n"
+          .data(using: .utf8)!)
+    }
+  }
+}
+
 private struct InsideVerticalScrollKey: EnvironmentKey {
   static let defaultValue = false
 }
@@ -1608,6 +1777,8 @@ struct LogseqVirtualColumn<ChildContent: View>: View {
   var total: Int = 0
   var emitFirst: Int = 0
   var onRequest: ((Int, Int) -> Void)? = nil
+  /// Live subtree-version lookup for the inner column's measure cache.
+  var stamps: (Int) -> Int = { _ in -1 }
   var childBuilder: (Int) -> ChildContent
 
   private var specDriven: Bool { total > 0 }
@@ -1721,7 +1892,7 @@ struct LogseqVirtualColumn<ChildContent: View>: View {
   var body: some View {
     if specDriven {
       let w = specWindow()
-      LogseqColumnLayout(nodeID: nodeID, spacing: spacing) {
+      LogseqColumnLayout(nodeID: nodeID, spacing: spacing, stamps: stamps) {
         if w.topPad > 0 { Color.clear.frame(height: w.topPad) }
         ForEach(Array(children.enumerated()), id: \.element) { i, c in
           childBuilder(c)
@@ -1756,7 +1927,7 @@ struct LogseqVirtualColumn<ChildContent: View>: View {
       let bottomPad =
         w.last >= w.first
         ? w.total - (w.starts[w.last] + childHeight(children[w.last])) : 0
-      LogseqColumnLayout(nodeID: nodeID, spacing: spacing) {
+      LogseqColumnLayout(nodeID: nodeID, spacing: spacing, stamps: stamps) {
         if topPad > 0 { Color.clear.frame(height: topPad) }
         if w.last >= w.first {
           ForEach(children[w.first...w.last], id: \.self) { c in
@@ -1907,7 +2078,7 @@ private struct LogseqStyleModifier: ViewModifier {
   @Environment(\.insideVerticalScroll) private var insideScroll
   @State private var hovering = false
 
-  func body(content: Content) -> some View {
+  @ViewBuilder func body(content: Content) -> some View {
     // Inside a vertical ScrollView, `h-full`/`flex-1` must not become an
     // unbounded height: the scroll area proposes unbounded height, so
     // .infinity would expand the content to a degenerate size and push
@@ -1921,60 +2092,97 @@ private struct LogseqStyleModifier: ViewModifier {
     // re-center their fixed-width box instead of pinning the anchor.
     let anchored = style.fixedX != nil || style.fixedY != nil
       || style.fixedRight != nil || style.fixedBottom != nil
-    return content
-      .frame(
-        maxWidth: style.alignTrailing ? .infinity : nil, alignment: .trailing)
-      .frame(minWidth: style.minWidth, minHeight: style.minHeight)
-      .frame(width: style.fixedWidth, height: style.fixedHeight)
-      .padding(style.padding ?? EdgeInsets())
-      .background {
-        if style.sidebarMaterial {
+    // Every modifier is a layout-engine hop measured on each of ~600+
+    // elements — attach only what actually does something. Order matches
+    // the old always-on chain: trailing > min > fixed > pad > bg > radius >
+    // hover > border > fill > max > clip > center > border > shadow >
+    // margin > opacity > priority.
+    var v = AnyView(content)
+    if style.alignTrailing {
+      v = AnyView(v.frame(maxWidth: .infinity, alignment: .trailing))
+    }
+    if style.minWidth != nil || style.minHeight != nil {
+      v = AnyView(v.frame(minWidth: style.minWidth, minHeight: style.minHeight))
+    }
+    if style.fixedWidth != nil || style.fixedHeight != nil {
+      v = AnyView(v.frame(width: style.fixedWidth, height: style.fixedHeight))
+    }
+    if let padding = style.padding {
+      v = AnyView(v.padding(padding))
+    }
+    if style.sidebarMaterial {
+      v = AnyView(
+        v.background(
           ZStack {
             LogseqSidebarMaterial()
             // lx-gray-02 wash over the vibrancy — keeps the Logseq tone
             // readable over busy wallpapers while staying native.
             LogseqColors.gray(2).opacity(0.6)
-          }
-        } else {
-          (hovering ? (style.hoverBackground ?? style.background) : style.background)
-            ?? Color.clear
-        }
-      }
-      .cornerRadius(style.cornerRadius ?? 0)
-      .onHover { hovering = $0 }
-      .overlay {
-        if let borderColor = style.borderColor, style.borderWidth > 0 {
+          }))
+    } else if style.background != nil || style.hoverBackground != nil {
+      v = AnyView(
+        v.background(
+          (hovering ? (style.hoverBackground ?? style.background)
+            : style.background) ?? Color.clear))
+    }
+    if let r = style.cornerRadius, r > 0 {
+      v = AnyView(v.cornerRadius(r))
+    }
+    if style.hoverBackground != nil {
+      v = AnyView(v.onHover { hovering = $0 })
+    }
+    if let borderColor = style.borderColor, style.borderWidth > 0 {
+      v = AnyView(
+        v.overlay(
           RoundedRectangle(cornerRadius: style.cornerRadius ?? 0)
-            .strokeBorder(borderColor, lineWidth: style.borderWidth)
-        }
-      }
-      // CSS default content alignment is start — SwiftUI's frame default
-      // is .center, which would center short text in a grown span. A
-      // centerHorizontally element (dialog boxes) centers its painted box
-      // in the grown frame instead.
-      .frame(
-        maxWidth: (!inline || style.grow || style.fullWidth) && !anchored
-          ? .infinity : nil,
-        maxHeight: (style.fullHeight && !insideScroll) ? .infinity : nil,
-        alignment: style.centerHorizontally ? .center : .leading)
-      .frame(maxWidth: style.maxWidth, maxHeight: style.maxHeight)
-      .modifier(LogseqClipper(enabled: style.clipContent))
-      .frame(
-        maxWidth: style.centerHorizontally ? .infinity : nil,
-        maxHeight: style.centerVertically ? .infinity : nil,
-        alignment: style.centerVertically ? .center : .top)
-      .overlay {
-        if style.hasBorder {
+            .strokeBorder(borderColor, lineWidth: style.borderWidth)))
+    }
+    // CSS default content alignment is start — SwiftUI's frame default
+    // is .center, which would center short text in a grown span. A
+    // centerHorizontally element (dialog boxes) centers its painted box
+    // in the grown frame instead.
+    let fillW = (!inline || style.grow || style.fullWidth) && !anchored
+    let fillH = style.fullHeight && !insideScroll
+    if fillW || fillH || style.centerHorizontally {
+      v = AnyView(
+        v.frame(
+          maxWidth: fillW ? .infinity : nil,
+          maxHeight: fillH ? .infinity : nil,
+          alignment: style.centerHorizontally ? .center : .leading))
+    }
+    if style.maxWidth != nil || style.maxHeight != nil {
+      v = AnyView(v.frame(maxWidth: style.maxWidth, maxHeight: style.maxHeight))
+    }
+    if style.clipContent {
+      v = AnyView(v.modifier(LogseqClipper(enabled: true)))
+    }
+    if style.centerHorizontally || style.centerVertically {
+      v = AnyView(
+        v.frame(
+          maxWidth: style.centerHorizontally ? .infinity : nil,
+          maxHeight: style.centerVertically ? .infinity : nil,
+          alignment: style.centerVertically ? .center : .top))
+    }
+    if style.hasBorder {
+      v = AnyView(
+        v.overlay(
           RoundedRectangle(cornerRadius: style.cornerRadius ?? 0)
-            .stroke(LogseqColors.border, lineWidth: 1)
-        }
-      }
-      .shadow(
-        color: style.hasShadow ? Color.black.opacity(0.3) : .clear,
-        radius: style.hasShadow ? 16 : 0, y: style.hasShadow ? 8 : 0)
-      .padding(style.margin ?? EdgeInsets())
-      .opacity(style.alpha)
-      .layoutPriority(style.grow ? 1 : 0)
+            .stroke(LogseqColors.border, lineWidth: 1)))
+    }
+    if style.hasShadow {
+      v = AnyView(
+        v.shadow(color: Color.black.opacity(0.3), radius: 16, y: 8))
+    }
+    if let margin = style.margin {
+      v = AnyView(v.padding(margin))
+    }
+    if style.alpha != 1 {
+      v = AnyView(v.opacity(style.alpha))
+    }
+    if style.grow {
+      v = AnyView(v.layoutPriority(1))
+    }
+    return v
   }
 }
 
@@ -2061,36 +2269,30 @@ private struct LogseqOverlayPresenter<Content: View>: View {
   }
 }
 
-/// Registers the rendered element in the dom-op registry under its DOM id so
-/// OCaml's imperative calls (focus, set-value, class toggles) can reach it.
-private struct LogseqElementRegistration: View {
-  let id: String
-  let context: LUIAppleExtensionViewContext
+/// Overlay frame probe — installs the geometry preference only for nodes
+/// rendered inside an overlay/imperative layer. On inactive nodes the body
+/// is a bare `content`, so no preference combiner runs for them.
+private struct LogseqOverlayProbe: ViewModifier {
+  let active: Bool
+  let nodeID: Int
+  let tag: String
+  let z: Int
 
-  var body: some View {
-    Color.clear
-      .frame(width: 0, height: 0)
-      .onAppear { register() }
-      .onDisappear { unregister() }
-  }
-
-  private func register() {
-    // Elements without a DOM id are still addressable by node ref —
-    // OCaml's doc_query_selector emits "#ref": "node-<id>" for them.
-    let handle = LogseqElementHandle(nodeID: context.nodeID)
-    LogseqElementRegistry.shared.register("node-\(context.nodeID)", handle)
-    LogseqElementRegistry.shared.registerContext(context)
-    guard !id.isEmpty else { return }
-    LogseqElementRegistry.shared.register(id, handle)
-    LogseqElementRegistry.shared.registerAnchor(id, context)
-  }
-
-  private func unregister() {
-    LogseqElementRegistry.shared.unregister("node-\(context.nodeID)")
-    LogseqElementRegistry.shared.unregisterContext(context.nodeID)
-    LogseqStyleOverrides.shared.clear(context.nodeID)
-    guard !id.isEmpty else { return }
-    LogseqElementRegistry.shared.unregister(id)
+  @ViewBuilder func body(content: Content) -> some View {
+    if active {
+      content
+        .onGeometryChange(for: CGRect.self) { g in
+          g.frame(in: .global)
+        } action: { rect in
+          LogseqFrameStore.overlayEntries[nodeID] =
+            LogseqFrameEntry(rect: rect, tag: tag, z: z)
+        }
+        .onDisappear {
+          LogseqFrameStore.overlayEntries.removeValue(forKey: nodeID)
+        }
+    } else {
+      content
+    }
   }
 }
 

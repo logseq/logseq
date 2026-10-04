@@ -584,6 +584,8 @@ struct LogseqFlowLayout: Layout {
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
   ) -> CGSize {
+    LogseqLayoutStats.flowCalls += 1
+    LogseqLayoutStats.flowKids += subviews.count
     let width = proposal.width ?? .infinity
     var x: CGFloat = 0
     var y: CGFloat = 0

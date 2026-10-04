@@ -227,7 +227,8 @@ let decode_extension_values payload =
 
 let take_patches_dbg where =
   let out = take_patches () in
-  Printf.eprintf "DBG patches %s bytes=%d\n%!" where (String.length out);
+  Printf.eprintf "DBG patches %s bytes=%d t=%.3f\n%!" where
+    (String.length out) (Unix.gettimeofday ());
   out
 
 (* The web runtime feeds registered doc scans from a MutationObserver;
@@ -267,6 +268,15 @@ let flush () =
       app_flush_checked app;
       run_doc_scans_after_flush ()
   | None -> ()
+
+let perf_log =
+  lazy (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
+
+let perf_ms () = Unix.gettimeofday () *. 1000.
+
+let perf_mark name t0 =
+  if Lazy.force perf_log
+  then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
 let initialize platform_code host_code (_payload : string) : string =
   Queue.clear pending_batches;
@@ -360,9 +370,12 @@ let initialize platform_code host_code (_payload : string) : string =
   (* Platform's request channel ("<op>\n<payload>") shares the same wire
      as Host's — clipboard-write, ui-state, etc. *)
   Platform.host_request := platform_request;
+  let t0 = perf_ms () in
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
   run_doc_scans_after_flush ();
+  perf_mark "init.app" t0;
+  let t1 = perf_ms () in
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
@@ -370,18 +383,14 @@ let initialize platform_code host_code (_payload : string) : string =
   Menu_bar.install ();
   Router.init ();
   Rtc_flows.init ();
+  perf_mark "init.installs" t1;
+  let t2 = perf_ms () in
   ignore (Boot.run ());
+  perf_mark "init.boot" t2;
+  let t3 = perf_ms () in
   run_doc_scans_after_flush ();
+  perf_mark "init.scans" t3;
   take_patches ()
-
-let perf_log =
-  lazy (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
-
-let perf_ms () = Unix.gettimeofday () *. 1000.
-
-let perf_mark name t0 =
-  if Lazy.force perf_log
-  then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
 (* NOTE: never Queue.clear pending_batches at entry — a systhread yield
    inside drain/dispatch (blocking daemon IO) can let another entry emit

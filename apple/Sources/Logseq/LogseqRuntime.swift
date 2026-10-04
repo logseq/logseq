@@ -175,17 +175,19 @@ private func drainRunOnMainPending(via: String = "?") {
   let batch = runOnMainPending
   runOnMainPending.removeAll()
   runOnMainLock.unlock()
-  if LogseqRuntime.perfLogging {
+  if LogseqRuntime.perfLogging, !batch.isEmpty {
     let now = CFAbsoluteTimeGetCurrent()
-    if !batch.isEmpty || now - LogseqRuntime.launchAbsTime < 3.0 {
-      let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain())
-        .map { $0.rawValue as String } ?? "none"
-      FileHandle.standardError.write(
-        "PERF drain t=\(now) n=\(batch.count) via=\(via) mode=\(mode)\n"
-          .data(using: .utf8)!)
-    }
+    let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain())
+      .map { $0.rawValue as String } ?? "none"
+    FileHandle.standardError.write(
+      "PERF drain t=\(now) n=\(batch.count) via=\(via) mode=\(mode)\n"
+        .data(using: .utf8)!)
   }
   for item in batch { item() }
+  patchQueueLock.lock()
+  let patchRetry = patchDrainScheduled
+  patchQueueLock.unlock()
+  if patchRetry { drainPatchQueue() }
 }
 
 
@@ -247,7 +249,57 @@ private func scheduleRunOnMainDrain() {
 /// decoded batches for a once-per-burst main-actor drain.
 nonisolated(unsafe) private var pendingPatchBatches: [LUIAppleBackend.DecodedPatchBatch] = []
 nonisolated(unsafe) private var patchDrainScheduled = false
+nonisolated(unsafe) private var lastPatchRecvAt: CFAbsoluteTime = 0
+nonisolated(unsafe) private var firstPendingPatchAt: CFAbsoluteTime = 0
 private let patchQueueLock = NSLock()
+
+/// Startup emits land as several generation batches ~5ms apart; applying
+/// each as it arrives makes SwiftUI run a mount pass per generation (~
+/// 130ms for the shell, then ~300ms again once the feed lands). Holding
+/// the queue until the stream goes quiet for ~6ms merges the burst into
+/// one apply = one mount. The 45ms cap keeps a continuous emit stream
+/// (fast scrolling) from deferring forever.
+private func drainPatchQueue() {
+  patchQueueLock.lock()
+  let now = CFAbsoluteTimeGetCurrent()
+  // Startup gens arrive ~10ms apart; interactive patches need a shorter
+  // wait so typing stays inside one 120fps frame.
+  // Startup: the whole emit burst (shell gens ~10ms apart, then the
+  // journals feed ~40ms later) merges into ONE apply = ONE mount pass —
+  // worth waiting for since every pass re-lays-out the whole tree. The
+  // 250ms cap bounds worst-case wait if the feed is slow. Interactive
+  // patches keep the 6ms window so typing stays inside one frame.
+  let launching = now - LogseqRuntime.launchAbsTime < 1.0
+  let quietWindow: CFAbsoluteTime = launching ? 0.06 : 0.006
+  let cap: CFAbsoluteTime = launching ? 0.25 : 0.045
+  if !pendingPatchBatches.isEmpty,
+    now - lastPatchRecvAt < quietWindow,
+    now - firstPendingPatchAt < cap
+  {
+    // Not quiet yet — patchDrainScheduled stays true, the next 2ms tick
+    // (or queued-item drain) retries without re-enqueueing work.
+    patchQueueLock.unlock()
+    return
+  }
+  let batch = pendingPatchBatches
+  pendingPatchBatches.removeAll()
+  patchDrainScheduled = false
+  patchQueueLock.unlock()
+  guard !batch.isEmpty else { return }
+  if LogseqRuntime.perfLogging {
+    FileHandle.standardError.write(
+      "PERF patch-deliver t=\(now) gens=\(batch.map { $0.generation }) hold=\(Int((now - firstPendingPatchAt) * 1000))ms\n"
+        .data(using: .utf8)!)
+  }
+  MainActor.assumeIsolated {
+    activeRuntime?.apply(decoded: batch)
+    // No forced layout here: during startup bursts a synchronous
+    // layoutSubtreeIfNeeded costs ~400ms of mount inside this drain and
+    // stalls every queued batch behind it. View insertion happens on the
+    // natural display pass (~1 frame), and the platform-request drain
+    // does its own layout flush before delivering focus-type ops.
+  }
+}
 
 private let receivePatch: PatchCallback = { source in
   guard let source else { return }
@@ -287,32 +339,14 @@ private let receivePatch: PatchCallback = { source in
   guard !decoded.isEmpty else { return }
   let recvAt = CFAbsoluteTimeGetCurrent()
   patchQueueLock.lock()
+  if pendingPatchBatches.isEmpty { firstPendingPatchAt = recvAt }
   pendingPatchBatches.append(contentsOf: decoded)
+  lastPatchRecvAt = recvAt
   let shouldSchedule = !patchDrainScheduled
   patchDrainScheduled = true
   patchQueueLock.unlock()
   guard shouldSchedule else { return }
-  runOnMain {
-    patchQueueLock.lock()
-    let batch = pendingPatchBatches
-    pendingPatchBatches.removeAll()
-    patchDrainScheduled = false
-    patchQueueLock.unlock()
-    if LogseqRuntime.perfLogging {
-      let holdMs = Int((CFAbsoluteTimeGetCurrent() - recvAt) * 1000)
-      FileHandle.standardError.write(
-        "PERF patch-deliver t=\(CFAbsoluteTimeGetCurrent()) gens=\(batch.map { $0.generation }) hold=\(holdMs)ms\n"
-          .data(using: .utf8)!)
-    }
-    MainActor.assumeIsolated {
-      activeRuntime?.apply(decoded: batch)
-      // No forced layout here: during startup bursts a synchronous
-      // layoutSubtreeIfNeeded costs ~400ms of mount inside this drain and
-      // stalls every queued batch behind it. View insertion happens on the
-      // natural display pass (~1 frame), and the platform-request drain
-      // does its own layout flush before delivering focus-type ops.
-    }
-  }
+  scheduleRunOnMainDrain()
 }
 
 /// Fired on whichever OCaml thread enqueued cross-thread work — enqueue the
@@ -440,6 +474,7 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   func start() {
     guard !started else { return }
     activeRuntime = self
+    LogseqLayoutStats.install()
     enqueueStart()
   }
 
