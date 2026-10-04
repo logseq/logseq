@@ -2885,53 +2885,64 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
        so they only need the retractEntity check *)
     let stale_restores (db : db) ~(forward_items : Wire.t list)
         (items : Wire.t list) : Wire.t list =
+      (* index the row's forward items once — per-item rescans are
+         O(reversed × forward) on bulk pending ops *)
+      let attr_key (e_w : Wire.t) (a : string) : string =
+        Transit_codec.to_string (Wire.Array [ e_w; Wire.Keyword a ])
+      in
+      let fw_retracts_ent_tbl = Hashtbl.create 8 in
+      let fw_retracts_attr_tbl = Hashtbl.create 16 in
+      let fw_vals_tbl = Hashtbl.create 16 in
+      let push_val e_w a_w v' =
+        match a_w with
+        | Wire.Keyword s | Wire.Symbol s ->
+            let k = attr_key e_w s in
+            let rest =
+              match Hashtbl.find_opt fw_vals_tbl k with
+              | Some l -> l
+              | None -> []
+            in
+            Hashtbl.replace fw_vals_tbl k (v' :: rest)
+        | _ -> ()
+      in
+      List.iter
+        (fun item ->
+          match item with
+          | Wire.Array (op :: e' :: _) | Wire.List (op :: e' :: _)
+            when op = kw "db/retractEntity"
+                 || op = kw "db.fn/retractEntity" ->
+              Hashtbl.replace fw_retracts_ent_tbl
+                (Transit_codec.to_string e') ()
+          | Wire.Array (op :: e' :: a' :: _) | Wire.List (op :: e' :: a' :: _)
+            when op = kw "db/retract" -> (
+              match a' with
+              | Wire.Keyword s | Wire.Symbol s ->
+                  Hashtbl.replace fw_retracts_attr_tbl (attr_key e' s) ()
+              | _ -> ())
+          (* values the forward tx wrote to (e,a): db/add carries the
+             new value at position 3, db/cas at position 4 (after the
+             old value). A db/retract writes nothing — it must not
+             count as a forward value or the intact check below would
+             demand the conn still hold a value the forward removed,
+             dropping the legit restore *)
+          | Wire.Array (op :: e' :: a' :: v' :: _)
+          | Wire.List (op :: e' :: a' :: v' :: _)
+            when op = kw "db/add" -> push_val e' a' v'
+          | Wire.Array (op :: e' :: a' :: _ :: v' :: _)
+          | Wire.List (op :: e' :: a' :: _ :: v' :: _)
+            when op = kw "db/cas" -> push_val e' a' v'
+          | _ -> ())
+        forward_items;
       let forward_retracts_entity (e_w : Wire.t) : bool =
-        List.exists
-          (fun item ->
-            match item with
-            | Wire.Array (op :: e' :: _) | Wire.List (op :: e' :: _)
-              when (op = kw "db/retractEntity"
-                    || op = kw "db.fn/retractEntity")
-                   && e' = e_w -> true
-            | _ -> false)
-          forward_items
+        Hashtbl.mem fw_retracts_ent_tbl (Transit_codec.to_string e_w)
       in
       let forward_retracts_attr (e_w : Wire.t) (a : string) : bool =
-        List.exists
-          (fun item ->
-            match item with
-            | Wire.Array (op :: e' :: a' :: _) | Wire.List (op :: e' :: a' :: _)
-              when op = kw "db/retract" && e' = e_w -> (
-                match a' with
-                | Wire.Keyword s | Wire.Symbol s -> s = a
-                | _ -> false)
-            | _ -> false)
-          forward_items
+        Hashtbl.mem fw_retracts_attr_tbl (attr_key e_w a)
       in
-      (* values the forward tx wrote to (e,a): db/add carries the new
-         value at position 3, db/cas at position 4 (after the old
-         value). A db/retract writes nothing — it must not count as a
-         forward value or the intact check below would demand the conn
-         still hold a value the forward removed, dropping the legit
-         restore *)
       let forward_vals (e_w : Wire.t) (a : string) : Wire.t list =
-        List.filter_map
-          (fun item ->
-            match item with
-            | Wire.Array (op :: e' :: a' :: v' :: _)
-            | Wire.List (op :: e' :: a' :: v' :: _)
-              when op = kw "db/add" && e' = e_w -> (
-                match a' with
-                | Wire.Keyword s | Wire.Symbol s when s = a -> Some v'
-                | _ -> None)
-            | Wire.Array (op :: e' :: a' :: _ :: v' :: _)
-            | Wire.List (op :: e' :: a' :: _ :: v' :: _)
-              when op = kw "db/cas" && e' = e_w -> (
-                match a' with
-                | Wire.Keyword s | Wire.Symbol s when s = a -> Some v'
-                | _ -> None)
-            | _ -> None)
-          forward_items
+        match Hashtbl.find_opt fw_vals_tbl (attr_key e_w a) with
+        | Some l -> l
+        | None -> []
       in
       let phantom_intact (e_w : Wire.t) (a : string) : bool =
         match forward_vals e_w a with
