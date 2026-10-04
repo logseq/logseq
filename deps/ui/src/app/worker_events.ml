@@ -10,6 +10,8 @@
    "rtc-sync-state" floods during sync bursts (presence updates,
    pending-tx counts) — dedupe identical states so a no-change
    rebroadcast doesn't pay a flush. *)
+open Promise_ext
+
 let last_rtc : Model.rtc option ref = ref None
 
 (* Boot_graph_ready clears Model.rtc; the dedup ref must clear too or an
@@ -117,6 +119,25 @@ let init () =
         (fun p -> Runtime.send (Action.Page_loaded p))
     ; publish_journals =
         (fun js -> Runtime.send (Action.Journals_loaded js))
+    ; refetch_page =
+        (fun p ->
+          match !Runtime.current_repo with
+          | None -> Js.Promise.resolve None
+          | Some repo -> (
+              let* blocks =
+                match !Runtime.current_route with
+                | Some (Model.Block_zoom uuid) ->
+                    let* v =
+                      Outliner_ops.fetch_zoom_blocks repo uuid
+                    in
+                    Outliner_ops.blocks_of_tree_wire repo p v
+                | _ -> Outliner_ops.fetch_page_blocks repo p
+              in
+              let* p' =
+                Outliner_ops.resolve_page_tags repo
+                  { p with Model.page_blocks = blocks }
+              in
+              Js.Promise.resolve (Some p')))
     };
   (* the worker's search-index build reports progress through this
      remoteInvoke; without a handler the worker->main comlink call hangs

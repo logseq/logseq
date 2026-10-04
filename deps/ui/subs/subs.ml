@@ -38,6 +38,9 @@ type hooks =
       (** commit a merged page — Runtime.send Page_loaded *)
   ; publish_journals : Model.page list -> unit
       (** commit a merged journals list — Runtime.send Journals_loaded *)
+  ; refetch_page : Model.page -> Model.page option Js.Promise.t
+      (** block-level fallback: a delta that can't splice refetches only
+          the affected page/day's blocks — never the whole route *)
   }
 
 let hooks : hooks option ref = ref None
@@ -110,10 +113,18 @@ and apply_pending () : unit Js.Promise.t =
     h.after_apply ();
     Subs_state.run_sync_subs ()
   in
+  (* sync subs (sidebar recents/favorites, views queries, embed
+     refresh) are graph-wide — a delta that touches no mounted page can
+     still change them, so finish() runs for any non-duplicate batch;
+     only the page/journals publish + refetch is gated on relevance *)
   match (!Subs_state.current_page, deltas, unknown) with
   | Some _, _ :: _, false -> (
       let all_dup =
         List.for_all Page_delta.delta_already_applied deltas
+      in
+      let prune () =
+        h.prune_overrides
+          (List.concat_map Page_delta.delta_uuids deltas)
       in
       (* fold and publish inside the apply queue so a racing arm can't
          interleave between our splice and our publish — canon rows
@@ -124,19 +135,20 @@ and apply_pending () : unit Js.Promise.t =
             match !Subs_state.current_page with
             | Some base -> (
                 let rec fold (p : Model.page) = function
-                  | [] -> Js.Promise.resolve (Some p)
+                  | [] -> Js.Promise.resolve (Page_delta.Applied p)
                   | d :: rest -> (
                       let* applied =
                         Page_delta.apply_to_page ~strict:true
                           (h.helpers_of p) p d
                       in
                       match applied with
-                      | Some p' -> fold p' rest
-                      | None -> Js.Promise.resolve None)
+                      | Page_delta.Applied p' -> fold p' rest
+                      | Page_delta.Unchanged -> fold p rest
+                      | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
                 in
                 let* m = fold base deltas in
                 (match m with
-                 | Some p'
+                 | Page_delta.Applied p'
                    when p' != base
                         &&
                         (match !Subs_state.current_page with
@@ -146,28 +158,41 @@ and apply_pending () : unit Js.Promise.t =
                      h.refresh_page_side p'
                  | _ -> ());
                 Js.Promise.resolve m)
-            | None -> Js.Promise.resolve None)
+            | None -> Js.Promise.resolve Page_delta.Failed)
       in
       (* a broadcast carrying only deltas we already spliced from our
          own op response has nothing new to publish — skip the subs
          refresh, it would just re-issue the sidebar/view fetches *)
       if not all_dup then finish ();
-      match merged with
-      | Some _ ->
+      (match merged with
+      | Page_delta.Applied _ ->
           (* the spliced rows are authoritative for the uuids these txs
              touched — drop only those title overrides, keep in-flight
              commits *)
-          if not all_dup then
-            h.prune_overrides
-              (List.concat_map Page_delta.delta_uuids deltas);
+          if not all_dup then prune ();
           Js.Promise.resolve ()
-      | None ->
-          h.reload ();
-          Js.Promise.resolve ())
+      | Page_delta.Unchanged ->
+          (* irrelevant — nothing to republish, nothing to prune *)
+          Js.Promise.resolve ()
+      | Page_delta.Failed -> (
+          (* relevant but unspliceable — refetch only this page's
+             blocks, never the whole route *)
+          match !Subs_state.current_page with
+          | Some p -> (
+              let* fresh = h.refetch_page p in
+              match fresh with
+              | Some p' ->
+                  h.publish_page p';
+                  h.refresh_page_side p';
+                  if not all_dup then prune ();
+                  Js.Promise.resolve ()
+              | None ->
+                  h.reload ();
+                  Js.Promise.resolve ())
+          | None -> Js.Promise.resolve ())))
   | _ ->
       (* journals route keeps its pages in current_journals — splice
-         the queued deltas into the touched day(s) like the op path;
-         a delta-less/foreign/failed splice still reloads the route *)
+         the queued deltas into the touched day(s) like the op path *)
       if !Subs_state.current_journals <> [] && deltas <> []
          && not unknown
       then
@@ -178,20 +203,21 @@ and apply_pending () : unit Js.Promise.t =
         let* merged =
           Page_delta.with_apply_queue (fun () ->
               let rec go js = function
-                | [] -> Js.Promise.resolve (Some js)
+                | [] -> Js.Promise.resolve (Page_delta.Applied js)
                 | d :: rest -> (
                     let* applied =
                       Page_delta.apply_to_journals ~strict:true
                         h.helpers_of js d
                     in
                     match applied with
-                    | Some js' -> go js' rest
-                    | None -> Js.Promise.resolve None)
+                    | Page_delta.Applied js' -> go js' rest
+                    | Page_delta.Unchanged -> go js rest
+                    | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
               in
               go start_js deltas)
         in
         (match merged with
-         | Some js' when js' != start_js
+         | Page_delta.Applied js' when js' != start_js
                         && !Subs_state.current_journals == start_js ->
              h.publish_journals js';
              if not all_dup then begin
@@ -200,13 +226,42 @@ and apply_pending () : unit Js.Promise.t =
                  (List.concat_map Page_delta.delta_uuids deltas)
              end;
              Js.Promise.resolve ()
-         | Some _ ->
+         | Page_delta.Applied _ | Page_delta.Unchanged ->
              if not all_dup then finish ();
              Js.Promise.resolve ()
-         | None ->
-             h.reload ();
-             finish ();
-             Js.Promise.resolve ())
+         | Page_delta.Failed -> (
+             (* relevant but unspliceable — refetch only the days the
+                deltas touched, never the whole journals route *)
+             let touched (p : Model.page) =
+               List.exists
+                 (fun d -> Page_delta.delta_touches d p)
+                 deltas
+             in
+             let rec refetch acc = function
+               | [] -> Js.Promise.resolve (Some (List.rev acc))
+               | (p : Model.page) :: rest ->
+                   if not (touched p) then refetch (p :: acc) rest
+                   else
+                     let* fresh = h.refetch_page p in
+                     (match fresh with
+                      | Some p' -> refetch (p' :: acc) rest
+                      | None -> Js.Promise.resolve None)
+             in
+             let* js' = refetch [] start_js in
+             match js' with
+             | Some js'
+               when !Subs_state.current_journals == start_js ->
+                 h.publish_journals js';
+                 if not all_dup then begin
+                   finish ();
+                   h.prune_overrides
+                     (List.concat_map Page_delta.delta_uuids deltas)
+                 end;
+                 Js.Promise.resolve ()
+             | Some _ -> Js.Promise.resolve ()
+             | None ->
+                 h.reload ();
+                 Js.Promise.resolve ()))
       else (
         h.reload ();
         finish ();

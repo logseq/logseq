@@ -977,8 +977,9 @@ let apply_queued _page delta =
                   Page_delta.apply_to_page ~strict:false h page d
                 in
                 match applied with
-                | Some page' -> go page' rest
-                | None -> Js.Promise.resolve None)
+                | Page_delta.Applied page' -> go page' rest
+                | Page_delta.Unchanged -> go page rest
+                | Page_delta.Failed -> Js.Promise.resolve None)
           in
           let* a = go base deltas in
           (match a with
@@ -1003,26 +1004,52 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
   let start_js = !Runtime.current_journals in
   Page_delta.with_apply_queue (fun () ->
       let rec go js = function
-        | [] -> Js.Promise.resolve (Some js)
+        | [] -> Js.Promise.resolve (Page_delta.Applied js)
         | d :: rest -> (
             let* applied =
               Page_delta.apply_to_journals ~strict:false delta_helpers js
                 d
             in
             match applied with
-            | Some js' -> go js' rest
-            | None -> Js.Promise.resolve None)
+            | Page_delta.Applied js' -> go js' rest
+            | Page_delta.Unchanged -> go js rest
+            | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
       in
       let* merged = go start_js deltas in
       (* a navigation mid-splice emptied the journals — this publish
          would resurrect the old route's days *)
       let still_current = !Runtime.current_journals == start_js in
       (match merged with
-       | Some js' when js' != start_js && still_current ->
+       | Page_delta.Applied js' when js' != start_js && still_current ->
            Runtime.send (Action.Journals_loaded js');
            Js.Promise.resolve ()
-       | Some _ -> Js.Promise.resolve ()
-       | None -> refresh_page ())
+       | Page_delta.Applied _ | Page_delta.Unchanged -> Js.Promise.resolve ()
+       | Page_delta.Failed -> (
+           (* a touched day couldn't splice — refetch just the days the
+              deltas touch, never the whole route *)
+           match !Runtime.current_repo with
+           | Some repo -> (
+               let touched_day (p : Model.page) =
+                 List.exists
+                   (fun d -> Page_delta.delta_touches d p)
+                   deltas
+               in
+               let rec refetch acc = function
+                 | [] -> Js.Promise.resolve (List.rev acc)
+                 | (p : Model.page) :: rest ->
+                     if not (touched_day p) then
+                       refetch (p :: acc) rest
+                     else
+                       let* blocks = fetch_page_blocks repo p in
+                       refetch
+                         ({ p with Model.page_blocks = blocks } :: acc)
+                         rest
+               in
+               let* js' = refetch [] start_js in
+               if still_current then
+                 Runtime.send (Action.Journals_loaded js');
+               Js.Promise.resolve ())
+           | None -> refresh_page ()))
       |> Js.Promise.then_ (fun () ->
              S.prune_overrides touched;
              Js.Promise.resolve ()))

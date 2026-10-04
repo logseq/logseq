@@ -716,16 +716,26 @@ struct LogseqElementView: View {
           if cs.contains("latex") || cs.contains("latex-inline") { return nil }
           if cs.contains("block-main-container") { probe.mainContainerID = id }
           if cs.contains("block-control") { probe.controlID = id }
-          if cs.contains("bullet-link-wrap") { probe.bulletID = id }
+          // .bullet-container is the span with id dot-<uuid> — the doc
+          // listener resolves zoom via closest(".bullet-container") +
+          // the dot- prefix; the wrapping .bullet-link-wrap anchor has
+          // no id and never matches.
+          if cs.contains("bullet-container") { probe.bulletID = id }
           if cs.contains("block-content-inner") { probe.contentID = id }
           if cs.contains("rotating-arrow") {
             probe.arrowCollapsed = cs.contains("collapsed")
           }
-          if cs.contains("block-children-container") { probe.hasChildren = true }
         }
       }
       for c in context.childIDs(of: id) { stack.append(c) }
     }
+    // Flat rows carry the fold state on the .ls-block element itself:
+    // children are stream siblings, never a nested
+    // .block-children-container inside the row.
+    probe.hasChildren =
+      (attrs["haschild"] as? String) == "true"
+      || (attrs["data-db-collapsable"] as? String) == "true"
+    probe.arrowCollapsed = (attrs["data-collapsed"] as? String) == "true"
     // Siblings of the main container (children column, properties area)
     // keep their normal mount.
     for c in context.childIDs where c != probe.mainContainerID {
