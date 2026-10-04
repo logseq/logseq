@@ -340,9 +340,13 @@ external download_path : download -> string Js.Promise.t = "path" [@@mel.send]
 external expect : locator -> assertion = "expect"
 [@@mel.module "@playwright/test"]
 
-external expect_is_visible : (assertion[@mel.this]) -> unit Js.Promise.t
-  = "toBeVisible"
+external expect_is_visible_opts :
+  (assertion[@mel.this]) -> 'opts Js.t -> unit Js.Promise.t = "toBeVisible"
 [@@mel.send]
+
+let expect_is_visible ?timeout assertion =
+  expect_is_visible_opts assertion
+    [%mel.obj { timeout = Js.Undefined.fromOption timeout }]
 
 external expect_is_hidden : (assertion[@mel.this]) -> unit Js.Promise.t
   = "toBeHidden"

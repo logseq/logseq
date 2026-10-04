@@ -170,6 +170,19 @@ let get_page_blocks_contents env =
   Pw.all_text env
     ".ls-page-blocks .ls-block:not(.block-add-button) .block-title-wrap"
 
+(** Poll [get_page_blocks_contents] until it stops changing for two reads,
+    giving in-flight renders (e.g. an emptied editing row tearing down after
+    paste) time to settle — the clj suite's JVM latency covered this gap. *)
+let settled_page_blocks_contents env =
+  let rec go prev idle =
+    let* contents = get_page_blocks_contents env in
+    if contents = prev && idle >= 3 then Js.Promise.resolve contents
+    else
+      let* () = wait_timeout env 150. in
+      go contents (if contents = prev then idle + 1 else 0)
+  in
+  go [||] 0
+
 let login_test_account ?(username = "e2etest") ?(password = "Logseq-e2e") env =
   let* () = Pw.eval_js env "localStorage.setItem(\"login-enabled\",true);" in
   let* () = Pw.click env ".toolbar-dots-btn" in
