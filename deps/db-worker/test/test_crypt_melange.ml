@@ -55,13 +55,24 @@ let rec pr_str (w : Wire.t) : string =
   | Wire.Uri u -> u
 
 let stub_state ~refresh_token ~id_token ~access_token () =
+  (* refresh-token still rides the crypt-local state_get_fn seam;
+     id/access tokens go through the real app_state table so
+     Sync_util.auth_token / Sync_auth see them too *)
   state_get_fn :=
     (fun k ->
       match k with
       | "auth/refresh-token" -> Option.map (fun s -> Wire.String s) refresh_token
       | "auth/id-token" -> Option.map (fun s -> Wire.String s) id_token
       | "auth/access-token" -> Option.map (fun s -> Wire.String s) access_token
-      | _ -> None)
+      | _ -> None);
+  Worker_state.merge_state
+    (Wire.Map
+       [ ( Wire.Keyword "auth/refresh-token"
+         , match refresh_token with Some s -> Wire.String s | None -> Wire.Nil )
+       ; ( Wire.Keyword "auth/id-token"
+         , match id_token with Some s -> Wire.String s | None -> Wire.Nil )
+       ; ( Wire.Keyword "auth/access-token"
+         , match access_token with Some s -> Wire.String s | None -> Wire.Nil ) ])
 
 let expect_rejection task (on_err : exn -> unit) =
   promise_of_task
@@ -86,17 +97,17 @@ let () =
       stub_state ~refresh_token:None ~id_token:(Some "state-token")
         ~access_token:None ();
       platform_env_fn := (fun () -> env "node" "cli");
-      eq (auth_token ()) (Some "state-token");
+      eq (Sync_util.auth_token ()) (Some "state-token");
       reset_hooks ());
 
   Fest.test "cli-node-get-user-uuid-reads-state-token-test" (fun () ->
       stub_state ~refresh_token:None ~id_token:(Some "state-token")
         ~access_token:None ();
       platform_env_fn := (fun () -> env "node" "cli");
-      parse_jwt_fn :=
+      Sync_util.parse_jwt_fn :=
         (fun token ->
-          if token = "state-token" then kwm [ ("sub", Wire.String "state-user-id") ]
-          else kwm []);
+          if token = "state-token" then Some (kwm [ ("sub", Wire.String "state-user-id") ])
+          else Some (kwm []));
       eq (get_user_uuid ()) (Some "state-user-id");
       reset_hooks ());
 
@@ -104,21 +115,21 @@ let () =
       stub_state ~refresh_token:None ~id_token:(Some "state-token")
         ~access_token:None ();
       platform_env_fn := (fun () -> env "node" "electron");
-      parse_jwt_fn :=
+      Sync_util.parse_jwt_fn :=
         (fun token ->
-          if token = "state-token" then kwm [ ("sub", Wire.String "state-user-id") ]
-          else kwm []);
-      eq (auth_token ()) (Some "state-token");
+          if token = "state-token" then Some (kwm [ ("sub", Wire.String "state-user-id") ])
+          else Some (kwm []));
+      eq (Sync_util.auth_token ()) (Some "state-token");
       eq (get_user_uuid ()) (Some "state-user-id");
       reset_hooks ());
 
   Fest.Promise.test "resolve-user-uuid-falls-back-to-resolved-token-test" (fun () ->
       get_user_uuid_fn := (fun () -> None);
-      resolve_ws_token_fn := (fun () -> pure (Some "fresh-token"));
-      parse_jwt_fn :=
+      Sync_auth.resolve_ws_token_fn := (fun () -> pure (Some "fresh-token"));
+      Sync_util.parse_jwt_fn :=
         (fun token ->
-          if token = "fresh-token" then kwm [ ("sub", Wire.String "fresh-user-id") ]
-          else kwm []);
+          if token = "fresh-token" then Some (kwm [ ("sub", Wire.String "fresh-user-id") ])
+          else Some (kwm []));
       promise_of_task (!resolve_user_uuid_fn ())
       |> Js.Promise.then_ (fun user_id ->
              eq user_id (Some "fresh-user-id");
@@ -981,7 +992,7 @@ let () =
       stub_state ~refresh_token:None ~id_token:(Some "token") ~access_token:None ();
       graph_e2ee_fn := (fun _repo -> Some (Datascript.Bool true));
       e2ee_base_fn := (fun () -> Some "https://example.com");
-      parse_jwt_fn := (fun _ -> kwm [ ("sub", Wire.String "user-1") ]);
+      Sync_util.parse_jwt_fn := (fun _ -> Some (kwm [ ("sub", Wire.String "user-1") ]));
       decrypt_private_key_fn :=
         (fun _opts _s -> pure (Wire.Keyword "private-key"));
       import_public_key_crypt_fn := (fun _ -> pure (Wire.Keyword "public-key"));
@@ -1045,7 +1056,7 @@ let () =
       let kv_set_calls = ref [] in
       stub_state ~refresh_token:None ~id_token:(Some "token") ~access_token:None ();
       e2ee_base_fn := (fun () -> Some "https://example.com");
-      parse_jwt_fn := (fun _ -> kwm [ ("sub", Wire.String "user-1") ]);
+      Sync_util.parse_jwt_fn := (fun _ -> Some (kwm [ ("sub", Wire.String "user-1") ]));
       decrypt_private_key_fn := (fun _opts _s -> pure (Wire.Keyword "private-key"));
       decrypt_aes_key_fn :=
         (fun _private_key encrypted ->

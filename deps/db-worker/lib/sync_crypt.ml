@@ -161,47 +161,6 @@ let decode_base64 s =
   done;
   Buffer.contents out
 
-let decode_base64url s =
-  let buf = Buffer.create (String.length s) in
-  String.iter
-    (fun c -> Buffer.add_char buf (match c with '-' -> '+' | '_' -> '/' | c -> c))
-    s;
-  decode_base64 (Buffer.contents buf)
-
-(* cljs decode-username: read UTF-16 code units, keep the low byte of
-   each, then UTF-8 decode the resulting bytes (identity for ASCII). *)
-let decode_username s =
-  let low = Buffer.create (String.length s) in
-  let i = ref 0 in
-  while !i < String.length s do
-    let dec = String.get_utf_8_uchar s !i in
-    if Uchar.utf_decode_is_valid dec then begin
-      let cp = Uchar.to_int (Uchar.utf_decode_uchar dec) in
-      i := !i + Uchar.utf_decode_length dec;
-      if cp <= 0xFFFF then Buffer.add_char low (Char.chr (cp land 0xFF))
-      else begin
-        let v = cp - 0x10000 in
-        let hi = 0xD800 lor (v lsr 10) and lo = 0xDC00 lor (v land 0x3FF) in
-        Buffer.add_char low (Char.chr (hi land 0xFF));
-        Buffer.add_char low (Char.chr (lo land 0xFF))
-      end
-    end else i := !i + 1
-  done;
-  let src = Buffer.contents low in
-  let buf = Buffer.create (String.length src) in
-  let j = ref 0 in
-  while !j < String.length src do
-    let dec = String.get_utf_8_uchar src !j in
-    if Uchar.utf_decode_is_valid dec then begin
-      Buffer.add_utf_8_uchar buf (Uchar.utf_decode_uchar dec);
-      j := !j + Uchar.utf_decode_length dec
-    end else begin
-      Buffer.add_utf_8_uchar buf Uchar.rep;
-      j := !j + 1
-    end
-  done;
-  Buffer.contents buf
-
 let urlencode s =
   let buf = Buffer.create (String.length s) in
   String.iter
@@ -211,9 +170,6 @@ let urlencode s =
       | c -> Buffer.add_string buf (Printf.sprintf "%%%02X" (Char.code c)))
     s;
   Buffer.contents buf
-
-let urlencoded params =
-  String.concat "&" (List.map (fun (k, v) -> urlencode k ^ "=" ^ urlencode v) params)
 
 (* ---------- platform env (cljs platform/current :env) ---------- *)
 
@@ -281,7 +237,6 @@ let datascript_conn_fn : (string -> Datascript.conn option) ref =
   ref Worker_state.datascript_conn
 
 let state_get_fn : (string -> Wire.t option) ref = ref Worker_state.state_get
-let merge_state_fn : (Wire.t -> unit) ref = ref Worker_state.merge_state
 let db_sync_config_fn : (unit -> Wire.t) ref = ref Worker_state.db_sync_config
 
 (* ---------- hooks: kv (platform/kv-get, kv-set!) ---------- *)
@@ -318,8 +273,6 @@ let http_send_fn : (Http.request -> Http.response t) ref = ref Http.send
    embedder's broadcast fn via Broadcast.to_clients *)
 let post_message_fn : (string -> unit) ref =
   ref (fun payload -> Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload)
-let now_ms_fn : (unit -> float) ref =
-  ref (fun () -> Time.epoch_ms_to_float (Time.now ()))
 
 (* ---------- hooks: crypt helpers (frontend.common.crypt) ---------- *)
 
@@ -507,132 +460,16 @@ let encrypt_text_by_text_password_fn : (string -> string -> Wire.t t) ref =
 let decrypt_text_by_text_password_fn : (string -> Wire.t -> string t) ref =
   ref decrypt_text_by_text_password_impl
 
-(* ---------- auth (sync.util/auth-token, sync.auth/<resolve-ws-token, parse-jwt) ---------- *)
-
-let parse_jwt_impl (jwt : string) : Wire.t =
-  match String.split_on_char '.' jwt with
-  | [ _; payload; _ ] ->
-      let json = Json.parse (decode_base64url payload) in
-      (match Wire.get "cognito:username" json with
-       | Some (Wire.String u) -> wire_assoc "cognito:username" (str (decode_username u)) json
-       | _ -> json)
-  | _ -> raise (Failure "parse-jwt: invalid token")
-
-let parse_jwt_fn : (string -> Wire.t) ref = ref parse_jwt_impl
-
-let auth_token_impl () : string option =
-  match !state_get_fn "auth/id-token" with
-  | Some (Wire.String s) when seq_ (Some s) -> Some s
-  | _ ->
-      (match !state_get_fn "auth/access-token" with
-       | Some (Wire.String s) when seq_ (Some s) -> Some s
-       | _ -> None)
-
-let auth_token_fn : (unit -> string option) ref = ref auth_token_impl
-let auth_token () = !auth_token_fn ()
+(* ---------- auth ----------
+   Canonical implementations live in Sync_util (auth_token, parse_jwt,
+   jwt_payload_field) and Sync_auth (resolve_ws_token); only the
+   refresh-token state read stays local since it goes through the
+   state_get_fn seam tests rebind. *)
 
 let refresh_token_from_state () =
   match !state_get_fn "auth/refresh-token" with
   | Some (Wire.String s) -> Some s
   | _ -> None
-
-let id_token_expired token =
-  match token with
-  | Some s when seq_ (Some s) ->
-      (try
-         match !parse_jwt_fn s |> Wire.get "exp" with
-         | Some w ->
-             (match Wire.as_int64 w with
-              | Some exp -> Int64.to_float exp *. 1000. <= !now_ms_fn ()
-              | None -> true)
-         | None -> true
-       with _ -> true)
-  | _ -> true
-
-let oauth_token_url () =
-  match !state_get_fn "auth/oauth-token-url" with
-  | Some (Wire.String s) when seq_ (Some s) -> Some s
-  | _ ->
-      (match !state_get_fn "auth/oauth-domain" with
-       | Some (Wire.String d) when seq_ (Some d) -> Some ("https://" ^ d ^ "/oauth2/token")
-       | _ -> None)
-
-let refresh_id_access_token () =
-  let refresh_token = refresh_token_from_state () in
-  let token_url = oauth_token_url () in
-  let client_id =
-    match !state_get_fn "auth/oauth-client-id" with
-    | Some (Wire.String s) -> Some s
-    | _ -> None
-  in
-  if not (seq_ refresh_token) then
-    error
-      (ex_info "worker auth refresh requires refresh token"
-         [ (kw "code", kw "missing-refresh-token") ])
-  else
-    match token_url, client_id with
-    | Some token_url, Some client_id when seq_ (Some client_id) ->
-        let body =
-          urlencoded
-            [ ("grant_type", "refresh_token");
-              ("client_id", client_id);
-              ("refresh_token", Option.get refresh_token) ]
-        in
-        bind
-          (!http_send_fn
-             { Http.url = token_url; method_ = "POST";
-               headers = [ ("content-type", "application/x-www-form-urlencoded") ];
-               body = Some body })
-          (fun resp ->
-            let data =
-              match resp.body with
-              | "" -> Wire.Nil
-              | b -> Json.parse b
-            in
-            if resp.status >= 200 && resp.status < 300 then
-              pure
-                ( Wire.as_string (Option.value (Wire.get "id_token" data) ~default:Wire.Nil)
-                , Wire.as_string (Option.value (Wire.get "access_token" data) ~default:Wire.Nil)
-                )
-            else
-              error
-                (ex_info "worker auth refresh failed"
-                   [ (kw "code", kw "auth-refresh-failed");
-                     (kw "status", Wire.Int resp.status);
-                     (kw "token-url", str token_url);
-                     (kw "body", data) ]))
-    | _ ->
-        (match token_url with
-         | None ->
-             error
-               (ex_info "worker auth refresh requires oauth token url"
-                  [ (kw "code", kw "missing-oauth-token-url") ])
-         | Some _ ->
-             error
-               (ex_info "worker auth refresh requires oauth client id"
-                  [ (kw "code", kw "missing-oauth-client-id") ]))
-
-let resolve_ws_token_impl () : string option t =
-  let token = auth_token () in
-  if (not (cli_node_owner ())) && id_token_expired token then
-    bind (refresh_id_access_token ()) (fun (id_token, access_token) ->
-        match id_token with
-        | Some id_token when seq_ (Some id_token) ->
-            !merge_state_fn
-              (Wire.kw_map
-                 ([ ("auth/id-token", str id_token) ]
-                  @
-                  match access_token with
-                  | Some a when seq_ (Some a) -> [ ("auth/access-token", str a) ]
-                  | _ -> []));
-            pure (Some id_token)
-        | _ ->
-            error
-              (ex_info "worker auth refresh returned empty id-token"
-                 [ (kw "code", kw "auth-refresh-empty-id-token") ]))
-  else pure token
-
-let resolve_ws_token_fn : (unit -> string option t) ref = ref resolve_ws_token_impl
 
 (* ---------- malli coercion (e2ee schemas only) ---------- *)
 
@@ -681,7 +518,7 @@ let coerce_http_response_fn : (string -> Wire.t -> Wire.t option) ref =
 let fetch_json_impl url ?(method_ = "GET") ?(headers = []) ?body ?response_schema
     ?(error_schema = "error") () =
   run (fun () ->
-      match auth_token () with
+      match Sync_util.auth_token () with
       | None -> error (ex_info "Empty token" [])
       | Some token ->
           let headers = headers @ [ ("authorization", "Bearer " ^ token) ] in
@@ -902,32 +739,15 @@ let get_graph_id_impl repo : string option =
 let get_graph_id_fn : (string -> string option) ref = ref get_graph_id_impl
 
 let get_user_uuid_impl () : string option =
-  match auth_token () with
-  | Some t ->
-      (try
-         match !parse_jwt_fn t |> Wire.get "sub" with
-         | Some (Wire.String s) -> Some s
-         | _ -> None
-       with _ -> None)
-  | None -> None
+  Sync_auth.get_user_uuid (Sync_util.auth_token ())
 
 let get_user_uuid_fn : (unit -> string option) ref = ref get_user_uuid_impl
 let get_user_uuid () = !get_user_uuid_fn ()
 
-let token_to_user_uuid token =
-  match token with
-  | Some t ->
-      (try
-         match !parse_jwt_fn t |> Wire.get "sub" with
-         | Some (Wire.String s) -> Some s
-         | _ -> None
-       with _ -> None)
-  | None -> None
-
 let resolve_user_uuid_impl () : string option t =
   match get_user_uuid () with
   | Some id when seq_ (Some id) -> pure (Some id)
-  | _ -> catch (map token_to_user_uuid (!resolve_ws_token_fn ())) (fun _ -> pure None)
+  | _ -> catch (map Sync_auth.get_user_uuid (Sync_auth.resolve_ws_token ())) (fun _ -> pure None)
 
 let resolve_user_uuid_fn : (unit -> string option t) ref = ref resolve_user_uuid_impl
 
@@ -2229,7 +2049,6 @@ let reset_hooks () =
   ldb_graph_rtc_uuid_fn := Ldb.get_graph_rtc_uuid;
   datascript_conn_fn := Worker_state.datascript_conn;
   state_get_fn := Worker_state.state_get;
-  merge_state_fn := Worker_state.merge_state;
   db_sync_config_fn := Worker_state.db_sync_config;
   kv_get_fn := kv_get_impl;
   kv_set_fn := kv_set_impl;
@@ -2241,7 +2060,6 @@ let reset_hooks () =
   post_message_fn :=
     (fun payload ->
       Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload);
-  now_ms_fn := (fun () -> Time.epoch_ms_to_float (Time.now ()));
   generate_rsa_key_pair_fn := generate_rsa_key_pair_impl;
   encrypt_private_key_fn := encrypt_private_key_impl;
   decrypt_private_key_crypt_fn := decrypt_private_key_crypt_impl;
@@ -2258,9 +2076,10 @@ let reset_hooks () =
   decrypt_text_if_encrypted_fn := decrypt_text_if_encrypted_impl;
   encrypt_text_by_text_password_fn := encrypt_text_by_text_password_impl;
   decrypt_text_by_text_password_fn := decrypt_text_by_text_password_impl;
-  parse_jwt_fn := parse_jwt_impl;
-  auth_token_fn := auth_token_impl;
-  resolve_ws_token_fn := resolve_ws_token_impl;
+  Sync_util.parse_jwt_fn := Sync_util.parse_jwt;
+  Sync_util.auth_token_fn := Sync_util.auth_token_impl;
+  Sync_auth.id_token_expired_fn := Sync_auth.id_token_expired_impl;
+  Sync_auth.resolve_ws_token_fn := Sync_auth.resolve_ws_token_impl;
   coerce_http_request_fn := coerce_http_request_impl;
   fetch_json_fn := fetch_json_impl;
   ui_request_fn := ui_request_impl;
