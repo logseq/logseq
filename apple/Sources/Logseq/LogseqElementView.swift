@@ -726,6 +726,13 @@ struct LogseqElementView: View {
             childView(child)
           }
         }
+      } else if scrollEnv.space != 0, let spec = virtSpec {
+        LogseqVirtualColumn(
+          nodeID: context.nodeID, children: children,
+          spacing: style.stackSpacing ?? 0, scroll: scrollEnv,
+          estimate: spec.est, total: spec.count, emitFirst: spec.first,
+          onRequest: { f, l in emitVirtWindow(first: f, last: l) }
+        ) { child in AnyView(childView(child)) }
       } else if virtualizable(children) {
         LogseqVirtualColumn(
           nodeID: context.nodeID, children: children,
@@ -742,6 +749,43 @@ struct LogseqElementView: View {
           }
         }
       }
+    }
+  }
+
+  /// OCaml `virt_list` spec: the emitted `children` are only the rows in
+  /// the current window — `data-virt-count/first/est` size the spacers
+  /// and scrolling past the emitted band is requested back via
+  /// `virt-window` dom-events.
+  private var virtSpec: (count: Int, first: Int, est: CGFloat)? {
+    guard
+      let c = attrs["data-virt-count"] as? String, let count = Int(c),
+      let f = attrs["data-virt-first"] as? String, let first = Int(f),
+      let e = attrs["data-virt-est"] as? String, let est = Double(e),
+      count > 0
+    else { return nil }
+    return (count, first, CGFloat(est))
+  }
+
+  /// Reports the desired row window to the backend; the OCaml virt_list
+  /// handler on this node widens it by its emit margin and re-emits the
+  /// keyed row slice, which lands here as an updated `children` + attrs.
+  /// The emit is deferred one runloop turn: firing it synchronously inside
+  /// a render pass re-enters patch apply (emit → OCaml dispatch → patch →
+  /// apply → Observation write → another render) and turns a window slide
+  /// into a ~1.5s nested cascade on the main thread.
+  private func emitVirtWindow(first: Int, last: Int) {
+    let payload: [String: Any] = [
+      "nodeId": context.nodeID, "first": first, "last": last,
+    ]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    let context = context
+    DispatchQueue.main.async {
+      try? context.emit(
+        name: "dom-event",
+        values: ["name": .string("virt-window"), "payload": .string(json)])
     }
   }
 
@@ -1534,12 +1578,14 @@ extension EnvironmentValues {
 /// columns measure eagerly (the windowing overhead isn't worth it).
 private let logseqVirtualColumnThreshold = 16
 
-/// Measured heights of virtualized children, keyed by node id — persists
-/// across unmount/remount so a row re-entering the window keeps its real
-/// height in the spacer math instead of the estimate.
+/// Measured heights of virtualized children. `heights` keys rows by node
+/// id (heuristic path — stable identity across reorder); `byIndex` keys
+/// spec-driven lists as column nodeID -> absolute row index -> height,
+/// which stays valid as the emitted window slides.
 final class LogseqHeightStore: @unchecked Sendable {
   static let shared = LogseqHeightStore()
   var heights: [Int: CGFloat] = [:]
+  var byIndex: [Int: [Int: CGFloat]] = [:]
 }
 
 /// Windowed column: mounts only the children overlapping the scroller's
@@ -1555,11 +1601,39 @@ struct LogseqVirtualColumn<ChildContent: View>: View {
   var spacing: CGFloat
   var scroll: LogseqScrollEnv
   var estimate: CGFloat = 32
+  /// Spec-driven mode (OCaml `virt_list`): `children` are the emitted
+  /// window rows — `children[i]` is absolute row `emitFirst + i` of
+  /// `total` — and scroll position beyond the emitted band is requested
+  /// back through `onRequest`.
+  var total: Int = 0
+  var emitFirst: Int = 0
+  var onRequest: ((Int, Int) -> Void)? = nil
   var childBuilder: (Int) -> ChildContent
+
+  private var specDriven: Bool { total > 0 }
 
   /// The column's top edge in the scroller's coordinate space. Unknown
   /// until the first geometry report; the first window is a prefix guess.
   @State private var minY = CGFloat.greatestFiniteMagnitude
+  /// Last window requested from the backend — suppresses repeat emits
+  /// while the patch carrying the new rows is still in flight.
+  @State private var requested = (first: -1, last: -1)
+
+  private func emitWindowIfNeeded(_ dFirst: Int, _ dLast: Int) {
+    guard let onRequest else { return }
+    let eLast = emitFirst + children.count - 1
+    // Re-request once the desired band escapes the emitted rows by more
+    // than a small guard — the backend widens requests by its own margin,
+    // so this fires roughly once per margin of travel.
+    guard
+      (dFirst < emitFirst + 8 || dLast > eLast - 8)
+        && (dFirst < requested.first - 4 || dLast > requested.last + 4)
+    else { return }
+    let f = max(0, dFirst - 8)
+    let l = min(total - 1, dLast + 8)
+    requested = (f, l)
+    onRequest(f, l)
+  }
 
   private func childHeight(_ id: Int) -> CGFloat {
     LogseqHeightStore.shared.heights[id] ?? estimate
@@ -1597,31 +1671,111 @@ struct LogseqVirtualColumn<ChildContent: View>: View {
     return (starts, total, first, last)
   }
 
+  /// Spec-mode geometry: cumulative heights over all `total` rows
+  /// (measured where known, `estimate` otherwise), the padding around the
+  /// emitted `children` slice, and the viewport's desired absolute range
+  /// — which also drives `onRequest` when it escapes the emitted band.
+  private func specWindow() -> (
+    topPad: CGFloat, bottomPad: CGFloat, dFirst: Int, dLast: Int
+  ) {
+    let heights = LogseqHeightStore.shared.byIndex[nodeID] ?? [:]
+    var starts = [CGFloat](repeating: 0, count: total)
+    var totalH: CGFloat = 0
+    for i in 0..<total {
+      starts[i] = totalH
+      totalH += heights[i] ?? estimate
+      if i < total - 1 { totalH += spacing }
+    }
+    _ = totalH
+    let overscan = scroll.viewport / 2 + 100
+    var dFirst = emitFirst
+    var dLast = emitFirst + children.count - 1
+    if minY.isFinite, scroll.viewport > 0 {
+      let lo = -overscan - minY
+      let hi = scroll.viewport + overscan - minY
+      dFirst = total
+      dLast = -1
+      for i in 0..<total {
+        let y0 = starts[i]
+        let y1 = y0 + (heights[i] ?? estimate)
+        if y1 > lo && dFirst == total { dFirst = i }
+        if y0 < hi { dLast = i }
+      }
+      if dLast < dFirst {
+        dFirst = emitFirst
+        dLast = emitFirst + children.count - 1
+      }
+    }
+    let emitLast = emitFirst + children.count - 1
+    let topPad = emitFirst > 0 ? starts[emitFirst] : 0
+    var bottomPad: CGFloat = 0
+    if emitLast + 1 < total {
+      for i in (emitLast + 1)..<total {
+        bottomPad += heights[i] ?? estimate
+        bottomPad += spacing
+      }
+    }
+    return (topPad, bottomPad, dFirst, min(dLast, total - 1))
+  }
+
   var body: some View {
-    let w = window()
-    let topPad = w.last >= w.first ? w.starts[w.first] : w.total
-    let bottomPad =
-      w.last >= w.first
-      ? w.total - (w.starts[w.last] + childHeight(children[w.last])) : 0
-    LogseqColumnLayout(nodeID: nodeID, spacing: spacing) {
-      if topPad > 0 { Color.clear.frame(height: topPad) }
-      if w.last >= w.first {
-        ForEach(children[w.first...w.last], id: \.self) { c in
+    if specDriven {
+      let w = specWindow()
+      LogseqColumnLayout(nodeID: nodeID, spacing: spacing) {
+        if w.topPad > 0 { Color.clear.frame(height: w.topPad) }
+        ForEach(Array(children.enumerated()), id: \.element) { i, c in
           childBuilder(c)
             .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
               let h = max(0.5, size.height)
-              if abs((LogseqHeightStore.shared.heights[c] ?? -1) - h) > 0.5 {
-                LogseqHeightStore.shared.heights[c] = h
+              var hs = LogseqHeightStore.shared.byIndex[nodeID] ?? [:]
+              let idx = emitFirst + i
+              if abs((hs[idx] ?? -1) - h) > 0.5 {
+                hs[idx] = h
+                LogseqHeightStore.shared.byIndex[nodeID] = hs
               }
             }
         }
+        if w.bottomPad > 0 { Color.clear.frame(height: w.bottomPad) }
       }
-      if bottomPad > 0 { Color.clear.frame(height: bottomPad) }
-    }
-    .onGeometryChange(for: CGRect.self) {
-      $0.frame(in: .named(scroll.space))
-    } action: { f in
-      if f.minY != minY { minY = f.minY }
+      .onGeometryChange(for: CGRect.self) {
+        $0.frame(in: .named(scroll.space))
+      } action: { f in
+        if f.minY != minY { minY = f.minY }
+      }
+      .onChange(of: minY) { _ in
+        let w = specWindow()
+        emitWindowIfNeeded(w.dFirst, w.dLast)
+      }
+      .onAppear {
+        let w = specWindow()
+        emitWindowIfNeeded(w.dFirst, w.dLast)
+      }
+    } else {
+      let w = window()
+      let topPad = w.last >= w.first ? w.starts[w.first] : w.total
+      let bottomPad =
+        w.last >= w.first
+        ? w.total - (w.starts[w.last] + childHeight(children[w.last])) : 0
+      LogseqColumnLayout(nodeID: nodeID, spacing: spacing) {
+        if topPad > 0 { Color.clear.frame(height: topPad) }
+        if w.last >= w.first {
+          ForEach(children[w.first...w.last], id: \.self) { c in
+            childBuilder(c)
+              .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
+                let h = max(0.5, size.height)
+                if abs((LogseqHeightStore.shared.heights[c] ?? -1) - h) > 0.5 {
+                  LogseqHeightStore.shared.heights[c] = h
+                }
+              }
+          }
+        }
+        if bottomPad > 0 { Color.clear.frame(height: bottomPad) }
+      }
+      .onGeometryChange(for: CGRect.self) {
+        $0.frame(in: .named(scroll.space))
+      } action: { f in
+        if f.minY != minY { minY = f.minY }
+      }
     }
   }
 }

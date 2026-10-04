@@ -1094,8 +1094,8 @@ let journal_item_inner (m : Model.t) (p : Model.page) : t =
             [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
                 [ page_title_el m p ]
             ; Properties_area.bidi_area p
-            ; blocks_inner ?puuid:p.page_uuid ~container:false
-                p.page_blocks
+            ; blocks_inner ?puuid:p.page_uuid ~virtualize:true
+                ~container:false p.page_blocks
             ]
         ; dom ~key:("jrefs-w-" ^ key) ~style_class:"flex flex-col gap-8 ml-1"
             (* cljs journal-page: #today-queries div on the today item,
@@ -1157,6 +1157,7 @@ let journals_view (m : Model.t) (js : Model.page list) : t =
                    [ Virt_list.list
                        ~list_attrs:[ ("data-virtuoso-scroller", "true") ]
                        ~estimate_size:(fun _ -> 640.)
+                       ~initial_rows:1
                        ~on_end:(fun () ->
                          ignore (!Runtime.journals_load_more ()))
                        ~data_sig:(fun ctx ->

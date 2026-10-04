@@ -125,8 +125,13 @@ private let runOnMainLock = NSLock()
 nonisolated(unsafe) private var drainTimer: CFRunLoopTimer?
 
 private func installTickTimer() {
+  // The parked _DPSNextEvent wait only listens on the event port and the
+  // timer port — wakeups and GCD are never serviced until the next event
+  // or timer fires. A 2ms tick is therefore the only reliable low-latency
+  // delivery channel for worker-produced work; an idle drain is a lock +
+  // empty check, so the cost is negligible.
   drainTimer = CFRunLoopTimerCreateWithHandler(
-    nil, CFAbsoluteTimeGetCurrent() + 0.1, 0.1, 0, 0
+    nil, CFAbsoluteTimeGetCurrent() + 0.002, 0.002, 0, 0
   ) { _ in
     drainRunOnMainPending(via: "timer")
   }
@@ -170,12 +175,15 @@ private func drainRunOnMainPending(via: String = "?") {
   let batch = runOnMainPending
   runOnMainPending.removeAll()
   runOnMainLock.unlock()
-  if LogseqRuntime.perfLogging, !batch.isEmpty {
-    let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain())
-      .map { $0.rawValue as String } ?? "none"
-    FileHandle.standardError.write(
-      "PERF drain t=\(CFAbsoluteTimeGetCurrent()) n=\(batch.count) via=\(via) mode=\(mode)\n"
-        .data(using: .utf8)!)
+  if LogseqRuntime.perfLogging {
+    let now = CFAbsoluteTimeGetCurrent()
+    if !batch.isEmpty || now - LogseqRuntime.launchAbsTime < 3.0 {
+      let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain())
+        .map { $0.rawValue as String } ?? "none"
+      FileHandle.standardError.write(
+        "PERF drain t=\(now) n=\(batch.count) via=\(via) mode=\(mode)\n"
+          .data(using: .utf8)!)
+    }
   }
   for item in batch { item() }
 }
@@ -215,11 +223,12 @@ func runOnMainDeferred(_ work: @escaping () -> Void) {
 }
 
 private func scheduleRunOnMainDrain() {
-  // The parked _DPSNextEvent wait services runloop timers: tightening
-  // to ~2ms delivers the queue on the next turn. GCD + PerformBlock are
-  // racing backups — the drain is idempotent, so whichever lands first
-  // wins. Only background (worker-produced) work uses this channel; it
-  // has no hard latency budget.
+  // Measured: while parked in _DPSNextEvent's mach-port wait, the main
+  // runloop services only its event port and timer port on time — GCD
+  // main.async, PerformBlock+WakeUp, and posted applicationDefined events
+  // all stall 0.2-2.9s until a real event or timer fires. The 2ms tick is
+  // therefore the delivery channel; the rest stay as racing backups.
+  //
   if let drainTimer {
     CFRunLoopTimerSetNextFireDate(
       drainTimer, CFAbsoluteTimeGetCurrent() + 0.002)
@@ -297,11 +306,11 @@ private let receivePatch: PatchCallback = { source in
     }
     MainActor.assumeIsolated {
       activeRuntime?.apply(decoded: batch)
-      // A patch can create platform views (e.g. an editor textarea) whose
-      // insertion into the window waits for a lazy view-update pass — when
-      // nothing else wakes the runloop that pass can lag by seconds, and a
-      // focus dom-op applied in the meantime fails silently. Flush now.
-      for window in NSApp.windows { window.contentView?.layoutSubtreeIfNeeded() }
+      // No forced layout here: during startup bursts a synchronous
+      // layoutSubtreeIfNeeded costs ~400ms of mount inside this drain and
+      // stalls every queued batch behind it. View insertion happens on the
+      // natural display pass (~1 frame), and the platform-request drain
+      // does its own layout flush before delivering focus-type ops.
     }
   }
 }
@@ -371,12 +380,14 @@ private let platformRequest: PlatformRequestCallback = { data, length in
       }
     }
     MainActor.assumeIsolated {
-      for text in batch { activeRuntime?.deliverPlatformRequest(text) }
       // Model mutations queue a SwiftUI view-tree update, but the hosting
       // pass that actually inserts platform views into the window is lazy —
       // without a nudge an unattached textarea can sit window-less for
-      // seconds (focus then fails silently). Flush pending layout now.
+      // seconds (a focus op delivered before its view mounts fails
+      // silently). Flush pending layout BEFORE delivering so focus-type
+      // ops find their views.
       for window in NSApp.windows { window.contentView?.layoutSubtreeIfNeeded() }
+      for text in batch { activeRuntime?.deliverPlatformRequest(text) }
     }
   }
 }
@@ -512,6 +523,8 @@ private let platformRequest: PlatformRequestCallback = { data, length in
 
   nonisolated static let perfLogging =
     ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil
+
+  nonisolated static let launchAbsTime = CFAbsoluteTimeGetCurrent()
 
   /// Reentrancy no longer exists: every Swift->OCaml call is a queued
   /// work item on the single OCaml thread, and OCaml->Swift callbacks are

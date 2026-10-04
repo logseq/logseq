@@ -385,13 +385,14 @@ let row_attrs margin (it : vrow) =
   ]
 
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
-    ?(estimate_size = fun _ -> 32.) ?(list_attrs = [])
+    ?(estimate_size = fun _ -> 32.) ?(initial_rows = -1) ?(list_attrs = [])
     ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
     ?(pin_sig = fun () -> None)
     ?(data_sig = fun (_ : Lui_ui.ui_context) -> None)
     ?(on_end = fun () -> ())
     ~key_of ~render (data : 'a array) : t =
  fun ctx parent ->
+  ignore initial_rows;
   let st = Signal.state ctx.ui_scheduler { v_rows = []; v_total = 0. } in
   let margin = ref 0. in
   let list_id = next_id () in

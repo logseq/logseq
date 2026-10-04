@@ -12,6 +12,22 @@ external platform_request : string -> unit = "logseq_lui_platform_request"
    batches loses nodes the later diffs reference. *)
 let pending_batches : string Queue.t = Queue.create ()
 
+(* Input-path entries (key/mouse/extension events) now run on the main
+   systhread while wakeup-driven [pump] runs on the OCaml worker systhread.
+   Systhreads in a domain preempt each other at poll points, so two entries
+   can interleave mid-flush — pending_ops / runtime_generation /
+   pending_batches are all shared. Serialize every entry that dispatches,
+   flushes, or drains; a main-thread event then waits out an in-flight pump
+   burst the same way event-queueing used to, instead of corrupting the
+   batch stream. *)
+let entry_lock = Mutex.create ()
+
+let with_entry_lock f =
+  Mutex.lock entry_lock;
+  match f () with
+  | x -> Mutex.unlock entry_lock; x
+  | exception e -> Mutex.unlock entry_lock; raise e
+
 let take_patches () : string =
   if Queue.is_empty pending_batches then ""
   else begin
@@ -367,25 +383,29 @@ let perf_mark name t0 =
   if Lazy.force perf_log
   then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
+(* NOTE: never Queue.clear pending_batches at entry — a systhread yield
+   inside drain/dispatch (blocking daemon IO) can let another entry emit
+   into the shared queue first; clearing here would drop those batches and
+   skip a wire generation, which the host rejects as invalidBatch. *)
 let dispatch_lui (event : Lui_protocol.event) : string =
-  let t0 = perf_ms () in
-  Queue.clear pending_batches;
-  (match !current_app with
-   | Some app ->
-       ignore (Lui_app.dispatch_event app event);
-       perf_mark "dispatch_event" t0;
-       let t1 = perf_ms () in
-       ignore (Lui_app.flush app);
-       perf_mark "flush" t1;
-       let t2 = perf_ms () in
-       run_doc_scans_after_flush ();
-       perf_mark "scans" t2
-   | None -> ());
-  let t3 = perf_ms () in
-  let out = take_patches_dbg "lui" in
-  perf_mark "take_patches" t3;
-  perf_mark "total" t0;
-  out
+  with_entry_lock (fun () ->
+      let t0 = perf_ms () in
+      (match !current_app with
+       | Some app ->
+           ignore (Lui_app.dispatch_event app event);
+           perf_mark "dispatch_event" t0;
+           let t1 = perf_ms () in
+           ignore (Lui_app.flush app);
+           perf_mark "flush" t1;
+           let t2 = perf_ms () in
+           run_doc_scans_after_flush ();
+           perf_mark "scans" t2
+       | None -> ());
+      let t3 = perf_ms () in
+      let out = take_patches_dbg "lui" in
+      perf_mark "take_patches" t3;
+      perf_mark "total" t0;
+      out)
 
 let appear node = dispatch_lui (Lui_protocol.Appear node)
 let press node = dispatch_lui (Lui_protocol.Press node)
@@ -432,57 +452,57 @@ let picked node payload =
   dispatch_lui (Lui_protocol.ExtensionEvent (node, "picked", "", m))
 
 let extension_event node name values : string =
-  let t0 = perf_ms () in
-  Queue.clear pending_batches;
-  (match !current_app with
-   | Some app -> (
-       match
-         Lui_runtime.extension_identifier (Lui_app.runtime app) node
-       with
-       | Some identifier ->
-           ignore
-             (Lui_app.dispatch_event app
-                (Lui_protocol.ExtensionEvent
-                   (node, identifier, name,
-                    decode_extension_values values)));
-           perf_mark "ext.dispatch" t0;
-           let t1 = perf_ms () in
-           ignore (Lui_app.flush app);
-           perf_mark "ext.flush" t1;
-           let t2 = perf_ms () in
-           (* Route through the scan gate: extension events are often
-              prop-only bursts (visible-range, scroll) and must not pay
-              a full-doc scan per event *)
-           run_doc_scans_after_flush ();
-           perf_mark "ext.scans" t2
-       | None -> ())
-   | None -> ());
-  let t3 = perf_ms () in
-  let out = take_patches_dbg "ext" in
-  perf_mark "ext.take" t3;
-  perf_mark "ext.total" t0;
-  out
+  with_entry_lock (fun () ->
+      let t0 = perf_ms () in
+      (match !current_app with
+       | Some app -> (
+           match
+             Lui_runtime.extension_identifier (Lui_app.runtime app) node
+           with
+           | Some identifier ->
+               ignore
+                 (Lui_app.dispatch_event app
+                    (Lui_protocol.ExtensionEvent
+                       (node, identifier, name,
+                        decode_extension_values values)));
+               perf_mark "ext.dispatch" t0;
+               let t1 = perf_ms () in
+               ignore (Lui_app.flush app);
+               perf_mark "ext.flush" t1;
+               let t2 = perf_ms () in
+               (* Route through the scan gate: extension events are often
+                  prop-only bursts (visible-range, scroll) and must not pay
+                  a full-doc scan per event *)
+               run_doc_scans_after_flush ();
+               perf_mark "ext.scans" t2
+           | None -> ())
+       | None -> ());
+      let t3 = perf_ms () in
+      let out = take_patches_dbg "ext" in
+      perf_mark "ext.take" t3;
+      perf_mark "ext.total" t0;
+      out)
 
 (* drain the Host mailbox on the app thread; called via the wakeup the
    OCaml side fired when async work completed *)
 let pump () : string =
-  let t0 = perf_ms () in
-  Queue.clear pending_batches;
-  Host.drain ();
-  perf_mark "pump.drain" t0;
-  let t1 = perf_ms () in
-  (match !current_app with
-   | Some app -> ignore (Lui_app.flush app)
-   | None -> ());
-  perf_mark "pump.flush" t1;
-  let t2 = perf_ms () in
-  run_doc_scans_after_flush ();
-  perf_mark "pump.scans" t2;
-  let t3 = perf_ms () in
-  let out = take_patches_dbg "pump" in
-  perf_mark "pump.take" t3;
-  perf_mark "pump.total" t0;
-  out
+  with_entry_lock (fun () ->
+      let t0 = perf_ms () in
+      Host.drain ();
+      perf_mark "pump.drain" t0;
+      let t1 = perf_ms () in
+      (match !current_app with
+       | Some app -> ignore (Lui_app.flush app)
+       | None -> ());
+      perf_mark "pump.flush" t1;
+      let t2 = perf_ms () in
+      run_doc_scans_after_flush ();
+      perf_mark "pump.scans" t2;
+      let t3 = perf_ms () in
+      let out = take_patches_dbg "pump" in
+      perf_mark "pump.take" t3;
+      perf_mark "pump.total" t0;
+      out)
 
 let platform_event payload =
   (* Swift -> OCaml event channel (window resize, appearance change,
