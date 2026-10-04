@@ -36,10 +36,10 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
   let checksum_exempt =
     Db_tx.tx_meta_flag tx_report.tx_meta "checksum-exempt?"
   in
-  if checksum_exempt then Sync_state.mark_checksum_exempt repo;
   if
     Sync_state.has_client_ops_conn repo && graph_remote tx_report.db_after
   then begin
+    if checksum_exempt then Sync_client_op.mark_checksum_exempted repo;
     (* cljs reads the stored checksum only when the graph was already
        remote, so a graph that just became remote anchors on a full
        checksum instead of deltas on an empty base. *)
@@ -49,10 +49,16 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
       else None
     in
     let new_checksum =
-      Db_sync_checksum.update_checksum
-        (Option.value current_checksum ~default:"")
-        ~db_before:tx_report.db_before ~db_after:tx_report.db_after
-        ~tx_data:(if checksum_exempt then [] else tx_report.tx_data)
+      if checksum_exempt && current_checksum = None then
+        (* an exempt tx with no stored anchor: the [] delta would
+           short-circuit update_checksum into storing "". Anchor on the
+           pre-tx image instead — same value the anchor branch computes *)
+        Db_sync_checksum.recompute_checksum tx_report.db_before
+      else
+        Db_sync_checksum.update_checksum
+          (Option.value current_checksum ~default:"")
+          ~db_before:tx_report.db_before ~db_after:tx_report.db_after
+          ~tx_data:(if checksum_exempt then [] else tx_report.tx_data)
     in
     (match Runtime_env.env "LOGSEQ_CHECKSUM_ASSERT" with
      | Some "1" ->
@@ -63,10 +69,11 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
            (* exempt writes (gc purges) legitimately diverge the stored
               server-image checksum from a local recompute — after one,
               drift here is expected, so demote raise to warn *)
-           let exempted = Sync_state.checksum_exempted repo in
-           Worker_log.error
-             (if exempted then "db-sync/checksum-drift-after-exempt"
-              else "db-sync/checksum-incremental-drift")
+           let exempted = Sync_client_op.checksum_exempted repo in
+           (if exempted then
+              Worker_log.warn "db-sync/checksum-drift-after-exempt"
+            else
+              Worker_log.error "db-sync/checksum-incremental-drift")
              [ "repo", repo
              ; "current-checksum", Option.value current_checksum ~default:""
              ; "incremental-checksum", new_checksum
@@ -103,21 +110,37 @@ let reconcile_local_checksum repo conn =
     let covered_tx = Sync_client_op.get_local_checksum_covered_tx repo in
     let current_tx = (Datascript.db conn).max_tx in
     (match checksum with
-     | Some _ when covered_tx <> Some current_tx ->
-         let recomputed =
-           Db_sync_checksum.recompute_checksum (Datascript.db conn)
-         in
-         if Some recomputed <> checksum then
-           Worker_log.info "db-sync/checksum-healed-on-open"
-             [ "repo", repo
-             ; "stored-checksum", Option.value checksum ~default:""
-             ; "recomputed-checksum", recomputed
-             ; "covered-tx",
-               (match covered_tx with
-                | Some t -> string_of_int t
-                | None -> "nil")
-             ; "current-tx", string_of_int current_tx ];
-         Sync_client_op.update_local_checksum repo recomputed current_tx
+     | Some stored when covered_tx <> Some current_tx ->
+         if Sync_client_op.checksum_exempted repo then
+           (* the stored value is a server image a local recompute cannot
+              reproduce (gc'd ghosts are absent locally). covered_tx
+              trails because the last commit had no counted deltas —
+              advance it without overwriting the checksum *)
+           begin
+             Worker_log.info "db-sync/checksum-heal-skipped-exempt"
+               [ "repo", repo ; "covered-tx",
+                 (match covered_tx with
+                  | Some t -> string_of_int t
+                  | None -> "nil")
+               ; "current-tx", string_of_int current_tx ];
+             Sync_client_op.update_local_checksum repo stored current_tx
+           end
+         else begin
+           let recomputed =
+             Db_sync_checksum.recompute_checksum (Datascript.db conn)
+           in
+           if Some recomputed <> checksum then
+             Worker_log.info "db-sync/checksum-healed-on-open"
+               [ "repo", repo
+               ; "stored-checksum", Option.value checksum ~default:""
+               ; "recomputed-checksum", recomputed
+               ; "covered-tx",
+                 (match covered_tx with
+                  | Some t -> string_of_int t
+                  | None -> "nil")
+               ; "current-tx", string_of_int current_tx ];
+           Sync_client_op.update_local_checksum repo recomputed current_tx
+         end
      | _ -> ())
   end
 

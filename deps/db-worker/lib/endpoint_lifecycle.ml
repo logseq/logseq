@@ -458,7 +458,7 @@ let initialize_db ~ensure_open args =
                  | None ->
                      maybe_enqueue_built_in_sync_repair repo conn None
                        initial_data_exists);
-                Endpoint_transaction.maybe_run_recycle_gc repo
+                ()
               end);
              (* cljs (when initial-tx-report (db-sync/handle-local-tx! repo
                 initial-tx-report)). *)
@@ -473,6 +473,12 @@ let initialize_db ~ensure_open args =
                 (confirmed state only); datascript_conn becomes the
                 storage-less display projection replaying pending ops. *)
              Sync_apply.split_off_server_if_remote repo;
+             (if not sync_download then
+                (* gc must run after the split attached the checksum
+                   listener — an exempt purge fired earlier would leave
+                   covered_tx behind and trigger a heal that overwrites
+                   the stored server-image checksum with a local one *)
+                Endpoint_transaction.maybe_run_recycle_gc repo);
              (* the split helper already moved the listener onto the
                 display conn when it swapped; only a non-remote conn
                 still needs it attached here *)

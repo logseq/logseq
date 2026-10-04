@@ -56,6 +56,15 @@ let recompute_checksum_diagnostics args =
   match Worker_state.datascript_conn repo with
   | None -> Db_worker_effect.pure Wire.Nil
   | Some conn ->
+      (* the stored checksum is computed over the confirmed conn — on a
+         remote graph datascript_conn is the display projection, whose
+         pending-inclusive db and display-domain max_tx would corrupt
+         the stored checksum and covered_tx *)
+      let conn =
+        match Sync_state.confirmed_conn repo with
+        | Some c -> c
+        | None -> conn
+      in
       let local, remote = checksum_diagnostics repo in
       let result =
         Worker_db_validate.recompute_checksum_diagnostics repo conn
@@ -68,7 +77,11 @@ let recompute_checksum_diagnostics args =
         | _ -> None
       in
       (match recomputed with
-       | Some (Wire.String checksum) ->
+       | Some (Wire.String checksum)
+         when not (Sync_client_op.checksum_exempted repo) ->
+           (* skip the write-back once exempt writes exist: the stored
+              checksum is a server image (gc'd ghosts stay counted) that
+              a local recompute cannot reproduce *)
            (match Sync_state.client_ops_conn_opt repo with
             | Some _client_ops_conn ->
                 Sync_client_op.update_local_checksum repo checksum

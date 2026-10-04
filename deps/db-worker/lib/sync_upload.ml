@@ -316,8 +316,7 @@ let set_graph_sync_metadata repo graph_id graph_e2ee =
                [ Wire.Keyword "db/ident"
                , Wire.Keyword "logseq.kv/graph-rtc-e2ee?"
                ; Wire.Keyword "kv/value", Wire.Bool graph_e2ee ] ]
-           [ ("outliner-op", Keyword "set-kvs")
-           ; ("checksum-exempt?", Bool true) ])
+           [ ("outliner-op", Keyword "set-kvs") ])
   | None -> ()
 
 let ensure_client_graph_uuid repo graph_id =
@@ -540,6 +539,10 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
       in
       Sync_client_op.update_local_checksum repo snapshot_checksum
         (Conn.db source_conn).max_tx;
+      (* the uploaded snapshot is a fresh server image — the stored
+         checksum covers the ghosts an earlier exempted gc removed, so
+         the exempted marker no longer applies *)
+      Sync_client_op.clear_checksum_exempted repo;
       update_upload_progress
         (Wire.Map
            [ Wire.Keyword "sub-type", Wire.Keyword "upload-progress"

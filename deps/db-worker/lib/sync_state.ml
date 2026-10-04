@@ -282,15 +282,6 @@ let pending_replay : bool ref = ref false
    display projection (server state + pending ops replayed forward). *)
 let server_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
 
-(* repos that have had checksum-exempt writes: their stored checksum
-   intentionally tracks the server image (exempt deltas skipped), so it
-   can legitimately diverge from a local recompute *)
-let checksum_exempt_repos : (string, bool) Hashtbl.t = Hashtbl.create 7
-
-let mark_checksum_exempt repo = Hashtbl.replace checksum_exempt_repos repo true
-let checksum_exempted repo =
-  Hashtbl.find_opt checksum_exempt_repos repo = Some true
-
 let server_conn repo = Hashtbl.find_opt server_conns repo
 let set_server_conn repo conn = Hashtbl.replace server_conns repo conn
 let drop_server_conn repo =
