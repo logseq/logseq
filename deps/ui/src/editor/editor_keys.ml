@@ -31,6 +31,48 @@ let ac_owned_key = function
   | "Enter" | "Tab" | "Escape" | "ArrowUp" | "ArrowDown" -> true
   | _ -> false
 
+(* -- normal-mode "p" chord (cljs keymap sequences p d/i/r/...) -- *)
+
+(* "p" on a selected block arms the property chord; the follow-up key
+   must land within 1.5s or the chord lapses *)
+let pending_p = ref false
+let pending_p_timer = ref (-1)
+
+let clear_pending_p () =
+  pending_p := false;
+  if !pending_p_timer >= 0 then (
+    D.clear_timeout !pending_p_timer;
+    pending_p_timer := -1)
+
+let arm_pending_p () =
+  clear_pending_p ();
+  pending_p := true;
+  pending_p_timer := D.set_timeout_id clear_pending_p 1500
+
+(* follow-up key after "p": the deadline calendar and the icon /
+   reaction pickers anchor under the first selected block (routed
+   through ls:editor-command like the context-menu commands); any other
+   key clears the chord and falls through to normal handling *)
+let run_p_chord ev key =
+  clear_pending_p ();
+  match key, A.selected_uuids () with
+  | "a", _ ->
+      (* cljs p a = toggle-display-hidden-properties *)
+      D.prevent_default ev;
+      Properties_state.toggle_hidden ();
+      Properties_state.refresh_all ();
+      true
+  | ("d" | "i" | "r" as k), u :: _ ->
+      D.prevent_default ev;
+      Popups_state.emit_cmd
+        (match k with
+         | "d" -> "deadline"
+         | "i" -> "set-icon"
+         | _ -> "add-reaction")
+        [ "block", Js.Json.string u ];
+      true
+  | _ -> false
+
 (* -- editor-mode keys -- *)
 
 (* cljs shortcut tables key on the unshifted key plus modifier flags; DOM
@@ -166,10 +208,23 @@ let on_normal_key ev =
   and alt = D.ev_alt ev
   and meta = D.ev_meta ev in
   let selected () = S.selection_active () in
+  if !pending_p && not (mods ev) && run_p_chord ev key then ()
+  else
   match key with
+  | "p" when selected () && not (mods ev) ->
+      D.prevent_default ev;
+      arm_pending_p ()
   | "Backspace" | "Delete" when selected () ->
       D.prevent_default ev;
       A.delete_selection ()
+  | " " when D.ev_ctrl ev && selected () ->
+      (* cljs ctrl+space = add-comment on the selection *)
+      D.prevent_default ev;
+      List.iter
+        (fun u ->
+          Popups_state.emit_cmd "add-comment"
+            [ "block", Js.Json.string u ])
+        (A.selected_uuids ())
   | "ArrowUp" when (meta || alt) && shift ->
       D.prevent_default ev;
       A.move_blocks_up_down true
@@ -202,6 +257,15 @@ let on_normal_key ev =
   | "Enter" when mods ev ->
       D.prevent_default ev;
       List.iter Editor_commands.cycle_todo (A.selected_uuids ())
+  | "Enter" when shift && selected () ->
+      (* cljs shift+enter = open-selected-blocks-in-sidebar *)
+      D.prevent_default ev;
+      List.iter
+        (fun u ->
+          Platform.dispatch "ls:open-right-sidebar"
+            (Js.Json.object_
+               (Js.Dict.fromList [ "uuid", Js.Json.string u ])))
+        (A.selected_uuids ())
   | "Enter" -> (
       match D.closest_sel ".block-add-button" (D.ev_target ev) with
       | Some btn ->

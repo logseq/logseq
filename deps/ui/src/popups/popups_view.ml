@@ -1012,6 +1012,55 @@ let handle_click st (ev : Dom_ext.event) =
           | None -> ())
 ;;
 
+(* `ls:block-picker` {block, kind:"icon"|"emoji"} — the `p i`/`p r`
+   selection chords open the same pickers anchored under the block row
+   (the commands route through ls:editor-command, which only popups can
+   service: icon_picker pulls in pages/comments that would cycle back
+   into editor_keys) *)
+let open_block_picker uuid emoji_only =
+  match
+    Editor_dom.query_selector (".ls-block[blockid='" ^ uuid ^ "']")
+  with
+  | Some anchor ->
+      let uuids =
+        match Platform.selected_block_uuids () with
+        | [] -> [ uuid ]
+        | sel -> sel
+      in
+      if emoji_only then
+        ignore
+          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+             ~opts:{ Icon_picker.emoji_only = true; sub = false }
+             ~on_chosen:(fun c ->
+               match c with
+               | Icon_picker.Emoji id ->
+                   List.iter
+                     (fun u -> Comments_view.toggle_reaction u id)
+                     uuids
+               | _ -> ()))
+      else
+        ignore
+          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+             ~opts:{ Icon_picker.emoji_only = false; sub = false }
+             ~on_chosen:(fun c ->
+               List.iter (fun u -> Page.set_icon u c) uuids))
+  | None -> ()
+
+let block_picker_detail name ev =
+  match Worker_client.json_field "detail" ev with
+  | Some d -> (
+      match Worker_client.json_field name d with
+      | Some v -> Worker_client.json_string v
+      | None -> None)
+  | None -> None
+
+let handle_block_picker _st ev =
+  match block_picker_detail "block" ev with
+  | Some uuid ->
+      open_block_picker uuid
+        (block_picker_detail "kind" ev = Some "emoji")
+  | None -> ()
+
 (* Set icon / Add reaction sub-triggers open the icon picker to the
    right of the menu (base-ui inline-end placement); the choice applies
    to every selected block for the multi-select menu *)
@@ -1107,6 +1156,8 @@ let install_listeners st =
   Dom_ext.add_document_listener "click" (handle_click st) true;
   Dom_ext.add_document_listener "mousedown" (handle_mousedown st) true;
   Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false;
+  Dom_ext.add_document_listener "ls:block-picker"
+    (handle_block_picker st) true;
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)

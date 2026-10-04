@@ -1057,6 +1057,15 @@ let target_uuids () : string list =
     | Some e -> [ e.Editor_state.uuid ]
     | None -> []
 
+(* the same ls:editor-command channel Popups_state.emit_cmd writes to —
+   cmdk can't call emit_cmd (Popups_state -> Cmdk_state would cycle) *)
+let editor_command command uuid =
+  Platform.dispatch "ls:editor-command"
+    (Js.Json.object_
+       (Js.Dict.fromList
+          [ "command", Js.Json.string command
+          ; "block", Js.Json.string uuid ]))
+
 let run_add_reaction st =
   close st;
   match target_uuids () with
@@ -1070,18 +1079,21 @@ let run_add_reaction st =
       match anchor with
       | None -> ()
       | Some anchor ->
-          Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->
-              match c with
-              | Icon_picker.Emoji emoji_id ->
-                  ignore
-                    (Outliner_ops.apply_and_refresh
-                       (List.map
-                          (fun u ->
-                            Outliner_ops.op "toggle-reaction"
-                              [ Wire.Uuid u; Wire.String emoji_id
-                              ; Wire.Nil ])
-                          uuids))
-              | _ -> ()))
+          ignore
+            (Icon_picker.open_picker_with_opts ~anchor ~del:false
+               ~opts:{ Icon_picker.emoji_only = true; sub = false }
+               ~on_chosen:(fun c ->
+                 match c with
+                 | Icon_picker.Emoji emoji_id ->
+                     ignore
+                       (Outliner_ops.apply_and_refresh
+                          (List.map
+                             (fun u ->
+                               Outliner_ops.op "toggle-reaction"
+                                 [ Wire.Uuid u; Wire.String emoji_id
+                                 ; Wire.Nil ])
+                             uuids))
+                 | _ -> ())))
 
 (* :editor/add-comment — ensure-comments-area-for-blocks over the block
    selection (or the edited block); the area renders once the refresh
@@ -1356,9 +1368,20 @@ and run_command st repo (cid : string) =
   | "ui/toggle-theme" ->
       close st;
       Settings_view.toggle_theme ()
-  | "editor/add-property" | "editor/add-property-deadline"
-  | "editor/add-property-status" | "editor/add-property-priority"
+  | "editor/add-property-deadline" ->
+      close st;
+      (* cljs runs the same command the `p d` chord fires: the deadline
+         calendar on the block, not the generic property dialog *)
+      (match target_uuids () with
+       | u :: _ -> editor_command "deadline" u
+       | [] -> ())
   | "editor/add-property-icon" ->
+      close st;
+      (match target_uuids () with
+       | u :: _ -> editor_command "set-icon" u
+       | [] -> ())
+  | "editor/add-property" | "editor/add-property-status"
+  | "editor/add-property-priority" ->
       close st;
       (match target_uuids () with
        | u :: _ -> Properties_dialog.open_for_block u

@@ -155,9 +155,15 @@ let commit_cal p =
       Ops.schedule_save p.uuid nv;
       close_popup p ~focus_caret:caret
   | Cal_prop ident ->
-      prop_batch ~caret:p.from p.uuid
-        [ Ops.set_block_property p.uuid ident
-            (W.Float (Js.Date.getTime d)) ]
+      let op =
+        Ops.set_block_property p.uuid ident (W.Float (Js.Date.getTime d))
+      in
+      (match D.textarea_of p.uuid with
+       | Some _ -> prop_batch ~caret:p.from p.uuid [ op ]
+       | None ->
+           (* selected (non-editing) block via `p d` — no buffer to save
+              and no caret to restore; just apply the property *)
+           ignore (Ops.apply_and_refresh [ op ]))
       (* popup deliberately stays open — cljs datepicker stays up for
          scheduled/deadline so the user can keep adjusting *)
   | Link_form _ -> ()
@@ -322,22 +328,39 @@ let nlp_commit p input =
     | None ->
         Toast.warning (I18n.tf "date/invalid-date-warning" [ v ])
 
-(* cljs open-editor-popup! anchors at the caret mirror span *)
+(* cljs open-editor-popup! anchors at the caret mirror span; a popup
+   opened on a selected (non-editing) block — the `p d` chord — anchors
+   under the block row instead *)
 let cal_pos_style ?top uuid =
   match D.textarea_of uuid with
   | Some el ->
       let x, y, _ = Dom_ext.caret_popup_pos (D.json_of_el el) in
       Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
         x (Option.value top ~default:y)
-  | None -> "position:fixed;top:96px;left:240px;z-index:900"
+  | None -> (
+      match D.query_selector (".ls-block[blockid='" ^ uuid ^ "']") with
+      | Some blk ->
+          let r = V.el_rect blk in
+          Printf.sprintf
+            "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
+            (V.rect_left r +. 24.)
+            (Option.value top ~default:(V.rect_bottom r +. 4.))
+      | None -> "position:fixed;top:96px;left:240px;z-index:900")
+
+let cal_anchor_rect uuid =
+  match D.textarea_of uuid with
+  | Some el -> Some (V.el_rect el)
+  | None -> (
+      match D.query_selector (".ls-block[blockid='" ^ uuid ^ "']") with
+      | Some blk -> Some (V.el_rect blk)
+      | None -> None)
 
 (* base-ui avoidCollisions: once mounted, flip the picker above the
    anchor when it overflows the viewport bottom and there is more room
    above; otherwise clamp its top inside the viewport *)
 let cal_clamp_in_view uuid root =
-  match D.textarea_of uuid with
-  | Some el ->
-      let tr = V.el_rect el in
+  match cal_anchor_rect uuid with
+  | Some tr ->
       let h = V.rect_height (V.el_rect root) in
       let vh = V.window_inner_height in
       let below = vh -. V.rect_bottom tr -. 4. in
@@ -790,11 +813,30 @@ let on_command ev =
     | None -> ()
     | Some command -> (
         match detail_str ev "block" with
-        | Some _ ->
-            (* context-menu commands target a block by uuid — Editor_cmds
-               owns them *)
-            Editor_cmds.run ~command ~block:(detail_str ev "block")
-              ~value:(detail_str ev "value")
+        | Some uuid -> (
+            (* deadline/scheduled on a non-editing block (the `p d`
+               chord) open the calendar anchored at the block row;
+               everything else is a context-menu command Editor_cmds
+               owns *)
+            match command with
+            | "deadline" ->
+                open_cal (Cal_prop "logseq.property/deadline") uuid 0
+            | "scheduled" ->
+                open_cal (Cal_prop "logseq.property/scheduled") uuid 0
+            | "set-icon" | "add-reaction" ->
+                (* the pickers live in the popups layer — editor modules
+                   cannot reach icon_picker without a module cycle *)
+                Platform.dispatch "ls:block-picker"
+                  (Js.Json.object_
+                     (Js.Dict.fromList
+                        [ "block", Js.Json.string uuid
+                        ; ( "kind"
+                          , Js.Json.string
+                              (if command = "add-reaction" then "emoji"
+                               else "icon") ) ]))
+            | _ ->
+                Editor_cmds.run ~command ~block:(Some uuid)
+                  ~value:(detail_str ev "value"))
         | None -> (
             match S.editing () with
             | None -> Editor_cmds.run ~command ~block:None

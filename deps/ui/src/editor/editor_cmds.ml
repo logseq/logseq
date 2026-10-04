@@ -200,8 +200,18 @@ let run ~command ~block ~value =
           ignore
             (let* sop = Outliner_ops.save_block_parsed uuid ("> " ^ title) in
              Outliner_ops.apply_and_refresh_deferred [ sop ])
+      | "add-comment" ->
+          (* cljs add-comment over the block selection — the comments
+             area mounts once the refresh lands *)
+          ignore
+            (let* _ =
+               Runtime.invoke2
+                 "thread-api/ensure-comments-area-for-blocks"
+                 (W.String (repo ()))
+                 (W.Array [ W.Uuid uuid ])
+             in Outliner_ops.refresh_page ())
       | "cycle-todo" | "deadline" | "scheduled" | "date-picker"
-      | "add-comment" | "copy-export-as" | "set-icon" | "add-reaction" ->
+      | "copy-export-as" | "set-icon" | "add-reaction" ->
           Platform.console_error ("editor command not implemented", command)
       | _ -> Platform.console_error ("unknown editor command", command))
 ;;
