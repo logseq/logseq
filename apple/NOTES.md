@@ -1252,3 +1252,23 @@ zoom!=1 path keeps the reader since it needs the container size.
   because the first layout pass has viewport 0. Heights cached per nodeID
   in `LogseqHeightStore`; spacers are Color.clear frames. The OCaml side
   still emits the full DOM — SwiftUI virt is mount-level only.
+- Daemon invoke serialization: `deps/db-worker/bin/main.ml` wraps every
+  /v1/invoke in a global mutex held until the E.t settles (cljs
+  single-thread parity). All boot invokes queue serially server-side —
+  a slow first call inflates the *measured* latency of everything behind
+  it (a "get-bidirectional-properties 429ms" reading was really queue
+  wait; the fn itself is ~7ms cold). Mitigation is client-side:
+  `apple/worker_client.ml` dedups identical in-flight read invokes
+  (get-*/pull/sync-app-state/search-build-*/list-*) on (name, transit args)
+  so duplicate boot calls share one round trip; writes are never merged.
+- `LogseqFlatBlockRow` (LogseqElementView): `ls-block` rows whose subtree
+  only contains inline text/icon tags (probe: div/span/a/raw-text/em-*/
+  kbd/svg family, <=400 nodes, no textarea/media/latex) fold into one
+  composite view — bulletZone draws its own chevron+bullet and emits
+  click on the real control/bullet node; content is one attributed
+  `Text` whose `a`-runs carry `lseq-node://<id>` links routed back to
+  emitClick. Click/hover emit `dom-event` {name:click|mouseenter} on the
+  REAL descendant node so the OCaml document listener's closest() still
+  resolves. Rows with an open editor/media/code bail to full mount.
+- Editing in a flat row: click -> OCaml adds textarea to the DOM ->
+  probe's allowlist rejects -> full mount returns. Verified by hand.

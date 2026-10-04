@@ -41,7 +41,40 @@ let install_stub_handlers () =
   register_api "thread-api/set-ui-state" (fun _ ->
       Js.Promise.resolve Wire.Nil)
 
-let invoke t name args = t.invoke_fn name args
+(* In-flight dedup for idempotent read invokes: the daemon serializes
+   every invoke on a global mutex (cljs single-thread semantics), so
+   duplicate boot calls — sync-app-state x3, pull x2, get-block-refs x4,
+   display/bidirectional/get-blocks x2 — each queue behind one another.
+   Same (method, args) while in-flight shares one promise; writes
+   (apply-outliner-ops, transact) are never merged. *)
+let inflight_reads : (string, Wire.t Js.Promise.t) Hashtbl.t =
+  Hashtbl.create 16
+
+let dedup_method (name : string) : bool =
+  (String.length name >= 4 && String.sub name 0 4 = "get-")
+  || name = "pull" || name = "sync-app-state"
+  || name = "search-build-blocks-indice-in-worker"
+  || name = "list-db" || name = "list-graphs"
+
+let invoke t name args =
+  if not (dedup_method name) then t.invoke_fn name args
+  else
+    let key = name ^ "|" ^ Transit.to_string (Wire.Array args) in
+    match Hashtbl.find_opt inflight_reads key with
+    | Some p -> p
+    | None ->
+        let p = t.invoke_fn name args in
+        Hashtbl.replace inflight_reads key p;
+        let release _ = Hashtbl.remove inflight_reads key in
+        ignore
+          (Js.Promise.then_
+             (fun r -> release (); Js.Promise.resolve r)
+             p
+          |> Js.Promise.catch (fun e ->
+                 release ();
+                 Js.Promise.reject e));
+        p
+
 let invoke1 t name a = invoke t name [ a ]
 let invoke2 t name a b = invoke t name [ a; b ]
 

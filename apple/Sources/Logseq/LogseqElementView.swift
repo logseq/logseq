@@ -50,6 +50,10 @@ enum LogseqPerf {
 /// DOM names), `text`/`html` content, `style-class` (tailwind-ish classes), and
 /// expects `dom-event` emissions for the wired events.
 struct LogseqElementView: View {
+  /// LOGSEQ_BARE_CONTENT: mount every element as a bare text leaf —
+  /// isolates the fixed per-node cost for mount-cost profiling.
+  nonisolated static let bareMode =
+    ProcessInfo.processInfo.environment["LOGSEQ_BARE_CONTENT"] != nil
   let tag: String
   let context: LUIAppleExtensionViewContext
   /// Rendered by the window-level overlay layer rather than inline —
@@ -428,8 +432,13 @@ struct LogseqElementView: View {
   }
 
   @ViewBuilder private var content: some View {
+    if Self.bareMode {
+      // LOGSEQ_BARE_CONTENT: mount every element as a bare text leaf —
+      // isolates the fixed per-node cost (probe/hover/lifecycle/style)
+      // from tag-specific views for mount-cost profiling.
+      Text(" ")
     // The HTML `hidden` attribute is display:none (e.g. the asset upload input).
-    if style.isHidden || attrs["hidden"] != nil {
+    } else if style.isHidden || attrs["hidden"] != nil {
       EmptyView()
 
     } else if isNativeSidebar {
@@ -661,6 +670,11 @@ struct LogseqElementView: View {
       }
     } else if children.isEmpty && html.isEmpty {
       styledText
+    } else if let flat = flatRowProbe {
+      // Composite row: the ~30-node ls-block subtree folds into one view —
+      // descendants never mount, so a row costs ~1 ext-view not ~30.
+      LogseqFlatBlockRow(probe: flat, context: context)
+        .modifier(LogseqStyleModifier(style: style, tag: tag))
     } else {
       stackBody
         .modifier(LogseqStyleModifier(style: style, tag: tag))
@@ -673,6 +687,51 @@ struct LogseqElementView: View {
           emit("click", payload: ["button": 0])
         }
     }
+  }
+
+  /// Non-nil when this element is an `ls-block` row whose whole subtree is
+  /// safe to composite-render: only the inline-text / icon tags below, no
+  /// editor textarea, media, or custom components. Rows holding an open
+  /// editor (textarea), images, code blocks, or latex keep the full DOM
+  /// mount so their bespoke views stay interactive.
+  private var flatRowProbe: LogseqFlatRowProbe? {
+    guard tag == "div", classSet.contains("ls-block") else { return nil }
+    var probe = LogseqFlatRowProbe()
+    var stack = context.childIDs
+    var steps = 0
+    let allowed: Set<String> = [
+      "div", "span", "a", "raw-text", "em-emoji", "kbd", "strong", "em",
+      "code", "u", "mark", "b", "i", "sup", "sub", "small", "br", "label",
+      "svg", "path", "g", "defs", "use", "circle", "rect", "line",
+      "polyline", "polygon", "ellipse", "tspan",
+    ]
+    while let id = stack.popLast() {
+      steps += 1
+      if steps > 400 { return nil }
+      if let ident = context.extensionIdentifier(of: id) {
+        let t = String(ident.dropFirst("logseq-".count))
+        guard allowed.contains(t) else { return nil }
+        if case .string(let classes) = context.childProperty(node: id, "style-class") {
+          let cs = Set(classes.split(separator: " ").map(String.init))
+          if cs.contains("latex") || cs.contains("latex-inline") { return nil }
+          if cs.contains("block-main-container") { probe.mainContainerID = id }
+          if cs.contains("block-control") { probe.controlID = id }
+          if cs.contains("bullet-link-wrap") { probe.bulletID = id }
+          if cs.contains("block-content-inner") { probe.contentID = id }
+          if cs.contains("rotating-arrow") {
+            probe.arrowCollapsed = cs.contains("collapsed")
+          }
+          if cs.contains("block-children-container") { probe.hasChildren = true }
+        }
+      }
+      for c in context.childIDs(of: id) { stack.append(c) }
+    }
+    // Siblings of the main container (children column, properties area)
+    // keep their normal mount.
+    for c in context.childIDs where c != probe.mainContainerID {
+      probe.siblings.append(c)
+    }
+    return probe
   }
 
   /// Wraps a child element view so the parent Row/Column layout can read the
@@ -2303,4 +2362,208 @@ private final class LogseqElementHandle: LogseqElement {
   let nodeID: Int
   init(nodeID: Int) { self.nodeID = nodeID }
 
+}
+
+// MARK: - flat block-row composite
+
+/// Result of `LogseqElementView.flatRowProbe`: the descendant ids a folded
+/// `ls-block` row renders and emits through. Filled by a bounded DFS over
+/// the row's subtree — pure property reads, no view work.
+struct LogseqFlatRowProbe {
+  var mainContainerID = -1  // .block-main-container (hover enter/leave)
+  var controlID = -1        // a.block-control (collapse arrow)
+  var bulletID = -1         // a.bullet-link-wrap (bullet target)
+  var contentID = -1        // .block-content-inner (text-click target)
+  var arrowCollapsed = false
+  var hasChildren = false
+  var siblings: [Int] = []  // children column / properties area — mounted
+}
+
+/// One mounted view for a whole `ls-block` row: bullet zone + the inline
+/// text of every descendant concatenated into a single attributed string.
+/// The ~30-node DOM subtree under the row never mounts — on the 1k-journal
+/// benchmark this is what keeps first-paint mount inside the budget.
+/// Inline links carry a `lseq-node://<id>` .link attribute; tapping one
+/// routes through openURL and emits the real node's click so page refs
+/// still navigate.
+private struct LogseqFlatBlockRow: View {
+  let probe: LogseqFlatRowProbe
+  let context: LUIAppleExtensionViewContext
+  @State private var hovering = false
+
+  private struct Run {
+    var text: String
+    var nodeID: Int
+    var link = false
+    var bold = false
+    var italic = false
+    var mono = false
+    var mark = false
+    var underline = false
+  }
+
+  /// DFS the main-container subtree collecting inline text runs in DOM
+  /// order. The control-wrap subtree (arrow/bullet icons) is skipped —
+  /// the flat view draws its own. `a` nodes set link on their text
+  /// descendants so refs navigate; ancestor tags carry emphasis.
+  private var runs: [Run] {
+    guard probe.mainContainerID >= 0 else { return [] }
+    var out: [Run] = []
+    // (id, link, bold, italic, mono, mark, underline)
+    var stack: [(Int, Bool, Bool, Bool, Bool, Bool, Bool)] =
+      context.childIDs(of: probe.mainContainerID)
+        .reversed()
+        .map { ($0, false, false, false, false, false, false) }
+    let inlineTags = LogseqElementView.inlineTags
+    while let (id, link, bold, italic, mono, mark, under) = stack.popLast() {
+      let ident = context.extensionIdentifier(of: id) ?? "logseq-div"
+      let t = String(ident.dropFirst("logseq-".count))
+      var classes = Set<String>()
+      if case .string(let c) = context.childProperty(node: id, "style-class") {
+        classes = Set(c.split(separator: " ").map(String.init))
+      }
+      if classes.contains("block-control-wrap") { continue }
+      var attrs: [String: Any] = [:]
+      if case .string(let j) = context.childProperty(node: id, "attrs"),
+        let data = j.data(using: .utf8),
+        let d = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      {
+        attrs = d
+      }
+      var text = ""
+      if case .string(let v) = context.childProperty(node: id, "text") {
+        text = v
+      }
+      if text.isEmpty && t == "raw-text" {
+        text = attrs["data-raw-text"] as? String ?? ""
+      }
+      if text.isEmpty && t == "em-emoji" {
+        text = (attrs["data-emoji"] as? String) ?? (attrs["emoji"] as? String) ?? ""
+      }
+      let b2 = bold || t == "strong" || t == "b"
+      let i2 = italic || t == "em" || t == "i"
+      let m2 = mono || t == "code" || t == "kbd"
+      let k2 = mark || t == "mark"
+      let u2 = under || t == "u" || classes.contains("hash-symbol")
+      let l2 = link || t == "a"
+      if !text.isEmpty {
+        out.append(
+          Run(
+            text: text, nodeID: id, link: l2, bold: b2, italic: i2,
+            mono: m2, mark: k2, underline: u2))
+      }
+      for c in context.childIDs(of: id).reversed() {
+        stack.append((c, l2, b2, i2, m2, k2, u2))
+      }
+      _ = inlineTags
+    }
+    return out
+  }
+
+  private var attributed: AttributedString {
+    var all = AttributedString()
+    for run in runs {
+      var a = AttributedString(run.text)
+      var intent = a.inlinePresentationIntent ?? []
+      if run.bold { intent.insert(.stronglyEmphasized) }
+      if run.italic { intent.insert(.emphasized) }
+      if !intent.isEmpty { a.inlinePresentationIntent = intent }
+      if run.mono {
+        a.font = .system(size: 12, design: .monospaced)
+      }
+      if run.underline { a.underlineStyle = .single }
+      if run.mark { a.backgroundColor = Color.yellow.opacity(0.45) }
+      if run.link {
+        a.foregroundColor = LogseqColors.link
+        a.link = URL(string: "lseq-node://\(run.nodeID)")
+      }
+      all += a
+    }
+    return all
+  }
+
+  /// DOM-faithful click on a descendant node — same enrichment the real
+  /// element views attach (nodeId, target snapshot, modifier flags) so the
+  /// OCaml document listener resolves closest() identically.
+  private func emitClick(on nodeID: Int) {
+    guard nodeID > 0 else { return }
+    var payload: [String: Any] = ["button": 0, "nodeId": nodeID]
+    payload["target"] = LogseqDOMSnapshot.snapshot(of: nodeID, context: context)
+    let flags = NSEvent.modifierFlags
+    payload["shiftKey"] = flags.contains(.shift)
+    payload["metaKey"] = flags.contains(.command)
+    payload["ctrlKey"] = flags.contains(.control)
+    payload["altKey"] = flags.contains(.option)
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    try? context.emit(
+      on: nodeID, name: "dom-event",
+      values: ["name": .string("click"), "payload": .string(json)])
+  }
+
+  private func emitHover(_ name: String) {
+    guard probe.mainContainerID > 0 else { return }
+    let payload: [String: Any] = ["nodeId": probe.mainContainerID]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    try? context.emit(
+      on: probe.mainContainerID, name: "dom-event",
+      values: ["name": .string(name), "payload": .string(json)])
+  }
+
+  private var bulletZone: some View {
+    HStack(spacing: 0) {
+      if probe.hasChildren {
+        Image(systemName: "chevron.right")
+          .font(.system(size: 8, weight: .bold))
+          .foregroundStyle(.secondary)
+          .rotationEffect(.degrees(probe.arrowCollapsed ? 0 : 90))
+          .frame(width: 12, height: 12)
+          .contentShape(Rectangle())
+          .onTapGesture { emitClick(on: probe.controlID) }
+      }
+      Circle()
+        .fill(Color.secondary.opacity(0.5))
+        .frame(width: 5, height: 5)
+        .frame(width: 12, height: 12)
+        .contentShape(Rectangle())
+        .onTapGesture {
+          emitClick(on: probe.bulletID > 0 ? probe.bulletID : probe.controlID)
+        }
+    }
+    .frame(width: 24, height: 20)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack(alignment: .firstTextBaseline, spacing: 2) {
+        bulletZone
+        Text(attributed)
+          .font(.system(size: 14))
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
+          .onTapGesture {
+            emitClick(on: probe.contentID > 0 ? probe.contentID : probe.mainContainerID)
+          }
+      }
+      .environment(\.openURL, OpenURLAction { url in
+        guard url.scheme == "lseq-node",
+          let id = Int(url.host ?? "")
+        else { return .systemAction }
+        emitClick(on: id)
+        return .handled
+      })
+      ForEach(probe.siblings, id: \.self) { sibling in
+        context.content(for: sibling)
+      }
+    }
+    .onHover { inside in
+      hovering = inside
+      emitHover(inside ? "mouseenter" : "mouseleave")
+    }
+  }
 }

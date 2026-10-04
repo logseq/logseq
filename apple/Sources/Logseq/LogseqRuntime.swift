@@ -462,12 +462,26 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     // reads them for popup anchoring and element measurements where the
     // web would use getBoundingClientRect.
     backend.onFramesReport = { [weak self] frames in
+      if Self.perfLogging {
+        let elapsed = CFAbsoluteTimeGetCurrent() - Self.launchAbsTime
+        if elapsed < 2.0 {
+          FileHandle.standardError.write(
+            "PERF frames t=\(Int(elapsed * 1000))ms n=\(frames.count) susp=\(Self.suspendFrames)\n"
+              .data(using: .utf8)!)
+        }
+      }
       self?.reportImperativeRects(frames)
       LogseqFrameStore.baseEntries = frames.mapValues {
         LogseqFrameEntry(rect: $0, tag: "", z: 0)
       }
     }
     backend.frameReportingEnabled = true
+    // LOGSEQ_NO_FRAME_PROBE: skip the per-node onGeometryChange that feeds
+    // imperative rects — mount-cost experiment (breaks popup anchoring).
+    if ProcessInfo.processInfo.environment["LOGSEQ_NO_FRAME_PROBE"] != nil {
+      backend.frameCollectionSuspended = true
+      Self.suspendFrames = true
+    }
     platform.runtime = self
   }
 
@@ -560,6 +574,7 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil
 
   nonisolated static let launchAbsTime = CFAbsoluteTimeGetCurrent()
+  private static var suspendFrames = false
 
   /// Reentrancy no longer exists: every Swift->OCaml call is a queued
   /// work item on the single OCaml thread, and OCaml->Swift callbacks are
