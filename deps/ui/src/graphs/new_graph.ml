@@ -87,10 +87,14 @@ let body (_ms : Model.t Signal.signal) : t =
           ~style_class:
             "ui__dialog-title" ~text:T.create_new_graph []
       ; dom ~key:"ng-in" ~tag:"input"
+          ~style_class:"ui__input"
           ~attrs:
             [ ("placeholder", T.graph_name_placeholder)
             ; ("autocomplete", "off")
             ; ("type", "text")
+            (* cljs shui/input is h-10; .ui__input defaults to the 29px
+               compact variant *)
+            ; ("style", "height:2.5rem")
             ]
           ~events:"keydown"
           ~on_dom_event:(fun n p ->

@@ -79,7 +79,11 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
         ~attrs:
           ([ ("data-state", "open")
            ; ( "style"
-             , Printf.sprintf "z-index:%d" z )
+             , Printf.sprintf "z-index:%d%s" z
+                 (match name with
+                  (* cljs dialog-open! {:style {:max-width "500px"}} *)
+                  | "new-graph" | "add-graph" -> ";max-width:500px"
+                  | _ -> "") )
            ]
           @
           match label_of name with
