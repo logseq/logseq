@@ -64,8 +64,8 @@ let clear_range uuid from to_ = snd (replace_range uuid from to_ "")
 let prop_batch ~caret uuid ops =
   let buf = A.live_buffer uuid in
   A.with_focus_after uuid caret
-    (let* sop = Ops.save_block_parsed uuid buf in
-     Ops.apply_and_refresh_deferred (sop :: ops))
+    (let* sops = Ops.save_block_parsed uuid buf in
+     Ops.apply_and_refresh_deferred (sops @ ops))
 
 (* same, but drop edit mode first (cljs :editor/exit — code blocks leave
    the textarea while the view re-renders the code surface), then focus
@@ -75,8 +75,8 @@ let exit_to_props uuid ops =
   let buf = A.live_buffer uuid in
   S.set (fun st -> { st with S.editing = None });
   A.with_focus_after uuid 0
-    (let* sop = Ops.save_block_parsed uuid buf in
-     Ops.apply_and_refresh (sop :: ops))
+    (let* sops = Ops.save_block_parsed uuid buf in
+     Ops.apply_and_refresh (sops @ ops))
 
 (* ---------- calendar ---------- *)
 
@@ -713,10 +713,10 @@ let toggle_children_list uuid caret =
            repaint now (the deferred path waits ~8s while editing) *)
         if ops <> [] then
           A.with_focus_after uuid caret
-            (let* sop =
+            (let* sops =
                Ops.save_block_parsed uuid (A.live_buffer uuid)
              in
-             Ops.apply_and_refresh (sop :: ops));
+             Ops.apply_and_refresh (sops @ ops));
         Js.Promise.resolve ())
 
 let run_editor_cmd uuid command from to_ =
@@ -790,11 +790,27 @@ let on_command ev =
     | None -> ()
     | Some command -> (
         match detail_str ev "block" with
-        | Some _ ->
-            (* context-menu commands target a block by uuid — Editor_cmds
-               owns them *)
-            Editor_cmds.run ~command ~block:(detail_str ev "block")
-              ~value:(detail_str ev "value")
+        | Some uuid -> (
+            (* calendar/status commands target a block but live here —
+               Editor_cmds can't call back into this module *)
+            match command with
+            | "cycle-todo" -> (
+                let sel =
+                  Editor_state.String_set.elements
+                    (Editor_state.selected ())
+                in
+                List.iter cycle_todo
+                  (if List.mem uuid sel then sel else [ uuid ]))
+            | "deadline" ->
+                open_cal (Cal_prop "logseq.property/deadline") uuid 0
+            | "scheduled" ->
+                open_cal (Cal_prop "logseq.property/scheduled") uuid 0
+            | "date-picker" -> open_cal Cal_insert uuid 0
+            | _ ->
+                (* context-menu commands target a block by uuid —
+                   Editor_cmds owns them *)
+                Editor_cmds.run ~command ~block:(detail_str ev "block")
+                  ~value:(detail_str ev "value"))
         | None -> (
             match S.editing () with
             | None -> Editor_cmds.run ~command ~block:None

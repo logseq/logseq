@@ -84,6 +84,40 @@ let current_block fallback =
   | None -> Editor_state.editing_uuid ()
 ;;
 
+(* context-menu target: the block selection when it includes the
+   emitted block, else the emitted block alone *)
+let target_uuids uuid =
+  let sel = Editor_state.String_set.elements (Editor_state.selected ()) in
+  if List.mem uuid sel then sel else [ uuid ]
+;;
+
+(* picker anchor: the target block's row *)
+(* page/set_icon inlined — Page is unreachable from here (page ->
+   selection_bar -> cmdk_state -> editor_commands -> editor_cmds) *)
+let set_icon_op (u : string) (c : Icon_picker.choice) =
+  match c with
+  | Icon_picker.Remove ->
+      Outliner_ops.op "remove-block-property"
+        [ Wire.Uuid u; Wire.Keyword "logseq.property/icon" ]
+  | Icon_picker.Emoji id ->
+      Outliner_ops.op "set-block-property"
+        [ Wire.Uuid u; Wire.Keyword "logseq.property/icon"
+        ; Wire.Map
+            [ Wire.Keyword "type", Wire.Keyword "emoji"
+            ; Wire.Keyword "id", Wire.String id ] ]
+  | Icon_picker.Tabler (id, color) ->
+      Outliner_ops.op "set-block-property"
+        [ Wire.Uuid u; Wire.Keyword "logseq.property/icon"
+        ; Wire.Map
+            ([ Wire.Keyword "type", Wire.Keyword "tabler-icon"
+             ; Wire.Keyword "id", Wire.String id ]
+            @ (match color with
+               | Some c -> [ Wire.Keyword "color", Wire.String c ]
+               | None -> [])) ]
+
+let block_anchor uuid = Editor_dom.get_element_by_id ("ls-block-" ^ uuid)
+;;
+
 let run ~command ~block ~value =
   match current_block block with
   | None -> ()
@@ -198,10 +232,46 @@ let run ~command ~block ~value =
             match b with Some x -> x.Model.block_title | None -> ""
           in
           ignore
-            (let* sop = Outliner_ops.save_block_parsed uuid ("> " ^ title) in
-             Outliner_ops.apply_and_refresh_deferred [ sop ])
-      | "cycle-todo" | "deadline" | "scheduled" | "date-picker"
-      | "add-comment" | "copy-export-as" | "set-icon" | "add-reaction" ->
-          Platform.console_error ("editor command not implemented", command)
+            (let* sops = Outliner_ops.save_block_parsed uuid ("> " ^ title) in
+             Outliner_ops.apply_and_refresh_deferred sops)
+      | "add-comment" -> Comments.ensure_for (target_uuids uuid)
+      | "copy-export-as" ->
+          ignore
+            (clipboard_write
+               (Editor_actions.export_titles
+                  (List.filter_map Editor_state.find (target_uuids uuid))))
+      | "set-icon" -> (
+          match block_anchor uuid with
+          | Some anchor ->
+              ignore
+                (Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->
+                  let us = target_uuids uuid in
+                  ignore
+                    (let* _ =
+                       Outliner_ops.apply (List.map (fun u -> set_icon_op u c) us)
+                     in
+                     !Runtime.reload_current_view ())))
+          | None -> ())
+      | "add-reaction" -> (
+          match block_anchor uuid with
+          | Some anchor ->
+              ignore
+                (Icon_picker.open_picker_with_opts ~anchor ~del:false
+                  ~opts:{ Icon_picker.emoji_only = true; sub = true }
+                  ~on_chosen:(fun c ->
+                  match c with
+                  | Icon_picker.Emoji id ->
+                      List.iter
+                        (fun u -> Comments_view.toggle_reaction u id)
+                        (target_uuids uuid)
+                  | _ -> ()))
+          | None -> ())
+      | "dev/show-block-data" ->
+          Dialogs_state.show_entity_data (repo ()) uuid
+      | "dev/show-block-ast" -> (
+          match Editor_state.find uuid with
+          | Some b ->
+              Dialogs_state.show_block_ast (repo ()) uuid b.Model.block_title
+          | None -> ())
       | _ -> Platform.console_error ("unknown editor command", command))
 ;;
