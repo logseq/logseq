@@ -157,6 +157,12 @@ type confirm =
 
 (* rtc-sync-state broadcast projection — the fields the header indicator
    and e2e rtc-tx element need (components/rtc/indicator.cljs) *)
+type rtc_user =
+  { ru_uuid : string (* user/uuid *)
+  ; ru_name : string (* user/name *)
+  ; ru_email : string option (* user/email *)
+  }
+
 type rtc =
   { rtc_lock : bool (* ws open *)
   ; rtc_ws_state : string
@@ -165,6 +171,8 @@ type rtc =
   ; rtc_pending_local : int (* unpushed-block-update-count *)
   ; rtc_pending_asset : int
   ; rtc_pending_server : int
+  ; rtc_online_users : rtc_user list (* online-users *)
+  ; rtc_missing_files : string list (* missing-asset-upload-files :file *)
   }
 
 (* :search/index-build — worker search-index progress pushed through the
@@ -233,6 +241,11 @@ type t =
   ; unlinked_blocks : block list
   ; rtc : rtc option
   ; index_build : index_build
+  ; (* latest rtc.log/download|upload sub-type activity — the cljs
+       *downloading?/*uploading? atoms behind the header
+       downloading-detail/uploading-detail buttons *)
+    rtc_downloading : bool
+  ; rtc_uploading : bool
   ; data_gen : int (* bumped whenever a block/page-bearing field is
                       reassigned — cheap revision for dyn ~equal so
                       block trees are never structurally compared *)
@@ -277,6 +290,8 @@ let initial =
       ; ib_repo = ""
       ; ib_build_id = None
       }
+  ; rtc_downloading = false
+  ; rtc_uploading = false
   ; data_gen = 0
   }
 

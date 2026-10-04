@@ -98,25 +98,9 @@ let rtc_tx_text (r : Model.rtc) =
 (* cljs header.cljs rtc-indicator-visible? — the indicator shows when
    the open repo is a remote/rtc graph: logged in, rtc-group, and the
    graph's rtc uuid known (db-rtc-uuid) or sync already broadcasting
-   state *)
-let db_rtc_uuid : string option ref = ref None
-let db_rtc_repo : string option ref = ref None
+   state. The uuid resolution lives in Rtc_flows (shared with
+   Collaborators) *)
 let last_rtc : Model.rtc option ref = ref None
-
-let refresh_db_rtc_uuid (repo : string option) =
-  match repo with
-  | Some r when !db_rtc_repo <> Some r ->
-      db_rtc_repo := Some r;
-      db_rtc_uuid := None;
-      ignore
-        (let open Promise_ext in
-        let* w =
-          Runtime.invoke1 "thread-api/get-rtc-graph-uuid" (Wire.String r)
-        in
-        db_rtc_uuid := Wire.as_uuid w;
-        Runtime.flush ();
-        Js.Promise.resolve ())
-  | _ -> ()
 
 (* cljs indicator.cljs details — dropdown under the cloud button:
    online/offline, pending counts, last-synced, debug toggle and a
@@ -180,6 +164,76 @@ external el_contains : Wd.el -> Js.Json.t -> bool = "contains"
 
 external ev_key : Js.Json.t -> string = "key" [@@mel.get]
 
+(* tabler alert-triangle glyph — cljs ui/icon inside the
+   missing-asset-files rows *)
+let alert_triangle_svg () =
+  let s = Web_dom.create_element "span" in
+  Web_dom.el_set_inner_html s
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" \
+     height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" \
+     stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" \
+     stroke-linejoin=\"round\" class=\"tabler-icon \
+     tabler-icon-alert-triangle \"><path d=\"M12 9v4\"/><path \
+     d=\"M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 \
+     1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z\"\
+     /><path d=\"M12 16h.01\"/></svg>";
+  s
+
+(* cljs missing-asset-files: <details.assets-missing-files> listing the
+   files waiting for an upload *)
+let missing_files_details (files : string list) =
+  let det = Web_dom.create_element "details" in
+  Web_dom.el_set_class det "assets-missing-files";
+  let sum = Web_dom.create_element "summary" in
+  Web_dom.el_set_text_content sum
+    (I18n.t1 "sync/missing-asset-files-count"
+       (string_of_int (List.length files)));
+  Web_dom.el_append_child det sum;
+  let inner = Web_dom.create_element "div" in
+  Web_dom.el_set_class inner "flex flex-col gap-1 text-sm";
+  List.iter
+    (fun f ->
+      let row = Web_dom.create_element "div" in
+      Web_dom.el_set_class row "flex flex-row gap-1 items-center";
+      Web_dom.el_append_child row (alert_triangle_svg ());
+      let sp = Web_dom.create_element "span" in
+      Web_dom.el_set_class sp "truncate";
+      Web_dom.el_set_text_content sp f;
+      Web_dom.el_append_child row sp;
+      Web_dom.el_append_child inner row)
+    files;
+  Web_dom.el_append_child det inner;
+  det
+
+(* cljs assets-progressing rows resolve block titles via <get-blocks;
+   fill each title span when the worker answers *)
+let enrich_asset_title (sp : Web_dom.el) (repo : string) (asset_id : string) =
+  ignore
+    (let open Promise_ext in
+    let* w =
+      Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+        (Wire.List
+           [ Wire.Map
+               [ (Wire.Keyword "id", Wire.String asset_id)
+               ; ( Wire.Keyword "opts"
+                 , Wire.Map [ (Wire.Keyword "children?", Wire.Bool false) ] )
+               ]
+           ])
+    in
+    (match w with
+     | Wire.Array items | Wire.List items ->
+         List.iter
+           (fun item ->
+             match Wire.get item "block" with
+             | Some b -> (
+                 match Wire.map_get_string b "block/title" with
+                 | Some t when t <> "" -> Web_dom.el_set_text_content sp t
+                 | _ -> ())
+             | _ -> ())
+           items
+     | _ -> ());
+    Js.Promise.resolve ())
+
 (* one-shot guards: the same click that opened the menu bubbles up to
    document, and the doc listeners themselves can't be unbound *)
 let rtc_doc_hooked = ref false
@@ -235,10 +289,85 @@ let open_rtc_details () =
   and p_server =
     match r with Some r -> r.rtc_pending_server | None -> 0
   in
-  Wd.el_append_child info (pend_row "sync/pending-local-changes" p_local);
-  if p_asset > 0 then
-    Wd.el_append_child info (pend_row "sync/pending-asset-uploads" p_asset);
-  Wd.el_append_child info (pend_row "sync/pending-server-changes" p_server);
+  (* cljs asset-status-rows: missing files, remaining pending uploads,
+     live upload/download transfers — each row only while positive *)
+  let missing_files =
+    match r with Some r -> r.rtc_missing_files | None -> []
+  in
+  let missing_count = List.length missing_files in
+  let p_upload = max 0 (p_asset - missing_count) in
+  let n_up, n_down =
+    match (Runtime.model ()).Model.repo with
+    | Some repo -> Asset_progress.transfer_counts repo
+    | None -> (0, 0)
+  in
+  Web_dom.el_append_child info (pend_row "sync/pending-local-changes" p_local);
+  if missing_count > 0 then
+    Web_dom.el_append_child info (pend_row "sync/missing-asset-files" missing_count);
+  if p_upload > 0 then
+    Web_dom.el_append_child info (pend_row "sync/pending-asset-uploads" p_upload);
+  if n_up > 0 then
+    Web_dom.el_append_child info (pend_row "sync/assets-uploading" n_up);
+  if n_down > 0 then
+    Web_dom.el_append_child info (pend_row "sync/assets-downloading" n_down);
+  Web_dom.el_append_child info (pend_row "sync/pending-server-changes" p_server);
+  if missing_files <> [] then
+    Web_dom.el_append_child info (missing_files_details missing_files);
+  (* cljs assets-progressing: <details> per direction with
+     percent + block title *)
+  let in_flight =
+    match (Runtime.model ()).Model.repo with
+    | Some repo -> Asset_progress.in_flight repo
+    | None -> []
+  in
+  if in_flight <> [] then begin
+    let wrap = Web_dom.create_element "div" in
+    Web_dom.el_set_class wrap "assets-sync-progress flex flex-col gap-2";
+    List.iter
+      (fun (dir, label_key) ->
+        let rows =
+          List.filter
+            (fun (p : Asset_progress.t) ->
+              p.ap_direction = dir)
+            in_flight
+        in
+        if rows <> [] then begin
+          let det = Web_dom.create_element "details" in
+          let sum = Web_dom.create_element "summary" in
+          Web_dom.el_set_text_content sum
+            (I18n.t1 label_key (string_of_int (List.length rows)));
+          Web_dom.el_append_child det sum;
+          let inner = Web_dom.create_element "div" in
+          Web_dom.el_set_class inner "flex flex-col gap-1 text-sm";
+          List.iter
+            (fun (p : Asset_progress.t) ->
+              let row = Web_dom.create_element "div" in
+              Web_dom.el_set_class row "flex flex-row gap-1 items-center";
+              let pct = Web_dom.create_element "span" in
+              Web_dom.el_set_class pct "indicator-progress-pie";
+              Web_dom.el_set_text_content pct
+                (string_of_int
+                   (int_of_float
+                      (100.0 *. Float.of_int p.ap_loaded
+                      /. Float.of_int p.ap_total))
+                ^ "%");
+              Web_dom.el_append_child row pct;
+              let sp = Web_dom.create_element "span" in
+              Web_dom.el_set_class sp "truncate";
+              Web_dom.el_set_text_content sp p.ap_id;
+              (match (Runtime.model ()).Model.repo with
+               | Some repo -> enrich_asset_title sp repo p.ap_id
+               | None -> ());
+              Web_dom.el_append_child row sp;
+              Web_dom.el_append_child inner row)
+            rows;
+          Web_dom.el_append_child det inner;
+          Web_dom.el_append_child wrap det
+        end)
+      [ ("download", "sync/assets-downloading-count")
+      ; ("upload", "sync/assets-uploading-count") ];
+    Web_dom.el_append_child info wrap
+  end;
   (match !Rtc_flows.last_sync_ms with
    | Some ms ->
        Wd.el_append_child info
@@ -295,12 +424,12 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
     ~equal:(fun (a : string option * Model.rtc option)
                   (b : string option * Model.rtc option) -> a = b)
     (fun ((repo : string option), (r : Model.rtc option)) ->
-      refresh_db_rtc_uuid repo;
+      Rtc_flows.refresh_db_rtc_uuid repo;
       last_rtc := r;
       let visible =
         (Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
         && repo <> None
-        && (!db_rtc_uuid <> None || r <> None))
+        && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
         || (Platform.rtc_test_mode () && repo <> None)
       in
       if not visible then
@@ -359,6 +488,29 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
           ]))
     (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)
 
+(* cljs indicator.cljs downloading-detail / uploading-detail — ghost
+   buttons visible while the latest rtc.log download|upload entry's
+   sub-type isn't *-completed; gated on logged-in only (header.cljs) *)
+let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
+    =
+  dyn ~equal:( = )
+    (fun (active : bool) ->
+      if not (Rtc_flows.logged_in () && active) then
+        Logseq_dom.dom ~key:"td-off" ~style_class:"hidden" []
+      else
+        Logseq_dom.dom ~key:"td" ~tag:"button"
+          ~style_class:"ui__button as-ghost opacity-50"
+          ~attrs:[ ("type", "button") ]
+          ~text:
+            (I18n.t
+               (if downloading then "sync/downloading"
+                else "sync/uploading"))
+          [])
+    (Signal.map
+       (fun (m : Model.t) ->
+         if downloading then m.rtc_downloading else m.rtc_uploading)
+       ms)
+
 (* cljs header.cljs local-graph-sync-button — cloud ghost button that
    uploads the open local graph to the sync server. Visible when the
    current repo is a local (non-remote, non-rtc) graph and the user is
@@ -367,14 +519,17 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
    the uuid resolves — cljs has the same window) *)
 let local_graph_sync_button (ms : Model.t Signal.signal) : t =
   dyn ~equal:( = )
-    (fun (repo : string option) ->
-      refresh_db_rtc_uuid repo;
+    (fun ((repo : string option), (repos : string list), (_rtc : Model.rtc option)) ->
+      (* m.rtc joins the input so the db-sync-start broadcast after an
+         upload re-renders — refresh_db_rtc_uuid then resolves the new
+         uuid and hides the button *)
+      Rtc_flows.refresh_db_rtc_uuid repo;
       let uploadable =
         match repo with
         | Some r ->
             Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
-            && List.mem r !Graphs_ops.repos
-            && !db_rtc_uuid = None
+            && List.mem r repos
+            && !Rtc_flows.db_rtc_uuid = None
         | None -> false
       in
       if uploadable then
@@ -393,7 +548,7 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
             | _ -> ())
           [ Icons.icon ~size:20. ~cls:"" "cloud" ]
       else Logseq_dom.dom ~key:"lgs-off" ~style_class:"hidden" [])
-    (Signal.map (fun (m : Model.t) -> m.repo) ms)
+    (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)
 
 (* cljs components/svg.cljs loader-fn — the ui/loading spinner *)
 let loader_svg : t =
@@ -550,7 +705,12 @@ let header (ms : Model.t Signal.signal) =
                   | _ -> Logseq_dom.dom ~key:"head-bc-empty" [])
                 ms ]
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
-            [ rtc_indicator ms
+            [ (* cljs header.cljs: inside the same rtc-indicator-visible?
+                 gate — collaborators then the cloud indicator *)
+              Collaborators.widget ms
+            ; rtc_indicator ms
+            ; transfer_detail_widget ~downloading:true ms
+            ; transfer_detail_widget ~downloading:false ms
             ; local_graph_sync_button ms
             ; index_progress ms
             ; home_button ms

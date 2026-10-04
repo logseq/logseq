@@ -260,6 +260,10 @@ let update (model : t) (action : Action.t) : t =
       if ib.ib_repo = repo && ib.ib_build_id = Some build_id then
         { model with index_build = { ib with ib_visible = false } }
       else model
+  | Rtc_flow_flags { downloading; uploading } ->
+      { model with rtc_downloading = downloading
+      ; rtc_uploading = uploading
+      }
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model

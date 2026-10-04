@@ -95,6 +95,30 @@ let username () =
 let email () = jwt_claim "email"
 let user_uuid () = jwt_claim "sub"
 
+(* resolved worker db-rtc-uuid for the open repo (cljs
+   use-db-rtc-uuid): the indicator/collaborators widgets gate on it.
+   Refetches when the repo changed OR the uuid is still unresolved —
+   after an upload the first fetch comes back nil, so every later
+   model emission retries until the worker lands the kv row *)
+let db_rtc_uuid : string option ref = ref None
+let db_rtc_repo : string option ref = ref None
+
+let refresh_db_rtc_uuid (repo : string option) =
+  match repo with
+  | Some r when !db_rtc_repo <> Some r || !db_rtc_uuid = None -> begin
+      db_rtc_repo := Some r;
+      db_rtc_uuid := None;
+      ignore
+        (let open Promise_ext in
+        let* w =
+          Runtime.invoke1 "thread-api/get-rtc-graph-uuid" (Wire.String r)
+        in
+        db_rtc_uuid := Wire.as_uuid w;
+        Runtime.flush ();
+        Js.Promise.resolve ())
+    end
+  | _ -> ()
+
 (* cljs user.cljs rtc-group? — dev build, a custom sync server, or a
    cognito group from {team, rtc_2025_07_10} *)
 let rtc_group () =
@@ -124,6 +148,29 @@ let wire_ms = function
   | Wire.Int n -> Some (Int64.of_int n)
   | _ -> None
 
+(* latest log sub-type per class — cljs *downloading?/*uploading?
+   atoms (downloading-detail / uploading-detail stay visible until a
+   *-completed log lands) *)
+let downloading_now = ref false
+let uploading_now = ref false
+
+let flow_flags_changed () =
+  let downloading =
+    match !download_log with
+    | Some l -> kw l "sub-type" <> Some "download-completed"
+    | None -> false
+  and uploading =
+    match !upload_log with
+    | Some l -> kw l "sub-type" <> Some "upload-completed"
+    | None -> false
+  in
+  if downloading <> !downloading_now || uploading <> !uploading_now
+  then begin
+    downloading_now := downloading;
+    uploading_now := uploading;
+    Runtime.send (Action.Rtc_flow_flags { downloading; uploading })
+  end
+
 (* cljs rtc-log skips {:sub-type :skip, :type :rtc.log/apply-remote-update} *)
 let on_log (log : Wire.t) =
   if not
@@ -133,11 +180,14 @@ let on_log (log : Wire.t) =
     last_log := Some log;
     if kw log "type" = Some "rtc.log/push-local-update" then
       last_sync_ms := Option.bind (Wire.get log "created-at") wire_ms;
-    match kw log "type" with
-    | Some "rtc.log/download" -> download_log := Some log
-    | Some "rtc.log/upload" -> upload_log := Some log
-    | _ -> misc_log := Some log
+    (match kw log "type" with
+     | Some "rtc.log/download" -> download_log := Some log
+     | Some "rtc.log/upload" -> upload_log := Some log
+     | _ -> misc_log := Some log);
+    flow_flags_changed ()
   end
+
+
 
 (* -- trigger-start-rtc: every source emits through [emit], which
    debounces 50ms (cljs clearTimeout + re-arm) so a burst — e.g. login

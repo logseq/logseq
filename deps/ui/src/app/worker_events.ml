@@ -274,6 +274,26 @@ let dispatch kind payload =
           Runtime.send (Action.Rtc_state rtc);
           Runtime.flush ())
   | "rtc-log" -> !Runtime.rtc_log_handler payload
+  | "rtc-asset-upload-download-progress" -> (
+      (* cljs :rtc/asset-upload-download-progress — per-asset
+         {direction,loaded,total}; accumulated for the indicator
+         popup's asset rows *)
+      match
+        ( Wire.map_get_string payload "repo"
+        , Wire.map_get_string payload "asset-id"
+        , Wire.get payload "progress" )
+      with
+      | Some repo, Some asset_id, Some progress -> (
+          match
+            ( Wire.map_get_string progress "direction"
+            , Wire.map_get_int progress "loaded"
+            , Wire.map_get_int progress "total" )
+          with
+          | Some direction, Some loaded, Some total ->
+              Asset_progress.note ~repo ~asset_id ~direction
+                ~loaded ~total
+          | _ -> ())
+      | _ -> ())
   | "db-worker/ui-request" -> Ui_requests.handle payload
   | "asset-file-write-finish" -> (
       (* worker finished writing a downloaded asset to pfs — set src on

@@ -44,4 +44,9 @@ type t =
     (* worker remoteInvoke — header widget *)
   | Search_index_hide of string * string
     (* repo + build-id — 1.5s after :completed, if still current *)
+  | Rtc_flow_flags of
+      { downloading : bool
+      ; uploading : bool
+      } (* latest rtc.log sub-type activity — downloading-detail /
+           uploading-detail header buttons *)
   | Noop

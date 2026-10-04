@@ -38,8 +38,10 @@ let already_exists name =
   List.mem (Graph.full_graph_name name) !repos
 
 (* remote graphs known to the sync server:
-   (name-without-prefix, uuid, e2ee?) *)
-let remote_graphs : (string * string * bool) list ref = ref []
+   (name-without-prefix, uuid, e2ee?, role) — role is the caller's
+   graph_members role ("manager" | "member"), cljs
+   :graph<->user-user-type *)
+let remote_graphs : (string * string * bool * string) list ref = ref []
 
 let list_remote_graphs () =
   Rtc_ops.sync_app_state (Runtime.model ()).Model.repo;
@@ -62,7 +64,9 @@ let list_remote_graphs () =
               | Some (Wire.Bool b) -> b
               | _ -> false
             in
-            Some (name, id, e2ee)
+            let role =
+              Option.value (Wire.map_get_string g "role") ~default:"" in
+            Some (name, id, e2ee, role)
         | _ -> None)
       entries;
   Js.Promise.resolve !remote_graphs)
@@ -107,6 +111,7 @@ let refresh () =
 let add_repo repo =
   if not (List.mem repo !repos) then begin
     repos := !repos @ [ repo ];
+    Runtime.send (Action.Repos_loaded !repos);
     !on_repos_changed ()
   end
 
@@ -249,10 +254,10 @@ let delete_graph repo ~remote =
   if remote then
     match
       List.find_opt
-        (fun (n, _, _) -> n = short_name repo)
+        (fun (n, _, _, _) -> n = short_name repo)
         !remote_graphs
     with
-    | Some (_, uuid, _) ->
+    | Some (_, uuid, _, _) ->
         let* remote_ok = delete_remote_http uuid in
         if remote_ok then finish ()
         else (

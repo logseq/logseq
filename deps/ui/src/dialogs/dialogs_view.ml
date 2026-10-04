@@ -53,6 +53,7 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "publish-page" -> Publish_view.body ms
   | "sync-server" -> Settings_url_view.sync_body ms
   | "publish-server" -> Settings_url_view.publish_body ms
+  | "rtc-collaborators" -> Collaborators.body ms
 
   | "quick-add" -> Quick_add_view.body ms
   | _ -> box ~key:("empty-" ^ name) []

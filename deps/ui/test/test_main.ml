@@ -2728,7 +2728,8 @@ let test_update2 () =
   let rtc =
     { Model.rtc_lock = true; rtc_ws_state = "on"
     ; rtc_local_tx = Some 3; rtc_remote_tx = Some 4
-    ; rtc_pending_local = 1; rtc_pending_asset = 2; rtc_pending_server = 3 }
+    ; rtc_pending_local = 1; rtc_pending_asset = 2; rtc_pending_server = 3
+    ; rtc_online_users = []; rtc_missing_files = [] }
   in
   let m2 = Update.update m1 (Action.Rtc_state rtc) in
   check "rtc_state sets" (m2.Model.rtc = Some rtc);
