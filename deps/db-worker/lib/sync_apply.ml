@@ -2708,13 +2708,66 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
                ; "error", Printexc.to_string e ])
         entries)
 
+(* Pending entries may have their forward datoms persisted on the conn
+   being split: pre-upgrade graphs wrote them under the old model, and a
+   mid-session split still applies local ops directly to the only conn
+   that exists. Un-applying each entry's stored reversed tx newest-first
+   restores the server conn to confirmed-only before the display
+   projection is built — replay then re-derives every pending effect
+   forward. Entries whose forward never touched the conn are no-ops:
+   reversed retracts miss absent datoms and re-adds of still-present
+   originals dedup away. Per-row errors (e.g. a lookup-ref left dangling
+   after a later row's un-apply) warn and move on to the next entry. *)
+let unapply_persisted_pending_txs repo (conn : conn) : unit =
+  if Sync_state.has_client_ops_conn repo then begin
+    let db = Conn.db conn in
+    (* logseq.kv/* ident entities are graph bookkeeping (graph-uuid,
+       graph-remote?, gc markers), not pending user data — pending rows
+       can contain them (e.g. upload's identity write), and un-applying
+       those would strip the remote flag off the server conn *)
+    let touches_kv_item (item : Wire.t) : bool =
+      let target =
+        match item with
+        | Wire.Array (_ :: e :: _) | Wire.List (_ :: e :: _) -> e
+        | _ -> Wire.Nil
+      in
+      match entity_of_wire_ref db target with
+      | Some e -> (
+          match Datascript.entity_attr e "db/ident" with
+          | Some (One_value (Keyword s) | One_value (String s)) ->
+              String.length s >= 10 && String.sub s 0 10 = "logseq.kv/"
+          | _ -> false)
+      | None -> false
+    in
+    pending_txs repo ()
+    |> List.rev
+    |> List.iter (fun (e : Sync_client_op.local_tx_entry) ->
+           match
+             tx_items_of e.reversed_tx
+             |> List.filter (fun i -> not (touches_kv_item i))
+           with
+           | [] -> ()
+           | items -> (
+               try
+                 ignore
+                   (Db_transact.transact conn items
+                      [ "persist-op?", Bool false ])
+               with exn ->
+                 Worker_log.warn "db-sync/unapply-pending-failed"
+                   [ "repo", repo; "tx-id", e.tx_id
+                   ; "error", Printexc.to_string exn ]))
+  end
+
 (* Remote graphs keep two conns: the storage-backed conn registered at
    open becomes the server conn holding only confirmed state (restored
    snapshot + remote txs + acked local txs); datascript_conn becomes a
    storage-less display projection replaying the pending queue forward.
    The commit listener moves to the display conn — server-conn transacts
-   drive checksum and the synthesized jump report explicitly. *)
-let split_off_server_if_remote repo : unit =
+   drive checksum and the synthesized jump report explicitly.
+   ~unapply_pending:false is for the initial-upload split: there the
+   snapshot must carry the pending content (clear_pending_txs confirms
+   it into the server conn afterwards), so the forward datoms stay. *)
+let split_off_server_if_remote ?(unapply_pending = true) repo : unit =
   match Worker_state.datascript_conn repo with
   | None -> ()
   | Some conn ->
@@ -2734,7 +2787,8 @@ let split_off_server_if_remote repo : unit =
         Datascript.unlisten conn "pipeline-updates";
         Sync_state.set_server_conn repo conn;
         Db_listener.listen_db_checksum repo conn;
-        let display = display_conn_from_server db in
+        if unapply_pending then unapply_persisted_pending_txs repo conn;
+        let display = display_conn_from_server (Conn.db conn) in
         Worker_state.set_datascript_conn repo display;
         Db_listener.listen_db_changes repo display;
         if had_pipeline then Outliner_db_pipeline.add_listener display;
