@@ -52,8 +52,8 @@ let task_of_promise promise =
 
 let supported () = Js.typeof cs_ctor = "function"
 
-let run ctor bytes =
-  let u8 = U8a.of_string bytes in
+let run ctor payload =
+  let u8 = U8a.of_string payload in
   let blob = blob_of_u8s [| u8 |] in
   let out = pipe_through (blob_stream blob) (ctor "gzip") in
   task_of_promise
@@ -61,5 +61,5 @@ let run ctor bytes =
        (fun buf -> Js.Promise.resolve (U8a.to_string (U8.fromBuffer buf ())))
        (resp_array_buffer (response_of_stream out)))
 
-let gzip_encode bytes = run compression_stream bytes
-let gzip_decode bytes = run decompression_stream bytes
+let gzip_encode payload = run compression_stream payload
+let gzip_decode payload = run decompression_stream payload
