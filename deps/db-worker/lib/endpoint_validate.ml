@@ -60,11 +60,7 @@ let recompute_checksum_diagnostics args =
          remote graph datascript_conn is the display projection, whose
          pending-inclusive db and display-domain max_tx would corrupt
          the stored checksum and covered_tx *)
-      let conn =
-        match Sync_state.confirmed_conn repo with
-        | Some c -> c
-        | None -> conn
-      in
+      let conn = Option.get (Sync_state.confirmed_conn repo) in
       let local, remote = checksum_diagnostics repo in
       let result =
         Worker_db_validate.recompute_checksum_diagnostics repo conn

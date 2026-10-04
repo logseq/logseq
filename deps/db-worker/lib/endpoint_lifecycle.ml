@@ -477,8 +477,12 @@ let initialize_db ~ensure_open args =
                 (* gc must run after the split attached the checksum
                    listener — an exempt purge fired earlier would leave
                    covered_tx behind and trigger a heal that overwrites
-                   the stored server-image checksum with a local one *)
-                Endpoint_transaction.maybe_run_recycle_gc repo);
+                   the stored server-image checksum with a local one.
+                   Rebuild the projection when it purged so recycled
+                   entities don't ghost on the display conn *)
+                (if Endpoint_transaction.maybe_run_recycle_gc repo
+                   && Sync_state.server_conn repo <> None
+                 then Sync_apply.rebuild_display repo ~jump_tx_data:[]));
              (* the split helper already moved the listener onto the
                 display conn when it swapped; only a non-remote conn
                 still needs it attached here *)

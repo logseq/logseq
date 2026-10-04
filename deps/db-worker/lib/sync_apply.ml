@@ -2057,18 +2057,23 @@ and expand_block_retracts_to_descendants (db : db) (tx_data : Wire.t list)
 (* uuids a tx actually creates: asserted via a block/uuid identity
    item. pending_tx_uuid_delta's e-position over-count deliberately
    (server upsert semantics), which would resurrect dangling
-   e-refs — replay needs the strict set *)
-let tx_self_created_uuids (items : Wire.t list) : SSet.t =
-  List.fold_left
-    (fun s item ->
-       match item with
-       | Wire.Array (op :: _ :: a :: Wire.Uuid u :: _)
-       | Wire.List (op :: _ :: a :: Wire.Uuid u :: _)
-         when op = kw "db/add" && a = kw "block/uuid" -> SSet.add u s
-       | _ -> s)
-    SSet.empty items
+   e-refs — replay needs the strict set. Maps uuid → the creator
+   item's e-position so refs can join a non-uuid creator form *)
+let tx_self_created (items : Wire.t list) : (string, Wire.t) Hashtbl.t =
+  let t = Hashtbl.create 16 in
+  List.iter
+    (fun item ->
+      match item with
+      | Wire.Array (op :: e :: a :: Wire.Uuid u :: _)
+      | Wire.List (op :: e :: a :: Wire.Uuid u :: _)
+        when op = kw "db/add" && a = kw "block/uuid" ->
+          if not (Hashtbl.mem t u) then Hashtbl.replace t u e
+      | _ -> ())
+    items;
+  t
 
-let resolve_temp_id ?(replay_created : SSet.t option) (db : db)
+let resolve_temp_id
+    ?(replay_created : (string, Wire.t) Hashtbl.t option) (db : db)
     (datom_v : Wire.t) : Wire.t =
   let replace v =
     match v with
@@ -2091,9 +2096,9 @@ let resolve_temp_id ?(replay_created : SSet.t option) (db : db)
     | None -> None
     | Some created -> (
         match e with
-        | Wire.Uuid u when SSet.mem u created -> Some u
+        | Wire.Uuid u when Hashtbl.mem created u -> Some u
         | Wire.Array [ a ; Wire.Uuid u ] | Wire.List [ a ; Wire.Uuid u ]
-          when a = kw "block/uuid" && SSet.mem u created -> Some u
+          when a = kw "block/uuid" && Hashtbl.mem created u -> Some u
         | _ -> None)
   in
   let replace_e op e =
@@ -2102,8 +2107,23 @@ let resolve_temp_id ?(replay_created : SSet.t option) (db : db)
     | _ -> (
         match e_created_uuid e with
         | Some u
-          when op = kw "db/add" && entity_of_wire_ref db e = None ->
-            Wire.String ("replay-created-" ^ u)
+          when op = kw "db/add" && entity_of_wire_ref db e = None -> (
+            (* join the creator's own e form when it is a usable
+               tempid — mixing forms (db/add "t-1" :block/uuid u plus
+               [:block/uuid u] refs) would otherwise split the entity *)
+            match
+              (match replay_created with
+               | Some created -> Hashtbl.find_opt created u
+               | None -> None)
+            with
+            | Some ce
+              when (match ce with
+                    | Wire.Uuid _ -> false
+                    | Wire.Array [ a ; Wire.Uuid _ ]
+                    | Wire.List [ a ; Wire.Uuid _ ] ->
+                        a <> kw "block/uuid"
+                    | _ -> true) -> ce
+            | _ -> Wire.String ("replay-created-" ^ u))
         | _ -> e)
   in
   match datom_v with
@@ -2563,7 +2583,7 @@ let replay_pending_entry (repo : string) (conn : conn)
               sanitize_pending_tx_refs ~attr_live db tx_data
             in
             let tx_data =
-              let replay_created = tx_self_created_uuids tx_data in
+              let replay_created = tx_self_created tx_data in
               List.map
                 (resolve_temp_id ~replay_created db)
                 tx_data
@@ -2829,7 +2849,11 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
       items
       |> List.concat_map (fun item ->
              match item with
-             | Wire.Array (_ :: e :: rest) | Wire.List (_ :: e :: rest) ->
+             (* only db/add items can use a stub: a retract resolves the
+                ref to the fresh stub eid and silently misses the real
+                dangling eid it meant to remove *)
+             | Wire.Array (op :: e :: rest) | Wire.List (op :: e :: rest)
+               when op = kw "db/add" ->
                  (match lookup_pair_of e with
                   | Some p when entity_of_wire_ref db e = None -> [ p ]
                   | _ -> [])
@@ -2851,20 +2875,58 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
              | None -> Hashtbl.replace seen (a, v) (); true)
     in
     (* a reversed db/add restores the value a pending write evicted —
-       but on card-one attrs it would stomp a LATER confirmed value:
-       apply the restore only while the phantom is intact, i.e. the
-       conn still holds a value this row's forward tx wrote for (e,a).
-       card-many re-adds dedup against re-confirmed datoms, so they
-       don't need the guard *)
+       but it must never stomp a LATER confirmed value: apply the
+       restore only while the phantom is intact, i.e. the conn still
+       shows the state this row's forward tx left. For a retractEntity
+       forward that means the entity is still absent — a confirmed
+       re-create wins wholesale. For an attr-level retract it means the
+       attr is still empty. For an add it means the forward value is
+       still present. card-many adds can't stomp a value (they merge),
+       so they only need the retractEntity check *)
     let stale_restores (db : db) ~(forward_items : Wire.t list)
         (items : Wire.t list) : Wire.t list =
+      let forward_retracts_entity (e_w : Wire.t) : bool =
+        List.exists
+          (fun item ->
+            match item with
+            | Wire.Array (op :: e' :: _) | Wire.List (op :: e' :: _)
+              when (op = kw "db/retractEntity"
+                    || op = kw "db.fn/retractEntity")
+                   && e' = e_w -> true
+            | _ -> false)
+          forward_items
+      in
+      let forward_retracts_attr (e_w : Wire.t) (a : string) : bool =
+        List.exists
+          (fun item ->
+            match item with
+            | Wire.Array (op :: e' :: a' :: _) | Wire.List (op :: e' :: a' :: _)
+              when op = kw "db/retract" && e' = e_w -> (
+                match a' with
+                | Wire.Keyword s | Wire.Symbol s -> s = a
+                | _ -> false)
+            | _ -> false)
+          forward_items
+      in
+      (* values the forward tx wrote to (e,a): db/add carries the new
+         value at position 3, db/cas at position 4 (after the old
+         value). A db/retract writes nothing — it must not count as a
+         forward value or the intact check below would demand the conn
+         still hold a value the forward removed, dropping the legit
+         restore *)
       let forward_vals (e_w : Wire.t) (a : string) : Wire.t list =
         List.filter_map
           (fun item ->
             match item with
-            | Wire.Array (_ :: e' :: a' :: v' :: _)
-            | Wire.List (_ :: e' :: a' :: v' :: _)
-              when e' = e_w -> (
+            | Wire.Array (op :: e' :: a' :: v' :: _)
+            | Wire.List (op :: e' :: a' :: v' :: _)
+              when op = kw "db/add" && e' = e_w -> (
+                match a' with
+                | Wire.Keyword s | Wire.Symbol s when s = a -> Some v'
+                | _ -> None)
+            | Wire.Array (op :: e' :: a' :: _ :: v' :: _)
+            | Wire.List (op :: e' :: a' :: _ :: v' :: _)
+              when op = kw "db/cas" && e' = e_w -> (
                 match a' with
                 | Wire.Keyword s | Wire.Symbol s when s = a -> Some v'
                 | _ -> None)
@@ -2873,7 +2935,15 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
       in
       let phantom_intact (e_w : Wire.t) (a : string) : bool =
         match forward_vals e_w a with
-        | [] -> true
+        | [] ->
+            (* the forward removed (e,a) rather than writing it: the
+               phantom only survives while nothing confirmed wrote it
+               back — a still-empty attr is intact; any present value
+               means confirmed state drifted and wins *)
+            forward_retracts_attr e_w a
+            && (match entity_of_wire_ref db e_w with
+                | None -> false
+                | Some ent -> Datascript.entity_attr ent a = None)
         | fvs -> (
             match entity_of_wire_ref db e_w with
             | None -> false
@@ -2911,51 +2981,60 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
           match item with
           | Wire.Array (op :: e_w :: a_w :: _ :: _)
           | Wire.List (op :: e_w :: a_w :: _ :: _)
-            when op = kw "db/add" -> (
-              match a_w with
-              | Wire.Keyword a | Wire.Symbol a
-                when not (Ldb.many_attr db a) ->
-                  phantom_intact e_w a
-              | _ -> true)
+            when op = kw "db/add" ->
+              if forward_retracts_entity e_w then
+                (* the forward deleted the whole entity: resurrect it
+                   only while it is still absent — a confirmed
+                   re-create wins wholesale *)
+                entity_of_wire_ref db e_w = None
+              else (
+                match a_w with
+                | Wire.Keyword a | Wire.Symbol a
+                  when not (Ldb.many_attr db a) ->
+                    phantom_intact e_w a
+                | _ -> true)
           | _ -> true)
         items
     in
+    let any_failed = ref false in
     Sync_client_op.get_unconfirmed_local_txs repo
     |> List.rev
     |> List.iter (fun (e : Sync_client_op.local_tx_entry) ->
-           let db = Conn.db conn in
-           match
-             tx_items_of e.reversed_tx
-             |> List.filter (fun i -> not (touches_kv_item i))
-             |> stale_restores db ~forward_items:(tx_items_of e.tx)
-           with
-           | [] -> ()
-           | items -> (
-               try
-                 (match stubs_of db items with
-                  | [] -> ()
-                  | stubs ->
-                      ignore
-                        (Db_transact.transact conn
-                           (List.mapi
-                              (fun i (a, v) ->
-                                Wire.Array
-                                  [ kw "db/add"
-                                  ; Wire.String
-                                      ("unapply-stub-" ^ string_of_int i)
-                                  ; Wire.Keyword a ; v ])
-                              stubs)
-                           [ "persist-op?", Bool false
-                           ; "skip-validate-db?", Bool true ]));
+           try
+             let db = Conn.db conn in
+             match
+               tx_items_of e.reversed_tx
+               |> List.filter (fun i -> not (touches_kv_item i))
+               |> stale_restores db ~forward_items:(tx_items_of e.tx)
+             with
+             | [] -> ()
+             | items ->
+                 (* stubs and items in ONE tx: lookup-refs resolve
+                    against datoms applied earlier in the same tx, and a
+                    single tx means an items failure can't orphan
+                    stub entities on the durable conn *)
+                 let stub_items =
+                   stubs_of db items
+                   |> List.mapi (fun i (a, v) ->
+                          Wire.Array
+                            [ kw "db/add"
+                            ; Wire.String
+                                ("unapply-stub-" ^ string_of_int i)
+                            ; Wire.Keyword a ; v ])
+                 in
                  ignore
-                   (Db_transact.transact conn items
+                   (Db_transact.transact conn (stub_items @ items)
                       [ "persist-op?", Bool false
                       ; "skip-validate-db?", Bool true ])
-               with exn ->
-                 Worker_log.warn "db-sync/unapply-pending-failed"
-                   [ "repo", repo; "tx-id", e.tx_id
-                   ; "error", Printexc.to_string exn ]));
-    Sync_client_op.mark_pending_unapply_done repo
+           with exn ->
+             any_failed := true;
+             Worker_log.warn "db-sync/unapply-pending-failed"
+               [ "repo", repo; "tx-id", e.tx_id
+               ; "error", Printexc.to_string exn ]);
+    (* a skipped row keeps its phantom datoms on the conn — don't mark
+       the pass done so the next open retries it (completed rows are
+       idempotent: their phantom is already stripped) *)
+    if not !any_failed then Sync_client_op.mark_pending_unapply_done repo
   end
 
 (* Remote graphs keep two conns: the storage-backed conn registered at
@@ -2985,24 +3064,36 @@ let split_off_server_if_remote ?(unapply_pending = true) repo : unit =
         let had_pipeline = Outliner_db_pipeline.has_listener conn in
         Datascript.unlisten conn "listen-db-changes!";
         Datascript.unlisten conn "pipeline-updates";
-        Sync_state.set_server_conn repo conn;
-        Db_listener.listen_db_checksum repo conn;
-        if unapply_pending then unapply_persisted_pending_txs repo conn;
-        let display = display_conn_from_server (Conn.db conn) in
-        Worker_state.set_datascript_conn repo display;
-        Db_listener.listen_db_changes repo display;
-        if had_pipeline then Outliner_db_pipeline.add_listener display;
-        (* the pre-split conn db is the best available db_before: at a
-           mid-session split (or a pre-upgrade graph whose pending datoms
-           were persisted) it still resolves remotely-deleted targets so
-           ancestor fallback can run; on a fresh restart under the new
-           model it simply lacks them and those ops mark failed *)
-        let failed = replay_pending_txs repo display (Some db) in
-        if failed > 0 then begin
-          Conn.update_db display (fun _ ->
-              display_db_from_server (Conn.db conn));
-          ignore (replay_pending_txs repo display None)
-        end
+        (try
+           Sync_state.set_server_conn repo conn;
+           Db_listener.listen_db_checksum repo conn;
+           if unapply_pending then unapply_persisted_pending_txs repo conn;
+           let display = display_conn_from_server (Conn.db conn) in
+           Worker_state.set_datascript_conn repo display;
+           Db_listener.listen_db_changes repo display;
+           if had_pipeline then Outliner_db_pipeline.add_listener display;
+           (* the pre-split conn db is the best available db_before: at a
+              mid-session split (or a pre-upgrade graph whose pending
+              datoms were persisted) it still resolves remotely-deleted
+              targets so ancestor fallback can run; on a fresh restart
+              under the new model it simply lacks them and those ops
+              mark failed *)
+           let failed = replay_pending_txs repo display (Some db) in
+           if failed > 0 then begin
+             Conn.update_db display (fun _ ->
+                 display_db_from_server (Conn.db conn));
+             ignore (replay_pending_txs repo display None)
+           end
+         with exn ->
+           (* a throw mid-split must not leave server_conn registered
+              with no display conn — a retry would early-return into
+              the half-state with the commit listener detached *)
+           Sync_state.drop_server_conn repo;
+           Datascript.unlisten conn "listen-db-sync-checksum";
+           Worker_state.set_datascript_conn repo conn;
+           Db_listener.listen_db_changes repo conn;
+           if had_pipeline then Outliner_db_pipeline.add_listener conn;
+           raise exn)
       end
 
 (* ---- handle-local-tx! (forward decl via ref) ---- *)
