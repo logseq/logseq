@@ -38,22 +38,21 @@ let open_prop_dlg ~remove ~anchor =
    (cljs show-action-bar!). Without the fixed bar's pointer-events:none
    it overlays drag targets and intercepts pointer events (e2e drag
    tests). *)
-module D = Dom_ext
+module D = Web_dom
 
-let listeners_installed = ref false
+let listeners_installed = State_cell.Once.make ()
 
 let install_listeners () =
-  if not !listeners_installed then (
-    listeners_installed := true;
+  State_cell.Once.run listeners_installed (fun () ->
     D.add_document_listener "mousedown"
       (fun e ->
-        match D.target e with
+        match D.ev_target e with
         | Some el -> (
-            match D.closest el ".selection-action-bar" with
+            match D.el_closest el ".selection-action-bar" with
             | Some _ -> ()
             | None ->
                 let inside sel =
-                  match D.closest el sel with Some _ -> true | None -> false
+                  match D.el_closest el sel with Some _ -> true | None -> false
                 in
                 (* cljs container.cljs window pointerdown →
                    hide-context-menu-and-clear-selection: a plain click
@@ -64,9 +63,9 @@ let install_listeners () =
                   && (not (inside ".ls-block"))
                   && (not (inside "[data-keep-selection]"))
                   && (not (inside "input,textarea,select,[contenteditable]"))
-                  && (not (D.shift_key e))
-                  && (not (D.meta_key e))
-                  && (not (D.ctrl_key e))
+                  && (not (D.ev_shift e))
+                  && (not (D.ev_meta e))
+                  && (not (D.ev_ctrl e))
                   && Editor_state.editing_uuid () = None
                 then Editor_actions.clear_selection ()
                 else if Editor_actions.selected_uuids () <> [] then
@@ -77,13 +76,13 @@ let install_listeners () =
       (fun e ->
         (* cljs show-selection-action-bar-for-pointer!: only a primary-
            button release can raise the bar *)
-        let tgt = if D.button e = 0 then D.target e else None in
+        let tgt = if D.ev_button e = 0 then D.ev_target e else None in
         D.set_timeout
           (fun () ->
             match tgt with
             | Some el -> (
                 match
-                  D.closest el ".block-control-wrap,button,input,textarea,a"
+                  D.el_closest el ".block-control-wrap,button,input,textarea,a"
                 with
                 | Some _ -> ()
                 | None ->
@@ -141,10 +140,10 @@ and node () : t = (
           match sel with
       | [] -> Logseq_dom.nothing
       | first :: _ -> (
-          match Editor_dom.get_element_by_id ("ls-block-" ^ first) with
+          match Web_dom.get_element_by_id ("ls-block-" ^ first) with
           | None -> Logseq_dom.nothing
           | Some blk ->
-              let l, t, _r, _b, _w = Properties_dom.el_rect blk in
+              let l, t, _r, _b, _w = Web_dom.bounding_rect_fields blk in
               let below = t -. 2. in
               dom ~key:"sbar"
                 ~style_class:

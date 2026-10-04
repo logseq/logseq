@@ -8,8 +8,7 @@
 
 open Promise_ext
 module D = Logseq_dom
-module E = Views_el
-module Ed = Editor_dom
+module E = Web_dom
 module V = Views_state
 module Wr = Views_wire
 module W = Wire
@@ -461,23 +460,23 @@ let rename_view inst (v : Wr.view_ent) anchor =
       ~cls:"cp__select-input w-full !p-1.5"
       ~attrs:[ ("type", "text") ] ()
   in
-  Ed.el_set_value input v.Wr.vtitle;
+  E.el_set_value input v.Wr.vtitle;
   let wrap = E.h ~cls:"block-title-wrap p-2" ~children:[ input ] () in
   let commit () =
-    let t = Ed.el_value input in
+    let t = E.el_value input in
     P.close_all ();
     Db.save_block_title v.Wr.vu t (fun () ->
         load_views inst ~on_done:(fun () -> refresh inst))
   in
-  E.el_add_listener input "keydown" (fun ev ->
-      match Ed.ev_key ev with
+  E.el_on input "keydown" (fun ev ->
+      match E.ev_key ev with
       | "Enter" ->
-          Ed.prevent_default ev;
+          E.ev_prevent_default ev;
           commit ()
       | "Escape" -> P.close_all ()
       | _ -> ());
   ignore (P.show_menu ~anchor [ P.MCustom wrap ]);
-  E.focus_end input
+  E.el_focus input
 
 let export_edn inst =
   let s =
@@ -486,7 +485,7 @@ let export_edn inst =
     |> String.concat "\n"
   in
   ignore
-    (let* () = E.clipboard_write s in
+    (let* () = Platform.clipboard_write_text s in
      Runtime.send
        (A.Toast_push
           { M.toast_id = 0; toast_key = None; toast_text = I.copied_view_nodes
@@ -506,9 +505,9 @@ let add_new_object inst =
           let rec try_edit n =
             if n <= 0 then ()
             else
-              match Ed.get_element_by_id ("ls-block-" ^ uuid) with
+              match E.get_element_by_id ("ls-block-" ^ uuid) with
               | Some _ -> Editor_actions.enter_edit ~scope:"sidebar" uuid 0
-              | None -> Ed.set_timeout (fun () -> try_edit (n - 1)) 100
+              | None -> E.set_timeout (fun () -> try_edit (n - 1)) 100
           in
           try_edit 20)
   | _ -> ()
@@ -538,7 +537,7 @@ let install_ops () =
     ; o_rename =
         (fun inst v ->
           match
-            Ed.get_element_by_id (Views_head.view_tab_anchor_id inst v)
+            E.get_element_by_id (Views_head.view_tab_anchor_id inst v)
           with
           | Some anchor -> rename_view inst v anchor
           | None -> ())

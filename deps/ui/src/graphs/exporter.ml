@@ -7,8 +7,6 @@ open Lui_elements
 
 let dom = Logseq_dom.dom
 module T = I18n
-module B = Browser_ui
-
 let repo () =
   match (Runtime.model ()).Model.repo with
   | Some r -> r
@@ -21,13 +19,13 @@ let short_repo () =
     String.sub r (String.length p) (String.length r - String.length p)
   else r
 
-let secs () = int_of_float (B.now_ms () /. 1000.)
+let secs () = int_of_float (Platform.date_now_ms () /. 1000.)
 
 let export_binary () =
   let* w = Runtime.invoke1 "thread-api/export-db-binary" (Wire.String (repo ())) in
   match w with
   | Wire.Binary data ->
-      B.download_binary
+      Web_dom.download_binary
         ~filename:
           (Printf.sprintf "%s_%d.sqlite" (short_repo ()) (secs ()))
         ~mime:"application/octet-stream" data;
@@ -41,7 +39,7 @@ let export_zip () =
       let z =
         Zip.build [ ("db.sqlite", data) ]
       in
-      B.download_binary
+      Web_dom.download_binary
         ~filename:
           (Printf.sprintf "%s_%d.zip" (short_repo ()) (secs ()))
         ~mime:"application/zip" z;
@@ -60,7 +58,7 @@ let export_edn () =
   let text =
     try Edn.to_string w with _ -> Transit.to_string w
   in
-  B.download_text
+  Web_dom.download_text
     ~filename:(Printf.sprintf "%s_%d.edn" (short_repo ()) (secs ()))
     ~mime:"application/edn" text;
   Js.Promise.resolve ()
@@ -85,7 +83,7 @@ let export_markdown () =
           pairs
       in
       let z = Zip.build files in
-      B.download_binary
+      Web_dom.download_binary
         ~filename:
           (Printf.sprintf "%s_markdown_%d.zip" (short_repo ())
              (secs ()))
@@ -101,7 +99,7 @@ let export_transit () =
   let text =
     try Transit.to_string w with _ -> Edn.to_string w
   in
-  B.download_text
+  Web_dom.download_text
     ~filename:
       (Printf.sprintf "%s-debug-datoms_%d.transit" (short_repo ())
          (secs ()))
@@ -262,7 +260,7 @@ let backup_now () =
            else (
              (if file_size f > 0. then
                 fh_move fh backups
-                  (Printf.sprintf "%.0f.db.sqlite" (B.now_ms ()))
+                  (Printf.sprintf "%.0f.db.sqlite" (Platform.date_now_ms ()))
               else Js.Promise.resolve ())
              |> Js.Promise.then_ (fun () ->
                     let* _ = truncate_old_versions backups in

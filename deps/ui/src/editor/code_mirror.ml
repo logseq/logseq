@@ -12,8 +12,7 @@
    modes/addons whose registration happens on require). *)
 
 open Promise_ext
-module D = Editor_dom
-module V = Views_el
+module D = Web_dom
 module S = Editor_state
 module A = Editor_actions
 module Ops = Outliner_ops
@@ -23,7 +22,6 @@ type t
 
 external raw_require : string -> Js.Json.t = "require"
 
-external cm_module_of_json : Js.Json.t -> cm_module = "%identity"
 
 (* codemirror.js and every mode/addon touch `document` at load time, so
    they must not require under the node test runner — the whole ui lib is
@@ -116,12 +114,10 @@ external mode_infos : cm_module -> Js.Json.t array = "modeInfo"
 external next_sibling : D.el -> D.el option = "nextElementSibling"
   [@@mel.get] [@@mel.return nullable]
 
-external json_of_fn : (t -> unit) -> Js.Json.t = "%identity"
-external json_of_cm : cm_module -> Js.Json.t = "%identity"
 external window_obj : Js.Json.t = "window"
   [@@mel.scope "globalThis"]
 
-external shim_load_cm_core : Js.Json.t -> Js.Json.t Js.Promise.t
+external shim_load_cm_core : Js.Json.t -> cm_module Js.Promise.t
   = "loadCmCore"
   [@@mel.send]
 
@@ -130,10 +126,10 @@ external shim_load_cm_core : Js.Json.t -> Js.Json.t Js.Promise.t
 let core_load =
   lazy
     (shim_load_cm_core (raw_require "lui-shims/lazy-assets")
-     |> Js.Promise.then_ (fun j ->
-            cm_cache := Some (cm_module_of_json j);
+     |> Js.Promise.then_ (fun m ->
+            cm_cache := Some m;
             (* cljs exposes the module on window (extensions/dev helpers) *)
-            Platform.set_prop window_obj "CodeMirror" (json_of_cm (cm ()));
+            Web_dom.js_set window_obj "CodeMirror" m;
             Js.Promise.resolve ()))
 
 let ensure_core () : unit Js.Promise.t = Lazy.force core_load
@@ -186,7 +182,7 @@ let lisp_like mode = List.mem mode [ "scheme"; "lisp"; "clojure"; "edn" ]
 (* theme ("solarized <light|dark>") follows the root .dark class the same
    way cljs theme-name does via the ui/theme subscription *)
 let theme_name () =
-  if V.el_class_contains D.document_element "dark" then "solarized dark"
+  if D.el_class_contains D.document_element "dark" then "solarized dark"
   else "solarized light"
 
 (* -- instances keyed by block uuid -- *)
@@ -195,7 +191,7 @@ let instances : (string, t) Hashtbl.t = Hashtbl.create 8
 
 let instance uuid =
   match Hashtbl.find_opt instances uuid with
-  | Some c when V.el_is_connected (get_wrapper c) -> Some c
+  | Some c when D.el_is_connected (get_wrapper c) -> Some c
   | Some _ ->
       Hashtbl.remove instances uuid;
       None
@@ -205,7 +201,7 @@ let prune () =
   let dead = ref [] in
   Hashtbl.iter
     (fun uuid c ->
-      if not (V.el_is_connected (get_wrapper c)) then dead := uuid :: !dead)
+      if not (D.el_is_connected (get_wrapper c)) then dead := uuid :: !dead)
     instances;
   List.iter (Hashtbl.remove instances) !dead
 
@@ -263,11 +259,11 @@ let update_calc c =
   | Some wrap -> (
       match D.el_query wrap ".extensions__code-calc" with
       | Some res ->
-          V.clear res;
+          D.el_replace_children res;
           List.iter
             (fun line ->
               D.el_append_child res
-                (V.h ~cls:"extensions__code-calc-output-line" ~text:line
+                (D.h ~cls:"extensions__code-calc-output-line" ~text:line
                    ()))
             (Render_calc.results (get_value c))
       | None -> ())
@@ -324,8 +320,8 @@ let wrapper_keydown uuid c ev =
   | _, true, _ -> (
       match ev_code ev with
       | "BracketLeft" | "BracketRight" ->
-          D.stop_propagation ev;
-          D.prevent_default ev
+          D.ev_stop_propagation ev;
+          D.ev_prevent_default ev
       | _ -> ())
   | "ArrowLeft", false, false -> if at_start c then A.arrow_nav uuid true
   | "ArrowRight", false, false ->
@@ -337,7 +333,7 @@ let wrapper_keydown uuid c ev =
 (* cljs pointerdown on the wrapper: stop propagation + clear the
    block-range selection *)
 let wrapper_pointerdown _uuid ev =
-  D.stop_propagation ev;
+  D.ev_stop_propagation ev;
   if S.selection_active () then
     S.set (fun st ->
         { st with
@@ -350,8 +346,8 @@ let wrapper_pointerdown _uuid ev =
 let make_options ~uuid ~lang ~mode =
   let extra_keys =
     Js.Dict.fromList
-      [ ("Esc", json_of_fn (fun _ -> on_escape uuid))
-      ; ("Shift-Enter", json_of_fn (fun _ -> on_shift_enter uuid))
+      [ ("Esc", fun _ -> on_escape uuid)
+      ; ("Shift-Enter", fun _ -> on_shift_enter uuid)
       ]
   in
   let opts =
@@ -364,9 +360,10 @@ let make_options ~uuid ~lang ~mode =
       ; ("mode", Js.Json.string mode)
       ; (* do not accept TAB-in, since TAB is bound globally (cljs) *)
         ("tabIndex", Js.Json.number (-1.))
-      ; ("extraKeys", Js.Json.object_ extra_keys)
       ]
   in
+  (* extraKeys values are cm callbacks, not json — set via js_set *)
+  Web_dom.js_set (Js.Json.object_ opts) "extraKeys" extra_keys;
   if lang = "calc" then
     (* cljs: calc editors expand to the whole buffer *)
     Js.Dict.set opts "viewportMargin" (Js.Json.number Float.infinity);
@@ -376,7 +373,7 @@ let make_options ~uuid ~lang ~mode =
    .CodeMirror wrapper right after it *)
 let bound el =
   match next_sibling el with
-  | Some sib -> V.el_class_contains sib "CodeMirror"
+  | Some sib -> D.el_class_contains sib "CodeMirror"
   | None -> false
 
 let uuid_of_el el =
@@ -395,8 +392,8 @@ let mount uuid textarea =
   on_event c "change" (fun c -> on_change uuid c);
   on_event c "blur" (fun _ -> on_cm_blur uuid);
   on_event c "focus" (fun _ -> on_cm_focus uuid);
-  V.el_add_listener (get_wrapper c) "keydown" (wrapper_keydown uuid c);
-  V.el_add_listener (get_wrapper c) "pointerdown" (wrapper_pointerdown uuid);
+  D.el_on (get_wrapper c) "keydown" (wrapper_keydown uuid c);
+  D.el_on (get_wrapper c) "pointerdown" (wrapper_pointerdown uuid);
   (* cljs .save()/.refresh() right after mount: textarea value -> doc
      state, then a layout pass while the container is on screen *)
   save c;
@@ -427,7 +424,7 @@ let mount_async uuid el =
       (ensure_core ()
        |> Js.Promise.then_ (fun () ->
               Hashtbl.remove pending_mounts uuid;
-              if instance uuid = None && V.el_is_connected el then
+              if instance uuid = None && D.el_is_connected el then
                 mount uuid el;
               Js.Promise.resolve ()))
   end
@@ -477,7 +474,7 @@ let picker : D.el option ref = ref None
 let close_picker () =
   match !picker with
   | Some el ->
-      V.el_remove el;
+      D.el_remove el;
       picker := None
   | None -> ()
 
@@ -516,19 +513,19 @@ let open_lang_picker uuid =
                 ("#ls-block-" ^ uuid ^ " .select-language") )
           with
           | Some host, Some button ->
-          let r = V.el_rect button in
+          let r = D.el_bounding_rect button in
           let menu =
-            V.h ~cls:"ls-code-lang-picker" ~attrs:[ ("role", "menu") ] ()
+            D.h ~cls:"ls-code-lang-picker" ~attrs:[ ("role", "menu") ] ()
           in
-          V.el_set_attr menu "style"
+          D.el_set_attr menu "style"
             (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:var(--ls-z-index-level-1)"
-               (V.rect_left r) (V.rect_bottom r +. 4.));
+               (D.rect_left r) (D.rect_bottom r +. 4.));
               Array.iter
                 (fun info ->
                   match json_string info "name" with
                   | Some name ->
                       let row =
-                        V.h ~cls:Menu_item.base_cls
+                        D.h ~cls:Menu_item.base_cls
                           ~attrs:Menu_item.item_attrs ~text:name
                           ~on_click:(fun _ -> pick_lang uuid name)
                           ()
@@ -547,7 +544,7 @@ let copy_button uuid =
   match instance uuid with
   | Some c ->
       ignore
-        (let* () = V.clipboard_write (get_value c) in
+        (let* () = Platform.clipboard_write_text (get_value c) in
          Runtime.send
            (Action.Toast_push
               { Model.toast_id = 0
@@ -566,7 +563,7 @@ let install () =
     (* hooks for editor_actions without a module cycle *)
     S.code_buffer_of := live_value;
     S.code_focus := focus_block;
-    D.document_add_listener "mousedown"
+    D.add_document_listener "mousedown"
       (fun ev ->
         match
           ( !picker

@@ -191,7 +191,7 @@ let on_page_loaded uuid f = after_page_load := Some (uuid, f)
    mounted under <body> by editor_commands — exposed here so
    Popups_state can hit-test it without an Editor_commands dependency
    (which would cycle through Cmdk_state) *)
-let editor_popup_root : Editor_dom.el option ref = ref None
+let editor_popup_root : Web_dom.el option ref = ref None
 
 let flush () = !app_flush ()
 

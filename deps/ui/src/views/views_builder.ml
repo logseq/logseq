@@ -9,8 +9,7 @@
    element resolved by id. *)
 
 module D = Logseq_dom
-module E = Views_el
-module Ed = Editor_dom
+module E = Web_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
@@ -322,7 +321,7 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
             ~cls:"flex flex-row justify-between gap-1 items-center px-1 pb-1 border-b"
             ~children:[ lab; cb ] ()
         in
-        E.el_add_listener cb "change" (fun _ ->
+        E.el_on cb "change" (fun _ ->
             property_picker inst ~tree ~loc ~anchor
               ~include_builtin:(E.el_checked cb));
         if include_builtin then E.el_set_checked cb true;
@@ -456,10 +455,10 @@ let full_text_picker inst ~tree ~loc ~anchor:_ =
   let wrap = E.h ~cls:"query-builder-picker" ~children:[ input ] () in
   E.el_append_child P.document_body wrap;
   P.push_popup wrap;
-  E.el_add_listener input "keydown" (fun ev ->
-      match Ed.ev_key ev with
+  E.el_on input "keydown" (fun ev ->
+      match E.ev_key ev with
       | "Enter" ->
-          let v = String.trim (Ed.el_value input) in
+          let v = String.trim (E.el_value input) in
           if v <> "" then begin
             P.close_all ();
             tree := append_at !tree loc (CText v);
@@ -467,7 +466,7 @@ let full_text_picker inst ~tree ~loc ~anchor:_ =
           end
       | "Escape" -> P.close_all ()
       | _ -> ());
-  Ed.set_timeout (fun () -> Ed.el_focus input) 0
+  E.set_timeout (fun () -> E.el_focus input) 0
 
 let sample_picker inst ~tree ~loc ~anchor =
   ignore
@@ -597,7 +596,7 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
                 ~events:"click"
                 ~on_dom_event:(fun name _ ->
                   if name = "click" then
-                    match Ed.get_element_by_id id with
+                    match E.get_element_by_id id with
                     | Some anchor ->
                         clause_popup inst ~tree ~loc ~anchor
                           ~is_op_clause:false
@@ -614,7 +613,7 @@ and op_label_el inst ~tree ~loc kind : t =
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       if name = "click" then
-        match Ed.get_element_by_id id with
+        match E.get_element_by_id id with
         | Some anchor -> clause_popup inst ~tree ~loc ~anchor ~is_op_clause:true
         | None -> ())
     []
@@ -627,7 +626,7 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       if name = "click" then
-        match Ed.get_element_by_id id with
+        match E.get_element_by_id id with
         | Some anchor -> picker inst ~tree ~loc ~anchor
         | None -> ())
     ( [ Views_table.icon_el "plus" ]

@@ -130,6 +130,7 @@ let with_apply_queue (f : unit -> 'a Js.Promise.t) : 'a Js.Promise.t =
     Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p;
   p
 
+
 let note_applied rev =
   applied := ISet.add rev !applied;
   (* bound the set — a long session of ops would otherwise grow it *)

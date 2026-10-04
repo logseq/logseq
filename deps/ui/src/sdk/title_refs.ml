@@ -190,22 +190,7 @@ let resolve_names names tags hash =
   in
   Js.Promise.resolve (Array.to_list a)
 
-let replace_all (s : string) ~pat ~rep =
-  let n = String.length s and m = String.length pat in
-  let buf = Buffer.create n in
-  let rec go i =
-    if i + m <= n && String.sub s i m = pat then (
-      Buffer.add_string buf rep;
-      go (i + m))
-    else if i < n then (
-      Buffer.add_char buf s.[i];
-      go (i + 1))
-  in
-  if m = 0 then s
-  else (
-    go 0;
-    Buffer.contents buf)
-
+let replace_all = Str_util.replace_all
 (* longest tag name matching at i followed by a boundary *)
 let tag_name_at (s : string) i resolved =
   let n = String.length s in

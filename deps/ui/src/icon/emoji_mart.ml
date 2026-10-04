@@ -72,7 +72,7 @@ let emoji_id_valid (id : string) : bool =
   | None -> false
 
 let json_str (j : Js.Json.t) (k : string) : string option =
-  Js.Json.decodeString (Platform.json_prop j k)
+  Js.Json.decodeString (Web_dom.js_get j k)
 
 (* search entries arrive as {id, name, skins} *)
 let entry_of_json (j : Js.Json.t) : (string * string) option =

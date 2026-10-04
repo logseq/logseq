@@ -32,10 +32,10 @@ let el ?key ~tag ?(attrs = []) ?(events = "") ?(style_class = "")
    interleaved with elements; LUI's own text nodes render as
    span.lui-text (an extra element), so a <raw-text> placeholder is
    mounted at the exact DOM position and the MutationObserver in
-   Editor_dom swaps it for a real text node. *)
+   Web_dom swaps it for a real text node. *)
 let txt (s : string) : t =
  fun context parent ->
-  Editor_dom.ensure_raw_text_observer ();
+  Web_dom.ensure_raw_text_observer ();
   Logseq_dom.dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] []
     context parent
 

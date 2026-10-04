@@ -9,12 +9,6 @@ type node = {
   kids : node list;
 }
 
-let trim s =
-  let n = String.length s in
-  let a = ref 0 and b = ref (n - 1) in
-  while !a < n && (s.[!a] = ' ' || s.[!a] = '\t') do incr a done;
-  while !b >= !a && (s.[!b] = ' ' || s.[!b] = '\t') do decr b done;
-  if !b < !a then "" else String.sub s !a (!b - !a + 1)
 
 type item = {
   level : int;
@@ -31,7 +25,7 @@ let items_of_content ~indent_unit content =
         :: items
   in
   let go (items, cur) line =
-    if trim line = "" then (items, cur)
+    if Str_util.trim line = "" then (items, cur)
     else
       let n = String.length line in
       let rec lvl i k =
@@ -50,7 +44,7 @@ let items_of_content ~indent_unit content =
         , Some (level, String.sub after 2 (la - 2), []) )
       else
         match cur with
-        | Some (l, h, ex) -> (items, Some (l, h, trim after :: ex))
+        | Some (l, h, ex) -> (items, Some (l, h, Str_util.trim after :: ex))
         | None -> (items, cur)
   in
   let items, cur =

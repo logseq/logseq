@@ -38,17 +38,17 @@ let current_mode () =
 (* theme.cljs container effect: dataset.theme + .dark class on
    documentElement, dark-theme vs white-theme light-theme on body *)
 let apply_theme_dom effective =
-  Platform.document_set_data "theme" effective;
+  Web_dom.doc_set_data "theme" effective;
   if effective = "dark" then (
-    Platform.root_add_class "dark";
-    Platform.body_add_class "dark-theme";
-    Platform.body_rm_class "light-theme";
-    Platform.body_rm_class "white-theme")
+    Web_dom.doc_add_class "dark";
+    Web_dom.body_add_class "dark-theme";
+    Web_dom.body_rm_class "light-theme";
+    Web_dom.body_rm_class "white-theme")
   else (
-    Platform.root_rm_class "dark";
-    Platform.body_rm_class "dark-theme";
-    Platform.body_add_class "white-theme";
-    Platform.body_add_class "light-theme")
+    Web_dom.doc_rm_class "dark";
+    Web_dom.body_rm_class "dark-theme";
+    Web_dom.body_add_class "white-theme";
+    Web_dom.body_add_class "light-theme")
 
 (* state/use-theme-mode!: set dataset.theme + storage; system follows
    prefers-color-scheme *)
@@ -56,7 +56,7 @@ let use_mode mode =
   let effective =
     if mode = "system" then (
       Platform.local_storage_set "system-theme?" "true";
-      if Browser_ui.prefers_dark () then "dark" else "light")
+      if Web_dom.prefers_dark () then "dark" else "light")
     else (
       Platform.local_storage_set "system-theme?" "false";
       mode)
@@ -73,7 +73,7 @@ let current_lang () =
 let set_language code =
   Platform.local_storage_set "preferred-language"
     (Platform.storage_quote code);
-  Platform.document_set_lang code;
+  Web_dom.doc_set_lang code;
   (* fetch the new locale first so the reload boots straight into it;
      `let x = t "..."` bindings freeze at module load so a full reload is
      the honest swap — same as before lazy dicts *)
@@ -88,39 +88,39 @@ let lang_label_for code =
   | Some (_, l) -> Platform.utf8 l
   | None -> code
 
-let lang_dropdown_on : Webapi.Dom.Element.t option ref = ref None
+let lang_dropdown_on : Web_dom.el option ref = ref None
 
 let close_lang_dropdown () =
   match !lang_dropdown_on with
   | Some el ->
-      Browser_ui.remove el;
+      Web_dom.el_remove el;
       lang_dropdown_on := None
   | None -> ()
 
 let open_text_dropdown anchor options on_pick =
   close_lang_dropdown ();
-  let menu = Browser_ui.create "div" in
-  Browser_ui.set_class menu
+  let menu = Web_dom.create_element "div" in
+  Web_dom.el_set_class menu
     "ui__select-content relative z-[99999] min-w-[8rem] overflow-hidden \
      rounded-md border bg-popover text-popover-foreground shadow-md";
-  let r = Browser_ui.rect_of anchor in
-  Browser_ui.set_attr menu "style"
+  let r = Web_dom.el_bounding_rect anchor in
+  Web_dom.el_set_attr menu "style"
     (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:99999"
-       (Browser_ui.rect_left r) (Browser_ui.rect_bottom r));
+       (Web_dom.rect_left r) (Web_dom.rect_bottom r));
   List.iter
     (fun opt ->
-      let it = Browser_ui.create "div" in
-      Browser_ui.set_class it
+      let it = Web_dom.create_element "div" in
+      Web_dom.el_set_class it
         "ui__select-item relative flex w-full cursor-pointer \
          select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm";
-      Browser_ui.set_text it opt;
-      Browser_ui.add_listener it "click" (fun _ ->
+      Web_dom.el_set_text_content it opt;
+      Web_dom.el_on it "click" (fun _ ->
           on_pick opt;
           close_lang_dropdown ());
-      Browser_ui.append menu it)
+      Web_dom.el_append_child menu it)
     options;
-  (match Browser_ui.qs "body" with
-   | Some b -> Browser_ui.append b menu
+  (match Web_dom.query_selector "body" with
+   | Some b -> Web_dom.el_append_child b menu
    | None -> ());
   lang_dropdown_on := Some menu
 
@@ -177,7 +177,7 @@ let lang_trigger ~key ~h_cls ~st ?(dom_id = "") ~anchor_sel =
     ~events:"click"
     ~on_dom_event:(fun n _ ->
       if n = "click" then
-        match Browser_ui.qs anchor_sel with
+        match Web_dom.query_selector anchor_sel with
         | Some el ->
             open_lang_dropdown el (fun l ->
                 Signal.set st l;
@@ -205,7 +205,7 @@ let toggle_theme () =
   let cur =
     match current_mode () with
     | "system" ->
-        if Browser_ui.prefers_dark () then "dark" else "light"
+        if Web_dom.prefers_dark () then "dark" else "light"
     | m -> m
   in
   use_mode (if cur = "dark" then "light" else "dark")

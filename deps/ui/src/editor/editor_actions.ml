@@ -3,7 +3,7 @@
    Outliner_ops (apply-outliner-ops) followed by a page refresh. *)
 
 module S = Editor_state
-module D = Editor_dom
+module D = Web_dom
 module Ops = Outliner_ops
 
 let ( let* ) p f = Js.Promise.then_ f p
@@ -290,7 +290,7 @@ let schedule_blur_commit () =
   | Some e ->
       pending_blur_uuid := Some e.uuid;
       ignore
-        (Editor_dom.set_timeout_id
+        (Web_dom.set_timeout_id
           (fun () ->
             match !pending_blur_uuid with
             | Some u ->
@@ -1025,8 +1025,8 @@ let copy_selection ev =
           let blocks = List.filter_map S.find roots in
           S.clipboard := blocks;
           S.clipboard_text := export_titles blocks;
-          D.clipboard_set_text clip "text/plain" !(S.clipboard_text);
-          D.prevent_default ev
+          D.cd_set_data clip "text/plain" !(S.clipboard_text);
+          D.ev_prevent_default ev
       | None -> ())
 
 let cut_selection ev =
@@ -1067,13 +1067,9 @@ let ltrim s =
   in
   String.sub s (go 0) (n - go 0)
 
-let starts_with s prefix =
-  let lp = String.length prefix in
-  String.length s >= lp && String.sub s 0 lp = prefix
-
 let is_url s =
   let t = String.trim s in
-  starts_with t "http://" || starts_with t "https://"
+  Str_util.starts_with t "http://" || Str_util.starts_with t "https://"
 
 (* extensions/video.cljs's host set — the regexes also pin the path
    shape, but for macro-wrapping a url the host check is what matters *)
@@ -1081,8 +1077,8 @@ let is_video_url url =
   let s = String.lowercase_ascii (String.trim url) in
   let host =
     let s =
-      if starts_with s "http://" then String.sub s 7 (String.length s - 7)
-      else if starts_with s "https://" then
+      if Str_util.starts_with s "http://" then String.sub s 7 (String.length s - 7)
+      else if Str_util.starts_with s "https://" then
         String.sub s 8 (String.length s - 8)
       else s
     in
@@ -1092,7 +1088,7 @@ let is_video_url url =
   in
   let host =
     List.fold_left
-      (fun h p -> if starts_with h p then String.sub h (String.length p) (String.length h - String.length p) else h)
+      (fun h p -> if Str_util.starts_with h p then String.sub h (String.length p) (String.length h - String.length p) else h)
       host [ "www."; "m."; "player." ]
   in
   List.mem host
@@ -1101,7 +1097,7 @@ let is_video_url url =
 
 let wrap_macro_url url =
   if is_video_url url then Some ("{{video " ^ url ^ "}}")
-  else if starts_with url "https://twitter.com" || starts_with url "https://x.com"
+  else if Str_util.starts_with url "https://twitter.com" || Str_util.starts_with url "https://x.com"
   then Some ("{{twitter " ^ url ^ "}}")
   else None
 
@@ -1124,7 +1120,7 @@ let markdown_blocks text =
   String.split_on_char '\n' text
   |> List.exists (fun l ->
       let t = ltrim l in
-      marker t || starts_with t "```" || t = "$$")
+      marker t || Str_util.starts_with t "```" || t = "$$")
 
 let contains_sub hay needle =
   let n = String.length hay and m = String.length needle in
@@ -1159,7 +1155,7 @@ let segmented_markdown text =
       else
         let t = ltrim p in
         if
-          starts_with t "-" && String.length t >= 2
+          Str_util.starts_with t "-" && String.length t >= 2
           && (t.[1] = ' ' || t.[1] = '\t')
         then Some p
         else Some ("- " ^ p))
@@ -1293,15 +1289,15 @@ let paste_into_editor ev =
   let clip_text, clip_html =
     match D.ev_clipboard ev with
     | Some clip ->
-        ( D.clipboard_get_text clip "text/plain"
-        , D.clipboard_get_text clip "text/html" )
+        ( D.cd_get_data clip "text/plain"
+        , D.cd_get_data clip "text/html" )
     | None -> ("", "")
   in
   match (S.editing (), !(S.clipboard)) with
   | Some e, (_ :: _ as trees) when clip_text = !(S.clipboard_text) -> (
       match S.find e.uuid with
       | Some b ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           let replace_empty =
             String.trim b.Model.block_title = ""
             && String.trim e.S.buffer = ""
@@ -1327,7 +1323,7 @@ let paste_into_editor ev =
       | Some el ->
           let text = paste_source_text ~text:clip_text ~html:clip_html in
           if String.trim text <> "" then (
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             let text =
               if markdown_blocks text then text
               else if has_paragraph_break text then
@@ -1357,7 +1353,7 @@ let paste_external ev ~text ~html =
     let text =
       if markdown_blocks text then text else segmented_markdown text
     in
-    D.prevent_default ev;
+    D.ev_prevent_default ev;
     match selected_uuids () with
     | _ :: _ as sel ->
         ignore
@@ -1392,7 +1388,7 @@ let paste_external ev ~text ~html =
     match lines with
     | [] -> ()
     | _ ->
-        D.prevent_default ev;
+        D.ev_prevent_default ev;
         paste_lines lines
 
 let paste_blocks ev =
@@ -1416,8 +1412,8 @@ let paste_blocks ev =
           match D.ev_clipboard ev with
           | Some clip ->
               paste_external ev
-                ~text:(D.clipboard_get_text clip "text/plain")
-                ~html:(D.clipboard_get_text clip "text/html")
+                ~text:(D.cd_get_data clip "text/plain")
+                ~html:(D.cd_get_data clip "text/html")
           | None -> ()))
 
 (* ---- misc ---- *)
@@ -1927,8 +1923,8 @@ let run_query_command ~advanced =
    block below the editing block. An empty target reuses its uuid and
    is replaced in place. -- *)
 let trigger_asset_upload () =
-  match Properties_dom.doc_query "input#upload-file" with
-  | Some el -> Properties_dom.el_click el
+  match Web_dom.query_selector "input#upload-file" with
+  | Some el -> Web_dom.el_click el
   | None -> ()
 
 let file_ext name =
@@ -1956,16 +1952,16 @@ let asset_block_map ~uuid ~title ~ext ~size ~checksum =
 
 let save_one_asset repo pfs target_uuid ~empty_target ~first
     (f : Js.Json.t) =
-  let name = Browser_ui.file_name f in
+  let name = Web_dom.file_name f in
   let ext = file_ext name in
-  let size = int_of_float (Browser_ui.file_size f) in
+  let size = int_of_float (Web_dom.file_size f) in
   let uuid =
     match (first, empty_target) with
     | true, true -> target_uuid
     | _ -> Platform.random_uuid ()
   in
   ignore
-    (let* buf = Browser_ui.file_buffer f in
+    (let* buf = Web_dom.file_buffer f in
     let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
     let* checksum = Platform.sha256_hex u8 in
     let dir =
@@ -1988,7 +1984,7 @@ let save_one_asset repo pfs target_uuid ~empty_target ~first
     in
     Js.Promise.resolve ())
 
-let save_uploaded_files (input : Editor_dom.el) =
+let save_uploaded_files (input : Web_dom.el) =
   match ((Runtime.model ()).Model.repo, S.editing ()) with
   | Some repo, Some e -> (
       match Platform.pfs_handle () with
@@ -2011,7 +2007,7 @@ let save_uploaded_files (input : Editor_dom.el) =
               (fun i f ->
                 save_one_asset repo pfs e.uuid ~empty_target
                   ~first:(i = 0) f)
-              (Browser_ui.files_of input);
+              (Web_dom.el_files input);
             Js.Promise.resolve ())
       | None -> ())
   | _ -> ()

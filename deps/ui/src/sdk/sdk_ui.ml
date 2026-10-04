@@ -8,7 +8,7 @@ open Sdk_util
 let detail_obj pairs =
   let o = Js.Dict.empty () in
   List.iter (fun (k, v) -> Js.Dict.set o k v) pairs;
-  Sdk_convert.json_obj o
+  Js.Json.object_ o
 
 let push_state a b _c _d =
   match arg_string a with
@@ -18,7 +18,7 @@ let push_state a b _c _d =
       | Some n ->
           Runtime.mark_nav ();
           Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ n));
-          Platform.dispatch "ls:navigate"
+          Web_dom.dispatch_custom "ls:navigate"
             (detail_obj [ ("name", Js.Json.string n) ]);
           resolved_nil
       | None -> resolved_nil)
@@ -28,13 +28,13 @@ let push_state a b _c _d =
   | None -> resolved_nil
 
 let exit_editing_mode _a _b _c _d =
-  Platform.dispatch "ls:exit-editing" (detail_obj []);
+  Web_dom.dispatch_custom "ls:exit-editing" (detail_obj []);
   resolved_nil
 
 let open_in_right_sidebar a _b _c _d =
   (match arg_string a with
    | Some uuid ->
-       Platform.dispatch "ls:open-right-sidebar"
+       Web_dom.dispatch_custom "ls:open-right-sidebar"
          (detail_obj [ ("uuid", Js.Json.string uuid) ])
    | None -> ());
   resolved_nil
@@ -60,7 +60,7 @@ let show_msg a b c _d =
     | None -> None
   in
   let key' = Option.value key ~default:(Platform.random_uuid ()) in
-  Platform.dispatch "ls:toast"
+  Web_dom.dispatch_custom "ls:toast"
     (detail_obj
        [ ("msg", Js.Json.string msg)
        ; ("cls", Js.Json.string cls)
@@ -71,7 +71,7 @@ let show_msg a b c _d =
 let close_msg a _b _c _d =
   (match arg_string a with
    | Some key ->
-       Platform.dispatch "ls:toast-close"
+       Web_dom.dispatch_custom "ls:toast-close"
          (detail_obj [ ("key", Js.Json.string key) ])
    | None -> ());
   resolved_nil
@@ -79,7 +79,7 @@ let close_msg a _b _c _d =
 let set_theme_mode a _b _c _d =
   (match arg_string a with
    | Some mode ->
-       Platform.document_set_data "theme" mode;
+       Web_dom.doc_set_data "theme" mode;
        Platform.local_storage_set "ui/theme" ("\"" ^ mode ^ "\"")
    | None -> ());
   resolved_nil
@@ -103,7 +103,7 @@ let set_state_from_store a b _c _d =
          | Some s -> s
          | None -> "logseq"
        in
-       Platform.document_set_data "color" color;
+       Web_dom.doc_set_data "color" color;
        Platform.local_storage_set "radix-color" ("\"" ^ color ^ "\"")
    | "ui/system-theme?" ->
        let enabled =
@@ -114,8 +114,8 @@ let set_state_from_store a b _c _d =
        Platform.local_storage_set "system-theme?"
          (if enabled then "true" else "false");
        if enabled then
-         Platform.document_set_data "theme"
-           (if Browser_ui.prefers_dark () then "dark" else "light")
+         Web_dom.doc_set_data "theme"
+           (if Web_dom.prefers_dark () then "dark" else "light")
    | _ -> ());
   resolved_nil
 
@@ -125,14 +125,14 @@ let get_selected_blocks _a _b _c _d =
      rows, so .ls-block.selected would only see the windowed subset *)
   let uuids = Editor_actions.selected_uuids () in
   match uuids with
-  | [] -> resolved (Sdk_convert.json_arr [||])
+  | [] -> resolved (Js.Json.array [||])
   | _ ->
       let* entities =
         Js.Promise.all
           (Array.of_list (List.map get_entity uuids))
       in
       Js.Promise.resolve
-        (Sdk_convert.json_arr
+        (Js.Json.array
            (Array.map Sdk_convert.json_of_wire entities))
 
 let get_current_graph _a _b _c _d =

@@ -4,12 +4,12 @@
    toggle. *)
 
 open Promise_ext
-open Properties_dom
+open Web_dom
 
 (* ---------- overlay stack ---------- *)
 
 type overlay =
-  { el : Editor_dom.el
+  { el : Web_dom.el
   ; on_escape : unit -> unit
   }
 
@@ -19,7 +19,7 @@ let overlays : overlay list ref = ref []
    LUI-managed, so any model flush reconciles its children and wipes
    foreign nodes (dialogs vanished mid-interaction). Body-level mount is
    safe; e2e locators are class-scoped. *)
-let overlays_root () = doc_query "body"
+let overlays_root () = query_selector "body"
 
 (* cljs shui popups dismiss on window mousedown outside their root: a
    click drops every overlay stacked above the innermost overlay that
@@ -42,7 +42,7 @@ let install_outside_close =
 let push_overlay el ~on_escape =
   install_outside_close ();
   (match overlays_root () with
-   | Some root -> Editor_dom.el_append_child root el
+   | Some root -> Web_dom.el_append_child root el
    | None -> ());
   overlays := { el; on_escape } :: !overlays
 
@@ -98,7 +98,7 @@ let toggle_hidden () = show_hidden := not !show_hidden
    get-display-properties and re-renders inside the container; dead
    entries are pruned by isConnected. *)
 type area =
-  { container : Editor_dom.el
+  { container : Web_dom.el
   ; key : string
   ; refresh : unit -> unit Js.Promise.t
   }
@@ -136,7 +136,7 @@ let refresh_all () =
   if !refresh_pending then ()
   else (
     refresh_pending := true;
-    Editor_dom.set_timeout (fun () ->
+    Web_dom.set_timeout (fun () ->
         refresh_pending := false;
         List.iter (fun a -> ignore (guarded a.refresh)) (live_areas ()))
       150)

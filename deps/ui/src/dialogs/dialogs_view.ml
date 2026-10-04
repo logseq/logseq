@@ -166,8 +166,8 @@ let confirm_view (c : Dialogs_state.confirm) =
 
 let prompt_view (p : Dialogs_state.prompt) =
   let submit () =
-    match Browser_ui.qs ".ui__dialog-content .form-input" with
-    | Some el -> Dialogs_state.submit_prompt (Browser_ui.value el)
+    match Web_dom.query_selector ".ui__dialog-content .form-input" with
+    | Some el -> Dialogs_state.submit_prompt (Web_dom.el_value el)
     | None -> ()
   in
   let input_events name payload =
@@ -241,17 +241,17 @@ let render (ms : Model.t Signal.signal) : t =
              close button never gets a focus ring) *)
           (try
              ignore
-               (Browser_ui.set_timeout
+               (Web_dom.set_timeout
                   (fun () ->
                     match
-                      Browser_ui.qs ".ui__dialog-content [autofocus]"
+                      Web_dom.query_selector ".ui__dialog-content [autofocus]"
                     with
-                    | Some el -> Browser_ui.focus el
+                    | Some el -> Web_dom.el_focus el
                     | None -> (
-                        match Browser_ui.qs ".ui__dialog-content" with
+                        match Web_dom.query_selector ".ui__dialog-content" with
                         | Some el ->
-                            Browser_ui.set_attr el "tabindex" "-1";
-                            Browser_ui.focus el
+                            Web_dom.el_set_attr el "tabindex" "-1";
+                            Web_dom.el_focus el
                         | None -> ()))
                   16)
            with _ -> ());

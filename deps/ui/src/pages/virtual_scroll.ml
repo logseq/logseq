@@ -22,9 +22,6 @@ external new_io : (Js.Json.t array -> unit) -> io_opts -> io
 
 external io_observe : io -> Js.Json.t -> unit = "observe" [@@mel.send]
 
-external set_attr : Js.Json.t -> string -> string -> unit = "setAttribute"
-  [@@mel.send]
-
 external entry_get : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
 external entry_bool : Js.Json.t -> string -> bool = "" [@@mel.get_index]
@@ -39,7 +36,7 @@ let set_visibility entry =
   let visibility =
     if entry_bool entry "isIntersecting" then "" else "hidden"
   in
-  Platform.set_prop (Platform.json_prop target "style") "visibility"
+  Web_dom.js_set (Web_dom.js_get target "style") "visibility"
     (Js.Json.string visibility)
 
 
@@ -74,10 +71,10 @@ let sync () =
     let o = observer () in
     Array.iter
       (fun row ->
-        match Platform.get_attribute row "data-vs" with
+        match Web_dom.el_get_attr row "data-vs" with
         | Some _ -> ()
         | None ->
-            set_attr row "data-vs" "1";
+            Web_dom.el_set_attr row "data-vs" "1";
             io_observe o row)
-      (Platform.query_selector_all
+      (Web_dom.query_selector_all_arr
          "[data-virtuoso-scroller] [data-index]")

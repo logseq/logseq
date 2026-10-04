@@ -67,7 +67,7 @@ let rec schedule_reload () =
   if !reload_first_ms = 0.0 then reload_first_ms := !reload_last_ms;
   if not !reload_pending then (
     reload_pending := true;
-    Editor_dom.set_timeout fire_reload 150)
+    Web_dom.set_timeout fire_reload 150)
 
 and fire_reload () =
   let now = Platform.date_now_ms () in
@@ -89,7 +89,7 @@ and fire_reload () =
     (* same overlay surfaces as editor_keys' outside-click routing: a
        route reload remounts the tree under an open popup/dialog and the
        pending click/type aimed at it misses *)
-    Editor_dom.query_selector
+    Web_dom.query_selector
       "#ui__ac, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form, .ls-property-dialog"
     <> None
   in
@@ -98,7 +98,7 @@ and fire_reload () =
   in
   if typing_active || flood_active || edit_throttled || popup_open
      || ui_active
-  then Editor_dom.set_timeout fire_reload 150
+  then Web_dom.set_timeout fire_reload 150
   else (
     reload_pending := false;
     reload_first_ms := 0.0;
@@ -258,7 +258,7 @@ let dispatch kind payload =
 
 (* sdk show_msg/close_msg dispatch `ls:toast`/`ls:toast-close`
    CustomEvents on document — same toast path as worker notifications. *)
-let detail_json ev = Platform.json_prop ev "detail"
+let detail_json ev = Web_dom.js_get ev "detail"
 
 let init () =
   (* the worker's search-index build reports progress through this
@@ -275,13 +275,13 @@ let init () =
          on the freshly loaded page *)
       Editor_actions.cancel_pending_focus ();
       if Editor_state.ready () then Editor_actions.clear_selection ());
-  Editor_dom.document_add_listener "pointerdown"
+  Web_dom.add_document_listener "pointerdown"
     (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
     true;
-  Editor_dom.document_add_listener "keydown"
+  Web_dom.add_document_listener "keydown"
     (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
     true;
-  Platform.on_document_event "ls:toast" (fun ev ->
+  Web_dom.on_document_event "ls:toast" (fun ev ->
       let d = detail_json ev in
       let text =
         match Js.Json.decodeObject d with
@@ -315,7 +315,7 @@ let init () =
            ; toast_key = key
            });
       Runtime.flush ());
-  Platform.on_document_event "ls:toast-close" (fun ev ->
+  Web_dom.on_document_event "ls:toast-close" (fun ev ->
       (* sdk close_msg targets one notification by its show_msg key;
          a missing key clears nothing — Toasts_clear stays internal *)
       match Js.Json.decodeObject (detail_json ev) with

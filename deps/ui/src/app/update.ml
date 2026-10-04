@@ -23,7 +23,7 @@ let effects (action : Action.t) : unit =
       Runtime.current_page := Some page;
       (* cljs route.cljs update-page-title!: document.title follows the
          loaded page's title *)
-      Browser_ui.set_document_title page.Model.page_title;
+      Web_dom.set_document_title page.Model.page_title;
       Runtime.sync_hash_graph_id ();
       (match !Runtime.after_page_load, page.Model.page_uuid with
        | Some (want, f), Some u when u = want ->
@@ -54,19 +54,19 @@ let effects (action : Action.t) : unit =
       (* cljs route.cljs static-title for non-page routes (page routes
          get their title when Page_loaded lands) *)
       (match r with
-       | Model.Home -> Browser_ui.set_document_title "Logseq"
+       | Model.Home -> Web_dom.set_document_title "Logseq"
        | Model.Journals ->
-           Browser_ui.set_document_title (I18n.t "nav/all-journals")
+           Web_dom.set_document_title (I18n.t "nav/all-journals")
        | Model.All_pages ->
-           Browser_ui.set_document_title (I18n.t "nav.all-pages/title")
+           Web_dom.set_document_title (I18n.t "nav.all-pages/title")
        | Model.All_graphs ->
-           Browser_ui.set_document_title (I18n.t "mobile.tab/graphs")
+           Web_dom.set_document_title (I18n.t "mobile.tab/graphs")
        | Model.Settings ->
-           Browser_ui.set_document_title (I18n.t "nav/settings")
+           Web_dom.set_document_title (I18n.t "nav/settings")
        | Model.Import ->
-           Browser_ui.set_document_title (I18n.t "import/title")
+           Web_dom.set_document_title (I18n.t "import/title")
        | Model.Library | Model.Not_found _ ->
-           Browser_ui.set_document_title "Logseq"
+           Web_dom.set_document_title "Logseq"
        | Model.Page _ | Model.Block_zoom _ -> ())
   | _ -> ()
 

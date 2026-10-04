@@ -11,8 +11,7 @@
    sync-db-changes broadcast. *)
 
 open Promise_ext
-open Editor_dom
-open Properties_dom
+open Web_dom
 module D = Properties_data
 module S = Properties_state
 module V = Properties_value
@@ -60,7 +59,7 @@ let property_key_inner row ~on_key_click =
   in
   (match property_icon_name row with
    | Some name ->
-       el_append_child btn (ui_icon_el ~size:15. ~cls:"opacity-50" name)
+       el_append_child btn (icon ~size:15. ~cls:"opacity-50" name)
    | None ->
        let bc = mk ~cls:"bullet-container" "span" in
        el_append_child bc (mk ~cls:"bullet" "span");
@@ -72,7 +71,7 @@ let property_key_inner row ~on_key_click =
       ~cls:"property-k flex select-none jtrigger w-full"
       ~attrs:[ ("tabindex", "0") ]
   in
-  el_set_text a (D.row_title row);
+  el_set_text_content a (D.row_title row);
   el_append_child inner a;
   on_click a (fun _ -> on_key_click ());
   inner
@@ -163,7 +162,7 @@ let pill_el (ctx : V.ctx) ~owner_is_tag ~owner_title row =
            ~owner_id:ctx.block_id ~owner_is_tag ~owner_title
            ~refresh:ctx.refresh row));
   let colon = mk ~cls:"select-none" "span" in
-  el_set_text colon ":";
+  el_set_text_content colon ":";
   el_append_child key_row colon;
   el_append_child pill key_row;
   let content =
@@ -207,8 +206,8 @@ let remove_all parent sel =
   let nl = el_query_all parent sel in
   let els =
     List.filter_map
-      (fun i -> node_list_item nl i)
-      (List.init (node_list_length nl) Fun.id)
+      (fun i -> nl_item nl i)
+      (List.init (nl_length nl) Fun.id)
   in
   List.iter el_remove els
 
@@ -282,7 +281,7 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
   in
   (* shui ui/icon markup: span.ui__icon.ti.ls-icon-plus > svg *)
   el_append_child btn
-    (ui_icon_el ~cls:"bottom-property-action-icon" "plus");
+    (icon ~cls:"bottom-property-action-icon" "plus");
   ignore
     (child_text "span" "" (I18n.t "property/add-new") btn);
   el_append_child wrap btn;
@@ -385,7 +384,7 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
     if el_is_connected area_el then el_remove area_el;
     remove_all host ":scope > .positioned-properties.block-below")
   else (
-    el_clear area_el;
+    el_replace_children area_el;
     let panel = mk ~cls:"properties-panel" "div" in
     el_append_child area_el panel;
     (match left_host with
@@ -454,7 +453,7 @@ let render_block_area_with ~ind ~left_host (ctx : V.ctx) ~owner_is_tag
         if el_is_connected area_el then el_remove area_el;
         remove_all ind ":scope > .positioned-properties.block-below")
       else (
-        el_clear area_el;
+        el_replace_children area_el;
         let panel = mk ~cls:"properties-panel" "div" in
         el_append_child area_el panel;
         (match left_host with
@@ -585,7 +584,7 @@ let render_bidi_groups wrap w =
         mk "a" ~cls:"property-k flex select-none jtrigger w-full"
           ~attrs:[ ("tabindex", "0") ]
       in
-      el_set_text key title;
+      el_set_text_content key title;
       el_append_child key_wrap key;
       el_append_child g key_wrap;
       let vc = mk ~cls:"ls-block property-value-container" "div" in
@@ -603,16 +602,10 @@ let render_bidi_groups wrap w =
       el_append_child wrap g)
     (W.elems w)
 
-(* shui button ghost sm — cljs components.cljs with-button-classes *)
 let ghost_btn_cls =
-  "ui__button inline-flex cursor-pointer items-center justify-center \
-   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-   ring-offset-background transition-colors focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
-   disabled:pointer-events-none disabled:opacity-50 select-none \
-   hover:bg-secondary/70 hover:text-secondary-foreground \
-   active:opacity-80 as-ghost h-6 rounded px-2 py-0 \
-   text-xs text-muted-foreground"
+  Ui_parts.ghost_btn_cls
+    ~extra:"h-6 rounded px-2 py-0 text-xs text-muted-foreground"
+    ()
 
 (* title action buttons — cljs db-page-title-actions: "Add icon" (when no
    icon prop) + "Set property"/"Add tag property"/"Configure" *)
@@ -624,7 +617,7 @@ let title_actions (p : Model.page) =
     let btn =
       mk "button" ~cls:ghost_btn_cls ~attrs:[ ("type", "button") ]
     in
-    el_set_text btn label;
+    el_set_text_content btn label;
     el_append_child row btn;
     on_click btn on
   in
@@ -665,7 +658,7 @@ let title_actions (p : Model.page) =
           ignore p));
   if p.Model.page_is_tag then
     add_btn (I18n.t "class/add-property") (fun _ ->
-        let l, _t, _r, b, _w = el_rect row in
+        let l, _t, _r, b, _w = bounding_rect_fields row in
         Properties_dialog.open_dialog ~anchor:(l, b +. 4.)
           { Properties_dialog.uuid
           ; uuids = []
@@ -696,7 +689,7 @@ let class_properties_key () =
     mk "a" ~cls:"property-k flex select-none jtrigger w-full"
       ~attrs:[ ("tabindex", "0") ]
   in
-  el_set_text a (I18n.t "property.built-in/class-properties");
+  el_set_text_content a (I18n.t "property.built-in/class-properties");
   el_append_child inner a;
   el_append_child key inner;
   key
@@ -758,7 +751,7 @@ let rec move_children src dst =
 
 let replace_if_changed host cand =
   if el_inner_html cand <> el_inner_html host then (
-    el_clear host;
+    el_replace_children host;
     move_children cand host)
 
 (* Page surface: attach .ls-properties-area only when there are rows to
@@ -832,7 +825,7 @@ and fill_bidirectional_page (p : Model.page) ~attach_bidi bidi =
         if el_is_connected bidi then el_remove bidi
       end else (
         attach_bidi ();
-        el_clear bidi;
+        el_replace_children bidi;
         render_bidi_groups bidi w);
       Js.Promise.resolve ())
       |> ignore
@@ -902,7 +895,7 @@ let mount_page_props page_inner (p : Model.page) uuid =
            refs out of the [data-testid='page title'] locator *)
         match el_query page_inner ".ls-page-blocks" with
         | Some blocks_el ->
-            el_insert_before page_inner bidi blocks_el
+            el_insert_before page_inner bidi (Some blocks_el)
         | None -> el_append_child page_inner bidi)
     in
     let detach () =
@@ -1047,7 +1040,7 @@ let mount_sidebar_area (area : el) =
           let rows, hidden = D.split_display wire in
           let rows = List.filter is_panel_row rows in
           let _l, below_rows, panel_rows = partition_rows rows in
-          el_clear area;
+          el_replace_children area;
           let before_hr el =
             match el_query host "hr" with
             | Some hr -> el_insert_adjacent hr "beforebegin" el
@@ -1096,7 +1089,7 @@ let mount_sidebar_area (area : el) =
                end else (
                  if not (el_is_connected bidi) then
                    el_insert_adjacent area "afterend" bidi;
-                 el_clear bidi;
+                 el_replace_children bidi;
                  render_bidi_groups bidi w);
                Js.Promise.resolve ())
                |> ignore
@@ -1130,10 +1123,10 @@ let drop_row ~owner_uuid ~title =
         | None -> false)
   in
   let keys = query_selector_all ".property-k" in
-  for i = 0 to node_list_length keys - 1 do
-    match node_list_item keys i with
+  for i = 0 to nl_length keys - 1 do
+    match nl_item keys i with
     | Some k ->
-        if el_text k = title && in_scope k then (
+        if el_text_content k = title && in_scope k then (
           match el_closest k ".property-pair" with
           | Some row -> el_remove row
           | None -> (

@@ -57,7 +57,7 @@ let model () =
   match !model_signal with
   | Some ms -> Signal.get ms
   | None -> Model.initial
-let hook_installed = ref false
+let hook_installed = State_cell.Once.make ()
 let loaded_repo : string option ref = ref None
 let last_page_key : string option ref = ref None
 
@@ -105,22 +105,18 @@ let detail_string name ev =
       | None -> None)
   | None -> None
 
-external set_el_width :
-  Webapi.Dom.Element.t -> string -> unit = "width" [@@mel.set]
-  [@@mel.scope "style"]
-
 (* #right-sidebar is chrome.ml's wrapper and carries no width; the
    resizer writes the persisted width inline, so we mirror that for
    .cp__right-sidebar.open to have a visible box. *)
 let sync_right_sidebar_width () =
-  match Platform.get_element_by_id "right-sidebar" with
+  match Web_dom.get_element_by_id "right-sidebar" with
   | Some el ->
       let width =
         match Platform.local_storage_get "ls-right-sidebar-width" with
         | Some w -> w
         | None -> "40%"
       in
-      set_el_width el
+      Web_dom.el_style_set_property el "width"
         (if (model ()).Model.right_sidebar_open then width else "0px")
   | None -> ()
 
@@ -148,12 +144,6 @@ external class_add : Js.Json.t -> string -> unit = "add"
 external class_rm : Js.Json.t -> string -> unit = "remove"
   [@@mel.scope "classList"] [@@mel.send]
 
-external win_inner_width : float = "innerWidth" [@@mel.scope "window"]
-
-let doc_query sel =
-  match Platform.query_selector_all sel with
-  | [||] -> None
-  | arr -> Some arr.(0)
 
 let left_resizing : Js.Json.t option ref = ref None
 let right_resizing = ref false
@@ -171,7 +161,7 @@ let set_right_width width =
   (* cljs persist-right-sidebar-width! also feeds :ui/sidebar-width;
      the inline write keeps the panel at the dragged size without
      waiting for the next model publish *)
-  match doc_query "#right-sidebar" with
+  match Web_dom.query_selector "#right-sidebar" with
   | Some el -> style_set_width_j el width
   | None -> ()
 
@@ -203,7 +193,7 @@ let on_resizer_mousemove ev =
    | None -> ()
   );
   if !right_resizing then begin
-    let vw = win_inner_width in
+    let vw = Web_dom.win_inner_width in
     let lo = max 0.1 (320. /. vw) in
     let ratio = clampf lo 0.7 ((vw -. ev_client_x ev) /. vw) in
     set_right_width (Printf.sprintf "%g%%" (ratio *. 100.))
@@ -245,7 +235,7 @@ let set_el_style el name v = style_set_prop el name v
 
 let apply_touch_drag sb dx =
   let open_ = (model ()).Model.left_sidebar_open in
-  (match doc_query "#left-sidebar .left-sidebar-inner" with
+  (match Web_dom.query_selector "#left-sidebar .left-sidebar-inner" with
    | Some inner ->
        let w = el_offset_width inner in
        let tx =
@@ -261,7 +251,7 @@ let apply_touch_drag sb dx =
            Printf.sprintf "translate3d(%.0fpx, 0, 0)" dx
        in
        set_el_style inner "transform" tx;
-       (match doc_query "#left-sidebar > .shade-mask" with
+       (match Web_dom.query_selector "#left-sidebar > .shade-mask" with
         | Some mask ->
             let ratio =
               if dx > 0. then clampf 0. 1. (dx /. w)
@@ -282,13 +272,13 @@ let clear_touch_drag () =
   touch_before := None;
   touch_dx := 0.;
   touch_pending := false;
-  (match doc_query "#left-sidebar" with
+  (match Web_dom.query_selector "#left-sidebar" with
    | Some sb -> class_rm sb "is-touching"
    | None -> ());
-  (match doc_query "#left-sidebar .left-sidebar-inner" with
+  (match Web_dom.query_selector "#left-sidebar .left-sidebar-inner" with
    | Some inner -> set_el_style inner "transform" ""
    | None -> ());
-  match doc_query "#left-sidebar > .shade-mask" with
+  match Web_dom.query_selector "#left-sidebar > .shade-mask" with
   | Some mask -> set_el_style mask "opacity" ""
   | None -> ()
 
@@ -308,7 +298,7 @@ let on_doc_touchmove ev =
           let dx = ax -. bx in
           touch_dx := dx;
           if Float.abs dx > 20. then
-            (match doc_query "#left-sidebar" with
+            (match Web_dom.query_selector "#left-sidebar" with
              | Some sb -> apply_touch_drag sb dx
              | None -> ())
       | None -> ())
@@ -510,7 +500,7 @@ let push_page_route target =
   in
   Runtime.mark_nav ();
   Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
-  Platform.dispatch "ls:navigate" Js.Json.null
+  Web_dom.dispatch_custom "ls:navigate" Js.Json.null
 
 (* cljs redirect-to-page!: route-info first — hidden and
    private-built-in pages warn instead of navigating, and alias pages
@@ -554,9 +544,9 @@ let fetch_blocks (p : Model.page) =
 let open_dialog name =
   let o = Js.Dict.empty () in
   Js.Dict.set o "name" (Js.Json.string name);
-  Platform.dispatch "ls:open-dialog" (Sdk_convert.json_obj o)
+  Web_dom.dispatch_custom "ls:open-dialog" (Js.Json.object_ o)
 
-let open_cards () = Platform.dispatch "ls:open-cards" Js.Json.null
+let open_cards () = Web_dom.dispatch_custom "ls:open-cards" Js.Json.null
 
 let ensure_right_open () =
   if not (model ()).Model.right_sidebar_open then
@@ -948,10 +938,8 @@ let on_sync st =
   | None -> ()
 
 let install_worker_hook st =
-  if not !hook_installed then begin
-    hook_installed := true;
-    Runtime.on_sync (fun () -> on_sync st)
-  end
+  State_cell.Once.run hook_installed (fun () ->
+    Runtime.on_sync (fun () -> on_sync st))
 
 let page_key (p : Model.page) =
   match p.Model.page_uuid with
@@ -1004,10 +992,10 @@ let on_doc_contextmenu st ev =
   match click_target "#left-sidebar a.link-item" ev with
   | Some el -> (
       prevent_default ev;
-      match Platform.get_attribute el "data-lp-ref" with
+      match Web_dom.el_get_attr el "data-lp-ref" with
       | Some target ->
           open_lp_menu st ~target
-            ~recent:(Platform.get_attribute el "data-lp-recent" = Some "1")
+            ~recent:(Web_dom.el_get_attr el "data-lp-recent" = Some "1")
             ~x:(ev_client_x ev) ~y:(ev_client_y ev)
       | None -> ())
   | None -> (
@@ -1018,7 +1006,7 @@ let on_doc_contextmenu st ev =
           match closest hdr ".sidebar-item[data-item-key]" with
           | Some it -> (
               prevent_default ev;
-              match Platform.get_attribute it "data-item-key" with
+              match Web_dom.el_get_attr it "data-item-key" with
               | Some key ->
                   open_item_menu st key ~x:(ev_client_x ev)
                     ~y:(ev_client_y ev)
@@ -1045,15 +1033,15 @@ let on_doc_click st ev =
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
            resolved title, which drifts out of sync on rename. tag chips
            keep the uuid on the .block-tag wrapper *)
-        (match Platform.get_attribute el "data-uuid" with
+        (match Web_dom.el_get_attr el "data-uuid" with
          | Some u when u <> "" -> Some u
          | _ -> (
              match
                Option.bind (closest el ".block-tag[data-tag-uuid]")
-                 (fun chip -> Platform.get_attribute chip "data-tag-uuid")
+                 (fun chip -> Web_dom.el_get_attr chip "data-tag-uuid")
              with
              | Some u when u <> "" -> Some u
-             | _ -> Platform.get_attribute el "data-ref"))
+             | _ -> Web_dom.el_get_attr el "data-ref"))
       with
       | Some ref_ ->
           (* cljs open-page-ref: shift+click opens in the sidebar, any other
@@ -1137,19 +1125,19 @@ let init (ms : Model.t Signal.signal) : t =
             (fun (it : item) -> Editor_state.find_in it.blocks uuid)
             (Signal.get_state st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
-      Platform.on_document_event "ls:open-right-sidebar" (fun ev ->
+      Web_dom.on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with
           | Some u -> open_uuid st u
           | None -> ());
-      Platform.on_document_event "click" (on_doc_click st);
-      Platform.on_document_event "contextmenu" (on_doc_contextmenu st);
-      Platform.on_document_event "keydown" (on_doc_keydown st);
-      Platform.on_document_event "mousedown" on_resizer_mousedown;
-      Platform.on_document_event "mousemove" on_resizer_mousemove;
-      Platform.on_document_event "mouseup" on_resizer_mouseup;
-      Platform.on_document_event "touchstart" on_doc_touchstart;
-      Platform.on_document_event "touchmove" on_doc_touchmove;
-      Platform.on_document_event "touchend" on_doc_touchend;
+      Web_dom.on_document_event "click" (on_doc_click st);
+      Web_dom.on_document_event "contextmenu" (on_doc_contextmenu st);
+      Web_dom.on_document_event "keydown" (on_doc_keydown st);
+      Web_dom.on_document_event "mousedown" on_resizer_mousedown;
+      Web_dom.on_document_event "mousemove" on_resizer_mousemove;
+      Web_dom.on_document_event "mouseup" on_resizer_mouseup;
+      Web_dom.on_document_event "touchstart" on_doc_touchstart;
+      Web_dom.on_document_event "touchmove" on_doc_touchmove;
+      Web_dom.on_document_event "touchend" on_doc_touchend;
       sync_left_sidebar_width ();
       st
 

@@ -672,16 +672,16 @@ let code_mode_wrap pid code_mode =
             ~on_dom_event:(fun n _ ->
               if n = "click" then (
                 match
-                  Dom_ext.doc_query_selector
+                  Web_dom.query_selector
                     ".cp__plugins-settings-inner .code-mode-wrap textarea"
                 with
                 | Some el -> (
-                    match set_json_exn (Dom_ext.value el) with
+                    match set_json_exn (Web_dom.el_value el) with
                     | Some j ->
                         Plugin_host.replace_plugin_settings pid j;
                         Runtime.signal_set code_mode false
                     | None ->
-                        Platform.dispatch "ls:toast"
+                        Web_dom.dispatch_custom "ls:toast"
                           (Plugin_host.jobj
                              [ ("msg", jstr_ "Invalid JSON")
                              ; ("cls", jstr_ "error")

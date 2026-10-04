@@ -269,7 +269,7 @@ let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
     ~on_click:(fun name _ ->
       if name = "click" then (
         Platform.set_location_hash (Runtime.nav_hash hash);
-        Platform.dispatch "ls:navigate" Js.Json.null))
+        Web_dom.dispatch_custom "ls:navigate" Js.Json.null))
     ()
 
 let tag_nav ~active_route class_ label titles =
@@ -349,7 +349,7 @@ let nav_group ms st =
                          if name = "click" then (
                            Platform.set_location_hash
                              (Runtime.nav_hash "#/");
-                           Platform.dispatch "ls:navigate" Js.Json.null))
+                           Web_dom.dispatch_custom "ls:navigate" Js.Json.null))
                        ())
                     :: nav_items ~active_route:route (checked, tag_titles)
                   ))
@@ -360,14 +360,6 @@ let nav_group ms st =
 
 (* ---------- favorites / recents ---------- *)
 
-let str_contains hay needle =
-  let lh = String.length hay and ln = String.length needle in
-  let rec go i =
-    i + ln <= lh
-    && (String.sub hay i ln = needle || go (i + 1))
-  in
-  go 0
-;;
 
 let page_item_el st (p : Model.page) ~li_class ~recent ~key =
   let lp_ref =
@@ -396,8 +388,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
               | None -> ""
             in
             if
-              str_contains cls "sidebar-page-actions"
-              || str_contains cls "ls-icon-dots" then
+              Str_util.contains cls "sidebar-page-actions"
+              || Str_util.contains cls "ls-icon-dots" then
               open_lp payload
             else
               let shift =

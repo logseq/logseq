@@ -42,8 +42,6 @@ external subtle_digest
 external u8_buffer : Js.Typed_array.Uint8Array.t -> Js.Typed_array.ArrayBuffer.t
   = "buffer" [@@mel.get]
 
-external u8_to_bytes : Js.Typed_array.Uint8Array.t -> bytes = "%identity"
-
 let strip_db_prefix repo =
   let prefix = "logseq_db_" in
   let n = String.length prefix in
@@ -130,10 +128,9 @@ let object_url ~repo ~name ~mime : string Js.Promise.t =
   | None ->
       let* u8 = read_asset ~repo ~name in
       let blob =
-        Browser_ui.make_blob
-          [| Browser_ui.u8_to_json u8 |]
-          (Browser_ui.json_props
-             [ ("type", Browser_ui.str_to_json mime) ])
+        Web_dom.make_blob [| u8 |]
+          (Web_dom.json_props
+             [ ("type", Js.Json.string mime) ])
       in
       let url = make_url blob in
       Hashtbl.replace url_cache k url;

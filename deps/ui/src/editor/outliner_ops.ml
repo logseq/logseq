@@ -860,23 +860,37 @@ let save_timer = ref 0
 let pending_save : (string * string) option ref = ref None
 
 let cancel_pending_save () =
-  Editor_dom.clear_timeout !save_timer;
+  Web_dom.clear_timeout !save_timer;
   pending_save := None
 
-let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
-  (* cljs saves the editing buffer on keydown before structure ops —
-     flush the queued keystroke save instead of dropping it, so ops like
-     indent/move don't lose text typed within the debounce window *)
+(* op names for error logging — nested op payloads are
+   [[op-name ...] ...] arrays or lists wrapping the same *)
+let op_names ops =
+  String.concat ","
+    (List.map
+       (fun o ->
+         match o with
+         | Wire.Array (Wire.Array (Wire.Keyword name :: _) :: _)
+         | Wire.List (Wire.Array (Wire.Keyword name :: _) :: _)
+         | Wire.Array (Wire.Keyword name :: _) -> name
+         | _ -> "?")
+       ops)
+
+(* cljs saves the editing buffer on keydown before structure ops —
+   flush the queued keystroke save instead of dropping it, so ops like
+   indent/move don't lose text typed within the debounce window *)
+let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
+    =
   match !pending_save with
   | Some (uuid, title) ->
       pending_save := None;
       let* sop = save_block_parsed uuid title in
-      let* () = apply [ sop ] in
-      apply ~opts ops
+      let* _ = apply_result [ sop ] in
+      apply_result ~opts ops
   | None -> (
-      Editor_dom.clear_timeout !save_timer;
+      Web_dom.clear_timeout !save_timer;
       match (Runtime.model ()).Model.repo with
-      | None -> Js.Promise.resolve ()
+      | None -> Js.Promise.resolve None
       | Some repo ->
           let opts =
             match opts with
@@ -894,24 +908,16 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
           (match Wire.get r "delta" with
            | Some d -> Page_delta.stash_deferred d
            | None -> ());
-          Js.Promise.resolve ())
+          Js.Promise.resolve (Some r))
           |> Js.Promise.catch (fun e ->
                  Platform.console_error
-                   ( "apply-outliner-ops failed"
-                   , String.concat ","
-                       (List.map
-                          (fun o ->
-                            match o with
-                            | Wire.Array
-                                (Wire.Array (Wire.Keyword name :: _) :: _)
-                            | Wire.List
-                                (Wire.Array (Wire.Keyword name :: _) :: _)
-                            | Wire.Array (Wire.Keyword name :: _) -> name
-                            | _ -> "?")
-                          ops)
-                   , e );
+                   ("apply-outliner-ops failed", op_names ops, e);
                  Toast.error (I18n.t "ui/save-changes-error");
-                 Js.Promise.resolve ()))
+                 Js.Promise.resolve None))
+
+let apply ?opts ops =
+  let* _ = apply_result ?opts ops in
+  Js.Promise.resolve ()
 
 (* While an editor is open a per-op fetch+rebuild starves keystroke
    dispatch under RTC traffic (~200-300ms of whole-page reconcile per
@@ -940,37 +946,6 @@ let apply_parsed ?opts ~rest pairs =
       (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
   in
   apply ?opts (Array.to_list a @ rest)
-
-(* same ops as [apply] but the promise carries the worker response
-   — callers that act on inserted uuids need {:blocks [...]} (cljs
-   insert-blocks! result) *)
-let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
-    =
-  match !pending_save with
-  | Some (uuid, title) ->
-      pending_save := None;
-      let* sop = save_block_parsed uuid title in
-      let* () = apply [ sop ] in
-      apply_result ~opts ops
-  | None -> (
-      Editor_dom.clear_timeout !save_timer;
-      match (Runtime.model ()).Model.repo with
-      | None -> Js.Promise.resolve None
-      | Some repo ->
-          let opts =
-            match opts with
-            | Wire.Map kvs ->
-                Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
-            | _ -> opts
-          in
-          (let* r =
-            Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-              (Wire.Array ops) opts
-          in
-          Js.Promise.resolve (Some r))
-          |> Js.Promise.catch (fun e ->
-                 Platform.console_error ("apply-outliner-ops failed", e);
-                 Js.Promise.resolve None))
 
 (* page-delta splice path: op responses carry the worker's render delta
    ({blocks, deleted, children, rev}) — patch only the touched rows
@@ -1226,7 +1201,7 @@ let schedule_save uuid title =
   cancel_pending_save ();
   pending_save := Some (uuid, title);
   save_timer :=
-    Editor_dom.set_timeout_id
+    Web_dom.set_timeout_id
       (fun () ->
         pending_save := None;
         ignore
@@ -1357,8 +1332,8 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
                        { e' with S.buffer = title; base = title }
                     }
                 | _ -> st);
-            match Editor_dom.textarea_of e.uuid with
-            | Some el -> Editor_dom.el_set_value el title
+            match Web_dom.textarea_of e.uuid with
+            | Some el -> Web_dom.el_set_value el title
             | None -> ()
           end;
           Js.Promise.resolve ()

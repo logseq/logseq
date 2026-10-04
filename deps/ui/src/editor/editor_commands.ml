@@ -10,10 +10,9 @@
 
 open Promise_ext
 module S = Editor_state
-module D = Editor_dom
+module D = Web_dom
 module A = Editor_actions
 module Ops = Outliner_ops
-module V = Views_el
 module W = Wire
 
 (* ---------- event detail ---------- *)
@@ -115,12 +114,12 @@ let day_date p =
     ~month:(float_of_int (p.cm - 1)) ~date:(float_of_int p.cd) ()
 
 let focus_day p =
-  match V.query_inside p.root "td[data-focused='true'] button" with
-  | Some b -> V.el_focus b
+  match D.el_query p.root "td[data-focused='true'] button" with
+  | Some b -> D.el_focus b
   | None -> ()
 
 let close_popup ?focus_caret p =
-  V.el_remove p.root;
+  D.el_remove p.root;
   active := None;
   Runtime.editor_popup_root := None;
   match focus_caret with
@@ -171,7 +170,7 @@ let rec cal_cell p d =
     p.cy * 10000 + p.cm * 100 + d = Dates.today_journal_day ()
   in
   let btn =
-    V.h ~tag:"button" ~cls:"ui__calendar-day"
+    D.h ~tag:"button" ~cls:"ui__calendar-day"
       ~attrs:
         ([ ("type", "button")
          ; ("aria-label", string_of_int d)
@@ -180,8 +179,8 @@ let rec cal_cell p d =
          @ if is_today then [ ("data-today", "true") ] else [])
       ~text:(string_of_int d) ()
   in
-  V.el_add_listener btn "click" (fun _ -> pick_day p p.cy p.cm d);
-  V.h ~tag:"td" ~cls:"ui__calendar-cell"
+  D.el_on btn "click" (fun _ -> pick_day p p.cy p.cm d);
+  D.h ~tag:"td" ~cls:"ui__calendar-cell"
     ~attrs:
       ([ ("role", "gridcell") ]
        @ (if focused
@@ -194,21 +193,21 @@ let rec cal_cell p d =
    the neighboring month it belongs to *)
 and out_cell p y m d =
   let btn =
-    V.h ~tag:"button" ~cls:"ui__calendar-day ls-cal-outside"
+    D.h ~tag:"button" ~cls:"ui__calendar-day ls-cal-outside"
       ~attrs:
         [ ("type", "button"); ("aria-label", string_of_int d)
         ; ("tabindex", "-1") ]
       ~text:(string_of_int d) ()
   in
-  V.el_add_listener btn "click" (fun _ -> pick_day p y m d);
-  V.h ~tag:"td" ~cls:"ui__calendar-cell" ~attrs:[ ("role", "gridcell") ]
+  D.el_on btn "click" (fun _ -> pick_day p y m d);
+  D.h ~tag:"td" ~cls:"ui__calendar-cell" ~attrs:[ ("role", "gridcell") ]
     ~children:[ btn ] ()
 
 and rebuild_grid p =
-  match V.query_inside p.root ".ui__calendar tbody" with
+  match D.el_query p.root ".ui__calendar tbody" with
   | None -> ()
   | Some tbody ->
-      V.clear tbody;
+      D.el_replace_children tbody;
       let days = days_in_month p.cy p.cm in
       let lead =
         int_of_float
@@ -225,7 +224,7 @@ and rebuild_grid p =
       in
       let rows = (lead + days + 6) / 7 in
       for r = 0 to rows - 1 do
-        let tr = Editor_dom.create_element "tr" in
+        let tr = Web_dom.create_element "tr" in
         for c = 0 to 6 do
           let d = (r * 7) + c + 1 - lead in
           D.el_append_child tr
@@ -237,11 +236,11 @@ and rebuild_grid p =
       done
 
 and rebuild_cal p =
-  (match V.query_inside p.root ".ls-date-month-select" with
+  (match D.el_query p.root ".ls-date-month-select" with
    | Some sel ->
-       V.el_set_text_content sel month_names.(p.cm - 1)
+       D.el_set_text_content sel month_names.(p.cm - 1)
    | None -> ());
-  (match V.query_inside p.root ".ls-date-year-input" with
+  (match D.el_query p.root ".ls-date-year-input" with
    | Some inp -> D.el_set_value inp (string_of_int p.cy)
    | None -> ());
   rebuild_grid p;
@@ -267,7 +266,7 @@ and pick_day p y m d =
 
 let close_menu p =
   match p.menu with
-  | Some m -> V.el_remove m; p.menu <- None
+  | Some m -> D.el_remove m; p.menu <- None
   | None -> ()
 
 (* cljs ui.cljs month select: label + [role=menu] of long month names *)
@@ -276,11 +275,11 @@ let toggle_month_menu p =
   | Some _ -> close_menu p
   | None ->
       let menu =
-        V.h ~cls:"ls-date-month-menu" ~attrs:[ ("role", "menu") ]
+        D.h ~cls:"ls-date-month-menu" ~attrs:[ ("role", "menu") ]
           ~children:
             (List.mapi
                (fun i name ->
-                 V.h ~cls:"ls-date-month-option" ~text:name
+                 D.h ~cls:"ls-date-month-option" ~text:name
                    ~attrs:[ ("role", "menuitem") ]
                    ~on_click:(fun _ ->
                      p.cm <- i + 1;
@@ -327,7 +326,7 @@ let nlp_commit p input =
 let cal_pos_style ?top uuid =
   match D.textarea_of uuid with
   | Some el ->
-      let x, y, _ = Dom_ext.caret_popup_pos (D.json_of_el el) in
+      let x, y, _ = Web_dom.caret_popup_pos (el) in
       Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
         x (Option.value top ~default:y)
   | None -> "position:fixed;top:96px;left:240px;z-index:900"
@@ -338,38 +337,38 @@ let cal_pos_style ?top uuid =
 let cal_clamp_in_view uuid root =
   match D.textarea_of uuid with
   | Some el ->
-      let tr = V.el_rect el in
-      let h = V.rect_height (V.el_rect root) in
-      let vh = V.window_inner_height in
-      let below = vh -. V.rect_bottom tr -. 4. in
-      let above = V.rect_top tr -. 4. in
+      let tr = D.el_bounding_rect el in
+      let h = D.rect_height (D.el_bounding_rect root) in
+      let vh = D.win_inner_height in
+      let below = vh -. D.rect_bottom tr -. 4. in
+      let above = D.rect_top tr -. 4. in
       if h > below then (
         let top =
-          if above > below then V.rect_top tr -. 4. -. h
+          if above > below then D.rect_top tr -. 4. -. h
           else Float.max 4.0 (vh -. 4. -. h)
         in
-        V.el_set_attr root "style" (cal_pos_style ~top uuid))
+        D.el_set_attr root "style" (cal_pos_style ~top uuid))
   | None -> ()
 let open_cal kind uuid from =
   let today = Dates.date_now () in
   let cy = int_of_float (Js.Date.getFullYear today)
   and cm = int_of_float (Js.Date.getMonth today) + 1
   and cd = int_of_float (Js.Date.getDate today) in
-  let tbody = V.h ~tag:"tbody" () in
+  let tbody = D.h ~tag:"tbody" () in
   let sel =
-    V.h ~tag:"button" ~cls:"ls-date-month-select"
+    D.h ~tag:"button" ~cls:"ls-date-month-select"
       ~attrs:[ ("type", "button") ]
       ~text:month_names.(cm - 1) ()
   in
   let year_inp =
-    V.h ~tag:"input" ~cls:"ls-date-year-input"
+    D.h ~tag:"input" ~cls:"ls-date-year-input"
       ~attrs:
         [ ("type", "number"); ("min", "1"); ("max", "9999")
         ; ("value", string_of_int cy) ]
       ()
   in
   let nlp_inp =
-    V.h ~tag:"input" ~cls:"ls-date-nlp"
+    D.h ~tag:"input" ~cls:"ls-date-nlp"
       ~attrs:
         [ ("type", "text")
         ; ("placeholder", I18n.t "ui/date-natural-language-placeholder")
@@ -377,34 +376,34 @@ let open_cal kind uuid from =
       ()
   in
   let root =
-    V.h ~cls:"ls-editor-date-picker"
+    D.h ~cls:"ls-editor-date-picker"
       ~attrs:
         [ ("id", "date-time-picker"); ("style", cal_pos_style uuid) ]
       ~children:
-        [ V.h ~cls:"ls-nlp-calendar"
+        [ D.h ~cls:"ls-nlp-calendar"
             ~children:
-              [ V.h ~cls:"ui__calendar"
+              [ D.h ~cls:"ui__calendar"
                   ~children:
-                    [ V.h ~cls:"ls-cal-head"
+                    [ D.h ~cls:"ls-cal-head"
                         ~children:
-                          [ V.h ~cls:"ls-cal-selects"
+                          [ D.h ~cls:"ls-cal-selects"
                               ~children:[ sel; year_inp ] ()
-                          ; V.h ~cls:"ls-cal-nav"
+                          ; D.h ~cls:"ls-cal-nav"
                               ~children:
-                                [ V.h ~tag:"button" ~cls:"ls-cal-nav-btn"
+                                [ D.h ~tag:"button" ~cls:"ls-cal-nav-btn"
                                     ~attrs:
                                       [ ("type", "button")
                                       ; ("aria-label", "Previous month") ]
-                                    ~children:[ V.icon "chevron-left" ] ()
-                                ; V.h ~tag:"button" ~cls:"ls-cal-nav-btn"
+                                    ~children:[ D.icon "chevron-left" ] ()
+                                ; D.h ~tag:"button" ~cls:"ls-cal-nav-btn"
                                     ~attrs:
                                       [ ("type", "button")
                                       ; ("aria-label", "Next month") ]
-                                    ~children:[ V.icon "chevron-right" ] ()
+                                    ~children:[ D.icon "chevron-right" ] ()
                                 ]
                               () ]
                         ()
-                    ; V.h ~tag:"table" ~attrs:[ ("role", "grid") ]
+                    ; D.h ~tag:"table" ~attrs:[ ("role", "grid") ]
                         ~children:[ tbody ] () ]
                   ()
               ; nlp_inp ]
@@ -415,22 +414,22 @@ let open_cal kind uuid from =
     { kind; uuid; from; root; cy; cm; cd; menu = None
     ; link_url = None; link_label = None }
   in
-  V.el_add_listener sel "click" (fun _ -> toggle_month_menu p);
-  V.el_add_listener year_inp "input" (fun _ ->
+  D.el_on sel "click" (fun _ -> toggle_month_menu p);
+  D.el_on year_inp "input" (fun _ ->
       match int_of_string_opt (D.el_value year_inp) with
       | Some y when y >= 1000 && y <= 9999 -> p.cy <- y; rebuild_cal p
       | _ -> ());
-  V.el_add_listener nlp_inp "keydown" (fun ev ->
+  D.el_on nlp_inp "keydown" (fun ev ->
       if D.ev_key ev = "Enter" then (
-        D.prevent_default ev;
+        D.ev_prevent_default ev;
         nlp_commit p nlp_inp));
-  (match V.query_inside root "button[aria-label='Previous month']" with
-   | Some b -> V.el_add_listener b "click" (fun _ -> nav_month p (-1))
+  (match D.el_query root "button[aria-label='Previous month']" with
+   | Some b -> D.el_on b "click" (fun _ -> nav_month p (-1))
    | None -> ());
-  (match V.query_inside root "button[aria-label='Next month']" with
-   | Some b -> V.el_add_listener b "click" (fun _ -> nav_month p 1)
+  (match D.el_query root "button[aria-label='Next month']" with
+   | Some b -> D.el_on b "click" (fun _ -> nav_month p 1)
    | None -> ());
-  D.el_append_child V.document_body root;
+  D.el_append_child D.document_body root;
   active := Some p;
   Runtime.editor_popup_root := Some p.root;
   rebuild_grid p;
@@ -441,18 +440,18 @@ let open_cal kind uuid from =
 
 let open_link_form image uuid from =
   let url_inp =
-    V.h ~tag:"input" ~cls:"ls-link-url"
+    D.h ~tag:"input" ~cls:"ls-link-url"
       ~attrs:
         [ ("type", "text")
         ; ("placeholder", I18n.t "editor/link-url-placeholder") ]
       ()
   in
   let label_inp =
-    V.h ~tag:"input" ~cls:"ls-link-text"
+    D.h ~tag:"input" ~cls:"ls-link-text"
       ~attrs:[ ("type", "text"); ("placeholder", I18n.t "editor/link-label-placeholder") ] ()
   in
   let root =
-    V.h ~cls:"ls-editor-link-form"
+    D.h ~cls:"ls-editor-link-form"
       ~attrs:
         [ ("style"
           , cal_pos_style uuid
@@ -464,7 +463,7 @@ let open_link_form image uuid from =
     { kind = Link_form image; uuid; from; root; cy = 0; cm = 0; cd = 0
     ; menu = None; link_url = Some url_inp; link_label = Some label_inp }
   in
-  D.el_append_child V.document_body root;
+  D.el_append_child D.document_body root;
   active := Some p;
   Runtime.editor_popup_root := Some p.root;
   D.el_focus url_inp
@@ -472,12 +471,12 @@ let open_link_form image uuid from =
 let submit_link p =
   let url =
     match p.link_url with
-    | Some i -> String.trim (V.el_value i)
+    | Some i -> String.trim (D.el_value i)
     | None -> ""
   in
   let label =
     match p.link_label with
-    | Some i -> String.trim (V.el_value i)
+    | Some i -> String.trim (D.el_value i)
     | None -> ""
   in
   let label = if label = "" then url else label in
@@ -501,20 +500,20 @@ let popup_key ev =
       | (Cal_insert | Cal_prop _), "ArrowDown" -> cal_move p 7; true
       | (Cal_insert | Cal_prop _), "ArrowUp" -> cal_move p (-7); true
       | (Cal_insert | Cal_prop _), "Enter" ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           commit_cal p; true
       | Link_form _, "Enter" ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           submit_link p; true
       | _, "Escape" ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           close_popup p ~focus_caret:p.from; true
       | Link_form _, _ -> false (* inputs handle their own keys *)
       | (Cal_insert | Cal_prop _), _ -> (
           (* swallow keys aimed at the calendar so e.g. typing does not
              reach the textarea while a day button is focused *)
           match D.closest_sel "#date-time-picker" (D.ev_target ev) with
-          | Some _ -> D.prevent_default ev; true
+          | Some _ -> D.ev_prevent_default ev; true
           | None -> false))
 
 (* click_guard: true -> mousedown inside a popup, suppress blur-commit.
@@ -814,6 +813,6 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
-    D.document_add_listener "ls:editor-command" on_command true;
+    D.add_document_listener "ls:editor-command" on_command true;
     Code_mirror.install ()
   end

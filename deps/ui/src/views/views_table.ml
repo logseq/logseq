@@ -8,8 +8,7 @@
    dialogs) mount imperatively through Views_popup. *)
 
 module D = Logseq_dom
-module E = Views_el
-module Ed = Editor_dom
+module E = Web_dom
 module I = I18n
 module V = Views_state
 module Wr = Views_wire
@@ -28,7 +27,7 @@ let sig_of (inst : V.inst) : V.vstate Signal.signal =
 let refresh inst = (V.ops ()).V.o_refresh inst
 
 (* <span class="ui__icon ti ls-icon-{name}">…</span> — identical markup
-   to the imperative Views_el.icon (tabler svg or font-glyph fallback),
+   to the imperative Web_dom.icon (tabler svg or font-glyph fallback),
    baked into the node's html prop *)
 let icon_el ?(cls = "") name : t =
   let inner = E.el_inner_html (E.icon name) in
@@ -363,7 +362,7 @@ let select_cell inst ~row_uuid ~blk : t =
     ctx parent
 
 let open_row_sidebar row_uuid =
-  Platform.dispatch "ls:open-right-sidebar"
+  Web_dom.dispatch_custom "ls:open-right-sidebar"
     (Js.Json.object_
        (Js.Dict.fromList [ ("uuid", Js.Json.string row_uuid) ]))
 
@@ -690,7 +689,7 @@ let header_cell inst (c : V.column) : t =
         [ header_select_cell inst ]
   | _ -> (
       let menu () =
-        match Ed.get_element_by_id (header_cell_id inst c) with
+        match E.get_element_by_id (header_cell_id inst c) with
         | Some anchor -> (
             match c.V.c_prop with
             | Some p -> open_property_menu inst ~anchor c p
@@ -940,10 +939,10 @@ let table_header inst cols : t =
                                 match p.Model.page_uuid with
                                 | Some uuid -> (
                                     match
-                                      Ed.get_element_by_id "add property"
+                                      E.get_element_by_id "add property"
                                     with
                                     | Some cell ->
-                                        let r = E.el_rect cell in
+                                        let r = E.el_bounding_rect cell in
                                         Properties_dialog.open_dialog
                                           ~anchor:
                                             ( E.rect_left r

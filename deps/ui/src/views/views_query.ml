@@ -5,13 +5,12 @@
    (.ls-query-setting → fake CodeMirror editing). *)
 
 module D = Logseq_dom
-module E = Views_el
+module E = Web_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
 module I = I18n
 module Db = Views_db
-module Ed = Editor_dom
 module M = Model
 
 type qsrc =
@@ -361,10 +360,10 @@ let cm_host_id inst = "vcm-" ^ string_of_int inst.V.id
    intentionally doesn't expose. The element itself is mounted by the
    declarative tree (if_ on query_editor_open). *)
 let attach_cm inst =
-  match Ed.get_element_by_id (cm_host_id inst) with
+  match E.get_element_by_id (cm_host_id inst) with
   | None -> ()
   | Some cm -> (
-      match Ed.el_query cm "pre.CodeMirror-line" with
+      match E.el_query cm "pre.CodeMirror-line" with
       | None -> ()
       | Some line ->
           (* cljs's CodeMirror editor evaluates as you type — fire the
@@ -372,14 +371,14 @@ let attach_cm inst =
              it does not wait for the save to land) and persist the title
              on a debounce *)
           let autosave = E.debounce 300 in
-          E.el_add_listener line "input" (fun _ ->
+          E.el_on line "input" (fun _ ->
               let src = E.el_text_content line |> String.trim in
               (V.ops ()).V.o_refresh_src inst src;
               autosave (fun () -> save_src inst src));
-          E.el_add_listener line "keydown" (fun ev ->
-              match Ed.ev_key ev with
+          E.el_on line "keydown" (fun ev ->
+              match E.ev_key ev with
               | "Escape" ->
-                  Ed.prevent_default ev;
+                  E.ev_prevent_default ev;
                   let src = E.el_text_content line |> String.trim in
                   (* cljs keeps the editor open after Esc commits; the next
                      tx broadcast re-renders the shell anyway. The eval
@@ -390,7 +389,7 @@ let attach_cm inst =
                   save_src inst src
               | "Enter" ->
                   (* single-line editor contract *)
-                  Ed.prevent_default ev
+                  E.ev_prevent_default ev
               | _ -> ()))
 
 (* the .CodeMirror host — declarative: mounts/unmounts on
@@ -418,7 +417,7 @@ let cm_host inst : Lui_elements.t =
           ]
           ctx parent
       in
-      Ed.set_timeout (fun () -> attach_cm inst) 0;
+      E.set_timeout (fun () -> attach_cm inst) 0;
       n)
     ctx parent
 

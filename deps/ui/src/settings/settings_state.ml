@@ -20,24 +20,12 @@ let initial =
   ; tick = 0
   }
 
-let st : t Signal.state option ref = ref None
+include State_cell.Make (struct
+  type nonrec t = t
+  let name = "settings"
+end)
 
-let ensure (ctx : Lui_ui.ui_context) =
-  match !st with
-  | Some _ -> ()
-  | None -> st := Some (Signal.state ctx.ui_scheduler initial)
-
-let ready () = Option.is_some !st
-
-let state () =
-  match !st with Some s -> s | None -> failwith "settings state not mounted"
-
-let value () = Signal.get_state (state ())
-let signal () = (state ()).Signal.state_signal
-
-let set f =
-  Signal.update (state ()) f;
-  Runtime.flush ()
+let ensure ctx = mount ctx initial
 
 (* storage-backed toggles don't touch `config` — bump tick so the pane
    dyn re-renders. Toggles are reachable without the pane mounted (cmdk
@@ -48,7 +36,7 @@ let poke () =
 let repo = Runtime.repo
 
 let set_tab tab =
-  Platform.body_set_data "settingsTab" tab;
+  Web_dom.body_set_data "settingsTab" tab;
   set (fun s -> { s with tab })
 
 (* cljs open-settings! <tab> — the tab the next activate applies.
@@ -127,10 +115,10 @@ let activate () =
     | Some t -> pending_tab := None; t
     | None -> "general"
   in
-  Platform.body_set_data "settingsTab" tab;
+  Web_dom.body_set_data "settingsTab" tab;
   if ready () then (Signal.set (state ()) { (value ()) with tab }; load ())
 
-let deactivate () = Platform.body_rm_data "settingsTab"
+let deactivate () = Web_dom.body_rm_data "settingsTab"
 
 (* ---- config.edn accessors ---- *)
 
@@ -223,8 +211,8 @@ let toggle_wide_mode () =
   let v = not (storage_bool "wide-mode" ~default:false) in
   storage_set_bool "wide-mode" v;
   poke ();
-  match Browser_ui.qs "#app-container-wrapper" with
-  | Some el -> (if v then Browser_ui.add_class else Browser_ui.rm_class) el "ls-wide-mode"
+  match Web_dom.query_selector "#app-container-wrapper" with
+  | Some el -> (if v then Web_dom.el_class_add else Web_dom.el_class_remove) el "ls-wide-mode"
   | None -> ()
 
 let toggle_shortcut_tooltip () =
@@ -265,7 +253,7 @@ let current_accent () =
 
 let set_accent name =
   Platform.local_storage_set "radix-color" (Platform.storage_quote (":" ^ name));
-  Platform.document_set_data "color" name;
+  Web_dom.doc_set_data "color" name;
   poke ()
 
 (* ---- editor font (state/set-editor-font! + theme.cljs effect) ---- *)
@@ -303,8 +291,8 @@ let write_editor_font cfg =
              [ (Wire.Keyword "type", Wire.String cfg.ftype)
              ; (Wire.Keyword "global", Wire.Bool cfg.fglobal)
              ])));
-  Platform.document_set_data "font" cfg.ftype;
-  Platform.document_set_data "font-global"
+  Web_dom.doc_set_data "font" cfg.ftype;
+  Web_dom.doc_set_data "font-global"
     (if cfg.fglobal then "true" else "false");
   poke ()
 

@@ -448,13 +448,13 @@ let test_fuzzy2 () =
   check "len dist equal" (Fuzzy.str_len_distance "abc" "xyz" = 1.0);
   check "len dist empty" (Fuzzy.str_len_distance "" "" = 1.0);
   check "len dist half" (Fuzzy.str_len_distance "ab" "abcd" = 0.5);
-  check "starts_with" (Fuzzy.starts_with "foobar" "foo");
+  check "starts_with" (Str_util.starts_with "foobar" "foo");
   check "starts_with neg"
-    (not (Fuzzy.starts_with "foo" "foobar"));
-  check "index_of empty" (Fuzzy.index_of "abc" "" = Some 0);
-  check "index_of mid" (Fuzzy.index_of "abc" "bc" = Some 1);
-  check "index_of miss" (Fuzzy.index_of "abc" "bd" = None);
-  check "index_of longer" (Fuzzy.index_of "ab" "abc" = None);
+    (not (Str_util.starts_with "foo" "foobar"));
+  check "index_of empty" (Str_util.index_of "abc" "" = Some 0);
+  check "index_of mid" (Str_util.index_of "abc" "bc" = Some 1);
+  check "index_of miss" (Str_util.index_of "abc" "bd" = None);
+  check "index_of longer" (Str_util.index_of "ab" "abc" = None);
   check "score exact > substring"
     (Fuzzy.score "foo" "foobar" > Fuzzy.score "foo" "xfoox");
   check "score substring > subsequence"
@@ -639,7 +639,7 @@ let test_title_refs2 () =
   let tm = Title_refs.new_tag_map "Baz" "u2" in
   (match Wire.get tm "db/ident" with
    | Some (Wire.Keyword i) ->
-       check "new_tag_map ident" (Fuzzy.starts_with i "user.class/Baz-")
+       check "new_tag_map ident" (Str_util.starts_with i "user.class/Baz-")
    | _ -> check "new_tag_map ident" false);
   check "new_tag_map tags + extends"
     (Wire.get tm "block/tags"
@@ -3248,7 +3248,7 @@ let test_decode7 () =
 let json_obj kvs =
   let d = Js.Dict.empty () in
   List.iter (fun (k, v) -> Js.Dict.set d k v) kvs;
-  Sdk_convert.json_obj d
+  Js.Json.object_ d
 
 let test_sdk_convert2 () =
   (* entity maps with uuid+title gain content/fullTitle aliases *)

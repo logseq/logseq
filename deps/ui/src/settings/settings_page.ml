@@ -97,7 +97,7 @@ let theme_row ctx =
                  (fun m ->
                    let effective =
                      if m = "system" then
-                       if Browser_ui.prefers_dark () then "dark"
+                       if Web_dom.prefers_dark () then "dark"
                        else "light"
                      else m
                    in
@@ -494,13 +494,13 @@ let keymap_pane () =
      time the keymap pane mounts (dialog open and tab switch alike) *)
   (try
      ignore
-       (Browser_ui.set_timeout
+       (Web_dom.set_timeout
           (fun () ->
             match
-              Browser_ui.qs
+              Web_dom.query_selector
                 ".cp__shortcut-page-x .search-input-wrap input"
             with
-            | Some el -> Browser_ui.focus el
+            | Some el -> Web_dom.el_focus el
             | None -> ())
           32)
    with _ -> ());

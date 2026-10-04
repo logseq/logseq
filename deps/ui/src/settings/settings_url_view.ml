@@ -23,21 +23,13 @@ let valid_url s =
   && (String.sub s 0 7 = "http://" || String.length s >= 8
       && String.sub s 0 8 = "https://")
 
-let strip_trailing_slashes s =
-  let n = String.length s in
-  let j = ref n in
-  while !j > 0 && s.[!j - 1] = '/' do
-    decr j
-  done;
-  String.sub s 0 !j
-
 let url_to_ws s =
   let scheme =
     if String.length s >= 5 && String.sub s 0 5 = "https" then "wss"
     else "ws"
   in
   let base =
-    strip_trailing_slashes
+    Str_util.strip_trailing_slashes
       (if String.length s >= 7 && String.sub s 0 7 = "http://" then
          String.sub s 7 (String.length s - 7)
        else String.sub s 8 (String.length s - 8))
@@ -48,7 +40,7 @@ let url_to_ws s =
 let push_sync_config () =
   let ws, http =
     match get_url "sync-server-url" with
-    | Some u -> (url_to_ws u, strip_trailing_slashes u)
+    | Some u -> (url_to_ws u, Str_util.strip_trailing_slashes u)
     | None -> (default_sync_ws, default_sync_http)
   in
   Runtime.invoke1 "thread-api/set-db-sync-config"
@@ -64,8 +56,8 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
  fun ctx parent ->
   let url = Signal.state ctx.ui_scheduler (Option.value (get_url storage_key) ~default:"") in
   let read_input () =
-    match Browser_ui.qs ("#" ^ key ^ "-input") with
-    | Some el -> Browser_ui.value el
+    match Web_dom.query_selector ("#" ^ key ^ "-input") with
+    | Some el -> Web_dom.el_value el
     | None -> Signal.get_state url
   in
   let reset () =

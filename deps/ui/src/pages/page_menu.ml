@@ -228,12 +228,12 @@ let global_items () =
         close ();
         (* cljs :ui/toggle-appearance anchors the appearance popup to the
            dots trigger, same as the menu itself *)
-        match Dom_ext.doc_query_selector ".toolbar-dots-btn" with
+        match Web_dom.query_selector ".toolbar-dots-btn" with
         | Some el ->
-            let r = Dom_ext.bounding_rect el in
+            let r = Web_dom.el_bounding_rect el in
             Runtime.send
               (Action.Appearance_set
-                 (Some (Dom_ext.rect_right r, Dom_ext.rect_bottom r +. 4.)))
+                 (Some (Web_dom.rect_right r, Web_dom.rect_bottom r +. 4.)))
         | None -> ())
   ; icon_item "recycle" I18n.recycle "trash" (fun () ->
         close ();

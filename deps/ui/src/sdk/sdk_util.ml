@@ -3,12 +3,8 @@
 open Promise_ext
 let repo = Runtime.repo
 
-external as_undefined : Js.Json.t -> Js.Json.t Js.Undefined.t
-  = "%identity"
-
 (* api args arrive positionally; absent slots are undefined/null *)
-let arg_is_nil j =
-  Js.Undefined.toOption (as_undefined j) = None || j == Js.Json.null
+let arg_is_nil j = Js.typeof j = "undefined" || j == Js.Json.null
 
 let arg_wire j = if arg_is_nil j then Wire.Nil else Sdk_convert.wire_of_json j
 
@@ -121,18 +117,7 @@ let page_ref_names (title : string) : string list =
   in
   go 0 []
 
-let replace_all (s : string) ~(pat : string) ~(rep : string) : string =
-  let n = String.length pat in
-  if n = 0 then s
-  else
-    let rec go pos acc =
-      match find_from s pos pat with
-      | i when i < 0 ->
-          List.rev (String.sub s pos (String.length s - pos) :: acc)
-      | i -> go (i + n) (rep :: String.sub s pos (i - pos) :: acc)
-    in
-    String.concat "" (go 0 [])
-
+let replace_all = Str_util.replace_all
 (* every block/title string anywhere in an op payload *)
 let rec collect_title_strings (w : Wire.t) (acc : string list) =
   let acc =

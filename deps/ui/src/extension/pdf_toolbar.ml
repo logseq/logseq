@@ -2,12 +2,10 @@
    overlay, finder, settings, docinfo modal, close. Web paths only
    (the system-window button is a no-op). *)
 
-module D = Dom_ext
-module B = Browser_ui
+module D = Web_dom
 module U = Pdf_utils
 module S = Pdf_state
 module A = Pdf_assets
-module E = Editor_dom
 
 let ( let* ) = U.( let* )
 
@@ -16,18 +14,18 @@ let ( let* ) = U.( let* )
 
 let ns = "http://www.w3.org/2000/svg"
 
-let svg attrs kids : D.element =
-  let s = E.svg_ns_el "svg" in
-  List.iter (fun (k, v) -> E.el_set_attr s k v) attrs;
-  List.iter (fun k -> E.el_append_child s k) kids;
-  E.json_of_el s
+let svg attrs kids : D.el =
+  let s = D.svg_ns_el "svg" in
+  List.iter (fun (k, v) -> D.el_set_attr s k v) attrs;
+  List.iter (fun k -> D.el_append_child s k) kids;
+  s
 
-let node tag attrs : E.el =
-  let n = E.svg_ns_el tag in
-  List.iter (fun (k, v) -> E.el_set_attr n k v) attrs;
+let node tag attrs : D.el =
+  let n = D.svg_ns_el tag in
+  List.iter (fun (k, v) -> D.el_set_attr n k v) attrs;
   n
 
-let svg24 ?(size = 16) ?(cls = "") ?(extra = []) kids : D.element =
+let svg24 ?(size = 16) ?(cls = "") ?(extra = []) kids : D.el =
   svg
     ([ ("viewBox", "0 0 24 24")
      ; ("width", string_of_int size)
@@ -38,7 +36,7 @@ let svg24 ?(size = 16) ?(cls = "") ?(extra = []) kids : D.element =
     @ extra)
     kids
 
-let path24 ?(cls = "") d : E.el =
+let path24 ?(cls = "") d : D.el =
   node "path"
     ([ ("d", d)
      ; ("stroke-linecap", "round")
@@ -265,9 +263,9 @@ let svg_arrow_right_v2 () =
              8.104-3.092 11.196 0l55.98 55.98a7.892 7.892 0 012.316 \
              5.595z" ) ] ]
 
-(* tabler icon via the editor's icon builder -> Dom_ext element *)
-let ticon ?(size = 18.) name : D.element =
-  E.json_of_el (E.ui_icon_el ~size name)
+(* tabler icon via the editor's icon builder -> Web_dom element *)
+let ticon ?(size = 18.) name : D.el =
+  (D.icon ~size name)
 
 (* ---------- state ---------- *)
 
@@ -279,10 +277,10 @@ type outline =
   }
 
 type finder =
-  { wrap : D.element
-  ; box : D.element
-  ; input : D.element
-  ; result_inner : D.element
+  { wrap : D.el
+  ; box : D.el
+  ; input : D.el
+  ; result_inner : D.el
   ; mutable f_val : string
   ; mutable f_case : bool
   ; mutable f_entered0 : bool
@@ -291,22 +289,22 @@ type finder =
   ; mutable f_cur : int
   ; mutable f_total : int
   ; mutable f_query : string
-  ; mutable f_go : D.element option
-  ; mutable f_case_btn : D.element
+  ; mutable f_go : D.el option
+  ; mutable f_case_btn : D.el
   }
 
 type t =
   { viewer : S.viewer
   ; bus : Js.Json.t
-  ; header : D.element
-  ; mutable page_input : D.element option
-  ; mutable total_small : D.element option
+  ; header : D.el
+  ; mutable page_input : D.el option
+  ; mutable total_small : D.el option
   ; mutable page_cur : int
   ; mutable page_total : int
-  ; mutable outline_wrap : D.element
-  ; mutable panels_el : D.element
-  ; mutable tab_contents : D.element
-  ; mutable tab_hls : D.element
+  ; mutable outline_wrap : D.el
+  ; mutable panels_el : D.el
+  ; mutable tab_contents : D.el
+  ; mutable tab_hls : D.el
   ; mutable active_tab : string (* "contents" | "highlights" *)
   ; mutable outlines : outline list
   ; mutable outlines_loaded : bool
@@ -314,20 +312,20 @@ type t =
   ; mutable outline_visible : bool
   ; mutable finder : finder option
   ; mutable finder_visible : bool
-  ; mutable settings_el : D.element option
+  ; mutable settings_el : D.el option
   ; mutable theme : string
-  ; mutable doc_listeners : (string * (D.event -> unit)) list
-  ; mutable key_listeners : (D.element * (D.event -> unit)) list
+  ; mutable doc_listeners : (string * (D.ev -> unit)) list
+  ; mutable key_listeners : (D.el * (D.ev -> unit)) list
   }
 
 let cur : t option ref = ref None
 
 let dispatch_extra (t : t) =
   ignore
-    (B.set_timeout
+    (Web_dom.set_timeout_id
        (fun () ->
          U.bus_dispatch t.bus "ls-update-extra-state"
-           (B.json_props
+           (Web_dom.json_props
               [ "page", Js.Json.number (float_of_int t.page_cur)
               ; ( "scale"
                 , match U.scale_value t.viewer with
@@ -337,7 +335,7 @@ let dispatch_extra (t : t) =
 
 (* document.body-level outside click (cljs resolve-own-container) *)
 let on_body_click f = D.add_document_listener "click" f false
-let off_body_click f = U.off_document "click" f false
+let off_body_click f = Web_dom.remove_document_listener "click" f false
 
 let track_click (t : t) f =
   on_body_click f;
@@ -345,71 +343,71 @@ let track_click (t : t) f =
 
 (* ---------- outline / highlights panels ---------- *)
 
-let rec render_outline_items (t : t) (parent : D.element)
+let rec render_outline_items (t : t) (parent : D.el)
     (nodes : outline list) : unit =
   List.iter (fun n -> render_outline_item t parent n) nodes
 
-and render_outline_item (t : t) (parent : D.element) (n : outline) :
+and render_outline_item (t : t) (parent : D.el) (n : outline) :
     unit =
-  let item = U.create_el "div" in
+  let item = Web_dom.create_element "div" in
   let has_child = n.o_children <> [] in
-  U.set_class item
+  Web_dom.el_set_class item
     ("extensions__pdf-outline-item"
     ^ (if has_child then " has-children" else "")
     ^ if n.o_expanded then " is-expand" else "");
-  let inner = U.create_el "div" in
-  U.set_class inner "inner";
-  let a = U.create_el "a" in
-  U.set_attr a "data-dest" (Js.Json.stringify n.o_dest);
-  let i = U.create_el "i" in
-  U.set_class i "arrow";
-  U.append_el i (svg_arrow_right_v2 ());
-  let sp = U.create_el "span" in
-  U.set_text sp n.o_title;
-  U.append_el a i;
-  U.append_el a sp;
-  U.on a "click" (fun e ->
-      match D.target e with
-      | Some target when D.closest target "i" <> None ->
-          D.prevent_default e;
+  let inner = Web_dom.create_element "div" in
+  Web_dom.el_set_class inner "inner";
+  let a = Web_dom.create_element "a" in
+  Web_dom.el_set_attr a "data-dest" (Js.Json.stringify n.o_dest);
+  let i = Web_dom.create_element "i" in
+  Web_dom.el_set_class i "arrow";
+  Web_dom.el_append_child i (svg_arrow_right_v2 ());
+  let sp = Web_dom.create_element "span" in
+  Web_dom.el_set_text_content sp n.o_title;
+  Web_dom.el_append_child a i;
+  Web_dom.el_append_child a sp;
+  Web_dom.el_on a "click" (fun e ->
+      match D.ev_target e with
+      | Some target when D.el_closest target "i" <> None ->
+          D.ev_prevent_default e;
           n.o_expanded <- not n.o_expanded;
           render_panel t
       | _ ->
           U.go_to_destination (U.link_service t.viewer) n.o_dest);
-  U.append_el inner a;
-  U.append_el item inner;
+  Web_dom.el_append_child inner a;
+  Web_dom.el_append_child item inner;
   if has_child && n.o_expanded then (
-    let ch = U.create_el "div" in
-    U.set_class ch "children";
+    let ch = Web_dom.create_element "div" in
+    Web_dom.el_set_class ch "children";
     render_outline_items t ch n.o_children;
-    U.append_el item ch);
-  U.append_el parent item
+    Web_dom.el_append_child item ch);
+  Web_dom.el_append_child parent item
 
 (* cljs pdf-outline content *)
-and render_outline_panel (t : t) (host : D.element) : unit =
-  let lc = U.create_el "div" in
-  U.set_class lc "extensions__pdf-outline-list-content";
-  U.set_attr lc "tabindex" "-1";
+and render_outline_panel (t : t) (host : D.el) : unit =
+  let lc = Web_dom.create_element "div" in
+  Web_dom.el_set_class lc "extensions__pdf-outline-list-content";
+  Web_dom.el_set_attr lc "tabindex" "-1";
   if t.outlines = [] then (
-    let sec = U.create_el "section" in
-    U.set_class sec "is-empty";
-    U.set_text sec (I18n.t "pdf/no-outlines");
-    U.append_el lc sec)
+    let sec = Web_dom.create_element "section" in
+    Web_dom.el_set_class sec "is-empty";
+    Web_dom.el_set_text_content sec (I18n.t "pdf/no-outlines");
+    Web_dom.el_append_child lc sec)
   else (
-    let sec = U.create_el "section" in
+    let sec = Web_dom.create_element "section" in
     render_outline_items t sec t.outlines;
-    U.append_el lc sec);
-  U.append_el host lc;
-  U.focus_el lc;
+    Web_dom.el_append_child lc sec);
+  Web_dom.el_append_child host lc;
+  Web_dom.el_focus lc;
   (* Esc closes *)
   let esc e =
-    if U.event_which e = 27 then toggle_outline t
+    if Web_dom.ev_which e = 27 then toggle_outline t
   in
   t.key_listeners <- (lc, esc) :: t.key_listeners;
-  U.on lc "keyup" esc
+  Web_dom.el_on lc "keyup" esc
 
 (* cljs pdf-highlights-list *)
-and render_highlights_panel (t : t) (host : D.element) : unit =
+and render_highlights_panel (t : t) (host : D.el) : unit =
   let hls =
     List.sort
       (fun (a : Model.hl) b -> compare a.hl_page b.hl_page)
@@ -417,68 +415,68 @@ and render_highlights_panel (t : t) (host : D.element) : unit =
   in
   List.iter
     (fun (hl : Model.hl) ->
-      let item = U.create_el "div" in
-      U.set_class item
+      let item = Web_dom.create_element "div" in
+      Web_dom.el_set_class item
         ("extensions__pdf-highlights-list-item"
         ^
         match hl.hl_id, t.hl_active with
         | Some id, Some a when id = a -> " active"
         | _ -> "");
-      let h6 = U.create_el "h6" in
-      U.set_class h6 "flex";
-      let sp = U.create_el "span" in
-      U.set_class sp "flex items-center";
-      let sm = U.create_el "small" in
+      let h6 = Web_dom.create_element "h6" in
+      Web_dom.el_set_class h6 "flex";
+      let sp = Web_dom.create_element "span" in
+      Web_dom.el_set_class sp "flex items-center";
+      let sm = Web_dom.create_element "small" in
       (match hl.hl_color with
-       | Some c -> U.set_attr sm "data-color" c
+       | Some c -> Web_dom.el_set_attr sm "data-color" c
        | None -> ());
-      let st = U.create_el "strong" in
-      U.set_text st
+      let st = Web_dom.create_element "strong" in
+      Web_dom.el_set_text_content st
         (I18n.sub (I18n.t "pdf/page-label") [ string_of_int hl.hl_page ]);
-      U.append_el sp sm;
-      U.append_el sp st;
-      let btn = U.create_el "button" in
-      U.set_attr btn "title" (I18n.t "pdf/linked-ref");
-      U.append_el btn (ticon "external-link");
+      Web_dom.el_append_child sp sm;
+      Web_dom.el_append_child sp st;
+      let btn = Web_dom.create_element "button" in
+      Web_dom.el_set_attr btn "title" (I18n.t "pdf/linked-ref");
+      Web_dom.el_append_child btn (ticon "external-link");
       let goto () = ignore (A.goto_block_ref hl) in
-      U.on btn "click" (fun _ -> goto ());
-      U.append_el h6 sp;
-      U.append_el h6 btn;
-      U.append_el item h6;
+      Web_dom.el_on btn "click" (fun _ -> goto ());
+      Web_dom.el_append_child h6 sp;
+      Web_dom.el_append_child h6 btn;
+      Web_dom.el_append_child item h6;
       (match hl.hl_image, hl.hl_id with
        | Some _, Some id ->
-           let pw = U.create_el "p" in
-           U.set_class pw "area-wrap";
-           let img = U.create_el "img" in
-           U.append_el pw img;
-           U.append_el item pw;
+           let pw = Web_dom.create_element "p" in
+           Web_dom.el_set_class pw "area-wrap";
+           let img = Web_dom.create_element "img" in
+           Web_dom.el_append_child pw img;
+           Web_dom.el_append_child item pw;
            ignore
              (let* src = A.hl_list_image_src ~hl_id:id in
               (match src with
-               | Some s -> U.set_attr img "src" s
+               | Some s -> Web_dom.el_set_attr img "src" s
                | None -> ());
               Js.Promise.resolve ())
        | _ ->
-           let pw = U.create_el "p" in
-           U.set_class pw "text-wrap";
-           U.set_text pw hl.hl_text;
-           U.append_el item pw);
-      U.on item "click" (fun _ ->
+           let pw = Web_dom.create_element "p" in
+           Web_dom.el_set_class pw "text-wrap";
+           Web_dom.el_set_text_content pw hl.hl_text;
+           Web_dom.el_append_child item pw);
+      Web_dom.el_on item "click" (fun _ ->
           U.scroll_to_highlight t.viewer hl;
           t.hl_active <- hl.hl_id;
           render_panel t);
-      U.on item "dblclick" (fun _ -> goto ());
-      U.append_el host item)
+      Web_dom.el_on item "dblclick" (fun _ -> goto ());
+      Web_dom.el_append_child host item)
     hls
 
 and render_panel (t : t) : unit =
-  U.inner_html_set t.panels_el "";
+  Web_dom.el_set_inner_html t.panels_el "";
   if t.active_tab = "contents" then render_outline_panel t t.panels_el
   else render_highlights_panel t t.panels_el
 
 and toggle_outline (t : t) : unit =
   t.outline_visible <- not t.outline_visible;
-  U.el_class_toggle t.outline_wrap "visible" t.outline_visible;
+  Web_dom.el_class_toggle t.outline_wrap "visible" t.outline_visible;
   if t.outline_visible then (
     t.active_tab <- "contents";
     refresh_tabs t;
@@ -488,8 +486,8 @@ and toggle_outline (t : t) : unit =
       load_outlines t))
 
 and refresh_tabs (t : t) : unit =
-  U.el_class_toggle t.tab_contents "active" (t.active_tab = "contents");
-  U.el_class_toggle t.tab_hls "active" (t.active_tab = "highlights")
+  Web_dom.el_class_toggle t.tab_contents "active" (t.active_tab = "contents");
+  Web_dom.el_class_toggle t.tab_hls "active" (t.active_tab = "highlights")
 
 and set_tab (t : t) (tab : string) : unit =
   t.active_tab <- tab;
@@ -549,7 +547,7 @@ and close_finder (t : t) : unit =
 
 and do_find (t : t) (f : finder) ~type_ ~prev : unit =
   U.bus_dispatch t.bus "find"
-    (B.json_props
+    (Web_dom.json_props
        [ "source", Js.Json.null
        ; "type", Js.Json.string type_
        ; "query", Js.Json.string f.f_val
@@ -561,67 +559,60 @@ and do_find (t : t) (f : finder) ~type_ ~prev : unit =
 
 (* cljs result-inner *)
 and render_finder_state (_t : t) (f : finder) : unit =
-  U.inner_html_set f.result_inner "";
+  Web_dom.el_set_inner_html f.result_inner "";
   if f.f_entered && String.trim f.f_val <> "" then
     match f.f_status with
     | Some s when s <> 1 ->
-        let d = U.create_el "div" in
-        U.set_class d "flex px-3 py-3 text-xs opacity-90";
+        let d = Web_dom.create_element "div" in
+        Web_dom.el_set_class d "flex px-3 py-3 text-xs opacity-90";
         let cur' = max f.f_cur f.f_cur in
         let q = if f.f_query = "" then f.f_val else f.f_query in
-        U.set_text d
+        Web_dom.el_set_text_content d
           (I18n.sub (I18n.t "pdf/find-results")
              [ string_of_int cur'
              ; string_of_int f.f_total
              ; q ]);
-        U.append_el f.result_inner d
+        Web_dom.el_append_child f.result_inner d
     | Some 1 ->
-        let d = U.create_el "div" in
-        U.set_class d "px-3 py-3 text-xs opacity-80 text-red-600";
-        U.set_text d (I18n.t "pdf/not-found");
-        U.append_el f.result_inner d
+        let d = Web_dom.create_element "div" in
+        Web_dom.el_set_class d "px-3 py-3 text-xs opacity-80 text-red-600";
+        Web_dom.el_set_text_content d (I18n.t "pdf/not-found");
+        Web_dom.el_append_child f.result_inner d
     | _ -> ()
 
 (* shui ghost/xs button + tabler icon (cljs ui/button) *)
-and ghost_btn ?(extra = "") ~icon ~title ~onclick () : D.element =
-  let b = U.create_el "button" in
-  U.set_class b
-    ("ui__button inline-flex cursor-pointer items-center \
-      justify-center whitespace-nowrap rounded-md text-sm gap-1 \
-      font-medium ring-offset-background transition-colors \
-      focus-visible:outline-none focus-visible:ring-2 \
-      focus-visible:ring-ring focus-visible:ring-offset-2 \
-      disabled:pointer-events-none disabled:opacity-50 select-none \
-      hover:bg-secondary/70 hover:text-secondary-foreground \
-      active:opacity-80 as-ghost h-6 text-xs rounded px-3"
-    ^ if extra = "" then "" else " " ^ extra);
-  U.set_attr b "type" "button";
-  U.set_attr b "title" title;
-  U.append_el b (ticon icon);
-  U.on b "click" (fun e ->
-      D.stop_propagation e;
+and ghost_btn ?(extra = "") ~icon ~title ~onclick () : D.el =
+  let b = Web_dom.create_element "button" in
+  Web_dom.el_set_class b
+    (Ui_parts.ghost_btn_cls ~extra:("h-6 text-xs rounded px-3 " ^ extra)
+       ());
+  Web_dom.el_set_attr b "type" "button";
+  Web_dom.el_set_attr b "title" title;
+  Web_dom.el_append_child b (ticon icon);
+  Web_dom.el_on b "click" (fun e ->
+      D.ev_stop_propagation e;
       onclick ());
   b
 
 (* cljs pdf-finder DOM *)
 and mount_finder (t : t) : finder =
-  let wrap = U.create_el "div" in
-  U.set_class wrap "extensions__pdf-finder-wrap hls-popup-overlay visible";
-  let box = U.create_el "div" in
-  U.set_class box "extensions__pdf-finder hls-popup-box";
-  U.set_attr box "tabindex" "-1";
-  let inner = U.create_el "div" in
-  U.set_class inner "input-inner flex items-center";
-  let iw = U.create_el "div" in
-  U.set_class iw "input-wrap relative";
-  let input = U.create_el "input" in
-  U.set_attr input "placeholder" (I18n.t "pdf/search-placeholder");
-  U.set_attr input "type" "text";
-  U.set_attr input "autofocus" "true";
-  U.append_el iw input;
-  U.append_el inner iw;
-  let result_inner = U.create_el "div" in
-  U.set_class result_inner "result-inner";
+  let wrap = Web_dom.create_element "div" in
+  Web_dom.el_set_class wrap "extensions__pdf-finder-wrap hls-popup-overlay visible";
+  let box = Web_dom.create_element "div" in
+  Web_dom.el_set_class box "extensions__pdf-finder hls-popup-box";
+  Web_dom.el_set_attr box "tabindex" "-1";
+  let inner = Web_dom.create_element "div" in
+  Web_dom.el_set_class inner "input-inner flex items-center";
+  let iw = Web_dom.create_element "div" in
+  Web_dom.el_set_class iw "input-wrap relative";
+  let input = Web_dom.create_element "input" in
+  Web_dom.el_set_attr input "placeholder" (I18n.t "pdf/search-placeholder");
+  Web_dom.el_set_attr input "type" "text";
+  Web_dom.el_set_attr input "autofocus" "true";
+  Web_dom.el_append_child iw input;
+  Web_dom.el_append_child inner iw;
+  let result_inner = Web_dom.create_element "div" in
+  Web_dom.el_set_class result_inner "result-inner";
   let f =
     { wrap
     ; box
@@ -641,13 +632,13 @@ and mount_finder (t : t) : finder =
   let case_btn =
     ghost_btn ~icon:"letter-case" ~title:"" ~onclick:(fun () ->
         f.f_case <- not f.f_case;
-        U.el_class_toggle f.f_case_btn "active" f.f_case;
+        Web_dom.el_class_toggle f.f_case_btn "active" f.f_case;
         do_find t f ~type_:"casesensitivitychange" ~prev:false)
       ()
   in
   f.f_case_btn <- case_btn;
   List.iter
-    (fun b -> U.append_el inner b)
+    (fun b -> Web_dom.el_append_child inner b)
     [ case_btn
     ; ghost_btn ~icon:"chevron-up" ~title:"" ~onclick:(fun () ->
           do_find t f ~type_:"again" ~prev:true)
@@ -657,15 +648,15 @@ and mount_finder (t : t) : finder =
         ()
     ; ghost_btn ~icon:"x" ~title:"" ~onclick:(fun () -> close_finder t)
         () ];
-  U.on input "input" (fun _ ->
-      f.f_val <- U.el_value input;
+  Web_dom.el_on input "input" (fun _ ->
+      f.f_val <- Web_dom.el_value input;
       f.f_entered0 <- String.trim f.f_val <> "";
       f.f_entered <- false;
       refresh_go_btn t f iw);
-  U.on input "keyup" (fun e ->
-      match U.event_which e with
+  Web_dom.el_on input "keyup" (fun e ->
+      match Web_dom.ev_which e with
       | 13 ->
-          let shift = D.shift_key e in
+          let shift = D.ev_shift e in
           do_find t f ~type_:"again" ~prev:shift;
           f.f_entered <- true;
           render_finder_state t f
@@ -674,32 +665,32 @@ and mount_finder (t : t) : finder =
           else (
             reset_finder f t;
             f.f_val <- "";
-            U.set_el_value input "";
+            Web_dom.el_set_value input "";
             refresh_go_btn t f iw)
       | _ -> ());
   (* click outside (cljs: not in finder, target title != Search) *)
   let outside e =
     if f.f_val = "" then
-      match D.target e with
+      match D.ev_target e with
       | Some target ->
           if
-            U.event_target_title e <> Some "Search"
-            && not (U.el_contains_el box target)
+            Web_dom.ev_target_title e <> Some "Search"
+            && not (Web_dom.el_contains box target)
           then close_finder t
       | None -> ()
   in
   track_click t outside;
-  U.append_el box inner;
-  U.append_el box result_inner;
-  U.append_el wrap box;
-  U.append_el t.header wrap;
-  U.focus_el input;
+  Web_dom.el_append_child box inner;
+  Web_dom.el_append_child box result_inner;
+  Web_dom.el_append_child wrap box;
+  Web_dom.el_append_child t.header wrap;
+  Web_dom.el_focus input;
   f
 
 (* icon-enter button appears once input is non-empty *)
-and refresh_go_btn (t : t) (f : finder) (iw : D.element) : unit =
+and refresh_go_btn (t : t) (f : finder) (iw : D.el) : unit =
   (match f.f_go with
-   | Some b -> U.remove_el b
+   | Some b -> Web_dom.el_remove b
    | None -> ());
   f.f_go <- None;
   if f.f_entered0 then (
@@ -713,11 +704,11 @@ and refresh_go_btn (t : t) (f : finder) (iw : D.element) : unit =
         ()
     in
     f.f_go <- Some b;
-    U.append_el iw b)
+    Web_dom.el_append_child iw b)
 
 and render_finder_wrap (t : t) : unit =
   (match t.finder with
-   | Some f -> U.remove_el f.wrap
+   | Some f -> Web_dom.el_remove f.wrap
    | None -> ());
   t.finder <- None;
   if t.finder_visible then (
@@ -731,10 +722,10 @@ and toggle_finder (t : t) : unit =
 (* ---------- settings ---------- *)
 
 (* ui/toggle -> shui Switch sm (same shape as settings_page.switch_el) *)
-and switch_el ~on_ ~on_toggle : D.element =
+and switch_el ~on_ ~on_toggle : D.el =
   let chk = if on_ then "checked" else "unchecked" in
-  let s = U.create_el "span" in
-  U.set_class s
+  let s = Web_dom.create_element "span" in
+  Web_dom.el_set_class s
     "ui__switch peer inline-flex shrink-0 cursor-pointer items-center \
      rounded-full border-2 border-transparent transition-colors \
      focus-visible:outline-none focus-visible:ring-2 \
@@ -743,65 +734,65 @@ and switch_el ~on_ ~on_toggle : D.element =
      data-[checked]:justify-end data-[checked]:bg-primary \
      data-[unchecked]:justify-start data-[unchecked]:bg-input \
      pr-[1px] pl-[1px] h-4.5 w-8";
-  U.set_attr s "role" "switch";
-  U.set_attr s "aria-checked" (if on_ then "true" else "false");
-  U.set_attr s ("data-" ^ chk) "";
-  let th = U.create_el "span" in
-  U.set_class th
+  Web_dom.el_set_attr s "role" "switch";
+  Web_dom.el_set_attr s "aria-checked" (if on_ then "true" else "false");
+  Web_dom.el_set_attr s ("data-" ^ chk) "";
+  let th = Web_dom.create_element "span" in
+  Web_dom.el_set_class th
     "pointer-events-none block rounded-full bg-background shadow-lg \
      ring-0 transition-transform h-3 w-3";
-  U.set_attr th ("data-" ^ chk) "";
-  U.append_el s th;
-  U.on s "click" (fun _ -> on_toggle ());
+  Web_dom.el_set_attr th ("data-" ^ chk) "";
+  Web_dom.el_append_child s th;
+  Web_dom.el_on s "click" (fun _ -> on_toggle ());
   s
 
 and set_theme (t : t) (name : string) : unit =
   t.theme <- name;
   S.set_viewer_theme name;
-  (match U.get_el_by_id
+  (match Web_dom.get_element_by_id
            ("pdf-layout-container_"
            ^
            match !S.current with
            | Some a -> a.Model.pdf_identity
            | None -> "")
    with
-   | Some el -> U.dataset_set el "theme" name
+   | Some el -> Web_dom.el_dataset_set el "theme" name
    | None -> ());
   render_settings t
 
-and toggle_item between ~label ~on_ ~on_toggle : D.element =
-  let it = U.create_el "div" in
-  U.set_class it
+and toggle_item between ~label ~on_ ~on_toggle : D.el =
+  let it = Web_dom.create_element "div" in
+  Web_dom.el_set_class it
     ("extensions__pdf-settings-item toggle-input"
     ^ if between then " is-between" else "");
-  let l = U.create_el "label" in
-  U.set_text l label;
-  U.append_el it l;
-  U.append_el it (switch_el ~on_ ~on_toggle);
+  let l = Web_dom.create_element "label" in
+  Web_dom.el_set_text_content l label;
+  Web_dom.el_append_child it l;
+  Web_dom.el_append_child it (switch_el ~on_ ~on_toggle);
   it
 
 (* cljs pdf-settings overlay *)
 and render_settings (t : t) : unit =
   (match t.settings_el with
-   | Some el -> U.remove_el el
+   | Some el -> Web_dom.el_remove el
    | None -> ());
-  let wrap = U.create_el "div" in
-  U.set_class wrap "extensions__pdf-settings hls-popup-overlay visible";
-  let box = U.create_el "div" in
-  U.set_class box "extensions__pdf-settings-inner hls-popup-box";
-  U.set_attr box "tabindex" "-1";
-  let picker = U.create_el "div" in
-  U.set_class picker "extensions__pdf-settings-item theme-picker";
+  let wrap = Web_dom.create_element "div" in
+  Web_dom.el_set_class wrap "extensions__pdf-settings hls-popup-overlay visible";
+  let box = Web_dom.create_element "div" in
+  Web_dom.el_set_class box "extensions__pdf-settings-inner hls-popup-box";
+  Web_dom.el_set_attr box "tabindex" "-1";
+  let picker = Web_dom.create_element "div" in
+  Web_dom.el_set_class picker "extensions__pdf-settings-item theme-picker";
   List.iter
     (fun name ->
-      let b = U.create_el "button" in
-      U.set_class b ("flex items-center justify-center " ^ name);
-      if name = t.theme then U.append_el b (svg_check 16);
-      U.on b "click" (fun _ -> set_theme t name);
-      U.append_el picker b)
+      let b = Web_dom.create_element "button" in
+      Web_dom.el_set_class b ("flex items-center justify-center " ^ name);
+      if name = t.theme then Web_dom.el_append_child b (svg_check 16);
+      Web_dom.el_on b "click" (fun _ -> set_theme t name);
+      Web_dom.el_append_child picker b)
     [ "light"; "warm"; "dark" ];
-  U.append_el box picker;
-  U.append_el box
+  Web_dom.el_append_child box picker;
+  Web_dom.el_append_child box
     (toggle_item false
        ~label:(I18n.t "pdf/toggle-dashed")
        ~on_:(S.area_dashed ())
@@ -809,19 +800,19 @@ and render_settings (t : t) : unit =
          let v = not (S.area_dashed ()) in
          S.set_area_dashed v;
          (match
-            U.qs_in (U.container_el t.viewer) ".extensions__pdf-viewer"
+            Web_dom.el_query (U.container_el t.viewer) ".extensions__pdf-viewer"
           with
-          | Some vel -> U.el_class_toggle vel "is-area-dashed" v
+          | Some vel -> Web_dom.el_class_toggle vel "is-area-dashed" v
           | None -> ());
          render_settings t));
-  U.append_el box
+  Web_dom.el_append_child box
     (toggle_item true
        ~label:(I18n.t "pdf/hl-block-colored")
        ~on_:(S.hl_colored ())
        ~on_toggle:(fun () ->
          S.set_hl_colored (not (S.hl_colored ()));
          render_settings t));
-  U.append_el box
+  Web_dom.el_append_child box
     (toggle_item true
        ~label:(I18n.t "pdf/auto-open-context-menu")
        ~on_:(S.auto_open_ctx ())
@@ -829,35 +820,35 @@ and render_settings (t : t) : unit =
          S.set_auto_open_ctx (not (S.auto_open_ctx ()));
          render_settings t));
   (* doc metadata *)
-  let meta_item = U.create_el "div" in
-  U.set_class meta_item "extensions__pdf-settings-item toggle-input";
-  let a = U.create_el "a" in
-  U.set_class a "is-info w-full text-gray-500";
-  U.set_attr a "title" (I18n.t "pdf/doc-metadata");
-  let sp = U.create_el "span" in
-  U.set_class sp "flex items-center justify-between w-full";
-  U.set_text sp "";
-  let txt = U.create_el "span" in
-  U.set_text txt (I18n.t "pdf/doc-metadata");
-  U.append_el sp txt;
-  U.append_el sp (svg_icon_info 16);
-  U.append_el a sp;
-  U.on a "click" (fun _ -> open_docinfo t);
-  U.append_el meta_item a;
-  U.append_el box meta_item;
-  U.append_el wrap box;
-  U.append_el t.header wrap;
+  let meta_item = Web_dom.create_element "div" in
+  Web_dom.el_set_class meta_item "extensions__pdf-settings-item toggle-input";
+  let a = Web_dom.create_element "a" in
+  Web_dom.el_set_class a "is-info w-full text-gray-500";
+  Web_dom.el_set_attr a "title" (I18n.t "pdf/doc-metadata");
+  let sp = Web_dom.create_element "span" in
+  Web_dom.el_set_class sp "flex items-center justify-between w-full";
+  Web_dom.el_set_text_content sp "";
+  let txt = Web_dom.create_element "span" in
+  Web_dom.el_set_text_content txt (I18n.t "pdf/doc-metadata");
+  Web_dom.el_append_child sp txt;
+  Web_dom.el_append_child sp (svg_icon_info 16);
+  Web_dom.el_append_child a sp;
+  Web_dom.el_on a "click" (fun _ -> open_docinfo t);
+  Web_dom.el_append_child meta_item a;
+  Web_dom.el_append_child box meta_item;
+  Web_dom.el_append_child wrap box;
+  Web_dom.el_append_child t.header wrap;
   t.settings_el <- Some wrap;
-  U.focus_el box;
-  let esc e = if U.event_which e = 27 then close_settings t in
+  Web_dom.el_focus box;
+  let esc e = if Web_dom.ev_which e = 27 then close_settings t in
   t.key_listeners <- (box, esc) :: t.key_listeners;
-  U.on box "keyup" esc;
+  Web_dom.el_on box "keyup" esc;
   let outside e =
-    match D.target e with
+    match D.ev_target e with
     | Some target ->
         if
-          (not (U.el_contains_el box target))
-          && D.closest target ".ui__dialog-content" = None
+          (not (Web_dom.el_contains box target))
+          && D.el_closest target ".ui__dialog-content" = None
         then close_settings t
     | None -> ()
   in
@@ -866,7 +857,7 @@ and render_settings (t : t) : unit =
 and close_settings (t : t) : unit =
   (match t.settings_el with
    | Some el ->
-       U.remove_el el;
+       Web_dom.el_remove el;
        t.settings_el <- None
    | None -> ())
 
@@ -893,43 +884,43 @@ and open_docinfo (t : t) : unit =
            Js.Promise.resolve ()))
 
 and show_docinfo_modal (t : t) (info : Js.Json.t) : unit =
-  let ov = U.create_el "div" in
-  U.set_class ov
+  let ov = Web_dom.create_element "div" in
+  Web_dom.el_set_class ov
     "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
      justify-center items-center";
-  let content = U.create_el "div" in
-  U.set_class content
+  let content = Web_dom.create_element "div" in
+  Web_dom.el_set_class content
     "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full \
      max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background \
      p-6 shadow-lg ui__dialog-zoom-in";
-  U.set_attr content "data-state" "open";
-  U.set_attr content "role" "dialog";
-  U.style_set content "transform" "translate(-50%, -50%)";
-  let main = U.create_el "div" in
-  U.set_class main "ui__dialog-main-content";
-  let docinfo = U.create_el "div" in
-  U.set_attr docinfo "id" "pdf-docinfo";
-  U.set_class docinfo "extensions__pdf-doc-info";
-  let inner_text = U.create_el "div" in
-  U.set_class inner_text "inner-text";
+  Web_dom.el_set_attr content "data-state" "open";
+  Web_dom.el_set_attr content "role" "dialog";
+  Web_dom.el_style_set_property content "transform" "translate(-50%, -50%)";
+  let main = Web_dom.create_element "div" in
+  Web_dom.el_set_class main "ui__dialog-main-content";
+  let docinfo = Web_dom.create_element "div" in
+  Web_dom.el_set_attr docinfo "id" "pdf-docinfo";
+  Web_dom.el_set_class docinfo "extensions__pdf-doc-info";
+  let inner_text = Web_dom.create_element "div" in
+  Web_dom.el_set_class inner_text "inner-text";
   (match Js.Json.decodeObject info with
    | Some d ->
        Js.Dict.entries d
        |> Array.iter (fun (k, v) ->
-              let p = U.create_el "p" in
-              let st = U.create_el "strong" in
-              U.set_text st (k ^ "::");
-              U.append_el p st;
-              let it = U.create_el "i" in
-              U.set_text it (Js.Json.stringify v);
-              U.append_el p it;
-              U.append_el inner_text p)
+              let p = Web_dom.create_element "p" in
+              let st = Web_dom.create_element "strong" in
+              Web_dom.el_set_text_content st (k ^ "::");
+              Web_dom.el_append_child p st;
+              let it = Web_dom.create_element "i" in
+              Web_dom.el_set_text_content it (Js.Json.stringify v);
+              Web_dom.el_append_child p it;
+              Web_dom.el_append_child inner_text p)
    | None -> ());
-  U.append_el docinfo inner_text;
-  let foot = U.create_el "div" in
-  U.set_class foot "flex items-center justify-center pt-2 pb--2";
-  let copy = U.create_el "button" in
-  U.set_class copy
+  Web_dom.el_append_child docinfo inner_text;
+  let foot = Web_dom.create_element "div" in
+  Web_dom.el_set_class foot "flex items-center justify-center pt-2 pb--2";
+  let copy = Web_dom.create_element "button" in
+  Web_dom.el_set_class copy
     "ui__button inline-flex cursor-pointer items-center \
      justify-center whitespace-nowrap rounded-md text-sm gap-1 \
      font-medium ring-offset-background transition-colors \
@@ -939,125 +930,125 @@ and show_docinfo_modal (t : t) (info : Js.Json.t) : unit =
      bg-primary/90 hover:bg-primary/100 active:opacity-90 \
      text-primary-foreground hover:text-primary-foreground as-solid \
      h-7 rounded px-3 py-1";
-  U.set_attr copy "type" "button";
-  U.set_text copy (I18n.t "ui/copy-all");
-  let close_all () = U.remove_el ov in
-  U.on copy "click" (fun _ ->
-      Platform.copy_to_clipboard (U.inner_text inner_text);
+  Web_dom.el_set_attr copy "type" "button";
+  Web_dom.el_set_text_content copy (I18n.t "ui/copy-all");
+  let close_all () = Web_dom.el_remove ov in
+  Web_dom.el_on copy "click" (fun _ ->
+      Platform.copy_to_clipboard (Web_dom.el_inner_text inner_text);
       Toast.success (I18n.t "notification/copied");
       close_all ());
-  U.append_el foot copy;
-  U.append_el docinfo foot;
-  U.append_el main docinfo;
-  U.append_el content main;
-  U.append_el ov content;
-  U.on ov "click" (fun e ->
-      match D.target e with
+  Web_dom.el_append_child foot copy;
+  Web_dom.el_append_child docinfo foot;
+  Web_dom.el_append_child main docinfo;
+  Web_dom.el_append_child content main;
+  Web_dom.el_append_child ov content;
+  Web_dom.el_on ov "click" (fun e ->
+      match D.ev_target e with
           | Some target
-        when U.el_contains_el ov target
-             && not (U.el_contains_el content target) ->
+        when Web_dom.el_contains ov target
+             && not (Web_dom.el_contains content target) ->
           close_all ()
       | _ -> ());
-  U.append_el t.header ov
+  Web_dom.el_append_child t.header ov
 
 (* ---------- toolbar row ---------- *)
 
 and tool_btn (_t : t) ~title ?(is_active = false) icon onclick :
-    D.element =
-  let a = U.create_el "a" in
-  U.set_class a ("button" ^ if is_active then " is-active" else "");
-  U.set_attr a "title" title;
-  U.append_el a icon;
-  U.on a "click" (fun e ->
-      D.stop_propagation e;
+    D.el =
+  let a = Web_dom.create_element "a" in
+  Web_dom.el_set_class a ("button" ^ if is_active then " is-active" else "");
+  Web_dom.el_set_attr a "title" title;
+  Web_dom.el_append_child a icon;
+  Web_dom.el_on a "click" (fun e ->
+      D.ev_stop_propagation e;
       onclick ());
   a
 
-and mount_pager (t : t) (host : D.element) : unit =
-  let pager = U.create_el "div" in
-  U.set_class pager "pager flex items-center ml-1";
-  let nu = U.create_el "span" in
-  U.set_class nu "nu flex items-center opacity-70";
-  let input = U.create_el "input" in
-  U.set_attr input "type" "number";
-  U.set_attr input "min" "1";
-  U.set_el_value input "1";
-  U.on input "mouseenter" (fun _ -> U.select_el input);
-  U.on input "keyup" (fun e ->
-      let v = int_of_string_opt (String.trim (U.el_value input)) in
+and mount_pager (t : t) (host : D.el) : unit =
+  let pager = Web_dom.create_element "div" in
+  Web_dom.el_set_class pager "pager flex items-center ml-1";
+  let nu = Web_dom.create_element "span" in
+  Web_dom.el_set_class nu "nu flex items-center opacity-70";
+  let input = Web_dom.create_element "input" in
+  Web_dom.el_set_attr input "type" "number";
+  Web_dom.el_set_attr input "min" "1";
+  Web_dom.el_set_value input "1";
+  Web_dom.el_on input "mouseenter" (fun _ -> Web_dom.el_select_text input);
+  Web_dom.el_on input "keyup" (fun e ->
+      let v = int_of_string_opt (String.trim (Web_dom.el_value input)) in
       (match v with
        | Some n -> (
            t.page_cur <- n;
-           U.el_class_toggle input "is-long" (n > 999);
-           if U.event_key_code e = 13 && n > 0 then
+           Web_dom.el_class_toggle input "is-long" (n > 999);
+           if Web_dom.ev_key_code e = 13 && n > 0 then
              U.set_current_page t.viewer (min n t.page_total)
            else ())
        | None -> ());
       ());
   t.page_input <- Some input;
-  let small = U.create_el "small" in
-  U.set_text small ("/ " ^ string_of_int t.page_total);
+  let small = Web_dom.create_element "small" in
+  Web_dom.el_set_text_content small ("/ " ^ string_of_int t.page_total);
   t.total_small <- Some small;
-  U.append_el nu input;
-  U.append_el nu small;
-  U.append_el pager nu;
-  let ct = U.create_el "span" in
-  U.set_class ct "ct flex items-center";
-  let prev = U.create_el "a" in
-  U.set_class prev "button";
-  U.append_el prev (svg_up_narrow 16);
-  U.on prev "click" (fun _ -> U.previous_page t.viewer);
-  let next = U.create_el "a" in
-  U.set_class next "button";
-  U.append_el next (svg_down_narrow 16);
-  U.on next "click" (fun _ -> U.next_page t.viewer);
-  U.append_el ct prev;
-  U.append_el ct next;
-  U.append_el pager ct;
-  U.append_el host pager
+  Web_dom.el_append_child nu input;
+  Web_dom.el_append_child nu small;
+  Web_dom.el_append_child pager nu;
+  let ct = Web_dom.create_element "span" in
+  Web_dom.el_set_class ct "ct flex items-center";
+  let prev = Web_dom.create_element "a" in
+  Web_dom.el_set_class prev "button";
+  Web_dom.el_append_child prev (svg_up_narrow 16);
+  Web_dom.el_on prev "click" (fun _ -> U.previous_page t.viewer);
+  let next = Web_dom.create_element "a" in
+  Web_dom.el_set_class next "button";
+  Web_dom.el_append_child next (svg_down_narrow 16);
+  Web_dom.el_on next "click" (fun _ -> U.next_page t.viewer);
+  Web_dom.el_append_child ct prev;
+  Web_dom.el_append_child ct next;
+  Web_dom.el_append_child pager ct;
+  Web_dom.el_append_child host pager
 
 (* cljs pdf-outline-&-highlights wrap (always mounted, .visible gate) *)
 and mount_outline_wrap (t : t) : unit =
-  let wrap = U.create_el "div" in
-  U.set_class wrap "extensions__pdf-outline-wrap hls-popup-overlay";
-  let box = U.create_el "div" in
-  U.set_class box "extensions__pdf-outline hls-popup-box";
-  U.set_attr box "tabindex" "-1";
-  let tabs = U.create_el "div" in
-  U.set_class tabs "extensions__pdf-outline-tabs";
-  let inner = U.create_el "div" in
-  U.set_class inner "inner";
-  let bc = U.create_el "button" in
-  U.set_class bc "active";
-  U.set_text bc (I18n.t "page/contents");
-  U.on bc "click" (fun _ -> set_tab t "contents");
-  let bh = U.create_el "button" in
-  U.set_text bh (I18n.t "pdf/highlights");
-  U.on bh "click" (fun _ -> set_tab t "highlights");
+  let wrap = Web_dom.create_element "div" in
+  Web_dom.el_set_class wrap "extensions__pdf-outline-wrap hls-popup-overlay";
+  let box = Web_dom.create_element "div" in
+  Web_dom.el_set_class box "extensions__pdf-outline hls-popup-box";
+  Web_dom.el_set_attr box "tabindex" "-1";
+  let tabs = Web_dom.create_element "div" in
+  Web_dom.el_set_class tabs "extensions__pdf-outline-tabs";
+  let inner = Web_dom.create_element "div" in
+  Web_dom.el_set_class inner "inner";
+  let bc = Web_dom.create_element "button" in
+  Web_dom.el_set_class bc "active";
+  Web_dom.el_set_text_content bc (I18n.t "page/contents");
+  Web_dom.el_on bc "click" (fun _ -> set_tab t "contents");
+  let bh = Web_dom.create_element "button" in
+  Web_dom.el_set_text_content bh (I18n.t "pdf/highlights");
+  Web_dom.el_on bh "click" (fun _ -> set_tab t "highlights");
   t.tab_contents <- bc;
   t.tab_hls <- bh;
-  U.append_el inner bc;
-  U.append_el inner bh;
-  U.append_el tabs inner;
-  let panels = U.create_el "div" in
-  U.set_class panels "extensions__pdf-outline-panels";
+  Web_dom.el_append_child inner bc;
+  Web_dom.el_append_child inner bh;
+  Web_dom.el_append_child tabs inner;
+  let panels = Web_dom.create_element "div" in
+  Web_dom.el_set_class panels "extensions__pdf-outline-panels";
   t.panels_el <- panels;
-  U.append_el box tabs;
-  U.append_el box panels;
-  U.append_el wrap box;
+  Web_dom.el_append_child box tabs;
+  Web_dom.el_append_child box panels;
+  Web_dom.el_append_child wrap box;
   t.outline_wrap <- wrap;
-  U.append_el t.header wrap;
+  Web_dom.el_append_child t.header wrap;
   (* cljs outside-click: closes unless target is the Outline button *)
   let outside e =
     if t.outline_visible then
-      match D.target e with
+      match D.ev_target e with
       | Some target ->
           if
-            U.event_target_title e <> Some "Outline"
-            && not (U.el_contains_el box target)
+            Web_dom.ev_target_title e <> Some "Outline"
+            && not (Web_dom.el_contains box target)
           then (
             t.outline_visible <- false;
-            U.el_class_rm wrap "visible";
+            Web_dom.el_class_remove wrap "visible";
             t.active_tab <- "contents";
             refresh_tabs t;
             render_panel t)
@@ -1066,19 +1057,19 @@ and mount_outline_wrap (t : t) : unit =
   track_click t outside
 
 (* public entry — cljs pdf-toolbar *)
-and mount ~(viewer : S.viewer) ~(parent : D.element)
+and mount ~(viewer : S.viewer) ~(parent : D.el)
     ~(bus : Js.Json.t) : unit =
-  let header = U.create_el "div" in
-  U.set_class header "extensions__pdf-header";
-  let tbar = U.create_el "div" in
-  U.set_class tbar "extensions__pdf-toolbar";
-  let inner = U.create_el "div" in
-  U.set_class inner "inner";
-  let buttons = U.create_el "div" in
-  U.set_class buttons "r flex buttons";
-  U.append_el inner buttons;
-  U.append_el tbar inner;
-  U.append_el header tbar;
+  let header = Web_dom.create_element "div" in
+  Web_dom.el_set_class header "extensions__pdf-header";
+  let tbar = Web_dom.create_element "div" in
+  Web_dom.el_set_class tbar "extensions__pdf-toolbar";
+  let inner = Web_dom.create_element "div" in
+  Web_dom.el_set_class inner "inner";
+  let buttons = Web_dom.create_element "div" in
+  Web_dom.el_set_class buttons "r flex buttons";
+  Web_dom.el_append_child inner buttons;
+  Web_dom.el_append_child tbar inner;
+  Web_dom.el_append_child header tbar;
   let t =
     { viewer
     ; bus
@@ -1106,36 +1097,36 @@ and mount ~(viewer : S.viewer) ~(parent : D.element)
   cur := Some t;
   mount_buttons t buttons;
   mount_pager t buttons;
-  let close = U.create_el "a" in
-  U.set_class close "button";
-  U.set_text close (I18n.t "ui/close");
-  U.on close "click" (fun _ -> S.set_current None);
-  U.append_el buttons close;
+  let close = Web_dom.create_element "a" in
+  Web_dom.el_set_class close "button";
+  Web_dom.el_set_text_content close (I18n.t "ui/close");
+  Web_dom.el_on close "click" (fun _ -> S.set_current None);
+  Web_dom.el_append_child buttons close;
   mount_outline_wrap t;
   wire_bus t;
   t.page_total <- U.num_pages viewer;
   (match t.total_small with
-   | Some s -> U.set_text s ("/ " ^ string_of_int t.page_total)
+   | Some s -> Web_dom.el_set_text_content s ("/ " ^ string_of_int t.page_total)
    | None -> ());
   t.page_cur <- U.current_page viewer;
   (match t.page_input with
    | Some i ->
-       U.set_el_value i (string_of_int t.page_cur);
-       U.el_class_toggle i "is-long" (t.page_cur > 999)
+       Web_dom.el_set_value i (string_of_int t.page_cur);
+       Web_dom.el_class_toggle i "is-long" (t.page_cur > 999)
    | None -> ());
   dispatch_extra t;
   apply_theme t;
-  U.append_el parent header
+  Web_dom.el_append_child parent header
 
 and apply_theme (t : t) : unit =
   match !S.current with
   | Some a -> (
-      match U.get_el_by_id ("pdf-layout-container_" ^ a.Model.pdf_identity) with
-      | Some el -> U.dataset_set el "theme" t.theme
+      match Web_dom.get_element_by_id ("pdf-layout-container_" ^ a.Model.pdf_identity) with
+      | Some el -> Web_dom.el_dataset_set el "theme" t.theme
       | None -> ())
   | None -> ()
 
-and mount_buttons (t : t) (buttons : D.element) : unit =
+and mount_buttons (t : t) (buttons : D.el) : unit =
   let area_title =
     I18n.sub
       (I18n.t "pdf/area-highlight-shortcut")
@@ -1148,7 +1139,7 @@ and mount_buttons (t : t) (buttons : D.element) : unit =
         S.area_mode := not !S.area_mode;
         match !area_btn_ref with
         | Some el ->
-            U.el_class_toggle el "is-active" !S.area_mode
+            Web_dom.el_class_toggle el "is-active" !S.area_mode
         | None -> ())
   in
   area_btn_ref := Some area_btn;
@@ -1159,37 +1150,37 @@ and mount_buttons (t : t) (buttons : D.element) : unit =
         S.highlight_mode := not !S.highlight_mode;
         match !hl_btn_ref with
         | Some el ->
-            U.el_class_toggle el "is-active" !S.highlight_mode
+            Web_dom.el_class_toggle el "is-active" !S.highlight_mode
         | None -> ())
   in
   hl_btn_ref := Some hl_btn;
-  U.append_el buttons
+  Web_dom.el_append_child buttons
     (tool_btn t ~title:(I18n.t "pdf/more-settings")
        (svg_adjustments 18) (fun () -> toggle_settings t));
-  U.append_el buttons area_btn;
-  U.append_el buttons hl_btn;
-  U.append_el buttons
+  Web_dom.el_append_child buttons area_btn;
+  Web_dom.el_append_child buttons hl_btn;
+  Web_dom.el_append_child buttons
     (tool_btn t ~title:(I18n.t "pdf/zoom-out") (svg_zoom_out 18)
        (fun () ->
          U.zoom_out t.viewer;
          dispatch_extra t));
-  U.append_el buttons
+  Web_dom.el_append_child buttons
     (tool_btn t ~title:(I18n.t "pdf/zoom-in") (svg_zoom_in 18)
        (fun () ->
          U.zoom_in t.viewer;
          dispatch_extra t));
-  U.append_el buttons
+  Web_dom.el_append_child buttons
     (tool_btn t ~title:(I18n.t "pdf/auto-fit") (svg_auto_fit 18)
        (fun () ->
          U.reset_viewer_auto t.viewer;
          dispatch_extra t));
-  U.append_el buttons
+  Web_dom.el_append_child buttons
     (tool_btn t ~title:(I18n.t "pdf/outline") (svg_view_list 16)
        (fun () -> toggle_outline t));
-  U.append_el buttons
+  Web_dom.el_append_child buttons
     (tool_btn t ~title:(I18n.t "pdf/search") (svg_search2 19)
        (fun () -> toggle_finder t));
-  U.append_el buttons
+  Web_dom.el_append_child buttons
     (tool_btn t ~title:(I18n.t "pdf/annotations-page")
        (svg_annotations 16) (fun () ->
          match !S.current with
@@ -1198,7 +1189,7 @@ and mount_buttons (t : t) (buttons : D.element) : unit =
          | _ -> ()));
   (* cljs renders the system-window button on web too; the handler is
      Electron-only so it is a no-op here *)
-  U.append_el buttons
+  Web_dom.el_append_child buttons
     (tool_btn t ~title:(I18n.t "pdf/open-in-external-window")
        (ticon "window-maximize") (fun () -> ()))
 
@@ -1210,8 +1201,8 @@ and wire_bus (t : t) : unit =
           t.page_cur <- n;
           (match t.page_input with
            | Some i ->
-               U.set_el_value i (string_of_int n);
-               U.el_class_toggle i "is-long" (n > 999)
+               Web_dom.el_set_value i (string_of_int n);
+               Web_dom.el_class_toggle i "is-long" (n > 999)
            | None -> ());
           dispatch_extra t
       | None -> ());

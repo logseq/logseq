@@ -15,8 +15,7 @@
    and doesn't exactly match an item. *)
 
 open Promise_ext
-open Editor_dom
-open Properties_dom
+open Web_dom
 
 type item =
   { it_title : string
@@ -38,8 +37,8 @@ type select_config =
   ; on_search : (string -> item list Js.Promise.t) option
         (* async item source — bypasses the static substring filter *)
   ; mutable searched : item list option
-  ; mutable results_inner : Editor_dom.el option
-  ; mutable results_py : Editor_dom.el option
+  ; mutable results_inner : Web_dom.el option
+  ; mutable results_py : Web_dom.el option
   }
 
 let item ?(tip = "") ?(icon = "") ?(strong = false) title on_choose =
@@ -109,8 +108,8 @@ let repaint_chosen cfg =
   | None -> ()
   | Some inner ->
       let links = el_query_all inner "a.menu-link" in
-      for i = 0 to node_list_length links - 1 do
-        match node_list_item links i with
+      for i = 0 to nl_length links - 1 do
+        match nl_item links i with
         | Some el ->
             el_set_class el
               ("menu-link"
@@ -145,14 +144,14 @@ let item_el idx cfg it =
   let strong =
     mk ~cls:"ls-normal" (if it.it_strong then "strong" else "span")
   in
-  el_set_text strong
+  el_set_text_content strong
     (if it.it_new then I18n.t1 "select/new-option-label" it.it_title
      else it.it_title);
   (* cljs property select renders a leading type icon (letter-t /
      puzzle) inside .pt-1 as a ui/icon svg *)
   if it.it_icon <> "" then (
     let ic = mk ~cls:"ls-pt" "span" in
-    el_append_child ic (ui_icon_el ~cls:"ls-icon-dim" it.it_icon);
+    el_append_child ic (icon ~cls:"ls-icon-dim" it.it_icon);
     el_append_child label_span ic);
   el_append_child label_span strong;
   el_append_child inner3 label_span;
@@ -168,7 +167,7 @@ let item_el idx cfg it =
 
 let rebuild_results cfg results_inner =
   cfg.results_inner <- Some results_inner;
-  el_clear results_inner;
+  el_replace_children results_inner;
   let vis = visible_items cfg in
   if cfg.chosen >= List.length vis then cfg.chosen <- 0;
   List.iteri
@@ -258,10 +257,10 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
   el_listen input "keydown"
     (fun ev ->
       match ev_key ev with
-      | "ArrowDown" -> prevent_default ev; move cfg results_inner 1
-      | "ArrowUp" -> prevent_default ev; move cfg results_inner (-1)
-      | "Enter" -> prevent_default ev; pick cfg
-      | "Escape" -> prevent_default ev; cfg.on_escape ()
+      | "ArrowDown" -> ev_prevent_default ev; move cfg results_inner 1
+      | "ArrowUp" -> ev_prevent_default ev; move cfg results_inner (-1)
+      | "Enter" -> ev_prevent_default ev; pick cfg
+      | "Escape" -> ev_prevent_default ev; cfg.on_escape ()
       | _ -> ())
     true;
   rebuild_results cfg results_inner;

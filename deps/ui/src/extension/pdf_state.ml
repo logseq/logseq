@@ -76,10 +76,10 @@ let set_hl_colored v =
   storage_set "ls-pdf-hl-block-is-colored" v;
   (* .theme-container-inner carries ls-hl-colored — flip it live; the
      class_signal recomputes from storage on the next publish too *)
-  (match Browser_ui.qs ".theme-container-inner" with
+  (match Web_dom.query_selector ".theme-container-inner" with
    | Some el ->
-       if v then Browser_ui.add_class el "ls-hl-colored"
-       else Browser_ui.rm_class el "ls-hl-colored"
+       if v then Web_dom.el_class_add el "ls-hl-colored"
+       else Web_dom.el_class_remove el "ls-hl-colored"
    | None -> ())
 
 let auto_open_ctx () =
@@ -97,9 +97,9 @@ let set_viewer_theme t =
   match !current with
   | Some a -> (
       match
-        Browser_ui.qs ("#pdf-layout-container_" ^ a.Model.pdf_identity)
+        Web_dom.query_selector ("#pdf-layout-container_" ^ a.Model.pdf_identity)
       with
-      | Some el -> Browser_ui.set_attr el "data-theme" t
+      | Some el -> Web_dom.el_set_attr el "data-theme" t
       | None -> ())
   | None -> ()
 

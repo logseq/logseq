@@ -4,8 +4,6 @@
 
 open Lui_elements
 module D = Render_dom
-module B = Browser_ui
-
 (* ---------- cljs area-display ---------- *)
 
 (* per-block resolved hl-image record: src drives the async render *)
@@ -70,17 +68,17 @@ let copy_image_to_clipboard src =
 (* ---------- cljs open-lightbox! (.hl-area img, y/x sorted, clicked
    first) ---------- *)
 
-external img_nat_w : Dom_ext.element -> float = "naturalWidth"
+external img_nat_w : Web_dom.el -> float = "naturalWidth"
   [@@mel.get]
 
-external img_nat_h : Dom_ext.element -> float = "naturalHeight"
+external img_nat_h : Web_dom.el -> float = "naturalHeight"
   [@@mel.get]
 
-external el_y : Dom_ext.element -> float = "offsetTop" [@@mel.get]
+external el_y : Web_dom.el -> float = "offsetTop" [@@mel.get]
 
-external el_x : Dom_ext.element -> float = "offsetLeft" [@@mel.get]
+external el_x : Web_dom.el -> float = "offsetLeft" [@@mel.get]
 
-let hl_area_imgs () = Pdf_utils.qs_all_doc ".hl-area img"
+let hl_area_imgs () = Web_dom.query_selector_all_arr ".hl-area img"
 
 let open_hl_lightbox ?clicked_id () =
   let imgs = hl_area_imgs () in
@@ -98,7 +96,7 @@ let open_hl_lightbox ?clicked_id () =
           let rec find i =
             if i >= n then 0
             else if
-              Option.value (Pdf_utils.get_attr sorted.(i) "id")
+              Option.value (Web_dom.el_get_attr sorted.(i) "id")
                 ~default:""
               = id
             then i
@@ -110,13 +108,13 @@ let open_hl_lightbox ?clicked_id () =
     let items =
       Array.init n (fun j ->
           let img = sorted.((idx + j) mod n) in
-          B.json_props
+          Web_dom.json_props
             [ "src",
-              B.str_to_json
-                (Option.value (Pdf_utils.get_attr img "src")
+              Js.Json.string
+                (Option.value (Web_dom.el_get_attr img "src")
                    ~default:"")
-            ; "w", B.str_to_json (Printf.sprintf "%.0f" (img_nat_w img))
-            ; "h", B.str_to_json (Printf.sprintf "%.0f" (img_nat_h img)) ])
+            ; "w", Js.Json.string (Printf.sprintf "%.0f" (img_nat_w img))
+            ; "h", Js.Json.string (Printf.sprintf "%.0f" (img_nat_h img)) ])
     in
     Asset_dom.preview_images items
   end

@@ -11,16 +11,16 @@ open Promise_ext
 
 external window_ : Js.Json.t = "window" [@@mel.scope "globalThis"]
 external getf : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
-external as_any : 'a -> Js.Json.t = "%identity"
-external as_promise : Js.Json.t -> Js.Json.t Js.Promise.t = "%identity"
-
 external reflect_apply :
   Js.Json.t -> Js.Json.t -> Js.Json.t array -> Js.Json.t = "apply"
   [@@mel.scope "Reflect"]
 
-external jstr_ : string -> Js.Json.t = "%identity"
+external reflect_apply_promise :
+  Js.Json.t -> Js.Json.t -> Js.Json.t array -> 'a Js.Promise.t = "apply"
+  [@@mel.scope "Reflect"]
 
 let meth o m args : Js.Json.t = reflect_apply (getf o m) o args
+let meth_promise o m args = reflect_apply_promise (getf o m) o args
 external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 
 external json_stringify : Js.Json.t -> string = "stringify"
@@ -73,9 +73,8 @@ let is_electron () : bool =
 let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
   let apis = getf window_ "apis" in
   let* result =
-    as_promise
-      (meth apis "doAction"
-         [| jstr_ (Transit.to_string (Wire.Array args)) |])
+    meth_promise apis "doAction"
+      [| Js.Json.string (Transit.to_string (Wire.Array args)) |]
   in
   Js.Promise.resolve
     (match Js.Json.decodeString result with
@@ -98,15 +97,15 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
   let* resp =
     fetch_ (base_url ^ "/v1/invoke")
       (jobj
-         [ "method", jstr_ "POST"
-         ; "headers", jobj [ "Content-Type", jstr_ "application/json" ]
+         [ "method", Js.Json.string "POST"
+         ; "headers", jobj [ "Content-Type", Js.Json.string "application/json" ]
          ; ( "body"
-           , jstr_
+           , Js.Json.string
                (json_stringify
                   (jobj
-                     [ "method", jstr_ name
+                     [ "method", Js.Json.string name
                      ; ( "argsTransit"
-                       , jstr_ (Transit.to_string (Wire.Array args)) )
+                       , Js.Json.string (Transit.to_string (Wire.Array args)) )
                      ])) )
          ])
   in

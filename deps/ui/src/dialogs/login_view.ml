@@ -19,8 +19,8 @@ let client_id = Rtc_ops.client_id
 let oauth_token_url = Rtc_ops.oauth_token_url
 
 let field_value name =
-  match Browser_ui.qs (".cp__user-login input[name=" ^ name ^ "]") with
-  | Some el -> Browser_ui.value el
+  match Web_dom.query_selector (".cp__user-login input[name=" ^ name ^ "]") with
+  | Some el -> Web_dom.el_value el
   | None -> ""
 
 let json_str s = Js.Json.string s
@@ -120,10 +120,10 @@ let set_tab ctx tab =
   set_auth ctx (fun a -> { a with tab; err = "" });
   (* autofocus alone doesn't refire on a patched-in node *)
   ignore
-    (Browser_ui.set_timeout
+    (Web_dom.set_timeout
        (fun () ->
-         match Browser_ui.qs ".cp__user-login [autofocus]" with
-         | Some el -> Browser_ui.focus el
+         match Web_dom.query_selector ".cp__user-login [autofocus]" with
+         | Some el -> Web_dom.el_focus el
          | None -> ())
        32)
 

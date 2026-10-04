@@ -7,8 +7,7 @@
    imperatively via Views_popup with an id-addressable node as anchor. *)
 
 module D = Logseq_dom
-module E = Views_el
-module Ed = Editor_dom
+module E = Web_dom
 module I = I18n
 module V = Views_state
 module Wr = Views_wire
@@ -89,7 +88,7 @@ let view_tab inst (v : Wr.view_ent) : t =
     ~on_dom_event:(fun name _ ->
       if name = "click" then
         if (V.get inst).V.view_uuid = v.Wr.vu then
-          match Ed.get_element_by_id (view_tab_anchor_id inst v) with
+          match E.get_element_by_id (view_tab_anchor_id inst v) with
           | Some b ->
               ignore
                 (P.show_menu ~anchor:b
@@ -197,13 +196,13 @@ let sorting_popup inst anchor =
             in
             (* one click flips asc/desc (same outcome as the cljs select,
                minus a nested popup that would detach this menu) *)
-            E.el_add_listener order_btn "click" (fun ev ->
-                Ed.stop_propagation ev;
+            E.el_on order_btn "click" (fun ev ->
+                E.ev_stop_propagation ev;
                 set_asc so (not so.V.s_asc));
             let remove_btn = E.h ~tag:"button" ~cls:"ls-sort-x" () in
             E.el_append_child remove_btn (E.icon "x");
-            E.el_add_listener remove_btn "click" (fun ev ->
-                Ed.stop_propagation ev;
+            E.el_on remove_btn "click" (fun ev ->
+                E.ev_stop_propagation ev;
                 remove_sort so);
             [ P.MCustom
                 (E.h ~cls:"ls-view-order-setting"
@@ -235,7 +234,7 @@ let sorting_popup inst anchor =
                      ]
                    ()
                in
-               E.el_add_listener btn "click" (fun _ ->
+               E.el_on btn "click" (fun _ ->
                    V.update inst (fun s -> { s with V.sorting = [] });
                    V.persist_sorting inst;
                    P.close_all ();
@@ -301,7 +300,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
       E.el_append_child inner
         (E.h ~cls:"item-results-wrap" ~children:[ results ] ());
       let render_items q =
-        E.clear results;
+        E.el_replace_children results;
         List.iter
           (fun it ->
             if Fuzzy.score q it.P.si_label > 0. then begin
@@ -313,7 +312,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
                         ~text:it.P.si_label () ]
                   ()
               in
-              E.el_add_listener a "click" (fun _ ->
+              E.el_on a "click" (fun _ ->
                   P.close_all ();
                   set_filters inst
                     ((V.get inst).V.filters
@@ -329,8 +328,8 @@ let filter_value_phase inst ~anchor (c : V.column) =
           items
       in
       render_items "";
-      E.el_add_listener inp "input" (fun _ ->
-          render_items (Editor_dom.el_value inp));
+      E.el_on inp "input" (fun _ ->
+          render_items (Web_dom.el_value inp));
       E.el_append_child content inner;
       (if ident <> "block/created-at" && ident <> "block/updated-at" then begin
          let mk label op =
@@ -340,7 +339,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
                  [ E.h ~tag:"span" ~cls:"ls-op-label" ~text:label () ]
                ()
            in
-           E.el_add_listener b "click" (fun _ ->
+           E.el_on b "click" (fun _ ->
                P.close_all ();
                set_filters inst
                  ((V.get inst).V.filters
@@ -362,7 +361,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
       E.el_append_child P.document_body pop;
       P.position_content ~anchor ~content:pop ~align_end:true ~submenu:false;
       P.push_popup pop;
-      Ed.set_timeout (fun () -> Ed.el_focus inp) 0)
+      E.set_timeout (fun () -> E.el_focus inp) 0)
 
 let filter_popup inst anchor =
   let s = V.get inst in
@@ -433,7 +432,7 @@ let groupable_columns inst =
   else cols
 
 let rec show_more_menu inst =
-  match Ed.get_element_by_id ("vmore-" ^ string_of_int inst.V.id) with
+  match E.get_element_by_id ("vmore-" ^ string_of_int inst.V.id) with
   | None -> ()
   | Some anchor ->
           let s = V.get inst in
@@ -528,7 +527,7 @@ let display_type_el inst : t =
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       if name = "click" then
-        match Ed.get_element_by_id wrap_id with
+        match E.get_element_by_id wrap_id with
         | Some anchor ->
             let set dt =
               V.update inst (fun s -> { s with V.display_type = dt });
@@ -571,10 +570,10 @@ let search_el inst : t =
         [ ghost_btn "search" ~on_click:(fun () ->
               if not (V.get inst).V.search_open then begin
                 V.update inst (fun s -> { s with V.search_open = true });
-                Ed.set_timeout
+                E.set_timeout
                   (fun () ->
-                    match Ed.get_element_by_id input_id with
-                    | Some el -> E.focus_end el
+                    match E.get_element_by_id input_id with
+                    | Some el -> E.el_focus el
                     | None -> ())
                   0
               end)
@@ -654,7 +653,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
         ~events:"click"
         ~on_dom_event:(fun name _ ->
           if name = "click" then
-            match Ed.get_element_by_id op_btn_id with
+            match E.get_element_by_id op_btn_id with
             | None -> ()
             | Some anchor ->
                 let prop =
@@ -797,7 +796,7 @@ let render_head inst : t =
                ~on_dom_event:(fun name _ ->
                  if name = "click" then
                    match
-                     Ed.get_element_by_id
+                     E.get_element_by_id
                        ("vsort-" ^ string_of_int inst.V.id)
                    with
                    | Some a -> sorting_popup inst a
@@ -812,7 +811,7 @@ let render_head inst : t =
             ~on_dom_event:(fun name _ ->
               if name = "click" then
                 match
-                  Ed.get_element_by_id
+                  E.get_element_by_id
                     ("vfilter-" ^ string_of_int inst.V.id)
                 with
                 | Some a -> filter_popup inst a

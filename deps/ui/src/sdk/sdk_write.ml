@@ -497,7 +497,7 @@ let insert_batch_block a b c _d =
               (Wire.elems w)
           in
           resolved
-            (Sdk_convert.json_arr
+            (Js.Json.array
                (Array.of_list
                   (List.map Sdk_convert.json_of_wire
                      blocks))))

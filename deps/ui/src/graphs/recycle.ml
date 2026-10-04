@@ -8,8 +8,6 @@
 
 open Promise_ext
 module T = I18n
-module B = Browser_ui
-
 let repo () =
   match (Runtime.model ()).Model.repo with Some r -> r | None -> "logseq_db_Demo"
 
@@ -76,7 +74,7 @@ and delete_forever uuid title is_page host =
     if is_page then T.recycle_delete_confirm_page
     else T.recycle_delete_confirm_block
   in
-  if B.confirm msg then
+  if Web_dom.win_confirm msg then
     ignore
       (let* _ = (outliner_op "recycle-delete-permanently" uuid) in
       Toast.success title;
@@ -84,40 +82,40 @@ and delete_forever uuid title is_page host =
       Js.Promise.resolve ())
 
 and ghost_btn label on_click =
-  let b = B.create "button" in
-  B.set_attr b "type" "button";
-  B.set_class b "!py-0 !px-1 h-4";
-  B.set_text b label;
-  B.add_listener b "click" (fun _ -> on_click ());
+  let b = Web_dom.create_element "button" in
+  Web_dom.el_set_attr b "type" "button";
+  Web_dom.el_set_class b "!py-0 !px-1 h-4";
+  Web_dom.el_set_text_content b label;
+  Web_dom.el_on b "click" (fun _ -> on_click ());
   b
 
 and root_header root host =
   let uuid = uuid_of root and title = title_of root and page = is_page root in
-  let hdr = B.create "div" in
-  B.set_class hdr
+  let hdr = Web_dom.create_element "div" in
+  Web_dom.el_set_class hdr
     "flex items-center justify-between gap-4 text-xs \
      text-muted-foreground";
-  let left = B.create "div" in
-  B.set_class left "flex items-center gap-1 min-w-0 flex-1";
-  let truncw = B.create "div" in
-  B.set_class truncw "min-w-0";
-  let txt = B.create "div" in
-  B.set_class txt "truncate";
-  B.set_text txt
+  let left = Web_dom.create_element "div" in
+  Web_dom.el_set_class left "flex items-center gap-1 min-w-0 flex-1";
+  let truncw = Web_dom.create_element "div" in
+  Web_dom.el_set_class truncw "min-w-0";
+  let txt = Web_dom.create_element "div" in
+  Web_dom.el_set_class txt "truncate";
+  Web_dom.el_set_text_content txt
     ((if page then T.recycle_page_deleted else T.recycle_block_deleted)
-       (B.fmt_time (deleted_at root)));
-  B.append truncw txt;
-  B.append left truncw;
-  let btns = B.create "div" in
-  B.set_class btns "flex items-center gap-1";
-  B.append btns (ghost_btn T.restore (fun () -> restore uuid title host));
-  B.append btns
+       (Platform.fmt_time (deleted_at root)));
+  Web_dom.el_append_child truncw txt;
+  Web_dom.el_append_child left truncw;
+  let btns = Web_dom.create_element "div" in
+  Web_dom.el_set_class btns "flex items-center gap-1";
+  Web_dom.el_append_child btns (ghost_btn T.restore (fun () -> restore uuid title host));
+  Web_dom.el_append_child btns
     (ghost_btn T.delete (fun () -> delete_forever uuid title page host));
-  B.append hdr left;
-  B.append hdr btns;
+  Web_dom.el_append_child hdr left;
+  Web_dom.el_append_child hdr btns;
   hdr
 
-and refresh (host : B.E.t) =
+and refresh (host : Web_dom.el) =
   incr refresh_seq;
   let my = !refresh_seq in
   ignore
@@ -150,74 +148,74 @@ and groups_of roots =
 (* cljs renders the recycled root through block-container — a text row
    carrying the title is what e2e reads back *)
 and root_body root =
-  let blk = B.create "div" in
-  B.set_class blk "ls-block";
-  let t = B.create "div" in
-  B.set_class t "block-title-wrap";
-  B.set_text t (title_of root);
-  B.append blk t;
+  let blk = Web_dom.create_element "div" in
+  Web_dom.el_set_class blk "ls-block";
+  let t = Web_dom.create_element "div" in
+  Web_dom.el_set_class t "block-title-wrap";
+  Web_dom.el_set_text_content t (title_of root);
+  Web_dom.el_append_child blk t;
   blk
 
 and render_roots host roots =
   (* clear inside the async callback — concurrent refreshes race
      otherwise and each append piles rows onto the previous paint *)
-  B.set_text host "";
-  let desc = B.create "div" in
-  B.set_class desc "text-sm text-muted-foreground ls-recycle-page-description ml-1";
-  B.set_text desc T.recycle_retention;
-  B.append host desc;
+  Web_dom.el_set_text_content host "";
+  let desc = Web_dom.create_element "div" in
+  Web_dom.el_set_class desc "text-sm text-muted-foreground ls-recycle-page-description ml-1";
+  Web_dom.el_set_text_content desc T.recycle_retention;
+  Web_dom.el_append_child host desc;
   if roots = [] then (
-    let e = B.create "div" in
-    B.set_class e "text-sm text-muted-foreground";
-    B.set_text e T.recycle_empty;
-    B.append host e)
+    let e = Web_dom.create_element "div" in
+    Web_dom.el_set_class e "text-sm text-muted-foreground";
+    Web_dom.el_set_text_content e T.recycle_empty;
+    Web_dom.el_append_child host e)
   else
     List.iter
       (fun (title, rs) ->
-        let sec = B.create "section" in
+        let sec = Web_dom.create_element "section" in
         (if not (List.exists is_page rs) then (
-           let h = B.create "h2" in
-           B.set_class h "text-lg font-medium mb-3";
-           B.set_text h title;
-           B.append sec h));
-        let col = B.create "div" in
-        B.set_class col "flex flex-col";
+           let h = Web_dom.create_element "h2" in
+           Web_dom.el_set_class h "text-lg font-medium mb-3";
+           Web_dom.el_set_text_content h title;
+           Web_dom.el_append_child sec h));
+        let col = Web_dom.create_element "div" in
+        Web_dom.el_set_class col "flex flex-col";
         List.iter
           (fun root ->
-            let row = B.create "div" in
-            B.append row (root_header root host);
+            let row = Web_dom.create_element "div" in
+            Web_dom.el_append_child row (root_header root host);
             (* deleted-root-outliner renders the block title — a plain
                title row is enough for the recycled contract (row text
                must carry the node title for has-text filters) *)
-            let body = B.create "div" in
-            B.set_class body "ls-block";
-            B.set_text body (title_of root);
-            B.append row body;
-            B.append row (root_body root);
-            B.append col row)
+            let body = Web_dom.create_element "div" in
+            Web_dom.el_set_class body "ls-block";
+            Web_dom.el_set_text_content body (title_of root);
+            Web_dom.el_append_child row body;
+            Web_dom.el_append_child row (root_body root);
+            Web_dom.el_append_child col row)
           rs;
-        B.append sec col;
-        B.append host sec)
+        Web_dom.el_append_child sec col;
+        Web_dom.el_append_child host sec)
       (groups_of roots)
 
 let show () =
-  match B.qs "#main-content-container" with
+  match Web_dom.query_selector "#main-content-container" with
   | Some parent -> (
-      match B.qs ".ls-recycle-page-content" with
+      match Web_dom.query_selector ".ls-recycle-page-content" with
       | Some host -> refresh host
       | None ->
           (* class the host before the async refresh so a second show
              before the promise resolves finds it instead of creating
              a duplicate container *)
-          let host = B.create "div" in
+          let host = Web_dom.create_element "div" in
           (* mark before the async refresh fills it so a second show()
              does not append a duplicate host *)
-          B.set_class host "flex flex-col gap-8 ls-recycle-page-content";
-          B.append parent host;
+          Web_dom.el_set_class host "flex flex-col gap-8 ls-recycle-page-content";
+          Web_dom.el_append_child parent host;
           refresh host)
   | None -> ()
 
 let hide () =
-  match B.qs ".ls-recycle-page-content" with
-  | Some host -> B.remove host
+  match Web_dom.query_selector ".ls-recycle-page-content" with
+  | Some host -> Web_dom.el_remove host
   | None -> ()

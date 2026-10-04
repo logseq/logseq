@@ -15,11 +15,6 @@ let client_id = "69cs1lgme7p8kbgld8n5kseii6"
 let oauth_token_url =
   "https://logseq-prod.auth.us-east-1.amazoncognito.com/oauth2/token"
 
-let trim_trailing_slashes s =
-  let n = String.length s in
-  let rec go i = if i > 0 && s.[i - 1] = '/' then go (i - 1) else i in
-  String.sub s 0 (go n)
-
 (* cljs config.cljs custom-url->ws-url: https->wss else ws, strip scheme +
    trailing slashes, append /sync/%s *)
 let ws_url () =
@@ -40,14 +35,14 @@ let ws_url () =
         | _ -> custom
       in
       Printf.sprintf "%s://%s/sync/%%s" scheme
-        (trim_trailing_slashes s))
+        (Str_util.strip_trailing_slashes s))
   | _ -> "wss://api.logseq.io/sync/%s"
 
 (* cljs custom-url->http-base: strip trailing slashes *)
 let http_base () =
   match Platform.local_storage_get "sync-server-url" with
   | Some custom when String.length custom > 0 ->
-      trim_trailing_slashes custom
+      Str_util.strip_trailing_slashes custom
   | _ -> "https://api.logseq.io"
 
 let db_sync_config () =

@@ -96,15 +96,12 @@ let pending : (string * int option * bool) option ref = ref None
 let arm uuid db_id ~has_top_level =
   pending := Some (uuid, db_id, has_top_level)
 
-let st_ref : t Signal.state option ref = ref None
+include State_cell.Make (struct
+  type nonrec t = t
+  let name = "export"
+end)
 
-let st ctx =
-  match !st_ref with
-  | Some s -> s
-  | None ->
-      let s = Signal.state ctx.Lui_ui.ui_scheduler (defaults ()) in
-      st_ref := Some s;
-      s
+let st ctx = get_or_init ctx.Lui_ui.ui_scheduler (defaults ())
 
 let open_ ctx =
   let st = st ctx in

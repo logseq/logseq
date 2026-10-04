@@ -38,7 +38,7 @@ let json_of_model_page (p : Model.page) =
   (match p.page_uuid with
    | Some u -> Js.Dict.set o "uuid" (Js.Json.string u)
    | None -> ());
-  Sdk_convert.json_obj o
+  Js.Json.object_ o
 
 let get_current_page _a _b _c _d =
   match (Runtime.model ()).Model.route_page with
