@@ -24,7 +24,7 @@ let comment_ident = "logseq.class/Comment"
 let is_comments_area (b : Model.block) =
   List.mem comments_area_ident b.Model.block_tag_idents
 
-let el_scroll_into_view (_ : D.el) : unit = ()
+let el_scroll_into_view (el : D.el) : unit = D.el_scroll_into_view el
 
 (* ---- write paths ---- *)
 
