@@ -101,6 +101,22 @@
                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
                   (throw error)))))))
 
+(defn stat
+  ([fpath]
+   (protocol/stat (get-fs fpath) fpath))
+  ([dir path]
+   (let [fpath (path/path-join dir path)]
+     (protocol/stat (get-fs dir) fpath))))
+
+(defn mkdir-if-not-exists
+  [dir]
+  (when dir
+    (util/p-handle
+     (stat dir)
+     (fn [_stat])
+     (fn [_error]
+       (mkdir-recur! dir)))))
+
 (defn write-file!
   "A node only version of write-plain-text-file! to avoid using the fs-protocol
    which has file graph assumptions. Creates the parent directory when missing
@@ -146,22 +162,6 @@
   [dir path & {:as options}]
   (let [fs (get-fs dir)]
     (protocol/read-file-raw fs dir path options)))
-
-(defn stat
-  ([fpath]
-   (protocol/stat (get-fs fpath) fpath))
-  ([dir path]
-   (let [fpath (path/path-join dir path)]
-     (protocol/stat (get-fs dir) fpath))))
-
-(defn mkdir-if-not-exists
-  [dir]
-  (when dir
-    (util/p-handle
-     (stat dir)
-     (fn [_stat])
-     (fn [_error]
-       (mkdir-recur! dir)))))
 
 ;; FIXME: counterintuitive return value
 (defn create-if-not-exists
