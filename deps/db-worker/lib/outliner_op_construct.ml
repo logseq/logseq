@@ -1558,11 +1558,12 @@ let build_inverse_move_blocks db_before (ids : Wire.t) : Wire.t list option =
   (* Restore in page order: a block's restore target, its left sibling
      or parent, may be another moved block, which must be back first. *)
   let roots =
-    List.stable_sort
-      (fun a b ->
-         compare_document_order (document_order_path a)
-           (document_order_path b))
-      roots
+    (* one parent-chain walk per root — the comparator would otherwise
+       recompute it per comparison *)
+    List.map (fun r -> (r, document_order_path r)) roots
+    |> List.stable_sort
+         (fun (_, path_a) (_, path_b) -> compare_document_order path_a path_b)
+    |> List.map fst
   in
   let restore_ops = List.map (move_root_to_restore_op db_before) roots in
   if (not incomplete) && roots <> [] && List.for_all Option.is_some restore_ops
