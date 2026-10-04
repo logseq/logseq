@@ -97,7 +97,7 @@ let strip_markdown_heading s lvl =
    Sync text-only parsing must never run here: a #tag ref emitted as a
    bare {name,title,fresh-uuid} map upserts nothing, minting a partial
    duplicate entity that fails tx validation *)
-let block_map_parsed ?(page = false) uuid title =
+let block_map_parsed_of_title ?(page = false) uuid title =
   let dt =
     match S.find uuid with
     | Some b -> b.Model.block_display_type
@@ -111,25 +111,98 @@ let block_map_parsed ?(page = false) uuid title =
   in
   let* p = Title_refs.parse title in
   Js.Promise.resolve
-    (Wire.Map
-       ([ str "block/uuid" (Wire.Uuid uuid)
-        ; str "block/title" (Wire.String p.Title_refs.title) ]
-       @ (match heading with
-          | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
-          | None -> [])
-       @ Title_refs.kvs_of_parsed p
-       @
-       if page then
-         [ ( Wire.String "block/tags"
-           , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
-         ; ( Wire.String "block/name"
-           , Wire.String (page_name_sanity_lc p.Title_refs.title) )
-         ]
-       else []))
+    ( Wire.Map
+        ([ str "block/uuid" (Wire.Uuid uuid)
+         ; str "block/title" (Wire.String p.Title_refs.title) ]
+        @ (match heading with
+           | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
+           | None -> [])
+        @ Title_refs.kvs_of_parsed p
+        @
+        if page then
+          [ ( Wire.String "block/tags"
+            , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
+          ; ( Wire.String "block/name"
+            , Wire.String (page_name_sanity_lc p.Title_refs.title) )
+          ]
+        else [])
+    , p )
+
+let block_map_parsed ?(page = false) uuid title =
+  let* bm, _ = block_map_parsed_of_title ~page uuid title in
+  Js.Promise.resolve bm
+
+(* `key:: value` property ops — db-graph behavior for property lines
+   typed in block text: a key already bound to a property reuses that
+   property's ident, a new key mints user.property/<name>-<rand> via
+   upsert-property, then set-block-property writes the value *)
+let typed_property_ops uuid (props : (string * string) list) =
+  match !Runtime.current_repo with
+  | None -> Js.Promise.resolve []
+  | Some repo ->
+      let* w =
+        Runtime.invoke2 "thread-api/get-all-properties"
+          (Wire.String repo)
+          (Wire.Map
+             [ kw "remove-ui-non-suitable-properties?" (Wire.Bool false)
+             ; kw "block"
+                 (Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ]) ])
+      in
+      let existing =
+        Wire.elems w
+        |> List.filter_map (fun p ->
+               match
+                 ( Wire.map_get_string p "block/name"
+                 , Wire.map_get p "db/ident" )
+               with
+               (* db/ident decodes as a transit keyword *)
+               | Some n, Some (Wire.Keyword i | Wire.String i) -> Some (n, i)
+               | _ -> None)
+      in
+      (* later `key::` occurrences win — cljs property map assoc order *)
+      let seen = ref [] in
+      let props =
+        List.rev props
+        |> List.filter_map (fun (k, v) ->
+               if List.mem k !seen then None
+               else (
+                 seen := k :: !seen;
+                 Some (k, v)))
+      in
+      Js.Promise.resolve
+        (List.concat_map
+           (fun (name, value) ->
+             let ident, newp =
+               match List.assoc_opt name existing with
+               | Some i -> (i, false)
+               | None -> (Title_refs.user_property_ident name, true)
+             in
+             (if newp then
+                [ op "upsert-property"
+                    [ Wire.Keyword ident
+                    ; Wire.Map
+                        [ kw "logseq.property/type"
+                            (Wire.Keyword "default")
+                        ; kw "db/cardinality"
+                            (Wire.Keyword "db.cardinality/one") ]
+                    ; Wire.Map [ kw "property-name" (Wire.String name) ]
+                    ]
+                ]
+              else [])
+             @ [ op "set-block-property"
+                   [ Wire.Uuid uuid
+                   ; Wire.Keyword ident
+                   ; Wire.String value ] ])
+           props)
 
 let save_block_parsed uuid title =
-  let* bm = block_map_parsed uuid title in
-  Js.Promise.resolve (op "save-block" [ bm; Wire.Map [] ])
+  let* bm, p = block_map_parsed_of_title uuid title in
+  let save_op = op "save-block" [ bm; Wire.Map [] ] in
+  match p.Title_refs.props with
+  | [] -> Js.Promise.resolve [ save_op ]
+  | props ->
+      let* prop_ops = typed_property_ops uuid props in
+      Js.Promise.resolve (save_op :: prop_ops)
 
 (* the block/title form saved_block_map persists — commit-title overrides
    paint this so the post-edit DOM already shows the normalized text
@@ -822,8 +895,8 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
   match !pending_save with
   | Some (uuid, title) ->
       pending_save := None;
-      let* sop = save_block_parsed uuid title in
-      let* () = apply [ sop ] in
+      let* sops = save_block_parsed uuid title in
+      let* () = apply sops in
       apply ~opts ops
   | None -> (
       Editor_dom.clear_timeout !save_timer;
@@ -891,7 +964,7 @@ let apply_parsed ?opts ~rest pairs =
     Js.Promise.all
       (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
   in
-  apply ?opts (Array.to_list a @ rest)
+  apply ?opts (List.concat (Array.to_list a) @ rest)
 
 (* same ops as [apply] but the promise carries the worker response
    — callers that act on inserted uuids need {:blocks [...]} (cljs
@@ -901,8 +974,8 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
   match !pending_save with
   | Some (uuid, title) ->
       pending_save := None;
-      let* sop = save_block_parsed uuid title in
-      let* () = apply [ sop ] in
+      let* sops = save_block_parsed uuid title in
+      let* () = apply sops in
       apply_result ~opts ops
   | None -> (
       Editor_dom.clear_timeout !save_timer;
@@ -1206,7 +1279,7 @@ let apply_parsed_and_refresh ?opts ~rest pairs =
     Js.Promise.all
       (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
   in
-  let* resp = apply_result ?opts (Array.to_list a @ rest) in
+  let* resp = apply_result ?opts (List.concat (Array.to_list a) @ rest) in
   refresh_via_delta resp
 
 let apply_and_refresh_result ?opts ops =

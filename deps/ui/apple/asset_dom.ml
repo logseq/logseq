@@ -145,10 +145,7 @@ let upload_paths (paths : string list) =
              | Some e -> (
                  match S.find e.S.uuid with
                  | Some b when b.Model.block_title <> e.S.buffer ->
-                     let* o =
-                       Outliner_ops.save_block_parsed e.S.uuid e.S.buffer
-                     in
-                     Js.Promise.resolve [ o ]
+                     Outliner_ops.save_block_parsed e.S.uuid e.S.buffer
                  | _ -> Js.Promise.resolve [])
              | None -> Js.Promise.resolve []
            in

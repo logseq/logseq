@@ -202,8 +202,8 @@ let remove_view_property view_uuid ident f =
 
 let save_block_title uuid title f =
   let _ =
-    (let* op = Outliner_ops.save_block_parsed uuid title in
-    Js.Promise.resolve (apply_ops [ op ] f))
+    (let* ops = Outliner_ops.save_block_parsed uuid title in
+    Js.Promise.resolve (apply_ops ops f))
   in
   ()
 

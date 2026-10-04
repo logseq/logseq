@@ -639,7 +639,9 @@ let test_title_refs2 () =
   let p =
     { Title_refs.title = "t"
     ; refs = [ Wire.String "r" ]
-    ; tags = [ Wire.String "g" ] }
+    ; tags = [ Wire.String "g" ]
+    ; props = []
+    ; invalid_props = [] }
   in
   check "kvs_of_parsed"
     (Title_refs.kvs_of_parsed p
@@ -647,7 +649,8 @@ let test_title_refs2 () =
        ; (Wire.String "block/tags", Wire.List [ Wire.String "g" ]) ]);
   check "kvs_of_parsed empty"
     (Title_refs.kvs_of_parsed
-       { Title_refs.title = "t"; refs = []; tags = [] }
+       { Title_refs.title = "t"; refs = []; tags = []; props = []
+       ; invalid_props = [] }
      = [])
 
 (* ---- Decode: labels, order lists, reactions, children ---- *)
@@ -3509,7 +3512,8 @@ let test_sdk_write3 () =
 let test_sdk_write4 () =
   let flat =
     Sdk_write.flat_map_of "u1" 2 (Some "pu")
-      { Title_refs.title = "t"; refs = []; tags = [] }
+      { Title_refs.title = "t"; refs = []; tags = []; props = []
+       ; invalid_props = [] }
   in
   check "flat_map_of"
     (Wire.get flat "block/title" = Some (Wire.String "t")
@@ -3520,7 +3524,8 @@ let test_sdk_write4 () =
   check "flat_map_of no parent"
     (Wire.get
        (Sdk_write.flat_map_of "u1" 1 None
-          { Title_refs.title = "t"; refs = []; tags = [] })
+          { Title_refs.title = "t"; refs = []; tags = []; props = []
+       ; invalid_props = [] })
        "block/parent"
      = None);
   (* flatten_batch: preorder fold, children before their siblings' rest,

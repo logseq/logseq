@@ -257,9 +257,90 @@ let rewrite_title title resolved =
   go 0;
   Buffer.contents buf
 
-type parsed = { title : string; refs : Wire.t list; tags : Wire.t list }
+(* gp-property/simplified-property? — a `key:: value` line: optional
+   single leading whitespace, a spaceless key, `::`, then the value *)
+let prop_of_line (line : string) : (string * string) option =
+  let line =
+    if String.length line > 0 && (line.[0] = ' ' || line.[0] = '\t')
+    then String.sub line 1 (String.length line - 1)
+    else line
+  in
+  let n = String.length line in
+  let rec sep i =
+    if i + 1 >= n then None
+    else if line.[i] = ':' && line.[i + 1] = ':' then Some i
+    else sep (i + 1)
+  in
+  match sep 0 with
+  | None -> None
+  | Some i ->
+      let k = String.sub line 0 i in
+      if k = "" || String.contains k ' ' || String.contains k '\t' then
+        None
+      else Some (k, String.trim (String.sub line (i + 2) (n - i - 2)))
+
+(* gp-block/extract-properties name normalization: lowercase, / space _
+   -> -, custom-id -> id *)
+let normalize_prop_name k =
+  let k =
+    String.map
+      (fun c -> match c with '/' | ' ' | '_' -> '-' | _ -> c)
+      (String.lowercase_ascii k)
+  in
+  if k = "custom-id" then "id" else k
+
+(* gp-property/valid-property-name? — the failing cases reachable from a
+   typed `key::` line (edn-invalid chars, leading # or another :) *)
+let valid_prop_name k =
+  let rec go i =
+    i >= String.length k
+    || (not (String.contains "\"|^(){}:" k.[i]) && go (i + 1))
+  in
+  k <> "" && k.[0] <> '#' && go 0
+
+(* `key::` lines -> (normalized name, value) pairs in line order, plus
+   the invalid names for block/invalid-properties *)
+let scan_props (title : string) : (string * string) list * string list =
+  let valid, invalid =
+    List.fold_left
+      (fun (ok, bad) line ->
+        match prop_of_line line with
+        | None -> (ok, bad)
+        | Some (k, v) ->
+            let k = normalize_prop_name k in
+            if valid_prop_name k then ((k, v) :: ok, bad)
+            else (ok, k :: bad))
+      ([], []) (String.split_on_char '\n' title)
+  in
+  (List.rev valid, List.rev invalid)
+
+(* db-property/create-user-property-ident-from-name — same mint as
+   user_class_ident: one letter + uuid-hex tail as the random suffix *)
+let user_property_ident name =
+  let hex =
+    String.concat "" (String.split_on_char '-' (Platform.random_uuid ()))
+  in
+  let first =
+    match
+      String.to_seq hex
+      |> Seq.find_map (fun c ->
+             if c >= 'a' && c <= 'f' then Some c else None)
+    with
+    | Some c -> String.make 1 c
+    | None -> "a"
+  in
+  "user.property/" ^ normalize_ident_name_part name ^ "-" ^ first
+  ^ String.sub hex 0 7
+
+type parsed =
+  { title : string
+  ; refs : Wire.t list
+  ; tags : Wire.t list
+  ; props : (string * string) list
+  ; invalid_props : string list }
 
 let parse title =
+  let props, invalid_props = scan_props title in
   let names, tags, hash = scan_title title in
   let* resolved = resolve_names names tags hash in
   (* seed the render pull caches with the resolved metas: a remounted
@@ -291,6 +372,8 @@ let parse title =
     ; tags = List.filter_map
                (fun r -> if r.is_tag then Some (tag_of r) else None)
                resolved
+    ; props
+    ; invalid_props
     }
 
 (* block map kvs for block/refs + block/tags — omitted when empty so
@@ -302,3 +385,9 @@ let kvs_of_parsed (p : parsed) =
   @ (match p.tags with
      | [] -> []
      | ts -> [ (Wire.String "block/tags", Wire.List ts) ])
+  @ (match p.invalid_props with
+     | [] -> []
+     | ks ->
+         [ ( Wire.String "block/invalid-properties"
+           , Wire.Set (List.map (fun k -> Wire.Keyword k) ks) )
+         ])

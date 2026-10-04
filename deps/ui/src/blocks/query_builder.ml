@@ -41,8 +41,8 @@ let filter_label = function
    -> editor-handler/save-block!) *)
 let save_dsl uuid dsl =
   ignore
-    (let* sop = Outliner_ops.save_block_parsed uuid dsl in
-     Outliner_ops.apply_and_refresh [ sop ])
+    (let* sops = Outliner_ops.save_block_parsed uuid dsl in
+     Outliner_ops.apply_and_refresh sops)
 
 let open_select ~anchor ~placeholder items =
   let root, input = Properties_select.create ~placeholder items in
