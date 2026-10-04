@@ -41,7 +41,10 @@ let initial =
   ; expanded_ui = String_set.empty
   }
 
-let st : t Signal.state option ref = ref None
+include State_cell.Make (struct
+  type nonrec t = t
+  let name = "editor"
+end)
 
 (* focus request consumed after the next DOM flush — ops remount the page
    subtree, so the textarea must be re-focused once it exists again *)
@@ -97,26 +100,11 @@ let ensure (ctx : Lui_ui.ui_context) =
       on_init := [];
       st := Some (Signal.state ctx.ui_scheduler init)
 
-let ready () = Option.is_some !st
-
-let state () =
-  match !st with
-  | Some s -> s
-  | None -> failwith "editor state not mounted"
-
-let value () = Signal.get_state (state ())
-
 (* the state as a read-only signal for dyn/if_/class_signal consumers *)
-let signal () = (state ()).Signal.state_signal
 
 (* updates that must repaint now (called from document listeners, outside
    LUI's event dispatch); Signal.update composes with any pending staged
    value so deferred on_init writes aren't lost *)
-let set f =
-  let st = state () in
-  Signal.update st f;
-  Runtime.flush ()
-
 (* updates with no visual dependency — folded into the next flush *)
 let set_silent f =
   let st = state () in

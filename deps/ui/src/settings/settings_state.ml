@@ -20,24 +20,12 @@ let initial =
   ; tick = 0
   }
 
-let st : t Signal.state option ref = ref None
+include State_cell.Make (struct
+  type nonrec t = t
+  let name = "settings"
+end)
 
-let ensure (ctx : Lui_ui.ui_context) =
-  match !st with
-  | Some _ -> ()
-  | None -> st := Some (Signal.state ctx.ui_scheduler initial)
-
-let ready () = Option.is_some !st
-
-let state () =
-  match !st with Some s -> s | None -> failwith "settings state not mounted"
-
-let value () = Signal.get_state (state ())
-let signal () = (state ()).Signal.state_signal
-
-let set f =
-  Signal.update (state ()) f;
-  Runtime.flush ()
+let ensure ctx = mount ctx initial
 
 (* storage-backed toggles don't touch `config` — bump tick so the pane
    dyn re-renders. Toggles are reachable without the pane mounted (cmdk

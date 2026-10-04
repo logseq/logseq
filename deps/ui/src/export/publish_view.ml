@@ -16,22 +16,18 @@ type pst = {
   publishing : bool;
 }
 
-let st_ref : pst Signal.state option ref = ref None
+include State_cell.Make (struct
+  type t = pst
+  let name = "publish"
+end)
 
 let st ctx =
-  match !st_ref with
-  | Some s -> s
-  | None ->
-      let s =
-        Signal.state ctx.Lui_ui.ui_scheduler
-          { page_uuid = None
-          ; page_db_id = None
-          ; password = ""
-          ; visible = false
-          ; publishing = false }
-      in
-      st_ref := Some s;
-      s
+  get_or_init ctx.Lui_ui.ui_scheduler
+    { page_uuid = None
+    ; page_db_id = None
+    ; password = ""
+    ; visible = false
+    ; publishing = false }
 
 let pending : (string * int option) option ref = ref None
 

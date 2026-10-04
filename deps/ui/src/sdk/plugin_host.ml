@@ -67,7 +67,10 @@ type ui_item = { it_pid : string; it_type : string; it_opts : Js.Json.t }
 
 let installed : Js.Json.t Js.Dict.t = Js.Dict.empty ()
 let items : ui_item list ref = ref []
-let dirty : int Signal.state option ref = ref None
+module Dirty = State_cell.Make (struct
+  type t = int
+  let name = "plugin_host dirty"
+end)
 let marketplace : Js.Json.t Js.Promise.t option ref = ref None
 
 (* pid -> available update version (cljs :plugin/updates-coming, from
@@ -75,18 +78,12 @@ let marketplace : Js.Json.t Js.Promise.t option ref = ref None
    on_lsp_update writes it *)
 let updates : (string, string) Hashtbl.t = Hashtbl.create 4
 
-let dirty_signal owner =
-  match !dirty with
-  | Some s -> s
-  | None ->
-      let s = Signal.state owner 0 in
-      dirty := Some s;
-      s
+let dirty_signal owner = Dirty.get_or_init owner 0
 
 let dirty_value owner = Signal.value (dirty_signal owner)
 
 let bump () =
-  match !dirty with
+  match !(Dirty.st) with
   | Some s -> Runtime.signal_set s (Signal.get_state s + 1)
   | None -> ()
 

@@ -34,21 +34,12 @@ type t =
 
 let initial = { dialogs = []; confirm = None; prompt = None; ui_request = None }
 
-let st : t Signal.state option ref = ref None
+include State_cell.Make (struct
+  type nonrec t = t
+  let name = "dialogs"
+end)
 
-let ensure (ctx : Lui_ui.ui_context) =
-  match !st with
-  | Some _ -> ()
-  | None -> st := Some (Signal.state ctx.ui_scheduler initial)
-
-let state () =
-  match !st with
-  | Some s -> s
-  | None -> failwith "dialogs state not mounted"
-
-let ready () = Option.is_some !st
-let value () = Signal.get_state (state ())
-let signal () = (state ()).Signal.state_signal
+let ensure ctx = mount ctx initial
 
 (* modal layer order (cljs shui modal stack): the most recently opened
    layer renders on top. ids: dialog names | "cmdk" | "prompt" |

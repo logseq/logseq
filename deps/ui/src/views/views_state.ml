@@ -342,11 +342,10 @@ type ops =
   ; o_title_of_uuid : inst -> string -> string
   }
 
-let ops_ref : ops option ref = ref None
+module Ops = State_cell.Cell (struct
+  type t = ops
+  let name = "views: ops"
+end)
 
-let ops () =
-  match !ops_ref with
-  | Some o -> o
-  | None -> failwith "views: ops not installed"
-
-let install_ops o = ops_ref := Some o
+let ops = Ops.get
+let install_ops = Ops.install
