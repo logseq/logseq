@@ -86,6 +86,15 @@ let files_of : 'a -> Js.Json.t array =
   [%mel.raw "function (el) { return Array.from(el.files || []) }"]
 
 external file_name : Js.Json.t -> string = "name" [@@mel.get]
+
+(* native hosts route a file-input click to their own picker dom-op; in
+   the browser the label-for-input click opens the dialog natively *)
+let pick_files ?(accept = "") ?(multiple = false) ?(directory = false)
+    ?(on_picked = fun () -> ()) (_id : string) : unit =
+  ignore accept;
+  ignore multiple;
+  ignore directory;
+  ignore on_picked
 external file_size : Js.Json.t -> float = "size" [@@mel.get]
 external file_text : Js.Json.t -> string Js.Promise.t = "text" [@@mel.send]
 

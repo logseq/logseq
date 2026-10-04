@@ -740,6 +740,7 @@ let file_cell (w : W.t) : D.el =
 (* slash "Upload an asset" emits ls:editor-command {command} — cljs
    :editor/click-hidden-file-input clicks the hidden input *)
 let install () =
+  S.upload_files := upload_files;
   Platform.on_document_event "ls:editor-command" (fun ev ->
       match
         Js.Json.decodeObject (Platform.json_prop ev "detail")

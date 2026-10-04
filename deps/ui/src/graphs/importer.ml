@@ -137,6 +137,18 @@ let logo_svg () =
 let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
   dom ~key:id ~tag:"label"
     ~style_class:"action-input"
+    ~events:"click"
+    ~on_dom_event:(fun n _ ->
+      if n = "click" then
+        (* native hosts route the pick through their own file dialog —
+           in the browser the label-for-input click opens it natively *)
+        B.pick_files ~accept
+          ~directory:
+            (List.exists
+               (fun (k, _) -> k = "webkitdirectory")
+               extra_attrs)
+          ~on_picked:(fun () -> on_change id ())
+          id)
     [ dom ~key:(id ^ "-ic") ~style_class:"as-flex-center"
         [ dom ~key:(id ^ "-ico") ~tag:"i" [ logo_svg () ] ]
     ; dom ~key:(id ^ "-t")

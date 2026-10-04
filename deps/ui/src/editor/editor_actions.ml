@@ -1445,6 +1445,19 @@ let paste_external ev ~text ~html =
         paste_lines lines
 
 let paste_blocks ev =
+  (* pasted files (screenshots, Finder-copied files) go to the asset
+     upload path before any text handling — cljs image-uploader does
+     the same via its paste listener *)
+  let files =
+    match D.ev_clipboard ev with
+    | Some clip -> D.clipboard_files clip
+    | None -> [||]
+  in
+  if Array.length files > 0 then begin
+    D.prevent_default ev;
+    !(S.upload_files) files
+  end
+  else
   match S.editing () with
   | Some _ -> paste_into_editor ev
   | None -> (

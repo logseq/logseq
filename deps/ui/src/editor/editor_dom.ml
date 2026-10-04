@@ -101,6 +101,15 @@ external dt_file_list : clipboard_data -> Js.Json.t = "files" [@@mel.get]
 
 let dt_files dt = json_array_from (dt_file_list dt)
 
+(* pasted files (screenshots, Finder-copied files) — clipboardData.files *)
+external clip_file_list : clipboard_data -> Js.Json.t option = "files"
+  [@@mel.get] [@@mel.return nullable]
+
+let clipboard_files cd =
+  match clip_file_list cd with
+  | Some l -> json_array_from l
+  | None -> [||]
+
 type rect
 external el_bounding_rect : el -> rect = "getBoundingClientRect" [@@mel.send]
 external rect_top : rect -> float = "top" [@@mel.get]

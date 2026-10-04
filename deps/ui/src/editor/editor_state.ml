@@ -59,6 +59,11 @@ let last_edit_input_ms : float ref = ref 0.0
 
 let note_input () = last_edit_input_ms := Platform.date_now_ms ()
 
+(* asset-dom's upload_files, wired by Asset_dom.install — same ref
+   pattern as code_* below (paste_blocks can't link Asset_dom: a cycle
+   through asset_dom → editor_actions) *)
+let upload_files : (Js.Json.t array -> unit) ref = ref (fun _ -> ())
+
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
 let clipboard : Model.block list ref = ref []
 
