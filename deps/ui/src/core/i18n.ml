@@ -71,15 +71,9 @@ let sub s args =
   |> fst
 
 (* cljs :preferred-language — an EDN-quoted string in localStorage *)
-let unquote s =
-  if String.length s >= 2 && String.get s 0 = '"'
-     && String.get s (String.length s - 1) = '"'
-  then String.sub s 1 (String.length s - 2)
-  else s
-
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with
-  | Some v -> unquote v
+  | Some v -> Platform.storage_unquote v
   | None -> "en"
 
 (* dict values are OCaml literals — Melange emits them as JS strings

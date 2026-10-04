@@ -109,9 +109,8 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
               ~style_class:"ls-form-actions"
               ([ dom ~key:(key ^ "-save") ~tag:"button"
                    ~style_class:
-                     (Settings_page.btn_base ^ " "
-                    ^ Settings_page.variant_cls `Solid ^ " "
-                    ^ Settings_page.size_cls `Sm)
+                     (Settings_controls.btn_cls ~variant:`Solid
+                        ~size:`Sm ())
                    ~attrs:[ ("type", "button") ]
                    ~text:T.save ~events:"click"
                    ~on_dom_event:(fun n _ -> if n = "click" then save ())
@@ -121,9 +120,8 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
               else
                 [ dom ~key:(key ^ "-reset") ~tag:"button"
                     ~style_class:
-                      (Settings_page.btn_base ^ " "
-                     ^ Settings_page.variant_cls `Outline ^ " "
-                     ^ Settings_page.size_cls `Sm)
+                      (Settings_controls.btn_cls ~variant:`Outline
+                         ~size:`Sm ())
                     ~attrs:[ ("type", "button") ]
                     ~text:T.reset_default ~events:"click"
                     ~on_dom_event:(fun n _ ->
