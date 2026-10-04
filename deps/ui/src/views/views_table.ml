@@ -924,14 +924,15 @@ let table_el inst ~refresh : D.el =
             | Some uuid ->
                 D.el_add_listener btn "click" (fun _ ->
                     let r = D.el_rect cell in
-                    Properties_dialog.open_dialog
-                      ~anchor:(D.rect_left r, D.rect_bottom r +. 4.)
-                      { Properties_dialog.uuid
-                      ; uuids = []
-                      ; db_id = p.Model.page_db_id
-                      ; is_tag = true
-                      ; title = p.Model.page_title
-                      })
+                    ignore
+                      (Properties_dialog.open_dialog
+                         ~anchor:(D.rect_left r, D.rect_bottom r +. 4.)
+                         { Properties_dialog.uuid
+                         ; uuids = []
+                         ; db_id = p.Model.page_db_id
+                         ; is_tag = true
+                         ; title = p.Model.page_title
+                         }))
             | None -> ());
            D.el_append_child cell btn;
            D.el_append_child header_row

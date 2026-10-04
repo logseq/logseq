@@ -214,10 +214,12 @@
   font-weight: 600;
 }
 
-/* menu item internals */
+/* menu item internals — cljs keeps labels on one line (menu sizes to
+   content); LUI's flex shrink would wrap two-word labels */
 .menu-item-label {
   flex: 1;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .ui__dropdown-menu-checkbox-item {
@@ -4324,6 +4326,19 @@ select.form-select {
 
 .ls-vf-logic:hover {
   opacity: 1;
+}
+
+/* cljs views.cljs: .ls-view-head.flex.flex-1.flex-nowrap.items-center
+   .justify-between.gap-1.overflow-hidden — without this the tabs and
+   view-actions stack vertically instead of sharing one row */
+.ls-view-head {
+  display: flex;
+  flex: 1 1 0%;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  overflow: hidden;
 }
 
 .ls-view-head-left {

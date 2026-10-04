@@ -62,13 +62,16 @@ let run_p_chord ev key =
       Properties_state.toggle_hidden ();
       Properties_state.refresh_all ();
       true
-  | ("d" | "i" | "r" as k), u :: _ ->
+  | ("d" | "i" | "r" | "s" | "p" | "t" as k), u :: _ ->
       D.prevent_default ev;
       Popups_state.emit_cmd
         (match k with
          | "d" -> "deadline"
          | "i" -> "set-icon"
-         | _ -> "add-reaction")
+         | "r" -> "add-reaction"
+         | "s" -> "add-property-status"
+         | "p" -> "add-property-priority"
+         | _ -> "set-tags")
         [ "block", Js.Json.string u ];
       true
   | _ -> false
@@ -195,6 +198,12 @@ let on_editor_key ev uuid el =
             D.prevent_default ev;
             A.wrap_selection uuid "=="
         | "e" when D.ev_meta ev -> A.quick_add ()
+        | "p" when mods ev && not shift ->
+            (* cljs :editor/add-property mod+p — the new-property dialog
+               on the editing block *)
+            D.prevent_default ev;
+            Popups_state.emit_cmd "add-property"
+              [ "block", Js.Json.string uuid ]
         | "." when mods ev && shift ->
             D.prevent_default ev;
             A.zoom_to uuid
@@ -211,6 +220,15 @@ let on_normal_key ev =
   if !pending_p && not (mods ev) && run_p_chord ev key then ()
   else
   match key with
+  | "p" when meta && not shift && selected () ->
+      (* cljs :editor/add-property mod+p — the new-property dialog on the
+         first selected block *)
+      D.prevent_default ev;
+      (match A.selected_uuids () with
+       | u :: _ ->
+           Popups_state.emit_cmd "add-property"
+             [ "block", Js.Json.string u ]
+       | [] -> ())
   | "p" when selected () && not (mods ev) ->
       D.prevent_default ev;
       arm_pending_p ()

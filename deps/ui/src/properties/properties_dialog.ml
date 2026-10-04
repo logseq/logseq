@@ -683,7 +683,8 @@ let open_dialog ?(remove = false) ?anchor target =
      second open replaces any popups left over from the previous flow *)
   S.close_overlays ();
   S.push_overlay root ~on_escape:(fun () -> ());
-  render d
+  render d;
+  d
 
 (* ---------- triggers ---------- *)
 
@@ -714,26 +715,47 @@ let current_target () : target option =
 (* open the dialog for a specific block uuid (slash command path). cljs
    anchors the popover on the editing textarea (#edit-block-<uuid>)
    with align:start — bottom-left corner, 4px left *)
+let anchor_of uuid =
+  match get_element_by_id ("edit-block-" ^ uuid) with
+  | Some ta ->
+      let l, _t, _r, b, _w = el_rect ta in
+      Some (l -. 4., b)
+  | None -> (
+      (* no live editor: cljs anchors on the block element itself
+         (selection path) — bottom-left of .ls-block *)
+      match get_element_by_id ("ls-block-" ^ uuid) with
+      | Some blk ->
+          let l, _t, _r, b, _w = el_rect blk in
+          Some (l, b)
+      | None -> None)
+
 let open_for_block ?anchor uuid =
   let anchor =
-    match anchor with
-    | Some _ -> anchor
-    | None -> (
-        match get_element_by_id ("edit-block-" ^ uuid) with
-        | Some ta ->
-            let l, _t, _r, b, _w = el_rect ta in
-            Some (l -. 4., b)
-        | None -> (
-            (* no live editor: cljs anchors on the block element itself
-               (selection path) — bottom-left of .ls-block *)
-            match get_element_by_id ("ls-block-" ^ uuid) with
-            | Some blk ->
-                let l, _t, _r, b, _w = el_rect blk in
-                Some (l, b)
-            | None -> None))
+    match anchor with Some _ -> anchor | None -> anchor_of uuid
   in
-  open_dialog ?anchor
-    { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
+  ignore
+    (open_dialog ?anchor
+       { uuid; uuids = []; db_id = None; is_tag = false; title = "" })
+
+(* cljs :editor/new-property {:property-key X} — the dialog skips the
+   property picker and lands in X's value editor (the p s/p p/p t
+   chords). [key] matches a property ident or its title ("Tags") *)
+let open_for_block_prop uuid key =
+  let d =
+    open_dialog ?anchor:(anchor_of uuid)
+      { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
+  in
+  ignore
+    ((let* w = D.all_properties (D.uuid_ref d.target.uuid) in
+     (match
+        List.find_opt
+          (fun p -> ident_of p = key || title_of p = key)
+          (W.elems w)
+      with
+      (* leave the prop picker up if the property can't be resolved *)
+      | Some p -> property_chosen d p
+      | None -> ());
+     Js.Promise.resolve ()))
 
 (* open anchored under a DOM element (its bottom-left corner) *)
 let open_for_block_at el uuid =
@@ -741,4 +763,4 @@ let open_for_block_at el uuid =
   open_for_block ~anchor:(l, b +. 4.) uuid
 
 let open_for_current () =
-  match current_target () with Some t -> open_dialog t | None -> ()
+  match current_target () with Some t -> ignore (open_dialog t) | None -> ()

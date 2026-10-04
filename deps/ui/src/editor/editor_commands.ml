@@ -823,6 +823,18 @@ let on_command ev =
                 open_cal (Cal_prop "logseq.property/deadline") uuid 0
             | "scheduled" ->
                 open_cal (Cal_prop "logseq.property/scheduled") uuid 0
+            (* cljs :editor/new-property {:property-key k} — p s/p p/p t
+               land in that property's value editor *)
+            | "add-property" ->
+                Properties_dialog.open_for_block uuid
+            | "add-property-status" ->
+                Properties_dialog.open_for_block_prop uuid
+                  "logseq.property/status"
+            | "add-property-priority" ->
+                Properties_dialog.open_for_block_prop uuid
+                  "logseq.property/priority"
+            | "set-tags" ->
+                Properties_dialog.open_for_block_prop uuid "Tags"
             | "set-icon" | "add-reaction" ->
                 (* the pickers live in the popups layer — editor modules
                    cannot reach icon_picker without a module cycle *)
