@@ -320,7 +320,7 @@ final class NSReferenceBox {
       guard let hit = LogseqFrameStore.hitTest(point),
         let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
       else { return event }
-      runOnMain {
+      runOnMainDeferred {
         LogseqPlatform.emitClick(context: context, nodeID: hit.nodeID, point: point)
       }
       return event
