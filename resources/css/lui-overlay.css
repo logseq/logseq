@@ -3373,14 +3373,50 @@ select.form-select {
   height: 2.5rem;
 }
 
-.cp__user-login .ls-login-error {
-  width: 100%;
-  margin-bottom: 1rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.375rem;
-  background: hsl(var(--destructive) / 0.15);
-  color: hsl(var(--destructive));
-  font-size: 0.875rem;
+/* cljs login.css: destructive auth alert — bg-red-300 light,
+   red-800/90 + red-200 text dark; the Alert base classes
+   (rounded-lg border p-4) land via tailwind */
+.cp__user-login .ui__alert {
+  background: oklch(80.8% 0.114 19.571);
+}
+
+.dark .cp__user-login .ui__alert {
+  border-color: oklch(44.4% 0.177 26.899);
+  background: color-mix(in oklab, oklch(44.4% 0.177 26.899) 90%, transparent);
+  color: oklch(88.5% 0.062 18.334);
+}
+
+.cp__user-login .ui__alert-description {
+  margin-bottom: -0.75rem;
+}
+
+/* cljs file_sync.css .cp__rtc-sync-indicator — state dot on the cloud
+   button: pending yellow for on/syncing/queuing, green when idle */
+:root {
+  --ls-color-file-sync-error: var(--color-red-600);
+  --ls-color-file-sync-pending: var(--color-yellow-600);
+  --ls-color-file-sync-idle: var(--color-green-600);
+}
+
+.cp__rtc-sync-indicator .ui__button.cloud {
+  position: relative;
+}
+
+.cp__rtc-sync-indicator .ui__button.cloud.on::after {
+  content: '*';
+  position: absolute;
+  bottom: 10px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  opacity: 1;
+  color: transparent;
+  background-color: var(--ls-color-file-sync-pending);
+}
+
+.cp__rtc-sync-indicator .ui__button.cloud.on.idle::after {
+  background-color: var(--ls-color-file-sync-idle);
 }
 
 /* quick-add + plugin readme + cards modal bodies */
@@ -3959,6 +3995,13 @@ select.form-select {
   justify-content: flex-end;
   gap: 0.5rem;
   padding-top: 0.5rem;
+}
+
+/* cljs settings.cljs sync/publish server editors: [:p.pt-2.flex.gap-2]
+   — left-aligned buttons */
+.cp__settings-sync-server-cnt .ls-form-actions,
+.cp__settings-publish-server-cnt .ls-form-actions {
+  justify-content: flex-start;
 }
 
 .ls-pl-warn {

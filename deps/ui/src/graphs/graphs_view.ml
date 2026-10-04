@@ -93,13 +93,20 @@ let open_menu repo anchor =
     (menu_item ~cls:"delete-local-graph-menu-item" T.delete_local_graph
        ~disabled:(not (Graphs_ops.removable repo))
        (fun () -> Graphs_ops.ask_delete ~remote:false repo));
-  (* remote graphs section below only exists for sync graphs; the local
-     row menu still exposes the remote-delete entry so tests can reach it
-     when the user is logged in *)
-  B.append menu
-    (menu_item ~cls:"delete-remote-graph-menu-item" T.delete_remote_graph
-       ~disabled:false
-       (fun () -> Graphs_ops.ask_delete ~remote:true repo));
+  (* cljs repo.cljs: "Use Logseq Sync (Beta testing)" only for a local,
+     non-remote graph that is currently open, logged in + rtc-group *)
+  let remote_names =
+    List.map (fun (n, _, _) -> n) !Graphs_ops.remote_graphs
+  in
+  if
+    Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
+    && not (List.mem (short_name repo) remote_names)
+    && (Runtime.model ()).Model.repo = Some repo
+  then
+    B.append menu
+      (menu_item ~cls:"use-logseq-sync-menu-item"
+         (I18n.t "graph/use-sync-beta") ~disabled:false
+         (fun () -> Graphs_ops.ask_upload repo));
   (match B.qs "body" with Some b -> B.append b menu | None -> ());
   dropdown_open := Some menu
 

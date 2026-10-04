@@ -17,6 +17,8 @@
 
 open Lui_elements
 
+module B = Browser_ui
+
 let dyn = Logseq_dom.dyn
 
 let skip_to_main =
@@ -80,44 +82,305 @@ let rtc_tx_text (r : Model.rtc) =
   Printf.sprintf "{:local-tx %s, :remote-tx %s}"
     (tx r.rtc_local_tx) (tx r.rtc_remote_tx)
 
+(* cljs header.cljs rtc-indicator-visible? — the indicator shows when
+   the open repo is a remote/rtc graph: logged in, rtc-group, and the
+   graph's rtc uuid known (db-rtc-uuid) or sync already broadcasting
+   state *)
+let db_rtc_uuid : string option ref = ref None
+let db_rtc_repo : string option ref = ref None
+let last_rtc : Model.rtc option ref = ref None
+
+let refresh_db_rtc_uuid (repo : string option) =
+  match repo with
+  | Some r when !db_rtc_repo <> Some r ->
+      db_rtc_repo := Some r;
+      db_rtc_uuid := None;
+      ignore
+        (let open Promise_ext in
+        let* w =
+          Runtime.invoke1 "thread-api/get-rtc-graph-uuid" (Wire.String r)
+        in
+        db_rtc_uuid := Wire.as_uuid w;
+        Runtime.flush ();
+        Js.Promise.resolve ())
+  | _ -> ()
+
+(* cljs indicator.cljs details — dropdown under the cloud button:
+   online/offline, pending counts, last-synced, debug toggle and a
+   Start sync action when the lock isn't open *)
+let rtc_details_popup : B.E.t option ref = ref None
+
+let close_rtc_details () =
+  match !rtc_details_popup with
+  | Some el ->
+      B.remove el;
+      rtc_details_popup := None
+  | None -> ()
+
+let el_ ?(cls = "") ?(text = "") () =
+  let d = B.create "div" in
+  B.set_class d cls;
+  if text <> "" then B.set_text d text;
+  d
+
+let pend_row cls_key n =
+  let d = el_ () in
+  let s = B.create "span" in
+  B.set_class s "font-medium mr-1";
+  B.set_text s (string_of_int n);
+  let l = B.create "span" in
+  B.set_text l (I18n.t cls_key);
+  B.append d s;
+  B.append d l;
+  d
+
+let rtc_debug_text (r : Model.rtc option) =
+  let lock =
+    match r with Some r -> if r.rtc_lock then ":open" else ":close"
+    | None -> ":close"
+  in
+  let num f = match r with Some r -> string_of_int (f r) | None -> "0" in
+  Printf.sprintf
+    "{:pending-local-ops %s\n :pending-asset-ops %s\n :pending-server-ops \
+     %s\n :local-tx %s\n :remote-tx %s\n :rtc-state %s}"
+    (num (fun r -> r.rtc_pending_local))
+    (num (fun r -> r.rtc_pending_asset))
+    (num (fun r -> r.rtc_pending_server))
+    (match r with
+     | Some r -> (
+         match r.rtc_local_tx with
+         | Some n -> string_of_int n
+         | None -> "nil")
+     | None -> "nil")
+    (match r with
+     | Some r -> (
+         match r.rtc_remote_tx with
+         | Some n -> string_of_int n
+         | None -> "nil")
+     | None -> "nil")
+    lock
+
+external ev_target : Js.Json.t -> Js.Json.t = "target" [@@mel.get]
+
+external el_contains : B.E.t -> Js.Json.t -> bool = "contains"
+  [@@mel.send]
+
+external ev_key : Js.Json.t -> string = "key" [@@mel.get]
+
+(* one-shot guards: the same click that opened the menu bubbles up to
+   document, and the doc listeners themselves can't be unbound *)
+let rtc_doc_hooked = ref false
+let rtc_open_guard = ref false
+
+let hook_rtc_doc_close () =
+  if not !rtc_doc_hooked then (
+    rtc_doc_hooked := true;
+    B.on_document "click" (fun ev ->
+        match !rtc_details_popup with
+        | Some el
+          when (not !rtc_open_guard) && not (el_contains el (ev_target ev))
+          -> close_rtc_details ()
+        | _ -> ());
+    B.on_document "keydown" (fun ev ->
+        if ev_key ev = "Escape" && !rtc_details_popup <> None then
+          close_rtc_details ()))
+
+let open_rtc_details () =
+  close_rtc_details ();
+  hook_rtc_doc_close ();
+  rtc_open_guard := true;
+  ignore (B.set_timeout (fun () -> rtc_open_guard := false) 0);
+  let r = !last_rtc in
+  let open_ =
+    match r with
+    | Some r -> Platform.online () && r.rtc_lock
+    | None -> false
+  in
+  let menu = B.create "div" in
+  B.set_class menu
+    "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
+     bg-popover p-1 text-popover-foreground shadow-md";
+  B.set_attr menu "role" "menu";
+  (match B.qs ".cp__rtc-sync-indicator .cloud" with
+   | Some anchor ->
+       let rect = B.rect_of anchor in
+       let left = Float.max 8.0 (B.rect_right rect -. 240.0) in
+       B.set_attr menu "style"
+         (Printf.sprintf
+            "position:fixed;left:%.0fpx;top:%.0fpx;width:240px"
+            left (B.rect_bottom rect +. 4.0))
+   | None -> ());
+  let info = el_ ~cls:"rtc-info flex flex-col gap-1 p-2 text-gray-11" () in
+  B.append info
+    (el_ ~cls:"font-medium mb-2"
+       ~text:(I18n.t (if Platform.online () then "sync/online" else "sync/offline"))
+       ());
+  let p_local =
+    match r with Some r -> r.rtc_pending_local | None -> 0
+  and p_asset =
+    match r with Some r -> r.rtc_pending_asset | None -> 0
+  and p_server =
+    match r with Some r -> r.rtc_pending_server | None -> 0
+  in
+  B.append info (pend_row "sync/pending-local-changes" p_local);
+  if p_asset > 0 then
+    B.append info (pend_row "sync/pending-asset-uploads" p_asset);
+  B.append info (pend_row "sync/pending-server-changes" p_server);
+  (match !Rtc_flows.last_sync_ms with
+   | Some ms ->
+       B.append info
+         (el_ ~cls:"text-sm"
+            ~text:
+              (I18n.t1 "sync/last-synced-time-label"
+                 (B.fmt_time (Int64.to_float ms)))
+            ())
+   | None -> ());
+  (* More debug info toggle *)
+  let dbg_link = B.create "a" in
+  B.set_class dbg_link "fade-link text-sm";
+  B.set_text dbg_link (I18n.t "sync/more-debug-info");
+  let dbg_on = ref false in
+  let dbg_el = ref (B.create "div") in
+  B.append info dbg_link;
+  B.add_listener dbg_link "click" (fun _ ->
+      dbg_on := not !dbg_on;
+      if !dbg_on then (
+        let d = el_ ~cls:"rtc-info-debug" () in
+        let pre = B.create "pre" in
+        B.set_class pre "select-text";
+        B.set_text pre (rtc_debug_text r);
+        B.append d pre;
+        dbg_el := d;
+        B.append info d)
+      else B.remove !dbg_el);
+  (match B.qs "body" with Some b -> B.append b menu | None -> ());
+  (* Start sync (cljs: shown when rtc-state <> :open) *)
+  if not open_ then (
+    let row = el_ ~cls:"mt-4" () in
+    let btn = B.create "button" in
+    B.set_class btn
+      (Settings_controls.btn_cls ~variant:`Solid ~size:`Sm ());
+    B.set_attr btn "type" "button";
+    B.set_text btn (I18n.t "sync/start-sync");
+    B.add_listener btn "click" (fun _ ->
+        close_rtc_details ();
+        match (Runtime.model ()).Model.repo with
+        | Some repo -> Rtc_ops.start repo
+        | None -> ());
+    B.append row btn;
+    B.append info row);
+  B.append menu info;
+  rtc_details_popup := Some menu
+
+let toggle_rtc_details () =
+  match !rtc_details_popup with
+  | Some _ -> close_rtc_details ()
+  | None -> open_rtc_details ()
+
 let rtc_indicator (ms : Model.t Signal.signal) : t =
-  dyn ~equal:( = ) (fun (r : Model.rtc option) ->
-      match r with
-      | None -> Logseq_dom.dom ~key:"rtc-off" ~style_class:"hidden" []
-      | Some r ->
-          let open_ = Platform.online () && r.rtc_lock in
-          let syncing = open_ && r.rtc_pending_server > 0 in
-          let idle =
-            open_ && r.rtc_pending_local = 0
-            && r.rtc_pending_asset = 0 && r.rtc_pending_server = 0
-          in
-          let queuing =
-            r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
-          in
-          let cls =
-            "cloud ui__button"
-            ^ (if open_ then " on" else "")
-            ^ (if syncing then " syncing" else "")
-            ^ (if idle then " idle" else "")
-            ^ (if queuing then " queuing" else "")
-          in
-          Logseq_dom.dom ~key:"rtc" ~style_class:"cp__rtc-sync"
-            [ Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
-                ~attrs:[ ("data-testid", "rtc-tx") ]
-                ~text:(rtc_tx_text r) []
-            ; Logseq_dom.dom ~key:"rtc-ind"
-                ~style_class:
-                  "cp__rtc-sync-indicator flex flex-row items-center \
-                   gap-1"
-                [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
-                    ~style_class:cls
-                    ~attrs:
-                      [ ("type", "button"); ("aria-label", "rtc sync") ]
-                    [ Logseq_dom.dom ~key:"rtc-i" ~tag:"i"
-                        ~style_class:"ti ti-cloud" [] ]
-                ]
-            ])
-    (Signal.map (fun (m : Model.t) -> m.rtc) ms)
+  dyn
+    ~equal:(fun (a : string option * Model.rtc option)
+                  (b : string option * Model.rtc option) -> a = b)
+    (fun ((repo : string option), (r : Model.rtc option)) ->
+      refresh_db_rtc_uuid repo;
+      last_rtc := r;
+      let visible =
+        (Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
+        && repo <> None
+        && (!db_rtc_uuid <> None || r <> None))
+        || (Platform.rtc_test_mode () && repo <> None)
+      in
+      if not visible then
+        Logseq_dom.dom ~key:"rtc-off" ~style_class:"hidden" []
+      else (
+        let open_ =
+          Platform.online ()
+          && (match r with Some r -> r.rtc_lock | None -> false)
+        in
+        let syncing =
+          open_
+          && (match r with Some r -> r.rtc_pending_server > 0
+              | None -> false)
+        in
+        let idle =
+          open_
+          && (match r with
+             | Some r ->
+                 r.rtc_pending_local = 0 && r.rtc_pending_asset = 0
+                 && r.rtc_pending_server = 0
+             | None -> true)
+        in
+        let queuing =
+          match r with
+          | Some r -> r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
+          | None -> false
+        in
+        let cls =
+          ghost_btn_cls ()
+          ^ " cloud"
+          ^ (if open_ then " on" else "")
+          ^ (if syncing then " syncing" else "")
+          ^ (if idle then " idle" else "")
+          ^ (if queuing then " queuing" else "")
+        in
+        Logseq_dom.dom ~key:"rtc" ~style_class:"cp__rtc-sync"
+          [ (match r with
+             | Some r ->
+                 Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
+                   ~attrs:[ ("data-testid", "rtc-tx") ]
+                   ~text:(rtc_tx_text r) []
+             | None -> Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
+                           ~attrs:[ ("data-testid", "rtc-tx") ] [])
+          ; Logseq_dom.dom ~key:"rtc-ind"
+              ~style_class:
+                "cp__rtc-sync-indicator flex flex-row items-center gap-1"
+              [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
+                  ~style_class:cls
+                  ~attrs:
+                    [ ("type", "button"); ("aria-label", "rtc sync") ]
+                  ~events:"click"
+                  ~on_dom_event:(fun n _ ->
+                    if n = "click" then toggle_rtc_details ())
+                  [ Icons.icon ~size:20. ~cls:"" "cloud" ]
+              ]
+          ]))
+    (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)
+
+(* cljs header.cljs local-graph-sync-button — cloud ghost button that
+   uploads the open local graph to the sync server. Visible when the
+   current repo is a local (non-remote, non-rtc) graph and the user is
+   logged in + rtc-group. The rtc-graph-uuid lookup is async, same as
+   cljs use-db-rtc-uuid (the button can flash on a remote graph until
+   the uuid resolves — cljs has the same window) *)
+let local_graph_sync_button (ms : Model.t Signal.signal) : t =
+  dyn ~equal:( = )
+    (fun (repo : string option) ->
+      refresh_db_rtc_uuid repo;
+      let uploadable =
+        match repo with
+        | Some r ->
+            Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
+            && List.mem r !Graphs_ops.repos
+            && !db_rtc_uuid = None
+        | None -> false
+      in
+      if uploadable then
+        Logseq_dom.dom ~key:"lgs" ~tag:"button"
+          ~style_class:
+            (ghost_btn_cls ~tail:"local-graph-sync-btn " ())
+          ~attrs:
+            [ ("type", "button")
+            ; ("aria-label", I18n.t "graph/use-sync-beta")
+            ; ("title", I18n.t "graph/use-sync-beta")
+            ]
+          ~events:"click"
+          ~on_dom_event:(fun n _ ->
+            match (Runtime.model ()).Model.repo with
+            | Some r when n = "click" -> Graphs_ops.ask_upload r
+            | _ -> ())
+          [ Icons.icon ~size:20. ~cls:"" "cloud" ]
+      else Logseq_dom.dom ~key:"lgs-off" ~style_class:"hidden" [])
+    (Signal.map (fun (m : Model.t) -> m.repo) ms)
 
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
@@ -211,6 +474,7 @@ let header (ms : Model.t Signal.signal) =
                 ms ]
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
             [ rtc_indicator ms
+            ; local_graph_sync_button ms
             ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders
                  .ui-items-container only when a plugin actually
