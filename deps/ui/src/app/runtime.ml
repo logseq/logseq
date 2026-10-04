@@ -110,6 +110,14 @@ let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
 let journal_item_key = Subs_state.journal_item_key
 let journals_sig = Subs_state.journals_sig
 let push_journals_items = Subs_state.push_journals_items
+let page_items_sig = Subs_state.page_items_sig
+let has_page_items = Subs_state.has_page_items
+let set_page_items = Subs_state.set_page_items
+let push_page_items = Subs_state.push_page_items
+let clear_page_items = Subs_state.clear_page_items
+let journal_page_sig = Subs_state.journal_page_sig
+let push_journal_page = Subs_state.push_journal_page
+let clear_journal_items = Subs_state.clear_journal_items
 
 (* Router clears its loading_route dedupe when a route load commits or
    fails (avoids a Runtime -> Router cycle) *)
@@ -136,6 +144,10 @@ let track action =
          delta basis only survives splices applied through Page_delta *)
       if not (Page_delta.is_own_commit page) then Page_delta.reset ();
       current_page := Some page;
+      (* splice-merged loads republish the same page: push the items
+         into the mounted list's signal so rows repaint even when the
+         view skips a remount *)
+      push_page_items page;
       (* cljs route.cljs update-page-title!: document.title follows the
          loaded page's title *)
       Browser_ui.set_document_title page.Model.page_title;
@@ -150,10 +162,20 @@ let track action =
       after_page_load := None
   | Action.Journals_loaded js ->
       !nav_load_done ();
+      let old = !current_journals in
       current_journals := js;
-      push_journals_items js
+      push_journals_items js;
+      (* republish each spliced day into its mounted item signal — the
+         journal item's dyn repaints without a stream remount *)
+      if List.length old = List.length js then
+        List.iter2
+          (fun (o : Model.page) (n : Model.page) ->
+            if o != n then push_journal_page n)
+          old js
   | Action.Navigate_to r ->
       Page_delta.reset ();
+      clear_page_items ();
+      clear_journal_items ();
       push_journals_items [];
       !on_navigate ();
       current_page := None;

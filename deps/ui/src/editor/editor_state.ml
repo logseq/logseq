@@ -314,6 +314,17 @@ let find_parent uuid =
   | Some i -> Some (None, i)
   | None -> find_parent_in tops uuid
 
+(* uuid of the top-level row containing [uuid] — virtual lists window
+   top-level items only, so a nested block's row lives under its
+   highest ancestor *)
+let rec top_level_uuid uuid =
+  match find_parent uuid with
+  | Some (Some p, _) -> (
+      match p.Model.block_uuid with
+      | Some u -> top_level_uuid u
+      | None -> uuid)
+  | _ -> uuid
+
 (* DFS over visible (non-collapsed-subtree) blocks *)
 let flat_visible ?(scope = "main") () =
   let rec go acc blocks =

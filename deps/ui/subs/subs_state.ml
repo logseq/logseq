@@ -37,6 +37,73 @@ let push_journals_items (js : Model.page list) =
   | Some s -> Signal.set s (Array.of_list js)
   | None -> ()
 
+(* items signals for mounted virtual lists — a spliced block array is
+   pushed straight into the list so the page dyn need not remount it *)
+let page_items : (string, Model.block array Signal.state) Hashtbl.t =
+  Hashtbl.create 8
+
+let items_key ~scope ~puuid =
+  scope ^ "|" ^ Option.value puuid ~default:""
+
+let page_items_sig_key scheduler k items =
+  match Hashtbl.find_opt page_items k with
+  | Some s -> s
+  | None ->
+      let s = Signal.state scheduler items in
+      Hashtbl.replace page_items k s;
+      s
+
+let page_items_sig scheduler ~scope ~puuid items =
+  page_items_sig_key scheduler (items_key ~scope ~puuid) items
+
+let has_page_items ~scope ~puuid =
+  Hashtbl.mem page_items (items_key ~scope ~puuid)
+
+let set_page_items ~scope ~puuid items =
+  match Hashtbl.find_opt page_items (items_key ~scope ~puuid) with
+  | Some s -> Signal.set s items
+  | None -> ()
+
+(* every Page_loaded whose page_blocks came from a splice/delta/optimistic
+   reparent — not a fresh fetch — pushes its items first so the mounted
+   virtual list repaints even when update.ml skips the remount *)
+let push_page_items (page : Model.page) =
+  set_page_items ~scope:"main" ~puuid:page.Model.page_uuid
+    (Array.of_list page.Model.page_blocks)
+
+let clear_page_items () =
+  Hashtbl.iter
+    (fun _ s -> Signal.dispose_signal (Signal.value s))
+    page_items;
+  Hashtbl.reset page_items
+
+(* per-journal-day signals for mounted journal items — a delta-spliced
+   journal page pushes straight into the item's dyn so the journals
+   view need not remount (inner block lists are eager — the item dyn
+   is the repaint channel) *)
+let journal_items : (string, Model.page Signal.state) Hashtbl.t =
+  Hashtbl.create 8
+
+let journal_page_sig scheduler (p : Model.page) : Model.page Signal.state =
+  let k = journal_item_key p in
+  match Hashtbl.find_opt journal_items k with
+  | Some s -> s
+  | None ->
+      let s = Signal.state scheduler p in
+      Hashtbl.replace journal_items k s;
+      s
+
+let push_journal_page (p : Model.page) =
+  match Hashtbl.find_opt journal_items (journal_item_key p) with
+  | Some s -> Signal.set s p
+  | None -> ()
+
+let clear_journal_items () =
+  Hashtbl.iter
+    (fun _ s -> Signal.dispose_signal (Signal.value s))
+    journal_items;
+  Hashtbl.reset journal_items
+
 (* generation counter for async page loads — several Page_loaded
    producers (route loads, refresh_page, block zoom) can be in flight
    at once and their fetches can resolve out of order; bump on

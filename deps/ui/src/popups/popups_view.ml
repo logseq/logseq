@@ -834,10 +834,9 @@ let pv_popover (p : S.pv) : t =
             ; Logseq_dom.dom ~key:"pvb" ~style_class:"ls-page-blocks"
                 [ Logseq_dom.dom ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
-                    [ Tree.flat_keyed ~scope:"preview"
-                        ~mount:(Tree.block_flat_row_sig ~editable:false
-                                  ~library:false ~scope:"preview")
-                        p.S.pv_blocks ]
+                    (List.map
+                       (Tree.block_row ~scope:"preview" ~editable:false)
+                       p.S.pv_blocks)
                 ]
             ]
         ]
