@@ -694,15 +694,17 @@ let get_all_properties db (opts : Wire.t) : Wire.t =
   List.of_seq (datoms db Avet ~a:"block/tags" ~v:(Ref property_tag) ())
   |> List.filter_map (fun (d : datom) -> Ldb.ent_of_id db d.e)
   |> List.filter (fun (p : entity) -> not (Ldb.recycled p))
-  |> List.stable_sort (fun (a : entity) (b : entity) ->
-         let triple e =
-           ( (match Ldb.ident_of e with
+  (* sort key computed once per property — the comparator would otherwise
+     re-read idents/attrs per comparison (O(n log n) seeks) *)
+  |> List.map (fun (p : entity) ->
+         ( p
+         , ( (match Ldb.ident_of p with
               | Some i -> Ldb.plugin_property i
               | None -> false)
-           , Ldb.built_in e
-           , Ldb.string_value e "block/title" )
-         in
-         compare (triple a) (triple b))
+           , Ldb.built_in p
+           , Ldb.string_value p "block/title" ) ))
+  |> List.stable_sort (fun (_, key_a) (_, key_b) -> compare key_a key_b)
+  |> List.map fst
   |> List.filter (fun (p : entity) ->
          (not remove_built_in)
          || not
