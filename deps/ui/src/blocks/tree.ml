@@ -412,6 +412,67 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
    still appear inline in the title ("#tag") are skipped — they render in
    the title itself. -- *)
 
+(* cljs block-tag: hovering the chip swaps the leading # for an x that
+   removes the tag value off the owner entity (block or page). Private
+   tags never show the x. *)
+let tag_hover hid xid name _payload =
+  match Browser_ui.qs ("#" ^ hid), Browser_ui.qs ("#" ^ xid) with
+  | Some h, Some x -> (
+      match name with
+      | "mouseenter" ->
+          Browser_ui.add_class h "hidden";
+          Browser_ui.rm_class x "hidden"
+      | "mouseleave" ->
+          Browser_ui.rm_class h "hidden";
+          Browser_ui.add_class x "hidden"
+      | _ -> ())
+  | _ -> ()
+
+let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
+  let priv = private_tag_ident ident in
+  let hid = "tagh-" ^ key and xid = "tagx-" ^ key in
+  dom ~key:("tag-" ^ key)
+    ~style_class:("block-tag" ^ if priv then " private-tag" else "")
+    (* cljs keeps the tag entity in the chip's click closure; the
+       delegated context-menu handler reads it off data attrs instead *)
+    ~attrs:
+      [ ("data-tag-uuid", tuuid)
+      ; ("data-tag-id", string_of_int dbid)
+      ; ("data-tag-title", tag)
+      ; ("data-tag-priv", if priv then "true" else "false") ]
+    ~events:(if priv then "" else "mouseenter mouseleave")
+    ~on_dom_event:(tag_hover hid xid)
+    [ dom ~key:("tc-" ^ key) ~style_class:"flex items-center"
+        [ dom ~key:("th-" ^ key) ~tag:"a" ~id:hid
+            ~style_class:"hash-symbol select-none flex" ~text:"#" []
+        ; (if priv then Logseq_dom.nothing
+           else
+             dom ~key:("tx-" ^ key) ~tag:"a" ~id:xid
+               ~style_class:
+                 "tag-x hash-symbol hidden cursor-pointer select-none flex"
+               ~attrs:[ ("title", I18n.t "block/remove-this-tag") ]
+               ~text:"x"
+               ~events:"click"
+               ~on_dom_event:(fun name _ ->
+                 match name with
+                 | "click" ->
+                     ignore
+                       (Outliner_ops.apply_and_refresh
+                          [ Outliner_ops.op "delete-property-value"
+                              [ Wire.Uuid owner_uuid
+                              ; Wire.Keyword "block/tags"
+                              ; Wire.Int dbid ] ])
+                 | _ -> ())
+               [])
+        ; dom ~key:("ta-" ^ key) ~tag:"a"
+            ~style_class:"tag relative"
+            ~attrs:
+              [ ("tabindex", "0"); ("draggable", "true")
+              ; ("data-uuid", tuuid)
+              ; ("data-ref", String.lowercase_ascii tag) ]
+            [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
+        ] ]
+
 let tags_el uuid (b : Model.block) : t =
   let quads =
     try List.map2
@@ -440,32 +501,8 @@ let tags_el uuid (b : Model.block) : t =
       dom ~key:("tags-" ^ uuid) ~style_class:"block-tags gap-1"
         (List.mapi
            (fun i (tag, tuuid, ident, dbid) ->
-             (* cljs block-tag: .block-tag > .flex.items-center >
-                a.hash-symbol("#") + a.tag[data-ref] *)
-             let priv = private_tag_ident ident in
-             dom ~key:("tag-" ^ uuid ^ "-" ^ string_of_int i)
-               ~style_class:
-                 ("block-tag" ^ if priv then " private-tag" else "")
-               (* cljs keeps the tag entity in the chip's click closure;
-                  the delegated context-menu handler reads it off data
-                  attrs instead *)
-               ~attrs:
-                 [ ("data-tag-uuid", tuuid)
-                 ; ("data-tag-id", string_of_int dbid)
-                 ; ("data-tag-title", tag)
-                 ; ("data-tag-priv", if priv then "true" else "false") ]
-               [ dom ~key:("tc-" ^ uuid ^ "-" ^ string_of_int i)
-                   ~style_class:"flex items-center"
-                   [ dom ~key:("th-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
-                       ~style_class:"hash-symbol select-none flex" ~text:"#" []
-                   ; dom ~key:("ta-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
-                       ~style_class:"tag relative"
-                       ~attrs:
-                         [ ("tabindex", "0"); ("draggable", "true")
-                         ; ("data-ref", String.lowercase_ascii tag) ]
-                       [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
-                   ]
-               ])
+             tag_chip ~key:(uuid ^ "-" ^ string_of_int i) ~owner_uuid:uuid
+               ~tag ~tuuid ~ident ~dbid)
            tags)
 
 

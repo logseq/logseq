@@ -815,19 +815,27 @@ let on_doc_click st ev =
     with
     | Some _ -> ()
     | None -> close_menu st);
-  match click_target "a.page-ref" ev with
+  match click_target "a.page-ref, a.tag" ev with
   | Some el -> (
       match
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
-           resolved title, which drifts out of sync on rename *)
-        match Platform.get_attribute el "data-uuid" with
-        | Some u -> Some u
-        | None -> Platform.get_attribute el "data-ref"
+           resolved title, which drifts out of sync on rename. tag chips
+           keep the uuid on the .block-tag wrapper *)
+        (match Platform.get_attribute el "data-uuid" with
+         | Some u when u <> "" -> Some u
+         | _ -> (
+             match
+               Option.bind (closest el ".block-tag[data-tag-uuid]")
+                 (fun chip -> Platform.get_attribute chip "data-tag-uuid")
+             with
+             | Some u when u <> "" -> Some u
+             | _ -> Platform.get_attribute el "data-ref"))
       with
       | Some ref_ ->
+          (* cljs open-page-ref: shift+click opens in the sidebar, any other
+             click (mod included) navigates *)
           if jbool "shiftKey" ev then open_ref st ref_
-          else if not (jbool "metaKey" ev || jbool "ctrlKey" ev) then
-            navigate_to_page ref_
+          else navigate_to_page ref_
       | None -> ())
   | None ->
       if jbool "shiftKey" ev then

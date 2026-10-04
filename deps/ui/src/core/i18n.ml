@@ -210,6 +210,7 @@ let en_overrides = function
   | "block.comments/add-comment" -> "Add comment"
   | "block/copy-ref" -> "Copy block ref"
   | "block/remove-tag" -> "Remove tag"
+  | "block/remove-this-tag" -> "Remove this tag"
   | "block.macro/embed-deprecated" ->
       "{{embed}} is deprecated. Use '/Node embed' command instead."
   | "export/copy-or-export-as" -> "Copy / Export as.."

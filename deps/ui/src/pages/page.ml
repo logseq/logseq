@@ -189,45 +189,22 @@ let title_tag_chips (page : Model.page) : t list =
                [ dom ~key:"pt-tags" ~style_class:"block-tags gap-1"
                    (List.mapi
                      (fun i tag ->
-                       let ident =
-                         match List.nth_opt page.Model.page_tag_idents i with
-                         | Some s -> s
+                       let opt_at l =
+                         match List.nth_opt l i with
+                         | Some x -> x
                          | None -> ""
                        in
-                       let priv = Tree.private_tag_ident ident in
-                       dom ~key:("pt-tag-" ^ string_of_int i)
-                         ~style_class:
-                           ("block-tag"
-                           ^ if priv then " private-tag" else "")
-                         ~attrs:
-                           [ ( "data-tag-uuid"
-                             , Option.value
-                                 (List.nth_opt
-                                    page.Model.page_tag_uuids i)
-                                 ~default:"" )
-                           ; ( "data-tag-id"
-                             , Option.value
-                                 (Option.map string_of_int
-                                    (List.nth_opt
-                                       page.Model.page_tag_db_ids i))
-                                 ~default:"0" )
-                           ; ("data-tag-title", tag)
-                           ; ( "data-tag-priv"
-                             , if priv then "true" else "false" ) ]
-                         [ dom ~key:("pti-" ^ string_of_int i)
-                             ~style_class:"flex items-center"
-                             [ dom ~key:("ph-" ^ string_of_int i) ~tag:"a"
-                                 ~style_class:"hash-symbol select-none flex"
-                                 ~text:"#" []
-                             ; dom ~key:("ptt-" ^ string_of_int i) ~tag:"a"
-                                 ~style_class:"tag relative"
-                                 ~attrs:
-                                   [ ("tabindex", "0"); ("draggable", "true")
-                                   ; ( "data-ref"
-                                     , String.lowercase_ascii tag ) ]
-                                 [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
-                             ]
-                         ])
+                       Tree.tag_chip
+                         ~key:("p" ^ string_of_int i)
+                         ~owner_uuid:
+                           (Option.value page.Model.page_uuid ~default:"")
+                         ~tag
+                         ~tuuid:(opt_at page.Model.page_tag_uuids)
+                         ~ident:(opt_at page.Model.page_tag_idents)
+                         ~dbid:
+                           (Option.value
+                              (List.nth_opt page.Model.page_tag_db_ids i)
+                              ~default:0))
                      tags)
                ]
            )
