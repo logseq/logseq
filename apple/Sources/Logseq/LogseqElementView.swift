@@ -721,6 +721,7 @@ struct LogseqElementView: View {
   private var flatRowProbe: LogseqFlatRowProbe? {
     guard tag == "div", classSet.contains("ls-block") else { return nil }
     var probe = LogseqFlatRowProbe()
+    var bailReason = ""
     var stack = context.childIDs
     var steps = 0
     let allowed: Set<String> = [
@@ -731,13 +732,13 @@ struct LogseqElementView: View {
     ]
     while let id = stack.popLast() {
       steps += 1
-      if steps > 400 { return nil }
+      if steps > 400 { bailReason = "steps"; break }
       if let ident = context.extensionIdentifier(of: id) {
         let t = String(ident.dropFirst("logseq-".count))
-        guard allowed.contains(t) else { return nil }
+        guard allowed.contains(t) else { bailReason = "tag:" + t; break }
         if case .string(let classes) = context.childProperty(node: id, "style-class") {
           let cs = Set(classes.split(separator: " ").map(String.init))
-          if cs.contains("latex") || cs.contains("latex-inline") { return nil }
+          if cs.contains("latex") || cs.contains("latex-inline") { bailReason = "latex"; break }
           if cs.contains("block-main-container") { probe.mainContainerID = id }
           if cs.contains("block-control") { probe.controlID = id }
           // .bullet-container is the span with id dot-<uuid> — the doc
@@ -760,11 +761,20 @@ struct LogseqElementView: View {
       (attrs["haschild"] as? String) == "true"
       || (attrs["data-db-collapsable"] as? String) == "true"
     probe.arrowCollapsed = (attrs["data-collapsed"] as? String) == "true"
+    if !bailReason.isEmpty {
+      FileHandle.standardError.write(
+        "DBG probe-bail id=\(context.nodeID) why=\(bailReason)\n"
+          .data(using: .utf8)!)
+      return nil
+    }
     // Siblings of the main container (children column, properties area)
     // keep their normal mount.
     for c in context.childIDs where c != probe.mainContainerID {
       probe.siblings.append(c)
     }
+    FileHandle.standardError.write(
+      "DBG probe row=\(context.nodeID) main=\(probe.mainContainerID) ctrl=\(probe.controlID) content=\(probe.contentID) sibs=\(probe.siblings.count)\n"
+        .data(using: .utf8)!)
     return probe
   }
 
@@ -1966,6 +1976,21 @@ struct LogseqFrameEntry: Equatable {
   /// popup write this — the O(depth) merge cost only exists while a
   /// popup is up and for popup nodes alone).
   static var overlayEntries: [Int: LogseqFrameEntry] = [:]
+  /// Sub-region frames reported by composite rows: the folded inner
+  /// nodes (bullet, control, content) get a pseudo-frame so monitor
+  /// hit-tests land on the same node a DOM click would, letting clicks
+  /// and hovers resolve .block-content/.bullet-container via closest().
+  static var aliasEntries: [Int: LogseqFrameEntry] = [:]
+
+  static func setAlias(_ nodeID: Int, _ rect: CGRect, tag: String) {
+    guard !rect.isEmpty, nodeID > 0 else { return }
+    if aliasEntries[nodeID]?.rect == rect { return }
+    aliasEntries[nodeID] = LogseqFrameEntry(rect: rect, tag: tag)
+  }
+
+  static func clearAlias(_ nodeID: Int) {
+    aliasEntries.removeValue(forKey: nodeID)
+  }
 
   /// Union for readers that want "whatever frame a node last painted"
   /// (dom-op rect answers, snapshots, dumps) — overlays shadow base.
@@ -2001,6 +2026,9 @@ struct LogseqFrameEntry: Equatable {
       if let overlay = overlayEntries[preferID], overlay.rect.contains(point) {
         return (preferID, overlay.tag)
       }
+      if let alias = aliasEntries[preferID], alias.rect.contains(point) {
+        return (preferID, alias.tag)
+      }
       if let base = baseEntries[preferID], base.rect.contains(point),
         let tag = tag(of: preferID), tag != "path"
       {
@@ -2019,6 +2047,19 @@ struct LogseqFrameEntry: Equatable {
     if let best, let entry = overlayEntries[best.id] {
       return (best.id, entry.tag)
     }
+    // Composite-row alias frames stand in for folded inner nodes — the
+    // only frame that can overlap them is their own (larger) row, so
+    // smallest alias wins without competing against real children.
+    var aliasHit: (id: Int, entry: LogseqFrameEntry)?
+    for (id, entry) in aliasEntries where entry.rect.contains(point) {
+      let area = entry.rect.width * entry.rect.height
+      if aliasHit == nil
+        || area < aliasHit!.entry.rect.width * aliasHit!.entry.rect.height
+      {
+        aliasHit = (id, entry)
+      }
+    }
+    if let aliasHit { return (aliasHit.id, aliasHit.entry.tag) }
     // Smallest containing element wins; `path` nodes don't hit-test
     // (their parent svg reports the same region), and non-element nodes
     // never did either.
@@ -2405,9 +2446,16 @@ private struct LogseqFlatBlockRow: View {
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
     else { return }
-    try? context.emit(
-      on: nodeID, name: "dom-event",
-      values: ["name": .string("click"), "payload": .string(json)])
+    do {
+      try context.emit(
+        on: nodeID, name: "dom-event",
+        values: ["name": .string("click"), "payload": .string(json)])
+      FileHandle.standardError.write(
+        "DBG emitClick ok node=\(nodeID)\n".data(using: .utf8)!)
+    } catch {
+      FileHandle.standardError.write(
+        "DBG emitClick FAIL node=\(nodeID) err=\(error)\n".data(using: .utf8)!)
+    }
   }
 
   private func emitHover(_ name: String) {
@@ -2432,6 +2480,10 @@ private struct LogseqFlatBlockRow: View {
           .frame(width: 12, height: 12)
           .contentShape(Rectangle())
           .onTapGesture { emitClick(on: probe.controlID) }
+          .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
+            action: { rect in
+              LogseqFrameStore.setAlias(probe.controlID, rect, tag: "a")
+            }
       }
       Circle()
         .fill(Color.secondary.opacity(0.5))
@@ -2441,6 +2493,12 @@ private struct LogseqFlatBlockRow: View {
         .onTapGesture {
           emitClick(on: probe.bulletID > 0 ? probe.bulletID : probe.controlID)
         }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
+          action: { rect in
+            LogseqFrameStore.setAlias(
+              probe.bulletID > 0 ? probe.bulletID : probe.controlID,
+              rect, tag: "a")
+          }
     }
     .frame(width: 24, height: 20)
   }
@@ -2456,6 +2514,12 @@ private struct LogseqFlatBlockRow: View {
           .onTapGesture {
             emitClick(on: probe.contentID > 0 ? probe.contentID : probe.mainContainerID)
           }
+          .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
+            action: { rect in
+              LogseqFrameStore.setAlias(
+                probe.contentID > 0 ? probe.contentID : probe.mainContainerID,
+                rect, tag: "div")
+            }
       }
       .environment(\.openURL, OpenURLAction { url in
         guard url.scheme == "lseq-node",
@@ -2466,6 +2530,12 @@ private struct LogseqFlatBlockRow: View {
       })
       ForEach(probe.siblings, id: \.self) { sibling in
         context.content(for: sibling)
+      }
+    }
+    .onDisappear {
+      for id in [probe.controlID, probe.bulletID, probe.contentID,
+                 probe.mainContainerID] where id > 0 {
+        LogseqFrameStore.clearAlias(id)
       }
     }
     .onHover { inside in

@@ -139,6 +139,18 @@ extension LogseqElement {
     contexts[nodeID]
   }
 
+  /// Context whose extension tree contains the node — needed for
+  /// composite-row alias hits (folded inner nodes aren't mounted, so
+  /// they're absent from `contexts` even though a bound context can
+  /// emit and query them).
+  func contextOwning(nodeID: Int) -> LUIAppleExtensionViewContext? {
+    if let c = contexts[nodeID] { return c }
+    for (_, c) in contexts where c.extensionIdentifier(of: nodeID) != nil {
+      return c
+    }
+    return nil
+  }
+
   func unregister(_ id: String) {
     elements[id] = nil
   }
@@ -302,7 +314,7 @@ final class NSReferenceBox {
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
       guard let hit = LogseqFrameStore.hitTest(point, prefer: lastMouseHitNode),
-        let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
+        let context = LogseqElementRegistry.shared.contextOwning(nodeID: hit.nodeID)
       else { return event }
       if hit.nodeID == lastMouseHitNode { return event }
       lastMouseHitNode = hit.nodeID
@@ -324,7 +336,7 @@ final class NSReferenceBox {
       let point = LogseqPlatform.windowPoint(event, in: contentView)
       let hit = LogseqFrameStore.hitTest(point)
       guard let hit,
-        let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
+        let context = LogseqElementRegistry.shared.contextOwning(nodeID: hit.nodeID)
       else { return event }
       LogseqPlatform.emitMouseDown(
         context: context, nodeID: hit.nodeID, point: point,
@@ -348,7 +360,7 @@ final class NSReferenceBox {
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
       guard let hit = LogseqFrameStore.hitTest(point),
-        let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
+        let context = LogseqElementRegistry.shared.contextOwning(nodeID: hit.nodeID)
       else {
         FileHandle.standardError.write(
           "DBG mouseUp no-hit at \(Int(point.x)),\(Int(point.y))\n"
