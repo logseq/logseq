@@ -199,16 +199,6 @@ let close_client_ops_conn repo =
 let client_ops_conn_opt repo : Sqlite.db option =
   Hashtbl.find_opt client_ops_conns repo
 
-(* worker-state/get-sqlite-conn [repo which-db] — :db main graph sqlite,
-   :search the vector/search index db (search package owns the schema). *)
-let search_conns : (string, Sqlite.db) Hashtbl.t = Hashtbl.create 7
-
-let search_conn repo : Sqlite.db option =
-  Hashtbl.find_opt search_conns repo
-
-let set_search_conn repo db = Hashtbl.replace search_conns repo db
-let drop_search_conn repo = Hashtbl.remove search_conns repo
-
 (* worker-state/get-id-token — :auth/id-token in app state *)
 let id_token () : string option =
   match Worker_state.state_get "auth/id-token" with

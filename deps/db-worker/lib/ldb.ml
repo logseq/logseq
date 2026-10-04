@@ -1118,8 +1118,7 @@ let consecutive_block db (b1 : entity) (b2 : entity) : bool =
     &&
     (match get_left_sibling y with
      | Some ls -> ls.id = x.id
-     | None -> false
-     | exception _ -> false)
+     | None -> false)
     || (match get_left_sibling y with
         | Some prev_sibling -> last_child_block db prev_sibling.id x.id
         | None -> false)
