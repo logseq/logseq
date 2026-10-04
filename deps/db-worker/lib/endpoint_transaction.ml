@@ -28,7 +28,15 @@ let require_conn repo : conn =
 (* maybe-run-recycle-gc! *)
 let recycle_gc_kv = "logseq.kv/recycle-last-gc-at"
 
-let maybe_run_recycle_gc (conn : conn) : unit =
+(* GC bookkeeping writes are system writes — on remote graphs they
+   belong to the confirmed base (server conn), not the projection.
+   Returns true when it transacted so callers can rebuild the display
+   projection — a server-conn purge otherwise leaves recycled entities
+   visible as ghosts until the next remote tx. *)
+let maybe_run_recycle_gc repo : bool =
+  match Sync_state.confirmed_conn repo with
+  | None -> false
+  | Some conn ->
   let now = Time.now () in
   let last_gc_at =
     match entity (Conn.db conn) (Ident recycle_gc_kv) with
@@ -42,7 +50,7 @@ let maybe_run_recycle_gc (conn : conn) : unit =
   (match last_gc_at with
    | Some l
      when Time.epoch_ms_to_float now -. Time.epoch_ms_to_float l
-          <= Outliner_recycle.gc_interval_ms -> ()
+          <= Outliner_recycle.gc_interval_ms -> false
    | _ ->
        ignore (Outliner_recycle.gc conn ~now_ms:now ());
        ignore
@@ -53,7 +61,8 @@ let maybe_run_recycle_gc (conn : conn) : unit =
                     [ ("db/ident", One_value (Keyword recycle_gc_kv))
                     ; ("kv/value", One_value (Float (Time.epoch_ms_to_float now))) ] } ]
             ~tx_meta:
-              [ ("persist-op?", Bool false); ("skip-validate-db?", Bool true) ] ))
+              [ ("persist-op?", Bool false); ("skip-validate-db?", Bool true) ] );
+       true)
 
 (* :thread-api/transact [repo tx-data tx-meta context] *)
 let transact args : Wire.t Db_worker_effect.t =
@@ -130,7 +139,11 @@ let transact args : Wire.t Db_worker_effect.t =
        ignore
          (Db_transact.transact conn tx_data'
             (Ds_wire.tx_meta_of_transit tx_meta'));
-     maybe_run_recycle_gc conn;
+     (if maybe_run_recycle_gc repo && Sync_state.server_conn repo <> None
+      then
+        (* the purge transacted on the server conn — rebuild the
+           display projection so recycled entities don't ghost *)
+        Sync_apply.rebuild_display repo ~jump_tx_data:[]);
      Db_worker_effect.pure Wire.Nil
    with e ->
      (* cljs (log/error ::worker-transact-failed {...}) then rethrow *)

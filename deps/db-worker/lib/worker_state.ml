@@ -1,5 +1,11 @@
 let datascript_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
 
+(* RTC graphs keep a second conn holding only confirmed state (restored
+   snapshot + remote txs + acked local txs); the registered datascript_conn
+   is an in-memory projection of it plus pending ops replayed forward. The
+   server conn registry lives in Sync_state — this module is sealed by
+   spec/worker/worker_state.mli. *)
+
 (* cljs worker-state/*sqlite-conns* — (repo, kind) -> db *)
 type db_kind =
   | Db
@@ -60,8 +66,9 @@ let close_graph_resources_fn : (string -> unit) ref =
       (fun (kind, db) ->
         drop_sqlite_conn_of repo kind;
         if kind = Db then drop_datascript_conn repo;
-        (try Sqlite.close db with _ -> ()))
-      entries)
+        (try Sqlite.close db with _ -> Pending_closes.note repo db))
+      entries;
+    List.iter (fun db -> try Sqlite.close db with _ -> ()) (Pending_closes.take repo))
 
 let close_other_sqlite_conns keep_repo =
   let repos =

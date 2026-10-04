@@ -22,15 +22,28 @@ let expand_home (path : string) : string =
   end
   else path
 
+(* windows drive-letter absolute path (C:\ or C:/ prefix). *)
+let windows_drive (s : string) : bool =
+  String.length s >= 2
+  && s.[1] = ':'
+  &&
+  (let c = s.[0] in
+   (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))
+
 (* node-path/resolve — lexical resolution to an absolute path against
-   the process cwd ('.'/'..' collapsed, trailing slash dropped). *)
+   the process cwd ('.'/'..' collapsed, trailing slash dropped).
+   Windows drive paths keep their drive letter and normalize to forward
+   slashes, matching node's win32 resolve output the fs layer accepts. *)
 let path_resolve (path : string) : string =
   let abs =
-    if Filename.is_relative path then
+    if Filename.is_relative path && not (windows_drive path) then
       Filename.concat (Node_process.cwd ()) path
     else path
   in
-  let segs = String.split_on_char '/' abs in
+  let sep_fixed =
+    String.map (fun c -> if c = '\\' then '/' else c) abs
+  in
+  let segs = String.split_on_char '/' sep_fixed in
   let rec go acc = function
     | [] -> List.rev acc
     | "" :: rest -> go acc rest
@@ -41,7 +54,10 @@ let path_resolve (path : string) : string =
          | _ :: acc' -> go acc' rest)
     | s :: rest -> go (s :: acc) rest
   in
-  "/" ^ String.concat "/" (go [] segs)
+  match segs with
+  | drive :: rest when windows_drive drive ->
+      drive ^ "/" ^ String.concat "/" (go [] rest)
+  | _ -> "/" ^ String.concat "/" (go [] segs)
 
 let normalize_root_dir (path : string option) : string =
   path_resolve

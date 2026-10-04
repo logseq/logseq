@@ -243,10 +243,14 @@ let replace_attr_retract_with_retract_entity ?memo (db_after : db)
          (match entity_id with
           | Some id when id = e -> () (* eid unchanged *)
           | _ ->
+              (* the retracted entity owned uuid v before this tx, so
+                 [:block/uuid v] resolves to exactly that entity on any
+                 conn the normalized data is applied to. Keeping the raw
+                 datom e (cljs (:e d)) leaks a conn-local int eid into
+                 data that is replayed on other conns (upload, server
+                 conn confirm) where the same eid is a different entity *)
               Hashtbl.replace retract_eids_by_entity (item_key e)
-                (match entity with
-                 | Some _ -> e
-                 | None -> Wire.Array [ kw "block/uuid"; v ]))
+                (Wire.Array [ kw "block/uuid"; v ]))
        end)
     tx_data;
   let seen : (string, unit) Hashtbl.t = Hashtbl.create 63 in

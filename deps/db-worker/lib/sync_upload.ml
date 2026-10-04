@@ -330,6 +330,11 @@ let persist_upload_graph_identity repo graph_id graph_e2ee =
          [ Wire.Keyword "repo", Wire.String repo
          ; Wire.Keyword "field", Wire.Keyword "graph-id" ]);
   set_graph_sync_metadata repo graph_id graph_e2ee;
+  (* the graph just became remote — split off the server conn now so
+     remote txs never interleave with pending ops on one conn *)
+  (* the snapshot below serializes the pre-split conn's datoms — keep
+     pending forward data in place so the upload carries it *)
+  Sync_apply.split_off_server_if_remote ~unapply_pending:false repo;
   ensure_client_graph_uuid repo graph_id;
   Wire.Map
     [ Wire.Keyword "graph-id", Wire.String graph_id
@@ -532,6 +537,11 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
       let snapshot_checksum =
         Db_sync_checksum.recompute_checksum (Conn.db source_conn)
       in
+      (* clear before the fresh-image anchor lands: dying in between
+         leaves flag=0 + the old checksum, which reconcile-on-open
+         recomputes into the right value — clearing after would pin
+         flag=1 to a fresh image and silence heal/drift forever *)
+      Sync_client_op.clear_checksum_exempted repo;
       Sync_client_op.update_local_checksum repo snapshot_checksum
         (Conn.db source_conn).max_tx;
       update_upload_progress
