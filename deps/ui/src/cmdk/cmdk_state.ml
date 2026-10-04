@@ -1226,8 +1226,16 @@ let shortcut_action cid : (unit -> unit) option =
   | "ui/select-theme-color" | "ui/customize-appearance" ->
       Some
         (fun () ->
-          Runtime.send (Action.Navigate_to Model.Settings);
-          Platform.set_location_hash (Runtime.nav_hash "#/settings"))
+          (* cljs :ui/toggle-appearance — appearance popup anchored to
+             the toolbar dots trigger *)
+          match Dom_ext.doc_query_selector ".toolbar-dots-btn" with
+          | Some el ->
+              let r = Dom_ext.bounding_rect el in
+              Runtime.send
+                (Action.Appearance_set
+                   (Some
+                      (Dom_ext.rect_right r, Dom_ext.rect_bottom r +. 4.)))
+          | None -> ())
   | _ -> editor_action cid
 
 let rec run_item st it =
@@ -1370,7 +1378,18 @@ and run_command st repo (cid : string) =
   | "go/journals" -> nav "#/" Model.Home
   | "go/all-graphs" -> nav "#/graphs" Model.All_graphs
   | "go/all-pages" -> nav "#/all-pages" Model.All_pages
-  | "ui/toggle-settings" -> nav "#/settings" Model.Settings
+  | "ui/toggle-settings" ->
+      (* cljs toggle-settings-modal! — toggles the settings dialog,
+         not the #/settings route *)
+      close st;
+      if Dialogs_state.is_open "settings" then
+        Dialogs_state.close_named "settings"
+      else Dialogs_state.open_ "settings"
+  | "go/keyboard-shortcuts" ->
+      (* cljs open-settings! :keymap — settings dialog on the keymap tab *)
+      close st;
+      Settings_state.open_at "keymap";
+      Dialogs_state.open_ "settings"
   | "sidebar/open-today-page" ->
       close st;
       goto_journal_day (Dates.today_journal_day ())

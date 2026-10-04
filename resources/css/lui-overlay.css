@@ -2446,7 +2446,10 @@ h1.cp__settings-category-title::first-letter {
   align-items: center;
 }
 
-.panel-wrap .it > *:nth-child(2),
+/* cljs .it is grid-cols-3: the control column spans 2 only when the
+   row has two children (label + control); three-child rows (e.g.
+   label | switch | shortcut kbd) keep one column each */
+.panel-wrap .it > *:nth-child(2):last-child,
 .panel-wrap .it .it-control {
   grid-column: span 2;
   display: flex;
@@ -2589,27 +2592,70 @@ h1.cp__settings-category-title::first-letter {
 .shortcut-toolbar-row {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .shortcut-toolbar-row .search-input-wrap {
   display: flex;
   align-items: center;
   flex: 1;
+  min-width: 0;
   position: relative;
+}
+
+.shortcut-toolbar-row .search-input-wrap input.form-input {
+  width: 100%;
+  height: 2rem;
+  padding-left: 1.75rem;
+  padding-right: 1.75rem;
+  font-size: 0.875rem;
 }
 
 .shortcut-toolbar-row .search-icon {
   position: absolute;
   left: 0.5rem;
-  opacity: 0.5;
+  opacity: 0.4;
   display: flex;
+  pointer-events: none;
+}
+
+.shortcut-toolbar-row .search-icon .ui__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* cljs shortcut.css .shortcut-keystroke-inactive — bordered "Search by
+   keys" button sitting right of the search input */
+.shortcut-keystroke-inactive {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  height: 30px;
+  padding: 0 10px;
+  min-width: 9rem;
+  border-radius: 6px;
+  border: 1px solid
+    var(--lx-gray-07, var(--ls-quaternary-background-color, hsl(var(--border))));
+  background-color:
+    var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--muted))));
+  color: var(--lx-gray-12, inherit);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.shortcut-keystroke-inactive:hover {
+  background-color:
+    var(--lx-gray-04, var(--ls-quaternary-background-color, hsl(var(--accent))));
 }
 
 .shortcut-pills-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
@@ -2635,8 +2681,26 @@ h1.cp__settings-category-title::first-letter {
 }
 
 .shortcut-filter-pill[data-active],
-.shortcut-filter-pill.active {
+.shortcut-filter-pill.active,
+.shortcut-filter-pill--active {
   background: var(--lx-gray-04, var(--ls-tertiary-background-color, hsl(var(--muted))));
+}
+
+/* cljs shortcut.css li.th — grey category band rows (Basics,
+   Navigation, ...) with the fold chevron at the right edge */
+.cp__shortcut-page-x li.th {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 15px;
+  background-color:
+    var(--lx-gray-03, var(--ls-tertiary-background-color, hsl(var(--muted))));
 }
 
 .shortcut-row {
