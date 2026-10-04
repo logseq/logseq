@@ -675,8 +675,12 @@ let block_item_of_row i w =
     | None -> Option.value (Cmdk_state.str_field w "block/uuid") ~default:""
   in
   (* cljs node-render for blocks: point-filled node icon and the parent
-     path in the breadcrumb row *)
-  mk_item ~key:it.Cmdk_state.ikey ~label:it.Cmdk_state.ititle ~node:true
+     path in the breadcrumb row. FTS rows carry
+     $pfts_2lqh>$..$<pfts_2lqh$ markers — strip them; the view's query
+     highlight still marks the hit *)
+  mk_item ~key:it.Cmdk_state.ikey
+    ~label:(Cmdk_state.strip_pfts it.Cmdk_state.ititle)
+    ~node:true
     ~node_icon:("point-filled", true)
     ~breadcrumb:(Option.value it.Cmdk_state.header ~default:"")
     (Emit ("[[" ^ uuid ^ "]]", 0));;
@@ -693,6 +697,10 @@ let run_block_search t ac =
      in
      let rows =
        match w with
+       | Wire.Map _ -> (
+           match Wire.get w "items" with
+           | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+           | _ -> [])
        | Wire.Array xs | Wire.List xs -> xs
        | _ -> []
      in
