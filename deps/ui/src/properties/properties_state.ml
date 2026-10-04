@@ -92,18 +92,26 @@ let toggle_hidden () = show_hidden := not !show_hidden
 
 (* ---------- mounted area registry ---------- *)
 
-(* Each mounted area registers (container element, refresh closure).
-   refresh() re-invokes get-display-properties and re-renders inside the
-   container; dead entries are pruned by isConnected. *)
+(* Each mounted area registers (container element, mount key, refresh
+   closure). The key dedups mounting — a container remounts when the key
+   (block/page uuid) it was mounted for changes. refresh() re-invokes
+   get-display-properties and re-renders inside the container; dead
+   entries are pruned by isConnected. *)
 type area =
   { container : Editor_dom.el
+  ; key : string
   ; refresh : unit -> unit Js.Promise.t
   }
 
 let areas : area list ref = ref []
 
-let register_area container refresh =
-  areas := { container; refresh } :: !areas
+let register_area ~key container refresh =
+  areas := { container; key; refresh } :: !areas
+
+let mounted_key el =
+  Option.map
+    (fun a -> a.key)
+    (List.find_opt (fun a -> a.container == el) !areas)
 
 let unregister_area el =
   areas := List.filter (fun a -> a.container != el) !areas
