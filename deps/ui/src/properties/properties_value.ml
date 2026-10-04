@@ -690,29 +690,58 @@ let closed_value_icon_id value =
       in
       if is_empty_placeholder then Some "line-dashed" else None)
 
-let closed_value_cell ctx row anchor =
+let closed_value_cell ?(icon_only = false) ctx row anchor =
   let value = D.row_value row in
   let cell = mk ~cls:"jtrigger" "div" in
   (* cljs select-item: an empty closed value renders .select-item >
      .empty-btn with the line-dashed icon — keeps the jtrigger
      visible/clickable *)
-  (match closed_value_icon_id value with
-   | Some id ->
-       let item = mk ~cls:"select-item" "div" in
-       el_append_child item (Views_dom.icon id);
-       el_append_child cell item
-   | None ->
-       if D.value_empty_p value then (
-         let item = mk ~cls:"select-item" "div" in
-         let btn = mk ~cls:"empty-btn" "button" ~attrs:[ ("type", "button") ] in
-         el_append_child btn (Views_dom.icon "line-dashed");
-         el_append_child item btn;
-         el_append_child cell item));
-  let txt = D.value_display value in
-  let txt =
-    if txt = "logseq.property/empty-placeholder" then "" else txt
+  let icon_only_chip =
+    (* cljs closed-value-item {:icon? true} at positioned spots: the
+       chip renders the icon alone, wrapped in .ls-icon-color-wrap —
+       no text label *)
+    match closed_value_icon_id value with
+    | Some id when icon_only && id <> "line-dashed" -> (
+        let item = mk ~cls:"select-item cursor-pointer shrink-0" "div" in
+        let wrap =
+          mk ~cls:"inline-flex items-center ls-icon-color-wrap" "span"
+        in
+        let color =
+          Option.bind
+            (D.getf (D.untag value) "logseq.property/icon")
+            (fun icon -> D.gets (D.untag icon) "color")
+        in
+        el_set_attr wrap "style"
+          ("color:" ^ Option.value color ~default:"inherit");
+        el_append_child wrap (Views_dom.icon id);
+        el_append_child item wrap;
+        el_append_child cell item;
+        Some ())
+    | _ -> None
   in
-  if txt <> "" then ignore (child_text "span" "" txt cell);
+  (match icon_only_chip with
+   | Some () -> ()
+   | None -> (
+       (match closed_value_icon_id value with
+        | Some id ->
+            let item = mk ~cls:"select-item" "div" in
+            el_append_child item (Views_dom.icon id);
+            el_append_child cell item
+        | None ->
+            if D.value_empty_p value then (
+              let item = mk ~cls:"select-item" "div" in
+              let btn =
+                mk ~cls:"empty-btn" "button"
+                  ~attrs:[ ("type", "button") ]
+              in
+              el_append_child btn (Views_dom.icon "line-dashed");
+              el_append_child item btn;
+              el_append_child cell item));
+       let txt = D.value_display value in
+       let txt =
+         if txt = "logseq.property/empty-placeholder" then "" else txt
+       in
+       if txt <> "" then ignore (child_text "span" "" txt cell)));
   on_click cell (fun _ ->
       block_tag_ids ctx (fun tag_ids ->
           gather_exclusions tag_ids (fun exclusions ->
@@ -993,7 +1022,9 @@ let editing_cell ctx row inner =
   el_append_child inner cell;
   edit_text_cell ctx row cell (edit_buffer ctx row)
 
-let render ctx row =
+(* icon_only = cljs :icon? — positioned rows (block-left chips,
+   block-below pills) show the closed-value icon without its label *)
+let render ?(icon_only = false) ctx row =
   let inner =
     mk ~cls:"property-value property-value-panel-inner" "div"
   in
@@ -1012,7 +1043,7 @@ let render ctx row =
     let ty = D.row_type row in
     let cell =
       if D.row_closed_values row <> [] then
-        closed_value_cell ctx row inner
+        closed_value_cell ~icon_only ctx row inner
       else
         match ty with
         | "checkbox" -> checkbox_cell ctx row

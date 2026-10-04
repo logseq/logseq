@@ -137,7 +137,9 @@ let pill_el (ctx : V.ctx) ~owner_is_tag ~owner_title row =
     mk ~cls:"bottom-property-content property-value-container" "div"
       ~attrs:[ ("style", "min-height:20px") ]
   in
-  el_append_child content (V.render ctx row);
+  (* cljs bottom-property-pill-cp passes :icon? true — closed-value
+     pills render icon-only like the block-left chips *)
+  el_append_child content (V.render ~icon_only:true ctx row);
   el_append_child pill content;
   pill
 
@@ -195,15 +197,20 @@ let partition_rows rows =
   (left, below, panel)
 
 (* left chips: .positioned-properties.block-left inline in
-   .block-main-content; one .property-value-inner per row *)
+   .block-main-content; one .property-value-inner per row. cljs emits
+   the utility classes (flex row, h-6 self-start) on the container *)
 let render_left (ctx : V.ctx) ~owner_is_tag ~owner_title host rows =
   remove_all host ":scope > .positioned-properties.block-left";
   if rows <> [] then begin
-    let pos = mk ~cls:"positioned-properties block-left" "div" in
+    let pos =
+      mk ~cls:
+        "positioned-properties flex flex-row gap-1 select-none h-6 \
+         self-start block-left" "div"
+    in
     List.iter
       (fun r ->
         let chip = mk ~cls:"property-value-inner" "div" in
-        el_append_child chip (V.render ctx r);
+        el_append_child chip (V.render ~icon_only:true ctx r);
         el_append_child pos chip)
       rows;
     el_append_child host pos
