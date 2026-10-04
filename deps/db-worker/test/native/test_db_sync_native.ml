@@ -439,7 +439,7 @@ let with_datascript_conns (db_conn : conn) (ops_conn : Sqlite.db option)
   (* remote-marked graphs run the pending model: the registered conn
      becomes the server conn and datascript_conn the display projection *)
   let server_prev = Sync_state.server_conn test_repo in
-  Sync_apply.split_off_server_if_remote test_repo;
+  Sync_replay.split_off_server_if_remote test_repo;
   let live_conn =
     match Worker_state.datascript_conn test_repo with
     | Some c -> c
@@ -768,7 +768,7 @@ let remote_tx_to_client (server_conn : conn) (ops : tx_op list) : unit =
       report.tx_data
   in
   await_unit
-    (Sync_apply.apply_remote_tx test_repo (mk_client ()) remote_tx)
+    (Sync_replay.apply_remote_tx test_repo (mk_client ()) remote_tx)
 
 (* cljs (assoc local-tx-meta :outliner-op op) *)
 let local_tx_meta_with_outliner_op (op : string) : Wire.t =
@@ -2833,7 +2833,7 @@ let test_pull_ok_batched_txs_preserve_tempid_boundaries () =
               match
                 (try
                    await_unit
-                     (Sync_apply.apply_remote_txs test_repo client
+                     (Sync_replay.apply_remote_txs test_repo client
                         remote_txs);
                    None
                  with e -> Some e)
@@ -2880,7 +2880,7 @@ let test_apply_remote_txs_updates_journal_title_format () =
             with_datascript_conns conn (Some ops) (fun () ->
                 with_pull_ok_prelude (fun () ->
                     await_unit
-                      (Sync_apply.apply_remote_txs test_repo client
+                      (Sync_replay.apply_remote_txs test_repo client
                          [ wire_map
                              [ ( "tx-data"
                                , Wire.Array
@@ -2937,7 +2937,7 @@ let test_apply_remote_txs_applies_db_migration_entry () =
                     Datascript.unlisten conn listen_key)
                 (fun () ->
                     await_unit
-                      (Sync_apply.apply_remote_txs test_repo client
+                      (Sync_replay.apply_remote_txs test_repo client
                          [ wire_map
                              [ "tx-data", tx_data
                              ; "outliner-op", kw "db-migrate" ] ]));
@@ -3033,7 +3033,7 @@ let apply_remote_asset_tx_with_owner_source (owner : string)
                     ; "skipped-existing", Wire.Int 0 ]));
           with_pull_ok_prelude (fun () ->
               await_unit
-                (Sync_apply.apply_remote_txs test_repo client
+                (Sync_replay.apply_remote_txs test_repo client
                    [ wire_map
                        [ ( "tx-data"
                          , Wire.Array
@@ -3225,7 +3225,7 @@ let test_apply_remote_txs_preserves_many_page_property_values () =
            with_datascript_conns conn_a (Some ops) (fun () ->
                with_pull_ok_prelude (fun () ->
                    await_unit
-                     (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                     (Sync_replay.apply_remote_txs test_repo (mk_client ())
                         !remote_txs);
                    let block' =
                      Option.get
@@ -3958,7 +3958,7 @@ let test_remote_batch_drops_follow_up_ops_for_stale_created_block () =
               (match
                  (try
                     await_unit
-                      (Sync_apply.apply_remote_txs test_repo client
+                      (Sync_replay.apply_remote_txs test_repo client
                          remote_txs);
                     None
                   with _ -> Some ())
@@ -4199,7 +4199,7 @@ let test_indent_outdent_direct_outdent_undo_restores_right_sibling_parent
           check "child3 parented to child2"
             (parent_uuid_of child3_uuid = Some child2_uuid);
           let undo_result =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo applied"
             (Wire.get "applied?" undo_result = Some (Wire.Bool true));
@@ -4221,10 +4221,10 @@ let test_indent_outdent_undo_enqueues_concrete_move_blocks_history () =
           let row = List.hd pending in
           let tx_id = row.tx_id in
           let undo_result =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           let redo_result =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "op"
             (match row.Sync_client_op.forward_outliner_ops with
@@ -4536,7 +4536,7 @@ let test_apply_history_action_does_not_reuse_original_tx_id () =
                local_tx_meta);
           let tx_id = (List.hd (Sync_apply.pending_txs test_repo ())).tx_id in
           let r =
-            Sync_apply.apply_history_action test_repo tx_id true
+            Sync_replay.apply_history_action test_repo tx_id true
               [ "db-sync/tx-id", Uuid tx_id ]
           in
           check "applied" (Wire.get "applied?" r = Some (Wire.Bool true));
@@ -4580,7 +4580,7 @@ let test_apply_history_action_preserves_source_forward_inverse_ops () =
             (List.hd (Sync_apply.pending_txs test_repo ())).tx_id
           in
           let r =
-            Sync_apply.apply_history_action test_repo source_tx_id true []
+            Sync_replay.apply_history_action test_repo source_tx_id true []
           in
           check "undo applied" (Wire.get "applied?" r = Some (Wire.Bool true));
           let undo_history_tx_id =
@@ -4616,7 +4616,7 @@ let test_apply_history_action_preserves_source_forward_inverse_ops () =
             (op_entry_first_block_title undo_pending.inverse_outliner_ops
              = Some "hello");
           let r2 =
-            Sync_apply.apply_history_action test_repo source_tx_id false []
+            Sync_replay.apply_history_action test_repo source_tx_id false []
           in
           check "redo applied" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           let redo_history_tx_id =
@@ -4675,7 +4675,7 @@ let test_apply_history_action_semantic_op_must_not_fallback_to_raw_tx () =
                          ; "block/title", Wire.String "broken semantic" ])
                       (wire_map []) ]
                 ~tx_data_v:tx_data tx_id ];
-          let r = Sync_apply.apply_history_action test_repo tx_id false [] in
+          let r = Sync_replay.apply_history_action test_repo tx_id false [] in
           check "not applied" (Wire.get "applied?" r = Some (Wire.Bool false));
           check "reason"
             (Wire.get "reason" r
@@ -4708,7 +4708,7 @@ let test_apply_history_action_inline_semantic_op_rejects_numeric_ref_ids () =
                 (wire_map []) ]
           in
           let r =
-            Sync_apply.apply_history_action test_repo tx_id false
+            Sync_replay.apply_history_action test_repo tx_id false
               [ "outliner-op", Keyword "save-block"
               ; ( "db-sync/forward-outliner-ops"
                 , Vector (List.map Ds_wire.value_of_transit fwd) )
@@ -4750,7 +4750,7 @@ let test_apply_history_action_redo_invalid_insert_conflict_skips_fail_fast ()
                 tx_id ];
           Sync_util.fail_fast_fn :=
             (fun _tag _data -> Failure "fail-fast-called");
-          let r = Sync_apply.apply_history_action test_repo tx_id false [] in
+          let r = Sync_replay.apply_history_action test_repo tx_id false [] in
           check "not applied" (Wire.get "applied?" r = Some (Wire.Bool false));
           check "reason"
             (Wire.get "reason" r
@@ -4780,7 +4780,7 @@ let test_apply_history_action_save_block_ignores_stale_db_id_when_uuid_exists
                          ; "block/title", Wire.String new_title ])
                       (wire_map []) ]
                 tx_id ];
-          let r = Sync_apply.apply_history_action test_repo tx_id false [] in
+          let r = Sync_replay.apply_history_action test_repo tx_id false [] in
           check "applied" (Wire.get "applied?" r = Some (Wire.Bool true));
           check "new title"
             (match ent_by_block_uuid (Datascript.db conn) (wire_uuid_str child_uuid) with
@@ -4887,7 +4887,7 @@ let test_apply_remote_txs_reverses_parent_insert_with_existing_child () =
                (wire_list pending_before.reversed_tx));
           let client = mk_client () in
           await_unit
-            (Sync_apply.apply_remote_txs test_repo client
+            (Sync_replay.apply_remote_txs test_repo client
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -4957,7 +4957,7 @@ let test_apply_remote_txs_drops_stale_save_block_reverse () =
                 tx_id ];
           let client = mk_client () in
           await_unit
-            (Sync_apply.apply_remote_tx test_repo client
+            (Sync_replay.apply_remote_tx test_repo client
                [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
                    "block/title" (Wire.String "remote parent") ]);
           check "parent title"
@@ -5048,7 +5048,7 @@ let test_apply_history_action_undo_delete_blocks_noops_when_target_missing ()
                               [ block_uuid_lookup (Wire.Uuid missing_uuid) ]
                           ; wire_map [] ] ] ]
                 tx_id ];
-          let r = Sync_apply.apply_history_action test_repo tx_id true [] in
+          let r = Sync_replay.apply_history_action test_repo tx_id true [] in
           check "applied" (Wire.get "applied?" r = Some (Wire.Bool true));
           check "child exists"
             (ent_by_block_uuid (Datascript.db conn)
@@ -5267,7 +5267,7 @@ let test_delete_page_rewrites_node_refs_and_semantic_undo_redo () =
                   (not (List.mem page_id (ref_ids (Ldb.values e "block/refs"))))
             | None -> Alcotest.fail "ref-block missing" );
           let r_undo =
-            Sync_apply.apply_history_action test_repo tx.tx_id true []
+            Sync_replay.apply_history_action test_repo tx.tx_id true []
           in
           check "undo applied"
             (Wire.get "applied?" r_undo = Some (Wire.Bool true));
@@ -5283,7 +5283,7 @@ let test_delete_page_rewrites_node_refs_and_semantic_undo_redo () =
              | Some e -> Ldb.value e "logseq.property/deleted-at" = None
              | None -> false);
           let r_redo =
-            Sync_apply.apply_history_action test_repo tx.tx_id false []
+            Sync_replay.apply_history_action test_repo tx.tx_id false []
           in
           check "redo applied"
             (Wire.get "applied?" r_redo = Some (Wire.Bool true));
@@ -5400,7 +5400,7 @@ let test_rebase_replays_direct_set_block_property_without_semantic_ops () =
                           ; "block/title", Wire.String "remote title" ]))
                     Outliner_core.default_save_opts Block_map.empty);
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     !remote_tx);
                ( match
                    ent_by_block_uuid (Datascript.db conn_a) block_uuid
@@ -5603,7 +5603,7 @@ let test_apply_history_action_batch_set_property_lookup_refs () =
                      [ db_retract block_ref "user.property/x7" page_y_ref ])
                 action_tx_id ];
           let r1 =
-            Sync_apply.apply_history_action test_repo action_tx_id false []
+            Sync_replay.apply_history_action test_repo action_tx_id false []
           in
           check "apply" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check "x7 = page y"
@@ -5613,7 +5613,7 @@ let test_apply_history_action_batch_set_property_lookup_refs () =
                      "user.property/x7"))
              = [ "page y" ]);
           let r2 =
-            Sync_apply.apply_history_action test_repo action_tx_id true []
+            Sync_replay.apply_history_action test_repo action_tx_id true []
           in
           check "undo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check "x7 empty"
@@ -5676,7 +5676,7 @@ let batch_set_property_raw_uuid_body () =
                          (Wire.Int 2) ])
                 action_tx_id ];
           let r1 =
-            Sync_apply.apply_history_action test_repo action_tx_id false []
+            Sync_replay.apply_history_action test_repo action_tx_id false []
           in
           check "apply" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           let heading_v =
@@ -5689,7 +5689,7 @@ let batch_set_property_raw_uuid_body () =
              | [ Float f ] -> f = 2.
              | _ -> false);
           let r2 =
-            Sync_apply.apply_history_action test_repo action_tx_id true []
+            Sync_replay.apply_history_action test_repo action_tx_id true []
           in
           check "undo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check "heading cleared"
@@ -5747,7 +5747,7 @@ let test_apply_history_action_set_block_property_lookup_refs () =
                      [ db_retract block_ref "user.property/x7" page_y_ref ])
                 action_tx_id ];
           let r1 =
-            Sync_apply.apply_history_action test_repo action_tx_id false []
+            Sync_replay.apply_history_action test_repo action_tx_id false []
           in
           check "apply" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check "x7 = page y"
@@ -5757,7 +5757,7 @@ let test_apply_history_action_set_block_property_lookup_refs () =
                      "user.property/x7"))
              = [ "page y" ]);
           let r2 =
-            Sync_apply.apply_history_action test_repo action_tx_id true []
+            Sync_replay.apply_history_action test_repo action_tx_id true []
           in
           check "undo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check "x7 empty"
@@ -5783,7 +5783,7 @@ let test_apply_history_action_skips_sync_fix_pending_tx () =
                      [ db_retract missing_block_ref "block/title"
                          (Wire.String "missing") ])
                 tx_id ];
-          let r = Sync_apply.apply_history_action test_repo tx_id true [] in
+          let r = Sync_replay.apply_history_action test_repo tx_id true [] in
           check "not applied" (Wire.get "applied?" r = Some (Wire.Bool false));
           check "reason"
             (Wire.get "reason" r = Some (kw "unsupported-history-action"))))
@@ -5816,7 +5816,7 @@ let test_replay_recycle_delete_permanently_removes_recycled_page () =
          | Some e -> Ldb.recycled e
          | None -> false);
       check "replay"
-        (Sync_apply.replay_canonical_outliner_op conn
+        (Sync_replay.replay_canonical_outliner_op conn
            (Wire.Array
               [ kw "recycle-delete-permanently"
               ; Wire.Array [ block_uuid_lookup (Wire.Uuid page_uuid) ] ])
@@ -5863,7 +5863,7 @@ let test_replay_recycle_delete_permanently_removes_recycled_block () =
          | Some e -> Ldb.recycled e
          | None -> false);
       check "replay"
-        (Sync_apply.replay_canonical_outliner_op conn
+        (Sync_replay.replay_canonical_outliner_op conn
            (Wire.Array
               [ kw "recycle-delete-permanently"
               ; Wire.Array [ block_uuid_lookup (Wire.Uuid parent_uuid) ] ])
@@ -5886,7 +5886,7 @@ let test_replay_recycle_delete_permanently_missing_root_is_idempotent () =
           ()
       in
       check "replay nil"
-        (Sync_apply.replay_canonical_outliner_op conn
+        (Sync_replay.replay_canonical_outliner_op conn
            (Wire.Array
               [ kw "recycle-delete-permanently"
               ; Wire.Array [ block_uuid_lookup (Wire.Uuid (fresh_uuid ())) ] ])
@@ -5941,7 +5941,7 @@ let set_block_property_raw_uuid_body () =
                   (Wire.Array [ db_retract block_ref "block/tags" tag_ref ])
                 action_tx_id ];
           let r1 =
-            Sync_apply.apply_history_action test_repo action_tx_id false []
+            Sync_replay.apply_history_action test_repo action_tx_id false []
           in
           check "apply" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check "tags = #{tag}"
@@ -5950,7 +5950,7 @@ let set_block_property_raw_uuid_body () =
                   "block/tags")
              = [ tag1.id ]);
           let r2 =
-            Sync_apply.apply_history_action test_repo action_tx_id true []
+            Sync_replay.apply_history_action test_repo action_tx_id true []
           in
           check "undo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check "tags cleared"
@@ -6062,7 +6062,7 @@ let wire_gen_undo_ops () : unit =
                 pairs
             in
             let result =
-              Sync_apply.apply_history_action repo
+              Sync_replay.apply_history_action repo
                 (Option.value ~default:"" tx_id_opt) undo tx_meta
             in
             match result with
@@ -6110,7 +6110,7 @@ let test_apply_history_action_redo_replays_insert_blocks () =
                (wire_list (op_arg (List.hd pending.inverse_outliner_ops) 0))
              = inserted_uuid);
           let r1 =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check "inserted gone"
@@ -6118,7 +6118,7 @@ let test_apply_history_action_redo_replays_insert_blocks () =
                (wire_uuid_str inserted_uuid)
              = None);
           let r2 =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "redo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           match
@@ -6159,12 +6159,12 @@ let test_apply_history_action_redo_replays_save_block () =
             | None -> Alcotest.fail "child missing"
           in
           let r1 =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check_title "child 1";
           let r2 =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "redo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check_title "child 1 inline edit"))
@@ -6238,7 +6238,7 @@ let test_apply_history_action_redo_rejects_save_block_late_query_ref () =
                           ; wire_map [] ] ] ]
                 tx_id ];
           let result =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "applied?" (Wire.get "applied?" result = Some (Wire.Bool false));
           check "reason" (Wire.get "reason" result = Some (kw "error"));
@@ -6277,7 +6277,7 @@ let test_replay_save_block_missing_block_is_invalid () =
         try
           ignore
             (with_silenced_console_error (fun () ->
-                 Sync_apply.replay_canonical_outliner_op conn
+                 Sync_replay.replay_canonical_outliner_op conn
                    (Wire.Array
                       [ kw "save-block"
                       ; Wire.Array
@@ -6333,12 +6333,12 @@ let test_apply_history_action_redo_replays_status_property () =
             | None -> Alcotest.fail "task missing"
           in
           let r1 =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check_status "logseq.property/status.todo";
           let r2 =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "redo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check_status "logseq.property/status.doing"))
@@ -6417,13 +6417,13 @@ let test_apply_history_action_redo_replays_upsert_property () =
                       = Wire.Uuid created_uuid)
                | None -> Alcotest.fail "pending tx missing");
               let r1 =
-                Sync_apply.apply_history_action test_repo tx_id true []
+                Sync_replay.apply_history_action test_repo tx_id true []
               in
               check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
               check "ident gone"
                 (Datascript.entity (Datascript.db conn) (Ident created_ident) = None);
               let r2 =
-                Sync_apply.apply_history_action test_repo tx_id false []
+                Sync_replay.apply_history_action test_repo tx_id false []
               in
               check "redo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
               match Datascript.entity (Datascript.db conn) (Ident created_ident) with
@@ -6545,12 +6545,12 @@ let test_apply_history_action_redo_replays_block_concat () =
           in
           check_titles "hellohellohello" true;
           let r1 =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check_titles "hellohello" false;
           let r2 =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "redo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check_titles "hellohellohello" true))
@@ -6598,12 +6598,12 @@ let test_apply_history_action_redo_replays_save_then_insert () =
               ((ent_by_block_uuid (Datascript.db conn) inserted_uuid' = None) = inserted_gone)
           in
           let r1 =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check_titles "child 1" true;
           let r2 =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "redo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check_titles "child 1 edited" false))
@@ -6690,7 +6690,7 @@ let test_apply_history_action_redo_replays_paste_into_empty_target () =
                   (fun entry -> op_name entry = Some "save-block")
                   inverse));
           let r1 =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           (match ent_by_block_uuid (Datascript.db conn) empty_target_uuid with
@@ -6701,7 +6701,7 @@ let test_apply_history_action_redo_replays_paste_into_empty_target () =
           check "pasted child gone"
             (ent_by_block_uuid (Datascript.db conn) pasted_child_uuid = None);
           let r2 =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "redo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           match ent_by_block_uuid (Datascript.db conn) pasted_uuid with
@@ -6766,22 +6766,22 @@ let test_apply_history_action_redo_replays_insert_save_delete_sequence () =
             | None -> check "title" (expected = "")
           in
           let r1 =
-            Sync_apply.apply_history_action test_repo delete_id true []
+            Sync_replay.apply_history_action test_repo delete_id true []
           in
           check "undo delete" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check_title "published";
           let r2 =
-            Sync_apply.apply_history_action test_repo save_id true []
+            Sync_replay.apply_history_action test_repo save_id true []
           in
           check "undo save" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check_title "draft";
           let r3 =
-            Sync_apply.apply_history_action test_repo save_id false []
+            Sync_replay.apply_history_action test_repo save_id false []
           in
           check "redo save" (Wire.get "applied?" r3 = Some (Wire.Bool true));
           check_title "published";
           let r4 =
-            Sync_apply.apply_history_action test_repo delete_id false []
+            Sync_replay.apply_history_action test_repo delete_id false []
           in
           check "redo delete" (Wire.get "applied?" r4 = Some (Wire.Bool true));
           check "gone again" (ent_by_block_uuid (Datascript.db conn) inserted_uuid' = None)))
@@ -6805,7 +6805,7 @@ let test_apply_history_action_undo_keeps_working_after_remote_update () =
                local_tx_meta);
           let tx_id = (List.hd (Sync_apply.pending_txs test_repo ())).tx_id in
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int child1.id) "block/updated-at"
                    (Wire.Int 12345) ]);
           let check_title expected =
@@ -6815,12 +6815,12 @@ let test_apply_history_action_undo_keeps_working_after_remote_update () =
             | None -> Alcotest.fail "child missing"
           in
           let r1 =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           check_title "child 1";
           let r2 =
-            Sync_apply.apply_history_action test_repo tx_id false []
+            Sync_replay.apply_history_action test_repo tx_id false []
           in
           check "redo" (Wire.get "applied?" r2 = Some (Wire.Bool true));
           check_title "local-2"))
@@ -6851,7 +6851,7 @@ let test_apply_history_action_undo_restores_hard_deleted_block () =
             (op_name (List.hd delete_action.inverse_outliner_ops)
              = Some "insert-blocks");
           let r1 =
-            Sync_apply.apply_history_action test_repo delete_action.tx_id
+            Sync_replay.apply_history_action test_repo delete_action.tx_id
               true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
@@ -6894,7 +6894,7 @@ let test_apply_history_action_undo_restores_multi_parent_delete () =
             |> Option.get
           in
           let r1 =
-            Sync_apply.apply_history_action test_repo delete_action.tx_id
+            Sync_replay.apply_history_action test_repo delete_action.tx_id
               true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
@@ -6986,7 +6986,7 @@ let test_apply_history_action_undo_restores_multi_parent_move () =
             |> Option.get
           in
           let r1 =
-            Sync_apply.apply_history_action test_repo move_action.tx_id
+            Sync_replay.apply_history_action test_repo move_action.tx_id
               true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
@@ -7034,7 +7034,7 @@ let test_apply_history_action_undo_replays_move_blocks_nested_lookup_ref () =
                           ; wire_map [ "sibling?", Wire.Bool false ] ] ] ]
                 tx_id ];
           let r1 =
-            Sync_apply.apply_history_action test_repo tx_id true []
+            Sync_replay.apply_history_action test_repo tx_id true []
           in
           check "undo" (Wire.get "applied?" r1 = Some (Wire.Bool true));
           match ent_by_block_uuid (Datascript.db conn) child_uuid with
@@ -7106,7 +7106,7 @@ let test_rebase_create_page_keeps_page_uuid () =
             (op_arg (List.hd pending_before.inverse_outliner_ops) 0
              = page_uuid);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "parent remote create-page") ]);
           match Db_test_util.find_page_by_title (Datascript.db conn) page_title with
@@ -7162,7 +7162,7 @@ let test_rebase_duplicate_create_page_keeps_remote_children () =
                 (Wire.Int now) ]
           in
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map [ "tx-data", remote_page_tx ]
                ; wire_map [ "tx-data", Wire.Array remote_child_tx ] ]);
           match Db_test_util.find_page_by_title (Datascript.db conn) page_title with
@@ -7284,7 +7284,7 @@ let test_rebase_drops_stale_title_add_for_deleted_reference_view () =
                   (Datascript.datom ~e:view_id ~a ~v ~tx:now ~added ()) )
           in
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -7360,7 +7360,7 @@ let test_rebase_insert_blocks_keeps_block_uuid () =
                (op_arg (List.hd pending_before.forward_outliner_ops) 2)
              = Some (Wire.Bool true));
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "parent remote insert-blocks") ]);
           match ent_by_block_uuid (Datascript.db conn) (wire_uuid_str block_uuid) with
@@ -7434,7 +7434,7 @@ let test_rebase_local_insert_then_save_keeps_cardinality_one_values () =
           check "2 pending"
             (List.length (Sync_apply.pending_txs test_repo ()) = 2);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/updated-at"
                    (Wire.Int 1710000000000) ]);
           match ent_by_block_uuid (Datascript.db conn) block_uuid with
@@ -7515,7 +7515,7 @@ let test_rebase_insert_indent_save_sequence_keeps_structural_state () =
             | None -> Wire.Nil
           in
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_retract (block_uuid_lookup (Wire.Uuid parent_uuid))
                    "block/parent"
                    (block_uuid_lookup (Wire.Uuid page_1_uuid))
@@ -7586,7 +7586,7 @@ let test_rebase_keeps_local_insert_and_save_when_sibling_target_deleted () =
           let pending_before = Sync_apply.pending_txs test_repo () in
           check "2+ pending" (List.length pending_before >= 2);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                (List.map Ds_wire.transit_of_tx_op remote_delete_sibling_tx));
           match ent_by_block_uuid (Datascript.db conn) block_uuid with
           | Some block_after ->
@@ -7702,7 +7702,7 @@ let test_rebase_replays_pending_insert_before_save_when_missed () =
                 (fresh_uuid ()) ];
           check "block absent" (ent_by_block_uuid (Datascript.db conn) block_uuid = None);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
                    "block/title" (Wire.String "remote parent title") ]);
           match ent_by_block_uuid (Datascript.db conn) block_uuid with
@@ -7781,7 +7781,7 @@ let test_rebase_drops_pending_reaction_tx_when_target_deleted () =
           check "1 pending" (List.length pending_before = 1);
           let tx_id_before = (List.hd pending_before).tx_id in
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                (List.map Ds_wire.transit_of_tx_op remote_delete_tx));
           let pending_after = Sync_apply.pending_txs test_repo () in
           check "pending empty" (pending_after = []);
@@ -7974,7 +7974,7 @@ let test_apply_remote_tx_does_not_clear_pending_without_ack () =
                           ; "keep-uuid?", Wire.Bool true ])));
                check "remote tx" (!remote_tx <> []);
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     !remote_tx);
                let pending_after = Sync_apply.pending_txs test_repo () in
                check "tx ids unchanged"
@@ -8073,7 +8073,7 @@ let test_replay_failure_marks_failed_and_restores_server_state () =
           check "1 pending" (List.length pending = 1);
           let tx_id = (List.hd pending).tx_id in
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_retract_entity
                    (block_uuid_lookup (Wire.Uuid child_uuid)) ]);
           check "child gone on display"
@@ -8242,7 +8242,7 @@ let test_reparent_block_when_cycle_detected () =
             | None -> failwith "parent has no page"
           in
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/parent"
                    (Wire.Int child1.id)
                ; db_add (Wire.Int child1.id) "block/parent"
@@ -8300,7 +8300,7 @@ let test_two_children_cycle () =
                move_blocks remote_conn [ remote_child2 ] remote_child1 false;
                check "remote tx" (!remote_tx <> []);
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     !remote_tx);
                let child1' =
                  Option.get
@@ -8372,7 +8372,7 @@ let test_three_children_cycle () =
                  false;
                check "2 remote txs" (List.length !remote_txs = 2);
                await_unit
-                 (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                 (Sync_replay.apply_remote_txs test_repo (mk_client ())
                     (List.map
                        (fun tx ->
                           Wire.Map [ kw "tx-data", Wire.Array tx ])
@@ -8479,7 +8479,7 @@ let test_ignore_missing_parent_update_after_local_delete () =
                [ Block_map.of_entity parent ]).tx_data
           in
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                (List.map Ds_wire.transit_of_tx_op delete_tx));
           check "child retracted"
             (ent_by_block_uuid (Datascript.db conn) child_uuid = None);
@@ -8506,7 +8506,7 @@ let test_missing_parent_after_remote_delete_removes_descendants () =
       in
       with_datascript_conns conn None (fun () ->
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                (List.map Ds_wire.transit_of_tx_op remote_delete_tx));
           check "child retracted"
             (ent_by_block_uuid (Datascript.db conn) child_uuid = None)))
@@ -8566,7 +8566,7 @@ let test_rebase_drops_local_property_pairs_for_deleted_property () =
                  (Outliner_page.delete_conn conn_b (ent_block_uuid p2_b)
                     (Wire.Map []));
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     !remote_tx);
                let local_block' =
                  Option.get
@@ -8629,7 +8629,7 @@ let test_rebase_drops_local_tags_for_deleted_tag () =
                  (Outliner_page.delete_conn conn_b (ent_block_uuid tag_b)
                     (Wire.Map []));
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     !remote_tx);
                let local_block' =
                  Option.get
@@ -8707,7 +8707,7 @@ let test_rebase_inserted_page_ref_drops_stale_ref_for_deleted_tag () =
                  (Outliner_page.delete_conn conn_a (ent_block_uuid tag_b)
                     (Wire.Map []));
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     !remote_tx);
                match ent_by_block_uuid (Datascript.db conn_a) block_uuid with
                | None -> check "block exists" false
@@ -8788,7 +8788,7 @@ let test_rebase_save_block_inline_tag_recreates_deleted_tag () =
                  (Outliner_page.delete_conn conn_b (ent_block_uuid tag_b)
                     (Wire.Map []));
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     !remote_tx);
                let db = Datascript.db conn_a in
                let block' = ent_by_block_uuid db block_uuid in
@@ -8888,7 +8888,7 @@ let test_rebase_save_block_inline_tag_mixed_surviving_deleted () =
                  (Outliner_page.delete_conn conn_b (ent_block_uuid tag2_b)
                     (Wire.Map []));
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     !remote_tx);
                let db = Datascript.db conn_a in
                let block' = ent_by_block_uuid db block_uuid in
@@ -8970,7 +8970,7 @@ let test_cut_paste_parent_with_child_keeps_child_parent () =
       let now = 1760000000000 in
       with_datascript_conns conn None (fun () ->
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_retract_entity (block_uuid_lookup (Wire.Uuid parent_uuid))
                ; db_retract_entity (block_uuid_lookup (Wire.Uuid target_uuid))
                ; db_add (Wire.Int (-1)) "block/uuid" (Wire.Uuid target_uuid)
@@ -9011,7 +9011,7 @@ let test_fix_duplicate_orders_after_rebase () =
             [ db_add (Wire.Int child1.id) "block/title"
                 (Wire.String "child 1 local") ];
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int child1.id) "block/order"
                    (Ds_wire.transit_of_value order)
                ; db_add (Wire.Int child2.id) "block/order"
@@ -9140,7 +9140,7 @@ let test_fix_duplicate_order_against_existing_sibling () =
             [ db_add (Wire.Int child1.id) "block/title"
                 (Wire.String "child 1 local") ];
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int child1.id) "block/order"
                    (Ds_wire.transit_of_value child2_order) ]);
           let child1' = Option.get (Ldb.ent_of_id (Datascript.db conn) child1.id) in
@@ -9181,7 +9181,7 @@ let test_apply_remote_txs_rejects_invalid_final_rebase () =
                          (Ds_wire.transit_of_value
                             (Option.get original_order)) ]) ];
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "remote parent") ]);
           let child1' =
@@ -9253,7 +9253,7 @@ let test_two_clients_extends_cycle () =
             [ db_add (Wire.Int a_id) "logseq.property.class/extends"
                 (Wire.Int b_id) ];
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int b_id) "logseq.property.class/extends"
                    (Wire.Int a_id) ]);
           let a =
@@ -9315,7 +9315,7 @@ let test_fix_duplicate_orders_local_and_remote_new_blocks () =
           let local1_order = Option.get (Ldb.value local1 "block/order") in
           let local2_order = Option.get (Ldb.value local2 "block/order") in
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int (-1)) "block/uuid"
                    (Wire.Uuid remote_uuid_1)
                ; db_add (Wire.Int (-1)) "block/title"
@@ -9375,7 +9375,7 @@ let test_rebase_preserves_pending_tx_boundaries () =
           in
           check "2 pending" (List.length pending_before = 2);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "parent remote") ]);
           let pending_after = Sync_apply.pending_txs test_repo () in
@@ -9409,7 +9409,7 @@ let test_remote_rebase_tx_not_enqueued_as_local_pending () =
           in
           check "1 pending" (List.length pending_before = 1);
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -9450,7 +9450,7 @@ let test_rebase_keeps_original_created_at_for_pending_tx () =
             ()
           done;
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "parent remote") ]);
           let created_at_after =
@@ -9528,7 +9528,7 @@ let test_rebase_keeps_pending_when_rebased_empty () =
           let pending_before = Sync_apply.pending_txs test_repo () in
           check "1 pending" (List.length pending_before = 1);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int child1.id) "block/title"
                    (Wire.String "same") ]);
           check "pending kept"
@@ -9543,7 +9543,7 @@ let test_apply_remote_tx_collapsed_encrypted_title () =
       let title = Option.get (Ldb.value child1 "block/title") in
       with_datascript_conns conn (Some ops) (fun () ->
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
                    "block/title" (Ds_wire.transit_of_value title)
                ; db_retract (block_uuid_lookup (Wire.Uuid child_uuid))
@@ -9585,7 +9585,7 @@ let test_rebase_later_tx_for_new_block_uses_lookup_ref () =
           let pending_before = Sync_apply.pending_txs test_repo () in
           check ">=2 pending" (List.length pending_before >= 2);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "parent remote") ]);
           let pending = Sync_apply.pending_txs test_repo () in
@@ -9649,7 +9649,7 @@ let test_rebase_drops_stale_raw_pending_missing_history_ops () =
                          (Ds_wire.transit_of_value previous_title) ]) ];
           check "1 pending" (List.length (Sync_apply.pending_txs test_repo ()) = 1);
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -9685,7 +9685,7 @@ let test_rebase_replays_title_only_raw_pending_tx () =
                          "block/title"
                          (Ds_wire.transit_of_value previous_title) ]) ];
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -9722,7 +9722,7 @@ let test_rebase_keeps_fix_pending_empty_reversed () =
                          "block/title" (Wire.String fix_title) ])
                 ~reversed_tx_data:(Wire.Array []) ];
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -9764,7 +9764,7 @@ let test_rebase_keeps_no_op_fix_pending_empty_reversed () =
                          "block/title" (Wire.String fix_title) ])
                 ~reversed_tx_data:(Wire.Array []) ];
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -9804,7 +9804,7 @@ let test_remote_log_uuid_string_scalar_values_stay_scalar () =
            (ent_by_block_uuid (Datascript.db conn) title_uuid)).id
       in
       let resolve a v =
-        Sync_apply.resolve_temp_id (Datascript.db conn)
+        Sync_replay.resolve_temp_id (Datascript.db conn)
           (Wire.Array
              [ kw "db/add"; Wire.String class_temp_id; kw a; v
              ; history_t ])
@@ -10179,7 +10179,7 @@ let test_rebase_preserves_title_when_reversed_tx_ids_change () =
           check "1 pending"
             (List.length (Sync_apply.pending_txs test_repo ()) = 1);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int block.id) "block/updated-at"
                    (Wire.Int 1710000000000) ]);
           let block' =
@@ -10238,7 +10238,7 @@ let test_rebase_saves_remote_title_and_name_conflicts () =
           check "pending"
             (Sync_apply.pending_txs test_repo () <> []);
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ "t", Wire.Int 10
                    ; ( "tx-data"
@@ -10293,7 +10293,7 @@ let test_rebase_does_not_leave_anonymous_created_by_entities () =
           ignore (delete_blocks conn [ child1 ]);
           check "pending" (Sync_apply.pending_txs test_repo () <> []);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "parent remote") ]);
           let db = Datascript.db conn in
@@ -10345,7 +10345,7 @@ let test_rebase_create_then_delete_no_anonymous () =
           check ">=2 pending"
             (List.length (Sync_apply.pending_txs test_repo ()) >= 2);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "parent remote 2") ]);
           let db = Datascript.db conn in
@@ -10394,7 +10394,7 @@ let test_apply_remote_txs_delete_parent_with_child_no_local () =
             (block_uuid_lookup (Wire.Uuid remote_parent_uuid)) ];
       with_datascript_conns conn (Some ops) (fun () ->
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -10464,7 +10464,7 @@ let test_delete_expansion_includes_generated_pvalue_children () =
           [ RetractEntity (Entity_id parent.id) ] ~outliner_op:"delete-blocks"
       in
       let sync_expanded =
-        Sync_apply.expand_block_retracts_to_descendants
+        Sync_replay.expand_block_retracts_to_descendants
           (Datascript.db conn)
           [ db_retract_entity (Wire.Int parent.id) ]
       in
@@ -10515,7 +10515,7 @@ let test_apply_remote_txs_computes_remote_deletes_once () =
       let child2_uuid = ent_block_uuid child2 in
       let delete_set_computations = ref 0 in
       let original =
-        !Sync_apply.remote_txs_retract_entity_block_uuid_suffixes_fn
+        !Sync_replay.remote_txs_retract_entity_block_uuid_suffixes_fn
       in
       let remote_txs =
         List.init 128 (fun index ->
@@ -10531,18 +10531,18 @@ let test_apply_remote_txs_computes_remote_deletes_once () =
                     [ db_retract_entity
                         (block_uuid_lookup (Wire.Uuid child2_uuid)) ] ) ] ]
       in
-      Sync_apply.remote_txs_retract_entity_block_uuid_suffixes_fn :=
+      Sync_replay.remote_txs_retract_entity_block_uuid_suffixes_fn :=
         (fun txs ->
            incr delete_set_computations;
            original txs);
       Fun.protect
         ~finally:(fun () ->
-            Sync_apply.remote_txs_retract_entity_block_uuid_suffixes_fn :=
+            Sync_replay.remote_txs_retract_entity_block_uuid_suffixes_fn :=
               original)
         (fun () ->
            with_datascript_conns conn (Some ops) (fun () ->
                await_unit
-                 (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                 (Sync_replay.apply_remote_txs test_repo (mk_client ())
                     remote_txs);
                check "computed once" (!delete_set_computations = 1);
                check "last title"
@@ -10573,25 +10573,25 @@ let test_apply_remote_txs_skips_block_ref_filters_no_refs () =
       let stale_calls = ref 0 in
       let missing_calls = ref 0 in
       let orig_stale =
-        !Sync_apply.drop_stale_deleted_block_ref_ops_fn
+        !Sync_replay.drop_stale_deleted_block_ref_ops_fn
       in
-      let orig_missing = !Sync_apply.drop_missing_block_ref_ops_fn in
-      Sync_apply.drop_stale_deleted_block_ref_ops_fn :=
+      let orig_missing = !Sync_replay.drop_missing_block_ref_ops_fn in
+      Sync_replay.drop_stale_deleted_block_ref_ops_fn :=
         (fun db deleted txs ->
            incr stale_calls;
            orig_stale db deleted txs);
-      Sync_apply.drop_missing_block_ref_ops_fn :=
+      Sync_replay.drop_missing_block_ref_ops_fn :=
         (fun ?display_db db txs ->
            incr missing_calls;
            orig_missing ?display_db db txs);
       Fun.protect
         ~finally:(fun () ->
-            Sync_apply.drop_stale_deleted_block_ref_ops_fn := orig_stale;
-            Sync_apply.drop_missing_block_ref_ops_fn := orig_missing)
+            Sync_replay.drop_stale_deleted_block_ref_ops_fn := orig_stale;
+            Sync_replay.drop_missing_block_ref_ops_fn := orig_missing)
         (fun () ->
            with_datascript_conns conn (Some ops) (fun () ->
                await_unit
-                 (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                 (Sync_replay.apply_remote_txs test_repo (mk_client ())
                     remote_txs);
                check "stale skipped" (!stale_calls = 0);
                check "missing skipped" (!missing_calls = 0);
@@ -10618,7 +10618,7 @@ let test_apply_remote_txs_keeps_refs_recreated_after_earlier_delete () =
       let now = now_ms () in
       with_datascript_conns conn (Some ops) (fun () ->
           await_unit
-            (Sync_apply.apply_remote_txs test_repo (mk_client ())
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
@@ -10712,7 +10712,7 @@ let test_apply_remote_txs_local_fallback_delete_parent_retracts_child () =
           check "pending"
             (List.length (Sync_apply.pending_txs test_repo ()) = 1);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int (-1)) "block/uuid"
                    (Wire.Uuid child_uuid)
                ; db_add (Wire.Int (-1)) "block/title"
@@ -10744,10 +10744,10 @@ let with_batch_transact_hook
       ?before_commit:(unit -> unit) -> (conn -> unit) -> unit ->
       tx_report option)
     (f : unit -> 'a) : 'a =
-  let orig = !Sync_apply.batch_transact_with_temp_conn_fn in
-  Sync_apply.batch_transact_with_temp_conn_fn := hook orig;
+  let orig = !Sync_replay.batch_transact_with_temp_conn_fn in
+  Sync_replay.batch_transact_with_temp_conn_fn := hook orig;
   Fun.protect f ~finally:(fun () ->
-      Sync_apply.batch_transact_with_temp_conn_fn := orig)
+      Sync_replay.batch_transact_with_temp_conn_fn := orig)
 
 let tx_meta_has (name : string) (tx_meta : tx_meta) : bool =
   List.exists (fun (k, _) -> k = name) tx_meta
@@ -10788,7 +10788,7 @@ let test_rechecks_local_delete_races_temp_snapshot () =
                  f' ())
             (fun () ->
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     [ db_add
                         (block_uuid_lookup (Wire.Uuid parent_uuid))
                         "block/title"
@@ -10843,7 +10843,7 @@ let test_rechecks_local_delete_races_temp_commit () =
                  ())
             (fun () ->
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     remote_tx));
           check "injected" !injected;
           let pending_after = Sync_apply.pending_txs test_repo () in
@@ -10910,7 +10910,7 @@ let test_rechecks_local_edit_races_without_local_batch () =
                  ())
             (fun () ->
                await_unit
-                 (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                 (Sync_replay.apply_remote_txs test_repo (mk_client ())
                     remote_txs));
           check "inserted" !inserted;
           let injected =
@@ -10947,7 +10947,7 @@ let test_rebase_persisted_row_forward_and_inverse_ops () =
                check "before inverse" (first.inverse_outliner_ops <> [])
            | [] -> check "pending exists" false);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int parent.id) "block/title"
                    (Wire.String "parent remote") ]);
           match Sync_apply.pending_tx_by_id test_repo tx_id with
@@ -10999,7 +10999,7 @@ let test_apply_remote_txs_rebases_create_delete_page_as_recycled () =
           check "2 pending"
             (List.length (Sync_apply.pending_txs test_repo ()) = 2);
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (Wire.Int remote_page.id) "block/title"
                    (Wire.String "remote page updated") ]);
           let page =
@@ -11043,7 +11043,7 @@ let test_legacy_rebase_row_missing_history_persisted_with_both_ops () =
           in
           seed_client_op_txs test_repo [ legacy_pending ];
           await_unit
-            (Sync_apply.apply_remote_tx test_repo (mk_client ())
+            (Sync_replay.apply_remote_tx test_repo (mk_client ())
                [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
                    "block/title" (Wire.String "parent remote refresh") ]);
           let pending_after = Sync_apply.pending_txs test_repo () in
@@ -11777,7 +11777,7 @@ let apply_history_wrapper (repo : string) (tx_id_opt : string option)
       pairs
   in
   let result =
-    Sync_apply.apply_history_action repo
+    Sync_replay.apply_history_action repo
       (Option.value ~default:"" tx_id_opt) undo tx_meta
   in
   match result with
@@ -11870,7 +11870,7 @@ let test_rebase_apply_template_preserves_followup_insert () =
               let error =
                 try
                   await_unit
-                    (Sync_apply.apply_remote_txs test_repo (mk_client ())
+                    (Sync_replay.apply_remote_txs test_repo (mk_client ())
                        !remote_txs);
                   None
                 with e -> Some e
@@ -12769,7 +12769,7 @@ let test_rebase_insert_page_in_library_with_reference () =
                         , "block/title"
                         , String "Remote edit" ) ]);
                await_unit
-                 (Sync_apply.apply_remote_tx test_repo (mk_client ())
+                 (Sync_replay.apply_remote_tx test_repo (mk_client ())
                     [ db_add (Wire.Int child1.id) "block/title"
                         (Wire.String "Remote edit") ]);
                let db = Datascript.db conn in
@@ -13759,7 +13759,7 @@ let test_display_conn_never_persists_pending_nodes () =
         List.sort compare (storage.storage_list_addresses ())
       in
       let display =
-        Sync_apply.display_conn_from_server (Datascript.db server)
+        Sync_replay.display_conn_from_server (Datascript.db server)
       in
       (* card-one update plus enough tx datoms to exceed the tail
          compaction threshold — pre-fix each tx grew conn.storage_tail
@@ -13928,7 +13928,7 @@ let test_unapply_persisted_pending_at_split () =
            | None -> Sync_state.drop_server_conn test_repo);
           Hashtbl.remove Sync_state.client_ops_conns test_repo)
         (fun () ->
-          Sync_apply.split_off_server_if_remote test_repo;
+          Sync_replay.split_off_server_if_remote test_repo;
           let server =
             match Sync_state.server_conn test_repo with
             | Some c -> c
@@ -14007,7 +14007,7 @@ let test_pending_unapply_done_skips_split () =
           Sync_state.drop_server_conn test_repo;
           Hashtbl.remove Sync_state.client_ops_conns test_repo)
         (fun () ->
-          Sync_apply.split_off_server_if_remote test_repo;
+          Sync_replay.split_off_server_if_remote test_repo;
           let server =
             match Sync_state.server_conn test_repo with
             | Some c -> c
@@ -14092,7 +14092,7 @@ let test_unapply_forward_retract_restores () =
           Sync_state.drop_server_conn test_repo;
           Hashtbl.remove Sync_state.client_ops_conns test_repo)
         (fun () ->
-          Sync_apply.split_off_server_if_remote test_repo;
+          Sync_replay.split_off_server_if_remote test_repo;
           let server =
             match Sync_state.server_conn test_repo with
             | Some c -> c
@@ -14142,7 +14142,7 @@ let test_unapply_failed_row_keeps_entity () =
           Sync_state.drop_server_conn test_repo;
           Hashtbl.remove Sync_state.client_ops_conns test_repo)
         (fun () ->
-          Sync_apply.split_off_server_if_remote test_repo;
+          Sync_replay.split_off_server_if_remote test_repo;
           let server =
             match Sync_state.server_conn test_repo with
             | Some c -> c
@@ -14191,7 +14191,7 @@ let test_unapply_row_failure_blocks_done () =
           Sync_state.drop_server_conn test_repo;
           Hashtbl.remove Sync_state.client_ops_conns test_repo)
         (fun () ->
-          Sync_apply.split_off_server_if_remote test_repo;
+          Sync_replay.split_off_server_if_remote test_repo;
           let server =
             match Sync_state.server_conn test_repo with
             | Some c -> c

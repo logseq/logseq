@@ -179,7 +179,7 @@ let apply_history_action_adapter repo tx_id_opt undo pairs =
       pairs
   in
   (match
-     Sync_apply.apply_history_action repo
+     Sync_replay.apply_history_action repo
        (Option.value ~default:"" tx_id_opt)
        undo tx_meta
    with
@@ -742,7 +742,7 @@ let sync_client_bang ?(upload = server_upload_bang) (server : server)
            (fun tx_data -> Wire.Map [ kw "tx-data", Wire.List tx_data ])
            txs
        in
-       await_unit (Sync_apply.apply_remote_txs repo c.client remote_txs);
+       await_unit (Sync_replay.apply_remote_txs repo c.client remote_txs);
        Sync_client_op.update_local_tx repo server_t;
        progress := true
      end);
@@ -772,7 +772,7 @@ let sync_client_bang ?(upload = server_upload_bang) (server : server)
           (if accepted then begin
              (* mirrors sync_handle_message tx-batch-ok: confirmed txs
                 land on the server conn before the queue drops them *)
-             Sync_apply.confirm_pending_txs repo tx_ids;
+             Sync_replay.confirm_pending_txs repo tx_ids;
              ignore (Sync_apply.mark_pending_txs_false repo tx_ids);
              (if tx_ids <> [] then begin
                 Sync_client_op.update_local_tx repo t;
@@ -2964,7 +2964,7 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
            (fun tx_data -> Wire.Map [ kw "tx-data", Wire.List tx_data ])
            txs
        in
-       await_unit (Sync_apply.apply_remote_txs repo c.c_client remote_txs);
+       await_unit (Sync_replay.apply_remote_txs repo c.c_client remote_txs);
        Sync_client_op.update_local_tx repo server_t;
        progress := true
      end);
@@ -2987,7 +2987,7 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
           let res = chaos_upload_bang rng server tx_entries in
           (if not res.u_stale then begin
              (if res.u_applied <> [] then begin
-                Sync_apply.confirm_pending_txs repo res.u_applied;
+                Sync_replay.confirm_pending_txs repo res.u_applied;
                 ignore
                   (Sync_apply.mark_pending_txs_false ~rebuild:false repo
                      res.u_applied)
@@ -2996,7 +2996,7 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
               | Some id -> Sync_apply.fail_pending_txs repo [ id ]
               | None ->
                   if res.u_applied <> [] then
-                    Sync_apply.rebuild_display repo ~jump_tx_data:[]);
+                    Sync_replay.rebuild_display repo ~jump_tx_data:[]);
              (if res.u_applied <> [] then begin
                 Sync_client_op.update_local_tx repo server.srv_counter;
                 progress := true
@@ -3032,7 +3032,7 @@ let restart_sim_client (repo : string) : conn =
   let loaded = conn_from_db (db_of srv) in
   Sync_state.drop_server_conn repo;
   Worker_state.set_datascript_conn repo loaded;
-  Sync_apply.split_off_server_if_remote repo;
+  Sync_replay.split_off_server_if_remote repo;
   match Worker_state.datascript_conn repo with
   | Some display ->
       ignore
@@ -4880,7 +4880,7 @@ let test_two_clients_a_wins_b_overlap_rebase_3_tries () =
                    if slice <> [] then
                      try
                        await_unit
-                         (Sync_apply.apply_remote_txs repo_b client_b
+                         (Sync_replay.apply_remote_txs repo_b client_b
                             slice)
                      with e ->
                        report_history_bang seed history

@@ -334,7 +334,7 @@ let persist_upload_graph_identity repo graph_id graph_e2ee =
      remote txs never interleave with pending ops on one conn *)
   (* the snapshot below serializes the pre-split conn's datoms — keep
      pending forward data in place so the upload carries it *)
-  Sync_apply.split_off_server_if_remote ~unapply_pending:false repo;
+  Sync_replay.split_off_server_if_remote ~unapply_pending:false repo;
   ensure_client_graph_uuid repo graph_id;
   Wire.Map
     [ Wire.Keyword "graph-id", Wire.String graph_id
@@ -567,7 +567,7 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
            in
            match rows with
            | [] ->
-               ignore (Sync_apply.clear_pending_txs repo);
+               ignore (Sync_replay.clear_pending_txs repo);
                Sync_client_op.reset_local_tx repo;
                Sync_client_op.add_all_exists_asset_as_ops repo;
                update_upload_progress
