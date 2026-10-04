@@ -2054,7 +2054,22 @@ and expand_block_retracts_to_descendants (db : db) (tx_data : Wire.t list)
 
 (* ---- reverse / rebase ---- *)
 
-let resolve_temp_id (db : db) (datom_v : Wire.t) : Wire.t =
+(* uuids a tx actually creates: asserted via a block/uuid identity
+   item. pending_tx_uuid_delta's e-position over-count deliberately
+   (server upsert semantics), which would resurrect dangling
+   e-refs — replay needs the strict set *)
+let tx_self_created_uuids (items : Wire.t list) : SSet.t =
+  List.fold_left
+    (fun s item ->
+       match item with
+       | Wire.Array (op :: _ :: a :: Wire.Uuid u :: _)
+       | Wire.List (op :: _ :: a :: Wire.Uuid u :: _)
+         when op = kw "db/add" && a = kw "block/uuid" -> SSet.add u s
+       | _ -> s)
+    SSet.empty items
+
+let resolve_temp_id ?(replay_created : SSet.t option) (db : db)
+    (datom_v : Wire.t) : Wire.t =
   let replace v =
     match v with
     | Wire.String s when Sync_state.uuid_string s -> (
@@ -2066,11 +2081,36 @@ let resolve_temp_id (db : db) (datom_v : Wire.t) : Wire.t =
         | None -> v)
     | _ -> v
   in
+  (* replay path only: a db/add e-position lookup-ref the tx itself
+     creates is unresolvable on a fresh base and strict resolution
+     kills the whole tx — map it to one deterministic string tempid
+     shared by every item materializing that entity. Off by default:
+     remote txs and dangling refs keep strict resolution *)
+  let e_created_uuid e =
+    match replay_created with
+    | None -> None
+    | Some created -> (
+        match e with
+        | Wire.Uuid u when SSet.mem u created -> Some u
+        | Wire.Array [ a ; Wire.Uuid u ] | Wire.List [ a ; Wire.Uuid u ]
+          when a = kw "block/uuid" && SSet.mem u created -> Some u
+        | _ -> None)
+  in
+  let replace_e op e =
+    match replace e with
+    | e' when e' <> e -> e'
+    | _ -> (
+        match e_created_uuid e with
+        | Some u
+          when op = kw "db/add" && entity_of_wire_ref db e = None ->
+            Wire.String ("replay-created-" ^ u)
+        | _ -> e)
+  in
   match datom_v with
   | Wire.Array (op :: e :: a :: v :: rest)
   | Wire.List (op :: e :: a :: v :: rest)
     when op = kw "db/add" || op = kw "db/retract" ->
-      let e' = replace e in
+      let e' = replace_e op e in
       let v' =
         match a with
         | Wire.Keyword attr when ref_attr db attr -> replace v
@@ -2522,7 +2562,12 @@ let replay_pending_entry (repo : string) (conn : conn)
             let tx_data =
               sanitize_pending_tx_refs ~attr_live db tx_data
             in
-            let tx_data = List.map (resolve_temp_id db) tx_data in
+            let tx_data =
+              let replay_created = tx_self_created_uuids tx_data in
+              List.map
+                (resolve_temp_id ~replay_created db)
+                tx_data
+            in
             ignore
               (Db_transact.transact conn tx_data
                  [ ( "outliner-op"
@@ -2719,43 +2764,198 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
    originals dedup away. Per-row errors (e.g. a lookup-ref left dangling
    after a later row's un-apply) warn and move on to the next entry. *)
 let unapply_persisted_pending_txs repo (conn : conn) : unit =
-  if Sync_state.has_client_ops_conn repo then begin
-    let db = Conn.db conn in
+  if
+    Sync_state.has_client_ops_conn repo
+    && not (Sync_client_op.pending_unapply_done repo)
+  then begin
     (* logseq.kv/* ident entities are graph bookkeeping (graph-uuid,
        graph-remote?, gc markers), not pending user data — pending rows
        can contain them (e.g. upload's identity write), and un-applying
-       those would strip the remote flag off the server conn *)
+       those would strip the remote flag off the server conn. The eid
+       set is computed once (bounded ident walk) — keyword and
+       lookup-ref subjects carry the ident string inline and never
+       need a resolve *)
+    let kv_eids =
+      let acc = ref Int_set.empty in
+      Datascript.datoms (Conn.db conn) Aevt ~a:"db/ident" ()
+      |> Seq.iter (fun (d : datom) ->
+             match d.v with
+             | Keyword s | String s
+               when String.length s >= 10
+                    && String.sub s 0 10 = "logseq.kv/" ->
+                 acc := Int_set.add d.e !acc
+             | _ -> ());
+      !acc
+    in
     let touches_kv_item (item : Wire.t) : bool =
+      let kv_ident (s : string) : bool =
+        String.length s >= 10 && String.sub s 0 10 = "logseq.kv/"
+      in
       let target =
         match item with
         | Wire.Array (_ :: e :: _) | Wire.List (_ :: e :: _) -> e
         | _ -> Wire.Nil
       in
-      match entity_of_wire_ref db target with
-      | Some e -> (
-          match Datascript.entity_attr e "db/ident" with
-          | Some (One_value (Keyword s) | One_value (String s)) ->
-              String.length s >= 10 && String.sub s 0 10 = "logseq.kv/"
+      match target with
+      | Wire.Keyword s | Wire.String s -> kv_ident s
+      | Wire.Array [ a ; Wire.Keyword s ] | Wire.List [ a ; Wire.Keyword s ]
+      | Wire.Array [ a ; Wire.String s ] | Wire.List [ a ; Wire.String s ]
+        when a = kw "db/ident" ->
+          kv_ident s
+      | Wire.Int n -> Int_set.mem n kv_eids
+      | Wire.Int64 n -> (
+          match Int64.to_int n with
+          | n' when Int64.of_int n' = n -> Int_set.mem n' kv_eids
           | _ -> false)
-      | None -> false
+      | _ -> false
     in
-    pending_txs repo ()
+    (* (attr, value) of a lookup-ref-shaped wire item, for stubbing *)
+    let lookup_pair_of (v : Wire.t) : (string * Wire.t) option =
+      match v with
+      | Wire.Uuid _ -> Some ("block/uuid", v)
+      | Wire.Array [ a ; v' ] | Wire.List [ a ; v' ] -> (
+          match a with
+          | Wire.Keyword s | Wire.Symbol s -> Some (s, v')
+          | _ -> None)
+      | _ -> None
+    in
+    (* a pending delete's reversed re-adds reference the deleted entity
+       through [:block/uuid u] — the lookup-ref is unresolvable until
+       the entity exists, which fails the whole item. Materialize a
+       stub per unresolvable ref first (uuid-only entities are
+       deliberately not "materialized" for replay, so stubs are inert) *)
+    let stubs_of (db : db) (items : Wire.t list) : (string * Wire.t) list =
+      let seen = Hashtbl.create 16 in
+      items
+      |> List.concat_map (fun item ->
+             match item with
+             | Wire.Array (_ :: e :: rest) | Wire.List (_ :: e :: rest) ->
+                 (match lookup_pair_of e with
+                  | Some p when entity_of_wire_ref db e = None -> [ p ]
+                  | _ -> [])
+                 @ (match rest with
+                    | a :: v :: _ -> (
+                        match a with
+                        | Wire.Keyword s | Wire.Symbol s
+                          when Ldb.ref_attr db s -> (
+                            match lookup_pair_of v with
+                            | Some p when entity_of_wire_ref db v = None
+                              -> [ p ]
+                            | _ -> [])
+                        | _ -> [])
+                    | _ -> [])
+             | _ -> [])
+      |> List.filter (fun (a, v) ->
+             match Hashtbl.find_opt seen (a, v) with
+             | Some () -> false
+             | None -> Hashtbl.replace seen (a, v) (); true)
+    in
+    (* a reversed db/add restores the value a pending write evicted —
+       but on card-one attrs it would stomp a LATER confirmed value:
+       apply the restore only while the phantom is intact, i.e. the
+       conn still holds a value this row's forward tx wrote for (e,a).
+       card-many re-adds dedup against re-confirmed datoms, so they
+       don't need the guard *)
+    let stale_restores (db : db) ~(forward_items : Wire.t list)
+        (items : Wire.t list) : Wire.t list =
+      let forward_vals (e_w : Wire.t) (a : string) : Wire.t list =
+        List.filter_map
+          (fun item ->
+            match item with
+            | Wire.Array (_ :: e' :: a' :: v' :: _)
+            | Wire.List (_ :: e' :: a' :: v' :: _)
+              when e' = e_w -> (
+                match a' with
+                | Wire.Keyword s | Wire.Symbol s when s = a -> Some v'
+                | _ -> None)
+            | _ -> None)
+          forward_items
+      in
+      let phantom_intact (e_w : Wire.t) (a : string) : bool =
+        match forward_vals e_w a with
+        | [] -> true
+        | fvs -> (
+            match entity_of_wire_ref db e_w with
+            | None -> false
+            | Some ent -> (
+                let match_val (wv : Wire.t) (dv : value) : bool =
+                  match dv with
+                  | Ref eid -> (
+                      match entity_of_wire_ref db wv with
+                      | Some re -> re.id = eid
+                      | None -> false)
+                  | _ -> Ds_wire.value_of_transit wv = dv
+                in
+                let match_ent (wv : Wire.t) (te : tx_entity) : bool =
+                  match entity_of_wire_ref db wv, te.db_id with
+                  | Some re, Some (Entity_id eid) -> re.id = eid
+                  | _ -> false
+                in
+                match Datascript.entity_attr ent a with
+                | Some (One_value dv) ->
+                    List.exists (fun wv -> match_val wv dv) fvs
+                | Some (One_entity te) ->
+                    List.exists (fun wv -> match_ent wv te) fvs
+                | Some (Many_values dvs) ->
+                    List.exists
+                      (fun wv -> List.exists (match_val wv) dvs)
+                      fvs
+                | Some (Many_entities tes) ->
+                    List.exists
+                      (fun wv -> List.exists (match_ent wv) tes)
+                      fvs
+                | None -> false))
+      in
+      List.filter
+        (fun item ->
+          match item with
+          | Wire.Array (op :: e_w :: a_w :: _ :: _)
+          | Wire.List (op :: e_w :: a_w :: _ :: _)
+            when op = kw "db/add" -> (
+              match a_w with
+              | Wire.Keyword a | Wire.Symbol a
+                when not (Ldb.many_attr db a) ->
+                  phantom_intact e_w a
+              | _ -> true)
+          | _ -> true)
+        items
+    in
+    Sync_client_op.get_unconfirmed_local_txs repo
     |> List.rev
     |> List.iter (fun (e : Sync_client_op.local_tx_entry) ->
+           let db = Conn.db conn in
            match
              tx_items_of e.reversed_tx
              |> List.filter (fun i -> not (touches_kv_item i))
+             |> stale_restores db ~forward_items:(tx_items_of e.tx)
            with
            | [] -> ()
            | items -> (
                try
+                 (match stubs_of db items with
+                  | [] -> ()
+                  | stubs ->
+                      ignore
+                        (Db_transact.transact conn
+                           (List.mapi
+                              (fun i (a, v) ->
+                                Wire.Array
+                                  [ kw "db/add"
+                                  ; Wire.String
+                                      ("unapply-stub-" ^ string_of_int i)
+                                  ; Wire.Keyword a ; v ])
+                              stubs)
+                           [ "persist-op?", Bool false
+                           ; "skip-validate-db?", Bool true ]));
                  ignore
                    (Db_transact.transact conn items
-                      [ "persist-op?", Bool false ])
+                      [ "persist-op?", Bool false
+                      ; "skip-validate-db?", Bool true ])
                with exn ->
                  Worker_log.warn "db-sync/unapply-pending-failed"
                    [ "repo", repo; "tx-id", e.tx_id
-                   ; "error", Printexc.to_string exn ]))
+                   ; "error", Printexc.to_string exn ]));
+    Sync_client_op.mark_pending_unapply_done repo
   end
 
 (* Remote graphs keep two conns: the storage-backed conn registered at

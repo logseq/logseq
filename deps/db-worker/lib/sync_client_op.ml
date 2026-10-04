@@ -203,6 +203,36 @@ let get_local_checksum_covered_tx repo : int option =
   | Some s -> Common_util.parse_long ~radix:10 s
   | None -> None
 
+(* Persisted counterpart of the checksum-exempt? tx-meta: once exempt
+   writes exist, the stored checksum is a server image (it keeps tuples
+   for datoms the local gc retracted) and can legitimately diverge from
+   a local recompute. Persisted so reopen still knows. *)
+let mark_checksum_exempted repo : unit =
+  if Sync_state.has_client_ops_conn repo then
+    set_meta (store repo) "db-sync/checksum-exempted" "1"
+
+let checksum_exempted repo : bool =
+  Sync_state.has_client_ops_conn repo
+  && get_meta (store repo) "db-sync/checksum-exempted" = Some "1"
+
+(* exempted state must not outlive a fresh server image — the stored
+   checksum is re-anchored on initial upload and on (re)download *)
+let clear_checksum_exempted repo : unit =
+  if Sync_state.has_client_ops_conn repo then
+    set_meta (store repo) "db-sync/checksum-exempted" "0"
+
+(* under the display-conn model pending datoms never persist on the
+   durable conn, so the old-model un-apply must run at most once — the
+   first split after upgrade drains the queue's phantoms; new-model
+   rows only ever projected forward on the display conn *)
+let pending_unapply_done repo : bool =
+  Sync_state.has_client_ops_conn repo
+  && get_meta (store repo) "db-sync/pending-unapply-done" = Some "1"
+
+let mark_pending_unapply_done repo : unit =
+  if Sync_state.has_client_ops_conn repo then
+    set_meta (store repo) "db-sync/pending-unapply-done" "1"
+
 let get_pending_local_tx_count repo : int =
   match Worker_state.pending_local_tx_count repo with
   | Some cached -> cached
@@ -352,6 +382,16 @@ let get_pending_local_txs repo ?(limit : int option) () : local_tx_entry list =
   in
   let params = match limit with Some n -> [ int n ] | None -> [] in
   rows (store repo) sql params
+  |> List.filter_map row_to_pending_local_tx
+
+(* rows whose forward datoms may still be persisted on the conn under
+   the old single-conn model: pending (awaiting server) and failed
+   (rejected/dropped — never un-applied anywhere else) *)
+let get_unconfirmed_local_txs repo : local_tx_entry list =
+  rows (store repo)
+    (pending_tx_select
+     ^ " and (pending = 1 or failed = 1) order by created_at asc, id asc")
+    []
   |> List.filter_map row_to_pending_local_tx
 
 let get_pending_local_tx_ids repo : string list =

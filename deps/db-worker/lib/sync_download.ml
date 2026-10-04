@@ -732,6 +732,9 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
          (match Sync_state.confirmed_conn repo with
           | Some conn -> set_graph_sync_metadata conn graph_id graph_e2ee
           | None -> ());
+         (* fresh server image: any checksum divergence recorded by an
+            earlier exempted gc no longer applies *)
+         Sync_client_op.clear_checksum_exempted repo;
          (* the graph-remote marker just landed: split server/display
             conns now so subsequent remote writes go to the base *)
          Sync_apply.split_off_server_if_remote repo;

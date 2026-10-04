@@ -13731,6 +13731,229 @@ let test_reopened_graph_keeps_max_tx_of_pipeline_transaction () =
               check "stored checksum still covers the reopened graph"
                 (Sync_client_op.get_local_checksum test_repo = Some "stale"))))
 
+(* old-model upgrade: pending rows whose forward datoms were persisted
+   on the conn get un-applied at split, so the server conn becomes
+   confirmed-only while the display projection still replays them *)
+let test_unapply_persisted_pending_at_split () =
+  preserve_state (fun () ->
+      let conn, ops, parent, c1, c2, c3 = setup_parent_child () in
+      let parent_u = entity_block_uuid parent
+      and c1_u = entity_block_uuid c1
+      and c2_u = entity_block_uuid c2
+      and c3_u = entity_block_uuid c3 in
+      let page_u =
+        match Ldb.value parent "block/page" with
+        | Some (Ref id) ->
+            entity_block_uuid (Option.get (Ldb.ent_of_id (Datascript.db conn) id))
+        | _ -> failwith "parent has no block/page"
+      in
+      Worker_state.set_datascript_conn test_repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Sync_client_op.update_local_tx test_repo 0;
+      mark_graph_remote conn;
+      let phantom_u = Wire.Uuid (fresh_uuid ()) in
+      let phantom_ref = block_uuid_lookup phantom_u in
+      (* forward datoms persisted on the conn under the old model —
+         tempid e forms since the lookup-ref can't resolve yet *)
+      ignore
+        (Db_transact.transact conn
+           [ db_add (Wire.String "t-phantom") "block/uuid" phantom_u
+           ; db_add (Wire.String "t-phantom") "block/title"
+               (Wire.String "phantom")
+           ; db_add (Wire.String "t-phantom") "block/parent"
+               (block_uuid_lookup parent_u)
+           ; db_add (Wire.String "t-phantom") "block/page"
+               (block_uuid_lookup page_u)
+           ; db_add (Wire.String "t-phantom") "block/order"
+               (Wire.String "a9")
+           ; db_add (Wire.String "t-phantom") "block/created-at"
+               (Wire.Int 9)
+           ; db_add (Wire.String "t-phantom") "block/updated-at"
+               (Wire.Int 9) ]
+           []);
+      ignore
+        (Db_transact.transact conn
+           [ db_retract_entity (block_uuid_lookup c1_u) ]
+           []);
+      ignore
+        (Db_transact.transact conn
+           [ db_add (block_uuid_lookup c2_u) "block/title"
+               (Wire.String "v1")
+           ; db_add (block_uuid_lookup c3_u) "block/title"
+               (Wire.String "t1") ]
+           []);
+      (* a confirmed tx overwrote c2's title after the pending write —
+         its reversed restore must not stomp the confirmed value *)
+      ignore
+        (Db_transact.transact conn
+           [ db_add (block_uuid_lookup c2_u) "block/title"
+               (Wire.String "v3") ]
+           []);
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_add phantom_ref "block/uuid" phantom_u
+                 ; db_add phantom_ref "block/title"
+                     (Wire.String "phantom")
+                 ; db_add phantom_ref "block/parent"
+                     (block_uuid_lookup parent_u)
+                 ; db_add phantom_ref "block/page"
+                     (block_uuid_lookup page_u)
+                 ; db_add phantom_ref "block/order" (Wire.String "a9")
+                 ; db_add phantom_ref "block/created-at" (Wire.Int 9)
+                 ; db_add phantom_ref "block/updated-at" (Wire.Int 9) ])
+            ~reversed_tx_data:
+              (Wire.Array [ db_retract_entity phantom_ref ])
+            "tx-create"
+        ; seed_tx ~created_at:2
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_retract_entity (block_uuid_lookup c1_u) ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c1_u) "block/uuid" c1_u
+                 ; db_add (block_uuid_lookup c1_u) "block/title"
+                     (Wire.String "child 1")
+                 ; db_add (block_uuid_lookup c1_u) "block/parent"
+                     (block_uuid_lookup parent_u)
+                 ; db_add (block_uuid_lookup c1_u) "block/page"
+                     (block_uuid_lookup page_u)
+                 ; db_add (block_uuid_lookup c1_u) "block/order"
+                     (Wire.String "a1")
+                 ; db_add (block_uuid_lookup c1_u) "block/created-at"
+                     (Wire.Int 1)
+                 ; db_add (block_uuid_lookup c1_u) "block/updated-at"
+                     (Wire.Int 1) ])
+            "tx-delete-c1"
+        ; seed_tx ~created_at:3
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c2_u) "block/title"
+                     (Wire.String "v1") ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c2_u) "block/title"
+                     (Wire.String "child 2") ])
+            "tx-title-c2"
+        ; seed_tx ~created_at:4
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c3_u) "block/title"
+                     (Wire.String "t1") ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c3_u) "block/title"
+                     (Wire.String "child 3") ])
+            "tx-title-c3"
+        ; (* a kv bookkeeping row also un-applies — the logseq.kv/*
+             filter must keep it from stripping graph-remote? *)
+          seed_tx ~created_at:5
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_retract_entity
+                     (Wire.Array
+                        [ kw "db/ident"
+                        ; Wire.Keyword "logseq.kv/graph-remote?" ]) ])
+            "tx-kv" ];
+      let server_prev = Sync_state.server_conn test_repo in
+      Fun.protect
+        ~finally:(fun () ->
+          (match server_prev with
+           | Some c -> Sync_state.set_server_conn test_repo c
+           | None -> Sync_state.drop_server_conn test_repo);
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          Sync_apply.split_off_server_if_remote test_repo;
+          let server =
+            match Sync_state.server_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no server conn after split"
+          in
+          let server_db = Conn.db server in
+          let title_on (db : db) (u : Wire.t) : string option =
+            match
+              Datascript.entity db (Lookup_ref ("block/uuid", Uuid (wire_uuid_str u)))
+            with
+            | Some e -> (
+                match Datascript.entity_attr e "block/title" with
+                | Some (One_value (String s)) -> Some s
+                | _ -> None)
+            | None -> None
+          in
+          check "phantom forward un-applied from server conn"
+            (Datascript.entity server_db
+               (Lookup_ref ("block/uuid", Uuid (wire_uuid_str phantom_u)))
+             = None);
+          check "pending-deleted block restored on server conn"
+            (title_on server_db c1_u = Some "child 1");
+          check "graph-remote? survives the kv filter"
+            (Datascript.entity server_db
+               (Ident "logseq.kv/graph-remote?")
+             <> None);
+          check "confirmed overwrite kept over reversed restore"
+            (title_on server_db c2_u = Some "v3");
+          check "uncontended reversed restore applied"
+            (title_on server_db c3_u = Some "child 3");
+          let display =
+            match Worker_state.datascript_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no display conn after split"
+          in
+          let display_db = Conn.db display in
+          check "pending create replayed on display"
+            (title_on display_db phantom_u = Some "phantom");
+          check "pending delete replayed on display"
+            (Datascript.entity display_db
+               (Lookup_ref ("block/uuid", Uuid (wire_uuid_str c1_u)))
+             = None);
+          check "pending title replayed on display"
+            (title_on display_db c2_u = Some "v1")))
+
+(* once the pass ran, later splits skip it: under the display-conn
+   model pending forward never persists on the durable conn, so a
+   stale-looking reversed row must not touch confirmed state *)
+let test_pending_unapply_done_skips_split () =
+  preserve_state (fun () ->
+      let conn, ops, _parent, c1, _c2, _c3 = setup_parent_child () in
+      let c1_u = entity_block_uuid c1 in
+      Worker_state.set_datascript_conn test_repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Sync_client_op.update_local_tx test_repo 0;
+      mark_graph_remote conn;
+      (* a phantom-looking queue row + a phantom datom persisted on the
+         conn — the done marker must suppress the un-apply entirely *)
+      ignore
+        (Db_transact.transact conn
+           [ db_retract_entity (block_uuid_lookup c1_u) ]
+           []);
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_retract_entity (block_uuid_lookup c1_u) ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c1_u) "block/title"
+                     (Wire.String "child 1") ])
+            "tx-old-delete" ];
+      Sync_client_op.mark_pending_unapply_done test_repo;
+      Fun.protect
+        ~finally:(fun () ->
+          Sync_state.drop_server_conn test_repo;
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          Sync_apply.split_off_server_if_remote test_repo;
+          let server =
+            match Sync_state.server_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no server conn after split"
+          in
+          check "done marker skips un-apply"
+            (Datascript.entity (Conn.db server)
+               (Lookup_ref ("block/uuid", Uuid (wire_uuid_str c1_u)))
+             = None)))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -14454,6 +14677,12 @@ let () =
             "template-text-property-uploads-after-rebase-and-undo-redo-test"
             `Quick
             test_template_text_property_uploads_after_rebase_and_undo_redo
+        ; Alcotest.test_case
+            "unapply-persisted-pending-at-split-test" `Quick
+            test_unapply_persisted_pending_at_split
+        ; Alcotest.test_case
+            "pending-unapply-done-skips-split-test" `Quick
+            test_pending_unapply_done_skips_split
         ] )
     ; ( "db-sync-upload"
       , Test_db_sync_upload_native.cases ) ]
