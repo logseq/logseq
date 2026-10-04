@@ -15,6 +15,22 @@
 (def test-date (t/date-time 2026 4 5))
 (def test-js-date (js/Date. 2026 3 5 12 7 8))
 
+(defn- in-every-zone
+  "Calls `f` with each IANA zone name while the process runs in that zone.
+  Node re-reads TZ on assignment, so a date built inside `f` is local to the
+  zone; the original zone is restored afterwards."
+  [f]
+  (let [env (.-env js/process)
+        before (.-TZ env)]
+    (try
+      (doseq [zone (js/Intl.supportedValuesOf "timeZone")]
+        (set! (.-TZ env) zone)
+        (f zone))
+      (finally
+        (if (some? before)
+          (set! (.-TZ env) before)
+          (js-delete env "TZ"))))))
+
 (use-fixtures :each
   (fn [f]
     (state/set-state! :preferred-language nil)
@@ -128,6 +144,27 @@
     (is (<= start plus7-no-time end))
     (is (nil? (date/journal-day-local-range-ms nil 7)))
     (is (nil? (date/journal-day-local-range-ms today nil)))))
+
+(deftest local-day-functions-hold-in-every-zone-test
+  ;; A journal day is a calendar day in the local zone. These must hold
+  ;; wherever the process runs, including zones whose day differs from UTC's
+  ;; at the hour upstream CI runs.
+  (with-redefs [state/get-date-formatter (constantly "yyyy-MM-dd")]
+    (in-every-zone
+     (fn [zone]
+       (let [local-midnight (.getTime (js/Date. 2026 3 5))
+             noon (js/Date. 2026 3 5 12 7 8)
+             [start end] (date/journal-day-local-range-ms 20260928 7)]
+         (is (= local-midnight (date/journal-day->local-ms 20260405)) zone)
+         (is (= "2026-04-05" (date/js-date->journal-title noon)) zone)
+         (is (= "2026-04-05" (date/js-date->journal-title (js/Date. local-midnight))) zone)
+         (is (= 20260405 (date/journal-title->int "2026-04-05")) zone)
+         (is (= (.getTime (js/Date. 2026 8 28)) start) zone)
+         (is (= (.getTime (js/Date. 2026 9 5)) end) zone)
+         (is (= 5 (.getDate (date/js-date->goog-date noon))) zone)
+         (is (= "2026-04-05 12:07"
+                (date/int->local-time-2 (.getTime noon)))
+             zone))))))
 
 (deftest int->local-time-2-test
   (is (= (tf/unparse (tf/formatter "yyyy-MM-dd HH:mm")
