@@ -7,6 +7,8 @@ module S = Editor_state
 module D = Editor_dom
 module A = Editor_actions
 
+let ( let* ) p f = Js.Promise.then_ f p
+
 let mods ev = D.ev_ctrl ev || D.ev_meta ev
 
 let uuid_of_prefixed prefix id =
@@ -30,6 +32,164 @@ let ac_popup_open () = Popups_state.ac_attached ()
 let ac_owned_key = function
   | "Enter" | "Tab" | "Escape" | "ArrowUp" | "ArrowDown" -> true
   | _ -> false
+
+(* -- line-editing ops (cljs editor/clear-block, kill-line-before,
+   forward-kill-word, forward/backward-word) -- *)
+
+let set_buffer uuid nv caret =
+  match D.textarea_of uuid with
+  | Some el ->
+      D.el_set_value el nv;
+      D.el_set_selection_range el caret caret;
+      A.sync_buffer uuid nv;
+      Outliner_ops.schedule_save uuid nv
+  | None -> ()
+
+let is_word_char c =
+  (c >= 'a' && c <= 'z')
+  || (c >= 'A' && c <= 'Z')
+  || (c >= '0' && c <= '9')
+  || c = '_' || Char.code c > 127
+
+let forward_word_pos v pos =
+  let n = String.length v in
+  let i = ref pos in
+  while !i < n && not (is_word_char v.[!i]) do
+    incr i
+  done;
+  while !i < n && is_word_char v.[!i] do
+    incr i
+  done;
+  !i
+
+let backward_word_pos v pos =
+  let i = ref pos in
+  while !i > 0 && not (is_word_char v.[!i - 1]) do
+    decr i
+  done;
+  while !i > 0 && is_word_char v.[!i - 1] do
+    decr i
+  done;
+  !i
+
+(* kill from caret back to the start of the current line *)
+let kill_line_before uuid =
+  match D.textarea_of uuid with
+  | Some el ->
+      let v = D.el_value el and s = D.el_selection_start el in
+      let ls =
+        match String.rindex_opt (String.sub v 0 s) '\n' with
+        | Some i -> i + 1
+        | None -> 0
+      in
+      set_buffer uuid
+        (String.sub v 0 ls ^ String.sub v s (String.length v - s))
+        ls
+  | None -> ()
+
+(* delete caret..end-of-word (emacs kill-word semantics) *)
+let forward_kill_word uuid =
+  match D.textarea_of uuid with
+  | Some el ->
+      let v = D.el_value el and s = D.el_selection_start el in
+      let e = forward_word_pos v s in
+      set_buffer uuid
+        (String.sub v 0 s ^ String.sub v e (String.length v - e))
+        s
+  | None -> ()
+
+let move_word uuid forward =
+  match D.textarea_of uuid with
+  | Some el ->
+      let v = D.el_value el and s = D.el_selection_start el in
+      let p =
+        if forward then forward_word_pos v s else backward_word_pos v s
+      in
+      D.el_set_selection_range el p p
+  | None -> ()
+
+(* cljs editor/follow-link: open the page ref / tag / block ref whose
+   markup spans the caret *)
+let link_target_at v s =
+  let enclosing start tok_end =
+    (* last [start] token strictly before caret, first [tok_end] at-or-after
+       caret — target text between them *)
+    let n = String.length v in
+    let st_n = String.length start in
+    let rec rfind i =
+      if i < 0 then None
+      else if i + st_n <= n && String.sub v i st_n = start then Some i
+      else rfind (i - 1)
+    in
+    match rfind (s - st_n) with
+    | Some a -> (
+        let te_n = String.length tok_end in
+        let rec find i =
+          if i + te_n > n then None
+          else if String.sub v i te_n = tok_end then Some i
+          else find (i + 1)
+        in
+        match find (a + st_n) with
+        | Some b when b >= s ->
+            Some (String.sub v (a + st_n) (b - a - st_n))
+        | _ -> None)
+    | None -> None
+  in
+  match enclosing "[[" "]]" with
+  | Some t -> Some t
+  | None -> (
+      match enclosing "((" "))" with
+      | Some u -> Some u
+      | None ->
+          (* #tag word at caret *)
+          let n = String.length v in
+          let is_boundary c = not (is_word_char c) && c <> '#' in
+          let a = ref s and b = ref s in
+          while !a > 0 && not (is_boundary v.[!a - 1]) do
+            decr a
+          done;
+          while !b < n && not (is_boundary v.[!b]) do
+            incr b
+          done;
+          if
+            !a < !b && !a > 0 && v.[!a - 1] = '#'
+            || (!a < !b && v.[!a] = '#')
+          then
+            let w = if v.[!a] = '#' then !a + 1 else !a in
+            Some (String.sub v w (!b - w))
+          else None)
+
+let follow_link uuid sidebar =
+  match D.textarea_of uuid with
+  | Some el -> (
+      match link_target_at (D.el_value el) (D.el_selection_start el) with
+      | Some title when String.trim title <> "" ->
+          A.exit_edit ~select:false;
+          (match sidebar, !Sidebar_state.st_ref with
+           | true, Some sst -> Sidebar_state.open_ref sst title
+           | _ ->
+               Platform.set_location_hash
+                 (Runtime.nav_hash ("#/page/" ^ title)))
+      | _ -> ())
+  | None -> ()
+
+(* paste clipboard text into the editing block at the caret as a single
+   block (cljs editor/paste-text-in-one-block-at-point) *)
+let paste_text_at_caret uuid =
+  ignore
+    (let* text = Platform.clipboard_read_text () in
+     (match D.textarea_of uuid with
+      | Some el ->
+          let v = D.el_value el in
+          let s = D.el_selection_start el
+          and e = D.el_selection_end el in
+          let nv =
+            String.sub v 0 s ^ text
+            ^ String.sub v e (String.length v - e)
+          in
+          set_buffer uuid nv (s + String.length text)
+      | None -> ());
+     Js.Promise.resolve ())
 
 (* -- editor-mode keys -- *)
 
@@ -134,10 +294,24 @@ let on_editor_key ev uuid el =
         | "y" when mods ev ->
             D.prevent_default ev;
             A.redo ()
-        | "b" when mods ev ->
+        | "a" when mods ev && not shift -> (
+            (* cljs editor/select-parent — only when the whole textarea
+               is selected does mod+a leave editing for the block *)
+            let v = D.el_value el in
+            if
+              v <> ""
+              && D.el_selection_start el = 0
+              && D.el_selection_end el = String.length v
+            then (
+              D.prevent_default ev;
+              A.exit_edit ~select:true))
+        | "b" when mods ev && not shift ->
             D.prevent_default ev;
             A.wrap_selection uuid "**"
-        | "i" when mods ev ->
+        | "b" when D.ev_ctrl ev && shift ->
+            D.prevent_default ev;
+            move_word uuid false
+        | "i" when mods ev && not shift ->
             D.prevent_default ev;
             A.wrap_selection uuid "*"
         | "s" when mods ev && shift ->
@@ -152,11 +326,228 @@ let on_editor_key ev uuid el =
         | "h" when mods ev && shift ->
             D.prevent_default ev;
             A.wrap_selection uuid "=="
-        | "e" when D.ev_meta ev -> A.quick_add ()
+        | "e" when D.ev_meta ev && not shift -> A.quick_add ()
+        | "e" when mods ev && shift ->
+            (* cljs editor/copy-embed *)
+            D.prevent_default ev;
+            Platform.copy_to_clipboard ("{{embed ((" ^ uuid ^ "))}}")
         | "." when mods ev && shift ->
             D.prevent_default ev;
             A.zoom_to uuid
+        | "l" when D.ev_meta ev && not shift ->
+            (* cljs editor/insert-link *)
+            D.prevent_default ev;
+            Editor_commands.open_link_form false uuid
+              (D.el_selection_start el)
+        | "l" when D.ev_ctrl ev && not shift ->
+            (* cljs editor/clear-block (macOS ctrl+l) *)
+            D.prevent_default ev;
+            set_buffer uuid "" 0
+        | "o" when mods ev ->
+            D.prevent_default ev;
+            follow_link uuid shift
+        | "u" when D.ev_ctrl ev && not shift ->
+            D.prevent_default ev;
+            kill_line_before uuid
+        | "w" when D.ev_ctrl ev && not shift ->
+            D.prevent_default ev;
+            forward_kill_word uuid
+        | "f" when D.ev_ctrl ev && shift ->
+            D.prevent_default ev;
+            move_word uuid true
+        | "c" when mods ev && shift ->
+            (* cljs editor/copy-text — the block's text to clipboard *)
+            D.prevent_default ev;
+            Platform.copy_to_clipboard (D.el_value el)
+        | "v" when mods ev && shift ->
+            (* cljs editor/paste-text-in-one-block-at-point *)
+            D.prevent_default ev;
+            paste_text_at_caret uuid
         | _ -> ())
+
+(* -- global shortcut chords (cljs modules/shortcut/config.cljs) --
+
+   The cljs KeyboardShortcutHandler tracks stroke sequences ("g j",
+   "mod+c mod+c", ...) over document keydowns; a complete sequence runs
+   the bound command id. Commands fall into cljs categories:
+
+   - editor-global / global-prevent-default: fire in editing AND
+     non-editing contexts (search, undo, sidebar/clear, ...)
+   - global-non-editing-only: fire only when the target is not an
+     editable element (the g/t/p/c letter chords live here)
+
+   Binding strings come from the same table the cmdk embeds
+   (Commands_data.table), so every cljs binding resolves to the same
+   command id and dispatches through Cmdk_state.dispatch_id. *)
+
+let canonical_binding b =
+  match List.rev (String.split_on_char '+' b) with
+  | key :: ms -> String.concat "+" (List.sort compare ms @ [ key ])
+  | [] -> b
+
+(* (binding stroke sequence, command id) — one row per binding *)
+let chord_table : (string list * string) list Lazy.t =
+  lazy
+    (List.concat_map
+       (fun (c : Commands_data.cmd) ->
+          match c.Commands_data.sc with
+          | Commands_data.Binds bs ->
+              List.map
+                (fun b ->
+                   ( List.map canonical_binding (String.split_on_char ' ' b)
+                   , c.Commands_data.id ))
+                bs
+          | _ -> [])
+       Commands_data.table)
+
+(* cljs :global-non-editing-only ids — never fire while the target is an
+   editable element *)
+let non_editing_only =
+  [ "go/home"; "go/journals"; "go/all-pages"; "go/flashcards"
+  ; "go/all-graphs"; "go/keyboard-shortcuts"; "go/tomorrow"
+  ; "go/next-journal"; "go/prev-journal"; "ui/toggle-document-mode"
+  ; "ui/highlight-recent-blocks"; "ui/toggle-settings"
+  ; "ui/toggle-right-sidebar"; "ui/toggle-left-sidebar"
+  ; "ui/toggle-help"; "ui/toggle-theme"; "editor/copy-page-url"
+  ; "editor/set-tags"; "editor/add-property-deadline"
+  ; "editor/add-property-status"; "editor/add-property-priority"
+  ; "editor/add-property-icon"; "editor/add-reaction"
+  ; "editor/add-comment"; "editor/toggle-display-hidden-properties"
+  ; "ui/toggle-wide-mode"; "ui/select-theme-color"; "ui/goto-plugins"
+  ; "editor/toggle-open-blocks"; "ui/clear-all-notifications"
+  ; "sidebar/close-top"; "misc/export-block-data"
+  ; "misc/export-page-data"; "misc/export-graph-ontology-data"
+  ; "misc/import-edn-data"; "ui/customize-appearance" ]
+
+(* single strokes another listener already owns — dispatching them here
+   would double-fire (palette open/move shortcuts, selection nav,
+   block-edit keys) *)
+let owned_strokes =
+  [ "mod+k"; "mod+shift+m" (* cmdk_view's own document listener *)
+  ; "enter"; "mod+enter"; "backspace"; "delete"; "tab"
+  ; "shift+tab"; "up"; "down"; "left"; "right"; "shift+up"
+  ; "shift+down"; "mod+shift+up"; "mod+shift+down"; "alt+shift+up"
+  ; "alt+shift+down"; "mod+up"; "mod+down"; "mod+;"; "mod+,"; "mod+z"
+  ; "mod+shift+z"; "mod+y"; "mod+a"; "mod+shift+a"; "mod+e"
+  ; "shift+/"; "ctrl+p"; "ctrl+n"; "escape" ]
+
+let chord_seq : string list ref = ref []
+let chord_ms : float ref = ref 0.
+
+(* Closure KeyboardShortcutHandler SEQUENCE_TIMEOUT *)
+let chord_window_ms = 1000.
+
+let rec is_prefix xs ys =
+  match xs, ys with
+  | [], _ -> true
+  | x :: xt, y :: yt -> x = y && is_prefix xt yt
+  | _ -> false
+
+(* a keydown's canonical stroke token, matching the binding-table format
+   ("mod+k", "shift+/", "g", "ctrl+space", ...) *)
+let stroke_of ev =
+  match D.ev_key ev with
+  | "Control" | "Meta" | "Alt" | "Shift" | "CapsLock" | "Dead" -> None
+  | _ ->
+      let key =
+        match shortcut_key ev with
+        | "arrowup" -> "up"
+        | "arrowdown" -> "down"
+        | "arrowleft" -> "left"
+        | "arrowright" -> "right"
+        | " " -> "space"
+        | "[" -> "open-square-bracket"
+        | "]" -> "close-square-bracket"
+        | k -> k
+      in
+      let ms =
+        (if D.ev_shift ev then [ "shift" ] else [])
+        @ (if D.ev_alt ev then [ "alt" ] else [])
+        @ (if D.ev_ctrl ev then [ "ctrl" ] else [])
+        @ (if D.ev_meta ev then [ "mod" ] else [])
+      in
+      Some (String.concat "+" (List.sort compare ms @ [ key ]))
+
+(* gate per cljs category: editor/* ids are owned by the per-mode key
+   paths (on_editor_key / on_normal_key) — the chord layer only needs
+   them when a sequence crosses into chords those paths can't see;
+   while editing, non-editor commands still fire (global-prevent-default)
+   except the non-editing-only set *)
+let chord_may_run editing cid =
+  if editing then
+    (* editor/* is owned by on_editor_key while editing; the only
+       exception is add-property, which cljs keeps live in every mode *)
+    cid = "editor/add-property"
+    || ((not (List.mem cid non_editing_only))
+        && not (String.length cid > 7 && String.sub cid 0 7 = "editor/"))
+  else true
+
+let on_global_key ev =
+  (* the open cmdk palette owns every key *)
+  let palette_open =
+    match !Cmdk_state.latest_st with
+    | Some st -> (Cmdk_state.get st).Cmdk_state.open_
+    | None -> false
+  in
+  if (not palette_open) && not (D.ev_composing ev) then
+    match stroke_of ev with
+    | None -> ()
+    | Some stroke ->
+        if not (List.mem stroke owned_strokes) then begin
+          let now = Platform.date_now_ms () in
+          let seq =
+            if now -. !chord_ms > chord_window_ms then [] else !chord_seq
+          in
+          let cand = seq @ [ stroke ] in
+          let tbl = Lazy.force chord_table in
+          let editing =
+            D.is_editable_target (D.ev_target ev)
+            || S.editing () <> None
+          in
+          let dispatch cid =
+            if chord_may_run editing cid then begin
+              D.prevent_default ev;
+              Cmdk_state.dispatch_id cid
+            end
+          in
+          match List.find_opt (fun (s, _) -> s = cand) tbl with
+          | Some (_, cid) ->
+              dispatch cid;
+              (* a stroke that is also a chord prefix keeps tracking —
+                 cljs "mod+c" fires copy AND stays armed for
+                 "mod+c mod+c" / "mod+c mod+s" *)
+              if List.exists (fun (s, _) -> is_prefix cand s && s <> cand) tbl
+              then begin
+                chord_seq := cand;
+                chord_ms := now
+              end
+              else chord_seq := []
+          | None ->
+              if
+                List.exists
+                  (fun (s, _) -> is_prefix cand s && s <> cand)
+                  tbl
+              then begin
+                chord_seq := cand;
+                chord_ms := now
+              end
+              else begin
+                chord_seq := [];
+                (* the dead sequence's last stroke may itself complete or
+                   start a binding ("t" then "x" — "x" alone could bind) *)
+                match List.find_opt (fun (s, _) -> s = [ stroke ]) tbl with
+                | Some (_, cid) -> dispatch cid
+                | None ->
+                    if
+                      List.exists
+                        (fun (s, _) -> List.hd s = stroke && List.length s > 1)
+                        tbl
+                    then begin
+                      chord_seq := [ stroke ];
+                      chord_ms := now
+                    end
+              end
+        end
 
 (* -- normal-mode keys (block selection) -- *)
 
@@ -202,7 +593,7 @@ let on_normal_key ev =
   | "Enter" when mods ev ->
       D.prevent_default ev;
       List.iter Editor_commands.cycle_todo (A.selected_uuids ())
-  | "Enter" -> (
+  | "Enter" when not shift -> (
       match D.closest_sel ".block-add-button" (D.ev_target ev) with
       | Some btn ->
           D.prevent_default ev;
@@ -769,6 +1160,7 @@ let install_once () =
   if not !installed then begin
     installed := true;
     D.document_add_listener "keydown" on_keydown true;
+    D.document_add_listener "keydown" on_global_key true;
     D.document_add_listener "input" on_input true;
     D.document_add_listener "paste" on_paste true;
     D.document_add_listener "copy" on_copy true;

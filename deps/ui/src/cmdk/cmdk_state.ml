@@ -81,10 +81,16 @@ let initial_view =
 
 let latest_vs : view Signal.signal option ref = ref None
 
+(* the palette singleton — lets keyboard shortcuts dispatch command ids
+   through the same run_command path palette items take *)
+let latest_st : t option ref = ref None
+
 let make scheduler : t =
   let vs = Signal.state scheduler initial_view in
   latest_vs := Some vs.Signal.state_signal;
-  { vs; gen = ref 0 }
+  let st = { vs; gen = ref 0 } in
+  latest_st := Some st;
+  st
 
 let get st = Signal.get st.vs.state_signal
 
@@ -1243,7 +1249,19 @@ and run_command st repo (cid : string) =
                   goto_page repo u;
                   Js.Promise.resolve ()
               | None -> Js.Promise.resolve ())
-          | None -> Js.Promise.resolve ())
+          | None ->
+              (* cljs redirect-to-journal!: a journal that doesn't exist
+                 yet goes through page/<create! — materialize it like the
+                 palette's create_page (worker infers block/journal-day
+                 from the title) *)
+              let title =
+                Dates.journal_title_of
+                  (Js.Date.make ~year:(float_of_int (day / 10000))
+                     ~month:(float_of_int (day / 100 mod 100 - 1))
+                     ~date:(float_of_int (day mod 100)) ())
+              in
+              create_page title;
+              Js.Promise.resolve ())
     | None -> ()
   in
   let rel_journal delta = (* today's journal +/- delta days *)
@@ -1271,6 +1289,13 @@ and run_command st repo (cid : string) =
   | "go/search-in-page" ->
       set_in st (fun v ->
           { v with filter = Some G_current_page; input = "" });
+      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+       | Some el -> Dom_ext.set_value el ""
+       | None -> ());
+      refresh st
+  | "go/search-themes" ->
+      set_in st (fun v ->
+          { v with filter = Some G_themes; input = "" });
       (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
        | Some el -> Dom_ext.set_value el ""
        | None -> ());
@@ -1340,6 +1365,27 @@ and run_command st repo (cid : string) =
 let run_highlighted st =
   let v = get st in
   match item_at v v.hl with Some it -> run_item st it | None -> ()
+
+(* keyboard-shortcut entry point: run a command id exactly as the
+   palette would. Palette-shaped commands open the palette in the right
+   mode first; everything else dispatches straight through run_command *)
+let dispatch_id (cid : string) =
+  match !latest_st with
+  | Some st -> (
+      match cid with
+      | "go/search" -> open_palette st
+      | "command-palette/toggle" ->
+          if (get st).open_ then close st
+          else begin
+            open_palette st;
+            set_in st (fun v -> { v with filter = Some G_commands; input = "" });
+            refresh st
+          end
+      | "go/search-in-page" | "editor/move-blocks" | "go/search-themes" ->
+          if not (get st).open_ then open_palette st;
+          run_command st !(Runtime.current_repo) cid
+      | _ -> run_command st !(Runtime.current_repo) cid)
+  | None -> ()
 
 (* shift+enter opens the highlighted page/block in the right sidebar
    (cljs cmdk on-shift-enter -> ui/open-in-right-sidebar) *)

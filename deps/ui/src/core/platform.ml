@@ -201,6 +201,9 @@ external navigator_platform : Js.Json.t -> string = "platform" [@@mel.get]
 external clipboard_write_text : string -> unit = "writeText"
   [@@mel.scope ("navigator", "clipboard")]
 
+external clipboard_read_text : unit -> string Js.Promise.t = "readText"
+  [@@mel.scope ("navigator", "clipboard")]
+
 (* cljs (or util/mac? util/win32?) — goog platform detection *)
 let desktop_os () =
   let p = String.lowercase_ascii (navigator_platform navigator_) in
