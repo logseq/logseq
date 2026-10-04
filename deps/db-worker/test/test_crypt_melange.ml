@@ -4,6 +4,7 @@
 
 open Db_worker_effect
 open Sync_crypt
+open Sync_platform
 
 let promise_of_task t =
   Js.Promise.make (fun ~resolve ~reject ->
@@ -210,7 +211,7 @@ let () =
         (fun refresh_token password ->
           encrypt_calls := !encrypt_calls @ [ (refresh_token, password) ];
           pure (kwm [ ("cipher", Wire.String "payload") ]));
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           native_calls := !native_calls @ [ (action, payload) ];
           pure (kwm [ ("supported?", Wire.Bool true) ]));
@@ -286,7 +287,7 @@ let () =
       let native_calls = ref [] in
       let secret_calls = ref [] in
       platform_env_fn := (fun () -> env "browser" "capacitor");
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           native_calls := !native_calls @ [ (action, payload) ];
           pure
@@ -345,7 +346,7 @@ let () =
       let secret_read_calls = ref 0 in
       let file_read_calls = ref 0 in
       platform_env_fn := (fun () -> env "browser" "capacitor");
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           incr native_read_calls;
           eq action (Wire.Keyword "native-get-e2ee-password");
@@ -509,7 +510,7 @@ let () =
       platform_env_fn := (fun () -> env "browser" "");
       kv_get_fn := (fun _platform' _k -> pure Wire.Nil);
       kv_set_fn := (fun _platform' _k _value -> pure ());
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           eq action (Wire.Keyword "request-e2ee-password");
           eq payload (kwm [ ("reason", Wire.Keyword "generate-user-rsa-key-pair") ]);
@@ -562,7 +563,7 @@ let () =
       platform_env_fn := (fun () -> env "browser" "");
       kv_get_fn := (fun _platform' _k -> pure Wire.Nil);
       kv_set_fn := (fun _platform' _k _value -> pure ());
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           eq action (Wire.Keyword "request-e2ee-password");
           eq payload (kwm [ ("reason", Wire.Keyword "generate-user-rsa-key-pair") ]);
@@ -608,7 +609,7 @@ let () =
       decrypt_private_key_crypt_fn :=
         (fun _password _encrypted_private_key ->
           error (ex_info "should-not-use-config-password" []));
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun _action _payload ?hint:_ ?timeout_ms:_ () ->
           error (ex_info "should-not-request-ui-in-headless" []));
       expect_rejection
@@ -629,7 +630,7 @@ let () =
       platform_env_fn := (fun () -> env "browser" "");
       secret_read_fn := (fun ~key:_ -> pure None);
       read_text_fn := (fun _path -> error (ex_info "should-not-read-browser-file" []));
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun _action payload ?hint:_ ?timeout_ms:_ () ->
           eq payload (kwm [ ("reason", Wire.Keyword "decrypt-user-rsa-private-key") ]);
           pure (kwm [ ("password", Wire.String "ui-password") ]));
@@ -675,7 +676,7 @@ let () =
       secret_save_fn :=
         (fun ~key:_ _text -> error (ex_info "should-not-save-worker-secret" []));
       read_text_fn := (fun _path -> error (ex_info "should-not-read-browser-file" []));
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           ui_calls := !ui_calls @ [ (action, payload) ];
           match action with
@@ -748,7 +749,7 @@ let () =
       stub_state ~refresh_token:(Some "refresh-token") ~id_token:None
         ~access_token:None ();
       platform_env_fn := (fun () -> env "browser" "capacitor");
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           ui_calls := !ui_calls @ [ (action, payload) ];
           match action with
@@ -808,7 +809,7 @@ let () =
       decrypt_text_by_text_password_fn :=
         (fun _refresh_token _data ->
           error (ex_info "decrypt-text-by-text-password" []));
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           ui_calls := !ui_calls @ [ (action, payload) ];
           error
@@ -855,7 +856,7 @@ let () =
           error
             (ex_info "decrypt-private-key"
                [ (Wire.Keyword "invalid-password?", Wire.Bool true) ]));
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           ui_calls := !ui_calls @ [ (action, payload) ];
           pure (kwm [ ("password", Wire.String "wrong-password") ]));
@@ -909,7 +910,7 @@ let () =
               error
                 (ex_info "decrypt-private-key"
                    [ (Wire.Keyword "invalid-password?", Wire.Bool true) ]));
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           ui_calls := !ui_calls @ [ (action, payload) ];
           pure (kwm [ ("password", Wire.String "current-password") ]));
@@ -968,7 +969,7 @@ let () =
               error
                 (ex_info "decrypt-private-key"
                    [ (Wire.Keyword "invalid-password?", Wire.Bool true) ]));
-      ui_request_fn :=
+      Sync_ui_request.ui_request_fn :=
         (fun action payload ?hint:_ ?timeout_ms:_ () ->
           ui_calls := !ui_calls @ [ (action, payload) ];
           pure (kwm [ ("password", Wire.String "wrong-password") ]));

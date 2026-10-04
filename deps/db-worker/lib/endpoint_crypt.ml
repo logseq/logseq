@@ -15,6 +15,7 @@
 
 open Db_worker_effect
 open Sync_crypt
+open Sync_platform
 
 let arg args n = List.nth_opt args n
 
