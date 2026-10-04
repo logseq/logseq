@@ -190,10 +190,9 @@ let on_doc_click ev =
       | None -> ())
   | None -> ()
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let ensure () =
-  if not !installed then (
-    installed := true;
-    D.register_doc_scan ~sync:true render_scan;
-    D.add_document_listener "click" on_doc_click true)
+  State_cell.Once.run installed (fun () ->
+      D.register_doc_scan ~sync:true render_scan;
+      D.add_document_listener "click" on_doc_click true)

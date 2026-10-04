@@ -588,9 +588,7 @@ let group_order v q rows total =
         @ [ nodes_g (); recents_g (); commands_g (); files_g ()
           ; filters_g () ]
 
-let apply_results st q move_mode expanded rows total =
-  ignore move_mode;
-  ignore expanded;
+let apply_results st q rows total =
   set_in st (fun v ->
       if v.input <> q then v (* stale — input moved on *)
       else
@@ -626,7 +624,7 @@ let refresh ?(clear = true) st =
   let gen = !(st.gen) in
   (* commands/filters are local — apply them synchronously so a hanging
      worker query (e.g. repo mid-transition) can't leave stale groups *)
-  if clear then apply_results st v.input v.move_mode v.expanded [] 0;
+  if clear then apply_results st v.input [] 0;
   match !(Runtime.current_repo) with
   | None -> ()
   | Some repo ->
@@ -638,7 +636,7 @@ let refresh ?(clear = true) st =
               | _ -> nodes_limit v.move_mode v.expanded)
          in
          if gen = !(st.gen) then
-           apply_results st v.input v.move_mode v.expanded rows total;
+           apply_results st v.input rows total;
          Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
                 Platform.console_error
@@ -814,7 +812,7 @@ let open_palette ?(move = false) st =
   set_in st (fun v -> { v with open_ = true });
   let q = (get st).input in
   (* prime synchronously so commands show before the search lands *)
-  apply_results st q move [] [] 0;
+  apply_results st q [] 0;
   refresh st;
   (match !(Runtime.current_repo) with
    | Some repo -> load_recents st repo

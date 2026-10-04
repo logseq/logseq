@@ -165,7 +165,7 @@ let follow_link uuid sidebar =
       match link_target_at (D.el_value el) (D.el_selection_start el) with
       | Some title when String.trim title <> "" ->
           A.exit_edit ~select:false;
-          (match sidebar, !Sidebar_state.st_ref with
+          (match sidebar, Sidebar_state.current () with
            | true, Some sst -> Sidebar_state.open_ref sst title
            | _ ->
                Platform.set_location_hash
@@ -1154,11 +1154,10 @@ let on_file_drop ev =
     Asset_dom.upload_files files
   end
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let install_once () =
-  if not !installed then begin
-    installed := true;
+  State_cell.Once.run installed (fun () ->
     D.add_document_listener "keydown" on_keydown true;
     D.add_document_listener "keydown" on_global_key true;
     D.add_document_listener "input" on_input true;
@@ -1186,5 +1185,4 @@ let install_once () =
       true;
     D.add_document_listener "pointerup"
       (fun _ev -> Block_selection.pointerup ())
-      true
-  end
+      true)

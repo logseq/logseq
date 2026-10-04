@@ -802,11 +802,9 @@ let on_command ev =
                 let to_ = Option.value (detail_int ev "to") ~default:from in
                 run_editor_cmd e.uuid command from to_))
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let install () =
-  if not !installed then begin
-    installed := true;
-    D.add_document_listener "ls:editor-command" on_command true;
-    Code_mirror.install ()
-  end
+  State_cell.Once.run installed (fun () ->
+      D.add_document_listener "ls:editor-command" on_command true;
+      Code_mirror.install ())

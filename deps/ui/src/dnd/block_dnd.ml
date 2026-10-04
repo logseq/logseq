@@ -151,11 +151,10 @@ let on_drag_end ev _m =
 
 (* ---------- install ---------- *)
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let install () =
-  if not !installed then begin
-    installed := true;
+  State_cell.Once.run installed (fun () ->
     let sensors =
       [| K.sensor_configure K.pointer_sensor
            (K.sensor_opts
@@ -177,5 +176,4 @@ let install () =
     K.on mon "dragend" on_drag_end ();
     scan m;
     let obs = Web_dom.new_observer (fun () -> scan m) in
-    Web_dom.obs_observe obs Web_dom.document_element (Web_dom.mo_opts ~childList:true ~subtree:true)
-  end
+    Web_dom.obs_observe obs Web_dom.document_element (Web_dom.mo_opts ~childList:true ~subtree:true))

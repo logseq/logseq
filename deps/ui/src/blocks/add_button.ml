@@ -79,14 +79,12 @@ let ensure_all roots =
       | Some existing -> refresh_opacity ?puuid ~has_children existing
       | None -> el_append_child parent (build_el ?puuid ()))
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let install () =
-  if not !installed then begin
-    installed := true;
-    (* sync: cljs renders add-button-inner inside the page component, so
-       the row exists atomically with the blocks. Debounced injection
-       leaves the row absent for ~60ms after a (re)mount — visible as a
-       shorter journal item on remount *)
-    register_doc_scan ~sync:true ensure_all
-  end
+  State_cell.Once.run installed (fun () ->
+      (* sync: cljs renders add-button-inner inside the page component, so
+         the row exists atomically with the blocks. Debounced injection
+         leaves the row absent for ~60ms after a (re)mount — visible as a
+         shorter journal item on remount *)
+      register_doc_scan ~sync:true ensure_all)

@@ -49,7 +49,7 @@ type t =
 
 let st_ref : t option ref = ref None
 let model_ref : Model.t ref = ref Model.initial
-let hook_installed = ref false
+let hook_installed = State_cell.Once.make ()
 let loaded_repo : string option ref = ref None
 let last_page_key : string option ref = ref None
 
@@ -895,10 +895,8 @@ let on_sync st =
   | None -> ()
 
 let install_worker_hook st =
-  if not !hook_installed then begin
-    hook_installed := true;
-    Runtime.on_sync (fun () -> on_sync st)
-  end
+  State_cell.Once.run hook_installed (fun () ->
+      Runtime.on_sync (fun () -> on_sync st))
 
 let page_key (p : Model.page) =
   match p.Model.page_uuid with

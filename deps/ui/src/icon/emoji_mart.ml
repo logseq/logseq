@@ -35,11 +35,10 @@ external mart_search :
   Js.Json.t -> string -> Js.Json.t array Js.Promise.t
   = "search" [@@mel.send]
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let install () =
-  if not !installed then begin
-    installed := true;
+  State_cell.Once.run installed (fun () ->
     let data = Js.Dict.empty () in
     Js.Dict.set data "categories" (Lazy.force mart_categories);
     Js.Dict.set data "emojis" (Lazy.force mart_emojis);
@@ -47,8 +46,7 @@ let install () =
     Js.Dict.set data "sheet" (Lazy.force mart_sheet);
     let opts = Js.Dict.empty () in
     Js.Dict.set opts "data" (Js.Json.object_ data);
-    mart_init (Js.Json.object_ opts)
-  end
+    mart_init (Js.Json.object_ opts))
 
 (* frontend.reaction/emoji-id-valid? *)
 let emoji_id_valid (id : string) : bool =

@@ -40,11 +40,10 @@ let open_prop_dlg ~remove ~anchor =
    tests). *)
 module D = Web_dom
 
-let listeners_installed = ref false
+let listeners_installed = State_cell.Once.make ()
 
 let install_listeners () =
-  if not !listeners_installed then (
-    listeners_installed := true;
+  State_cell.Once.run listeners_installed (fun () ->
     D.add_document_listener "mousedown"
       (fun e ->
         match D.ev_target e with

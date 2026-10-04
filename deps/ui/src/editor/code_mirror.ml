@@ -539,11 +539,10 @@ let copy_button uuid =
          Js.Promise.resolve ())
   | None -> ()
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let install () =
-  if not !installed then begin
-    installed := true;
+  State_cell.Once.run installed (fun () ->
     load_core ();
     (* hooks for editor_actions without a module cycle *)
     S.code_buffer_of := live_value;
@@ -561,5 +560,4 @@ let install () =
         | Some _, None -> close_picker ()
         | _ -> ())
       true;
-    D.register_doc_scan ~sync:true scan
-  end
+    D.register_doc_scan ~sync:true scan)

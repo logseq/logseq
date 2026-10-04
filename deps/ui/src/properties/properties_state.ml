@@ -25,10 +25,7 @@ let overlays_root () = query_selector "body"
    click drops every overlay stacked above the innermost overlay that
    contains the click target (all when outside any). *)
 let install_outside_close =
-  let installed = ref false in
-  fun () ->
-    if not !installed then (
-      installed := true;
+  State_cell.Once.memo (fun () ->
       Overlay.on_document_press "mousedown"
         ~els:(fun () -> List.map (fun o -> o.el) !overlays)
         ~on_hit:(function

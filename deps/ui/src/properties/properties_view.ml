@@ -54,12 +54,10 @@ let on_keydown ev =
 
 (* ---------- install ---------- *)
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let install () =
-  if !installed then ()
-  else (
-    installed := true;
+  State_cell.Once.run installed (fun () ->
     S.chain_worker ();
     (* mutations inside our own managed areas are self-inflicted (value
        editors, pill renders); rebuilding on them would wipe a live

@@ -246,7 +246,7 @@ let scan roots =
   ensure_object_view roots;
   ensure_query_shells roots
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 (* delegated click handler for every `.ls-query-setting` button —
    per-shell wiring raced with clicks arriving before the mutation scan
@@ -280,8 +280,6 @@ let on_document_click (ev : Ed.ev) =
               | None -> ())))
 
 let install () =
-  if not !installed then begin
-    installed := true;
-    Ed.add_document_listener "click" on_document_click false;
-    Ed.register_doc_scan scan
-  end
+  State_cell.Once.run installed (fun () ->
+      Ed.add_document_listener "click" on_document_click false;
+      Ed.register_doc_scan scan)

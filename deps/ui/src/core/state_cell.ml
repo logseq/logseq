@@ -51,3 +51,25 @@ module Cell (A : ARG) = struct
   let get () =
     match !r with Some v -> v | None -> failwith (A.name ^ " not installed")
 end
+
+(* run-once guards — document listeners, observers, hook installs that
+   must not double-register on remount *)
+module Once : sig
+  type t
+  val make : unit -> t
+  val run : t -> (unit -> unit) -> unit
+  val memo : (unit -> unit) -> unit -> unit
+end = struct
+  type t = bool ref
+  let make () = ref false
+
+  let run r f =
+    if not !r then begin
+      r := true;
+      f ()
+    end
+
+  let memo f =
+    let r = make () in
+    fun () -> run r f
+end
