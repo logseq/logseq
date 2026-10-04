@@ -1059,6 +1059,143 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
        | _ -> Some item)
     tx_data
 
+let entity_of_wire_ref (db : db) (v : Wire.t) : entity option =
+  match v with
+  | Wire.Int n -> Datascript.entity db (Entity_id n)
+  | Wire.Uuid s -> Datascript.entity db (Lookup_ref ("block/uuid", Uuid s))
+  | _ -> (
+      try Datascript.entity db (Ds_wire.entity_ref_of_transit v)
+      with _ -> None)
+
+(* Drop `[:db/add e "block/parent" p]` items whose edge would close a
+   parent cycle on the post-tx image. Each queued move was legal when
+   issued, but against a newer base (the other half of a mutual move
+   already landed remotely) the pair forms a loop — verbatim replay and
+   confirm have no op-time move_parents_to_child guard, so the cycle
+   would land on the projection/server conn unchecked (the server
+   accepts the verbatim upload as-is, same hole cljs has). Dropping the
+   closing edge keeps the local image acyclic; the checksum reconcile
+   surfaces the remaining drift instead of a corrupt tree. Edges are
+   checked in tx order: earlier assignments win, the later edge that
+   would walk back into its own subtree is dropped. *)
+let drop_cycle_parent_edges
+    ?(kept : (entity_id, entity_id option) Hashtbl.t option) (db : db)
+    (tx_data : Wire.t list) : Wire.t list =
+  let eid_of (w : Wire.t) : entity_id option =
+    match entity_of_wire_ref db w with
+    | Some e -> Some e.id
+    | None -> None
+  in
+  let db_parent (e : entity_id) : entity_id option =
+    match Datascript.entity db (Entity_id e) with
+    | Some en -> (
+        match Ldb.ref_ent en "block/parent" with
+        | Some p -> Some p.id
+        | None -> None)
+    | None -> None
+  in
+  (* kept overrides: eid -> parent eid option (None = parent cleared).
+     Upload passes one shared map across the batch so a later entry sees
+     the parent edges an earlier surviving entry will land; replay and
+     confirm use a fresh one. *)
+  let kept =
+    match kept with
+    | Some k -> k
+    | None -> Hashtbl.create 8
+  in
+  (* first-seen `kept` value per entity this tx mutates — restoring it on
+     a dropped add undoes the tx's own retracts without clobbering what
+     an earlier batch entry assigned *)
+  let orig : (entity_id, entity_id option option) Hashtbl.t =
+    Hashtbl.create 8
+  in
+  let set_kept (e : entity_id) (v : entity_id option) : unit =
+    if not (Hashtbl.mem orig e) then
+      Hashtbl.replace orig e (Hashtbl.find_opt kept e);
+    Hashtbl.replace kept e v
+  in
+  let parent_of (e : entity_id) : entity_id option =
+    match Hashtbl.find_opt kept e with
+    | Some p -> p
+    | None -> db_parent e
+  in
+  (* walking src's parent chain reaches dst? *)
+  let reaches (src : entity_id) (dst : entity_id) : bool =
+    let seen = Hashtbl.create 8 in
+    let rec loop cur =
+      if cur = dst then true
+      else if Hashtbl.mem seen cur then false
+      else begin
+        Hashtbl.add seen cur ();
+        match parent_of cur with
+        | Some p -> loop p
+        | None -> false
+      end
+    in
+    loop src
+  in
+  (* first pass: decide which adds close a cycle. Earlier assignments
+     win; a dropped add also takes its paired `db/retract e
+     "block/parent"` with it so the block keeps its previous parent
+     instead of going orphan *)
+  let dropped_idx : (int, unit) Hashtbl.t = Hashtbl.create 4 in
+  let dropped_es : (entity_id, unit) Hashtbl.t = Hashtbl.create 4 in
+  List.iteri
+    (fun i item ->
+       match item with
+       | Wire.Array (op :: e :: a :: v :: _)
+       | Wire.List (op :: e :: a :: v :: _)
+         when op = kw "db/add" && a = kw "block/parent" -> (
+           match eid_of e, eid_of v with
+           | Some eid, Some pid ->
+               if reaches pid eid then begin
+                 Hashtbl.replace dropped_idx i ();
+                 Hashtbl.replace dropped_es eid ();
+                 (* a paired retract may already have cleared e — restore
+                    the pre-tx override so later checks see the edge that
+                    survives the drop *)
+                 (match Hashtbl.find_opt orig eid with
+                  | Some (Some v) -> Hashtbl.replace kept eid v
+                  | Some None | None -> Hashtbl.remove kept eid)
+               end
+               else set_kept eid (Some pid)
+           | _ -> ())
+       | Wire.Array (op :: e :: a :: _)
+       | Wire.List (op :: e :: a :: _)
+         when (op = kw "db/retract" || op = kw "db/retractEntity")
+              && a = kw "block/parent" -> (
+           match eid_of e with
+           | Some eid -> set_kept eid None
+           | None -> ())
+       | Wire.Array (op :: e :: _)
+       | Wire.List (op :: e :: _)
+         when op = kw "db/retractEntity" -> (
+           match eid_of e with
+           | Some eid -> set_kept eid None
+           | None -> ())
+       | _ -> ())
+    tx_data;
+  if Hashtbl.length dropped_idx = 0 then tx_data
+  else
+    tx_data
+    |> List.mapi
+         (fun i item ->
+            if Hashtbl.mem dropped_idx i then begin
+              Worker_log.warn "db-sync/dropped-cycle-parent-edge"
+                [ "tx-item", Ds_wire.edn_of_transit item ];
+              None
+            end
+            else
+              match item with
+              | Wire.Array (op :: e :: a :: _)
+              | Wire.List (op :: e :: a :: _)
+                when op = kw "db/retract" && a = kw "block/parent" -> (
+                  match eid_of e with
+                  | Some eid when Hashtbl.mem dropped_es eid -> None
+                  | _ -> Some item)
+              | _ -> Some item)
+    |> List.filter_map Fun.id
+
 let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     (pending : Sync_client_op.local_tx_entry list) :
     Wire.t list * string list * Wire.t list =
@@ -1085,6 +1222,10 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
      seek; never seed from a whole-index walk. *)
   let created_delta = ref SSet.empty in
   let retracted_delta = ref SSet.empty in
+  (* surviving parent edges accumulate across the batch — a later entry
+     sees the parent an earlier entry will land, so a cross-entry mutual
+     move is caught the same as an in-tx cycle *)
+  let cycle_kept = Hashtbl.create 16 in
   let srv_uuid_memo = Hashtbl.create 64 in
   let uuid_available =
     match srv_db with
@@ -1124,7 +1265,17 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
                try
                  Some
                    (sanitize_pending_tx_refs ~uuid_exists ~attr_live
-                      (Conn.db c) (tx_items_of e.tx))
+                      (Conn.db c) (tx_items_of e.tx)
+                    |>
+                    match srv_db with
+                    | Some d ->
+                        (* keep the server's image acyclic — the edge
+                           must not upload, else the verbatim confirm
+                           would land a parent cycle on the server conn *)
+                        fun items ->
+                          drop_cycle_parent_edges ~kept:cycle_kept d
+                            items
+                    | None -> Fun.id)
                with ex ->
                  Worker_log.warn "db-sync/upload-sanitize-failed"
                    [ ( "repo", Option.value repo ~default:"-" )
@@ -1400,14 +1551,6 @@ let replay_entity_id_coll (db : db) (ids : Wire.t) : Wire.t list =
          match replay_entity_id_value db v with
          | Wire.Nil -> v
          | w -> w)
-
-let entity_of_wire_ref (db : db) (v : Wire.t) : entity option =
-  match v with
-  | Wire.Int n -> Datascript.entity db (Entity_id n)
-  | Wire.Uuid s -> Datascript.entity db (Lookup_ref ("block/uuid", Uuid s))
-  | _ -> (
-      try Datascript.entity db (Ds_wire.entity_ref_of_transit v)
-      with _ -> None)
 
 let get_left_sibling_entity (e : entity) : entity option =
   Ldb.get_left_sibling e
@@ -2651,6 +2794,7 @@ let replay_pending_entry (repo : string) (conn : conn)
               List.map
                 (resolve_temp_id ~replay_created db)
                 tx_data
+              |> drop_cycle_parent_edges db
             in
             ignore
               (Db_transact.transact conn tx_data
@@ -2838,6 +2982,7 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
                            ~drop_ops_targeting_retracted_entities:delete_op
                            ~retract_touched_descendants:delete_op
                       |> List.map Ds_wire.transit_of_value
+                   |> drop_cycle_parent_edges db
                  in
                  if tx_data <> [] then
                    ignore
