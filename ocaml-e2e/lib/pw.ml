@@ -1,0 +1,145 @@
+(** Ergonomic page operations over {!Env.t}, mirroring wally's API surface.
+    Functions suffixed [_l] take a locator; the rest take a CSS selector. *)
+
+open Fest.Promise
+
+let page env = env.Env.page
+let q env selector = Playwright.locator (page env) selector
+
+let qq env ?has ?has_not ?has_text ?has_not_text selector =
+  Playwright.locator ?has ?has_not ?has_text ?has_not_text (page env) selector
+
+let qs env selector = Playwright.locator_all (q env selector)
+let sub loc selector = Playwright.locator_locator loc selector
+let sub_first loc selector = Playwright.locator_first (sub loc selector)
+
+(* {2 Actions} *)
+
+let click env selector = Playwright.click (q env selector)
+let click_l ?button ?timeout loc = Playwright.click ?button ?timeout loc
+let click_right env selector = click_l ~button:"right" (q env selector)
+let dblclick env selector = Playwright.dblclick (q env selector)
+let fill env selector value = Playwright.fill (q env selector) value
+let fill_l ?timeout loc value = Playwright.fill ?timeout loc value
+let hover_l ?timeout loc = Playwright.hover ?timeout loc
+
+(* {2 Waiting / state} *)
+
+let wait_for env ?state ?timeout selector =
+  Playwright.wait_for_selector ?state ?timeout (page env) selector
+
+let wait_for_hidden env ?timeout selector =
+  wait_for env ~state:"hidden" ?timeout selector
+
+let wait_for_l ?state ?timeout loc =
+  Playwright.locator_wait_for ?state ?timeout loc
+
+let wait_for_hidden_l ?timeout loc = wait_for_l ~state:"hidden" ?timeout loc
+let visible env selector = Playwright.is_visible (q env selector)
+let visible_l loc = Playwright.is_visible loc
+let count env selector = Playwright.count (q env selector)
+let count_l loc = Playwright.count loc
+let all_text env selector = Playwright.all_text_contents (q env selector)
+
+let all_text_l loc = Playwright.all_text_contents loc
+
+let text_of_l loc =
+  let* contents = Playwright.all_text_contents loc in
+  match Array.to_list contents with
+  | [ content ] -> Js.Promise.resolve content
+  | [] -> Js.Promise.resolve ""
+  | _ -> Js.Promise.reject (Failure "text_of_l: query matches more than 1 element")
+
+let attr env selector name = Playwright.get_attribute (q env selector) name
+let attr_l loc name = Playwright.get_attribute loc name
+let input_value env selector = Playwright.input_value (q env selector)
+let input_value_l loc = Playwright.input_value loc
+
+let bounding_xy_l loc =
+  let* box = Playwright.bounding_box loc in
+  match box with
+  | Some b -> Js.Promise.resolve (Playwright.box_x b, Playwright.box_y b)
+  | None -> Js.Promise.reject (Failure "bounding_xy_l: element not visible")
+
+(* {2 Navigation} *)
+
+let navigate env url = Playwright.goto (page env) url
+let refresh env = Playwright.reload (page env)
+let go_back env = Playwright.go_back (page env)
+let url env = Playwright.page_url (page env)
+let wait_timeout env ms = Playwright.wait_for_timeout (page env) ms
+
+(* {2 Keyboard} *)
+
+let press env ?delay key =
+  Playwright.keyboard_press ?delay (Playwright.page_keyboard (page env)) key
+
+let press_all env ?delay keys =
+  List.fold_left
+    (fun p key ->
+      Js.Promise.then_
+        (fun () ->
+          Playwright.keyboard_press ?delay
+            (Playwright.page_keyboard (page env))
+            key)
+        p)
+    (Js.Promise.resolve ()) keys
+
+(* {2 Get-by queries} *)
+
+let get_by_test_id env testid = Playwright.get_by_test_id (page env) testid
+let get_by_text env ?exact text = Playwright.get_by_text ?exact (page env) text
+let get_by_label env ?exact text = Playwright.get_by_label ?exact (page env) text
+let get_by_role env ?name role = Playwright.get_by_role ?name (page env) role
+
+(* {2 JS evaluation} *)
+
+let eval_js env js = Playwright.evaluate (page env) js
+let eval_js_arg env js arg = Playwright.evaluate_arg (page env) js arg
+
+(* {2 Misc} *)
+
+let on_console env cb = Playwright.on_console (page env) cb
+let screenshot env ~path = Playwright.screenshot ~path (page env)
+
+let clipboard_text env =
+  eval_js env "() => navigator.clipboard.readText()"
+
+let grant_permissions env permissions =
+  Playwright.grant_permissions (Playwright.page_context (page env)) permissions
+
+let set_default_timeout env ms =
+  Playwright.set_default_timeout (page env) ms
+
+(** wally's [maybe]: run a promise; a Playwright TimeoutError resolves to
+    [None] instead of rejecting. *)
+let maybe p =
+  Js.Promise.catch
+    (fun e ->
+      if Playwright.is_timeout_error e then Js.Promise.resolve None
+      else Playwright.throw_error e)
+    (Js.Promise.then_ (fun v -> Js.Promise.resolve (Some v)) p)
+
+(** [with_timeout_error p f] resolves to [f ()] on TimeoutError, otherwise
+    rethrows — for wally's [(try ... (catch TimeoutError ...))] patterns. *)
+let catch_timeout p f =
+  Js.Promise.catch
+    (fun e ->
+      if Playwright.is_timeout_error e then f ()
+      else Playwright.throw_error e)
+    p
+
+(** [ignore_timeout p] resolves to [()] on TimeoutError, otherwise rethrows. *)
+let ignore_timeout p = catch_timeout p (fun () -> Js.Promise.resolve ())
+
+let find_one_by_text env selector text =
+  let* locs = qs env selector in
+  let rec go i =
+    if i >= Array.length locs then Js.Promise.resolve None
+    else
+      let* contents = Playwright.all_text_contents locs.(i) in
+      if Array.to_list contents = [ text ] then
+        Js.Promise.resolve (Some locs.(i))
+      else go (i + 1)
+  in
+  go 0

@@ -1,0 +1,233 @@
+(** General utilities, mirroring clj-e2e's [util.clj]. *)
+
+open Fest.Promise
+
+let wait_timeout env ms = Pw.wait_timeout env ms
+
+let editor_q = ".editor-wrapper textarea"
+
+let get_active_element env = Pw.q env "*:focus"
+
+let get_editor env =
+  let editor = Pw.q env editor_q in
+  let* visible = Pw.visible env editor_q in
+  if not visible then Js.Promise.resolve None
+  else
+    (* ensure cursor exists: sometimes the editor is up without a blinking
+       cursor and subsequent key presses fail *)
+    Js.Promise.catch
+      (fun e ->
+        let* still_visible = Pw.visible env editor_q in
+        if still_visible then Playwright.throw_error e
+        else Js.Promise.resolve None)
+      (Js.Promise.then_
+         (fun () -> Js.Promise.resolve (Some editor))
+         (Playwright.focus editor))
+
+let get_edit_block_container env =
+  let* () = E2e_assert.have_count env editor_q 1 in
+  Js.Promise.resolve
+    (Playwright.locator_first
+       (Pw.qq env ".ls-block" ~has:(Pw.q env editor_q)))
+
+(** replaces the focused input's value with [text] *)
+let input env text = Pw.fill env "*:focus" text
+
+let press_seq env ?(delay = 0.) text =
+  Playwright.press_sequentially ~delay (Pw.q env "*:focus") text
+
+let exit_edit env =
+  let* editor = get_editor env in
+  (match editor with
+   | Some _ ->
+       let* () = Keyboard.esc env in
+       let* left =
+         Pw.catch_timeout
+           (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+              (Pw.wait_for_hidden env ~timeout:1000. editor_q))
+           (fun () -> Js.Promise.resolve false)
+       in
+       if left then Js.Promise.resolve ()
+       else
+         let* editor = get_editor env in
+         (match editor with
+          | Some _ -> Keyboard.esc env
+          | None -> Js.Promise.resolve ())
+   | None -> Js.Promise.resolve ())
+  |> Js.Promise.then_ (fun () -> E2e_assert.non_editor_mode env)
+
+let double_esc env =
+  let popups =
+    ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content"
+  in
+  let* v = Pw.visible env popups in
+  let* () = if v then Keyboard.esc env else Js.Promise.resolve () in
+  let* () = exit_edit env in
+  let* v = Pw.visible env popups in
+  if v then Keyboard.esc env else Js.Promise.resolve ()
+
+let cmdk_search_settle_ms = 400.
+
+let fill_cmdk_search env text =
+  (* clear first so a retry of the same query still fires input/onChange *)
+  let* () = Pw.fill env ".cp__cmdk-search-input" "" in
+  Pw.fill env ".cp__cmdk-search-input" text
+
+let cmdk_open env =
+  let* () = Keyboard.press env "ControlOrMeta+k" in
+  Pw.catch_timeout
+    (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+       (Pw.wait_for env ~timeout:2000. ".cp__cmdk-search-input"))
+    (fun () -> Js.Promise.resolve false)
+
+let search env text =
+  let* already = Pw.visible env ".cp__cmdk-search-input" in
+  let* () =
+    if already then Js.Promise.resolve ()
+    else
+      let* opened = cmdk_open env in
+      if opened then Js.Promise.resolve ()
+      else
+        let* () = double_esc env in
+        let* () = Pw.wait_for env ~timeout:15000. "#search-button" in
+        let* _ = E2e_assert.in_normal_mode env in
+        let* () = Pw.click env "#search-button" in
+        Pw.wait_for env ".cp__cmdk-search-input"
+  in
+  let* () = fill_cmdk_search env text in
+  wait_timeout env cmdk_search_settle_ms
+
+let rec repeat_until_visible env n target_loc repeat_fn =
+  let* visible = Pw.visible_l target_loc in
+  if visible then Js.Promise.resolve ()
+  else
+    let* () = repeat_fn () in
+    Js.Promise.catch
+      (fun e ->
+        if n <= 0 then Playwright.throw_error e
+        else repeat_until_visible env (n - 1) target_loc repeat_fn)
+      (E2e_assert.is_visible_l target_loc)
+
+let search_and_click env search_text =
+  let* () = search env search_text in
+  let result =
+    Playwright.locator_first (Pw.get_by_test_id env search_text)
+  in
+  let* () = repeat_until_visible env 5 result (fun () -> search env search_text) in
+  Pw.click_l result
+
+let wait_editor_gone ?(editor = editor_q) env =
+  Pw.wait_for_hidden env editor
+
+let wait_editor_visible env = Pw.wait_for env ".editor-wrapper textarea"
+
+let count_elements env q = Pw.count env q
+
+let blocks_count env =
+  Pw.count env ".ls-block:not(.block-add-button)"
+
+let page_blocks_count env =
+  Pw.count env
+    ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)"
+
+let get_text_of loc = Pw.text_of_l loc
+let get_text env selector = Pw.text_of_l (Pw.q env selector)
+
+let get_edit_content env =
+  let* editor = get_editor env in
+  match editor with
+  | Some e -> Js.Promise.then_ (fun v -> Js.Promise.resolve (Some v)) (Pw.input_value_l e)
+  | None -> Js.Promise.resolve None
+
+(** waits until the editing textarea's content equals [expected] *)
+let wait_edit_content env expected =
+  let* () = wait_editor_visible env in
+  let deadline = Js.Date.now () +. 10000. in
+  let rec loop () =
+    let* content = get_edit_content env in
+    if content = Some expected then Js.Promise.resolve true
+    else if Js.Date.now () > deadline then (
+      Fest.equal (Option.value ~default:"" content) expected Fest.expect;
+      Js.Promise.resolve true)
+    else
+      let* () = wait_timeout env 100. in
+      loop ()
+  in
+  loop ()
+
+let bounding_xy_l = Pw.bounding_xy_l
+
+let repeat_keyboard env n shortcut =
+  let rec go i =
+    if i <= 0 then Js.Promise.resolve ()
+    else
+      let* () = Keyboard.press env ~delay:20. shortcut in
+      go (i - 1)
+  in
+  go n
+
+let get_page_blocks_contents env =
+  Pw.all_text env
+    ".ls-page-blocks .ls-block:not(.block-add-button) .block-title-wrap"
+
+let login_test_account ?(username = "e2etest") ?(password = "Logseq-e2e") env =
+  let* () = Pw.eval_js env "localStorage.setItem(\"login-enabled\",true);" in
+  let* () = Pw.click env ".toolbar-dots-btn" in
+  let* () = Pw.click env "div:text(\"Login\")" in
+  let* () = input env username in
+  let* () = Keyboard.tab env in
+  let* () = input env password in
+  let* () = Pw.click env ".cp__user-login button[type=\"submit\"]" in
+  Pw.wait_for_hidden env ".cp__user-login"
+
+let goto_journals env = search_and_click env "Go to journals"
+
+let refresh_until_graph_loaded env =
+  let* () = Pw.refresh env in
+  E2e_assert.graph_loaded env
+
+let move_cursor_to_end env =
+  Pw.press_all env ~delay:20. [ "ControlOrMeta+a"; "ArrowRight" ]
+
+let move_cursor_to_start env =
+  Pw.press_all env ~delay:20. [ "ControlOrMeta+a"; "ArrowLeft" ]
+
+let input_command env command =
+  let* content = get_edit_content env in
+  let* () =
+    match content with
+    | Some c when c <> "" && not (String.equal (String.sub c (String.length c - 1) 1) " ") ->
+        press_seq env " "
+    | _ -> Js.Promise.resolve ()
+  in
+  let* () = press_seq env ~delay:20. "/" in
+  let* () = Pw.wait_for env ".ui__popover-content" in
+  let* () = press_seq env ~delay:20. command in
+  let command_item = Pw.q env "a.menu-link.chosen" in
+  let* _ = E2e_assert.is_visible_l command_item in
+  Pw.click_l command_item
+
+let set_tag ?(hidden = false) env tag =
+  let* () = press_seq env ~delay:20. " #" in
+  let* () = press_seq env tag in
+  let* items =
+    Pw.qs env (Printf.sprintf "a.menu-link:has-text(\"%s\")" tag)
+  in
+  let* () =
+    match items with
+    | [||] -> Js.Promise.reject (Failure ("set_tag: no menu-link for " ^ tag))
+    | arr -> Pw.click_l arr.(0)
+  in
+  if String.lowercase_ascii tag <> "task" && not hidden then
+    let sel =
+      Printf.sprintf
+        ".ls-block:not(.block-add-button):has(.editor-wrapper textarea):has(.block-tag :text('%s'))"
+        tag
+    in
+    let* _ = E2e_assert.is_visible env sel in
+    Js.Promise.resolve ()
+  else Js.Promise.resolve ()
+
+let query_last env q = Playwright.locator_last (Pw.q env q)
+
+let get_by_text env text exact = Pw.get_by_text env ~exact text
