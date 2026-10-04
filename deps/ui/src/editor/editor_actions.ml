@@ -12,16 +12,16 @@ let ( let* ) p f = Js.Promise.then_ f p
 
 let live_buffer uuid =
   (* code-fence blocks edit inside a mounted CodeMirror — its doc, not
-     the hidden textarea, holds the live value *)
+     the hidden textarea, holds the live value. For plain textareas
+     e.buffer is authoritative: every write path (on_input, splices,
+     undo) goes through sync_buffer, and the DOM copy is stale while
+     the textarea is remounting *)
   match !(S.code_buffer_of) uuid with
   | Some v -> v
   | None -> (
-      match D.textarea_of uuid with
-      | Some el -> D.el_value el
-      | None -> (
-          match S.editing () with
-          | Some e when e.uuid = uuid -> e.buffer
-          | _ -> ""))
+      match S.editing () with
+      | Some e when e.uuid = uuid -> e.buffer
+      | _ -> "")
 
 let sync_buffer uuid v =
   S.set_silent (fun st ->
