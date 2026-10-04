@@ -199,8 +199,7 @@ let publishing_html (transit_db : string) (app_state : value)
           [ Hstr "script"; Hmap [ "type", Some "text/javascript" ]
           ; Hstr
               "// Single Page Apps for GitHub Pages\n      // https://github.com/rafgraph/spa-github-pages\n      // Copyright (c) 2016 Rafael Pedicini, licensed under the MIT License\n      // ----------------------------------------------------------------------\n      // This script checks to see if a redirect is present in the query string\n      // and converts it back into the correct url and adds it to the\n      // browser's history using window.history.replaceState(...),\n      // which won't cause the browser to attempt to load the new url.\n      // When the single page app is loaded further down in this file,\n      // the correct url will be waiting in the browser's history for\n      // the single page app to route accordingly.\n      (function(l) {\n        if (l.search) {\n          var q = {};\n          l.search.slice(1).split('&').forEach(function(v) {\n            var a = v.split('=');\n            q[a[0]] = a.slice(1).join('=').replace(/~and~/g, '&');\n          });\n          if (q.p !== undefined) {\n            window.history.replaceState(null, null,\n              l.pathname.slice(0, -1) + (q.p || '') +\n              (q.q ? ('?' + q.q) : '') +\n              l.hash\n            );\n          }\n        }\n      }(window.location))" ]
-      ; Hvec [ Hstr "script"; Hmap [ "src", Some "static/js/react.production.min.js" ] ]
-      ; Hvec [ Hstr "script"; Hmap [ "src", Some "static/js/react-dom.production.min.js" ] ]
+      ; Hvec [ Hstr "script"; Hmap [ "src", Some "static/js/magic_portal.js" ] ]
       ; Hvec [ Hstr "script"; Hmap [ "src", Some "static/js/main.js" ] ]
       ; Hvec
           [ Hstr "script"

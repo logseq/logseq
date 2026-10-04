@@ -13,6 +13,23 @@ let page_ref_without_nested_re = Regexp.compile "\\[\\[([^\\[\\]]+)\\]\\]"
 
 let page_ref s = "[[" ^ s ^ "]]"
 
+(* cljs get-matched-ids — distinct uuids captured by id-ref-pattern. *)
+let get_matched_ids (content : string) : string list =
+  let rec loop pos acc =
+    match Regexp.exec ~pos id_ref_re content with
+    | None -> List.rev acc
+    | Some m ->
+        let uuid =
+          match m.Regexp.groups.(1) with
+          | Some u -> u
+          | None -> ""
+        in
+        loop m.Regexp.last (uuid :: acc)
+  in
+  List.fold_left
+    (fun acc u -> if u <> "" && not (List.mem u acc) then acc @ [ u ] else acc)
+    [] (loop 0 [])
+
 (* cljs string/replace with a string pattern: literal, all occurrences. *)
 let replace_all s ~pattern ~replacement =
   let n = String.length s and m = String.length pattern in
@@ -180,6 +197,24 @@ let ref_to_title_entry replace_block_refs (ref_ : entity) =
 let uuid_of (e : entity) =
   match Ldb.value e "block/uuid" with Some (Uuid u) -> Some u | _ -> None
 
+(* cljs db-content/title-has-id-ref? *)
+let title_has_id_ref (title : string option) : bool =
+  match title with
+  | Some t -> Regexp.test id_ref_re t
+  | None -> false
+
+(* cljs db-content/title-ref-entities — id refs are self-contained in the
+   title, so their targets resolve directly without relying on :block/refs
+   being up to date. *)
+let title_ref_entities (ent : entity) : entity list =
+  match Ldb.string_value ent "block/title" with
+  | None -> []
+  | Some title ->
+      List.filter_map
+        (fun u ->
+          Datascript.entity ent.db (Lookup_ref ("block/uuid", Uuid u)))
+        (get_matched_ids title)
+
 let block_ref_id_to_title (ent : entity) max_depth replace_block_refs =
   let seen = Hashtbl.create 64 in
   let rec loop frontier id_to_title_rev depth =
@@ -206,12 +241,14 @@ let block_ref_id_to_title (ent : entity) max_depth replace_block_refs =
           (List.filter_map (ref_to_title_entry replace_block_refs) new_refs)
       in
       let next =
-        List.concat_map (fun e -> Ldb.ref_ents e "block/refs") new_refs
+        List.concat_map
+          (fun e -> Ldb.ref_ents e "block/refs" @ title_ref_entities e)
+          new_refs
       in
       loop next id_to_title_rev (depth + 1)
     end
   in
-  loop (Ldb.ref_ents ent "block/refs") [] 0
+  loop (Ldb.ref_ents ent "block/refs" @ title_ref_entities ent) [] 0
 
 (* db-content/recur-replace-uuid-in-block-title *)
 let recur_replace_uuid_in_block_title ?(max_depth = 10)
@@ -453,24 +490,6 @@ let replace_tag_refs_with_page_refs_maps (content : string)
          | _ -> content)
        content
        (sort_ref_maps tags))
-
-(* cljs get-matched-ids — distinct uuids captured by id-ref-pattern. *)
-let get_matched_ids (content : string) : string list =
-  let rec loop pos acc =
-    match Regexp.exec ~pos id_ref_re content with
-    | None -> List.rev acc
-    | Some m ->
-        let uuid =
-          match m.Regexp.groups.(1) with
-          | Some u -> u
-          | None -> ""
-        in
-        loop m.Regexp.last (uuid :: acc)
-  in
-  List.fold_left
-    (fun acc u -> if u <> "" && not (List.mem u acc) then acc @ [ u ] else acc)
-    [] (loop 0 [])
-
 
 (* entity-plus/get-block-title — cljs (:block/title e) via
    lookup-kv-then-entity: journal pages get the formatted journal

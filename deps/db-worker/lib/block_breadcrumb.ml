@@ -314,3 +314,101 @@ let block_breadcrumb ?(depth = load_depth) db (block : Ev.node) :
   match Ev.ref_node block "logseq.property/created-from-property" with
   | Some prop -> crumbs @ [ breadcrumb_entity ~cache db prop ]
   | None -> crumbs
+
+(* cljs breadcrumb-ref-titles — ref uuid -> title for every :block/refs
+   target plus every [[uuid]] found inside entity titles. Id refs nested
+   in a title (e.g. [[<uuid>]] inside a page-ref name) are not covered by
+   :block/refs, so they are resolved directly and followed transitively
+   through their own titles. Returns uuid-string -> title pairs. *)
+let breadcrumb_ref_titles (db : db) ~(nodes : Ev.node list)
+    ~(crumbs : (attr * value) list list) : (string * string) list =
+  let titles = Hashtbl.create 17 in
+  let add_ref (uuid_v, title_v) =
+    match uuid_v with
+    | Some (Uuid u) -> (
+        match title_v with
+        | Some (String t) -> Hashtbl.replace titles u t
+        | Some v ->
+            fail "Invalid breadcrumb reference title"
+              (Printf.sprintf "{:ref-uuid %s :title %s}" u
+                 (Ds_wire.edn_of_transit (Ds_wire.transit_of_value v)))
+        | None -> ())
+    | _ -> ()
+  in
+  let node_ref_ids (n : Ev.node) : string list =
+    List.filter_map
+      (fun (r : Ev.node) ->
+        match Ev.title r with
+        | Some t -> Some (Db_content.get_matched_ids t)
+        | None -> None)
+      (Ev.ref_nodes n "block/refs")
+    |> List.concat
+  in
+  let crumb_ref_maps (crumb : (attr * value) list) : (value * value) list list =
+    match List.assoc_opt "block/refs" crumb with
+    | Some (Vector refs) | Some (List refs) | Some (Set refs) ->
+        List.filter_map
+          (fun rv -> match rv with Map kvs -> Some kvs | _ -> None)
+          refs
+    | _ -> []
+  in
+  (* pass 1: uuid -> title from every :block/refs target *)
+  List.iter
+    (fun (n : Ev.node) ->
+      List.iter
+        (fun (r : Ev.node) ->
+          add_ref (Ev.value r "block/uuid", Ev.value r "block/title"))
+        (Ev.ref_nodes n "block/refs"))
+    nodes;
+  List.iter
+    (fun crumb ->
+      List.iter
+        (fun (kvs : (value * value) list) ->
+          add_ref
+            ( List.assoc_opt (Keyword "block/uuid") kvs
+            , List.assoc_opt (Keyword "block/title") kvs ))
+        (crumb_ref_maps crumb))
+    crumbs;
+  (* BFS seed: title-embedded [[uuid]]s of each entity and of each of its
+     refs' own titles (a ref whose title is itself an id ref is not
+     reachable from the ancestor titles alone). *)
+  let node_title_ids (n : Ev.node) : string list =
+    (match Ev.title n with
+     | Some t -> Db_content.get_matched_ids t
+     | None -> [])
+    @ node_ref_ids n
+  in
+  let crumb_title_ids (crumb : (attr * value) list) : string list =
+    (match List.assoc_opt "block/title" crumb with
+     | Some (String t) -> Db_content.get_matched_ids t
+     | _ -> [])
+    @ List.concat_map
+        (fun (kvs : (value * value) list) ->
+          match List.assoc_opt (Keyword "block/title") kvs with
+          | Some (String t) -> Db_content.get_matched_ids t
+          | _ -> [])
+        (crumb_ref_maps crumb)
+  in
+  let seen = Hashtbl.create 17 in
+  Hashtbl.iter (fun u _ -> Hashtbl.replace seen u ()) titles;
+  let rec bfs frontier =
+    match frontier with
+    | [] -> ()
+    | u :: rest ->
+        if Hashtbl.mem seen u then bfs rest
+        else begin
+          Hashtbl.replace seen u ();
+          (match entity db (Lookup_ref ("block/uuid", Uuid u)) with
+           | Some e -> (
+               match Ldb.string_value e "block/title" with
+               | Some t ->
+                   Hashtbl.replace titles u t;
+                   bfs (rest @ Db_content.get_matched_ids t)
+               | None -> bfs rest)
+           | None -> bfs rest)
+        end
+  in
+  bfs
+    (List.concat_map node_title_ids nodes
+     @ List.concat_map crumb_title_ids crumbs);
+  Hashtbl.fold (fun u t acc -> (u, t) :: acc) titles []

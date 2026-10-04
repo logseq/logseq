@@ -25,7 +25,7 @@ module E = Db_worker_effect
 
 (* ---- constants (cljs defs at top of handler/search.cljs) ---- *)
 
-let search_db_version = 5
+let search_db_version = 6
 
 (* fts-id-keyed-search-db-version — the last version whose blocks_fts
    rows have rowids unrelated to their blocks rows. Such an index moves

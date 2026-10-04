@@ -280,46 +280,8 @@ let render_page_preview_source db key _runtime =
   ( Watch_keys [ watch_entity page_uuid; watch_attr "block/alias" ]
   , Wire.Uuid (entity_uuid db source.id) )
 
-(* breadcrumb-ref-titles — refs of the block plus each crumb map. *)
-let breadcrumb_ref_titles (block : entity)
-    (crumbs : (attr * value) list list) : (Wire.t * Wire.t) list =
-  let titles = Hashtbl.create 17 in
-  let add_ref (uuid_v, title_v) =
-    match uuid_v with
-    | Some (Uuid u) -> (
-        match title_v with
-        | Some (String t) -> Hashtbl.replace titles u t
-        | _ ->
-            fail "Invalid breadcrumb reference title"
-              [ (kw "ref-uuid", Wire.Uuid u)
-              ; ( kw "title"
-                , match title_v with
-                  | Some v -> Ds_wire.transit_of_value v
-                  | None -> Wire.Nil ) ])
-    | _ -> ()
-  in
-  (* entity block refs *)
-  List.iter
-    (fun (r : entity) ->
-      add_ref (Ldb.value r "block/uuid", Ldb.value r "block/title"))
-    (Ldb.ref_ents block "block/refs");
-  (* crumb map refs: :block/refs -> Vector of Map values *)
-  List.iter
-    (fun (crumb : (attr * value) list) ->
-      match List.assoc_opt "block/refs" crumb with
-      | Some (Vector refs) | Some (List refs) | Some (Set refs) ->
-          List.iter
-            (fun rv ->
-              match rv with
-              | Map kvs ->
-                  add_ref
-                    ( List.assoc_opt (Keyword "block/uuid") kvs
-                    , List.assoc_opt (Keyword "block/title") kvs )
-              | _ -> ())
-            refs
-      | _ -> ())
-    crumbs;
-  Hashtbl.fold (fun u t acc -> (Wire.Uuid u, Wire.String t) :: acc) titles []
+(* breadcrumb-ref-titles — moved to Block_breadcrumb (cljs handler
+   move); covers title-embedded [[uuid]] refs transitively. *)
 
 let empty_block_breadcrumb block_uuid =
   Wire.Map
@@ -353,10 +315,14 @@ let render_block_breadcrumb db key _runtime =
               [ (kw "block-uuid", Wire.Uuid block_uuid) ]
       in
       let ancestor_uuids = List.map crumb_uuid crumbs in
-      let ref_titles = breadcrumb_ref_titles block crumbs in
+      let ref_titles =
+        Block_breadcrumb.breadcrumb_ref_titles db
+          ~nodes:[ Entity_view.of_entity block ]
+          ~crumbs
+      in
       let watch_uuids =
         block_uuid :: ancestor_uuids
-        @ List.map (fun (k, _) -> match k with Wire.Uuid u -> u | _ -> "") ref_titles
+        @ List.map fst ref_titles
         |> List.filter (fun u -> u <> "")
       in
       ( Watch_keys
@@ -374,7 +340,11 @@ let render_block_breadcrumb db key _runtime =
                           (fun (a, v) -> (kw a, Ds_wire.transit_of_value v))
                           crumb))
                    crumbs) )
-          ; (kw "ref-titles", Wire.Map ref_titles) ] )
+          ; ( kw "ref-titles"
+            , Wire.Map
+                (List.map
+                   (fun (u, t) -> (Wire.Uuid u, Wire.String t))
+                   ref_titles) ) ] )
 
 let render_journals db _key _runtime =
   ( Watch_keys [ wkey [ kw "journals" ] ]
