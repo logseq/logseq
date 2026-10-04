@@ -10,6 +10,7 @@
 #include <caml/printexc.h>
 #include <caml/signals.h>
 #include <caml/startup.h>
+#include <caml/threads.h>
 
 #if defined(_WIN32)
 #define LUI_EXPORT __declspec(dllexport)
@@ -106,6 +107,14 @@ LUI_EXPORT void logseq_lui_platform_request(value payload) {
   int32_t length = (int32_t)caml_string_length(payload);
   if (platform_request_callback != NULL)
     platform_request_callback(data, length);
+}
+
+/* Registers a foreign thread (the UI thread) as a domain-0 systhread so
+   it may call the lui_ocaml_* entries synchronously — the acquire/release
+   pattern inside each entry then serializes it against the OCaml worker
+   and OCaml's own systhreads. Returns 1 on success. */
+LUI_EXPORT int32_t lui_ocaml_register_current_thread(void) {
+  return caml_c_thread_register();
 }
 
 static int dispatch_long(const char *name, int64_t node) {

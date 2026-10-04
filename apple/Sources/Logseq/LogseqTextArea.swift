@@ -563,6 +563,24 @@ struct LogseqInputField: NSViewRepresentable {
 struct LogseqFlowLayout: Layout {
   var spacing: CGFloat = 0
 
+  /// The default Layout.explicitAlignment walks every subview's subtree —
+  /// with thousands of DOM children that's a recursion storm per parent
+  /// alignment query. No child defines custom guides; nil resolves against
+  /// our bounds.
+  func explicitAlignment(
+    of guide: HorizontalAlignment, in bounds: CGRect,
+    proposal: ProposedViewSize, subviews: Subviews, cache: inout Void
+  ) -> CGFloat? {
+    nil
+  }
+
+  func explicitAlignment(
+    of guide: VerticalAlignment, in bounds: CGRect,
+    proposal: ProposedViewSize, subviews: Subviews, cache: inout Void
+  ) -> CGFloat? {
+    nil
+  }
+
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
   ) -> CGSize {

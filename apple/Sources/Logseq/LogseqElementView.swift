@@ -56,6 +56,10 @@ struct LogseqElementView: View {
   /// skips the presenter branch so the element draws normally.
   var inOverlay = false
   @Environment(\.logseqInOverlay) private var nestedInOverlay
+  @Environment(\.logseqScroll) private var scrollEnv
+  /// This element's own scroll viewport height (when `style.isScrollable`) —
+  /// feeds the `logseqScroll` env its descendants virtualize against.
+  @State private var scrollViewport: CGFloat = 0
   @Environment(\.logseqInImperative) private var inImperativeLayer
   /// lui-overlay.css's `#ui__ac-inner` max-height: the enclosing
   /// `data-editor-popup-ref` popover pushes its --available-height budget
@@ -722,6 +726,11 @@ struct LogseqElementView: View {
             childView(child)
           }
         }
+      } else if virtualizable(children) {
+        LogseqVirtualColumn(
+          nodeID: context.nodeID, children: children,
+          spacing: style.stackSpacing ?? 0, scroll: scrollEnv
+        ) { child in AnyView(childView(child)) }
       } else {
         LogseqColumnLayout(
           nodeID: context.nodeID, spacing: style.stackSpacing ?? 0,
@@ -736,6 +745,37 @@ struct LogseqElementView: View {
     }
   }
 
+  /// Column virtualization is only safe inside a tracked scroller
+  /// (`scrollEnv.viewport > 0`) and when every child is a plain in-flow,
+  /// non-growing row — grow/out-of-flow children need the whole-column
+  /// flex pass, so those columns stay eager.
+  private func virtualizable(_ children: [Int]) -> Bool {
+    // `space != 0` (not viewport) gates this — the viewport height arrives a
+    // frame later via onScrollGeometryChange, and an eager first frame would
+    // lay out the entire 8k-node feed before virtualization could engage.
+    if LogseqPerf.detail, children.count >= logseqVirtualColumnThreshold {
+      FileHandle.standardError.write(
+        "DBG virt-cand id=\(context.nodeID) kids=\(children.count) space=\(scrollEnv.space) vp=\(Int(scrollEnv.viewport)) cM=\(style.centerMain) cC=\(style.centerCross) txt=\(!effectiveText.isEmpty) html=\(!html.isEmpty)\n"
+          .data(using: .utf8)!)
+    }
+    guard scrollEnv.space != 0,
+          !style.centerMain, !style.centerCross,
+          children.count >= logseqVirtualColumnThreshold,
+          effectiveText.isEmpty, html.isEmpty
+    else { return false }
+    for child in children {
+      let s = childStyle(of: child)
+      let oof = s.outOfFlow && !(nestedInOverlay && s.fillsOverlay)
+      if oof || s.grow || s.fullHeight || s.outOfFlowFillY { return false }
+    }
+    if LogseqPerf.detail {
+      FileHandle.standardError.write(
+        "DBG virt id=\(context.nodeID) kids=\(children.count)\n"
+          .data(using: .utf8)!)
+    }
+    return true
+  }
+
   @ViewBuilder private var styledContainer: some View {
     if style.isScrollable {
       // ScrollView must sit OUTSIDE the flex-height frame: inside it, a
@@ -744,9 +784,16 @@ struct LogseqElementView: View {
       ScrollViewReader { proxy in
         ScrollView {
           elementBody
+            .environment(
+              \.logseqScroll,
+              LogseqScrollEnv(space: context.nodeID, viewport: scrollViewport))
             .scrollTargetLayout()
         }
+        .coordinateSpace(name: context.nodeID)
         .scrollIndicators(style.hideScrollIndicators ? .never : .automatic)
+        .onScrollGeometryChange(for: CGFloat.self, of: { $0.containerSize.height }) { _, h in
+          if h != scrollViewport { scrollViewport = h }
+        }
         .onAppear {
           LogseqScrollProxyStore.shared.set(context.nodeID, proxy)
         }
@@ -1155,6 +1202,25 @@ struct LogseqRowLayout: Layout {
 
   func makeCache(subviews: Subviews) -> Cache { [] }
 
+  /// The default Layout.explicitAlignment walks every subview (and their
+  /// whole subtrees) to resolve a guide — with thousands of DOM nodes that
+  /// turns one HStack/VStack alignment query into a full-tree recursion
+  /// storm. No DOM child defines custom alignment guides, so answering nil
+  /// (resolve the guide against our bounds) is both correct and O(1).
+  func explicitAlignment(
+    of guide: HorizontalAlignment, in bounds: CGRect,
+    proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
+  ) -> CGFloat? {
+    nil
+  }
+
+  func explicitAlignment(
+    of guide: VerticalAlignment, in bounds: CGRect,
+    proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
+  ) -> CGFloat? {
+    nil
+  }
+
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
   ) -> CGSize {
@@ -1293,6 +1359,22 @@ struct LogseqColumnLayout: Layout {
 
   func makeCache(subviews: Subviews) -> Cache { Cache() }
 
+  /// See LogseqRowLayout.explicitAlignment — answering nil keeps parent
+  /// alignment queries O(1) instead of walking this column's whole subtree.
+  func explicitAlignment(
+    of guide: HorizontalAlignment, in bounds: CGRect,
+    proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
+  ) -> CGFloat? {
+    nil
+  }
+
+  func explicitAlignment(
+    of guide: VerticalAlignment, in bounds: CGRect,
+    proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
+  ) -> CGFloat? {
+    nil
+  }
+
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
   ) -> CGSize {
@@ -1425,6 +1507,123 @@ final class LogseqLayoutProbeDumped: @unchecked Sendable {
 
 private struct InsideVerticalScrollKey: EnvironmentKey {
   static let defaultValue = false
+}
+
+/// Per-scroller virtualization context: the scroll viewport height plus the
+/// named coordinate space the scrollable element declares. Column children
+/// past `logseqVirtualColumnThreshold` render only the rows intersecting
+/// the viewport (plus overscan); unmeasured rows use `estimate` height until
+/// their real height lands in `LogseqHeightStore`.
+struct LogseqScrollEnv: Equatable {
+  var space: Int = 0
+  var viewport: CGFloat = 0
+}
+
+private struct LogseqScrollEnvKey: EnvironmentKey {
+  static let defaultValue = LogseqScrollEnv()
+}
+
+extension EnvironmentValues {
+  var logseqScroll: LogseqScrollEnv {
+    get { self[LogseqScrollEnvKey.self] }
+    set { self[LogseqScrollEnvKey.self] = newValue }
+  }
+}
+
+/// Column virtualization engages only above this child count — smaller
+/// columns measure eagerly (the windowing overhead isn't worth it).
+private let logseqVirtualColumnThreshold = 16
+
+/// Measured heights of virtualized children, keyed by node id — persists
+/// across unmount/remount so a row re-entering the window keeps its real
+/// height in the spacer math instead of the estimate.
+final class LogseqHeightStore: @unchecked Sendable {
+  static let shared = LogseqHeightStore()
+  var heights: [Int: CGFloat] = [:]
+}
+
+/// Windowed column: mounts only the children overlapping the scroller's
+/// viewport (±overscan) and pads the hidden prefix/suffix with spacers, so
+/// a 1000-row list costs ~40 measured children instead of 1000. Nested
+/// columns each self-anchor via their own frame in the scroller's named
+/// coordinate space — virtualization cascades through arbitrarily deep
+/// wrapper chains without env plumbing.
+struct LogseqVirtualColumn<ChildContent: View>: View {
+
+  var nodeID: Int
+  var children: [Int]
+  var spacing: CGFloat
+  var scroll: LogseqScrollEnv
+  var estimate: CGFloat = 32
+  var childBuilder: (Int) -> ChildContent
+
+  /// The column's top edge in the scroller's coordinate space. Unknown
+  /// until the first geometry report; the first window is a prefix guess.
+  @State private var minY = CGFloat.greatestFiniteMagnitude
+
+  private func childHeight(_ id: Int) -> CGFloat {
+    LogseqHeightStore.shared.heights[id] ?? estimate
+  }
+
+  /// Window geometry in column-local points: cumulative row offsets, the
+  /// total column height, and the mounted `[first, last]` index range —
+  /// computed outside `body` because ViewBuilder rejects control flow.
+  private func window() -> (
+    starts: [CGFloat], total: CGFloat, first: Int, last: Int
+  ) {
+    var starts = [CGFloat](repeating: 0, count: children.count)
+    var total: CGFloat = 0
+    for (i, c) in children.enumerated() {
+      starts[i] = total
+      total += childHeight(c)
+      if i < children.count - 1 { total += spacing }
+    }
+    let overscan = scroll.viewport / 2 + 100
+    var first = 0
+    var last = min(children.count, 48) - 1
+    if minY.isFinite, scroll.viewport > 0 {
+      let lo = -overscan - minY
+      let hi = scroll.viewport + overscan - minY
+      first = children.count
+      last = -1
+      for i in 0..<children.count {
+        let y0 = starts[i]
+        let y1 = y0 + childHeight(children[i])
+        if y1 > lo && first == children.count { first = i }
+        if y0 < hi { last = i }
+      }
+      if last < first { first = 0 }
+    }
+    return (starts, total, first, last)
+  }
+
+  var body: some View {
+    let w = window()
+    let topPad = w.last >= w.first ? w.starts[w.first] : w.total
+    let bottomPad =
+      w.last >= w.first
+      ? w.total - (w.starts[w.last] + childHeight(children[w.last])) : 0
+    LogseqColumnLayout(nodeID: nodeID, spacing: spacing) {
+      if topPad > 0 { Color.clear.frame(height: topPad) }
+      if w.last >= w.first {
+        ForEach(children[w.first...w.last], id: \.self) { c in
+          childBuilder(c)
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
+              let h = max(0.5, size.height)
+              if abs((LogseqHeightStore.shared.heights[c] ?? -1) - h) > 0.5 {
+                LogseqHeightStore.shared.heights[c] = h
+              }
+            }
+        }
+      }
+      if bottomPad > 0 { Color.clear.frame(height: bottomPad) }
+    }
+    .onGeometryChange(for: CGRect.self) {
+      $0.frame(in: .named(scroll.space))
+    } action: { f in
+      if f.minY != minY { minY = f.minY }
+    }
+  }
 }
 
 private struct ACInnerMaxHeightKey: EnvironmentKey {

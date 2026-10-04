@@ -6,19 +6,17 @@ import Observation
 
 /// C bridge entries exported by deps/ui/apple/logseq_lui_bridge.c. Every entry
 /// that produces a patch emits it synchronously through the patch callback
-/// installed at start; all entries are invoked on the main actor, which owns
-/// the OCaml runtime started by `lui_ocaml_start` on this thread.
+/// installed at start. Interactive calls (events, platform envelopes) run
+/// synchronously on the main thread — registered as a domain-0 systhread at
+/// start completion — so their patches apply inside the triggering event's
+/// runloop turn, with no cross-thread wake on the input path. The pinned
+/// OCaml worker keeps only startup and wakeup-driven pumps.
 private typealias PatchCallback = @convention(c) (UnsafePointer<CChar>?) -> Void
 private typealias WakeupCallback = @convention(c) () -> Void
 
 private typealias PlatformRequestCallback =
   @convention(c) (UnsafePointer<CChar>?, Int32) -> Void
 
-// Carbon PostEventToQueue was tried as the wake channel: it returns
-// success but AppKit drops the unknown event class before it ever
-// becomes an NSEvent, so it neither wakes the parked wait nor reaches
-// local event monitors. The working carrier is a real flagsChanged
-// CGEvent — see postWakeup().
 @_silgen_name("lui_ocaml_start")
 private func luiOCamlStart(
   _ callback: PatchCallback?,
@@ -39,13 +37,16 @@ private func luiOCamlPlatformEvent(
 ) -> Int32
 @_silgen_name("lui_ocaml_root_node")
 private func luiOCamlRootNode() -> Int64
+@_silgen_name("lui_ocaml_register_current_thread")
+private func luiOCamlRegisterCurrentThread() -> Int32
 
 nonisolated(unsafe) private var activeRuntime: LogseqRuntime?
 
-/// Every OCaml entry point runs on one pinned worker thread. The bridge
-/// acquires the runtime lock inside each entry (leave_blocking_section)
-/// and releases it on return (enter_blocking_section), so domain-0
-/// systhreads (daemon HTTP, timers) interleave between entries on their
+/// Async OCaml work (startup, wakeup pumps) runs on one pinned worker
+/// thread. The bridge acquires the runtime lock inside each entry
+/// (leave_blocking_section) and releases it on return
+/// (enter_blocking_section), so domain-0 systhreads (daemon HTTP, timers,
+/// and the registered main thread) interleave between entries on their
 /// own threads. A DispatchQueue would hop OS threads and break OCaml's
 /// per-thread domain binding — this is a real NSThread + runloop mailbox.
 private final class OCamlWorker: NSObject {
@@ -111,48 +112,16 @@ extension LogseqRuntime {
   }
 }
 
-/// Marshals work onto the main runloop via CFRunLoopPerformBlock +
-/// CFRunLoopWakeUp — the documented cross-thread wakeup. CF registers its own
-/// wakeup port in every mode's waitset, so the wake always reaches the parked
-/// wait (unlike a custom CFMachPort source, whose messages were observed to
-/// sit 0.6-2.9s in the port queue while the loop parked on a different set).
-///
-/// Main-thread callers run inline: CFRunLoopPerformBlock from the runloop's
-/// own thread would only run on the next iteration.
+/// Cross-thread work for the main actor is queued here and drained on the
+/// main runloop. The parked _DPSNextEvent wait was measured to service
+/// runloop timers even while no real events exist (idle cadence ~50ms), so
+/// enqueueing tightens the timer to ~2ms — a worker-produced patch lands
+/// on the next turn without synthetic events. Interactive (input-driven)
+/// OCaml calls don't come through here: they run synchronously on main
+/// inside the triggering event.
 nonisolated(unsafe) private var runOnMainPending: [() -> Void] = []
 private let runOnMainLock = NSLock()
 
-/// Events dispatched while work is pending drain it inline — a real
-/// event always reaches the loop, unlike queued blocks which can sit
-/// behind a long-running iteration.
-/// Samples the main runloop's current mode from a background thread —
-/// catches private-mode waits (dockmsg, connection-reply, tracking) that
-/// common-mode observers never report.
-private func installModeProbe() {
-  Thread.detachNewThread {
-    var lastMode = ""
-    while true {
-      Thread.sleep(forTimeInterval: 0.1)
-      let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain())
-        .map { $0.rawValue as String } ?? "none"
-      if mode != lastMode {
-        FileHandle.standardError.write(
-          "PERF rlmode t=\(CFAbsoluteTimeGetCurrent()) mode=\(mode)\n"
-            .data(using: .utf8)!)
-        lastMode = mode
-      }
-    }
-  }
-}
-
-/// Adaptive drain timer — the parked _DPSNextEvent wait was measured to
-/// service runloop timers every turn even while no real events exist
-/// (rlphase marks cycle ~50ms), while every other wake channel stalls
-/// (GCD, CFRunLoopWakeUp, mach-port source, postEvent:, posted CGEvents
-/// ~650ms, activate() ~300-800ms, signals delivered but ignored, IOHID
-/// injection filtered). Instead of waking the loop we ride the timer:
-/// enqueue tightens the next fire to ~2ms and the handler drains the
-/// pending queue on that same turn; idle cadence stays 100ms.
 nonisolated(unsafe) private var drainTimer: CFRunLoopTimer?
 
 private func installTickTimer() {
@@ -160,10 +129,6 @@ private func installTickTimer() {
     nil, CFAbsoluteTimeGetCurrent() + 0.1, 0.1, 0, 0
   ) { _ in
     drainRunOnMainPending(via: "timer")
-    if LogseqRuntime.perfLogging {
-      FileHandle.standardError.write(
-        "PERF tick t=\(CFAbsoluteTimeGetCurrent())\n".data(using: .utf8)!)
-    }
   }
   CFRunLoopAddTimer(CFRunLoopGetMain(), drainTimer, CFRunLoopMode.commonModes)
 }
@@ -204,7 +169,6 @@ private func drainRunOnMainPending(via: String = "?") {
   runOnMainLock.lock()
   let batch = runOnMainPending
   runOnMainPending.removeAll()
-  wakeInFlight = false
   runOnMainLock.unlock()
   if LogseqRuntime.perfLogging, !batch.isEmpty {
     let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain())
@@ -216,132 +180,7 @@ private func drainRunOnMainPending(via: String = "?") {
   for item in batch { item() }
 }
 
-/// A version-1 (port-based) runloop source on the main loop. The parked
-/// _DPSNextEvent event wait services only the source that woke it — it
-/// never runs __CFRunLoopDoBlocks or GCD main-queue work on those wakes
-/// (measured: 2.1-2.9s delivery stalls until a real event arrived).
-/// Sending a real mach message to this source's port lands on the same
-/// waitset a real event arrives on, so the handler drains the queue on
-/// the very next turn. CFRunLoopWakeUp, DispatchQueue.main.async,
-/// NSApp.postEvent, self-AppleEvents and commonMode timers were all
-/// measured to sit behind the parked wait — only a real CGEvent posted
-/// to our own pid reaches it (postWakeup).
-nonisolated(unsafe) private var wakeupPort: mach_port_t = mach_port_t(MACH_PORT_NULL)
-nonisolated(unsafe) private var wakeupSource: CFRunLoopSource?
 
-private func installWakeupSource() {
-  var ctx = CFMachPortContext()
-  let port = CFMachPortCreate(
-    nil,
-    { _, _, _, _ in drainRunOnMainPending(via: "port") },
-    &ctx,
-    nil
-  )!
-  wakeupPort = CFMachPortGetPort(port)
-  wakeupSource = CFMachPortCreateRunLoopSource(nil, port, 0)
-  CFRunLoopAddSource(CFRunLoopGetMain(), wakeupSource, CFRunLoopMode.commonModes)
-}
-
-/// One synthetic event in flight at a time — the drain clears the flag, so
-/// items queued before the wake lands don't spam extra CGEvents. The
-/// timestamp lets a dropped event unlock posting again after 1s instead of
-/// stalling the queue forever.
-nonisolated(unsafe) private var wakeInFlight = false
-nonisolated(unsafe) private var wakePostedAt: CFAbsoluteTime = 0
-/// Own-app AX element for AXUIElementPostKeyboardEvent wakes (the only
-/// synthetic post that reaches the real event connection instantly).
-nonisolated(unsafe) private var wakeAXApp = AXUIElementCreateApplication(getpid())
-private typealias AXPostKeyboardEventFn = @convention(c) (
-  AXUIElement, CGCharCode, CGKeyCode, UInt8
-) -> AXError
-/// AXUIElementPostKeyboardEvent is deprecated out of the SDK headers but
-/// still exported by HIServices — resolve it dynamically.
-nonisolated(unsafe) private let axPostKeyboardEvent: AXPostKeyboardEventFn? = {
-  guard let sym = dlsym(dlopen(nil, RTLD_LAZY), "AXUIElementPostKeyboardEvent")
-  else { return nil }
-  return unsafeBitCast(sym, to: AXPostKeyboardEventFn.self)
-}()
-
-private func postWakeup() {
-  guard wakeupPort != mach_port_t(MACH_PORT_NULL) else { return }
-  var msg = mach_msg_header_t()
-  msg.msgh_bits = mach_msg_bits_t(MACH_MSG_TYPE_MAKE_SEND)
-  msg.msgh_size = mach_msg_size_t(MemoryLayout<mach_msg_header_t>.size)
-  msg.msgh_remote_port = wakeupPort
-  msg.msgh_local_port = mach_port_t(MACH_PORT_NULL)
-  msg.msgh_id = 0
-  msg.msgh_voucher_port = mach_port_t(MACH_PORT_NULL)
-  var hdr = msg
-  let rc = withUnsafeMutablePointer(to: &hdr) {
-    mach_msg(
-      $0,
-      mach_msg_option_t(MACH_SEND_MSG),
-      mach_msg_size_t(MemoryLayout<mach_msg_header_t>.size),
-      0,
-      mach_port_name_t(MACH_PORT_NULL),
-      0,
-      mach_port_name_t(MACH_PORT_NULL)
-    )
-  }
-  if rc != 0, LogseqRuntime.perfLogging {
-    FileHandle.standardError.write(
-      "PERF wakefail rc=\(rc)\n".data(using: .utf8)!)
-  }
-  // Coalesce wakes: the synthetic key event is still in flight while
-  // wakeInFlight holds, so items queued before it lands reuse the same
-  // post instead of spamming extra events.
-  let now = CFAbsoluteTimeGetCurrent()
-  runOnMainLock.lock()
-  let stale = now - wakePostedAt > 0.5
-  let inFlight = wakeInFlight && !stale
-  if !inFlight {
-    wakeInFlight = true
-    wakePostedAt = now
-  }
-  runOnMainLock.unlock()
-  if LogseqRuntime.perfLogging {
-    FileHandle.standardError.write(
-      "PERF wake t=\(now) skip=\(inFlight ? 1 : 0)\n"
-        .data(using: .utf8)!)
-  }
-  guard !inFlight else { return }
-  // Tighten the drain timer — the parked wait services timers, so the
-  // next turn (~2ms out) drains this item without needing a real event.
-  if let drainTimer {
-    CFRunLoopTimerSetNextFireDate(
-      drainTimer, CFAbsoluteTimeGetCurrent() + 0.002)
-  }
-  // The parked _DPSNextEvent wait wakes ONLY for events arriving on the
-  // window-server event connection — and during tracking/parked windows
-  // it services nothing else (measured: timers, mach msgs, GCD all stall
-  // 0.5-1.8s; a custom-class Carbon event posts fine but AppKit drops it
-  // before it ever becomes an NSEvent). The one channel that always gets
-  // dispatched is real input.
-  // PostToPid lands straight in the app's NSEvent queue without
-  // generating window-server connection traffic, so a deep-parked
-  // _DPSNextEvent never wakes for it — queued events are only read when
-  // a real hardware event arrives (~1.5-3s measured). HID/session-tap
-  // injected CGEvents (flagsChanged AND a real key pair) get the same
-  // treatment. The one post that DOES wake the parked wait instantly is
-  // AXUIElementPostKeyboardEvent — HIServices routes it through the
-  // trusted event path onto the real event connection (~5ms measured).
-  // F19 (kc=80) is unmapped everywhere: our keyMonitor passes it through
-  // and no app binding exists to swallow it.
-  let downOK = axPostKeyboardEvent?(wakeAXApp, 0, 80, 1) == .success
-  let upOK = axPostKeyboardEvent?(wakeAXApp, 0, 80, 0) == .success
-  if !downOK || !upOK {
-    if let down = CGEvent(
-      keyboardEventSource: nil, virtualKey: 80, keyDown: true)
-    {
-      down.post(tap: .cghidEventTap)
-    }
-    if let up = CGEvent(
-      keyboardEventSource: nil, virtualKey: 80, keyDown: false)
-    {
-      up.post(tap: .cghidEventTap)
-    }
-  }
-}
 
 func runOnMain(_ work: @escaping () -> Void) {
   if Thread.isMainThread {
@@ -376,23 +215,22 @@ func runOnMainDeferred(_ work: @escaping () -> Void) {
 }
 
 private func scheduleRunOnMainDrain() {
-  // Belt-and-suspenders: the parked _DPSNextEvent wait services nothing
-  // but real events on the window-server connection — mach msgs,
-  // CFRunLoopPerformBlock, and posted CGEvents all sit for seconds.
-  // DispatchQueue.main.async is measured the same way in most states,
-  // but when it does deliver it beats every other channel; the drain
-  // is idempotent so racing channels are harmless.
+  // The parked _DPSNextEvent wait services runloop timers: tightening
+  // to ~2ms delivers the queue on the next turn. GCD + PerformBlock are
+  // racing backups — the drain is idempotent, so whichever lands first
+  // wins. Only background (worker-produced) work uses this channel; it
+  // has no hard latency budget.
+  if let drainTimer {
+    CFRunLoopTimerSetNextFireDate(
+      drainTimer, CFAbsoluteTimeGetCurrent() + 0.002)
+  }
   DispatchQueue.main.async {
     drainRunOnMainPending(via: "gcd")
   }
-  if wakeupPort != mach_port_t(MACH_PORT_NULL) {
-    postWakeup()
-  } else {
-    CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
-      drainRunOnMainPending(via: "block")
-    }
-    CFRunLoopWakeUp(CFRunLoopGetMain())
+  CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
+    drainRunOnMainPending(via: "block")
   }
+  CFRunLoopWakeUp(CFRunLoopGetMain())
 }
 
 /// Patches arrive on the OCaml worker thread; split + decode them there
@@ -505,7 +343,11 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   platformRequestDrainScheduled = true
   platformRequestLock.unlock()
   guard shouldSchedule else { return }
-  runOnMain {
+  // Always deferred: platformRequest can fire while the main thread is
+  // inside an OCaml entry call (holding the non-recursive domain lock),
+  // and platform.handle may emit dom events back into OCaml — running it
+  // inline there would deadlock.
+  runOnMainDeferred {
     let drainAt = CFAbsoluteTimeGetCurrent()
     platformRequestLock.lock()
     let batch = pendingPlatformRequests
@@ -553,10 +395,16 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   /// (the wakeup callback fires on OCaml systhreads).
   nonisolated(unsafe) private let ocaml = OCamlWorker()
 
+  /// Once the main thread is registered as a domain-0 systhread, input
+  /// events invoke OCaml entries inline; `ocamlCallDepth` guards against
+  /// reentry — a nested event raised while main already holds the domain
+  /// lock is routed to the worker instead (the lock is non-recursive).
+  private var ocamlMainReady = false
+  private var ocamlCallDepth = 0
+
   init(extensionRegistry: LUIAppleExtensionRegistry) throws {
     installEventDrainMonitor()
-    installWakeupSource()
-    if LogseqRuntime.perfLogging { installModeProbe(); installTickTimer() }
+    installTickTimer()
     platform = LogseqPlatform()
     backend = try LUIAppleBackend(
       // `app:` icon names referenced from OCaml semantic elements (the
@@ -607,6 +455,11 @@ private let platformRequest: PlatformRequestCallback = { data, length in
             activeRuntime = nil
             return
           }
+          self.ocamlMainReady = luiOCamlRegisterCurrentThread() == 1
+          if !self.ocamlMainReady {
+            NSLog(
+              "LogseqRuntime: caml_c_thread_register failed; events stay on the worker")
+          }
           self.started = true
           self.platform.attach()
         }
@@ -617,7 +470,11 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   func stop() {
     guard started else { return }
     platform.detach()
-    _ = syncStop()
+    if ocamlMainReady, ocamlCallDepth == 0 {
+      _ = luiOCamlStop()
+    } else {
+      _ = syncStop()
+    }
     started = false
     activeRuntime = nil
   }
@@ -678,7 +535,13 @@ private let platformRequest: PlatformRequestCallback = { data, length in
 
   func pump() {
     guard started else { return }
-    enqueuePump()
+    guard ocamlMainReady, ocamlCallDepth == 0 else {
+      enqueuePump()
+      return
+    }
+    ocamlCallDepth += 1
+    _ = luiOCamlPump()
+    ocamlCallDepth -= 1
   }
 
   /// "<op>\n<payload>" envelopes from OCaml's Host.host_op.
@@ -690,10 +553,27 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     platform.handle(op: op, payload: payload)
   }
 
-  /// Pushes one host-originated "<name>\n<json>" envelope to OCaml.
+  /// Pushes one host-originated "<name>\n<json>" envelope to OCaml —
+  /// synchronously in this runloop turn when main is registered.
   func sendPlatformEvent(name: String, json: String) {
     guard started else { return }
-    enqueuePlatformEvent(name + "\n" + json)
+    let envelope = name + "\n" + json
+    guard ocamlMainReady, ocamlCallDepth == 0 else {
+      enqueuePlatformEvent(envelope)
+      return
+    }
+    ocamlCallDepth += 1
+    let t0 = CFAbsoluteTimeGetCurrent()
+    perfLastEvent = (String(envelope.prefix(48)), t0)
+    envelope.withCString { pointer in
+      _ = luiOCamlPlatformEvent(pointer, Int32(envelope.utf8.count))
+    }
+    ocamlCallDepth -= 1
+    let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+    if Self.perfLogging, ms > 4 {
+      FileHandle.standardError.write(
+        "PERF pevent \(envelope.prefix(32)) dur=\(Int(ms))ms\n".data(using: .utf8)!)
+    }
   }
 
   nonisolated private func enqueuePlatformEvent(_ envelope: String) {
@@ -713,7 +593,21 @@ private let platformRequest: PlatformRequestCallback = { data, length in
 
   private func handle(_ event: LUIEvent) {
     guard started else { return }
-    enqueueDispatch(event)
+    guard ocamlMainReady, ocamlCallDepth == 0 else {
+      enqueueDispatch(event)
+      return
+    }
+    ocamlCallDepth += 1
+    let t0 = CFAbsoluteTimeGetCurrent()
+    perfLastEvent = (Self.describeEvent(event), t0)
+    _ = LogseqLUIEvents.dispatch(event)
+    ocamlCallDepth -= 1
+    let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+    if Self.perfLogging, ms > 4 {
+      FileHandle.standardError.write(
+        "PERF dispatch \(Self.describeEvent(event)) dur=\(Int(ms))ms\n"
+          .data(using: .utf8)!)
+    }
   }
 
   nonisolated private func enqueueDispatch(_ event: LUIEvent) {

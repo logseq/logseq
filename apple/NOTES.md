@@ -1239,3 +1239,16 @@ zoom!=1 path keeps the reader since it needs the container size.
   (cmdk search input) costs ~20-30ms of OCaml dispatch and re-renders
   ~280 nodes; fine per keystroke, but the apply log's `e2e=` field
   exposes backlog when events pile behind it.
+- Pitfall: custom `Layout` types MUST override both `explicitAlignment`
+  overloads to return nil. The protocol default recursively walks every
+  subview's subtree to answer an alignment query, so one real HStack/VStack
+  guide query against a LogseqColumnLayout/RowLayout/FlowLayout re-walked
+  the whole DOM (~165k calls, ~90% of a 4.3s patch-deliver hold on an
+  8.5k-node journals patch; returning nil cut the hold to ~0.4s).
+- Virtualization: `LogseqVirtualColumn` window-mounts column children
+  (>=16) against the nearest scrollable container's coordinate space
+  (`logseqScroll` env — space nodeID + viewport published inside
+  `styledContainer`'s ScrollView); gate on `space != 0`, not viewport,
+  because the first layout pass has viewport 0. Heights cached per nodeID
+  in `LogseqHeightStore`; spacers are Color.clear frames. The OCaml side
+  still emits the full DOM — SwiftUI virt is mount-level only.
