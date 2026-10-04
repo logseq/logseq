@@ -1215,3 +1215,27 @@ zoom!=1 path keeps the reader since it needs the container size.
   "frozen" (menu items, Escape, keyboard dead). It is a tooling
   artifact, not an app bug; dismiss via AXCancel through
   `osascript -e 'tell application "System Events" to ...'`.
+- Pitfall: `open --stdout/--stderr` and direct-binary launches produce
+  an instance that never receives mouse events (window orders front but
+  the app never activates; `.any` monitor logs zero type=1/2/3 while
+  keyboard still arrives). Launch with plain `open`; capture stderr
+  via `LOGSEQ_PERF_FILE=/path` (app dup2s fd 2 onto the file at startup,
+  covering Swift FileHandle.standardError and OCaml eprintf alike).
+- Pitfall: `cmdk_view.install_listeners` ran on every `render` mount
+  (S.make bumps `latest_t`), stacking a document keydown/click/mousemove
+  listener per mount on dead state. Registered once now; handlers
+  resolve the live state via `!Cmdk_state.latest_t` at dispatch.
+- Pitfall: `global_chord` in editor_keys must not own chords the cmdk
+  document listener also owns (mod+k, mod+shift+m): two document
+  listeners on one emit toggled the palette open then closed in the
+  same pump. cmdk owns open/close/move-mode; global_chord keeps only
+  mod+shift+p (open_latest).
+- Pitfall: stale `native_embed.exe.o` — `dune build apple/native_embed.exe.o`
+  must run AFTER the last OCaml edit and BEFORE `./apple/build.sh`;
+  the swift build links whatever .o exists and stays silent when it is
+  older than the sources, so a fix can be "in the tree" but absent
+  from the binary.
+- Pitfall: every `dom-event` emit on the `logseq-input` extension
+  (cmdk search input) costs ~20-30ms of OCaml dispatch and re-renders
+  ~280 nodes; fine per keystroke, but the apply log's `e2e=` field
+  exposes backlog when events pile behind it.

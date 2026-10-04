@@ -184,17 +184,13 @@ let global_chord ev =
   let shift = D.ev_shift ev and alt = D.ev_alt ev in
   let meta = D.ev_meta ev in
   match shortcut_key ev with
-  | "k" when meta && not shift ->
-      D.prevent_default ev;
-      Cmdk_state.open_latest ();
-      true
+  (* mod+k / mod+shift+m belong to the cmdk palette's own document keydown
+     listener (cmdk_view.handle_keydown) — it owns open, close and
+     move-mode, and a second handler on the same chord toggles the
+     palette straight back off *)
   | "p" when meta && shift ->
       D.prevent_default ev;
       Cmdk_state.open_latest ();
-      true
-  | "m" when meta && shift ->
-      D.prevent_default ev;
-      Cmdk_state.open_latest ~move:true ();
       true
   | "p" when meta ->
       D.prevent_default ev;

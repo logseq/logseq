@@ -905,10 +905,21 @@ let handle_mousemove st (ev : Dom_ext.event) =
         | None -> ())
     | None -> ()
 
-let install_listeners st =
-  Dom_ext.add_document_listener "keydown" (handle_keydown st) true;
-  Dom_ext.add_document_listener "click" (handle_click st) true;
-  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) true
+(* render() mounts a fresh state per call (S.make bumps latest_t), so
+   capture the live state at dispatch time — registering per render would
+   stack a duplicate listener (on dead state) per mount *)
+let listeners_installed = ref false
+
+let install_listeners () =
+  if not !listeners_installed then (
+    listeners_installed := true;
+    let with_latest f ev =
+      match !S.latest_t with Some st -> f st ev | None -> ()
+    in
+    Dom_ext.add_document_listener "keydown" (with_latest handle_keydown) true;
+    Dom_ext.add_document_listener "click" (with_latest handle_click) true;
+    Dom_ext.add_document_listener "mousemove" (with_latest handle_mousemove)
+      true)
 
 (* modal shell mirrors shui dialog markup: overlay + centered
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
@@ -946,7 +957,7 @@ let render (_ms : Model.t Signal.signal) : t =
   (* empty-conditional slots render as <raw-text> placeholders; the
      observer swap must be armed before cmdk mounts on a fresh page *)
   Editor_dom.ensure_raw_text_observer ();
-  install_listeners st;
+  install_listeners ();
   let open_sig =
     Signal.map (fun (v : S.view) -> v.S.open_) st.S.vs.Signal.state_signal
   in
