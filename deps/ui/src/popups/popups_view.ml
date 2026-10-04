@@ -772,7 +772,11 @@ let pv_open st (wrap : Dom_ext.element) =
   | None -> ()
   | Some name ->
       let r = Dom_ext.bounding_rect wrap in
-      let x = Dom_ext.rect_left r and y = Dom_ext.rect_bottom r +. 8.0 in
+      (* cljs popover anchors align=center at the trigger: the 610px card
+         centers under the ref link, opening at its bottom edge *)
+      let x =
+        Dom_ext.rect_left r +. (Dom_ext.rect_width r /. 2.0) -. 305.0
+      and y = Dom_ext.rect_bottom r in
       ignore
         (let* (title, blocks) = S.fetch_preview (Router.repo ()) name in
         (match !pv_pending with
@@ -820,8 +824,9 @@ let pv_popover (p : S.pv) : t =
     ~attrs:
       [ ( "style"
         , Printf.sprintf
-            "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999"
-            p.S.pv_x p.S.pv_y ) ]
+            "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999; \
+             --available-height: calc(100vh - %.0fpx)"
+            p.S.pv_x p.S.pv_y (p.S.pv_y +. 8.0) ) ]
     [ Logseq_dom.dom ~key:"pvw" ~style_class:"tippy-wrapper as-page"
         ~attrs:
           [ ("tabindex", "-1")
@@ -921,11 +926,21 @@ let handle_contextmenu st (ev : Dom_ext.event) =
       | None ->
       if Dom_ext.closest el ".ls-page-title" <> None then ()
       else
+      (* cljs app-context-menu-observer: the block menu only opens from
+         .bullet-container[blockid] (or a :block/link row's
+         .ls-block[originalblockid]); right-click on block text is left to
+         the native menu unless it lands inside an existing selection *)
       match
-        Dom_ext.closest el ".bullet-container[blockid], .ls-block[blockid]"
+        Dom_ext.closest el
+          ".bullet-container[blockid], .ls-block[originalblockid]"
       with
       | Some blk -> (
-          match Dom_ext.get_attribute blk "blockid" with
+          let id =
+            match Dom_ext.get_attribute blk "originalblockid" with
+            | Some oid -> Some oid
+            | None -> Dom_ext.get_attribute blk "blockid"
+          in
+          match id with
           | Some id ->
               Dom_ext.prevent_default ev;
               Dom_ext.stop_propagation ev;
@@ -938,7 +953,25 @@ let handle_contextmenu st (ev : Dom_ext.event) =
                 ~y:(Dom_ext.client_y ev) ~block_id:id
                 ~multi:(List.length (Platform.selected_block_uuids ()) >= 2)
           | None -> ())
-      | None -> ())
+      | None -> (
+          (* cljs: right-click inside a selection shows the selection menu;
+             a single selected block gets its own block menu *)
+          match Dom_ext.closest el ".ls-block[blockid]" with
+          | Some blk -> (
+              match
+                (Dom_ext.get_attribute blk "blockid"
+                , Platform.selected_block_uuids ())
+              with
+              | Some id, (first :: _ as sel)
+                when List.exists (fun u -> u = id) sel ->
+                  Dom_ext.prevent_default ev;
+                  Dom_ext.stop_propagation ev;
+                  close_cm_picker ();
+                  S.open_cm st ~x:(Dom_ext.client_x ev)
+                    ~y:(Dom_ext.client_y ev) ~block_id:first
+                    ~multi:(List.length sel >= 2)
+              | _ -> ())
+          | None -> ()))
 ;;
 
 (* run f with the value of attr on the closest matching ancestor *)

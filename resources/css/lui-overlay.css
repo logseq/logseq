@@ -501,13 +501,25 @@ div[data-keep-selection].menu-links-wrapper {
   gap: 0.5rem;
 }
 
-/* page-ref hover preview */
+/* page-ref hover preview — cljs page.css: .ls-preview-popup pl-6;
+   .tippy-wrapper p-2, &.as-page -ml-5 pl-7 */
 .ls-preview-popup {
   padding: 0.375rem;
+  padding-left: 1.5rem;
 }
 
 .ls-preview-popup .tippy-wrapper {
   min-width: 200px;
+  padding: 0.5rem;
+}
+
+.ls-preview-popup .tippy-wrapper.as-page {
+  margin-left: -1.25rem;
+  padding-left: 1.75rem;
+}
+
+.ls-preview-popup .ls-page-blocks {
+  margin-top: 1rem;
 }
 
 /* ---- context menu rows ----------------------------------------------- */
