@@ -67,7 +67,7 @@ let save_comment cuuid (text : string) =
      Ops.apply_and_refresh [ sop ])
 
 let delete_comment cuuid =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore

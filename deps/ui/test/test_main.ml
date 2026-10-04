@@ -3,6 +3,19 @@
 
 open Test_check
 
+(* tests exercising model-derived readers stub the live model through
+   Runtime.read_model *)
+let model_stub = ref Model.initial
+
+let () = Runtime.read_model := (fun () -> !model_stub)
+
+let set_page p = model_stub := { !model_stub with Model.route_page = p }
+
+let set_journals js =
+  model_stub := { !model_stub with Model.journals = js }
+
+let set_route r = model_stub := { !model_stub with Model.route = r }
+
 (* ---- Model.move_selected_top_blocks ---- *)
 
 let test_move () =
@@ -905,15 +918,14 @@ let test_editor_state () =
     (not (Editor_state.selection_active ()))
 
 let test_editor_state_rt () =
-  let saved_page = !Runtime.current_page
-  and saved_journals = !Runtime.current_journals in
+  let saved_model = !model_stub in
   let gc = block "g" "gc" in
   let coll =
     { (block ~children:[ gc ] "c" "child") with
       Model.block_default_collapsed = true }
   in
   let t1 = block "t1" "a" and t2 = block "t2" "b" in
-  Runtime.current_page := Some (page [ coll; t1; t2 ]);
+  set_page (Some (page [ coll; t1; t2 ]));
   eqi "flat_all includes collapsed subtree" 4
     (List.length (Editor_state.flat_all ()));
   let vis = Editor_state.flat_visible () in
@@ -922,7 +934,7 @@ let test_editor_state_rt () =
        (fun (b : Model.block) -> Option.value b.block_uuid ~default:"")
        vis
      = [ "c"; "t1"; "t2" ]);
-  check "find via current_page" (Option.is_some (Editor_state.find "g"));
+  check "find via route_page" (Option.is_some (Editor_state.find "g"));
   (match Editor_state.find_parent "t1" with
    | Some (None, i) -> check "top-level parent idx" (i = 1)
    | _ -> check "top-level parent idx" false);
@@ -949,12 +961,11 @@ let test_editor_state_rt () =
   check "effective_collapsed default false"
     (not (Editor_state.effective_collapsed t1));
   (* journals fallback when no page is loaded *)
-  Runtime.current_page := None;
-  Runtime.current_journals := [ page [ block "j" "j" ] ];
+  set_page None;
+  set_journals [ page [ block "j" "j" ] ];
   eqi "page_blocks journals fallback" 1
     (List.length (Editor_state.page_blocks ()));
-  Runtime.current_page := saved_page;
-  Runtime.current_journals := saved_journals
+  model_stub := saved_model
 
 (* ---- Outliner_ops pure op builders ---- *)
 
@@ -1008,16 +1019,16 @@ let test_outliner_ops2 () =
   (* normalized_title: markdown heading split out unless the block has a
      display type (the saved map itself is built async via
      block_map_parsed — Title_refs resolves entities through the worker) *)
-  let saved_page = !Runtime.current_page in
-  Runtime.current_page := None;
+  let saved_model = !model_stub in
+  set_page None;
   eqs "normalized_title strips heading" "hello [[P]]"
     (Outliner_ops.normalized_title "u" "  ## hello [[P]]");
   let codeblk =
     { (block "cb" "x") with Model.block_display_type = Some "code" } in
-  Runtime.current_page := Some (page [ codeblk ]);
+  set_page (Some (page [ codeblk ]));
   eqs "normalized_title code" "## raw"
     (Outliner_ops.normalized_title "cb" " ## raw");
-  Runtime.current_page := saved_page;
+  model_stub := saved_model;
   check "delete_blocks op"
     (match op_name_args (Outliner_ops.delete_blocks [ "a" ]) with
      | Some ("delete-blocks", [ Wire.List [ Wire.Uuid "a" ]; Wire.Map [] ]) ->
@@ -1205,17 +1216,15 @@ let test_cmdk_items () =
    | _ -> check "create tag item" false);
   (* filter rows: leading current-page row only when a page is current *)
   eqi "filters no page" 5 (List.length (Cmdk_state.filter_items ()));
-  let saved_route = !Runtime.current_route
-  and saved_page = !Runtime.current_page in
-  Runtime.current_route := Some (Model.Page "x");
-  Runtime.current_page := Some (page []);
+  let saved_model = !model_stub in
+  set_route (Model.Page "x");
+  set_page (Some (page []));
   let fs = Cmdk_state.filter_items () in
   check "filters with page"
     (List.length fs = 6
     && (List.hd fs).Cmdk_state.act
        = Cmdk_state.Set_filter Cmdk_state.G_current_page);
-  Runtime.current_route := saved_route;
-  Runtime.current_page := saved_page;
+  model_stub := saved_model;
   check "file_items empty q" (Cmdk_state.file_items "" = []);
   check "file_items match"
     (match Cmdk_state.file_items "config" with
@@ -1257,10 +1266,9 @@ let test_cmdk_rows () =
     (ib.iicon = "point-filled" && ib.act = Cmdk_state.Open_block "bu2"
     && ib.header = Some "P" && ib.ikey = "node-bu2-3");
   (* current-page badge needs the page route + loaded page *)
-  let saved_route = !Runtime.current_route
-  and saved_page = !Runtime.current_page in
-  Runtime.current_route := Some (Model.Page "x");
-  Runtime.current_page := Some (page []);
+  let saved_model = !model_stub in
+  set_route (Model.Page "x");
+  set_page (Some (page []));
   check "badge page on current page"
     (Cmdk_state.badge_of row true "p" = Cmdk_state.Text_badge);
   check "badge block on current page"
@@ -1268,8 +1276,7 @@ let test_cmdk_rows () =
      = Cmdk_state.Header_badge);
   check "badge other page"
     (Cmdk_state.badge_of row true "other" = Cmdk_state.No_badge);
-  Runtime.current_route := saved_route;
-  Runtime.current_page := saved_page;
+  model_stub := saved_model;
   (* search opts *)
   let so = Cmdk_state.search_opts ~dev:true true 20 in
   check "search_opts move-mode"
@@ -2306,7 +2313,9 @@ let test_views_query () =
        (Views_query.spec_of inst (Wire.Map []) "b1"
           (Views_query.QDatalog (wmap [ "x", Wire.Int 1 ]))));
   (* current page title lands in the spec *)
-  let saved_page = !Runtime.current_page in
+  let saved_model = !model_stub and saved_cp = !Runtime.current_page in
+  set_page (Some (page []));
+  (* views still read the derived mirror — set both for this check *)
   Runtime.current_page := Some (page []);
   (match
      Views_query.spec_of inst (Wire.Map []) "b1" (Views_query.QDsl "x")
@@ -2315,7 +2324,8 @@ let test_views_query () =
        check "spec page title"
          (Wire.get spec "current-page-title" = Some (Wire.String "p"))
    | Error _ -> check "spec page title" false);
-  Runtime.current_page := saved_page;
+  model_stub := saved_model;
+  Runtime.current_page := saved_cp;
   (* decode_result *)
   Views_query.decode_result inst
     (wmap [ "error", wmap [ "message", Wire.String "boom" ] ]);
@@ -2639,16 +2649,16 @@ let test_editor_actions () =
     (Outliner_ops.last_inserted_uuid
        (Some (wmap [ "result", wmap [ "blocks", Wire.Array [] ] ]))
      = None);
-  (* Runtime.current_page-backed pure fns *)
-  let saved_page = !Runtime.current_page in
-  Runtime.current_page :=
-    Some
+  (* model route_page-backed pure fns *)
+  let saved_model = !model_stub in
+  set_page
+    (Some
       (page
          [ block ~children:[ block "ca" "CA" ] "a" "A"
          ; block ~children:[ block "gc" "GC" ] "p1" "P1"
          ; block ~children:[ block "gc2" "GC2" ] "p2" "P2"
          ; { (block "top" "T") with
-             Model.block_order_list = Some "1." } ]);
+             Model.block_order_list = Some "1." } ]));
   check "is_descendant"
     (Editor_actions.is_descendant "gc" "p1"
     && not (Editor_actions.is_descendant "gc" "p2")
@@ -2687,10 +2697,10 @@ let test_editor_actions () =
   check "drop_own_order_list no prop"
     (not (Editor_actions.drop_own_order_list "p1" "  " false));
   check "library_context false" (not (Editor_actions.library_context ()));
-  Runtime.current_page :=
-    Some { (page []) with Model.page_is_library = true };
+  set_page
+    (Some { (page []) with Model.page_is_library = true });
   check "library_context true" (Editor_actions.library_context ());
-  Runtime.current_page := saved_page
+  model_stub := saved_model
 
 (* ---- update: remaining arms ---- *)
 
@@ -3145,11 +3155,11 @@ let test_title_refs3 () =
 
 let test_selected_uuids () =
   (* no mounted editor state -> empty selection -> empty list *)
-  let saved_page = !Runtime.current_page in
-  Runtime.current_page := Some (page [ block "a" "A"; block "b" "B" ]);
+  let saved_model = !model_stub in
+  set_page (Some (page [ block "a" "A"; block "b" "B" ]));
   check "selected_uuids empty sel"
     (Editor_actions.selected_uuids () = []);
-  Runtime.current_page := saved_page
+  model_stub := saved_model
 
 (* ---- Update.update: remaining arm ---- *)
 

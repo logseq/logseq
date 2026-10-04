@@ -136,7 +136,7 @@ let prime_ref_metas (metas : (string * string) list) =
   List.iter
     (fun (name, u) -> Hashtbl.replace minted_meta u (name, true))
     metas;
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       let cache = repo_cache repo in
@@ -150,7 +150,7 @@ let prime_ref_metas (metas : (string * string) list) =
 (* same priming for an entity already pulled elsewhere (a resolved
    [[name]] -> uuid lookup) — caches only, no minted entry *)
 let prime_pull_meta ~name ~uuid ~title ~is_page =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       let cache = repo_cache repo in

@@ -2,6 +2,7 @@
 
 type t =
   | Boot_graph_ready of string
+  | Graph_closed (* the open repo was deleted — no graph remains *)
   | Repos_loaded of string list
   | Page_loaded of Model.page
   | Page_load_failed (* page/block lookup resolved to nothing *)

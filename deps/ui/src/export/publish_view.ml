@@ -179,7 +179,7 @@ let submit ctx =
              | None -> W.Int (Option.get cur.page_db_id)
            in
            let repo =
-             match !Runtime.current_repo with
+             match (Runtime.model ()).Model.repo with
              | Some r -> r
              | None -> "logseq_db_Demo"
            in

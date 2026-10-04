@@ -12,16 +12,16 @@ let ( let* ) p f = Js.Promise.then_ f p
 
 let live_buffer uuid =
   (* code-fence blocks edit inside a mounted CodeMirror — its doc, not
-     the hidden textarea, holds the live value *)
+     the hidden textarea, holds the live value. For plain textareas
+     e.buffer is authoritative: every write path (on_input, splices,
+     undo) goes through sync_buffer, and the DOM copy is stale while
+     the textarea is remounting *)
   match !(S.code_buffer_of) uuid with
   | Some v -> v
   | None -> (
-      match D.textarea_of uuid with
-      | Some el -> D.el_value el
-      | None -> (
-          match S.editing () with
-          | Some e when e.uuid = uuid -> e.buffer
-          | _ -> ""))
+      match S.editing () with
+      | Some e when e.uuid = uuid -> e.buffer
+      | _ -> "")
 
 let sync_buffer uuid v =
   S.set_silent (fun st ->
@@ -36,62 +36,58 @@ let sync_buffer uuid v =
   | Some el -> D.el_set_text_content el v
   | None -> ()
 
-(* retry until the textarea mounts — a slow apply+refresh can take
-   longer than the fixed delays the old version used *)
-let focus_attempts = ref 0
+(* focus recovery runs one pass per Runtime.flush (wired in main.ml):
+   the textarea a pending arm waits for mounts through a DOM patch, and
+   every patch path ends in a flush — so a pass after each flush is the
+   only retry the flow needs. Queued keys replay one per pass: a
+   replayed nav/structural op re-enters edit mode asynchronously
+   (enter_edit awaits the title ref before updating S.editing), so the
+   rest wait for the next pass rather than applying against the stale
+   editing block *)
+let focus_passes = ref 0
 
-(* replay keys queued while the textarea was remounting — the refreshed
-   model (and the new textarea) exist by the time focus lands *)
-let run_pending_focus_actions () =
-  (* replay one queued key per focus landing: a replayed nav/structural
-     op re-enters edit mode asynchronously (enter_edit awaits the title
-     ref before updating S.editing), so running the whole batch at once
-     applies follow-up keys against the stale editing block — leave the
-     rest for the pending_focus cycle the replay re-arms *)
-  match List.rev !S.pending_focus_actions with
-  | f :: rest -> S.pending_focus_actions := List.rev rest; f ()
-  | [] -> ()
+(* replayed keys can re-enter the queue through the flush their op
+   triggers — the gate keeps a nested pass from replaying twice *)
+let drain_gate = ref false
 
-(* drain the queue at keypress cadence instead of waiting for DOM
-   landings: a queued op doesn't need the landed textarea — it reads
-   S.editing/model state — and deferring its outliner op until a landing
-   lets same-task readers (e2e asserts, plugin api calls) query the
-   worker before the op even reaches it. Chained ops still can't run
-   synchronously back-to-back (a replayed nav re-enters edit mode
-   asynchronously), so after popping one, schedule the next for the
-   first moment the editing uuid has moved — polling briefly so a
-   same-uuid op (indent) doesn't stall the rest of the queue *)
-let rec drain_pending_focus_actions attempts =
-  match !S.pending_focus_actions with
-  | [] -> ()
-  | _ -> (
-      let before = S.editing_uuid () in
-      run_pending_focus_actions ();
-      match !S.pending_focus_actions with
-      | [] -> ()
-      | _ ->
-          ignore
-            (let* () = Js.Promise.resolve () in
-             if S.editing_uuid () <> before then
-               drain_pending_focus_actions 0
-             else if attempts < 20 then
-               D.set_timeout
-                 (fun () -> drain_pending_focus_actions (attempts + 1))
-                 10;
-             Js.Promise.resolve ()))
+let drain_pending_focus_actions () =
+  if !drain_gate then ()
+  else
+    match List.rev !S.pending_focus_actions with
+    | [] -> ()
+    | f :: rest ->
+        drain_gate := true;
+        S.pending_focus_actions := List.rev rest;
+        (try f ()
+         with e ->
+           Platform.console_error ("queued key replay failed", e));
+        drain_gate := false
 
-let rec apply_focus () =
-  (* a stale retry timer can fire after its arm was consumed or replaced;
-     queued keys belong to the next landing, not the void — replay them
-     against the live editing state instead of dropping the presses *)
+let focus_miss () =
+  incr focus_passes;
+  if !focus_passes >= 60 then (
+    S.pending_focus := None;
+    focus_passes := 0;
+    drain_pending_focus_actions ())
+  else if !focus_passes = 1 || !focus_passes mod 10 = 5 then
+    (* the editing row can sit outside the virtual window — a scroll
+       jump (Home/End, a remount, an insert below the viewport edge)
+       unmounts it and focus passes would spin on a textarea that can't
+       render. Pulling its item key back into the rendered range
+       remounts the row so focus can land *)
+    match !S.pending_focus with
+    | Some (u, _, _) -> !(S.scroll_key_into_view) (S.top_level_uuid u)
+    | None -> ()
+
+let focus_pending () =
   match !S.pending_focus with
-  | None -> drain_pending_focus_actions 0
+  | None -> drain_pending_focus_actions ()
   | Some (uuid, caret, armed_ms) -> (
       if !(S.code_focus) ~caret uuid then (
         (* CodeMirror-backed code block: cm.focus() + setCursor landed *)
         S.pending_focus := None;
-        focus_attempts := 0;
-        drain_pending_focus_actions 0)
+        focus_passes := 0;
+        drain_pending_focus_actions ())
       else
       match D.textarea_of uuid with
       | Some el -> (
@@ -99,12 +95,12 @@ let rec apply_focus () =
           D.el_focus el;
           (* a pending apply+refresh can still replace this node after
              landing — only consume the pending state once the element
-             really holds focus; otherwise keep retrying so the remounted
-             editor gets it *)
+             really holds focus; otherwise leave the arm for the next
+             pass *)
           match D.active_element with
           | Some ae when ae == el ->
               S.pending_focus := None;
-              focus_attempts := 0;
+              focus_passes := 0;
               (* a landing that ran late (remount during a remote-tx
                  refresh) must not stomp the caret: if the user typed
                  since this focus was requested, the stored caret is
@@ -113,50 +109,29 @@ let rec apply_focus () =
                 let len = String.length (D.el_value el) in
                 let c = max 0 (min caret len) in
                 D.el_set_selection_range el c c);
-              drain_pending_focus_actions 0
-          | _ -> retry_focus ())
-      | None -> retry_focus ())
-
-and retry_focus () =
-  incr focus_attempts;
-  if !focus_attempts < 50 then begin
-    (* the editing row can sit outside the virtual window — a scroll
-       jump (Home/End, a remount, an insert below the viewport edge)
-       unmounts it and focus retries would spin forever on a textarea
-       that can't render. Pulling its item key back into the rendered
-       range remounts the row so focus can land *)
-    if !focus_attempts = 1 || !focus_attempts mod 10 = 5 then
-      (match !S.pending_focus with
-       | Some (u, _, _) ->
-           !(S.scroll_key_into_view) (S.top_level_uuid u)
-       | None -> ());
-    D.set_timeout apply_focus 40
-  end
-  else (
-    S.pending_focus := None;
-    focus_attempts := 0;
-    drain_pending_focus_actions 0)
+              drain_pending_focus_actions ()
+          | _ -> focus_miss ())
+      | None -> focus_miss ())
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   (* pending_focus_actions intentionally kept: keys queued during the
      remount window belong to the next focus landing as well *)
-  focus_attempts := 0;
-  D.set_timeout apply_focus 0
+  focus_passes := 0;
+  (* usually the textarea already exists — land right away; otherwise
+     the arm rides the next flush pass *)
+  focus_pending ()
 
-(* set pending focus, then run [p]; re-apply focus after the flush so a
-   remounted textarea still ends up focused *)
+(* set pending focus, then run [p]; re-apply focus after it resolves so
+   a remounted textarea still ends up focused *)
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
-  focus_attempts := 0;
-  (* start polling now — the refreshed row can mount before [p] fully
-     resolves (property-area and refs refetches trail the repaint), and
-     apply_focus is idempotent until the textarea exists *)
-  D.set_timeout apply_focus 0;
+  focus_passes := 0;
+  focus_pending ();
   ignore
     (let* () = p in
-    D.set_timeout apply_focus 0;
-    Js.Promise.resolve ())
+     focus_pending ();
+     Js.Promise.resolve ())
 
 (* persisted/worker truth; display_title layers committed-but-unrefreshed
    buffers on top so exit-edit paints the saved text on the first frame *)
@@ -339,7 +314,7 @@ let drop_own_order_list uuid buf parent_ordered =
 (* cljs insert-as-sibling?: every insert on the Library page lands as a
    sibling *page* — library children are always page-typed *)
 let library_context () =
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some p -> p.Model.page_is_library
   | None -> false
 
@@ -401,7 +376,7 @@ let split_at_cursor uuid =
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
-        (match !Runtime.current_page with
+        (match (Runtime.model ()).Model.route_page with
          | Some page -> (
              match
                Model.split_insert page ~uuid ~before
@@ -448,7 +423,7 @@ let insert_sibling_after uuid =
               [ Ops.block_map ~title:"" ~page:library new_uuid ]
               uuid ~sibling ])
       in
-      (match !Runtime.current_page with
+      (match (Runtime.model ()).Model.route_page with
        | Some page -> (
            match
              Model.split_insert page ~uuid ~before:buf
@@ -867,7 +842,7 @@ let indent_or_outdent ~indent =
       (* optimistic local reparent: the DOM moves in this task instead of
          remounting when the async worker refresh lands (e2e boundingBox
          races that remount). Worker refresh stays authoritative. *)
-      (match !Runtime.current_page, parent_original with
+      (match (Runtime.model ()).Model.route_page, parent_original with
        | Some page, None -> (
            match
              (if indent then Model.indent_blocks else Model.outdent_blocks)
@@ -888,7 +863,7 @@ let move_blocks_up_down up =
   match selected_uuids () with
   | [] -> ()
   | uuids ->
-      (match !Runtime.current_page with
+      (match (Runtime.model ()).Model.route_page with
        | Some page ->
            let page' = Model.move_selected_top_blocks page uuids up in
            Page_delta.mark_own_commit page';
@@ -977,9 +952,9 @@ let drop_dragged_block src tgt move_to =
           | Some (Some p, _) -> p.Model.block_uuid
           | Some (None, _) -> (
               (* top-level block: the parent is the containing page —
-                 journals views keep their pages in current_journals
-                 instead of current_page *)
-              match !Runtime.current_page with
+                 journals views keep their pages in model.journals
+                 instead of route_page *)
+              match (Runtime.model ()).Model.route_page with
               | Some page -> page.Model.page_uuid
               | None ->
                   List.find_map
@@ -991,7 +966,7 @@ let drop_dragged_block src tgt move_to =
                           p.Model.page_blocks
                       then p.Model.page_uuid
                       else None)
-                    !Runtime.current_journals)
+                    (Runtime.model ()).Model.journals)
           | None -> None
         in
         match parent_uuid with
@@ -1268,7 +1243,7 @@ let paste_lines lines =
   match selected_uuids () with
   | [] -> (
       (* nothing selected: append at page end *)
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some p -> (
           match p.Model.page_uuid with
           | None -> ()
@@ -1391,7 +1366,7 @@ let paste_external ev ~text ~html =
              text ~replace_empty:false ~sibling:true)
     | [] -> (
         (* nothing selected: append at page end *)
-        match !Runtime.current_page with
+        match (Runtime.model ()).Model.route_page with
         | Some p -> (
             match List.rev (S.page_blocks ()) with
             | last :: _ -> (
@@ -1616,10 +1591,10 @@ let focus_page_title () =
   (* cljs journal titles aren't editable (protected attrs — a save tx
      throws journal-page-protected-attr-updated) *)
   let journal_title =
-    match !Runtime.current_route with
-    | Some (Model.Journals | Model.Home) -> true
+    match Runtime.route () with
+    | Model.Journals | Model.Home -> true
     | _ -> (
-        match !Runtime.current_page with
+        match (Runtime.model ()).Model.route_page with
         | Some p -> p.Model.page_journal_day <> None
         | None -> false)
   in
@@ -1666,15 +1641,15 @@ let append_block ?for_page ?(scope = "main") () =
   let page =
     match for_page with
     | Some u -> (
-        match !Runtime.current_journals with
+        match (Runtime.model ()).Model.journals with
         | js ->
             List.find_opt
               (fun (p : Model.page) -> p.Model.page_uuid = Some u)
               js)
-    | None -> !Runtime.current_page
+    | None -> (Runtime.model ()).Model.route_page
   in
   let page =
-    match page, !Runtime.current_page with
+    match page, (Runtime.model ()).Model.route_page with
     | Some _ as p, _ -> p
     | None, p -> p
   in
@@ -1754,7 +1729,7 @@ let quick_add_open_dialog puuid blocks =
 (* cljs show-quick-add: ensure an empty block exists on the "Quick add"
    page, then open the dialog *)
 let open_quick_add () =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -1825,7 +1800,7 @@ let move_qa_blocks_to_today repo uuids =
 
 (* cljs quick-add-blocks!: save the live edit, then move everything *)
 let quick_add_blocks_to_today () =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       blur_commit ();
@@ -1875,14 +1850,14 @@ let consume_pending_zoom () =
 let zoom_out () =
   match S.editing_uuid () with
   | Some edit_u -> (
-      match !Runtime.current_route with
-      | Some (Model.Block_zoom uuid) ->
+      match Runtime.route () with
+      | Model.Block_zoom uuid ->
           pending_zoom := Some edit_u;
           ignore
             (let* p =
               Runtime.invoke2 "thread-api/get-block-parent"
                 (Wire.String
-                   (Option.value !Runtime.current_repo ~default:""))
+                   (Option.value (Runtime.model ()).Model.repo ~default:""))
                 (Wire.Uuid uuid)
             in
             (match Wire.map_get_uuid p "block/uuid" with
@@ -2014,7 +1989,7 @@ let save_one_asset repo pfs target_uuid ~empty_target ~first
     Js.Promise.resolve ())
 
 let save_uploaded_files (input : Editor_dom.el) =
-  match (!Runtime.current_repo, S.editing ()) with
+  match ((Runtime.model ()).Model.repo, S.editing ()) with
   | Some repo, Some e -> (
       match Platform.pfs_handle () with
       | Some pfs ->

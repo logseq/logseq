@@ -26,7 +26,7 @@ let ensure_page_id repo (title : string) : int option Js.Promise.t =
     fetch ()
 
 let insert title =
-  match (String.trim title = "", !Runtime.current_repo, S.editing_uuid ())
+  match (String.trim title = "", (Runtime.model ()).Model.repo, S.editing_uuid ())
   with
   | true, _, _ | _, None, _ | _, _, None -> ()
   | false, Some repo, Some uuid ->

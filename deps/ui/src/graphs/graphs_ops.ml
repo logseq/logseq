@@ -42,7 +42,7 @@ let already_exists name =
 let remote_graphs : (string * string * bool) list ref = ref []
 
 let list_remote_graphs () =
-  Rtc_ops.sync_app_state !Runtime.current_repo;
+  Rtc_ops.sync_app_state (Runtime.model ()).Model.repo;
   (let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in
   let entries =
     match w with
@@ -129,7 +129,6 @@ let navigate_journal repo =
   if !nav_req = seq then begin
     Worker_events.reset_rtc ();
     Runtime.send (Action.Boot_graph_ready repo);
-    Runtime.current_repo := Some repo;
     Graph.build_search_index repo;
     Platform.set_location_hash (Runtime.nav_hash "#/");
     Router.resolve ()
@@ -230,13 +229,13 @@ let delete_graph repo ~remote =
     in
     if not ok then Js.Promise.resolve ()
     else
-      match !Runtime.current_repo = Some repo, !repos with
+      match (Runtime.model ()).Model.repo = Some repo, !repos with
       | true, next :: _ ->
           Toast.success (T.removed_redirecting repo next);
           navigate_journal next
       | true, [] ->
           Toast.success (T.removed repo);
-          Runtime.current_repo := None;
+          Runtime.send Action.Graph_closed;
           Router.resolve ();
           Js.Promise.resolve ()
       | false, _ ->
@@ -272,7 +271,7 @@ let ask_delete ~remote repo =
    carry ?graph-id=<uuid> inside the hash so deep links and reloads can
    resolve back to the repo (cljs handler.graph/remember-current-graph-id-in-tab!) *)
 let () =
-  Runtime.on_graph_opened := fun repo ->
+  Runtime.hooks.on_graph_opened <- fun repo ->
     ignore
       (let* w = Runtime.invoke1 "thread-api/get-graph-uuid" (Wire.String repo) in
       (* cljs graph_tab/set-tab-graph! — sessionStorage keys so a

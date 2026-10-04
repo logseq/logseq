@@ -101,6 +101,11 @@ let open_signal () =
   | Some vs -> Some (Signal.map (fun v -> v.open_) vs)
   | None -> None
 
+let is_open () =
+  match open_signal () with
+  | Some s -> Signal.get s
+  | None -> false
+
 (* View-derived flags are baked into every item and group at publish
    time so keyed rows never subscribe the view signal themselves: a row
    removed mid-flush would otherwise re-mount its branch and emit DOM
@@ -277,9 +282,9 @@ let create_items q =
 (* cljs state/get-current-page equivalent — the :page route counts, and a
    block zoom is still a :page route there (path param = block uuid) *)
 let current_page_uuid () =
-  match !(Runtime.current_route) with
-  | Some (Model.Page _) | Some (Model.Block_zoom _) ->
-      Option.bind !(Runtime.current_page) (fun p -> p.Model.page_uuid)
+  match Runtime.route () with
+  | Model.Page _ | Model.Block_zoom _ ->
+      Option.bind (Runtime.model ()).Model.route_page (fun p -> p.Model.page_uuid)
   | _ -> None
 
 (* cljs `filters` — leading "Search only current page" row exists only
@@ -627,7 +632,7 @@ let refresh ?(clear = true) st =
   (* commands/filters are local — apply them synchronously so a hanging
      worker query (e.g. repo mid-transition) can't leave stale groups *)
   if clear then apply_results st v.input v.move_mode v.expanded [] 0;
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -736,7 +741,7 @@ let filter_of_name = function
 
 let save_last_search (v : view) =
   let repo =
-    Option.value !(Runtime.current_repo) ~default:"__no-repo__"
+    Option.value (Runtime.model ()).Model.repo ~default:"__no-repo__"
   in
   let entry =
     Js.Json.object_
@@ -764,7 +769,7 @@ let save_last_search (v : view) =
 
 let load_last_search () : (string * group_id option) option =
   let repo =
-    Option.value !(Runtime.current_repo) ~default:"__no-repo__"
+    Option.value (Runtime.model ()).Model.repo ~default:"__no-repo__"
   in
   match Platform.local_storage_get last_search_key with
   | None -> None
@@ -816,7 +821,7 @@ let open_palette ?(move = false) st =
   (* prime synchronously so commands show before the search lands *)
   apply_results st q move [] [] 0;
   refresh st;
-  (match !(Runtime.current_repo) with
+  (match (Runtime.model ()).Model.repo with
    | Some repo -> load_recents st repo
    | None -> ());
   let rec focus_input tries =
@@ -939,7 +944,7 @@ let created_uuid w =
   | _ -> None
 
 let apply_create op label on_ok =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       (* navigation intent: commit and close any in-progress edit so the
@@ -1239,7 +1244,7 @@ let shortcut_action cid : (unit -> unit) option =
   | _ -> editor_action cid
 
 let rec run_item st it =
-  let repo = !(Runtime.current_repo) in
+  let repo = (Runtime.model ()).Model.repo in
   let v = get st in
   (match v.move_mode, it.act with
    | true, (Open_page target | Open_block target) -> run_move st target
@@ -1344,7 +1349,7 @@ and run_command st repo (cid : string) =
       (Dates.journal_day_of (Dates.add_days (Dates.date_now ()) delta))
   in
   let cur_day () =
-    Option.bind !(Runtime.current_page) (fun p -> p.Model.page_journal_day)
+    Option.bind (Runtime.model ()).Model.route_page (fun p -> p.Model.page_journal_day)
   in
   (match Commands_data.command_by_id cid with
    | Some c -> record_invoke c
@@ -1485,8 +1490,8 @@ let dispatch_id (cid : string) =
           end
       | "go/search-in-page" | "editor/move-blocks" | "go/search-themes" ->
           if not (get st).open_ then open_palette st;
-          run_command st !(Runtime.current_repo) cid
-      | _ -> run_command st !(Runtime.current_repo) cid)
+          run_command st (Runtime.model ()).Model.repo cid
+      | _ -> run_command st (Runtime.model ()).Model.repo cid)
   | None -> ()
 
 (* shift+enter opens the highlighted page/block in the right sidebar

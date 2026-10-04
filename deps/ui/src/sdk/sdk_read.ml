@@ -41,7 +41,7 @@ let json_of_model_page (p : Model.page) =
   Sdk_convert.json_obj o
 
 let get_current_page _a _b _c _d =
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some p -> resolved (json_of_model_page p)
   | None -> resolved_nil
 
@@ -312,7 +312,7 @@ let datascript_query a b c d =
           (List.filter_map Fun.id
              [ Option.map
                  (fun u -> (Wire.kw "current-page", Wire.String u))
-                 (Option.bind !Runtime.current_page
+                 (Option.bind (Runtime.model ()).Model.route_page
                     (fun (p : Model.page) -> p.page_uuid))
              ; Some
                  (Wire.kw "today-title", Wire.String (Dates.today ())) ])
@@ -347,7 +347,7 @@ let dsl_query a _b _c _d =
              [ Option.map
                  (fun (p : Model.page) ->
                    (Wire.kw "current-page-title", Wire.String p.page_title))
-                 !Runtime.current_page
+                 (Runtime.model ()).Model.route_page
              ; Some
                  ( Wire.kw "today-day"
                  , Wire.Int (Dates.today_journal_day ()) ) ])

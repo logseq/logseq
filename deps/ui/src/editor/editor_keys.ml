@@ -771,7 +771,7 @@ let on_pending_focus_key ev e caret =
      ops read S.editing/model state, not the landed textarea, and
      deferring them to the next focus landing delays their outliner ops
      past same-task readers *)
-  A.drain_pending_focus_actions 0
+  A.drain_pending_focus_actions ()
 
 let on_keydown ev =
   if S.ready () then begin
@@ -811,7 +811,7 @@ let on_keydown ev =
               in
               S.pending_focus :=
                 Some (e.S.uuid, caret, !S.last_edit_input_ms);
-              D.set_timeout A.apply_focus 0;
+              A.focus_pending ();
               on_pending_focus_key ev e caret
           | _ -> (
           match
@@ -1104,17 +1104,9 @@ let on_mousedown ev =
     with
     | Some _ -> ()
     | None -> (
-            (* .cp__overlays hosts the cmdk/autocomplete/context-menu popups;
-               .ui__popover-content/.ls-context-menu-content cover anchored
-               property popups and cmdk/dialog portals mount outside the
-               overlays container under body *)
-            match
-              D.closest_sel
-                ".cp__overlays, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form"
-                (D.ev_target ev)
-            with
-        | Some _ -> ()
-        | None ->
+        match D.ev_target ev with
+        | Some el when Popups_state.inside el -> ()
+        | _ ->
             if Editor_commands.click_guard (D.ev_target ev) then ()
             else A.schedule_blur_commit ())
 

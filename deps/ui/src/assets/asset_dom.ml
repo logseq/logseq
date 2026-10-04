@@ -228,13 +228,13 @@ let upload_files (files : Js.Json.t array) =
       match edit_uuid with
       | Some u -> Some u
       | None -> (
-          match !Runtime.current_page with
+          match (Runtime.model ()).Model.route_page with
           | Some (p : Model.page) -> p.Model.page_uuid
           | None -> (
               (* cljs falls back to today's journal — the journals view
                  is fetched newest-first so today's page leads
-                 current_journals *)
-              match !Runtime.current_journals with
+                 model.journals *)
+              match (Runtime.model ()).Model.journals with
               | j :: _ -> j.Model.page_uuid
               | [] -> None))
     in
