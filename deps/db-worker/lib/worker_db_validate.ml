@@ -596,12 +596,21 @@ let validate_db_result (db : db) : db_result =
 let log_validation_errors (errors : Db_validate.grouped_error list) : unit =
   List.iter
     (fun (ge : Db_validate.grouped_error) ->
-      Printf.eprintf "validation error entity: %d errors: %d\n%!"
-        (match Malli.map_get "db/id" ge.ge_entity with
-         | Some (Ref i) -> i
-         | Some (Int64 i) -> Option.value (Datascript.Util.int64_to_int i) ~default:(-1)
-         | _ -> -1)
-        (List.length ge.ge_errors))
+      Worker_log.error "validate/invalid-entity"
+        [ "eid"
+          , (match Malli.map_get "db/id" ge.ge_entity with
+             | Some (Ref i) -> string_of_int i
+             | Some (Int64 i) ->
+                 Option.value (Datascript.Util.int64_to_int i)
+                   ~default:(-1)
+                 |> string_of_int
+             | _ -> "?")
+        ; "dispatch-key", ge.ge_dispatch_key
+        ; "entity"
+        , Ds_wire.edn_of_transit (Ds_wire.transit_of_value ge.ge_entity)
+        ; "errors"
+        , Ds_wire.edn_of_transit
+            (Ds_wire.transit_of_value (Malli.humanize ge.ge_errors)) ])
     errors
 
 let humanize_grouped (ge : Db_validate.grouped_error) : Wire.t =

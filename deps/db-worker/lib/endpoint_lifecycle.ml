@@ -368,10 +368,21 @@ let initialize_db ~ensure_open args =
                 before the initial transact so sync bookkeeping (local-tx
                 seed, handle-local-tx!) can see it. *)
              Worker_state.set_datascript_conn repo conn;
+             let sync_download = opt_bool "sync-download-graph?" false opts in
              (* cljs db-fix/check-and-fix-schema! right after
-                get-storage-conn, before datoms/initial-data *)
-             Worker_db_fix.check_and_fix_schema conn;
-             Worker_db_fix.heal_instant_values conn;
+                get-storage-conn, before datoms/initial-data. Skipped on
+                sync-download opens: the conn is empty so there is nothing
+                to fix, and any entity allocated here (e.g. the
+                instant-values-healed marker at eid 1) would collide with
+                the verbatim server eids the snapshot import writes — its
+                datoms assert a new :db/ident on the colliding entity while
+                leaving the marker's :kv/value residue behind.
+                heal_instant_values runs again post-import in
+                sync_download. *)
+             (if not sync_download then begin
+                Worker_db_fix.check_and_fix_schema conn;
+                Worker_db_fix.heal_instant_values conn
+              end);
              (* cljs bootstrap-transact! on the :datoms/:debug-transit-raw
                 open-opts (CLI/node import path). *)
              let datoms =
@@ -394,7 +405,6 @@ let initialize_db ~ensure_open args =
              (* cljs <create-or-open-db!: on a fresh graph (no initial data,
                 not a sync-download, no imported datoms) transact
                 build-db-initial-data; run db-migrate on every open. *)
-             let sync_download = opt_bool "sync-download-graph?" false opts in
              let initial_data_exists =
                match datoms with
                | Some _ -> false

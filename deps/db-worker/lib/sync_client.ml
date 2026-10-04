@@ -48,16 +48,37 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
       else None
     in
     let new_checksum =
-      if checksum_exempt && current_checksum = None then
-        (* an exempt tx with no stored anchor: the [] delta would
-           short-circuit update_checksum into storing "". Anchor on the
-           pre-tx image instead — same value the anchor branch computes *)
-        Db_sync_checksum.recompute_checksum tx_report.db_before
-      else
-        Db_sync_checksum.update_checksum
-          (Option.value current_checksum ~default:"")
-          ~db_before:tx_report.db_before ~db_after:tx_report.db_after
-          ~tx_data:(if checksum_exempt then [] else tx_report.tx_data)
+      try
+        if checksum_exempt && current_checksum = None then
+          (* an exempt tx with no stored anchor: the [] delta would
+             short-circuit update_checksum into storing "". Anchor on the
+             pre-tx image instead — same value the anchor branch computes *)
+          Db_sync_checksum.recompute_checksum tx_report.db_before
+        else
+          Db_sync_checksum.update_checksum
+            (Option.value current_checksum ~default:"")
+            ~db_before:tx_report.db_before ~db_after:tx_report.db_after
+            ~tx_data:(if checksum_exempt then [] else tx_report.tx_data)
+      with Invalid_argument _ ->
+        (* the delta path can hit attrs the tx dropped from the schema
+           (an attr-entity churn strips :db/index off its spec, then
+           every ~a/~v index access throws). The checksum is a pure
+           function of the db image, so heal it with the full recompute
+           reconcile uses — except on exempted graphs where the stored
+           value is a server image local state cannot reproduce. *)
+        if Sync_client_op.checksum_exempted repo then begin
+          Worker_log.warn "db-sync/checksum-update-failed-exempt"
+            [ "repo", repo ];
+          Option.value current_checksum ~default:""
+        end else begin
+          let recomputed =
+            Db_sync_checksum.recompute_checksum tx_report.db_after
+          in
+          Worker_log.warn "db-sync/checksum-healed-after-schema-churn"
+            [ "repo", repo
+            ; "tx-count", string_of_int (List.length tx_report.tx_data) ];
+          recomputed
+        end
     in
     (match Runtime_env.env "LOGSEQ_CHECKSUM_ASSERT" with
      | Some "1" ->
@@ -416,8 +437,11 @@ and connect repo (client : Sync_state.client) (url : string)
            | Web_socket.Binary _ -> ()
            | Web_socket.Error e ->
                Worker_log.error "db-sync/ws-error" [ "error", e ]
-           | Web_socket.Close (_, _) ->
-               Worker_log.info "db-sync/ws-closed" [ "repo", repo ];
+           | Web_socket.Close (code, reason) ->
+               Worker_log.info "db-sync/ws-closed"
+                 [ "repo", repo
+                 ; "code", string_of_int code
+                 ; "reason", reason ];
                clear_stale_ws_loop_timer updated;
                clear_inflight updated;
                update_online_users updated [];
