@@ -229,9 +229,6 @@ private struct LogseqRuntimeHost: View {
               // whole surface blank until a manual resize re-proposed.
               LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .simultaneousGesture(TapGesture().onEnded {
-                  FileHandle.standardError.write("DBG surface-tap\n".data(using: .utf8)!)
-                })
             } else {
               GeometryReader { geo in
                 LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
