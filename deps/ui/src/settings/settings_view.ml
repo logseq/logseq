@@ -3,7 +3,6 @@
    state/use-theme-mode! and theme.cljs DOM effects.
    Storage keys use cljs storage.cljs `(name key)` semantics. *)
 
-open Lui_elements
 
 let dom = Logseq_dom.dom
 module T = I18n
@@ -20,21 +19,20 @@ let languages =
   ; ("sk", "Slovenčina"); ("fa", "فارسی"); ("id", "Bahasa Indonesia")
   ; ("cs", "Čeština"); ("ar", "العربية") ]
 
-
-let quoted v = "\"" ^ v ^ "\""
-
 (* cljs :ui/system-theme? default is (or util/mac? util/win32?) *)
 let current_mode () =
   let system =
     match Platform.local_storage_get "system-theme?" with
-    | Some v -> Str_util.unquote v = "true"
+    | Some v -> Platform.storage_unquote v = "true"
     | None -> Platform.desktop_os ()
   in
   if system then "system"
   else
     match Platform.local_storage_get "theme" with
     | Some v -> (
-        match Str_util.unquote v with "dark" -> "dark" | _ -> "light")
+        match Platform.storage_unquote v with
+        | "dark" -> "dark"
+        | _ -> "light")
     | None -> "light"
 
 (* theme.cljs container effect: dataset.theme + .dark class on
@@ -65,15 +63,16 @@ let use_mode mode =
   in
   (* cljs stores the *effective* mode in :ui/theme even under system *)
   apply_theme_dom effective;
-  Platform.local_storage_set "theme" (quoted effective)
+  Platform.local_storage_set "theme" (Platform.storage_quote effective)
 
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with
-  | Some v -> Str_util.unquote v
+  | Some v -> Platform.storage_unquote v
   | None -> "en"
 
 let set_language code =
-  Platform.local_storage_set "preferred-language" (quoted code);
+  Platform.local_storage_set "preferred-language"
+    (Platform.storage_quote code);
   Web_dom.doc_set_lang code;
   (* fetch the new locale first so the reload boots straight into it;
      `let x = t "..."` bindings freeze at module load so a full reload is
@@ -200,32 +199,6 @@ let lang_trigger ~key ~h_cls ~st ?(dom_id = "") ~anchor_sel =
             ]
         ]
     ]
-
-(* legacy simple body — kept for non-page callers; the settings dialog now
-   renders the full settings panel via Settings_page.modal_body *)
-let body (_ms : Model.t Signal.signal) : t =
- fun ctx parent ->
-  let mode = Signal.state ctx.ui_scheduler (current_mode ()) in
-  let lang_label =
-    Signal.state ctx.ui_scheduler (lang_label_for (current_lang ()))
-  in
-  let node =
-    dom ~key:"settings" ~style_class:"cp__settings"
-      [ dom ~key:"st-h" ~tag:"h2"
-          ~style_class:
-            "ui__dialog-title" ~text:T.settings_title []
-      ; dom ~key:"st-theme" ~style_class:"ls-settings-col"
-          [ dom ~key:"st-tl" ~tag:"strong" ~text:T.theme_label []
-          ; theme_modes_ul ~st:mode
-          ]
-      ; dom ~key:"st-lang" ~style_class:"ls-settings-col"
-          [ dom ~key:"st-ll" ~tag:"strong" ~text:T.language_label []
-          ; lang_trigger ~key:"st-ls" ~h_cls:"ls-select-lg" ~st:lang_label
-              ~anchor_sel:".ui__select-trigger"
-          ]
-      ]
-  in
-  node ctx parent
 
 (* cljs ui/toggle-theme — resolve system first, then flip light/dark *)
 let toggle_theme () =

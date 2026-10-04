@@ -42,6 +42,7 @@ let schema_of tag =
     [ Lui_extension.property "attrs" Lui_extension.StringScalar false None
     ; Lui_extension.property "events" Lui_extension.StringScalar false None
     ; Lui_extension.property "text" Lui_extension.StringScalar false None
+    ; Lui_extension.property "html" Lui_extension.StringScalar false None
     ; Lui_extension.property "style-class" Lui_extension.StringScalar false
         None
     ; Lui_extension.property "accessibility-identifier"

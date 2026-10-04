@@ -44,7 +44,7 @@ let reveal uuid =
 (* cljs add-comment-to-blocks! → ensure-comments-area-for-blocks then
    reveal; the endpoint inserts the area child when it does not exist yet *)
 let ensure_for uuids =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -116,7 +116,7 @@ let submit area_uuid =
   | None -> ()
 
 let delete uuid =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | Some repo ->
       ignore
         (let* _ =

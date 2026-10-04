@@ -66,7 +66,7 @@ let breadcrumbs title : t list =
 
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)
-let open_menu name payload =
+let open_menu (page : Model.page) name payload =
   (* title-tag chips get their own context menu (.block-tag, cljs
      block-tag popup) — only the bare title opens the page menu. Refs
      and other anchors inside the title still open the page menu *)
@@ -79,7 +79,8 @@ let open_menu name payload =
          (Some
             ( Platform.payload_num payload "clientX"
             , Platform.payload_num payload "clientY"
-            , false )));
+            , false
+            , page.page_uuid )));
     Runtime.flush ())
 
 (* generic: works for any entity uuid (page or block) *)
@@ -274,12 +275,13 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
      class "hash" -> property "letter-p"; rendered as the icon-picker
      button inside .block-main-content *)
   let icon_el =
-    match page.page_icon, page.page_is_tag with
-    | Some ("emoji", eid), _ ->
+    match page.page_icon, page.page_is_tag, page.page_is_property with
+    | Some ("emoji", eid), _, _ ->
         Some (dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [])
-    | Some (_, iid), _ -> Some (Icons.icon ~size:38. iid)
-    | None, true -> Some (Icons.icon ~size:38. "hash")
-    | None, false -> None
+    | Some (_, iid), _, _ -> Some (Icons.icon ~size:38. iid)
+    | None, true, _ -> Some (Icons.icon ~size:38. "hash")
+    | None, _, true -> Some (Icons.icon ~size:38. "letter-p")
+    | _ -> None
   in
   let uuid = Option.value page.page_uuid ~default:"" in
   (* cljs db-page-title: tag/class pages render collapsed by default; the
@@ -526,7 +528,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 let n = String.length (Web_dom.el_value el) in
                 Web_dom.el_set_selection_range el n n
             | None -> ())
-      | _ -> open_menu name payload)
+      | _ -> open_menu page name payload)
     body
     ) ctx parent
 
@@ -620,7 +622,7 @@ let ui_btn =
    disabled:pointer-events-none disabled:opacity-50 select-none \
    hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80"
 
-let fold_arrow ?on_click key : t =
+let fold_arrow ?on_click ?(collapsed = false) key : t =
   let events, handler =
     match on_click with
     | Some f -> ("click", Some (fun name _ -> if name = "click" then f ()))
@@ -631,8 +633,12 @@ let fold_arrow ?on_click key : t =
       "ls-foldable-title-control block-control opacity-50 hover:opacity-100"
     ~attrs:[ ("style", "width: 14px; height: 16px;") ]
     ~events ?on_dom_event:handler
-    [ dom ~key:"ch" ~tag:"span" ~style_class:"control-hide"
-        [ dom ~key:"ra" ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
+    [ dom ~key:"ch" ~tag:"span"
+        ~style_class:(if collapsed then "control-show" else "control-hide")
+        [ dom ~key:"ra" ~tag:"span"
+            ~style_class:
+              (if collapsed then "rotating-arrow collapsed"
+               else "rotating-arrow not-collapsed")
             [ Ui_parts.rotating_arrow (key ^ "-svg") ]
         ]
     ]
@@ -724,12 +730,13 @@ let refs_view_head key ?on_search title count : t =
 (* cljs ui/foldable-title: .ls-foldable-title > .foldable-title >
    .ls-foldable-header > [a.ls-foldable-title-control] + header —
    the control renders at every level (section and group titles). *)
-let foldable_title ?on_click ?(control = true) key inner : t =
+let foldable_title ?on_click ?(control = true) ?(collapsed = false) key
+    inner : t =
   dom ~key:(key ^ "-ft") ~style_class:"ls-foldable-title content"
     [ dom ~key:"ftr" ~style_class:"flex-1 flex-row foldable-title"
         [ dom ~key:"fth"
             ~style_class:"flex flex-row items-center ls-foldable-header gap-1"
-            ((if control then [ fold_arrow ?on_click (key ^ "-fa") ]
+            ((if control then [ fold_arrow ?on_click ~collapsed (key ^ "-fa") ]
               else [])
              @ [ inner ])
         ]
@@ -740,18 +747,39 @@ let foldable_content key inner : t =
     ~attrs:[ ("aria-hidden", "false") ]
     [ dom ~key:"fci" ~style_class:"ls-foldable-content-inner" [ inner ] ]
 
+(* cljs .breadcrumb.block-parents.breadcrumb--inline — one segment per
+   ancestor title (farthest-first), "/" separators between *)
+let group_breadcrumb key (titles : string list) : t =
+  let segs =
+    List.mapi
+      (fun i title ->
+        (if i > 0 then
+           [ dom ~key:("sep-" ^ string_of_int i) ~tag:"span"
+               ~style_class:"opacity-50 px-1" ~text:"/" [] ]
+         else [])
+        @ [ dom ~key:("seg-" ^ string_of_int i) ~tag:"a"
+              [ dom ~key:"si" ~tag:"span"
+                  ~style_class:
+                    "breadcrumb__segment inline-flex items-center min-w-0"
+                  [ dom ~key:"sl" ~tag:"span"
+                      ~style_class:"breadcrumb__label" ~text:title [] ]
+              ]
+          ])
+      titles
+  in
+  dom ~key ~style_class:"breadcrumb block-parents breadcrumb--inline"
+    (List.concat segs)
+
 (* one linked-ref group: source page-ref foldable title + its blocks.
    The static layout keeps the virtuoso index attrs; virtualized rows get
    data-index from the .ls-virt-row wrapper instead (a second data-index
-   inside would double-measure) *)
-let ref_group ?(extra_attrs = []) (name, blocks) : t =
+   inside would double-measure). ~parents maps group page name ->
+   ancestor titles for the namespace breadcrumb *)
+let ref_group ?(extra_attrs = []) ?(parents = []) (name, blocks) : t =
   let key = "rg-" ^ name in
   dom ~key ~attrs:extra_attrs
     [ dom ~key:"gi" ~style_class:"flex flex-col"
-        (* ref-group titles carry no fold arrow: e2e resolves
-           ".unlinked-references .ls-foldable-title-control" strictly
-           (one control per section) *)
-        [ foldable_title ~control:false (key ^ "-t")
+        [ foldable_title (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
                [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
                    ~attrs:
@@ -766,7 +794,13 @@ let ref_group ?(extra_attrs = []) (name, blocks) : t =
                [ dom ~key:"grv" ~id:(Platform.random_uuid ())
                    [ dom ~key:"grp2"
                        [ dom ~key:"grb" ~style_class:"ml-6 text-sm \
-                          opacity-70 hover:opacity-100 mt-1" []
+                          opacity-70 hover:opacity-100 mt-1"
+                           (match List.assoc_opt name parents with
+                            | Some ( (_ :: _) as ts ) ->
+                                (* cljs: ancestors farthest-first + the
+                                   source page itself as the last segment *)
+                                [ group_breadcrumb "bc" (ts @ [ name ]) ]
+                            | _ -> [])
                        ; dom ~key:"grc" ~style_class:"content"
                            (List.map
                       (fun (b : Model.block) ->
@@ -783,7 +817,8 @@ let ref_group ?(extra_attrs = []) (name, blocks) : t =
         ]
     ]
 
-let ref_groups_virt key (groups : (string * Model.block list) list) : t =
+let ref_groups_virt key ?(parents = [])
+    (groups : (string * Model.block list) list) : t =
   let items = Array.of_list groups in
   (* virtualize at group granularity — a tag page can carry hundreds of
      source-page groups; group rows measure dynamically like journals *)
@@ -794,7 +829,8 @@ let ref_groups_virt key (groups : (string * Model.block list) list) : t =
       [ Virt_list.list
           ~list_attrs:[ ("data-viewport-type", "window") ]
           ~key_of:(fun (name, _) -> name)
-          ~estimate_size:(fun _ -> 120.) ~render:ref_group items ]
+          ~estimate_size:(fun _ -> 120.)
+          ~render:(ref_group ~parents) items ]
   else
     dom ~key ~style_class:"group-list-view"
       ~attrs:[ ("data-virtuoso-scroller", "true")
@@ -808,7 +844,7 @@ let ref_groups_virt key (groups : (string * Model.block list) list) : t =
                      padding-bottom: 0px; padding-top: 0px;" ) ]
               (List.mapi
                  (fun i g ->
-                   ref_group
+                   ref_group ~parents
                      ~extra_attrs:
                        [ ("data-index", string_of_int i)
                        ; ("data-item-index", string_of_int i)
@@ -855,7 +891,7 @@ let fetch_unlinked (m : Model.t) =
         p
   | None -> ()
 
-let references_view (refs : Model.block list) : t =
+let references_view ?(parents = []) (refs : Model.block list) : t =
   match refs with
   | [] -> Logseq_dom.nothing
   | _ ->
@@ -875,7 +911,7 @@ let references_view (refs : Model.block list) : t =
                            [ dom ~key:"rvl"
                                ~style_class:"flex flex-col border-t pt-2 \
                                              gap-2"
-                               [ ref_groups_virt "rvg" groups ]
+                               [ ref_groups_virt "rvg" ~parents groups ]
                            ])
                     ]
                 ]
@@ -932,8 +968,30 @@ let unlinked_row (b : Model.block) : t =
     ; Tree.block_row ~scope:"unlinked" b
     ]
 
+(* cljs collapsed unlinked head: no .ls-view-head wrapper — .views
+   (tab text, no count) + a visible add-view + directly under
+   .ls-foldable-header *)
+let unlinked_head_collapsed key : t =
+  dom ~key:(key ^ "-views") ~style_class:"views"
+    [ dom ~key:"uvt" ~tag:"button"
+        ~attrs:
+          [ ("type", "button"); ("tabindex", "0")
+          ; ("data-view-tab-id", "view-tab-" ^ key) ]
+        ~style_class:(ui_btn ^ " as-text rounded text-sm px-0 py-0 h-6")
+        ~text:(I18n.t "view/unlinked-references") []
+    ; dom ~key:"uva" ~tag:"button"
+        ~attrs:
+          [ ("type", "button"); ("tabindex", "0")
+          ; ("title", I18n.t "view/add-new-view") ]
+        ~style_class:
+          (ui_btn ^ " as-text h-7 rounded py-1 !px-1 -ml-1 \
+           text-muted-foreground hover:text-foreground \
+           transition-opacity ease-in duration-300")
+        [ Icons.icon ~size:15. "plus" ]
+    ]
+
 (* cljs reference/unlinked-references — same views/view chrome as linked
-   refs; our search input + fold toggle ride on the same handlers *)
+   refs while open; collapsed keeps only the lean .views head *)
 let unlinked_references_view (m : Model.t) : t =
   (* cljs renders the section (foldable header included) whenever the
      :block-unlinked-ref-exists resource is true — independent of the
@@ -959,17 +1017,20 @@ let unlinked_references_view (m : Model.t) : t =
     [ dom ~key:"uv1" ~style_class:"flex flex-col gap-2"
         [ dom ~key:"uv2" ~style_class:"flex flex-col gap-2 grid"
             [ dom ~key:"uv3" ~style_class:"flex flex-col"
-                [ foldable_title "urefs-t"
+                [ foldable_title "urefs-t" ~collapsed:(not m.unlinked_open)
                     ~on_click:(fun () ->
                       Runtime.send Action.Unlinked_toggle_open;
                       if not m.unlinked_open then fetch_unlinked m;
                       Runtime.flush ())
-                    (refs_view_head "urefs"
-                       ~on_search:(fun () ->
-                         Runtime.send Action.Unlinked_toggle_search;
-                         Runtime.flush ())
-                       (I18n.t "view/unlinked-references")
-                       (List.length refs))
+                    (if m.unlinked_open
+                     then
+                       refs_view_head "urefs"
+                         ~on_search:(fun () ->
+                           Runtime.send Action.Unlinked_toggle_search;
+                           Runtime.flush ())
+                         (I18n.t "view/unlinked-references")
+                         (List.length refs)
+                     else unlinked_head_collapsed "urefs")
                 ; dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
                     ~attrs:
                       [ ( "aria-hidden"
@@ -984,6 +1045,7 @@ let unlinked_references_view (m : Model.t) : t =
                                 ~style_class:"flex flex-col border-t pt-2 \
                                               gap-2"
                                 [ ref_groups_virt "uvg"
+                                    ~parents:m.ref_parents
                                     (refs_grouped filtered) ]
                             ]
                         ]
@@ -1331,6 +1393,7 @@ let ref_flags (p : Model.page option) =
    the point of the stable region *)
 let refs_eq (a : Model.t) (b : Model.t) =
   a.page_refs == b.page_refs
+  && a.ref_parents == b.ref_parents
   && a.unlinked_refs == b.unlinked_refs
   && a.unlinked_exists = b.unlinked_exists
   && a.unlinked_open = b.unlinked_open
@@ -1350,7 +1413,7 @@ let refs_wrap (m : Model.t) : t =
             [ dom ~key:"tq" ~id:"today-queries" [] ]
           else [])
         @ [ dom ~key:"lrefs" ~style_class:"fade-in delay"
-              [ references_view m.page_refs ]
+              [ references_view ~parents:m.ref_parents m.page_refs ]
           ; (* cljs when-not class-page?/property-page? — the unlinked
                section is omitted entirely on node pages *)
             (if page.page_is_tag || page.page_is_property
@@ -1359,6 +1422,40 @@ let refs_wrap (m : Model.t) : t =
                dom ~key:"urefs" ~style_class:"fade-in delay"
                  [ unlinked_references_view m ])
           ])
+
+(* cljs page-inner (show-tabs?): class/property pages render
+   .page-tabs > .w-full > .ui__tabs-content > .ml-1 hosting the objects
+   view — the view mounts declaratively on the current route page *)
+let page_tabs_el (m : Model.t) : t =
+  match m.Model.route_page with
+  | Some p when p.Model.page_is_tag || p.Model.page_is_property -> (
+      match p.Model.page_uuid with
+      | None -> Logseq_dom.nothing
+      | Some uuid ->
+          let kind =
+            if p.Model.page_is_tag then Views_state.KTagPage uuid
+            else Views_state.KPropertyPage uuid
+          in
+          dom ~key:("ptabs-" ^ uuid) ~style_class:"page-tabs"
+            [ dom ~style_class:"w-full"
+                ~attrs:
+                  [ ("data-orientation", "horizontal")
+                  ; ("data-activation-direction", "none") ]
+                [ dom
+                    ~style_class:
+                      "ui__tabs-content mt-2 ring-offset-background \
+                       focus-visible:outline-none \
+                       focus-visible:ring-2 focus-visible:ring-ring \
+                       focus-visible:ring-offset-2"
+                    ~attrs:
+                      [ ("data-orientation", "horizontal")
+                      ; ("role", "tabpanel"); ("tabindex", "0")
+                      ; ("data-index", "0") ]
+                    [ dom ~style_class:"ml-1"
+                        [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
+                ]
+            ])
+  | _ -> Logseq_dom.nothing
 
 let page_view_ms (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
@@ -1381,6 +1478,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
         [ Logseq_dom.dyn ~equal:top_eq top_view ms
+        ; page_tabs_el m0
         ; blocks_area ~scope ~library ?puuid ms
         ]
     ; Logseq_dom.dyn ~equal:refs_eq refs_wrap ms
@@ -1418,8 +1516,13 @@ let region (ms : Model.t Signal.signal) : t =
           dom ~key:"journals-root"
             [ journals_view_ms ms; Selection_bar.view () ]
       | Model.Ready, Model.Not_found n -> not_found_view n
-      | Model.Ready, (Model.All_graphs | Model.All_pages) ->
-          box ~key:"graphs-view" [] (* renders via its own view *)
+      | Model.Ready, Model.All_pages ->
+          (* cljs all_pages.cljs renders .ls-all-pages inside the page
+             wrapper — the objects view mounts declaratively here *)
+          dom ~key:"graphs-view" ~style_class:"ls-all-pages w-full mx-auto"
+            [ Views_view.view ~kind:Views_state.KAllPages
+                ~owner:(Wire.String "$$$views") ]
+      | Model.Ready, Model.All_graphs -> box ~key:"graphs-view" []
       | Model.Ready, Model.Settings -> Settings_page.view m
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, _ -> (

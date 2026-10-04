@@ -9,7 +9,7 @@
 open Promise_ext
 module T = I18n
 let repo () =
-  match !Runtime.current_repo with Some r -> r | None -> "logseq_db_Demo"
+  match (Runtime.model ()).Model.repo with Some r -> r | None -> "logseq_db_Demo"
 
 let snapshots () =
   Runtime.invoke2 "thread-api/get-render-snapshots"

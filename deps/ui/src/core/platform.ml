@@ -52,6 +52,17 @@ let local_storage_set k v =
 let local_storage_remove k =
   match local_storage_obj with Some s -> ls_remove_item s k | None -> ()
 
+(* cljs storage.cljs reads with reader/read-string and writes pr-str,
+   so cljs-stored strings appear double-quoted ("\"en\""). Strip/add
+   that quoting at the storage boundary. *)
+let storage_unquote s =
+  let len = String.length s in
+  if len >= 2 && String.get s 0 = '"' && String.get s (len - 1) = '"' then
+    String.sub s 1 (len - 2)
+  else s
+
+let storage_quote v = "\"" ^ v ^ "\""
+
 (* sessionStorage — cljs graph_tab.cljs persists the per-tab graph so a
    reload restores it; absent outside the browser *)
 external session_storage_obj : Js.Json.t option = "sessionStorage"
@@ -157,15 +168,16 @@ let copy_to_clipboard s = ignore (clipboard_write_text s)
 
 external decode_uri : string -> string = "decodeURIComponent"
 
-external encode_uri_component : string -> string = "encodeURIComponent"
-
-external js_escape : string -> string = "escape"
-
 (* OCaml source literals hold UTF-8 bytes; Melange hands them to JS as a
-   byte-string so non-ASCII renders mojibake. Percent-encode each byte then
-   UTF-8 decode to obtain the real JS string. Only safe for literals — worker
-   (transit-decoded) strings are already proper JS strings and would throw. *)
-let utf8 s = decode_uri (js_escape s)
+   byte-string so non-ASCII renders mojibake. Copy the byte chars into a
+   Uint8Array and UTF-8 decode to obtain the real JS string. Only safe for
+   literals — worker (transit-decoded) strings are already proper JS strings
+   and would throw. *)
+let utf8 : string -> string =
+  [%mel.raw
+    "function (s) { var u8 = new Uint8Array(s.length); for (var i = 0; i < \
+     s.length; i++) u8[i] = s.charCodeAt(i) & 0xff; return new \
+     TextDecoder().decode(u8) }"]
 
 external navigator_ : Js.Json.t = "navigator"
 external navigator_platform : Js.Json.t -> string = "platform" [@@mel.get]

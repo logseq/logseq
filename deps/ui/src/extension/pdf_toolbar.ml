@@ -6,7 +6,6 @@ module D = Web_dom
 module U = Pdf_utils
 module S = Pdf_state
 module A = Pdf_assets
-module E = Web_dom
 
 let ( let* ) = U.( let* )
 
@@ -16,14 +15,14 @@ let ( let* ) = U.( let* )
 let ns = "http://www.w3.org/2000/svg"
 
 let svg attrs kids : D.el =
-  let s = E.svg_ns_el "svg" in
-  List.iter (fun (k, v) -> E.el_set_attr s k v) attrs;
-  List.iter (fun k -> E.el_append_child s k) kids;
+  let s = D.svg_ns_el "svg" in
+  List.iter (fun (k, v) -> D.el_set_attr s k v) attrs;
+  List.iter (fun k -> D.el_append_child s k) kids;
   s
 
-let node tag attrs : E.el =
-  let n = E.svg_ns_el tag in
-  List.iter (fun (k, v) -> E.el_set_attr n k v) attrs;
+let node tag attrs : D.el =
+  let n = D.svg_ns_el tag in
+  List.iter (fun (k, v) -> D.el_set_attr n k v) attrs;
   n
 
 let svg24 ?(size = 16) ?(cls = "") ?(extra = []) kids : D.el =
@@ -37,7 +36,7 @@ let svg24 ?(size = 16) ?(cls = "") ?(extra = []) kids : D.el =
     @ extra)
     kids
 
-let path24 ?(cls = "") d : E.el =
+let path24 ?(cls = "") d : D.el =
   node "path"
     ([ ("d", d)
      ; ("stroke-linecap", "round")
@@ -264,9 +263,9 @@ let svg_arrow_right_v2 () =
              8.104-3.092 11.196 0l55.98 55.98a7.892 7.892 0 012.316 \
              5.595z" ) ] ]
 
-(* tabler icon via the editor's icon builder -> Dom_ext element *)
+(* tabler icon via the editor's icon builder -> Web_dom element *)
 let ticon ?(size = 18.) name : D.el =
-  (E.icon ~size name)
+  (D.icon ~size name)
 
 (* ---------- state ---------- *)
 

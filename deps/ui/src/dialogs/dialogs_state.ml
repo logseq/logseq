@@ -48,7 +48,7 @@ let layer_order : string list ref = ref []
 
 let touch id = Overlay.touch layer_order id
 let release id = Overlay.release layer_order id
-let z_index id = Overlay.z_index ~base:50 layer_order id
+let z_index id = Overlay.z_index ~base:999 layer_order id
 
 (* drop layer ids whose layer is gone — runs inside every set so any
    removal path (close_top/close_named/close_all) stays in sync *)

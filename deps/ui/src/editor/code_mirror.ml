@@ -13,7 +13,6 @@
 
 open Promise_ext
 module D = Web_dom
-module V = Web_dom
 module S = Editor_state
 module A = Editor_actions
 module Ops = Outliner_ops
@@ -23,46 +22,26 @@ type t
 
 external raw_require : string -> Js.Json.t = "require"
 
-external require_cm : string -> cm_module = "require"
 
 (* codemirror.js and every mode/addon touch `document` at load time, so
    they must not require under the node test runner — the whole ui lib is
-   linked into test_main. Requires stay literal so the bundler can still
-   resolve them statically; they only execute once install/mount runs in
-   the browser. *)
+   linked into test_main. The core package and addons ship as ONE lazy
+   chunk (shims/lazy_assets.mjs loadCmCore) fetched on first use; a
+   literal require here would pull it back into main.js, so cm () is
+   fail-fast and every call site sits behind ensure_core. *)
 let cm_cache : cm_module option ref = ref None
 
 let cm () : cm_module =
   match !cm_cache with
   | Some m -> m
-  | None ->
-      let m = require_cm "codemirror" in
-      cm_cache := Some m;
-      m
-
-let core_loaded = ref false
-
-(* core + the addons cljs extensions/code.cljs requires + mode/meta
-   (findModeByName/findModeByExtension drive both mount and the language
-   picker). The ~130 mode files are NOT required here — they ship as
-   per-mode lazy chunks and register on demand via ensure_mode below. *)
-let load_core () =
-  if not !core_loaded then begin
-    core_loaded := true;
-    ignore (raw_require "codemirror");
-    ignore (raw_require "codemirror/addon/edit/closebrackets");
-    ignore (raw_require "codemirror/addon/edit/matchbrackets");
-    ignore (raw_require "codemirror/addon/hint/show-hint");
-    ignore (raw_require "codemirror/addon/selection/active-line");
-    ignore (raw_require "codemirror/mode/meta")
-  end
+  | None -> failwith "codemirror core not loaded"
 
 (* -- lazy mode loading --
 
    shims/lazy_assets.mjs exposes one dynamic-import chunk per
-   codemirror/mode/<name>/<name>.js (the bundler alias resolves it to the
-   same codemirror install the literal requires hit, so modes register
-   on the shared CodeMirror singleton). mode_loads dedups in-flight
+   codemirror/mode/<name>/<name>.js — each mode module imports the same
+   "codemirror" package the core chunk loads, so registration lands on
+   the shared CodeMirror singleton. mode_loads dedups in-flight
    loads; a rejected load is uncached so the next mount retries, and the
    editor stays plain-text — same surface an unknown language already
    gets. *)
@@ -138,6 +117,22 @@ external next_sibling : D.el -> D.el option = "nextElementSibling"
 external window_obj : Js.Json.t = "window"
   [@@mel.scope "globalThis"]
 
+external shim_load_cm_core : Js.Json.t -> cm_module Js.Promise.t
+  = "loadCmCore"
+  [@@mel.send]
+
+(* core + addons + mode/meta arrive as one lazy chunk on first use —
+   mount/picker await it; window.CodeMirror lands with the module *)
+let core_load =
+  lazy
+    (shim_load_cm_core (raw_require "lui-shims/lazy-assets")
+     |> Js.Promise.then_ (fun m ->
+            cm_cache := Some m;
+            (* cljs exposes the module on window (extensions/dev helpers) *)
+            Web_dom.js_set window_obj "CodeMirror" m;
+            Js.Promise.resolve ()))
+
+let ensure_core () : unit Js.Promise.t = Lazy.force core_load
 
 
 (* -- json helpers -- *)
@@ -187,7 +182,7 @@ let lisp_like mode = List.mem mode [ "scheme"; "lisp"; "clojure"; "edn" ]
 (* theme ("solarized <light|dark>") follows the root .dark class the same
    way cljs theme-name does via the ui/theme subscription *)
 let theme_name () =
-  if V.el_class_contains D.document_element "dark" then "solarized dark"
+  if D.el_class_contains D.document_element "dark" then "solarized dark"
   else "solarized light"
 
 (* -- instances keyed by block uuid -- *)
@@ -196,7 +191,7 @@ let instances : (string, t) Hashtbl.t = Hashtbl.create 8
 
 let instance uuid =
   match Hashtbl.find_opt instances uuid with
-  | Some c when V.el_is_connected (get_wrapper c) -> Some c
+  | Some c when D.el_is_connected (get_wrapper c) -> Some c
   | Some _ ->
       Hashtbl.remove instances uuid;
       None
@@ -206,7 +201,7 @@ let prune () =
   let dead = ref [] in
   Hashtbl.iter
     (fun uuid c ->
-      if not (V.el_is_connected (get_wrapper c)) then dead := uuid :: !dead)
+      if not (D.el_is_connected (get_wrapper c)) then dead := uuid :: !dead)
     instances;
   List.iter (Hashtbl.remove instances) !dead
 
@@ -264,11 +259,11 @@ let update_calc c =
   | Some wrap -> (
       match D.el_query wrap ".extensions__code-calc" with
       | Some res ->
-          V.el_replace_children res;
+          D.el_replace_children res;
           List.iter
             (fun line ->
               D.el_append_child res
-                (V.h ~cls:"extensions__code-calc-output-line" ~text:line
+                (D.h ~cls:"extensions__code-calc-output-line" ~text:line
                    ()))
             (Render_calc.results (get_value c))
       | None -> ())
@@ -367,19 +362,18 @@ let make_options ~uuid ~lang ~mode =
         ("tabIndex", Js.Json.number (-1.))
       ]
   in
+  (* extraKeys values are cm callbacks, not json — set via js_set *)
   Web_dom.js_set (Js.Json.object_ opts) "extraKeys" extra_keys;
   if lang = "calc" then
     (* cljs: calc editors expand to the whole buffer *)
     Js.Dict.set opts "viewportMargin" (Js.Json.number Float.infinity);
-  let o = Js.Json.object_ opts in
-  Web_dom.js_set o "extraKeys" extra_keys;
-  o
+  Js.Json.object_ opts
 
 (* fromTextArea leaves the textarea in place (hidden) and inserts the
    .CodeMirror wrapper right after it *)
 let bound el =
   match next_sibling el with
-  | Some sib -> V.el_class_contains sib "CodeMirror"
+  | Some sib -> D.el_class_contains sib "CodeMirror"
   | None -> false
 
 let uuid_of_el el =
@@ -398,8 +392,8 @@ let mount uuid textarea =
   on_event c "change" (fun c -> on_change uuid c);
   on_event c "blur" (fun _ -> on_cm_blur uuid);
   on_event c "focus" (fun _ -> on_cm_focus uuid);
-  V.el_on (get_wrapper c) "keydown" (wrapper_keydown uuid c);
-  V.el_on (get_wrapper c) "pointerdown" (wrapper_pointerdown uuid);
+  D.el_on (get_wrapper c) "keydown" (wrapper_keydown uuid c);
+  D.el_on (get_wrapper c) "pointerdown" (wrapper_pointerdown uuid);
   (* cljs .save()/.refresh() right after mount: textarea value -> doc
      state, then a layout pass while the container is on screen *)
   save c;
@@ -418,6 +412,22 @@ let mount uuid textarea =
                  | _ -> ());
                 Js.Promise.resolve ()))
   | None -> ()
+
+(* scan fires before the core chunk exists — queue the mount behind it,
+   deduped by uuid so a second scan pass can't mount twice *)
+let pending_mounts : (string, unit) Hashtbl.t = Hashtbl.create 4
+
+let mount_async uuid el =
+  if instance uuid = None && not (Hashtbl.mem pending_mounts uuid) then begin
+    Hashtbl.replace pending_mounts uuid ();
+    ignore
+      (ensure_core ()
+       |> Js.Promise.then_ (fun () ->
+              Hashtbl.remove pending_mounts uuid;
+              if instance uuid = None && D.el_is_connected el then
+                mount uuid el;
+              Js.Promise.resolve ()))
+  end
 
 (* cljs sync-editor-code!: a title written by another path (undo, db
    refresh, /code conversion) is pushed into an unfocused editor *)
@@ -454,7 +464,7 @@ let scan roots =
         && D.el_closest el ".CodeMirror" = None
       then
         match uuid_of_el el with
-        | Some uuid -> mount uuid el
+        | Some uuid -> mount_async uuid el
         | None -> ())
 
 (* -- language picker (.code-block-actions .select-language) -- *)
@@ -464,63 +474,69 @@ let picker : D.el option ref = ref None
 let close_picker () =
   match !picker with
   | Some el ->
-      V.el_remove el;
+      D.el_remove el;
       picker := None
   | None -> ()
 
 let pick_lang uuid lang =
   close_picker ();
-  (match (instance uuid, mode_file lang) with
-   | Some c, Some file ->
-       (* fetch the mode chunk first, then swap — same post-load path as
-          mount *)
-       ignore
-         (ensure_mode file
-          |> Js.Promise.then_ (fun () ->
-                 (match instance uuid with
-                  | Some c' when c' == c ->
-                      set_option c "mode" (Js.Json.string file)
-                  | _ -> ());
-                 Js.Promise.resolve ()))
-   | _ -> ());
   ignore
-    (Ops.apply_and_refresh
-       [ Ops.set_block_property uuid "logseq.property.code/lang"
-           (Wire.String lang) ])
+    (let* () = ensure_core () in
+     (match (instance uuid, mode_file lang) with
+      | Some c, Some file ->
+          (* fetch the mode chunk first, then swap — same post-load path
+             as mount *)
+          ignore
+            (ensure_mode file
+             |> Js.Promise.then_ (fun () ->
+                    (match instance uuid with
+                     | Some c' when c' == c ->
+                         set_option c "mode" (Js.Json.string file)
+                     | _ -> ());
+                    Js.Promise.resolve ()))
+      | _ -> ());
+     ignore
+       (Ops.apply_and_refresh
+          [ Ops.set_block_property uuid "logseq.property.code/lang"
+              (Wire.String lang) ]);
+     Js.Promise.resolve ())
 
 let open_lang_picker uuid =
   match !picker with
   | Some _ -> close_picker ()
-  | None -> (
-      match
-        ( D.query_selector ".cp__overlays"
-        , D.query_selector
-            ("#ls-block-" ^ uuid ^ " .select-language") )
-      with
-      | Some host, Some button ->
-          let r = V.el_bounding_rect button in
+  | None ->
+      ignore
+        (let* () = ensure_core () in
+         (match
+            ( D.query_selector ".cp__overlays"
+            , D.query_selector
+                ("#ls-block-" ^ uuid ^ " .select-language") )
+          with
+          | Some host, Some button ->
+          let r = D.el_bounding_rect button in
           let menu =
-            V.h ~cls:"ls-code-lang-picker" ~attrs:[ ("role", "menu") ] ()
+            D.h ~cls:"ls-code-lang-picker" ~attrs:[ ("role", "menu") ] ()
           in
-          V.el_set_attr menu "style"
+          D.el_set_attr menu "style"
             (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:var(--ls-z-index-level-1)"
-               (V.rect_left r) (V.rect_bottom r +. 4.));
-          Array.iter
-            (fun info ->
-              match json_string info "name" with
-              | Some name ->
-                  let row =
-                    V.h ~cls:Menu_item.base_cls ~attrs:Menu_item.item_attrs
-                      ~text:name
-                      ~on_click:(fun _ -> pick_lang uuid name)
-                      ()
-                  in
-                  D.el_append_child menu row
-              | None -> ())
-            (mode_infos (cm ()));
-          D.el_append_child host menu;
-          picker := Some menu
-      | _ -> ())
+               (D.rect_left r) (D.rect_bottom r +. 4.));
+              Array.iter
+                (fun info ->
+                  match json_string info "name" with
+                  | Some name ->
+                      let row =
+                        D.h ~cls:Menu_item.base_cls
+                          ~attrs:Menu_item.item_attrs ~text:name
+                          ~on_click:(fun _ -> pick_lang uuid name)
+                          ()
+                      in
+                      D.el_append_child menu row
+                  | None -> ())
+                (mode_infos (cm ()));
+              D.el_append_child host menu;
+              picker := Some menu
+          | _ -> ());
+         Js.Promise.resolve ())
 
 (* .code-block-actions copy button (cljs copy-code!: clipboard +
    "Copied!" notification) *)
@@ -539,17 +555,14 @@ let copy_button uuid =
          Js.Promise.resolve ())
   | None -> ()
 
-let installed = State_cell.Once.make ()
+let installed = ref false
 
 let install () =
-  State_cell.Once.run installed (fun () ->
-    load_core ();
+  if not !installed then begin
+    installed := true;
     (* hooks for editor_actions without a module cycle *)
     S.code_buffer_of := live_value;
     S.code_focus := focus_block;
-    (* cljs exposes the module on window (used by extensions and dev
-       helpers) *)
-    Web_dom.js_set window_obj "CodeMirror" (cm ());
     D.add_document_listener "mousedown"
       (fun ev ->
         match
@@ -560,4 +573,5 @@ let install () =
         | Some _, None -> close_picker ()
         | _ -> ())
       true;
-    D.register_doc_scan ~sync:true scan)
+    D.register_doc_scan ~sync:true scan
+  end

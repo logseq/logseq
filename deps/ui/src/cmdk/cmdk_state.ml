@@ -101,6 +101,11 @@ let open_signal () =
   | Some vs -> Some (Signal.map (fun v -> v.open_) vs)
   | None -> None
 
+let is_open () =
+  match open_signal () with
+  | Some s -> Signal.get s
+  | None -> false
+
 (* View-derived flags are baked into every item and group at publish
    time so keyed rows never subscribe the view signal themselves: a row
    removed mid-flush would otherwise re-mount its branch and emit DOM
@@ -277,9 +282,9 @@ let create_items q =
 (* cljs state/get-current-page equivalent — the :page route counts, and a
    block zoom is still a :page route there (path param = block uuid) *)
 let current_page_uuid () =
-  match !(Runtime.current_route) with
-  | Some (Model.Page _) | Some (Model.Block_zoom _) ->
-      Option.bind !(Runtime.current_page) (fun p -> p.Model.page_uuid)
+  match Runtime.route () with
+  | Model.Page _ | Model.Block_zoom _ ->
+      Option.bind (Runtime.model ()).Model.route_page (fun p -> p.Model.page_uuid)
   | _ -> None
 
 (* cljs `filters` — leading "Search only current page" row exists only
@@ -588,7 +593,9 @@ let group_order v q rows total =
         @ [ nodes_g (); recents_g (); commands_g (); files_g ()
           ; filters_g () ]
 
-let apply_results st q rows total =
+let apply_results st q move_mode expanded rows total =
+  ignore move_mode;
+  ignore expanded;
   set_in st (fun v ->
       if v.input <> q then v (* stale — input moved on *)
       else
@@ -624,8 +631,8 @@ let refresh ?(clear = true) st =
   let gen = !(st.gen) in
   (* commands/filters are local — apply them synchronously so a hanging
      worker query (e.g. repo mid-transition) can't leave stale groups *)
-  if clear then apply_results st v.input [] 0;
-  match !(Runtime.current_repo) with
+  if clear then apply_results st v.input v.move_mode v.expanded [] 0;
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -636,7 +643,7 @@ let refresh ?(clear = true) st =
               | _ -> nodes_limit v.move_mode v.expanded)
          in
          if gen = !(st.gen) then
-           apply_results st v.input rows total;
+           apply_results st v.input v.move_mode v.expanded rows total;
          Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
                 Platform.console_error
@@ -734,7 +741,7 @@ let filter_of_name = function
 
 let save_last_search (v : view) =
   let repo =
-    Option.value !(Runtime.current_repo) ~default:"__no-repo__"
+    Option.value (Runtime.model ()).Model.repo ~default:"__no-repo__"
   in
   let entry =
     Js.Json.object_
@@ -762,7 +769,7 @@ let save_last_search (v : view) =
 
 let load_last_search () : (string * group_id option) option =
   let repo =
-    Option.value !(Runtime.current_repo) ~default:"__no-repo__"
+    Option.value (Runtime.model ()).Model.repo ~default:"__no-repo__"
   in
   match Platform.local_storage_get last_search_key with
   | None -> None
@@ -812,9 +819,9 @@ let open_palette ?(move = false) st =
   set_in st (fun v -> { v with open_ = true });
   let q = (get st).input in
   (* prime synchronously so commands show before the search lands *)
-  apply_results st q [] 0;
+  apply_results st q move [] [] 0;
   refresh st;
-  (match !(Runtime.current_repo) with
+  (match (Runtime.model ()).Model.repo with
    | Some repo -> load_recents st repo
    | None -> ());
   let rec focus_input tries =
@@ -937,7 +944,7 @@ let created_uuid w =
   | _ -> None
 
 let apply_create op label on_ok =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       (* navigation intent: commit and close any in-progress edit so the
@@ -1224,12 +1231,20 @@ let shortcut_action cid : (unit -> unit) option =
   | "ui/select-theme-color" | "ui/customize-appearance" ->
       Some
         (fun () ->
-          Runtime.send (Action.Navigate_to Model.Settings);
-          Platform.set_location_hash (Runtime.nav_hash "#/settings"))
+          (* cljs :ui/toggle-appearance — appearance popup anchored to
+             the toolbar dots trigger *)
+          match Web_dom.query_selector ".toolbar-dots-btn" with
+          | Some el ->
+              let r = Web_dom.el_bounding_rect el in
+              Runtime.send
+                (Action.Appearance_set
+                   (Some
+                      (Web_dom.rect_right r, Web_dom.rect_bottom r +. 4.)))
+          | None -> ())
   | _ -> editor_action cid
 
 let rec run_item st it =
-  let repo = !(Runtime.current_repo) in
+  let repo = (Runtime.model ()).Model.repo in
   let v = get st in
   (match v.move_mode, it.act with
    | true, (Open_page target | Open_block target) -> run_move st target
@@ -1334,7 +1349,7 @@ and run_command st repo (cid : string) =
       (Dates.journal_day_of (Dates.add_days (Dates.date_now ()) delta))
   in
   let cur_day () =
-    Option.bind !(Runtime.current_page) (fun p -> p.Model.page_journal_day)
+    Option.bind (Runtime.model ()).Model.route_page (fun p -> p.Model.page_journal_day)
   in
   (match Commands_data.command_by_id cid with
    | Some c -> record_invoke c
@@ -1368,7 +1383,18 @@ and run_command st repo (cid : string) =
   | "go/journals" -> nav "#/" Model.Home
   | "go/all-graphs" -> nav "#/graphs" Model.All_graphs
   | "go/all-pages" -> nav "#/all-pages" Model.All_pages
-  | "ui/toggle-settings" -> nav "#/settings" Model.Settings
+  | "ui/toggle-settings" ->
+      (* cljs toggle-settings-modal! — toggles the settings dialog,
+         not the #/settings route *)
+      close st;
+      if Dialogs_state.is_open "settings" then
+        Dialogs_state.close_named "settings"
+      else Dialogs_state.open_ "settings"
+  | "go/keyboard-shortcuts" ->
+      (* cljs open-settings! :keymap — settings dialog on the keymap tab *)
+      close st;
+      Settings_state.open_at "keymap";
+      Dialogs_state.open_ "settings"
   | "sidebar/open-today-page" ->
       close st;
       goto_journal_day (Dates.today_journal_day ())
@@ -1464,8 +1490,8 @@ let dispatch_id (cid : string) =
           end
       | "go/search-in-page" | "editor/move-blocks" | "go/search-themes" ->
           if not (get st).open_ then open_palette st;
-          run_command st !(Runtime.current_repo) cid
-      | _ -> run_command st !(Runtime.current_repo) cid)
+          run_command st (Runtime.model ()).Model.repo cid
+      | _ -> run_command st (Runtime.model ()).Model.repo cid)
   | None -> ()
 
 (* shift+enter opens the highlighted page/block in the right sidebar

@@ -338,8 +338,8 @@ let sidebar_props_row st (it : Sidebar_state.item) =
   | _ -> empty
 
 (* cljs page-inner (show-tabs?): class/property pages render
-   .page-tabs > .w-full > tabpanel > .ml-1 hosting the objects view.
-   Views_mount.ensure_object_view mounts it off data-sb-views-*. *)
+   .page-tabs > .w-full > tabpanel > .ml-1 hosting the objects view —
+   mounted declaratively, one inst per sidebar item *)
 let object_tabs_host (it : Sidebar_state.item) =
   match it.Sidebar_state.page with
   | Some p
@@ -348,10 +348,10 @@ let object_tabs_host (it : Sidebar_state.item) =
       | None -> dom ~key:("tabs-none-" ^ it.key) []
       | Some uuid ->
           let kind =
-            if p.Model.page_is_tag then "tag" else "property"
+            if p.Model.page_is_tag then Views_state.KTagPage uuid
+            else Views_state.KPropertyPage uuid
           in
           dom ~key:("tabs-" ^ it.key) ~style_class:"page-tabs"
-            ~attrs:[ ("data-views-owner", uuid); ("data-sb-kind", kind) ]
             [ dom ~style_class:"w-full"
                 ~attrs:
                   [ ("data-orientation", "horizontal")
@@ -367,10 +367,7 @@ let object_tabs_host (it : Sidebar_state.item) =
                       ; ("role", "tabpanel"); ("tabindex", "0")
                       ; ("data-index", "0") ]
                     [ dom ~key:("tabs-c-" ^ it.key) ~style_class:"ml-1"
-                        ~attrs:
-                          [ ("data-sb-views-owner", uuid)
-                          ; ("data-sb-kind", kind) ]
-                        [] ]
+                        [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
                 ]
             ])
   | _ -> dom ~key:("tabs-none-" ^ it.key) []

@@ -52,7 +52,7 @@ let text_span ~key s = Logseq_dom.dom ~key ~tag:"span" ~text:s [];;
 
 (* cljs hiccup renders plain strings as bare DOM text nodes; LUI mounts
    only elements, so a <raw-text> placeholder marks the exact position
-   and the MutationObserver in Editor_dom swaps it for a text node *)
+   and the MutationObserver in Web_dom swaps it for a text node *)
 let bare_text (s : string) : t =
  fun context parent ->
   Web_dom.ensure_raw_text_observer ();
@@ -690,11 +690,7 @@ let cm_popover (st : S.t) : t =
 
 (* -- delegated listeners --------------------------------------------- *)
 
-let in_popups el =
-  Web_dom.el_closest el
-    ".ui__popover-content, .ls-context-menu-content, .ls-preview-popup"
-  <> None
-;;
+let in_popups el = S.inside el;;
 
 (* the icon/emoji picker mounts as an overlay outside the menu DOM —
    track it so closing the sub or the whole menu removes it like the
@@ -985,7 +981,7 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
       Web_dom.selected_block_uuids ()
     else [ cm.S.block_id ]
   in
-  let anchor = anchor in
+  (* el = Js.Json.t — no cast *)
   close_cm_picker ();
   match pk with
   | S.Picker_icon ->

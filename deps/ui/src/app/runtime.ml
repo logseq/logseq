@@ -5,30 +5,85 @@ let worker : Worker_client.t option ref = ref None
 let app_send : (Action.t -> bool) ref = ref (fun _ -> false)
 let app_flush : (unit -> unit) ref = ref (fun () -> ())
 
-(* mirrors of model fields for non-view consumers (sdk bridge, events) *)
-let current_repo : string option ref = ref None
+(* the live reducer model — wired to Lui_app.model in main.ml; feature
+   modules read current model fields through this instead of shadowing
+   them in local refs *)
+let read_model : (unit -> Model.t) ref = ref (fun () -> Model.initial)
+
+let model () = !read_model ()
+
+let repo () = Option.value (model ()).Model.repo ~default:""
+
+let route () = (model ()).Model.route
+
+(* DERIVED MIRRORS — worker_events.ml, pages/page.ml and views/* read
+   these two refs directly and are owned by other cleanup sessions.
+   Update.effects keeps them in sync with model.route_page/model.route.
+   No new readers: use Runtime.model instead. *)
 let current_page : Model.page option ref = ref None
 let current_route : Model.route option ref = ref None
 
-let repo () = Option.value !current_repo ~default:""
-(* journals view renders several pages at once — editor actions like
-   append/find need access to every journal item's blocks *)
-let current_journals : Model.page list ref = ref []
 (* set by the router per route — lets outliner_ops refresh views whose
-   content isn't covered by current_page (e.g. the journals list) *)
+   content isn't covered by route_page (e.g. the journals list).
+   Top-level name pinned: pages/page.ml invokes it directly *)
 let reload_current_view : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
 
-(* mutation paths outside the editor (sdk bridge) refresh the current
-   view through this hook — Outliner_ops sets it to refresh_page (avoids
-   an editor->sdk dependency cycle) *)
-let refresh_after_ops : (unit -> unit Js.Promise.t) ref =
-  ref (fun () -> Js.Promise.resolve ())
+(* cycle-breaking callback refs whose names are pinned by
+   app/worker_events.ml (a sibling session owns that file — it both
+   invokes and registers these). Everything else lives in [hooks]. *)
+(* delta splices skip their side-fetches through this — Router
+   registers the impl *)
+let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
 
-(* mounted property areas live outside the model — Properties_state sets
-   this so sdk mutations can rebuild them without the 150ms debounce *)
-let refresh_property_areas : (unit -> unit Js.Promise.t) ref =
-  ref (fun () -> Js.Promise.resolve ())
+(* set by rtc_flows (avoids a Worker_events -> Rtc_flows -> Rtc_ops ->
+   Worker_events module cycle): the rtc-log broadcast feeds its
+   latest-entry projections *)
+let rtc_log_handler : (Wire.t -> unit) ref = ref (fun _ -> ())
+
+(* set by graphs_ops (avoids a Worker_events -> Graphs_ops -> Boot
+   module cycle): remote-graph-gone broadcast refreshes the remote
+   list and the all-graphs view *)
+let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
+
+(* set by graphs_ops (same cycle-avoidance): worker add-repo broadcast
+   appends a downloaded graph to the local list *)
+let add_repo : (string -> unit) ref = ref (fun _ -> ())
+
+(* Worker_events clears its stashed broadcast deltas on every route
+   change (avoids a Runtime -> Worker_events cycle) *)
+let on_navigate : (unit -> unit) ref = ref (fun () -> ())
+
+(* the rest of the cycle-breaking callbacks, one documented record —
+   each field is registered once by its owning module *)
+type hooks =
+  { (* graphs_ops — fetch + remember the graph's worker uuid after
+       Boot_graph_ready *)
+    mutable on_graph_opened : string -> unit
+  ; (* rtc_flows — graph-switch sync trigger on Boot_graph_ready *)
+    mutable rtc_graph_ready : string -> unit
+  ; (* router — clears its loading_route dedupe when a route load
+       commits or fails *)
+    mutable nav_load_done : unit -> unit
+  ; (* router — refetch one journal item's linked refs and republish
+       through the keyed collection *)
+    mutable refresh_journal_side : Model.page -> unit
+  ; (* outliner_ops — refresh the current view after mutations made
+       outside the editor (sdk bridge) *)
+    mutable refresh_after_ops : unit -> unit Js.Promise.t
+  ; (* properties_state — rebuild mounted property areas (they hold
+       worker data outside the model) without the 150ms debounce *)
+    mutable refresh_property_areas : unit -> unit Js.Promise.t
+  }
+
+let hooks =
+  { on_graph_opened = (fun _ -> ())
+  ; rtc_graph_ready = (fun _ -> ())
+  ; nav_load_done = (fun () -> ())
+  ; refresh_journal_side = (fun _ -> ())
+  ; refresh_after_ops = (fun () -> Js.Promise.resolve ())
+  ; refresh_property_areas = (fun () -> Js.Promise.resolve ())
+  }
 
 (* "sync-db-changes" subscribers — one ordered list (drained by
    Worker_events.dispatch) instead of each area monkey-patching
@@ -49,19 +104,6 @@ let run_sync_subs () =
    location hash (e.g. "#/page/u?graph-id=u") like cljs
    current-graph-query-params, so deep links and reloads resolve a repo *)
 let current_graph_uuid : string option ref = ref None
-
-(* set by graphs_ops (avoids a boot/graphs_ops module cycle); invoked on
-   Boot_graph_ready to fetch and remember the graph's uuid *)
-let on_graph_opened : (string -> unit) ref = ref (fun _ -> ())
-
-(* set by rtc_flows (avoids a Worker_events -> Rtc_flows -> Rtc_ops ->
-   Worker_events module cycle): the rtc-log broadcast feeds its
-   latest-entry projections *)
-let rtc_log_handler : (Wire.t -> unit) ref = ref (fun _ -> ())
-
-(* a second Boot_graph_ready subscriber for rtc_flows' graph-switch
-   sync trigger (on_graph_opened is already owned by graphs_ops) *)
-let rtc_graph_ready : (string -> unit) ref = ref (fun _ -> ())
 
 (* append ?graph-id=<uuid> to an in-app hash route when the uuid is known *)
 let nav_hash route =
@@ -101,29 +143,6 @@ let take_nav_mark () =
    latest-initiated load always wins *)
 let load_gen : int ref = ref 0
 
-(* set by graphs_ops (avoids a Worker_events -> Graphs_ops -> Boot
-   module cycle): remote-graph-gone broadcast refreshes the remote
-   list and the all-graphs view *)
-let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
-
-(* set by graphs_ops (same cycle-avoidance): worker add-repo broadcast
-   appends a downloaded graph to the local list *)
-let add_repo : (string -> unit) ref = ref (fun _ -> ())
-
-(* Worker_events clears its stashed broadcast deltas on every route
-   change (avoids a Runtime -> Worker_events cycle) *)
-let on_navigate : (unit -> unit) ref = ref (fun () -> ())
-
-(* the cheap side-fetches a page load also runs (linked refs, unlinked
-   refs/exists) — Router registers it so the delta-splice path can
-   refresh them without a routing -> outliner_ops cycle *)
-let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
-
-(* same for one journal item on the Journals/Home route — refetches
-   that page's linked refs and republishes them through the keyed
-   collection (Router registers the impl) *)
-let refresh_journal_side : (Model.page -> unit) ref = ref (fun _ -> ())
-
 (* items signals for mounted virtual lists — a spliced block array is
    pushed straight into the list so the page dyn need not remount it *)
 let page_items : (string, Model.block array Signal.state) Hashtbl.t =
@@ -162,98 +181,29 @@ let clear_page_items () =
   Hashtbl.iter (fun _ s -> Signal.dispose_signal (Signal.value s)) page_items;
   Hashtbl.reset page_items
 
-(* Router clears its loading_route dedupe when a route load commits or
-   fails (avoids a Runtime -> Router cycle) *)
-let nav_load_done : (unit -> unit) ref = ref (fun () -> ())
-
 (* one-shot (page_uuid, callback) armed before a hash navigation — runs
    when that page's Page_loaded lands; consumed by fire or load failure *)
 let after_page_load : (string * (unit -> unit)) option ref = ref None
 
 let on_page_loaded uuid f = after_page_load := Some (uuid, f)
 
-(* mirrors Model.unlinked_open so fetch paths outside the model (router,
-   outliner refresh) can gate the full-title unlinked scan on the
-   section being open *)
-let unlinked_open = ref true
-
-let track action =
-  match action with
-  | Action.Boot_graph_ready repo ->
-      current_repo := Some repo;
-      current_graph_uuid := None;
-      !on_graph_opened repo;
-      !rtc_graph_ready repo
-  | Action.Page_loaded page ->
-      !nav_load_done ();
-      (* a fresh full-fetch replaces the tree at an unknown rev — the
-         delta basis only survives splices applied through Page_delta *)
-      if not (Page_delta.is_own_commit page) then Page_delta.reset ();
-      current_page := Some page;
-      (* cljs route.cljs update-page-title!: document.title follows the
-         loaded page's title *)
-      Web_dom.set_document_title page.Model.page_title;
-      sync_hash_graph_id ();
-      (match !after_page_load, page.Model.page_uuid with
-       | Some (want, f), Some u when u = want ->
-           after_page_load := None;
-           f ()
-       | _ -> ())
-  | Action.Page_load_failed ->
-      !nav_load_done ();
-      after_page_load := None
-  | Action.Journals_loaded js ->
-      !nav_load_done ();
-      (* a fresh full-fetch replaces every journal tree at an unknown
-         rev — the delta basis only survives splices applied through
-         Page_delta *)
-      Page_delta.reset ();
-      current_journals := js
-  | Action.Journals_spliced js ->
-      !nav_load_done ();
-      current_journals := js
-  | Action.Navigate_to r ->
-      Page_delta.reset ();
-      clear_page_items ();
-      !on_navigate ();
-      current_page := None;
-      current_journals := [];
-      current_route := Some r;
-      unlinked_open := false;
-      (* in-graph routes always carry ?graph-id — navigation call sites
-         write raw hashes, so re-append it here after the hash settles *)
-      (match r with
-       | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
-       | _ -> sync_hash_graph_id ());
-      (* cljs route.cljs static-title for non-page routes (page routes
-         get their title when Page_loaded lands) *)
-      (match r with
-       | Model.Home -> Web_dom.set_document_title "Logseq"
-       | Model.Journals ->
-           Web_dom.set_document_title (I18n.t "nav/all-journals")
-       | Model.All_pages ->
-           Web_dom.set_document_title (I18n.t "nav.all-pages/title")
-       | Model.All_graphs ->
-           Web_dom.set_document_title (I18n.t "mobile.tab/graphs")
-       | Model.Settings ->
-           Web_dom.set_document_title (I18n.t "nav/settings")
-       | Model.Import ->
-           Web_dom.set_document_title (I18n.t "import/title")
-       | Model.Library | Model.Not_found _ ->
-           Web_dom.set_document_title "Logseq"
-       | Model.Page _ | Model.Block_zoom _ -> ())
-  | Action.Unlinked_toggle_open -> unlinked_open := not !unlinked_open
-  | _ -> ()
+(* root element of the editor's inline popup (date picker / link form),
+   mounted under <body> by editor_commands — exposed here so
+   Popups_state can hit-test it without an Editor_commands dependency
+   (which would cycle through Cmdk_state) *)
+let editor_popup_root : Web_dom.el option ref = ref None
 
 let flush () = !app_flush ()
 
+(* all actions reach the reducer through !app_send (wired to Lui_app.send
+   in main.ml); Update.apply runs the per-action effect pass inside the
+   dispatch so there is a single dispatch path *)
 let send action =
   (match action with
    | Action.Navigate_to _ -> Platform.perf_mark "action:navigate"
    | Action.Page_loaded _ -> Platform.perf_mark "action:page-loaded"
    | Action.Boot_graph_ready _ -> Platform.perf_mark "action:boot-ready"
    | _ -> ());
-  track action;
   ignore (!app_send action);
   flush ()
 

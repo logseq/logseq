@@ -27,12 +27,40 @@ open Promise_ext
 (* substring search helpers (case-sensitive contains, case-insensitive
    contains/index) shared by popups, menus, icon picker, plugin list *)
 
-let contains = Str_util.contains
-let contains_ci = Str_util.contains_ci
-let index_ci = Str_util.index_ci
+let contains hay needle =
+  let lh = String.length hay and ln = String.length needle in
+  let rec go i = i + ln <= lh && (String.sub hay i ln = needle || go (i + 1)) in
+  ln = 0 || go 0
+
+let contains_ci hay needle =
+  let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
+  contains h n
+
+let index_ci hay needle =
+  let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
+  let ln = String.length n and lh = String.length h in
+  let rec go i =
+    if ln = 0 || i + ln > lh then None
+    else if String.sub h i ln = n then Some i
+    else go (i + 1)
+  in
+  go 0
 
 (* "{1}" / "{2}" placeholder substitution *)
-let replace_all s pat rep = Str_util.replace_all s ~pat ~rep
+let replace_all s pat rep =
+  let plen = String.length pat in
+  let b = Buffer.create (String.length s) in
+  let i = ref 0 in
+  while !i <= String.length s - plen do
+    if String.sub s !i plen = pat then (
+      Buffer.add_string b rep;
+      i := !i + plen)
+    else (
+      Buffer.add_char b (String.get s !i);
+      incr i)
+  done;
+  Buffer.add_string b (String.sub s !i (String.length s - !i));
+  Buffer.contents b
 
 (* positional substitution on a literal template *)
 let sub s args =
@@ -42,11 +70,10 @@ let sub s args =
     (s, 1) args
   |> fst
 
-let unquote = Str_util.unquote
-
+(* cljs :preferred-language — an EDN-quoted string in localStorage *)
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with
-  | Some v -> unquote v
+  | Some v -> Platform.storage_unquote v
   | None -> "en"
 
 (* dict values are OCaml literals — Melange emits them as JS strings
@@ -133,6 +160,8 @@ let init () = load (current_lang ())
    for e2e/DOM-parity while non-English lookups resolve through the same
    key. *)
 let en_overrides = function
+  (* cljs imports.cljs hardcodes [:strong "SQLite"] — no dict key exists *)
+  | "import/sqlite-label" -> "SQLite"
   | "cmdk.create/page" -> "Create page"
   | "cmdk.create/tag" -> "Create tag"
   | "cmdk.info/create-page" -> "Create page called '{1}'"
@@ -545,7 +574,6 @@ let en_overrides = function
   | "ui/false" -> "false"
   | "graph.switch/select-prompt" -> "Select a Graph"
   | "cmdk.group/current-page" -> "Current Page"
-  | "account/sign-in" -> "Sign in"
   | "publish/publish-error" -> "Publish failed. Please try again."
   | "graph/delete-server-action" -> "Delete remote graph"
   | "import/invalid-edn-file" -> "Invalid EDN file."

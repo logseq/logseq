@@ -33,7 +33,7 @@ let reset () = set (fun _ -> empty)
 (* re-pull the page's block tree after an outliner op — the dialog list is
    outside .page-blocks-inner, so refresh_page does not cover it *)
 let reload () =
-  match !Runtime.current_repo, !latest.page_uuid with
+  match (Runtime.model ()).Model.repo, !latest.page_uuid with
   | Some repo, Some puuid ->
       ignore
         (let* w =

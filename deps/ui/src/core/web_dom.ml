@@ -65,6 +65,8 @@ external parse_float : string -> float = "parseFloat"
 (* build {k: v, ...} from a pair list *)
 let json_props pairs = Js.Json.object_ (Js.Dict.fromList pairs)
 
+let str_to_json s = Js.Json.string s
+
 (* ---------- document ---------- *)
 
 external document_el : el = "document"
@@ -776,7 +778,7 @@ let is_editable_target target =
   | None -> false
 
 (* Focus a text input/textarea and move caret to the end. *)
-let focus_end el =
+let el_focus el =
   el_focus el;
   (* input[type=number|date|...] reject setSelectionRange *)
   (try

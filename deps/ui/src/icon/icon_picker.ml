@@ -12,17 +12,16 @@
 
 module D = Web_dom
 
-module E = Web_dom
 module I = I18n
 
 type choice = Emoji of string | Tabler of (string * string option) | Remove
 type tab = Tab_all | Tab_emoji | Tab_icon
 
-let em_emoji_el ?(cls = "") (id : string) : E.el =
+let em_emoji_el ?(cls = "") (id : string) : D.el =
   D.mk ~cls ~attrs:[ ("id", id) ] "em-emoji"
 
 (* icon value {type,id} -> display element *)
-let icon_el ?(size = 18.) ?(cls = "") (ty, id) : E.el =
+let icon_el ?(size = 18.) ?(cls = "") (ty, id) : D.el =
   match ty with
   | "emoji" -> em_emoji_el ~cls id
   | _ -> D.icon ~size ~cls id
@@ -39,7 +38,7 @@ let tab_item_cls active =
 
 let ui_input_cls = "ui__input ls-ep-input"
 
-external el_style : E.el -> Js.Json.t = "style" [@@mel.get]
+external el_style : D.el -> Js.Json.t = "style" [@@mel.get]
 
 external style_set : Js.Json.t -> string -> string -> unit = "setProperty"
   [@@mel.send]
@@ -47,9 +46,10 @@ external style_set : Js.Json.t -> string -> string -> unit = "setProperty"
 (* ---------- tabler icon names ---------- *)
 
 (* cljs get-tabler-icons enumerates @tabler/icons-react exports in order
-   and csk-prettifies them into display names ("Abacus Off"); the bundled
-   list in Icon_picker_names keeps (display, kebab) pairs in that order. *)
-let icon_items () = Array.to_list Icon_picker_names.items
+   and csk-prettifies them into display names ("Abacus Off"); the table
+   ships as a lazy chunk (Icon_picker_names) — empty until the first
+   picker open resolves it. *)
+let icon_items () = Array.to_list !Icon_picker_names.items
 
 (* cljs icon-cp strips spaces from the display name to form the id/title:
    "A B 2" -> "AB2" *)
@@ -131,12 +131,12 @@ type picker =
   ; mutable q : string
   ; mutable tab : tab
   ; mutable gen : int
-  ; mutable input : E.el option
-  ; mutable x_btn : E.el option
-  ; mutable bd : E.el option
-  ; mutable pane : E.el option
-  ; mutable root : E.el option
-  ; mutable pal_wrap : E.el option
+  ; mutable input : D.el option
+  ; mutable x_btn : D.el option
+  ; mutable bd : D.el option
+  ; mutable pane : D.el option
+  ; mutable root : D.el option
+  ; mutable pal_wrap : D.el option
   }
 
 type item =
@@ -199,7 +199,7 @@ let choose (p : picker) (c : choice) =
    | Remove -> ());
   p.on_chosen c
 
-let item_btn (p : picker) (it : item) : E.el =
+let item_btn (p : picker) (it : item) : D.el =
   match it with
   | Emoji_item (id, name) ->
       let b =
@@ -241,7 +241,7 @@ let rec chunks n xs =
       | row, rest -> row :: chunks n rest)
 
 let pane_section ?(virtual_list = false) ?(searching = false) label
-    (items : E.el list) : E.el =
+    (items : D.el list) : D.el =
   let sec =
     D.mk
       ~cls:
@@ -279,7 +279,7 @@ let clear_pane (p : picker) =
   | Some pane -> D.el_replace_children pane
   | None -> ()
 
-let used_section_items (p : picker) : E.el list =
+let used_section_items (p : picker) : D.el list =
   used_items ()
   |> List.map (fun (typ, id, name) ->
          if typ = "emoji" then item_btn p (Emoji_item (id, name))
@@ -437,7 +437,7 @@ let preset_colors =
   [ Some "#6e7b8b"; Some "#5e69d2"; Some "#00b5ed"; Some "#00b55b"
   ; Some "#f2be00"; Some "#e47a00"; Some "#f38e81"; Some "#fb434c"; None ]
 
-let presets_popover (p : picker) (anchor_btn : E.el) : E.el =
+let presets_popover (p : picker) (anchor_btn : D.el) : D.el =
   let pop = D.mk ~cls:"color-picker-presets" "div" in
   List.iter
     (fun c ->
@@ -474,7 +474,7 @@ let presets_popover (p : picker) (anchor_btn : E.el) : E.el =
 
 (* ---------- view ---------- *)
 
-let view (p : picker) : E.el =
+let view (p : picker) : D.el =
   let root = D.mk ~cls:"cp__emoji-icon-picker" "div" in
   D.el_set_attr root "data-keep-selection" "true";
   D.el_listen root "keydown"
@@ -556,7 +556,7 @@ let view (p : picker) : E.el =
   D.el_append_child pal_strong (icon_el ("tabler-icon", "palette"));
   D.el_append_child pal pal_strong;
   D.el_append_child pal_wrap pal;
-  let pop_ref : E.el option ref = ref None in
+  let pop_ref : D.el option ref = ref None in
   D.on_click pal (fun _ ->
       match !pop_ref with
       | Some pop -> D.el_remove pop; pop_ref := None
@@ -593,8 +593,8 @@ let view (p : picker) : E.el =
    `emoji_only` restricts it to the Emojis tab (reaction picker) *)
 type picker_opts = { emoji_only : bool; sub : bool }
 
-let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
-    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : E.el =
+let open_picker_with_opts ~(anchor : D.el) ~(del : bool)
+    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : D.el =
   let emoji_only = opts.emoji_only in
   Emoji_mart.install ();
   let p =
@@ -604,6 +604,12 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
     ; x_btn = None; bd = None; pane = None; root = None; pal_wrap = None }
   in
   let root = view p in
+  (* icon names load lazily — re-render the pane once the chunk lands *)
+  ignore
+    (Lazy.force Icon_picker_names.load
+     |> Js.Promise.then_ (fun () ->
+            refresh p;
+            Js.Promise.resolve ()));
   (* cljs chrome: ui__popover-content > ls-property-dialog >
      ls-property-input > ls-property-add > .flex-row >
      property-value-inner > picker *)
@@ -647,7 +653,7 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
   pop
 ;;
 
-let open_picker ~(anchor : E.el) ~(del : bool)
+let open_picker ~(anchor : D.el) ~(del : bool)
     ~(on_chosen : choice -> unit) : unit =
   ignore
     (open_picker_with_opts ~anchor ~del

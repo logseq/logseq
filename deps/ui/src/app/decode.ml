@@ -381,6 +381,10 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
            | Some t -> Some t
            | None -> Wire.map_get_string w "block/page-name")
        | _ -> Wire.map_get_string w "block/page-name")
+  ; block_page_uuid =
+      (match Wire.get w "block/page" with
+       | Some (Wire.Map _ as p) -> Wire.map_get_uuid p "block/uuid"
+       | _ -> Wire.map_get_uuid w "block/page-uuid")
   ; block_tag_idents = tag_idents
   ; block_icon = block_icon_of_wire w
   ; block_tag_icons = List.filter_map block_icon_of_wire tag_entries

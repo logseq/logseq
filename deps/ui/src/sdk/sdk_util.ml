@@ -376,8 +376,8 @@ let apply_ops ops opts =
   (* the sync-db-changes broadcast refresh is debounced;
      refresh before resolving so callers observe applied
      state (matches cljs' reactive frontend db) *)
-  let* () = !Runtime.refresh_property_areas () in
-  let* () = !Runtime.refresh_after_ops () in
+  let* () = Runtime.hooks.refresh_property_areas () in
+  let* () = Runtime.hooks.refresh_after_ops () in
   Js.Promise.resolve result
 
 let apply_op op args =

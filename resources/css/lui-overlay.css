@@ -218,6 +218,11 @@
 .menu-item-label {
   flex: 1;
   min-width: 0;
+  /* cljs menu items never wrap — keeps sub-trigger rows at 32px and
+     lets the menu reach its natural (wider) width */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ui__dropdown-menu-checkbox-item {
@@ -1139,6 +1144,17 @@ div[data-keep-selection].menu-links-wrapper {
   padding: 0.375rem;
 }
 
+/* cljs dropdown selects (view filter/sort pickers) use a compact input —
+   4px 8px, 32px row — not the command-palette's 16px padding */
+.ui__dropdown-menu-content .cp__select-input {
+  padding: 4px 8px;
+  height: 32px;
+}
+
+.ui__dropdown-menu-content .cp__select-main {
+  width: 100%;
+}
+
 .cp__select-results .menu-link {
   display: flex;
   justify-content: space-between;
@@ -1217,7 +1233,8 @@ div[data-keep-selection].menu-links-wrapper {
 .ui__dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  /* cljs shui.css maps the overlay's z-50 utility to z-999 */
+  z-index: 999;
   display: grid;
   place-items: center;
   overflow-y: auto;
@@ -1228,7 +1245,7 @@ div[data-keep-selection].menu-links-wrapper {
 .ui__alert-dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 999;
   background: hsl(var(--background) / 0.8);
   backdrop-filter: blur(4px);
   animation: lui-fade-in 150ms ease-out;
@@ -1238,7 +1255,9 @@ div[data-keep-selection].menu-links-wrapper {
   position: fixed;
   left: 50%;
   top: 50%;
-  z-index: 50;
+  z-index: 999;
+  outline: none;
+  margin: 0;
   display: grid;
   gap: 1rem;
   width: 100%;
@@ -1265,7 +1284,7 @@ div[data-keep-selection].menu-links-wrapper {
   position: fixed;
   left: 50%;
   top: 50%;
-  z-index: 50;
+  z-index: 999;
   display: grid;
   gap: 1rem;
   width: 100%;
@@ -1340,12 +1359,26 @@ div[data-keep-selection].menu-links-wrapper {
   color: #fff;
   font-size: 0.875rem;
   font-weight: 500;
-  padding: 0.5rem 1rem;
+  height: 2.5rem;
+  padding: 0 1rem;
   cursor: pointer;
 }
 
 .ui__button.ls-btn-primary:hover {
   opacity: 0.9;
+}
+
+/* cljs shui/button default variant is bg-primary/90 (-> /100 hover),
+   not the lx-accent-09 tint */
+.ui__dialog-content .ui__button.ls-btn-primary,
+.ui__alert-dialog-content .ui__button.ls-btn-primary {
+  background: hsl(var(--primary, 200 97% 37%) / 0.9);
+}
+
+.ui__dialog-content .ui__button.ls-btn-primary:hover,
+.ui__alert-dialog-content .ui__button.ls-btn-primary:hover {
+  background: hsl(var(--primary, 200 97% 37%) / 1);
+  opacity: 1;
 }
 
 /* leading icon inside a menu item */
@@ -1354,11 +1387,14 @@ div[data-keep-selection].menu-links-wrapper {
   flex-shrink: 0;
 }
 
+/* cljs shui dialog title: text-lg font-semibold leading-none tracking-tight
+   (+ tailwind preflight margin reset) */
 .ui__dialog-title {
   font-size: 1.125rem;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1;
   letter-spacing: -0.01em;
+  margin: 0;
 }
 
 .ui__dialog-close {
@@ -1368,8 +1404,8 @@ div[data-keep-selection].menu-links-wrapper {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1rem;
+  height: 1rem;
   border-radius: 0.25rem;
   opacity: 0.7;
   cursor: pointer;
@@ -1383,9 +1419,35 @@ div[data-keep-selection].menu-links-wrapper {
   opacity: 1;
 }
 
+/* cljs shui dialog-close: focus:ring-2 ring-offset-2 — autofocused on
+   dialog open */
+.ui__dialog-close:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
+
 .ui__dialog-main-content {
   min-height: 0;
   overflow-y: auto;
+}
+
+/* cljs ui.css: flashcards dialog sizing */
+.ui__dialog-content[label="flashcards__cp"] {
+  padding: 1.5rem 1.25rem 1rem;
+}
+
+.ui__dialog-content[label="flashcards__cp"] .ui__dialog-main-content {
+  max-height: 85vh;
+  min-height: 65vh;
+  overflow: auto;
+  padding: 0.25rem;
+}
+
+@media (min-width: 820px) {
+  .ui__dialog-content[label="flashcards__cp"] {
+    min-width: 800px;
+    max-width: min(85%, 980px);
+  }
 }
 
 .ui__dialog-content[data-base-ui-inert],
@@ -1407,16 +1469,13 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* per-name dialog sizing (was inline utilities on the content node) */
 .ls-dialog-export-page {
-  width: auto;
-  max-width: 56rem;
+  /* cljs export dialog keeps the default 42/48rem cap */
   max-height: 80vh;
   overflow-y: auto;
 }
 
-.ls-dialog-publish-page {
-  width: auto;
-  max-width: 28rem;
-}
+/* cljs shui/dialog-open! on publish-page-dialog uses the default
+   .ui__dialog-content sizing (w-full max-w-2xl, lg:max-w-3xl) */
 
 .ls-dialog-sync-server,
 .ls-dialog-publish-server {
@@ -1436,6 +1495,20 @@ div[data-keep-selection].menu-links-wrapper {
 .ui__dialog-content[label="plugins-dashboard"] {
   width: 90vw;
   max-width: 1246px;
+  max-height: calc(100vh - 50px);
+  overflow-y: hidden;
+}
+
+/* cljs plugins.css .cp__plugins-page.web-platform .cp__plugins-item-lists */
+.cp__plugins-page.web-platform .cp__plugins-item-lists {
+  max-height: 80vh;
+  height: calc(100vh - 320px);
+  overflow-y: auto;
+}
+
+/* cljs :graph/new-db-graph dialog-open! {:style {:max-width "500px"}} */
+.ui__dialog-content[label="new-db-graph"] {
+  max-width: 500px;
 }
 
 /* cljs marks the settings overlay data-align="top", but its dialog-content
@@ -1498,6 +1571,34 @@ div[data-keep-selection].menu-links-wrapper {
   display: block;
   width: 100%;
   margin: 0.5rem 0 1rem;
+}
+
+/* cljs login.css: .ui__dialog-content[label=user-login] centers a
+   ~440px authenticator column */
+.ui__dialog-content[label="user-login"] {
+  display: flex;
+  align-items: center;
+  width: auto;
+  max-width: none;
+  padding: 0 1.5rem 1.5rem;
+}
+
+.ui__dialog-content[label="user-login"] .ui__dialog-main-content {
+  padding: 0;
+  width: 70vw;
+  max-width: 500px;
+  position: relative;
+}
+
+@media (min-width: 640px) {
+  .ui__dialog-content[label="user-login"] .ui__dialog-main-content {
+    width: 440px;
+  }
+}
+
+.ui__dialog-content[label="user-login"] .ui__dialog-close {
+  z-index: 10;
+  top: 4px;
 }
 
 /* e2ee password modal */
@@ -2446,7 +2547,10 @@ h1.cp__settings-category-title::first-letter {
   align-items: center;
 }
 
-.panel-wrap .it > *:nth-child(2),
+/* cljs .it is grid-cols-3: the control column spans 2 only when the
+   row has two children (label + control); three-child rows (e.g.
+   label | switch | shortcut kbd) keep one column each */
+.panel-wrap .it > *:nth-child(2):last-child,
 .panel-wrap .it .it-control {
   grid-column: span 2;
   display: flex;
@@ -2589,27 +2693,70 @@ h1.cp__settings-category-title::first-letter {
 .shortcut-toolbar-row {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .shortcut-toolbar-row .search-input-wrap {
   display: flex;
   align-items: center;
   flex: 1;
+  min-width: 0;
   position: relative;
+}
+
+.shortcut-toolbar-row .search-input-wrap input.form-input {
+  width: 100%;
+  height: 2rem;
+  padding-left: 1.75rem;
+  padding-right: 1.75rem;
+  font-size: 0.875rem;
 }
 
 .shortcut-toolbar-row .search-icon {
   position: absolute;
   left: 0.5rem;
-  opacity: 0.5;
+  opacity: 0.4;
   display: flex;
+  pointer-events: none;
+}
+
+.shortcut-toolbar-row .search-icon .ui__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* cljs shortcut.css .shortcut-keystroke-inactive — bordered "Search by
+   keys" button sitting right of the search input */
+.shortcut-keystroke-inactive {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  height: 30px;
+  padding: 0 10px;
+  min-width: 9rem;
+  border-radius: 6px;
+  border: 1px solid
+    var(--lx-gray-07, var(--ls-quaternary-background-color, hsl(var(--border))));
+  background-color:
+    var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--muted))));
+  color: var(--lx-gray-12, inherit);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.shortcut-keystroke-inactive:hover {
+  background-color:
+    var(--lx-gray-04, var(--ls-quaternary-background-color, hsl(var(--accent))));
 }
 
 .shortcut-pills-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
@@ -2635,8 +2782,26 @@ h1.cp__settings-category-title::first-letter {
 }
 
 .shortcut-filter-pill[data-active],
-.shortcut-filter-pill.active {
+.shortcut-filter-pill.active,
+.shortcut-filter-pill--active {
   background: var(--lx-gray-04, var(--ls-tertiary-background-color, hsl(var(--muted))));
+}
+
+/* cljs shortcut.css li.th — grey category band rows (Basics,
+   Navigation, ...) with the fold chevron at the right edge */
+.cp__shortcut-page-x li.th {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 15px;
+  background-color:
+    var(--lx-gray-03, var(--ls-tertiary-background-color, hsl(var(--muted))));
 }
 
 .shortcut-row {
@@ -3203,17 +3368,54 @@ select.form-select {
   min-width: 12rem;
 }
 
-/* login dialog body */
+/* login dialog body — cljs login.css: mx-auto w-full max-w-[440px] px-1 */
 .cp__user-login {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 18rem;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  max-width: 440px;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
 }
 
 .cp__user-login .desc {
   font-size: 0.875rem;
   opacity: 0.8;
+}
+
+/* cljs login.css bumps the muted text/links up to 80% */
+.cp__user-login span.opacity-50,
+.cp__user-login a.opacity-60 {
+  opacity: 0.8;
+}
+
+/* cljs card-header (p-6 + pb-7) + card-title (text-2xl) */
+.cp__user-login .ls-auth-title {
+  font-size: 1.5rem;
+  line-height: 1;
+  padding-top: 1.5rem;
+  padding-bottom: 1.75rem;
+}
+
+/* cljs shui input is h-10 px-3 py-2 everywhere it appears in dialogs */
+.ui__dialog-content .ui__input {
+  height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+/* cljs shui button default size is h-10 */
+.cp__user-login .ui__button {
+  height: 2.5rem;
+}
+
+.cp__user-login .ls-login-error {
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: hsl(var(--destructive) / 0.15);
+  color: hsl(var(--destructive));
+  font-size: 0.875rem;
 }
 
 /* quick-add + plugin readme + cards modal bodies */
@@ -3264,6 +3466,12 @@ select.form-select {
   display: flex;
   padding: 0 0.5rem;
   align-items: center;
+}
+
+/* cljs components/svg.css */
+.ls-info-icon svg.info {
+  fill: var(--ls-primary-text-color);
+  transition: fill 200ms ease-in;
 }
 
 .shui-shortcut-wrap {
@@ -3414,7 +3622,8 @@ select.form-select {
 
 .ls-desc {
   font-size: 0.875rem;
-  opacity: 0.5;
+  opacity: 0.7;
+  margin-bottom: 0;
 }
 
 .ls-dc {
@@ -3818,22 +4027,56 @@ select.form-select {
   display: none;
 }
 
+/* cljs onboarding/index.css — article.importer is the gray-03 card;
+   .inner-card pads 55px and centers the h1/h2 header */
 .importer {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 4rem 2rem;
+  background-color: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
+  border-radius: 20px;
+  flex: 1;
 }
 
 .cp__onboarding-setups {
   display: flex;
   flex: 1;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+/* cljs onboarding/index.css centers the card on desktop */
+@media (min-width: 1024px) {
+  .cp__onboarding-setups {
+    justify-content: center;
+    align-items: center;
+  }
 }
 
 .inner-card {
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding-top: 55px;
+}
+
+/* cljs .inner-card > h1 (36px/50.4 computed), > h2 (20px/30, my-20/40) */
+.inner-card > h1.ls-imp-title {
+  font-size: 36px;
+  line-height: 1.4;
+  margin: 0;
+  text-align: center;
+}
+
+.inner-card > h2 {
+  font-size: 20px;
+  line-height: 30px;
+  margin: 20px 0 40px;
+  padding: 0 30px;
+  text-align: center;
 }
 
 .ls-imp-title {
@@ -3893,12 +4136,48 @@ select.form-select {
   margin-left: 0.25rem;
 }
 
+/* cljs components/export.cljs: h1.title.mb-8 */
+.export h1.title.ls-mb {
+  margin: 0 0 2rem;
+}
+
+/* cljs tailwind preflight + export.cljs [:hr]: my-8 */
+.export hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+
 /* cards (flashcards review modal) */
 .ls-cards-select {
   width: 16rem;
   height: 2rem;
   padding: 0 0.5rem;
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--ls-border-color);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.ls-cards-select-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ls-cards-select-value .ls-icon-sm,
+.ls-cards-select-value svg {
+  opacity: 0.5;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
 }
 
 .ls-gap {
@@ -4128,6 +4407,10 @@ select.form-select {
 }
 
 .ls-view-tab {
+  /* cljs shui/button base: inline-flex items-center gap-1 */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: 0.875rem;
   height: 1.5rem;
   padding: 0;
@@ -4171,6 +4454,88 @@ select.form-select {
 .ls-col-name {
   color: hsl(var(--muted-foreground));
   white-space: nowrap;
+}
+
+/* cljs view-sorting-item: order pill (select-trigger chrome) + ghost x */
+.ls-sort-right {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ls-sort-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--ls-border-color);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--ls-primary-text-color);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ls-sort-order svg,
+.ls-sort-order .ls-icon-sm {
+  width: 0.75rem;
+  height: 0.75rem;
+  opacity: 0.5;
+}
+
+.ls-sort-order .ti {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.ls-sort-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  padding: 0 0.25rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.ls-sort-x:hover {
+  background: hsl(var(--muted));
+}
+
+.ls-sort-x svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* cljs: Delete sort ghost button — muted, left-aligned, trash icon */
+.ls-sort-delete {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ls-sort-delete:hover {
+  background: hsl(var(--muted));
+}
+
+.ls-sort-delete svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .ls-xs {
@@ -4301,6 +4666,155 @@ select.form-select {
 
 .ls-vf-logic:hover {
   opacity: 1;
+}
+
+/* .page-inner is display:grid — a child with the default min-width:auto
+   expands the auto track to the objects table's max-content (~1250px),
+   so the whole tab panel overflowed the page column. min-width:0 lets
+   the chain shrink and the inner .ls-table-rows handle x-scrolling */
+.page-inner > .page-tabs,
+.page-tabs > .w-full,
+.ui__tabs-content,
+.ui__tabs-content > .ml-1,
+.ls-view-body {
+  min-width: 0;
+}
+
+/* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
+   kept in flow here so the rows list needs no top offset) —
+   .sticky-columns and the unpinned cell row are flex items on the same
+   line, not stacked block children */
+.ls-table-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: fit-content;
+  min-width: 100%;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.sticky-columns {
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  background: var(--lx-gray-01, var(--ls-primary-background-color));
+}
+
+.ls-table-header-cell {
+  cursor: pointer;
+  text-align: left;
+  vertical-align: middle;
+  font-weight: 500;
+  color: var(--muted-foreground, var(--ls-secondary-text-color));
+  border-right: 1px solid var(--ls-border-color);
+}
+
+/* cljs header button is h-8 (32px); .ls-btn-default's 2.5rem height
+   beats the h-8 utility on specificity */
+.ls-table-header-cell > .ui__button {
+  height: 2rem !important;
+  overflow: hidden;
+}
+
+/* cljs .ls-table-resize-handle: absolute col-resize grip on the cell's
+   right edge, invisible until hover */
+.ls-table-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -0.125rem;
+  width: 0.25rem;
+  height: 100%;
+  cursor: col-resize;
+  background: var(--accent-08, var(--ls-accent-color));
+  border-radius: 0.25rem;
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+.ls-table-resize-handle:hover {
+  opacity: 0.7;
+}
+
+.ls-table-resize-handle:active {
+  opacity: 1;
+}
+
+/* cljs .ls-table-row is a hard 33px (min/max), not the .ls-block
+   padding box used by outline rows */
+.ls-table-row.ls-block {
+  height: 33px;
+  min-height: 33px;
+  max-height: 33px;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.ls-table-row div,
+.ls-table-row span,
+.ls-table-row a {
+  white-space: nowrap;
+}
+
+.ls-table-row .table-block-title,
+.ls-table-row .block-head-wrap a {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+/* row wrappers cljs pins to the same 33px */
+.ls-table-rows div[data-index],
+.ls-table-rows div[data-item-index] {
+  height: 33px;
+  min-height: 33px;
+  max-height: 33px;
+  overflow: hidden;
+}
+
+.ls-table-footer {
+  position: absolute;
+  left: 0;
+  bottom: 8px;
+  width: 100%;
+}
+
+.ls-table-rows div[data-viewport-type='window'] {
+  min-width: 100%;
+  width: auto !important;
+}
+
+/* cljs .ls-table-cell { @apply h-full max-h-[33px] overflow-hidden } —
+   caps row height and clips cell content */
+.ls-table-cell {
+  height: 100%;
+  max-height: 33px;
+  overflow: hidden;
+}
+
+.ls-table-cell > div {
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* cljs ui.css: fold carets hang 27px into the left gutter instead of
+   taking inline width in the foldable header */
+.ls-foldable-title-control {
+  margin-left: -27px;
+}
+
+/* cljs ls-view-head: count/tabs left, view-actions right on one row
+   (flex flex-1 flex-nowrap items-center justify-between gap-1) */
+.ls-view-head {
+  display: flex;
+  flex: 1 1 0%;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .ls-view-head-left {
@@ -4481,19 +4995,80 @@ select.form-select {
 }
 
 /* importer internals */
+/* cljs onboarding/index.css label.action-input — gray-06 68px rounded row */
 .action-input {
   display: flex;
   align-items: center;
   margin: 0.5rem;
+  background-color: var(--lx-gray-06, var(--ls-page-inline-code-bg-color));
+  height: 68px;
+  width: 100%;
+  opacity: 0.8;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  cursor: pointer;
+  transition: none;
 }
 
+.action-input:hover {
+  opacity: 1;
+}
+
+.action-input:active {
+  opacity: 0.5;
+}
+
+.action-input strong {
+  font-size: 18px;
+  line-height: 27px;
+}
+
+.action-input small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* cljs .importer section.c header sizes (28px / 19px lh3em) and the
+   icon column inside each action-input row (62px box, pad-4) */
 .importer .c {
   text-align: center;
+}
+
+.importer .c h1 {
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.importer .c h2 {
+  font-size: 19px;
+  line-height: 3em;
+  margin: 0;
 }
 
 .importer .d {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  padding: 20px 0;
+}
+
+.importer .d > label.action-input {
+  width: unset;
+  height: 62px;
+  flex: 1;
+  margin-bottom: 10px;
+}
+
+.action-input .as-flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  padding: 16px;
+  flex-shrink: 0;
 }
 
 .link-block {

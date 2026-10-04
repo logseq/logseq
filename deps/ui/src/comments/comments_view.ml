@@ -19,7 +19,6 @@
 open Promise_ext
 open Lui_elements
 module D = Web_dom
-module E = Web_dom
 module I = I18n
 module Ops = Outliner_ops
 
@@ -67,7 +66,7 @@ let save_comment cuuid (text : string) =
      Ops.apply_and_refresh [ sop ])
 
 let delete_comment cuuid =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore

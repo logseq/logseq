@@ -81,8 +81,91 @@ let store_tokens id acc refresh =
   (* cljs flows/current-login-user watch -> trigger-start-rtc [:login] *)
   Rtc_flows.notify_login ()
 
-let submit () =
-  let user = field_value "username" and pass = field_value "password" in
+(* cljs components/user/login.cljs authenticator — a small tab state
+   machine over the dialog: login / signup / reset-password / confirm-code,
+   plus a logged-in pane when a session already exists. Tab switches only
+   swap the inner form; the dialog chrome stays. *)
+
+type auth_tab =
+  | Login
+  | Signup
+  | Reset_pw
+  | Reset_confirm of string (* username the reset code was sent for *)
+  | Confirm_code of string * string (* username, next-step *)
+
+type auth_ui =
+  { tab : auth_tab
+  ; err : string
+  ; session_user : string option
+  }
+
+let auth_ref : auth_ui Signal.state option ref = ref None
+
+let auth_st ctx =
+  match !auth_ref with
+  | Some s -> s
+  | None ->
+      let s =
+        Signal.state ctx.Lui_ui.ui_scheduler
+          { tab = Login; err = ""; session_user = None }
+      in
+      auth_ref := Some s;
+      s
+
+let set_auth ctx f =
+  Signal.update (auth_st ctx) f;
+  Runtime.flush ()
+
+let set_tab ctx tab =
+  set_auth ctx (fun a -> { a with tab; err = "" });
+  (* autofocus alone doesn't refire on a patched-in node *)
+  ignore
+    (Web_dom.set_timeout
+       (fun () ->
+         match Web_dom.query_selector ".cp__user-login [autofocus]" with
+         | Some el -> Web_dom.el_focus el
+         | None -> ())
+       32)
+
+let fail ctx msg = set_auth ctx (fun a -> { a with err = msg })
+
+let error_message (json : Js.Json.t) =
+  match Js.Json.decodeObject json with
+  | Some o -> (
+      match dict_str o "message" with
+      | Some m -> m
+      | None -> (
+          match dict_str o "__type" with
+          | Some m -> m
+          | None -> T.login_failed))
+  | None -> T.login_failed
+
+let cognito_call ctx target payload f_ok =
+  let init =
+    Fetch.RequestInit.make ~method_:Post
+      ~headers:
+        (Fetch.HeadersInit.makeWithArray
+           [| ( "X-Amz-Target"
+              , "AWSCognitoIdentityProviderService." ^ target )
+            ; ("Content-Type", "application/x-amz-json-1.1") |])
+      ~body:(Fetch.BodyInit.make payload)
+      ()
+  in
+  (let* resp = Fetch.fetchWithInit cognito_url init in
+   let* json = Fetch.Response.json resp in
+   match Js.Json.decodeObject json with
+   | Some o -> (
+       match dict_str o "__type" with
+       | Some _ -> fail ctx (error_message json); Js.Promise.resolve ()
+       | None -> f_ok json)
+   | None -> f_ok json)
+  |> Js.Promise.catch (fun _ ->
+         fail ctx T.login_failed;
+         Js.Promise.resolve ())
+  |> ignore
+
+let submit ctx =
+  let user = field_value "email" and pass = field_value "password" in
   if user = "" || pass = "" then ()
   else
     let init =
@@ -102,74 +185,323 @@ let submit () =
     | Some (id, acc, refresh) ->
         store_tokens id acc refresh;
         Dialogs_state.close_named "login";
-        Toast.success T.login_title;
         Js.Promise.resolve ()
     | None ->
-        let msg =
-          match Js.Json.decodeObject json with
-          | Some o -> (
-              match dict_str o "message" with
-              | Some m -> m
-              | None -> (
-                  match dict_str o "__type" with
-                  | Some m -> m
-                  | None -> T.login_failed))
-          | None -> T.login_failed
-        in
-        Toast.error msg;
+        fail ctx (error_message json);
         Js.Promise.resolve ())
     |> Js.Promise.catch (fun _ ->
-           Toast.error T.login_failed;
+           fail ctx T.login_failed;
            Js.Promise.resolve ())
     |> ignore
 
-let field ~key ~name ~type_ ~placeholder ~autofocus =
-  dom ~key ~tag:"input"
-    ~style_class:"form-input ls-login-input"
-    ~attrs:
-      ([ ("name", name); ("type", type_); ("placeholder", placeholder)
-       ; ("autocomplete", "off") ]
-      @ if autofocus then [ ("autofocus", "") ] else [])
-    ~events:"keydown"
-    ~on_dom_event:(fun n p ->
-      match n with
-      | "keydown" -> (
-          match
-            Platform.payload_str p "key"
-          with
-          | "Enter" -> submit ()
-          | _ -> ())
-      | _ -> ())
+let json_obj xs = Js.Json.object_ (Js.Dict.fromList xs)
+
+let signup_submit ctx =
+  let email = field_value "email"
+  and user = field_value "username"
+  and pass = field_value "password"
+  and confirm = field_value "confirm-password" in
+  if user = "" || pass = "" || email = "" then ()
+  else if pass <> confirm then
+    fail ctx (I18n.t "account/passwords-do-not-match")
+  else
+    let open Js.Json in
+    let payload =
+      stringify
+        (json_obj
+           [ ("ClientId", string client_id)
+           ; ("Username", string user)
+           ; ("Password", string pass)
+           ; ( "UserAttributes"
+             , array
+                 [| json_obj
+                      [ ("Name", string "email"); ("Value", string email) ]
+                 |] )
+           ])
+    in
+    (* cognito returns nextStep.signUpStep in the REST response *)
+    cognito_call ctx "SignUp" payload (fun json ->
+        let confirmed =
+          match Js.Json.decodeObject json with
+          | Some o -> (
+              match Js.Dict.get o "UserConfirmed" with
+              | Some v -> Js.Json.decodeBoolean v = Some true
+              | None -> false)
+          | None -> false
+        in
+        set_tab ctx
+          (if confirmed then Login else Confirm_code (user, "CONFIRM_SIGN_UP"));
+        Js.Promise.resolve ())
+
+let forgot_submit ctx =
+  let user = field_value "email" in
+  if user = "" then ()
+  else
+    let payload =
+      Js.Json.stringify
+        (json_obj
+           [ ("ClientId", Js.Json.string client_id)
+           ; ("Username", Js.Json.string user) ])
+    in
+    cognito_call ctx "ForgotPassword" payload (fun _ ->
+        set_tab ctx (Reset_confirm user);
+        Js.Promise.resolve ())
+
+let reset_submit ctx user =
+  let code = field_value "code"
+  and pass = field_value "password"
+  and confirm = field_value "confirm-password" in
+  if code = "" || pass = "" then ()
+  else if pass <> confirm then
+    fail ctx (I18n.t "account/passwords-do-not-match")
+  else
+    let payload =
+      Js.Json.stringify
+        (json_obj
+           [ ("ClientId", Js.Json.string client_id)
+           ; ("Username", Js.Json.string user)
+           ; ("ConfirmationCode", Js.Json.string code)
+           ; ("Password", Js.Json.string pass) ])
+    in
+    cognito_call ctx "ConfirmForgotPassword" payload (fun _ ->
+        set_tab ctx Login;
+        Js.Promise.resolve ())
+
+let confirm_submit ctx user _next_step =
+  let code = field_value "code" in
+  if code = "" then ()
+  else
+    let payload =
+      Js.Json.stringify
+        (json_obj
+           [ ("ClientId", Js.Json.string client_id)
+           ; ("Username", Js.Json.string user)
+           ; ("ConfirmationCode", Js.Json.string code) ])
+    in
+    cognito_call ctx "ConfirmSignUp" payload (fun _ ->
+        set_tab ctx Login;
+        Js.Promise.resolve ())
+
+let sign_out ctx =
+  Platform.local_storage_remove "id-token";
+  Platform.local_storage_remove "access-token";
+  Platform.local_storage_remove "refresh-token";
+  ignore
+    (Runtime.invoke1 "thread-api/sync-app-state"
+       (Wire.Map
+          [ (Wire.kw "auth/id-token", Wire.String "")
+          ; (Wire.kw "auth/access-token", Wire.String "")
+          ; (Wire.kw "auth/refresh-token", Wire.String "")
+          ]));
+  set_auth ctx (fun _ -> { tab = Login; err = ""; session_user = None })
+
+external atob_ : string -> string = "atob" [@@mel.scope "window"]
+
+(* id-token payload is the middle base64url segment; its
+   cognito:username claim is the signed-in user *)
+let session_username () =
+  match Platform.local_storage_get "id-token" with
+  | None -> None
+  | Some tok -> (
+      match String.split_on_char '.' tok with
+      | [ _; payload; _ ] -> (
+          let b64 =
+            String.map
+              (fun c -> match c with '-' -> '+' | '_' -> '/' | c -> c)
+              payload
+          in
+          let pad =
+            match String.length b64 mod 4 with
+            | 2 -> "==" | 3 -> "=" | _ -> ""
+          in
+          try
+            match Js.Json.decodeObject (Js.Json.parseExn (atob_ (b64 ^ pad))) with
+            | Some o -> (
+                match Js.Dict.get o "cognito:username" with
+                | Some v -> Js.Json.decodeString v
+                | None -> (
+                    match Js.Dict.get o "username" with
+                    | Some v -> Js.Json.decodeString v
+                    | None -> None))
+            | None -> None
+          with _ -> None)
+      | _ -> None)
+
+let input_row ~key ~id ~name ~type_ ~label ~autocomplete ?(autofocus = false) () =
+  dom ~key ~style_class:"relative w-full flex flex-col gap-3 pb-1"
+    [ dom ~key:"l" ~tag:"label" ~style_class:"text-sm font-medium"
+        ~attrs:[ ("for", id) ] ~text:label []
+    ; dom ~key:"i" ~tag:"input" ~style_class:"ui__input"
+        ~attrs:
+          ([ ("id", id); ("name", name); ("type", type_)
+           ; ("autocomplete", autocomplete); ("required", "") ]
+          @ if autofocus then [ ("autofocus", "") ] else [])
+        []
+    ]
+
+let submit_btn ~key label on_submit =
+  dom ~key ~tag:"button" ~text:label
+    ~style_class:"ui__button ls-btn-primary w-full"
+    ~attrs:[ ("type", "submit") ]
+    ~events:"click"
+    ~on_dom_event:(fun n _ -> if n = "click" then on_submit ())
     []
+
+let back_link ctx =
+  dom ~key:"back" ~tag:"p" ~style_class:"pt-1 text-center"
+    [ dom ~key:"a" ~tag:"a"
+        ~style_class:"text-sm opacity-60 hover:opacity-80 underline"
+        ~text:(I18n.t "account/back-to-login")
+        ~events:"click"
+        ~on_dom_event:(fun n _ -> if n = "click" then set_tab ctx Login)
+        [] ]
+
+let form ~key on_submit children =
+  dom ~key ~tag:"form"
+    ~style_class:"relative flex flex-col justify-center items-center gap-4 w-full"
+    ~attrs:
+      [ ("onsubmit", "return false"); ("novalidate", "")
+      ; ("autocomplete", "off") ]
+    ~events:"submit"
+    ~on_dom_event:(fun n _ -> if n = "submit" then on_submit ())
+    children
+
+let login_panel ctx =
+  form ~key:"f-login"
+    (fun () -> submit ctx)
+    [ input_row ~key:"r-email" ~id:"email" ~name:"email" ~type_:"text"
+        ~label:(I18n.t "account/email") ~autocomplete:"username"
+        ~autofocus:true ()
+    ; input_row ~key:"r-pw" ~id:"password" ~name:"password"
+        ~type_:"password" ~label:(I18n.t "account/password")
+        ~autocomplete:"current-password" ()
+    ; dom ~key:"lg-sub" ~style_class:"w-full"
+        [ submit_btn ~key:"lg-btn" (I18n.t "account/sign-in")
+            (fun () -> submit ctx)
+        ; dom ~key:"lg-foot" ~tag:"p" ~style_class:"pt-4 text-center"
+            [ dom ~key:"f1" ~tag:"span" ~style_class:"text-sm"
+                [ dom ~key:"f1a" ~tag:"span" ~style_class:"opacity-50"
+                    ~text:(I18n.t "account/dont-have-account-question" ^ " ")
+                    []
+                ; dom ~key:"f1b" ~tag:"a"
+                    ~style_class:"underline opacity-60 hover:opacity-80"
+                    ~text:(I18n.t "account/sign-up")
+                    ~events:"click"
+                    ~on_dom_event:(fun n _ ->
+                      if n = "click" then set_tab ctx Signup)
+                    []
+                ; dom ~key:"f1c" ~tag:"br" []
+                ; dom ~key:"f1d" ~tag:"span" ~style_class:"opacity-50"
+                    ~text:(I18n.t "account/or" ^ " ") [] ]
+            ; dom ~key:"f2" ~tag:"a"
+                ~style_class:"text-sm opacity-60 hover:opacity-80 underline"
+                ~text:(I18n.t "encryption/forgot-password-question")
+                ~events:"click"
+                ~on_dom_event:(fun n _ ->
+                  if n = "click" then set_tab ctx Reset_pw)
+                [] ]
+        ]
+    ]
+
+let signup_panel ctx =
+  form ~key:"f-signup" (fun () -> signup_submit ctx)
+    [ input_row ~key:"r-email" ~id:"email" ~name:"email" ~type_:"email"
+        ~label:(I18n.t "account/email") ~autocomplete:"email"
+        ~autofocus:true ()
+    ; input_row ~key:"r-user" ~id:"username" ~name:"username"
+        ~type_:"text" ~label:(I18n.t "account/username")
+        ~autocomplete:"username" ()
+    ; input_row ~key:"r-pw" ~id:"password" ~name:"password"
+        ~type_:"password" ~label:(I18n.t "account/password")
+        ~autocomplete:"new-password" ()
+    ; input_row ~key:"r-pw2" ~id:"confirm-password" ~name:"confirm-password"
+        ~type_:"password" ~label:(I18n.t "account/confirm-password")
+        ~autocomplete:"new-password" ()
+    ; dom ~key:"su-sub" ~style_class:"w-full"
+        [ submit_btn ~key:"su-btn" (I18n.t "account/create-account")
+            (fun () -> signup_submit ctx) ]
+    ; back_link ctx
+    ]
+
+let reset_panel ctx =
+  form ~key:"f-reset" (fun () -> forgot_submit ctx)
+    [ input_row ~key:"r-email" ~id:"email" ~name:"email" ~type_:"email"
+        ~label:(I18n.t "account/enter-email") ~autocomplete:"email"
+        ~autofocus:true ()
+    ; dom ~key:"rs-sub" ~style_class:"w-full"
+        [ submit_btn ~key:"rs-btn" (I18n.t "account/send-code")
+            (fun () -> forgot_submit ctx) ]
+    ; back_link ctx
+    ]
+
+let reset_confirm_panel ctx user =
+  form ~key:"f-rset2" (fun () -> reset_submit ctx user)
+    [ input_row ~key:"r-code" ~id:"code" ~name:"code" ~type_:"text"
+        ~label:(I18n.t "account/enter-code") ~autocomplete:"off"
+        ~autofocus:true ()
+    ; input_row ~key:"r-pw" ~id:"password" ~name:"password"
+        ~type_:"password" ~label:(I18n.t "account/password")
+        ~autocomplete:"new-password" ()
+    ; input_row ~key:"r-pw2" ~id:"confirm-password" ~name:"confirm-password"
+        ~type_:"password" ~label:(I18n.t "account/confirm-password")
+        ~autocomplete:"new-password" ()
+    ; dom ~key:"rc-sub" ~style_class:"w-full"
+        [ submit_btn ~key:"rc-btn" (I18n.t "account/reset-password")
+            (fun () -> reset_submit ctx user) ]
+    ; back_link ctx
+    ]
+
+let confirm_panel ctx user next_step =
+  form ~key:"f-confirm" (fun () -> confirm_submit ctx user next_step)
+    [ dom ~key:"cc-hint" ~tag:"p" ~style_class:"pb-2 opacity-60"
+        ~text:(I18n.t "account/code-on-the-way-tip") []
+    ; input_row ~key:"r-code" ~id:"code" ~name:"code" ~type_:"text"
+        ~label:(I18n.t "account/enter-code") ~autocomplete:"off"
+        ~autofocus:true ()
+    ; dom ~key:"cc-sub" ~style_class:"w-full"
+        [ submit_btn ~key:"cc-btn" (I18n.t "account/confirm")
+            (fun () -> confirm_submit ctx user next_step) ]
+    ; back_link ctx
+    ]
+
+let panel ctx (a : auth_ui) : t =
+  let title, inner =
+    match a.session_user with
+    | Some u ->
+        ( I18n.t "ui/login"
+        , [ dom ~key:"lg-in" ~style_class:"w-full text-center"
+              [ dom ~key:"p" ~tag:"p" ~style_class:"mb-4"
+                  ~text:(I18n.t1 "account/already-logged-in-as" u) []
+              ; dom ~key:"so" ~tag:"button"
+                  ~text:(I18n.t "account/sign-out")
+                  ~style_class:"ui__button ls-btn w-full"
+                  ~events:"click"
+                  ~on_dom_event:(fun n _ ->
+                    if n = "click" then sign_out ctx)
+                  [] ] ] )
+    | None -> (
+        match a.tab with
+        | Login -> (I18n.t "ui/login", [ login_panel ctx ])
+        | Signup -> (I18n.t "account/sign-up", [ signup_panel ctx ])
+        | Reset_pw -> (I18n.t "account/reset-password", [ reset_panel ctx ])
+        | Reset_confirm user ->
+            (I18n.t "account/reset-password", [ reset_confirm_panel ctx user ])
+        | Confirm_code (user, next_step) ->
+            (I18n.t "account/confirm", [ confirm_panel ctx user next_step ]))
+  in
+  Logseq_dom.fragment
+    (dom ~key:"lg-t" ~tag:"h2" ~style_class:"ui__dialog-title ls-auth-title"
+       ~text:title []
+     :: (if a.err = "" then []
+         else
+           [ dom ~key:"err" ~tag:"div"
+               ~style_class:"ui__alert ls-login-error" ~text:a.err [] ])
+     @ inner)
 
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
-  let node =
-    dom ~key:"login" ~tag:"form" ~style_class:"cp__user-login"
-      ~attrs:[ ("onsubmit", "return false"); ("novalidate", "") ]
-      ~events:"submit"
-      ~on_dom_event:(fun n _ -> if n = "submit" then submit ())
-      [ dom ~key:"lg-t" ~tag:"h2"
-          ~style_class:"ui__dialog-title" ~text:T.login_title []
-      ; field ~key:"lg-u" ~name:"username" ~type_:"text"
-          ~placeholder:T.login_username ~autofocus:true
-      ; field ~key:"lg-p" ~name:"password" ~type_:"password"
-          ~placeholder:T.login_password ~autofocus:false
-      ; dom ~key:"lg-s" ~tag:"button" ~text:T.submit
-          ~style_class:"ui__button ls-btn-primary"
-          ~attrs:[ ("type", "submit") ]
-          ~events:"click"
-          ~on_dom_event:(fun n _ -> if n = "click" then submit ())
-          []
-      ]
-  in
-  ignore
-    (Web_dom.set_timeout_id
-       (fun () ->
-         match
-           Web_dom.query_selector ".cp__user-login input[name=username]"
-         with
-         | Some el -> Web_dom.el_focus el
-         | None -> ())
-       32);
-  node ctx parent
+  Signal.update (auth_st ctx) (fun _ ->
+      { tab = Login; err = ""; session_user = session_username () });
+  Logseq_dom.dyn ~equal:( == )
+    (fun a -> dom ~key:"login" ~style_class:"cp__user-login" [ panel ctx a ])
+    (auth_st ctx).Signal.state_signal ctx parent

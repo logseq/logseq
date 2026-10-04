@@ -36,7 +36,7 @@ let content_config =
 let indent_unit = "\t"
 
 let repo () =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | Some r -> r
   | None -> "logseq_db_Demo"
 

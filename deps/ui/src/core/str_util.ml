@@ -81,11 +81,6 @@ let replace_all s ~pat ~rep =
     Buffer.contents buf
 
 (* "\"en\"" -> "en" — storage values are edn-ish strings *)
-let unquote s =
-  let n = String.length s in
-  if n >= 2 && s.[0] = '"' && s.[n - 1] = '"' then String.sub s 1 (n - 2)
-  else s
-
 (* "ws://host///" -> "ws://host" *)
 let strip_trailing_slashes s =
   let n = String.length s in

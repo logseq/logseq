@@ -40,7 +40,7 @@ let btn_base =
    ring-offset-background transition-colors focus-visible:outline-none \
    focus-visible:ring-2 focus-visible:ring-ring \
    focus-visible:ring-offset-2 disabled:pointer-events-none \
-   disabled:opacity-50 select-none h-7 rounded px-3 py-1"
+   disabled:opacity-50 select-none"
 
 let input_cls =
   "ui__input flex h-10 w-full rounded-md border border-input \
@@ -167,7 +167,7 @@ let submit ctx =
              | None -> W.Int (Option.get cur.page_db_id)
            in
            let repo =
-             match !Runtime.current_repo with
+             match (Runtime.model ()).Model.repo with
              | Some r -> r
              | None -> "logseq_db_Demo"
            in
@@ -219,8 +219,8 @@ let ghost_btn () =
   dom ~key:"pub-cancel" ~tag:"button"
     ~style_class:
       (btn_base
-     ^ " hover:bg-secondary/70 hover:text-secondary-foreground \
-        active:opacity-80 as-ghost")
+     ^ " h-10 rounded px-4 py-2 hover:bg-secondary/70 \
+        hover:text-secondary-foreground active:opacity-80 as-ghost")
     ~attrs:[ ("type", "button") ] ~events:"click"
     ~on_dom_event:(fun n _ ->
       if n = "click" then Dialogs_state.close_top ())
@@ -252,8 +252,9 @@ let toggle_pw ctx =
         (dom ~key:"pub-eye" ~tag:"button"
            ~style_class:
              (btn_base
-            ^ " hover:bg-secondary/70 hover:text-secondary-foreground \
-               active:opacity-80 as-ghost absolute right-1")
+            ^ " h-8 rounded px-3 py-1 hover:bg-secondary/70 \
+               hover:text-secondary-foreground active:opacity-80 as-ghost \
+               absolute right-1")
            ~attrs:[ ("type", "button"); ("style", "top: 6px") ]
            ~events:"click"
            ~on_dom_event:(fun n _ ->
@@ -298,7 +299,8 @@ let body (_ms : Model.t Signal.signal) : t =
           ; dom ~key:"pub-submit" ~tag:"button"
               ~style_class:
                 (btn_base
-               ^ " bg-primary text-primary-foreground hover:bg-primary/90")
+               ^ " h-10 rounded px-4 py-2 bg-primary \
+                  text-primary-foreground hover:bg-primary/90")
               ~attrs_signal_v:(Logseq_dom.reactive_attrs
                    (fun (s : pst) ->
                      [ ("type", "submit"); ("autofocus", "") ]

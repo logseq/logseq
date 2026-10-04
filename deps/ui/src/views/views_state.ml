@@ -1,5 +1,8 @@
-(* Per-instance view state. A `view` is mounted inside a DOM container;
-   its data lives here and re-renders on sync-db-changes / user actions. *)
+(* Per-instance view state. A `view` is a mounted LUI element subtree;
+   its data lives in a single immutable `vstate` carried by a Signal.state
+   — every mutation publishes through `update` so the declarative tree
+   repaints. Instances are created by Views_view.view at mount time and
+   disposed with their mount scope. *)
 
 open Promise_ext
 module W = Wire
@@ -31,95 +34,109 @@ type inst_kind =
   | KPropertyPage of string (* owner property page uuid *)
   | KQuery of { block_uuid : string }
 
+(* All view data + view-local UI state. Whole-record updates publish a new
+   snapshot; collections that load wholesale (blocks, all_props,
+   ref_titles) swap in a fresh table so renders see a consistent map. *)
+type vstate =
+  { view_uuid : string (* selected view entity uuid *)
+  ; views : Views_wire.view_ent list
+  ; view_ent : Views_wire.view_ent option
+  ; sorting : sort_item list
+  ; filters_or : bool
+  ; filters : filter_clause list
+  ; input : string
+  ; search_open : bool
+  ; group_by : string option
+  ; group_sort_by : string option
+  ; group_desc : bool option
+  ; display_type : string (* ident tail: "table" | "list" | "gallery" *)
+  ; selected : Sset.t
+  ; hidden : Sset.t
+  ; ordered : string list
+  ; pinned : Sset.t
+  ; columns : column list
+  ; data : Views_wire.view_data
+  ; blocks : (string, W.t) Hashtbl.t (* uuid -> block map *)
+  ; loading : bool
+  ; collapsed_groups : Sset.t
+  ; query_rows : string list (* query-result feature input *)
+  ; query_error : string option
+  ; asset_class : bool (* KTagPage owner ident is logseq.class/Asset *)
+  ; query_idents : string list (* property idents from view-data *)
+  ; is_advanced : bool (* datalog query source *)
+  ; query_scalar_rows : W.t list (* non-block query rows *)
+  ; query_view : W.t (* hiccup wire produced by :view fn, Nil none *)
+  ; qsrc : string (* query source text (value block title) *)
+  ; query_block_uuid : string
+        (* logseq.property/query value block uuid — query writes target it *)
+  ; query_editor_open : bool (* raw-source CodeMirror visible *)
+  ; props_loaded : bool
+  ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
+  ; ref_titles : (string, string) Hashtbl.t (* referenced uuid -> title *)
+  }
+
 type inst =
   { id : int
   ; kind : inst_kind
   ; feature : feature
   ; owner : W.t (* [:views] resource owner lookup *)
-  ; mutable container : Web_dom.el (* .ls-view-body mount point *)
-  ; mutable view_uuid : string (* selected view entity uuid *)
-  ; mutable views : Views_wire.view_ent list
-  ; mutable view_ent : Views_wire.view_ent option
-  ; mutable sorting : sort_item list
-  ; mutable filters_or : bool
-  ; mutable filters : filter_clause list
-  ; mutable input : string
-  ; mutable search_open : bool
-  ; mutable group_by : string option
-  ; mutable group_sort_by : string option
-  ; mutable group_desc : bool option
-  ; mutable display_type : string (* ident tail: "table" | "list" | "gallery" *)
-  ; mutable selected : Sset.t
-  ; mutable hidden : Sset.t
-  ; mutable ordered : string list
-  ; mutable pinned : Sset.t
-  ; mutable columns : column list
-  ; mutable data : Views_wire.view_data
-  ; mutable blocks : (string, W.t) Hashtbl.t (* uuid -> block map *)
-  ; mutable loading : bool
-  ; mutable collapsed_groups : Sset.t
-  ; mutable query_rows : string list (* query-result feature input *)
-  ; mutable query_error : string option
-  ; mutable asset_class : bool (* KTagPage owner ident is logseq.class/Asset *)
-  ; mutable query_idents : string list (* property idents from view-data *)
-  ; mutable is_advanced : bool (* datalog query source *)
-  ; mutable query_scalar_rows : W.t list (* non-block query rows *)
-  ; mutable query_view : W.t (* hiccup wire produced by :view fn, Nil none *)
-  ; mutable qsrc : string (* query source text (value block title) *)
-  ; mutable query_block_uuid : string
-        (* logseq.property/query value block uuid — query writes target it *)
-  ; mutable query_editor_open : bool
-        (* raw-source CodeMirror visible — page remounts re-open it on the
-           fresh shell so a rebuild never silently loses the editor *)
-  ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
-  ; mutable props_loaded : bool
-  ; ref_titles : (string, string) Hashtbl.t (* referenced uuid -> title *)
+  ; st : vstate Signal.state
+  }
+
+let empty_vstate () : vstate =
+  { view_uuid = ""
+  ; views = []
+  ; view_ent = None
+  ; sorting = []
+  ; filters_or = false
+  ; filters = []
+  ; input = ""
+  ; search_open = false
+  ; group_by = None
+  ; group_sort_by = None
+  ; group_desc = None
+  ; display_type = "table"
+  ; selected = Sset.empty
+  ; hidden = Sset.empty
+  ; ordered = []
+  ; pinned = Sset.empty
+  ; columns = []
+  ; data = Views_wire.VEmpty
+  ; blocks = Hashtbl.create 64
+  ; loading = true
+  ; collapsed_groups = Sset.empty
+  ; query_rows = []
+  ; query_error = None
+  ; query_idents = []
+  ; is_advanced = false
+  ; query_scalar_rows = []
+  ; query_view = W.Nil
+  ; qsrc = ""
+  ; query_block_uuid = ""
+  ; query_editor_open = false
+  ; props_loaded = false
+  ; all_props = Hashtbl.create 17
+  ; ref_titles = Hashtbl.create 8
+  ; asset_class = false
   }
 
 let next_id = ref 0
 
-let make ~kind ~feature ~owner ~container : inst =
+let make ~sched ~kind ~feature ~owner : inst =
   incr next_id;
   { id = !next_id
   ; kind
-    ; feature
-    ; owner
-    ; container
-    ; view_uuid = ""
-    ; views = []
-    ; view_ent = None
-    ; sorting = []
-    ; filters_or = false
-    ; filters = []
-    ; input = ""
-    ; search_open = false
-    ; group_by = None
-    ; group_sort_by = None
-    ; group_desc = None
-    ; display_type = "table"
-    ; selected = Sset.empty
-    ; hidden = Sset.empty
-    ; ordered = []
-    ; pinned = Sset.empty
-    ; columns = []
-    ; data = Views_wire.VEmpty
-    ; blocks = Hashtbl.create 64
-    ; loading = true
-    ; collapsed_groups = Sset.empty
-    ; query_rows = []
-    ; query_error = None
-    ; query_idents = []
-    ; is_advanced = false
-    ; query_scalar_rows = []
-    ; query_view = W.Nil
-    ; qsrc = ""
-    ; query_block_uuid = ""
-    ; query_editor_open = false
-    ; all_props = Hashtbl.create 17
-    ; props_loaded = false
-    ; ref_titles = Hashtbl.create 8
-    ; asset_class = false
-    }
+  ; feature
+  ; owner
+  ; st = Signal.state sched (empty_vstate ())
+  }
+
+let get inst : vstate = Signal.get inst.st.Signal.state_signal
+
+(* publish a new vstate — the only way view state changes *)
+let set inst (s : vstate) = Runtime.signal_set inst.st s
+
+let update inst f = set inst (f (get inst))
 
 (* -- wire encode/decode of persisted table state -- *)
 
@@ -187,26 +204,27 @@ let filters_to_wire filters or_ =
 
 (* view-data context for the [:view-data uuid ctx] resource *)
 let ctx_of inst : W.t =
+  let s = get inst in
   let base =
     [ (W.kw "feature-type", W.Keyword inst.feature)
-    ; (W.kw "sorting", sorting_to_wire inst.sorting)
-    ; (W.kw "input", W.String inst.input)
+    ; (W.kw "sorting", sorting_to_wire s.sorting)
+    ; (W.kw "input", W.String s.input)
     ]
   in
   let base =
-    match inst.filters with
+    match s.filters with
     | [] -> base
-    | fs -> base @ [ (W.kw "filters", filters_to_wire fs inst.filters_or) ]
+    | fs -> base @ [ (W.kw "filters", filters_to_wire fs s.filters_or) ]
   in
   let base =
-    match inst.group_by with
+    match s.group_by with
     | Some g -> base @ [ (W.kw "group-by-property-ident", W.Keyword g) ]
     | None -> base
   in
   let base =
     (* cljs loaded-view-resource-plan: un-grouped all-pages/class-objects
        are windowed — initial-row-count = min 1000 (ceil viewport/33) *)
-    match inst.feature, inst.group_by with
+    match inst.feature, s.group_by with
     | ("all-pages" | "class-objects"), None ->
         let n =
           Web_dom.win_inner_height /. 33.
@@ -219,57 +237,60 @@ let ctx_of inst : W.t =
     if inst.feature = "query-result" then
       base
       @ [ ( W.kw "query-row-uuids"
-          , W.Array (List.map (fun u -> W.Uuid u) inst.query_rows) ) ]
+          , W.Array (List.map (fun u -> W.Uuid u) s.query_rows) ) ]
     else base
   in
   W.Map base
 
-(* apply persisted view-entity state into the instance *)
-let apply_view_entity inst (v : Views_wire.view_ent) =
-  inst.view_uuid <- v.vu;
-  inst.view_ent <- Some v;
-  inst.display_type <-
-    (match v.vtype with
-     | "logseq.property.view/type.list" -> "list"
-     | "logseq.property.view/type.gallery" -> "gallery"
-     | _ -> "table");
-  inst.group_by <-
-    (match v.vgroup_by with
-     | Some g -> Some g
-     | None when inst.display_type = "list" -> Some "block/page"
-     | None -> None);
-  inst.sorting <-
-    (match v.vsorting with
-     | Some w -> sorting_of_wire w
-     | None -> [ { s_id = "block/updated-at"; s_asc = false } ]);
-  (match v.vfilters with
-   | Some w ->
-       let fs, or_ = filters_of_wire w in
-       inst.filters <- fs;
-       inst.filters_or <- or_
-   | None ->
-       inst.filters <- [];
-       inst.filters_or <- false);
-  inst.hidden <-
-    List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vhidden;
-  inst.ordered <- v.vordered;
-  inst.pinned <-
-    List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vpinned;
-  inst.group_sort_by <- v.vgroup_sort_by;
-  inst.group_desc <- v.vgroup_desc
+(* apply persisted view-entity state — pure vstate -> vstate *)
+let apply_view_entity s (v : Views_wire.view_ent) : vstate =
+  let display_type =
+    match v.vtype with
+    | "logseq.property.view/type.list" -> "list"
+    | "logseq.property.view/type.gallery" -> "gallery"
+    | _ -> "table"
+  in
+  let fs, or_ =
+    match v.vfilters with Some w -> filters_of_wire w | None -> ([], false)
+  in
+  { s with
+    view_uuid = v.vu
+  ; view_ent = Some v
+  ; display_type
+  ; group_by =
+      (match v.vgroup_by with
+       | Some g -> Some g
+       | None when display_type = "list" -> Some "block/page"
+       | None -> None)
+  ; sorting =
+      (match v.vsorting with
+       | Some w -> sorting_of_wire w
+       | None -> [ { s_id = "block/updated-at"; s_asc = false } ])
+  ; filters = fs
+  ; filters_or = or_
+  ; hidden =
+      List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vhidden
+  ; ordered = v.vordered
+  ; pinned =
+      List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vpinned
+  ; group_sort_by = v.vgroup_sort_by
+  ; group_desc = v.vgroup_desc
+  }
 
 let display_title (v : Views_wire.view_ent) =
   if String.trim v.vtitle = "" then I18n.new_view else v.vtitle
 
 (* persisted write helpers *)
 let persist_sorting inst =
-  Views_db.set_view_property inst.view_uuid "logseq.property.table/sorting"
-    (sorting_to_wire inst.sorting)
+  let s = get inst in
+  Views_db.set_view_property s.view_uuid "logseq.property.table/sorting"
+    (sorting_to_wire s.sorting)
     (fun () -> ())
 
 let persist_filters inst =
-  Views_db.set_view_property inst.view_uuid "logseq.property.table/filters"
-    (filters_to_wire inst.filters inst.filters_or)
+  let s = get inst in
+  Views_db.set_view_property s.view_uuid "logseq.property.table/filters"
+    (filters_to_wire s.filters s.filters_or)
     (fun () -> ())
 
 (* property ident -> :db/id via thread-api/pull [:db/id] ident *)
@@ -284,47 +305,51 @@ let resolve_property_id ident f =
   |> ignore
 
 let persist_group_by inst =
-  match inst.group_by with
+  let s = get inst in
+  match s.group_by with
   | Some g ->
       resolve_property_id g (fun id ->
           match id with
           | Some id ->
-              Views_db.set_view_property inst.view_uuid
+              Views_db.set_view_property s.view_uuid
                 "logseq.property.view/group-by-property" (W.Int id)
                 (fun () -> ())
           | None -> ())
   | None ->
-      Views_db.remove_view_property inst.view_uuid
+      Views_db.remove_view_property s.view_uuid
         "logseq.property.view/group-by-property" (fun () -> ())
 
 let persist_hidden inst =
-  Views_db.set_view_property inst.view_uuid
+  let s = get inst in
+  Views_db.set_view_property s.view_uuid
     "logseq.property.table/hidden-columns"
-    (W.Array (List.map (fun k -> W.Keyword k) (Sset.elements inst.hidden)))
+    (W.Array (List.map (fun k -> W.Keyword k) (Sset.elements s.hidden)))
     (fun () -> ())
 
 let persist_display_type inst =
-  Views_db.set_view_property inst.view_uuid "logseq.property.view/type"
-    (W.Keyword ("logseq.property.view/type." ^ inst.display_type))
+  let s = get inst in
+  Views_db.set_view_property s.view_uuid "logseq.property.view/type"
+    (W.Keyword ("logseq.property.view/type." ^ s.display_type))
     (fun () -> ())
 
 let persist_group_sort_by inst v =
+  let s = get inst in
   match v with
   | Some id ->
-      Views_db.set_view_property inst.view_uuid
+      Views_db.set_view_property s.view_uuid
         "logseq.property.view/sort-groups-by-property"
         (W.Int id) (fun () -> ())
   | None ->
-      Views_db.remove_view_property inst.view_uuid
+      Views_db.remove_view_property s.view_uuid
         "logseq.property.view/sort-groups-by-property" (fun () -> ())
 
 let persist_group_desc inst d =
-  inst.group_desc <- Some d;
-  Views_db.set_view_property inst.view_uuid
+  update inst (fun s -> { s with group_desc = Some d });
+  Views_db.set_view_property (get inst).view_uuid
     "logseq.property.view/sort-groups-desc?" (W.Bool d) (fun () -> ())
 
 let persist_group_sort_by_ident inst ident f =
-  inst.group_sort_by <- Some ident;
+  update inst (fun s -> { s with group_sort_by = Some ident });
   resolve_property_id ident (fun id ->
       persist_group_sort_by inst id;
       f ())
@@ -342,10 +367,11 @@ type ops =
   ; o_title_of_uuid : inst -> string -> string
   }
 
-module Ops = State_cell.Cell (struct
-  type t = ops
-  let name = "views: ops"
-end)
+let ops_ref : ops option ref = ref None
 
-let ops = Ops.get
-let install_ops = Ops.install
+let ops () =
+  match !ops_ref with
+  | Some o -> o
+  | None -> failwith "views: ops not installed"
+
+let install_ops o = ops_ref := Some o

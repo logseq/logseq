@@ -11,21 +11,21 @@ let demo_graph = "Demo"
 let apply_storage_env () =
   let lang =
     match Platform.local_storage_get "preferred-language" with
-    | Some v -> Str_util.unquote v
+    | Some v -> Platform.storage_unquote v
     | None -> "en"
   in
   Web_dom.doc_set_lang lang;
   let system =
     (* cljs state.cljs :ui/system-theme? defaults to true *)
     match Platform.local_storage_get "system-theme?" with
-    | Some v -> Str_util.unquote v = "true"
+    | Some v -> Platform.storage_unquote v = "true"
     | None -> true
   in
   let theme =
     if system then if Web_dom.prefers_dark () then "dark" else "light"
     else
       match Platform.local_storage_get "theme" with
-      | Some v -> Str_util.unquote v
+      | Some v -> Platform.storage_unquote v
       | None -> "light"
   in
   Settings_view.apply_theme_dom theme;
@@ -33,7 +33,7 @@ let apply_storage_env () =
     (* cljs storage key is (name :ui/radix-color) = "radix-color" *)
     match Platform.local_storage_get "radix-color" with
     | Some v -> (
-        let v = Str_util.unquote v in
+        let v = Platform.storage_unquote v in
         if String.length v > 0 && String.get v 0 = ':' then
           String.sub v 1 (String.length v - 1)
         else v)
@@ -42,7 +42,7 @@ let apply_storage_env () =
   Web_dom.doc_set_data "color" accent;
   (match Platform.local_storage_get "editor-font" with
    | Some v -> (
-       match Edn.parse (Str_util.unquote v) with
+       match Edn.parse (Platform.storage_unquote v) with
        | Wire.Map kvs ->
            let m = Wire.Map kvs in
            (match Wire.get m "type" with
@@ -57,7 +57,7 @@ let apply_storage_env () =
    | None -> ());
   let wide =
     match Platform.local_storage_get "wide-mode" with
-    | Some v -> Str_util.unquote v = "true" || v = "true"
+    | Some v -> Platform.storage_unquote v = "true" || v = "true"
     | None -> false
   in
   if wide then

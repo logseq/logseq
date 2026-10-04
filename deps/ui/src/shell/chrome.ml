@@ -26,9 +26,14 @@ let skip_to_main =
 (* cljs shui/button :ghost :size :sm — tooltip-wrapped buttons carry no
    title attr; extra classes sort alphabetically into the class list *)
 let ghost_btn_cls ?(mid = "") ?(tail = "") () =
-  Ui_parts.ghost_btn_cls
-    ~extra:(mid ^ "box-content h-6 overflow-hidden p-1 w-6 " ^ tail)
-    ()
+  "active:opacity-80 as-ghost box-content " ^ mid
+  ^ "cursor-pointer disabled:opacity-50 disabled:pointer-events-none \
+     focus-visible:outline-none focus-visible:ring-2 \
+     focus-visible:ring-offset-2 focus-visible:ring-ring font-medium gap-1 \
+     h-6 hover:bg-secondary/70 hover:text-secondary-foreground inline-flex \
+     items-center justify-center overflow-hidden p-1 ring-offset-background \
+     rounded-md select-none text-sm " ^ tail
+  ^ "transition-colors ui__button w-6 whitespace-nowrap"
 
 let icon_btn ~key ~id ~cls ~icon ~on_click =
   Logseq_dom.dom ~key ~tag:"button" ~id
@@ -62,7 +67,8 @@ let dots_button =
                  (Some
                     ( Web_dom.rect_right r
                     , Web_dom.rect_bottom r +. 4.
-                    , true )))
+                    , true
+                    , None )))
         | None -> ())
     [ Icons.icon ~size:20. ~cls:"" "dots" ]
 
@@ -75,48 +81,43 @@ let rtc_tx_text (r : Model.rtc) =
     (tx r.rtc_local_tx) (tx r.rtc_remote_tx)
 
 let rtc_indicator (ms : Model.t Signal.signal) : t =
-  let rs = Signal.map (fun (m : Model.t) -> m.rtc) ms in
-  let cls_of (r : Model.rtc) =
-    let open_ = Platform.online () && r.rtc_lock in
-    let syncing = open_ && r.rtc_pending_server > 0 in
-    let idle =
-      open_ && r.rtc_pending_local = 0
-      && r.rtc_pending_asset = 0 && r.rtc_pending_server = 0
-    in
-    let queuing =
-      r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
-    in
-    "cloud ui__button"
-    ^ (if open_ then " on" else "")
-    ^ (if syncing then " syncing" else "")
-    ^ (if idle then " idle" else "")
-    ^ (if queuing then " queuing" else "")
-  in
-  Logseq_dom.dom ~key:"rtc"
-    ~style_class_signal:
-      (Logseq_dom.class_signal rs (function
-        | None -> "hidden"
-        | Some _ -> "cp__rtc-sync"))
-    [ Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
-        ~attrs:[ ("data-testid", "rtc-tx") ]
-        ~text_signal:
-          (Logseq_dom.reactive_text
-             (function None -> "" | Some r -> rtc_tx_text r)
-             rs)
-        []
-    ; Logseq_dom.dom ~key:"rtc-ind"
-        ~style_class:
-          "cp__rtc-sync-indicator flex flex-row items-center gap-1"
-        [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
-            ~style_class_signal:
-              (Logseq_dom.class_signal rs (function
-                | None -> "cloud ui__button"
-                | Some r -> cls_of r))
-            ~attrs:[ ("type", "button"); ("aria-label", "rtc sync") ]
-            [ Logseq_dom.dom ~key:"rtc-i" ~tag:"i"
-                ~style_class:"ti ti-cloud" [] ]
-        ]
-    ]
+  dyn ~equal:( = ) (fun (r : Model.rtc option) ->
+      match r with
+      | None -> Logseq_dom.dom ~key:"rtc-off" ~style_class:"hidden" []
+      | Some r ->
+          let open_ = Platform.online () && r.rtc_lock in
+          let syncing = open_ && r.rtc_pending_server > 0 in
+          let idle =
+            open_ && r.rtc_pending_local = 0
+            && r.rtc_pending_asset = 0 && r.rtc_pending_server = 0
+          in
+          let queuing =
+            r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
+          in
+          let cls =
+            "cloud ui__button"
+            ^ (if open_ then " on" else "")
+            ^ (if syncing then " syncing" else "")
+            ^ (if idle then " idle" else "")
+            ^ (if queuing then " queuing" else "")
+          in
+          Logseq_dom.dom ~key:"rtc" ~style_class:"cp__rtc-sync"
+            [ Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
+                ~attrs:[ ("data-testid", "rtc-tx") ]
+                ~text:(rtc_tx_text r) []
+            ; Logseq_dom.dom ~key:"rtc-ind"
+                ~style_class:
+                  "cp__rtc-sync-indicator flex flex-row items-center \
+                   gap-1"
+                [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
+                    ~style_class:cls
+                    ~attrs:
+                      [ ("type", "button"); ("aria-label", "rtc sync") ]
+                    [ Logseq_dom.dom ~key:"rtc-i" ~tag:"i"
+                        ~style_class:"ti ti-cloud" [] ]
+                ]
+            ])
+    (Signal.map (fun (m : Model.t) -> m.rtc) ms)
 
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
@@ -268,7 +269,9 @@ let main_content (ms : Model.t Signal.signal) =
     ; Logseq_dom.dom ~key:"main-content" ~id:"main-content-container"
         ~style_class:
           "scrollbar-spacing w-full flex justify-center flex-row outline-none relative"
-        ~attrs:[ ("data-is-margin-less-pages", "false") ]
+        ~attrs_signal_v:
+          (Logseq_dom.attrs_signal ms (fun (_ : Model.t) ->
+               [ ("data-is-margin-less-pages", "false") ]))
         [ Logseq_dom.dom ~key:"main-inner"
             ~style_class:"cp__sidebar-main-content"
             ~attrs_signal_v:
@@ -283,20 +286,17 @@ let main_content (ms : Model.t Signal.signal) =
                        ("data-is-full-width", "true") :: marginless
                    | _ -> marginless))
             [ Logseq_dom.dom ~key:"content-wrap"
-                ~style_class_signal:
-                  (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-                       (* cljs container.cljs: div.mx-auto.pb-24 around
-                          main-content; home/margin-less routes keep an
-                          empty class *)
-                       match m.route with
-                       | Model.Journals | Model.Home -> ""
-                       | _ -> "mx-auto pb-24"))
                 ~attrs_signal_v:
                   (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
+                       (* cljs container.cljs: div.mx-auto.pb-24 around
+                          main-content; home/margin-less routes keep an
+                          empty class + 0 margin *)
                        match m.route with
                        | Model.Journals | Model.Home ->
                            [ ("style", "margin-bottom: 0") ]
-                       | _ -> [ ("style", "margin-bottom: 120px") ]))
+                       | _ ->
+                           [ ("class", "mx-auto pb-24")
+                           ; ("style", "margin-bottom: 120px") ]))
                 [ Page.region ms ]
             ]
         ]
@@ -322,6 +322,13 @@ let overlays (ms : Model.t Signal.signal) =
              per-publish deep [=] on the whole route page record *)
           a.page_menu = b.page_menu && a.confirm = b.confirm
           && a.data_gen = b.data_gen
+          && List.map
+               (fun (p : Model.page) -> (p.page_uuid, p.page_journal_day))
+               a.journals
+             = List.map
+                 (fun (p : Model.page) ->
+                   (p.page_uuid, p.page_journal_day))
+                 b.journals
           && Option.map
                (fun (p : Model.page) ->
                  ( p.page_uuid

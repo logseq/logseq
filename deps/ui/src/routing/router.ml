@@ -149,8 +149,9 @@ let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
 let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   (let* blocks = fetch_refs_blocks p in
   Js.Promise.resolve
-    (if not (is_stale ()) then
-       Runtime.send (Action.Refs_loaded blocks)))
+    (if not (is_stale ()) then (
+       Runtime.send (Action.Refs_loaded blocks);
+       Outliner_ops.fetch_ref_group_parents ~stale:is_stale blocks)))
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("get-block-refs failed", e);
          Js.Promise.resolve ())
@@ -178,14 +179,14 @@ let load_journals () =
   let* arr = Js.Promise.all (Array.of_list (List.map collect pages)) in
   let* js = Js.Promise.resolve (Array.to_list arr) in
   Js.Promise.resolve
-    (match !Runtime.current_route with
-     | Some (Model.Journals | Model.Home) ->
+    (match Runtime.route () with
+     | Model.Journals | Model.Home ->
          Runtime.send (Action.Journals_loaded js)
      | _ -> ()))
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("load_journals failed", e);
-         (match !Runtime.current_route with
-          | Some (Model.Journals | Model.Home) ->
+         (match Runtime.route () with
+          | Model.Journals | Model.Home ->
               Runtime.send Action.Page_load_failed
           | _ -> ());
          Js.Promise.resolve ())
@@ -198,7 +199,7 @@ let load_journals () =
 
 (* drop a send when the route moved on while the fetch was in-flight —
    otherwise a slow stale load overwrites the page the user navigated to *)
-let stale (route : Model.route) = !Runtime.current_route <> Some route
+let stale (route : Model.route) = Runtime.route () <> route
 
 (* routes that already committed a route_page — a same-route reload can
    race a mid-apply sync tx and read the page as missing; that transient
@@ -212,7 +213,7 @@ let loaded_route : Model.route option ref = ref None
 let loading_route : Model.route option ref = ref None
 
 let stale_page (p : Model.page) () =
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some c -> c.Model.page_uuid <> p.Model.page_uuid
   | None -> true
 
@@ -323,8 +324,8 @@ let load_home () =
       load_journals ())
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("load_home failed", e);
-         (match !Runtime.current_route with
-          | Some Model.Home -> Runtime.send Action.Page_load_failed
+         (match Runtime.route () with
+          | Model.Home -> Runtime.send Action.Page_load_failed
           | _ -> ());
          Js.Promise.resolve ())
 
@@ -395,8 +396,8 @@ let load_block_zoom uuid =
                    zoom target is no longer routed *)
                 if
                   gen = !Runtime.load_gen
-                  && !Runtime.current_route
-                     = Some (Model.Block_zoom uuid)
+                  && Runtime.route ()
+                     = Model.Block_zoom uuid
                 then (
                   Editor_state.clear_overrides ();
                   loaded_route
@@ -444,8 +445,8 @@ let load_block_zoom uuid =
                                ("load_block_zoom parents failed", e);
                              if
                                gen = !Runtime.load_gen
-                               && !Runtime.current_route
-                                  = Some (Model.Block_zoom uuid)
+                               && Runtime.route ()
+                                  = Model.Block_zoom uuid
                              then (
                                if
                                  !loaded_route
@@ -506,10 +507,10 @@ let load_route (route : Model.route) =
 let resolve () =
   Platform.perf_mark "router:resolve";
   let route = parse_hash () in
-  (match !Runtime.current_route with
-  | Some r when r = route ->
+  (match Runtime.route () with
+  | r when r = route ->
       (* our own set_location_hash (or a repeat hashchange) for the route
-         already shown — Navigate_to would blank route_page/current_page
+         already shown — Navigate_to would blank route_page
          while the same data refetches; just refresh in place. A load
          for this same route already in flight (the push's second
          resolve) is skipped entirely — the dedupe clears on commit *)
@@ -547,13 +548,11 @@ let reload () =
   reload_timer :=
     Web_dom.set_timeout_id
       (fun () ->
-        match !Runtime.current_route with
-        | Some r -> load_route r
-        | None -> resolve ())
+        load_route (Runtime.route ()))
       30
 
 let init () =
-  Runtime.nav_load_done := (fun () -> loading_route := None);
+  Runtime.hooks.nav_load_done <- (fun () -> loading_route := None);
   (* the cheap side-fetches a delta-spliced refresh still needs — linked
      refs plus the unlinked section's exists/list checks *)
   Runtime.refresh_page_side :=
@@ -565,13 +564,13 @@ let init () =
   (* delta-spliced journals update: the owning journal's linked refs
      still need their cheap refresh (a block-title edit can create or
      remove a mention) — refetch just that page's refs and republish *)
-  Runtime.refresh_journal_side :=
+  Runtime.hooks.refresh_journal_side <-
     (fun p ->
       ignore
         ((let* refs = fetch_refs_blocks p in
           Js.Promise.resolve
-            (match !Runtime.current_route with
-             | Some (Model.Journals | Model.Home) ->
+            (match Runtime.route () with
+             | Model.Journals | Model.Home ->
                  Runtime.send
                    (Action.Journals_spliced
                       (List.map
@@ -579,7 +578,7 @@ let init () =
                            if j.Model.page_uuid = p.Model.page_uuid then
                              { j with Model.page_linked_refs = refs }
                            else j)
-                         !Runtime.current_journals))
+                         (Runtime.model ()).Model.journals))
              | _ -> ()))
          |> Js.Promise.catch (fun e ->
                 Platform.console_error

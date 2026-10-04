@@ -58,7 +58,7 @@ let emit_timeout : int option ref = ref None
    emitted repo, else the current one — db-sync-start is idempotent and
    no-ops for graphs without a remote id *)
 let start repo =
-  match repo, !Runtime.current_repo with
+  match repo, (Runtime.model ()).Model.repo with
   | Some r, _ -> Rtc_ops.start r
   | None, Some r -> Rtc_ops.start r
   | None, None -> ()
@@ -102,7 +102,7 @@ let notify_logout () = Rtc_ops.stop ()
 
 let () =
   Runtime.rtc_log_handler := on_log;
-  Runtime.rtc_graph_ready := notify_repo_switch
+  Runtime.hooks.rtc_graph_ready <- notify_repo_switch
 
 let init () =
   Web_dom.add_window_listener "online" (fun _ -> on_online ());

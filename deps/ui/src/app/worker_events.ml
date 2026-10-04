@@ -117,10 +117,7 @@ and apply_pending () : unit Js.Promise.t =
   let deltas = Page_delta.drain_deferred () @ !pending_deltas in
   let unknown = !pending_unknown_delta in
   clear_pending_deltas ();
-  let finish () =
-    Views_mount.refresh_query_insts ();
-    Runtime.run_sync_subs ()
-  in
+  let finish () = Runtime.run_sync_subs () in
   match (!Runtime.current_route, !Runtime.current_page, deltas, unknown)
   with
   | Some (Model.Journals | Model.Home), _, _ :: _, false -> (

@@ -94,7 +94,7 @@ let control_tabs ~key ~search_st ~cat ~cat_st ~nums =
               [ ("href", "https://github.com/logseq/marketplace")
               ; ("target", "_blank")
               ]
-            ~text:(Platform.utf8 (t "plugin/contribute")) []
+            ~text:(t "plugin/contribute") []
         ]
     ]
 
