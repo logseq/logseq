@@ -213,6 +213,18 @@ let en_overrides = function
   | "block/remove-this-tag" -> "Remove this tag"
   | "block.macro/embed-deprecated" ->
       "{{embed}} is deprecated. Use '/Node embed' command instead."
+  | "block.macro/query-deprecated" ->
+      "{{query}} is deprecated. Use '/Query' command instead."
+  | "block.macro/namespace-deprecated" ->
+      "{{namespace}} is deprecated. Use the {1} feature instead."
+  | "block/deprecated-quote" ->
+      "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."
+  | "block/deprecated-query-syntax" ->
+      "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."
+  | "block/deprecated-latex-export" ->
+      "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command \
+       instead."
+  | "library/title" -> "Library"
   | "export/copy-or-export-as" -> "Copy / Export as.."
   | "editor/cut" -> "Cut"
   | "editor/delete-selection" -> "Delete selected blocks"

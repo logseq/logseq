@@ -1360,11 +1360,6 @@ a.page-title {
   > .inline.w-full {
     display: block;
   }
-
-  a {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 }
 
 .block-title-wrap.as-heading {
@@ -1503,6 +1498,8 @@ a.page-title {
 .block-control {
   text-decoration: none;
   font-size: 0.875rem;
+  /* cljs text-sm = font-size .875rem + line-height 1.42857 */
+  line-height: 1.42857;
   cursor: default;
   margin-top: 1px;
   min-width: 22px;
@@ -1541,7 +1538,8 @@ a.page-title {
   }
 
   .bullet {
-    border-radius: 50%;
+    /* cljs rounded-full -> Tailwind v4 calc(infinity * 1px) */
+    border-radius: calc(infinity * 1px);
     opacity: 0.8;
     display: block;
     flex: none;
@@ -1856,6 +1854,65 @@ a.page-title {
   }
 }
 
+/* cljs common.css .broken — unresolved [[uuid]]/broken page ref */
+.broken {
+  color: var(--lx-red-11, var(--rx-red-11));
+  cursor: pointer;
+  opacity: 0.9;
+  text-decoration: underline wavy var(--lx-red-11, var(--rx-red-11)) 1px;
+  text-underline-offset: 3px;
+
+  &:hover {
+    color: var(--lx-red-12, var(--rx-red-12));
+  }
+}
+
+/* cljs common.css + block.css — KaTeX surfaces */
+.katex * {
+  border-color: var(--ls-primary-text-color);
+}
+
+.katex .tag {
+  overflow-x: clip;
+}
+
+.katex svg {
+  width: 100%;
+  height: inherit;
+}
+
+html.is-mobile {
+  .block-title-wrap.as-heading {
+    display: inline;
+    font-size: inherit;
+  }
+
+  .katex-display {
+    display: inline;
+    margin: 0;
+  }
+
+  .katex-display > .katex {
+    display: inline-block;
+    text-align: initial;
+  }
+
+  .katex-display > .katex > .katex-html > .tag {
+    position: static;
+    margin-left: 0.5em;
+  }
+
+  .katex svg {
+    width: 100%;
+    height: inherit;
+  }
+}
+
+.math-block,
+.math-block .latex {
+  width: 100%;
+}
+
 .preview-ref-link {
   display: inline;
 
@@ -1868,7 +1925,9 @@ a.page-title {
 
 a.tag {
   font-size: 0.875rem;
-  line-height: 1.25rem;
+  /* cljs uses --text-sm--line-height (1.42857) so the pill scales when
+     .block-title-wrap bumps font-size to medium (16px -> 22.86px) */
+  line-height: 1.42857;
   display: inline-flex;
   align-items: center;
   cursor: pointer;

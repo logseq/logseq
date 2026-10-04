@@ -26,14 +26,46 @@ let show_panel_bullet row =
   || (match D.row_type row with "default" | "url" -> false | _ -> true)
   || D.value_empty_p (D.row_value row)
 
+(* cljs property-icon (components/property.cljs): :block/tags -> hash,
+   :plugin.* -> puzzle, else the property type's tabler icon, else a
+   bullet *)
+let property_icon_name row =
+  let ident = D.row_ident row |> Option.value ~default:"" in
+  if ident = "block/tags" || ident = ":block/tags" then Some "hash"
+  else if
+    (String.length ident >= 7 && String.sub ident 0 7 = ":plugin")
+    || (String.length ident >= 6 && String.sub ident 0 6 = "plugin")
+  then Some "puzzle"
+  else
+    match D.row_type row with
+    | "number" -> Some "number"
+    | "date" | "datetime" -> Some "calendar"
+    | "checkbox" -> Some "checkbox"
+    | "url" -> Some "link"
+    | "property" -> Some "letter-p"
+    | "page" -> Some "page"
+    | "node" -> Some "point-filled"
+    | "asset" -> Some "letter-a"
+    | _ -> None
+
 (* the property key (name + icon/bullet), used by both the panel row and
    the bottom pill *)
 let property_key_inner row ~on_key_click =
   let inner = mk ~cls:"property-key-inner jtrigger-view" "div" in
-  let bullet = mk ~cls:"bullet-container" "div" in
-  let b = mk ~cls:"bullet" "span" in
-  el_append_child bullet b;
-  el_append_child inner bullet;
+  let icon_wrap = mk ~cls:"property-icon" "div" in
+  let btn =
+    mk "button" ~cls:"flex items-center property-m"
+      ~attrs:[ ("type", "button") ]
+  in
+  (match property_icon_name row with
+   | Some name ->
+       el_append_child btn (ui_icon_el ~size:15. ~cls:"opacity-50" name)
+   | None ->
+       let bc = mk ~cls:"bullet-container" "span" in
+       el_append_child bc (mk ~cls:"bullet" "span");
+       el_append_child btn bc);
+  el_append_child icon_wrap btn;
+  el_append_child inner icon_wrap;
   let a =
     mk "a"
       ~cls:"property-k flex select-none jtrigger w-full"

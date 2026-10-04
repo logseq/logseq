@@ -165,14 +165,18 @@ let arrow_svg_el () =
   el_append_child svg p;
   svg
 
-(* cljs mounts the property-value editor as a whole .ls-block skeleton
+(* cljs mounts the property-value cell as a whole .ls-block skeleton
    (components/property.cljs property-value renders an inline block
-   editor): .ls-block.is-blank > .block-main-container >
+   editor): .ls-block > .block-main-container >
    .block-control-wrap (arrow + bullet) + .block-main-content >
-   .block-content-or-editor-wrap > .block-row > .editor-wrapper *)
-let block_editor_frame u cell wrap =
+   .block-content-or-editor-wrap > .block-row > content.  The same
+   skeleton wraps the read-only value — blank toggles is-blank, and the
+   right side carries .opacity-70.hover:opacity-100 in view mode vs
+   .ls-hover-lit while editing. *)
+let block_frame ?(blank = true) u cell wrap =
   let blk =
-    mk ~cls:"is-blank ls-block swipe-item" "div"
+    mk ~cls:((if blank then "is-blank " else "") ^ "ls-block swipe-item")
+      "div"
       ~attrs:
         [ ("data-block-title", ""); ("haschild", "false")
         ; ("data-comment-item", "false"); ("data-comments-area", "false")
@@ -216,10 +220,15 @@ let block_editor_frame u cell wrap =
   in
   el_append_child brow wrap;
   let right =
-    mk ~cls:"ls-block-right"
+    mk
+      ~cls:
+        (if blank then "ls-block-right"
+         else "ls-block-right flex flex-row items-center self-start gap-1")
       "div"
   in
-  el_append_child right (mk ~cls:"ls-hover-lit" "div");
+  el_append_child right
+    (mk ~cls:(if blank then "ls-hover-lit" else "opacity-70 hover:opacity-100")
+       "div");
   el_append_child brow right;
   el_append_child boei brow;
   el_append_child boew boei;
@@ -264,7 +273,7 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
   el_append_child inner mt;
   el_append_child inner uploader;
   el_append_child wrap inner;
-  block_editor_frame vu cell wrap;
+  block_frame vu cell wrap;
   el_set_value ta initial;
   (* single editing surface: commit the property editor still open
      elsewhere before this one registers — the previous commit's row
@@ -334,21 +343,43 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
   el_listen ta "input" (fun _ -> set_edit_buffer ctx row (el_value ta))
     true
 
+(* cljs view-mode value: the property-block-container holds a real
+   block row — .ls-block.swipe-item > .block-main-container >
+   control-wrap + content chain > .block-row >
+   (.block-content-wrapper > .block-content.inline > .block-content-inner
+   > .block-head-wrap > .w-full.inline > span.block-title-wrap) *)
+let view_value_wrap value_text =
+  let wrap = mk ~cls:"flex flex-1 w-full block-content-wrapper" "div" in
+  let content = mk ~cls:"jtrigger block-content inline" "div" in
+  let inner =
+    mk ~cls:"flex flex-row justify-between block-content-inner" "div"
+  in
+  let head = mk ~cls:"block-head-wrap" "div" in
+  let inl = mk ~cls:"w-full inline" "div" in
+  ignore (child_text "span" "block-title-wrap" value_text inl);
+  el_append_child head inl;
+  el_append_child inner head;
+  el_append_child content inner;
+  el_append_child wrap content;
+  el_append_child wrap (mk ~cls:"flex flex-row items-center" "div");
+  wrap
+
 let text_cell ctx row =
   let value = D.row_value row in
   let cell =
-    mk ~cls:"property-block-container content jtrigger" "div"
+    mk ~cls:"property-block-container content w-full jtrigger" "div"
       ~attrs:[ ("tabindex", "-1") ]
   in
+  let vu = Option.value ~default:ctx.block_uuid (D.ref_uuid value) in
   if not (D.value_empty_p value) then
     List.iter
       (fun v ->
-        ignore
-          (child_text "span" "block-title-wrap"
-             (match v with
-              | W.String s -> s
-              | other -> D.ref_title other)
-             cell))
+        let t =
+          match v with
+          | W.String s -> s
+          | other -> D.ref_title other
+        in
+        block_frame ~blank:false vu cell (view_value_wrap t))
       (D.value_elems value);
   on_click cell (fun _ ->
       edit_text_cell ~steal:true ctx row cell (D.value_display value));
@@ -1046,9 +1077,40 @@ let editing_cell ctx row inner =
    block-below pills) show the closed-value icon without its label *)
 let render ?(icon_only = false) ctx row =
   let inner =
-    mk ~cls:"property-value property-value-panel-inner" "div"
+    mk ~cls:"property-value property-value-panel-inner flex flex-1" "div"
   in
   let ident = D.row_ident row |> Option.value ~default:"" in
+  let ty = D.row_type row in
+  (* cljs components/property/value.cljs: the cell always sits in a
+     .property-value-inner[data-type] carrier (empty-value flag when the
+     row has no value); scalar text/url values add
+     .flex.flex-1 > .flex.flex-1.cursor-text wrappers *)
+  let eff = D.row_with_effective_value row in
+  let empty_p = D.value_empty_p (D.row_value eff) in
+  let value_inner =
+    mk ~cls:("property-value-inner w-full" ^ (if empty_p then " empty-value" else ""))
+      "div"
+  in
+  el_set_attr value_inner "data-type" ty;
+  el_append_child inner value_inner;
+  let text_wrap, text_leaf =
+    let flex1 = mk ~cls:"flex flex-1" "div" in
+    let ct =
+      mk ~cls:"flex flex-1 cursor-text" "div"
+        ~attrs:[ ("tabindex", "0"); ("style", "min-height:24px") ]
+    in
+    el_append_child flex1 ct;
+    (flex1, ct)
+  in
+  let is_text =
+    D.row_closed_values row = []
+    && not
+         (List.mem ty
+            [ "checkbox"; "number"; "date"; "datetime"; "node"; "asset"
+            ; "page"; "class"; "property" ])
+  in
+  if is_text then el_append_child value_inner text_wrap;
+  let leaf = if is_text then text_leaf else value_inner in
   (* cljs keeps a single editing surface: while a block is open in the
      outliner editor a pending/stale value editor must not mount —
      two .editor-wrapper textareas would coexist *)
@@ -1056,11 +1118,10 @@ let render ?(icon_only = false) ctx row =
     (take_pending_edit ~block_uuid:ctx.block_uuid ~ident
      || has_active_edit ctx row)
     && Editor_state.editing () = None
-  then editing_cell ctx row inner
+  then editing_cell ctx row leaf
   else (
-    let row = D.row_with_effective_value row in
+    let row = eff in
     let value = D.row_value row in
-    let ty = D.row_type row in
     let cell =
       if D.row_closed_values row <> [] then
         closed_value_cell ~icon_only ctx row inner
@@ -1086,11 +1147,11 @@ let render ?(icon_only = false) ctx row =
               in
               on_click empty (fun _ ->
                   let cell = text_cell ctx row in
-                  el_clear inner;
-                  el_append_child inner cell;
+                  el_clear leaf;
+                  el_append_child leaf cell;
                   el_click cell);
               empty)
             else text_cell ctx row
     in
-    el_append_child inner cell);
+    el_append_child leaf cell);
   inner
