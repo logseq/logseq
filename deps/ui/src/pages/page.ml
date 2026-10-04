@@ -1274,13 +1274,9 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
       ~attrs:
         [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
-      [ Logseq_dom.dyn ~equal:(fun a b -> a == b)
-          (fun (bs : Model.block list) ->
-            Virt_list.list ~key_of:Tree.block_key
-              ~estimate_size:(fun _ -> 32.)
-              ~render:(Tree.block_row ~library ~scope ~virtualize:true)
-              (Array.of_list bs))
-          blocks_sig ]
+      [ Virt_list.rows_sig ~key:Tree.block_key ~cmp:String.compare
+          ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true)
+          ~estimate_size:(fun _ -> 32.) blocks_sig ]
   in
   (* if_/dyn branches must mount a node — the keyed/virt choice can't be
      a dynamic child, so pick once per region mount; either renderer is

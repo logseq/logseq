@@ -52,3 +52,22 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
           ~on_dom_event:(fun _name _payload -> on_end ())
           (children_of arr))
       arr_sig ctx parent
+
+(* Signal-driven row stream: same [ls-virt-list] shell but children are
+   a keyed collection, so a splice republishes only the touched rows —
+   on this backend every row is a real child anyway, so diffing per row
+   is what keeps outliner ops cheap on huge pages (a single-block edit
+   must not re-emit the whole stream). *)
+let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ()) ~estimate_size:_
+    (source : 'a list Signal.signal) : t =
+ fun ctx parent ->
+  let count_sig = Signal.map List.length source in
+  let attrs_sig =
+    Logseq_dom.attrs_signal count_sig (fun n ->
+        [ ("data-virt-count", string_of_int n) ])
+  in
+  (D.dom ~style_class:"ls-virt-list" ~events:"virt-end"
+     ~attrs_signal_v:attrs_sig
+     ~on_dom_event:(fun _name _payload -> on_end ())
+     [ D.keyed ~source ~key ~cmp ~mount ])
+    ctx parent

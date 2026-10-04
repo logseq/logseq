@@ -432,3 +432,17 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
         ]
     ]
     ctx parent
+
+(* Signal-driven row stream: feeds the items signal into [list]'s
+   data_sig splice path so a delta republishes only the touched rows
+   instead of remounting the whole list — mirrors the apple twin's
+   keyed rows_sig. *)
+let rows_sig ~key ~cmp:_ ~mount ?(on_end = fun () -> ()) ~estimate_size
+    (source : 'a list Signal.signal) : t =
+ fun ctx parent ->
+  let sched = ctx.Lui_ui.ui_scheduler in
+  let arr_sig = D.own ctx (Signal.map Array.of_list source) in
+  list ~key_of:key ~estimate_size ~on_end
+    ~data_sig:(fun _ -> Some arr_sig)
+    ~render:(fun it -> mount (Signal.constant sched it))
+    [||] ctx parent
