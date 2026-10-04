@@ -17,7 +17,7 @@
 
 open Lui_elements
 
-module B = Browser_ui
+module Wd = Web_dom
 
 let dyn = Logseq_dom.dyn
 
@@ -108,30 +108,30 @@ let refresh_db_rtc_uuid (repo : string option) =
 (* cljs indicator.cljs details — dropdown under the cloud button:
    online/offline, pending counts, last-synced, debug toggle and a
    Start sync action when the lock isn't open *)
-let rtc_details_popup : B.E.t option ref = ref None
+let rtc_details_popup : Wd.el option ref = ref None
 
 let close_rtc_details () =
   match !rtc_details_popup with
   | Some el ->
-      B.remove el;
+      Wd.el_remove el;
       rtc_details_popup := None
   | None -> ()
 
 let el_ ?(cls = "") ?(text = "") () =
-  let d = B.create "div" in
-  B.set_class d cls;
-  if text <> "" then B.set_text d text;
+  let d = Wd.create_element "div" in
+  Wd.el_set_class d cls;
+  if text <> "" then Wd.el_set_text_content d text;
   d
 
 let pend_row cls_key n =
   let d = el_ () in
-  let s = B.create "span" in
-  B.set_class s "font-medium mr-1";
-  B.set_text s (string_of_int n);
-  let l = B.create "span" in
-  B.set_text l (I18n.t cls_key);
-  B.append d s;
-  B.append d l;
+  let s = Wd.create_element "span" in
+  Wd.el_set_class s "font-medium mr-1";
+  Wd.el_set_text_content s (string_of_int n);
+  let l = Wd.create_element "span" in
+  Wd.el_set_text_content l (I18n.t cls_key);
+  Wd.el_append_child d s;
+  Wd.el_append_child d l;
   d
 
 let rtc_debug_text (r : Model.rtc option) =
@@ -162,7 +162,7 @@ let rtc_debug_text (r : Model.rtc option) =
 
 external ev_target : Js.Json.t -> Js.Json.t = "target" [@@mel.get]
 
-external el_contains : B.E.t -> Js.Json.t -> bool = "contains"
+external el_contains : Wd.el -> Js.Json.t -> bool = "contains"
   [@@mel.send]
 
 external ev_key : Js.Json.t -> string = "key" [@@mel.get]
@@ -175,13 +175,13 @@ let rtc_open_guard = ref false
 let hook_rtc_doc_close () =
   if not !rtc_doc_hooked then (
     rtc_doc_hooked := true;
-    B.on_document "click" (fun ev ->
+    Wd.on_document_event "click" (fun ev ->
         match !rtc_details_popup with
         | Some el
           when (not !rtc_open_guard) && not (el_contains el (ev_target ev))
           -> close_rtc_details ()
         | _ -> ());
-    B.on_document "keydown" (fun ev ->
+    Wd.on_document_event "keydown" (fun ev ->
         if ev_key ev = "Escape" && !rtc_details_popup <> None then
           close_rtc_details ()))
 
@@ -189,29 +189,29 @@ let open_rtc_details () =
   close_rtc_details ();
   hook_rtc_doc_close ();
   rtc_open_guard := true;
-  ignore (B.set_timeout (fun () -> rtc_open_guard := false) 0);
+  ignore (Wd.set_timeout (fun () -> rtc_open_guard := false) 0);
   let r = !last_rtc in
   let open_ =
     match r with
     | Some r -> Platform.online () && r.rtc_lock
     | None -> false
   in
-  let menu = B.create "div" in
-  B.set_class menu
+  let menu = Wd.create_element "div" in
+  Wd.el_set_class menu
     "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
      bg-popover p-1 text-popover-foreground shadow-md";
-  B.set_attr menu "role" "menu";
-  (match B.qs ".cp__rtc-sync-indicator .cloud" with
+  Wd.el_set_attr menu "role" "menu";
+  (match Wd.query_selector ".cp__rtc-sync-indicator .cloud" with
    | Some anchor ->
-       let rect = B.rect_of anchor in
-       let left = Float.max 8.0 (B.rect_right rect -. 240.0) in
-       B.set_attr menu "style"
+       let rect = Wd.el_bounding_rect anchor in
+       let left = Float.max 8.0 (Wd.rect_right rect -. 240.0) in
+       Wd.el_set_attr menu "style"
          (Printf.sprintf
             "position:fixed;left:%.0fpx;top:%.0fpx;width:240px"
-            left (B.rect_bottom rect +. 4.0))
+            left (Wd.rect_bottom rect +. 4.0))
    | None -> ());
   let info = el_ ~cls:"rtc-info flex flex-col gap-1 p-2 text-gray-11" () in
-  B.append info
+  Wd.el_append_child info
     (el_ ~cls:"font-medium mb-2"
        ~text:(I18n.t (if Platform.online () then "sync/online" else "sync/offline"))
        ());
@@ -222,54 +222,54 @@ let open_rtc_details () =
   and p_server =
     match r with Some r -> r.rtc_pending_server | None -> 0
   in
-  B.append info (pend_row "sync/pending-local-changes" p_local);
+  Wd.el_append_child info (pend_row "sync/pending-local-changes" p_local);
   if p_asset > 0 then
-    B.append info (pend_row "sync/pending-asset-uploads" p_asset);
-  B.append info (pend_row "sync/pending-server-changes" p_server);
+    Wd.el_append_child info (pend_row "sync/pending-asset-uploads" p_asset);
+  Wd.el_append_child info (pend_row "sync/pending-server-changes" p_server);
   (match !Rtc_flows.last_sync_ms with
    | Some ms ->
-       B.append info
+       Wd.el_append_child info
          (el_ ~cls:"text-sm"
             ~text:
               (I18n.t1 "sync/last-synced-time-label"
-                 (B.fmt_time (Int64.to_float ms)))
+                 (Platform.fmt_time (Int64.to_float ms)))
             ())
    | None -> ());
   (* More debug info toggle *)
-  let dbg_link = B.create "a" in
-  B.set_class dbg_link "fade-link text-sm";
-  B.set_text dbg_link (I18n.t "sync/more-debug-info");
+  let dbg_link = Wd.create_element "a" in
+  Wd.el_set_class dbg_link "fade-link text-sm";
+  Wd.el_set_text_content dbg_link (I18n.t "sync/more-debug-info");
   let dbg_on = ref false in
-  let dbg_el = ref (B.create "div") in
-  B.append info dbg_link;
-  B.add_listener dbg_link "click" (fun _ ->
+  let dbg_el = ref (Wd.create_element "div") in
+  Wd.el_append_child info dbg_link;
+  Wd.el_on dbg_link "click" (fun _ ->
       dbg_on := not !dbg_on;
       if !dbg_on then (
         let d = el_ ~cls:"rtc-info-debug" () in
-        let pre = B.create "pre" in
-        B.set_class pre "select-text";
-        B.set_text pre (rtc_debug_text r);
-        B.append d pre;
+        let pre = Wd.create_element "pre" in
+        Wd.el_set_class pre "select-text";
+        Wd.el_set_text_content pre (rtc_debug_text r);
+        Wd.el_append_child d pre;
         dbg_el := d;
-        B.append info d)
-      else B.remove !dbg_el);
-  (match B.qs "body" with Some b -> B.append b menu | None -> ());
+        Wd.el_append_child info d)
+      else Wd.el_remove !dbg_el);
+  (match Wd.query_selector "body" with Some b -> Wd.el_append_child b menu | None -> ());
   (* Start sync (cljs: shown when rtc-state <> :open) *)
   if not open_ then (
     let row = el_ ~cls:"mt-4" () in
-    let btn = B.create "button" in
-    B.set_class btn
+    let btn = Wd.create_element "button" in
+    Wd.el_set_class btn
       (Settings_controls.btn_cls ~variant:`Solid ~size:`Sm ());
-    B.set_attr btn "type" "button";
-    B.set_text btn (I18n.t "sync/start-sync");
-    B.add_listener btn "click" (fun _ ->
+    Wd.el_set_attr btn "type" "button";
+    Wd.el_set_text_content btn (I18n.t "sync/start-sync");
+    Wd.el_on btn "click" (fun _ ->
         close_rtc_details ();
         match (Runtime.model ()).Model.repo with
         | Some repo -> Rtc_ops.start repo
         | None -> ());
-    B.append row btn;
-    B.append info row);
-  B.append menu info;
+    Wd.el_append_child row btn;
+    Wd.el_append_child info row);
+  Wd.el_append_child menu info;
   rtc_details_popup := Some menu
 
 let toggle_rtc_details () =
