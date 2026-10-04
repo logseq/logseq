@@ -7,7 +7,6 @@ open Db_worker_effect
 
 let default_ui_timeout_ms = 60000
 
-let kw s = Wire.Keyword s
 let str s = Wire.String s
 let ex_info msg data = Dispatcher.Exn_info (msg, data)
 
@@ -26,10 +25,10 @@ let run f = try f () with e -> error e
 
 let ui_interaction_required_error action hint =
   ex_info "ui-interaction-required"
-    ([ (kw "code", kw "ui-interaction-required"); (kw "action", action) ]
+    ([ (Wire.keyword "code", Wire.keyword "ui-interaction-required"); (Wire.keyword "action", action) ]
      @
      match hint with
-     | Some h when seq_ (Some h) -> [ (kw "hint", str h) ]
+     | Some h when seq_ (Some h) -> [ (Wire.keyword "hint", str h) ]
      | _ -> [])
 
 (* cljs ui-request/->rejectable-error — an Error-map's fields become
@@ -50,13 +49,13 @@ let rejectable_exn_of_wire request_id action (m : Wire.t) =
     entries
     @ (match Wire.get "code" m with
        | Some _ -> []
-       | None -> [ (kw "code", kw "ui-request-rejected") ])
+       | None -> [ (Wire.keyword "code", Wire.keyword "ui-request-rejected") ])
     @ (match Wire.get "request-id" m with
        | Some _ -> []
-       | None -> [ (kw "request-id", str request_id) ])
+       | None -> [ (Wire.keyword "request-id", str request_id) ])
     @ (match Wire.get "action" m with
        | Some _ -> []
-       | None -> [ (kw "action", action) ])
+       | None -> [ (Wire.keyword "action", action) ])
   in
   ex_info message entries
 
@@ -80,7 +79,7 @@ let ui_request_impl (action : Wire.t) (payload : Wire.t) ?hint ?timeout_ms () : 
                   wakeup r
                     (Error
                        (Wire.kw_map
-                          [ ("code", kw "ui-request-timeout");
+                          [ ("code", Wire.keyword "ui-request-timeout");
                             ("request-id", str request_id);
                             ("action", action);
                             ("timeout-ms", Wire.Int timeout_ms) ]))
@@ -90,7 +89,7 @@ let ui_request_impl (action : Wire.t) (payload : Wire.t) ?hint ?timeout_ms () : 
            !Sync_platform.post_message_fn
              (Sync_platform.transit_write
                 (Wire.Array
-                   [ kw "db-worker/ui-request";
+                   [ Wire.keyword "db-worker/ui-request";
                      Wire.kw_map
                        [ ("request-id", str request_id);
                          ("action", action);
@@ -103,7 +102,7 @@ let ui_request_impl (action : Wire.t) (payload : Wire.t) ?hint ?timeout_ms () : 
                 wakeup r
                   (Error
                      (Wire.kw_map
-                        [ ("code", kw "ui-request-rejected");
+                        [ ("code", Wire.keyword "ui-request-rejected");
                           ("request-id", str request_id);
                           ("action", action);
                           ("data", Wire.Map (exn_data e)) ]))
@@ -135,7 +134,7 @@ let cancel_all_ui_requests context =
           wakeup r
             (Error
                (Wire.kw_map
-                  [ ("code", kw "ui-request-cancelled");
+                  [ ("code", Wire.keyword "ui-request-cancelled");
                     ("request-id", str id);
                     ("action", action);
                     ("context", context) ]))

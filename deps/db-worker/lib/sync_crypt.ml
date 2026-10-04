@@ -37,7 +37,6 @@ let encrypt_attr_set = [ "block/title"; "block/name" ]
 
 (* ---------- wire helpers ---------- *)
 
-let kw s = Wire.Keyword s
 let str s = Wire.String s
 let wire_opt f = function Some x -> f x | None -> Wire.Nil
 
@@ -49,8 +48,8 @@ let kw_name s =
 let wire_assoc key v m =
   match m with
   | Wire.Map kvs ->
-      Wire.Map ((kw key, v) :: List.filter (fun (k, _) -> not (Wire.key_matches key k)) kvs)
-  | _ -> Wire.Map [ (kw key, v) ]
+      Wire.Map ((Wire.keyword key, v) :: List.filter (fun (k, _) -> not (Wire.key_matches key k)) kvs)
+  | _ -> Wire.Map [ (Wire.keyword key, v) ]
 
 let seq_ = function
   | Some s -> String.length (Unicode.trim s) > 0
@@ -99,15 +98,15 @@ let missing_e2ee_password_exn data =
   ex_info "missing-e2ee-password"
     (Wire.as_map
        (Wire.kw_map
-          ([ ("code", kw "db-sync/missing-e2ee-password");
-             ("field", kw "e2ee-password") ]
+          ([ ("code", Wire.keyword "db-sync/missing-e2ee-password");
+             ("field", Wire.keyword "e2ee-password") ]
            @ data)))
 
 let fail_missing_e2ee_password_impl data : unit =
   fail_fast "db-sync/missing-e2ee-password"
     (Wire.kw_map
-       ([ ("code", kw "db-sync/missing-e2ee-password");
-          ("field", kw "e2ee-password") ]
+       ([ ("code", Wire.keyword "db-sync/missing-e2ee-password");
+          ("field", Wire.keyword "e2ee-password") ]
         @ data))
 
 let fail_missing_e2ee_password_fn : ((string * Wire.t) list -> unit) ref =
@@ -116,7 +115,7 @@ let fail_missing_e2ee_password_fn : ((string * Wire.t) list -> unit) ref =
 let ensure_refresh_token refresh_token =
   if not (seq_ refresh_token) then
     !fail_missing_e2ee_password_fn
-      [ ("reason", kw "missing-refresh-token");
+      [ ("reason", Wire.keyword "missing-refresh-token");
         ("hint", str "Run logseq login first.") ]
 
 let non_retriable_user_rsa_key_error_codes =
@@ -206,7 +205,7 @@ let decrypt_private_key_crypt_impl (password : string) (encrypted_key_data : Wir
             Worker_log.error "decrypt-private-key" [ ("error", exn_message e) ];
           error
             (ex_info "decrypt-private-key"
-               (if invalid_password then [ (kw "invalid-password?", Wire.Bool true) ] else []))))
+               (if invalid_password then [ (Wire.keyword "invalid-password?", Wire.Bool true) ] else []))))
 
 let encrypt_private_key_fn : (string -> Wire.t -> Wire.t t) ref = ref encrypt_private_key_impl
 let decrypt_private_key_crypt_fn : (string -> Wire.t -> Wire.t t) ref =
@@ -403,9 +402,9 @@ let fetch_json_impl url ?(method_ = "GET") ?(headers = []) ?body ?response_schem
                      | None ->
                          error
                            (ex_info "db-sync invalid response"
-                              [ (kw "status", Wire.Int resp.status);
-                                (kw "url", str url);
-                                (kw "body", Wire.Nil) ]))
+                              [ (Wire.keyword "status", Wire.Int resp.status);
+                                (Wire.keyword "url", str url);
+                                (Wire.keyword "body", Wire.Nil) ]))
               else
                 let body =
                   match data with
@@ -417,9 +416,9 @@ let fetch_json_impl url ?(method_ = "GET") ?(headers = []) ?body ?response_schem
                 in
                 error
                   (ex_info "db-sync request failed"
-                     [ (kw "status", Wire.Int resp.status);
-                       (kw "url", str url);
-                       (kw "body", body) ])))
+                     [ (Wire.keyword "status", Wire.Int resp.status);
+                       (Wire.keyword "url", str url);
+                       (Wire.keyword "body", body) ])))
 
 let fetch_json_fn = ref fetch_json_impl
 
@@ -553,7 +552,7 @@ let get_user_rsa_key_pair_raw_impl base : Wire.t t =
                  (Wire.kw_map
                     [ ("base", wire_opt str base);
                       ("user-id", wire_opt str user_id);
-                      ("field", kw "user-rsa-key-pair") ]));
+                      ("field", Wire.keyword "user-rsa-key-pair") ]));
           let b = Option.get base and u = Option.get user_id in
           let k = (b, u) in
           match Hashtbl.find_opt user_rsa_key_pair_inflight k with
@@ -591,7 +590,7 @@ let upload_user_rsa_key_pair_impl base public_key encrypted_private_key =
       (match body with
        | None ->
            fail_fast "db-sync/invalid-field"
-             (Wire.kw_map [ ("type", kw "e2ee/user-keys"); ("body", Wire.Nil) ])
+             (Wire.kw_map [ ("type", Wire.keyword "e2ee/user-keys"); ("body", Wire.Nil) ])
        | Some _ -> ());
       bind
         (!fetch_json_fn (base ^ "/e2ee/user-keys") ~method_:"POST"
@@ -614,7 +613,7 @@ let read_refresh_token_from_auth_file () : string option t =
       (match parse_auth_file (Some text) with
        | `Invalid ->
            !fail_missing_e2ee_password_fn
-             [ ("reason", kw "invalid-auth-file");
+             [ ("reason", Wire.keyword "invalid-auth-file");
                ("hint", str "Run logseq login first.") ]
        | `Empty | `Parsed _ -> ());
       let refresh_token =
@@ -639,7 +638,7 @@ let save_e2ee_password_impl (password : string) : unit t =
           if capacitor_runtime () then
             catch
               (bind
-                 (Sync_ui_request.request_ui (kw "native-save-e2ee-password")
+                 (Sync_ui_request.request_ui (Wire.keyword "native-save-e2ee-password")
                     (Wire.kw_map
                        [ ("key", str e2ee_password_secret_key);
                          ("encrypted-text", str text) ])
@@ -670,7 +669,7 @@ let read_e2ee_password_text_impl (refresh_token : string option) : string option
       if capacitor_runtime () then
         bind
           (catch
-             (Sync_ui_request.request_ui (kw "native-get-e2ee-password")
+             (Sync_ui_request.request_ui (Wire.keyword "native-get-e2ee-password")
                 (Wire.kw_map [ ("key", str e2ee_password_secret_key) ])
                 ())
              (fun e ->
@@ -695,15 +694,15 @@ let decrypt_e2ee_password_text refresh_token text : string t =
       | false ->
           error
             (missing_e2ee_password_exn
-               [ ("reason", kw "missing-persisted-password");
+               [ ("reason", Wire.keyword "missing-persisted-password");
                  ("hint", str "Provide --e2ee-password to persist it.") ])
       | true ->
           (match transit_read_safe (Option.get text) with
            | None ->
                fail_fast "db-sync/invalid-e2ee-password-payload"
                  (Wire.kw_map
-                    [ ("field", kw "e2ee-password");
-                      ("reason", kw "invalid-transit-payload") ])
+                    [ ("field", Wire.keyword "e2ee-password");
+                      ("reason", Wire.keyword "invalid-transit-payload") ])
            | Some data ->
                !decrypt_text_by_text_password_fn (Option.get refresh_token) data))
 
@@ -720,7 +719,7 @@ let clear_e2ee_password_impl () : unit t =
   if capacitor_runtime () then
     bind
       (catch
-         (Sync_ui_request.request_ui (kw "native-delete-e2ee-password")
+         (Sync_ui_request.request_ui (Wire.keyword "native-delete-e2ee-password")
             (Wire.kw_map [ ("key", str e2ee_password_secret_key) ])
             ())
          (fun e ->
@@ -747,7 +746,7 @@ let clear_e2ee_password_fn : (unit -> unit t) ref = ref clear_e2ee_password_impl
 
 let request_e2ee_password_from_ui_impl payload : string t =
   bind
-    (Sync_ui_request.request_ui (kw "request-e2ee-password") payload
+    (Sync_ui_request.request_ui (Wire.keyword "request-e2ee-password") payload
        ~hint:"Provide e2ee-password to continue." ())
     (fun resp ->
       match Wire.get "password" resp with
@@ -755,7 +754,7 @@ let request_e2ee_password_from_ui_impl payload : string t =
       | _ ->
           fail_fast "db-sync/missing-e2ee-password"
             (Wire.kw_map
-               [ ("field", kw "e2ee-password"); ("reason", kw "empty-ui-password") ]))
+               [ ("field", Wire.keyword "e2ee-password"); ("reason", Wire.keyword "empty-ui-password") ]))
 
 let request_e2ee_password_from_ui_fn : (Wire.t -> string t) ref =
   ref request_e2ee_password_from_ui_impl
@@ -763,7 +762,7 @@ let request_e2ee_password_from_ui_fn : (Wire.t -> string t) ref =
 let verify_e2ee_password_impl password encrypted_private_key_or_str : Wire.t t =
   run (fun () ->
       if not (seq_ (Some password)) then
-        !fail_missing_e2ee_password_fn [ ("reason", kw "empty-password") ];
+        !fail_missing_e2ee_password_fn [ ("reason", Wire.keyword "empty-password") ];
       let encrypted_private_key =
         match encrypted_private_key_or_str with
         | Wire.String s -> transit_read s
@@ -773,7 +772,7 @@ let verify_e2ee_password_impl password encrypted_private_key_or_str : Wire.t t =
           if exn_field_true "invalid-password?" e then
             error
               (ex_info "invalid-e2ee-password"
-                 [ (kw "code", kw "db-sync/invalid-e2ee-password") ])
+                 [ (Wire.keyword "code", Wire.keyword "db-sync/invalid-e2ee-password") ])
           else error e))
 
 let verify_e2ee_password_fn : (string -> Wire.t -> Wire.t t) ref =
@@ -791,7 +790,7 @@ let verify_and_save_e2ee_password_from_server_impl (password : string) : Wire.t 
       match e2ee_base () with
       | None ->
           fail_fast "db-sync/missing-field"
-            (Wire.kw_map [ ("base", Wire.Nil); ("field", kw "e2ee-base") ])
+            (Wire.kw_map [ ("base", Wire.Nil); ("field", Wire.keyword "e2ee-base") ])
       | Some base ->
           bind (!fetch_user_rsa_key_pair_raw_fn base) (fun pair ->
               match Wire.get "encrypted-private-key" pair with
@@ -800,7 +799,7 @@ let verify_and_save_e2ee_password_from_server_impl (password : string) : Wire.t 
               | _ ->
                   fail_fast "db-sync/missing-field"
                     (Wire.kw_map
-                       [ ("base", str base); ("field", kw "encrypted-private-key") ])))
+                       [ ("base", str base); ("field", Wire.keyword "encrypted-private-key") ])))
 
 let verify_and_save_e2ee_password_from_server_fn : (string -> Wire.t t) ref =
   ref verify_and_save_e2ee_password_from_server_impl
@@ -819,10 +818,10 @@ let generate_and_upload_user_rsa_key_pair_impl base (opts : Wire.t) : Wire.t t =
                 | Some p -> pure p
                 | None when interactive_runtime () ->
                     !request_e2ee_password_from_ui_fn
-                      (Wire.kw_map [ ("reason", kw "generate-user-rsa-key-pair") ])
+                      (Wire.kw_map [ ("reason", Wire.keyword "generate-user-rsa-key-pair") ])
              | None ->
                  !fail_missing_e2ee_password_fn
-                   [ ("reason", kw "missing-password-for-generate-user-rsa-key-pair");
+                   [ ("reason", Wire.keyword "missing-password-for-generate-user-rsa-key-pair");
                      ( "hint"
                      , str
                          "Provide --e2ee-password when running sync ensure-keys --upload-keys."
@@ -921,7 +920,7 @@ let ensure_user_rsa_key_pair_impl base (opts : Wire.t) : Wire.t t =
                      (Wire.kw_map
                         [ ("base", str base);
                           ("user-id", Wire.Nil);
-                          ("field", kw "user-rsa-key-pair") ]));
+                          ("field", Wire.keyword "user-rsa-key-pair") ]));
               let u = Option.get user_id in
               let ensure_server =
                 match Wire.get "ensure-server?" opts with
@@ -980,7 +979,7 @@ let decrypt_private_key_impl (opts : decrypt_private_key_opts)
        | Some p when seq_ (Some p) -> pure p
        | _ ->
            !request_e2ee_password_from_ui_fn
-             (Wire.kw_map [ ("reason", kw "decrypt-user-rsa-private-key") ]))
+             (Wire.kw_map [ ("reason", Wire.keyword "decrypt-user-rsa-private-key") ]))
       (fun password ->
         ui_password_ref := Some password;
         bind (!verify_e2ee_password_fn password enc) (fun priv ->
@@ -996,13 +995,13 @@ let decrypt_private_key_impl (opts : decrypt_private_key_opts)
             bind (!decrypt_e2ee_password_text_fn refresh_token text) (fun password ->
                 if not (seq_ (Some password)) then
                   !fail_missing_e2ee_password_fn
-                    [ ("reason", kw "headless-empty-password");
+                    [ ("reason", Wire.keyword "headless-empty-password");
                       ("hint", str "Provide --e2ee-password to persist it.") ];
                 !verify_e2ee_password_fn password enc)
         | false ->
             error
               (missing_e2ee_password_exn
-                 [ ("reason", kw "missing-persisted-password");
+                 [ ("reason", Wire.keyword "missing-persisted-password");
                    ("hint", str "Provide --e2ee-password to persist it.") ]))
   in
   run (fun () ->
@@ -1071,7 +1070,7 @@ let upsert_graph_encrypted_aes_key_impl base graph_id encrypted_aes_key_str =
        | Some _ -> ()
        | None ->
            fail_fast "db-sync/invalid-field"
-             (Wire.kw_map [ ("type", kw "e2ee/graph-aes-key"); ("body", Wire.Nil) ]));
+             (Wire.kw_map [ ("type", Wire.keyword "e2ee/graph-aes-key"); ("body", Wire.Nil) ]));
       !fetch_json_fn (base ^ "/e2ee/graphs/" ^ graph_id ^ "/aes-key")
         ~method_:"POST" ~headers:[ ("content-type", "application/json") ]
         ~body:(Json.stringify (Option.get body))
@@ -1094,7 +1093,7 @@ let load_user_rsa_key_material_impl base (user_id : string) (graph_id : string o
                (Wire.kw_map
                   [ ("base", str base); ("user-id", str user_id);
                     ("graph-id", wire_opt str graph_id);
-                    ("field", kw "user-rsa-key-pair") ]));
+                    ("field", Wire.keyword "user-rsa-key-pair") ]));
         let public_key =
           match Wire.get "public-key" pair with
           | Some (Wire.String s) -> s
@@ -1150,7 +1149,7 @@ let preflight_upload_e2ee_impl repo encrypted_graph : unit t =
                         [ ("repo", str repo);
                           ("base", wire_opt str base);
                           ("user-id", wire_opt str user_id);
-                          ("field", kw "user-rsa-key-pair") ]));
+                          ("field", Wire.keyword "user-rsa-key-pair") ]));
               map ignore
                 (!load_user_rsa_key_material_fn (Option.get base) (Option.get user_id) None)))
   | false -> pure ()
@@ -1289,7 +1288,7 @@ let fetch_graph_aes_key_for_download_impl (graph_id : string option) : Wire.t t 
                  fail_fast "db-sync/missing-field"
                    (Wire.kw_map
                       [ ("graph-id", wire_opt str graph_id);
-                        ("field", kw "user-rsa-key-pair") ]));
+                        ("field", Wire.keyword "user-rsa-key-pair") ]));
             let enc_priv =
               match Wire.get "encrypted-private-key" pair with
               | Some (Wire.String s) -> s
@@ -1312,7 +1311,7 @@ let fetch_graph_aes_key_for_download_impl (graph_id : string option) : Wire.t t 
                          fail_fast "db-sync/missing-field"
                            (Wire.kw_map
                               [ ("graph-id", wire_opt str graph_id);
-                                ("field", kw "encrypted-aes-key") ]));
+                                ("field", Wire.keyword "encrypted-aes-key") ]));
                     let enc = Option.get encrypted_aes_key in
                     bind (!set_item_fn aes_key_k enc) (fun () ->
                         bind (!decrypt_aes_key_fn private_key enc) (fun aes_key ->
@@ -1360,7 +1359,7 @@ let grant_graph_access_impl repo graph_id target_email : unit t =
              | Some _ -> ()
              | None ->
                  fail_fast "db-sync/missing-field"
-                   (Wire.kw_map [ ("repo", str repo); ("field", kw "aes-key") ]));
+                   (Wire.kw_map [ ("repo", str repo); ("field", Wire.keyword "aes-key") ]));
             let aes_key = Option.get aes_key in
             bind
               (!fetch_user_public_key_by_email_fn base target_email)
@@ -1385,7 +1384,7 @@ let grant_graph_access_impl repo graph_id target_email : unit t =
                              | None ->
                                  fail_fast "db-sync/invalid-field"
                                    (Wire.kw_map
-                                      [ ("type", kw "e2ee/grant-access");
+                                      [ ("type", Wire.keyword "e2ee/grant-access");
                                         ("body", Wire.Nil) ]));
                             map
                               (fun _ -> ())
@@ -1399,7 +1398,7 @@ let grant_graph_access_impl repo graph_id target_email : unit t =
                 | _ ->
                     fail_fast "db-sync/missing-field"
                       (Wire.kw_map
-                         [ ("repo", str repo); ("field", kw "public-key");
+                         [ ("repo", str repo); ("field", Wire.keyword "public-key");
                            ("email", str target_email) ]))))
 
 let grant_graph_access_fn : (string -> string option -> string -> unit t) ref =
@@ -1656,7 +1655,7 @@ let change_e2ee_password_impl _refresh_token user_uuid old_password new_password
                fail_fast "db-sync/missing-field"
                  (Wire.kw_map
                     [ ("base", str base); ("user-uuid", wire_opt str user_uuid);
-                      ("field", kw "user-rsa-key-pair") ]));
+                      ("field", Wire.keyword "user-rsa-key-pair") ]));
           let public_key =
             match Wire.get "public-key" pair with
             | Some (Wire.String s) -> s | _ -> assert false

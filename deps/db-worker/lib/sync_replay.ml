@@ -12,7 +12,7 @@ open Sync_apply
 let invalid_rebase_op op data : 'a =
   let data' =
     match data with
-    | Wire.Map kvs -> Wire.Map (kvs @ [ kw "op", op ])
+    | Wire.Map kvs -> Wire.Map (kvs @ [ Wire.keyword "op", op ])
     | _ -> data
   in
   raise (Sync_util.ex_info "invalid rebase op" (Wire.as_map data'))
@@ -36,8 +36,8 @@ let expected_stale_rebase_error (error : exn) : bool =
     when msg = "unique constraint"
          || Common_util.str_starts_with msg "Nothing found for entity id" -> true
   | _ ->
-      err = Some (kw "entity-id/missing")
-      || (err = Some (kw "transact/unique") && attr = Some (kw "block/uuid"))
+      err = Some (Wire.keyword "entity-id/missing")
+      || (err = Some (Wire.keyword "transact/unique") && attr = Some (Wire.keyword "block/uuid"))
 
 let history_action_error_reason (error : exn) : Wire.t =
   let msg =
@@ -47,12 +47,12 @@ let history_action_error_reason (error : exn) : Wire.t =
   in
   if msg = "invalid rebase op"
      || msg = "Non-transact outliner ops contain numeric entity ids" then
-    kw "invalid-history-action-ops"
-  else kw "error"
+    Wire.keyword "invalid-history-action-ops"
+  else Wire.keyword "error"
 
 let expected_history_action_error_reason reason : bool =
-  reason = kw "invalid-history-action-ops"
-  || reason = kw "invalid-history-action-tx"
+  reason = Wire.keyword "invalid-history-action-ops"
+  || reason = Wire.keyword "invalid-history-action-tx"
 
 (* batch-transact-with-temp-conn! with cljs {:listen-db :before-commit} *)
 let batch_transact_with_temp_conn_impl (conn : conn) (tx_meta : tx_meta)
@@ -87,8 +87,8 @@ let batch_transact_with_temp_conn_impl (conn : conn) (tx_meta : tx_meta)
         (List.map
            (fun (d : datom) ->
               Wire.Array
-                [ kw (if d.added then "db/add" else "db/retract")
-                ; Wire.Int d.e; kw d.a; Ds_wire.transit_of_value d.v ])
+                [ Wire.keyword (if d.added then "db/add" else "db/retract")
+                ; Wire.Int d.e; Wire.keyword d.a; Ds_wire.transit_of_value d.v ])
            datoms)
         tx_meta
 
@@ -157,12 +157,12 @@ let rebase_find_existing_left_sibling (current_db : db) (target : entity)
 
 let rebase_target_ref (target_id : Wire.t) : Wire.t =
   match target_id with
-  | Wire.Array [ a; _ ] | Wire.List [ a; _ ] when a = kw "block/uuid" ->
+  | Wire.Array [ a; _ ] | Wire.List [ a; _ ] when a = Wire.keyword "block/uuid" ->
       target_id
-  | Wire.Uuid _ -> Wire.Array [ kw "block/uuid"; target_id ]
+  | Wire.Uuid _ -> Wire.Array [ Wire.keyword "block/uuid"; target_id ]
   | Wire.Map _ -> (
       match Wire.get "block/uuid" target_id with
-      | Some (Wire.Uuid _ as u) -> Wire.Array [ kw "block/uuid"; u ]
+      | Some (Wire.Uuid _ as u) -> Wire.Array [ Wire.keyword "block/uuid"; u ]
       | _ -> target_id)
   | _ -> target_id
 
@@ -266,12 +266,12 @@ let rebase_resolve_target_and_sibling ?(page_root_fallback = false)
 
 let template_parent_ref (parent : Wire.t) : Wire.t =
   match parent with
-  | Wire.Array [ a; _ ] | Wire.List [ a; _ ] when a = kw "block/uuid" ->
+  | Wire.Array [ a; _ ] | Wire.List [ a; _ ] when a = Wire.keyword "block/uuid" ->
       parent
-  | Wire.Uuid _ -> Wire.Array [ kw "block/uuid"; parent ]
+  | Wire.Uuid _ -> Wire.Array [ Wire.keyword "block/uuid"; parent ]
   | Wire.Map _ -> (
       match Wire.get "block/uuid" parent with
-      | Some (Wire.Uuid _ as u) -> Wire.Array [ kw "block/uuid"; u ]
+      | Some (Wire.Uuid _ as u) -> Wire.Array [ Wire.keyword "block/uuid"; u ]
       | _ -> parent)
   | _ -> parent
 
@@ -285,14 +285,14 @@ let sanitize_template_block (current_db : db) (rebase_db_before : db option)
     (block : Wire.t) : Wire.t =
   let m = Wire.as_map block in
   let block_id =
-    List.assoc_opt (kw "db/id") m |> Option.value ~default:Wire.Nil
+    List.assoc_opt (Wire.keyword "db/id") m |> Option.value ~default:Wire.Nil
   in
   (* cljs (or (:block/uuid m) ...) — a truthy :block/uuid wins raw, whatever
      its shape; the db/id and lookup-vector fallbacks only run when it's
      absent/nil/false. uuid? is checked at assoc time, so a non-uuid
      :block/uuid is kept verbatim rather than replaced by a db lookup. *)
   let block_uuid =
-    match List.assoc_opt (kw "block/uuid") m with
+    match List.assoc_opt (Wire.keyword "block/uuid") m with
     | Some v when v <> Wire.Nil && v <> Wire.Bool false -> Some v
     | _ -> (
         match block_id with
@@ -311,30 +311,30 @@ let sanitize_template_block (current_db : db) (rebase_db_before : db option)
                 | Some u -> Some (Wire.Uuid u)
                 | None -> None))
         | Wire.Array [ a; u ] | Wire.List [ a; u ]
-          when a = kw "block/uuid" -> (
+          when a = Wire.keyword "block/uuid" -> (
             match u with Wire.Uuid _ -> Some u | _ -> None)
         | _ -> None)
   in
   let dropped =
     List.filter
       (fun (k, _) ->
-         k <> kw "db/id" && k <> kw "block/order" && k <> kw "block/page"
-         && k <> kw "block/tx-id")
+         k <> Wire.keyword "db/id" && k <> Wire.keyword "block/order" && k <> Wire.keyword "block/page"
+         && k <> Wire.keyword "block/tx-id")
       m
   in
   (* cljs (update :block/parent template-parent-ref) — :block/parent is
      always present in the result (nil when absent in the input) *)
   let with_parent =
-    let has_parent = List.exists (fun (k, _) -> k = kw "block/parent") dropped in
+    let has_parent = List.exists (fun (k, _) -> k = Wire.keyword "block/parent") dropped in
     let mapped =
       List.map
         (fun (k, v) ->
-           if k = kw "block/parent" then (k, template_parent_ref v)
+           if k = Wire.keyword "block/parent" then (k, template_parent_ref v)
            else (k, v))
         dropped
     in
     if has_parent then mapped
-    else mapped @ [ (kw "block/parent", template_parent_ref Wire.Nil) ]
+    else mapped @ [ (Wire.keyword "block/parent", template_parent_ref Wire.Nil) ]
   in
   match block_uuid with
   | Some (Wire.Uuid _ as u) ->
@@ -372,7 +372,7 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
       let block_base =
         block
         |> Wire.as_map
-        |> List.filter (fun (k, _) -> k <> kw "db/id" && k <> kw "block/order")
+        |> List.filter (fun (k, _) -> k <> Wire.keyword "db/id" && k <> Wire.keyword "block/order")
         |> fun kvs -> Wire.Map kvs
       in
       let block' =
@@ -381,9 +381,9 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
       in
       (match block_ent with
        | None ->
-           invalid_rebase_op (kw op)
-             (Wire.Map [ kw "args", Wire.Array args
-                       ; kw "reason", kw "missing-block" ])
+           invalid_rebase_op (Wire.keyword op)
+             (Wire.Map [ Wire.keyword "args", Wire.Array args
+                       ; Wire.keyword "reason", Wire.keyword "missing-block" ])
        | Some _ -> ());
       ignore
         (Outliner_core.save_block_conn conn (block_map_wire block')
@@ -410,8 +410,8 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
            in
            match blocks' with
            | [] ->
-               invalid_rebase_op (kw op)
-                 (Wire.Map [ kw "args", Wire.Array args ])
+               invalid_rebase_op (Wire.keyword op)
+                 (Wire.Map [ Wire.keyword "args", Wire.Array args ])
            | _ ->
                let opts' =
                  Cljs_map.assoc (opts_wire_map opts) "sibling?"
@@ -425,8 +425,8 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                     (block_map_wire opts'));
                None)
        | None ->
-           invalid_rebase_op (kw op)
-             (Wire.Map [ kw "args", Wire.Array args ]))
+           invalid_rebase_op (Wire.keyword op)
+             (Wire.Map [ Wire.keyword "args", Wire.Array args ]))
   | "apply-template", [ template_id; target_id; opts ] -> (
       let template_id' = replay_entity_id_value db template_id in
       let sibling =
@@ -490,7 +490,7 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                 let o =
                   Wire.Map
                     (List.filter
-                       (fun (k, _) -> k <> kw "template-blocks")
+                       (fun (k, _) -> k <> Wire.keyword "template-blocks")
                        (Wire.as_map o))
                 in
                 if template_blocks <> [] then
@@ -502,21 +502,21 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                 (Outliner_op.apply_ops conn
                    (Wire.Array
                       [ Wire.Array
-                          [ kw "apply-template"
+                          [ Wire.keyword "apply-template"
                           ; Wire.Array
                               [ Wire.Uuid tuuid; Wire.Uuid tguuid; opts' ] ] ])
-                   (Wire.Map [ (kw "gen-undo-ops?", Wire.Bool false) ]));
+                   (Wire.Map [ (Wire.keyword "gen-undo-ops?", Wire.Bool false) ]));
               None
           | _ ->
-              invalid_rebase_op (kw op)
+              invalid_rebase_op (Wire.keyword op)
                 (Wire.Map
-                   [ kw "args", Wire.Array args
-                   ; kw "reason", kw "missing-template-or-target-uuid" ]))
+                   [ Wire.keyword "args", Wire.Array args
+                   ; Wire.keyword "reason", Wire.keyword "missing-template-or-target-uuid" ]))
       | _ ->
-          invalid_rebase_op (kw op)
+          invalid_rebase_op (Wire.keyword op)
             (Wire.Map
-               [ kw "args", Wire.Array args
-               ; kw "reason", kw "missing-template-or-target-block" ]))
+               [ Wire.keyword "args", Wire.Array args
+               ; Wire.keyword "reason", Wire.keyword "missing-template-or-target-block" ]))
   | "move-blocks", [ ids; target_id; opts ] -> (
       let ids' = replay_entity_id_coll db ids in
       let blocks = List.filter_map (entity_of_wire_ref db) ids' in
@@ -540,7 +540,7 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                   (Wire.Bool sibling')));
           None
       | _ ->
-          invalid_rebase_op (kw op) (Wire.Map [ kw "args", Wire.Array args ]))
+          invalid_rebase_op (Wire.keyword op) (Wire.Map [ Wire.keyword "args", Wire.Array args ]))
   | "move-blocks-up-down", [ ids; up ] ->
       let ids' = replay_entity_id_coll db ids in
       let blocks = List.filter_map (entity_of_wire_ref db) ids' in
@@ -555,8 +555,8 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
       let indent = match indent with Wire.Bool b -> b | _ -> false in
       (match blocks with
        | [] ->
-           invalid_rebase_op (kw op)
-             (Wire.Map [ kw "args", Wire.Array args ])
+           invalid_rebase_op (Wire.keyword op)
+             (Wire.Map [ Wire.keyword "args", Wire.Array args ])
        | _ ->
            Outliner_core.indent_outdent_blocks_conn conn blocks indent
              (block_map_wire (opts_wire_map opts)));
@@ -696,9 +696,9 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
   | "restore-recycled", [ root_id ] -> (
       let root_ref =
         match root_id with
-        | Wire.Array [ a; _ ] | Wire.List [ a; _ ] when a = kw "block/uuid" ->
+        | Wire.Array [ a; _ ] | Wire.List [ a; _ ] when a = Wire.keyword "block/uuid" ->
             root_id
-        | Wire.Uuid _ -> Wire.Array [ kw "block/uuid"; root_id ]
+        | Wire.Uuid _ -> Wire.Array [ Wire.keyword "block/uuid"; root_id ]
         | _ -> root_id
       in
       let root = entity_of_wire_ref db root_ref in
@@ -709,10 +709,10 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
       in
       match tx_ops with
       | [] ->
-          invalid_rebase_op (kw op)
+          invalid_rebase_op (Wire.keyword op)
             (Wire.Map
-               [ kw "args", Wire.Array args
-               ; kw "reason", kw "invalid-restore-target" ])
+               [ Wire.keyword "args", Wire.Array args
+               ; Wire.keyword "reason", Wire.keyword "invalid-restore-target" ])
       | _ ->
           ignore
             (Db_tx.transact
@@ -722,9 +722,9 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
   | "recycle-delete-permanently", [ root_id ] -> (
       let root_ref =
         match root_id with
-        | Wire.Array [ a; _ ] | Wire.List [ a; _ ] when a = kw "block/uuid" ->
+        | Wire.Array [ a; _ ] | Wire.List [ a; _ ] when a = Wire.keyword "block/uuid" ->
             root_id
-        | Wire.Uuid _ -> Wire.Array [ kw "block/uuid"; root_id ]
+        | Wire.Uuid _ -> Wire.Array [ Wire.keyword "block/uuid"; root_id ]
         | _ -> root_id
       in
       let root = entity_of_wire_ref db root_ref in
@@ -762,7 +762,7 @@ and expand_block_retracts_to_descendants (db : db) (tx_data : Wire.t list)
       (fun item ->
          match item with
          | Wire.Array [ op; e ] | Wire.List [ op; e ]
-           when op = kw "db/retractEntity" || op = kw "db.fn/retractEntity" -> (
+           when op = Wire.keyword "db/retractEntity" || op = Wire.keyword "db.fn/retractEntity" -> (
              match entity_of_wire_ref db e with
              | Some ent -> Some ent.id
              | None -> None)
@@ -791,7 +791,7 @@ and expand_block_retracts_to_descendants (db : db) (tx_data : Wire.t list)
     (fun item ->
        match item with
        | Wire.Array [ op; e ] | Wire.List [ op; e ]
-         when op = kw "db/retractEntity" || op = kw "db.fn/retractEntity" -> (
+         when op = Wire.keyword "db/retractEntity" || op = Wire.keyword "db.fn/retractEntity" -> (
            match entity_of_wire_ref db e with
            | Some root ->
                descendants root
@@ -803,10 +803,10 @@ and expand_block_retracts_to_descendants (db : db) (tx_data : Wire.t list)
                           Datascript.entity_attr ent "block/uuid"
                         with
                         | Some (One_value (Uuid u)) ->
-                            Wire.Array [ kw "block/uuid"; Wire.Uuid u ]
+                            Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid u ]
                         | _ -> Wire.Int ent.id
                       in
-                      Wire.Array [ kw "db/retractEntity"; ref_v ])
+                      Wire.Array [ Wire.keyword "db/retractEntity"; ref_v ])
                |> fun ds -> ds @ [ item ]
            | None -> [ item ])
        | _ -> [ item ])
@@ -826,7 +826,7 @@ let tx_self_created (items : Wire.t list) : (string, Wire.t) Hashtbl.t =
       match item with
       | Wire.Array (op :: e :: a :: Wire.Uuid u :: _)
       | Wire.List (op :: e :: a :: Wire.Uuid u :: _)
-        when op = kw "db/add" && a = kw "block/uuid" ->
+        when op = Wire.keyword "db/add" && a = Wire.keyword "block/uuid" ->
           if not (Hashtbl.mem t u) then Hashtbl.replace t u e
       | _ -> ())
     items;
@@ -858,7 +858,7 @@ let resolve_temp_id
         match e with
         | Wire.Uuid u when Hashtbl.mem created u -> Some u
         | Wire.Array [ a ; Wire.Uuid u ] | Wire.List [ a ; Wire.Uuid u ]
-          when a = kw "block/uuid" && Hashtbl.mem created u -> Some u
+          when a = Wire.keyword "block/uuid" && Hashtbl.mem created u -> Some u
         | _ -> None)
   in
   let replace_e op e =
@@ -867,7 +867,7 @@ let resolve_temp_id
     | _ -> (
         match e_created_uuid e with
         | Some u
-          when op = kw "db/add" && entity_of_wire_ref db e = None -> (
+          when op = Wire.keyword "db/add" && entity_of_wire_ref db e = None -> (
             (* join the creator's own e form when it is a usable
                tempid — mixing forms (db/add "t-1" :block/uuid u plus
                [:block/uuid u] refs) would otherwise split the entity *)
@@ -881,7 +881,7 @@ let resolve_temp_id
                     | Wire.Uuid _ -> false
                     | Wire.Array [ a ; Wire.Uuid _ ]
                     | Wire.List [ a ; Wire.Uuid _ ] ->
-                        a <> kw "block/uuid"
+                        a <> Wire.keyword "block/uuid"
                     | _ -> true) -> ce
             | _ -> Wire.String ("replay-created-" ^ u))
         | _ -> e)
@@ -889,7 +889,7 @@ let resolve_temp_id
   match datom_v with
   | Wire.Array (op :: e :: a :: v :: rest)
   | Wire.List (op :: e :: a :: v :: rest)
-    when op = kw "db/add" || op = kw "db/retract" ->
+    when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract" ->
       let e' = replace_e op e in
       let v' =
         match a with
@@ -925,8 +925,8 @@ let apply_history_action repo (tx_id : string) (undo : bool)
   | None ->
       Sync_util.fail_fast "db-sync/missing-db"
         (Wire.Map
-           [ kw "repo", Wire.String repo
-           ; kw "op", kw "apply-history-action" ])
+           [ Wire.keyword "repo", Wire.String repo
+           ; Wire.keyword "op", Wire.keyword "apply-history-action" ])
   | Some conn -> (
       let action =
         match pending_tx_by_id repo tx_id with
@@ -947,26 +947,26 @@ let apply_history_action repo (tx_id : string) (undo : bool)
       match action with
       | None ->
           Wire.Map
-            [ kw "applied?", Wire.Bool false
-            ; kw "reason", kw "missing-history-action"
-            ; kw "tx-id", Wire.String tx_id ]
+            [ Wire.keyword "applied?", Wire.Bool false
+            ; Wire.keyword "reason", Wire.keyword "missing-history-action"
+            ; Wire.keyword "tx-id", Wire.String tx_id ]
       | Some (outliner_op, forward_ops, inverse_ops, tx, reversed_tx) ->
           let action_wire =
             Wire.Map
-              [ ( kw "outliner-op"
+              [ ( Wire.keyword "outliner-op"
                 , match outliner_op with
                     | Some o -> Ds_wire.transit_of_value o
                     | None -> Nil )
-              ; kw "forward-outliner-ops", Wire.Array forward_ops
-              ; kw "inverse-outliner-ops", Wire.Array inverse_ops
-              ; kw "tx", tx
-              ; kw "reversed-tx", reversed_tx ]
+              ; Wire.keyword "forward-outliner-ops", Wire.Array forward_ops
+              ; Wire.keyword "inverse-outliner-ops", Wire.Array inverse_ops
+              ; Wire.keyword "tx", tx
+              ; Wire.keyword "reversed-tx", reversed_tx ]
           in
           if outliner_op = Some (Keyword "fix") then
             Wire.Map
-              [ kw "applied?", Wire.Bool false
-              ; kw "reason", kw "unsupported-history-action"
-              ; kw "action", action_wire ]
+              [ Wire.keyword "applied?", Wire.Bool false
+              ; Wire.keyword "reason", Wire.keyword "unsupported-history-action"
+              ; Wire.keyword "action", action_wire ]
           else
             let ops =
               (if undo then inverse_ops else forward_ops)
@@ -986,7 +986,7 @@ let apply_history_action repo (tx_id : string) (undo : bool)
               | _ :: _ -> ops
               | [] ->
                   [ Wire.Array
-                      [ kw "transact"
+                      [ Wire.keyword "transact"
                       ; Wire.Array
                           [ Wire.Array tx_data_items; Wire.Nil ] ] ]
             in
@@ -1024,9 +1024,9 @@ let apply_history_action repo (tx_id : string) (undo : bool)
             (match ops' with
              | [] ->
                  Wire.Map
-                   [ kw "applied?", Wire.Bool false
-                   ; kw "reason", kw "unsupported-history-action"
-                   ; kw "action", action_wire ]
+                   [ Wire.keyword "applied?", Wire.Bool false
+                   ; Wire.keyword "reason", Wire.keyword "unsupported-history-action"
+                   ; Wire.keyword "action", action_wire ]
              | _ -> (
                  try
                    if ops <> [] then
@@ -1042,17 +1042,17 @@ let apply_history_action repo (tx_id : string) (undo : bool)
                              ops')
                         ());
                    Wire.Map
-                     [ kw "applied?", Wire.Bool true
-                     ; kw "history-tx-id", Wire.Uuid history_tx_id ]
+                     [ Wire.keyword "applied?", Wire.Bool true
+                     ; Wire.keyword "history-tx-id", Wire.Uuid history_tx_id ]
                  with e ->
                    let reason = history_action_error_reason e in
                    if not (expected_history_action_error_reason reason) then
                      Worker_log.error "undo-redo-failed"
                        [ "repo", repo; "error", Printexc.to_string e ];
                    Wire.Map
-                     [ kw "applied?", Wire.Bool false
-                     ; kw "reason", reason
-                     ; kw "action", action_wire ])))
+                     [ Wire.keyword "applied?", Wire.Bool false
+                     ; Wire.keyword "reason", reason
+                     ; Wire.keyword "action", action_wire ])))
 
 let fix_tx (conn : conn) (tx_report : tx_report) (tx_meta : tx_meta) : unit =
   Db_sync_order.fix_duplicate_orders conn tx_report.tx_data tx_meta
@@ -1097,7 +1097,7 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
        match item with
        | Wire.Array (op :: e :: a :: v :: _)
        | Wire.List (op :: e :: a :: v :: _)
-         when op = kw "db/add" && a = kw "block/uuid" -> (
+         when op = Wire.keyword "db/add" && a = Wire.keyword "block/uuid" -> (
            match uuid_str_of_wire v with
            | Some u ->
                let u = Datascript.Util.uuid_canonicalize u in
@@ -1144,7 +1144,7 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
          match item with
          | Wire.Array (op :: e :: a :: v :: rest)
          | Wire.List (op :: e :: a :: v :: rest)
-           when op = kw "db/add" || op = kw "db/retract" ->
+           when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract" ->
              let e' = rewrite_pos e in
              let v' =
                match a with
@@ -1159,7 +1159,7 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
     (SSet.fold
        (fun u acc ->
           Wire.Array
-            [ kw "db/add"; Wire.String u; kw "block/uuid"; Wire.Uuid u ]
+            [ Wire.keyword "db/add"; Wire.String u; Wire.keyword "block/uuid"; Wire.Uuid u ]
           :: acc)
        !display_only [])
     tx_data
@@ -1253,8 +1253,8 @@ let pending_property_attrs (pending : Sync_client_op.local_tx_entry list)
             match item with
             | Wire.Array l | Wire.List l
               when List.length l >= 4
-                   && List.nth l 0 = kw "db/add"
-                   && List.nth l 2 = kw "db/ident" -> (
+                   && List.nth l 0 = Wire.keyword "db/add"
+                   && List.nth l 2 = Wire.keyword "db/ident" -> (
                 match List.nth l 3 with
                 | Wire.Keyword a | Wire.String a
                   when Db_property.property a -> SSet.add a acc
@@ -1278,8 +1278,8 @@ let replay_pending_entry (repo : string) (conn : conn)
          match item with
          | Wire.Array l | Wire.List l
            when List.length l >= 4
-                && List.nth l 0 = kw "db/add"
-                && List.nth l 2 = kw "block/uuid" -> (
+                && List.nth l 0 = Wire.keyword "db/add"
+                && List.nth l 2 = Wire.keyword "block/uuid" -> (
              match List.nth l 3 with
              | Wire.Uuid u -> Some u
              | _ -> None)
@@ -1338,10 +1338,10 @@ let replay_pending_entry (repo : string) (conn : conn)
              target is now inside the moved subtree). Without a failure
              the stale verbatim .tx would still upload and confirm,
              applying exactly what the rebase rejected *)
-          invalid_rebase_op (kw "replay-no-effect")
+          invalid_rebase_op (Wire.keyword "replay-no-effect")
             (Wire.Map
-               [ kw "tx-id", Wire.String local_tx.tx_id
-               ; kw "reason", kw "ops-produced-no-datoms" ]);
+               [ Wire.keyword "tx-id", Wire.String local_tx.tx_id
+               ; Wire.keyword "reason", Wire.keyword "ops-produced-no-datoms" ]);
         if datoms <> [] then
           let resolved =
             normalize_tx_data (Conn.db conn) db_before_apply datoms
@@ -1624,7 +1624,7 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
              else s)
       | Wire.Array [ a ; Wire.Keyword s ] | Wire.List [ a ; Wire.Keyword s ]
       | Wire.Array [ a ; Wire.String s ] | Wire.List [ a ; Wire.String s ]
-        when a = kw "db/ident" ->
+        when a = Wire.keyword "db/ident" ->
           kv_ident s
       | Wire.Int n -> Int_set.mem n kv_eids
       | Wire.Int64 n -> (
@@ -1659,7 +1659,7 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
     let is_retract_entity_item (item : Wire.t) : bool =
       match item with
       | Wire.Array (op :: _) | Wire.List (op :: _) ->
-          op = kw "db/retractEntity" || op = kw "db.fn/retractEntity"
+          op = Wire.keyword "db/retractEntity" || op = Wire.keyword "db.fn/retractEntity"
       | _ -> false
     in
     (* a pending delete's reversed re-adds reference the deleted entity
@@ -1676,7 +1676,7 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
                 ref to the fresh stub eid and silently misses the real
                 dangling eid it meant to remove *)
              | Wire.Array (op :: e :: rest) | Wire.List (op :: e :: rest)
-               when op = kw "db/add" ->
+               when op = Wire.keyword "db/add" ->
                  (match lookup_pair_of e with
                   | Some p when entity_of_wire_ref db e = None -> [ p ]
                   | _ -> [])
@@ -1732,12 +1732,12 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
         (fun item ->
           match item with
           | Wire.Array (op :: e' :: _) | Wire.List (op :: e' :: _)
-            when op = kw "db/retractEntity"
-                 || op = kw "db.fn/retractEntity" ->
+            when op = Wire.keyword "db/retractEntity"
+                 || op = Wire.keyword "db.fn/retractEntity" ->
               Hashtbl.replace fw_retracts_ent_tbl
                 (Transit_codec.to_string e') ()
           | Wire.Array (op :: e' :: a' :: _) | Wire.List (op :: e' :: a' :: _)
-            when op = kw "db/retract" -> (
+            when op = Wire.keyword "db/retract" -> (
               match a' with
               | Wire.Keyword s | Wire.Symbol s ->
                   Hashtbl.replace fw_retracts_attr_tbl (attr_key e' s) ()
@@ -1750,10 +1750,10 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
              dropping the legit restore *)
           | Wire.Array (op :: e' :: a' :: v' :: _)
           | Wire.List (op :: e' :: a' :: v' :: _)
-            when op = kw "db/add" -> push_val e' a' v'
+            when op = Wire.keyword "db/add" -> push_val e' a' v'
           | Wire.Array (op :: e' :: a' :: _ :: v' :: _)
           | Wire.List (op :: e' :: a' :: _ :: v' :: _)
-            when op = kw "db/cas" -> push_val e' a' v'
+            when op = Wire.keyword "db/cas" -> push_val e' a' v'
           | _ -> ())
         forward_items;
       let forward_retracts_entity (e_w : Wire.t) : bool =
@@ -1815,7 +1815,7 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
           match item with
           | Wire.Array (op :: e_w :: a_w :: _ :: _)
           | Wire.List (op :: e_w :: a_w :: _ :: _)
-            when op = kw "db/add" ->
+            when op = Wire.keyword "db/add" ->
               if forward_retracts_entity e_w then
                 (* the forward deleted the whole entity: resurrect it
                    only while it is still absent — a confirmed
@@ -1864,7 +1864,7 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
                    stubs_of db items
                    |> List.mapi (fun i (a, v) ->
                           Wire.Array
-                            [ kw "db/add"
+                            [ Wire.keyword "db/add"
                             ; Wire.String
                                 ("unapply-stub-" ^ string_of_int i)
                             ; Wire.Keyword a ; v ])
@@ -1973,7 +1973,7 @@ let tx_entity_uuid (db : db) (temp_id_uuid : (string, string) Hashtbl.t)
   match e with
   | Wire.Uuid s -> Some s
   | Wire.String s when Sync_state.uuid_string s -> Some s
-  | Wire.Array [ a; u ] | Wire.List [ a; u ] when a = kw "block/uuid" ->
+  | Wire.Array [ a; u ] | Wire.List [ a; u ] when a = Wire.keyword "block/uuid" ->
       uuid_str_of_wire u
   | Wire.Int _ -> (
       match Hashtbl.find_opt temp_id_uuid (Transit_codec.to_string e) with
@@ -2063,24 +2063,24 @@ let broadcast_sync_conflicts repo conflicts : unit =
          ~transit_payload:
            (Transit_codec.to_string
               (Wire.Array
-                 [ kw "sync-conflicts-updated"
+                 [ Wire.keyword "sync-conflicts-updated"
                  ; Wire.Map
-                     [ kw "repo", Wire.String repo
-                     ; kw "block-uuid", Wire.String block_uuid
-                     ; ( kw "conflicts"
+                     [ Wire.keyword "repo", Wire.String repo
+                     ; Wire.keyword "block-uuid", Wire.String block_uuid
+                     ; ( Wire.keyword "conflicts"
                    , Wire.Array
                        (List.map
                           (fun (c : Sync_client_op.sync_conflict) ->
                              Wire.Map
-                               [ kw "id", Wire.Int c.id
-                               ; kw "block-uuid", Wire.String c.block_uuid
-                               ; kw "attr", Wire.String c.attr
-                               ; kw "value", Wire.String c.value
-                               ; ( kw "remote-t"
+                               [ Wire.keyword "id", Wire.Int c.id
+                               ; Wire.keyword "block-uuid", Wire.String c.block_uuid
+                               ; Wire.keyword "attr", Wire.String c.attr
+                               ; Wire.keyword "value", Wire.String c.value
+                               ; ( Wire.keyword "remote-t"
                                  , match c.remote_t with
                                    | Some t -> Wire.Int t
                                    | None -> Wire.Nil )
-                               ; kw "created-at", Ds_wire.wire_int64 (Time.epoch_ms_to_int64 c.created_at) ])
+                               ; Wire.keyword "created-at", Ds_wire.wire_int64 (Time.epoch_ms_to_int64 c.created_at) ])
                           cs)) ]] )))
     uuids
 
@@ -2094,11 +2094,11 @@ let report_apply_remote_txs_error (_error : exn) has_local_changes remote_count
     | Some fn ->
         fn "Sync apply remote txs failed"
           (Wire.Map
-             [ kw "source", Wire.String "db-sync"
-             ; kw "operation", Wire.String "apply-remote-txs"
-             ; kw "has-local-changes", Wire.Bool has_local_changes
-             ; kw "remote-tx-count", Wire.Int remote_count
-             ; kw "local-tx-count", Wire.Int local_count ])
+             [ Wire.keyword "source", Wire.String "db-sync"
+             ; Wire.keyword "operation", Wire.String "apply-remote-txs"
+             ; Wire.keyword "has-local-changes", Wire.Bool has_local_changes
+             ; Wire.keyword "remote-tx-count", Wire.Int remote_count
+             ; Wire.keyword "local-tx-count", Wire.Int local_count ])
           Wire.Nil
     | None -> ()
   with e ->
@@ -2153,8 +2153,8 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
   | None ->
       Sync_util.fail_fast "db-sync/missing-db"
         (Wire.Map
-           [ kw "repo", Wire.String repo
-           ; kw "op", kw "apply-remote-txs" ])
+           [ Wire.keyword "repo", Wire.String repo
+           ; Wire.keyword "op", Wire.keyword "apply-remote-txs" ])
   | Some display_conn -> (
       let conn =
         Option.value (Sync_state.server_conn repo) ~default:display_conn
@@ -2244,5 +2244,5 @@ let apply_remote_txs repo (client : Sync_state.client)
 
 let apply_remote_tx repo client (tx_data : Wire.t list) =
   apply_remote_txs repo client
-    [ Wire.Map [ (kw "tx-data", Wire.Array tx_data) ] ]
+    [ Wire.Map [ (Wire.keyword "tx-data", Wire.Array tx_data) ] ]
 

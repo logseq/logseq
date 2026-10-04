@@ -412,7 +412,7 @@ let () =
       decrypt_private_key_crypt_fn :=
         (fun _password _encrypted_private_key ->
           error
-            (ex_info "decrypt-private-key" [ (Wire.Keyword "code", kw "invalid-password") ]));
+            (ex_info "decrypt-private-key" [ (Wire.Keyword "code", Wire.keyword "invalid-password") ]));
       secret_save_fn :=
         (fun ~key:_ _text ->
           incr save_calls;
@@ -814,7 +814,7 @@ let () =
           ui_calls := !ui_calls @ [ (action, payload) ];
           error
             (ex_info "cancelled"
-               [ (Wire.Keyword "code", kw "ui-request-rejected") ]));
+               [ (Wire.Keyword "code", Wire.keyword "ui-request-rejected") ]));
       expect_rejection (!preflight_upload_e2ee_fn "logseq_db_demo" true) (fun e ->
           eq (exn_code e) (Some "ui-request-rejected");
           eq !get_pair_calls 1;

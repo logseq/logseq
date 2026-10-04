@@ -16,7 +16,6 @@
 open Datascript
 open Db_worker_effect.Infix
 
-let kw s = Wire.Keyword s
 
 (* ---- atoms ---- *)
 
@@ -65,7 +64,7 @@ let broadcast_rtc_state (client : Sync_state.client option) : unit =
         ~transit_payload:
           (Transit_codec.to_string
              (Wire.Array
-                [ kw "rtc-sync-state"
+                [ Wire.keyword "rtc-sync-state"
                 ; Sync_presence.rtc_state_payload ~sync_counts client ]))
   | None -> ()
 
@@ -142,37 +141,37 @@ let report_upload_response_timeout (client : Sync_state.client)
     let data =
       Wire.Map
         (List.filter_map Fun.id
-           [ Some (kw "source", Wire.String "db-sync")
-           ; Some (kw "operation", Wire.String "upload-tx-batch")
-           ; Some (kw "repo", Wire.String repo)
+           [ Some (Wire.keyword "source", Wire.String "db-sync")
+           ; Some (Wire.keyword "operation", Wire.String "upload-tx-batch")
+           ; Some (Wire.keyword "repo", Wire.String repo)
            ; Some
-               ( kw "graph-id"
+               ( Wire.keyword "graph-id"
                , (match client.graph_id with
                   | Some g -> Wire.String g
                   | None -> Wire.Nil) )
-           ; Some (kw "timeout-ms", Wire.Int upload_response_timeout_ms)
-           ; Some (kw "elapsed-ms", Wire.Float elapsed_ms)
-           ; Some (kw "tx-count", Wire.Int (List.length request.tx_ids))
+           ; Some (Wire.keyword "timeout-ms", Wire.Int upload_response_timeout_ms)
+           ; Some (Wire.keyword "elapsed-ms", Wire.Float elapsed_ms)
+           ; Some (Wire.keyword "tx-count", Wire.Int (List.length request.tx_ids))
            ; Some
-               ( kw "t-before"
+               ( Wire.keyword "t-before"
                , (match request.t_before with
                   | Some t -> Wire.Int t
                   | None -> Wire.Nil) )
            ; Some
-               ( kw "latest-remote-tx"
+               ( Wire.keyword "latest-remote-tx"
                , (match Hashtbl.find_opt repo_latest_remote_tx repo with
                   | Some t -> Wire.Int t
                   | None -> Wire.Nil) )
            ; Some
-               ( kw "current-local-tx"
+               ( Wire.keyword "current-local-tx"
                , (match Sync_client_op.get_local_tx repo with
                   | Some t -> Wire.Int t
                   | None -> Wire.Nil) )
-           ; Some (kw "online?", Wire.Bool online)
-           ; Some (kw "ws-open?", Wire.Bool ws_open_state)
+           ; Some (Wire.keyword "online?", Wire.Bool online)
+           ; Some (Wire.keyword "ws-open?", Wire.Bool ws_open_state)
            ; (match request.outliner_ops with
               | [] -> None
-              | _ -> Some (kw "outliner-op", outliner_op_tag)) ])
+              | _ -> Some (Wire.keyword "outliner-op", outliner_op_tag)) ])
     in
     Worker_log.error "db-sync/upload-response-timeout"
       (List.map
@@ -185,10 +184,10 @@ let report_upload_response_timeout (client : Sync_state.client)
        | Some fn ->
            fn "Sync upload request did not get response" data
              (Wire.Map
-                [ ( kw "tx-ids"
+                [ ( Wire.keyword "tx-ids"
                   , Wire.Array
                       (List.map (fun s -> Wire.String s) request.tx_ids) )
-                ; ( kw "outliner-ops"
+                ; ( Wire.keyword "outliner-ops"
                   , Wire.Array
                       (List.map (fun s -> Wire.String s)
                          request.outliner_ops) ) ])
@@ -331,7 +330,7 @@ let () =
 let derive_history_outliner_ops db_before db_after tx_data
     (tx_meta : tx_meta) : Wire.t list * Wire.t list =
   let tx_meta_wire =
-    List.map (fun (k, v) -> (kw k, Ds_wire.transit_of_value v)) tx_meta
+    List.map (fun (k, v) -> (Wire.keyword k, Ds_wire.transit_of_value v)) tx_meta
   in
   let fwd, inv =
     Sync_deps.require "derive_history_outliner_ops"
@@ -422,7 +421,7 @@ let tx_item_block_uuid (db : db) (v : Wire.t) : string option =
   match v with
   | Wire.Uuid s -> Some s
   | Wire.Array [ a; u ] | Wire.List [ a; u ]
-    when a = kw "block/uuid" ->
+    when a = Wire.keyword "block/uuid" ->
       uuid_str_of_wire u
   | Wire.Int n -> (
       match Datascript.entity db (Entity_id n) with
@@ -463,17 +462,17 @@ let tx_item_attr (item : Wire.t) : Wire.t =
 let tx_item_add (item : Wire.t) : bool =
   match datom_item_parts item with
   | Some (_, _, tx) -> tx > 0
-  | None -> item_nth item 0 = kw "db/add"
+  | None -> item_nth item 0 = Wire.keyword "db/add"
 
 let tx_item_retract (item : Wire.t) : bool =
   match datom_item_parts item with
   | Some (_, _, tx) -> tx <= 0
-  | None -> item_nth item 0 = kw "db/retract"
+  | None -> item_nth item 0 = Wire.keyword "db/retract"
 
 let block_uuid_lookup_ref_value (v : Wire.t) : string option =
   match v with
   | Wire.Array [ a; u ] | Wire.List [ a; u ]
-    when a = kw "block/uuid" ->
+    when a = Wire.keyword "block/uuid" ->
       uuid_str_of_wire u
   | _ -> None
 
@@ -490,7 +489,7 @@ let tx_data_has_block_uuid_ref (tx_data : Wire.t list) : bool =
 let tx_item_retract_entity_block_uuid (item : Wire.t) : string option =
   match item with
   | Wire.Array [ op; e ] | Wire.List [ op; e ]
-    when op = kw "db/retractEntity" || op = kw "db.fn/retractEntity" ->
+    when op = Wire.keyword "db/retractEntity" || op = Wire.keyword "db.fn/retractEntity" ->
       block_uuid_lookup_ref_value e
   | _ -> None
 
@@ -559,7 +558,7 @@ let tx_item_created_block_uuid_entry (item : Wire.t)
   match item with
   | Wire.Array l | Wire.List l when List.length l >= 4 -> (
       let e = List.nth l 1 and a = List.nth l 2 and v = List.nth l 3 in
-      let is_add = List.nth l 0 = kw "db/add" in
+      let is_add = List.nth l 0 = Wire.keyword "db/add" in
       match (is_add, a, v) with
       | true, Wire.Keyword "block/uuid", (Wire.Uuid u) -> (
           match e with
@@ -636,7 +635,7 @@ let drop_stale_adds_after_remote_entity_delete (tx_data : Wire.t list)
   let deleted_eids =
     List.filter_map
       (fun item ->
-         if tx_item_retract item && tx_item_attr item = kw "block/uuid" then
+         if tx_item_retract item && tx_item_attr item = Wire.keyword "block/uuid" then
            match tx_item_entity item with
            | Wire.Int n -> Some n
            | _ -> None
@@ -646,7 +645,7 @@ let drop_stale_adds_after_remote_entity_delete (tx_data : Wire.t list)
   let recreated_eids =
     List.filter_map
       (fun item ->
-         if tx_item_add item && tx_item_attr item = kw "block/uuid" then
+         if tx_item_add item && tx_item_attr item = Wire.keyword "block/uuid" then
            match tx_item_entity item with
            | Wire.Int n -> Some n
            | _ -> None
@@ -672,7 +671,7 @@ let drop_stale_adds_after_remote_entity_delete (tx_data : Wire.t list)
 
 let remote_txs_db_migrate (remote_txs : Wire.t list) : bool =
   List.exists
-    (fun tx -> Wire.get "outliner-op" tx = Some (kw "db-migrate"))
+    (fun tx -> Wire.get "outliner-op" tx = Some (Wire.keyword "db-migrate"))
     remote_txs
 
 (* ---- upload temp-id grouping ---- *)
@@ -713,7 +712,7 @@ let upload_replaced_values (db : db) (tx_data : Wire.t list)
        | Wire.Array l | Wire.List l -> (
            match l with
            | op :: entity :: (Wire.Keyword a as attr_wire) :: _ :: _
-             when op = kw "db/retract"
+             when op = Wire.keyword "db/retract"
                   && List.length l >= 4
                   && (not (upload_tempid entity))
                   && not (Ldb.many_attr db a) ->
@@ -740,7 +739,7 @@ let upload_tx_item_group_keys (db : db) (linked : Wire.t list)
       match l with
       | op :: entity :: attr :: value :: _
         when List.mem op
-               [ kw "db/add"; kw "db/retract"; kw "db/cas"; kw "db.fn/cas" ]
+               [ Wire.keyword "db/add"; Wire.keyword "db/retract"; Wire.keyword "db/cas"; Wire.keyword "db.fn/cas" ]
              && List.length l >= 4 ->
           let acc = ref [] in
           let is_ref =
@@ -751,22 +750,22 @@ let upload_tx_item_group_keys (db : db) (linked : Wire.t list)
           (* a plain non-ref add on a linked entity is leaf data and may
              split; a retract/cas or a ref edge on it is a dependency *)
           if upload_tempid entity
-             || (List.mem entity linked && (op <> kw "db/add" || is_ref))
+             || (List.mem entity linked && (op <> Wire.keyword "db/add" || is_ref))
           then acc := entity :: !acc;
           (match attr with
            | Wire.Keyword a when ref_attr db a ->
                if upload_tempid value then acc := value :: !acc
            | _ -> ());
-          if (op = kw "db/add" || op = kw "db/retract")
+          if (op = Wire.keyword "db/add" || op = Wire.keyword "db/retract")
              && Hashtbl.mem replaced
                   (Transit_codec.to_string (Wire.Array [ entity; attr ]))
           then
             acc :=
-              Wire.List [ kw "sync/value-replacement"; entity; attr ]
+              Wire.List [ Wire.keyword "sync/value-replacement"; entity; attr ]
               :: !acc;
           !acc
       | [ op; e ]
-        when (op = kw "db/retractEntity" || op = kw "db.fn/retractEntity")
+        when (op = Wire.keyword "db/retractEntity" || op = Wire.keyword "db.fn/retractEntity")
              && (upload_tempid e || List.mem e linked) ->
           [ e ]
       | _ -> [])
@@ -907,19 +906,19 @@ let cap_upload_request_tx_entries repo (db : db)
     let base =
       Wire.as_map entry
       |> List.map (fun (k, v) ->
-             if k = kw "tx-data" then (k, Wire.Array chunk)
+             if k = Wire.keyword "tx-data" then (k, Wire.Array chunk)
              else (k, v))
     in
     let augmented =
       base
-      @ [ kw "large-upload-original-tx-id"
+      @ [ Wire.keyword "large-upload-original-tx-id"
         , (match tx_id with Some w -> w | None -> Wire.Nil)
-        ; kw "large-upload-next-index", Wire.Int next_index
-        ; kw "large-upload-final?", Wire.Bool final_ ]
+        ; Wire.keyword "large-upload-next-index", Wire.Int next_index
+        ; Wire.keyword "large-upload-final?", Wire.Bool final_ ]
     in
     let augmented =
       if not final_ then
-        List.filter (fun (k, _) -> k <> kw "tx-id") augmented
+        List.filter (fun (k, _) -> k <> Wire.keyword "tx-id") augmented
       else augmented
     in
     Wire.Map augmented
@@ -939,29 +938,29 @@ let pending_tx_uuid_delta (items : Wire.t list) : SSet.t * SSet.t =
     (fun (created, retracted) item ->
        match item with
        | (Wire.Array l | Wire.List l)
-         when List.length l >= 4 && List.nth l 0 = kw "db/add" -> (
+         when List.length l >= 4 && List.nth l 0 = Wire.keyword "db/add" -> (
            (* an e-position [:block/uuid u] upserts u on the server even
               when the tx doesn't assert block/uuid explicitly *)
            let created =
              match List.nth l 1 with
              | Wire.Array [ a; Wire.Uuid u ] | Wire.List [ a; Wire.Uuid u ]
-               when a = kw "block/uuid" -> SSet.add u created
+               when a = Wire.keyword "block/uuid" -> SSet.add u created
              | _ -> created
            in
-           match List.nth l 2 = kw "block/uuid", List.nth l 3 with
+           match List.nth l 2 = Wire.keyword "block/uuid", List.nth l 3 with
            | true, Wire.Uuid u -> (SSet.add u created, retracted)
            | _ -> (created, retracted))
        | (Wire.Array l | Wire.List l)
-         when List.length l >= 4 && List.nth l 0 = kw "db/retract" -> (
-           match List.nth l 2 = kw "block/uuid", List.nth l 3 with
+         when List.length l >= 4 && List.nth l 0 = Wire.keyword "db/retract" -> (
+           match List.nth l 2 = Wire.keyword "block/uuid", List.nth l 3 with
            | true, Wire.Uuid u -> (created, SSet.add u retracted)
            | _ -> (created, retracted))
        | (Wire.Array [ op; e ] | Wire.List [ op; e ])
-         when op = kw "db/retractEntity"
-              || op = kw "db.fn/retractEntity" -> (
+         when op = Wire.keyword "db/retractEntity"
+              || op = Wire.keyword "db.fn/retractEntity" -> (
            match e with
            | Wire.Array [ a; Wire.Uuid u ] | Wire.List [ a; Wire.Uuid u ]
-             when a = kw "block/uuid" -> (created, SSet.add u retracted)
+             when a = Wire.keyword "block/uuid" -> (created, SSet.add u retracted)
            | _ -> (created, retracted))
        | _ -> (created, retracted))
     (SSet.empty, SSet.empty)
@@ -1010,7 +1009,7 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
        match item with
        | Wire.Array (op :: e :: a :: v :: _)
        | Wire.List (op :: e :: a :: v :: _)
-         when op = kw "db/add" && a = kw "block/page"
+         when op = Wire.keyword "db/add" && a = Wire.keyword "block/page"
               && not (is_missing_ref v) ->
            let k = Transit_codec.to_string e in
            if not (Hashtbl.mem page_ref_of k) then
@@ -1152,7 +1151,7 @@ let drop_cycle_parent_edges
        match item with
        | Wire.Array (op :: e :: a :: v :: _)
        | Wire.List (op :: e :: a :: v :: _)
-         when op = kw "db/add" && a = kw "block/parent" -> (
+         when op = Wire.keyword "db/add" && a = Wire.keyword "block/parent" -> (
            match eid_of e, eid_of v with
            | Some eid, Some pid ->
                if reaches pid eid then begin
@@ -1169,14 +1168,14 @@ let drop_cycle_parent_edges
            | _ -> ())
        | Wire.Array (op :: e :: a :: _)
        | Wire.List (op :: e :: a :: _)
-         when (op = kw "db/retract" || op = kw "db/retractEntity")
-              && a = kw "block/parent" -> (
+         when (op = Wire.keyword "db/retract" || op = Wire.keyword "db/retractEntity")
+              && a = Wire.keyword "block/parent" -> (
            match eid_of e with
            | Some eid -> set_kept eid None
            | None -> ())
        | Wire.Array (op :: e :: _)
        | Wire.List (op :: e :: _)
-         when op = kw "db/retractEntity" -> (
+         when op = Wire.keyword "db/retractEntity" -> (
            match eid_of e with
            | Some eid -> set_kept eid None
            | None -> ())
@@ -1196,7 +1195,7 @@ let drop_cycle_parent_edges
               match item with
               | Wire.Array (op :: e :: a :: _)
               | Wire.List (op :: e :: a :: _)
-                when op = kw "db/retract" && a = kw "block/parent" -> (
+                when op = Wire.keyword "db/retract" && a = Wire.keyword "block/parent" -> (
                   match eid_of e with
                   | Some eid when Hashtbl.mem dropped_es eid -> None
                   | _ -> Some item)
@@ -1305,12 +1304,12 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
               | _ -> ());
              Some
                (Wire.Map
-                  [ kw "tx-id", Wire.String e.tx_id
-                  ; kw "outliner-op"
+                  [ Wire.keyword "tx-id", Wire.String e.tx_id
+                  ; Wire.keyword "outliner-op"
                   , (match e.outliner_op with
-                     | Some op -> kw op
+                     | Some op -> Wire.keyword op
                      | None -> Wire.Nil)
-                  ; kw "tx-data", Wire.Array items ])
+                  ; Wire.keyword "tx-data", Wire.Array items ])
          | None ->
              missing_entity_tx_ids := e.tx_id :: !missing_entity_tx_ids;
              None)
@@ -1320,8 +1319,8 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     List.map
       (fun tx_id ->
          Wire.Map
-           [ kw "tx-id", Wire.String tx_id
-           ; kw "reason", kw "missing-block-entity" ])
+           [ Wire.keyword "tx-id", Wire.String tx_id
+           ; Wire.keyword "reason", Wire.keyword "missing-block-entity" ])
       (List.rev !missing_entity_tx_ids)
   in
   let empty_tx_ids =
@@ -1341,12 +1340,12 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
          | Some (Wire.Array []) | Some (Wire.List []) ->
              Some
                (Wire.Map
-                  [ ( kw "tx-id"
+                  [ ( Wire.keyword "tx-id"
                     , Option.value (Wire.get "tx-id" e) ~default:Wire.Nil )
-                  ; ( kw "outliner-op"
+                  ; ( Wire.keyword "outliner-op"
                     , Option.value (Wire.get "outliner-op" e)
                         ~default:Wire.Nil )
-                  ; kw "reason", kw "empty-tx-data" ])
+                  ; Wire.keyword "reason", Wire.keyword "empty-tx-data" ])
          | _ -> None)
       entries
   in
@@ -1379,12 +1378,12 @@ let large_upload_progress (tx_entries : Wire.t list) : Wire.t list =
        | Some (Wire.String _ as orig) ->
            Some
              (Wire.Map
-                [ kw "large-upload-original-tx-id", orig
-                ; ( kw "large-upload-next-index"
+                [ Wire.keyword "large-upload-original-tx-id", orig
+                ; ( Wire.keyword "large-upload-next-index"
                   , Option.value
                       (Wire.get "large-upload-next-index" entry)
                       ~default:Wire.Nil )
-                ; ( kw "large-upload-final?"
+                ; ( Wire.keyword "large-upload-final?"
                   , Option.value
                       (Wire.get "large-upload-final?" entry)
                       ~default:Wire.Nil ) ])
@@ -1475,7 +1474,7 @@ let upload_aes_key repo (tx_entries : Wire.t list) : Wire.t Db_worker_effect.t
     if aes_key = Wire.Nil then
       Sync_util.fail_fast "db-sync/missing-field"
         (Wire.Map
-           [ kw "repo", Wire.String repo; kw "field", kw "aes-key" ]);
+           [ Wire.keyword "repo", Wire.String repo; Wire.keyword "field", Wire.keyword "aes-key" ]);
     Db_worker_effect.pure aes_key
   else Db_worker_effect.pure Wire.Nil
 
@@ -1503,7 +1502,7 @@ let encrypt_tx_entry repo (client : Sync_state.client) aes_key
     (Wire.Map
        (List.map
           (fun (k, v) ->
-             if k = kw "tx-data" then (k, Wire.Array tx_data'') else (k, v))
+             if k = Wire.keyword "tx-data" then (k, Wire.Array tx_data'') else (k, v))
           (Wire.as_map entry)))
 
 (* cljs tx-entry->upload-message *)
@@ -1512,16 +1511,16 @@ let tx_entry_to_upload_message (entry : Wire.t) : Wire.t =
     Transit_codec.to_string
       (Option.value (Wire.get "tx-data" entry) ~default:(Wire.Array []))
   in
-  let base : (Wire.t * Wire.t) list = [ kw "tx", Wire.String tx_str ] in
+  let base : (Wire.t * Wire.t) list = [ Wire.keyword "tx", Wire.String tx_str ] in
   let with_id =
     match Wire.get "tx-id" entry with
-    | Some (Wire.String id) -> base @ [ kw "tx-id", Wire.String id ]
+    | Some (Wire.String id) -> base @ [ Wire.keyword "tx-id", Wire.String id ]
     | _ -> base
   in
   Wire.Map
     (match Wire.get "outliner-op" entry with
      | Some ((Wire.Keyword _ | Wire.String _) as op) ->
-         with_id @ [ kw "outliner-op", op ]
+         with_id @ [ Wire.keyword "outliner-op", op ]
      | _ -> with_id)
 
 (* cljs send-tx-batch! *)
@@ -1550,11 +1549,11 @@ let send_tx_batch (client : Sync_state.client)
   in
   send ws
     (Wire.Map
-       [ kw "type", Wire.String "tx/batch"
-       ; kw "client-revision", Wire.String (Sync_util.build_revision ())
-       ; ( kw "t-before"
+       [ Wire.keyword "type", Wire.String "tx/batch"
+       ; Wire.keyword "client-revision", Wire.String (Sync_util.build_revision ())
+       ; ( Wire.keyword "t-before"
          , match local_tx with Some t -> Wire.Int t | None -> Wire.Nil )
-       ; kw "txs", Wire.Array payload ])
+       ; Wire.keyword "txs", Wire.Array payload ])
   >>= fun () ->
   start_upload_response_timeout client
     { Sync_state.tx_ids
