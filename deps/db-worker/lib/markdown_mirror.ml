@@ -354,9 +354,9 @@ let is_not_found_exn exn =
     | Failure m -> m
     | _ -> Printexc.to_string exn
   in
-  Export_file.str_contains msg "ENOENT"
-  || Export_file.str_contains msg "No such file"
-  || Export_file.str_contains msg "NotFoundError"
+  Ns_util.str_contains msg "ENOENT"
+  || Ns_util.str_contains msg "No such file"
+  || Ns_util.str_contains msg "NotFoundError"
 
 let read_text_opt path : string option Db_worker_effect.t =
   Db_worker_effect.catch
@@ -565,7 +565,7 @@ let rendered_line_matches_block (info : block_line_info option) (content : strin
       let fragment' = normalize_rendered_match_text info.first_line_fragment in
       if info.code_block then code_fence_block_line content
       else if str_blank fragment' then str_blank content
-      else Export_file.str_contains content' fragment'
+      else Ns_util.str_contains content' fragment'
 
 (* db/class-instance? — class via tags incl. transitive class/extends. *)
 let class_instance (cls : entity) (obj : entity) : bool =

@@ -41,10 +41,6 @@ let default_tree_opts =
   ; heading_to_list = false
   ; include_properties = true }
 
-let str_contains s sub =
-  let n = String.length s and m = String.length sub in
-  let rec loop i = i + m <= n && (String.sub s i m = sub || loop (i + 1)) in
-  m = 0 || loop 0
 
 let split_lines s = if s = "" then [] else String.split_on_char '\n' s
 
@@ -66,7 +62,7 @@ let is_property_attr (a : attr) : bool =
   | Some i ->
       let ns = String.sub a 0 i in
       List.mem ns logseq_property_namespaces
-      || str_contains ns ".property"
+      || Ns_util.str_contains ns ".property"
       || List.mem a Plain_value.public_db_attribute_properties
   | None -> List.mem a Plain_value.public_db_attribute_properties
 
