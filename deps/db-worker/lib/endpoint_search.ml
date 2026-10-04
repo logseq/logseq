@@ -65,11 +65,7 @@ let sanitize_repo_name repo =
   String.map (fun c -> match c with '/' | '\\' | ':' -> '-' | c -> c) repo
 
 let search_db_path repo =
-  let base =
-    match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-    | Some dir -> dir
-    | None -> "."
-  in
+  let base = Root_dir.worker_db_dir () in
   Filename.concat base (sanitize_repo_name repo ^ "-search.sqlite")
 
 (* cljs get-dbs/resolve-db-path: the search sqlite lives inside the

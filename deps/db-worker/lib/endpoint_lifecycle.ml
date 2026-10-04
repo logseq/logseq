@@ -14,11 +14,7 @@ let () =
    <graphs-dir>/<encoded-graph>/db.sqlite (platform/node.cljs repo-dir),
    where <encoded-graph> is graph-dir/repo->encoded-graph-dir-name. *)
 let db_dir repo =
-  let base =
-    match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-    | Some dir -> dir
-    | None -> "."
-  in
+  let base = Root_dir.worker_db_dir () in
   match Graph_dir.repo_to_encoded_graph_dir_name repo with
   | Some dir -> Filename.concat base dir
   | None -> base
