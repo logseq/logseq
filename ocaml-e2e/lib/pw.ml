@@ -115,8 +115,14 @@ let eval_js_arg env js arg =
     object itself, returning undefined), so we evaluate at page level against
     the first element matching [selector]. *)
 let eval_on_element env selector js =
+  (* Locator.evaluate serializes a function string instead of invoking it,
+     so we evaluate at page level. [selector] may use Playwright-only
+     pseudos; the only one the suite needs is :has-text, handled by a
+     textContent filter fallback. *)
   eval_js_arg env
-    (Printf.sprintf "sel => { const element = document.querySelector(sel); return (%s)(element); }" js)
+    (Printf.sprintf
+       "sel => { const m = sel.match(/^(.*):has-text\\('([^']*)'\\)$/);         const element = m ? [...document.querySelectorAll(m[1])].find(e => e.textContent.includes(m[2]))         : document.querySelector(sel); return (%s)(element); }"
+       js)
     selector
 
 (* {2 Misc} *)

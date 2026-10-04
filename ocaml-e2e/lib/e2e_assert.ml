@@ -4,7 +4,10 @@
 open Fest.Promise
 
 let is_visible_l ?timeout loc =
-  Playwright.expect_is_visible ?timeout (Playwright.expect loc)
+  (* clj assert-is-visible: (w/-query q) .first isVisible — first-match
+     semantics, not strict mode *)
+  Playwright.expect_is_visible ?timeout
+    (Playwright.expect (Playwright.locator_first loc))
 
 let is_visible env selector =
   let* () = is_visible_l (Playwright.locator_first (Pw.q env selector)) in
