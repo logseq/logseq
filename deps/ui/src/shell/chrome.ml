@@ -26,14 +26,9 @@ let skip_to_main =
 (* cljs shui/button :ghost :size :sm — tooltip-wrapped buttons carry no
    title attr; extra classes sort alphabetically into the class list *)
 let ghost_btn_cls ?(mid = "") ?(tail = "") () =
-  "active:opacity-80 as-ghost box-content " ^ mid
-  ^ "cursor-pointer disabled:opacity-50 disabled:pointer-events-none \
-     focus-visible:outline-none focus-visible:ring-2 \
-     focus-visible:ring-offset-2 focus-visible:ring-ring font-medium gap-1 \
-     h-6 hover:bg-secondary/70 hover:text-secondary-foreground inline-flex \
-     items-center justify-center overflow-hidden p-1 ring-offset-background \
-     rounded-md select-none text-sm " ^ tail
-  ^ "transition-colors ui__button w-6 whitespace-nowrap"
+  Ui_parts.ghost_btn_cls
+    ~extra:(mid ^ "box-content h-6 overflow-hidden p-1 w-6 " ^ tail)
+    ()
 
 let icon_btn ~key ~id ~cls ~icon ~on_click =
   Logseq_dom.dom ~key ~tag:"button" ~id

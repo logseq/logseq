@@ -611,16 +611,10 @@ let render_bidi_groups wrap w =
       el_append_child wrap g)
     (W.elems w)
 
-(* shui button ghost sm — cljs components.cljs with-button-classes *)
 let ghost_btn_cls =
-  "ui__button inline-flex cursor-pointer items-center justify-center \
-   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-   ring-offset-background transition-colors focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
-   disabled:pointer-events-none disabled:opacity-50 select-none \
-   hover:bg-secondary/70 hover:text-secondary-foreground \
-   active:opacity-80 as-ghost h-6 rounded px-2 py-0 \
-   text-xs text-muted-foreground"
+  Ui_parts.ghost_btn_cls
+    ~extra:"h-6 rounded px-2 py-0 text-xs text-muted-foreground"
+    ()
 
 (* title action buttons — cljs db-page-title-actions: "Add icon" (when no
    icon prop) + "Set property"/"Add tag property"/"Configure" *)

@@ -585,15 +585,8 @@ and render_finder_state (_t : t) (f : finder) : unit =
 and ghost_btn ?(extra = "") ~icon ~title ~onclick () : D.el =
   let b = Web_dom.create_element "button" in
   Web_dom.el_set_class b
-    ("ui__button inline-flex cursor-pointer items-center \
-      justify-center whitespace-nowrap rounded-md text-sm gap-1 \
-      font-medium ring-offset-background transition-colors \
-      focus-visible:outline-none focus-visible:ring-2 \
-      focus-visible:ring-ring focus-visible:ring-offset-2 \
-      disabled:pointer-events-none disabled:opacity-50 select-none \
-      hover:bg-secondary/70 hover:text-secondary-foreground \
-      active:opacity-80 as-ghost h-6 text-xs rounded px-3"
-    ^ if extra = "" then "" else " " ^ extra);
+    (Ui_parts.ghost_btn_cls ~extra:("h-6 text-xs rounded px-3 " ^ extra)
+       ());
   Web_dom.el_set_attr b "type" "button";
   Web_dom.el_set_attr b "title" title;
   Web_dom.el_append_child b (ticon icon);

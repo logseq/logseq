@@ -13,14 +13,7 @@ let short_name repo =
     String.sub repo lp (String.length repo - lp)
   else repo
 
-let ghost_btn_cls =
-  "ui__button inline-flex cursor-pointer items-center justify-center \
-   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-   ring-offset-background transition-colors focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
-   disabled:pointer-events-none disabled:opacity-50 select-none \
-   hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 \
-   as-ghost h-7 rounded py-1"
+let ghost_btn_cls = Ui_parts.ghost_btn_cls ~extra:"h-7 rounded py-1" ()
 
 (* tabler dots glyph — cljs ui/icon renders the inline svg inside
    span.ls-icon-dots.ui__icon.ti *)

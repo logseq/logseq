@@ -815,7 +815,22 @@ let cancel_pending_save () =
   Web_dom.clear_timeout !save_timer;
   pending_save := None
 
-let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
+let op_names ops =
+  String.concat ","
+    (List.map
+       (fun o ->
+         match o with
+         | Wire.Array (Wire.Array (Wire.Keyword name :: _) :: _)
+         | Wire.List (Wire.Array (Wire.Keyword name :: _) :: _)
+         | Wire.Array (Wire.Keyword name :: _) -> name
+         | _ -> "?")
+       ops)
+
+(* same ops as [apply] but the promise carries the worker response
+   — callers that act on inserted uuids need {:blocks [...]} (cljs
+   insert-blocks! result) *)
+let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
+    =
   (* cljs saves the editing buffer on keydown before structure ops —
      flush the queued keystroke save instead of dropping it, so ops like
      indent/move don't lose text typed within the debounce window *)
@@ -824,11 +839,11 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
       pending_save := None;
       let* sop = save_block_parsed uuid title in
       let* () = apply [ sop ] in
-      apply ~opts ops
+      apply_result ~opts ops
   | None -> (
       Web_dom.clear_timeout !save_timer;
       match !Runtime.current_repo with
-      | None -> Js.Promise.resolve ()
+      | None -> Js.Promise.resolve None
       | Some repo ->
           let opts =
             match opts with
@@ -840,30 +855,25 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
             Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
               (Wire.Array ops) opts
           in
-          (* callers that ignore the response (autosave, the pending_save
-             flush) never refresh — queue the delta so the next refresh
-             or broadcast merges the change it carries *)
-          (match Wire.get r "delta" with
-           | Some d -> Page_delta.stash_deferred d
-           | None -> ());
-          Js.Promise.resolve ())
+          Js.Promise.resolve (Some r))
           |> Js.Promise.catch (fun e ->
                  Platform.console_error
-                   ( "apply-outliner-ops failed"
-                   , String.concat ","
-                       (List.map
-                          (fun o ->
-                            match o with
-                            | Wire.Array
-                                (Wire.Array (Wire.Keyword name :: _) :: _)
-                            | Wire.List
-                                (Wire.Array (Wire.Keyword name :: _) :: _)
-                            | Wire.Array (Wire.Keyword name :: _) -> name
-                            | _ -> "?")
-                          ops)
-                   , e );
+                   ("apply-outliner-ops failed", op_names ops, e);
                  Toast.error (I18n.t "ui/save-changes-error");
-                 Js.Promise.resolve ()))
+                 Js.Promise.resolve None))
+
+and apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
+  let* r = apply_result ~opts ops in
+  (* callers that ignore the response (autosave, the pending_save flush)
+     never refresh — queue the delta so the next refresh or broadcast
+     merges the change it carries *)
+  (match r with
+   | Some r -> (
+       match Wire.get r "delta" with
+       | Some d -> Page_delta.stash_deferred d
+       | None -> ())
+   | None -> ());
+  Js.Promise.resolve ()
 
 (* While an editor is open a per-op fetch+rebuild starves keystroke
    dispatch under RTC traffic (~200-300ms of whole-page reconcile per
@@ -893,36 +903,6 @@ let apply_parsed ?opts ~rest pairs =
   in
   apply ?opts (Array.to_list a @ rest)
 
-(* same ops as [apply] but the promise carries the worker response
-   — callers that act on inserted uuids need {:blocks [...]} (cljs
-   insert-blocks! result) *)
-let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
-    =
-  match !pending_save with
-  | Some (uuid, title) ->
-      pending_save := None;
-      let* sop = save_block_parsed uuid title in
-      let* () = apply [ sop ] in
-      apply_result ~opts ops
-  | None -> (
-      Web_dom.clear_timeout !save_timer;
-      match !Runtime.current_repo with
-      | None -> Js.Promise.resolve None
-      | Some repo ->
-          let opts =
-            match opts with
-            | Wire.Map kvs ->
-                Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
-            | _ -> opts
-          in
-          (let* r =
-            Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-              (Wire.Array ops) opts
-          in
-          Js.Promise.resolve (Some r))
-          |> Js.Promise.catch (fun e ->
-                 Platform.console_error ("apply-outliner-ops failed", e);
-                 Js.Promise.resolve None))
 
 (* page-delta splice path: op responses carry the worker's render delta
    ({blocks, deleted, children, rev}) — patch only the touched rows
@@ -960,27 +940,11 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
    Returns the merged page plus every uuid the folded deltas touched, so
    the caller can drop only the title overrides the tx caught up to *)
 let apply_queued _page delta =
-  let deltas = Page_delta.drain_deferred () @ [ delta ] in
-  let touched = List.concat_map Page_delta.delta_uuids deltas in
-  (* fold and publish inside the apply queue so a racing arm can't
-     interleave between our splice and our publish — canon rows replace
-     block fields wholesale, so a stale arm publishing last would blank
-     rows the newer model already advanced *)
-  Page_delta.with_apply_queue (fun () ->
+  Page_delta.with_delta_batch [ delta ] (fun deltas touched ->
       match !Runtime.current_page with
       | Some base -> (
           let h = delta_helpers base in
-          let rec go page = function
-            | [] -> Js.Promise.resolve (Some page)
-            | d :: rest -> (
-                let* applied =
-                  Page_delta.apply_to_page ~strict:false h page d
-                in
-                match applied with
-                | Some page' -> go page' rest
-                | None -> Js.Promise.resolve None)
-          in
-          let* a = go base deltas in
+          let* a = Page_delta.fold_page ~strict:false h base deltas in
           (match a with
            | Some p'
              when p' != base
@@ -1004,9 +968,8 @@ let apply_queued _page delta =
    caller falls back to a full reload *)
 let splice_journals ?(strict = false) (deltas : Wire.t list) :
     bool Js.Promise.t =
-  let deltas = Page_delta.drain_deferred () @ deltas in
-  let touched = List.concat_map Page_delta.delta_uuids deltas in
-  let build_index (js : Model.page list) =
+  Page_delta.with_delta_batch deltas (fun deltas touched ->
+    let build_index (js : Model.page list) =
     let idx = Hashtbl.create 512 in
     List.iteri
       (fun i (p : Model.page) ->
@@ -1024,9 +987,8 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
       js;
     idx
   in
-  Page_delta.with_apply_queue (fun () ->
-      let base = !Runtime.current_journals in
-      match base with
+  let base = !Runtime.current_journals in
+  match base with
       | [] -> Js.Promise.resolve false
       | _ ->
           let arr = Array.of_list base in
@@ -1078,9 +1040,6 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
              match !Runtime.current_journals with
              | cur when cur == base ->
                  if !owners <> [] then begin
-                   (* fold and publish inside the apply queue so a
-                      racing arm can't interleave between our splice
-                      and our publish *)
                    Runtime.send
                      (Action.Journals_spliced (Array.to_list arr));
                    S.prune_overrides touched;

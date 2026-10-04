@@ -130,6 +130,7 @@ let with_apply_queue (f : unit -> 'a Js.Promise.t) : 'a Js.Promise.t =
     Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p;
   p
 
+
 let note_applied rev =
   applied := ISet.add rev !applied;
   (* bound the set — a long session of ops would otherwise grow it *)
@@ -487,3 +488,30 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           in
           own_commit := Some page';
           Js.Promise.resolve (Some page')))
+
+(* the shared drain→queue envelope every delta consumer goes through:
+   [deltas] gain the queued deferred deltas, run inside the apply queue
+   (fold and publish together so a racing arm can't interleave between
+   the splice and the publish), and [f] also receives every uuid the
+   batch touches for override pruning *)
+let with_delta_batch (deltas : Wire.t list)
+    (f : Wire.t list -> string list -> 'a Js.Promise.t) : 'a Js.Promise.t
+    =
+  let deltas = drain_deferred () @ deltas in
+  let touched = List.concat_map delta_uuids deltas in
+  with_apply_queue (fun () -> f deltas touched)
+
+(* fold [deltas] onto [page] via [h], stopping at the first delta that
+   can't splice. Op-side patches are absolute set-ops (~strict:false);
+   the broadcast path keeps ~strict:true *)
+let fold_page ~strict (h : helpers) (page : Model.page)
+    (deltas : Wire.t list) : Model.page option Js.Promise.t =
+  let rec go p = function
+    | [] -> Js.Promise.resolve (Some p)
+    | d :: rest -> (
+        let* applied = apply_to_page ~strict h p d in
+        match applied with
+        | Some p' -> go p' rest
+        | None -> Js.Promise.resolve None)
+  in
+  go page deltas
