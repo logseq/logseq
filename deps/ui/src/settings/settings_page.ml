@@ -247,6 +247,7 @@ let language_row ctx =
     ~label:T.language_label
     ~actions:
       [ V.lang_trigger ~key:"lang-sel" ~h_cls:"ls-select-md" ~st:lang_label
+          ~dom_id:"settings-lang-trigger"
           ~anchor_sel:"#settings-lang-trigger"
       ; dom ~key:"lang-sel-i" ~tag:"input"
           ~attrs:

@@ -1695,6 +1695,10 @@ a.page-title {
       height: 14px;
     }
   }
+
+  &:hover > .code-block-actions {
+    opacity: 1;
+  }
 }
 
 .CodeMirror {

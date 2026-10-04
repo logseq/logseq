@@ -78,7 +78,15 @@ let current_lang () =
 
 let set_language code =
   Platform.local_storage_set "preferred-language" (quoted code);
-  Platform.document_set_lang code
+  Platform.document_set_lang code;
+  (* fetch the new locale first so the reload boots straight into it;
+     `let x = t "..."` bindings freeze at module load so a full reload is
+     the honest swap — same as before lazy dicts *)
+  ignore
+    (I18n.load code
+     |> Js.Promise.then_ (fun () ->
+            Platform.location_reload ();
+            Js.Promise.resolve ()))
 
 let lang_label_for code =
   match List.find_opt (fun (k, _) -> k = code) languages with
@@ -164,8 +172,8 @@ let theme_modes_ul ~st =
     ]
 
 (* shui select trigger + chevron; opening the language popover like cljs *)
-let lang_trigger ~key ~h_cls ~st ~anchor_sel =
-  dom ~key ~tag:"button"
+let lang_trigger ~key ~h_cls ~st ?(dom_id = "") ~anchor_sel =
+  dom ~key ~tag:"button" ~id:dom_id
     ~style_class:
       ("ui__select-trigger " ^ h_cls)
     ~attrs:
