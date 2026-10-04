@@ -139,12 +139,10 @@ let journal_flatten ~scope (pages : Model.page array) (st : S.t) :
   let last_i = Array.length pages - 1 in
   Array.iteri
     (fun i (p : Model.page) ->
-      acc := Day_tail (p, i = last_i) :: !acc;
+      acc := Day_head p :: !acc;
       let rows = flatten ~scope ~roots:p.Model.page_blocks st in
-      for j = Array.length rows - 1 downto 0 do
-        acc := Row rows.(j) :: !acc
-      done;
-      acc := Day_head p :: !acc)
+      Array.iter (fun r -> acc := Row r :: !acc) rows;
+      acc := Day_tail (p, i = last_i) :: !acc)
     pages;
   Array.of_list (List.rev !acc)
 
