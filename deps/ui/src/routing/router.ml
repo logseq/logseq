@@ -173,8 +173,12 @@ let load_journals () =
   let collect p =
     let* p' = fetch_blocks p in
     let* refs = fetch_refs_blocks p' in
-    Js.Promise.resolve
-      { p' with Model.page_linked_refs = refs }
+    (* title-tag chips need tag uuids/id for their context menu *)
+    let* p'' =
+      Outliner_ops.resolve_page_tags (repo ())
+        { p' with Model.page_linked_refs = refs }
+    in
+    Js.Promise.resolve p''
   in
   let* arr = Js.Promise.all (Array.of_list (List.map collect pages)) in
   let* js = Js.Promise.resolve (Array.to_list arr) in

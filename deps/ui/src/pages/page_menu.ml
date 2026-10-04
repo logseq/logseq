@@ -53,7 +53,9 @@ let page_items (p : Model.page) =
         in
         [ item "fav" label (fun () ->
               Runtime.send (Action.Page_menu_set None);
-              Sidebar_state.toggle_favorite st) ]
+              match p.page_uuid with
+              | Some u -> Sidebar_state.toggle_favorite_uuid st u
+              | None -> Sidebar_state.toggle_favorite st) ]
     | None -> []
   in
   let export_page =

@@ -40,4 +40,8 @@ type t =
   | Help_toggle
   | Rtc_state of Model.rtc (* rtc-sync-state broadcast *)
   | Rtc_state_clear (* a graph's sync is (re)starting — hide stale state *)
+  | Search_index_progress of Model.index_progress_event
+    (* worker remoteInvoke — header widget *)
+  | Search_index_hide of string * string
+    (* repo + build-id — 1.5s after :completed, if still current *)
   | Noop

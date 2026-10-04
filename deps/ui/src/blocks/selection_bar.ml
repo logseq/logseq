@@ -27,7 +27,7 @@ let action_btn key ?(title = "") ?(text = "") on_click children : t =
    own current_target resolves the selected uuids for batch ops) *)
 let open_prop_dlg ~remove ~anchor =
   match Properties_dialog.current_target () with
-  | Some tgt -> Properties_dialog.open_dialog ~remove ~anchor tgt
+  | Some tgt -> ignore (Properties_dialog.open_dialog ~remove ~anchor tgt)
   | None -> ()
 
 (* cljs mounts the bar as a radix popover (:selection-action-bar): an

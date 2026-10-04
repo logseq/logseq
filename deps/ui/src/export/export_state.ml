@@ -12,6 +12,7 @@ type fmt =
 type t =
   { page_uuid : string option
   ; page_db_id : int option
+  ; block_uuids : string list
   ; has_top_level : bool
     (* cljs when-not (seq? top-level-uuids) gates the PNG tab *)
   ; fmt : fmt
@@ -64,6 +65,7 @@ let defaults () =
   let nl, ob, lvl = stored_other () in
   { page_uuid = None
   ; page_db_id = None
+  ; block_uuids = []
   ; has_top_level = false
   ; fmt = Text
   ; content = None
@@ -89,12 +91,19 @@ let persist st =
     (Printf.sprintf "newline-after-block=%b,open-blocks-only=%b,keep-only-level<=N=%s"
        st.newline_after_block st.open_blocks_only lvl)
 
-(* Page identity stashed by page_menu when the dialog opens — mirrors
-   cljs state/:*export-block-text properties. *)
-let pending : (string * int option * bool) option ref = ref None
+(* Identity stashed by the opener when the dialog opens — page_menu
+   arms a page, the block context menu arms block uuids (already
+   filtered to top-level roots, cljs get-top-level-uuids). *)
+type pending_target =
+  | Pending_page of string * int option * bool
+  | Pending_blocks of string list
+
+let pending : pending_target option ref = ref None
 
 let arm uuid db_id ~has_top_level =
-  pending := Some (uuid, db_id, has_top_level)
+  pending := Some (Pending_page (uuid, db_id, has_top_level))
+
+let arm_blocks uuids = pending := Some (Pending_blocks uuids)
 
 include State_cell.Make (struct
   type nonrec t = t
@@ -105,10 +114,11 @@ let st ctx = get_or_init ctx.Lui_ui.ui_scheduler (defaults ())
 
 let open_ ctx =
   let st = st ctx in
-  let uuid, db_id, has_top_level =
+  let uuid, db_id, block_uuids, has_top_level =
     match !pending with
-    | Some (u, d, tl) -> (Some u, d, tl)
-    | None -> (None, None, false)
+    | Some (Pending_page (u, d, tl)) -> (Some u, d, [], tl)
+    | Some (Pending_blocks us) -> (None, None, us, us <> [])
+    | None -> (None, None, [], false)
   in
   pending := None;
   (match (Signal.get_state st).png_url with
@@ -118,6 +128,7 @@ let open_ ctx =
       { s with
         page_uuid = uuid
       ; page_db_id = db_id
+      ; block_uuids = block_uuids
       ; has_top_level
       ; fmt = Text
       ; content = None

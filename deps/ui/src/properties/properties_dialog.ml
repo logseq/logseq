@@ -651,11 +651,14 @@ let open_dialog ?(remove = false) ?anchor ?(phase = Prop_select) target =
   let style =
     match anchor with
     | Some (x, y) ->
-        Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;%s"
-          x y body_style
+        let avail = Float.max (Web_dom.win_inner_height -. y -. 10.) 200. in
+        Printf.sprintf
+          "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;\
+           --available-height:%.0fpx;%s"
+          x y avail body_style
     | None ->
         "position:fixed;left:50%;top:30%;transform:translateX(-50%);\
-         z-index:9999;" ^ body_style
+         z-index:9999;--available-height:60vh;" ^ body_style
   in
   (* cljs popup chrome: ui__popover-content card > .ls-property-dialog *)
   let root =
@@ -735,8 +738,9 @@ let open_for_block ?anchor uuid =
   let anchor =
     match anchor with Some _ -> anchor | None -> block_anchor uuid
   in
-  open_dialog ?anchor
-    { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
+  ignore
+    (open_dialog ?anchor
+       { uuid; uuids = []; db_id = None; is_tag = false; title = "" })
 
 (* open anchored under a DOM element (its bottom-left corner) *)
 let open_for_block_at el uuid =
@@ -763,4 +767,4 @@ let open_for_block_with_property ?anchor ~uuids uuid ~ident =
   |> ignore
 
 let open_for_current () =
-  match current_target () with Some t -> open_dialog t | None -> ()
+  match current_target () with Some t -> ignore (open_dialog t) | None -> ()

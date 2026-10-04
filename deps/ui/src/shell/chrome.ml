@@ -37,23 +37,36 @@ let ghost_btn_cls ?(mid = "") ?(tail = "") () =
      rounded-md select-none text-sm " ^ tail
   ^ "transition-colors ui__button w-6 whitespace-nowrap"
 
-let icon_btn ~key ~id ~cls ~icon ~on_click =
+(* the trailing () discharges the optionals — without it a call that
+   skips ?tip_keys stays a partial application because the element
+   type t is itself a function type *)
+let icon_btn ?tip ?tip_keys ~key ~id ~cls ~icon ~on_click () =
   Logseq_dom.dom ~key ~tag:"button" ~id
     ~style_class:cls
-    ~attrs:[ ("type", "button") ]
+    ~attrs:
+      ([ ("type", "button") ]
+      @ (match tip with
+         | Some t -> [ ("data-tooltip", t) ]
+         | None -> [])
+      @ (match tip_keys with
+         | Some k -> [ ("data-tooltip-keys", k) ]
+         | None -> []))
     ~events:"click"
     ~on_dom_event:(fun name payload -> if name = "click" then on_click payload)
     [ Icons.icon ~size:20. ~cls:"" icon ]
 
+(* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
 let search_button =
   icon_btn ~key:"search-btn" ~id:"search-button" ~cls:(ghost_btn_cls ())
-    ~icon:"search"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_search)
+    ~icon:"search" ~tip:(I18n.t "nav/search") ~tip_keys:"⌘ K"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_search) ()
 
+(* cljs ui/tooltip (t :header/more) *)
 let dots_button =
   Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
     ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn " ())
-    ~attrs:[ ("type", "button") ]
+    ~attrs:
+      [ ("type", "button"); ("data-tooltip", I18n.t "header/more") ]
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       (* cljs anchors the dropdown to the trigger's right edge, not
@@ -382,11 +395,71 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
       else Logseq_dom.dom ~key:"lgs-off" ~style_class:"hidden" [])
     (Signal.map (fun (m : Model.t) -> m.repo) ms)
 
+(* cljs components/svg.cljs loader-fn — the ui/loading spinner *)
+let loader_svg : t =
+  Logseq_dom.dom ~key:"ldr" ~tag:"svg"
+    ~attrs:
+      [ ("version", "1.1"); ("viewBox", "0 0 24 24"); ("fill", "none")
+      ; ("class", "animate-spin w-5 h-5"); ("display", "inline-block") ]
+    [ Logseq_dom.dom ~key:"ldr-c" ~tag:"circle"
+        ~attrs:
+          [ ("class", "opacity-25"); ("cx", "12"); ("cy", "12"); ("r", "10")
+          ; ("stroke", "currentColor"); ("stroke-width", "4") ]
+        []
+    ; Logseq_dom.dom ~key:"ldr-p" ~tag:"path"
+        ~attrs:
+          [ ("class", "opacity-75"); ("fill", "currentColor")
+          ; ( "d"
+            , "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 \
+               5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 \
+               7.938l3-2.647z" ) ]
+        []
+    ]
+
+(* cljs header.cljs search-index-progress — renders while the worker
+   reports its FTS index build for the current repo *)
+let index_progress (ms : Model.t Signal.signal) : t =
+  dyn
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      a.index_build = b.index_build)
+    (fun (m : Model.t) ->
+      let ib = m.Model.index_build in
+      if
+        (ib.ib_visible || ib.ib_running) && m.repo = Some ib.ib_repo
+      then
+        Logseq_dom.dom ~key:"sip" ~style_class:"search-index-progress"
+          [ Logseq_dom.dom ~key:"sip-l"
+              ~style_class:
+                "flex flex-row items-center inline icon-loading"
+              [ Logseq_dom.dom ~key:"sip-i" ~tag:"span"
+                  ~style_class:"icon flex items-center"
+                  [ loader_svg ] ]
+          ; Logseq_dom.dom ~key:"sip-t" ~tag:"span"
+              ~style_class:"search-index-progress__text"
+              ~text:
+                (I18n.tf "search/index-progress"
+                   [ string_of_int ib.ib_progress ])
+              []
+          ; Logseq_dom.dom ~key:"sip-b"
+              ~style_class:"search-index-progress__bar"
+              [ Logseq_dom.dom ~key:"sip-f"
+                  ~style_class:"search-index-progress__bar-fill"
+                  ~attrs:
+                    [ ( "style"
+                      , Printf.sprintf "width: %d%%" ib.ib_progress )
+                    ]
+                  [] ]
+          ]
+      else Logseq_dom.nothing)
+    ms
+
+(* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
     ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu " ())
-    ~icon:"menu-2"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
+    ~icon:"menu-2" ~tip:(I18n.t "header/toggle-left-sidebar")
+    ~tip_keys:"T L"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar) ()
 
 (* cljs header.cljs: home button hidden on the :home route and on a
    custom home page *)
@@ -398,9 +471,11 @@ let home_button ms =
       | Model.Home -> Logseq_dom.nothing
       | _ ->
           icon_btn ~key:"home-btn" ~id:"" ~cls:(ghost_btn_cls ())
-            ~icon:"home" ~on_click:(fun _ ->
+            ~icon:"home" ~tip:(I18n.t "nav/home")
+            ~on_click:(fun _ ->
               Platform.set_location_hash "#/";
-              Web_dom.dispatch_custom "ls:navigate" Js.Json.null))
+              Web_dom.dispatch_custom "ls:navigate" Js.Json.null)
+            ())
     ms
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
@@ -409,9 +484,11 @@ let right_toggle_button ms =
   icon_btn ~key:"rs-toggle" ~id:""
     ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar " ())
     ~icon:"layout-sidebar-right"
+    ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~tip_keys:"T R"
     ~on_click:(fun _ ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
+    ()
 
 let header (ms : Model.t Signal.signal) =
   (* cljs header.cljs sets inline fontSize:50 on .cp__header *)
@@ -475,6 +552,7 @@ let header (ms : Model.t Signal.signal) =
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
             [ rtc_indicator ms
             ; local_graph_sync_button ms
+            ; index_progress ms
             ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders
                  .ui-items-container only when a plugin actually

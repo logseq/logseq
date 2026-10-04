@@ -116,7 +116,17 @@ let set_silent f =
 let read () =
   match !st with Some s -> Signal.get_state s | None -> initial
 
-let editing () = (read ()).editing
+(* imperative readers get the pending (not-yet-published) value:
+   Signal.update composes onto it, so a published snapshot can lag the
+   edit buffer by several keystrokes during a remount window — caret
+   math and mount renders must see the latest *)
+let editing () =
+  match !st with
+  | Some s -> (
+      match !(s.Signal.pending) with
+      | Some v -> v.editing
+      | None -> (read ()).editing)
+  | None -> initial.editing
 
 let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None

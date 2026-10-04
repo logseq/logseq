@@ -214,7 +214,8 @@
   font-weight: 600;
 }
 
-/* menu item internals */
+/* menu item internals — cljs keeps labels on one line (menu sizes to
+   content); LUI's flex shrink would wrap two-word labels */
 .menu-item-label {
   flex: 1;
   min-width: 0;
@@ -506,13 +507,25 @@ div[data-keep-selection].menu-links-wrapper {
   gap: 0.5rem;
 }
 
-/* page-ref hover preview */
+/* page-ref hover preview — cljs page.css: .ls-preview-popup pl-6;
+   .tippy-wrapper p-2, &.as-page -ml-5 pl-7 */
 .ls-preview-popup {
   padding: 0.375rem;
+  padding-left: 1.5rem;
 }
 
 .ls-preview-popup .tippy-wrapper {
   min-width: 200px;
+  padding: 0.5rem;
+}
+
+.ls-preview-popup .tippy-wrapper.as-page {
+  margin-left: -1.25rem;
+  padding-left: 1.75rem;
+}
+
+.ls-preview-popup .ls-page-blocks {
+  margin-top: 1rem;
 }
 
 /* ---- context menu rows ----------------------------------------------- */
@@ -896,6 +909,32 @@ div[data-keep-selection].menu-links-wrapper {
 .shui-shortcut-chord .shui-shortcut-chord-sep {
   font-size: 10px;
   opacity: 0.45;
+}
+
+/* cljs shui TooltipContent: ui__tooltip-content z-50 rounded-md border
+   bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md */
+.ui__tooltip-content {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: max-content;
+  max-width: 20rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  animation: lui-fade-zoom-in 120ms ease-out;
+}
+
+.ls-tooltip-keys {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0.8;
 }
 
 /* cljs shui.css: flat keycap label (no border/bg) */
@@ -2159,7 +2198,8 @@ div[data-keep-selection].menu-links-wrapper {
   color: inherit;
 }
 
-.ls-editor-date-picker .ls-date-month-menu {
+.ls-editor-date-picker .ls-date-month-menu,
+.ls-repeat-choice-menu {
   position: absolute;
   max-height: 16rem;
   overflow-y: auto;
@@ -2179,6 +2219,164 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ls-editor-date-picker .ls-date-month-option:hover {
   background: var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2));
+}
+
+/* ---- datetime picker (scheduled/deadline): two-column layout --------- */
+
+.ls-editor-date-picker.ls-cal-prop {
+  width: auto;
+  max-width: calc(100vw - 16px);
+}
+
+.ls-editor-date-picker .ls-property-date-picker {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.ls-editor-date-picker .ls-time-picker {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ls-editor-date-picker .ls-time-input {
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
+  border-radius: 0.375rem;
+  background: transparent;
+  font-size: 0.875rem;
+  color: inherit;
+  color-scheme: light dark;
+}
+
+.ls-editor-date-picker .ls-time-now {
+  border: none;
+  background: transparent;
+  padding: 0 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--lx-gray-09, var(--ls-secondary-text-color, #777));
+  cursor: pointer;
+}
+
+.ls-editor-date-picker .ls-time-now:hover {
+  color: var(--ls-primary-text-color, inherit);
+}
+
+/* repeat panel — cljs property/value.cljs repeat-setting (w-64 p-4) */
+
+.ls-repeat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 16rem;
+  flex: none;
+  padding: 0 0 0 8px;
+  border-left: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
+  font-size: 0.875rem;
+}
+
+.ls-repeat-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.ls-repeat-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #888));
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.ls-repeat-checkbox[data-checked] {
+  background: var(--lx-accent-09, var(--ls-link-text-color, hsl(var(--primary, #0f7b6c))));
+  border-color: transparent;
+  color: #fff;
+}
+
+.ls-repeat-frequency {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.ls-repeat-label {
+  flex: none;
+  color: var(--lx-gray-09, var(--ls-secondary-text-color, #777));
+}
+
+.ls-repeat-frequency-input {
+  height: 2rem;
+  width: 3.5rem;
+  flex: none;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
+  border-radius: 0.375rem;
+  background: transparent;
+  font-size: 0.875rem;
+  color: inherit;
+}
+
+.ls-repeat-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
+  border-radius: 0.375rem;
+  background: transparent;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ls-repeat-select:hover {
+  background: var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2));
+}
+
+.ls-repeat-next,
+.ls-repeat-when {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ls-repeat-when .ls-repeat-select {
+  width: 100%;
+}
+
+.ls-repeat-is {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+}
+
+.ls-repeat-choice-menu .ls-date-month-option {
+  white-space: nowrap;
 }
 
 /* ---- property popup panes ---------------------------------------------- */
@@ -2332,6 +2530,17 @@ div[data-keep-selection].menu-links-wrapper {
   display: flex;
   flex-direction: row;
   align-items: center;
+}
+
+/* cljs value.css: the set/add-property picker caps the key column and
+   scrolls the result list inside it */
+.ls-property-dialog .ls-property-key {
+  height: 286px;
+  overflow-y: hidden;
+}
+
+.ls-property-dialog .ls-property-key .cp__select-main .item-results-wrap {
+  max-height: 250px;
 }
 
 .ls-property-date-picker {

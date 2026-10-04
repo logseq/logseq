@@ -287,12 +287,13 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
   el_append_child wrap btn;
   on_click btn (fun _ ->
       if for_class then
-        Properties_dialog.open_dialog
-          { Properties_dialog.uuid = ctx.block_uuid
-          ; uuids = []
-          ; db_id = ctx.block_id
-          ; is_tag = true
-          ; title = owner_title }
+        ignore
+          (Properties_dialog.open_dialog
+             { Properties_dialog.uuid = ctx.block_uuid
+             ; uuids = []
+             ; db_id = ctx.block_id
+             ; is_tag = true
+             ; title = owner_title })
       else Properties_dialog.open_for_block ctx.block_uuid);
   wrap
 
@@ -659,13 +660,14 @@ let title_actions (p : Model.page) =
   if p.Model.page_is_tag then
     add_btn (I18n.t "class/add-property") (fun _ ->
         let l, _t, _r, b, _w = bounding_rect_fields row in
-        Properties_dialog.open_dialog ~anchor:(l, b +. 4.)
-          { Properties_dialog.uuid
-          ; uuids = []
-          ; db_id = p.Model.page_db_id
-          ; is_tag = true
-          ; title = p.Model.page_title
-          })
+        ignore
+          (Properties_dialog.open_dialog ~anchor:(l, b +. 4.)
+             { Properties_dialog.uuid
+             ; uuids = []
+             ; db_id = p.Model.page_db_id
+             ; is_tag = true
+             ; title = p.Model.page_title
+             }))
   else
     add_btn (I18n.t "property/set-property") (fun _ ->
         Properties_dialog.open_for_block_at row uuid);

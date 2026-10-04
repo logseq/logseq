@@ -89,6 +89,9 @@ let body (_ms : Model.t Signal.signal) : t =
             [ ("placeholder", T.graph_name_placeholder)
             ; ("autocomplete", "off")
             ; ("type", "text")
+            (* cljs shui/input is h-10; .ui__input defaults to the 29px
+               compact variant *)
+            ; ("style", "height:2.5rem")
             ]
           ~events:"keydown"
           ~on_dom_event:(fun n p ->

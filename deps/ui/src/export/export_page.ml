@@ -41,7 +41,12 @@ let repo () =
   | None -> "logseq_db_Demo"
 
 let uuids_v st =
-  match st.S.page_uuid with Some u -> W.List [ W.Uuid u ] | None -> W.List []
+  match st.S.block_uuids with
+  | [] -> (
+      match st.S.page_uuid with
+      | Some u -> W.List [ W.Uuid u ]
+      | None -> W.List [])
+  | us -> W.List (List.map (fun u -> W.Uuid u) us)
 
 let tree_opts_v (st : S.t) =
   W.Map
@@ -103,30 +108,52 @@ let export_structured (st : S.t) =
      | _ -> content)
 
 let export_edn (st : S.t) =
-  let page_id =
-    match st.page_uuid with
-    | Some u -> W.List [ W.Keyword "block/uuid"; W.Uuid u ]
-    | None -> (
-        match st.page_db_id with
-        | Some id -> W.Int id
-        | None -> W.Nil)
+  let uuid_id u = W.List [ W.Keyword "block/uuid"; W.Uuid u ] in
+  let options_v =
+    match st.block_uuids with
+    | [ u ] ->
+        (* cljs <export-edn-helper :block — no validation *)
+        W.Map
+          [ (W.kw "export-type", W.Keyword "block")
+          ; (W.kw "block-id", uuid_id u) ]
+    | _ :: _ as us ->
+        W.Map
+          [ (W.kw "export-type", W.Keyword "selected-nodes")
+          ; (W.kw "node-ids", W.List (List.map uuid_id us)) ]
+    | [] ->
+        let page_id =
+          match st.page_uuid with
+          | Some u -> uuid_id u
+          | None -> (
+              match st.page_db_id with
+              | Some id -> W.Int id
+              | None -> W.Nil)
+        in
+        W.Map
+          [ (W.kw "export-type", W.Keyword "page")
+          ; (W.kw "page-id", page_id) ]
   in
   let* w =
     Runtime.invoke2 "thread-api/export-edn" (W.String (repo ()))
-      (W.Map [ (W.kw "export-type", W.Keyword "page"); (W.kw "page-id", page_id) ])
+      options_v
   in
   Js.Promise.resolve (Edn.to_string w)
 
-(* cljs get-image-blob for a page export — selector is always
-   #main-content-container; page zoom/x/y/width/height cljs pulls from
-   the block-selection path do not apply here (scale 1, x/y 0) *)
+(* cljs get-image-blob — page export snapshots #main-content-container;
+   a block export snapshots [blockid='<top-level-id>'] (windowHeight is
+   page-only in cljs). *)
 let export_png (st : S.t Signal.state) =
   Signal.update st (fun s -> { s with png = None });
   Runtime.flush ();
-  match Web_dom.query_selector "#main-content-container" with
+  let cur = Signal.get_state st in
+  let selector =
+    match cur.S.block_uuids with
+    | u :: _ -> "[blockid='" ^ u ^ "']"
+    | [] -> "#main-content-container"
+  in
+  match Web_dom.query_selector selector with
   | None -> ()
   | Some container ->
-      let cur = Signal.get_state st in
       let background =
         if cur.S.png_transparent then "transparent"
         else
@@ -140,17 +167,22 @@ let export_png (st : S.t Signal.state) =
       in
       let options =
         Web_dom.json_props
-          [ "allowTaint", Js.Json.boolean true
-          ; "useCORS", Js.Json.boolean true
-          ; "backgroundColor", Js.Json.string background
-          ; "x", Js.Json.number 0.
-          ; "y", Js.Json.number 0.
-          ; "width", Js.Json.null
-          ; "height", Js.Json.null
-          ; "scrollX", Js.Json.number 0.
-          ; "scrollY", Js.Json.number 0.
-          ; "scale", Js.Json.number 1.
-          ; "windowHeight", Js.Json.number (Web_dom.el_scroll_height container) ]
+          ([ "allowTaint", Js.Json.boolean true
+           ; "useCORS", Js.Json.boolean true
+           ; "backgroundColor", Js.Json.string background
+           ; "x", Js.Json.number 0.
+           ; "y", Js.Json.number 0.
+           ; "width", Js.Json.null
+           ; "height", Js.Json.null
+           ; "scrollX", Js.Json.number 0.
+           ; "scrollY", Js.Json.number 0.
+           ; "scale", Js.Json.number 1. ]
+          @ (match cur.S.block_uuids with
+             | [] ->
+                 [ ( "windowHeight"
+                   , Js.Json.number
+                       (Web_dom.el_scroll_height container) ) ]
+             | _ -> []))
       in
       (let* cv = html2canvas_ container options in
        canvas_to_blob cv

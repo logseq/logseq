@@ -216,6 +216,50 @@ let update (model : t) (action : Action.t) : t =
   | Help_toggle -> { model with help_open = not model.help_open }
   | Rtc_state rtc -> { model with rtc = Some rtc }
   | Rtc_state_clear -> { model with rtc = None }
+  | Search_index_progress ev ->
+      (* cljs persist_db/browser.cljs thread-api/search-index-build-progress:
+         :running shows + tracks, :completed shows at 100% (the event
+         layer sends Search_index_hide 1.5s later), :idle hides unless
+         the last build completed. vector-index stages aren't surfaced *)
+      let ib = model.index_build in
+      let visible_repo =
+        model.repo = Some ev.ip_repo || ib.ib_repo = ev.ip_repo
+      in
+      if (not visible_repo) || ev.ip_stage = "vector-index" then model
+      else
+        let keep =
+          { ib with
+            ib_status = ev.ip_status
+          ; ib_repo = ev.ip_repo
+          ; ib_build_id =
+              (match ev.ip_build_id with
+               | Some _ -> ev.ip_build_id
+               | None -> ib.ib_build_id)
+          }
+        in
+        (match ev.ip_status with
+         | "idle" ->
+             if ib.ib_status = "completed" then model
+             else
+               { model with
+                 index_build =
+                   { keep with ib_visible = false; ib_running = false }
+               }
+         | "running" | "completed" ->
+             { model with
+               index_build =
+                 { keep with
+                   ib_visible = true
+                 ; ib_running = ev.ip_status = "running"
+                 ; ib_progress = max 0 (min 100 ev.ip_progress)
+                 }
+             }
+         | _ -> model)
+  | Search_index_hide (repo, build_id) ->
+      let ib = model.index_build in
+      if ib.ib_repo = repo && ib.ib_build_id = Some build_id then
+        { model with index_build = { ib with ib_visible = false } }
+      else model
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model

@@ -398,11 +398,15 @@ let ac_popover (st : S.t) : t =
            match v.S.ac with
            | Some a ->
                attrs_v
-                 [ ("style", popover_style ~x:a.S.x ~y:a.S.y ~flip:a.S.flip)
+                 [ ( "style"
+                   , popover_style
+                       ~x:(Option.value a.S.flipx ~default:a.S.x)
+                       ~y:a.S.y ~flip:a.S.flip )
                  ; ("data-open", "")
                  ; ( "data-side"
                    , (match a.S.flip with Some _ -> "top" | None -> "bottom") )
-                 ; ("data-align", "start")
+                 ; ( "data-align"
+                   , (match a.S.flipx with Some _ -> "end" | None -> "start") )
                  ; ("tabindex", "-1")
                  ; ("data-base-ui-focusable", "")
                  ; ("role", "dialog")
@@ -659,17 +663,21 @@ let cm_popover (st : S.t) : t =
          (fun (v : S.view) ->
            match v.S.cm with
            | Some m ->
+               (* block-tag popups use w-60 (240px) content in cljs;
+                  the block context menu is 280px *)
+               let w = if m.S.tag <> None then 240. else 280. in
                attrs_v
                  [ ( "style"
                    , Printf.sprintf
                        "position: fixed; left: %.0fpx; top: %.0fpx; \
-                        z-index: 999; --available-height: calc(100vh - %.0fpx)"
+                        width: %.0fpx; z-index: 999; \
+                        --available-height: calc(100vh - %.0fpx)"
                        (* cljs anchors a 1px point at the click and the
-                          base-ui dropdown centers the 280px content on it *)
+                          base-ui dropdown centers the content on it *)
                        (Float.max 8.
-                          (Float.min (m.S.cx -. 140.)
-                             (Web_dom.win_inner_width -. 288.)))
-                       m.S.cy (m.S.cy +. 8.) )
+                          (Float.min (m.S.cx -. (w /. 2.))
+                             (Web_dom.win_inner_width -. (w +. 8.))))
+                       m.S.cy w (m.S.cy +. 8.) )
                  ; ("role", "menu") ]
            | None -> attrs_v [])
          st.S.vs.Signal.state_signal)
@@ -764,9 +772,15 @@ let pv_open st (wrap : Web_dom.el) =
   | None -> ()
   | Some name ->
       let r = Web_dom.el_bounding_rect wrap in
-      let x = Web_dom.rect_left r and y = Web_dom.rect_bottom r +. 8.0 in
+      (* cljs popover anchors align=center at the trigger: the 610px card
+         centers under the ref link, opening at its bottom edge *)
+      let x =
+        Web_dom.rect_left r +. (Web_dom.rect_width r /. 2.0) -. 305.0
+      and y = Web_dom.rect_bottom r in
       ignore
-        (let* (title, blocks) = S.fetch_preview (Router.repo ()) name in
+        (let* (title, page, blocks) =
+            S.fetch_preview (Router.repo ()) name
+        in
         (match !pv_pending with
          | Some el when el == wrap ->
              S.set_pv st
@@ -774,8 +788,26 @@ let pv_open st (wrap : Web_dom.el) =
                   { S.pv_x = x
                   ; S.pv_y = y
                   ; S.pv_title = title
+                  ; S.pv_page = page
                   ; S.pv_blocks = blocks
-                  })
+                  });
+             (* cljs page-preview renders page-cp with-actions? => the
+                .ls-page-title-actions buttons (Add icon / Set property)
+                mount inside .block-content-wrapper — insert them into
+                the freshly flushed popover the same way
+                mount_page_area does for a real page *)
+             (match page with
+              | Some p -> (
+                  match
+                    Web_dom.query_selector
+                      ".ls-preview-popup .ls-page-title \
+                       .block-content-wrapper"
+                  with
+                  | Some cw ->
+                      Web_dom.el_insert_adjacent cw "afterbegin"
+                        (Properties_area.title_actions p)
+                  | None -> ())
+              | None -> ())
          | _ -> ());
         Js.Promise.resolve ())
 
@@ -812,8 +844,9 @@ let pv_popover (p : S.pv) : t =
     ~attrs:
       [ ( "style"
         , Printf.sprintf
-            "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999"
-            p.S.pv_x p.S.pv_y ) ]
+            "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999; \
+             --available-height: calc(100vh - %.0fpx)"
+            p.S.pv_x p.S.pv_y (p.S.pv_y +. 8.0) ) ]
     [ Logseq_dom.dom ~key:"pvw" ~style_class:"tippy-wrapper as-page"
         ~attrs:
           [ ("tabindex", "-1")
@@ -825,8 +858,15 @@ let pv_popover (p : S.pv) : t =
             [ Logseq_dom.dom ~key:"pvt"
                 ~style_class:"ls-page-title content title"
                 ~attrs:[ ("data-testid", "page title") ]
-                [ Logseq_dom.dom ~key:"pvtw" ~style_class:"block-title-wrap"
-                    ~text:p.S.pv_title [] ]
+                [ Logseq_dom.dom ~key:"pvtc"
+                    ~style_class:"ls-page-title-container"
+                    [ Logseq_dom.dom ~key:"pvtcw"
+                        ~style_class:"block-content-wrapper relative"
+                        [ Logseq_dom.dom ~key:"pvtw"
+                            ~style_class:"block-title-wrap"
+                            ~text:p.S.pv_title [] ]
+                    ]
+                ]
             ; Logseq_dom.dom ~key:"pvb" ~style_class:"ls-page-blocks"
                 [ Logseq_dom.dom ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
@@ -913,11 +953,21 @@ let handle_contextmenu st (ev : Web_dom.ev) =
       | None ->
       if Web_dom.el_closest el ".ls-page-title" <> None then ()
       else
+      (* cljs app-context-menu-observer: the block menu only opens from
+         .bullet-container[blockid] (or a :block/link row's
+         .ls-block[originalblockid]); right-click on block text is left to
+         the native menu unless it lands inside an existing selection *)
       match
-        Web_dom.el_closest el ".bullet-container[blockid], .ls-block[blockid]"
+        Web_dom.el_closest el
+          ".bullet-container[blockid], .ls-block[originalblockid]"
       with
       | Some blk -> (
-          match Web_dom.el_get_attr blk "blockid" with
+          let id =
+            match Web_dom.el_get_attr blk "originalblockid" with
+            | Some oid -> Some oid
+            | None -> Web_dom.el_get_attr blk "blockid"
+          in
+          match id with
           | Some id ->
               Web_dom.ev_prevent_default ev;
               Web_dom.ev_stop_propagation ev;
@@ -930,7 +980,25 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                 ~y:(Web_dom.ev_client_y ev) ~block_id:id
                 ~multi:(List.length (Web_dom.selected_block_uuids ()) >= 2)
           | None -> ())
-      | None -> ())
+      | None -> (
+          (* cljs: right-click inside a selection shows the selection menu;
+             a single selected block gets its own block menu *)
+          match Web_dom.el_closest el ".ls-block[blockid]" with
+          | Some blk -> (
+              match
+                (Web_dom.el_get_attr blk "blockid"
+                , Web_dom.selected_block_uuids ())
+              with
+              | Some id, (first :: _ as sel)
+                when List.exists (fun u -> u = id) sel ->
+                  Web_dom.ev_prevent_default ev;
+                  Web_dom.ev_stop_propagation ev;
+                  close_cm_picker ();
+                  S.open_cm st ~x:(Web_dom.ev_client_x ev)
+                    ~y:(Web_dom.ev_client_y ev) ~block_id:first
+                    ~multi:(List.length sel >= 2)
+              | _ -> ())
+          | None -> ()))
 ;;
 
 (* run f with the value of attr on the closest matching ancestor *)
@@ -970,6 +1038,55 @@ let handle_click st (ev : Web_dom.ev) =
                    ac_index_of_id)
           | None -> ())
 ;;
+
+(* `ls:block-picker` {block, kind:"icon"|"emoji"} — the `p i`/`p r`
+   selection chords open the same pickers anchored under the block row
+   (the commands route through ls:editor-command, which only popups can
+   service: icon_picker pulls in pages/comments that would cycle back
+   into editor_keys) *)
+let open_block_picker uuid emoji_only =
+  match
+    Web_dom.query_selector (".ls-block[blockid='" ^ uuid ^ "']")
+  with
+  | Some anchor ->
+      let uuids =
+        match Web_dom.selected_block_uuids () with
+        | [] -> [ uuid ]
+        | sel -> sel
+      in
+      if emoji_only then
+        ignore
+          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+             ~opts:{ Icon_picker.emoji_only = true; sub = false }
+             ~on_chosen:(fun c ->
+               match c with
+               | Icon_picker.Emoji id ->
+                   List.iter
+                     (fun u -> Comments_view.toggle_reaction u id)
+                     uuids
+               | _ -> ()))
+      else
+        ignore
+          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+             ~opts:{ Icon_picker.emoji_only = false; sub = false }
+             ~on_chosen:(fun c ->
+               List.iter (fun u -> Page.set_icon u c) uuids))
+  | None -> ()
+
+let block_picker_detail name ev =
+  match Worker_client.json_field "detail" ev with
+  | Some d -> (
+      match Worker_client.json_field name d with
+      | Some v -> Worker_client.json_string v
+      | None -> None)
+  | None -> None
+
+let handle_block_picker _st ev =
+  match block_picker_detail "block" ev with
+  | Some uuid ->
+      open_block_picker uuid
+        (block_picker_detail "kind" ev = Some "emoji")
+  | None -> ()
 
 (* Set icon / Add reaction sub-triggers open the icon picker to the
    right of the menu (base-ui inline-end placement); the choice applies
@@ -1066,10 +1183,13 @@ let install_listeners st =
   Web_dom.add_document_listener "click" (handle_click st) true;
   Web_dom.add_document_listener "mousedown" (handle_mousedown st) true;
   Web_dom.add_document_listener "mousemove" (handle_mousemove st) false;
+  Web_dom.add_document_listener "ls:block-picker"
+    (handle_block_picker st) true;
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)
-  Platform.on_hash_change (fun () -> S.close_pv st)
+  Platform.on_hash_change (fun () -> S.close_pv st);
+  Tooltip.install ()
 ;;
 
 let render (_ms : Model.t Signal.signal) : t =

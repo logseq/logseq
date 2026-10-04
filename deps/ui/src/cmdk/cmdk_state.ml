@@ -56,6 +56,41 @@ type group =
   ; gfilter_active : bool (* view.filter = Some gid, baked by [decorate] *)
   }
 
+(* FTS5 highlight markers the worker embeds in search-result titles
+   (`$pfts_2lqh>$match$<pfts_2lqh$`); the view parses them for rendering,
+   title comparisons strip them *)
+let pfts_open = "$pfts_2lqh>$"
+let pfts_close = "$<pfts_2lqh$"
+
+let find_sub sub s start =
+  let n = String.length s and m = String.length sub in
+  let rec go i =
+    if i + m > n then -1
+    else if String.sub s i m = sub then i
+    else go (i + 1)
+  in
+  go start
+
+(* strip the pfts markers, keeping the marked text itself *)
+let strip_pfts text =
+  let n = String.length text in
+  let lo = String.length pfts_open and lc = String.length pfts_close in
+  let buf = Buffer.create n in
+  let rec go pos =
+    let i = find_sub pfts_open text pos in
+    if i < 0 then Buffer.add_substring buf text pos (n - pos)
+    else
+      let j = find_sub pfts_close text (i + lo) in
+      if j < 0 then Buffer.add_substring buf text pos (n - pos)
+      else begin
+        Buffer.add_substring buf text pos (i - pos);
+        Buffer.add_substring buf text (i + lo) (j - i - lo);
+        go (j + lc)
+      end
+  in
+  go 0;
+  Buffer.contents buf
+
 type view =
   { open_ : bool
   ; input : string
@@ -474,7 +509,7 @@ let node_exists q rows =
        (fun (it : item) ->
          match it.act with
          | Open_page _ ->
-             String.lowercase_ascii (String.trim it.ititle) = q'
+             String.lowercase_ascii (String.trim (strip_pfts it.ititle)) = q'
          | _ -> false)
        rows
 
@@ -544,7 +579,7 @@ let group_order v q rows total =
     ; gitems =
         (if String.trim q = "" then v.recents
          else
-           Fuzzy.fuzzy_search ~extract:(fun (it : item) -> it.ititle)
+           Fuzzy.fuzzy_search ~extract:(fun (it : item) -> strip_pfts it.ititle)
              ~limit:99 v.recents q)
     ; gtotal = List.length v.recents
     ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded

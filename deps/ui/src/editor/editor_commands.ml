@@ -88,6 +88,21 @@ type popup_kind =
   | Cal_prop of string (* scheduled/deadline: Enter sets a datetime prop *)
   | Link_form of bool (* link/image-link form; bool = image *)
 
+(* cljs repeat-setting panel state — resolved async from the worker and
+   rendered as the right column of the date picker for datetime
+   properties (scheduled/deadline) *)
+type repeat =
+  { prop_id : int (* db/id of the Cal_prop property entity *)
+  ; mutable repeated : bool
+  ; mutable freq : int
+  ; mutable unit_id : int (* selected recur-unit choice db/id *)
+  ; unit_choices : (int * string * string) list (* db/id, ident, label *)
+  ; mutable rtype_id : int
+  ; rtype_choices : (int * string * string) list
+  ; mutable when_id : int (* selected checked-property entity db/id *)
+  ; when_choices : (int * string * string) list (* db/id, label, done label *)
+  }
+
 type popup =
   { kind : popup_kind
   ; uuid : string
@@ -96,7 +111,10 @@ type popup =
   ; mutable cy : int
   ; mutable cm : int
   ; mutable cd : int
+  ; mutable hour : int (* time-of-day for datetime commits, local time *)
+  ; mutable tmin : int
   ; mutable menu : D.el option
+  ; mutable rpt : repeat option
   ; link_url : D.el option
   ; link_label : D.el option
   }
@@ -109,9 +127,13 @@ let days_in_month y m =
        (Js.Date.make ~year:(float_of_int y)
           ~month:(float_of_int m) ~date:0. ()))
 
+(* LOCAL time — cljs merges the time input via .setHours into the
+   calendar day before tc/to-long, so the stored ms is the local
+   datetime (getTime), never UTC-midnight day math *)
 let day_date p =
   Js.Date.make ~year:(float_of_int p.cy)
-    ~month:(float_of_int (p.cm - 1)) ~date:(float_of_int p.cd) ()
+    ~month:(float_of_int (p.cm - 1)) ~date:(float_of_int p.cd)
+    ~hours:(float_of_int p.hour) ~minutes:(float_of_int p.tmin) ()
 
 let focus_day p =
   match D.el_query p.root "td[data-focused='true'] button" with
@@ -155,9 +177,15 @@ let commit_cal p =
       Ops.schedule_save p.uuid nv;
       close_popup p ~focus_caret:caret
   | Cal_prop ident ->
-      prop_batch ~caret:p.from p.uuid
-        [ Ops.set_block_property p.uuid ident
-            (W.Float (Js.Date.getTime d)) ]
+      let op =
+        Ops.set_block_property p.uuid ident (W.Float (Js.Date.getTime d))
+      in
+      (match D.textarea_of p.uuid with
+       | Some _ -> prop_batch ~caret:p.from p.uuid [ op ]
+       | None ->
+           (* selected (non-editing) block via `p d` — no buffer to save
+              and no caret to restore; just apply the property *)
+           ignore (Ops.apply_and_refresh [ op ]))
       (* popup deliberately stays open — cljs datepicker stays up for
          scheduled/deadline so the user can keep adjusting *)
   | Link_form _ -> ()
@@ -322,22 +350,39 @@ let nlp_commit p input =
     | None ->
         Toast.warning (I18n.tf "date/invalid-date-warning" [ v ])
 
-(* cljs open-editor-popup! anchors at the caret mirror span *)
+(* cljs open-editor-popup! anchors at the caret mirror span; a popup
+   opened on a selected (non-editing) block — the `p d` chord — anchors
+   under the block row instead *)
 let cal_pos_style ?top uuid =
   match D.textarea_of uuid with
   | Some el ->
       let x, y, _ = Web_dom.caret_popup_pos (el) in
       Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
         x (Option.value top ~default:y)
-  | None -> "position:fixed;top:96px;left:240px;z-index:900"
+  | None -> (
+      match D.query_selector (".ls-block[blockid='" ^ uuid ^ "']") with
+      | Some blk ->
+          let r = D.el_bounding_rect blk in
+          Printf.sprintf
+            "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
+            (D.rect_left r +. 24.)
+            (Option.value top ~default:(D.rect_bottom r +. 4.))
+      | None -> "position:fixed;top:96px;left:240px;z-index:900")
+
+let cal_anchor_rect uuid =
+  match D.textarea_of uuid with
+  | Some el -> Some (D.el_bounding_rect el)
+  | None -> (
+      match D.query_selector (".ls-block[blockid='" ^ uuid ^ "']") with
+      | Some blk -> Some (D.el_bounding_rect blk)
+      | None -> None)
 
 (* base-ui avoidCollisions: once mounted, flip the picker above the
    anchor when it overflows the viewport bottom and there is more room
    above; otherwise clamp its top inside the viewport *)
 let cal_clamp_in_view uuid root =
-  match D.textarea_of uuid with
-  | Some el ->
-      let tr = D.el_bounding_rect el in
+  match cal_anchor_rect uuid with
+  | Some tr ->
       let h = D.rect_height (D.el_bounding_rect root) in
       let vh = D.win_inner_height in
       let below = vh -. D.rect_bottom tr -. 4. in
@@ -349,6 +394,488 @@ let cal_clamp_in_view uuid root =
         in
         D.el_set_attr root "style" (cal_pos_style ~top uuid))
   | None -> ()
+(* ---------- repeat panel (cljs property/value.cljs repeat-setting) -- *)
+
+(* property writes for a popup-targeted block — same editing/non-editing
+   split as commit_cal: the editing path saves the live buffer first so
+   typed-but-unsaved text survives the refresh *)
+let apply_props p ops =
+  match D.textarea_of p.uuid with
+  | Some _ -> prop_batch ~caret:p.from p.uuid ops
+  | None -> ignore (Ops.apply_and_refresh ops)
+
+(* scalar property attrs on the block are refs to value entities
+   {logseq.property/value: v}; closed-value/ref attrs point straight at
+   the choice/property entity. Worker returns Tagged entity maps —
+   untag first *)
+let unwrap_value w =
+  match Properties_data.untag w with
+  | W.Map _ as m ->
+      Option.value ~default:m
+        (Properties_data.getf m "logseq.property/value")
+  | _ -> w
+
+let int_of_wire = function
+  | W.Int n -> Some n
+  | W.Int64 n -> Some (Int64.to_int n)
+  | W.Float f -> Some (int_of_float f)
+  | _ -> None
+
+let ms_of_wire = function
+  | W.Int n -> Some (float_of_int n)
+  | W.Int64 n -> Some (Int64.to_float n)
+  | W.Float f -> Some f
+  | W.Date_ms n -> Some (Int64.to_float n)
+  | _ -> None
+
+(* a button + anchored [role=menu] like the month select, reused for the
+   repeat selects (unit / repeat-type / when) *)
+let open_choice_menu p anchor items =
+  close_menu p;
+  let ar = D.el_bounding_rect anchor and rr = D.el_bounding_rect p.root in
+  let menu =
+    D.h ~cls:"ls-date-month-menu ls-repeat-choice-menu"
+      ~attrs:[ ("role", "menu") ]
+      ~children:
+        (List.map
+           (fun (label, pick) ->
+             D.h ~cls:"ls-date-month-option" ~text:label
+               ~attrs:[ ("role", "menuitem") ]
+               ~on_click:(fun _ ->
+                 close_menu p;
+                 pick ())
+               ())
+           items)
+      ()
+  in
+  D.el_set_attr menu "style"
+    (Printf.sprintf "position:absolute;left:%.0fpx;top:%.0fpx"
+       (D.rect_left ar -. D.rect_left rr)
+       (D.rect_bottom ar -. D.rect_top rr));
+  p.menu <- Some menu;
+  D.el_append_child p.root menu
+
+(* select widget: a ghost button whose label is the current choice;
+   picking a menu item updates the label and runs on_pick *)
+let repeat_select p ~current ~options ~on_pick =
+  let lbl = D.h ~tag:"span" ~text:current () in
+  let btn =
+    D.h ~tag:"button" ~cls:"ls-repeat-select"
+      ~attrs:[ ("type", "button") ]
+      ~children:[ lbl; D.icon "chevron-down" ] ()
+  in
+  D.el_on btn "click" (fun _ ->
+      open_choice_menu p btn
+        (List.map
+           (fun (id, label) ->
+             ( label
+             , fun () ->
+                 D.el_set_text_content lbl label;
+                 on_pick id label ))
+           options));
+  btn
+
+let done_label_of (r : repeat) =
+  match
+    List.find_map
+      (fun (id, _label, done_label) ->
+        if id = r.when_id then Some done_label else None)
+      r.when_choices
+  with
+  | Some l -> l
+  | None -> ""
+
+let rec render_repeat p (r : repeat) =
+  let mark =
+    D.h ~tag:"span" ~cls:"ls-repeat-checkmark"
+      ~text:(if r.repeated then "✓" else "")
+      ()
+  in
+  let box =
+    D.h ~tag:"button" ~cls:"jtrigger ls-repeat-checkbox"
+      ~attrs:
+        [ ("type", "button"); ("role", "checkbox")
+        ; ("aria-checked", string_of_bool r.repeated) ]
+      ~children:[ mark ] ()
+  in
+  if r.repeated then D.el_set_attr box "data-checked" "true";
+  D.el_on box "click" (fun _ ->
+      let on = not r.repeated in
+      r.repeated <- on;
+      D.el_set_attr box "aria-checked" (string_of_bool on);
+      D.el_set_text_content mark (if on then "✓" else "");
+      if on then D.el_set_attr box "data-checked" "true"
+      else D.el_remove_attr box "data-checked";
+      apply_props p
+        ([ Ops.set_block_property p.uuid
+             "logseq.property.repeat/repeated?" (W.Bool on) ]
+         @
+         if on then
+           [ Ops.set_block_property p.uuid
+               "logseq.property.repeat/temporal-property"
+               (W.Int r.prop_id) ]
+         else
+           [ Ops.remove_block_property p.uuid
+               "logseq.property.repeat/temporal-property" ]));
+  let freq_inp =
+    D.h ~tag:"input" ~cls:"ls-repeat-frequency-input"
+      ~attrs:
+        [ ("type", "number"); ("min", "1"); ("step", "1")
+        ; ("value", string_of_int r.freq) ]
+      ()
+  in
+  let commit_freq () =
+    match int_of_string_opt (D.el_value freq_inp) with
+    | Some n when n > 0 ->
+        if n <> r.freq then (
+          r.freq <- n;
+          apply_props p
+            [ Ops.set_block_property p.uuid
+                "logseq.property.repeat/recur-frequency" (W.Int n) ])
+    | _ -> D.el_set_value freq_inp (string_of_int r.freq)
+  in
+  D.el_on freq_inp "blur" (fun _ -> commit_freq ());
+  D.el_on freq_inp "keydown" (fun ev ->
+      if D.ev_key ev = "Enter" then (
+        D.ev_prevent_default ev;
+        D.el_blur freq_inp));
+  let label_of choices id =
+    match
+      List.find_map
+        (fun (cid, _i, l) -> if cid = id then Some l else None)
+        choices
+    with
+    | Some l -> l
+    | None -> ""
+  in
+  let unit_btn =
+    repeat_select p ~current:(label_of r.unit_choices r.unit_id)
+      ~options:(List.map (fun (id, _i, l) -> (id, l)) r.unit_choices)
+      ~on_pick:(fun id _label ->
+        if id <> r.unit_id then (
+          r.unit_id <- id;
+          apply_props p
+            [ Ops.set_block_property p.uuid
+                "logseq.property.repeat/recur-unit" (W.Int id) ]))
+  in
+  let rtype_btn =
+    repeat_select p ~current:(label_of r.rtype_choices r.rtype_id)
+      ~options:(List.map (fun (id, _i, l) -> (id, l)) r.rtype_choices)
+      ~on_pick:(fun id _label ->
+        if id <> r.rtype_id then (
+          r.rtype_id <- id;
+          apply_props p
+            [ Ops.set_block_property p.uuid
+                "logseq.property.repeat/repeat-type" (W.Int id) ]))
+  in
+  let done_lbl = D.h ~tag:"span" ~text:(done_label_of r) () in
+  let when_btn =
+    repeat_select p
+      ~current:
+        (match
+           List.find_map
+             (fun (id, l, _d) -> if id = r.when_id then Some l else None)
+             r.when_choices
+         with
+         | Some l -> l
+         | None -> "")
+      ~options:(List.map (fun (id, l, _d) -> (id, l)) r.when_choices)
+      ~on_pick:(fun id _label ->
+        if id <> r.when_id then (
+          r.when_id <- id;
+          D.el_set_text_content done_lbl (done_label_of r);
+          apply_props p
+            [ Ops.set_block_property p.uuid
+                "logseq.property.repeat/checked-property" (W.Int id) ]))
+  in
+  let panel =
+    D.h ~cls:"ls-repeat-panel"
+      ~children:
+        [ D.h ~cls:"ls-repeat-head"
+            ~children:
+              [ box
+              ; D.h ~tag:"span"
+                  ~text:(I18n.t "property.repeat/task")
+                  () ]
+            ()
+        ; D.h ~cls:"ls-repeat-frequency"
+            ~children:
+              [ D.h ~tag:"label" ~cls:"ls-repeat-label"
+                  ~text:(I18n.t "property.repeat/every") ()
+              ; freq_inp; unit_btn ]
+            ()
+        ; D.h ~cls:"ls-repeat-next"
+            ~children:
+              [ D.h ~tag:"div" ~cls:"ls-repeat-label"
+                  ~text:(I18n.t "property.repeat/next-date") ()
+              ; rtype_btn ]
+            ()
+        ; D.h ~cls:"ls-repeat-when"
+            ~children:
+              [ D.h ~tag:"div" ~cls:"ls-repeat-label"
+                  ~text:(I18n.t "property.repeat/when") ()
+              ; when_btn
+              ; D.h ~cls:"ls-repeat-is"
+                  ~children:
+                    [ D.h ~tag:"span" ~cls:"ls-repeat-label"
+                        ~text:(I18n.t "property.repeat/is-label") ()
+                    ; done_lbl ]
+                  () ]
+            () ]
+      ()
+  in
+  match D.el_query p.root ".ls-property-date-picker" with
+  | Some wrap ->
+      D.el_append_child wrap panel;
+      cal_clamp_in_view p.uuid p.root;
+      cal_clamp_x p
+  | None -> ()
+
+(* resolve the block's repeat props + choice lists, then append the
+   repeat panel. Writes happen lazily on toggle, mirroring cljs *)
+and load_repeat p ident =
+  ignore
+    (let* wires =
+       Js.Promise.all
+         [| Properties_data.entity_by_uuid p.uuid
+          ; Properties_data.entity (W.Keyword ident)
+          ; Properties_data.closed_values
+              (W.Keyword "logseq.property.repeat/recur-unit")
+          ; Properties_data.closed_values
+              (W.Keyword "logseq.property.repeat/repeat-type")
+          ; Properties_data.entity (W.Keyword "logseq.property/status")
+          ; Properties_data.closed_values
+              (W.Keyword "logseq.property/status")
+          ; Properties_data.display_props ~show_hidden:false
+              (Properties_data.uuid_ref p.uuid) |]
+     in
+     (* the popup may have closed while fetching *)
+     (match !active with
+      | Some ap when ap == p && ap.rpt = None ->
+          let block = Properties_data.untag wires.(0)
+          and prop_w = Properties_data.untag wires.(1)
+          and units = W.elems wires.(2)
+          and rtypes = W.elems wires.(3)
+          and status_ent = Properties_data.untag wires.(4)
+          and status_choices = W.elems wires.(5)
+          and disp_w = wires.(6) in
+          (* populate the time input from the stored datetime value —
+             local hours/minutes of the epoch ms *)
+          (match Properties_data.getf block ident with
+           | Some v -> (
+               match ms_of_wire (unwrap_value v) with
+               | Some ms ->
+                   let d = Js.Date.fromFloat ms in
+                   p.hour <- int_of_float (Js.Date.getHours d);
+                   p.tmin <- int_of_float (Js.Date.getMinutes d);
+                   (match D.el_query p.root "input[type='time']"
+                    with
+                    | Some inp ->
+                        D.el_set_value inp
+                          (Printf.sprintf "%02d:%02d" p.hour p.tmin)
+                    | None -> ())
+               | None -> ())
+           | None -> ());
+          let prop_type =
+            Option.value ~default:""
+              (Properties_data.getk prop_w "logseq.property/type")
+          in
+          let cid_and_ident w =
+            match Properties_data.entity_id_of w with
+            | Some id ->
+                Some
+                  ( id
+                  , Option.value ~default:""
+                      (Properties_data.getk (Properties_data.untag w)
+                         "db/ident") )
+            | None -> None
+          in
+          let suffix ident =
+            match String.rindex_opt ident '.' with
+            | Some i ->
+                String.sub ident (i + 1) (String.length ident - i - 1)
+            | None -> ident
+          in
+          let unit_choices =
+            List.filter_map
+              (fun w ->
+                match cid_and_ident w with
+                | Some (id, i) ->
+                    (* minute/hour are datetime-only per cljs
+                       repeat-unit-choices *)
+                    if prop_type <> "datetime"
+                       && (i = "logseq.property.repeat/recur-unit.minute"
+                           || i = "logseq.property.repeat/recur-unit.hour")
+                    then None
+                    else
+                      Some
+                        ( id, i
+                        , I18n.t
+                            ("property.repeat-recur-unit/" ^ suffix i) )
+                | None -> None)
+              units
+          and rtype_choices =
+            List.filter_map
+              (fun w ->
+                match cid_and_ident w with
+                | Some (id, i) ->
+                    Some
+                      ( id, i
+                      , I18n.t
+                          ("property.repeat-repeat-type/" ^ suffix i) )
+                | None -> None)
+              rtypes
+          in
+          (* done label of a property = its closed value whose
+             choice-checkbox-state is true; falls back to the first
+             choice's title (cljs falls back to status-done) *)
+          let done_of choices =
+            match
+              List.find_map
+                (fun c ->
+                  match
+                    Properties_data.getf (Properties_data.untag c)
+                      "logseq.property/choice-checkbox-state"
+                  with
+                  | Some (W.Bool true) ->
+                      Some (Properties_data.ref_title c)
+                  | _ -> None)
+                choices
+            with
+            | Some l -> l
+            | None ->
+                Option.value ~default:""
+                  (Option.map Properties_data.ref_title
+                     (List.nth_opt choices 0))
+          in
+          (* when options: status + this block's non-built-in properties
+             with >=2 closed values (cljs full-properties filter) *)
+          let status_id =
+            Option.value ~default:0
+              (Properties_data.entity_id_of status_ent)
+          in
+          let rows, _hidden = Properties_data.split_display disp_w in
+          let when_choices =
+            [ (status_id, I18n.t "property.built-in/status", done_of status_choices) ]
+            @ List.filter_map
+                (fun row ->
+                  let prop = Properties_data.row_prop row in
+                  match
+                    ( Properties_data.entity_id_of prop
+                    , Properties_data.getk prop "db/ident" )
+                  with
+                  | Some id, Some ident'
+                    when not
+                           (String.starts_with ~prefix:"logseq." ident') -> (
+                      match
+                        Properties_data.getf prop
+                          "property/closed-values"
+                      with
+                      | Some cvs when List.length (W.elems cvs) >= 2 ->
+                          Some
+                            ( id
+                            , Properties_data.ref_title prop
+                            , done_of (W.elems cvs) )
+                      | _ -> None)
+                  | _ -> None)
+                rows
+          in
+          let ref_id key =
+            match Properties_data.getf block key with
+            | Some v ->
+                Properties_data.entity_id_of
+                  (unwrap_value v)
+            | None -> None
+          in
+          let r =
+            { prop_id =
+                Option.value ~default:0
+                  (Properties_data.entity_id_of prop_w)
+            ; repeated =
+                (match
+                   Option.bind
+                     (Properties_data.getf block
+                        "logseq.property.repeat/repeated?")
+                     (fun v -> W.as_bool (unwrap_value v))
+                 with
+                 | Some b -> b
+                 | None -> false)
+            ; freq =
+                (match
+                   Option.bind
+                     (Properties_data.getf block
+                        "logseq.property.repeat/recur-frequency")
+                     (fun v -> int_of_wire (unwrap_value v))
+                 with
+                 | Some n -> n
+                 | None -> 1)
+            ; unit_id =
+                (match
+                   ref_id "logseq.property.repeat/recur-unit"
+                 with
+                 | Some id -> id
+                 | None ->
+                     Option.value ~default:0
+                       (List.find_map
+                          (fun (id, i, _l) ->
+                            if i = "logseq.property.repeat/recur-unit.day"
+                            then Some id
+                            else None)
+                          unit_choices))
+            ; unit_choices
+            ; rtype_id =
+                (match
+                   ref_id "logseq.property.repeat/repeat-type"
+                 with
+                 | Some id -> id
+                 | None ->
+                     Option.value ~default:0
+                       (List.find_map
+                          (fun (id, i, _l) ->
+                            if i
+                               = "logseq.property.repeat/repeat-type.double-plus"
+                            then Some id
+                            else None)
+                          rtype_choices))
+            ; rtype_choices
+            ; when_id =
+                (match
+                   ref_id "logseq.property.repeat/checked-property"
+                 with
+                 | Some id -> id
+                 | None -> status_id)
+            ; when_choices
+            }
+          in
+          p.rpt <- Some r;
+          render_repeat p r;
+          Js.Promise.resolve ()
+      | _ -> Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("load_repeat failed", e);
+            Js.Promise.resolve ()))
+
+(* cljs base-ui avoidCollisions for the horizontal axis too: the
+   two-column picker can overflow the right edge — shift it left
+   inside the viewport *)
+and cal_clamp_x p =
+  let r = D.el_bounding_rect p.root in
+  let vw = D.win_inner_width in
+  if D.rect_left r +. D.rect_width r > vw -. 8. then (
+    let left = Float.max 8. (vw -. 8. -. D.rect_width r) in
+    let top = D.rect_top r in
+    let styled = cal_pos_style ~top p.uuid in
+    let parts = String.split_on_char ';' styled in
+    let parts =
+      List.map
+        (fun kv ->
+          if String.starts_with ~prefix:"left:" kv then
+            Printf.sprintf "left:%.0fpx" left
+          else kv)
+        parts
+    in
+    D.el_set_attr p.root "style" (String.concat ";" parts))
+
 let open_cal kind uuid from =
   let today = Dates.date_now () in
   let cy = int_of_float (Js.Date.getFullYear today)
@@ -375,45 +902,115 @@ let open_cal kind uuid from =
         ; ("tabindex", "-1") ]
       ()
   in
+  (* cljs nlp-calendar datetime? branch: time-picker input + ghost
+     "Use current time" button between the calendar and the NLP input *)
+  let time_inp, time_row =
+    match kind with
+    | Cal_prop _ ->
+        let inp =
+          D.h ~tag:"input" ~cls:"ls-time-input"
+            ~attrs:
+              [ ("type", "time"); ("id", "time-picker")
+              ; ("value", "00:00") ]
+            ()
+        in
+        let now_btn =
+          D.h ~tag:"button" ~cls:"ls-time-now"
+            ~attrs:[ ("type", "button") ]
+            ~text:(I18n.t "ui/use-current-time") ()
+        in
+        ( Some inp
+        , Some
+            (D.h ~cls:"ls-time-picker" ~children:[ inp; now_btn ] ()) )
+    | _ -> (None, None)
+  in
   let root =
-    D.h ~cls:"ls-editor-date-picker"
+    D.h
+      ~cls:
+        ("ls-editor-date-picker"
+         ^ (match kind with
+            | Cal_prop _ -> " ls-cal-prop"
+            | _ -> ""))
       ~attrs:
         [ ("id", "date-time-picker"); ("style", cal_pos_style uuid) ]
       ~children:
-        [ D.h ~cls:"ls-nlp-calendar"
+        [ D.h ~cls:"ls-property-date-picker"
             ~children:
-              [ D.h ~cls:"ui__calendar"
+              [ D.h ~cls:"ls-nlp-calendar"
                   ~children:
-                    [ D.h ~cls:"ls-cal-head"
+                    ([ D.h ~cls:"ui__calendar"
                         ~children:
-                          [ D.h ~cls:"ls-cal-selects"
-                              ~children:[ sel; year_inp ] ()
-                          ; D.h ~cls:"ls-cal-nav"
+                          [ D.h ~cls:"ls-cal-head"
                               ~children:
-                                [ D.h ~tag:"button" ~cls:"ls-cal-nav-btn"
-                                    ~attrs:
-                                      [ ("type", "button")
-                                      ; ("aria-label", "Previous month") ]
-                                    ~children:[ D.icon "chevron-left" ] ()
-                                ; D.h ~tag:"button" ~cls:"ls-cal-nav-btn"
-                                    ~attrs:
-                                      [ ("type", "button")
-                                      ; ("aria-label", "Next month") ]
-                                    ~children:[ D.icon "chevron-right" ] ()
-                                ]
-                              () ]
+                                [ D.h ~cls:"ls-cal-selects"
+                                    ~children:[ sel; year_inp ] ()
+                                ; D.h ~cls:"ls-cal-nav"
+                                    ~children:
+                                      [ D.h ~tag:"button"
+                                          ~cls:"ls-cal-nav-btn"
+                                          ~attrs:
+                                            [ ("type", "button")
+                                            ; ( "aria-label"
+                                              , "Previous month" ) ]
+                                          ~children:
+                                            [ D.icon "chevron-left" ]
+                                          ()
+                                      ; D.h ~tag:"button"
+                                          ~cls:"ls-cal-nav-btn"
+                                          ~attrs:
+                                            [ ("type", "button")
+                                            ; ( "aria-label"
+                                              , "Next month" ) ]
+                                          ~children:
+                                            [ D.icon "chevron-right" ]
+                                          () ]
+                                    () ]
+                              ()
+                          ; D.h ~tag:"table" ~attrs:[ ("role", "grid") ]
+                              ~children:[ tbody ] () ]
                         ()
-                    ; D.h ~tag:"table" ~attrs:[ ("role", "grid") ]
-                        ~children:[ tbody ] () ]
-                  ()
-              ; nlp_inp ]
+                     ]
+                     @ (match time_row with
+                        | Some t -> [ t ]
+                        | None -> [])
+                     @ [ nlp_inp ])
+                  () ]
             () ]
       ()
   in
   let p =
-    { kind; uuid; from; root; cy; cm; cd; menu = None
-    ; link_url = None; link_label = None }
+    { kind; uuid; from; root; cy; cm; cd; hour = 0; tmin = 0
+    ; menu = None; rpt = None; link_url = None; link_label = None }
   in
+  (match time_inp with
+   | Some inp ->
+       let commit_time () =
+         match String.split_on_char ':' (D.el_value inp) with
+         | [ h; m ] -> (
+             match (int_of_string_opt h, int_of_string_opt m) with
+             | Some h, Some m when h >= 0 && h < 24 && m >= 0 && m < 60 ->
+                 p.hour <- h;
+                 p.tmin <- m;
+                 commit_cal p
+             | _ -> ())
+         | _ -> ()
+       in
+       D.el_on inp "change" (fun _ -> commit_time ());
+       D.el_on inp "blur" (fun _ -> commit_time ());
+       let now_btn =
+         D.el_query root ".ls-time-now"
+       in
+       (match now_btn with
+        | Some b ->
+            D.el_on b "click" (fun _ ->
+                let now = Dates.date_now () in
+                p.hour <- int_of_float (Js.Date.getHours now);
+                p.tmin <- int_of_float (Js.Date.getMinutes now);
+                D.el_set_value inp
+                  (Printf.sprintf "%02d:%02d" p.hour p.tmin);
+                commit_cal p)
+        | None -> ())
+   | None -> ());
   D.el_on sel "click" (fun _ -> toggle_month_menu p);
   D.el_on year_inp "input" (fun _ ->
       match int_of_string_opt (D.el_value year_inp) with
@@ -434,6 +1031,9 @@ let open_cal kind uuid from =
   Runtime.editor_popup_root := Some p.root;
   rebuild_grid p;
   cal_clamp_in_view uuid root;
+  (match kind with
+   | Cal_prop ident -> load_repeat p ident
+   | _ -> ());
   focus_day p
 
 (* ---------- link / image-link form ---------- *)
@@ -461,7 +1061,8 @@ let open_link_form image uuid from =
   in
   let p =
     { kind = Link_form image; uuid; from; root; cy = 0; cm = 0; cd = 0
-    ; menu = None; link_url = Some url_inp; link_label = Some label_inp }
+    ; hour = 0; tmin = 0; menu = None; rpt = None
+    ; link_url = Some url_inp; link_label = Some label_inp }
   in
   D.el_append_child D.document_body root;
   active := Some p;
@@ -792,11 +1393,45 @@ let on_command ev =
     | None -> ()
     | Some command -> (
         match detail_str ev "block" with
-        | Some _ ->
-            (* context-menu commands target a block by uuid — Editor_cmds
-               owns them *)
-            Editor_cmds.run ~command ~block:(detail_str ev "block")
-              ~value:(detail_str ev "value")
+        | Some uuid -> (
+            (* deadline/scheduled on a non-editing block (the `p d`
+               chord) open the calendar anchored at the block row;
+               everything else is a context-menu command Editor_cmds
+               owns *)
+            match command with
+            | "deadline" ->
+                open_cal (Cal_prop "logseq.property/deadline") uuid 0
+            | "scheduled" ->
+                open_cal (Cal_prop "logseq.property/scheduled") uuid 0
+            (* cljs :editor/new-property {:property-key k} — p s/p p/p t
+               land in that property's value editor *)
+            | "add-property" ->
+                Properties_dialog.open_for_block uuid
+            | "add-property-status" ->
+                Properties_dialog.open_for_block_with_property
+                  ~uuids:[ uuid ] uuid
+                  ~ident:"logseq.property/status"
+            | "add-property-priority" ->
+                Properties_dialog.open_for_block_with_property
+                  ~uuids:[ uuid ] uuid
+                  ~ident:"logseq.property/priority"
+            | "set-tags" ->
+                Properties_dialog.open_for_block_with_property
+                  ~uuids:[ uuid ] uuid ~ident:"block/tags"
+            | "set-icon" | "add-reaction" ->
+                (* the pickers live in the popups layer — editor modules
+                   cannot reach icon_picker without a module cycle *)
+                Web_dom.dispatch_custom "ls:block-picker"
+                  (Js.Json.object_
+                     (Js.Dict.fromList
+                        [ "block", Js.Json.string uuid
+                        ; ( "kind"
+                          , Js.Json.string
+                              (if command = "add-reaction" then "emoji"
+                               else "icon") ) ]))
+            | _ ->
+                Editor_cmds.run ~command ~block:(Some uuid)
+                  ~value:(detail_str ev "value"))
         | None -> (
             match S.editing () with
             | None -> Editor_cmds.run ~command ~block:None

@@ -167,6 +167,27 @@ type rtc =
   ; rtc_pending_server : int
   }
 
+(* :search/index-build — worker search-index progress pushed through the
+   thread-api/search-index-build-progress remoteInvoke (cljs
+   persist_db/browser.cljs). Rendered by the header widget *)
+type index_build =
+  { ib_visible : bool
+  ; ib_running : bool
+  ; ib_status : string (* "" | "idle" | "running" | "completed" *)
+  ; ib_progress : int (* 0-100 *)
+  ; ib_repo : string
+  ; ib_build_id : string option
+  }
+
+(* one decoded search-index-build-progress event *)
+type index_progress_event =
+  { ip_repo : string
+  ; ip_status : string
+  ; ip_stage : string (* "search-index" | "vector-index" *)
+  ; ip_progress : int
+  ; ip_build_id : string option
+  }
+
 (* worker :notification broadcast -> toast *)
 type toast =
   { toast_id : int
@@ -211,6 +232,7 @@ type t =
   ; help_open : bool
   ; unlinked_blocks : block list
   ; rtc : rtc option
+  ; index_build : index_build
   ; data_gen : int (* bumped whenever a block/page-bearing field is
                       reassigned — cheap revision for dyn ~equal so
                       block trees are never structurally compared *)
@@ -247,6 +269,14 @@ let initial =
   ; help_open = false
   ; unlinked_blocks = []
   ; rtc = None
+  ; index_build =
+      { ib_visible = false
+      ; ib_running = false
+      ; ib_status = ""
+      ; ib_progress = 0
+      ; ib_repo = ""
+      ; ib_build_id = None
+      }
   ; data_gen = 0
   }
 

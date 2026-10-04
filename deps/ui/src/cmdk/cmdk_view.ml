@@ -308,10 +308,29 @@ let find_sub_ci sub low start =
   in
   go start
 
+(* cljs cmdk/highlight-content-query parses the worker's pfts markers
+   into span/mark segments via text-util/cut-by *)
+let pfts_segments text : (bool * string) list =
+  let n = String.length text in
+  let lo = String.length S.pfts_open and lc = String.length S.pfts_close in
+  let rec go pos acc =
+    let i = S.find_sub S.pfts_open text pos in
+    if i < 0 then List.rev ((false, String.sub text pos (n - pos)) :: acc)
+    else
+      let j = S.find_sub S.pfts_close text (i + lo) in
+      if j < 0 then List.rev ((false, String.sub text pos (n - pos)) :: acc)
+      else
+        go (j + lc)
+          ((true, String.sub text (i + lo) (j - i - lo))
+           :: (false, String.sub text pos (i - pos)) :: acc)
+  in
+  go 0 []
+
 (* leftmost match across query terms (whitespace-split); ties keep the
    earliest term like a JS "a|b" alternation *)
 let hl_segments ~query ~text : (bool * string) list =
-  if String.trim query = "" || text = "" then [ (false, text) ]
+  if S.find_sub S.pfts_open text 0 >= 0 then pfts_segments text
+  else if String.trim query = "" || text = "" then [ (false, text) ]
   else
     (* indices must stay byte-aligned with [text]: cljs highlights via a
        case-insensitive regex on the raw title, so lowercase the original
@@ -351,10 +370,13 @@ let hl_segments ~query ~text : (bool * string) list =
       go 0 []
 
 (* cljs [:span {:data-testid text} seg/span ... seg/mark] — mark gets
-   padding 0 border-radius 0 *)
+   padding 0 border-radius 0; data-testid is the original (unmarked)
+   title *)
 let highlight_el key query text =
+  let segs = hl_segments ~query ~text in
+  let plain = String.concat "" (List.map snd segs) in
   Logseq_dom.dom ~key ~tag:"span"
-    ~attrs:[ ("data-testid", text) ]
+    ~attrs:[ ("data-testid", plain) ]
     (List.mapi
        (fun i (hl, seg) ->
          if hl then
@@ -363,7 +385,7 @@ let highlight_el key query text =
          else
            Logseq_dom.dom ~key:(Printf.sprintf "tx%d" i) ~tag:"span"
              ~text:seg [])
-       (List.filter (fun (_, s) -> s <> "") (hl_segments ~query ~text)))
+       (List.filter (fun (_, s) -> s <> "") segs))
 
 let badge_el key =
   Logseq_dom.dom ~key ~tag:"span"

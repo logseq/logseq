@@ -91,6 +91,10 @@ type ac =
   ; flip : (float * float) option
     (* Some (top, avail-h) once the popup measured too tall for the
        space below the caret — base-ui avoidCollisions flips it above *)
+  ; flipx : float option
+    (* Some left' when the popup measured wider than the space to the
+       right of the caret — base-ui flips align start->end, so the
+       right edge lands at the caret; x keeps the caret anchor *)
   ; query : string
   ; tpos : int (* query-trigger offset (the "/" "[[" "((" "#" start) *)
   ; tlen : int
@@ -136,6 +140,9 @@ type pv =
   { pv_x : float
   ; pv_y : float
   ; pv_title : string
+  ; pv_page : Model.page option (* feeds the title actions — cljs
+                                     page-preview renders page-cp with
+                                     with-actions? *)
   ; pv_blocks : Model.block list
   }
 
@@ -250,13 +257,15 @@ let close_pv t = set_pv t None
 (* title + blocks of the page a .preview-ref-link points at — same bare
    uuid/name ref as sidebar_state.fetch_blocks *)
 
-let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
+let fetch_preview repo name
+    : (string * Model.page option * Model.block list) Js.Promise.t =
   let* info =
     Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
       (Wire.page_ref name)
   in
+  let page = Decode.page_of_summary info in
   let title =
-    match Decode.page_of_summary info with
+    match page with
     | Some p -> p.Model.page_title
     | None -> name
   in
@@ -265,7 +274,7 @@ let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
       (Wire.String repo) (Wire.page_ref name) Wire.Nil
   in
   Js.Promise.resolve
-    (title, Decode.blocks_of_wire w)
+    (title, page, Decode.blocks_of_wire w)
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
@@ -693,8 +702,12 @@ let block_item_of_row i w =
     | None -> Option.value (Cmdk_state.str_field w "block/uuid") ~default:""
   in
   (* cljs node-render for blocks: point-filled node icon and the parent
-     path in the breadcrumb row *)
-  mk_item ~key:it.Cmdk_state.ikey ~label:it.Cmdk_state.ititle ~node:true
+     path in the breadcrumb row. FTS rows carry
+     $pfts_2lqh>$..$<pfts_2lqh$ markers — strip them; the view's query
+     highlight still marks the hit *)
+  mk_item ~key:it.Cmdk_state.ikey
+    ~label:(Cmdk_state.strip_pfts it.Cmdk_state.ititle)
+    ~node:true
     ~node_icon:("point-filled", true)
     ~breadcrumb:(Option.value it.Cmdk_state.header ~default:"")
     (Emit ("[[" ^ uuid ^ "]]", 0));;
@@ -711,6 +724,10 @@ let run_block_search t ac =
      in
      let rows =
        match w with
+       | Wire.Map _ -> (
+           match Wire.get w "items" with
+           | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+           | _ -> [])
        | Wire.Array xs | Wire.List xs -> xs
        | _ -> []
      in
@@ -959,7 +976,7 @@ let open_ac t kind editor =
   let tlen = trigger_len_of_kind kind in
   let tpos = Web_dom.el_selection_start editor - tlen in
   let ac =
-    { kind; x; y; cy; flip = None; query = ""
+    { kind; x; y; cy; flip = None; flipx = None; query = ""
     ; tpos; tlen
     ; items = []; chosen = 0; editor
     ; auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" }
@@ -982,8 +999,22 @@ let open_ac t kind editor =
                 (* --available-height propagates to #ui__ac-inner's own
                    max-height; lift it to read the real rendered height
                    (the list's own CSS max still applies) *)
-                Web_dom.el_style_set_property pop "--available-height" "2000px";
-                let h = Web_dom.rect_height (Web_dom.el_bounding_rect pop) in
+                Web_dom.el_style_set_property pop "--available-height"
+                  "2000px";
+                let rect = Web_dom.el_bounding_rect pop in
+                (* base-ui flips align start->end when the popup would
+                   overflow the right viewport edge — the right edge
+                   lands at the caret; clamp to the margin when even
+                   that doesn't fit *)
+                let fx =
+                  let w = Web_dom.rect_width rect in
+                  if a.x +. w > Web_dom.win_inner_width -. 8. then
+                    Some (Float.max 8. (a.x -. w))
+                  else None
+                in
+                if fx <> a.flipx then
+                  set_ac t (Some { a with flipx = fx });
+                let h = Web_dom.rect_height rect in
                 let below = Web_dom.win_inner_height -. a.y -. 8. in
                 let above = a.cy -. 8. in
                 if h > below && above > below then (

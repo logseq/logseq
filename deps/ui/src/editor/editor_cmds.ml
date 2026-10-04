@@ -200,8 +200,32 @@ let run ~command ~block ~value =
           ignore
             (let* sop = Outliner_ops.save_block_parsed uuid ("> " ^ title) in
              Outliner_ops.apply_and_refresh_deferred [ sop ])
+      | "add-comment" ->
+          (* cljs add-comment over the block selection — the comments
+             area mounts once the refresh lands *)
+          ignore
+            (let* _ =
+               Runtime.invoke2
+                 "thread-api/ensure-comments-area-for-blocks"
+                 (W.String (repo ()))
+                 (W.Array [ W.Uuid uuid ])
+             in Outliner_ops.refresh_page ())
+      | "copy-export-as" ->
+          (* cljs export-blocks: block ctx menu -> [block] :block; the
+             selection ctx menu exports the top-level selected roots *)
+          let sel = Editor_state.selected () in
+          let uuids =
+            if Editor_state.String_set.mem uuid sel then
+              List.filter
+                (fun u ->
+                  not (Editor_actions.has_selected_ancestor sel u))
+                (Editor_actions.selected_uuids ())
+            else [ uuid ]
+          in
+          Export_state.arm_blocks uuids;
+          Sidebar_state.open_dialog "export-page"
       | "cycle-todo" | "deadline" | "scheduled" | "date-picker"
-      | "add-comment" | "copy-export-as" | "set-icon" | "add-reaction" ->
+      | "set-icon" | "add-reaction" ->
           Platform.console_error ("editor command not implemented", command)
       | _ -> Platform.console_error ("unknown editor command", command))
 ;;

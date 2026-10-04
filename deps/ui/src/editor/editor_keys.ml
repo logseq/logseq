@@ -191,6 +191,52 @@ let paste_text_at_caret uuid =
       | None -> ());
      Js.Promise.resolve ())
 
+
+(* -- normal-mode "p" chord (cljs keymap sequences p d/i/r/...) -- *)
+
+(* "p" on a selected block arms the property chord; the follow-up key
+   must land within 1.5s or the chord lapses *)
+let pending_p = ref false
+let pending_p_timer = ref (-1)
+
+let clear_pending_p () =
+  pending_p := false;
+  if !pending_p_timer >= 0 then (
+    D.clear_timeout !pending_p_timer;
+    pending_p_timer := -1)
+
+let arm_pending_p () =
+  clear_pending_p ();
+  pending_p := true;
+  pending_p_timer := D.set_timeout_id clear_pending_p 1500
+
+(* follow-up key after "p": the deadline calendar and the icon /
+   reaction pickers anchor under the first selected block (routed
+   through ls:editor-command like the context-menu commands); any other
+   key clears the chord and falls through to normal handling *)
+let run_p_chord ev key =
+  clear_pending_p ();
+  match key, A.selected_uuids () with
+  | "a", _ ->
+      (* cljs p a = toggle-display-hidden-properties *)
+      D.ev_prevent_default ev;
+      Properties_state.toggle_hidden ();
+      Properties_state.refresh_all ();
+      true
+  | ("d" | "i" | "r" | "s" | "p" | "t" as k), u :: _ ->
+      D.ev_prevent_default ev;
+      Popups_state.emit_cmd
+        (match k with
+         | "d" -> "deadline"
+         | "i" -> "set-icon"
+         | "r" -> "add-reaction"
+         | "s" -> "add-property-status"
+         | "p" -> "add-property-priority"
+         | _ -> "set-tags")
+        [ "block", Js.Json.string u ];
+      true
+  | _ -> false
+
 (* -- editor-mode keys -- *)
 
 (* cljs shortcut tables key on the unshifted key plus modifier flags; DOM
@@ -331,6 +377,12 @@ let on_editor_key ev uuid el =
             (* cljs editor/copy-embed *)
             D.ev_prevent_default ev;
             Platform.copy_to_clipboard ("{{embed ((" ^ uuid ^ "))}}")
+        | "p" when mods ev && not shift ->
+            (* cljs :editor/add-property mod+p — the new-property dialog
+               on the editing block *)
+            D.ev_prevent_default ev;
+            Popups_state.emit_cmd "add-property"
+              [ "block", Js.Json.string uuid ]
         | "." when mods ev && shift ->
             D.ev_prevent_default ev;
             A.zoom_to uuid
@@ -557,10 +609,32 @@ let on_normal_key ev =
   and alt = D.ev_alt ev
   and meta = D.ev_meta ev in
   let selected () = S.selection_active () in
+  if !pending_p && not (mods ev) && run_p_chord ev key then ()
+  else
   match key with
+  | "p" when meta && not shift && selected () ->
+      (* cljs :editor/add-property mod+p — the new-property dialog on the
+         first selected block *)
+      D.ev_prevent_default ev;
+      (match A.selected_uuids () with
+       | u :: _ ->
+           Popups_state.emit_cmd "add-property"
+             [ "block", Js.Json.string u ]
+       | [] -> ())
+  | "p" when selected () && not (mods ev) ->
+      D.ev_prevent_default ev;
+      arm_pending_p ()
   | "Backspace" | "Delete" when selected () ->
       D.ev_prevent_default ev;
       A.delete_selection ()
+  | " " when D.ev_ctrl ev && selected () ->
+      (* cljs ctrl+space = add-comment on the selection *)
+      D.ev_prevent_default ev;
+      List.iter
+        (fun u ->
+          Popups_state.emit_cmd "add-comment"
+            [ "block", Js.Json.string u ])
+        (A.selected_uuids ())
   | "ArrowUp" when (meta || alt) && shift ->
       D.ev_prevent_default ev;
       A.move_blocks_up_down true
@@ -593,6 +667,15 @@ let on_normal_key ev =
   | "Enter" when mods ev ->
       D.ev_prevent_default ev;
       List.iter Editor_commands.cycle_todo (A.selected_uuids ())
+  | "Enter" when shift && selected () ->
+      (* cljs shift+enter = open-selected-blocks-in-sidebar *)
+      D.ev_prevent_default ev;
+      List.iter
+        (fun u ->
+          Web_dom.dispatch_custom "ls:open-right-sidebar"
+            (Js.Json.object_
+               (Js.Dict.fromList [ "uuid", Js.Json.string u ])))
+        (A.selected_uuids ())
   | "Enter" when not shift -> (
       match D.closest_sel ".block-add-button" (D.ev_target ev) with
       | Some btn ->
@@ -678,29 +761,68 @@ let is_other_block_editor uuid target =
    synchronously so it never sees this window — apply text edits to the
    pending buffer at the pending caret and replay structural ops once
    focus lands *)
-let on_pending_focus_key ev e caret =
+let rec on_pending_focus_key ev e caret =
   let buf = e.S.buffer in
   let len = String.length buf in
   (* pending_focus caret is derived from the live textarea, which can
      outpace e.buffer while a refresh rewrites it — clamp before any
      String.sub *)
   let caret = max 0 (min caret len) in
+  (match D.textarea_of e.S.uuid with
+  | Some el ->
+      (* the remount already landed — the textarea exists and carries
+         the buffer, so the DOM is authoritative. The key only arrived
+         at <body> because focus has not caught up; focus it and run the
+         normal editor path so value/caret stay live. Plain characters
+         get no browser default on <body>, so splice them in manually *)
+      D.el_focus el;
+      (match D.ev_key ev with
+      | key
+        when String.length key = 1 && not (D.ev_composing ev)
+             && not (mods ev || D.ev_alt ev) ->
+          D.ev_prevent_default ev;
+          S.note_input ();
+          let dv = D.el_value el in
+          let ds = D.el_selection_start el in
+          let de = D.el_selection_end el in
+          D.el_set_value el
+            (String.sub dv 0 ds ^ key
+            ^ String.sub dv de (String.length dv - de));
+          D.el_set_selection_range el (ds + 1) (ds + 1);
+          A.sync_buffer e.S.uuid (D.el_value el)
+      | _ -> on_editor_key ev e.S.uuid el)
+  | None -> on_pending_focus_key_unmounted ev e buf caret)
+and on_pending_focus_key_unmounted ev e buf caret =
+  let len = String.length buf in
   let queue f = S.pending_focus_actions := f :: !S.pending_focus_actions in
-  let patch buf' caret' =
+  let patch buf_fn caret' =
+    (* buf_fn transforms the signal's latest buffer — the captured
+       record can lag the pending (not-yet-published) value by several
+       buffered keystrokes, and Signal.update composes onto that
+       pending value *)
+    let applied = ref (buf_fn buf) in
     S.set_silent (fun st ->
-        { st with S.editing = Some { e with S.buffer = buf' } });
+        match st.S.editing with
+        | Some e2 when e2.S.uuid = e.S.uuid ->
+            let v = buf_fn e2.S.buffer in
+            applied := v;
+            { st with S.editing = Some { e2 with S.buffer = v } }
+        | _ -> st);
     (* the textarea can already be mounted when pending was lost mid-
        remount — mirror the buffer into it so the DOM doesn't diverge *)
     (match D.textarea_of e.S.uuid with
      | Some el ->
-         D.el_set_value el buf';
+         D.el_set_value el !applied;
          D.el_set_selection_range el caret' caret'
      | None -> ());
     S.pending_focus := Some (e.S.uuid, caret', !S.last_edit_input_ms)
   in
   let insert s =
     patch
-      (String.sub buf 0 caret ^ s ^ String.sub buf caret (len - caret))
+      (fun b ->
+        let caret' = max 0 (min caret (String.length b)) in
+        String.sub b 0 caret' ^ s
+        ^ String.sub b caret' (String.length b - caret'))
       (caret + String.length s)
   in
   (match D.ev_key ev with
@@ -709,16 +831,21 @@ let on_pending_focus_key ev e caret =
       if caret = 0 then queue (fun () -> A.merge_prev e.S.uuid)
       else
         patch
-          (String.sub buf 0 (caret - 1)
-          ^ String.sub buf caret (len - caret))
+          (fun b ->
+            let caret' = max 0 (min caret (String.length b)) in
+            String.sub b 0 (caret' - 1)
+            ^ String.sub b caret' (String.length b - caret'))
           (caret - 1)
   | "Delete" ->
       D.ev_prevent_default ev;
       if caret = len then queue (fun () -> A.merge_next e.S.uuid)
       else
         patch
-          (String.sub buf 0 caret
-          ^ String.sub buf (caret + 1) (len - caret - 1))
+          (fun b ->
+            let caret' = max 0 (min caret (String.length b)) in
+            String.sub b 0 caret'
+            ^ String.sub b (caret' + 1)
+                (String.length b - caret' - 1))
           caret
   | "Enter" ->
       D.ev_prevent_default ev;
