@@ -4315,6 +4315,130 @@ select.form-select {
   min-width: 0;
 }
 
+/* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
+   kept in flow here so the rows list needs no top offset) —
+   .sticky-columns and the unpinned cell row are flex items on the same
+   line, not stacked block children */
+.ls-table-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: fit-content;
+  min-width: 100%;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.sticky-columns {
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  background: var(--lx-gray-01, var(--ls-primary-background-color));
+}
+
+.ls-table-header-cell {
+  cursor: pointer;
+  text-align: left;
+  vertical-align: middle;
+  font-weight: 500;
+  color: var(--muted-foreground, var(--ls-secondary-text-color));
+  border-right: 1px solid var(--ls-border-color);
+}
+
+/* cljs header button is h-8 (32px); .ls-btn-default's 2.5rem height
+   beats the h-8 utility on specificity */
+.ls-table-header-cell > .ui__button {
+  height: 2rem !important;
+  overflow: hidden;
+}
+
+/* cljs .ls-table-resize-handle: absolute col-resize grip on the cell's
+   right edge, invisible until hover */
+.ls-table-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -0.125rem;
+  width: 0.25rem;
+  height: 100%;
+  cursor: col-resize;
+  background: var(--accent-08, var(--ls-accent-color));
+  border-radius: 0.25rem;
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+.ls-table-resize-handle:hover {
+  opacity: 0.7;
+}
+
+.ls-table-resize-handle:active {
+  opacity: 1;
+}
+
+/* cljs .ls-table-row is a hard 33px (min/max), not the .ls-block
+   padding box used by outline rows */
+.ls-table-row.ls-block {
+  height: 33px;
+  min-height: 33px;
+  max-height: 33px;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.ls-table-row div,
+.ls-table-row span,
+.ls-table-row a {
+  white-space: nowrap;
+}
+
+.ls-table-row .table-block-title,
+.ls-table-row .block-head-wrap a {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+/* row wrappers cljs pins to the same 33px */
+.ls-table-rows div[data-index],
+.ls-table-rows div[data-item-index] {
+  height: 33px;
+  min-height: 33px;
+  max-height: 33px;
+  overflow: hidden;
+}
+
+.ls-table-footer {
+  position: absolute;
+  left: 0;
+  bottom: 8px;
+  width: 100%;
+}
+
+.ls-table-rows div[data-viewport-type='window'] {
+  min-width: 100%;
+  width: auto !important;
+}
+
+/* cljs .ls-table-cell { @apply h-full max-h-[33px] overflow-hidden } —
+   caps row height and clips cell content */
+.ls-table-cell {
+  height: 100%;
+  max-height: 33px;
+  overflow: hidden;
+}
+
+.ls-table-cell > div {
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* cljs ui.css: fold carets hang 27px into the left gutter instead of
+   taking inline width in the foldable header */
+.ls-foldable-title-control {
+  margin-left: -27px;
+}
+
 /* cljs ls-view-head: count/tabs left, view-actions right on one row
    (flex flex-1 flex-nowrap items-center justify-between gap-1) */
 .ls-view-head {
