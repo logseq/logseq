@@ -397,6 +397,31 @@ let get_unconfirmed_local_txs repo : local_tx_entry list =
     []
   |> List.filter_map row_to_pending_local_tx
 
+(* lean variant for the un-apply pass: only the columns it reads —
+   skips the per-row transit decode of the outliner-op blobs *)
+type unconfirmed_tx_row =
+  { un_tx_id : string
+  ; un_failed : bool
+  ; un_normalized_tx_data : string option
+  ; un_reversed_tx_data : string option
+  }
+
+let get_unconfirmed_tx_data repo : unconfirmed_tx_row list =
+  rows (store repo)
+    ("select tx_id, failed, normalized_tx_data, reversed_tx_data from client_ops"
+     ^ " where kind = 'tx' and (pending = 1 or failed = 1)"
+     ^ " order by created_at asc, id asc")
+    []
+  |> List.filter_map (fun r ->
+         match col_text_opt r 0 with
+         | Some tx_id ->
+             Some
+               { un_tx_id = tx_id
+               ; un_failed = int_to_bool (col_int r 1)
+               ; un_normalized_tx_data = col_text_opt r 2
+               ; un_reversed_tx_data = col_text_opt r 3 }
+         | None -> None)
+
 let get_pending_local_tx_ids repo : string list =
   rows (store repo)
     "select tx_id from client_ops where kind = 'tx' and pending = 1 order by created_at asc, id asc"
