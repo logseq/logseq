@@ -103,12 +103,15 @@
 
 (defn write-file!
   "A node only version of write-plain-text-file! to avoid using the fs-protocol
-   which has file graph assumptions"
+   which has file graph assumptions. Creates the parent directory when missing
+   so first-save of sidecar files such as export.css does not fail with ENOENT."
   [path content]
   (when (util/electron?)
     (let [file-fpath (common-util/path-normalize path)]
       ;; repo is nil because we don't want a backup file written
-      (-> (ipc/ipc "writeFile" nil file-fpath content)
+      (-> (p/do!
+           (mkdir-if-not-exists (path/parent file-fpath))
+           (ipc/ipc "writeFile" nil file-fpath content))
           (p/catch (fn [error]
                      (state/pub-event! [:capture-error {:error error
                                                         :payload {:type :write-file/failed
