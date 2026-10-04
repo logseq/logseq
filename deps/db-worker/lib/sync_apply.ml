@@ -2968,10 +2968,7 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
                  in
                  let fix_op = local_tx.outliner_op = Some "fix" in
                  let tx_data =
-                   (try
-                      sanitize_pending_tx_refs ~uuid_exists ~attr_live db
-                        tx_data
-                    with _ -> tx_data)
+                   sanitize_pending_tx_refs ~uuid_exists ~attr_live db tx_data
                    |> List.map (resolve_temp_id db)
                    |> fun items ->
                       List.map Ds_wire.value_of_transit items
