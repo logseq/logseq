@@ -23,7 +23,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `isTitleAvailable` | title | title-holder query | query adapter | DB read |
 | `findDuplicateTitles` | `normalize`, `include_recycled` | queries + grouping | query adapter | DB read |
 | `inspectPage` | page UUID, `detail` | page plus selected blocks, tags, properties, or declarations | dedicated `logseq.DB.inspectPage` API; retains the detail envelope and query-shaped entity keys | API implemented; local DB, MCP, and capability tests pass; live validation pending |
-| `pageStats` | page UUID | fixed count queries | query adapter | DB read |
+| `pageStats` | page UUID | fixed counts, subtree/alias/reference/property analysis | dedicated `logseq.DB.getPageStats` API owns the read-only DB aggregation and preserves the response/diagnostic contract | production route switched; local DB, MCP, and capability tests pass; live validation pending |
 | `getBlockUUID` | page UUID | query | query adapter | DB read |
 | `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; six read-only smoke cases pass; collapsed and property-bearing cases remain blocked pending live reads |
 | `searchBlocks` | text, page scope, regex, limit | predicate query + separate count | query adapter, single attempt | DB read/query |
@@ -33,7 +33,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `getTagUUID` | title | `getTagsByName` | API tag lookup | DB read |
 | `getTag` | tag UUID | UUID/title/name projection query | existing `logseq.DB.getTag` API; MCP preserves its full PageEntity fields, including UUID/title/name and richer id/ident metadata | production route switched; DB API and MCP pass-through tests pass; live validation pending |
 | `getTagUsers` | tag UUID | direct `:block/tags` holder query; returns UUID/title/name/page | dedicated `logseq.DB.getTagUsers` API; excludes inherited-only holders to preserve contract | production route switched; DB API, MCP, and capability tests pass; live validation pending |
-| `getPropertyIndent` | property title | property-class query | query adapter | DB read |
+| `getPropertyIndent` | property title | exact-title property query; ambiguity candidates retained | dedicated `logseq.DB.getPropertiesByTitle` returns all matching property definitions; MCP preserves the existing ident/type/ambiguity envelope | API implemented; local DB, MCP, and capability tests pass; live validation pending |
 | `getProperyUsers` | property ident | query + value resolution | query adapter | DB read |
 
 ## Lists

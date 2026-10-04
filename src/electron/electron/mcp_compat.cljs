@@ -88,19 +88,19 @@
         (string/replace #"\s+" " ")
         string/trim
         (string/split #" "))]
-   (string/join " "
-          (map (fn [word]
-           (cond
-             (and (> (count word) 4) (string/ends-with? word "es"))
-             (subs word 0 (- (count word) 2))
+      (string/join " "
+                   (map (fn [word]
+                          (cond
+                            (and (> (count word) 4) (string/ends-with? word "es"))
+                            (subs word 0 (- (count word) 2))
 
-             (and (> (count word) 3)
-               (string/ends-with? word "s")
-               (not (string/ends-with? word "ss")))
-             (subs word 0 (dec (count word)))
+                            (and (> (count word) 3)
+                                 (string/ends-with? word "s")
+                                 (not (string/ends-with? word "ss")))
+                            (subs word 0 (dec (count word)))
 
-             :else word))
-            words)))))
+                            :else word))
+                        words)))))
 
 (defn- within-edit-distance?
   [left right allowed]
@@ -120,7 +120,7 @@
                                   value (min (inc (nth previous (inc j)))
                                              (inc (peek row))
                                              (+ (nth previous j) cost))]
-                              (recur (inc j) (conj row value)))))]
+                              (recur (inc j) (conj row value))))) ]
             (if (> (apply min current) allowed)
               false
               (recur (inc i) current))))))))
@@ -388,28 +388,6 @@
         :_parent (:block/_parent entity)
         nil)))
 
-(defn- page-stats-subtree
-  [tree root-id]
-  (let [own (atom 0)
-        nested (atom 0)
-        orphans (atom 0)]
-    (letfn [(walk [node expected-page]
-              (doseq [child (or (page-stats-field node :_parent) [])]
-                (let [child-id (page-stats-field child :id)
-                      page (page-stats-field child :page)
-                      page-id (if (map? page) (page-stats-field page :id) page)]
-                  (if (page-stats-field child :name)
-                    (do
-                      (swap! nested inc)
-                      (walk child child-id))
-                    (do
-                      (if (= page-id expected-page)
-                        (swap! own inc)
-                        (swap! orphans inc))
-                      (walk child expected-page))))))]
-      (walk tree root-id)
-      {:own @own :nested @nested :orphans @orphans})))
-
 (defn- structural-property-value?
   [property]
   (let [ident (or (:ident property) (:db/ident property))
@@ -426,84 +404,8 @@
     (when-not (and (string? page-uuid)
                    (re-matches page-stats-uuid-pattern page-uuid))
       (throw (js/Error. "page_uuid must be a UUID")))
-    (let [entity-query (str "[:find (pull ?entity [*]) . :where "
-                            "[?entity :block/uuid #uuid \"" page-uuid "\"]]")]
-      (p/let [entity-result (api-fn "logseq.DB.datascriptQuery" [entity-query])
-              page (js->clj entity-result :keywordize-keys true)]
-        (when-not page
-          (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
-        (when-not (page-stats-field page :name)
-          (throw (js/Error. "UUID identifies a block, not a page")))
-        (let [page-id (page-stats-field page :id)
-              tree-query (str "[:find (pull ?root [:db/id :block/uuid :block/title :block/name "
-                               "{:block/page [:db/id]} {:block/_parent ...}]) . :where "
-                               "[?root :block/uuid #uuid \"" page-uuid "\"]]")
-              aliases-by-query "[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?target :where (or-join [?holder ?target] [?holder :logseq.property/alias ?target] [?holder :block/alias ?target])]"
-              aliases-query "[:find [(pull ?alias [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?page :where (or-join [?page ?alias] [?page :logseq.property/alias ?alias] [?page :block/alias ?alias])]"
-              property-values-query "[:find (pull ?prop [:db/ident]) ?e :in $ ?target ?class :where [?prop :block/tags ?class] [?prop :db/ident ?attr] [?e ?attr ?target]]"]
-          (p/let [tree-result (api-fn "logseq.DB.datascriptQuery" [tree-query])
-                  aliases-by-result (api-fn "logseq.DB.datascriptQuery"
-                                            [aliases-by-query page-id])
-                  aliases-result (api-fn "logseq.DB.datascriptQuery"
-                                         [aliases-query page-id])
-                  by-page-result (api-fn "logseq.DB.datascriptQuery"
-                                         ["[:find (count ?b) . :in $ ?page :where [?b :block/page ?page]]" page-id])
-                  empty-result (api-fn "logseq.DB.datascriptQuery"
-                                       ["[:find (count ?b) . :in $ ?page :where [?b :block/page ?page] [?b :block/title \"\"]" page-id])
-                  refs-result (api-fn "logseq.DB.datascriptQuery"
-                                      ["[:find (count ?e) . :in $ ?target :where [?e :block/refs ?target]]" page-id])
-                  tag-holders-result (api-fn "logseq.DB.datascriptQuery"
-                                             ["[:find (count ?e) . :in $ ?target :where [?e :block/tags ?target]]" page-id])
-                  property-class-result (api-fn "logseq.DB.datascriptQuery"
-                                                ["[:find ?class . :where [?class :db/ident :logseq.class/Property]]"])
-                  property-values-result (api-fn "logseq.DB.datascriptQuery"
-                                                 [property-values-query page-id property-class-result])]
-            (let [{:keys [own nested orphans]}
-                  (page-stats-subtree (js->clj tree-result :keywordize-keys true) page-id)
-                  aliases (js->clj aliases-result :keywordize-keys true)
-                  aliased-by (js->clj aliases-by-result :keywordize-keys true)
-                  alias-uuids (vec (keep #(page-stats-field % :uuid) aliases))
-                  alias-of (vec (keep #(page-stats-field % :uuid) aliased-by))
-                  by-page (if (number? by-page-result) by-page-result 0)
-                  empty-count (if (number? empty-result) empty-result 0)
-                  refs (if (number? refs-result) refs-result 0)
-                  tag-holders (if (number? tag-holders-result) tag-holders-result 0)
-                  value-rows (js->clj property-values-result :keywordize-keys true)
-                  property-values (count (remove #(structural-property-value? (first %)) value-rows))
-                  counts-note (str (- by-page empty-count) " block(s) with content, "
-                                   by-page " own block(s) including " empty-count " empty, "
-                                   nested " nested page(s), "
-                                   (+ refs tag-holders property-values) " inbound reference(s)"
-                                   (when (pos? orphans)
-                                     (str ", " orphans " ORPHANED block(s)"))
-                                   (when (pos? empty-count)
-                                     ". content_blocks is the figure to pair with the reference count when judging whether a page is empty; own_blocks counts the empty block createPage seeds and so is never 0 on a page that was created through this API"))
-                  alias-note (when (or (seq alias-of) (seq alias-uuids))
-                               (str "ALIAS RELATION: this page "
-                                    (string/join " and "
-                                      (remove nil? [(when (seq alias-of)
-                                                      (str "is an alias of " (count alias-of) " page(s)"))
-                                                    (when (seq alias-uuids)
-                                                      (str "declares " (count alias-uuids) " alias(es)"))]))
-                                    ". Deleting either side breaks resolution, and `alias` is a built-in property outside this server's writable namespace, so it cannot be restored afterwards. An empty page in an alias relation is NOT a dead stub."
-                                    (when (> (count alias-of) 1)
-                                      " More than one page claims this one as an alias, which is itself irregular -- read both before touching either.")))
-                  diagnostic (str (string/replace counts-note #"\.?$" ".")
-                                  (when alias-note (str " " alias-note)))]
-              {:page_uuid page-uuid
-               :title (page-stats-field page :title)
-               :own_blocks by-page
-               :empty_blocks empty-count
-               :content_blocks (- by-page empty-count)
-               :subtree_blocks (+ own nested orphans)
-               :nested_pages nested
-               :true_orphans orphans
-               :refs refs
-               :tag_holders tag-holders
-               :property_values property-values
-               :is_alias_of (first alias-of)
-               :aliases alias-uuids
-               :diagnostic diagnostic})))))))
+    (p/let [result (api-fn "logseq.DB.getPageStats" [page-uuid])]
+      (js->clj result :keywordize-keys true))))
 
 (defn title-holder-kind
   [entity]
@@ -636,19 +538,9 @@
 
     (defn get-property-ident
       [api-fn args]
-      (let [title (aget args "title")
-            query "[:find [(pull ?property [:db/ident :block/title :logseq.property/type]) ...]
-                     :in $ ?title
-                     :where
-                     [?property :block/title ?title]
-                     [?property :block/tags ?class]
-                     [?class :db/ident :logseq.class/Property]]"]
-        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query title])
-                properties (js->clj result :keywordize-keys true)
-                properties (if (and (= 1 (count properties))
-                                    (vector? (first properties)))
-                             (first properties)
-                             properties)]
+      (let [title (aget args "title")]
+        (p/let [result (api-fn "logseq.DB.getPropertiesByTitle" [title])
+                properties (js->clj result :keywordize-keys true)]
           (property-ident-result title properties))))
 
 (defn get-property-users
@@ -2684,7 +2576,7 @@
    :listTags ["logseq.DB.listTags"]
    :listProperties ["logseq.DB.listProperties"]
    :getPageUUID ["logseq.DB.datascriptQuery"]
-   :pageStats ["logseq.DB.datascriptQuery"]
+  :pageStats ["logseq.DB.getPageStats"]
    :inspectPage ["logseq.DB.inspectPage"]
    :getTagUUID ["logseq.DB.getTagsByName"]
    :creatTag ["logseq.DB.createTag"]
@@ -2708,7 +2600,7 @@
    :repairLinks ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.createTag" "logseq.DB.updateBlock"]
    :getTag ["logseq.DB.getTag"]
    :getTagUsers ["logseq.DB.getTagUsers"]
-   :getPropertyIndent ["logseq.DB.datascriptQuery"]
+  :getPropertyIndent ["logseq.DB.getPropertiesByTitle"]
    :getBlock ["logseq.DB.getBlock"]
    :getBlockUUID ["logseq.DB.datascriptQuery"]
    :getBlockTree ["logseq.DB.datascriptQuery"]
@@ -2736,6 +2628,8 @@
    "logseq.DB.getTag" ["__mcp_capability_probe__"]
    "logseq.DB.getTagUsers" ["00000000-0000-4000-8000-000000000999"]
    "logseq.DB.inspectPage" ["00000000-0000-4000-8000-000000000999" "page"]
+  "logseq.DB.getPageStats" ["00000000-0000-4000-8000-000000000999"]
+  "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
    "logseq.DB.listPages" [#js {:expand false}]

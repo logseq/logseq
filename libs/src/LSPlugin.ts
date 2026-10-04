@@ -904,6 +904,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   // property entity related APIs (DB only)
   getProperty: (key: string) => Promise<BlockEntity | null>
+  getPropertiesByTitle: (title: string) => Promise<Array<Partial<BlockEntity>>>
 
   // insert or update property entity
   upsertProperty: (
@@ -977,6 +978,7 @@ export interface IDBProxy {
     pageUuid: BlockUUID,
     detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'
   ) => Promise<Record<string, any>>
+  getPageStats: (pageUuid: BlockUUID) => Promise<Record<string, any>>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<BlockEntity | null>
   listTags: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>
   listProperties: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>

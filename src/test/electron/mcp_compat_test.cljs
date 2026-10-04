@@ -82,6 +82,13 @@
                              :logseq.property/type (keyword (aget schema "type"))
                              :db/cardinality (keyword "db.cardinality" (or (aget schema "cardinality") "one"))}])
                     #js {:ident (str ident) :uuid uuid-text})
+                      "logseq.DB.getPropertiesByTitle"
+                      (let [properties (d/q '[:find [(pull ?property [:db/ident :block/title :logseq.property/type]) ...]
+                                  :in $ ?title
+                                  :where [?property :block/title ?title]
+                                       [?property :block/tags 157]]
+                                  @conn (first args))]
+                        (clj->js (sdk-utils/normalize-keyword-for-json properties false)))
                 "logseq.DB.addBlockTag"
                 (do (d/transact! conn [[:db/add [:block/uuid (uuid (first args))] :block/tags
                                        [:block/uuid (uuid (second args))]]]) nil)
@@ -297,7 +304,7 @@
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
 (deftest create-property-verifies-sdk-metadata-and-reports-normalized-title
-  (let [{:keys [api]} (page-fixture)]
+  (let [{:keys [api calls]} (page-fixture)]
     (async done
       (-> (p/let [result (mcp-compat/create-property api #js {"title" "MCP Smoke Prop"
                                                              "schema" #js {"type" "default" "cardinality" "one"}})
@@ -309,6 +316,7 @@
             (is (true? (:found lookup)))
             (is (= ":plugin.property._test_plugin/MCPSmokeProp" (:ident lookup)))
             (is (= "default" (:type lookup)))
+            (is (some #(= "logseq.DB.getPropertiesByTitle" (first %)) @calls))
             (js/queueMicrotask done))
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
@@ -1066,6 +1074,8 @@
                     (is (some #(= "logseq.DB.listTags" (first %)) @calls))
                     (is (some #(= "logseq.DB.listProperties" (first %)) @calls))
                     (is (some #(= "logseq.DB.inspectPage" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getPropertiesByTitle" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getPageStats" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1420,34 +1430,23 @@
 (deftest page-stats-counts-subtree-references-and-aliases
   (let [page-uuid "00000000-0000-4000-8000-000000000001"
         calls (atom [])
-        tree #js {"id" 10
-                  "name" "page"
-                  "_parent" #js [#js {"id" 11
-                                      "page" #js {"id" 10}
-                                      "_parent" #js [#js {"id" 12
-                                                          "name" "nested"
-                                                          "page" #js {"id" 10}
-                                                          "_parent" #js [#js {"id" 13
-                                                                              "page" #js {"id" 12}}]}]}
-                                 #js {"id" 14 "page" #js {"id" 99}}]}
-        api (fn [_method args]
-              (let [query (first args)]
-                (swap! calls conj query)
-                (cond
-                  (string/includes? query "pull ?entity [*]")
-                  #js {"id" 10 "uuid" page-uuid "name" "page" "title" "Page"}
-                  (string/includes? query "block/_parent") tree
-                  (string/includes? query "?holder")
-                  #js [#js {"uuid" "00000000-0000-4000-8000-000000000002"}]
-                  (string/includes? query "?alias")
-                  #js [#js {"uuid" "00000000-0000-4000-8000-000000000003"}]
-                  (string/includes? query "count ?b") (if (string/includes? query "block/title") 1 4)
-                  (string/includes? query "count ?e") (if (string/includes? query "block/refs") 2 1)
-                  (string/includes? query "?class :db/ident") 90
-                  (string/includes? query "?attr")
-                  #js [#js [#js {"ident" "user.property/target"} 20]
-                       #js [#js {"ident" "parent"} 21]]
-                  :else nil)))]
+        result #js {"page_uuid" page-uuid
+                    "title" "Page"
+                    "own_blocks" 4
+                    "empty_blocks" 1
+                    "content_blocks" 3
+                    "subtree_blocks" 4
+                    "nested_pages" 1
+                    "true_orphans" 1
+                    "refs" 2
+                    "tag_holders" 1
+                    "property_values" 1
+                    "is_alias_of" "00000000-0000-4000-8000-000000000002"
+                    "aliases" #js ["00000000-0000-4000-8000-000000000003"]
+                    "diagnostic" "ALIAS RELATION: diagnostic fixture"}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              result)]
     (async done
       (p/then (mcp-compat/page-stats api #js {"page_uuid" page-uuid})
               (fn [result]
@@ -1465,7 +1464,7 @@
                 (is (= "00000000-0000-4000-8000-000000000002" (:is_alias_of result)))
                 (is (= ["00000000-0000-4000-8000-000000000003"] (:aliases result)))
                 (is (string/includes? (:diagnostic result) "ALIAS RELATION"))
-                (is (= 10 (count @calls)))
+                (is (= [["logseq.DB.getPageStats" [page-uuid]]] @calls))
                 (done))))))
 
 (deftest page-stats-validates-page-uuid-before-querying

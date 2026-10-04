@@ -47,6 +47,23 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest get-properties-by-title-filters-to-property-definitions
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [_ (db-based-api/create-tag "LookupProp" nil)
+                    _ (db-based-api/upsert-property "LookupProp" #js {:type "number"} nil)
+                  candidates (db-based-api/get-properties-by-title "LookupProp")
+                  candidates (api-test/js->clj-kw candidates)
+                    missing (db-based-api/get-properties-by-title "MissingProperty")]
+              (is (= 1 (count candidates)))
+              (is (= ":plugin.property._test_plugin/LookupProp" (:ident (first candidates))))
+              (is (= "LookupProp" (:title (first candidates))))
+              (is (empty? missing)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest create-and-lookup-tags
   (async done
     (-> (api-test/with-plugin-api
@@ -167,6 +184,34 @@
                 (is (= {:found false :page_uuid "00000000-0000-4000-8000-000000000999" :page nil}
                        missing))
                 (is (= "target is a block, not a page" (:reason non-page)))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest get-page-stats-api-counts-page-blocks
+  (test-helper/load-test-files
+   [{:page {:block/title "Stats API Page"}
+     :blocks [{:block/title "Stats API Block"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [page (test-helper/find-page-by-title "Stats API Page")
+                  page-uuid (str (:block/uuid page))]
+              (p/let [result (db-based-api/get-page-stats page-uuid)
+                      stats (api-test/js->clj-kw result)]
+                (is (= page-uuid (:page_uuid stats)))
+                (is (= "Stats API Page" (:title stats)))
+                (is (= 1 (:own_blocks stats)))
+                (is (= 0 (:empty_blocks stats)))
+                (is (= 1 (:content_blocks stats)))
+                (is (= 1 (:subtree_blocks stats)))
+                (is (zero? (:nested_pages stats)))
+                (is (zero? (:true_orphans stats)))
+                (is (zero? (:refs stats)))
+                (is (zero? (:tag_holders stats)))
+                (is (zero? (:property_values stats)))
+                (is (nil? (:is_alias_of stats)))
+                (is (empty? (:aliases stats)))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))

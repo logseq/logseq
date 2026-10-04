@@ -204,6 +204,7 @@
 
 ;; db based graph APIs
 (def ^:export get_property db-based-api/get-property)
+(def ^:export get_properties_by_title db-based-api/get-properties-by-title)
 (def ^:export upsert_property db-based-api/upsert-property)
 (def ^:export remove_property db-based-api/remove-property)
 (def ^:export get_all_tags db-based-api/get-all-tags)
@@ -213,6 +214,7 @@
 (def ^:export get_tag db-based-api/get-tag)
 (def ^:export get_tag_users db-based-api/get-tag-users)
 (def ^:export inspect_page db-based-api/inspect-page)
+(def ^:export get_page_stats db-based-api/get-page-stats)
 (def ^:export get_tags_by_name db-based-api/get-tags-by-name)
 (def ^:export add_tag_extends db-based-api/add-tag-extends)
 (def ^:export remove_tag_extends db-based-api/remove-tag-extends)
