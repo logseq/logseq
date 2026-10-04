@@ -206,7 +206,8 @@ let attached : (string, string) Hashtbl.t = Hashtbl.create 4
 let boot_t0 = Unix.gettimeofday ()
 
 let boot_mark msg =
-  Printf.eprintf "[boot +%.3fs] %s\n%!" (Unix.gettimeofday () -. boot_t0) msg
+  Printf.eprintf "[boot +%.3fs u=%.3f] %s\n%!"
+    (Unix.gettimeofday () -. boot_t0) (Unix.gettimeofday ()) msg
 
 (* spawn main.exe for [repo] (canonical "logseq_db_<name>"), wait for it
    to publish its port. Returns base-url. Blocking — caller runs this on
@@ -255,7 +256,7 @@ let spawn_daemon (repo : string) : string =
             ("db-worker daemon did not publish a port (pid "
             ^ string_of_int pid ^ "); see " ^ log_path)
         else begin
-          Unix.sleepf 0.05;
+          Unix.sleepf 0.01;
           poll ()
         end
   in
@@ -372,6 +373,156 @@ let list_repo_names () : Wire.t list =
            && Sys.is_directory (Filename.concat dir name))
     |> List.map (fun name -> Wire.String ("logseq_db_" ^ name))
 
+(* ---------- attach + prewarm ---------- *)
+
+(* Serializes attach-or-spawn across the prewarm thread and ipc callers
+   so only one daemon is ever spawned per repo: a second waiter blocks
+   on the mutex, then finds the freshly published daemon in
+   server-list / `attached`. *)
+let attach_mu = Mutex.create ()
+
+let last_repo_path () = Filename.concat (root_dir ()) "last-repo"
+
+let record_last_repo (repo : string) : unit =
+  try
+    let fd =
+      Unix.openfile (last_repo_path ())
+        [ Unix.O_CREAT; Unix.O_WRONLY; Unix.O_TRUNC ] 0o644
+    in
+    ignore (Unix.write fd (Bytes.of_string repo) 0 (String.length repo));
+    Unix.close fd
+  with _ -> ()
+
+let ensure_attached (repo : string) : string =
+  Mutex.lock attach_mu;
+  Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
+      match Hashtbl.find_opt attached repo with
+      | Some base -> base
+      | None ->
+          let base =
+            match find_live_daemon repo with
+            | Some base ->
+                boot_mark ("reuse daemon " ^ base);
+                base
+            | None -> spawn_daemon repo
+          in
+          Hashtbl.replace attached repo base;
+          record_last_repo repo;
+          base)
+
+(* Cold-start overlap: spawn the graph's daemon on a background thread
+   while the app is still booting, so the runtime ipc later attaches to
+   an already-up daemon instead of paying spawn + graph open inline.
+   Graph choice: the last attached repo (<root>/last-repo), else the
+   single graph under graphs_dir; ambiguous cases skip prewarming —
+   the ipc path spawns on demand as before. *)
+let pick_prewarm_repo () : string option =
+  let last =
+    try
+      match
+        In_channel.with_open_bin (last_repo_path ())
+          In_channel.input_all
+      with
+      | "" -> None
+      | s -> Some (String.trim s)
+    with _ -> None
+  in
+  match last with
+  | Some r -> Some r
+  | None -> (
+      match list_repo_names () with
+      | [ Wire.String r ] -> Some r
+      | _ -> None)
+
+(* ---------- login-resident daemon ---------- *)
+
+(* Install a per-(root,repo) LaunchAgent so the db-worker daemon is
+   already running at login — after that every app attach is the warm
+   path (one healthz round-trip) instead of a ~120ms cold spawn. The
+   plist is rewritten each launch so the paths/repo stay current.
+   Opt out with LOGSEQ_NO_LOGIN_DAEMON=1. *)
+let login_agent_label (repo : string) : string =
+  "com.logseq.dbworker."
+  ^ String.sub (sha256_hex (root_dir () ^ "|" ^ repo)) 0 8
+
+let ensure_login_daemon (repo : string) : unit =
+  match Sys.getenv_opt "LOGSEQ_NO_LOGIN_DAEMON" with
+  | Some _ -> ()
+  | None -> (
+      try
+        let label = login_agent_label repo in
+        let agents_dir =
+          Filename.concat
+            (Filename.concat (home ()) "Library") "LaunchAgents"
+        in
+        mkdir_p agents_dir;
+        let plist_path =
+          Filename.concat agents_dir (label ^ ".plist")
+        in
+        let xml_escape s =
+          let b = Buffer.create (String.length s) in
+          String.iter
+            (fun c ->
+              match c with
+              | '&' -> Buffer.add_string b "&amp;"
+              | '<' -> Buffer.add_string b "&lt;"
+              | '>' -> Buffer.add_string b "&gt;"
+              | _ -> Buffer.add_char b c)
+            s;
+          Buffer.contents b
+        in
+        let args =
+          String.concat ""
+            (List.map
+               (fun a ->
+                 "    <string>" ^ xml_escape a ^ "</string>\n")
+               [ daemon_bin ()
+               ; "--root-dir"
+               ; root_dir ()
+               ; "--graphs-dir"
+               ; graphs_dir ()
+               ; "--repo"
+               ; repo
+               ; "--owner-source"
+               ; "electron" ])
+        in
+        let plist =
+          "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+          ^ "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \
+             \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+          ^ "<plist version=\"1.0\">\n<dict>\n"
+          ^ "  <key>Label</key>\n  <string>" ^ label ^ "</string>\n"
+          ^ "  <key>ProgramArguments</key>\n  <array>\n" ^ args
+          ^ "  </array>\n"
+          ^ "  <key>RunAtLoad</key>\n  <true/>\n"
+          ^ "  <key>KeepAlive</key>\n  <false/>\n"
+          ^ "</dict>\n</plist>\n"
+        in
+        let oc = open_out_bin plist_path in
+        output_string oc plist;
+        close_out oc;
+        let uid = string_of_int (Unix.getuid ()) in
+        let service = "gui/" ^ uid ^ "/" ^ label in
+        if
+          Sys.command ("launchctl print " ^ service ^ " >/dev/null 2>&1")
+          <> 0
+        then
+          ignore
+            (Sys.command
+               ("launchctl bootstrap gui/" ^ uid ^ " "
+                ^ Filename.quote plist_path ^ " >/dev/null 2>&1"))
+      with _ -> ())
+
+let prewarm () : unit =
+  match pick_prewarm_repo () with
+  | None -> ()
+  | Some repo ->
+      boot_mark ("prewarm " ^ repo);
+      ignore (ensure_attached repo);
+      ensure_login_daemon repo
+
+let () = ignore (Thread.create (fun () -> prewarm ()) ())
+
 (* ---------- ipc (was window.apis.doAction) ---------- *)
 
 let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
@@ -385,27 +536,17 @@ let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
               resolve (Wire.Array (list_repo_names ())))
       | [ Wire.String "db-worker-runtime"; Wire.String repo; _ ] ->
           boot_mark ("ipc db-worker-runtime " ^ repo);
-          let base =
-            match Hashtbl.find_opt attached repo with
-            | Some base -> base
-            | None -> (
-                (* prefer a daemon left running by a previous launch —
-                   it still owns the repo admission and has the graph
-                   open, so attaching costs one healthz round-trip *)
-                match find_live_daemon repo with
-                | Some base ->
-                    boot_mark ("reuse daemon " ^ base);
-                    base
-                | None -> spawn_daemon repo)
-          in
-          Hashtbl.replace attached repo base;
+          let base = ensure_attached repo in
+          ensure_login_daemon repo;
           Host.enqueue (fun () ->
               resolve
                 (Wire.Map [ (Wire.kw "base-url", Wire.String base) ]))
       | [ Wire.String "releaseDbWorkerRuntime"; Wire.String repo ] ->
           (* detach only — the daemon keeps the repo open so a later
              attach (or the next app launch) is instant *)
+          Mutex.lock attach_mu;
           Hashtbl.remove attached repo;
+          Mutex.unlock attach_mu;
           Host.enqueue (fun () -> resolve Wire.Nil)
       | _ -> Host.enqueue (fun () -> resolve Wire.Nil)
     with e ->

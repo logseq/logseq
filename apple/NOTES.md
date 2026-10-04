@@ -1272,3 +1272,22 @@ zoom!=1 path keeps the reader since it needs the container size.
   resolves. Rows with an open editor/media/code bail to full mount.
 - Editing in a flat row: click -> OCaml adds textarea to the DOM ->
   probe's allowlist rejects -> full mount returns. Verified by hand.
+- Boot invoke names carry a "thread-api/" routing prefix — classify
+  (dedup, deferral, triggers) on the stripped method name; matching
+  against the raw name is silently dead code.
+- Journal mount chain awaits `Sdk_config.read_config`
+  (thread-api/get-file-content) before the first get-latest-journals
+  invoke — deferring that call stalls the whole home load. Any "hold
+  aux invokes" scheme must not defer calls awaited by route loading
+  (get-file-content, get-page-route-info, pull, get-graph-uuid).
+- Daemon cold spawn is ~110-160ms: ~40-60ms exec+OCaml init, ~5-40ms
+  internal (admit→worker-init→open-db on the Demo graph is <40ms —
+  daemon-phase marks in db_worker_node.ml), server publish + 10ms
+  client poll. Kill the wait instead of optimizing it: `prewarm`
+  (module-init thread) starts the spawn before the runtime ipc asks,
+  `ensure_attached` serializes attach/spawn on attach_mu, and
+  `ensure_login_daemon` installs a per-(root,repo) LaunchAgent
+  (~/Library/LaunchAgents/com.logseq.dbworker.<hash>.plist,
+  RunAtLoad) so the daemon is resident across reboots —
+  LOGSEQ_NO_LOGIN_DAEMON=1 opts out. Warm attach ≈ one healthz
+  round-trip; journal content applies ~130ms after launch.

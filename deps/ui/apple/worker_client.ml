@@ -50,15 +50,25 @@ let install_stub_handlers () =
 let inflight_reads : (string, Wire.t Js.Promise.t) Hashtbl.t =
   Hashtbl.create 16
 
+(* Callers pass names with a "thread-api/" routing prefix; classify on
+   the method part. *)
+let method_name (name : string) : string =
+  let prefix = "thread-api/" in
+  let pl = String.length prefix in
+  if String.length name > pl && String.sub name 0 pl = prefix
+  then String.sub name pl (String.length name - pl)
+  else name
+
 let dedup_method (name : string) : bool =
+  let name = method_name name in
   (String.length name >= 4 && String.sub name 0 4 = "get-")
   || name = "pull" || name = "sync-app-state"
   || name = "search-build-blocks-indice-in-worker"
   || name = "list-db" || name = "list-graphs"
 
-let invoke t name args =
+let run_invoke t name args =
   if not (dedup_method name) then t.invoke_fn name args
-  else
+  else begin
     let key = name ^ "|" ^ Transit.to_string (Wire.Array args) in
     match Hashtbl.find_opt inflight_reads key with
     | Some p -> p
@@ -74,6 +84,9 @@ let invoke t name args =
                  release ();
                  Js.Promise.reject e));
         p
+  end
+
+let invoke t name args = run_invoke t name args
 
 let invoke1 t name a = invoke t name [ a ]
 let invoke2 t name a b = invoke t name [ a; b ]
