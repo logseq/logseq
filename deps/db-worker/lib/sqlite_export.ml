@@ -60,47 +60,94 @@ let bm_put m a v = BM.put m a v
 let bm_dissoc (m : BM.t) (ks : attr list) : BM.t =
   List.filter (fun (k, _) -> not (List.mem k ks)) m
 
-(* cljs walk/postwalk over value trees *)
-let rec postwalk (f : value -> value) (v : value) : value =
-  let v' =
-    match v with
-    | Map kvs -> Map (List.map (fun (k, x) -> (k, postwalk f x)) kvs)
-    | Vector vs -> Vector (List.map (postwalk f) vs)
-    | List vs -> List (List.map (postwalk f) vs)
-    | Set vs -> Set (List.map (postwalk f) vs)
-    | _ -> v
-  in
-  f v'
+(* cljs clojure.walk/postwalk over value trees — shared implementation
+   in Clj_value (walks map entries as 2-vectors and Tuple children, so f
+   sees keys too, matching cljs). *)
+let postwalk = Clj_value.postwalk
 
 let value_in (v : value) (xs : value list) : bool =
   List.exists (fun x -> Util.value_equal x v) xs
 
-let dedup_values_str (xs : string list) : string list =
-  let rec aux seen acc = function
-    | [] -> List.rev acc
-    | x :: rest ->
-        if List.mem x seen then aux seen acc rest
-        else aux (x :: seen) (x :: acc) rest
-  in
-  aux [] [] xs
+(* Hash-bucketed value membership — cljs sets and `distinct` are
+   hash-based, so membership is ~O(1); a List.mem-style seen-list over
+   export-scale collections is O(n^2). Bucketed by Hashtbl.hash with
+   Util.value_equal inside each bucket, preserving its exact semantics
+   (NaN equality, order-sensitive Set/Map compare). *)
+module Value_memo = struct
+  type t = (int, value list) Hashtbl.t
 
-let dedup_ints (xs : int list) : int list =
-  let rec aux seen acc = function
-    | [] -> List.rev acc
-    | x :: rest ->
-        if List.mem x seen then aux seen acc rest
-        else aux (x :: seen) (x :: acc) rest
-  in
-  aux [] [] xs
+  let create () : t = Hashtbl.create 16
+
+  let add (t : t) (v : value) : unit =
+    let h = Hashtbl.hash v in
+    Hashtbl.replace t h (v :: Option.value ~default:[] (Hashtbl.find_opt t h))
+
+  let of_list (vs : value list) : t =
+    let t = create () in
+    List.iter (add t) vs;
+    t
+
+  let mem (t : t) (v : value) : bool =
+    match Hashtbl.find_opt t (Hashtbl.hash v) with
+    | Some bucket -> List.exists (fun x -> Util.value_equal x v) bucket
+    | None -> false
+end
+
+let dedup_values_str (xs : string list) : string list =
+  Common_util.distinct_by Fun.id xs
+
+let dedup_ints (xs : int list) : int list = Common_util.distinct_by Fun.id xs
 
 let dedup_values (vs : value list) : value list =
-  let rec aux seen acc = function
-    | [] -> List.rev acc
-    | v :: rest ->
-        if List.exists (fun s -> Util.value_equal s v) seen then aux seen acc rest
-        else aux (v :: seen) (v :: acc) rest
-  in
-  aux [] [] vs
+  let seen = Value_memo.create () in
+  List.filter
+    (fun v ->
+      if Value_memo.mem seen v then false
+      else begin Value_memo.add seen v; true end)
+    vs
+
+(* Ordered assoc index over (value,value) pairs: hash-bucketed lookup
+   with value_equal equality, for hot merge/dedup paths where List.assoc
+   with value_equal is O(n) per lookup. *)
+let kv_index (kvs : (value * value) list) : (int, (value * value) list) Hashtbl.t =
+  let t = Hashtbl.create (max 16 (List.length kvs)) in
+  List.iter
+    (fun ((k, _) as p) ->
+      let h = Hashtbl.hash k in
+      Hashtbl.replace t h (p :: Option.value ~default:[] (Hashtbl.find_opt t h)))
+    kvs;
+  t
+
+let kv_find (t : (int, (value * value) list) Hashtbl.t) (k : value) : value option =
+  match Hashtbl.find_opt t (Hashtbl.hash k) with
+  | Some bucket -> (
+      match List.find_opt (fun (k', _) -> Util.value_equal k' k) bucket with
+      | Some (_, v) -> Some v
+      | None -> None)
+  | None -> None
+
+let kv_mem (t : (int, (value * value) list) Hashtbl.t) (k : value) : bool =
+  match kv_find t k with Some _ -> true | None -> false
+
+(* cljs-style ordered group-by over a `value` key: hash-bucketed O(n)
+   grouping preserving first-seen key order and insertion order within
+   each group. *)
+let ordered_group_by (key_of : 'a -> value) (xs : 'a list) : (value * 'a list) list =
+  let buckets : (int, (value * 'a list ref) list) Hashtbl.t = Hashtbl.create 16 in
+  let order : (value * 'a list ref) list ref = ref [] in
+  List.iter
+    (fun x ->
+      let k = key_of x in
+      let h = Hashtbl.hash k in
+      let bucket = Option.value ~default:[] (Hashtbl.find_opt buckets h) in
+      match List.find_opt (fun (k', _) -> Util.value_equal k' k) bucket with
+      | Some (_, items) -> items := x :: !items
+      | None ->
+          let cell = (k, ref [ x ]) in
+          Hashtbl.replace buckets h (cell :: bucket);
+          order := cell :: !order)
+    xs;
+  List.map (fun (k, items) -> (k, List.rev !items)) (List.rev !order)
 
 (* uuid of a [:block/uuid u] lookup vector *)
 let uuid_of_uuid_vec (v : value) : string option =
@@ -947,15 +994,18 @@ let build_node_properties ~epuuids (db : db) (e : entity)
   let existing =
     match options.properties with
     | Some (Map kvs) ->
-        List.filter_map (fun (k, _) -> match k with Keyword s -> Some s | _ -> None) kvs
-    | _ -> []
+        SSet.of_list
+          (List.filter_map
+             (fun (k, _) -> match k with Keyword s -> Some s | _ -> None)
+             kvs)
+    | _ -> SSet.empty
   in
   let new_user_property_ids =
     List.map fst ent_properties_l
     @ class_prop_idents
     @ List.concat_map collect_nested_property_ids (List.map snd ent_properties_l)
     |> List.filter (fun k -> not (Db_property.logseq_property k))
-    |> List.filter (fun k -> not (List.mem k existing))
+    |> List.filter (fun k -> not (SSet.mem k existing))
     |> dedup_values_str
   in
   build_export_properties ~epuuids db new_user_property_ids options
@@ -1088,13 +1138,18 @@ let merge_export_maps (export_maps : value list) : value =
   let merge_pair (v1 : value) (v2 : value) : value =
     match v1, v2 with
     | Map a, Map b ->
-        (* cljs merge — right wins *)
-        Map
-          (List.fold_left
-             (fun acc (k, v) ->
-               List.filter (fun (k', _) -> not (Util.value_equal k' k)) acc
-               @ [ (k, v) ])
-             a b)
+        (* cljs merge — right wins: b's keys drop out of a, b appended
+           with dup keys collapsing to their last occurrence. *)
+        let bi = kv_index b in
+        let seen = Value_memo.create () in
+        let b' =
+          List.fold_left
+            (fun acc ((k, _) as p) ->
+              if Value_memo.mem seen k then acc
+              else begin Value_memo.add seen k; p :: acc end)
+            [] (List.rev b)
+        in
+        Map (List.filter (fun (k, _) -> not (kv_mem bi k)) a @ b')
     | Set a, Set b -> Set (dedup_values (a @ b))
     | Vector a, Vector b -> Vector (a @ b)
     | List a, List b -> List (a @ b)
@@ -1103,66 +1158,56 @@ let merge_export_maps (export_maps : value list) : value =
   let merge_item (m1 : value) (m2 : value) : value =
     match m1, m2 with
     | Map a, Map b ->
-        Map
-          (List.fold_left
-             (fun acc (k, v) ->
-               match List.find_opt (fun (k', _) -> Util.value_equal k' k) acc with
-               | Some (k', _) ->
-                   List.map
-                     (fun (kk, vv) ->
-                       if Util.value_equal kk k' then (kk, merge_pair vv v) else (kk, vv))
-                     acc
-               | None -> acc @ [ (k, v) ])
-             a b)
+        (* b's per-key values pre-folded with merge_pair so dup b keys
+           collapse like the original sequential merge; a keeps its
+           positions, new b keys append in first-seen order. *)
+        let b_grouped =
+          List.filter_map
+            (fun (k, occs) ->
+              match occs with
+              | [] -> None
+              | (_, v0) :: rest ->
+                  Some
+                    (k, List.fold_left (fun acc (_, v) -> merge_pair acc v) v0 rest))
+            (ordered_group_by fst b)
+        in
+        let ai = kv_index a and bi = kv_index b_grouped in
+        let merged_a =
+          List.map
+            (fun (k, x) ->
+              match kv_find bi k with Some v -> (k, merge_pair x v) | None -> (k, x))
+            a
+        in
+        Map (merged_a @ List.filter (fun (k, _) -> not (kv_mem ai k)) b_grouped)
     | _ -> m2
   in
-  let groups : ((value * value) * value list) list ref = ref [] in
-  List.iter
-    (fun m ->
-      let key = page_key m in
-      match
-        List.find_opt
-          (fun (k, _) -> Util.value_equal (fst k) (fst key) && Util.value_equal (snd k) (snd key))
-          !groups
-      with
-      | Some (k, _) ->
-          groups :=
-            List.map
-              (fun (k2, items2) ->
-                if k2 == k then (k2, items2 @ [ m ]) else (k2, items2))
-              !groups
-      | None -> groups := !groups @ [ (key, [ m ]) ])
-    pabs;
+  let groups =
+    ordered_group_by
+      (fun m -> let t, j = page_key m in Vector [ t; j ])
+      pabs
+  in
   let pages_and_blocks =
     List.map
       (fun (_, items) ->
         match items with
         | [] -> Map []
         | first :: rest -> List.fold_left merge_item first rest)
-      !groups
+      groups
   in
   (* merge-with merge on properties/classes maps *)
   let merge_ident_maps (ms : value list) : value option =
+    let pairs =
+      List.concat_map (fun m -> match m with Map kvs -> kvs | _ -> []) ms
+    in
+    let grouped = ordered_group_by fst pairs in
     let merged =
-      List.fold_left
-        (fun acc m ->
-          match m with
-          | Map kvs ->
-              List.fold_left
-                (fun acc (k, v) ->
-                  match
-                    List.find_opt (fun (k', _) -> Util.value_equal k' k) acc
-                  with
-                  | Some _ ->
-                      List.map
-                        (fun (kk, vv) ->
-                          if Util.value_equal kk k then (kk, merge_pair vv v)
-                          else (kk, vv))
-                        acc
-                  | None -> acc @ [ (k, v) ])
-                acc kvs
-          | _ -> acc)
-        [] ms
+      List.filter_map
+        (fun (_, kvs) ->
+          match kvs with
+          | [] -> None
+          | (k, v0) :: rest ->
+              Some (k, List.fold_left (fun acc (_, v) -> merge_pair acc v) v0 rest))
+        grouped
     in
     if merged = [] then None else Some (Map merged)
   in
@@ -1543,7 +1588,7 @@ let build_uuid_block_export ~epuuids (db : db) (pvalue_uuids : string list)
                      let _, es =
                        Option.value ~default:(page_e, []) (Hashtbl.find_opt by_page pid)
                      in
-                     Hashtbl.replace by_page pid (page_e, es @ [ e ])
+                     Hashtbl.replace by_page pid (page_e, e :: es)
                | None -> ())
           | [] -> ())
         uuid_block_ents;
@@ -1551,7 +1596,7 @@ let build_uuid_block_export ~epuuids (db : db) (pvalue_uuids : string list)
         (fun _ (page_e, blocks) acc ->
           let be =
             build_blocks_export ~epuuids db
-              (sort_by_block_order blocks)
+              (sort_by_block_order (List.rev blocks))
               { (default_export_options ()) with
                 include_uuid_fn = always
               ; shallow_copy = true }
@@ -2000,11 +2045,11 @@ let build_nodes_export ~epuuids (db : db) (nodes : entity list)
       | pid :: _ ->
           (match Ldb.ent_of_id db pid with
            | Some page_e ->
-               if not (Hashtbl.mem by_page pid) then page_order := !page_order @ [ pid ];
+               if not (Hashtbl.mem by_page pid) then page_order := pid :: !page_order;
                let _, es =
                  Option.value ~default:(page_e, []) (Hashtbl.find_opt by_page pid)
                in
-               Hashtbl.replace by_page pid (page_e, es @ [ e ])
+               Hashtbl.replace by_page pid (page_e, e :: es)
            | None -> ())
       | [] -> ())
     node_blocks;
@@ -2015,12 +2060,12 @@ let build_nodes_export ~epuuids (db : db) (nodes : entity list)
         | Some (page_e, blocks) ->
             let be =
               build_blocks_export ~epuuids db
-                (sort_by_block_order blocks) options
+                (sort_by_block_order (List.rev blocks)) options
             in
             (* cljs (merge blocks-export {:page ...}) — plain merge *)
             Some (map_of_bm (bm_put be "page" (map_of_bm (shallow_copy_page page_e))))
         | None -> None)
-      !page_order
+      (List.rev !page_order)
   in
   let pabs =
     List.map
@@ -2619,15 +2664,13 @@ let get_used_property_idents_from_options (m : value) : string list =
     | _ -> []
   in
   let dedup_pairs xs =
-    List.fold_left
-      (fun acc ((k, v) as pair) ->
-        if
-          List.exists
-            (fun (k2, v2) -> k2 = k && Util.value_equal v2 v)
-            acc
-        then acc
-        else acc @ [ pair ])
-      [] xs
+    let seen = Value_memo.create () in
+    List.filter
+      (fun (k, v) ->
+        let kv = Vector [ String k; v ] in
+        if Value_memo.mem seen kv then false
+        else begin Value_memo.add seen kv; true end)
+      xs
   in
   class_properties @ page_block_properties @ property_properties
   |> dedup_pairs
@@ -2760,12 +2803,13 @@ let export_datom (db : db) (d : datom) : value =
 
 (* cljs build-graph-datoms-export *)
 let build_graph_datoms_export (db : db) : value =
-  let excluded = graph_datom_export_excluded_eids db in
+  let excluded = IntSet.of_list (graph_datom_export_excluded_eids db) in
+  let excluded_attrs = SSet.of_list graph_datom_export_excluded_attrs in
   let datoms' =
     List.of_seq (datoms db Eavt ())
     |> List.filter (fun (d : datom) ->
-           not (List.mem d.e excluded)
-           && not (List.mem d.a graph_datom_export_excluded_attrs))
+           not (IntSet.mem d.e excluded)
+           && not (SSet.mem d.a excluded_attrs))
     |> List.map (export_datom db)
     |> List.stable_sort (fun a b ->
            match a, b with
@@ -2896,8 +2940,9 @@ let find_undefined_classes_and_properties (export_map : value) : value =
     List.filter_map (fun (k, _) -> match k with Keyword s -> Some s | _ -> None)
       (match bm_get mm "classes" with Map kvs -> kvs | _ -> [])
   in
+  let defined_class_set = SSet.of_list defined_classes in
   let undefined_classes =
-    List.filter (fun k -> not (List.mem k defined_classes)) referenced_classes
+    List.filter (fun k -> not (SSet.mem k defined_class_set)) referenced_classes
   in
   let referenced_properties =
     (List.concat_map
@@ -2926,9 +2971,10 @@ let find_undefined_classes_and_properties (export_map : value) : value =
     List.filter_map (fun (k, _) -> match k with Keyword s -> Some s | _ -> None)
       (match bm_get mm "properties" with Map kvs -> kvs | _ -> [])
   in
+  let defined_property_set = SSet.of_list defined_properties in
   let undefined_properties =
     List.filter
-      (fun k -> not (List.mem k defined_properties))
+      (fun k -> not (SSet.mem k defined_property_set))
       referenced_properties
   in
   let out = [] in
@@ -3035,7 +3081,8 @@ let find_undefined_uuids ~(epuuids : SSet.t ref) (db : db) (export_map : value) 
            | None -> true)
     |> dedup_values_str
   in
-  List.filter (fun u -> not (List.mem u known_uuids)) ref_uuids
+  let known_set = SSet.of_list known_uuids in
+  List.filter (fun u -> not (SSet.mem u known_set)) ref_uuids
 
 (* cljs remove-namespaced-keys *)
 let remove_namespaced_keys (m : value) : value =
@@ -3357,12 +3404,16 @@ let check_for_existing_entities (db : db) (export_map : value)
         export_map'
   in
   (* Update uuid references of all pages whose uuids were remapped *)
+  let remapped_uuids = Hashtbl.create 16 in
+  List.iter
+    (fun (u, nu) -> Hashtbl.replace remapped_uuids u nu)
+    (List.rev !import_to_existing_page_uuids);
   postwalk
     (fun v ->
       match v with
       | Vector [ Keyword "block/uuid"; Uuid u ]
       | Vector [ Keyword "block/uuid"; String u ] ->
-          (match List.assoc_opt u !import_to_existing_page_uuids with
+          (match Hashtbl.find_opt remapped_uuids u with
            | Some nu -> uuid_vec nu
            | None -> v)
       | _ -> v)
@@ -3404,10 +3455,16 @@ let build_block_import_options (current_block : entity) (export_map : value) : v
 
 (* cljs current-db-retract-tx *)
 let current_db_retract_tx (db : db) : value list =
-  List.of_seq (datoms db Eavt ())
-  |> List.map (fun (d : datom) -> d.e)
-  |> dedup_ints
-  |> List.map (fun e -> Vector [ Keyword "db/retractEntity"; Int64 (Int64.of_int e) ])
+  let seen = ref IntSet.empty in
+  Seq.fold_left
+    (fun acc (d : datom) ->
+      if IntSet.mem d.e !seen then acc
+      else begin
+        seen := IntSet.add d.e !seen;
+        Vector [ Keyword "db/retractEntity"; Int64 (Int64.of_int d.e) ] :: acc
+      end)
+    [] (datoms db Eavt ())
+  |> List.rev
 
 let datom_schema_attrs =
   [ "db/ident"; "db/cardinality"; "db/valueType"; "db/unique"; "db/index" ]
@@ -3431,30 +3488,35 @@ let schema_datom_eids (datoms : value list) : int list =
         | _ -> None)
       datoms
   in
-  List.filter (fun e -> List.mem e schema_eids) ident_eids |> dedup_ints
+  let schema_set = IntSet.of_list schema_eids in
+  List.filter (fun e -> IntSet.mem e schema_set) ident_eids |> dedup_ints
 
 (* cljs resolve-lookup-refs *)
 let resolve_lookup_refs (datoms : value list) : value list =
-  let lookup_eids =
-    List.filter_map
-      (fun v ->
-        match coll_items v with
-        | [ Int64 e; Keyword a; vv ] -> Some ((a, vv), e)
-        | _ -> None)
-      datoms
-  in
+  let lookup_eids : (attr, (value * int64) list ref) Hashtbl.t = Hashtbl.create 16 in
+  List.iter
+    (fun v ->
+      match coll_items v with
+      | [ Int64 e; Keyword a; vv ] -> (
+          match Hashtbl.find_opt lookup_eids a with
+          | Some r -> r := (vv, e) :: !r
+          | None -> Hashtbl.replace lookup_eids a (ref [ (vv, e) ]))
+      | _ -> ())
+    datoms;
+  (* restore datom order so per-attr lookups keep first-match semantics *)
+  Hashtbl.iter (fun _ r -> r := List.rev !r) lookup_eids;
   List.map
     (fun v ->
       match coll_items v with
       | [ Int64 e; Keyword a; Vector [ Keyword la; lv ] ] ->
           let resolved =
-            match
-              List.find_opt
-                (fun ((ka, kv), _) ->
-                  ka = la && Util.value_equal kv lv)
-                lookup_eids
-            with
-            | Some (_, e') -> Int64 e'
+            match Hashtbl.find_opt lookup_eids la with
+            | Some bucket -> (
+                match
+                  List.find_opt (fun (kv, _) -> Util.value_equal kv lv) !bucket
+                with
+                | Some (_, e') -> Int64 e'
+                | None -> Vector [ Keyword la; lv ])
             | None -> Vector [ Keyword la; lv ]
           in
           Vector [ Int64 e; Keyword a; resolved ]
@@ -3464,17 +3526,18 @@ let resolve_lookup_refs (datoms : value list) : value list =
 (* cljs datoms-for-import *)
 let datoms_for_import (datoms : value list) : value list =
   let datoms = resolve_lookup_refs datoms in
-  let schema_eids = schema_datom_eids datoms in
+  let schema_eids = IntSet.of_list (schema_datom_eids datoms) in
   let is_schema v =
     match coll_items v with
     | [ Int64 e; Keyword a; _ ] -> (
         match Datascript.Util.int64_to_int e with
-        | Some e -> List.mem e schema_eids && List.mem a datom_schema_attrs
+        | Some e -> IntSet.mem e schema_eids && List.mem a datom_schema_attrs
         | None -> false)
     | _ -> false
   in
   let schema_datoms = List.filter is_schema datoms in
-  schema_datoms @ List.filter (fun d -> not (List.exists (Util.value_equal d) schema_datoms)) datoms
+  let schema_memo = Value_memo.of_list schema_datoms in
+  schema_datoms @ List.filter (fun d -> not (Value_memo.mem schema_memo d)) datoms
 
 (* cljs build-datom-import *)
 let build_datom_import (export_map : value) (db : db) : import_txs =
@@ -3602,6 +3665,11 @@ let all_disallowed_key_errors (errors : Db_validate.grouped_error list) : bool =
 
 let remove_disallowed_key_datoms (tx_data : value list)
     (eid_attrs : (int * string list) list) : value list =
+  let attrs_of : (int, string list) Hashtbl.t = Hashtbl.create 16 in
+  List.iter
+    (fun (eid, attrs) ->
+      if not (Hashtbl.mem attrs_of eid) then Hashtbl.replace attrs_of eid attrs)
+    eid_attrs;
   List.filter
     (fun tx ->
       match coll_items tx with
@@ -3614,7 +3682,7 @@ let remove_disallowed_key_datoms (tx_data : value list)
           in
           (match eid with
            | Some eid ->
-               (match List.assoc_opt eid eid_attrs with
+               (match Hashtbl.find_opt attrs_of eid with
                 | Some attrs -> not (List.mem a attrs)
                 | None -> true)
            | None -> true)
@@ -3750,15 +3818,14 @@ let rec diff_values (a : value) (b : value) : value option * value option =
   match a, b with
   | Map ka, Map kb ->
       let diff_side mine other =
+        let oi = kv_index other in
         List.filter_map
           (fun (k, v) ->
-            match
-              List.find_opt (fun (k', _) -> Util.value_equal k' k) other
-            with
-            | Some (_, v') ->
-                (match diff_values v v' with
-                 | Some dv, _ -> Some (k, dv)
-                 | None, _ -> None)
+            match kv_find oi k with
+            | Some v' -> (
+                match diff_values v v' with
+                | Some dv, _ -> Some (k, dv)
+                | None, _ -> None)
             | None -> Some (k, v))
           mine
       in
@@ -3766,8 +3833,9 @@ let rec diff_values (a : value) (b : value) : value option * value option =
       ( (if da = [] then None else Some (Map da))
       , if db_ = [] then None else Some (Map db_) )
   | Set sa, Set sb | Vector sa, Vector sb | List sa, List sb ->
-      let da = List.filter (fun x -> not (value_in x sb)) sa in
-      let db_ = List.filter (fun x -> not (value_in x sa)) sb in
+      let sbm = Value_memo.of_list sb and sam = Value_memo.of_list sa in
+      let da = List.filter (fun x -> not (Value_memo.mem sbm x)) sa in
+      let db_ = List.filter (fun x -> not (Value_memo.mem sam x)) sb in
       ( (if da = [] then None else Some (Set da))
       , if db_ = [] then None else Some (Set db_) )
   | _ ->
