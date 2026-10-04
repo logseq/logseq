@@ -140,9 +140,11 @@ let load_test_page () =
           ; block "b2" "Parent block" ~children:[ block "b2c" "Child block" ]
           ]))
 
+(* the row element itself — flat rows also carry ancestor blockids on
+   their guide strips, so match the row's id attr, not blockid *)
 let find_block uuid =
   List.find_opt
-    (fun n -> attr_val n "blockid" = Some uuid)
+    (fun n -> attr_val n "id" = Some ("ls-block-" ^ uuid))
     (M.all_nodes (tree ()))
 
 (* ---------------- shell + header ---------------- *)
@@ -191,11 +193,17 @@ let test_block_tree () =
        List.iter (fun n -> check_tok "ls-block class" n "ls-block")
          [ b1; b2; b2c ];
        attr_eq "block row id" b1 "id" "ls-block-b1";
-       check "child row nested under parent"
-         (subtree_contains b2 (fun n -> attr_val n "blockid" = Some "b2c"));
-       check "b2c not at top level"
+       (* flat stream: children are sibling .ls-block rows, never
+          nested — the child row's .flat-guides carries one collapse
+          strip per ancestor *)
+       check "child row not inside parent"
          (not
-            (subtree_contains b1 (fun n -> attr_val n "blockid" = Some "b2c")));
+            (subtree_contains b2 (fun n -> attr_val n "blockid" = Some "b2c")));
+       check "child row carries parent collapse strip"
+         (subtree_contains b2c (fun n ->
+              has_tok n "block-children-left-border"
+              && attr_val n "blockid" = Some "b2"));
+       attr_eq "child level attr" b2c "level" "1";
        (* bullet affordance in each row *)
        List.iter
          (fun n ->

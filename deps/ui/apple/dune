@@ -21,6 +21,8 @@
 (rule
  (copy ../src/blocks/add_button.ml add_button.ml))
 (rule
+ (copy ../src/blocks/flat.ml flat.ml))
+(rule
  (copy ../src/blocks/query_builder.ml query_builder.ml))
 (rule
  (copy ../src/blocks/selection_bar.ml selection_bar.ml))

@@ -990,6 +990,17 @@ blockquote {
   .journal-last-item {
     border-style: none;
   }
+
+  /* flat journals stream: the day separator that .journal-item
+     carried now lives on the tail item ending each day */
+  .journal-tail {
+    border-bottom: 1px solid var(--lx-gray-04, var(--ls-border-color));
+    padding-bottom: 60px;
+
+    &.journal-last-item {
+      border-style: none;
+    }
+  }
 }
 
 .ls-page-blocks {
@@ -1379,6 +1390,28 @@ a.page-title {
 
 .hidden-block .block-children {
   border-left: 0;
+}
+
+/* flat row indent guides: one overlay per indented .ls-block spanning
+   its margin area — a 1px line at every 29px ancestor boundary,
+   matching the lines .block-children borders drew in nested DOM */
+.flat-guides {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent 28px,
+    var(--lx-gray-04-alpha, var(--ls-guideline-color)) 28px,
+    var(--lx-gray-04-alpha, var(--ls-guideline-color)) 29px
+  );
+}
+
+/* the collapse strips inside .flat-guides stay clickable */
+.flat-guides .block-children-left-border {
+  pointer-events: auto;
 }
 
 /* Bullet + controls */

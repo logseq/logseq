@@ -151,7 +151,9 @@ and retry_focus () =
     if !focus_attempts = 1 || !focus_attempts mod 10 = 5 then
       (match !S.pending_focus with
        | Some (u, _, _) ->
-           !(S.scroll_key_into_view) (S.top_level_uuid u)
+           (* flat stream keys are the block's own uuid — no more
+              top-level key like the nested list had *)
+           !(S.scroll_key_into_view) u
        | None -> ());
     D.set_timeout apply_focus 40
   end
@@ -436,7 +438,6 @@ let split_at_cursor uuid =
              with
              | Some page' ->
                  Page_delta.mark_own_commit page';
-                 Runtime.push_page_items page';
                  Runtime.send (Action.Page_loaded page')
              | None -> ())
          | None -> ());
@@ -483,7 +484,6 @@ let insert_sibling_after uuid =
            with
            | Some page' ->
                Page_delta.mark_own_commit page';
-               Runtime.push_page_items page';
                Runtime.send (Action.Page_loaded page')
            | None -> ())
        | None -> ());
@@ -899,7 +899,6 @@ let indent_or_outdent ~indent =
            with
            | Some page' ->
                Page_delta.mark_own_commit page';
-               Runtime.push_page_items page';
                Runtime.send (Action.Page_loaded page')
            | None -> ())
        | _ -> ());
@@ -916,7 +915,6 @@ let move_blocks_up_down up =
        | Some page ->
            let page' = Model.move_selected_top_blocks page uuids up in
            Page_delta.mark_own_commit page';
-           Runtime.push_page_items page';
            Runtime.send (Action.Page_loaded page')
        | None -> ());
       ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])

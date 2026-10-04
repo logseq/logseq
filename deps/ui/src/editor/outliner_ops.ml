@@ -988,7 +988,6 @@ let apply_queued _page delta =
                   (match !Runtime.current_page with
                    | Some c -> c == base
                    | None -> false) ->
-               Runtime.push_page_items p';
                Runtime.send (Action.Page_loaded p')
            | _ -> ());
           Js.Promise.resolve (a, touched))
@@ -1021,11 +1020,6 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
       (match merged with
        | Some js' when js' != start_js && still_current ->
            Runtime.send (Action.Journals_loaded js');
-           (* repaint only the days the splice actually changed *)
-           List.iter2
-             (fun o (n : Model.page) ->
-               if o != n then Runtime.push_journal_page n)
-             start_js js';
            Js.Promise.resolve ()
        | Some _ -> Js.Promise.resolve ()
        | None -> refresh_page ())
@@ -1051,7 +1045,6 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
              list before Page_loaded — the items signal repaints only
              the touched rows, and matching container fields then let
              update.ml skip the data_gen bump (no page remount) *)
-          Runtime.push_page_items page';
           Runtime.send (Action.Page_loaded page');
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)

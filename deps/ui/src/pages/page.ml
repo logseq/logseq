@@ -593,69 +593,6 @@ let add_button_el ?puuid ~(has_children : 'a -> bool Signal.signal) : t =
              ] ] ])
     context parent
 
-let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
-    ?(scope = "main") ?(container = true) (blocks : Model.block list) : t =
-  let inner_attrs =
-    match puuid with
-    | Some u -> [ ("data-pu", u) ]
-    | None -> []
-  in
-  let items = Array.of_list blocks in
-  (* cljs plain-block-list: (when (seq block-uuids)
-     [:div.blocks-list-wrap ...]) — empty pages emit no wrap *)
-  let list_wrap =
-    if blocks = [] then []
-    else if Virt_list.enabled ~virtualize (Array.length items) then
-      (* cljs parity: .blocks-list-wrap carries
-         data-virtuoso-scroller; rows are .ls-virt-row[data-index] >
-         .ls-block *)
-      [ dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
-          ~attrs:
-            [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
-          [ Virt_list.list ~key_of:Tree.block_key
-              ~estimate_size:(fun _ -> 32.)
-              ~data_sig:(fun ctx ->
-                Some
-                  (Signal.value
-                     (Runtime.page_items_sig ctx.Lui_ui.ui_scheduler
-                        ~scope ~puuid items)))
-              ~pin_key:(fun () ->
-                match S.editing () with
-                | Some e when e.S.scope = scope ->
-                    Some (S.top_level_uuid e.S.uuid)
-                | _ -> None)
-              ~pin_sig:(fun () ->
-                if S.ready () then Some (S.signal ()) else None)
-              ~render:(Tree.block_row ~library ~scope) items ] ]
-    else
-      [ dom ~key:"blw" ~style_class:"blocks-list-wrap"
-          ~attrs:[ ("data-level", "0") ]
-          (List.map (Tree.block_row ~library ~scope) blocks) ]
-  in
-  (* cljs page-root-virtual-list: .blocks-container.flex-1[containerid]
-     wraps the .blocks-list-wrap block list; journal-page's
-     plain-block-list sits directly under .page-blocks-inner *)
-  let body =
-    if not container then list_wrap
-    else
-      [ dom ~key:"blc" ~style_class:"blocks-container flex-1"
-          ~attrs:
-            (match puuid with
-             | Some u -> [ ("containerid", u) ]
-             | None -> [])
-          list_wrap ]
-  in
-  dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
-    ~attrs:[ ("style", "margin-left: -20px") ]
-    [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~attrs:(("data-cid", scope) :: inner_attrs)
-        (body
-         @ [ add_button_el ?puuid
-               ~has_children:(fun ctx ->
-                 Signal.constant ctx.Lui_ui.ui_scheduler (blocks <> []))
-           ])
-    ]
-
 (* cljs components/block.cljs grouped-blocks-container: refs render
    grouped under their source page (references-blocks-item > page-cp),
    so the referencing page's name must appear inside .references *)
@@ -843,7 +780,14 @@ let ref_group ?(extra_attrs = []) (name, blocks) : t =
                                 ^ Option.value b.block_uuid ~default:"x")
                           ~style_class:"relative w-full"
                           ~attrs:[ ("style", "min-height: 24px;") ]
-                          [ Tree.block_row_static b ])
+                          [ (* flat keyed rows — the ref block's subtree
+                               splices on collapse toggles like any
+                               other flat stream *)
+                            Tree.flat_keyed ~scope:"ref"
+                              ~mount:(fun rs ->
+                                Tree.block_flat_static_row
+                                  (Signal.get rs))
+                              [ b ] ])
                       blocks)
                        ]
                    ]
@@ -896,9 +840,14 @@ let references_row (b : Model.block) : t =
         ~style_class:"references-item"
         [ dom ~key:"pn" ~tag:"a" ~style_class:"page-ref"
             ~attrs:[ ("data-ref", pname) ] ~text:pname []
-        ; Tree.block_row_static b
+        ; Tree.flat_keyed ~scope:"ref"
+            ~mount:(fun rs -> Tree.block_flat_static_row (Signal.get rs))
+            [ b ]
         ]
-  | None -> Tree.block_row_static b
+  | None ->
+      Tree.flat_keyed ~scope:"ref"
+        ~mount:(fun rs -> Tree.block_flat_static_row (Signal.get rs))
+        [ b ]
 
 (* cljs reference/references -> views/view :linked-references DOM *)
 
@@ -912,7 +861,9 @@ let ref_item (b : Model.block) : t =
            dom ~tag:"a" ~style_class:"references-item-page"
              ~attrs:[ ("data-ref", name) ]
              ~text:name [])
-    ; Tree.block_row b
+    ; Tree.flat_keyed ~scope:"main"
+        ~mount:(Tree.block_flat_row_sig ~library:false ~scope:"main")
+        [ b ]
     ]
 
 let fetch_unlinked (m : Model.t) =
@@ -997,7 +948,9 @@ let unlinked_row (b : Model.block) : t =
              ~attrs:[ ("href", "#/page/" ^ name) ]
              ~text:name []
        | None -> Logseq_dom.nothing)
-    ; Tree.block_row ~scope:"unlinked" b
+    ; Tree.flat_keyed ~scope:"unlinked"
+        ~mount:(Tree.block_flat_row_sig ~library:false ~scope:"unlinked")
+        [ b ]
     ]
 
 (* cljs reference/unlinked-references — same views/view chrome as linked
@@ -1083,100 +1036,92 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
   | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
   | None -> false
 
-let journal_item_inner (m : Model.t) (p : Model.page) : t =
-  let key = Runtime.journal_item_key p in
-  dom ~key:("jiw-" ^ key)
-        ~style_class:
-          "flex-1 page relative cp__page-inner-wrap is-journals"
-        ~attrs:(page_wrap_attrs p)
-        [ dom ~key:("jip-" ^ key)
-            ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-            [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
-                [ page_title_el m p ]
-            ; Properties_area.bidi_area p
-            ; blocks_inner ?puuid:p.page_uuid ~virtualize:true
-                ~container:false p.page_blocks
-            ]
-        ; dom ~key:("jrefs-w-" ^ key) ~style_class:"flex flex-col gap-8 ml-1"
-            (* cljs journal-page: #today-queries div on the today item,
-               then one .fade-in.delay refs section (unlinked refs are
-               suppressed on the home route) *)
-            ((if is_today_journal p then
-                [ dom ~key:"tq" ~id:"today-queries" [] ]
-              else [])
-            @ [ dom ~key:"jrefs-f" ~style_class:"fade-in delay"
-                  [ journal_references_view p ]
-              ])
-        ]
-
-let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
+(* one flattened journals stream — a day head item, that day's flat
+   block rows, a tail item (refs/add section), repeat. The old shape
+   (a virtual list of journal pages each nesting its own list) is gone:
+   pagination appends items to the same stream and a spliced day
+   re-flattens in place *)
+let journal_day_head (m : Model.t) (p : Model.page) : t =
   let key = Runtime.journal_item_key p in
   (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
-     containing the same editable db-page-title row as a page; the last
-     item drops its separator border via .journal-last-item *)
-  dom ~key:("ji-" ^ key)
-    ~style_class:
-      ("journal-item content relative" ^ if last then " journal-last-item" else "")
-    [ (fun ctx parent ->
-        (* delta-splices push the merged page into the item's signal —
-           only that day remounts; the outer journals list (and other
-           days' DOM) survives *)
-        let p_sig = Runtime.journal_page_sig ctx.Lui_ui.ui_scheduler p in
-        (Logseq_dom.dyn
-           ~equal:(fun (a : Model.page) b -> a == b)
-           (fun (p' : Model.page) -> journal_item_inner m p')
-           (Signal.value p_sig))
-          ctx parent)
+     containing the same editable db-page-title row as a page *)
+  dom ~key:("jih-" ^ key) ~style_class:"journal-head content relative"
+    [ dom ~key:("jiw-" ^ key)
+        ~style_class:"flex-1 page relative cp__page-inner-wrap is-journals"
+        ~attrs:(page_wrap_attrs p)
+        [ dom ~key:("jip-" ^ key)
+            ~style_class:"relative grid gap-4 sm:gap-8 page-inner"
+            [ dom ~key:("jit-" ^ key)
+                ~style_class:"flex flex-row space-between"
+                [ page_title_el m p ]
+            ; Properties_area.bidi_area p
+            ]
+        ]
     ]
 
-(* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:
-   #journals > div > div > div[data-testid=virtuoso-item-list] > div >
-   journal-item. We keep the same scaffolding. *)
-let journals_virt_item (m : Model.t) (js : Model.page list) : t list =
-  List.mapi
-    (fun i p ->
-      dom ~key:("jvi-" ^ string_of_int i)
-        [ journal_item ~last:(i = List.length js - 1) m p ])
-    js
+let journal_day_tail ~last (p : Model.page) : t =
+  let key = Runtime.journal_item_key p in
+  (* the day separator lived on .journal-item; in the flat stream the
+     tail item carries it (and .journal-last-item on the last day) *)
+  dom ~key:("jtl-" ^ key)
+    ~style_class:("journal-tail" ^ if last then " journal-last-item" else "")
+    [ (* the day-end add button lived at the end of the day's block
+         list — in the stream it heads the tail item *)
+      add_button_el ?puuid:p.Model.page_uuid
+        ~has_children:(fun ctx ->
+          Signal.constant ctx.Lui_ui.ui_scheduler
+            (p.Model.page_blocks <> []))
+    ; dom ~key:("jrefs-w-" ^ key) ~style_class:"flex flex-col gap-8 ml-1"
+        (* cljs journal-page: #today-queries div on the today item,
+           then one .fade-in.delay refs section (unlinked refs are
+           suppressed on the home route) *)
+        ((if is_today_journal p then
+            [ dom ~key:"tq" ~id:"today-queries" [] ]
+          else [])
+        @ [ dom ~key:"jrefs-f" ~style_class:"fade-in delay"
+              [ journal_references_view p ]
+          ])
+    ]
+
+let journal_stream_item (m : Model.t) (it : Flat.item) : t =
+  match it with
+  | Flat.Row r -> Tree.block_flat_row ~scope:"main" ~library:false r
+  | Flat.Day_head p -> journal_day_head m p
+  | Flat.Day_tail (p, last) -> journal_day_tail ~last p
 
 let journals_view (m : Model.t) (js : Model.page list) : t =
-  let items = Array.of_list js in
   dom ~key:"journals" ~id:"journals" ~style_class:"h-full"
     (match js with
      | [] ->
          [ dom ~key:"jp"
              ~style_class:"journal-item-placeholder animate-pulse p-6" [] ]
      | _ ->
-         (* cljs mounts the Virtuoso scroller unconditionally; only
-            rtc-test mode (without the flag) falls back to eager rows *)
-         if Virt_list.enabled_min ~virtualize:true ~min:1
-              (Array.length items)
-         then
-           [ dom ~key:"js"
-               [ dom ~key:"jvp"
-                   [ Virt_list.list
-                       ~list_attrs:[ ("data-virtuoso-scroller", "true") ]
-                       ~estimate_size:(fun _ -> 640.)
-                       ~initial_rows:1
-                       ~on_end:(fun () ->
-                         ignore (!Runtime.journals_load_more ()))
-                       ~data_sig:(fun ctx ->
-                         Some
-                           (Signal.value
-                              (Runtime.journals_sig
-                                 ctx.Lui_ui.ui_scheduler)))
-                       ~key_of:(fun (p : Model.page) ->
-                         Option.value p.page_uuid ~default:p.page_title)
-                       ~render:(journal_item m) items ]
-               ]
-           ]
-         else
-           [ dom ~key:"js"
-               [ dom ~key:"jvp"
-                   [ dom ~key:"jil"
-                       ~attrs:[ ("data-testid", "virtuoso-item-list") ]
-                       (journals_virt_item m js) ]
-               ]
+         (* cljs mounts the Virtuoso scroller unconditionally *)
+         [ dom ~key:"js"
+             [ (fun ctx parent ->
+                 S.ensure ctx;
+                 let stream =
+                   Flat.journal_stream ~scope:"main"
+                     (Signal.value
+                        (Runtime.journals_sig ctx.Lui_ui.ui_scheduler))
+                 in
+                 (Virt_list.list
+                    ~list_attrs:[ ("data-virtuoso-scroller", "true") ]
+                    ~estimate_size:(fun _ -> 40.)
+                    ~on_end:(fun () ->
+                      ignore (!Runtime.journals_load_more ()))
+                    ~data_sig:(fun _ -> Some stream)
+                    ~key_of:Flat.item_key
+                    ~pin_key:(fun () ->
+                      match S.editing () with
+                      | Some e when e.S.scope = "main" -> Some e.S.uuid
+                      | _ -> None)
+                    ~pin_sig:(fun () ->
+                      if S.ready () then Some (S.signal ()) else None)
+                    ~render:(journal_stream_item m)
+                    (Signal.get stream))
+                   ctx parent)
+             ]
            ])
 
 let not_found_view name : t =
@@ -1251,62 +1196,62 @@ let blocks_sig_of (ms : Model.t Signal.signal) =
       | None -> [])
     ms
 
-(* top-level block rows as a keyed collection: keyed republishes only
-   items whose record actually changed, so a delta splice remounts the
-   touched row instead of re-diffing every mounted block *)
+(* block rows as a flat keyed collection or flat virtual list — the
+   stream is built by Flat.rows_sig: collapse already applied, splices
+   republish only rows whose record changed *)
 let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
   let blocks_sig = blocks_sig_of ms in
   let nonempty = Signal.map (fun bs -> bs <> []) blocks_sig in
-  let keyed_list =
-    dom ~key:"blw" ~style_class:"blocks-list-wrap"
-      ~attrs:[ ("data-level", "0") ]
-      [ Logseq_dom.keyed ~source:blocks_sig ~key:Tree.block_key
-          ~cmp:String.compare
-          ~mount:(Tree.block_row_sig ~library ~scope) ]
-  in
-  (* a virtualized list captures its data array at mount, so it can't
-     ride the keyed path — rebuild it on a new blocks spine; windowed
-     rendering stays active for big pages outside rtc-test *)
-  let virt_list =
-    dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
-      ~attrs:
-        [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
-      [ Logseq_dom.dyn ~equal:(fun a b -> a == b)
-          (fun (bs : Model.block list) ->
-            Virt_list.list ~key_of:Tree.block_key
+  fun ctx parent ->
+    S.ensure ctx;
+    let rs = Flat.rows_sig ~scope blocks_sig in
+    let rows0 = Signal.get rs in
+    (* either renderer is correct at any size — the threshold only
+       switches the mount strategy *)
+    let list_el =
+      if Virt_list.enabled ~virtualize:true (Array.length rows0) then
+        dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
+          ~attrs:
+            [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
+          [ Virt_list.list ~key_of:Flat.row_key
               ~estimate_size:(fun _ -> 32.)
-              ~render:(Tree.block_row ~library ~scope)
-              (Array.of_list bs))
-          blocks_sig ]
-  in
-  (* if_/dyn branches must mount a node — the keyed/virt choice can't be
-     a dynamic child, so pick once per region mount; either renderer is
-     correct at any size, the threshold is only an optimization *)
-  let list_el =
-    if Virt_list.enabled ~virtualize:true
-         (List.length (Signal.get blocks_sig))
-    then virt_list
-    else keyed_list
-  in
-  (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
-  dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
-    ~attrs:[ ("style", "margin-left: -20px") ]
-    [ dom ~key:"page-blocks-inner"
-        ~style_class:"page-blocks-inner relative"
-        ~attrs:
-          (("data-cid", scope)
-           :: (match puuid with
-               | Some u -> [ ("data-pu", u) ]
-               | None -> []))
-        [ dom ~key:"blc" ~style_class:"blocks-container flex-1"
-            ~attrs:
-              (match puuid with
-               | Some u -> [ ("containerid", u) ]
-               | None -> [])
-            [ Logseq_dom.if_ ~test:nonempty list_el ]
-        ; add_button_el ?puuid ~has_children:(fun _ -> nonempty)
-        ]
-    ]
+              ~data_sig:(fun _ -> Some rs)
+              ~pin_key:(fun () ->
+                match S.editing () with
+                | Some e when e.S.scope = scope -> Some e.S.uuid
+                | _ -> None)
+              ~pin_sig:(fun () ->
+                if S.ready () then Some (S.signal ()) else None)
+              ~render:(Tree.block_flat_row ~library ~scope)
+              rows0 ]
+      else
+        dom ~key:"blw" ~style_class:"blocks-list-wrap"
+          ~attrs:[ ("data-level", "0") ]
+          [ Logseq_dom.keyed
+              ~source:(Signal.map Array.to_list rs)
+              ~key:Flat.row_key ~cmp:String.compare
+              ~mount:(Tree.block_flat_row_sig ~library ~scope) ]
+    in
+    (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
+    (dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
+       ~attrs:[ ("style", "margin-left: -20px") ]
+       [ dom ~key:"page-blocks-inner"
+           ~style_class:"page-blocks-inner relative"
+           ~attrs:
+             (("data-cid", scope)
+              :: (match puuid with
+                  | Some u -> [ ("data-pu", u) ]
+                  | None -> []))
+           [ dom ~key:"blc" ~style_class:"blocks-container flex-1"
+               ~attrs:
+                 (match puuid with
+                  | Some u -> [ ("containerid", u) ]
+                  | None -> [])
+               [ Logseq_dom.if_ ~test:nonempty list_el ]
+           ; add_button_el ?puuid ~has_children:(fun _ -> nonempty)
+           ]
+       ])
+      ctx parent
 
 let title_row (m : Model.t) (page : Model.page) : t =
   dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"

@@ -17,17 +17,15 @@ let update (model : t) (action : Action.t) : t =
       ; page_missing = false
       ; data_gen =
           (if
-             (* a mounted virtual list consumes the spliced blocks
-                through its items signal — skipping the gen bump keeps
-                the whole .ls-page subtree (and the virtual window) from
-                remounting per editing op. Only safe when nothing but
-                the block tree changed *)
+             (* spliced block trees reach the mounted flat row stream
+                through the model signal — skipping the gen bump keeps
+                the whole .ls-page subtree (and the virtual window)
+                from remounting per editing op. Only safe when nothing
+                but the block tree changed *)
              match model.route_page with
              | Some p
                when { p with Model.page_blocks = [] }
-                    = { page with page_blocks = [] }
-                    && Runtime.has_page_items ~scope:"main"
-                         ~puuid:page.Model.page_uuid -> true
+                    = { page with page_blocks = [] } -> true
              | _ -> false
            then model.data_gen
            else model.data_gen + 1)

@@ -154,7 +154,6 @@ and apply_pending () : unit Js.Promise.t =
                         (match !Runtime.current_page with
                          | Some c -> c == base
                          | None -> false) ->
-                     Runtime.push_page_items p';
                      Runtime.send (Action.Page_loaded p');
                      !Runtime.refresh_page_side p'
                  | _ -> ());
@@ -206,10 +205,6 @@ and apply_pending () : unit Js.Promise.t =
          | Some js' when js' != start_js
                         && !Runtime.current_journals == start_js ->
              Runtime.send (Action.Journals_loaded js');
-             List.iter2
-               (fun o (n : Model.page) ->
-                 if o != n then Runtime.push_journal_page n)
-               start_js js';
              if not all_dup then begin
                finish ();
                Editor_state.prune_overrides

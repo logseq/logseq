@@ -105,16 +105,6 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
   @ (if embed then [ ("originalblockid", uuid); ("data-embed", "true") ]
      else [])
 
-let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
-  Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
-      row_attrs_of ~scope ~depth uuid b st)
-
-let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
-  Logseq_dom.attrs_signal
-    (Signal.map2 (fun a b -> (a, b)) bs (S.signal ()))
-    (fun ((b : Model.block), (st : S.t)) ->
-      let uuid = Option.value b.block_uuid ~default:"" in
-      row_attrs_of ~scope ~depth uuid b st)
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
   Signal.map
@@ -478,27 +468,15 @@ let tags_el uuid (b : Model.block) : t =
 
 (* -- row -- *)
 
-(* module init runs at app load (page.ml references block_row): install
-   the document listeners and the add-button observer even for pages with
-   zero blocks, where block_row is never mounted *)
+(* module init runs at app load: install the document listeners and
+   the add-button observer even for pages with zero blocks *)
 let () =
   Editor_keys.install_once ();
   Add_button.install ();
   Asset_dom.install ();
   Editor_dom.ensure_raw_text_observer ()
 
-let rec block_row
-    ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    (b : Model.block) : t =
-
- fun ctx parent ->
-  S.ensure ctx;
-  (row_el ~depth ~editable ~library scope b) ctx parent
-
-
-(* the .block-main-container subtree — everything inside .ls-block
-   except the children container *)
-and row_main ~editable ~library scope (b : Model.block) : t =
+let rec row_main ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   dom ~key:("main-" ^ key)
@@ -562,203 +540,218 @@ and row_main ~editable ~library scope (b : Model.block) : t =
             ]
         ]
 
-and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
+(* the record isn't the only input to row_main: Render resolves
+   [[uuid]]/((uuid))/#[[uuid]] refs through Render_inline's pull cache
+   at mount, and an untouched record keeps its mount on every publish.
+   Pair the invalidation gens in and remount only when a uuid this row
+   mentions was invalidated since it last painted — per-uuid gens
+   compare [ia]@[ib] so re-touching a previously invalidated entity
+   still remounts *)
+and gen_bumped (b : Model.block) ia ib =
+  let uuid = Option.value b.Model.block_uuid ~default:"" in
+  (* the painted title — committed-buffer overrides paint before the
+     worker's canon row lands, so the stored block_title can be "" *)
+  let title = S.title_for uuid b.Model.block_title in
+  Render_inline.Uuid_gens.exists
+    (fun u g ->
+      match Render_inline.Uuid_gens.find_opt u ia with
+      | Some g' when g' = g -> false
+      | _ ->
+          List.mem u b.Model.block_tag_uuids
+          || contains_sub title ("[[" ^ u ^ "]]")
+          || contains_sub title ("((" ^ u ^ "))"))
+    ib
 
-  let uuid = Option.value b.block_uuid ~default:"" in
-  if b.Model.block_is_comments_area then Comments_view.area_el b
+(* -- flat rows --
+   the .ls-block shell the nested form renders, minus the children
+   container: indent comes from an inline margin, the .flat-guides
+   overlay paints the ancestor indent lines and hosts the per-group
+   collapse strips the nested .block-children-container carried *)
+
+(* one .block-children-container margin per level *)
+and flat_indent d = d * 29
+
+(* row_attrs_of output + the indent margin; width:auto keeps the block
+   box inside the virt row instead of overflowing by the margin (its
+   stylesheet width:100% ignores the margin) *)
+and flat_attrs_of ~scope uuid (r : Flat.row) (st : S.t) =
+  row_attrs_of ~scope ~depth:r.depth uuid r.block st
+  @ (if r.depth <= 0 then []
+     else
+       [ ( "style"
+         , "margin-left:"
+           ^ string_of_int (flat_indent r.depth)
+           ^ "px;width:auto" )
+       ])
+
+(* indent guides: one overlay spanning the margin area paints every
+   ancestor group's 1px line; inside it, one .block-children-left-border
+   strip per ancestor depth keeps the click-to-collapse-parent gesture —
+   nested DOM mounts that strip per group, flat rows mount it per row *)
+and guides_el ~scope:_ (r : Flat.row) : t =
+  let d = r.Flat.depth in
+  if d <= 0 then Logseq_dom.nothing
   else
-  let key = block_key b in
-  let embed = b.block_link <> None in
-  let has_children = S.children_of b <> [] in
-  let blank = String.trim b.block_title = "" in
-  (* the reload key is scope-namespaced: the same block uuid renders in the
-     main list, sidebars, previews and embeds simultaneously, and a bare
-     ls-<uuid> key makes those distinct rows claim each other's DOM node *)
-  dom ~key:("ls-" ^ scope ^ "-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
-    [ row_main ~editable ~library scope b
-    ; (* .ls-block-content-indent: block properties area + block-below
-         pills, sibling of .block-main-container *)
-      Properties_area.block_area ~uuid
-    ; (if has_children && not (Comments.is_comments_area b) then
-         children_el ~depth ~editable ~library uuid scope b
-       else Logseq_dom.nothing)
-    ]
+    let w = flat_indent d in
+    (* position:absolute must be inline — the apple backend only lifts
+       out-of-flow elements it can see in the style attribute *)
+    dom ~key:("fg-" ^ r.uuid) ~style_class:"flat-guides"
+      ~attrs:
+        [ ( "style"
+          , Printf.sprintf "position:absolute;left:-%dpx;width:%dpx" w
+              w ) ]
+      (List.init d (fun k ->
+           dom
+             ~key:("fgs-" ^ r.uuid ^ "-" ^ string_of_int k)
+             ~style_class:"block-children-left-border"
+             ~attrs:
+               [ ("blockid", r.Flat.ancestors.(k))
+               ; ( "style"
+                 , Printf.sprintf "position:absolute;left:%dpx"
+                     (29 * (k + 1) - 1) )
+               ]
+             []))
 
-(* keyed-row variant of row_el: the .ls-block shell is a stable node
-   (keyed reconcile needs a node per item) and the content inside it is
-   rebuilt only when the row's own block record changes *)
-and row_sig ~depth ~editable ~library scope
-    (bs : Model.block Signal.signal) : t =
-  let b0 = Signal.get bs in
-  let key = block_key b0 in
-  (* the record isn't the only input to row_main: Render resolves
-     [[uuid]]/((uuid))/#[[uuid]] refs through Render_inline's pull cache
-     at mount, and an untouched record keeps its mount on every
-     publish. Pair the invalidation gens in and remount only when a uuid
-     this row mentions was invalidated since it last painted *)
-  (* remount iff a uuid the row renders was (re)invalidated since the
-     last paint — per-uuid gens compare [ia]@[ib] so re-touching a
-     previously invalidated entity still remounts *)
-  let gen_bumped (b : Model.block) ia ib =
-    let uuid = Option.value b.Model.block_uuid ~default:"" in
-    (* the painted title — committed-buffer overrides paint before the
-       worker's canon row lands, so the stored block_title can be "" *)
-    let title = S.title_for uuid b.Model.block_title in
-    Render_inline.Uuid_gens.exists
-      (fun u g ->
-        match Render_inline.Uuid_gens.find_opt u ia with
-        | Some g' when g' = g -> false
-        | _ ->
-            List.mem u b.Model.block_tag_uuids
-            || contains_sub title ("[[" ^ u ^ "]]")
-            || contains_sub title ("((" ^ u ^ "))"))
-      ib
-  in
-  dom ~key:("ls-" ^ scope ^ "-" ^ key)
-    ~style_class_signal:(row_class_sig_of bs)
-    ~attrs_signal_v:(row_attrs_sig_of ~scope ~depth bs)
-    [ Logseq_dom.dyn
-        ~equal:
-          (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
-          a == b && ga = gb && not (gen_bumped a ia ib))
-        (fun ((b : Model.block), _g, _i) ->
-          row_main ~editable ~library scope b)
-        (Signal.map2
-           (fun (b : Model.block) (_st : S.t) ->
-             let g, i = Render_inline.invalidation () in
-             (b, g, i))
-           bs (S.signal ()))
-    ; Properties_area.block_area
-        ~uuid:(Option.value b0.Model.block_uuid ~default:"")
-    ; row_children ~depth ~editable ~library scope bs
-    ]
-
-and row_children ~depth ~editable ~library scope
-    (bs : Model.block Signal.signal) : t =
-  Logseq_dom.dyn
-    ~equal:(fun ((a : Model.block), ca) ((b : Model.block), cb) ->
-      a == b && ca = cb)
-    (fun (b, collapsed) ->
-      if collapsed || Comments.is_comments_area b || S.children_of b = []
-      then Logseq_dom.nothing
-      else
-        let uuid = Option.value b.block_uuid ~default:"" in
-        children_dom ~depth ~editable ~library uuid scope b)
-    (Signal.map2
-       (fun (b : Model.block) (st : S.t) ->
-         let uuid = Option.value b.block_uuid ~default:"" in
-         ( b
-         , effective_collapsed_st ~scope uuid b.block_default_collapsed
-             st ))
-       bs (S.signal ()))
-
-and block_row_sig
-    ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    (bs : Model.block Signal.signal) : t =
+(* flat read-only row for linked-reference lists: the .ls-block shell
+   of block_row_static minus the children container — never swaps to an
+   editor (the same block can be under edit in its own page) and keeps
+   the rfs- key so it can't claim the live row's DOM node *)
+and block_flat_static_row ?(library = false) (r : Flat.row) : t =
  fun ctx parent ->
   S.ensure ctx;
-  let b0 = Signal.get bs in
-  (if b0.Model.block_is_comments_area then Comments_view.area_el b0
-   else row_sig ~depth ~editable ~library scope bs) ctx parent
-
-and children_dom ~depth ~editable ~library uuid scope (b : Model.block) : t =
-  dom ~key:("children-" ^ uuid)
-    ~style_class:"block-children-container flex"
-    [ dom ~key:("border-" ^ uuid)
-        ~style_class:"block-children-left-border"
-        ~attrs:[ ("blockid", uuid) ] []
-    ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-        (List.map (block_row ~scope ~editable ~depth:(depth + 1) ~library)
-           (S.children_of b))
-    ]
-
-and children_el ~depth ~editable ~library uuid scope (b : Model.block) : t =
-
-  if_
-    ~test:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
-    (children_dom ~depth ~editable ~library uuid scope b)
-
-(* Read-only row for linked-reference lists: same shell as row_el but the
-   content never swaps to editor_el — a block shown in .references can
-   simultaneously be under edit in its own page, and a second
-   #edit-block-<uuid> textarea breaks locators. The rfs- reload key also
-   keeps the row from claiming the live row's DOM node on reconciliation —
-   both are keyed ls-…/rfs-… on the same uuid but are distinct logical
-   nodes. *)
-and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
- fun ctx parent ->
-  (* references rows can be the first block render on a page (journals
-     refresh mounts ref rows before any editable row) — the state must
-     exist before the per-row signals below *)
-  S.ensure ctx;
-  (let uuid = Option.value b.block_uuid ~default:"" in
-  let key = block_key b in
-  let embed = b.block_link <> None in
-  let has_children = b.block_children <> [] in
-  let blank = String.trim b.block_title = "" in
-  dom ~key:("rfs-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope:"ref" ~depth uuid b)
-    [ dom ~key:("main-" ^ key)
-        ~style_class:"block-main-container flex flex-row gap-1"
-        ~attrs:(heading_attrs b)
-        ~events:"mouseenter mouseleave"
-        ~on_dom_event:(arrow_hover ~scope:"ref" ~uuid ~b)
-        [ control_wrap ~scope:"ref" ~library uuid b
-        ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
-            [ dom ~key:("col2-" ^ key) ~style_class:"flex flex-col w-full"
-                [ dom ~key:("bmc-" ^ key)
-                    ~style_class:"block-main-content flex flex-row gap-2"
-                    [ dom ~key:("col3-" ^ key)
-                        ~style_class:"flex flex-col w-full"
-                        [ dom ~key:("cew-" ^ key)
-                            ~style_class:"block-content-or-editor-wrap"
-                            [ dom ~key:("cei-" ^ key)
-                                ~style_class:"block-content-or-editor-inner"
-                                [ dom ~key:("row-" ^ key)
-                                    ~style_class:
-                                      "block-row flex flex-1 flex-row gap-1 \
-                                       items-center"
-                                    [ content_wrapper uuid b
-                                    ; dom ~key:("br-" ^ key)
-                                        ~style_class:
-                                          "flex flex-row gap-1 \
-                                           items-center ls-block-right \
-                                           self-start"
-                                        [ dom ~key:("bg-" ^ key)
-                                            ~style_class:
-                                              "hover:opacity-100 opacity-70"
-                                            []
-                                        ; tags_el uuid b
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ; Properties_area.block_left_chips ~uuid
-                    ]
-                ]
-            ; Comments_view.reactions_el uuid b.Model.block_reactions
-            ]
-        ]
-    ; Properties_area.block_area ~uuid
-    ; (if has_children then children_static_el ~depth ~library uuid b
-       else Logseq_dom.nothing)
-    ])
+  (let b = r.Flat.block in
+   let uuid = Option.value b.block_uuid ~default:"" in
+   let key = block_key b in
+   let embed = b.block_link <> None in
+   let blank = String.trim b.block_title = "" in
+   dom ~key:("rfs-" ^ key)
+     ~style_class_signal:(row_class_sig uuid blank embed b)
+     ~attrs_signal_v:
+       (Logseq_dom.attrs_signal (S.signal ())
+          (flat_attrs_of ~scope:"ref" uuid r))
+     [ guides_el ~scope:"ref" r
+     ; dom ~key:("main-" ^ key)
+         ~style_class:"block-main-container flex flex-row gap-1"
+         ~attrs:(heading_attrs b)
+         ~events:"mouseenter mouseleave"
+         ~on_dom_event:(arrow_hover ~scope:"ref" ~uuid ~b)
+         [ control_wrap ~scope:"ref" ~library uuid b
+         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
+             [ dom ~key:("col2-" ^ key) ~style_class:"flex flex-col w-full"
+                 [ dom ~key:("bmc-" ^ key)
+                     ~style_class:"block-main-content flex flex-row gap-2"
+                     [ dom ~key:("col3-" ^ key)
+                         ~style_class:"flex flex-col w-full"
+                         [ dom ~key:("cew-" ^ key)
+                             ~style_class:"block-content-or-editor-wrap"
+                             [ dom ~key:("cei-" ^ key)
+                                 ~style_class:
+                                   "block-content-or-editor-inner"
+                                 [ dom ~key:("row-" ^ key)
+                                     ~style_class:
+                                       "block-row flex flex-1 flex-row \
+                                        gap-1 items-center"
+                                     [ content_wrapper uuid b
+                                     ; dom ~key:("br-" ^ key)
+                                         ~style_class:
+                                           "flex flex-row gap-1 \
+                                            items-center ls-block-right \
+                                            self-start"
+                                         [ dom ~key:("bg-" ^ key)
+                                             ~style_class:
+                                               "hover:opacity-100 \
+                                                opacity-70"
+                                             []
+                                         ; tags_el uuid b
+                                         ]
+                                     ]
+                                 ]
+                             ]
+                         ]
+                     ; Properties_area.block_left_chips ~uuid
+                     ]
+                 ]
+             ; Comments_view.reactions_el uuid b.Model.block_reactions
+             ]
+         ]
+     ; Properties_area.block_area ~uuid
+     ])
   ctx parent
 
-and children_static_el ~depth ~library uuid (b : Model.block) : t =
-  dom ~key:("children-" ^ uuid)
-    ~style_class:"block-children-container flex"
-    [ dom ~key:("border-" ^ uuid)
-        ~style_class:"block-children-left-border"
-        ~attrs:[ ("blockid", uuid) ] []
-    ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-        (List.map (block_row_static ~depth:(depth + 1) ~library)
-           b.block_children)
-    ]
+(* flat row for eager lists and Virt_list's ~render *)
+and block_flat_row ?(editable = true) ~scope ~library (r : Flat.row) : t =
+ fun ctx parent ->
+  S.ensure ctx;
+  (let b = r.Flat.block in
+   let uuid = r.uuid in
+   if b.Model.block_is_comments_area then Comments_view.area_el b
+   else
+     let key = block_key b in
+     let embed = b.block_link <> None in
+     let blank = String.trim b.block_title = "" in
+     dom ~key:("ls-" ^ scope ^ "-" ^ key)
+       ~style_class_signal:(row_class_sig uuid blank embed b)
+       ~attrs_signal_v:
+         (Logseq_dom.attrs_signal (S.signal ())
+            (flat_attrs_of ~scope uuid r))
+       [ guides_el ~scope r
+       ; row_main ~editable ~library scope b
+       ; Properties_area.block_area ~uuid
+       ])
+    ctx parent
+
+(* flat keyed list for eager consumers (refs, sidebar, embeds,
+   previews): block trees that never window but still need collapse
+   toggles to re-flatten — keyed reconcile splices the changed rows
+   instead of remounting the list *)
+and flat_keyed ~scope ~mount (roots : Model.block list) : t =
+ fun ctx parent ->
+  S.ensure ctx;
+  let roots_sig = Signal.constant ctx.Lui_ui.ui_scheduler roots in
+  (Logseq_dom.keyed
+     ~source:(Signal.map Array.to_list (Flat.rows_sig ~scope roots_sig))
+     ~key:Flat.row_key ~cmp:String.compare ~mount)
+    ctx parent
+
+(* keyed-mount flat row: same invalidation-aware remount as row_sig —
+   the .ls-block shell survives splices, its interior rebuilds only when
+   the row's block record or a uuid it renders changes *)
+and block_flat_row_sig ?(editable = true) ~library ~scope
+    (rs : Flat.row Signal.signal) : t =
+ fun ctx parent ->
+  S.ensure ctx;
+  (let r0 = Signal.get rs in
+   let uuid = r0.Flat.uuid in
+   if r0.Flat.block.Model.block_is_comments_area then
+     Comments_view.area_el r0.Flat.block
+   else
+     dom ~key:("ls-" ^ scope ^ "-" ^ uuid)
+       ~style_class_signal:
+         (row_class_sig_of (Signal.map (fun (r : Flat.row) -> r.block) rs))
+       ~attrs_signal_v:
+         (Logseq_dom.attrs_signal
+            (Signal.map2 (fun a b -> (a, b)) rs (S.signal ()))
+            (fun ((r : Flat.row), (st : S.t)) ->
+              flat_attrs_of ~scope r.Flat.uuid r st))
+       [ Logseq_dom.dyn
+           ~equal:(fun (a : Flat.row) (b : Flat.row) ->
+             a.Flat.depth = b.Flat.depth && a.ancestors = b.ancestors)
+           (fun (r : Flat.row) -> guides_el ~scope r)
+           rs
+       ; Logseq_dom.dyn
+           ~equal:
+             (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
+             a == b && ga = gb && not (gen_bumped a ia ib))
+           (fun ((b : Model.block), _g, _i) ->
+             row_main ~editable ~library scope b)
+           (Signal.map2
+              (fun (r : Flat.row) (_st : S.t) ->
+                let g, i = Render_inline.invalidation () in
+                (r.Flat.block, g, i))
+              rs (S.signal ()))
+       ; Properties_area.block_area ~uuid
+       ])
+    ctx parent
 
 
 (* -- {{embed [[page]]}}: live page block tree inside .embed-block --
@@ -803,18 +796,22 @@ let fetch_embed_blocks name st =
                 Platform.console_error ("embed blocks fetch failed", e);
                 Js.Promise.resolve ())))
 
-(* cheap dyn equality for fetched trees: uuid + title covers structure
-   and content edits; a full structural compare walks every field of a
-   rebuilt-per-fetch tree on each publish *)
-let rec same_blocks a b =
-  match a, b with
-  | [], [] -> true
-  | x :: xs, y :: ys ->
-      x.Model.block_uuid = y.Model.block_uuid
-      && x.Model.block_title = y.Model.block_title
-      && same_blocks x.Model.block_children y.Model.block_children
-      && same_blocks xs ys
-  | _ -> false
+(* embed row cap: render at most this many rows; a longer node opens
+   through the click-through row instead of inflating the embed *)
+let embed_row_cap = 50
+
+(* the overflow row — clicking it navigates to the embedded node's own
+   detail page *)
+let embed_more_el (name : string) : t =
+  dom ~key:"embed-more" ~tag:"div"
+    ~style_class:"embed-more ls-block cursor-pointer text-sm opacity-70"
+    ~attrs:[ ("tabindex", "0") ]
+    ~events:"click"
+    ~on_dom_event:(fun n _ ->
+      if n = "click" then
+        Runtime.send (Action.Navigate_to (Model.Page name)))
+    [ dom ~key:"embed-more-t" ~tag:"span" ~text:(I18n.t "ui/show-more")
+        [] ]
 
 let page_embed (name : string) : t =
  fun ctx parent ->
@@ -830,13 +827,30 @@ let page_embed (name : string) : t =
   (* a destroyed embed must stop refetching on every tx broadcast *)
   Signal.on_dispose ctx.ui_scope (fun () ->
       Hashtbl.remove embed_refreshes id);
-  (dyn ~equal:same_blocks
-     (fun blocks ->
-       (* embed copies render read-only — the same uuid can exist in the
-          sidebar/main tree, and only that instance should own the textarea *)
-       dom ~key:"embed-page" ~tag:"div" ~style_class:"embed-page"
-         (List.map (block_row ~scope:"embed" ~editable:false) blocks))
-     (Signal.value st))
+  S.ensure ctx;
+  let rows = Flat.rows_sig ~scope:"embed" (Signal.value st) in
+  (dom ~key:"embed-page" ~tag:"div" ~style_class:"embed-page"
+     [ (* embed copies render read-only — the same uuid can exist in the
+          sidebar/main tree, and only that instance should own the
+          textarea *)
+       Logseq_dom.keyed
+         ~source:
+           (Signal.map
+              (fun (r : Flat.row array) ->
+                Array.to_list
+                  (Array.sub r 0 (min embed_row_cap (Array.length r))))
+              rows)
+         ~key:Flat.row_key ~cmp:String.compare
+         ~mount:(block_flat_row_sig ~editable:false ~library:false
+                   ~scope:"embed")
+     ; Logseq_dom.if_
+         ~test:
+           (Signal.map
+              (fun (r : Flat.row array) ->
+                Array.length r > embed_row_cap)
+              rows)
+         (embed_more_el name)
+     ])
     ctx parent
 
 let () = Render_state.page_embed := page_embed

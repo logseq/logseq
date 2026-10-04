@@ -28,7 +28,10 @@ let body (_ms : Model.t Signal.signal) : t =
               (fun blocks ->
                 dom ~key:"qa-list"
                   ~style_class:"page-blocks-inner"
-                  (List.map (Tree.block_row ~scope:"quick-add") blocks))
+                  [ Tree.flat_keyed ~scope:"quick-add"
+                      ~mount:(Tree.block_flat_row_sig ~library:false
+                                ~scope:"quick-add")
+                      blocks ])
               blocks_sig ]
       ; dom ~key:"qa-btns" ~style_class:"ls-qa-btns"
           [ dom ~key:"qa-add" ~tag:"button"

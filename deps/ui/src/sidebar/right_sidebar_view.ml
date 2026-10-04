@@ -439,9 +439,14 @@ let item_body st idx (it : Sidebar_state.item) =
                  [ dom ~key:("pbin-" ^ it.key)
                      ~style_class:"page-blocks-inner relative"
                      ~attrs:[ ("data-cid", "sidebar") ]
-                     (List.map
-                        (Tree.block_row ~scope:"sidebar")
-                        it.blocks)
+                     [ (* flat keyed rows — sidebar block trees never
+                          window but collapse toggles splice through the
+                          shared flat pipeline *)
+                       Tree.flat_keyed ~scope:"sidebar"
+                         ~mount:(Tree.block_flat_row_sig ~library:false
+                                   ~scope:"sidebar")
+                         it.blocks
+                     ]
                  ]
              ]
             (* linked references sit inside .page-inner in cljs *)
