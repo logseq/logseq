@@ -1,25 +1,4 @@
-(* Property endpoints (frontend/worker/handler/property.cljs).
-   Wiring note for worker_core.ml — add:
-
-     ignore Endpoint_property.get_all_classes;
-     ignore Endpoint_property.get_structured_children;
-     ignore Endpoint_property.get_class_extends_children_tree;
-     ignore Endpoint_property.get_block_class_default_properties;
-     ignore Endpoint_property.get_class_properties;
-     ignore Endpoint_property.get_property_closed_values;
-     ignore Endpoint_property.get_property_node_selector_data;
-     ignore Endpoint_property.get_class_objects;
-     ignore Endpoint_property.validate_block_tag;
-     ignore Endpoint_property.get_property_values;
-     ignore Endpoint_property.get_all_properties;
-     ignore Endpoint_property.validate_property_value;
-     ignore Endpoint_property.get_first_url_property_value;
-     ignore Endpoint_property.convert_tag_to_page;
-     ignore Endpoint_property.convert_page_to_tag;
-     ignore Endpoint_property.get_date_scheduled_or_deadlines_endpoint;
-     ignore Endpoint_property.get_display_properties_endpoint;
-     ignore Endpoint_property.reorder_display_property;
-*)
+(* Property endpoints (frontend/worker/handler/property.cljs). *)
 
 open Datascript
 
