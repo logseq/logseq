@@ -1146,7 +1146,9 @@ let compute_extra_tx_data (report : tx_report) : tx_op list =
     | None -> db
   in
   let insert_templates_tx =
-    if rtc_tx_or_download_graph tx_meta then []
+    if rtc_tx_or_download_graph tx_meta || flag tx_meta "undo?"
+       || flag tx_meta "db-sync/replayed-tx-data?"
+    then []
     else
       insert_tag_templates
         { report with
