@@ -379,7 +379,7 @@ blockquote {
   position: fixed;
   top: 0;
   left: 0;
-  width: 0;
+  width: 10px;
   z-index: var(--ls-z-index-level-4);
   transition: width 0.3s;
 
@@ -402,6 +402,17 @@ blockquote {
 
   .shade-mask {
     display: none;
+  }
+}
+
+/* cljs container.css: on >=sm the fixed left sidebar drops under the
+   z-10 header so the header's left-menu/search buttons stay visible and
+   clickable while the sidebar is open; level-4 z-index is for the
+   mobile overlay only */
+@media (min-width: 640px) {
+  .cp__sidebar-left-layout {
+    width: 0;
+    z-index: var(--ls-z-index-level-1);
   }
 }
 
