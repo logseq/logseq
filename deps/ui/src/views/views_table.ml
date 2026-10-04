@@ -581,8 +581,8 @@ let header_button inst (c : V.column) : D.el =
   D.h ~tag:"button"
     ~cls:
       (D.button_cls ~variant:"text"
-         ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground w-full \
-               justify-start"
+         ~cls:"inline-flex items-center h-8 !pl-2 !px-2 !py-0 \
+               hover:text-foreground w-full justify-start"
          ())
     ~attrs:[ ("type", "button") ]
     ~children ()
@@ -1119,7 +1119,10 @@ let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
       ~children:[ D.h ~cls:"ls-foldable-content-inner" ~children:[ body () ] () ]
       ()
   in
-  D.h ~cls:"flex flex-col" ~children:[ title; content ] ()
+  (* min-w-0: as a grid item inside .flex.flex-col.gap-2.grid the default
+     min-width:auto would expand the track to the table's max-content,
+     overflowing .page-inner — the inner .ls-table-rows owns x-scroll *)
+  D.h ~cls:"flex flex-col min-w-0" ~children:[ title; content ] ()
 
 let group_title inst gv =
   match gv with

@@ -11,6 +11,7 @@ type t =
      Journals_loaded but no data_gen bump: the mounted keyed collections
      repaint only the touched rows instead of remounting the region *)
   | Refs_loaded of Model.block list
+  | Ref_parents_loaded of (string * string list) list
   | Unlinked_loaded of Model.block list
   | Unlinked_exists of bool
   | Navigate_to of Model.route

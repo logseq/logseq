@@ -615,6 +615,10 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
     ; (* cljs custom-query* — the live query shell sits below
          .block-main-container, not inside the title row *)
       (if Render.is_query_block b then Render.query_below_el uuid
+       else if Render.is_cards_block b then
+         (* class-Cards blocks get the same results shell; with no card
+            children cljs shows the "No matched result" empty state *)
+         Render.query_below_el ~empty:(b.block_children = []) uuid
        else Logseq_dom.nothing)
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library uuid scope b
@@ -667,6 +671,9 @@ and row_sig ~depth ~editable ~library scope
            bs (S.signal ()))
     ; (if Render.is_query_block b0 then
          Render.query_below_el
+           (Option.value b0.Model.block_uuid ~default:"")
+       else if Render.is_cards_block b0 then
+         Render.query_below_el ~empty:(b0.block_children = [])
            (Option.value b0.Model.block_uuid ~default:"")
        else Logseq_dom.nothing)
     ; row_children ~depth ~editable ~library scope bs

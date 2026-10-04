@@ -316,10 +316,17 @@ let is_cards_block (b : Model.block) =
    .custom-query > .bd > .custom-query-results BELOW .block-main-container
    (a sibling inside .ls-block); Views_mount.ensure_query_shells mounts
    the query-result view into it *)
-let query_below_el uuid =
+let query_below_el ?(empty = false) uuid =
   D.el ~key:("cq-" ^ uuid) ~tag:"div" ~style_class:"custom-query"
     [ D.el ~tag:"div" ~style_class:"bd"
-        [ D.el ~tag:"div" ~style_class:"custom-query-results" [] ] ]
+        [ D.el ~tag:"div" ~style_class:"custom-query-results"
+            (if empty then
+               (* cljs query-view empty state *)
+               [ D.el ~tag:"div" ~style_class:"text-sm mt-2 opacity-90"
+                   ~text:(I18n.t "search/no-result") [] ]
+             else [])
+        ]
+    ]
 
 (* content for a (possibly quoted) body — headings nest inside quote *)
 let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])

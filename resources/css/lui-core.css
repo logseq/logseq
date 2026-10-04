@@ -1319,11 +1319,13 @@ a.page-title {
     pointer-events: auto;
   }
 
-  /* the blanket .jtrigger{flex:1} must not grow the shui checkbox
-     inside its label — cljs keeps it 16px */
-  .as-scalar-value-wrap .ui__checkbox {
-    flex: 0 0 auto;
-  }
+}
+
+/* the blanket .jtrigger{flex:1} must not grow the shui checkbox inside
+   its label — applies in the page properties panel AND in positioned
+   property rows embedded inside reference blocks (cljs keeps it 16px) */
+.as-scalar-value-wrap .ui__checkbox {
+  flex: 0 0 auto;
 }
 
 .ls-block.property-value-container {
@@ -1366,6 +1368,11 @@ a.page-title {
   a {
     color: var(--ls-link-text-color);
   }
+}
+
+/* cljs: block-parents crumbs use primary text color, not link blue */
+.breadcrumb.block-parents a {
+  color: var(--ls-primary-text-color);
 }
 
 .breadcrumb.block-parents {

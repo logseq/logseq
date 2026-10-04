@@ -149,8 +149,9 @@ let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
 let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   (let* blocks = fetch_refs_blocks p in
   Js.Promise.resolve
-    (if not (is_stale ()) then
-       Runtime.send (Action.Refs_loaded blocks)))
+    (if not (is_stale ()) then (
+       Runtime.send (Action.Refs_loaded blocks);
+       Outliner_ops.fetch_ref_group_parents ~stale:is_stale blocks)))
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("get-block-refs failed", e);
          Js.Promise.resolve ())

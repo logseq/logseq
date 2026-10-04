@@ -4303,6 +4303,18 @@ select.form-select {
   opacity: 1;
 }
 
+/* .page-inner is display:grid — a child with the default min-width:auto
+   expands the auto track to the objects table's max-content (~1250px),
+   so the whole tab panel overflowed the page column. min-width:0 lets
+   the chain shrink and the inner .ls-table-rows handle x-scrolling */
+.page-inner > .page-tabs,
+.page-tabs > .w-full,
+.ui__tabs-content,
+.ui__tabs-content > .ml-1,
+.ls-view-body {
+  min-width: 0;
+}
+
 /* cljs ls-view-head: count/tabs left, view-actions right on one row
    (flex flex-1 flex-nowrap items-center justify-between gap-1) */
 .ls-view-head {

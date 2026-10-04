@@ -702,7 +702,7 @@ let render_head inst ~refresh : D.el =
   D.el_append_child actions (display_type_el inst ~refresh);
   D.el_append_child actions (more_actions inst ~refresh);
   (match inst.V.kind with
-   | V.KTagPage _ -> (
+   | V.KTagPage _ | V.KPropertyPage _ -> (
        (* cljs objects.cljs: no "new object" for private class idents
           (worker sends add-object? in route-info) *)
        match !Runtime.current_page with

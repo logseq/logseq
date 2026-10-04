@@ -35,6 +35,9 @@ type block =
   ; block_tag_idents : string list (* resolved tag idents, same filtering *)
   ; block_tag_db_ids : int list (* aligned with block_tags — chip ctx menu *)
   ; block_page_name : string option (* containing page, for ref rows *)
+  ; block_page_uuid : string option (* containing page uuid — ref-group
+                                       namespace breadcrumbs resolve the
+                                       page's ancestors through it *)
   ; block_reactions : (string * int) list (* emoji-id, count *)
   ; block_is_comments_area : bool
   ; block_is_comment : bool
@@ -182,6 +185,9 @@ type t =
                            the chrome, not the route-level 404 *)
   ; journals : page list
   ; page_refs : block list
+  ; ref_parents : (string * string list) list
+    (* group page name -> ancestor titles (farthest-first) — linked/unlinked
+       ref groups on namespaced source pages render a .breadcrumb--inline *)
   ; unlinked_refs : block list
   ; unlinked_exists : bool (* cljs :block-unlinked-ref-exists — gates
                               whether the collapsed section renders at all *)
@@ -216,6 +222,7 @@ let initial =
   ; page_missing = false
   ; journals = []
   ; page_refs = []
+  ; ref_parents = []
   ; unlinked_refs = []
   ; unlinked_exists = false
   ; repos = []
@@ -257,6 +264,7 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_tag_idents = []
   ; block_tag_db_ids = []
   ; block_page_name = None
+  ; block_page_uuid = None
   ; block_reactions = []
   ; block_is_comments_area = false
   ; block_is_comment = false

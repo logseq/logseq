@@ -50,6 +50,24 @@ let update (model : t) (action : Action.t) : t =
           (if refs = model.page_refs then model.data_gen
            else model.data_gen + 1)
       }
+  | Ref_parents_loaded entries ->
+      (* merge into the keyed assoc — linked and unlinked fetches each
+         contribute their own group pages; an unchanged merge keeps the
+         same list so refs_eq's physical compare holds *)
+      let merged =
+        List.fold_left
+          (fun acc (k, v) ->
+            match List.assoc_opt k acc with
+            | Some v' when v' = v -> acc
+            | _ -> (k, v) :: List.remove_assoc k acc)
+          model.ref_parents entries
+      in
+      { model with
+        ref_parents = merged
+      ; data_gen =
+          (if merged == model.ref_parents then model.data_gen
+           else model.data_gen + 1)
+      }
   | Unlinked_loaded refs ->
       { model with
         unlinked_refs = refs
@@ -70,6 +88,7 @@ let update (model : t) (action : Action.t) : t =
       ; route_page = None
       ; page_missing = false
       ; page_refs = []
+      ; ref_parents = []
       ; unlinked_refs = []
       ; unlinked_exists = false
       ; editing_title = false
