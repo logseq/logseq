@@ -1370,3 +1370,16 @@ let open_latest ?(move = false) () =
       (* mod+k toggles; move mode always switches the open palette over *)
       if (get st).open_ && not move then close st else open_palette ~move st
   | None -> ()
+
+(* mod+shift+k (go/search-in-page): the command-table arm only scopes an
+   already-open palette; the chord must also open it when closed *)
+let open_in_page () =
+  match !latest_t with
+  | Some st ->
+      if not (get st).open_ then open_palette st;
+      set_in st (fun v -> { v with filter = Some G_current_page; input = "" });
+      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+       | Some el -> Dom_ext.set_value el ""
+       | None -> ());
+      refresh st
+  | None -> ()

@@ -188,6 +188,10 @@ let global_chord ev =
      listener (cmdk_view.handle_keydown) — it owns open, close and
      move-mode, and a second handler on the same chord toggles the
      palette straight back off *)
+  | "k" when meta && shift ->
+      D.prevent_default ev;
+      Cmdk_state.open_in_page ();
+      true
   | "p" when meta && shift ->
       D.prevent_default ev;
       Cmdk_state.open_latest ();
