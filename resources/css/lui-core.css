@@ -1192,12 +1192,286 @@ a.page-title {
   }
 }
 
+/* ==================== Page properties panel ============================= */
+/* cljs components/property.css — two-column grid rows under the page
+   title: .ls-properties-area > .properties-panel > .property-pair
+   (name column fit-content(260px), value column minmax(0,1fr)). */
+
+.ls-properties-area {
+  .properties-panel {
+    border-radius: 0.375rem;
+    overflow: hidden;
+  }
+
+  .properties-panel-header {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 500;
+    color: var(--ls-secondary-text-color);
+    border-bottom: 1px solid var(--ls-border-color);
+  }
+
+  .property-pair.property-panel-row {
+    display: grid;
+    grid-template-columns: fit-content(260px) minmax(0, 1fr);
+    align-items: start;
+    gap: 0.75rem;
+    width: 100%;
+    padding-right: 0.75rem;
+    margin-left: 0;
+  }
+
+  .property-key-panel {
+    display: flex;
+    align-items: center;
+    min-width: 150px;
+    min-height: 28px;
+    font-size: inherit;
+    color: var(--ls-primary-text-color);
+  }
+
+  .property-key-inner {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.25rem;
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    min-height: 28px;
+
+    .property-icon {
+      display: flex;
+      align-items: center;
+
+      svg {
+        width: 15px;
+        height: 15px;
+      }
+    }
+  }
+
+  .property-key-panel .property-k {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .property-value-panel.ls-block.property-value-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.25rem;
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+    min-height: 28px;
+  }
+
+  .property-value-panel {
+    position: relative;
+  }
+
+  .property-pair.property-panel-row.property-panel-row-empty
+    .property-value-panel.ls-block.property-value-container {
+    align-items: center;
+  }
+
+  .property-pair.property-panel-row[data-property-type='node']
+    .property-value-panel.ls-block.property-value-container,
+  .property-pair.property-panel-row[data-property-type='node']
+    .property-value.property-value-panel-inner {
+    align-items: center;
+  }
+
+  .property-pair.property-panel-row[data-property-type='checkbox']
+    .property-value-panel.ls-block.property-value-container,
+  .property-pair.property-panel-row[data-property-type='checkbox']
+    .property-value.property-value-panel-inner {
+    align-items: center;
+  }
+
+  .property-pair.property-panel-row[data-property-type='url']
+    .property-value-panel a:not(.block-control):not(.bullet-link-wrap),
+  .property-pair.property-panel-row[data-property-type='url']
+    .asset-image-fallback {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .hidden-properties-toggle-row {
+    padding-right: 0.75rem;
+  }
+
+  .hidden-properties-toggle-key {
+    width: 100%;
+    min-width: 0;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    color: var(--ls-primary-text-color);
+
+    .property-icon {
+      color: var(--ls-primary-text-color);
+    }
+  }
+
+  .property-pair {
+    .property-k {
+      display: inline-block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 26px;
+    }
+
+    .property-value {
+      padding-left: 0.25rem;
+      min-height: 28px;
+    }
+  }
+
+  .property-pair.property-panel-row .property-k {
+    line-height: 20px;
+    font-size: inherit;
+    color: var(--ls-primary-text-color);
+  }
+
+  .property-pair.property-panel-row a.property-k,
+  .property-key-panel a {
+    color: var(--ls-primary-text-color);
+  }
+
+  .property-value.property-value-panel-inner {
+    padding-left: 0;
+    min-height: 20px;
+    width: 100%;
+    min-width: 0;
+    color: var(--ls-primary-text-color);
+  }
+
+  .property-value.property-value-panel-inner > .property-value-inner {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .property-value.property-value-panel-inner .jtrigger {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .property-value.property-value-panel-inner .select-item {
+    min-width: 0;
+  }
+
+  .property-panel-bullet {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.6;
+    margin-left: 2px;
+    min-height: 24px;
+
+    .bullet-container {
+      position: relative;
+      left: 0;
+      top: 0;
+    }
+  }
+
+  .property-panel-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border-radius: 9999px;
+    color: var(--ls-primary-text-color);
+    background-color: var(--ls-primary-background-color);
+    box-shadow: inset 0 0 0 1px var(--ls-border-color);
+  }
+
+  .property-value-panel:has(.property-value-panel-inner:hover)
+    .property-panel-edit-btn,
+  .property-value-panel:has(.property-value-panel-inner:focus-within)
+    .property-panel-edit-btn,
+  .property-panel-edit-btn:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+}
+
+/* the blanket .jtrigger{flex:1} must not grow the shui checkbox inside
+   its label — applies in the page properties panel AND in positioned
+   property rows embedded inside reference blocks (cljs keeps it 16px) */
+.as-scalar-value-wrap .ui__checkbox {
+  flex: 0 0 auto;
+}
+
+.ls-block.property-value-container {
+  flex: 1;
+  flex-shrink: 0;
+  min-width: 100px;
+  min-height: 28px;
+  padding-top: 0;
+  padding-bottom: 0;
+  container-type: normal;
+}
+
+.ls-page-properties .property-key,
+.ls-properties-area .property-key {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.property-key {
+  font-size: 15px;
+  min-width: 160px;
+  min-height: 28px;
+}
+
+.ls-page-title .ls-page-properties {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 1rem;
+}
+
+.ls-page-title .ls-page-properties > .ls-new-property {
+  margin-top: 0.5rem;
+}
+
 /* ============================ Breadcrumb ================================= */
 
 .breadcrumb {
   a {
     color: var(--ls-link-text-color);
   }
+}
+
+/* cljs: block-parents crumbs use primary text color, not link blue */
+.breadcrumb.block-parents a {
+  color: var(--ls-primary-text-color);
 }
 
 .breadcrumb.block-parents {
@@ -2099,12 +2373,26 @@ button[role='checkbox'][data-state='unchecked'] {
     opacity: 1;
   }
 
+  /* the hover-only remove-tag 'x' keeps .hidden until tag_hover swaps
+     it in — the hash-symbol display:flex above must not resurrect it
+     (cljs has no display on .block-tag a.hash-symbol so .hidden wins) */
+  a.hidden {
+    display: none;
+  }
+
   span {
     white-space: nowrap;
     overflow: hidden;
     max-width: 160px;
     text-overflow: ellipsis;
   }
+}
+
+/* cljs block-title-aux: the class-Query settings button is opacity-0
+   until the head row is hovered */
+.block-head-wrap:hover .ls-query-setting,
+.ls-query-setting:focus-visible {
+  opacity: 1;
 }
 
 .block-properties,

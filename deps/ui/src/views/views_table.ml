@@ -581,8 +581,8 @@ let header_button inst (c : V.column) : D.el =
   D.h ~tag:"button"
     ~cls:
       (D.button_cls ~variant:"text"
-         ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground w-full \
-               justify-start"
+         ~cls:"inline-flex items-center h-8 !pl-2 !px-2 !py-0 \
+               hover:text-foreground w-full justify-start"
          ())
     ~attrs:[ ("type", "button") ]
     ~children ()
@@ -869,22 +869,16 @@ let row_el inst ~refresh ~idx ~row_uuid (cols : V.column list) : D.el =
 
 (* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
    .force-visible-scrollbar > .relative > [header; body rows] *)
-let table_el inst ~refresh : D.el =
-  let tbl = D.h ~cls:"ls-table w-full caption-bottom text-sm table-fixed" () in
-  let cols = visible_columns inst in
-  let scroller =
-    D.h ~cls:"ls-table-rows content overflow-x-auto force-visible-scrollbar"
-      ()
-  in
-  let rel = D.h ~cls:"relative" () in
-
+(* cljs header: .sticky-columns > pinned header cells (#Select > select
+   cell, div[role=button] > cell for pinned props); sibling .flex.flex-row >
+   unpinned (div[role=button] > cell)* > #add property]. Shared by the outer
+   table and each grouped section (cljs renders a full inner table per
+   group, header row included). *)
+let table_header_el inst ~refresh cols : D.el =
   let header =
     D.h ~cls:"ls-table-header border-y transition-colors bg-gray-01"
       ~attrs:[ ("style", "z-index:9") ] ()
   in
-  (* cljs header: .sticky-columns > pinned header cells (#Select > select
-     cell, div[role=button] > cell for pinned props); sibling
-     .flex.flex-row > unpinned (div[role=button] > cell)* > #add property] *)
   let sticky = D.h ~cls:"flex flex-row sticky-columns" () in
   let header_row = D.h ~cls:"flex flex-row" () in
   List.iter
@@ -941,6 +935,17 @@ let table_el inst ~refresh : D.el =
   D.el_append_child header_row (dnd_live "1");
   D.el_append_child header sticky;
   D.el_append_child header header_row;
+  header
+
+let table_el inst ~refresh : D.el =
+  let tbl = D.h ~cls:"ls-table w-full caption-bottom text-sm table-fixed" () in
+  let cols = visible_columns inst in
+  let scroller =
+    D.h ~cls:"ls-table-rows content overflow-x-auto force-visible-scrollbar"
+      ()
+  in
+  let rel = D.h ~cls:"relative" () in
+  let header = table_header_el inst ~refresh cols in
   (match action_bar inst ~refresh with
    | Some bar -> D.el_append_child header bar
    | None -> ());
@@ -997,7 +1002,8 @@ let table_el inst ~refresh : D.el =
 
   tbl
 
-(* grouped rows render without the header (group table per cljs) *)
+(* cljs renders a full inner view-table per group — its own column header
+   row (no action bar) plus the group's rows *)
 let grouped_table inst ~refresh ~rows () =
   let tbl = D.h ~cls:"ls-table w-full caption-bottom text-sm table-fixed" () in
   let rows_el =
@@ -1005,19 +1011,26 @@ let grouped_table inst ~refresh ~rows () =
       ~cls:"ls-table-rows content overflow-x-auto force-visible-scrollbar"
       ()
   in
+  let rel = D.h ~cls:"relative" () in
   let uuids = Array.of_list rows in
   let cols = visible_columns inst in
+  D.el_append_child rel (table_header_el inst ~refresh cols);
+  let vlist = D.h ~attrs:[ ("data-testid", "virtuoso-item-list") ] () in
   if Virt_list.enabled ~virtualize:true (Array.length uuids) then
-    D.el_append_child rows_el
+    D.el_append_child vlist
       (Views_virt.rows ~key_of:Fun.id
          ~render_el:(fun i u -> row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols)
          uuids)
   else
     Array.iteri
       (fun i u ->
-        D.el_append_child rows_el
-          (row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols))
+        D.el_append_child vlist
+          (D.h ~children:[ row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols ]
+             ()))
       uuids;
+  D.el_append_child rel
+    (D.h ~children:[ D.h ~children:[ vlist ] () ] ());
+  D.el_append_child rows_el rel;
   D.el_append_child tbl rows_el;
   tbl
 
@@ -1119,17 +1132,45 @@ let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
       ~children:[ D.h ~cls:"ls-foldable-content-inner" ~children:[ body () ] () ]
       ()
   in
-  D.h ~cls:"flex flex-col" ~children:[ title; content ] ()
+  (* min-w-0: as a grid item inside .flex.flex-col.gap-2.grid the default
+     min-width:auto would expand the track to the table's max-content,
+     overflowing .page-inner — the inner .ls-table-rows owns x-scroll *)
+  D.h ~cls:"flex flex-col min-w-0" ~children:[ title; content ] ()
+
+(* cljs "No {1}" uses the group-by property's block/title, not its ident *)
+let group_prop_title inst =
+  match inst.V.group_by with
+  | Some ident -> (
+      match Hashtbl.find_opt inst.V.all_props ident with
+      | Some p ->
+          Wr.prop_text (Option.value (W.get p "block/title") ~default:W.Nil)
+      | None -> ident)
+  | None -> ""
 
 let group_title inst gv =
+  let empty_title () =
+    if inst.V.group_by = Some "block/page" then I.pages
+    else I.no_group_value (group_prop_title inst)
+  in
   match gv with
   | W.Map _ -> (
-      match Wr.ref_title gv with
-      | Some t when t <> "" -> t
-      | _ -> I.no_group_value (Option.value inst.V.group_by ~default:""))
-  | W.Nil ->
-      if inst.V.group_by = Some "block/page" then I.pages
-      else I.no_group_value (Option.value inst.V.group_by ~default:"")
+      (* wire {kind:entity|scalar|empty, uuid|value} — entity titles resolve
+         through inst.blocks (group uuids are fetched with the rows) *)
+      match W.as_keyword (Option.value (W.get gv "kind") ~default:W.Nil) with
+      | Some "entity" -> (
+          match W.as_uuid (Option.value (W.get gv "uuid") ~default:W.Nil) with
+          | Some u -> (
+              let t = row_title inst u in
+              if t = "" then u else t)
+          | None -> empty_title ())
+      | Some "scalar" ->
+          Wr.prop_text (Option.value (W.get gv "value") ~default:W.Nil)
+      | Some "empty" -> empty_title ()
+      | _ -> (
+          match Wr.ref_title gv with
+          | Some t when t <> "" -> t
+          | _ -> empty_title ()))
+  | W.Nil -> empty_title ()
   | v -> Wr.prop_text v
 
 (* ---------- body dispatch ---------- *)

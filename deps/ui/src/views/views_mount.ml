@@ -259,7 +259,19 @@ let on_document_click (ev : Ed.ev) =
       | None -> ()
       | Some btn -> (
           Ed.stop_propagation ev;
-          match Ed.el_closest btn ".custom-query-results" with
+          (* the class-Query settings button sits in the title row (cljs
+             block-title-aux) — its .custom-query-results shell is a
+             sibling inside the same .ls-block, not an ancestor *)
+          let shell =
+            match Ed.el_closest btn ".custom-query-results" with
+            | Some s -> Some s
+            | None -> (
+                match Ed.el_closest btn ".ls-block" with
+                | Some block_el ->
+                    Ed.el_query block_el ".custom-query-results"
+                | None -> None)
+          in
+          match shell with
           | None -> ()
           | Some shell -> (
               let inst =

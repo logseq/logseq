@@ -168,14 +168,21 @@ and render_query inst =
       inst.V.query_scalar_rows;
     D.el_append_child inst.V.container ul
   end
-  else if inst.V.query_rows <> [] then begin
-    (* block results → the query-result view *)
+  else if inst.V.query_rows <> [] || not inst.V.loading then begin
+    (* block results → the query-result view. cljs renders the foldable
+       live-query shell ("Live query (n)" head + view-actions + table)
+       even when the result is empty — only the loading state replaces
+       it *)
     let inner = D.h ~cls:"query-result w-full" () in
-    D.el_append_child inner (Views_head.render_head inst ~refresh);
-    (match Views_head.filters_row inst ~refresh with
-     | Some r -> D.el_append_child inner r
-     | None -> ());
-    D.el_append_child inner (Views_table.render_body inst ~refresh ());
+    let grid = D.h ~cls:"flex flex-col gap-2 grid" () in
+    D.el_append_child grid
+      (Views_table.foldable inst ~refresh ~key:"qr"
+         ~title_el:(Views_head.render_head inst ~refresh)
+         ~body:(fun () ->
+           Views_table.render_body inst ~refresh
+             ~filters:(Views_head.filters_row inst ~refresh)
+             ()));
+    D.el_append_child inner (D.h ~cls:"flex flex-col gap-2" ~children:[ grid ] ());
     D.el_append_child inst.V.container inner
   end
   else if inst.V.loading then
@@ -272,7 +279,19 @@ let load_view_data inst =
            | _ -> ());
           inst.V.loading <- false;
           let uuids =
+            (* group-value entity uuids ride along — the group header titles
+               resolve through inst.blocks like row titles *)
             row_uuids_of d
+            @ (match d with
+               | Wr.VGrouped gs ->
+                   List.filter_map
+                     (fun g -> Wr.group_value_uuid g.Wr.gv)
+                     gs
+               | Wr.VGroupedList gs ->
+                   List.filter_map
+                     (fun g -> Wr.group_value_uuid g.Wr.glv)
+                     gs
+               | _ -> [])
             @ (match inst.V.query_view with
                | W.Nil -> []
                | v -> Views_query.collect_uuids v [])

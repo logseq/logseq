@@ -118,6 +118,23 @@ let tabs_el inst ~refresh ~opacity : D.el * D.el =
 (* ---------- sorting popup ---------- *)
 
 let sorting_popup inst ~refresh anchor =
+  let set_asc s asc =
+    inst.V.sorting <-
+      List.map
+        (fun x ->
+          if x.V.s_id = s.V.s_id then { x with V.s_asc = asc } else x)
+        inst.V.sorting;
+    V.persist_sorting inst;
+    P.close_all ();
+    refresh inst
+  in
+  let remove_sort s =
+    inst.V.sorting <-
+      List.filter (fun x -> x.V.s_id <> s.V.s_id) inst.V.sorting;
+    V.persist_sorting inst;
+    P.close_all ();
+    refresh inst
+  in
   let items =
     List.concat_map
       (fun s ->
@@ -126,32 +143,41 @@ let sorting_popup inst ~refresh anchor =
         with
         | None -> []
         | Some c ->
+            let order_btn =
+              (* cljs shui/select trigger: order-button !px-2 !py-0 !h-8 *)
+              D.h ~tag:"button" ~cls:"ls-sort-order"
+                ~children:
+                  [ D.h ~tag:"span"
+                      ~text:
+                        (if s.V.s_asc then I.ascending else I.descending)
+                      ()
+                  ; D.icon "chevron-down" ]
+                ()
+            in
+            (* one click flips asc/desc (same outcome as the cljs select,
+               minus a nested popup that would detach this menu) *)
+            D.el_add_listener order_btn "click" (fun ev ->
+                Editor_dom.stop_propagation ev;
+                set_asc s (not s.V.s_asc));
+            let remove_btn = D.h ~tag:"button" ~cls:"ls-sort-x" () in
+            (match Editor_dom.tabler_svg_el "x" with
+             | Some svg -> D.el_append_child remove_btn svg
+             | None -> D.el_append_child remove_btn (D.icon "x"));
+            D.el_add_listener remove_btn "click" (fun ev ->
+                Editor_dom.stop_propagation ev;
+                remove_sort s);
             [ P.MCustom
-                (D.h ~cls:
-                   "ls-view-order-setting"
+                (D.h ~cls:"ls-view-order-setting"
                    ~children:
                      [ D.h ~cls:"ls-drag-row"
                          ~children:
                            [ D.h ~tag:"i" ~cls:"ti ti-grip-vertical" ()
-                           ; D.h ~cls:
-                               "ls-col-name"
+                           ; D.h ~cls:"ls-col-name"
                                ~text:(c.V.c_name ^ ":") ()
                            ]
                          ()
-                     ; D.h ~tag:"span" ~cls:"ls-xs"
-                         ~text:
-                           (if s.V.s_asc then I.ascending else I.descending)
-                         ~on_click:(fun _ ->
-                           inst.V.sorting <-
-                             List.map
-                               (fun x ->
-                                 if x.V.s_id = s.V.s_id then
-                                   { x with V.s_asc = not x.V.s_asc }
-                                 else x)
-                               inst.V.sorting;
-                           V.persist_sorting inst;
-                           P.close_all ();
-                           refresh inst)
+                     ; D.h ~cls:"ls-sort-right"
+                         ~children:[ order_btn; remove_btn ]
                          ()
                      ]
                    ()) ])
@@ -160,12 +186,25 @@ let sorting_popup inst ~refresh anchor =
   ignore
     (P.show_menu ~anchor ~align_end:true
        (items
-        @ [ P.MItem
-              ( I.delete_sort
-              , fun () ->
-                  inst.V.sorting <- [];
-                  V.persist_sorting inst;
-                  refresh inst ) ]))
+        @ [ P.MCustom
+              ((* cljs: ghost button, muted, pl-3, trash icon + label *)
+               let btn =
+                 D.h ~tag:"button" ~cls:"ls-sort-delete"
+                   ~children:
+                     [ (match Editor_dom.tabler_svg_el "trash" with
+                        | Some svg -> svg
+                        | None -> D.icon "trash")
+                     ; D.h ~tag:"span" ~cls:"menu-item-label"
+                         ~text:I.delete_sort ()
+                     ]
+                   ()
+               in
+               D.el_add_listener btn "click" (fun _ ->
+                   inst.V.sorting <- [];
+                   V.persist_sorting inst;
+                   P.close_all ();
+                   refresh inst);
+               btn) ] ))
 
 (* ---------- filter popup ---------- *)
 
@@ -297,6 +336,10 @@ let filter_popup inst ~refresh anchor =
   in
   ignore
     (P.show_select ~anchor ~items ~placeholder:I.filter
+       ~wrap_cls:
+         "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
+          bg-popover p-1 text-popover-foreground shadow-md"
+       ~align_end:true
        ~on_chosen:(fun it _ ->
          match
            List.find_opt (fun c -> c.V.c_id = it.P.si_value) inst.V.columns
@@ -702,7 +745,7 @@ let render_head inst ~refresh : D.el =
   D.el_append_child actions (display_type_el inst ~refresh);
   D.el_append_child actions (more_actions inst ~refresh);
   (match inst.V.kind with
-   | V.KTagPage _ -> (
+   | V.KTagPage _ | V.KPropertyPage _ -> (
        (* cljs objects.cljs: no "new object" for private class idents
           (worker sends add-object? in route-info) *)
        match !Runtime.current_page with

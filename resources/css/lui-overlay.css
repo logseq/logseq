@@ -218,6 +218,11 @@
 .menu-item-label {
   flex: 1;
   min-width: 0;
+  /* cljs menu items never wrap — keeps sub-trigger rows at 32px and
+     lets the menu reach its natural (wider) width */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ui__dropdown-menu-checkbox-item {
@@ -1139,6 +1144,17 @@ div[data-keep-selection].menu-links-wrapper {
   padding: 0.375rem;
 }
 
+/* cljs dropdown selects (view filter/sort pickers) use a compact input —
+   4px 8px, 32px row — not the command-palette's 16px padding */
+.ui__dropdown-menu-content .cp__select-input {
+  padding: 4px 8px;
+  height: 32px;
+}
+
+.ui__dropdown-menu-content .cp__select-main {
+  width: 100%;
+}
+
 .cp__select-results .menu-link {
   display: flex;
   justify-content: space-between;
@@ -1413,6 +1429,25 @@ div[data-keep-selection].menu-links-wrapper {
 .ui__dialog-main-content {
   min-height: 0;
   overflow-y: auto;
+}
+
+/* cljs ui.css: flashcards dialog sizing */
+.ui__dialog-content[label="flashcards__cp"] {
+  padding: 1.5rem 1.25rem 1rem;
+}
+
+.ui__dialog-content[label="flashcards__cp"] .ui__dialog-main-content {
+  max-height: 85vh;
+  min-height: 65vh;
+  overflow: auto;
+  padding: 0.25rem;
+}
+
+@media (min-width: 820px) {
+  .ui__dialog-content[label="flashcards__cp"] {
+    min-width: 800px;
+    max-width: min(85%, 980px);
+  }
 }
 
 .ui__dialog-content[data-base-ui-inert],
@@ -4119,6 +4154,30 @@ select.form-select {
   height: 2rem;
   padding: 0 0.5rem;
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--ls-border-color);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.ls-cards-select-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ls-cards-select-value .ls-icon-sm,
+.ls-cards-select-value svg {
+  opacity: 0.5;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
 }
 
 .ls-gap {
@@ -4348,6 +4407,10 @@ select.form-select {
 }
 
 .ls-view-tab {
+  /* cljs shui/button base: inline-flex items-center gap-1 */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: 0.875rem;
   height: 1.5rem;
   padding: 0;
@@ -4391,6 +4454,88 @@ select.form-select {
 .ls-col-name {
   color: hsl(var(--muted-foreground));
   white-space: nowrap;
+}
+
+/* cljs view-sorting-item: order pill (select-trigger chrome) + ghost x */
+.ls-sort-right {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ls-sort-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--ls-border-color);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--ls-primary-text-color);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ls-sort-order svg,
+.ls-sort-order .ls-icon-sm {
+  width: 0.75rem;
+  height: 0.75rem;
+  opacity: 0.5;
+}
+
+.ls-sort-order .ti {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.ls-sort-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  padding: 0 0.25rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.ls-sort-x:hover {
+  background: hsl(var(--muted));
+}
+
+.ls-sort-x svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* cljs: Delete sort ghost button — muted, left-aligned, trash icon */
+.ls-sort-delete {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem 0.375rem 0.75rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ls-sort-delete:hover {
+  background: hsl(var(--muted));
+}
+
+.ls-sort-delete svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .ls-xs {
@@ -4521,6 +4666,155 @@ select.form-select {
 
 .ls-vf-logic:hover {
   opacity: 1;
+}
+
+/* .page-inner is display:grid — a child with the default min-width:auto
+   expands the auto track to the objects table's max-content (~1250px),
+   so the whole tab panel overflowed the page column. min-width:0 lets
+   the chain shrink and the inner .ls-table-rows handle x-scrolling */
+.page-inner > .page-tabs,
+.page-tabs > .w-full,
+.ui__tabs-content,
+.ui__tabs-content > .ml-1,
+.ls-view-body {
+  min-width: 0;
+}
+
+/* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
+   kept in flow here so the rows list needs no top offset) —
+   .sticky-columns and the unpinned cell row are flex items on the same
+   line, not stacked block children */
+.ls-table-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: fit-content;
+  min-width: 100%;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.sticky-columns {
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  background: var(--lx-gray-01, var(--ls-primary-background-color));
+}
+
+.ls-table-header-cell {
+  cursor: pointer;
+  text-align: left;
+  vertical-align: middle;
+  font-weight: 500;
+  color: var(--muted-foreground, var(--ls-secondary-text-color));
+  border-right: 1px solid var(--ls-border-color);
+}
+
+/* cljs header button is h-8 (32px); .ls-btn-default's 2.5rem height
+   beats the h-8 utility on specificity */
+.ls-table-header-cell > .ui__button {
+  height: 2rem !important;
+  overflow: hidden;
+}
+
+/* cljs .ls-table-resize-handle: absolute col-resize grip on the cell's
+   right edge, invisible until hover */
+.ls-table-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -0.125rem;
+  width: 0.25rem;
+  height: 100%;
+  cursor: col-resize;
+  background: var(--accent-08, var(--ls-accent-color));
+  border-radius: 0.25rem;
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+.ls-table-resize-handle:hover {
+  opacity: 0.7;
+}
+
+.ls-table-resize-handle:active {
+  opacity: 1;
+}
+
+/* cljs .ls-table-row is a hard 33px (min/max), not the .ls-block
+   padding box used by outline rows */
+.ls-table-row.ls-block {
+  height: 33px;
+  min-height: 33px;
+  max-height: 33px;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+}
+
+.ls-table-row div,
+.ls-table-row span,
+.ls-table-row a {
+  white-space: nowrap;
+}
+
+.ls-table-row .table-block-title,
+.ls-table-row .block-head-wrap a {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+/* row wrappers cljs pins to the same 33px */
+.ls-table-rows div[data-index],
+.ls-table-rows div[data-item-index] {
+  height: 33px;
+  min-height: 33px;
+  max-height: 33px;
+  overflow: hidden;
+}
+
+.ls-table-footer {
+  position: absolute;
+  left: 0;
+  bottom: 8px;
+  width: 100%;
+}
+
+.ls-table-rows div[data-viewport-type='window'] {
+  min-width: 100%;
+  width: auto !important;
+}
+
+/* cljs .ls-table-cell { @apply h-full max-h-[33px] overflow-hidden } —
+   caps row height and clips cell content */
+.ls-table-cell {
+  height: 100%;
+  max-height: 33px;
+  overflow: hidden;
+}
+
+.ls-table-cell > div {
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* cljs ui.css: fold carets hang 27px into the left gutter instead of
+   taking inline width in the foldable header */
+.ls-foldable-title-control {
+  margin-left: -27px;
+}
+
+/* cljs ls-view-head: count/tabs left, view-actions right on one row
+   (flex flex-1 flex-nowrap items-center justify-between gap-1) */
+.ls-view-head {
+  display: flex;
+  flex: 1 1 0%;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .ls-view-head-left {

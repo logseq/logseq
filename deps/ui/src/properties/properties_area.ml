@@ -52,6 +52,7 @@ let property_icon_name row =
    the bottom pill *)
 let property_key_inner row ~on_key_click =
   let inner = mk ~cls:"property-key-inner jtrigger-view" "div" in
+  (* cljs .property-icon > button.property-m > type icon or bullet *)
   let icon_wrap = mk ~cls:"property-icon" "div" in
   let btn =
     mk "button" ~cls:"flex items-center property-m"

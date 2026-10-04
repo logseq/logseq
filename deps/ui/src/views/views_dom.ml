@@ -71,6 +71,8 @@ type rect
 external window_inner_height : float = "innerHeight"
   [@@mel.scope "window"]
 
+external window_inner_width : float = "innerWidth" [@@mel.scope "window"]
+
 external el_rect : el -> rect = "getBoundingClientRect" [@@mel.send]
 
 external rect_top : rect -> float = "top" [@@mel.get]
