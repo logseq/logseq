@@ -1,19 +1,23 @@
 (rule
- (copy ../src/app/action.ml action.ml))
+ (copy ../subs/action.ml action.ml))
 (rule
  (copy ../src/app/boot.ml boot.ml))
 (rule
- (copy ../src/app/decode.ml decode.ml))
+ (copy ../subs/decode.ml decode.ml))
 (rule
  (copy ../src/app/graph.ml graph.ml))
 (rule
- (copy ../src/app/model.ml model.ml))
+ (copy ../subs/model.ml model.ml))
 (rule
- (copy ../src/app/page_delta.ml page_delta.ml))
+ (copy ../subs/page_delta.ml page_delta.ml))
+(rule
+ (copy ../subs/subs.ml subs.ml))
+(rule
+ (copy ../subs/subs_state.ml subs_state.ml))
 (rule
  (copy ../src/app/runtime.ml runtime.ml))
 (rule
- (copy ../src/app/update.ml update.ml))
+ (copy ../subs/update.ml update.ml))
 (rule
  (copy ../src/app/view.ml view.ml))
 (rule
@@ -45,11 +49,11 @@
 (rule
  (copy ../src/core/overlay.ml overlay.ml))
 (rule
- (copy ../src/core/promise_ext.ml promise_ext.ml))
+ (copy ../subs/promise_ext.ml promise_ext.ml))
 (rule
  (copy ../src/core/ui_parts.ml ui_parts.ml))
 (rule
- (copy ../src/core/wire.ml wire.ml))
+ (copy ../subs/wire.ml wire.ml))
 (rule
  (copy ../src/dialogs/dialogs_state.ml dialogs_state.ml))
 (rule

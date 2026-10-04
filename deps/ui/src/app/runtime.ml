@@ -7,13 +7,13 @@ let app_flush : (unit -> unit) ref = ref (fun () -> ())
 
 (* mirrors of model fields for non-view consumers (sdk bridge, events) *)
 let current_repo : string option ref = ref None
-let current_page : Model.page option ref = ref None
+(* the subscribed-data stores live in the subs package (logseq_subs) —
+   these aliases keep every consumer on the same refs *)
+let current_page = Subs_state.current_page
 let current_route : Model.route option ref = ref None
 
 let repo () = Option.value !current_repo ~default:""
-(* journals view renders several pages at once — editor actions like
-   append/find need access to every journal item's blocks *)
-let current_journals : Model.page list ref = ref []
+let current_journals = Subs_state.current_journals
 (* set by the router per route — lets outliner_ops refresh views whose
    content isn't covered by current_page (e.g. the journals list) *)
 let reload_current_view : (unit -> unit Js.Promise.t) ref =
@@ -35,20 +35,8 @@ let refresh_after_ops : (unit -> unit Js.Promise.t) ref =
 let refresh_property_areas : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
 
-(* "sync-db-changes" subscribers — one ordered list (drained by
-   Worker_events.dispatch) instead of each area monkey-patching
-   Worker_client.on_message. A failing handler is logged and the rest
-   still run. *)
-let sync_subs : (unit -> unit) list ref = ref []
-
-let on_sync f = sync_subs := !sync_subs @ [ f ]
-
-let run_sync_subs () =
-  List.iter
-    (fun f ->
-      try f ()
-      with e -> Platform.console_error ("sync-db-changes handler failed", e))
-    !sync_subs
+let on_sync = Subs_state.on_sync
+let run_sync_subs = Subs_state.run_sync_subs
 
 (* the open graph's worker uuid — carried as ?graph-id=<uuid> inside the
    location hash (e.g. "#/page/u?graph-id=u") like cljs
@@ -99,12 +87,7 @@ let take_nav_mark () =
   nav_user_initiated := false;
   v
 
-(* generation counter for async page loads — several Page_loaded
-   producers (route loads, refresh_page, block zoom) can be in flight at
-   once and their fetches can resolve out of order; bump on initiation
-   and only commit when the captured generation is still current, so the
-   latest-initiated load always wins *)
-let load_gen : int ref = ref 0
+let load_gen = Subs_state.load_gen
 
 (* set by graphs_ops (avoids a Worker_events -> Graphs_ops -> Boot
    module cycle): remote-graph-gone broadcast refreshes the remote
@@ -124,40 +107,16 @@ let on_navigate : (unit -> unit) ref = ref (fun () -> ())
    refresh them without a routing -> outliner_ops cycle *)
 let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
 
-let journal_item_key (p : Model.page) =
-  Option.value p.Model.page_uuid ~default:p.Model.page_title
-
-(* the mounted journals stream's data signal — appended paginated days
-   and delta-spliced days swap in through this array so the stream
-   (and the scroll offset) survives; page.ml creates it lazily on
-   mount *)
-let journals_items : Model.page array Signal.state option ref = ref None
-
-let journals_sig scheduler : Model.page array Signal.state =
-  match !journals_items with
-  | Some s -> s
-  | None ->
-      (* Journals_loaded can land before the list mounts — a
-         push_journals_items before then is a no-op, so seed the
-         signal from the authoritative list, not an empty array *)
-      let s = Signal.state scheduler (Array.of_list !current_journals) in
-      journals_items := Some s;
-      s
-
-let push_journals_items (js : Model.page list) =
-  match !journals_items with
-  | Some s -> Signal.set s (Array.of_list js)
-  | None -> ()
+let journal_item_key = Subs_state.journal_item_key
+let journals_sig = Subs_state.journals_sig
+let push_journals_items = Subs_state.push_journals_items
 
 (* Router clears its loading_route dedupe when a route load commits or
    fails (avoids a Runtime -> Router cycle) *)
 let nav_load_done : (unit -> unit) ref = ref (fun () -> ())
 
-(* one-shot (page_uuid, callback) armed before a hash navigation — runs
-   when that page's Page_loaded lands; consumed by fire or load failure *)
-let after_page_load : (string * (unit -> unit)) option ref = ref None
-
-let on_page_loaded uuid f = after_page_load := Some (uuid, f)
+let after_page_load = Subs_state.after_page_load
+let on_page_loaded = Subs_state.on_page_loaded
 
 (* mirrors Model.unlinked_open so fetch paths outside the model (router,
    outliner refresh) can gate the full-title unlinked scan on the
