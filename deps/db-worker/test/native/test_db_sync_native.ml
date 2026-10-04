@@ -13734,6 +13734,67 @@ let test_reopened_graph_keeps_max_tx_of_pipeline_transaction () =
               check "stored checksum still covers the reopened graph"
                 (Sync_client_op.get_local_checksum test_repo = Some "stale"))))
 
+(* The display projection reads the server conn's storage pages lazily
+   (each PSet carries its own set_storage) but must never reach a
+   conn-level store path: PSet.store writes index nodes through the set's
+   own storage, so context.store on the display conn persists pending
+   nodes into the real pages — a store wrapper cannot intercept it —
+   and re-adopts the indexes as deferred roots over unwritten addresses.
+   storage_ref must be None so transact/apply_report/reset_schema stay
+   out of the store path entirely. *)
+let test_display_conn_never_persists_pending_nodes () =
+  preserve_state (fun () ->
+      let storage = Datascript.memory_storage () in
+      let schema = Db_schema.schema () in
+      ignore
+        (Datascript.conn_from_datoms ~schema ~storage
+           [ Datascript.datom ~e:1 ~a:"block/title" ~v:(String "confirmed") ()
+           ; Datascript.datom ~e:1 ~a:"block/tx-id" ~v:(Int64 100L) () ]);
+      let server =
+        match Datascript.restore_conn storage with
+        | Some c -> c
+        | None -> failwith "restore-conn failed"
+      in
+      let addresses_before =
+        List.sort compare (storage.storage_list_addresses ())
+      in
+      let display =
+        Sync_apply.display_conn_from_server (Datascript.db server)
+      in
+      (* card-one update plus enough tx datoms to exceed the tail
+         compaction threshold — pre-fix each tx grew conn.storage_tail
+         and context.store eventually persisted display index nodes into
+         the shared pages *)
+      for i = 1 to 20 do
+        ignore
+          (Db_transact.transact display
+             [ db_add (Wire.Int 1) "block/title"
+                 (Wire.String ("pending-" ^ string_of_int i))
+             ; db_add (Wire.Int (100 + i)) "block/title"
+                 (Wire.String ("extra-" ^ string_of_int i)) ]
+             [])
+      done;
+      check "display sees pending card-one update"
+        (Datascript.datoms (Datascript.db display) Eavt ~e:1
+           ~a:"block/title" ()
+         |> Seq.map (fun (d : datom) -> d.v)
+         |> List.of_seq
+         = [ String "pending-20" ]);
+      check "display tx-id stays single-valued"
+        (Datascript.datoms (Datascript.db display) Eavt ~e:1
+           ~a:"block/tx-id" ()
+         |> Seq.length
+         = 1);
+      check "server conn unaffected by pending title"
+        (Datascript.datoms (Datascript.db server) Eavt ~e:1
+           ~a:"block/title" ()
+         |> Seq.map (fun (d : datom) -> d.v)
+         |> List.of_seq
+         = [ String "confirmed" ]);
+      check "no durable writes from display conn"
+        (List.sort compare (storage.storage_list_addresses ())
+         = addresses_before))
+
 (* old-model upgrade: pending rows whose forward datoms were persisted
    on the conn get un-applied at split, so the server conn becomes
    confirmed-only while the display projection still replays them *)
@@ -14376,6 +14437,8 @@ let () =
         ; Alcotest.test_case
             "reopened-graph-keeps-max-tx-of-pipeline-transaction-test"
             `Quick test_reopened_graph_keeps_max_tx_of_pipeline_transaction
+        ; Alcotest.test_case "display-conn-never-persists-pending-nodes"
+            `Quick test_display_conn_never_persists_pending_nodes
         ; Alcotest.test_case
             "local-graph-open-does-not-recompute-checksum"
             `Quick test_local_graph_open_does_not_recompute_checksum
