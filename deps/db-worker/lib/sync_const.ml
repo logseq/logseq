@@ -23,8 +23,6 @@ let ignore_entities_when_init_upload : string list =
 
 let encrypt_attr_set : string list = [ "block/title"; "block/name" ]
 
-let is_ignored_attr a = List.mem a ignore_attrs_when_syncing
-
 let is_ignored_entity ident = List.mem ident ignore_entities_when_init_upload
 
 let is_encrypt_attr a = List.mem a encrypt_attr_set

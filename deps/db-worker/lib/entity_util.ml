@@ -37,6 +37,3 @@ let object_ (e : entity) : bool =
   && Ldb.value e "block/parent" <> None
 
 let built_in (e : entity) = Ldb.built_in e
-
-let get_pages_by_name (db : db) (page_name : string) : datom list =
-  Ldb.pages_by_name db page_name

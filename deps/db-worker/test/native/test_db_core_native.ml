@@ -68,7 +68,6 @@
      set-page-favorite-accepts-repeated-false-values-test
      reorder-favorites-is-idempotent-test
      get-page-route-info
-     get-block-by-page-name-and-block-route-name
      reset-db-replaces-conn-db
      get-class-objects-returns-entities-for-class-test
      get-all-page-titles-returns-all-sorted-page-titles
@@ -410,18 +409,18 @@ let test_db_core_registers_all_db_core_thread_apis () =
     ; "thread-api/search-upsert-blocks"; "thread-api/search-delete-blocks"; "thread-api/search-truncate-tables"
     ; "thread-api/search-build-blocks-indice"; "thread-api/search-build-blocks-indice-in-worker"; "thread-api/search-build-pages-indice"
     ; "thread-api/apply-outliner-ops"; "thread-api/sync-app-state"; "thread-api/markdown-mirror-set-enabled"
-    ; "thread-api/markdown-mirror-flush"; "thread-api/markdown-mirror-regenerate"; "thread-api/export-get-debug-datoms"
+    ; "thread-api/markdown-mirror-regenerate"; "thread-api/export-get-debug-datoms"
     ; "thread-api/export-get-all-page->content"; "thread-api/validate-db"; "thread-api/recompute-checksum-diagnostics"
     ; "thread-api/export-edn"; "thread-api/import-edn"; "thread-api/get-fsrs-due-card-block-ids"
     ; "thread-api/get-fsrs-card-block-ids"; "thread-api/get-view-data"; "thread-api/get-class-objects"; "thread-api/validate-block-tag"
     ; "thread-api/convert-tag-to-page"; "thread-api/convert-page-to-tag"; "thread-api/set-page-favorite"
-    ; "thread-api/reorder-favorites"; "thread-api/get-page-route-info"; "thread-api/get-block-by-page-name-and-block-route-name"
+    ; "thread-api/reorder-favorites"; "thread-api/get-page-route-info"
     ; "thread-api/query-custom"; "thread-api/query-dsl-query"; "thread-api/query-dsl-custom-query"
     ; "thread-api/get-journal-page-by-day"; "thread-api/get-latest-journals"; "thread-api/page-exists?"
     ; "thread-api/get-case-page"; "thread-api/get-tags-by-name"; "thread-api/resolve-query-inputs"
     ; "thread-api/get-block-parent"; "thread-api/get-block-page-info"; "thread-api/ensure-comments-area"
     ; "thread-api/ensure-comments-area-for-blocks"; "thread-api/delete-comment"; "thread-api/get-comment-threads-for-block"
-    ; "thread-api/get-comment-thread-block-uuids"; "thread-api/get-block-immediate-children"; "thread-api/get-block-sibling"
+    ; "thread-api/get-block-immediate-children"; "thread-api/get-block-sibling"
     ; "thread-api/get-page-blocks-tree"; "thread-api/get-block-class-default-properties"; "thread-api/get-class-properties"
     ; "thread-api/get-all-classes"; "thread-api/get-structured-children"; "thread-api/get-class-extends-children-tree"
     ; "thread-api/get-property-node-selector-data"; "thread-api/get-view-filter-data"; "thread-api/get-alias-source-page"
@@ -2560,49 +2559,6 @@ let test_get_page_route_info () =
   in
   check "route-info non-nil" (result <> Wire.Nil)
 
-(* (deftest get-block-by-page-name-and-block-route-name ...) *)
-let test_get_block_by_page_and_route () =
-  let conn = create_conn () in
-  let page_uuid = "b1b1b1b1-0000-0000-0000-000000000001"
-  and heading_uuid = "b1b1b1b1-0000-0000-0000-000000000002"
-  and plain_uuid = "b1b1b1b1-0000-0000-0000-000000000003" in
-  ignore
-    (transact_maps conn
-       [ [ "block/uuid", Uuid page_uuid
-         ; "block/title", Str "p1"
-         ; "block/name", Str "p1"
-         ; "block/tags", Vec [ Kw "logseq.class/Page" ] ] ]);
-  ignore
-    (transact_maps conn
-       [ [ "block/uuid", Uuid heading_uuid
-         ; "block/title", Str "Heading block"
-         ; "block/page", Vec [ Kw "block/uuid"; Uuid page_uuid ]
-         ; "block/parent", Vec [ Kw "block/uuid"; Uuid page_uuid ]
-         ; "block/order", Str "a"
-         ; "logseq.property/heading", Int64 1 ]
-       ; [ "block/uuid", Uuid plain_uuid
-         ; "block/title", Str "Plain block"
-         ; "block/page", Vec [ Kw "block/uuid"; Uuid page_uuid ]
-         ; "block/parent", Vec [ Kw "block/uuid"; Uuid page_uuid ]
-         ; "block/order", Str "b" ] ]);
-  register_conn conn;
-  let result =
-    api "get-block-by-page-name-and-block-route-name"
-      [ Wire.String test_repo; Wire.String "p1"; Wire.String "Heading block" ]
-  in
-  check "heading route uuid"
-    (match result with
-     | Wire.Map m -> wire_get "block/uuid" m = Some (Wire.Uuid heading_uuid)
-     | _ -> false);
-  check "non-heading route nil"
-    (api "get-block-by-page-name-and-block-route-name"
-       [ Wire.String test_repo; Wire.String "p1"; Wire.String "Plain block" ]
-     = Wire.Nil);
-  check "missing page nil"
-    (api "get-block-by-page-name-and-block-route-name"
-       [ Wire.String test_repo; Wire.String "missing"; Wire.String "x" ]
-     = Wire.Nil)
-
 (* ---------- reset-db / class-objects / page-titles ---------- *)
 
 (* (deftest reset-db-replaces-conn-db ...) *)
@@ -3491,8 +3447,6 @@ let cases =
   ; Alcotest.test_case "reorder-favorites-is-idempotent-test" `Quick
       test_reorder_favorites
   ; Alcotest.test_case "get-page-route-info" `Quick test_get_page_route_info
-  ; Alcotest.test_case "get-block-by-page-name-and-block-route-name" `Quick
-      test_get_block_by_page_and_route
   ; Alcotest.test_case "reset-db-replaces-conn-db" `Quick test_reset_db
   ; Alcotest.test_case "get-class-objects-returns-entities-for-class-test" `Quick
       test_get_class_objects

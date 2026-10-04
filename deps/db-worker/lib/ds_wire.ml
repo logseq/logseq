@@ -348,21 +348,6 @@ let wire_of_query_output (output : query_output) : Wire.t =
   | Query_tuple_map (Some pairs) -> wire_map_of_pairs pairs
   | Query_tuple_map None -> Wire.nil
 
-(* ---- tx_report -> transit ---- *)
-
-let transit_of_tx_report (r : tx_report) : Wire.t =
-  Wire.Map
-    [
-      (Wire.Keyword "db-before", transit_of_serializable_db (Datascript.serializable r.db_before));
-      (Wire.Keyword "db-after", transit_of_serializable_db (Datascript.serializable r.db_after));
-      ( Wire.Keyword "tx-data",
-        Wire.Array (List.map (fun d -> Wire.Tagged ("datascript/Datom", transit_of_datom d)) r.tx_data) );
-      ( Wire.Keyword "tempids",
-        Wire.Map (List.map (fun (t, e) -> (Wire.String t, Wire.Int e)) r.tempids) );
-      ( Wire.Keyword "tx-meta",
-        Wire.Map (List.map (fun (a, v) -> (Wire.Keyword a, transit_of_value v)) r.tx_meta) );
-    ]
-
 (* ---- query inputs ---- *)
 
 let query_arg_of_transit (t : Wire.t) : query_arg =
@@ -403,11 +388,6 @@ let rec edn_of_query_form (f : query_form) : string =
   | QueryFormMap kvs ->
       let pair (k, v) = edn_of_query_form k ^ " " ^ edn_of_query_form v in
       "{" ^ String.concat " " (List.map pair kvs) ^ "}"
-
-let query_result_of_transit (t : Wire.t) : query_result =
-  match value_of_transit t with
-  | Keyword s -> Result_attr s
-  | v -> Result_value v
 
 (* Canonical string key for a wire scalar (ui-request ids, state keys). *)
 let wire_key (t : Wire.t) : string =
@@ -559,8 +539,3 @@ let transit_of_tx_op (op : tx_op) : Wire.t =
 let transit_of_tx_meta (meta : tx_meta) : Wire.t =
   Wire.Map
     (List.map (fun (a, v) -> (Wire.Keyword a, transit_of_value v)) meta)
-
-let transit_of_tx_result (tx_data : tx_op list) (tx_meta : tx_meta) : Wire.t =
-  Wire.Map
-    [ (Wire.Keyword "tx-data", Wire.Array (List.map transit_of_tx_op tx_data))
-    ; (Wire.Keyword "tx-meta", transit_of_tx_meta tx_meta) ]
