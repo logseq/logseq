@@ -306,7 +306,7 @@ let select_item_row it chosen multiple sel_set =
 (* A select popup; on_chosen item selected? -> unit; on_apply for multiple *)
 let show_select ~anchor ~items ~placeholder ?(multiple = false)
     ?(on_apply = fun _ -> ()) ?(extra : (unit -> D.el option) option)
-    ?(wrap_cls = "") ~on_chosen () =
+    ?(wrap_cls = "") ?(align_end = false) ~on_chosen () =
   close_all ();
   let sel_values : string list ref = ref [] in
   let sel_mem s v = List.mem v s in
@@ -437,7 +437,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   D.el_append_child inner results_wrap;
   if multiple then D.el_append_child inner apply_wrap;
   D.el_append_child document_body wrap;
-  position_content ~anchor ~content:wrap ~align_end:false ~submenu:false;
+  position_content ~anchor ~content:wrap ~align_end ~submenu:false;
   push_popup wrap;
   Editor_dom.set_timeout (fun () -> Editor_dom.el_focus input) 0
 
