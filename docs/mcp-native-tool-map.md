@@ -32,7 +32,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `findOrphans` | page UUID | parent/page comparison query | query adapter | DB read |
 | `getTagUUID` | title | `getTagsByName` | API tag lookup | DB read |
 | `getTag` | tag UUID | UUID/title/name projection query | existing `logseq.DB.getTag` API; MCP preserves its full PageEntity fields, including UUID/title/name and richer id/ident metadata | production route switched; DB API and MCP pass-through tests pass; live validation pending |
-| `getTagUsers` | tag UUID | query | query adapter | DB read |
+| `getTagUsers` | tag UUID | direct `:block/tags` holder query; returns UUID/title/name/page | dedicated `logseq.DB.getTagUsers` API; excludes inherited-only holders to preserve contract | production route switched; DB API, MCP, and capability tests pass; live validation pending |
 | `getPropertyIndent` | property title | property-class query | query adapter | DB read |
 | `getProperyUsers` | property ident | query + value resolution | query adapter | DB read |
 
@@ -40,10 +40,10 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 
 | Tool | Inputs / key contract | Current reference route | First native route | Later candidate |
 |---|---|---|---|---|
-| `listPages` | `with_counts?`, `limit?` | query; optional count indexes | query adapter | DB read |
+| `listPages` | `expand?` | existing DB list API | same exported `list_pages` API via `logseq.DB.listPages`; options and payload unchanged | production route switched; local route/API tests pass; live validation pending |
 | `listJournals` | `with_counts?`, `limit?` | query; optional count indexes | query adapter | DB read |
-| `listTags` | none | `getAllTags` | existing API | DB read |
-| `listProperties` | none | `getAllProperties` | existing API | DB read |
+| `listTags` | `expand?` | existing `list_tags` wrapper | same exported list API via `logseq.DB.listTags`; preserve expand option and namespaced payload | production route switched; local route and API tests pass; live validation pending |
+| `listProperties` | `expand?` | existing `list_properties` wrapper | same exported list API via `logseq.DB.listProperties`; preserve expand option and namespaced payload | production route switched; local route and API tests pass; live validation pending |
 | `listClosedValues` | none | reverse closed-value query | query adapter | DB read |
 | `listOrphanTags` | none | missing reverse tag query | query adapter | DB read |
 | `listOrphanProperties` | none | one query per property ident | query adapter | DB read |

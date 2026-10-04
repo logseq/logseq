@@ -45,6 +45,20 @@
                               "logseq.DB.getBlock"
                               (clj->js (sdk-utils/normalize-keyword-for-json
                                    (d/pull @conn '[*] [:block/uuid (uuid (first args))]) true))
+                              "logseq.DB.getTag"
+                              (when (d/q '[:find ?tag . :in $ ?uuid
+                                           :where [?tag :block/uuid ?uuid] [?tag :block/tags 159]]
+                                         @conn (uuid (first args)))
+                                (clj->js (sdk-utils/normalize-keyword-for-json
+                                          (d/pull @conn '[*] [:block/uuid (uuid (first args))]) true)))
+                              "logseq.DB.getTagUsers"
+                              (let [tag-uuid (uuid (first args))
+                                    users (d/q '[:find [(pull ?holder [:block/uuid :block/title :block/name
+                                                                        :block/page]) ...]
+                                                :in $ ?tag-uuid
+                                                :where [?tag :block/uuid ?tag-uuid] [?holder :block/tags ?tag]]
+                                              @conn tag-uuid)]
+                                (clj->js (sdk-utils/normalize-keyword-for-json users false)))
                 "logseq.DB.deletePage"
                 (let [entity (d/entity @conn [:block/uuid (uuid (first args))])]
                   (if (some #(= 159 (:db/id %)) (:block/tags entity))
@@ -231,7 +245,7 @@
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
 (deftest uuid-tag-and-reference-queries-resolve-native-entity-ids
-  (let [{:keys [page-uuid block-uuid api conn]} (page-fixture)
+  (let [{:keys [page-uuid block-uuid api conn calls]} (page-fixture)
         tag-uuid "00000000-0000-4000-8000-000000000166"]
     (d/transact! conn [{:db/id 166 :block/uuid (uuid tag-uuid) :block/title "Test Tag" :block/tags [159]}
                       {:db/id 160 :block/tags [166]}
@@ -244,6 +258,7 @@
             (is (true? (:found tag)))
             (is (= tag-uuid (:uuid tag)))
             (is (= [page-uuid] (mapv :uuid holders)))
+            (is (some #(= "logseq.DB.getTagUsers" (first %)) @calls))
             (is (= [block-uuid] (mapv :uuid (:refs links))))
             (is (= block-uuid (get-in links [:property_values 0 :holder :uuid])))
             (js/queueMicrotask done))
@@ -1020,10 +1035,12 @@
     (is (= :ok (mcp-compat/search-blocks api #js {"searchTerm" "needle"})))
     (is (= ["logseq.cli.getPageData" ["Inbox"]]
            (first @calls)))
-    (is (= "logseq.cli.listPages" (first (second @calls))))
+    (is (= "logseq.DB.listPages" (first (second @calls))))
     (is (= true (aget (first (second (second @calls))) "expand")))
-    (is (= "logseq.cli.listTags" (first (nth @calls 2))))
-    (is (= "logseq.cli.listProperties" (first (nth @calls 3))))
+    (is (= "logseq.DB.listTags" (first (nth @calls 2))))
+    (is (= false (aget (first (second (nth @calls 2))) "expand")))
+    (is (= "logseq.DB.listProperties" (first (nth @calls 3))))
+    (is (= true (aget (first (second (nth @calls 3))) "expand")))
     (is (= ["logseq.app.search" "needle"]
           [(first (nth @calls 4)) (first (second (nth @calls 4)))]))))
 
@@ -1045,6 +1062,9 @@
                     (is (some #{"getTagUUID"} (:unknown result)))
                     (is (some #(= "logseq.DB.getTag" (first %)) @calls))
                     (is (some #(= "logseq.DB.getBlock" (first %)) @calls))
+                    (is (some #(= "logseq.DB.listPages" (first %)) @calls))
+                    (is (some #(= "logseq.DB.listTags" (first %)) @calls))
+                    (is (some #(= "logseq.DB.listProperties" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))

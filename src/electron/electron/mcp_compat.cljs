@@ -287,16 +287,9 @@
 
     (defn get-tag-users
       [api-fn args]
-      (let [tag-uuid (aget args "tag_uuid")
-            query "[:find [(pull ?holder [:block/uuid :block/title :block/name
-                                           :block/page]) ...]
-                     :in $ ?tag-uuid
-                     :where [?tag :block/uuid ?tag-uuid] [?holder :block/tags ?tag]]"]
-        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query (uuid-query-input tag-uuid)])
-                users (js->clj result :keywordize-keys true)]
-          (if (and (= 1 (count users)) (vector? (first users)))
-            (first users)
-            users))))
+      (let [tag-uuid (aget args "tag_uuid")]
+        (p/let [result (api-fn "logseq.DB.getTagUsers" [tag-uuid])]
+          (js->clj result :keywordize-keys true))))
 
     (defn get-block-uuids
       [api-fn args]
@@ -2211,7 +2204,7 @@
         (block-result block-uuid (if block [block] []))))))
 (defn list-pages
   [call-api-fn args]
-  (call-api-fn "logseq.cli.listPages" [#js {:expand (aget args "expand")}]))
+  (call-api-fn "logseq.DB.listPages" [#js {:expand (aget args "expand")}]))
 
 (defn- query-result-rows
   [result]
@@ -2625,11 +2618,11 @@
 
 (defn list-tags
   [call-api-fn args]
-  (call-api-fn "logseq.cli.listTags" [#js {:expand (aget args "expand")}]))
+  (call-api-fn "logseq.DB.listTags" [#js {:expand (aget args "expand")}]))
 
 (defn list-properties
   [call-api-fn args]
-  (call-api-fn "logseq.cli.listProperties" [#js {:expand (aget args "expand")}]))
+  (call-api-fn "logseq.DB.listProperties" [#js {:expand (aget args "expand")}]))
 
 (defn search-blocks
   [call-api-fn args]
@@ -2752,12 +2745,12 @@
                                  :diagnostic "Unresolved or ambiguous placeholders remain unchanged. Inspect unverified writes before retrying."})))))))
 
 (def ^:private capability-tool-routes
-  {:listPages ["logseq.cli.listPages"]
+  {:listPages ["logseq.DB.listPages"]
    :listJournals ["logseq.DB.datascriptQuery"]
    :getPage ["logseq.cli.getPageData"]
    :searchBlocks ["logseq.app.search"]
-   :listTags ["logseq.cli.listTags"]
-   :listProperties ["logseq.cli.listProperties"]
+  :listTags ["logseq.DB.listTags"]
+  :listProperties ["logseq.DB.listProperties"]
    :getPageUUID ["logseq.DB.datascriptQuery"]
    :pageStats ["logseq.DB.datascriptQuery"]
    :inspectPage ["logseq.DB.datascriptQuery"]
@@ -2782,9 +2775,9 @@
    :importPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.insertBatchBlock" "logseq.DB.removeBlock"]
    :repairLinks ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.createTag" "logseq.DB.updateBlock"]
    :getTag ["logseq.DB.getTag"]
+   :getTagUsers ["logseq.DB.getTagUsers"]
    :getPropertyIndent ["logseq.DB.datascriptQuery"]
-  :getBlock ["logseq.DB.getBlock"]
-   :getTagUsers ["logseq.DB.datascriptQuery"]
+   :getBlock ["logseq.DB.getBlock"]
    :getBlockUUID ["logseq.DB.datascriptQuery"]
    :getBlockTree ["logseq.DB.datascriptQuery"]
    :findBacklinks ["logseq.DB.datascriptQuery"]
@@ -2809,11 +2802,12 @@
   {"logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
   "logseq.DB.getBlock" ["__mcp_capability_probe__" #js {:includeChildren false :includePage true}]
   "logseq.DB.getTag" ["__mcp_capability_probe__"]
+  "logseq.DB.getTagUsers" ["00000000-0000-4000-8000-000000000999"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
-   "logseq.cli.listPages" [#js {}]
-   "logseq.cli.listTags" [#js {}]
-   "logseq.cli.listProperties" [#js {}]
+  "logseq.DB.listPages" [#js {:expand false}]
+  "logseq.DB.listTags" [#js {:expand false}]
+  "logseq.DB.listProperties" [#js {:expand false}]
    "logseq.cli.getPageData" ["__mcp_capability_probe__"]
    "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
    "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]

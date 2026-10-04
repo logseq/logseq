@@ -972,7 +972,16 @@ export interface IDBProxy {
 
   getBlock: IEditorProxy['getBlock']
   getTag: IEditorProxy['getTag']
+  getTagUsers: (tagUuid: BlockUUID) => Promise<Array<BlockEntity | PageEntity>>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<BlockEntity | null>
+  listTags: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>
+  listProperties: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>
+  listPages: (options?: Partial<{ expand: boolean }>) => Promise<Array<{
+    'block/title': string
+    'block/uuid': BlockUUID
+    'block/created-at'?: number
+    'block/updated-at'?: number
+  }>>
 
   /**
    * Hook all transaction data of DB.

@@ -328,6 +328,18 @@
              (when (entity/class? tag)
                (sdk-utils/result->js tag)))))
 
+(defn get-tag-users [tag-uuid]
+  (let [repo (state/get-current-repo)
+        tag-uuid (sdk-utils/uuid-or-throw-error tag-uuid)]
+    (p/let [users (db-async/<q repo {}
+                               '[:find [(pull ?holder [:block/uuid :block/title :block/name
+                                                      :block/page]) ...]
+                                 :in $ ?tag-uuid
+                                 :where [?tag :block/uuid ?tag-uuid]
+                                        [?holder :block/tags ?tag]]
+                               tag-uuid)]
+      (sdk-utils/result->js users))))
+
 (defn get-tags-by-name [name]
   (p/let [tags (get-tags name)]
     (sdk-utils/result->js tags)))
