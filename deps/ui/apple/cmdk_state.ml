@@ -832,15 +832,18 @@ let open_palette ?(move = false) st =
 
 (* Semantic triggers (toolbar search button, menubar) have no DOM node
    to click through — open the current palette instance directly. *)
-let open_latest ?(move = false) () =
-  match !latest_t with Some st -> open_palette ~move st | None -> ()
-
 let close st =
   let v = get st in
   (* cljs persist-cmdk-query-state! runs on unmount and every committed
      action; move mode is outside the default context *)
   if not v.move_mode then save_last_search v;
   set_in st (fun v -> { v with open_ = false })
+
+let open_latest ?(move = false) () =
+  match !latest_t with
+  | Some st ->
+      if (get st).open_ && not move then close st else open_palette ~move st
+  | None -> ()
 
 let clear_filter st =
   set_in st (fun v -> { v with filter = None });

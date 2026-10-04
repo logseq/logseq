@@ -1365,4 +1365,8 @@ let hl_group st =
 (* open the current palette without a handle — global shortcuts
    (mod+k, mod+shift+p) fire before any caller holds st *)
 let open_latest ?(move = false) () =
-  match !latest_t with Some st -> open_palette ~move st | None -> ()
+  match !latest_t with
+  | Some st ->
+      (* mod+k toggles; move mode always switches the open palette over *)
+      if (get st).open_ && not move then close st else open_palette ~move st
+  | None -> ()
