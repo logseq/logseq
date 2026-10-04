@@ -12,6 +12,7 @@ type fmt =
 type t =
   { page_uuid : string option
   ; page_db_id : int option
+  ; block_uuids : string list
   ; fmt : fmt
   ; content : string option
   ; copied : bool
@@ -62,6 +63,7 @@ let defaults () =
   let nl, ob, lvl = stored_other () in
   { page_uuid = None
   ; page_db_id = None
+  ; block_uuids = []
   ; fmt = Text
   ; content = None
   ; copied = false
@@ -86,11 +88,17 @@ let persist st =
     (Printf.sprintf "newline-after-block=%b,open-blocks-only=%b,keep-only-level<=N=%s"
        st.newline_after_block st.open_blocks_only lvl)
 
-(* Page identity stashed by page_menu when the dialog opens — mirrors
-   cljs state/:*export-block-text properties. *)
-let pending : (string * int option) option ref = ref None
+(* Identity stashed by the opener when the dialog opens — page_menu
+   arms a page, the block context menu arms block uuids (already
+   filtered to top-level roots, cljs get-top-level-uuids). *)
+type pending_target =
+  | Pending_page of string * int option
+  | Pending_blocks of string list
 
-let arm uuid db_id = pending := Some (uuid, db_id)
+let pending : pending_target option ref = ref None
+
+let arm uuid db_id = pending := Some (Pending_page (uuid, db_id))
+let arm_blocks uuids = pending := Some (Pending_blocks uuids)
 
 let st_ref : t Signal.state option ref = ref None
 
@@ -104,10 +112,11 @@ let st ctx =
 
 let open_ ctx =
   let st = st ctx in
-  let uuid, db_id =
+  let uuid, db_id, block_uuids =
     match !pending with
-    | Some (u, d) -> (Some u, d)
-    | None -> (None, None)
+    | Some (Pending_page (u, d)) -> (Some u, d, [])
+    | Some (Pending_blocks us) -> (None, None, us)
+    | None -> (None, None, [])
   in
   pending := None;
   (match (Signal.get_state st).png_url with
@@ -117,6 +126,7 @@ let open_ ctx =
       { s with
         page_uuid = uuid
       ; page_db_id = db_id
+      ; block_uuids = block_uuids
       ; fmt = Text
       ; content = None
       ; copied = false

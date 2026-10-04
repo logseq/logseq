@@ -112,7 +112,7 @@ let level_select ctx =
     ~value:(fun st ->
       match st.S.level_lte with None -> "all" | Some n -> string_of_int n)
     ~options:
-      (("all", I18n.t "export/level-all")
+      (("all", "all")
       :: List.init 9 (fun i ->
              (string_of_int (i + 1), string_of_int (i + 1))))
     ~on_change:(fun v ->
