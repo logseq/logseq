@@ -300,7 +300,7 @@ struct LogseqTextArea: NSViewRepresentable {
             .data(using: .utf8)!)
       }
       let view = textView
-      runOnMain {
+      runOnMainDeferred {
         let ok = view?.window?.makeFirstResponder(view) ?? false
         if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
           FileHandle.standardError.write(
@@ -514,7 +514,7 @@ struct LogseqInputField: NSViewRepresentable {
       // Overlay-mounted fields (cmdk input) may not be in a window yet when
       // the op arrives — retry until the view attaches or attempts run out.
       func attempt(_ remaining: Int) {
-        runOnMain { [weak self] in
+        runOnMainDeferred { [weak self] in
           guard let self else { return }
           guard let input = self.field else {
             if remaining > 0 { attempt(remaining - 1) }

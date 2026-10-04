@@ -337,6 +337,26 @@ func runOnMain(_ work: @escaping () -> Void) {
       "PERF enq t=\(CFAbsoluteTimeGetCurrent())\n"
         .data(using: .utf8)!)
   }
+  scheduleRunOnMainDrain()
+}
+
+/// Always queues for a later runloop turn — unlike runOnMain it never
+/// runs inline, so ordering-sensitive emits keep their deferral (the
+/// monitor-sourced document click must land after an element's own
+/// gesture emit, and local monitors run on the main thread).
+func runOnMainDeferred(_ work: @escaping () -> Void) {
+  runOnMainLock.lock()
+  runOnMainPending.append(work)
+  runOnMainLock.unlock()
+  if LogseqRuntime.perfLogging {
+    FileHandle.standardError.write(
+      "PERF enq t=\(CFAbsoluteTimeGetCurrent())\n"
+        .data(using: .utf8)!)
+  }
+  scheduleRunOnMainDrain()
+}
+
+private func scheduleRunOnMainDrain() {
   if wakeupPort != mach_port_t(MACH_PORT_NULL) {
     postWakeup()
   } else {
