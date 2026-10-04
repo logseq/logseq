@@ -200,6 +200,28 @@ let gen_undo_ops_adapter repo (r : tx_report) tx_id =
 (* cljs with-test-repos *)
 type repo_conns = { conn : conn; ops_conn : Sqlite.db option }
 
+(* the enqueue listener — shared by with_test_repos and chaos restarts:
+   a restarted client's new display conn needs it or local ops never
+   reach the client_ops queue *)
+let enqueue_listener repo (r : tx_report) : unit =
+  let client_id =
+    match Worker_state.state_get "client-id" with
+    | Some w -> Ds_wire.value_of_transit w
+    | None -> Nil
+  in
+  let tx_meta =
+    ("client-id", client_id) :: List.remove_assoc "client-id" r.tx_meta
+  in
+  let tx_meta =
+    match List.assoc_opt "local-tx?" tx_meta with
+    | None -> ("local-tx?", Bool true) :: tx_meta
+    | Some _ -> tx_meta
+  in
+  (* mirrors handle_local_tx_impl: replay txs from rebuild_display must
+     not re-enter the queue *)
+  if not !Sync_state.pending_replay then
+    Sync_apply.enqueue_local_tx repo { r with tx_meta }
+
 let with_test_repos (repos : (string * repo_conns) list) (f : unit -> 'a) :
     'a =
   (* cljs crypt.cljs is loaded for sync-apply; wire the Sync_deps hooks *)
@@ -255,26 +277,7 @@ let with_test_repos (repos : (string * repo_conns) list) (f : unit -> 'a) :
       match ops_conn with
       | Some _ ->
           let key = Printf.sprintf "db-sync-sim/%s" repo in
-          ignore
-            (Datascript.listen conn key (fun (r : tx_report) ->
-                 let client_id =
-                   match Worker_state.state_get "client-id" with
-                   | Some w -> Ds_wire.value_of_transit w
-                   | None -> Nil
-                 in
-                 let tx_meta =
-                   ("client-id", client_id)
-                   :: List.remove_assoc "client-id" r.tx_meta
-                 in
-                 let tx_meta =
-                   match List.assoc_opt "local-tx?" tx_meta with
-                   | None -> ("local-tx?", Bool true) :: tx_meta
-                   | Some _ -> tx_meta
-                 in
-                 (* mirrors handle_local_tx_impl: replay txs from
-                    rebuild_display must not re-enter the queue *)
-                 if not !Sync_state.pending_replay then
-                   Sync_apply.enqueue_local_tx repo { r with tx_meta }));
+          ignore (Datascript.listen conn key (enqueue_listener repo));
           listeners := (conn, key) :: !listeners
       | None -> ())
     repos;
@@ -601,7 +604,21 @@ let server_upload_bang (server : server) (t_before : int)
           | Some w -> tx_items_of w
           | None -> []
         in
-        let tx_data = List.map strip_datom_tx tx_data in
+        let op =
+          match Wire.get "outliner-op" tx_entry with
+          | Some (Wire.Keyword s) -> s
+          | _ -> ""
+        in
+        let delete_op = op = "delete-blocks" || op = "delete-page" in
+        let tx_data =
+          List.map strip_datom_tx tx_data
+          |> List.map Ds_wire.value_of_transit
+          |> Db_sync_tx_sanitize.sanitize_tx (Conn.db server.srv_conn)
+               ~drop_missing_retract_ops:(delete_op || op = "fix")
+               ~drop_ops_targeting_retracted_entities:delete_op
+               ~retract_touched_descendants:delete_op
+          |> List.map Ds_wire.transit_of_value
+        in
         let report =
           try
             Db_transact.transact server.srv_conn tx_data
@@ -1071,10 +1088,8 @@ let sync_loop_bang (server : server) (clients : sim_client list) : unit =
         let server_checksum_missing, server_checksum_extra =
           map_diff base_checksum_attrs server_checksum_attrs
         in
-        raise
-          (Dispatcher.Exn_info
-             ( "checksums not equal after sync"
-             , [ ( kw "checksums"
+        let payload =
+          [ ( kw "checksums"
                  , Wire.List
                      (List.map
                         (fun (repo, sum) ->
@@ -1094,7 +1109,11 @@ let sync_loop_bang (server : server) (clients : sim_client list) : unit =
                        , wire_of_uuid_attrs (take 5 server_checksum_missing) )
                      ; ( kw "checksum-extra-sample"
                        , wire_of_uuid_attrs (take 5 server_checksum_extra) ) ] )
-               ] )))
+               ]
+        in
+        raise
+          (Dispatcher.Exn_info ("checksums not equal after sync", payload))
+        )
    end)
 
 (* cljs sync-until-idle! *)
@@ -2816,6 +2835,391 @@ let assert_checksum_cache_aligned_bang (seed : int) (server : server)
        check "server checksum == client full checksum"
          (first = server_checksum)
    | [] -> ())
+
+(* ---------- pending-sync chaos driver ----------
+
+   Brute-force property testing of the display-conn pending model:
+   random op sequences interleaved with random offline flips, client
+   restarts (re-split + un-apply + replay), and a server that randomly
+   rejects whole batches (stale), rejects one entry mid-batch
+   (failed-tx-id with a confirmed prefix, tail left pending), or fails
+   on a genuinely bad apply. Final asserts: queues drain to empty
+   (every op confirmed or failed), no invalid tx, no db issues, client
+   attr sets converge, and stored checksums equal the server image. *)
+
+type chaos_client =
+  { c_repo : string
+  ; mutable c_conn : conn (* current display conn — swapped on restart *)
+  ; c_client : Sync_state.client
+  ; mutable c_online : bool
+  ; c_gen : (unit -> string) option }
+
+type upload_outcome =
+  { u_stale : bool
+  ; u_applied : string list
+  ; u_failed : string option }
+
+(* applies one tx entry exactly like server_upload_bang's inner loop —
+   cljs apply-tx-entry! runs tx-sanitize with flags keyed on the entry's
+   outliner-op before transacting *)
+let chaos_apply_entry (server : server) (tx_entry : Wire.t) : unit =
+  let tx_data =
+    match Wire.get "tx-data" tx_entry with
+    | Some w -> tx_items_of w
+    | None -> []
+  in
+  let op =
+    match Wire.get "outliner-op" tx_entry with
+    | Some (Wire.Keyword s) -> s
+    | _ -> ""
+  in
+  let delete_op = op = "delete-blocks" || op = "delete-page" in
+  let tx_data =
+    List.map strip_datom_tx tx_data
+    |> List.map Ds_wire.value_of_transit
+    |> Db_sync_tx_sanitize.sanitize_tx (Conn.db server.srv_conn)
+         ~drop_missing_retract_ops:(delete_op || op = "fix")
+         ~drop_ops_targeting_retracted_entities:delete_op
+         ~retract_touched_descendants:delete_op
+    |> List.map Ds_wire.transit_of_value
+  in
+  let report =
+    Db_transact.transact server.srv_conn tx_data
+      [ "op", Keyword "apply-client-tx" ]
+  in
+  let normalized =
+    match report with
+    | Some r ->
+        Sync_apply.normalize_tx_data r.db_after r.db_before r.tx_data
+    | None -> []
+  in
+  server.srv_counter <- server.srv_counter + 1;
+  server.srv_txs <-
+    server.srv_txs
+    @ [ { srv_t = server.srv_counter; srv_tx = normalized } ]
+
+let chaos_upload_bang (rng : unit -> float) (server : server)
+    (tx_entries : Wire.t list) : upload_outcome =
+  if rand_int_bang rng 8 = 0 then
+    { u_stale = true; u_applied = []; u_failed = None }
+  else begin
+    let n = List.length tx_entries in
+    (* 75%: whole batch accepted. Otherwise the server applies a prefix,
+       rejects the next entry (failed-tx-id), and never processes the
+       tail — the real handle-tx-batch! stops at the first failure *)
+    let cut =
+      if n <= 1 || rand_int_bang rng 4 <> 0 then n
+      else rand_int_bang rng (n - 1)
+    in
+    let applied = ref [] in
+    let failed = ref None in
+    let stop = ref false in
+    List.iteri
+      (fun i entry ->
+        if not !stop then begin
+          let id =
+            match Wire.get "tx-id" entry with
+            | Some (Wire.String s) -> Some s
+            | _ -> None
+          in
+          if i >= cut then begin
+            failed := id;
+            stop := true
+          end
+          else
+            (try
+               chaos_apply_entry server entry;
+               (match id with
+                | Some s -> applied := s :: !applied
+                | None -> ())
+             with _ ->
+               (* a bad apply is also a reject: the server reports
+                  failed-tx-id and stops, never touching the tail *)
+               failed := id;
+               stop := true)
+        end)
+      tx_entries;
+    { u_stale = false
+    ; u_applied = List.rev !applied
+    ; u_failed = !failed }
+  end
+
+(* sync_client_bang with the chaos uploader and production reject
+   handling: confirmed prefix lands on the server conn first, the
+   failed entry drops through fail_pending_txs, the tail stays queued *)
+let chaos_sync_client_bang (rng : unit -> float) (server : server)
+    (c : chaos_client) : bool =
+  if not c.c_online then false
+  else begin
+    let progress = ref false in
+    let repo = c.c_repo in
+    let local_tx =
+      Option.value (Sync_client_op.get_local_tx repo) ~default:0
+    in
+    let server_t = server.srv_counter in
+    (if local_tx < server_t then begin
+       let txs = server_pull server local_tx in
+       let remote_txs =
+         List.map
+           (fun tx_data -> Wire.Map [ kw "tx-data", Wire.List tx_data ])
+           txs
+       in
+       await_unit (Sync_apply.apply_remote_txs repo c.c_client remote_txs);
+       Sync_client_op.update_local_tx repo server_t;
+       progress := true
+     end);
+    let pending = Sync_apply.pending_txs repo () in
+    let local_tx' =
+      Option.value (Sync_client_op.get_local_tx repo) ~default:0
+    in
+    let server_t' = server.srv_counter in
+    (if pending <> [] && local_tx' = server_t' then begin
+       let tx_entries, drop_txs =
+         build_upload_plan ~repo ~server c.c_conn pending
+       in
+       (if drop_txs <> [] then begin
+          let failed_ids, benign_ids = partition_drops drop_txs in
+          ignore (Sync_apply.mark_failed_txs repo failed_ids);
+          ignore (Sync_apply.mark_pending_txs_false repo benign_ids);
+          progress := true
+        end);
+       (if tx_entries <> [] then begin
+          let res = chaos_upload_bang rng server tx_entries in
+          (if not res.u_stale then begin
+             (if res.u_applied <> [] then begin
+                Sync_apply.confirm_pending_txs repo res.u_applied;
+                ignore
+                  (Sync_apply.mark_pending_txs_false ~rebuild:false repo
+                     res.u_applied)
+              end);
+             (match res.u_failed with
+              | Some id -> Sync_apply.fail_pending_txs repo [ id ]
+              | None ->
+                  if res.u_applied <> [] then
+                    Sync_apply.rebuild_display repo ~jump_tx_data:[]);
+             (if res.u_applied <> [] then begin
+                Sync_client_op.update_local_tx repo server.srv_counter;
+                progress := true
+              end)
+           end)
+        end)
+     end);
+    !progress
+  end
+
+let chaos_sync_loop_bang (rng : unit -> float) (server : server)
+    (clients : chaos_client list) : unit =
+  let rec loop i =
+    if i < 64 then begin
+      let progress = ref false in
+      List.iter
+        (fun c -> if chaos_sync_client_bang rng server c then progress := true)
+        clients;
+      if !progress then loop (i + 1)
+    end
+  in
+  loop 0
+
+(* production graph open: the loaded conn carries only the durable
+   server image — the display conn is rebuilt on top of it and pending
+   rows replay forward *)
+let restart_sim_client (repo : string) : conn =
+  let srv =
+    match Sync_state.server_conn repo with
+    | Some s -> s
+    | None -> failwith "chaos restart before split"
+  in
+  let loaded = conn_from_db (db_of srv) in
+  Sync_state.drop_server_conn repo;
+  Worker_state.set_datascript_conn repo loaded;
+  Sync_apply.split_off_server_if_remote repo;
+  match Worker_state.datascript_conn repo with
+  | Some display ->
+      ignore
+        (Datascript.listen display
+           (Printf.sprintf "db-sync-sim/%s" repo)
+           (enqueue_listener repo));
+      display
+  | None -> failwith "chaos restart produced no display conn"
+
+let chaos_run_seed (seed : int) : unit =
+  let rng = make_rng seed in
+  let gen_uuid () = rng_uuid rng in
+  let base_uuid = gen_uuid () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
+  let ops_a = new_client_ops_db ()
+  and ops_b = new_client_ops_db () in
+  let client_a = make_client repo_a
+  and client_b = make_client repo_b in
+  let server = make_server () in
+  let history = ref [] in
+  with_test_repos
+    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
+    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (fun () ->
+      let { repro; restore } = install_invalid_tx_repro_bang seed history in
+      Fun.protect ~finally:restore (fun () ->
+          let ca =
+            { c_repo = repo_a; c_conn = conn_a; c_client = client_a
+            ; c_online = true; c_gen = Some gen_uuid }
+          and cb =
+            { c_repo = repo_b; c_conn = conn_b; c_client = client_b
+            ; c_online = true; c_gen = Some gen_uuid }
+          in
+          let clients = [ ca; cb ] in
+          (* shared pool: both clients pick targets from every uuid
+             either side ever created — this is what manufactures the
+             remote-delete-vs-pending races the model has to survive *)
+          let shared = new_state base_uuid in
+          let states = [ repo_a, shared; repo_b, shared ] in
+          let rounds = 150 in
+          for i = 1 to rounds do
+            (match rand_nth_bang rng clients with
+             | Some c ->
+                 run_ops_bang rng
+                   { repo = Some c.c_repo; conn = c.c_conn
+                   ; base_uuid = Some base_uuid
+                   ; state = List.assoc c.c_repo states
+                   ; gen_uuid = c.c_gen }
+                   1 history
+                   { pick_op_opts =
+                       { enable_ops = None; disable_ops = None }
+                   ; op_table_override = None
+                   ; context =
+                       Some
+                         (wire_map
+                            [ "phase", kw "chaos"
+                            ; "round", Wire.Int i ]) }
+             | None -> ());
+            (* chaos: offline flips, offline op bursts, and restarts
+               (re-split + un-apply + replay) — restarts must never
+               resurrect ops into the pending queue *)
+            (match rand_nth_bang rng clients with
+             | Some c ->
+                 let roll = rand_int_bang rng 20 in
+                 (if roll < 4 then c.c_online <- not c.c_online
+                  else if roll < 6 then begin
+                    c.c_online <- false;
+                    run_ops_bang rng
+                      { repo = Some c.c_repo; conn = c.c_conn
+                      ; base_uuid = Some base_uuid
+                      ; state = List.assoc c.c_repo states
+                      ; gen_uuid = c.c_gen }
+                      (3 + rand_int_bang rng 6) history
+                      { pick_op_opts =
+                          { enable_ops = None; disable_ops = None }
+                      ; op_table_override = None
+                      ; context =
+                          Some
+                            (wire_map
+                               [ "phase", kw "chaos-offline-burst"
+                               ; "round", Wire.Int i ]) }
+                  end
+                  else if roll < 8 then begin
+                    let before_ids =
+                      List.map
+                        (fun (t : Sync_client_op.local_tx_entry) -> t.tx_id)
+                        (Sync_apply.pending_txs c.c_repo ())
+                    in
+                    c.c_conn <- restart_sim_client c.c_repo;
+                    let after_rows = Sync_apply.pending_txs c.c_repo () in
+                    let after_ids =
+                      List.map
+                        (fun (t : Sync_client_op.local_tx_entry) -> t.tx_id)
+                        after_rows
+                    in
+                    let new_ids =
+                      List.filter
+                        (fun id -> not (List.mem id before_ids))
+                        after_ids
+                    in
+                    let before = List.length before_ids in
+                    let after = List.length after_ids in
+                    (if after > before then begin
+                       report_history_bang seed history
+                         (Some
+                            [ "type", kw "pending-grew-on-restart"
+                            ; "repo", Wire.String c.c_repo
+                            ; "before", Wire.Int before
+                            ; "after", Wire.Int after ]);
+                       List.iter
+                         (fun (t : Sync_client_op.local_tx_entry) ->
+                            if List.mem t.tx_id new_ids then
+                              Printf.eprintf
+                                "[chaos] repo=%s NEW pending tx_id=%s op=%s\n"
+                                c.c_repo t.tx_id
+                                (Option.value t.outliner_op ~default:"nil"))
+                         after_rows
+                     end);
+                    check "pending did not grow on restart"
+                      (after <= before)
+                  end)
+             | None -> ());
+            chaos_sync_loop_bang rng server clients
+          done;
+          (* drain: everyone online, then a plain pass to settle the
+             remainder and run the shared convergence asserts *)
+          List.iter (fun c -> c.c_online <- true) clients;
+          chaos_sync_loop_bang rng server clients;
+          let sims =
+            List.map
+              (fun c ->
+                { repo = c.c_repo; conn = c.c_conn; client = c.c_client
+                ; online = c.c_online; gen_uuid = c.c_gen })
+              clients
+          in
+          sync_loop_bang server sims;
+          assert_no_invalid_tx_bang seed history repro;
+          List.iter
+            (fun c ->
+              let pend = Sync_apply.pending_txs c.c_repo () in
+              (if pend <> [] then
+                 report_history_bang seed history
+                   (Some
+                      [ "type", kw "pending-undrained"
+                      ; "repo", Wire.String c.c_repo
+                      ; "count", Wire.Int (List.length pend) ]));
+              check
+                (Printf.sprintf "pending drained (%s)" c.c_repo)
+                (pend = []))
+            clients;
+          let issues_a = db_issues (db_of_conn ca.c_conn)
+          and issues_b = db_issues (db_of_conn cb.c_conn) in
+          (if issues_a <> [] || issues_b <> [] then begin
+             report_history_bang seed history
+               (Some [ "type", kw "db-issues" ]);
+             List.iter
+               (fun (i : issue) ->
+                  Printf.eprintf "[chaos] issue A %s %s\n%!" i.issue_type
+                    i.issue_uuid)
+               issues_a;
+             List.iter
+               (fun (i : issue) ->
+                  Printf.eprintf "[chaos] issue B %s %s\n%!" i.issue_type
+                    i.issue_uuid)
+               issues_b
+           end);
+          check "db A issues empty" (issues_a = []);
+          check "db B issues empty" (issues_b = []);
+          let attrs_a = block_attr_map (db_of_conn ca.c_conn)
+          and attrs_b = block_attr_map (db_of_conn cb.c_conn) in
+          assert_synced_attrs_bang seed history attrs_a attrs_b attrs_b;
+          assert_checksum_cache_aligned_bang seed server
+            [ repo_a, ca.c_conn; repo_b, cb.c_conn ]))
+
+let test_pending_chaos_property_sim () =
+  let base_seed = Option.value (env_seed ()) ~default:default_seed in
+  let seed_count =
+    match Sys.getenv_opt "DB_SYNC_CHAOS_SEEDS" with
+    | Some s -> (try int_of_string s with _ -> 6)
+    | None -> 6
+  in
+  for s = 0 to seed_count - 1 do
+    let seed = base_seed + (7919 * s) in
+    Printf.eprintf "[chaos] running seed=%d\n%!" seed;
+    chaos_run_seed seed
+  done
 
 (* ---------- tests (cljs deftest order) ---------- *)
 
@@ -5505,4 +5909,6 @@ let () =
         ; Alcotest.test_case "pending-property-attrs-verbatim-replay"
             `Quick test_pending_property_attrs_verbatim_replay
         ; Alcotest.test_case "three-clients-single-repo-sim-test" `Quick
-            test_three_clients_single_repo_sim ] ) ]
+            test_three_clients_single_repo_sim
+        ; Alcotest.test_case "pending-chaos-property-sim-test" `Quick
+            test_pending_chaos_property_sim ] ) ]
