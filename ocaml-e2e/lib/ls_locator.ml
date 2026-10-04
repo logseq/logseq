@@ -13,6 +13,10 @@ let or_list env = function
 let and_ env q1 q2 =
   Playwright.locator_and (Pw.q env q1) (Pw.q env q2)
 
+(** Locator-level [and], for mixing selectors and getBy-style locators like
+    clj's [(loc/and "span" (util/get-by-text t true))]. *)
+let and_l l1 l2 = Playwright.locator_and l1 l2
+
 let filter env ?has ?has_not ?has_text ?has_not_text selector =
   Playwright.locator_filter ?has ?has_not ?has_text ?has_not_text
     (Pw.q env selector)

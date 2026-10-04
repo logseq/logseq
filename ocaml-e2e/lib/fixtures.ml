@@ -180,9 +180,9 @@ let new_logseq_page env =
   in
   let* () =
     Pw.eval_js env
-      "() => { const url = new URL(location.href); \
+      "(() => { const url = new URL(location.href); \
        url.searchParams.delete('virtualized'); \
-       history.replaceState(null, '', url.pathname + url.search + url.hash); }"
+       history.replaceState(null, '', url.pathname + url.search + url.hash); })()"
   in
   let* _ = create_page env in
   Js.Promise.resolve ()

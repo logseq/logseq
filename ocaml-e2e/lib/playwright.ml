@@ -12,6 +12,8 @@ type console_message
 type bounding_box
 type download
 type assertion
+type file_chooser
+type dialog
 
 external error_name : Js.Promise.error -> string option = "name" [@@mel.get]
 external error_message : Js.Promise.error -> string option = "message"
@@ -53,13 +55,13 @@ external browser_new_page : browser -> page Js.Promise.t = "newPage"
 [@@mel.send]
 
 external browser_close : browser -> unit Js.Promise.t = "close" [@@mel.send]
-external browser_version : browser -> string = "version" [@@mel.get]
-external browser_contexts : browser -> context array = "contexts" [@@mel.get]
+external browser_version : browser -> string = "version" [@@mel.send]
+external browser_contexts : browser -> context array = "contexts" [@@mel.send]
 
 (* {2 Context} *)
 
 external context_browser : context -> browser = "browser" [@@mel.send]
-external context_pages : context -> page array = "pages" [@@mel.get]
+external context_pages : context -> page array = "pages" [@@mel.send]
 external context_close : context -> unit Js.Promise.t = "close" [@@mel.send]
 
 external context_new_context : browser -> context Js.Promise.t = "newContext"
@@ -85,6 +87,7 @@ external page_close : page -> unit Js.Promise.t = "close" [@@mel.send]
 external page_is_closed : page -> bool = "isClosed" [@@mel.send]
 external reload : page -> 'a Js.Promise.t = "reload" [@@mel.send]
 external go_back : page -> 'a Js.Promise.t = "goBack" [@@mel.send]
+external go_forward : page -> 'a Js.Promise.t = "goForward" [@@mel.send]
 
 external goto : page -> string -> 'opts Js.t -> 'a Js.Promise.t = "goto"
 [@@mel.send]
@@ -151,6 +154,20 @@ external on : page -> string -> (console_message -> unit [@mel.uncurry]) -> unit
 
 let on_console page cb = on page "console" cb
 
+external on_event :
+  page -> string -> ('a -> unit [@mel.uncurry]) -> unit = "on" [@@mel.send]
+
+external off_event :
+  page -> string -> ('a -> unit [@mel.uncurry]) -> unit = "off" [@@mel.send]
+
+external file_chooser_set_files :
+  file_chooser -> string array -> unit Js.Promise.t = "setFiles" [@@mel.send]
+
+external dialog_type : dialog -> string = "type" [@@mel.send]
+external dialog_message : dialog -> string = "message" [@@mel.send]
+external dialog_accept : dialog -> unit Js.Promise.t = "accept" [@@mel.send]
+external dialog_dismiss : dialog -> unit Js.Promise.t = "dismiss" [@@mel.send]
+
 external wait_for_event :
   page -> string -> 'opts Js.t -> 'a Js.Promise.t = "waitForEvent"
 [@@mel.send]
@@ -196,11 +213,12 @@ let locator_locator ?has ?has_not ?has_text ?has_not_text loc selector =
 external click : locator -> 'opts Js.t -> unit Js.Promise.t = "click"
 [@@mel.send]
 
-let click ?button ?timeout loc =
+let click ?button ?timeout ?(modifiers = [||]) loc =
   click loc
     [%mel.obj
       { button = Js.Undefined.fromOption button
       ; timeout = Js.Undefined.fromOption timeout
+      ; modifiers
       }]
 
 external dblclick : locator -> 'opts Js.t -> unit Js.Promise.t = "dblclick"
@@ -299,11 +317,21 @@ let set_input_files ?timeout loc files =
   set_input_files loc files
     [%mel.obj { timeout = Js.Undefined.fromOption timeout }]
 
-external drag_to :
+external locator_drag_to :
   locator -> locator -> 'opts Js.t -> unit Js.Promise.t = "dragTo" [@@mel.send]
 
-let drag_to ?timeout loc target =
-  drag_to loc target [%mel.obj { timeout = Js.Undefined.fromOption timeout }]
+let drag_to ?timeout ?target_x ?target_y ?steps loc target =
+  let pos =
+    match (target_x, target_y) with
+    | Some x, Some y -> Js.Undefined.return [%mel.obj { x; y }]
+    | _ -> Js.Undefined.empty
+  in
+  locator_drag_to loc target
+    [%mel.obj
+      { timeout = Js.Undefined.fromOption timeout
+      ; targetPosition = pos
+      ; steps = Js.Undefined.fromOption steps
+      }]
 
 external locator_press :
   locator -> string -> 'opts Js.t -> unit Js.Promise.t = "press" [@@mel.send]
@@ -335,6 +363,10 @@ external download_suggested_filename : download -> string
 
 external download_path : download -> string Js.Promise.t = "path" [@@mel.send]
 
+(** [page.waitForFunction "expr"] — polls until the page expression is truthy. *)
+external wait_for_function :
+  page -> string -> 'a Js.Promise.t = "waitForFunction" [@@mel.send]
+
 (* {2 Assertions from @playwright/test} *)
 
 external expect : locator -> assertion = "expect"
@@ -364,6 +396,10 @@ external expect_to_have_text :
 external expect_to_contain_text :
   (assertion[@mel.this]) -> 'expected -> 'opts Js.t -> unit Js.Promise.t
   = "toContainText"
+[@@mel.send]
+
+external expect_has_value :
+  (assertion[@mel.this]) -> string -> unit Js.Promise.t = "toHaveValue"
 [@@mel.send]
 
 external not_ : assertion -> assertion = "not" [@@mel.get]

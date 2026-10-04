@@ -51,11 +51,33 @@ let ls_api_call env api_keyword args =
 
 (** JSON-field access on values returned by [ls_api_call], the [(get x k)]
     pattern. The return type is untyped like the JS object itself. *)
-external get : 'a -> string -> 'b Js.Undefined.t = "" [@@mel.get_index]
+(* API results use [null] for missing values (bean/->js of nil), so the
+   accessors must treat both [null] and [undefined] as absent — including
+   when the object itself is null. *)
+external get_index : 'a -> string -> 'b Js.Nullable.t = "" [@@mel.get_index]
+external nullable : 'a -> 'a Js.Nullable.t = "%identity"
 
-let get_string o k = Js.Undefined.toOption (get o k)
-let get_int o k = Option.map int_of_float (Js.Undefined.toOption (get o k))
-let get_bool o k = Js.Undefined.toOption (get o k)
-let get_list o k : 'a array option = Js.Undefined.toOption (get o k)
+let get o k =
+  match Js.Nullable.toOption (nullable o) with
+  | None -> Js.Nullable.null
+  | Some v -> get_index v k
+
+let get_string o k = Js.Nullable.toOption (get o k)
+let get_int o k = Option.map int_of_float (Js.Nullable.toOption (get o k))
+let get_float o k : float option = Js.Nullable.toOption (get o k)
+let get_bool o k = Js.Nullable.toOption (get o k)
+let get_list o k : 'a array option = Js.Nullable.toOption (get o k)
+(** Unwraps [get] to the raw JS value — throws when the key is absent. *)
+let get_raw o k = Option.get (Js.Nullable.toOption (get o k))
+
 let get_uuid o _ = get_string o "uuid"
 let get_id o _ = get_int o "id"
+
+(** JSON-object construction for api args (clj maps → JSON objects). Keys may
+    contain any characters ([Js.Dict] keys are literal). *)
+let str s = Js.Json.string s
+let num f = Js.Json.number f
+let bool b = Js.Json.boolean b
+let arr a = Js.Json.array a
+let obj pairs = Js.Json.object_ (Js.Dict.fromList pairs)
+let null = Js.Json.null

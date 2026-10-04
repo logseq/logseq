@@ -2,10 +2,7 @@
  (target test_node)
  (alias test_node)
  (module_systems commonjs)
- (modules
-  test_left_sidebar_basic
-  test_graph
-  test_undo_redo)
+ (modules (:standard))
  (libraries
   logseq_e2e
   melange-fest

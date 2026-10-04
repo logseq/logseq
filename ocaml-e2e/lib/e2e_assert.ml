@@ -10,6 +10,10 @@ let is_visible env selector =
   let* () = is_visible_l (Playwright.locator_first (Pw.q env selector)) in
   Js.Promise.resolve true
 
+let is_hidden_l loc =
+  let* () = Playwright.expect_is_hidden (Playwright.expect loc) in
+  Js.Promise.resolve true
+
 let is_hidden env selector =
   let* () = Playwright.expect_is_hidden (Playwright.expect (Pw.q env selector)) in
   Js.Promise.resolve true
@@ -37,6 +41,12 @@ let editor_mode env = have_count env ".editor-wrapper textarea" 1
 
 let selected_block_text env text =
   is_visible env (Printf.sprintf ".ls-block.selected :text('%s')" text)
+
+(** Playwright's [expect(loc).toHaveText(regex)] — clj's
+    [(-> (assert-that loc) (.hasText re))]. *)
+let to_have_text_re ?timeout loc re =
+  Playwright.expect_to_have_text (Playwright.expect loc) re
+    [%mel.obj { timeout = Js.Undefined.fromOption timeout }]
 
 (** [summary] values come from {!Graph.validate_graph}; equality compares the
     same keys the cljs suite did (blocks/pages/classes/properties). *)
