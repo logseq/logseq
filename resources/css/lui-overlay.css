@@ -2098,7 +2098,8 @@ div[data-keep-selection].menu-links-wrapper {
   color: inherit;
 }
 
-.ls-editor-date-picker .ls-date-month-menu {
+.ls-editor-date-picker .ls-date-month-menu,
+.ls-repeat-choice-menu {
   position: absolute;
   max-height: 16rem;
   overflow-y: auto;
@@ -2118,6 +2119,164 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ls-editor-date-picker .ls-date-month-option:hover {
   background: var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2));
+}
+
+/* ---- datetime picker (scheduled/deadline): two-column layout --------- */
+
+.ls-editor-date-picker.ls-cal-prop {
+  width: auto;
+  max-width: calc(100vw - 16px);
+}
+
+.ls-editor-date-picker .ls-property-date-picker {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.ls-editor-date-picker .ls-time-picker {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ls-editor-date-picker .ls-time-input {
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
+  border-radius: 0.375rem;
+  background: transparent;
+  font-size: 0.875rem;
+  color: inherit;
+  color-scheme: light dark;
+}
+
+.ls-editor-date-picker .ls-time-now {
+  border: none;
+  background: transparent;
+  padding: 0 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--lx-gray-09, var(--ls-secondary-text-color, #777));
+  cursor: pointer;
+}
+
+.ls-editor-date-picker .ls-time-now:hover {
+  color: var(--ls-primary-text-color, inherit);
+}
+
+/* repeat panel — cljs property/value.cljs repeat-setting (w-64 p-4) */
+
+.ls-repeat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 16rem;
+  flex: none;
+  padding: 0 0 0 8px;
+  border-left: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
+  font-size: 0.875rem;
+}
+
+.ls-repeat-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.ls-repeat-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #888));
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.ls-repeat-checkbox[data-checked] {
+  background: var(--lx-accent-09, var(--ls-link-text-color, hsl(var(--primary, #0f7b6c))));
+  border-color: transparent;
+  color: #fff;
+}
+
+.ls-repeat-frequency {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.ls-repeat-label {
+  flex: none;
+  color: var(--lx-gray-09, var(--ls-secondary-text-color, #777));
+}
+
+.ls-repeat-frequency-input {
+  height: 2rem;
+  width: 3.5rem;
+  flex: none;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
+  border-radius: 0.375rem;
+  background: transparent;
+  font-size: 0.875rem;
+  color: inherit;
+}
+
+.ls-repeat-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--lx-popover-border, var(--ls-border-color, #e5e5e5));
+  border-radius: 0.375rem;
+  background: transparent;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ls-repeat-select:hover {
+  background: var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2));
+}
+
+.ls-repeat-next,
+.ls-repeat-when {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ls-repeat-when .ls-repeat-select {
+  width: 100%;
+}
+
+.ls-repeat-is {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+}
+
+.ls-repeat-choice-menu .ls-date-month-option {
+  white-space: nowrap;
 }
 
 /* ---- property popup panes ---------------------------------------------- */
