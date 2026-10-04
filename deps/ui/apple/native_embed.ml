@@ -227,8 +227,11 @@ let decode_extension_values payload =
 
 let take_patches_dbg where =
   let out = take_patches () in
-  Printf.eprintf "DBG patches %s bytes=%d t=%.3f\n%!" where
-    (String.length out) (Unix.gettimeofday ());
+  (match Sys.getenv_opt "LOGSEQ_PERF" with
+   | Some _ ->
+       Printf.eprintf "[perf] patches %s bytes=%d t=%.3f\n%!" where
+         (String.length out) (Unix.gettimeofday ())
+   | None -> ());
   out
 
 (* The web runtime feeds registered doc scans from a MutationObserver;
