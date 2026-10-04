@@ -50,21 +50,32 @@ let pop_popup el =
 
 let position_content ~anchor ~content ~align_end ~submenu =
   let r = D.el_rect anchor in
+  (* fixed first: a static block child of body measures full-width, which
+     would trip the right-edge flip below *)
+  D.el_set_attr content "style" "position:fixed;z-index:50;";
   let style = ref "position:fixed;z-index:50;" in
   (if submenu then begin
      (* opens right of the item, top-aligned; radix shifts the panel up
-        when it would overflow the viewport bottom, and caps its height
-        at the viewport so every option stays inside *)
+        when it would overflow the viewport bottom, flips it to the
+        trigger's left when it would overflow the right edge, and caps its
+        height at the viewport so every option stays inside *)
      let h = D.rect_height (D.el_rect content) in
+     let w = D.rect_width (D.el_rect content) in
      let top =
        Float.max 8.
          (Float.min (D.rect_top r -. 4.)
             (D.window_inner_height -. 8. -. h))
      in
+     let open_right = D.rect_left r +. D.rect_width r -. 4. in
+     let left =
+       if open_right +. w > D.window_inner_width -. 8. then
+         Float.max 8. (D.rect_left r -. w +. 4.)
+       else open_right
+     in
      style := !style
        ^ Printf.sprintf
            "left:%.0fpx;top:%.0fpx;max-height:%.0fpx;overflow-y:auto;"
-           (D.rect_left r +. D.rect_width r -. 4.) top
+           left top
            (D.window_inner_height -. 16.)
    end
    else begin

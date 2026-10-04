@@ -279,7 +279,19 @@ let load_view_data inst =
            | _ -> ());
           inst.V.loading <- false;
           let uuids =
+            (* group-value entity uuids ride along — the group header titles
+               resolve through inst.blocks like row titles *)
             row_uuids_of d
+            @ (match d with
+               | Wr.VGrouped gs ->
+                   List.filter_map
+                     (fun g -> Wr.group_value_uuid g.Wr.gv)
+                     gs
+               | Wr.VGroupedList gs ->
+                   List.filter_map
+                     (fun g -> Wr.group_value_uuid g.Wr.glv)
+                     gs
+               | _ -> [])
             @ (match inst.V.query_view with
                | W.Nil -> []
                | v -> Views_query.collect_uuids v [])

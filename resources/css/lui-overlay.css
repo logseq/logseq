@@ -4187,6 +4187,10 @@ select.form-select {
 }
 
 .ls-view-tab {
+  /* cljs shui/button base: inline-flex items-center gap-1 */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: 0.875rem;
   height: 1.5rem;
   padding: 0;
