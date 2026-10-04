@@ -369,29 +369,68 @@ let is_other_block_editor uuid target =
    synchronously so it never sees this window — apply text edits to the
    pending buffer at the pending caret and replay structural ops once
    focus lands *)
-let on_pending_focus_key ev e caret =
+let rec on_pending_focus_key ev e caret =
   let buf = e.S.buffer in
   let len = String.length buf in
   (* pending_focus caret is derived from the live textarea, which can
      outpace e.buffer while a refresh rewrites it — clamp before any
      String.sub *)
   let caret = max 0 (min caret len) in
+  (match D.textarea_of e.S.uuid with
+  | Some el ->
+      (* the remount already landed — the textarea exists and carries
+         the buffer, so the DOM is authoritative. The key only arrived
+         at <body> because focus has not caught up; focus it and run the
+         normal editor path so value/caret stay live. Plain characters
+         get no browser default on <body>, so splice them in manually *)
+      D.el_focus el;
+      (match D.ev_key ev with
+      | key
+        when String.length key = 1 && not (D.ev_composing ev)
+             && not (mods ev || D.ev_alt ev) ->
+          D.prevent_default ev;
+          S.note_input ();
+          let dv = D.el_value el in
+          let ds = D.el_selection_start el in
+          let de = D.el_selection_end el in
+          D.el_set_value el
+            (String.sub dv 0 ds ^ key
+            ^ String.sub dv de (String.length dv - de));
+          D.el_set_selection_range el (ds + 1) (ds + 1);
+          A.sync_buffer e.S.uuid (D.el_value el)
+      | _ -> on_editor_key ev e.S.uuid el)
+  | None -> on_pending_focus_key_unmounted ev e buf caret)
+and on_pending_focus_key_unmounted ev e buf caret =
+  let len = String.length buf in
   let queue f = S.pending_focus_actions := f :: !S.pending_focus_actions in
-  let patch buf' caret' =
+  let patch buf_fn caret' =
+    (* buf_fn transforms the signal's latest buffer — the captured
+       record can lag the pending (not-yet-published) value by several
+       buffered keystrokes, and Signal.update composes onto that
+       pending value *)
+    let applied = ref (buf_fn buf) in
     S.set_silent (fun st ->
-        { st with S.editing = Some { e with S.buffer = buf' } });
+        match st.S.editing with
+        | Some e2 when e2.S.uuid = e.S.uuid ->
+            let v = buf_fn e2.S.buffer in
+            applied := v;
+            { st with S.editing = Some { e2 with S.buffer = v } }
+        | _ -> st);
     (* the textarea can already be mounted when pending was lost mid-
        remount — mirror the buffer into it so the DOM doesn't diverge *)
     (match D.textarea_of e.S.uuid with
      | Some el ->
-         D.el_set_value el buf';
+         D.el_set_value el !applied;
          D.el_set_selection_range el caret' caret'
      | None -> ());
     S.pending_focus := Some (e.S.uuid, caret', !S.last_edit_input_ms)
   in
   let insert s =
     patch
-      (String.sub buf 0 caret ^ s ^ String.sub buf caret (len - caret))
+      (fun b ->
+        let caret' = max 0 (min caret (String.length b)) in
+        String.sub b 0 caret' ^ s
+        ^ String.sub b caret' (String.length b - caret'))
       (caret + String.length s)
   in
   (match D.ev_key ev with
@@ -400,16 +439,21 @@ let on_pending_focus_key ev e caret =
       if caret = 0 then queue (fun () -> A.merge_prev e.S.uuid)
       else
         patch
-          (String.sub buf 0 (caret - 1)
-          ^ String.sub buf caret (len - caret))
+          (fun b ->
+            let caret' = max 0 (min caret (String.length b)) in
+            String.sub b 0 (caret' - 1)
+            ^ String.sub b caret' (String.length b - caret'))
           (caret - 1)
   | "Delete" ->
       D.prevent_default ev;
       if caret = len then queue (fun () -> A.merge_next e.S.uuid)
       else
         patch
-          (String.sub buf 0 caret
-          ^ String.sub buf (caret + 1) (len - caret - 1))
+          (fun b ->
+            let caret' = max 0 (min caret (String.length b)) in
+            String.sub b 0 caret'
+            ^ String.sub b (caret' + 1)
+                (String.length b - caret' - 1))
           caret
   | "Enter" ->
       D.prevent_default ev;
