@@ -52,7 +52,7 @@ let close_dropdown () =
 let menu_item ~cls label ~disabled on_click =
   let b = B.create "div" in
   B.set_attr b "role" "menuitem";
-  B.set_class b (Menu_item.graphs_cls ^ cls);
+  B.set_class b (Menu_item.graphs_cls ^ " " ^ cls);
   B.set_text b label;
   if disabled then (
     B.set_attr b "data-disabled" "";
@@ -96,7 +96,7 @@ let open_menu repo anchor =
   (* cljs repo.cljs: "Use Logseq Sync (Beta testing)" only for a local,
      non-remote graph that is currently open, logged in + rtc-group *)
   let remote_names =
-    List.map (fun (n, _, _) -> n) !Graphs_ops.remote_graphs
+    List.map (fun (n, _, _, _) -> n) !Graphs_ops.remote_graphs
   in
   if
     Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
@@ -157,7 +157,7 @@ let graph_row repo =
   B.append row controls;
   row
 
-let remote_menu name _uuid anchor =
+let remote_menu ~rerender name uuid ~role anchor =
   close_dropdown ();
   let menu = B.create "div" in
   B.set_class menu
@@ -181,12 +181,36 @@ let remote_menu name _uuid anchor =
        (fun () ->
          Graphs_ops.ask_delete ~remote:true
            (Graph.full_graph_name name)));
+  (* cljs repo.cljs: leave-shared-graph only for a remote graph the
+     caller doesn't manage *)
+  if role <> "manager" then
+    B.append menu
+      (menu_item ~cls:"leave-shared-graph-menu-item"
+         (I18n.t "graph/leave-action") ~disabled:false (fun () ->
+           Dialogs_state.ask
+             ~title:""
+             ~desc:(I18n.t "graph/leave-confirm-desc")
+             ~on_confirm:(fun () ->
+               ignore
+                 (let open Promise_ext in
+                 (if (Runtime.model ()).Model.repo = Some local_repo
+                  then Rtc_ops.stop ());
+                 let* ok = Collaborators.leave_graph ~uuid in
+                 if ok then begin
+                   Toast.success (I18n.t "graph/left");
+                   let* _ = Graphs_ops.list_remote_graphs () in
+                   rerender (); Js.Promise.resolve ()
+                 end
+                 else begin
+                   Toast.error (I18n.t "graph/leave-error");
+                   Js.Promise.resolve ()
+                 end)) ()));
   (match B.qs "body" with Some b -> B.append b menu | None -> ());
   dropdown_open := Some menu
 
 (* e2e: (.last (w/-query "div[data-testid='logseq_db_<n>']
    span:has-text('<n>')")) clicks the remote row to download+switch *)
-let remote_row (name, uuid, e2ee) =
+let remote_row ~rerender (name, uuid, e2ee, role) =
   let row = B.create "div" in
   B.set_attr row "data-testid" ("logseq_db_" ^ name);
   B.set_class row "flex justify-between mb-2 items-center group";
@@ -215,7 +239,8 @@ let remote_row (name, uuid, e2ee) =
   B.set_attr btn "type" "button";
   B.set_attr btn "aria-haspopup" "menu";
   B.append btn (dots_icon ());
-  B.add_listener btn "click" (fun _ -> remote_menu name uuid btn);
+  B.add_listener btn "click"
+    (fun _ -> remote_menu ~rerender name uuid ~role btn);
   B.append wrap btn;
   B.append controls wrap;
   B.append row left;
@@ -258,7 +283,7 @@ let remote_section rerender =
   B.append head refresh_btn;
   B.append sec head;
   List.iter
-    (fun rg -> B.append sec (remote_row rg))
+    (fun rg -> B.append sec (remote_row ~rerender rg))
     !Graphs_ops.remote_graphs;
   sec
 
@@ -283,7 +308,7 @@ let view_sig () =
   in
   let remote =
     List.map
-      (fun (n, u, e) -> Printf.sprintf "%s:%s:%b" n u e)
+      (fun (n, u, e, r) -> Printf.sprintf "%s:%s:%b:%s" n u e r)
       !Graphs_ops.remote_graphs
   in
   String.concat "|" (local @ [ "##" ] @ remote)
@@ -336,7 +361,7 @@ and render_fresh host =
   (* cljs combine-local-&-remote-graphs merges by :url — a remote graph
      that exists locally renders once, under Remote graphs *)
   let remote_names =
-    List.map (fun (n, _, _) -> n) !Graphs_ops.remote_graphs
+    List.map (fun (n, _, _, _) -> n) !Graphs_ops.remote_graphs
   in
   List.iter
     (fun r ->

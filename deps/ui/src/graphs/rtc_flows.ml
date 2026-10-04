@@ -95,6 +95,30 @@ let username () =
 let email () = jwt_claim "email"
 let user_uuid () = jwt_claim "sub"
 
+(* resolved worker db-rtc-uuid for the open repo (cljs
+   use-db-rtc-uuid): the indicator/collaborators widgets gate on it.
+   Refetches when the repo changed OR the uuid is still unresolved —
+   after an upload the first fetch comes back nil, so every later
+   model emission retries until the worker lands the kv row *)
+let db_rtc_uuid : string option ref = ref None
+let db_rtc_repo : string option ref = ref None
+
+let refresh_db_rtc_uuid (repo : string option) =
+  match repo with
+  | Some r when !db_rtc_repo <> Some r || !db_rtc_uuid = None -> begin
+      db_rtc_repo := Some r;
+      db_rtc_uuid := None;
+      ignore
+        (let open Promise_ext in
+        let* w =
+          Runtime.invoke1 "thread-api/get-rtc-graph-uuid" (Wire.String r)
+        in
+        db_rtc_uuid := Wire.as_uuid w;
+        Runtime.flush ();
+        Js.Promise.resolve ())
+    end
+  | _ -> ()
+
 (* cljs user.cljs rtc-group? — dev build, a custom sync server, or a
    cognito group from {team, rtc_2025_07_10} *)
 let rtc_group () =

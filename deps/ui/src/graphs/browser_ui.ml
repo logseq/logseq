@@ -51,6 +51,8 @@ external clear_timeout : int -> unit = "clearTimeout" [@@mel.scope "window"]
 external focus : E.t -> unit = "focus" [@@mel.send]
 external click : E.t -> unit = "click" [@@mel.send]
 external value : E.t -> string = "value" [@@mel.get]
+
+external set_value : E.t -> string -> unit = "value" [@@mel.set]
 external confirm : string -> bool = "confirm" [@@mel.scope "window"]
 external open_url : string -> unit = "open" [@@mel.scope "window"]
 external location_origin : unit -> string = "origin" [@@mel.scope "location"]

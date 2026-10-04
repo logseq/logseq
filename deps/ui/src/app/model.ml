@@ -157,6 +157,12 @@ type confirm =
 
 (* rtc-sync-state broadcast projection — the fields the header indicator
    and e2e rtc-tx element need (components/rtc/indicator.cljs) *)
+type rtc_user =
+  { ru_uuid : string (* user/uuid *)
+  ; ru_name : string (* user/name *)
+  ; ru_email : string option (* user/email *)
+  }
+
 type rtc =
   { rtc_lock : bool (* ws open *)
   ; rtc_ws_state : string
@@ -165,6 +171,7 @@ type rtc =
   ; rtc_pending_local : int (* unpushed-block-update-count *)
   ; rtc_pending_asset : int
   ; rtc_pending_server : int
+  ; rtc_online_users : rtc_user list (* online-users *)
   }
 
 (* worker :notification broadcast -> toast *)

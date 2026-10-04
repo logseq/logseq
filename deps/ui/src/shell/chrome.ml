@@ -85,25 +85,9 @@ let rtc_tx_text (r : Model.rtc) =
 (* cljs header.cljs rtc-indicator-visible? — the indicator shows when
    the open repo is a remote/rtc graph: logged in, rtc-group, and the
    graph's rtc uuid known (db-rtc-uuid) or sync already broadcasting
-   state *)
-let db_rtc_uuid : string option ref = ref None
-let db_rtc_repo : string option ref = ref None
+   state. The uuid resolution lives in Rtc_flows (shared with
+   Collaborators) *)
 let last_rtc : Model.rtc option ref = ref None
-
-let refresh_db_rtc_uuid (repo : string option) =
-  match repo with
-  | Some r when !db_rtc_repo <> Some r || !db_rtc_uuid = None ->
-      db_rtc_repo := Some r;
-      db_rtc_uuid := None;
-      ignore
-        (let open Promise_ext in
-        let* w =
-          Runtime.invoke1 "thread-api/get-rtc-graph-uuid" (Wire.String r)
-        in
-        db_rtc_uuid := Wire.as_uuid w;
-        Runtime.flush ();
-        Js.Promise.resolve ())
-  | _ -> ()
 
 (* cljs indicator.cljs details — dropdown under the cloud button:
    online/offline, pending counts, last-synced, debug toggle and a
@@ -282,12 +266,12 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
     ~equal:(fun (a : string option * Model.rtc option)
                   (b : string option * Model.rtc option) -> a = b)
     (fun ((repo : string option), (r : Model.rtc option)) ->
-      refresh_db_rtc_uuid repo;
+      Rtc_flows.refresh_db_rtc_uuid repo;
       last_rtc := r;
       let visible =
         (Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
         && repo <> None
-        && (!db_rtc_uuid <> None || r <> None))
+        && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
         || (Platform.rtc_test_mode () && repo <> None)
       in
       if not visible then
@@ -358,13 +342,13 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
       (* m.rtc joins the input so the db-sync-start broadcast after an
          upload re-renders — refresh_db_rtc_uuid then resolves the new
          uuid and hides the button *)
-      refresh_db_rtc_uuid repo;
+      Rtc_flows.refresh_db_rtc_uuid repo;
       let uploadable =
         match repo with
         | Some r ->
             Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
             && List.mem r repos
-            && !db_rtc_uuid = None
+            && !Rtc_flows.db_rtc_uuid = None
         | None -> false
       in
       if uploadable then
@@ -476,7 +460,10 @@ let header (ms : Model.t Signal.signal) =
                   | _ -> Logseq_dom.dom ~key:"head-bc-empty" [])
                 ms ]
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
-            [ rtc_indicator ms
+            [ (* cljs header.cljs: inside the same rtc-indicator-visible?
+                 gate — collaborators then the cloud indicator *)
+              Collaborators.widget ms
+            ; rtc_indicator ms
             ; local_graph_sync_button ms
             ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders
