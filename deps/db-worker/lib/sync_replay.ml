@@ -1633,6 +1633,44 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
           | _ -> false)
       | _ -> false
     in
+    (* attr entities whose ident is built-in (anything outside the
+       user.* namespaces) are graph bookkeeping like logseq.kv/*
+       entities — every peer derives them from its own seed with the
+       same deterministic content, so un-applying their retractions only
+       churns the schema: the fork drops the schema attr when an
+       entity's db/ident retracts and re-asserts it bare on re-create,
+       losing declared-only flags like :db/index (every subsequent
+       :avet access on block/parent then throws — the checksum listener
+       crashes on each commit and sync counters never converge).
+       Retraction items that target a bookkeeping attr entity are
+       skipped; adds still apply so a pending delete still resurrects
+       the entity. *)
+    let builtin_attr_eids =
+      let acc = ref Int_set.empty in
+      Datascript.datoms (Conn.db conn) Aevt ~a:"db/ident" ()
+      |> Seq.iter (fun (d : datom) ->
+             match d.v with
+             | Keyword s | String s
+               when not
+                      (String.length s >= 5
+                       && String.sub s 0 5 = "user.") ->
+                 acc := Int_set.add d.e !acc
+             | _ -> ());
+      !acc
+    in
+    let touches_builtin_attr (db : db) (item : Wire.t) : bool =
+      let target =
+        match item with
+        | Wire.Array (op :: e :: _) | Wire.List (op :: e :: _)
+          when op = Wire.keyword "db/retract"
+               || op = Wire.keyword "db/retractEntity"
+               || op = Wire.keyword "db.fn/retractEntity" -> e
+        | _ -> Wire.Nil
+      in
+      match Sync_apply.entity_of_wire_ref db target with
+      | Some ent -> Int_set.mem ent.id builtin_attr_eids
+      | None -> false
+    in
     (* (attr, value) of a lookup-ref-shaped wire item, for stubbing *)
     let lookup_pair_of (v : Wire.t) : (string * Wire.t) option =
       match v with
@@ -1836,7 +1874,46 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
       | Some s -> tx_items_of (Transit_codec.of_string s)
       | None -> []
     in
-    Sync_client_op.get_unconfirmed_tx_data repo
+    let unconfirmed = Sync_client_op.get_unconfirmed_tx_data repo in
+    Worker_log.warn "db-sync/unapply-rows"
+      ([ "repo", repo; "count", string_of_int (List.length unconfirmed) ]
+       @ List.concat_map
+           (fun (e : Sync_client_op.unconfirmed_tx_row) ->
+              let items = stored_items e.un_reversed_tx_data in
+              let ops =
+                items
+                |> List.filter_map (fun i ->
+                       match i with
+                       | Wire.Array (op :: _) | Wire.List (op :: _) -> (
+                           match op with
+                           | Wire.Keyword s | Wire.String s -> Some s
+                           | _ -> None)
+                       | _ -> None)
+                |> List.sort_uniq compare
+                |> String.concat ","
+              in
+              let retract_idents =
+                items
+                |> List.filter_map (fun i ->
+                       match i with
+                       | Wire.Array
+                           [ op; _e; a; v ]
+                       | Wire.List [ op; _e; a; v ]
+                         when op = Wire.keyword "db/retract"
+                              && a = Wire.keyword "db/ident" -> (
+                           match v with
+                           | Wire.Keyword s | Wire.String s -> Some s
+                           | _ -> None)
+                       | _ -> None)
+                |> String.concat ","
+              in
+              [ "tx-id", e.un_tx_id
+              ; "failed", string_of_bool e.un_failed
+              ; "items", string_of_int (List.length items)
+              ; "ops", ops
+              ; "retract-idents", retract_idents ])
+           unconfirmed);
+    unconfirmed
     |> List.rev
     |> List.iter (fun (e : Sync_client_op.unconfirmed_tx_row) ->
            try
@@ -1844,6 +1921,7 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
              match
                stored_items e.un_reversed_tx_data
                |> List.filter (fun i -> not (touches_kv_item i))
+               |> List.filter (fun i -> not (touches_builtin_attr db i))
                (* a failed row's reject usually already rolled its
                   reversed tx back on the durable conn — a second
                   retractEntity would delete an entity re-created in
