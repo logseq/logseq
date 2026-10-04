@@ -92,7 +92,7 @@ let last_rtc : Model.rtc option ref = ref None
 
 let refresh_db_rtc_uuid (repo : string option) =
   match repo with
-  | Some r when !db_rtc_repo <> Some r ->
+  | Some r when !db_rtc_repo <> Some r || !db_rtc_uuid = None ->
       db_rtc_repo := Some r;
       db_rtc_uuid := None;
       ignore
@@ -354,13 +354,16 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
    the uuid resolves — cljs has the same window) *)
 let local_graph_sync_button (ms : Model.t Signal.signal) : t =
   dyn ~equal:( = )
-    (fun (repo : string option) ->
+    (fun ((repo : string option), (repos : string list), (_rtc : Model.rtc option)) ->
+      (* m.rtc joins the input so the db-sync-start broadcast after an
+         upload re-renders — refresh_db_rtc_uuid then resolves the new
+         uuid and hides the button *)
       refresh_db_rtc_uuid repo;
       let uploadable =
         match repo with
         | Some r ->
             Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
-            && List.mem r !Graphs_ops.repos
+            && List.mem r repos
             && !db_rtc_uuid = None
         | None -> false
       in
@@ -380,7 +383,7 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
             | _ -> ())
           [ Icons.icon ~size:20. ~cls:"" "cloud" ]
       else Logseq_dom.dom ~key:"lgs-off" ~style_class:"hidden" [])
-    (Signal.map (fun (m : Model.t) -> m.repo) ms)
+    (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)
 
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"

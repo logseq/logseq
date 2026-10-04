@@ -121,6 +121,10 @@ let run () =
     Runtime.send (Action.Repos_loaded repos);
     pick_graph repos
   in
+  (* pick_graph may have just created the repo (fresh profile -> Demo);
+     Repos_loaded fired before that create, so register it now — the
+     header's local-graph-sync-btn checks m.repos membership *)
+  if not (List.mem repo repos) then !Runtime.add_repo repo;
   let* _ = Graph.open_graph repo in
   let* repo =
     Graphs_meta.touch repo;

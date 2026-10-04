@@ -107,6 +107,7 @@ let refresh () =
 let add_repo repo =
   if not (List.mem repo !repos) then begin
     repos := !repos @ [ repo ];
+    Runtime.send (Action.Repos_loaded !repos);
     !on_repos_changed ()
   end
 
