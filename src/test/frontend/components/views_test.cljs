@@ -832,7 +832,52 @@
                          :rows [(random-uuid)]}]
     (is (= ready-view-data (#'views/view-paint-source ready-view-data nil)))
     (is (= ready-view-data (#'views/view-paint-source nil ready-view-data))
-        "Typing into the view search changes the resource key before the worker returns; keep the old view mounted so the input stays open.")))
+        "Typing into the view search changes the resource key before the worker returns; keep the old view mounted so the input stays open.")
+    (is (= ready-view-data
+           (#'views/retained-view-paint nil ready-view-data "same" "same"))
+        "A search refetch must keep the last payload so the toolbar stays mounted.")
+    (is (nil? (#'views/retained-view-paint nil ready-view-data "filters" "search"))
+        "Filter/sort identity changes still drop stale paint immediately.")
+    (is (nil? (#'views/retained-view-paint nil nil "same" "same"))
+        "Initial load with no payload still shows skeletons.")))
+
+(deftest view-paint-identity-ignores-search-input
+  (let [base {:feature-type :class-objects
+              :sorting [{:id :block/title :asc? true}]
+              :input ""
+              :initial-row-count 30}
+        typed (assoc base :input "todo")
+        filtered (assoc base :filters {:or? false
+                                       :filters [[:block/title :text-contains "Alpha"]]})
+        resorted (assoc base :sorting [{:id :block/updated-at :asc? false}])]
+    (is (= (#'views/view-paint-identity base)
+           (#'views/view-paint-identity typed))
+        "Search input must not drop previous paint.")
+    (is (not= (#'views/view-paint-identity base)
+              (#'views/view-paint-identity filtered))
+        "Filter changes still drop stale paint.")
+    (is (not= (#'views/view-paint-identity base)
+              (#'views/view-paint-identity resorted))
+        "Sort changes still drop stale paint.")))
+
+(deftest search-input-stays-visible-when-query-is-present
+  (is (false? (#'views/search-input-visible? false "")))
+  (is (false? (#'views/search-input-visible? false "   ")))
+  (is (true? (#'views/search-input-visible? true "")))
+  (is (true? (#'views/search-input-visible? false "todo"))
+      "A remounted search with a non-empty query must stay open."))
+
+(deftest table-search-renders-input-when-query-is-non-empty
+  (let [open-markup (render-static
+                     (views/search "todo" {:on-change identity :set-input! identity}))
+        closed-markup (render-static
+                       (views/search "" {:on-change identity :set-input! identity}))]
+    (is (string/includes? open-markup "Type to search")
+        "Remounting search with a typed query must keep the input mounted.")
+    (is (string/includes? open-markup "todo")
+        "The typed filter value is preserved on remount.")
+    (is (not (string/includes? closed-markup "Type to search"))
+        "An empty query still collapses back to the search button.")))
 
 (deftest first-window-fills-a-tall-viewport-from-screen-height-test
   (let [view-uuid (random-uuid)
