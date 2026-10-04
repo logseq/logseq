@@ -166,6 +166,8 @@ let init () = load (current_lang ())
    for e2e/DOM-parity while non-English lookups resolve through the same
    key. *)
 let en_overrides = function
+  (* cljs imports.cljs hardcodes [:strong "SQLite"] — no dict key exists *)
+  | "import/sqlite-label" -> "SQLite"
   | "cmdk.create/page" -> "Create page"
   | "cmdk.create/tag" -> "Create tag"
   | "cmdk.info/create-page" -> "Create page called '{1}'"
@@ -578,7 +580,6 @@ let en_overrides = function
   | "ui/false" -> "false"
   | "graph.switch/select-prompt" -> "Select a Graph"
   | "cmdk.group/current-page" -> "Current Page"
-  | "account/sign-in" -> "Sign in"
   | "publish/publish-error" -> "Publish failed. Please try again."
   | "graph/delete-server-action" -> "Delete remote graph"
   | "import/invalid-edn-file" -> "Invalid EDN file."

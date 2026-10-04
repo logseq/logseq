@@ -67,7 +67,8 @@ let dots_button =
                  (Some
                     ( Dom_ext.rect_right r
                     , Dom_ext.rect_bottom r +. 4.
-                    , true )))
+                    , true
+                    , None )))
         | None -> ())
     [ Icons.icon ~size:20. ~cls:"" "dots" ]
 
@@ -321,6 +322,13 @@ let overlays (ms : Model.t Signal.signal) =
              per-publish deep [=] on the whole route page record *)
           a.page_menu = b.page_menu && a.confirm = b.confirm
           && a.data_gen = b.data_gen
+          && List.map
+               (fun (p : Model.page) -> (p.page_uuid, p.page_journal_day))
+               a.journals
+             = List.map
+                 (fun (p : Model.page) ->
+                   (p.page_uuid, p.page_journal_day))
+                 b.journals
           && Option.map
                (fun (p : Model.page) ->
                  ( p.page_uuid

@@ -558,7 +558,11 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
             ~style_class:"item flex items-center gap-1 select-none"
             ~events:"click"
             ~on_dom_event:(fun n _ ->
-              if n = "click" then Sidebar_state.open_dialog "graphs")
+              if n = "click" then
+                (* cljs opens a repos dropdown menu here; until that menu
+                   exists, land on the All graphs page (graph switching,
+                   create, and row actions live there) *)
+                Platform.set_location_hash (Runtime.nav_hash "#/graphs"))
             [ dom ~key:"gsel-th" ~tag:"span" ~style_class:"thumb"
                 [ icon "topology-star" ]
             ; dom ~key:"gsel-n" ~tag:"strong"

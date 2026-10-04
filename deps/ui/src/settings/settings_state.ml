@@ -51,6 +51,13 @@ let set_tab tab =
   Platform.body_set_data "settingsTab" tab;
   set (fun s -> { s with tab })
 
+(* cljs open-settings! <tab> — the tab the next activate applies.
+   Consumed once; a plain open always lands on general like cljs's
+   :ui/settings-open? = true *)
+let pending_tab : string option ref = ref None
+
+let open_at tab = pending_tab := Some tab
+
 (* common-util/page-name-sanity-lc approximation: lowercase + strip boundary
    slashes (path normalization is not needed for the settings lookups) *)
 let page_name_lc s =
@@ -115,10 +122,13 @@ let load () =
    Uses Signal.set (no flush) — called during mount, the pending render
    picks up the fresh value. *)
 let activate () =
-  Platform.body_set_data "settingsTab" "general";
-  if ready () then (
-    Signal.set (state ()) { (value ()) with tab = "general" };
-    load ())
+  let tab =
+    match !pending_tab with
+    | Some t -> pending_tab := None; t
+    | None -> "general"
+  in
+  Platform.body_set_data "settingsTab" tab;
+  if ready () then (Signal.set (state ()) { (value ()) with tab }; load ())
 
 let deactivate () = Platform.body_rm_data "settingsTab"
 

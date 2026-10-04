@@ -66,7 +66,7 @@ let breadcrumbs title : t list =
 
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)
-let open_menu name payload =
+let open_menu (page : Model.page) name payload =
   (* title-tag chips get their own context menu (.block-tag, cljs
      block-tag popup) — only the bare title opens the page menu. Refs
      and other anchors inside the title still open the page menu *)
@@ -79,7 +79,8 @@ let open_menu name payload =
          (Some
             ( Platform.payload_num payload "clientX"
             , Platform.payload_num payload "clientY"
-            , false )));
+            , false
+            , page.page_uuid )));
     Runtime.flush ())
 
 (* generic: works for any entity uuid (page or block) *)
@@ -526,7 +527,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 let n = String.length (Dom_ext.value el) in
                 Dom_ext.set_selection_range el n n
             | None -> ())
-      | _ -> open_menu name payload)
+      | _ -> open_menu page name payload)
     body
     ) ctx parent
 

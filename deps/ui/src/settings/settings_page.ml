@@ -582,7 +582,9 @@ let keymap_controls () =
                     [ icon ~key:"km-sic" "search" ]
                 ; dom ~key:"km-in" ~tag:"input"
                     ~style_class:"form-input is-small"
-                    ~attrs:[ ("placeholder", T.keymap_search_placeholder) ]
+                    ~attrs:
+                      [ ("placeholder", T.keymap_search_placeholder)
+                      ; ("autofocus", "true") ]
                     []
                 ]
             ; dom ~key:"km-kb" ~tag:"button"
@@ -705,6 +707,20 @@ let keymap_row ~key (r : Keymap_data.row) =
     ]
 
 let keymap_pane () =
+  (* cljs shortcut.cljs :auto-focus — the search input gets focus every
+     time the keymap pane mounts (dialog open and tab switch alike) *)
+  (try
+     ignore
+       (Browser_ui.set_timeout
+          (fun () ->
+            match
+              Browser_ui.qs
+                ".cp__shortcut-page-x .search-input-wrap input"
+            with
+            | Some el -> Browser_ui.focus el
+            | None -> ())
+          32)
+   with _ -> ());
   dom ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x"
     ~attrs:[ ("style", "--shortcut-header-h: 85px;") ]
     [ keymap_controls ()

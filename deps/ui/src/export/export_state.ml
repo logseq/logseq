@@ -12,6 +12,8 @@ type fmt =
 type t =
   { page_uuid : string option
   ; page_db_id : int option
+  ; has_top_level : bool
+    (* cljs when-not (seq? top-level-uuids) gates the PNG tab *)
   ; fmt : fmt
   ; content : string option
   ; copied : bool
@@ -62,6 +64,7 @@ let defaults () =
   let nl, ob, lvl = stored_other () in
   { page_uuid = None
   ; page_db_id = None
+  ; has_top_level = false
   ; fmt = Text
   ; content = None
   ; copied = false
@@ -88,9 +91,10 @@ let persist st =
 
 (* Page identity stashed by page_menu when the dialog opens — mirrors
    cljs state/:*export-block-text properties. *)
-let pending : (string * int option) option ref = ref None
+let pending : (string * int option * bool) option ref = ref None
 
-let arm uuid db_id = pending := Some (uuid, db_id)
+let arm uuid db_id ~has_top_level =
+  pending := Some (uuid, db_id, has_top_level)
 
 let st_ref : t Signal.state option ref = ref None
 
@@ -104,10 +108,10 @@ let st ctx =
 
 let open_ ctx =
   let st = st ctx in
-  let uuid, db_id =
+  let uuid, db_id, has_top_level =
     match !pending with
-    | Some (u, d) -> (Some u, d)
-    | None -> (None, None)
+    | Some (u, d, tl) -> (Some u, d, tl)
+    | None -> (None, None, false)
   in
   pending := None;
   (match (Signal.get_state st).png_url with
@@ -117,6 +121,7 @@ let open_ ctx =
       { s with
         page_uuid = uuid
       ; page_db_id = db_id
+      ; has_top_level
       ; fmt = Text
       ; content = None
       ; copied = false
