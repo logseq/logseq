@@ -131,6 +131,64 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
             ])
     (Signal.map (fun (m : Model.t) -> m.rtc) ms)
 
+(* cljs components/svg.cljs loader-fn — the ui/loading spinner *)
+let loader_svg : t =
+  Logseq_dom.dom ~key:"ldr" ~tag:"svg"
+    ~attrs:
+      [ ("version", "1.1"); ("viewBox", "0 0 24 24"); ("fill", "none")
+      ; ("class", "animate-spin w-5 h-5"); ("display", "inline-block") ]
+    [ Logseq_dom.dom ~key:"ldr-c" ~tag:"circle"
+        ~attrs:
+          [ ("class", "opacity-25"); ("cx", "12"); ("cy", "12"); ("r", "10")
+          ; ("stroke", "currentColor"); ("stroke-width", "4") ]
+        []
+    ; Logseq_dom.dom ~key:"ldr-p" ~tag:"path"
+        ~attrs:
+          [ ("class", "opacity-75"); ("fill", "currentColor")
+          ; ( "d"
+            , "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 \
+               5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 \
+               7.938l3-2.647z" ) ]
+        []
+    ]
+
+(* cljs header.cljs search-index-progress — renders while the worker
+   reports its FTS index build for the current repo *)
+let index_progress (ms : Model.t Signal.signal) : t =
+  dyn
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      a.index_build = b.index_build)
+    (fun (m : Model.t) ->
+      let ib = m.Model.index_build in
+      if
+        (ib.ib_visible || ib.ib_running) && m.repo = Some ib.ib_repo
+      then
+        Logseq_dom.dom ~key:"sip" ~style_class:"search-index-progress"
+          [ Logseq_dom.dom ~key:"sip-l"
+              ~style_class:
+                "flex flex-row items-center inline icon-loading"
+              [ Logseq_dom.dom ~key:"sip-i" ~tag:"span"
+                  ~style_class:"icon flex items-center"
+                  [ loader_svg ] ]
+          ; Logseq_dom.dom ~key:"sip-t" ~tag:"span"
+              ~style_class:"search-index-progress__text"
+              ~text:
+                (I18n.tf "search/index-progress"
+                   [ string_of_int ib.ib_progress ])
+              []
+          ; Logseq_dom.dom ~key:"sip-b"
+              ~style_class:"search-index-progress__bar"
+              [ Logseq_dom.dom ~key:"sip-f"
+                  ~style_class:"search-index-progress__bar-fill"
+                  ~attrs:
+                    [ ( "style"
+                      , Printf.sprintf "width: %d%%" ib.ib_progress )
+                    ]
+                  [] ]
+          ]
+      else Logseq_dom.nothing)
+    ms
+
 (* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
@@ -180,6 +238,7 @@ let header (ms : Model.t Signal.signal) =
         [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
             [ rtc_indicator ms
+            ; index_progress ms
             ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders
                  .ui-items-container only when a plugin actually

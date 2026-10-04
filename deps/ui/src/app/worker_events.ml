@@ -182,8 +182,48 @@ and apply_pending () : unit Js.Promise.t =
       finish ();
       Js.Promise.resolve ()
 
+(* cljs persist_db/browser.cljs thread-api/search-index-build-progress:
+   running/completed surface the header chip; :completed hides it 1.5s
+   later if the build is still current *)
+let on_index_progress repo (payload : Wire.t) =
+  let str k =
+    match Wire.get payload k with
+    | Some (Wire.String s | Wire.Keyword s) -> s
+    | _ -> ""
+  in
+  let status = str "status" in
+  let build_id =
+    match Wire.get payload "build-id" with
+    | Some (Wire.String s) -> Some s
+    | _ -> None
+  in
+  Runtime.send
+    (Action.Search_index_progress
+       { Model.ip_repo = repo
+       ; ip_status = status
+       ; ip_stage = str "stage"
+       ; ip_progress =
+           Option.value (Wire.map_get_int payload "progress") ~default:0
+       ; ip_build_id = build_id
+       });
+  Runtime.flush ();
+  match status, build_id with
+  | "completed", Some bid ->
+      Editor_dom.set_timeout
+        (fun () ->
+          Runtime.send (Action.Search_index_hide (repo, bid));
+          Runtime.flush ())
+        1500
+  | _ -> ()
+
 let dispatch kind payload =
   match kind with
+  | "thread-api/search-index-build-progress" -> (
+      (* daemon path — the native worker Broadcast.to_clients the same
+         [repo, payload] args the browser worker sends via remoteInvoke *)
+      match Wire.args_list payload with
+      | [ Wire.String repo; progress ] -> on_index_progress repo progress
+      | _ -> ())
   | "notification" -> (
       match Decode.toast_of_wire payload with
       | Some t ->
@@ -249,10 +289,14 @@ let detail_json ev = Platform.json_prop ev "detail"
 let init () =
   (* the worker's search-index build reports progress through this
      remoteInvoke; without a handler the worker->main comlink call hangs
-     and the build never settles *)
+     and the build never settles. Feeds the header's
+     .search-index-progress widget — cljs
+     persist_db/browser.cljs thread-api/search-index-build-progress *)
   Worker_client.register_api "thread-api/search-index-build-progress"
     (fun args ->
-      ignore args;
+      (match args with
+       | [ Wire.String repo; payload ] -> on_index_progress repo payload
+       | _ -> ());
       Js.Promise.resolve Wire.Nil);
   Runtime.on_navigate := (fun () ->
       clear_pending_deltas ();

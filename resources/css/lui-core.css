@@ -359,6 +359,37 @@ blockquote {
     width: auto;
     padding: 0 0.375rem;
   }
+
+  /* cljs header.css: worker search-index build progress chip */
+  .search-index-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    opacity: 0.9;
+    -webkit-app-region: no-drag;
+    background-color: var(--ls-tertiary-background-color);
+  }
+
+  .search-index-progress__text {
+    white-space: nowrap;
+  }
+
+  .search-index-progress__bar {
+    height: 0.25rem;
+    width: 4rem;
+    overflow: hidden;
+    border-radius: 0.25rem;
+    background-color: var(--ls-quaternary-background-color);
+  }
+
+  .search-index-progress__bar-fill {
+    height: 100%;
+    transition: all 200ms;
+    background-color: var(--ls-link-text-color);
+  }
 }
 
 .cp__header-logo {
