@@ -2801,7 +2801,10 @@ let replay_pending_entry (repo : string) (conn : conn)
                  [ ( "outliner-op"
                    , match local_tx.outliner_op with
                      | Some o -> Keyword o
-                     | None -> Nil ) ])
+                     | None -> Nil )
+                 ; (* recorded tx-data already carries the original tx's
+                      pipeline effects — skip re-running them *)
+                   "db-sync/replayed-tx-data?", Bool true ])
         | [] -> ())
 
 (* Replays the pending queue in order. A replay failure marks the entry
