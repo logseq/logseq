@@ -251,10 +251,18 @@ let confirm_view (c : Model.confirm) =
         ]
     ]
 
+(* cljs right-sidebar/get-page: non-page routes resolve the dots-menu
+   page to today's journal — here that's the head of m.journals (only
+   populated on the Journals/Home routes) *)
+let menu_page (m : Model.t) =
+  match m.route_page with
+  | Some p -> Some p
+  | None -> List.nth_opt m.journals 0
+
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
   match m.page_menu with
-  | Some (x, y, with_app) -> view (x, y, with_app) m.route_page
+  | Some (x, y, with_app) -> view (x, y, with_app) (menu_page m)
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c

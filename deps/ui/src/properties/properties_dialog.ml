@@ -644,11 +644,14 @@ let open_dialog ?(remove = false) ?anchor target =
   let style =
     match anchor with
     | Some (x, y) ->
-        Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;%s"
-          x y body_style
+        let avail = Float.max (window_inner_height -. y -. 10.) 200. in
+        Printf.sprintf
+          "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;\
+           --available-height:%.0fpx;%s"
+          x y avail body_style
     | None ->
         "position:fixed;left:50%;top:30%;transform:translateX(-50%);\
-         z-index:9999;" ^ body_style
+         z-index:9999;--available-height:60vh;" ^ body_style
   in
   (* cljs popup chrome: ui__popover-content card > .ls-property-dialog *)
   let root =

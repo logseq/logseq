@@ -2233,6 +2233,17 @@ div[data-keep-selection].menu-links-wrapper {
   align-items: center;
 }
 
+/* cljs value.css: the set/add-property picker caps the key column and
+   scrolls the result list inside it */
+.ls-property-dialog .ls-property-key {
+  height: 286px;
+  overflow-y: hidden;
+}
+
+.ls-property-dialog .ls-property-key .cp__select-main .item-results-wrap {
+  max-height: 250px;
+}
+
 .ls-property-date-picker {
   display: flex;
   flex-direction: row;
