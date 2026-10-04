@@ -413,20 +413,6 @@ let pooled_runtime () = not (is_node ())
 
 (* --- raw db-file ops (cljs storage :export-file/:import-db) --- *)
 
-module U8 = Js.Typed_array.Uint8Array
-
-external u8a_get : U8.t -> int -> int = "" [@@mel.get_index]
-external u8a_set : U8.t -> int -> int -> unit = "" [@@mel.set_index]
-external u8a_length : U8.t -> int = "length" [@@mel.get]
-external new_u8a : int -> U8.t = "Uint8Array" [@@mel.new]
-
-let string_of_u8a a = String.init (u8a_length a) (fun i -> Char.chr (u8a_get a i))
-
-let u8a_of_string s =
-  let a = new_u8a (String.length s) in
-  String.iteri (fun i c -> u8a_set a i (Char.code c)) s;
-  a
-
 (* node fs binary helpers — latin1 encoding keeps the byte string 1:1
    (Buffer.from/toString default to utf8, which would corrupt bytes). *)
 external readFileSync : string -> Node.Buffer.t = "readFileSync" [@@mel.module "fs"]
@@ -457,7 +443,7 @@ let export_file ~name ~dir ~path =
   else
     match Hashtbl.find_opt pools name with
     | Some pool ->
-        (try Db_worker_effect.pure (string_of_u8a (Opfs.export_file pool path))
+        (try Db_worker_effect.pure (U8a.to_string (Opfs.export_file pool path))
          with Js.Exn.Error e ->
            Db_worker_effect.error (Failure (js_error_message e)))
     | None ->
@@ -477,7 +463,7 @@ let import_db ~name ~dir ~path contents =
     match Hashtbl.find_opt pools name with
     | Some pool ->
         (try
-           ignore (Opfs.import_db pool path (u8a_of_string contents));
+           ignore (Opfs.import_db pool path (U8a.of_string contents));
            Db_worker_effect.pure ()
          with Js.Exn.Error e ->
            Db_worker_effect.error (Failure (js_error_message e)))

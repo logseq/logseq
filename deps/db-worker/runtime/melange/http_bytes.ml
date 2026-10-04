@@ -14,15 +14,6 @@ type response =
   ; body : string
   }
 
-module U8 = Js.Typed_array.Uint8Array
-
-let u8_of_bytes s =
-  let a = U8.fromLength (String.length s) in
-  String.iteri (fun i c -> U8.unsafe_set a i (Char.code c)) s;
-  a
-
-let bytes_of_u8 a =
-  String.init (U8.length a) (fun i -> Char.chr (U8.unsafe_get a i))
 
 external promise_error_message : Js.Promise.error -> string option = "message"
   [@@mel.get] [@@mel.return { undefined_to_opt }]
@@ -57,6 +48,8 @@ let method_of_string = function
   | "CONNECT" -> Fetch.Connect
   | "TRACE" -> Fetch.Trace
   | _ -> Fetch.Get
+
+module U8 = Js.Typed_array.Uint8Array
 
 external body_init_of_u8 : U8.t -> Fetch.bodyInit = "%identity"
 external resp_array_buffer : Fetch.Response.t -> Js.arrayBuffer Js.Promise.t
@@ -95,7 +88,7 @@ external reader_read :
 let request_init (req : request) =
   let body =
     Option.map
-      (fun bytes -> body_init_of_u8 (u8_of_bytes bytes))
+      (fun bytes -> body_init_of_u8 (U8a.of_string bytes))
       req.body
   in
   Fetch.RequestInit.make ~method_:(method_of_string req.method_)
@@ -108,7 +101,7 @@ let send req =
   task_of_promise (Fetch.fetchWithInit req.url (request_init req))
   >>= fun resp ->
   task_of_promise (resp_array_buffer resp) >>= fun buf ->
-  let body = bytes_of_u8 (U8.fromBuffer buf ()) in
+  let body = U8a.to_string (U8.fromBuffer buf ()) in
   Db_worker_effect.pure
     { status = Fetch.Response.status resp
     ; headers = headers_of_response resp
@@ -193,7 +186,7 @@ let gunzip_reader src (first : U8.t)
     | None ->
         read_u8_chunk out >>= fun chunk ->
         (match chunk with
-         | Some u8 -> Db_worker_effect.pure (Some (bytes_of_u8 u8))
+         | Some u8 -> Db_worker_effect.pure (Some (U8a.to_string u8))
          | None -> Db_worker_effect.pure None)
 
 let gzip_magic (u8 : U8.t) =
@@ -213,11 +206,11 @@ let send_stream req f =
       match !first with
       | Some u8 ->
           first := None;
-          Db_worker_effect.pure (Some (bytes_of_u8 u8))
+          Db_worker_effect.pure (Some (U8a.to_string u8))
       | None ->
           read_u8_chunk reader >>= fun chunk ->
           (match chunk with
-           | Some u8 -> Db_worker_effect.pure (Some (bytes_of_u8 u8))
+           | Some u8 -> Db_worker_effect.pure (Some (U8a.to_string u8))
            | None -> Db_worker_effect.pure None)
   in
   (* cljs <stream-snapshot-row-batches! semantics: decode only when the
