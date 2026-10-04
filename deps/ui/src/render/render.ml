@@ -291,14 +291,17 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
 
 (* cljs block-title-aux query-setting: class-Query blocks get a ghost
    settings button next to the title (opacity-0 until the head row is
-   hovered) that toggles the query source editor — the delegated click
-   handler in Views_mount resolves the shell inside the same .ls-block *)
-let query_setting_el =
+   hovered) that toggles the query source editor inside the block's
+   below-row .custom-query-results view *)
+let query_setting_el ~block_uuid =
   D.el ~key:"qs" ~tag:"button"
     ~style_class:
       "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6 \
        transition-opacity ease-in duration-300 opacity-0"
     ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ]
+    ~events:"click"
+    ~on_dom_event:(fun name _ ->
+      if name = "click" then Views_view.toggle_query_editor ~block_uuid)
     [ Icons.icon ~size:14. "settings" ]
 
 (* cljs cards-block?: logseq.class/Cards tag adds a "Practice" ghost
@@ -322,17 +325,15 @@ let is_cards_block (b : Model.block) =
 
 (* cljs custom-query*: class-Query blocks render their live query inside
    .custom-query > .bd > .custom-query-results BELOW .block-main-container
-   (a sibling inside .ls-block); Views_mount.ensure_query_shells mounts
-   the query-result view into it *)
-let query_below_el ?(empty = false) uuid =
+   (a sibling inside .ls-block) — mounted declaratively as a KQuery view
+   (.views-query-inner + raw-source .CodeMirror when the editor is open) *)
+let query_below_el uuid =
   D.el ~key:("cq-" ^ uuid) ~tag:"div" ~style_class:"custom-query"
     [ D.el ~tag:"div" ~style_class:"bd"
         [ D.el ~tag:"div" ~style_class:"custom-query-results"
-            (if empty then
-               (* cljs query-view empty state *)
-               [ D.el ~tag:"div" ~style_class:"text-sm mt-2 opacity-90"
-                   ~text:(I18n.t "search/no-result") [] ]
-             else [])
+            [ Views_view.view
+                ~kind:(Views_state.KQuery { block_uuid = uuid })
+                ~owner:(Wire.Uuid uuid) ]
         ]
     ]
 
@@ -410,7 +411,8 @@ let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
             (* {{query}} is a normal inline macro — macro_el renders the
                deprecation .warning inside .block-title-wrap like cljs *)
             let tail =
-              (if is_query then [ query_setting_el ] else [])
+              (if is_query then [ query_setting_el ~block_uuid:self ]
+               else [])
               @ if is_cards then [ practice_el ] else []
             in
             match ordered_prefix s with

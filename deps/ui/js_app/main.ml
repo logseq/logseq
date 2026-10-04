@@ -83,7 +83,8 @@ let main root =
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
-  Views_mount.install ();
+  (* views mount declaratively at their host sites — no
+     Views_mount observer *)
   Router.init ();
   Rtc_flows.init ();
   ignore (Boot.run ())
