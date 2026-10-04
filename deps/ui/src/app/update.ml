@@ -38,13 +38,11 @@ let update (model : t) (action : Action.t) : t =
       ; page_missing = true
       ; data_gen = model.data_gen + 1
       }
-  | Journals_loaded js ->
-      { model with
-        journals = js
-      ; data_gen =
-          (if js = model.journals then model.data_gen
-           else model.data_gen + 1)
-      }
+  | Journals_loaded js | Journals_spliced js ->
+      (* the journals view is signal-driven end to end (keyed items,
+         keyed blocks, dyn'd refs) — a publish never needs a data_gen
+         bump; the collections repaint or reconcile themselves *)
+      { model with journals = js }
   | Refs_loaded refs ->
       { model with
         page_refs = refs

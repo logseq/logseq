@@ -119,6 +119,11 @@ let on_navigate : (unit -> unit) ref = ref (fun () -> ())
    refresh them without a routing -> outliner_ops cycle *)
 let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
 
+(* same for one journal item on the Journals/Home route — refetches
+   that page's linked refs and republishes them through the keyed
+   collection (Router registers the impl) *)
+let refresh_journal_side : (Model.page -> unit) ref = ref (fun _ -> ())
+
 (* items signals for mounted virtual lists — a spliced block array is
    pushed straight into the list so the page dyn need not remount it *)
 let page_items : (string, Model.block array Signal.state) Hashtbl.t =
@@ -198,6 +203,13 @@ let track action =
       !nav_load_done ();
       after_page_load := None
   | Action.Journals_loaded js ->
+      !nav_load_done ();
+      (* a fresh full-fetch replaces every journal tree at an unknown
+         rev — the delta basis only survives splices applied through
+         Page_delta *)
+      Page_delta.reset ();
+      current_journals := js
+  | Action.Journals_spliced js ->
       !nav_load_done ();
       current_journals := js
   | Action.Navigate_to r ->

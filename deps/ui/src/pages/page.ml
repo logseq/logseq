@@ -508,7 +508,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             Platform.payload_bool payload "shiftKey"
           in
           if
-            page.page_uuid <> None && not shift
+            page.page_uuid <> None && page.page_journal_day = None
+            && not shift
             && (target = "" || target = "page-title"
                 || target = "page-title-text")
             && not interactive
@@ -1014,79 +1015,140 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
   | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
   | None -> false
 
-let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
-  let key = Option.value p.page_uuid ~default:p.page_title in
-  (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
-     containing the same editable db-page-title row as a page; the last
-     item drops its separator border via .journal-last-item *)
+(* journal item backed by the journals signal — the outer keyed
+   collection keeps the item mounted across publishes, a title dyn
+   repaints title/icon/tag edits, the block list is the same keyed
+   collection the page route uses (a delta splice repaints only the
+   touched rows), and the refs section repaints when page_linked_refs
+   changes. cljs journal-item > page-inner:
+   .cp__page-inner-wrap.is-journals containing the same editable
+   db-page-title row as a page; the last item drops its separator
+   border via .journal-last-item *)
+let journal_item_sig (ms : Model.t Signal.signal)
+    (ps : Model.page Signal.signal) : t =
+  let p0 = Signal.get ps in
+  let key =
+    Option.value p0.Model.page_uuid ~default:p0.Model.page_title
+  in
+  let is_last () =
+    match List.rev (Signal.get ms).Model.journals with
+    | last :: _ -> last.Model.page_uuid = (Signal.get ps).Model.page_uuid
+    | [] -> false
+  in
+  let title_eq ((a : Model.page), ea) ((b : Model.page), eb) =
+    ea = eb
+    && a.Model.page_title = b.Model.page_title
+    && a.Model.page_icon = b.Model.page_icon
+    && a.Model.page_tags = b.Model.page_tags
+    && a.Model.page_is_tag = b.Model.page_is_tag
+    && a.Model.page_db_collapsable = b.Model.page_db_collapsable
+    && a.Model.page_uuid = b.Model.page_uuid
+  in
+  let blocks_sig =
+    Signal.map (fun (p : Model.page) -> p.Model.page_blocks) ps
+  in
+  let nonempty = Signal.map (fun bs -> bs <> []) blocks_sig in
+  let jrefs_eq (a : Model.page) (b : Model.page) =
+    a.Model.page_linked_refs == b.Model.page_linked_refs
+    && is_today_journal a = is_today_journal b
+  in
   dom ~key:("ji-" ^ key)
-    ~style_class:
-      ("journal-item content relative" ^ if last then " journal-last-item" else "")
+    ~style_class_signal:
+      (Logseq_dom.class_signal
+         (Signal.map2 (fun _ _ -> ()) ps ms)
+         (fun _ ->
+           "journal-item content relative"
+           ^ if is_last () then " journal-last-item" else ""))
     [ dom ~key:("jiw-" ^ key)
         ~style_class:
           "flex-1 page relative cp__page-inner-wrap is-journals"
-        ~attrs:(page_wrap_attrs p)
+        ~attrs:(page_wrap_attrs p0)
         [ dom ~key:("jip-" ^ key)
             ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-            [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
-                [ page_title_el m p ]
-            ; blocks_inner ?puuid:p.page_uuid ~container:false
-                p.page_blocks
+            [ dom ~key:("jit-" ^ key)
+                ~style_class:"flex flex-row space-between"
+                [ Logseq_dom.dyn ~equal:title_eq
+                    (fun (p, editing_title) ->
+                      page_title_el
+                        { (Signal.get ms) with
+                          Model.editing_title = editing_title }
+                        p)
+                    (Signal.map2
+                       (fun (p : Model.page) (m : Model.t) ->
+                         (p, m.Model.editing_title))
+                       ps ms)
+                ]
+            ; dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
+                ~attrs:[ ("style", "margin-left: -20px") ]
+                [ dom ~key:"page-blocks-inner"
+                    ~style_class:"page-blocks-inner relative"
+                    ~attrs:
+                      [ ("data-cid", "main"); ("data-pu", key) ]
+                    (* cljs plain-block-list emits no .blocks-list-wrap
+                       on empty pages *)
+                    [ Logseq_dom.if_ ~test:nonempty
+                        (dom ~key:"blw"
+                           ~style_class:"blocks-list-wrap"
+                           ~attrs:[ ("data-level", "0") ]
+                           [ Logseq_dom.keyed ~source:blocks_sig
+                               ~key:Tree.block_key ~cmp:String.compare
+                               ~mount:(Tree.block_row_sig ~scope:"main")
+                           ])
+                    ]
+                ]
             ]
-        ; dom ~key:("jrefs-w-" ^ key) ~style_class:"flex flex-col gap-8 ml-1"
+        ; dom ~key:("jrefs-w-" ^ key)
+            ~style_class:"flex flex-col gap-8 ml-1"
             (* cljs journal-page: #today-queries div on the today item,
                then one .fade-in.delay refs section (unlinked refs are
                suppressed on the home route) *)
-            ((if is_today_journal p then
-                [ dom ~key:"tq" ~id:"today-queries" [] ]
-              else [])
-            @ [ dom ~key:"jrefs-f" ~style_class:"fade-in delay"
-                  [ journal_references_view p ]
-              ])
+            [ Logseq_dom.dyn ~equal:jrefs_eq
+                (fun (p : Model.page) ->
+                  dom ~key:("jrefs-i-" ^ key)
+                    ~style_class:"flex flex-col gap-8"
+                    ((if is_today_journal p then
+                        [ dom ~key:"tq" ~id:"today-queries" [] ]
+                      else [])
+                    @ [ dom ~key:"jrefs-f"
+                          ~style_class:"fade-in delay"
+                          [ journal_references_view p ]
+                      ]))
+                ps
+            ]
         ]
     ]
 
 (* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:
    #journals > div > div > div[data-testid=virtuoso-item-list] > div >
-   journal-item. We keep the same scaffolding. *)
-let journals_virt_item (m : Model.t) (js : Model.page list) : t list =
-  List.mapi
-    (fun i p ->
-      dom ~key:("jvi-" ^ string_of_int i)
-        [ journal_item ~last:(i = List.length js - 1) m p ])
-    js
-
-let journals_view (m : Model.t) (js : Model.page list) : t =
-  let items = Array.of_list js in
+   journal-item. We keep the same scaffolding, but the item list is a
+   keyed collection rather than a virtualized one: virtual rows only
+   re-render whole items, while keyed items repaint their internals
+   through per-item signals — that's what keeps an outliner op from
+   tearing down every mounted block row. *)
+let journals_view_ms (ms : Model.t Signal.signal) : t =
+  let journals_sig =
+    Signal.map (fun (m : Model.t) -> m.Model.journals) ms
+  in
   dom ~key:"journals" ~id:"journals" ~style_class:"h-full"
-    (match js with
-     | [] ->
-         [ dom ~key:"jp"
-             ~style_class:"journal-item-placeholder animate-pulse p-6" [] ]
-     | _ ->
-         (* cljs mounts the Virtuoso scroller unconditionally; only
-            rtc-test mode (without the flag) falls back to eager rows *)
-         if Virt_list.enabled_min ~virtualize:true ~min:1
-              (Array.length items)
-         then
-           [ dom ~key:"js"
-               [ dom ~key:"jvp"
-                   [ Virt_list.list
-                       ~list_attrs:[ ("data-virtuoso-scroller", "true") ]
-                       ~estimate_size:(fun _ -> 640.)
-                       ~key_of:(fun (p : Model.page) ->
-                         Option.value p.page_uuid ~default:p.page_title)
-                       ~render:(journal_item m) items ]
-               ]
-           ]
-         else
-           [ dom ~key:"js"
-               [ dom ~key:"jvp"
-                   [ dom ~key:"jil"
-                       ~attrs:[ ("data-testid", "virtuoso-item-list") ]
-                       (journals_virt_item m js) ]
-               ]
-           ])
+    [ dom ~key:"js"
+        [ dom ~key:"jvp"
+            [ dom ~key:"jil"
+                ~attrs:[ ("data-testid", "virtuoso-item-list") ]
+                [ Logseq_dom.if_
+                    ~test:(Signal.map (fun js -> js = []) journals_sig)
+                    (dom ~key:"jp"
+                       ~style_class:
+                         "journal-item-placeholder animate-pulse p-6" [])
+                ; Logseq_dom.keyed ~source:journals_sig
+                    ~key:(fun (p : Model.page) ->
+                      Option.value p.Model.page_uuid
+                        ~default:p.Model.page_title)
+                    ~cmp:String.compare
+                    ~mount:(journal_item_sig ms)
+                ]
+            ]
+        ]
+    ]
 
 let not_found_view name : t =
   dom ~key:"not-found" ~style_class:"page"
@@ -1354,7 +1416,7 @@ let region (ms : Model.t Signal.signal) : t =
           (* cljs container.cljs: journals render inside a plain
              route-root div *)
           dom ~key:"journals-root"
-            [ journals_view m m.journals; Selection_bar.view () ]
+            [ journals_view_ms ms; Selection_bar.view () ]
       | Model.Ready, Model.Not_found n -> not_found_view n
       | Model.Ready, (Model.All_graphs | Model.All_pages) ->
           box ~key:"graphs-view" [] (* renders via its own view *)

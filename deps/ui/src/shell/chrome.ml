@@ -158,7 +158,54 @@ let header (ms : Model.t Signal.signal) =
     ; Logseq_dom.dom ~key:"head-r"
         ~style_class:
           "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
-        [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
+        [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1"
+            [ dyn
+                ~equal:(fun (a : Model.t) (b : Model.t) ->
+                  (* only the zoomed-block trail renders here *)
+                  Option.map
+                    (fun (p : Model.page) ->
+                      List.map
+                        (fun (pb : Model.block) -> pb.Model.block_uuid)
+                        p.Model.page_parents)
+                    a.Model.route_page
+                  = Option.map
+                      (fun (p : Model.page) ->
+                        List.map
+                          (fun (pb : Model.block) -> pb.Model.block_uuid)
+                          p.Model.page_parents)
+                      b.Model.route_page)
+                (fun (m : Model.t) ->
+                  (* cljs header.cljs block-breadcrumb: ancestor trail in
+                     the header only while zoomed into a block (the page
+                     itself carries its own breadcrumb) *)
+                  match m.Model.route_page with
+                  | Some p when p.Model.page_parents <> [] ->
+                      let item key ~href ~text =
+                        Logseq_dom.dom ~key ~tag:"a"
+                          ~style_class:"breadcrumb-item"
+                          ~attrs:[ ("href", href) ]
+                          ~text:text []
+                      in
+                      Logseq_dom.dom ~key:"head-bc"
+                        ~style_class:"breadcrumb"
+                        (List.mapi
+                           (fun i (pb : Model.block) ->
+                             item
+                               ("hbc-" ^ string_of_int i)
+                               ~href:
+                                 ("#/block/"
+                                 ^ Option.value pb.Model.block_uuid
+                                     ~default:"")
+                               ~text:pb.Model.block_title)
+                           p.Model.page_parents
+                        @ [ item "hbc-cur"
+                              ~href:
+                                ("#/block/"
+                                ^ Option.value p.Model.page_uuid
+                                    ~default:"")
+                              ~text:p.Model.page_title ])
+                  | _ -> Logseq_dom.dom ~key:"head-bc-empty" [])
+                ms ]
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
             [ rtc_indicator ms
             ; home_button ms

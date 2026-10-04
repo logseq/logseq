@@ -121,8 +121,25 @@ and apply_pending () : unit Js.Promise.t =
     Views_mount.refresh_query_insts ();
     Runtime.run_sync_subs ()
   in
-  match (!Runtime.current_page, deltas, unknown) with
-  | Some _, _ :: _, false -> (
+  match (!Runtime.current_route, !Runtime.current_page, deltas, unknown)
+  with
+  | Some (Model.Journals | Model.Home), _, _ :: _, false -> (
+      (* journals counterpart of the route-page splice: fold the stashed
+         tx deltas into the owning journal pages *)
+      let all_dup =
+        List.for_all Page_delta.delta_already_applied deltas
+      in
+      let* ok = Outliner_ops.splice_journals ~strict:true deltas in
+      match ok with
+      | true ->
+          (* a broadcast carrying only deltas we already spliced from
+             our own op response has nothing new to publish *)
+          if not all_dup then finish ();
+          Js.Promise.resolve ()
+      | false ->
+          Router.reload ();
+          Js.Promise.resolve ())
+  | _, Some _, _ :: _, false -> (
       let all_dup =
         List.for_all Page_delta.delta_already_applied deltas
       in

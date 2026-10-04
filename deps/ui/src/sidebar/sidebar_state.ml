@@ -116,6 +116,107 @@ let sync_right_sidebar_width () =
         (if (!model_ref).Model.right_sidebar_open then width else "0px")
   | None -> ()
 
+(* ---------- resizers ----------
+   cljs left_sidebar.cljs/sidebar-resizer + right_sidebar.cljs/sidebar-
+   resizer: interact.js drag clamps the left panel to [240,460]px
+   (persisted :ls-left-sidebar-width, restored into
+   --ls-left-sidebar-width on mount) and the right panel to
+   [max(0.1,320/vw),0.7] of the viewport (persisted
+   "ls-right-sidebar-width"). Raw mousedown/move/up tracking here (no
+   interact.js in LUI). *)
+
+external doc_root : Js.Json.t = "document.documentElement"
+
+external style_set_prop :
+  Js.Json.t -> string -> string -> unit
+  = "setProperty" [@@mel.scope "style"] [@@mel.send]
+
+external style_set_width_j : Js.Json.t -> string -> unit = "width"
+  [@@mel.scope "style"] [@@mel.set]
+
+external class_add : Js.Json.t -> string -> unit = "add"
+  [@@mel.scope "classList"] [@@mel.send]
+
+external class_rm : Js.Json.t -> string -> unit = "remove"
+  [@@mel.scope "classList"] [@@mel.send]
+
+external win_inner_width : float = "innerWidth" [@@mel.scope "window"]
+
+let doc_query sel =
+  match Platform.query_selector_all sel with
+  | [||] -> None
+  | arr -> Some arr.(0)
+
+let left_resizing : Js.Json.t option ref = ref None
+let right_resizing = ref false
+
+let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
+
+(* cljs restores the persisted left width on mount *)
+let sync_left_sidebar_width () =
+  match Platform.local_storage_get "ls-left-sidebar-width" with
+  | Some w -> style_set_prop doc_root "--ls-left-sidebar-width" w
+  | None -> ()
+
+let set_right_width width =
+  Platform.local_storage_set "ls-right-sidebar-width" width;
+  (* cljs persist-right-sidebar-width! also feeds :ui/sidebar-width;
+     the inline write keeps the panel at the dragged size without
+     waiting for the next model publish *)
+  match doc_query "#right-sidebar" with
+  | Some el -> style_set_width_j el width
+  | None -> ()
+
+let on_resizer_mousedown ev =
+  match click_target ".left-sidebar-resizer" ev with
+  | Some el -> (
+      prevent_default ev;
+      left_resizing := Some el;
+      class_add doc_root "is-resizing-buf";
+      class_add el "is-active";
+      match closest el "#left-sidebar" with
+      | Some sb -> class_add sb "is-resizing"
+      | None -> ())
+  | None -> (
+      match click_target "#right-sidebar > .resizer" ev with
+      | Some _ ->
+          prevent_default ev;
+          right_resizing := true;
+          class_add doc_root "is-resizing-buf"
+      | None -> ())
+
+let on_resizer_mousemove ev =
+  (match !left_resizing with
+   | Some _ ->
+       let w = clampf 240. 460. (ev_client_x ev) in
+       let s = Printf.sprintf "%.2fpx" w in
+       style_set_prop doc_root "--ls-left-sidebar-width" s;
+       Platform.local_storage_set "ls-left-sidebar-width" s
+   | None -> ()
+  );
+  if !right_resizing then begin
+    let vw = win_inner_width in
+    let lo = max 0.1 (320. /. vw) in
+    let ratio = clampf lo 0.7 ((vw -. ev_client_x ev) /. vw) in
+    set_right_width (Printf.sprintf "%g%%" (ratio *. 100.))
+  end
+
+let on_resizer_mouseup _ev =
+  (match !left_resizing with
+   | Some el -> (
+       left_resizing := None;
+       class_rm doc_root "is-resizing-buf";
+       class_rm el "is-active";
+       match closest el "#left-sidebar" with
+       | Some sb -> class_rm sb "is-resizing"
+       | None -> ())
+   | None -> ()
+  );
+  if !right_resizing then begin
+    right_resizing := false;
+    class_rm doc_root "is-resizing-buf"
+  end
+
 (* ---------- storage ---------- *)
 
 let nav_checked_of_storage () =
@@ -895,6 +996,10 @@ let init (ms : Model.t Signal.signal) : t =
       Platform.on_document_event "click" (on_doc_click st);
       Platform.on_document_event "contextmenu" (on_doc_contextmenu st);
       Platform.on_document_event "keydown" (on_doc_keydown st);
+      Platform.on_document_event "mousedown" on_resizer_mousedown;
+      Platform.on_document_event "mousemove" on_resizer_mousemove;
+      Platform.on_document_event "mouseup" on_resizer_mouseup;
+      sync_left_sidebar_width ();
       st
 
 let ensure ms = init ms
