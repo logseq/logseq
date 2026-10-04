@@ -5673,6 +5673,104 @@ let test_pending_property_attrs_verbatim_replay () =
           check "pending queue drained"
             (Sync_apply.pending_txs repo_b () = [])))
 
+(* A verbatim pending tx that would close a parent cycle against the
+   newer server base must be dropped on both the display replay and the
+   server-conn confirm — the mutual-move merge artifact the server
+   accepts unchecked *)
+let test_verbatim_apply_drops_cycle_parent_edge () =
+  let seed = Option.value (env_seed ()) ~default:default_seed in
+  let rng = make_rng seed in
+  let gen_uuid () = rng_uuid rng in
+  let base_uuid = gen_uuid () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
+  let ops_a = new_client_ops_db ()
+  and ops_b = new_client_ops_db () in
+  let client_a = make_client repo_a
+  and client_b = make_client repo_b in
+  let server = make_server () in
+  let history = ref [] in
+  let uuid_x = gen_uuid ()
+  and uuid_y = gen_uuid () in
+  with_test_repos
+    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
+    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (fun () ->
+      let { repro = _; restore } =
+        install_invalid_tx_repro_bang seed history
+      in
+      Fun.protect
+        ~finally:restore
+        (fun () ->
+          Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+          record_meta_bang history
+            [ "seed", Wire.Int seed; "base-uuid", Wire.Uuid base_uuid
+            ; "phase", kw "verbatim-apply-drops-cycle-parent-edge" ];
+          List.iter
+            (fun c -> ensure_base_page_bang c base_uuid)
+            [ conn_a; conn_b ];
+          List.iter
+            (fun repo -> Sync_client_op.update_local_tx repo 0)
+            [ repo_a; repo_b ];
+          let clients =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid }
+            ; { repo = repo_b; conn = conn_b; client = client_b
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          (* X and Y siblings under base, visible on both clients *)
+          (match ent_at_uuid (db_of_conn conn_a) base_uuid with
+           | Some base ->
+               create_block_bang conn_a base "x" uuid_x;
+               create_block_bang conn_a base "y" uuid_y
+           | None -> ());
+          sync_loop_bang server clients;
+          (* B enqueues a VERBATIM tx moving X under Y — a raw transact
+             carries no forward_outliner_ops so the entry replays and
+             uploads verbatim, exercising the .tx verbatim seam *)
+          ignore
+            (Db_transact.transact conn_b
+               [ Wire.Array
+                   [ kw "db/add"
+                   ; Wire.Array [ kw "block/uuid"; Wire.Uuid uuid_x ]
+                   ; kw "block/parent"
+                   ; Wire.Array [ kw "block/uuid"; Wire.Uuid uuid_y ] ] ]
+               [ "client-id", String repo_b; "local-tx?", Bool true ]);
+          check "verbatim pending queued on B"
+            (Sync_apply.pending_txs repo_b () <> []);
+          (* A moves Y under X and syncs — the remote edge lands on B's
+             server conn before B's pending X->Y confirms *)
+          move_block_bang conn_a uuid_y uuid_x;
+          let clients_a_only =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          sync_loop_bang server clients_a_only;
+          (* B syncs: pulls Y->X, replays + uploads + confirms its own
+             verbatim X->Y — the closing edge must be dropped on both
+             conns *)
+          sync_loop_bang server clients;
+          sync_loop_bang server clients;
+          let has_cycle (d : db) : bool =
+            List.exists
+              (fun (i : issue) -> i.issue_type = "cycle")
+              (db_issues d)
+          in
+          check "display conn has no parent cycle"
+            (not (has_cycle (db_of_conn conn_b)));
+          match Sync_state.server_conn repo_b with
+          | Some srv ->
+              check "server conn has no parent cycle"
+                (not (has_cycle (Conn.db srv)));
+              check "closing edge not applied on server conn"
+                (match ent_at_uuid (Conn.db srv) uuid_x with
+                 | Some x -> (
+                     match Ldb.ref_ent x "block/parent" with
+                     | Some p -> ent_uuid p <> Some uuid_y
+                     | None -> true)
+                 | None -> false)
+          | None -> check "server conn exists" false))
+
 (* deftest three-clients-single-repo-sim-test *)
 let test_three_clients_single_repo_sim () =
   let seed = Option.value (env_seed ()) ~default:default_seed in
@@ -5910,5 +6008,8 @@ let () =
             `Quick test_pending_property_attrs_verbatim_replay
         ; Alcotest.test_case "three-clients-single-repo-sim-test" `Quick
             test_three_clients_single_repo_sim
+        ; Alcotest.test_case
+            "verbatim-apply-drops-cycle-parent-edge-test" `Quick
+            test_verbatim_apply_drops_cycle_parent_edge
         ; Alcotest.test_case "pending-chaos-property-sim-test" `Quick
             test_pending_chaos_property_sim ] ) ]

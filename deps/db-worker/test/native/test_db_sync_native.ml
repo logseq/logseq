@@ -8393,14 +8393,17 @@ let test_three_children_cycle () =
                  (Option.bind (Ldb.ref_ent child1' "block/parent")
                     (fun p -> Ldb.value p "block/title")
                   = Some (String "child 2"));
-               check "child2 parent is child 1"
+               (* cljs lets the pending edge land and a cycle forms;
+                  pending-sync drops the cycle-closing verbatim edge on
+                  replay — the block keeps its pre-tx parent instead *)
+               check "child2 parent is child 3"
                  (Option.bind (Ldb.ref_ent child2' "block/parent")
                     (fun p -> Ldb.value p "block/title")
-                  = Some (String "child 1"));
-               check "child3 parent is child 2"
+                  = Some (String "child 3"));
+               check "child3 parent is parent"
                  (Option.bind (Ldb.ref_ent child3' "block/parent")
                     (fun p -> Ldb.value p "block/title")
-                  = Some (String "child 2")))))
+                  = Some (String "parent")))))
 
 (* cljs sync-apply/normalize-rebased-pending-tx (remote-tx-data-set unused
    in tests) *)
