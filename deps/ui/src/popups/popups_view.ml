@@ -398,11 +398,15 @@ let ac_popover (st : S.t) : t =
            match v.S.ac with
            | Some a ->
                attrs_v
-                 [ ("style", popover_style ~x:a.S.x ~y:a.S.y ~flip:a.S.flip)
+                 [ ( "style"
+                   , popover_style
+                       ~x:(Option.value a.S.flipx ~default:a.S.x)
+                       ~y:a.S.y ~flip:a.S.flip )
                  ; ("data-open", "")
                  ; ( "data-side"
                    , (match a.S.flip with Some _ -> "top" | None -> "bottom") )
-                 ; ("data-align", "start")
+                 ; ( "data-align"
+                   , (match a.S.flipx with Some _ -> "end" | None -> "start") )
                  ; ("tabindex", "-1")
                  ; ("data-base-ui-focusable", "")
                  ; ("role", "dialog")

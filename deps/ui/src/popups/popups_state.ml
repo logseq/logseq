@@ -91,6 +91,10 @@ type ac =
   ; flip : (float * float) option
     (* Some (top, avail-h) once the popup measured too tall for the
        space below the caret — base-ui avoidCollisions flips it above *)
+  ; flipx : float option
+    (* Some left' when the popup measured wider than the space to the
+       right of the caret — base-ui flips align start->end, so the
+       right edge lands at the caret; x keeps the caret anchor *)
   ; query : string
   ; tpos : int (* query-trigger offset (the "/" "[[" "((" "#" start) *)
   ; tlen : int
@@ -949,7 +953,7 @@ let open_ac t kind editor =
   let tlen = trigger_len_of_kind kind in
   let tpos = Dom_ext.selection_start editor - tlen in
   let ac =
-    { kind; x; y; cy; flip = None; query = ""
+    { kind; x; y; cy; flip = None; flipx = None; query = ""
     ; tpos; tlen
     ; items = []; chosen = 0; editor
     ; auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" }
@@ -973,7 +977,20 @@ let open_ac t kind editor =
                    max-height; lift it to read the real rendered height
                    (the list's own CSS max still applies) *)
                 Dom_ext.style_set_property pop "--available-height" "2000px";
-                let h = Dom_ext.rect_height (Dom_ext.bounding_rect pop) in
+                let rect = Dom_ext.bounding_rect pop in
+                (* base-ui flips align start->end when the popup would
+                   overflow the right viewport edge — the right edge
+                   lands at the caret; clamp to the margin when even
+                   that doesn't fit *)
+                let fx =
+                  let w = Dom_ext.rect_width rect in
+                  if a.x +. w > Dom_ext.window_inner_width -. 8. then
+                    Some (Float.max 8. (a.x -. w))
+                  else None
+                in
+                if fx <> a.flipx then
+                  set_ac t (Some { a with flipx = fx });
+                let h = Dom_ext.rect_height rect in
                 let below = Dom_ext.window_inner_height -. a.y -. 8. in
                 let above = a.cy -. 8. in
                 if h > below && above > below then (
