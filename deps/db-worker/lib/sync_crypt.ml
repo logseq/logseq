@@ -17,6 +17,7 @@
    [reset_hooks] restores all defaults. *)
 
 open Db_worker_effect
+open Sync_platform
 
 (* ---------- atoms ---------- *)
 
@@ -31,7 +32,6 @@ let ensure_user_rsa_key_pair_inflight
 
 let node_default_auth_file = "~/logseq/auth.json"
 let e2ee_password_secret_key = "logseq-encrypted-password"
-let default_ui_timeout_ms = 60000
 let pbkdf2_version = "20251210"
 let encrypt_attr_set = [ "block/title"; "block/name" ]
 
@@ -128,39 +128,6 @@ let user_rsa_key_cache_retryable_error error =
   | Some c -> not (List.mem c non_retriable_user_rsa_key_error_codes)
   | None -> true
 
-(* ---------- base64 ---------- *)
-
-let decode_base64 s =
-  let tbl = Array.make 256 (-1) in
-  String.iteri
-    (fun i c -> tbl.(Char.code c) <- i)
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let out = Buffer.create (String.length s) in
-  let i = ref 0 in
-  while !i < String.length s && s.[!i] <> '=' do
-    let read_v k =
-      if !i + k < String.length s && s.[!i + k] <> '=' then
-        let v = tbl.(Char.code s.[!i + k]) in
-        if v >= 0 then Some v else None
-      else None
-    in
-    match read_v 0, read_v 1, read_v 2, read_v 3 with
-    | Some a, Some b, Some c, Some d ->
-        Buffer.add_char out (Char.chr ((a lsl 2) lor (b lsr 4)));
-        Buffer.add_char out (Char.chr (((b lsl 4) lor (c lsr 2)) land 0xFF));
-        Buffer.add_char out (Char.chr (((c lsl 6) lor d) land 0xFF));
-        i := !i + 4
-    | Some a, Some b, Some c, None ->
-        Buffer.add_char out (Char.chr ((a lsl 2) lor (b lsr 4)));
-        Buffer.add_char out (Char.chr (((b lsl 4) lor (c lsr 2)) land 0xFF));
-        i := !i + 4
-    | Some a, Some b, None, _ ->
-        Buffer.add_char out (Char.chr ((a lsl 2) lor (b lsr 4)));
-        i := !i + 4
-    | _ -> i := !i + 4
-  done;
-  Buffer.contents out
-
 let urlencode s =
   let buf = Buffer.create (String.length s) in
   String.iter
@@ -170,109 +137,6 @@ let urlencode s =
       | c -> Buffer.add_string buf (Printf.sprintf "%%%02X" (Char.code c)))
     s;
   Buffer.contents buf
-
-(* ---------- platform env (cljs platform/current :env) ---------- *)
-
-type platform_env =
-  { runtime : string  (* "browser" | "node" *)
-  ; owner_source : string
-  }
-
-let platform_env_impl () : platform_env =
-  match Runtime_env.kind () with
-  | Runtime_env.Browser_worker ->
-      { runtime = "browser"; owner_source = Runtime_env.owner_source () }
-  | Runtime_env.Node | Runtime_env.Native ->
-      { runtime = "node"; owner_source = Runtime_env.owner_source () }
-
-let platform_env_fn : (unit -> platform_env) ref = ref platform_env_impl
-let platform_env () = !platform_env_fn ()
-
-let browser_runtime () = String.equal (platform_env ()).runtime "browser"
-let owner_source () = (platform_env ()).owner_source
-
-let capacitor_runtime () =
-  browser_runtime () && String.equal (owner_source ()) "capacitor"
-
-let interactive_runtime () =
-  let env = platform_env () in
-  String.equal env.runtime "browser"
-  || (String.equal env.runtime "node" && String.equal env.owner_source "electron")
-
-let cli_node_owner () =
-  try
-    let env = platform_env () in
-    String.equal env.runtime "node" && String.equal env.owner_source "cli"
-  with _ -> false
-
-(* ---------- hooks: ldb / worker-state ---------- *)
-
-let transit_read_fn : (string -> Wire.t) ref = ref Transit_codec.of_string
-let transit_write_fn : (Wire.t -> string) ref = ref (fun w -> Transit_codec.to_string w)
-let transit_read s = !transit_read_fn s
-let transit_write w = !transit_write_fn w
-
-exception Invalid_transit
-
-let transit_read_safe value = try Some (!transit_read_fn value) with _ -> None
-
-let read_transit_exn v =
-  match transit_read_safe v with
-  | Some w -> w
-  | None -> raise Invalid_transit
-
-(* cljs read-transit-str over a kv value (nil parses to nil). *)
-let transit_read_value = function
-  | Wire.String s -> !transit_read_fn s
-  | Wire.Nil -> Wire.Nil
-  | _ -> invalid_arg "transit_read_value: expected string or nil"
-
-let ldb_graph_rtc_e2ee_fn : (Datascript.db -> Datascript.value option) ref =
-  ref Ldb.get_graph_rtc_e2ee
-
-let ldb_graph_rtc_uuid_fn : (Datascript.db -> Datascript.value option) ref =
-  ref Ldb.get_graph_rtc_uuid
-
-let datascript_conn_fn : (string -> Datascript.conn option) ref =
-  ref Worker_state.datascript_conn
-
-let state_get_fn : (string -> Wire.t option) ref = ref Worker_state.state_get
-let db_sync_config_fn : (unit -> Wire.t) ref = ref Worker_state.db_sync_config
-
-(* ---------- hooks: kv (platform/kv-get, kv-set!) ---------- *)
-
-(* cljs stores typed values in IDB; our kv is string-based, so binary
-   payloads use a "b64:"-prefixed string (Idb.{get,set}_binary). *)
-let kv_get_impl (_platform : platform_env) (k : string) : Wire.t t =
-  map
-    (function
-      | Some s when String.length s >= 4 && String.sub s 0 4 = "b64:" ->
-          Wire.Binary (decode_base64 (String.sub s 4 (String.length s - 4)))
-      | Some s -> Wire.String s
-      | None -> Wire.Nil)
-    (Idb.get k)
-
-let kv_set_impl (_platform : platform_env) k (v : Wire.t) : unit t =
-  match v with
-  | Wire.Nil -> Idb.delete k
-  | Wire.Binary b -> Idb.set_binary k b
-  | Wire.String s -> Idb.set k s
-  | v -> Idb.set k (transit_write v)
-
-let kv_get_fn : (platform_env -> string -> Wire.t t) ref = ref kv_get_impl
-let kv_set_fn : (platform_env -> string -> Wire.t -> unit t) ref = ref kv_set_impl
-
-(* ---------- hooks: secret store / file / http / comm ---------- *)
-
-let secret_save_fn : (key:string -> string -> unit t) ref = ref Secret_store.save
-let secret_read_fn : (key:string -> string option t) ref = ref Secret_store.read
-let secret_delete_fn : (key:string -> unit t) ref = ref Secret_store.delete
-let read_text_fn : (string -> string t) ref = ref File_sys.read_text
-let http_send_fn : (Http.request -> Http.response t) ref = ref Http.send
-(* cljs platform/post-message! — browser posts on self; node routes to the
-   embedder's broadcast fn via Broadcast.to_clients *)
-let post_message_fn : (string -> unit) ref =
-  ref (fun payload -> Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload)
 
 (* ---------- hooks: crypt helpers (frontend.common.crypt) ---------- *)
 
@@ -559,127 +423,6 @@ let fetch_json_impl url ?(method_ = "GET") ?(headers = []) ?body ?response_schem
 
 let fetch_json_fn = ref fetch_json_impl
 
-(* ---------- ui-request client (frontend.worker.ui-request) ---------- *)
-
-let ui_interaction_required_error action hint =
-  ex_info "ui-interaction-required"
-    ([ (kw "code", kw "ui-interaction-required"); (kw "action", action) ]
-     @
-     match hint with
-     | Some h when seq_ (Some h) -> [ (kw "hint", str h) ]
-     | _ -> [])
-
-(* cljs ui-request/->rejectable-error — an Error-map's fields become
-   ex-data; code defaults to :ui-request-rejected. *)
-let rejectable_exn_of_wire request_id action (m : Wire.t) =
-  let entries = Wire.as_map m in
-  let code =
-    match Wire.get "code" m with
-    | Some (Wire.Keyword s) | Some (Wire.String s) -> s
-    | _ -> "ui-request-rejected"
-  in
-  let message =
-    match Wire.get "message" m with
-    | Some (Wire.String s) -> s
-    | _ -> code
-  in
-  let entries =
-    entries
-    @ (match Wire.get "code" m with
-       | Some _ -> []
-       | None -> [ (kw "code", kw "ui-request-rejected") ])
-    @ (match Wire.get "request-id" m with
-       | Some _ -> []
-       | None -> [ (kw "request-id", str request_id) ])
-    @ (match Wire.get "action" m with
-       | Some _ -> []
-       | None -> [ (kw "action", action) ])
-  in
-  ex_info message entries
-
-let ui_request_impl (action : Wire.t) (payload : Wire.t) ?hint ?timeout_ms () : Wire.t t =
-  run (fun () ->
-      if not (interactive_runtime ()) then
-        error (ui_interaction_required_error action hint)
-      else begin
-        let request_id = Uuid_gen.uuid () in
-        let timeout_ms =
-          match timeout_ms with
-          | Some t when t > 0 -> t
-          | _ -> default_ui_timeout_ms
-        in
-        let task, resolver = wait () in
-        Worker_state.ui_request_put request_id resolver action;
-        let timer =
-          Timers.set_timeout timeout_ms (fun () ->
-              match Worker_state.ui_request_take request_id with
-              | Some (r, _) ->
-                  wakeup r
-                    (Error
-                       (Wire.kw_map
-                          [ ("code", kw "ui-request-timeout");
-                            ("request-id", str request_id);
-                            ("action", action);
-                            ("timeout-ms", Wire.Int timeout_ms) ]))
-              | None -> ())
-        in
-        (try
-           !post_message_fn
-             (transit_write
-                (Wire.Array
-                   [ kw "db-worker/ui-request";
-                     Wire.kw_map
-                       [ ("request-id", str request_id);
-                         ("action", action);
-                         ("payload", payload);
-                         ("timeout-ms", Wire.Int timeout_ms) ] ]))
-         with e ->
-           (match Worker_state.ui_request_take request_id with
-            | Some (r, _) ->
-                Timers.clear timer;
-                wakeup r
-                  (Error
-                     (Wire.kw_map
-                        [ ("code", kw "ui-request-rejected");
-                          ("request-id", str request_id);
-                          ("action", action);
-                          ("data", Wire.Map (exn_data e)) ]))
-            | None -> ()));
-        bind task (function
-          | Ok v ->
-              Timers.clear timer;
-              pure v
-          | Error m ->
-              Timers.clear timer;
-              error (rejectable_exn_of_wire request_id action m))
-      end)
-
-let ui_request_fn :
-    (Wire.t -> Wire.t -> ?hint:string -> ?timeout_ms:int -> unit -> Wire.t t) ref =
-  ref ui_request_impl
-
-let request_ui action payload ?hint ?timeout_ms () =
-  !ui_request_fn action payload ?hint ?timeout_ms ()
-
-(* cljs ui-request/cancel-all! — resolve/reject endpoints already live
-   in endpoint_state.ml. *)
-let cancel_all_ui_requests context =
-  let ids = Worker_state.ui_request_ids () in
-  List.iter
-    (fun id ->
-      match Worker_state.ui_request_take id with
-      | Some (r, action) ->
-          wakeup r
-            (Error
-               (Wire.kw_map
-                  [ ("code", kw "ui-request-cancelled");
-                    ("request-id", str id);
-                    ("action", action);
-                    ("context", context) ]))
-      | None -> ())
-    ids;
-  Wire.kw_map [ ("ok", Wire.Bool true); ("cancelled", Wire.Int (List.length ids)) ]
-
 (* ---------- small pieces ---------- *)
 
 let auth_file_path () = node_default_auth_file
@@ -750,31 +493,6 @@ let resolve_user_uuid_impl () : string option t =
   | _ -> catch (map Sync_auth.get_user_uuid (Sync_auth.resolve_ws_token ())) (fun _ -> pure None)
 
 let resolve_user_uuid_fn : (unit -> string option t) ref = ref resolve_user_uuid_impl
-
-(* ---------- idb item wrappers ---------- *)
-
-let get_item_impl k =
-  assert (seq_ (Some k));
-  !kv_get_fn (platform_env ()) k
-
-let set_item_impl k v =
-  assert (seq_ (Some k));
-  !kv_set_fn (platform_env ()) k v
-
-let clear_item_impl k =
-  assert (seq_ (Some k));
-  !kv_set_fn (platform_env ()) k Wire.Nil
-
-let get_item_fn : (string -> Wire.t t) ref = ref get_item_impl
-let set_item_fn : (string -> Wire.t -> unit t) ref = ref set_item_impl
-let clear_item_fn : (string -> unit t) ref = ref clear_item_impl
-
-let get_item k = !get_item_fn k
-let set_item k v = !set_item_fn k v
-let clear_item k = !clear_item_fn k
-
-let graph_encrypted_aes_key_idb_key graph_id = "rtc-encrypted-aes-key###" ^ graph_id
-let user_rsa_key_pair_idb_key base user_id = "rtc-user-rsa-key-pair###" ^ base ^ "###" ^ user_id
 
 (* ---------- user rsa key pair ---------- *)
 
@@ -921,7 +639,7 @@ let save_e2ee_password_impl (password : string) : unit t =
           if capacitor_runtime () then
             catch
               (bind
-                 (request_ui (kw "native-save-e2ee-password")
+                 (Sync_ui_request.request_ui (kw "native-save-e2ee-password")
                     (Wire.kw_map
                        [ ("key", str e2ee_password_secret_key);
                          ("encrypted-text", str text) ])
@@ -952,7 +670,7 @@ let read_e2ee_password_text_impl (refresh_token : string option) : string option
       if capacitor_runtime () then
         bind
           (catch
-             (request_ui (kw "native-get-e2ee-password")
+             (Sync_ui_request.request_ui (kw "native-get-e2ee-password")
                 (Wire.kw_map [ ("key", str e2ee_password_secret_key) ])
                 ())
              (fun e ->
@@ -1002,7 +720,7 @@ let clear_e2ee_password_impl () : unit t =
   if capacitor_runtime () then
     bind
       (catch
-         (request_ui (kw "native-delete-e2ee-password")
+         (Sync_ui_request.request_ui (kw "native-delete-e2ee-password")
             (Wire.kw_map [ ("key", str e2ee_password_secret_key) ])
             ())
          (fun e ->
@@ -1029,7 +747,7 @@ let clear_e2ee_password_fn : (unit -> unit t) ref = ref clear_e2ee_password_impl
 
 let request_e2ee_password_from_ui_impl payload : string t =
   bind
-    (request_ui (kw "request-e2ee-password") payload
+    (Sync_ui_request.request_ui (kw "request-e2ee-password") payload
        ~hint:"Provide e2ee-password to continue." ())
     (fun resp ->
       match Wire.get "password" resp with
@@ -1955,7 +1673,7 @@ let change_e2ee_password_fn :
     (string option -> string option -> string -> string -> unit t) ref =
   ref change_e2ee_password_impl
 
-let cancel_ui_requests context = cancel_all_ui_requests context
+let cancel_ui_requests context = Sync_ui_request.cancel_all_ui_requests context
 
 (* ---------- init + hook reset ---------- *)
 
@@ -2082,7 +1800,7 @@ let reset_hooks () =
   Sync_auth.resolve_ws_token_fn := Sync_auth.resolve_ws_token_impl;
   coerce_http_request_fn := coerce_http_request_impl;
   fetch_json_fn := fetch_json_impl;
-  ui_request_fn := ui_request_impl;
+  Sync_ui_request.ui_request_fn := Sync_ui_request.ui_request_impl;
   e2ee_base_fn := e2ee_base_impl;
   graph_e2ee_fn := graph_e2ee_impl;
   get_graph_id_fn := get_graph_id_impl;
