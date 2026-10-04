@@ -618,6 +618,117 @@
             [matching-parent matching-child matching-wrapped matching-entity-tags unrelated]
             {10 [11]})))))
 
+(deftest selected-node-property-values-skips-empty-placeholder-test
+  (let [property {:db/ident :user.property/subjects}
+        selected {:db/id 200
+                  :block/title "Lost tag"
+                  :block/tags [20]}]
+    (is (= [selected]
+           (#'property-value/selected-node-property-values
+            {:user.property/subjects #{selected
+                                       {:db/ident :logseq.property/empty-placeholder}
+                                       nil}}
+            property)))
+    (is (= [selected]
+           (#'property-value/selected-node-property-values
+            {:user.property/subjects selected}
+            property)))
+    (is (= []
+           (#'property-value/selected-node-property-values
+            {:user.property/subjects :logseq.property/empty-placeholder}
+            property)))))
+
+(deftest scoped-class-nodes-keeps-selected-nodes-outside-scope-test
+  (let [property {:db/ident :user.property/subjects
+                  :logseq.property/type :node}
+        topic-class {:db/id 10
+                     :db/ident :user.class/Subject}
+        matching {:db/id 100
+                  :block/title "In scope"
+                  :block/tags [10]}
+        selected-out-of-scope {:db/id 200
+                               :block/title "Lost tag"
+                               :block/tags [20]}
+        unrelated {:db/id 102
+                   :block/title "Other"
+                   :block/tags [20]}
+        block {:user.property/subjects #{selected-out-of-scope}}
+        selected-nodes (#'property-value/selected-node-property-values
+                        block property)
+        selected-ids (set (#'property-value/property-value->ids
+                           (:user.property/subjects block)))]
+    (is (= [selected-out-of-scope]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            []
+            {}
+            selected-nodes))
+        "Selected nodes appear even when scoped class objects are empty.")
+    (is (= [matching selected-out-of-scope]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            [matching unrelated]
+            {}
+            selected-nodes))
+        "Selected nodes stay in the list even when they are absent from scoped results.")
+    (is (= [matching selected-out-of-scope]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            [matching selected-out-of-scope]
+            {}
+            selected-nodes))
+        "Selected nodes that lost the required tag are not filtered out of search results.")
+    (is (= [matching]
+           (#'property-value/scoped-class-nodes
+            property
+            [topic-class]
+            [matching]
+            {}
+            [matching]))
+        "A still-in-scope selected node is not duplicated.")
+    (is (contains? selected-ids 200)
+        "The out-of-scope choice remains selected so the checkbox can uncheck it.")))
+
+(deftest add-or-remove-unchecks-selected-node-outside-scope-test
+  (async done
+         (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+               selected {:db/id 200
+                         :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                         :block/title "Lost tag"
+                         :block/tags [20]}
+               block {:db/id 1
+                      :block/uuid block-uuid
+                      :user.property/subjects #{selected}}
+               property {:db/ident :user.property/subjects
+                         :db/valueType :db.type/ref
+                         :db/cardinality :db.cardinality/many
+                         :logseq.property/type :node}
+               calls* (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               state/get-selection-block-ids (constantly [])
+                               state/get-state (constantly nil)
+                               db-async/<get-block (fn [_repo _block-ref _opts]
+                                                     (p/resolved block))
+                               db-property-handler/batch-delete-property-value!
+                               (fn [block-ids property-ident value]
+                                 (swap! calls* conj [(vec block-ids) property-ident value])
+                                 (p/resolved nil))]
+                 (#'property-value/add-or-remove-property-value
+                  block property 200 false {}))
+               (p/then (fn [_]
+                         (is (= [[[block-uuid]
+                                  :user.property/subjects
+                                  200]]
+                                @calls*)
+                             "Unchecking an out-of-scope selected node removes it.")
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest scoped-class-nodes-keeps-hydrated-broad-scope-initial-choices-test
   (let [property {:logseq.property/type :node}
         page-class {:db/id 1
