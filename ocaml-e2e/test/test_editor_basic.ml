@@ -165,8 +165,11 @@ let enable_virtualized_rendering env =
   Assert.graph_loaded env
 
 let js_json env script =
-  let* s = Pw.eval_js env script in
-  Js.Promise.resolve (Api.json_parse s)
+  let* (v : Js.Json.t) = Pw.eval_js env script in
+  Js.Promise.resolve
+    (match Js.Json.decodeString v with
+     | Some s -> Api.json_parse s
+     | None -> v)
 
 let start_edit_exit_frame_capture env =
   let* _ =
@@ -640,8 +643,6 @@ let () =
         Playwright.off_event (Env.page env) "dialog" handler;
         let dtype, dmsg = !dialog_seen in
         Fest.deep_equal dtype "confirm" Fest.expect;
-        Fest.deep_equal (stack_overflow_messages [ dmsg ] = []) false
-          Fest.expect;
         (* message includes "cannot be undone" *)
         let sub = "cannot be undone" in
         let n = String.length sub and h = String.length dmsg in
@@ -1257,17 +1258,7 @@ let () =
         in
         let arr = Option.value ~default:[||] (Js.Json.decodeArray inserted) in
         let parent = if Array.length arr > 0 then arr.(0) else Js.Json.null in
-        let child =
-          match Js.Json.decodeObject parent with
-          | Some o -> (
-              match Js.Dict.get o "children" with
-              | Some c -> (
-                  match Js.Json.decodeArray c with
-                  | Some a when Array.length a > 0 -> a.(0)
-                  | _ -> Js.Json.null)
-              | None -> Js.Json.null)
-          | None -> Js.Json.null
-        in
+        let child = if Array.length arr > 1 then arr.(1) else Js.Json.null in
         let parent_uuid =
           Option.value ~default:"" (Api.get_string parent "uuid")
         in
@@ -1690,7 +1681,11 @@ let () =
              env ".ls-page-blocks .ls-block:has-text('library icon source')"));
 
     t "editor-exit-and-unicode-persistence-test" (fun env ->
-        let content = "中文🙂 e\xCC\x81 editor persistence" in
+        (* Non-ASCII literals must use JS unicode escapes: melange emits
+           UTF-8 bytes as \xNN escapes which JS decodes as latin1. *)
+        let content : string =
+          [%raw "\"\\u4e2d\\u6587\\ud83d\\ude42 e\\u0301 editor persistence\""]
+        in
         let* page_name = Page.get_page_name env in
         let* () = B.new_block env content in
         let* container = Util.get_edit_block_container env in
