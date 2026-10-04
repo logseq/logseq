@@ -240,11 +240,12 @@ let snapshot_datoms_in_import_order (conn : conn) : datom list =
       Int_set.empty
       (datoms db Aevt ~a:"db/ident" ())
   in
-  let ordered pred =
-    datoms db Eavt () |> Seq.filter pred |> List.of_seq
+  let schema_datoms, rest =
+    datoms db Eavt ()
+    |> List.of_seq
+    |> List.partition (schema_datom ident_eids schema_version_eid)
   in
-  ordered (schema_datom ident_eids schema_version_eid)
-  @ ordered (fun d -> not (schema_datom ident_eids schema_version_eid d))
+  schema_datoms @ rest
 
 let log_import_progress (state : import_state) datoms_count =
   if datoms_count > 0 then begin
@@ -739,7 +740,7 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
           | None -> ());
          (* the graph-remote marker just landed: split server/display
             conns now so subsequent remote writes go to the base *)
-         Sync_apply.split_off_server_if_remote repo;
+         Sync_replay.split_off_server_if_remote repo;
          Db_worker_effect.pure
            (Wire.Map
               [ Wire.Keyword "repo", Wire.String repo

@@ -142,7 +142,7 @@ let transact args : Wire.t Db_worker_effect.t =
       then
         (* the purge transacted on the server conn — rebuild the
            display projection so recycled entities don't ghost *)
-        Sync_apply.rebuild_display repo ~jump_tx_data:[]);
+        Sync_replay.rebuild_display repo ~jump_tx_data:[]);
      Db_worker_effect.pure Wire.Nil
    with e ->
      (* cljs (log/error ::worker-transact-failed {...}) then rethrow *)

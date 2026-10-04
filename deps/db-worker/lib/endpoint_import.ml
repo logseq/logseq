@@ -34,7 +34,7 @@ let file_needs_lazy_read (file : BM.t) : bool =
 
 (* ui-request/<request :read-import-file {:path} — resolves to a file map *)
 let request_import_file (file : BM.t) : BM.t Eff.t =
-  Sync_crypt.ui_request_impl (kw "read-import-file")
+  Sync_ui_request.ui_request_impl (kw "read-import-file")
     (Wire.kw_map
        [ ( "path"
          , match bm_get_string file "path" with

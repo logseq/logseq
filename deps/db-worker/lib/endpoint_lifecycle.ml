@@ -468,7 +468,7 @@ let initialize_db ~ensure_open args =
              (* remote graphs split here: conn becomes the server conn
                 (confirmed state only); datascript_conn becomes the
                 storage-less display projection replaying pending ops. *)
-             Sync_apply.split_off_server_if_remote repo;
+             Sync_replay.split_off_server_if_remote repo;
              (if not sync_download then
                 (* gc must run after the split attached the checksum
                    listener — an exempt purge fired earlier would leave
@@ -478,7 +478,7 @@ let initialize_db ~ensure_open args =
                    entities don't ghost on the display conn *)
                 (if Endpoint_transaction.maybe_run_recycle_gc repo
                    && Sync_state.server_conn repo <> None
-                 then Sync_apply.rebuild_display repo ~jump_tx_data:[]));
+                 then Sync_replay.rebuild_display repo ~jump_tx_data:[]));
              (* the split helper already moved the listener onto the
                 display conn when it swapped; only a non-remote conn
                 still needs it attached here *)
