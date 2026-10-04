@@ -247,7 +247,7 @@ let current_accent () =
      unset = no active swatch *)
   match Platform.local_storage_get "radix-color" with
   | Some v -> (
-      let v = Settings_view.unquote v in
+      let v = Str_util.unquote v in
       if String.length v > 0 && v.[0] = ':' then
         String.sub v 1 (String.length v - 1)
       else v)
@@ -270,7 +270,7 @@ let default_font_cfg = { ftype = "default"; fglobal = false }
 let current_editor_font () =
   match Platform.local_storage_get "editor-font" with
   | Some v -> (
-      match Edn.parse (Settings_view.unquote v) with
+      match Edn.parse (Str_util.unquote v) with
       | Wire.Map kvs ->
           let m = Wire.Map kvs in
           { ftype =

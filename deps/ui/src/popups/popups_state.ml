@@ -433,11 +433,6 @@ let slash_fallback =
 
 (* ---- filtering ---- *)
 
-let starts_with_ci hay needle =
-  let h = S.lowercase_ascii hay and n = S.lowercase_ascii needle in
-  let nl = S.length n in
-  nl <= S.length h && S.sub h 0 nl = n
-;;
 
 let rec take n xs =
   if n <= 0 then [] else match xs with [] -> [] | x :: tl -> x :: take (n - 1) tl
@@ -760,7 +755,7 @@ let run_node_search t ac =
             | new_items ->
                 let first_starts =
                   match matched with
-                  | m :: _ -> starts_with_ci m.ai_label a.query
+                  | m :: _ -> Str_util.starts_with_ci m.ai_label a.query
                   | [] -> false
                 in
                 if first_starts then

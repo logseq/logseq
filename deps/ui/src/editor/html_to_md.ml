@@ -44,13 +44,6 @@ let rec remove_ending_dash_lines s =
     remove_ending_dash_lines (String.sub t 0 (n - 1))
   else t
 
-let contains hay needle =
-  let n = String.length hay and m = String.length needle in
-  if m = 0 then true
-  else
-    let rec go i = i + m <= n && (String.sub hay i m = needle || go (i + 1)) in
-    go 0
-
 (* collapse \n + whitespace runs to a single space — the cljs
    (replace #"\n" " ") + (replace #"\s+" " ") pair *)
 let normalize_text s =
@@ -100,22 +93,22 @@ let bold_styled style =
 
 let italic_styled style =
   match style_value style [ "font-style" ] with
-  | Some v -> contains v "italic"
+  | Some v -> Str_util.contains v "italic"
   | None -> false
 
 let underline_styled style =
   match style_value style [ "text-decoration"; "text-decoration-line" ] with
-  | Some v -> contains v "underline"
+  | Some v -> Str_util.contains v "underline"
   | None -> false
 
 let strike_styled style =
   match style_value style [ "text-decoration"; "text-decoration-line" ] with
-  | Some v -> contains v "line-through"
+  | Some v -> Str_util.contains v "line-through"
   | None -> false
 
 let mark_styled style =
   match style_value style [ "background-color" ] with
-  | Some v -> contains v "yellow"
+  | Some v -> Str_util.contains v "yellow"
   | None -> false
 
 type attrs = { style : string option }
@@ -211,7 +204,7 @@ let rec node_to_md (ctx : ctx) (node : D.el) : string =
               when not
                      (String.length src >= 5
                       && String.sub src 0 5 = "data:"
-                      && not (contains src ";base64,")) ->
+                      && not (Str_util.contains src ";base64,")) ->
                 "!["
                 ^ Option.value (D.el_get_attr node "alt") ~default:""
                 ^ "]("

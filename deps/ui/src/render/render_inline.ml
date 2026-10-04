@@ -7,10 +7,7 @@ open Lui_elements
 module D = Render_dom
 module U = I18n
 
-let starts_at s i pat =
-  let n = String.length pat in
-  i + n <= String.length s && String.sub s i n = pat
-
+(* positional substring index, -1 when absent *)
 let find_sub s i pat =
   let n = String.length s and m = String.length pat in
   let rec go j =
@@ -563,7 +560,7 @@ and try_match ~refs ~self s i : (t * int) option =
 
 (* [[page]] / [label](url) *)
 and try_bracket ~refs ~self s i =
-  if starts_at s i "[[" then
+  if Str_util.starts_at s i "[[" then
     match find_sub s (i + 2) "]]" with
     | j when j > i + 2 ->
         Some (page_ref ~refs ~self (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
@@ -703,7 +700,7 @@ and macro_el ~refs:_refs ~self:_self body =
 
 (* #[[page]] / #tag *)
 and try_hash ~refs ~self s i =
-  if starts_at s i "#[[" then
+  if Str_util.starts_at s i "#[[" then
     match find_sub s (i + 3) "]]" with
     | j when j > i + 3 ->
         let inner = String.sub s (i + 3) (j - i - 3) in
@@ -754,7 +751,7 @@ and try_paren s i =
 
 (* ![alt](src) *)
 and try_image s i =
-  if starts_at s i "![" then
+  if Str_util.starts_at s i "![" then
     match find_sub s (i + 2) "](" with
     | j when j >= i + 2 -> (
         match find_sub s (j + 2) ")" with
@@ -775,7 +772,7 @@ and try_code s i =
 
 (* **bold** / *italic* *)
 and try_star ~refs ~self s i =
-  if starts_at s i "**" then
+  if Str_util.starts_at s i "**" then
     match find_sub s (i + 2) "**" with
     | j when j > i + 2 ->
         Some
@@ -792,7 +789,7 @@ and try_star ~refs ~self s i =
 
 (* __bold__ / _italic_ *)
 and try_uscore ~refs ~self s i =
-  if starts_at s i "__" then
+  if Str_util.starts_at s i "__" then
     match find_sub s (i + 2) "__" with
     | j when j > i + 2 ->
         Some
@@ -809,7 +806,7 @@ and try_uscore ~refs ~self s i =
 
 (* ~~strike~~ *)
 and try_strike ~refs ~self s i =
-  if starts_at s i "~~" then
+  if Str_util.starts_at s i "~~" then
     match find_sub s (i + 2) "~~" with
     | j when j > i + 2 ->
         Some
@@ -820,7 +817,7 @@ and try_strike ~refs ~self s i =
 
 (* ^^highlight^^ *)
 and try_hl ~refs ~self s i =
-  if starts_at s i "^^" then
+  if Str_util.starts_at s i "^^" then
     match find_sub s (i + 2) "^^" with
     | j when j > i + 2 ->
         Some
@@ -831,7 +828,7 @@ and try_hl ~refs ~self s i =
 
 (* $$..$$ / $..$ *)
 and try_math s i =
-  if starts_at s i "$$" then
+  if Str_util.starts_at s i "$$" then
     match find_sub s (i + 2) "$$" with
     | j when j > i + 2 ->
         Some
@@ -850,7 +847,7 @@ and try_math s i =
 
 (* {{macro ...}} *)
 and try_macro ~refs ~self s i =
-  if starts_at s i "{{" then
+  if Str_util.starts_at s i "{{" then
     match find_sub s (i + 2) "}}" with
     | j when j > i + 2 ->
         Some (macro_el ~refs ~self (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
@@ -865,8 +862,8 @@ and try_lt ~refs ~self s i =
       match try_html_tag ~refs ~self s i with
       | Some hit -> Some hit
       | None ->
-          if starts_at s i "<br>" then Some (D.el ~tag:"br" [], 4)
-          else if starts_at s i "<br/>" then Some (D.el ~tag:"br" [], 5)
+          if Str_util.starts_at s i "<br>" then Some (D.el ~tag:"br" [], 4)
+          else if Str_util.starts_at s i "<br/>" then Some (D.el ~tag:"br" [], 5)
           else None)
 
 (* <2026-09-27 Sun ...> — date starting with a digit *)
@@ -895,7 +892,7 @@ and try_html_tag ~refs ~self s i =
   in
   let try_one t =
     let open_len = String.length t + 2 in
-    if starts_at s i ("<" ^ t ^ ">") then
+    if Str_util.starts_at s i ("<" ^ t ^ ">") then
       let close = "</" ^ t ^ ">" in
       match find_sub s (i + open_len) close with
       | j when j >= i + open_len ->
@@ -939,7 +936,7 @@ and plain_text ?(refs = []) ?(self = "") s =
 
 (* bare http(s):// url *)
 and try_url s i =
-  if starts_at s i "http://" || starts_at s i "https://" then (
+  if Str_util.starts_at s i "http://" || Str_util.starts_at s i "https://" then (
     let n = String.length s in
     let rec stop j =
       if j >= n || List.mem s.[j] [ ' '; '\t'; '\n'; ')'; ']'; '"' ] then j

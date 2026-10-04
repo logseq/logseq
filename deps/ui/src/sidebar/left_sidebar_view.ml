@@ -360,14 +360,6 @@ let nav_group ms st =
 
 (* ---------- favorites / recents ---------- *)
 
-let str_contains hay needle =
-  let lh = String.length hay and ln = String.length needle in
-  let rec go i =
-    i + ln <= lh
-    && (String.sub hay i ln = needle || go (i + 1))
-  in
-  go 0
-;;
 
 let page_item_el st (p : Model.page) ~li_class ~recent ~key =
   let lp_ref =
@@ -396,8 +388,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
               | None -> ""
             in
             if
-              str_contains cls "sidebar-page-actions"
-              || str_contains cls "ls-icon-dots" then
+              Str_util.contains cls "sidebar-page-actions"
+              || Str_util.contains cls "ls-icon-dots" then
               open_lp payload
             else
               let shift =

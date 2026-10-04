@@ -1083,22 +1083,10 @@ let copy_selection_text () =
    by blank lines becomes one block per paragraph; anything else is a
    plain text insert. *)
 
-let ltrim s =
-  let n = String.length s in
-  let rec go i =
-    if i < n && (s.[i] = ' ' || s.[i] = '\t' || s.[i] = '\r') then
-      go (i + 1)
-    else i
-  in
-  String.sub s (go 0) (n - go 0)
-
-let starts_with s prefix =
-  let lp = String.length prefix in
-  String.length s >= lp && String.sub s 0 lp = prefix
 
 let is_url s =
   let t = String.trim s in
-  starts_with t "http://" || starts_with t "https://"
+  Str_util.starts_with t "http://" || Str_util.starts_with t "https://"
 
 (* extensions/video.cljs's host set — the regexes also pin the path
    shape, but for macro-wrapping a url the host check is what matters *)
@@ -1106,8 +1094,8 @@ let is_video_url url =
   let s = String.lowercase_ascii (String.trim url) in
   let host =
     let s =
-      if starts_with s "http://" then String.sub s 7 (String.length s - 7)
-      else if starts_with s "https://" then
+      if Str_util.starts_with s "http://" then String.sub s 7 (String.length s - 7)
+      else if Str_util.starts_with s "https://" then
         String.sub s 8 (String.length s - 8)
       else s
     in
@@ -1117,7 +1105,7 @@ let is_video_url url =
   in
   let host =
     List.fold_left
-      (fun h p -> if starts_with h p then String.sub h (String.length p) (String.length h - String.length p) else h)
+      (fun h p -> if Str_util.starts_with h p then String.sub h (String.length p) (String.length h - String.length p) else h)
       host [ "www."; "m."; "player." ]
   in
   List.mem host
@@ -1126,7 +1114,7 @@ let is_video_url url =
 
 let wrap_macro_url url =
   if is_video_url url then Some ("{{video " ^ url ^ "}}")
-  else if starts_with url "https://twitter.com" || starts_with url "https://x.com"
+  else if Str_util.starts_with url "https://twitter.com" || Str_util.starts_with url "https://x.com"
   then Some ("{{twitter " ^ url ^ "}}")
   else None
 
@@ -1148,18 +1136,11 @@ let markdown_blocks text =
   in
   String.split_on_char '\n' text
   |> List.exists (fun l ->
-      let t = ltrim l in
-      marker t || starts_with t "```" || t = "$$")
-
-let contains_sub hay needle =
-  let n = String.length hay and m = String.length needle in
-  if m = 0 then true
-  else
-    let rec go i = i + m <= n && (String.sub hay i m = needle || go (i + 1)) in
-    go 0
+      let t = Str_util.ltrim l in
+      marker t || Str_util.starts_with t "```" || t = "$$")
 
 (* "(?:\r?\n){2,}" — a blank-line run separates pasted paragraphs *)
-let has_paragraph_break text = contains_sub text "\n\n"
+let has_paragraph_break text = Str_util.contains text "\n\n"
 
 (* paste-segmented-text — one "- " block per paragraph *)
 let segmented_markdown text =
@@ -1182,9 +1163,9 @@ let segmented_markdown text =
       let p = String.trim (String.concat "\n" p) in
       if p = "" then None
       else
-        let t = ltrim p in
+        let t = Str_util.ltrim p in
         if
-          starts_with t "-" && String.length t >= 2
+          Str_util.starts_with t "-" && String.length t >= 2
           && (t.[1] = ' ' || t.[1] = '\t')
         then Some p
         else Some ("- " ^ p))

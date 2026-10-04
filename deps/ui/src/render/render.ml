@@ -50,24 +50,18 @@ let heading_level s =
   then Some (i, String.trim (String.sub s (i + 1) (n - i - 1)))
   else None
 
-let starts_ci s pat =
-  let n = String.length pat in
-  String.length s >= n
-  && String.lowercase_ascii (String.sub s 0 n)
-     = String.lowercase_ascii pat
-
 (* #+BEGIN_QUOTE is deprecated in db graphs — cljs renders a
    .warning notice (t :block/deprecated-quote), not a quote block *)
-let deprecated_quote s = starts_ci s "#+begin_quote"
+let deprecated_quote s = Str_util.starts_with_ci s "#+begin_quote"
 
 (* #+BEGIN_QUERY — same deprecation treatment (cljs
    :block/deprecated-query-syntax) *)
-let deprecated_query s = starts_ci s "#+begin_query"
+let deprecated_query s = Str_util.starts_with_ci s "#+begin_query"
 
 (* '#+BEGIN_EXPORT latex' — deprecated in favor of '/Math block' *)
 let deprecated_latex_export s =
-  starts_ci s "#+begin_export"
-  && starts_ci
+  Str_util.starts_with_ci s "#+begin_export"
+  && Str_util.starts_with_ci
        (String.trim
           (String.sub s (String.length "#+begin_export")
              (String.length s - String.length "#+begin_export")))
@@ -101,7 +95,7 @@ let src_block s =
         Some (lang, body))
   else
     let prefix = "#+begin_src" in
-    if starts_ci s prefix then (
+    if Str_util.starts_with_ci s prefix then (
       let rest =
         String.sub s (String.length prefix)
           (String.length s - String.length prefix)
@@ -313,7 +307,7 @@ let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
    can address the emitted markup (#embed-test). *)
 let html_body s =
   let t = String.trim s in
-  if starts_ci t "@@html:" then
+  if Str_util.starts_with_ci t "@@html:" then
     Some (String.trim (String.sub t 7 (String.length t - 7)))
   else None
 

@@ -97,16 +97,8 @@ let set_hls_extra (asset : Model.pdf_asset) (extra : Js.Json.t) =
 
 (* ---------- getDocument ---------- *)
 
-let ends_with s suf =
-  let ls = String.length s and lf = String.length suf in
-  ls >= lf && String.sub s (ls - lf) lf = suf
-
-let starts_with s pre =
-  let ls = String.length s and lf = String.length pre in
-  ls >= lf && String.sub s 0 lf = pre
-
 let cmap_url () =
-  (if ends_with location_host "logseq.com" then "./static/" else "./")
+  (if Str_util.ends_with location_host "logseq.com" then "./static/" else "./")
   ^ "js/pdfjs/cmaps/"
 
 let get_doc ~url ~password : Js.Json.t Js.Promise.t =
@@ -344,7 +336,7 @@ and handle_load_error (m : mount) (loader : D.el)
       ask_password ~on_submit:(fun pw -> load m loader asset ~password:pw)
   | _ -> (
       match asset.pdf_block_external_url with
-      | Some ext when starts_with ext "http://" || starts_with ext "https://"
+      | Some ext when Str_util.starts_with ext "http://" || Str_util.starts_with ext "https://"
         ->
           location_open ext;
           S.set_current None

@@ -27,40 +27,12 @@ open Promise_ext
 (* substring search helpers (case-sensitive contains, case-insensitive
    contains/index) shared by popups, menus, icon picker, plugin list *)
 
-let contains hay needle =
-  let lh = String.length hay and ln = String.length needle in
-  let rec go i = i + ln <= lh && (String.sub hay i ln = needle || go (i + 1)) in
-  ln = 0 || go 0
-
-let contains_ci hay needle =
-  let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
-  contains h n
-
-let index_ci hay needle =
-  let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
-  let ln = String.length n and lh = String.length h in
-  let rec go i =
-    if ln = 0 || i + ln > lh then None
-    else if String.sub h i ln = n then Some i
-    else go (i + 1)
-  in
-  go 0
+let contains = Str_util.contains
+let contains_ci = Str_util.contains_ci
+let index_ci = Str_util.index_ci
 
 (* "{1}" / "{2}" placeholder substitution *)
-let replace_all s pat rep =
-  let plen = String.length pat in
-  let b = Buffer.create (String.length s) in
-  let i = ref 0 in
-  while !i <= String.length s - plen do
-    if String.sub s !i plen = pat then (
-      Buffer.add_string b rep;
-      i := !i + plen)
-    else (
-      Buffer.add_char b (String.get s !i);
-      incr i)
-  done;
-  Buffer.add_string b (String.sub s !i (String.length s - !i));
-  Buffer.contents b
+let replace_all s pat rep = Str_util.replace_all s ~pat ~rep
 
 (* positional substitution on a literal template *)
 let sub s args =
@@ -70,12 +42,7 @@ let sub s args =
     (s, 1) args
   |> fst
 
-(* cljs :preferred-language — an EDN-quoted string in localStorage *)
-let unquote s =
-  if String.length s >= 2 && String.get s 0 = '"'
-     && String.get s (String.length s - 1) = '"'
-  then String.sub s 1 (String.length s - 2)
-  else s
+let unquote = Str_util.unquote
 
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with

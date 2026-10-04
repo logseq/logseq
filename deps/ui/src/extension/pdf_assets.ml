@@ -68,19 +68,9 @@ let protocol_link s =
 let local_protocol_asset s =
   String.length s >= 8 && String.sub s 0 8 = "asset://"
 
-(* substring search without Str *)
-let find_sub ~sub s =
-  let n = String.length sub and m = String.length s in
-  let rec go i =
-    if i + n > m then None
-    else if String.sub s i n = sub then Some i
-    else go (i + 1)
-  in
-  go 0
-
 (* cljs get-in-repo-assets-full-filename — keep tail after "/assets/" *)
 let in_repo_assets_full_filename url =
-  match find_sub ~sub:"/assets/" url with
+  match Str_util.index_of "/assets/" url with
   | Some i -> String.sub url (i + 8) (String.length url - i - 8)
   | None -> url
 

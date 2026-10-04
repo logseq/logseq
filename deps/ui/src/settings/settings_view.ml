@@ -20,10 +20,6 @@ let languages =
   ; ("sk", "Slovenčina"); ("fa", "فارسی"); ("id", "Bahasa Indonesia")
   ; ("cs", "Čeština"); ("ar", "العربية") ]
 
-let unquote s =
-  let l = String.length s in
-  if l >= 2 && s.[0] = '"' && s.[l - 1] = '"' then String.sub s 1 (l - 2)
-  else s
 
 let quoted v = "\"" ^ v ^ "\""
 
@@ -31,14 +27,14 @@ let quoted v = "\"" ^ v ^ "\""
 let current_mode () =
   let system =
     match Platform.local_storage_get "system-theme?" with
-    | Some v -> unquote v = "true"
+    | Some v -> Str_util.unquote v = "true"
     | None -> Platform.desktop_os ()
   in
   if system then "system"
   else
     match Platform.local_storage_get "theme" with
     | Some v -> (
-        match unquote v with "dark" -> "dark" | _ -> "light")
+        match Str_util.unquote v with "dark" -> "dark" | _ -> "light")
     | None -> "light"
 
 (* theme.cljs container effect: dataset.theme + .dark class on
@@ -73,7 +69,7 @@ let use_mode mode =
 
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with
-  | Some v -> unquote v
+  | Some v -> Str_util.unquote v
   | None -> "en"
 
 let set_language code =

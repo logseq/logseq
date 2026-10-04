@@ -55,12 +55,6 @@ let input_cls =
    focus-visible:ring-offset-2 disabled:cursor-not-allowed \
    disabled:opacity-50"
 
-let trim s =
-  let n = String.length s in
-  let a = ref 0 and b = ref (n - 1) in
-  while !a < n && (s.[!a] = ' ' || s.[!a] = '\t' || s.[!a] = '\n') do incr a done;
-  while !b >= !a && (s.[!b] = ' ' || s.[!b] = '\t' || s.[!b] = '\n') do decr b done;
-  if !b < !a then "" else String.sub s !a (!b - !a + 1)
 
 (* cljs util/time-ms *)
 let now_ms () = Platform.date_now_ms () |> int_of_float |> string_of_int
@@ -109,7 +103,7 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
     ~schema_version =
   let body_wire =
     let items = map_items payload in
-    let pw = trim st.password in
+    let pw = Str_util.trim st.password in
     let items =
       if pw = "" then items
       else items @ [ (W.kw "page-password", W.String pw) ]
@@ -258,7 +252,7 @@ let toggle_pw ctx =
         []
     ; if_
         ~test:
-          (Signal.map (fun (s : pst) -> trim s.password <> "") st_sig)
+          (Signal.map (fun (s : pst) -> Str_util.trim s.password <> "") st_sig)
         (dom ~key:"pub-eye" ~tag:"button"
            ~style_class:
              (btn_base

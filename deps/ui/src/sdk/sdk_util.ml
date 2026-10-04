@@ -117,18 +117,7 @@ let page_ref_names (title : string) : string list =
   in
   go 0 []
 
-let replace_all (s : string) ~(pat : string) ~(rep : string) : string =
-  let n = String.length pat in
-  if n = 0 then s
-  else
-    let rec go pos acc =
-      match find_from s pos pat with
-      | i when i < 0 ->
-          List.rev (String.sub s pos (String.length s - pos) :: acc)
-      | i -> go (i + n) (rep :: String.sub s pos (i - pos) :: acc)
-    in
-    String.concat "" (go 0 [])
-
+let replace_all = Str_util.replace_all
 (* every block/title string anywhere in an op payload *)
 let rec collect_title_strings (w : Wire.t) (acc : string list) =
   let acc =

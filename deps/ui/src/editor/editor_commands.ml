@@ -530,10 +530,6 @@ let click_guard target =
 
 (* ---------- command dispatch ---------- *)
 
-let starts s prefix =
-  let n = String.length prefix in
-  String.length s >= n && String.sub s 0 n = prefix
-
 let set_props ~caret uuid ident v =
   prop_batch ~caret uuid [ Ops.set_block_property uuid ident v ]
 
@@ -764,7 +760,7 @@ let run_editor_cmd uuid command from to_ =
       A.exit_edit ~select:false
   | "add-property" -> Properties_dialog.open_for_block uuid
   | _ ->
-      if starts command "heading:" then
+      if Str_util.starts_with command "heading:" then
         match
           int_of_string_opt
             (String.sub command 8 (String.length command - 8))
@@ -772,10 +768,10 @@ let run_editor_cmd uuid command from to_ =
         | Some n when n >= 1 && n <= 6 ->
             set_props ~caret uuid "logseq.property/heading" (W.Int n)
         | _ -> ()
-      else if starts command "status:" then
+      else if Str_util.starts_with command "status:" then
         set_closed_prop ~caret uuid "logseq.property/status"
           (String.sub command 7 (String.length command - 7))
-      else if starts command "priority:" then (
+      else if Str_util.starts_with command "priority:" then (
         let s = String.sub command 9 (String.length command - 9) in
         if s = "" then
           set_props ~caret uuid "logseq.property/priority"
