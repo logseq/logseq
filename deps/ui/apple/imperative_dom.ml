@@ -565,10 +565,6 @@ let remove_attr (n : node) (name : string) : unit =
        push_attrs n
    | _ -> push_attrs n)
 
-let set_text (n : node) (v : string) : unit =
-  n.s_text <- v;
-  push_text n
-
 let materialize (n : node) : unit =
   if n.s_lui = 0 then begin
     let a = app () in
@@ -835,6 +831,24 @@ let detach_child (child : el) : unit =
        | None -> ())
    | None -> ());
   detach_bookkeeping child
+
+let set_text (n : node) (v : string) : unit =
+  (* textContent semantics: children are replaced by the text — detach
+     them like remove does (they keep shadow records for re-append) *)
+  List.iter
+    (fun c ->
+      match id_of c with
+      | Some cid -> (
+          match get cid with
+          | Some cn ->
+              detach_runtime cn;
+              cn.s_parent <- None
+          | None -> ())
+      | None -> ())
+    n.s_children;
+  n.s_children <- [];
+  n.s_text <- v;
+  push_text n
 
 (* ---------- rects ---------- *)
 
