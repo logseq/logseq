@@ -3903,8 +3903,9 @@
 (defn- class-or-property-page-title?
   "Tag and property page titles own a property panel that defaults collapsed."
   [config block]
-  (and (:page-title? config)
-       (or (entity/class? block) (entity/property? block))))
+  (boolean
+   (and (:page-title? config)
+        (or (entity/class? block) (entity/property? block)))))
 
 (defn- block-collapsed?
   "Collapsed state combining transient UI overrides with the persisted flag.
