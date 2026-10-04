@@ -521,22 +521,34 @@ let push_accessibility (n : node) : unit =
       (StringValue (acc_id n))
 
 let set_attr (n : node) (name : string) (v : string) : unit =
-  (match name with
-   | "class" -> n.s_cls <- v
-   | "value" -> n.s_value <- v
-   | "checked" -> n.s_checked <- true
-   | _ ->
-       n.s_attrs <-
-         (name, v) :: List.filter (fun (k, _) -> k <> name) n.s_attrs);
-  (match name with
-   | "class" -> push_style_class n
-   | "value" -> push_text n
-   | "checked" -> push_attrs n
-   | "id" ->
-       (* accessibility-identifier is derived from the dom id *)
-       push_accessibility n;
-       push_attrs n
-   | _ -> push_attrs n)
+  (* Re-setting the same value produces an identical patch op — and every op
+     costs a native layout pass on the ancestor chain. Focus retries were
+     re-emitting the same class ~110x per click. *)
+  let unchanged =
+    match name with
+    | "class" -> n.s_cls = v
+    | "value" -> n.s_value = v
+    | "checked" -> n.s_checked
+    | _ -> List.assoc_opt name n.s_attrs = Some v
+  in
+  if not unchanged then begin
+    (match name with
+     | "class" -> n.s_cls <- v
+     | "value" -> n.s_value <- v
+     | "checked" -> n.s_checked <- true
+     | _ ->
+         n.s_attrs <-
+           (name, v) :: List.filter (fun (k, _) -> k <> name) n.s_attrs);
+    (match name with
+     | "class" -> push_style_class n
+     | "value" -> push_text n
+     | "checked" -> push_attrs n
+     | "id" ->
+         (* accessibility-identifier is derived from the dom id *)
+         push_accessibility n;
+         push_attrs n
+     | _ -> push_attrs n)
+  end
 
 let remove_attr (n : node) (name : string) : unit =
   (match name with

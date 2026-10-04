@@ -43,7 +43,11 @@ import AppKit
   private var deltas: [CFTimeInterval] = []
 
   func start() {
-    guard ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil, link == nil
+    // LOGSEQ_PERF_PROBES: msg-generating probes (displaylink/hb/timers)
+    // — they flood the runloop waitset queue and skew delivery latency
+    // measurements, so they're a separate gate from LOGSEQ_PERF.
+    guard ProcessInfo.processInfo.environment["LOGSEQ_PERF_PROBES"] != nil,
+      link == nil
     else { return }
     guard
       let l = NSScreen.main?.displayLink(
@@ -66,6 +70,29 @@ import AppKit
         fps, worst * 1000, deltas.count
       ).data(using: .utf8)!)
     deltas.removeAll(keepingCapacity: true)
+  }
+
+  /// GCD heartbeat: self-rescheduling main.async — measures how long the
+  /// main queue actually takes to service items vs the nominal 50ms, so a
+  /// starved serial queue is distinguishable from a busy main thread.
+  private var hbLast: CFAbsoluteTime = 0
+  func heartbeat() {
+    guard ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil else {
+      return
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      let now = CFAbsoluteTimeGetCurrent()
+      if self.hbLast > 0, now - self.hbLast > 0.25 {
+        FileHandle.standardError.write(
+          String(format: "PERF hb t=%.3f gap=%dms\n", now, Int((now - self.hbLast) * 1000))
+            .data(using: .utf8)!)
+      }
+      self.hbLast = now
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+        self?.heartbeat()
+      }
+    }
   }
 }
 
@@ -224,9 +251,6 @@ private struct LogseqRuntimeHost: View {
             }
           }
           .coordinateSpace(name: "logseqWindow")
-          .onPreferenceChange(LogseqFrameKey.self) {
-            LogseqFrameStore.entries = $0
-          }
           // File drop → asset upload: OCaml's window "file-drop"
           // listener mirrors the web file-picker path
           // (db-based-save-assets! writes assets/<uuid>.<ext> +
@@ -291,11 +315,78 @@ private struct LogseqRuntimeHost: View {
   }
 }
 
+private final class ModeBox: @unchecked Sendable {
+  var value = ""
+  nonisolated(unsafe) static var lastTick: CFAbsoluteTime = 0
+  static func timerTick(tag: String = "def") {
+    let now = CFAbsoluteTimeGetCurrent()
+    if lastTick > 0, now - lastTick > 0.25 {
+      FileHandle.standardError.write(
+        "PERF rltick t=\(now) gap=\(Int((now - lastTick) * 1000))ms timer=\(tag) mode=\(CFRunLoopCopyCurrentMode(CFRunLoopGetMain())?.rawValue as String? ?? "?")\n"
+          .data(using: .utf8)!)
+    }
+    lastTick = now
+  }
+}
+
 @MainActor final class LogseqApplicationDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApplication.shared.activate()
     NSApplication.shared.windows.first?.makeKeyAndOrderFront(nil)
     LogseqPerfMonitor.shared.start()
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF_PROBES"] != nil {
+      LogseqPerfMonitor.shared.heartbeat()
+    }
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+      // Phase observer: every runloop activity transition — shows whether
+      // a stall is a parked wait or a busy loop, and where time goes.
+      let obs = CFRunLoopObserverCreateWithHandler(
+        nil, CFRunLoopActivity.allActivities.rawValue, true, 0
+      ) { _, activity in
+        let name: String
+        switch activity {
+        case .entry: name = "entry"
+        case .beforeTimers: name = "beforeTimers"
+        case .beforeSources: name = "beforeSources"
+        case .beforeWaiting: name = "beforeWaiting"
+        case .afterWaiting: name = "afterWaiting"
+        case .exit: name = "exit"
+        default: name = "?"
+        }
+        FileHandle.standardError.write(
+          "PERF rlphase t=\(CFAbsoluteTimeGetCurrent()) a=\(name) mode=\(CFRunLoopCopyCurrentMode(CFRunLoopGetMain())?.rawValue as String? ?? "?")\n"
+            .data(using: .utf8)!)
+      }
+      CFRunLoopAddObserver(CFRunLoopGetMain(), obs, .commonModes)
+    }
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF_PROBES"] != nil {
+      let lastMode = ModeBox()
+      let obs = CFRunLoopObserverCreateWithHandler(
+        nil, CFRunLoopActivity.entry.rawValue, true, 0
+      ) { _, activity in
+        let mode = CFRunLoopCopyCurrentMode(CFRunLoopGetMain())?.rawValue as String? ?? "?"
+        guard mode != lastMode.value else { return }
+        lastMode.value = mode
+        FileHandle.standardError.write(
+          "PERF rl-mode t=\(CFAbsoluteTimeGetCurrent()) mode=\(mode)\n"
+            .data(using: .utf8)!)
+      }
+      CFRunLoopAddObserver(CFRunLoopGetMain(), obs, .commonModes)
+      Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+        ModeBox.timerTick()
+      }
+      for mode in [RunLoop.Mode.eventTracking, .modalPanel,
+                   RunLoop.Mode(rawValue: "NSUnmodalRunLoopMode"),
+                   RunLoop.Mode(rawValue: "NSConnectionReplyMode"),
+                   RunLoop.Mode(rawValue: "NSConnectionReplyRemoteMode"),
+                   RunLoop.Mode(rawValue: "kCFRunLoopDefaultMode")] {
+        let name = mode.rawValue
+        CFRunLoopAddTimer(CFRunLoopGetMain(),
+          CFRunLoopTimerCreateWithHandler(nil, 0.05, 0.05, 0, 0) { _ in
+            ModeBox.timerTick(tag: name)
+          }, CFRunLoopMode(rawValue: mode.rawValue as CFString))
+      }
+    }
     if ProcessInfo.processInfo.environment["LOGSEQ_DEBUG_VIEWS"] != nil {
       for delay in [2.0, 8.0] {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {

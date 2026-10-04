@@ -27,7 +27,7 @@ final class LogseqBlockTextView: NSTextView {
     if ok { coordinator?.noteFocused() }
     if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
       FileHandle.standardError.write(
-        "PERF becomeFR ok=\(ok) coord=\(coordinator != nil) domID=\(domID ?? "-")\n"
+        "PERF becomeFR t=\(CFAbsoluteTimeGetCurrent()) ok=\(ok) coord=\(coordinator != nil) domID=\(domID ?? "-")\n"
           .data(using: .utf8)!)
     }
     return ok
@@ -52,6 +52,22 @@ final class LogseqBlockTextView: NSTextView {
       window.makeFirstResponder(nil)
     }
     super.viewWillMove(toWindow: newWindow)
+  }
+
+  /// A `focus` dom-op that lands while this view is unattached silently
+  /// fails — `makeFirstResponder` needs the view in a window — and
+  /// OCaml's pending-focus loop then re-emits the op every attempt,
+  /// each round-trip feeding a remount/focus-loss cycle for seconds.
+  /// Consume the pending request on attach so a single op converges.
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    if let window, window.firstResponder !== self,
+      let req = LogseqPlatform.lastFocusRequest,
+      req.id == domID, Date().timeIntervalSince(req.at) < 5
+    {
+      LogseqPlatform.lastFocusRequest = nil
+      window.makeFirstResponder(self)
+    }
   }
 }
 
@@ -278,12 +294,17 @@ struct LogseqTextArea: NSViewRepresentable {
       // synchronously, and its blur emit re-enters OCaml — which deadlocks
       // when the dom-op itself runs inside an OCaml callback. Defer one
       // runloop tick so the blur lands after the outer call returns.
+      if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+        FileHandle.standardError.write(
+          "PERF domfocus-req t=\(CFAbsoluteTimeGetCurrent()) domID=\((textView as? LogseqBlockTextView)?.domID ?? "-")\n"
+            .data(using: .utf8)!)
+      }
       let view = textView
-      DispatchQueue.main.async {
+      runOnMain {
         let ok = view?.window?.makeFirstResponder(view) ?? false
         if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
           FileHandle.standardError.write(
-            "PERF domfocus view=\(view != nil) window=\(view?.window != nil) ok=\(ok) accepts=\(view?.acceptsFirstResponder ?? false) editable=\(view?.isEditable ?? false) selectable=\(view?.isSelectable ?? false) key=\(view?.window?.isKeyWindow ?? false)\n"
+            "PERF domfocus t=\(CFAbsoluteTimeGetCurrent()) view=\(view != nil) window=\(view?.window != nil) ok=\(ok) accepts=\(view?.acceptsFirstResponder ?? false) editable=\(view?.isEditable ?? false) selectable=\(view?.isSelectable ?? false) key=\(view?.window?.isKeyWindow ?? false)\n"
               .data(using: .utf8)!)
         }
       }
@@ -376,7 +397,7 @@ struct LogseqTextArea: NSViewRepresentable {
           values: ["name": .string(name), "payload": .string(json)])
         if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
           FileHandle.standardError.write(
-            "PERF emit-ok name=\(name)\n".data(using: .utf8)!)
+            "PERF emit-ok t=\(CFAbsoluteTimeGetCurrent()) name=\(name)\n".data(using: .utf8)!)
         }
       } catch {
         if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
@@ -493,7 +514,7 @@ struct LogseqInputField: NSViewRepresentable {
       // Overlay-mounted fields (cmdk input) may not be in a window yet when
       // the op arrives — retry until the view attaches or attempts run out.
       func attempt(_ remaining: Int) {
-        DispatchQueue.main.async { [weak self] in
+        runOnMain { [weak self] in
           guard let self else { return }
           guard let input = self.field else {
             if remaining > 0 { attempt(remaining - 1) }

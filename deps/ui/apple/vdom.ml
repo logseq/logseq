@@ -371,23 +371,31 @@ let remove_attr el name =
       | None -> ())
 
 let set_class el c =
-  match vrec_of_el el with
-  | Some r -> (
-      r.v_class <- c;
-      match r.v_node, rt () with
-      | Some node, Some rt when node_live node ->
-          Lui_runtime.set_extension_prop rt node "style-class"
-            (StringValue c)
-      | _ -> ())
-  | None -> (
-      match node_of_el el with
-      | Some node ->
-          Dom_ext.overlay_set_class node c;
-          Host.dom_op "set-class"
-            (Js.Json.stringify
-               (Js.Json.JObject
-                  [ ("ref", ref_json el); ("class", Js.Json.JString c) ]))
-      | None -> ())
+  (* Same value → skip the emit: every op costs a patch + a native layout
+     pass; focus retries re-sent the same class ~110x per click. *)
+  let cur =
+    match vrec_of_el el with
+    | Some r -> r.v_class
+    | None -> String.concat " " (Dom_ext.class_list el)
+  in
+  if cur <> c then
+    match vrec_of_el el with
+    | Some r -> (
+        r.v_class <- c;
+        match r.v_node, rt () with
+        | Some node, Some rt when node_live node ->
+            Lui_runtime.set_extension_prop rt node "style-class"
+              (StringValue c)
+        | _ -> ())
+    | None -> (
+        match node_of_el el with
+        | Some node ->
+            Dom_ext.overlay_set_class node c;
+            Host.dom_op "set-class"
+              (Js.Json.stringify
+                 (Js.Json.JObject
+                    [ ("ref", ref_json el); ("class", Js.Json.JString c) ]))
+        | None -> ())
 
 let class_add el c =
   let cur =

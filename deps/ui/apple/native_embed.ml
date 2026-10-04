@@ -434,8 +434,10 @@ let extension_event node name values : string =
                    (node, identifier, name,
                     decode_extension_values values)));
            ignore (Lui_app.flush app);
-           Editor_dom.run_doc_scans ();
-           ignore (Lui_app.flush app)
+           (* Route through the scan gate: extension events are often
+              prop-only bursts (visible-range, scroll) and must not pay
+              a full-doc scan per event *)
+           run_doc_scans_after_flush ()
        | None -> ())
    | None -> ());
   take_patches ()
