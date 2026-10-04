@@ -583,7 +583,17 @@ let close_db_aux repo =
   attempt (fun () -> Sync_state.drop_server_conn repo);
   Worker_state.drop_pending_local_tx_count repo;
   Endpoint_search.clear_search_index_builds repo;
-  List.iter (fun (_, db) -> attempt (fun () -> Sqlite.close db)) conns;
+  List.iter
+    (fun (_, db) ->
+       attempt (fun () ->
+           try Sqlite.close db
+           with exn ->
+             Pending_closes.note repo db;
+             raise exn))
+    conns;
+  List.iter
+    (fun db -> attempt (fun () -> Sqlite.close db))
+    (Pending_closes.take repo);
   attempt (fun () -> Sync_state.close_client_ops_conn repo);
   if Sqlite.pooled_runtime () then begin
     (* cljs attempt!s .pauseVfs and forgets the pool unconditionally *)

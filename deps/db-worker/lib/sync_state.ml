@@ -178,6 +178,7 @@ let client_ops_conn repo : Sqlite.db =
              Sqlite.close db;
              exn
            with close_exn ->
+             Pending_closes.note repo db;
              Failure
                (Printf.sprintf "Client ops initialization failed: %s; close failed: %s"
                   (Printexc.to_string exn) (Printexc.to_string close_exn))
@@ -188,7 +189,12 @@ let has_client_ops_conn repo = Hashtbl.mem client_ops_conns repo
 
 let close_client_ops_conn repo =
   match Hashtbl.find_opt client_ops_conns repo with
-  | Some db -> Hashtbl.remove client_ops_conns repo; Sqlite.close db
+  | Some db ->
+      Hashtbl.remove client_ops_conns repo;
+      (try Sqlite.close db
+       with exn ->
+         Pending_closes.note repo db;
+         raise exn)
   | None -> ()
 
 (* cljs get-client-ops-conn returns the open conn (if any) without

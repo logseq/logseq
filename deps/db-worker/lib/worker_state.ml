@@ -66,8 +66,9 @@ let close_graph_resources_fn : (string -> unit) ref =
       (fun (kind, db) ->
         drop_sqlite_conn_of repo kind;
         if kind = Db then drop_datascript_conn repo;
-        (try Sqlite.close db with _ -> ()))
-      entries)
+        (try Sqlite.close db with _ -> Pending_closes.note repo db))
+      entries;
+    List.iter (fun db -> try Sqlite.close db with _ -> ()) (Pending_closes.take repo))
 
 let close_other_sqlite_conns keep_repo =
   let repos =
