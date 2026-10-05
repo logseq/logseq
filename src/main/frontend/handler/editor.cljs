@@ -1818,14 +1818,18 @@
     (state/pub-event! [:editor/hide-action-bar])
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
-                       (let [blocks' (block-handler/get-top-level-blocks blocks)
-                             result (ui-outliner-tx/transact!
-                                     (merge {:outliner-op :move-blocks}
-                                            (block-handler/outliner-tx-meta (first blocks')))
-                                     (outliner-op/move-blocks-up-down! blocks' up?))]
-                         (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                           (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
-                         result))]
+                       (let [blocks' (block-handler/get-top-level-blocks blocks)]
+                         (p/let [result (ui-outliner-tx/transact!
+                                         (merge {:outliner-op :move-blocks}
+                                                (block-handler/outliner-tx-meta (first blocks')))
+                                         (outliner-op/move-blocks-up-down! blocks' up?))]
+                           ;; the moved row is drawn in its new place on the
+                           ;; next frame; scroll that place into view
+                           (js/requestAnimationFrame
+                            (fn []
+                              (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                                (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))
+                           result)))]
       (p/let [root-block (get-focused-root-block)]
         (if edit-block-id
           (p/let [block (db-async/<get-block (state/get-current-repo) edit-block-id {:children? false})]
