@@ -40,6 +40,32 @@ let get_rtc_tx env =
     ; remote_tx = int_after ~label:"remote-tx" text
     }
 
+let dump_sync_logs env =
+  let kws = [ "sync"; "rtc"; "RTC"; "ws"; "error"; "Error"; "fail"; "exn" ] in
+  let has_any m =
+    List.exists
+      (fun k ->
+        let open Js.String in
+        includes ~search:k m)
+      kws
+  in
+  let rec take n = function
+    | [] -> []
+    | x :: tl -> if n <= 0 then [] else x :: take (n - 1) tl
+  in
+  Env.console_logs env
+  |> List.filter has_any
+  |> take 40
+  |> List.rev
+  |> List.iter (fun m -> Js.log ("[rtc-dbg] " ^ m))
+
+let wait_idle env =
+  Js.Promise.catch
+    (fun e ->
+      dump_sync_logs env;
+      Playwright.throw_error e)
+    (Pw.wait_for env ~timeout:35000. "button.cloud.on.idle")
+
 (** exec [body], then wait for the rtc-tx to advance past the previous max
     with local-tx = remote-tx. Returns the new tx numbers. *)
 let with_wait_tx_updated env body =
@@ -59,7 +85,7 @@ let with_wait_tx_updated env body =
               (Option.value ~default:0 new_m.remote_tx)))
     else
       let* () = Util.wait_timeout env 500. in
-      let* () = Pw.wait_for env ~timeout:35000. "button.cloud.on.idle" in
+      let* () = wait_idle env in
       let* () = Util.wait_timeout env 1000. in
       let* new_m = get_rtc_tx env in
       let new_local = Option.value ~default:0 new_m.local_tx in
@@ -72,13 +98,14 @@ let with_wait_tx_updated env body =
 
 let wait_tx_update_to env new_tx =
   let rec loop i last =
-    if i <= 0 then
+    if i <= 0 then (
+      dump_sync_logs env;
       Js.Promise.reject
         (Failure
-           (Printf.sprintf "wait-tx-update-to %d, last local-tx %d" new_tx last))
+           (Printf.sprintf "wait-tx-update-to %d, last local-tx %d" new_tx last)))
     else
       let* () = Util.wait_timeout env 1000. in
-      let* () = Pw.wait_for env ~timeout:35000. "button.cloud.on.idle" in
+      let* () = wait_idle env in
       let* m = get_rtc_tx env in
       let local = Option.value ~default:0 m.local_tx in
       if local >= new_tx then Js.Promise.resolve local
@@ -92,5 +119,13 @@ let rtc_stop env = Util.search_and_click env "(Dev) RTC Stop"
 let validate_graphs_in_2_pages env page1 page2 =
   let* s1 = Env.with_page env page1 (fun () -> Graph.validate_graph env) in
   let* s2 = Env.with_page env page2 (fun () -> Graph.validate_graph env) in
+  E2e_assert.graph_summary_equal s1 s2;
+  Js.Promise.resolve ()
+
+(** For two separate app instances — each env keeps its own console queue,
+    so a failure dump shows the right instance's worker logs. *)
+let validate_graphs_in_2_envs env1 env2 =
+  let* s1 = Graph.validate_graph env1 in
+  let* s2 = Graph.validate_graph env2 in
   E2e_assert.graph_summary_equal s1 s2;
   Js.Promise.resolve ()

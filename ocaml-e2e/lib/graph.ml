@@ -157,7 +157,25 @@ let validate_graph env =
   let* () = Keyboard.esc env in
   let* () = Keyboard.esc env in
   let* () = Util.search_and_click env "(Dev) Validate current graph" in
-  let* () = Pw.wait_for env ~timeout:30000. success_toast in
+  let* () =
+    Js.Promise.catch
+      (fun e ->
+        let* toasts =
+          Pw.eval_js env
+            "(() => [...document.querySelectorAll('.ui__toast')].map(t => t.textContent.slice(0,400)).join('\\n---\\n'))()"
+        in
+        let toast_text =
+          match Js.Json.decodeString toasts with
+          | Some s -> s
+          | None -> "<none>"
+        in
+        Js.log ("[validate-dbg] toasts: " ^ toast_text);
+        Env.console_logs env |> List.rev
+        |> (fun l -> let rec take n = function [] -> [] | x::tl -> if n<=0 then [] else x :: take (n-1) tl in take 60 l)
+        |> List.iter (fun m -> Js.log ("[validate-dbg] " ^ m));
+        Playwright.throw_error e)
+      (Pw.wait_for env ~timeout:30000. success_toast)
+  in
   let* () =
     Pw.eval_js env
       "(() => document.querySelectorAll('.ui__toast.success button')\

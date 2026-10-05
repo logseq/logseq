@@ -75,9 +75,20 @@ let focus_new_block env ~previous_editor_id =
      the following steps (e.g. paste, which uses the current edit block as
      target) then operate on the wrong block.  Just wait longer for the new
      block's editor; if it never mounts that is a real bug to surface. *)
-  Js.Promise.catch
-    (fun _ -> E2e_assert.is_visible_l ~timeout:8000. new_editor)
-    (E2e_assert.is_visible_l ~timeout:12000. new_editor)
+  let* () =
+    Js.Promise.catch
+      (fun _ -> E2e_assert.is_visible_l ~timeout:8000. new_editor)
+      (E2e_assert.is_visible_l ~timeout:12000. new_editor)
+  in
+  (* The wrapper can mount before focus actually moves off the previous
+     textarea; typing into `*:focus` during that window drops the first
+     keystrokes into the old editor. Wait for the new textarea itself to
+     hold :focus before returning. *)
+  E2e_assert.is_visible_l ~timeout:8000.
+    (Pw.q env
+       (Printf.sprintf
+          ".editor-wrapper:has(textarea:not(#%s)) textarea:focus"
+          previous_editor_id))
 
 let new_block env title =
   let* editor = Util.get_editor env in
@@ -94,10 +105,33 @@ let new_block env title =
   let* () = Keyboard.enter env in
   let* () = focus_new_block env ~previous_editor_id:last_id in
   let* () =
-    if String.length title > 0 then Util.press_seq env title
+    if String.length title > 0 then begin
+      (* type into the resolved new textarea, not *:focus — a remount can
+         move focus to body mid-typing and silently drop keystrokes *)
+      Playwright.press_sequentially
+        (Pw.q env
+           (Printf.sprintf
+              ".editor-wrapper:has(textarea:not(#%s)) textarea" last_id))
+        title
+    end
     else Js.Promise.resolve ()
   in
   let* () = E2e_assert.editor_mode env in
+  let* content = Util.get_edit_content env in
+  let* () =
+    if Option.value ~default:"" content = title then
+      Js.Promise.resolve ()
+    else begin
+      (* a remount stole focus mid-typing and keystrokes landed on the old
+         editor — set the new editor's value directly (clj's save-block
+         uses fill for the same reason) *)
+      Pw.fill_l
+        (Pw.q env
+           (Printf.sprintf
+              ".editor-wrapper:has(textarea:not(#%s)) textarea" last_id))
+        title
+    end
+  in
   let* content = Util.get_edit_content env in
   Fest.equal (Option.value ~default:"" content) title Fest.expect;
   Js.Promise.resolve ()
@@ -188,6 +222,34 @@ let indent_outdent env ~indent =
       let moved = if indent then ( < ) else ( > ) in
       let* () = if indent then Keyboard.tab env else Keyboard.shift_tab env in
       let* x2 = wait_for_editor_x_change env x1 moved in
+      let* x2 =
+        if moved x1 x2 then Js.Promise.resolve x2
+        else
+          (* the tx→render roundtrip remounted the editor mid-wait and the
+             keypress landed on body — or the worker's indent tx rendered a
+             duplicate editor for the same block (seen on cljs runs as a
+             strict-mode violation with two identical edit-block-* ids).
+             Dump the DOM shape for diagnosis, then refocus the same open
+             editor and press once more. *)
+          let* dom =
+            Pw.eval_js env
+              "(() => [...document.querySelectorAll('.editor-wrapper')].map(w => ({id: w.querySelector('textarea')?.id, tas: w.querySelectorAll('textarea').length, block: w.closest('.ls-block')?.dataset?.blockId})).map(JSON.stringify).join('\\n'))()"
+          in
+          (match Js.Json.decodeString dom with
+           | Some s -> Js.log ("[indent-dbg] wrappers: " ^ s)
+           | None -> ());
+          let* () = Pw.click env Util.editor_q in
+          let* () =
+            if indent then Keyboard.tab env else Keyboard.shift_tab env
+          in
+          let* x2 = wait_for_editor_x_change env x1 moved in
+          if not (moved x1 x2) then
+            Env.console_logs env
+            |> (fun l -> let rec take n = function [] -> [] | x::tl -> if n<=0 then [] else x :: take (n-1) tl in take 60 l)
+            |> List.rev
+            |> List.iter (fun m -> Js.log ("[indent-dbg] " ^ m));
+          Js.Promise.resolve x2
+      in
       if indent then Fest.ok (x1 < x2) Fest.expect else Fest.ok (x1 > x2) Fest.expect;
       Js.Promise.resolve ()
 

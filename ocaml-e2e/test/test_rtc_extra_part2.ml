@@ -14,11 +14,10 @@ external read_file_sync : string -> string -> string = "readFileSync"
 
 let read_utf8 path = read_file_sync path "utf8"
 
-external getenv : string -> string Js.undefined = "env"
-  [@@mel.scope "process"] [@@mel.get]
+external process_env : string Js.Dict.t = "process.env"
 
 let env_int k default =
-  match Js.Undefined.toOption (getenv k) with
+  match Js.Dict.get process_env k with
   | None -> default
   | Some s -> (
       match int_of_string_opt (String.trim s) with
