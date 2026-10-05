@@ -2195,10 +2195,29 @@ let () =
         let* () = insert_code 2 in
         let* () = K.esc env in
         let* () = Util.exit_edit env in
-        let* _ =
-          Assert.is_visible_l ~timeout:15000.
-            (Loc.filter env ".extensions__code"
-               ~has_text:"const value = 1")
+        let* shown =
+          Js.Promise.catch
+            (fun _ -> Js.Promise.resolve false)
+            (let* _ =
+               Assert.is_visible_l ~timeout:15000.
+                 (Loc.filter env ".extensions__code"
+                    ~has_text:"const value = 1")
+             in
+             Js.Promise.resolve true)
+        in
+        let* () =
+          if shown then Js.Promise.resolve ()
+          else
+            let* dump =
+              Pw.eval_js env
+                "(() => JSON.stringify({cm: document.querySelectorAll('.CodeMirror').length, code: [...document.querySelectorAll('.extensions__code')].map(e => e.textContent.replace(/\\s+/g,' ').slice(0,40)), doc: (document.querySelector('.CodeMirror')?.CodeMirror?.getValue() ?? null), editing: logseq.api.get_state_from_store('editor/block')}))()"
+            in
+            let* () =
+              Js.Promise.resolve (Js.log2 "[code-dbg]" dump)
+            in
+            Assert.is_visible_l ~timeout:1000.
+              (Loc.filter env ".extensions__code"
+                 ~has_text:"const value = 1")
         in
         let* _ = Util.refresh_until_graph_loaded env in
         let* blk =
