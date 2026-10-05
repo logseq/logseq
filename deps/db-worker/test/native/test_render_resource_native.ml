@@ -1652,6 +1652,7 @@ let test_block_bidirectional_properties_returns_uuid_groups () =
     Wire.Array
       [ Wire.Map
           [ kw "class-uuid", wu (u "bidirectional-class")
+          ; kw "title", Wire.String "Projects"
           ; kw "entity-uuids", Wire.Array [ wu (u "bidirectional-entity") ] ] ]
   in
   assert_resource_envelope db resource_key
