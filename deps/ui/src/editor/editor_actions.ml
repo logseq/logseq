@@ -1998,10 +1998,13 @@ let run_query_command ~advanced =
    /<graph>/assets/<uuid>.<ext>, then insert-blocks an Asset-tagged
    block below the editing block. An empty target reuses its uuid and
    is replaced in place. -- *)
+(* The picker lives behind the ls:editor-command event (Asset_dom
+   listens) — dispatching it keeps the same trigger contract the slash
+   command uses without an editor_actions -> asset_dom module edge. *)
 let trigger_asset_upload () =
-  match Web_dom.query_selector "input#upload-file" with
-  | Some el -> Web_dom.el_click el
-  | None -> ()
+  Web_dom.dispatch_custom "ls:editor-command"
+    (Js.Json.object_
+       (Js.Dict.fromList [ ("command", Js.Json.string "upload") ]))
 
 let file_ext name =
   match String.rindex_opt name '.' with

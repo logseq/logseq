@@ -386,21 +386,6 @@ let overlays (ms : Model.t Signal.signal) =
           | None -> spacer ~key:"app-none" []) ms
     ]
 
-(* cljs container.cljs emits hidden <a> anchors used by export flows.
-   TODO(component): imperative handles — keep dom *)
-let export_anchors : t =
-  Logseq_dom.fragment
-    (List.map
-       (fun id ->
-         Logseq_dom.dom ~key:("a-" ^ id) ~tag:"a" ~id
-           ~style_class:"hidden" [])
-       [ "download"; "download-as-edn-v2"; "download-as-json-v2"
-       ; "download-as-transit-debug"; "download-as-sqlite-db"
-       ; "download-as-db-edn"; "download-as-roam-json"
-       ; "download-as-html"; "download-as-zip"; "export-as-markdown"
-       ; "export-as-opml"
-       ; "convert-markdown-to-unordered-list-or-heading" ])
-
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup; popup itself not ported yet *)
 (* cljs container.cljs help-button: the tabler help glyph — the native
@@ -538,7 +523,6 @@ let shell (ms : Model.t Signal.signal) : t =
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]
     ; overlays ms
-    ; export_anchors
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
               match a.route, b.route with

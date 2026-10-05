@@ -1,7 +1,7 @@
 # Component residuals — `TODO(component)` audit
 
 Audit of `deps/ui/` on `devin/component-migration` (tip `faac3b841b`). Every
-`TODO(component)` marker: **145 total — 142 code sites**, 1 convention comment
+`TODO(component)` marker: **139 total — 136 code sites**, 1 convention comment
 (`render_dom.ml:39`), 2 documentation references
 (`docs/editor-surface-extension.md:3`, `:123`).
 
@@ -24,7 +24,7 @@ Each site is classified by the *primary* missing vocabulary:
 | extension | 24 | formal `logseq-*` extension family (editor, emoji, codemirror, virt-list/lazy, embed, katex, pdf) + keep `el` as the raw-element escape hatch for user markup |
 | event | 11 | enrich press/pointer payloads: `{modifiers, client_x, client_y, target, interactive}` + pointerdown/up, pointer-enter/leave, contextmenu |
 | css | 6 | rewrite element selectors to class anchors, or an `~as:` element-override prop on `heading`/`text`/`button` |
-| dom-op | 6 | new ops on the existing channel: `click`/`open-file-picker`, `download`, `scroll-into-view`/`focus` by node id |
+| dom-op | 0 | resolved: `open-file-picker` op (web transient input, apple NSOpenPanel + `files-picked` event), `download-*` ops already existed (dead anchors removed), cmdk focus/scroll via `~id` node ids |
 | (info) | 3 | `render_dom.ml:39` convention comment; `editor-surface-extension.md:3,123` doc references |
 
 ## Top protocol additions (by sites unblocked)
@@ -228,19 +228,39 @@ elements and lose the semantics.
 | src/graphs/importer.ml:182 | `article` | `dom ~tag:"h1"/"h2"` | `.importer .c h1/h2` key on tags | class anchors → `heading` |
 | src/graphs/importer.ml:195 | `view` | `dom ~tag:"h1".ls-imp-title` + `h2` | `.inner-card > h1.ls-imp-title / > h2` key on tags | class anchors → `heading` |
 
-## dom-op — 6 sites
+## dom-op — resolved (0 sites)
 
-Imperative host operations. The dom-op channel exists (scroll-into-view,
-node bounds, focus); these need new ops or node-id rewiring.
+Imperative host operations. All six sites migrated on `devin/domop-batch`:
 
-| Site | Function | Element now | Op needed | Proposed fix |
-|---|---|---|---|---|
-| src/assets/asset_dom.ml:265 | `upload_input` | hidden `input#upload-file[type=file]`; `editor_actions` clicks it, `change` reads `el.files` | `open-file-picker` on a node id, or invoke the file_picker request API directly | new dom-op `open-file-picker` (returns file list); alternatively rewire `trigger_asset_upload` to the `file_picker` kind — no DOM node needed |
-| apple/asset_dom.ml:179 | `upload_input` | same contract | same | same |
-| src/shell/chrome.ml:799 | `export_anchors` | hidden `<a>` anchors (`#download`,`#download-as-*`); export code `getElementById`→set `href`→`click()` | `download` host op | new dom-op `download {name, url|blob}` replacing the anchor hack entirely |
-| apple/chrome.ml:390 | `export_anchors` | same | same | same |
-| apple/cmdk_view.ml:573 | `scroller` | `dom .cp__cmdk-scroller` queried for `scroll-into-view` | scroll-into-view by node id | dom-op already supports it — switch `cmdk_state` to node ids (`data_attrs`/`~id` on the kind meanwhile) |
-| apple/cmdk_view.ml:592 | `input_row` | `dom ~tag:"input" .cp__cmdk-search-input` — queried/focused + imperative input events | focus by node id + `on_input` | `input ~on_input` + dom-op `focus` by node id |
+- `upload_input` (src + apple `asset_dom.ml`) — deleted; the new
+  `open-file-picker` op replaces the hidden input: web synthesizes a
+  transient `<input type=file>` (`Web_dom.open_file_picker`), apple issues
+  `dom-op "open-file-picker"` → NSOpenPanel → `files-picked` event carrying
+  `{request, files:[{name,size,path}]}`. The slash "upload" command and
+  `trigger_asset_upload` dispatch through `ls:editor-command`, which
+  `Asset_dom.install` maps to the picker (apple: also `Editor_cmds.run
+  "upload"` and the `file-drop` event — `install` is now wired from
+  `native_embed`). `importer.file_input` stays dom: `file_picker` has no
+  accept/directory vocabulary and it needs a visible label card.
+- `export_anchors` (src + apple `chrome.ml`) — deleted; every deps/ui
+  export path already went through `Web_dom.download_*` (web transient
+  `<a>`) / `Browser_ui.download-text|download-binary` (apple
+  `dom-op` → `NSSavePanel`). The anchors were unqueried cljs parity. The
+  `download-binary` payload now carries `{name,mime,"data-b64"}` JSON —
+  the old `\n`-separated body never parsed, so binary export on apple was
+  a silent no-op.
+- cmdk `scroller`/`input_row` (`apple/cmdk_view.ml`) — kept `dom` (the
+  `input` kind has no `~placeholder_signal`); `~id:"cmdk-scroller"` /
+  `~id:"cmdk-input"` register the refs, `cmdk_state` queries `#cmdk-*`
+  instead of class selectors, and `cp__cmdk-scroller` gained a Swift
+  style entry (`isScrollable`) so the node actually hosts a
+  ScrollViewProxy for `scroll-row-into-view`.
+- `natural-size` — new op following `measure-node`: `dom-op
+  "natural-size" {ref}` → Swift reads the img's `src` attr → NSImage →
+  `node-natural-size` event {nodeId, width, height}; OCaml polls the
+  store via `el_nat_width`/`el_nat_height` (web already had externals).
+  No apple caller yet — export `png_preview` stays `dom` until the
+  `image` kind gains a URL `~source` (schema-owned).
 
 ## Informational (3)
 

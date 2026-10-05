@@ -258,25 +258,12 @@ let upload_files (files : Js.Json.t array) =
             Js.Promise.resolve ())
   end
 
-(* hidden <input type=file> inside every editor — cljs
-   components/editor.cljs image-uploader; the slash command clicks it *)
-let upload_input key : t =
-  box ~key
-    [ (* TODO(component): <input type=file> has no component equivalent —
-         the picker is imperative (the slash command clicks #upload-file
-         and reads el.files) *)
-      dom ~key:(key ^ "-in") ~tag:"input" ~id:"upload-file"
-        ~attrs:[ ("type", "file"); ("hidden", "") ]
-        ~events:"change"
-        ~on_dom_event:(fun name _ ->
-          if name = "change" then
-            match B.query_selector "#upload-file" with
-            | Some el ->
-                upload_files (B.el_files el);
-                (* allow picking the same file twice in a row *)
-                Web_dom.el_set_value el ""
-            | None -> ())
-        [] ]
+(* cljs image-uploader hid an <input type=file> per editor; here the
+   picker is imperative — a transient input via the open-file-picker
+   op, no persistent node in the tree. Both the slash command and
+   editor_actions.trigger_asset_upload go through this. *)
+let pick_files () =
+  Web_dom.open_file_picker (fun files -> upload_files files)
 
 (* ---------- lightbox ---------- *)
 
@@ -703,7 +690,8 @@ let file_cell_el (w : W.t) : t =
 (* ---------- command hookup ---------- *)
 
 (* slash "Upload an asset" emits ls:editor-command {command} — cljs
-   :editor/click-hidden-file-input clicks the hidden input *)
+   :editor/click-hidden-file-input clicked a hidden input; the picker
+   op replaces it *)
 let install () =
   Web_dom.on_document_event "ls:editor-command" (fun ev ->
       match
@@ -713,9 +701,6 @@ let install () =
           match
             Option.bind (Js.Dict.get d "command") Js.Json.decodeString
           with
-          | Some "upload" -> (
-              match B.query_selector "#upload-file" with
-              | Some el -> B.el_click el
-              | None -> ())
+          | Some "upload" -> pick_files ()
           | _ -> ())
       | None -> ())

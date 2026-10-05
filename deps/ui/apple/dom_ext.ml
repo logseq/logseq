@@ -557,6 +557,37 @@ let bounding_rect (el : element) : rect =
           | None -> Js.Json.JObject [])
       | None -> Js.Json.JObject [])
 
+(* <img> natural size — same fire-and-poll convention as rects: the
+   "natural-size" dom-op makes the host measure the decoded image and
+   reply with a "node-natural-size" event; callers read the pushed
+   value on their next attempt. *)
+let natural_store : (int, Js.Json.t) Hashtbl.t = Hashtbl.create 8
+
+let note_node_natural_size (j : Js.Json.t) : unit =
+  match Option.map int_of_float (num_prop "nodeId" j) with
+  | Some id -> Hashtbl.replace natural_store id j
+  | None -> ()
+
+let natural_size_fetch (el : element) (name : string) : float =
+  let cached =
+    match Option.map int_of_float (num_prop "node-id" el) with
+    | Some id -> (
+        match Hashtbl.find_opt natural_store id with
+        | Some j -> num_prop name j
+        | None ->
+            Host.dom_op "natural-size"
+              (Js.Json.stringify (Js.Json.JObject [ ("ref", el) ]));
+            None)
+    | None -> None
+  in
+  Option.value cached ~default:0.
+
+let el_nat_width (el : element) : float =
+  natural_size_fetch el "width"
+
+let el_nat_height (el : element) : float =
+  natural_size_fetch el "height"
+
 let rect_left (r : rect) : float =
   Option.value (num_prop "left" r) ~default:0.
 

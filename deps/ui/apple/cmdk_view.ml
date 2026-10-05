@@ -570,9 +570,10 @@ let scroller st : t =
   let input_sig =
     Signal.map (fun (v : S.view) -> v.S.input) st.S.vs.Signal.state_signal
   in
-  (* TODO(component): .cp__cmdk-scroller is queried by cmdk_state
-     (scroll-into-view) — imperative handle *)
-  Logseq_dom.dom ~key:"scroller" ~style_class:scroller_class
+  (* ~id registers "cmdk-scroller" in the dom-op ref registry —
+     cmdk_state resolves it for scroll-row-into-view *)
+  Logseq_dom.dom ~key:"scroller" ~id:"cmdk-scroller"
+    ~style_class:scroller_class
     [ reactive ~equal:(fun (a : S.group_id option) b -> a = b) (fun f ->
           match f with
           | None -> spacer ~key:"flt-none" []
@@ -589,10 +590,9 @@ let scroller st : t =
 let input_row st : t =
  fun ctx parent ->
   row ~key:"input-row" ~style_class:"cp__cmdk-input-row"
-    [ (* TODO(component): .cp__cmdk-search-input is queried/focused by
-         cmdk_state and carries imperative input events — imperative
-         handle *)
-      Logseq_dom.dom ~key:"input" ~tag:"input"
+    [ (* ~id registers "cmdk-input" in the dom-op ref registry —
+         cmdk_state resolves it for focus/set-value/set-selection *)
+      Logseq_dom.dom ~key:"input" ~tag:"input" ~id:"cmdk-input"
         ~style_class:"cp__cmdk-search-input"
         ~attrs_signal_v:(Logseq_dom.reactive_attrs
              (fun (v : S.view) ->

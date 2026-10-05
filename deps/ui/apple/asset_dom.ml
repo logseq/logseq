@@ -176,14 +176,15 @@ let upload_paths (paths : string list) =
                ignore (Outliner_ops.resync_open_editor ());
              Js.Promise.resolve ())
 
-(* TODO(component): hidden file input clicked imperatively via
-   `input#upload-file` (editor_actions.trigger_asset_upload) — the
-   file_picker kind is request-driven, not query-click, so this stays
-   a logseq-input until the trigger is rewired *)
-let upload_input key : Lui_elements.t =
-  dom ~key ~tag:"input"
-    ~attrs:[ ("type", "file"); ("hidden", "") ; ("id", "upload-file") ]
-    []
+(* The file picker is imperative — the "upload" editor command calls
+   Browser_ui.open_file_picker (host NSOpenPanel) and feeds the picked
+   file snapshots through upload_paths. No hidden input node. *)
+let pick_files () =
+  Browser_ui.open_file_picker (fun files ->
+      upload_paths
+        (List.filter_map
+           (fun f -> Dom_ext.str_prop "path" f)
+           (Array.to_list files)))
 
 let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()
@@ -242,6 +243,16 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
        else Lui_elements.spacer ~key:("asset-empty-" ^ uuid) []) ]
 
 let install () =
+  (* slash "Upload an asset" dispatches ls:editor-command
+     {command:"upload"} — the picker op replaces the hidden input the
+     web used to click *)
+  Platform.add_event_listener "ls:editor-command" (fun j ->
+      match Dom_ext.prop "detail" j with
+      | Js.Json.JObject _ as d -> (
+          match Dom_ext.str_prop "command" d with
+          | Some "upload" -> pick_files ()
+          | _ -> ())
+      | _ -> ());
   (* window-level file drop — the Swift host posts
      platform_event "file-drop" {"paths": [...]} when files are dropped
      on the window *)
