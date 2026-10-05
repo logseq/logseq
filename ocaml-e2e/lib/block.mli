@@ -1,7 +1,8 @@
 val last_page_block_content : Env.t -> Playwright.locator Js.Promise.t
 val open_last_block : ?in_retry:bool -> Env.t -> unit Js.Promise.t
 val save_block : Env.t -> string -> unit Js.Promise.t
-val focus_new_block : Env.t -> previous_editor_id:string -> unit Js.Promise.t
+val focus_new_block :
+  Env.t -> previous_editor_id:string -> string Js.Promise.t
 val new_block : Env.t -> string -> unit Js.Promise.t
 val new_blocks : Env.t -> string list -> unit Js.Promise.t
 val delete_blocks : Env.t -> unit Js.Promise.t

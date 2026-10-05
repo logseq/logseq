@@ -101,30 +101,57 @@ let save_block env text =
   wait_value (Js.Date.now () +. 15000.)
 
 let focus_new_block env ~previous_editor_id =
-  let new_editor =
-    Ls_locator.filter env ".editor-wrapper" ~has:(Pw.q env "textarea")
-      ~has_not:(Pw.q env ("#" ^ previous_editor_id))
+  let prev_uuid =
+    if String.length previous_editor_id > 11
+       && String.sub previous_editor_id 0 11 = "edit-block-"
+    then String.sub previous_editor_id 11
+          (String.length previous_editor_id - 11)
+    else previous_editor_id
   in
-  (* Never re-Enter and never re-click: the first Enter's insert op is
-     already applied in the worker, and re-driving the UI here can mint a
-     duplicate empty block or open the previous block's editor — either way
-     the following steps (e.g. paste, which uses the current edit block as
-     target) then operate on the wrong block.  Just wait longer for the new
-     block's editor; if it never mounts that is a real bug to surface. *)
-  let* () =
-    Js.Promise.catch
-      (fun _ -> E2e_assert.is_visible_l ~timeout:15000. new_editor)
-      (E2e_assert.is_visible_l ~timeout:30000. new_editor)
+  (* The authoritative signal that the Enter's insert op landed is the
+     app's editing state moving to a different block; the DOM textarea
+     mounts (or fails to mount, under remote-tx remounts) after that.
+     Never re-Enter and never re-click: the insert op is already applied
+     in the worker, and re-driving the UI here can mint a duplicate empty
+     block or open the previous block's editor. *)
+  let deadline = Js.Date.now () +. 45000. in
+  let rec wait_moved () =
+    let* u = Util.editing_uuid env in
+    match u with
+    | Some uuid when uuid <> prev_uuid -> Js.Promise.resolve (Some uuid)
+    | _ ->
+        if Js.Date.now () > deadline then Js.Promise.resolve None
+        else
+          let* () = Util.wait_timeout env 200. in
+          wait_moved ()
   in
-  (* The wrapper can mount before focus actually moves off the previous
-     textarea; typing into `*:focus` during that window drops the first
-     keystrokes into the old editor. Wait for the new textarea itself to
-     hold :focus before returning. *)
-  E2e_assert.is_visible_l ~timeout:15000.
-    (Pw.q env
-       (Printf.sprintf
-          ".editor-wrapper:has(textarea:not(#%s)) textarea:focus"
-          previous_editor_id))
+  let* new_uuid = wait_moved () in
+  match new_uuid with
+  | None ->
+      failwith
+        ("editing state never moved off " ^ previous_editor_id
+       ^ " — Enter's insert op was swallowed")
+  | Some uuid ->
+      (* the app may not have mounted/focused the new block's textarea
+         (remote remount can swallow it); force-open via the API when the
+         state already moved *)
+      let* mounted =
+        Pw.catch_timeout
+          (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+             (E2e_assert.is_visible_l ~timeout:20000.
+                (Pw.q env ("#edit-block-" ^ uuid ^ ":focus"))))
+          (fun () -> Js.Promise.resolve false)
+      in
+      let* () =
+        if mounted then Js.Promise.resolve ()
+        else
+          let* _ =
+            Api.ls_api_call env "editor.editBlock" [| Api.str uuid |]
+          in
+          E2e_assert.is_visible_l ~timeout:15000.
+            (Pw.q env ("#edit-block-" ^ uuid ^ ":focus"))
+      in
+      Js.Promise.resolve uuid
 
 let new_block env title =
   (* gate on the app's editing state and use its uuid for the live
@@ -167,13 +194,11 @@ let new_block env title =
       enter_new_block (n - 1)
   in
   let* () = enter_new_block 3 in
-  let* () = focus_new_block env ~previous_editor_id:last_id in
+  let* new_uuid = focus_new_block env ~previous_editor_id:last_id in
   (* the block's own textarea id is derived from the block uuid, so it
      survives editor remounts; read/fill it directly instead of
      get_edit_content, which is ambiguous while two editors coexist *)
-  let new_editor_q =
-    Printf.sprintf ".editor-wrapper:has(textarea:not(#%s)) textarea" last_id
-  in
+  let new_editor_q = "#edit-block-" ^ new_uuid in
   let* () =
     if String.length title > 0 then begin
       (* type into the resolved new textarea, not *:focus — a remount can
