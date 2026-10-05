@@ -6,6 +6,7 @@ val get_editor : Env.t -> Playwright.locator option Js.Promise.t
 val get_edit_block_container : Env.t -> Playwright.locator Js.Promise.t
 val input : Env.t -> string -> unit Js.Promise.t
 val press_seq : Env.t -> ?delay:float -> string -> unit Js.Promise.t
+val type_in_editor : Env.t -> ?delay:float -> string -> unit Js.Promise.t
 val exit_edit : Env.t -> unit Js.Promise.t
 val double_esc : Env.t -> unit Js.Promise.t
 val cmdk_search_settle_ms : float

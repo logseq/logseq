@@ -40,14 +40,37 @@ let input env text = Pw.fill env "*:focus" text
 let press_seq env ?(delay = 0.) text =
   Playwright.press_sequentially ~delay (Pw.q env "*:focus") text
 
+let type_in_editor env ?(delay = 0.) text =
+  (* type into the editor textarea itself — *:focus can point at <body>
+     after a remount and silently eat keystrokes; verify and refill *)
+  let rec go tries =
+    let* () =
+      Playwright.press_sequentially ~delay (Pw.q env editor_q) text
+    in
+    let* v = Pw.input_value env editor_q in
+    if v = text || tries <= 1 then Js.Promise.resolve ()
+    else
+      let* () = Pw.fill_l (Pw.q env editor_q) text in
+      let* v' = Pw.input_value env editor_q in
+      if v' = text then Js.Promise.resolve () else go (tries - 1)
+  in
+  go 3
+
 let exit_edit env =
   let* editor = get_editor env in
   (match editor with
    | Some _ ->
        (* esc can be eaten by a remount or a misfocused element; keep
-          pressing until the editor actually hides *)
+          pressing until the editor actually hides. First tries target
+          the editor element directly so focus doesn't matter. *)
        let rec try_esc tries =
-         let* () = Keyboard.esc env in
+         let* () =
+           if tries > 2 then
+             Js.Promise.catch
+               (fun _ -> Keyboard.esc env)
+               (Keyboard.press_in_editor env "Escape")
+           else Keyboard.esc env
+         in
          let* left =
            Pw.catch_timeout
              (Js.Promise.then_ (fun () -> Js.Promise.resolve true)

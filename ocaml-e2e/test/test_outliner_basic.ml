@@ -645,7 +645,7 @@ let () =
     let* () = Util.move_cursor_to_end env in
     let* () = K.enter env in
     let* () = K.tab env in
-    let* () = Util.press_seq env "new child" in
+    let* () = Util.type_in_editor env "new child" in
     let* _ =
       assert_expanded_parent env "collapsed parent" "hidden child"
     in

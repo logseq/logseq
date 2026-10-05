@@ -94,6 +94,13 @@ let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
     if enable_sync then
       let* () = maybe_input_e2ee_password env in
       Pw.wait_for env ~timeout:180000. cloud_ready_indicator
+      |> Js.Promise.catch (fun e ->
+          let* dump =
+            Pw.eval_js env
+              "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none'}))()"
+          in
+          let* () = Js.Promise.resolve (Js.log2 "cloud-idle-timeout" dump) in
+          Playwright.throw_error e)
     else Js.Promise.resolve ()
   in
   let* () = Pw.wait_for_hidden env ~timeout:30000. new_graph_dialog in
@@ -146,6 +153,13 @@ let switch_graph env to_graph_name ~wait_sync ~need_input_password =
         else Js.Promise.resolve ()
       in
       Pw.wait_for env ~timeout:180000. cloud_ready_indicator
+      |> Js.Promise.catch (fun e ->
+          let* dump =
+            Pw.eval_js env
+              "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none'}))()"
+          in
+          let* () = Js.Promise.resolve (Js.log2 "cloud-idle-timeout" dump) in
+          Playwright.throw_error e)
     else Js.Promise.resolve ()
   in
   E2e_assert.graph_loaded env
