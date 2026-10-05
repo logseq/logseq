@@ -1,4 +1,6 @@
-(* ported from deps/ui/src/blocks/comments.ml *)
+(* ported from deps/ui/src/blocks/comments.ml — scrollIntoView
+   stubbed (no imperative scroll on the native twin), dyn → reactive;
+   keep in sync upstream *)
 (* Comment thread areas — cljs components/block/comments.cljs +
    handler/comments.cljs.
 
@@ -12,7 +14,7 @@ open Promise_ext
 open Lui_elements
 
 module S = Editor_state
-module D = Editor_dom
+module D = Web_dom
 module W = Wire
 module U = I18n
 
@@ -35,7 +37,7 @@ let reveal uuid =
   | Some blk -> (
       el_scroll_into_view blk;
       match
-        Properties_dom.doc_query
+        Web_dom.query_selector
           ("#ls-block-" ^ uuid ^ " .ls-comment-add textarea")
       with
       | Some el -> D.el_focus el
@@ -45,7 +47,7 @@ let reveal uuid =
 (* cljs add-comment-to-blocks! → ensure-comments-area-for-blocks then
    reveal; the endpoint inserts the area child when it does not exist yet *)
 let ensure_for uuids =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -101,7 +103,7 @@ let insert_comment_op area_uuid text =
   Outliner_ops.insert_blocks [ blk ] area_uuid ~sibling:false
 
 let add_box_of area_uuid =
-  Properties_dom.doc_query
+  Web_dom.query_selector
     ("#ls-block-" ^ area_uuid ^ " .ls-comment-add textarea")
 
 let submit area_uuid =
@@ -117,7 +119,7 @@ let submit area_uuid =
   | None -> ()
 
 let delete uuid =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | Some repo ->
       ignore
         (let* _ =
@@ -131,11 +133,11 @@ let delete uuid =
 
 let editing_sig uuid =
   Signal.map
-    (fun (st : S.t) ->
-      match st.S.editing with
+    (fun e ->
+      match e with
       | Some e -> e.S.uuid = uuid
       | None -> false)
-    (S.signal ())
+    (S.editing_sig ())
 
 (* same shell as the block editor's textarea — the document-level
    editor listeners key off .editor-wrapper / #edit-block-<uuid> *)
@@ -148,99 +150,93 @@ let title_editor_el uuid : t =
   Ui_parts.editor_wrapper ~key:("ctew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
     [ Ui_parts.editor_inner ~key:("ctei-" ^ uuid)
-        [ dom ~key:("ctet-" ^ uuid) ~tag:"textarea"
+        [ (* TODO(component): #edit-block-<uuid> textarea — imperative
+             editor surface, migrates with logseq-editor extension *)
+          dom ~key:("ctet-" ^ uuid) ~tag:"textarea"
             ~id:("edit-block-" ^ uuid) ~text:buffer [] ] ]
 
 (* cljs comments-area-title-view: the label swaps for the block editor
    while the area's title is being edited *)
 let title_cell uuid (b : Model.block) : t =
-  dyn
-    ~equal:(fun a b -> a = b)
+  reactive
     (fun editing ->
       if editing then
-        dom ~key:("cte-" ^ uuid) ~style_class:"ls-comments-title-editor"
+        box ~key:("cte-" ^ uuid) ~style_class:"ls-comments-title-editor"
           [ title_editor_el uuid ]
       else
-        dom ~key:("clab-" ^ uuid) ~tag:"button"
+        (* data-area-uuid dropped — the direct on_press below covers the
+           action; the delegated editor_keys lookup now no-ops *)
+        button ~key:("clab-" ^ uuid)
           ~style_class:"ls-comments-label"
-          ~attrs:
-            [ ("type", "button")
-            ; ("title", U.t "editor/click-to-edit")
-            ; ("data-area-uuid", uuid)
-            ]
-          ~events:"click"
-          ~on_dom_event:(fun _ _ ->
+          ~label:(U.t "editor/click-to-edit")
+          ~text:(S.title_for uuid b.Model.block_title)
+          ~on_press:(fun _ ->
             (* cljs edit-comments-area-title! → edit-block! on the area
                block; the standard editor machinery renders the textarea *)
             Editor_actions.enter_edit uuid 0)
-          ~text:(S.title_for uuid b.Model.block_title)
           [])
     (editing_sig uuid)
 
 let comment_row uuid (b : Model.block) : t =
-  dom ~key:("crw-" ^ uuid) ~style_class:"ls-comment-row"
-    [ dom ~key:("crm-" ^ uuid) ~style_class:"ls-comment-main"
-        [ dom ~key:("crmeta-" ^ uuid) ~style_class:"ls-comment-meta" []
-        ; dom ~key:("crb-" ^ uuid) ~style_class:"ls-comment-body"
+  box ~key:("crw-" ^ uuid) ~style_class:"ls-comment-row"
+    [ box ~key:("crm-" ^ uuid) ~style_class:"ls-comment-main"
+        [ box ~key:("crmeta-" ^ uuid) ~style_class:"ls-comment-meta" []
+        ; box ~key:("crb-" ^ uuid) ~style_class:"ls-comment-body"
             (Render.title (S.title_for uuid b.Model.block_title))
         ]
-    ; dom ~key:("cra-" ^ uuid) ~style_class:"ls-comment-actions"
-        [ dom ~key:("crd-" ^ uuid) ~tag:"button"
+    ; box ~key:("cra-" ^ uuid) ~style_class:"ls-comment-actions"
+        [ (* data-comment-uuid dropped — direct on_press covers the
+             action; the delegated editor_keys lookup now no-ops *)
+          button ~key:("crd-" ^ uuid)
             ~style_class:"ls-comment-action ls-comment-delete"
-            ~attrs:
-              [ ("type", "button")
-              ; ("title", U.t "ui/delete")
-              ; ("aria-label", U.t "ui/delete")
-              ; ("data-comment-uuid", uuid)
-              ]
-            [ dom ~key:("cri-" ^ uuid) ~tag:"i"
-                ~style_class:"ti ti-trash" []
-            ]
+            ~variant:`ghost ~size:`icon
+            ~label:(U.t "ui/delete")
+            ~icon:`trash
+            ~on_press:(fun _ -> delete uuid)
+            []
         ]
     ]
 
-(* cljs comment-box: a bare textarea plus the send-button submit *)
+(* cljs comment-box: a bare textarea plus the send-button submit —
+   reveal()/submit() still resolve the box by '.ls-comment-add textarea'
+   and the textarea kind renders a real <textarea> *)
 let add_box uuid : t =
-  dom ~key:("caa-" ^ uuid) ~style_class:"ls-comment-add"
-    [ dom ~key:("cab-" ^ uuid) ~style_class:"ls-comment-box"
-        [ dom ~key:("cae-" ^ uuid) ~style_class:"ls-comment-box-editor"
-            [ dom ~key:("cat-" ^ uuid) ~tag:"textarea"
-                ~attrs:
-                  [ ("placeholder", U.t "block.comments/placeholder")
-                  ; ("rows", "1")
-                  ]
+  box ~key:("caa-" ^ uuid) ~style_class:"ls-comment-add"
+    [ box ~key:("cab-" ^ uuid) ~style_class:"ls-comment-box"
+        [ box ~key:("cae-" ^ uuid) ~style_class:"ls-comment-box-editor"
+            [ (* rows=1 dropped — no rows prop on the textarea kind *)
+              textarea ~key:("cat-" ^ uuid)
+                ~placeholder:(U.t "block.comments/placeholder")
                 []
             ]
-        ; dom ~key:("cax-" ^ uuid) ~style_class:"ls-comment-box-actions"
-            [ dom ~key:("cas-" ^ uuid) ~tag:"button"
+        ; box ~key:("cax-" ^ uuid) ~style_class:"ls-comment-box-actions"
+            [ (* data-area-uuid dropped — direct on_press covers the
+                 action; the delegated editor_keys lookup now no-ops *)
+              button ~key:("cas-" ^ uuid)
                 ~style_class:"ls-comment-submit"
-                ~attrs:
-                  [ ("type", "button")
-                  ; ("title", U.t "ui/submit")
-                  ; ("aria-label", U.t "ui/submit")
-                  ; ("data-area-uuid", uuid)
-                  ]
-                [ dom ~key:("casi-" ^ uuid) ~tag:"i"
-                    ~style_class:"ti ti-send" []
-                ]
+                ~variant:`ghost ~size:`icon
+                ~label:(U.t "ui/submit")
+                ~icon:`send
+                ~on_press:(fun _ -> submit uuid)
+                []
             ]
         ]
     ]
 
 (* cljs comments-area-view (expanded branch) *)
 let area_view uuid (b : Model.block) : t =
-  dom ~key:("cav-" ^ uuid) ~style_class:"ls-comments-area"
-    [ dom ~key:("cah-" ^ uuid) ~style_class:"ls-comments-header"
+  box ~key:("cav-" ^ uuid) ~style_class:"ls-comments-area"
+    [ box ~key:("cah-" ^ uuid) ~style_class:"ls-comments-header"
         [ title_cell uuid b
-        ; dom ~key:("cac-" ^ uuid) ~tag:"span"
+        ; text ~key:("cac-" ^ uuid)
             ~style_class:"ls-comments-count"
-            ~text:(string_of_int (List.length b.Model.block_children))
+            ~value:(string_of_int (List.length b.Model.block_children))
             []
         ]
     ; (match b.Model.block_children with
        | [] -> box ~key:("cal-" ^ uuid) []
        | children ->
-           dom ~key:("cal-" ^ uuid) ~style_class:"ls-comments-list"
+           box ~key:("cal-" ^ uuid) ~style_class:"ls-comments-list"
              (List.map
                 (fun c ->
                   comment_row

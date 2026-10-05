@@ -164,6 +164,9 @@ let view (x, y, with_app_items) (p : Model.page option) =
         (Float.max 8. (Float.min (x -. 140.) (inner_width () -. 288.)))
         y (y +. 8.)
   in
+  (* TODO(component): fixed-position anchored menu — the inline
+     style carries the anchor coordinates and no positioned-container
+     kind exists yet *)
   dom ~key:"page-menu" ~tag:"div"
     (* toolbar dots menu is w-64 (cljs header.cljs); the page
        right-click keeps the context-menu look *)
@@ -180,8 +183,8 @@ let view (x, y, with_app_items) (p : Model.page option) =
      | None, _ -> global_items ())
 
 let btn key label cls act =
-  dom ~key ~tag:"button" ~style_class:cls ~text:label ~events:"click"
-    ~on_dom_event:(fun name _ -> if name = "click" then act ())
+  Lui_elements.button ~key ~style_class:cls ~text:label
+    ~on_press:(fun _ -> act ())
     []
 
 (* div[role='alertdialog'] — Confirm / Cancel *)
@@ -212,6 +215,9 @@ let confirm_view (c : Model.confirm) =
     Runtime.send (Action.Confirm_set None);
     Runtime.flush ()
   in
+  (* TODO(component): backdrop dismiss filters click events on
+     targetClass — no component equivalent for event-target
+     inspection *)
   dom ~key:"alertdlg-overlay" ~tag:"div"
     ~style_class:"ui__alert-dialog-overlay"
     ~events:"click"
@@ -224,21 +230,22 @@ let confirm_view (c : Model.confirm) =
              (Platform.payload_str payload "targetClass")
              "ui__alert-dialog-overlay"
       then close ())
-    [ dom ~key:"alertdlg" ~tag:"div"
-        ~attrs:[ ("role", "alertdialog") ]
+    [ Lui_elements.column ~key:"alertdlg"
         ~style_class:"ui__alert-dialog-content"
-        [ dom ~key:"adlg-t" ~tag:"h2"
-            ~style_class:"ui__alert-dialog-title"
-            [ (match icon_opt with
-               | Some i ->
-                   (* cljs dialog-confirm title: flex gap-2 items-center
-                      > icon + text *)
-                   dom ~key:"adlg-tw" ~style_class:"ls-alert-title"
-                     [ i; dom ~key:"adlg-tx" ~text:title [] ]
-               | None -> dom ~key:"adlg-tx" ~text:title []) ]
-        ; dom ~key:"adlg-d" ~tag:"div"
-            ~style_class:desc_cls ~text:desc []
-        ; dom ~key:"adlg-f" ~tag:"div"
+        [ (* cljs dialog-confirm title: flex gap-2 items-center >
+             icon + text (heading is a leaf — the row carries the pair) *)
+          (match icon_opt with
+           | Some i ->
+               Lui_elements.row ~key:"adlg-tw" ~cross:`center
+                 ~style_class:"ui__alert-dialog-title ls-alert-title"
+                 [ i
+                 ; Lui_elements.heading ~key:"adlg-t" ~value:title [] ]
+           | None ->
+               Lui_elements.heading ~key:"adlg-t"
+                 ~style_class:"ui__alert-dialog-title" ~value:title [])
+        ; Lui_elements.text ~key:"adlg-d"
+            ~style_class:desc_cls ~value:desc []
+        ; Lui_elements.row ~key:"adlg-f"
             ~style_class:"ui__alert-dialog-footer"
             [ btn "adlg-cancel" I18n.cancel
                 "ui__button ls-btn-outline" close
@@ -273,4 +280,4 @@ let dialog_view (m : Model.t) =
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c
-      | None -> Logseq_dom.nothing)
+      | None -> Lui_elements.spacer ~key:"page-menu-empty" [])

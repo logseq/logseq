@@ -50,9 +50,9 @@ let hl_img_sig (b : Model.block) context =
    .asset-action-bar + img.w-full *)
 let area_display (b : Model.block) context : Lui_elements.t =
   let st = hl_img_sig b context in
-  Logseq_dom.dyn ~equal:( = ) (fun r ->
+  reactive ~equal:( = ) (fun r ->
       match r with
-      | None -> Logseq_dom.nothing
+      | None -> Lui_elements.spacer ~key:"hla-none" []
       | Some r ->
           let w_style =
             match r.width with
@@ -92,8 +92,7 @@ let area_display (b : Model.block) context : Lui_elements.t =
                                 ~default:"" ) ]
                       []
                   ]
-              ])
-    st.Signal.state_signal
+              ]) st.Signal.state_signal
 
 (* cljs hl-ref prefix-link — pointerdown opens the pdf at the hl
    (unless the click lands on a .blank span inside an area hl) *)

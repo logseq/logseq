@@ -18,10 +18,9 @@
 
 open Lui_elements
 
-let dyn = Logseq_dom.dyn
 
 let skip_to_main =
-  Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
+  button ~key:"skip" ~accessibility_identifier:"skip-to-main"
     ~text:(I18n.t "nav/skip-to-main-content") []
 
 (* ---- native topbar (Out parity) ----
@@ -120,10 +119,9 @@ let home_btn ms =
    navigation group. A toolbar child must be a concrete element (a dyn
    hoists zero-size), so the text rides a reactive text signal. *)
 let crumb_title ms =
-  Logseq_dom.dom ~key:"tb-crumb" ~tag:"span"
-    ~style_class:"ls-tb-crumb"
-    ~text_signal:
-      (Logseq_dom.reactive_text
+  text ~key:"tb-crumb" ~style_class:"ls-tb-crumb"
+    ~value:
+      (reactive
          (fun (m : Model.t) ->
            let label =
              match m.route_page with
@@ -209,10 +207,13 @@ let rtc_tx_text (r : Model.rtc) =
   Printf.sprintf "{:local-tx %s, :remote-tx %s}"
     (tx r.rtc_local_tx) (tx r.rtc_remote_tx)
 
+(* TODO(component): the rtc indicator stays dom — its hidden rtc-tx
+   element (data-testid) is an e2e EDN contract and the mount keeps the
+   sync emitters alive; the semantic toolbar twin is rtc_item *)
 let rtc_indicator (ms : Model.t Signal.signal) : t =
-  dyn ~equal:( = ) (fun (r : Model.rtc option) ->
+  reactive (fun (r : Model.rtc option) ->
       match r with
-      | None -> Logseq_dom.dom ~key:"rtc-off" ~style_class:"hidden" []
+      | None -> spacer ~key:"rtc-off" ~style_class:"hidden" []
       | Some r ->
           let open_ = Platform.online () && r.rtc_lock in
           let syncing = open_ && r.rtc_pending_server > 0 in
@@ -252,12 +253,15 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
    their DOM mounts hidden so emitters and the rtc-tx e2e element stay
    alive. *)
 let hidden_chrome (ms : Model.t Signal.signal) : t =
-  Logseq_dom.dom ~key:"chrome-hidden" ~style_class:"hidden"
+  box ~key:"chrome-hidden" ~style_class:"hidden"
     [ rtc_indicator ms; Left_sidebar_view.plugins_toolbar ms ]
 
 (* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
    carries .open/.closed; only renders contents while open *)
 let right_sidebar (ms : Model.t Signal.signal) =
+  (* TODO(component): #right-sidebar is read imperatively
+     (sidebar_state get_element_by_id); kinds are invisible to the
+     imperative overlay *)
   Logseq_dom.dom ~key:"right-sidebar" ~id:"right-sidebar"
     ~style_class_signal:
       (Logseq_dom.class_signal ms (fun (m : Model.t) ->
@@ -270,38 +274,38 @@ let right_sidebar (ms : Model.t Signal.signal) =
    resizer. #left-sidebar{display:none} on desktop keeps the overlay
    out of the click path when closed. *)
 let left_sidebar (ms : Model.t Signal.signal) =
-  Logseq_dom.dom ~key:"left-sidebar" ~id:"left-sidebar"
-    ~style_class_signal:
-      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-           "cp__sidebar-left-layout"
-           ^ if m.left_sidebar_open then " is-open" else ""))
-    [ Logseq_dom.dom ~key:"ls-inner"
-        ~style_class:
-          "left-sidebar-inner as-container flex-1 flex flex-col min-h-0"
-        [ Logseq_dom.dom ~key:"ls-wrap" ~style_class:"wrap"
-            [ Logseq_dom.dom ~key:"ls-head"
-                ~style_class:"sidebar-header-container"
-                [ Left_sidebar_view.header ms ]
-            ; Left_sidebar_view.contents ms
-            ]
-        ]
-    ; Logseq_dom.dom ~key:"shade" ~tag:"span" ~style_class:"shade-mask"
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Runtime.send Action.Toggle_left_sidebar)
-        []
-    ; Logseq_dom.dom ~key:"resizer" ~tag:"span"
-        ~style_class:"left-sidebar-resizer" []
-    ]
+  Ui_parts.class_signal ms
+    (fun (m : Model.t) ->
+      "cp__sidebar-left-layout"
+      ^ if m.left_sidebar_open then " is-open" else "")
+    (column ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+       [ column ~key:"ls-inner"
+           ~style_class:"left-sidebar-inner as-container"
+           [ box ~key:"ls-wrap" ~style_class:"wrap"
+               [ box ~key:"ls-head"
+                   ~style_class:"sidebar-header-container"
+                   [ Left_sidebar_view.header ms ]
+               ; Left_sidebar_view.contents ms
+               ]
+           ]
+       ; Ui_parts.pressable
+           ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
+           (box ~key:"shade" ~style_class:"shade-mask" [])
+       ; box ~key:"resizer" ~style_class:"left-sidebar-resizer" []
+       ])
 
 let main_content (ms : Model.t Signal.signal) =
-  Logseq_dom.dom ~key:"main-container" ~id:"main-container"
-    ~style_class_signal:
-      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-           "cp__sidebar-main-layout flex-1 flex"
-           ^ if m.left_sidebar_open then " is-left-sidebar-open" else ""))
+  Ui_parts.class_signal ms
+    (fun (m : Model.t) ->
+      "cp__sidebar-main-layout flex-1 flex"
+      ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
+    (row ~key:"main-container" ~accessibility_identifier:"main-container"
     [ left_sidebar ms
-    ; Logseq_dom.dom ~key:"main-content" ~id:"main-content-container"
+    ; (* TODO(component): #main-content-container is queried by
+         graphs/recycle.ml; the data-is-* attrs and
+         .cp__sidebar-main-content/.mx-auto classes are imperative
+         contracts (graphs_view, container.cljs hooks) — keep dom *)
+      Logseq_dom.dom ~key:"main-content" ~id:"main-content-container"
         ~style_class:
           "scrollbar-spacing w-full flex justify-center flex-row outline-none relative"
         ~attrs_signal_v:
@@ -335,7 +339,7 @@ let main_content (ms : Model.t Signal.signal) =
                 [ Page.region ms ]
             ]
         ]
-    ]
+    ])
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;
@@ -344,6 +348,8 @@ let main_content (ms : Model.t Signal.signal) =
    mounted overlay mid-batch). cljs mounts them via portals, which
    are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
+  (* TODO(component): .cp__overlays is an imperative handle —
+     popups_state el_closest walks ancestors to it *)
   Logseq_dom.dom ~key:"overlays" ~style_class:"cp__overlays"
     [ Cmdk_view.render ms
     ; Popups_view.render ms
@@ -352,8 +358,7 @@ let overlays (ms : Model.t Signal.signal) =
     ; Cards_view.render ms
     ; Toasts_view.render ms
     ; Properties_view.overlays
-    ; dyn
-        ~equal:(fun (a : Model.t) (b : Model.t) ->
+    ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
           (* the menu reads only page scalars — comparing them skips the
              per-publish deep [=] on the whole route page record *)
           a.page_menu = b.page_menu && a.confirm = b.confirm
@@ -373,20 +378,16 @@ let overlays (ms : Model.t Signal.signal) =
                    , p.page_is_tag
                    , p.page_internal
                    , p.page_built_in ))
-                 b.route_page)
-        (fun m -> Page_menu.dialog_view m)
-        ms
-    ; dyn
-        ~equal:(fun (a : Model.t) (b : Model.t) ->
-          a.appearance = b.appearance)
-        (fun m ->
+                 b.route_page) (fun m -> Page_menu.dialog_view m) ms
+    ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
+          a.appearance = b.appearance) (fun m ->
           match m.Model.appearance with
           | Some pos -> Settings_page.appearance_body pos
-          | None -> Logseq_dom.dom ~key:"app-none" [])
-        ms
+          | None -> spacer ~key:"app-none" []) ms
     ]
 
-(* cljs container.cljs emits hidden <a> anchors used by export flows *)
+(* cljs container.cljs emits hidden <a> anchors used by export flows.
+   TODO(component): imperative handles — keep dom *)
 let export_anchors : t =
   Logseq_dom.fragment
     (List.map
@@ -410,29 +411,25 @@ let open_url (u : string) = Host.open_url u
 
 (* cljs container.cljs help-menu-items -> .cp__sidebar-help-menu-popup *)
 let help_item key title icon_name act =
-  Logseq_dom.dom ~key ~tag:"a"
-    ~style_class:"it"
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then act ())
-    [ Logseq_dom.dom ~key:(key ^ "-i") ~tag:"span"
-        ~style_class:"ls-hm-icon"
-        [ Icons.icon ~size:20. icon_name ]
-    ; Logseq_dom.dom ~key:(key ^ "-t") ~tag:"strong"
-        ~style_class:"ls-hm-title" ~text:title []
-    ]
+  Ui_parts.pressable ~on_press:(fun _ -> act ())
+    (row ~key ~style_class:"it" ~cross:`center
+       [ box ~key:(key ^ "-i") ~style_class:"ls-hm-icon"
+           [ Icons.icon ~size:20. icon_name ]
+       ; text ~key:(key ^ "-t") ~style_class:"ls-hm-title" ~value:title []
+       ])
 
 let help_menu_popup : t =
   let close () =
     Runtime.send Action.Help_toggle;
     Runtime.flush ()
   in
-  Logseq_dom.dom ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
-    [ Logseq_dom.dom ~key:"hm-wrap" ~style_class:"list-wrap"
+  column ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
+    [ column ~key:"hm-wrap" ~style_class:"list-wrap"
         [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
         ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
         ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
-        ; Logseq_dom.dom ~key:"hm-hr1" ~tag:"hr" ~style_class:"ls-hm-hr" []
+        ; divider ~key:"hm-hr1" ~style_class:"ls-hm-hr" []
         ; help_item "hm-bug" (I18n.help_bug) "bug" close
         ; help_item "hm-feature" (I18n.help_feature) "git-pull-request"
             (fun () ->
@@ -442,27 +439,27 @@ let help_menu_popup : t =
         ; help_item "hm-feedback" (I18n.help_feedback) "messages"
             (fun () ->
               open_url "https://discuss.logseq.com/c/feedback/13"; close ())
-        ; Logseq_dom.dom ~key:"hm-hr2" ~tag:"hr" ~style_class:"ls-hm-hr" []
+        ; divider ~key:"hm-hr2" ~style_class:"ls-hm-hr" []
         ; help_item "hm-discord" (I18n.help_discord) "brand-discord"
             (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
         ; help_item "hm-forum" (I18n.help_forum) "message" (fun () ->
             open_url "https://discuss.logseq.com/"; close ())
-        ; Logseq_dom.dom ~key:"hm-hr3" ~tag:"hr" ~style_class:"ls-hm-hr" []
+        ; divider ~key:"hm-hr3" ~style_class:"ls-hm-hr" []
         ; help_item "hm-notes" (I18n.help_release_notes) "asterisk"
             (fun () ->
               open_url "https://docs.logseq.com/#/page/changelog"; close ())
         ]
-    ; Logseq_dom.dom ~key:"hm-ft"
+    ; row ~key:"hm-ft"
         ~style_class:"ft"
-        ([ Logseq_dom.dom ~key:"hm-ver" ~tag:"span"
+        ([ text ~key:"hm-ver"
              ~style_class:"ls-hm-meta"
-             ~text:(Printf.sprintf "Logseq %s" Version.app) [] ]
+             ~value:(Printf.sprintf "Logseq %s" Version.app) [] ]
         @ (match Version.revision () with
            | "" -> []
            | rev ->
-               [ Logseq_dom.dom ~key:"hm-rev" ~tag:"span"
+               [ text ~key:"hm-rev"
                    ~style_class:"ls-hm-meta"
-                   ~text:(I18n.tf "help/revision" [ rev ]) [] ]))
+                   ~value:(I18n.tf "help/revision" [ rev ]) [] ]))
     ]
 
 let help_area (ms : Model.t Signal.signal) : t =
@@ -471,16 +468,13 @@ let help_area (ms : Model.t Signal.signal) : t =
        smallest frame at the point and may land on the wrapper or the svg —
        the document listener walks ancestors, so the handler must sit on
        the outermost element of the hit box. *)
-    [ Logseq_dom.dom ~key:"help" ~style_class:"cp__sidebar-help-btn"
-        ~events:"click"
-        ~on_dom_event:(fun n _ ->
-          if n = "click" then (
-            Runtime.send Action.Help_toggle; Runtime.flush ()))
-        [ Logseq_dom.dom ~key:"help-inner" ~style_class:"inner"
-            [ help_svg ] ]
-    ; dyn
-        ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
-        (fun (m : Model.t) ->
+    [ Ui_parts.pressable
+        ~on_press:(fun _ ->
+          Runtime.send Action.Help_toggle; Runtime.flush ())
+        (box ~key:"help" ~style_class:"cp__sidebar-help-btn"
+           [ box ~key:"help-inner" ~style_class:"inner"
+               [ help_svg ] ])
+    ; reactive ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open) (fun (m : Model.t) ->
           if m.help_open then
             (* The dismiss catcher mounts while the mouse button that opened
                the menu is still down — its click lands on the catcher and
@@ -490,24 +484,23 @@ let help_area (ms : Model.t Signal.signal) : t =
             (* a dyn child must be a real element — Logseq_dom.fragment is
                only valid in static child lists; inside a dyn it mounts into
                the wrong parent and the children never materialize *)
-            Logseq_dom.dom ~key:"help-open" ~style_class:""
-              [ Logseq_dom.dom ~key:"help-dismiss"
-                  ~style_class:"cp__cmdk-dismiss"
-                  ~attrs:[ ("role", "presentation") ]
-                  ~events:"click"
-                  ~on_dom_event:(fun n _ ->
-                    if n = "click" && Platform.date_now_ms () -. opened_at > 400.
+            box ~key:"help-open"
+              [ Ui_parts.pressable
+                  ~on_press:(fun _ ->
+                    if Platform.date_now_ms () -. opened_at > 400.
                     then ( Runtime.send Action.Help_toggle; Runtime.flush ()))
-                  []
+                  (box ~key:"help-dismiss"
+                     ~style_class:"cp__cmdk-dismiss" [])
               ; help_menu_popup ]
-          else Logseq_dom.nothing)
-        ms
+          else spacer ~key:"help-closed" []) ms
     ]
 
 (* cljs page.cljs not-found: replaces the whole app chrome. Rendered
    as a fixed overlay (remounting the whole app tree inside a dyn
    hits a retained-store crash on the swap). *)
 let not_found_page : t =
+  (* TODO(component): position:fixed inset overlay — no
+     positioned-container kind *)
   Logseq_dom.dom ~key:"nf-full"
     ~style_class:
       "flex flex-col items-center justify-center min-h-screen bg-background"
@@ -515,58 +508,44 @@ let not_found_page : t =
       [ ( "style"
         , "position:fixed;inset:0;z-index:99999;background:var(--ls-primary-background-color)" )
       ]
-    [ Logseq_dom.dom ~key:"nf-h1" ~tag:"h1"
-        ~style_class:"text-6xl font-bold text-gray-12 mb-4" ~text:"404" []
-    ; Logseq_dom.dom ~key:"nf-h2" ~tag:"h2"
-        ~style_class:"text-2xl font-semibold text-gray-10 mb-6"
-        ~text:(I18n.t "page/not-found-title") []
-    ; Logseq_dom.dom ~key:"nf-p" ~tag:"p"
-        ~style_class:"text-gray-500 mb-8"
-        ~text:(I18n.t "page/not-found-desc") []
-    ; Logseq_dom.dom ~key:"nf-btn" ~tag:"button"
-        ~style_class:
-          "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none border bg-background hover:bg-accent hover:text-accent-foreground active:opacity-80 as-outline h-10 px-4 py-2"
-        ~events:"click"
-        ~on_dom_event:(fun n _ ->
-          if n = "click" then Platform.set_location_hash "#/")
-        [ Logseq_dom.dom ~key:"nf-ico" ~tag:"span"
-            ~style_class:"ls-icon-home  ui__icon ti"
-            [ Icons.icon ~size:18. ~cls:"" "home" ]
-        ; Logseq_dom.dom ~key:"nf-txt" ~tag:"span"
-            ~text:(I18n.t "page/go-back-home") []
+    [ heading ~key:"nf-h1" ~value:"404" []
+    ; heading ~key:"nf-h2" ~value:(I18n.t "page/not-found-title") []
+    ; text ~key:"nf-p" ~value:(I18n.t "page/not-found-desc") []
+    ; button ~key:"nf-btn"
+        ~style_class:"ui__button"
+        ~on_press:(fun _ -> Platform.set_location_hash "#/")
+        [ Icons.icon ~size:18. "home"
+        ; text ~key:"nf-txt" ~value:(I18n.t "page/go-back-home") []
         ]
     ]
 
 let shell (ms : Model.t Signal.signal) : t =
-  Logseq_dom.dom ~key:"wrapper" ~tag:"main" ~id:"app-container-wrapper"
-    ~style_class_signal:
-      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-           "theme-container-inner ls-hl-colored"
-           ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
-           ^ if m.right_sidebar_open then " ls-right-sidebar-open" else ""))
+  Ui_parts.class_signal ms
+    (fun (m : Model.t) ->
+      "theme-container-inner ls-hl-colored"
+      ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
+      ^ if m.right_sidebar_open then " ls-right-sidebar-open" else "")
+    (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
     [ skip_to_main
-    ; Logseq_dom.dom ~key:"app" ~id:"app-container"
-        [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
-            ~style_class_signal:
-              (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-                   if m.left_sidebar_open then "overflow-hidden"
-                   else "w-full"))
-            (topbar ms @ [ hidden_chrome ms; main_content ms ])
+    ; box ~key:"app" ~accessibility_identifier:"app-container"
+        [ Ui_parts.class_signal ms
+            (fun (m : Model.t) ->
+              if m.left_sidebar_open then "overflow-hidden" else "w-full")
+            (column ~key:"left-container"
+               ~accessibility_identifier:"left-container"
+               (topbar ms @ [ hidden_chrome ms; main_content ms ]))
         ; right_sidebar ms
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]
     ; overlays ms
     ; export_anchors
     ; help_area ms
-    ; dyn
-            ~equal:(fun (a : Model.t) (b : Model.t) ->
+    ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
               match a.route, b.route with
               | Model.Not_found _, Model.Not_found _ -> true
               | Model.Not_found _, _ | _, Model.Not_found _ -> false
-              | _ -> true)
-            (fun (m : Model.t) ->
+              | _ -> true) (fun (m : Model.t) ->
               match m.route with
               | Model.Not_found _ -> not_found_page
-              | _ -> Logseq_dom.nothing)
-            ms
-    ]
+              | _ -> spacer ~key:"nf-none" []) ms
+    ])

@@ -436,14 +436,12 @@ let picker_dropdown ~open_ ~placeholder ~new_option ~initial ~on_search
   (dropdown_menu ~anchor:`below ~anchor_alignment:`stretch
      ~anchor_offset:4.0 ~min_width:240
      ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
-     [ dyn ~equal:(fun a b -> Option.is_some a = Option.is_some b)
-         (fun m ->
+     [ reactive ~equal:(fun a b -> Option.is_some a = Option.is_some b) (fun m ->
             match m with
         | None -> column ~gap:2 []
             | Some (items, on_search) ->
                 Sel.view ~placeholder ?new_option
-                  ~on_search:(Some on_search) items)
-         (Signal.value items_st)
+                  ~on_search:(Some on_search) items) (Signal.value items_st)
      ])
     context parent
 
@@ -679,13 +677,11 @@ let extends_view ctx row : t =
          (dropdown_menu ~anchor:`below ~anchor_alignment:`start
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
-            [ dyn
-                ~equal:(fun a b ->
+            [ reactive ~equal:(fun a b ->
                   match a, b with
                   | None, None -> true
                   | Some (_, s1), Some (_, s2) -> s1 = s2
-                  | _ -> false)
-                (fun m ->
+                  | _ -> false) (fun m ->
                    match m with
                    | None -> column []
                    | Some (options, selected) ->
@@ -700,8 +696,7 @@ let extends_view ctx row : t =
                                        ~checked:(List.mem id selected)
                                        ~on_press:(fun _ -> toggle id)
                                        []))
-                            options))
-                (Signal.value picker_st)
+                            options)) (Signal.value picker_st)
             ])
      ])
     context parent
@@ -748,8 +743,7 @@ let closed_value_view ctx row : t =
          (dropdown_menu ~anchor:`below ~anchor_alignment:`stretch
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> close ())
-            [ dyn ~equal:(fun a b -> Option.is_some a = Option.is_some b)
-                (fun m ->
+            [ reactive ~equal:(fun a b -> Option.is_some a = Option.is_some b) (fun m ->
                    match m with
                | None -> column ~gap:2 []
                    | Some items ->
@@ -759,8 +753,7 @@ let closed_value_view ctx row : t =
                               (D.row_title row))
                          ~new_option:(fun text ->
                            new_choice ctx row ~close text)
-                         items)
-                (Signal.value items_st)
+                         items) (Signal.value items_st)
             ])
      ])
     context parent
