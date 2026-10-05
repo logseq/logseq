@@ -70,6 +70,13 @@ enum LogseqLUIEvents {
           }
         }
       }
+    // Pointer-detail events are emitted by lui's pointer-enabled standard
+    // views; logseq routes pointer input through its own dom-event layer
+    // (LogseqPlatform hit-testing + element gestures), so these have no
+    // OCaml entry point and are intentionally unhandled.
+    case .pressDetail, .pointerDown, .pointerUp, .pointerEnter,
+         .pointerLeave, .contextMenuPress:
+      return 0
     }
   }
 

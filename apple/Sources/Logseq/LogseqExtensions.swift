@@ -68,7 +68,11 @@ enum LogseqExtensionFingerprint {
     "pdf",
   ]
 
-  static let identifiers = tags.map { "logseq-" + $0 }
+  /// `tags` mirror the `logseq-<tag>` dom twins; `identifiers` adds the
+  /// dedicated widget extensions that may nest inside them — must stay
+  /// in sync with `child_identifiers` in apple/logseq_dom.ml (it feeds
+  /// the fingerprint's `children:`).
+  static let identifiers = tags.map { "logseq-" + $0 } + ["logseq-codemirror"]
   private static let profiles = ["web/web", "macos/swiftui"]
 
   private static let propertySchemas: [LogseqExtensionFingerprint.Property] = [
@@ -101,6 +105,65 @@ enum LogseqExtensionFingerprint {
     .init(name: "accessibility-identifier", kind: .string),
   ]
 
+  /// Schema mirror of deps/ui/apple/logseq_codemirror.ml — the OCaml
+  /// apple schema registers all three profiles.
+  private static let codemirrorProfiles = ["web/web", "macos/swiftui", "macos/gpui"]
+
+  private static let codemirrorPropertySchemas: [LogseqExtensionFingerprint.Property] = [
+    .init(name: "uuid", kind: "string", required: false, defaultValue: nil),
+    .init(name: "lang", kind: "string", required: false, defaultValue: nil),
+    .init(name: "value", kind: "string", required: false, defaultValue: nil),
+    .init(name: "read-only", kind: "bool", required: false, defaultValue: nil),
+    .init(name: "source-role", kind: "string", required: false, defaultValue: nil),
+    .init(name: "style-class", kind: "string", required: false, defaultValue: nil),
+    .init(name: "accessibility-identifier", kind: "string", required: false, defaultValue: nil),
+  ]
+
+  private static let codemirrorEvent = LogseqExtensionFingerprint.Event(
+    name: "cm-event",
+    fields: [
+      (name: "name", kind: "string", required: true),
+      (name: "value", kind: "string", required: false),
+      (name: "key", kind: "string", required: false),
+    ])
+
+  private static let codemirrorPropertyDecls: [LUIExtensionProperty] = [
+    .init(name: "uuid", kind: .string),
+    .init(name: "lang", kind: .string),
+    .init(name: "value", kind: .string),
+    .init(name: "read-only", kind: .bool),
+    .init(name: "source-role", kind: .string),
+    .init(name: "style-class", kind: .string),
+    .init(name: "accessibility-identifier", kind: .string),
+  ]
+
+  private static let codemirrorEventSchema = LUIExtensionEvent(
+    name: "cm-event",
+    fields: [
+      .init(name: "name", kind: .string, isRequired: true),
+      .init(name: "value", kind: .string, isRequired: false),
+      .init(name: "key", kind: .string, isRequired: false),
+    ])
+
+  private static func codemirrorExtension() -> LUIAppleExtension {
+    LUIAppleExtension(
+      identifier: "logseq-codemirror",
+      fingerprint: LogseqExtensionFingerprint.make(
+        identifier: "logseq-codemirror",
+        profiles: codemirrorProfiles,
+        standardChildren: false,
+        children: [],
+        properties: codemirrorPropertySchemas,
+        events: [codemirrorEvent]),
+      acceptsStandardChildren: false,
+      childIdentifiers: [],
+      properties: codemirrorPropertyDecls,
+      events: [codemirrorEventSchema]
+    ) { context in
+      AnyView(LogseqCodeMirrorView(context: context))
+    }
+  }
+
   private static func elementExtension(tag: String) -> LUIAppleExtension {
     let identifier = "logseq-" + tag
     return LUIAppleExtension(
@@ -125,6 +188,7 @@ enum LogseqExtensionFingerprint {
     view: (@MainActor (LUIAppleExtensionViewContext) -> AnyView)? = nil
   ) throws -> LUIAppleExtensionRegistry {
     let registry = LUIAppleExtensionRegistry()
+    try registry.register(codemirrorExtension())
     for tag in tags {
       if let view {
         let identifier = "logseq-" + tag
