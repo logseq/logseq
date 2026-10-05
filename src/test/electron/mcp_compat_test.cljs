@@ -1182,6 +1182,7 @@
                     (is (some #(= "logseq.DB.getClosedValues" (first %)) @calls))
                     (is (some #(= "logseq.DB.getOrphanTags" (first %)) @calls))
                     (is (some #(= "logseq.DB.getOrphanProperties" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getPropertyUsers" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1712,13 +1713,13 @@
 
 (deftest get-property-users-preserves-literals-and-resolves-entities
   (let [calls (atom [])
+     users #js [#js {"holder" #js {"uuid" "holder-1"} "value" true "value_entity" nil}
+          #js {"holder" #js {"uuid" "holder-2"} "value" 99
+            "value_entity" #js {"id" 99 "title" "Resolved value" "value" "green"}}
+          #js {"holder" #js {"uuid" "holder-3"} "value" "literal" "value_entity" nil}]
         api (fn [method args]
               (swap! calls conj [method args])
-              (if (string/includes? (first args) "pull ?holder")
-                #js [#js [#js {"uuid" "holder-1"} true]
-                     #js [#js {"uuid" "holder-2"} 99]
-                     #js [#js {"uuid" "holder-3"} "literal"]]
-                #js [#js {"id" 99 "title" "Resolved value" "value" "green"}]))]
+        users)]
     (async done
       (p/then (mcp-compat/get-property-users api
                                              #js {"property_ident" ":user.property/flag"})
@@ -1729,8 +1730,7 @@
                 (is (= "Resolved value" (get-in users [1 :value_entity :title])))
                 (is (= "literal" (:value (nth users 2))))
                 (is (nil? (:value_entity (nth users 2))))
-                (is (= 2 (count @calls)))
-                (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls))
+                (is (= [["logseq.DB.getPropertyUsers" [":user.property/flag"]]] @calls))
                 (done))))))
 
 (deftest get-property-users-rejects-non-ident-input

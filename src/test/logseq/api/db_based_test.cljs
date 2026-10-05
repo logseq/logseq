@@ -92,6 +92,40 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest get-property-users-preserves-literals-and-resolves-entities
+  (test-helper/load-test-files
+   [{:page {:block/title "Property Users Page"}
+     :blocks [{:block/title "Property Users Holder"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [block (test-helper/find-block-by-content "Property Users Holder")]
+              (p/let [property (db-based-api/upsert-property "property-users-ref" #js {:type "default"} nil)
+                      property-ident (:ident (api-test/js->clj-kw property))
+                      _ (db-property-handler/set-block-property!
+                         (:db/id block) (keyword (subs property-ident 1)) "Resolved value")
+                       ref-result (db-based-api/get-property-users property-ident)
+                       ref-users (api-test/js->clj-kw ref-result)
+                       literal-result (db-based-api/get-property-users ":block/title")
+                       literal-users (api-test/js->clj-kw literal-result)
+                      ref-user (some #(when (= "Property Users Holder"
+                                               (get-in % [:holder :title])) %)
+                                     ref-users)
+                      literal-user (some #(when (= "Property Users Holder"
+                                                   (get-in % [:holder :title])) %)
+                                         literal-users)]
+                (is (= "Resolved value" (get-in ref-user [:value_entity :title])))
+                (is (number? (:value ref-user)))
+                (is (= "Property Users Holder" (:value literal-user)))
+                (is (nil? (:value_entity literal-user)))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest get-property-users-rejects-non-ident-input
+  (is (thrown-with-msg? js/Error #"exact namespaced property ident"
+                        (db-based-api/get-property-users "Flag"))))
+
 (deftest get-properties-by-title-filters-to-property-definitions
   (async done
     (-> (api-test/with-plugin-api

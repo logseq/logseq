@@ -990,6 +990,11 @@ export interface IDBProxy {
   getClosedValues: () => Promise<Array<[Record<string, any>, Record<string, any>]>>
   getOrphanTags: () => Promise<Array<Record<string, any>>>
   getOrphanProperties: () => Promise<Array<{ ident: string; title: string; type: string | null }>>
+  getPropertyUsers: (propertyIdent: string) => Promise<Array<{
+    holder: Record<string, any>
+    value: any
+    value_entity: Record<string, any> | null
+  }>>
   inspectPage: (
     pageUuid: BlockUUID,
     detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'

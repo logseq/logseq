@@ -515,6 +515,46 @@
                           properties))]
       (bean/->js (sdk-utils/normalize-keyword-for-json orphans false)))))
 
+(def ^:private property-users-ident-pattern
+  #"(?i):[a-z][\w.-]*/[\w.?!+-]+")
+
+(defn get-property-users [property-ident]
+  (let [ident (when (string? property-ident)
+                (string/trim property-ident))]
+    (when-not (and ident (re-matches property-users-ident-pattern ident))
+      (throw (js/Error. "Expected an exact namespaced property ident such as :plugin.property.my_plugin/Effort, not a title or a UUID")))
+    (let [repo (state/get-current-repo)
+          query (str "[:find (pull ?holder [:db/id :block/uuid :block/title "
+                      ":block/name {:block/page [:db/id :block/uuid :block/title]}]) "
+                      "?value :where [?holder " ident " ?value]]")]
+      (p/let [rows (db-async/<q
+                    repo
+                    {:transact-db? false}
+                    (cljs.reader/read-string query))
+              entity-ids (->> rows
+                              (map second)
+                              (filter #(and (number? %) (not (boolean? %))))
+                              set)
+              resolved (if (seq entity-ids)
+                         (db-async/<q
+                          repo
+                          {:transact-db? false}
+                          '[:find [(pull ?e [:db/id :db/ident :block/title
+                                             :logseq.property/value]) ...]
+                            :in $ [?e ...]
+                            :where [?e ?a _]]
+                          (vec entity-ids))
+                         [])
+              resolved-by-id (into {} (map (juxt :db/id identity) resolved))
+              users (mapv (fn [[holder value]]
+                            {:holder holder
+                             :value value
+                             :value_entity (when (and (number? value)
+                                                      (not (boolean? value)))
+                                             (get resolved-by-id value))})
+                          rows)]
+        (bean/->js (sdk-utils/normalize-keyword-for-json users false))))))
+
 (def ^:private inspect-page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 

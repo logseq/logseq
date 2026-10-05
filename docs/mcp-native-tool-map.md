@@ -34,7 +34,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `getTag` | tag UUID | UUID/title/name projection query | existing `logseq.DB.getTag` API; MCP preserves its full PageEntity fields, including UUID/title/name and richer id/ident metadata | production route switched; DB API and MCP pass-through tests pass; live validation pending |
 | `getTagUsers` | tag UUID | direct `:block/tags` holder query; returns UUID/title/name/page | dedicated `logseq.DB.getTagUsers` API; excludes inherited-only holders to preserve contract | production route switched; DB API, MCP, and capability tests pass; live validation pending |
 | `getPropertyIndent` | property title | exact-title property query; ambiguity candidates retained | dedicated `logseq.DB.getPropertiesByTitle` returns all matching property definitions; MCP preserves the existing ident/type/ambiguity envelope | API implemented; local DB, MCP, and capability tests pass; live validation pending |
-| `getProperyUsers` | property ident | query + value resolution | query adapter | DB read |
+| `getProperyUsers` | exact property ident | literal values and resolved value entities | `logseq.DB.getPropertyUsers` owns holder lookup and entity resolution; public tool name and response stay unchanged | production route switched; local DB, MCP, capability, and SDK type checks pass; live validation pending |
 
 ## Lists
 
