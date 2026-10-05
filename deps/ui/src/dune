@@ -16,6 +16,6 @@
  (wrapped false)
  (modes melange)
  (libraries lui lui.web.dom melange-webapi melange.dom
-   melange-transit-melange melange-fetch)
+   melange-transit-melange melange-fetch logseq_subs)
  (preprocess
   (pps melange.ppx lui.ppx)))

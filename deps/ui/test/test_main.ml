@@ -3945,6 +3945,39 @@ let test_props_value2 () =
      = Some "line-dashed");
   check "closed_value_icon_id none"
     (Properties_value.closed_value_icon_id (wmap []) = None)
+
+(* ---- Runtime.scan_gate — doc-scan coalescing (perf regression) ---- *)
+
+let test_scan_gate () =
+  let g = Runtime.scan_gate () in
+  let iv = Runtime.scan_gate_interval in
+  (* first structural generation always scans immediately *)
+  Runtime.scan_gate_note_structural g;
+  check "gate structural immediate"
+    (Runtime.scan_gate_should g ~gen:1 ~now:0.);
+  Runtime.scan_gate_mark g ~gen:1 ~now:0.;
+  (* prop-only generations inside the interval coalesce *)
+  check "gate prop same gen skipped"
+    (not (Runtime.scan_gate_should g ~gen:1 ~now:iv));
+  check "gate prop burst coalesced"
+    (not (Runtime.scan_gate_should g ~gen:2 ~now:(iv -. 0.01)));
+  check "gate prop burst still coalesced"
+    (not (Runtime.scan_gate_should g ~gen:5 ~now:(iv -. 0.001)));
+  (* past the interval the latest generation scans once *)
+  check "gate prop after interval runs"
+    (Runtime.scan_gate_should g ~gen:5 ~now:(iv +. 0.01));
+  Runtime.scan_gate_mark g ~gen:5 ~now:(iv +. 0.01);
+  (* structural flag forces a scan even inside the interval *)
+  Runtime.scan_gate_note_structural g;
+  check "gate structural inside interval"
+    (Runtime.scan_gate_should g ~gen:6 ~now:(iv +. 0.02));
+  Runtime.scan_gate_mark g ~gen:6 ~now:(iv +. 0.02);
+  (* mark cleared the flag — next prop-only gen waits again *)
+  check "gate flag cleared by mark"
+    (not (Runtime.scan_gate_should g ~gen:7 ~now:(iv +. 0.03)));
+  check "gate stale gen + old time"
+    (Runtime.scan_gate_should g ~gen:7 ~now:1000.)
+
 let () =
   test_move ();
   test_update ();
@@ -4033,6 +4066,7 @@ let () =
   test_props_data4 ();
   test_props_value ();
   test_props_value2 ();
+  test_scan_gate ();
   (* Drive view tests run their worker-fed assertions on a promise tick;
      the summary + exit must wait for that stage *)
   Test_drive.run ~finish:(fun () ->

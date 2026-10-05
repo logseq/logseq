@@ -78,12 +78,10 @@ let language_row ctx =
   C.action_row ~key:"lang" ~for_:"preferred_language"
     ~label:T.language_label
     ~actions:
-      [ V.lang_trigger ~key:"lang-sel" ~h_cls:"ls-select-md" ~st:lang_label
-          ~dom_id:"settings-lang-trigger"
-          ~anchor_sel:"#settings-lang-trigger"
+      [ V.lang_trigger ~ctx ~key:"lang-sel" ~h_cls:"ls-select-md"
+          ~st:lang_label
       ; C.hidden_input ~key:"lang-sel-i"
-          ~attrs:[ ("value", V.current_lang ()) ]
-      ]
+          ~attrs:[ ("value", V.current_lang ()) ]      ]
     ()
 
 let theme_row ctx =
@@ -689,6 +687,7 @@ let pane_of ~modal ctx tab =
 
 let article ~modal ctx =
   dom ~key:"settings-article" ~tag:"article"
+    ~style_class:"cp__settings-article"
     [ dom ~key:"art-h" ~tag:"header" ~style_class:"cp__settings-header"
         [ dom ~key:"art-ht" ~tag:"h1"
             ~style_class:"cp__settings-category-title"

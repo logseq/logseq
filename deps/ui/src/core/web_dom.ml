@@ -79,14 +79,22 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector : string -> el option = "querySelector"
   [@@mel.scope "document"] [@@mel.return nullable]
 
+(* the apple twin names the document-scoped query doc_query *)
+let doc_query = query_selector
+
 external query_selector_all : string -> node_list = "querySelectorAll"
   [@@mel.scope "document"]
 
 external query_selector_all_arr : string -> el array = "querySelectorAll"
   [@@mel.scope "document"]
 
-external active_element : el option = "document.activeElement"
+external active_element_dom : el option = "document.activeElement"
   [@@mel.return nullable]
+
+(* function form — the apple twin re-queries the focused node on every
+   call, so shared call sites take `active_element ()` rather than a
+   value that would be captured once *)
+let active_element () = active_element_dom
 
 external doc_client_width : float = "clientWidth"
   [@@mel.scope "document.documentElement"]
@@ -349,6 +357,17 @@ external el_set_selection_range : el -> int -> int -> unit
 
 external el_select_text : el -> unit = "select" [@@mel.send]
 external el_focus : el -> unit = "focus" [@@mel.send]
+
+(* shared with the native impl: stable identity for an el — the DOM id
+   when present (native resolves snapshot/imperative ids too) *)
+let el_dom_id (el : el) : string option = el_get_attr el "id"
+
+(* Focus by DOM id; on the web the element either exists (real DOM) or
+   the pending-focus poll picks it up next tick — no host-side queue. *)
+let focus_dom_id (id : string) : unit =
+  match get_element_by_id id with
+  | Some el -> el_focus el
+  | None -> ()
 external el_blur : el -> unit = "blur" [@@mel.send]
 external el_click : el -> unit = "click" [@@mel.send]
 external el_checked : el -> bool = "checked" [@@mel.get]
@@ -1221,3 +1240,69 @@ let download_binary ~filename ~mime payload =
 
 let download_text ~filename ~mime text =
   download_binary ~filename ~mime text
+
+(* ---------- File System Access (cljs auto-backup) ---------- *)
+
+type dir_handle
+
+type file_handle
+
+type writable_
+
+external show_dir_picker : Js.Json.t -> dir_handle Js.Promise.t =
+  "showDirectoryPicker" [@@mel.scope "window"]
+
+let picker_supported : unit -> bool =
+  [%mel.raw
+    "function () { return typeof window.showDirectoryPicker === \
+     'function' }"]
+
+external h_name : dir_handle -> string = "name" [@@mel.get]
+
+external get_dir :
+  dir_handle -> string -> Js.Json.t -> dir_handle Js.Promise.t =
+  "getDirectoryHandle" [@@mel.send]
+
+external get_file :
+  dir_handle -> string -> Js.Json.t -> file_handle Js.Promise.t =
+  "getFileHandle" [@@mel.send]
+
+external fh_get_file : file_handle -> Js.Json.t Js.Promise.t =
+  "getFile" [@@mel.send]
+
+external fh_move :
+  file_handle -> dir_handle -> string -> unit Js.Promise.t = "move"
+  [@@mel.send]
+
+external fh_writable : file_handle -> writable_ Js.Promise.t =
+  "createWritable" [@@mel.send]
+
+external w_write :
+  writable_ -> Js.Typed_array.Uint8Array.t -> unit Js.Promise.t =
+  "write" [@@mel.send]
+
+external w_close : writable_ -> unit Js.Promise.t = "close" [@@mel.send]
+
+external set_interval : (unit -> unit) -> int -> int =
+  "setInterval" [@@mel.scope "window"]
+
+external clear_interval : int -> unit = "clearInterval"
+  [@@mel.scope "window"]
+
+let truncate_old_versions : dir_handle -> unit Js.Promise.t =
+  [%mel.raw
+    "async function (dir) { const names = []; for await (const e of \
+     dir.values()) if (e.kind === 'file') names.push(e.name); for \
+     (const n of names.sort().reverse().slice(12)) await \
+     dir.removeEntry(n); }"]
+
+let decode_u8 : Js.Typed_array.Uint8Array.t -> string Js.Promise.t =
+  [%mel.raw
+    "async function (u8) { return new TextDecoder().decode(u8) }"]
+
+let str_to_u8 (s : string) =
+  let u8 = Js.Typed_array.Uint8Array.fromLength (String.length s) in
+  String.iteri
+    (fun i c -> Js.Typed_array.Uint8Array.unsafe_set u8 i (Char.code c))
+    s;
+  u8

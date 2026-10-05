@@ -3,6 +3,7 @@
    state/use-theme-mode! and theme.cljs DOM effects.
    Storage keys use cljs storage.cljs `(name key)` semantics. *)
 
+open Lui_elements
 
 let dom = Logseq_dom.dom
 module T = I18n
@@ -88,52 +89,41 @@ let lang_label_for code =
   | Some (_, l) -> Platform.utf8 l
   | None -> code
 
-let lang_dropdown_on : Web_dom.el option ref = ref None
+(* language dropdown — LUI select + anchored dropdown_menu (mounted =
+   presented on every host; on_dismiss covers outside-tap and Escape) *)
+let lang_menu_st : bool Signal.state option ref = ref None
 
-let close_lang_dropdown () =
-  match !lang_dropdown_on with
-  | Some el ->
-      Web_dom.el_remove el;
-      lang_dropdown_on := None
-  | None -> ()
+let lang_menu_state ctx =
+  match !lang_menu_st with
+  | Some s -> s
+  | None ->
+      let s = Signal.state ctx.Lui_ui.ui_scheduler false in
+      lang_menu_st := Some s;
+      s
 
-let open_text_dropdown anchor options on_pick =
-  close_lang_dropdown ();
-  let menu = Web_dom.create_element "div" in
-  Web_dom.el_set_class menu
-    "ui__select-content relative z-[99999] min-w-[8rem] overflow-hidden \
-     rounded-md border bg-popover text-popover-foreground shadow-md";
-  let r = Web_dom.el_bounding_rect anchor in
-  Web_dom.el_set_attr menu "style"
-    (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:99999"
-       (Web_dom.rect_left r) (Web_dom.rect_bottom r));
-  List.iter
-    (fun opt ->
-      let it = Web_dom.create_element "div" in
-      Web_dom.el_set_class it
-        "ui__select-item relative flex w-full cursor-pointer \
-         select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm";
-      Web_dom.el_set_text_content it opt;
-      Web_dom.el_on it "click" (fun _ ->
-          on_pick opt;
-          close_lang_dropdown ());
-      Web_dom.el_append_child menu it)
-    options;
-  (match Web_dom.query_selector "body" with
-   | Some b -> Web_dom.el_append_child b menu
-   | None -> ());
-  lang_dropdown_on := Some menu
+let lang_menu_close mst =
+  Signal.set mst false;
+  Runtime.flush ()
 
-let open_lang_dropdown anchor on_pick =
-  open_text_dropdown anchor
-    (List.map (fun (_, l) -> Platform.utf8 l) languages)
-    (fun label ->
-      (match
-         List.find_opt (fun (_, l) -> Platform.utf8 l = label) languages
-       with
-       | Some (code, _) -> set_language code
-       | None -> ());
-      on_pick label)
+let lang_menu ~key st mst =
+  Lui_elements.dropdown_menu ~key:("lm-" ^ key)
+    ~anchor:`below ~anchor_alignment:`start
+    ~style_class:"ui__dropdown-menu-content ui__select-content"
+    ~on_dismiss:(fun _ev -> lang_menu_close mst)
+    (List.mapi
+       (fun i (code, label) ->
+         let label = Platform.utf8 label in
+         Lui_elements.menu_item
+           ~key:(Printf.sprintf "lmi-%s-%d" key i)
+           ~text:label
+           ~selected:(code = current_lang ())
+           ~style_class:"ui__dropdown-menu-item"
+           ~on_press:(fun _ev ->
+             set_language code;
+             Signal.set st label;
+             lang_menu_close mst)
+           [])
+       languages)
 
 let theme_item ~st mode label =
   dom ~key:("tm-" ^ mode) ~tag:"li"
@@ -148,12 +138,15 @@ let theme_item ~st mode label =
         Runtime.flush ()))
     [ dom ~key:("tmi-" ^ mode) ~tag:"i"
         (* cljs: .radix only when an accent color is stored
-           (:ui/radix-color) *)
-        ~style_class:
-          ("mode-" ^ mode
-          ^ if Platform.local_storage_get "radix-color" <> None
-            then " radix"
-            else "")
+           (:ui/radix-color); mode-active draws the .active>i ring *)
+        ~style_class_signal:
+          (Logseq_dom.class_signal (Signal.value st)
+             (fun active ->
+               "mode-" ^ mode
+               ^ (if active = mode then " mode-active" else "")
+               ^ (if Platform.local_storage_get "radix-color" <> None
+                  then " radix"
+                  else "")))
         []
     ; dom ~key:("tms-" ^ mode) ~tag:"strong" ~text:label []
     ]
@@ -166,39 +159,56 @@ let theme_modes_ul ~st =
     ; theme_item ~st "system" T.theme_system
     ]
 
-(* shui select trigger + chevron; opening the language popover like cljs *)
-let lang_trigger ~key ~h_cls ~st ?(dom_id = "") ~anchor_sel =
-  dom ~key ~tag:"button" ~id:dom_id
-    ~style_class:
-      ("ui__select-trigger " ^ h_cls)
-    ~attrs:
-      [ ("type", "button"); ("role", "combobox")
-      ; ("aria-expanded", "false") ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ ->
-      if n = "click" then
-        match Web_dom.query_selector anchor_sel with
-        | Some el ->
-            open_lang_dropdown el (fun l ->
-                Signal.set st l;
-                Runtime.flush ())
-        | None -> ())
-    [ dom ~key:(key ^ "v") ~tag:"span"
-        ~text_signal:(Logseq_dom.reactive_text Fun.id (Signal.value st))
-        []
-    ; dom ~key:(key ^ "i") ~tag:"span"
-        ~style_class:"ui__select-icon"
-        [ dom ~key:(key ^ "svg") ~tag:"svg"
-            ~style_class:"ls-icon-sm tabler-icon tabler-icon-chevron-down"
-            ~attrs:
-              [ ("viewBox", "0 0 24 24"); ("fill", "none")
-              ; ("stroke", "currentColor"); ("stroke-width", "2")
-              ]
-            [ dom ~key:(key ^ "p") ~tag:"path"
-                ~attrs:[ ("d", "m6 9 6 6 6-6") ] []
-            ]
-        ]
-    ]
+(* shui select trigger + chevron; the popover mounts as a sibling so
+   position:fixed anchors it under the trigger on both platforms *)
+let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
+  let mst = lang_menu_state ctx in
+  fun uctx parent ->
+    (* box (stack kind) so the host anchors the dropdown_menu to the
+       select trigger — the cljs combobox markup maps onto select +
+       anchored menu_item children *)
+    Lui_elements.box ~key:(key ^ "-w")
+      ~style_class:("ls-select-wrap " ^ h_cls)
+      [ Lui_elements.select ~key:(key ^ "-s")
+          ~text_signal:(Signal.value st)
+          ~style_class:("ui__select-trigger " ^ h_cls)
+          ~on_press:(fun _ev ->
+            Signal.set mst (not (Signal.get_state mst));
+            Runtime.flush ())
+          []
+      ; Logseq_dom.dyn ~equal:( == ) (fun open_ ->
+            if open_ then lang_menu ~key st mst
+            else Logseq_dom.nothing)
+          (Signal.value mst)
+      ]
+      uctx parent
+
+
+(* legacy simple body — kept for non-page callers; the settings dialog now
+   renders the full settings panel via Settings_page.modal_body *)
+let body (_ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let mode = Signal.state ctx.ui_scheduler (current_mode ()) in
+  let lang_label =
+    Signal.state ctx.ui_scheduler (lang_label_for (current_lang ()))
+  in
+  let node =
+    dom ~key:"settings" ~style_class:"cp__settings"
+      [ dom ~key:"st-h" ~tag:"h2"
+          ~style_class:
+            "ui__dialog-title" ~text:T.settings_title []
+      ; dom ~key:"st-theme" ~style_class:"ls-settings-col"
+          [ dom ~key:"st-tl" ~tag:"strong" ~text:T.theme_label []
+          ; theme_modes_ul ~st:mode
+          ]
+      ; dom ~key:"st-lang" ~style_class:"ls-settings-col"
+          [ dom ~key:"st-ll" ~tag:"strong" ~text:T.language_label []
+          ; lang_trigger ~ctx ~key:"st-ls" ~h_cls:"ls-select-lg"
+              ~st:lang_label
+          ]
+      ]
+  in
+  node ctx parent
 
 (* cljs ui/toggle-theme — resolve system first, then flip light/dark *)
 let toggle_theme () =

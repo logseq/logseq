@@ -28,6 +28,10 @@ type t =
        block_default_collapsed render flag without persisting *)
   ; collapsed_ui : String_set.t (* per-scope overrides: "scope\x00uuid" *)
   ; expanded_ui : String_set.t
+  ; inv_tick : int
+      (* bumped by Render_inline cache invalidations via worker_events —
+         lets painted rows recheck their rendered-ref gens without
+         subscribing the whole state record *)
   }
 
 let initial =
@@ -39,6 +43,7 @@ let initial =
   ; expanded = String_set.empty
   ; collapsed_ui = String_set.empty
   ; expanded_ui = String_set.empty
+  ; inv_tick = 0
   }
 
 include State_cell.Make (struct
@@ -102,6 +107,81 @@ let ensure (ctx : Lui_ui.ui_context) =
 
 (* the state as a read-only signal for dyn/if_/class_signal consumers *)
 
+(* per-field derived signals, created once alongside the coarse record —
+   every mounted row leaves ~15 subscriptions behind, so a bare [S.set]
+   dirtied ~1k tasks on large pages (~80ms). Rows subscribe a field
+   instead: an [editing] change only runs editing subscribers *)
+type collapse_view =
+  { cv_collapsed : String_set.t
+  ; cv_expanded : String_set.t
+  ; cv_collapsed_ui : String_set.t
+  ; cv_expanded_ui : String_set.t
+  }
+
+let equal_collapse_view a b =
+  String_set.equal a.cv_collapsed b.cv_collapsed
+  && String_set.equal a.cv_expanded b.cv_expanded
+  && String_set.equal a.cv_collapsed_ui b.cv_collapsed_ui
+  && String_set.equal a.cv_expanded_ui b.cv_expanded_ui
+
+type field_sigs =
+  { editing_sig : editing option Signal.signal
+  ; selected_sig : String_set.t Signal.signal
+  ; anchor_sig : string option Signal.signal
+  ; action_bar_sig : bool Signal.signal
+  ; collapse_sig : collapse_view Signal.signal
+  ; invalidation_sig : int Signal.signal
+  }
+
+let field_sigs_opt : field_sigs option ref = ref None
+
+let field_sigs () =
+  match !field_sigs_opt with
+  | Some f -> f
+  | None ->
+      let s = signal () in
+      let f =
+        { editing_sig =
+            Signal.cutoff ( = ) (Signal.map (fun st -> st.editing) s)
+        ; selected_sig =
+            Signal.cutoff String_set.equal
+              (Signal.map (fun st -> st.selected) s)
+        ; anchor_sig =
+            Signal.cutoff ( = ) (Signal.map (fun st -> st.anchor) s)
+        ; action_bar_sig =
+            Signal.cutoff ( = ) (Signal.map (fun st -> st.action_bar) s)
+        ; collapse_sig =
+            Signal.cutoff equal_collapse_view
+              (Signal.map
+                 (fun (st : t) ->
+                   { cv_collapsed = st.collapsed
+                   ; cv_expanded = st.expanded
+                   ; cv_collapsed_ui = st.collapsed_ui
+                   ; cv_expanded_ui = st.expanded_ui
+                   })
+                 s)
+        ; invalidation_sig =
+            Signal.cutoff ( = ) (Signal.map (fun st -> st.inv_tick) s)
+        }
+      in
+      field_sigs_opt := Some f;
+      f
+
+let editing_sig () = (field_sigs ()).editing_sig
+let selected_sig () = (field_sigs ()).selected_sig
+let anchor_sig () = (field_sigs ()).anchor_sig
+let action_bar_sig () = (field_sigs ()).action_bar_sig
+let collapse_sig () = (field_sigs ()).collapse_sig
+let invalidation_sig () = (field_sigs ()).invalidation_sig
+
+(* Render_inline cache invalidation dirtied painted rows' ref gens —
+   fold a tick into the state so row invalidation signals emit on the
+   next flush. Silent: the caller's update flow already flushes *)
+let bump_invalidation () =
+  match !st with
+  | Some st -> Signal.update st (fun s -> { s with inv_tick = s.inv_tick + 1 })
+  | None -> ()
+
 (* updates that must repaint now (called from document listeners, outside
    LUI's event dispatch); Signal.update composes with any pending staged
    value so deferred on_init writes aren't lost *)
@@ -151,6 +231,14 @@ let collapsed_in ~scope (st : t) uuid =
   else if String_set.mem uuid st.expanded then false
   else String_set.mem uuid st.collapsed
 
+(* same check on the projected [collapse_view] carried by [collapse_sig] *)
+let collapsed_in_view ~scope (v : collapse_view) uuid =
+  let k = collapse_key scope uuid in
+  if String_set.mem k v.cv_expanded_ui then false
+  else if String_set.mem k v.cv_collapsed_ui then true
+  else if String_set.mem uuid v.cv_expanded then false
+  else String_set.mem uuid v.cv_collapsed
+
 let is_collapsed_in ?(scope = "main") uuid = collapsed_in ~scope (read ()) uuid
 
 let collapsed_ui_transform ~scope uuid v (st : t) =
@@ -180,6 +268,12 @@ let effective_collapsed_in ~scope uuid default (st : t) =
      || String_set.mem (collapse_key scope uuid) st.expanded_ui
   then false
   else collapsed_in ~scope st uuid || default
+
+let effective_collapsed_in_view ~scope uuid default (v : collapse_view) =
+  if String_set.mem uuid v.cv_expanded
+     || String_set.mem (collapse_key scope uuid) v.cv_expanded_ui
+  then false
+  else collapsed_in_view ~scope v uuid || default
 
 let effective_collapsed ?(scope = "main") (b : Model.block) =
   match b.Model.block_uuid with

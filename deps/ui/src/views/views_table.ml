@@ -941,12 +941,8 @@ let table_header inst cols : t =
                                     match
                                       E.get_element_by_id "add property"
                                     with
-                                    | Some cell ->
-                                        let r = E.el_bounding_rect cell in
+                                    | Some _ ->
                                         Properties_dialog.open_dialog
-                                          ~anchor:
-                                            ( E.rect_left r
-                                            , E.rect_bottom r +. 4. )
                                           { Properties_dialog.uuid
                                           ; uuids = []
                                           ; db_id = p.Model.page_db_id

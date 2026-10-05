@@ -2,6 +2,6 @@
  (target js_app)
  (modules main)
  (module_systems esm)
- (libraries logseq_ui melange.js)
+ (libraries logseq_ui logseq_subs melange.js)
  (preprocess
   (pps melange.ppx)))

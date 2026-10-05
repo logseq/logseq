@@ -46,6 +46,8 @@ let pending_tab : string option ref = ref None
 
 let open_at tab = pending_tab := Some tab
 
+let clear_pending_tab () = pending_tab := None
+
 (* common-util/page-name-sanity-lc approximation: lowercase + strip boundary
    slashes (path normalization is not needed for the settings lookups) *)
 let page_name_lc s =

@@ -39,6 +39,9 @@ let title_kvs t =
    insert tx then dissocs block/page so the block lives only under
    block/parent. ?link carries a [:block/link db-id] embed edge. *)
 let block_map ?title ?(page = false) ?link uuid =
+  (* cljs wrap-parse-block saves (string/trim title); trim at the single
+     constructor so every insert path matches *)
+  let title = Option.map String.trim title in
   Wire.Map
     ([ str "block/uuid" (Wire.Uuid uuid) ]
     @ (match title with
@@ -985,6 +988,11 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
 let apply_queued _page delta =
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
+  let route_at_start = !Runtime.current_route in
+  let perf =
+    match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false
+  in
+  let ms () = Platform.date_now_ms () in
   (* fold and publish inside the apply queue so a racing arm can't
      interleave between our splice and our publish — canon rows replace
      block fields wholesale, so a stale arm publishing last would blank
@@ -996,26 +1004,98 @@ let apply_queued _page delta =
           let rec go page = function
             | [] -> Js.Promise.resolve (Some page)
             | d :: rest -> (
+                let t0 = ms () in
                 let* applied =
                   Page_delta.apply_to_page ~strict:false h page d
                 in
+                if perf then
+                  Printf.eprintf "[perf] op.apply_to_page %.1fms\n%!"
+                    (ms () -. t0);
                 match applied with
-                | Some page' -> go page' rest
-                | None -> Js.Promise.resolve None)
+                | Page_delta.Applied page' -> go page' rest
+                | Page_delta.Unchanged -> go page rest
+                | Page_delta.Failed -> Js.Promise.resolve None)
           in
           let* a = go base deltas in
           (match a with
            | Some p'
              when p' != base
+                  && !Runtime.current_route = route_at_start
                   &&
                   (match (Runtime.model ()).Model.route_page with
                    | Some c -> c == base
                    | None -> false) ->
-               Runtime.push_page_items p';
-               Runtime.send (Action.Page_loaded p')
+               let t0 = ms () in
+               Runtime.send (Action.Page_loaded p');
+               if perf then
+                 Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
            | _ -> ());
-          Js.Promise.resolve (a, touched))
-      | None -> Js.Promise.resolve (None, touched))
+          Js.Promise.resolve (a, touched, deltas))
+      | None -> Js.Promise.resolve (None, touched, deltas))
+
+(* journals-route fold of the op response (+ any deferred deltas) —
+   the route page lives in current_journals, so the page-route splice
+   can't see it; apply each delta to the journal day it touches and
+   push the changed day into its mounted item signal *)
+let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
+  let deltas = Page_delta.drain_deferred () @ [ delta ] in
+  let touched = List.concat_map Page_delta.delta_uuids deltas in
+  let start_js = !Runtime.current_journals in
+  Page_delta.with_apply_queue (fun () ->
+      let rec go js = function
+        | [] -> Js.Promise.resolve (Page_delta.Applied js)
+        | d :: rest -> (
+            let* applied =
+              Page_delta.apply_to_journals ~strict:false delta_helpers js
+                d
+            in
+            match applied with
+            | Page_delta.Applied js' -> go js' rest
+            | Page_delta.Unchanged -> go js rest
+            | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
+      in
+      let* merged = go start_js deltas in
+      (* a navigation mid-splice emptied the journals — this publish
+         would resurrect the old route's days *)
+      let still_current = !Runtime.current_journals == start_js in
+      (match merged with
+       | Page_delta.Applied js' when js' != start_js && still_current ->
+           Runtime.send (Action.Journals_loaded js');
+           Js.Promise.resolve ()
+       | Page_delta.Applied _ | Page_delta.Unchanged -> Js.Promise.resolve ()
+       | Page_delta.Failed -> (
+           (* a touched day couldn't splice — refetch just the days the
+              deltas touch, never the whole route *)
+           match !Runtime.current_repo with
+           | Some repo -> (
+               let touched_day (p : Model.page) =
+                 List.exists
+                   (fun d -> Page_delta.delta_touches d p)
+                   deltas
+               in
+               let rec refetch acc = function
+                 | [] -> Js.Promise.resolve (List.rev acc)
+                 | (p : Model.page) :: rest ->
+                     if not (touched_day p) then
+                       refetch (p :: acc) rest
+                     else
+                       let* blocks = fetch_page_blocks repo p in
+                       refetch
+                         ({ p with Model.page_blocks = blocks } :: acc)
+                         rest
+               in
+               let* js' = refetch [] start_js in
+               if still_current then (
+                 Runtime.send (Action.Journals_loaded js');
+                 (* the refetched days already contain these deltas'
+                    effects — marking their revs seeds the basis so the
+                    next broadcast splices instead of refetching *)
+                 List.iter Page_delta.note_applied_of_delta deltas);
+               Js.Promise.resolve ())
+           | None -> refresh_page ()))
+      |> Js.Promise.then_ (fun () ->
+             S.prune_overrides touched;
+             Js.Promise.resolve ()))
 
 (* Journals/Home counterpart of apply_queued: each delta belongs to
    the journal page whose tree consumes it. The owner is found via a
@@ -1080,11 +1160,12 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
                         j d
                     in
                     match applied with
-                    | Some j' when j' != j ->
+                    | Page_delta.Applied j' ->
                         arr.(i) <- j';
                         owners := j' :: !owners;
                         Js.Promise.resolve `Applied
-                    | _ -> try_cands rest)
+                    | Page_delta.Failed -> Js.Promise.resolve `Unmatched
+                    | Page_delta.Unchanged -> try_cands rest)
               in
               try_cands cands
           in
@@ -1118,7 +1199,11 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match
     (Option.bind resp (fun r -> Wire.get r "delta"), (Runtime.model ()).Model.route_page)
   with
-  | Some delta, None -> (
+  | Some delta, None when !Runtime.current_journals <> [] -> (
+      (* journals / other route-less views keep their pages in
+         current_journals — splice the delta into the day it touches.
+         Inside the Journals/Home route the splice is keyed-list
+         repaint; off-route the day store still updates *)
       match Runtime.route () with
       | Model.Journals | Model.Home -> (
           let* ok = splice_journals [ delta ] in
@@ -1128,23 +1213,20 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
             ignore (Runtime.hooks.refresh_property_areas ());
             Js.Promise.resolve ())
           else refresh_page ())
-      | _ -> refresh_page ())
+      | _ -> refresh_journals_via_delta delta)
   | Some delta, Some page -> (
       let route_at_start = Runtime.route () in
-      let* applied, touched = apply_queued page delta in
-      match applied with
+      let* applied, touched, deltas = apply_queued page delta in      match applied with
       | Some page' when page_still_current route_at_start page' ->
           (* the spliced rows are authoritative for the uuids the tx
              touched — drop their committed-buffer title overrides like
              refresh_page does, but keep in-flight commits the tx
              didn't cover *)
           S.prune_overrides touched;
-          (* push the spliced tree straight into the mounted virtual
-             list before Page_loaded — the items signal repaints only
-             the touched rows, and matching container fields then let
-             update.ml skip the data_gen bump (no page remount) *)
-          Runtime.push_page_items page';
-          Runtime.send (Action.Page_loaded page');
+          (* the queue already published Page_loaded — a second send
+             would take the not-own-commit branch and wipe basis/
+             applied/deferred via Page_delta.reset right after the
+             splice populated them *)
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)
           !Runtime.refresh_page_side page';
@@ -1159,7 +1241,18 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
       | Some _ ->
           (* page moved on mid-splice — this page is gone *)
           Js.Promise.resolve ()
-      | None -> refresh_page ())
+      | None ->
+          let* () = refresh_page () in
+          (* the fresh fetch contains every attempted delta — seed the
+             basis so later broadcasts splice *)
+          List.iter Page_delta.note_applied_of_delta deltas;
+          Js.Promise.resolve ())
+  | Some delta, None ->
+      (* no page store — the fresh reload already contains the delta's
+         effects; seed the basis after it so later broadcasts splice *)
+      let* () = refresh_page () in
+      Page_delta.note_applied_of_delta delta;
+      Js.Promise.resolve ()
   | _ -> refresh_page ()
 
 let apply_and_refresh ?opts ops =

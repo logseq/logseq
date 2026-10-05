@@ -194,18 +194,26 @@ let is_overlay_click payload =
   go 0
 
 (* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label
-   :flashcards__cp} — the deck lives inside the standard dialog chrome
-   (.ui__dialog-overlay > .ui__dialog-content) so it stacks above the
-   page instead of rendering inline *)
+   :flashcards__cp} — scrim and dialog content are SIBLINGS here, like
+   cmdk: the native backend hoists each fillsOverlay element into the
+   window overlay layer, and a nested content would render inside its
+   parent's overlay copy instead of being its own layer. *)
 let modal st =
-  dom ~key:"cards-ov"
-    ~style_class:
-      "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
-       justify-center items-center"
-    ~events:"click"
-    ~on_dom_event:(fun n p ->
-      if n = "click" && is_overlay_click p then Cards_state.close st)
-    [ dom ~key:"cards-ct"
+  (* The scrim mounts while the opening gesture is still in flight: its
+     mouseup lands on the overlay and would instantly re-close the modal.
+     Ignore overlay clicks for a short grace window after mount. *)
+  let opened_at = Platform.date_now_ms () in
+  Logseq_dom.fragment
+    [ dom ~key:"cards-ov"
+        ~style_class:
+          "ui__dialog-overlay fixed inset-0 z-50 bg-background/90"
+        ~events:"click"
+        ~on_dom_event:(fun n p ->
+          if n = "click" && is_overlay_click p
+             && Platform.date_now_ms () -. opened_at > 400.
+          then Cards_state.close st)
+        []
+    ; dom ~key:"cards-ct"
         ~style_class:
           "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid \
            w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg \
@@ -224,8 +232,7 @@ let modal st =
             ~events:"click"
             ~on_dom_event:(fun name _ ->
               if name = "click" then Cards_state.close st)
-            [ Icons.raw ~cls:"ls-icon-sm" "x" ] ]
-    ]
+            [ Icons.raw ~cls:"ls-icon-sm" "x" ] ]    ]
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in

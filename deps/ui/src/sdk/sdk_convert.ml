@@ -1,3 +1,5 @@
+external json_obj : 'a Js.Dict.t -> Js.Json.t = "%identity"
+
 (* JS <-> Wire converters for the window.logseq api surface.
    Result side mirrors logseq.sdk.utils/normalize-keyword-for-json:
    keyword -> camelCase name when ns in {block,db,file} or unqualified,

@@ -16,11 +16,26 @@ type patch =
   ; upsert : (string * string) list (* uuid, order — pre-sorted by worker *)
   }
 
+(* splice outcome: [Unchanged] — the delta is irrelevant to this store
+   (foreign page/parent — nothing visible changed, no refresh at all);
+   [Applied] — merged in place; [Failed] — relevant but could not
+   splice (non-contiguous base rev, missing nodes) — caller refetches
+   only the affected page/day, never the whole route *)
+type 'a splice =
+  | Unchanged
+  | Applied of 'a
+  | Failed
+
 type parsed =
   { rev : int
   ; canon : Wire.t SMap.t
   ; deleted : SSet.t
   ; patches : patch SMap.t
+  ; affected : Wire.t list
+      (** the worker's affected-keys ([tag] / [tag value] vectors —
+          render_affected_keys.ml): which resources this tx can
+          invalidate. Sync subs gate on these instead of refetching
+          on every batch *)
   }
 
 let uuid_pairs (w : Wire.t) : (string * Wire.t) list =
@@ -86,7 +101,12 @@ let parse (delta : Wire.t) : parsed option =
             | None -> m)
           SMap.empty (uuid_pairs children_w)
       in
-      Some { rev; canon; deleted; patches }
+      let affected =
+        match Wire.get delta "affected-keys" with
+        | Some w -> Wire.elems w
+        | None -> []
+      in
+      Some { rev; canon; deleted; patches; affected }
   | _ -> None
 
 (* rev of the tx that produced the current materialized page state —
@@ -126,8 +146,13 @@ let with_apply_queue (f : unit -> 'a Js.Promise.t) : 'a Js.Promise.t =
     let* () = !apply_queue in
     f ()
   in
+  (* the queued successor must resolve on EITHER outcome — a then_-only
+     chain stays rejected after the first failed apply and every later
+     enqueue binds onto that rejection and never runs *)
   apply_queue :=
-    Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p;
+    Js.Promise.catch
+      (fun _ -> Js.Promise.resolve ())
+      (Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p);
   p
 
 
@@ -321,11 +346,19 @@ let rec splice_children env parent_key (cur : Model.block list)
                 (* keep the positionally-assigned index — the canon wire
                    carries none and decode defaults it to 1, so swapping
                    blindly makes every touched sibling render "1." *)
-                { n with
-                  Model.block_children = c.Model.block_children
-                ; block_embed_children = c.Model.block_embed_children
-                ; block_order_index = c.Model.block_order_index
-                }
+                let merged =
+                  { n with
+                    Model.block_children = c.Model.block_children
+                  ; block_embed_children = c.Model.block_embed_children
+                  ; block_order_index = c.Model.block_order_index
+                  }
+                in
+                (* wire records are rebuilt whole, so an unchanged block
+                   still arrives as a fresh record — swapping it in breaks
+                   the == cutoffs downstream (row_children, keyed rows) and
+                   remounts every untouched row. Keep the old record when
+                   the merge is field-identical. *)
+                if merged = c then c else merged
             | _ -> c)
         | None -> c
       in
@@ -396,6 +429,47 @@ let delta_uuids (delta : Wire.t) : string list =
         (SSet.fold (fun u acc -> u :: acc) p.deleted [])
   | None -> []
 
+(* the delta's affected-keys — sync subs intersect these with their
+   resource watches to skip refetches the tx couldn't change *)
+let delta_affected (delta : Wire.t) : Wire.t list =
+  match parse delta with Some p -> p.affected | None -> []
+
+(* a refetched tree already contains every received delta's effects —
+   marking the failed batch's revs applied after a refetch seeds the
+   basis so the NEXT broadcast splices instead of refetching again
+   (self-heals in one refetch instead of being stuck on the slow path) *)
+let note_applied_of_delta (delta : Wire.t) =
+  match parse delta with Some p -> note_applied p.rev | None -> ()
+
+(* does the delta touch this page's tree: a membership patch keys the
+   page uuid (top-level children list) or any canon/deleted/patch uuid
+   lives inside the block tree *)
+let delta_touches_parsed (p : parsed) (page : Model.page) : bool =
+  let rec block_touches (b : Model.block) =
+    (match b.Model.block_uuid with
+     | Some u ->
+         SMap.mem u p.canon || SSet.mem u p.deleted
+         || SMap.mem u p.patches
+     | None -> false)
+    || List.exists block_touches b.Model.block_children
+    || List.exists block_touches b.Model.block_embed_children
+  in
+  (match page.Model.page_uuid with
+   | Some pu ->
+       (* a canon/deleted row keyed by the page entity's own uuid is a
+          page-level change — rename, delete, tag drop. Missing it made
+          those deltas read as Unchanged and the rename/delete never
+          reached the UI *)
+       SMap.mem pu p.patches || SMap.mem pu p.canon
+       || SSet.mem pu p.deleted
+   | None -> false)
+  || List.exists block_touches page.Model.page_blocks
+
+let delta_touches (delta : Wire.t) (page : Model.page) : bool =
+  match parse delta with
+  | Some p -> delta_touches_parsed p page
+  | None -> false
+
 (* every uuid a delta addresses — canon rows + tombstones + membership
    patch parents: the owner-detection key set for multi-page views
    (journals), where the page holding the touched tree must be found
@@ -408,21 +482,34 @@ let delta_keys (delta : Wire.t) : string list =
            (SSet.fold (fun u acc -> u :: acc) p.deleted []))
   | None -> []
 
-(* apply [delta] to [page]; Some merged page on success, None when the
-   delta can't splice onto the current tree (caller refetches).
+(* apply [delta] to [page]:
+   [Unchanged] — delta already applied or irrelevant to this tree (the
+   caller must not publish, refetch, or refresh anything);
+   [Applied p'] — merged in place, untouched subtrees keep identity;
+   [Failed] — relevant but unspliceable: refetch only this page/day.
    [~strict] (broadcast path) requires every membership patch to be
    contiguous with our materialized rev; the op-response path passes
    ~strict:false — its patches are absolute set-ops from a tx we just
-   ran, and a non-contiguous base self-heals through the next broadcast
-   reload *)
+   ran, and a non-contiguous base self-heals through the next broadcast *)
 let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
-    (delta : Wire.t) : Model.page option Js.Promise.t =
+    (delta : Wire.t) : Model.page splice Js.Promise.t =
   match parse delta with
-  | None -> Js.Promise.resolve None
+  | None -> Js.Promise.resolve Failed
   | Some p -> (
-      if already_applied p.rev then Js.Promise.resolve (Some page)
-      else if strict && not (structural_ok p) then
-        Js.Promise.resolve None
+      if already_applied p.rev then Js.Promise.resolve Unchanged
+      else if not (delta_touches_parsed p page) then
+        Js.Promise.resolve Unchanged
+      else if strict && !basis <> None && not (structural_ok p) then
+        (* [basis] is unset only right after a full fetch, which
+           already contains every committed tx — trust it and let the
+           fold seed the rev via note_applied. Gating here would send
+           the first structural broadcast after ANY load to a whole-page
+           refetch (the refetch publishes through Page_loaded, which
+           resets basis again, so it could never self-heal). A dropped
+           intermediate broadcast is the only residual risk and is
+           still caught by the per-delta already_applied checks on
+           later folds. *)
+        Js.Promise.resolve Failed
       else
         (* decode + enrich the canonical rows up front — tag titles and
            embed children need worker roundtrips *)
@@ -436,7 +523,7 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           h.resolve (List.map snd decoded)
         in
         let* filled = h.fill_embeds filled in
-        if already_applied p.rev then Js.Promise.resolve (Some page)
+        if already_applied p.rev then Js.Promise.resolve Unchanged
         else
         let canon_nodes = Hashtbl.create (List.length filled) in
         List.iter2
@@ -468,12 +555,19 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           renumber_tree
             (splice_children env root_key page.Model.page_blocks 1)
         in
+        (* a patch whose parent is not in this tree is foreign (a
+           cross-page move's other end, another route's children) — not
+           a failure: the splice is complete for this page. It only
+           fails when a patch targeted a node this tree has but never
+           visited *)
         let unconsumed =
           SMap.exists
-            (fun k _ -> not (Hashtbl.mem env.consumed k))
+            (fun k _ ->
+              Hashtbl.mem idx_nodes k
+              && not (Hashtbl.mem env.consumed k))
             p.patches
         in
-        if env.failed || unconsumed then Js.Promise.resolve None
+        if env.failed || unconsumed then Js.Promise.resolve Failed
         else (
           let add_c, rem_c = collapsed_sets p in
           if not (SSet.is_empty add_c && SSet.is_empty rem_c) then
@@ -487,4 +581,35 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
             | _ -> Js.Promise.resolve page'
           in
           own_commit := Some page';
-          Js.Promise.resolve (Some page')))
+          Js.Promise.resolve (Applied page')))
+
+(* fold [delta] onto the journal page(s) it touches — same tri-state as
+   [apply_to_page]: [Unchanged] when no loaded day is touched (delta
+   targets an unloaded page — nothing visible changed, the caller must
+   not reload the route); [Failed] when a touched day couldn't splice
+   (caller refetches just that day) *)
+let apply_to_journals ?(strict = true) (mk_helpers : Model.page -> helpers)
+    (journals : Model.page list) (delta : Wire.t)
+    : Model.page list splice Js.Promise.t =
+  match parse delta with
+  | None -> Js.Promise.resolve Failed
+  | Some p ->
+      if already_applied p.rev then Js.Promise.resolve Unchanged
+      else
+        let rec go acc = function
+          | [] -> Js.Promise.resolve (Applied (List.rev acc))
+          | page :: rest ->
+              if not (delta_touches_parsed p page) then
+                go (page :: acc) rest
+              else
+                let* applied =
+                  apply_to_page ~strict (mk_helpers page) page delta
+                in
+                (match applied with
+                 | Applied p' -> go (p' :: acc) rest
+                 | Unchanged -> go (page :: acc) rest
+                 | Failed -> Js.Promise.resolve Failed)
+        in
+        if List.exists (delta_touches_parsed p) journals then
+          go [] journals
+        else Js.Promise.resolve Unchanged

@@ -121,6 +121,13 @@ let own context (source : 'a Signal.signal) =
   else
     source
 
+(* perf trace: wraps a dyn ~equal and reports which site remounted *)
+let trace_equal name eq a b =
+  let r = eq a b in
+  if (not r) && Sys.getenv_opt "LOGSEQ_PERF" <> None then
+    Printf.eprintf "[dyn-remount] %s\n%!" name;
+  r
+
 let dyn ~equal f (source : 'a Signal.signal) : Lui_elements.t =
  fun context parent ->
   Lui_elements.dyn ~equal f (own context source) context parent

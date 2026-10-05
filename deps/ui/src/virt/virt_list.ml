@@ -157,7 +157,8 @@ let rows_of (v : V.t) =
 (* One mounted list instance: deferred virtualizer attach once the list
    element exists, scope cleanup on unmount. *)
 let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
-    data versions key_of overscan estimate_size pin_key pin_sig data_sig =
+    data versions key_of overscan estimate_size pin_key pin_sig data_sig
+    same_item on_end =
   match get_by_id list_id, get_by_id scroll_parent_id with
   | Some list_el, Some scroll_el ->
       margin :=
@@ -202,6 +203,12 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         in
         Signal.set st { v_rows = rows; v_total = V.get_total_size v };
         Runtime.flush ();
+        (* the last data row rendered — ask the owner for the next
+           page (journals scroll-back pagination; a no-op hook on
+           fixed-size lists) *)
+        (match List.nth_opt rows (List.length rows - 1) with
+         | Some r when r.v_index >= Array.length !data - 1 -> on_end ()
+         | _ -> ());
         (* cljs virtuoso items-rendered: while a block-range drag is in
            progress the selection extends to the boundary row in the
            scroll direction — a stale mid-range row must never shrink it.
@@ -309,13 +316,13 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
                          i < Array.length old && unchanged_at i
                          &&
                          match Hashtbl.find_opt prev_items k with
-                         | Some old_it -> old_it == it || old_it = it
+                         | Some old_it -> same_item old_it it
                          | None -> false
                        in
                        if not unchanged then begin
                          dirty := true;
                          match Hashtbl.find_opt prev_items k with
-                         | Some old_it when old_it == it || old_it = it ->
+                         | Some old_it when same_item old_it it ->
                              ()
                          | _ ->
                              Hashtbl.replace versions k
@@ -378,19 +385,25 @@ let row_attrs margin (it : vrow) =
   ]
 
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
-    ?(estimate_size = fun _ -> 32.) ?(list_attrs = [])
+    ?(estimate_size = fun _ -> 32.) ?(initial_rows = -1) ?(list_attrs = [])
     ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
     ?(pin_sig = fun () -> None)
     ?(data_sig = fun (_ : Lui_ui.ui_context) -> None)
+    ?(on_end = fun () -> ())
+    ?(same_item = fun (a : 'a) (b : 'a) -> a == b || a = b)
     ~key_of ~render (data : 'a array) : t =
  fun ctx parent ->
+  ignore initial_rows;
   let st = Signal.state ctx.ui_scheduler { v_rows = []; v_total = 0. } in
   let margin = ref 0. in
   let list_id = next_id () in
   let data_sig = data_sig ctx in
   let data = ref data in
   (* bumped per uuid by the items-signal splice when a row's item
-     changes — folds into the reload key so only touched rows remount *)
+     changes — folds into the reload key so only touched rows remount.
+     [same_item] decides "same" — callers whose rows repaint internally
+     from their own signals (journals' journal_page_sig) pass a
+     key-only equality so splices never remount the whole row *)
   let versions : (string, int) Hashtbl.t = Hashtbl.create 16 in
   let vstate_sig = st.Signal.state_signal in
   let spacer_attrs =
@@ -411,7 +424,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   set_timeout
     (fun () ->
       attach ctx st margin list_id scroll_parent_id data versions key_of
-        overscan estimate_size pin_key pin_sig data_sig)
+        overscan estimate_size pin_key pin_sig data_sig same_item on_end)
     0;
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs
@@ -423,3 +436,19 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
         ]
     ]
     ctx parent
+
+(* Signal-driven row stream: feeds the items signal into [list]'s
+   data_sig splice path so a delta republishes only the touched rows
+   instead of remounting the whole list — mirrors the apple twin's
+   keyed rows_sig. *)
+let rows_sig ~key ~cmp:_ ~mount ?(on_end = fun () -> ())
+    ?(initial_rows = -1) ~estimate_size
+    (source : 'a list Signal.signal) : t =
+ fun ctx parent ->
+  ignore initial_rows;
+  let sched = ctx.Lui_ui.ui_scheduler in
+  let arr_sig = D.own ctx (Signal.map Array.of_list source) in
+  list ~key_of:key ~estimate_size ~on_end
+    ~data_sig:(fun _ -> Some arr_sig)
+    ~render:(fun it -> mount (Signal.constant sched it))
+    [||] ctx parent

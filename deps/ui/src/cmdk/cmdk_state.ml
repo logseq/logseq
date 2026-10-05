@@ -115,6 +115,7 @@ let initial_view =
   ; recents = []; tip = 0 }
 
 let latest_vs : view Signal.signal option ref = ref None
+let latest_t : t option ref = ref None
 
 (* the palette singleton — lets keyboard shortcuts dispatch command ids
    through the same run_command path palette items take *)
@@ -126,7 +127,6 @@ let make scheduler : t =
   let st = { vs; gen = ref 0 } in
   latest_st := Some st;
   st
-
 let get st = Signal.get st.vs.state_signal
 
 (* whether the palette is open — chrome like the selection action-bar
@@ -1417,6 +1417,7 @@ and run_command st repo (cid : string) =
   | "go/home" -> nav "#/" Model.Home
   | "go/journals" -> nav "#/" Model.Home
   | "go/all-graphs" -> nav "#/graphs" Model.All_graphs
+  | "go/graph-view" -> nav "#/graph" Model.Graph_view
   | "go/all-pages" -> nav "#/all-pages" Model.All_pages
   | "ui/toggle-settings" ->
       (* cljs toggle-settings-modal! — toggles the settings dialog,
@@ -1546,3 +1547,25 @@ let run_highlighted_sidebar st =
 let hl_group st =
   let v = get st in
   Option.map (fun (it : item) -> it.gid) (item_at v v.hl)
+
+(* open the current palette without a handle — global shortcuts
+   (mod+k, mod+shift+p) fire before any caller holds st *)
+let open_latest ?(move = false) () =
+  match !latest_t with
+  | Some st ->
+      (* mod+k toggles; move mode always switches the open palette over *)
+      if (get st).open_ && not move then close st else open_palette ~move st
+  | None -> ()
+
+(* mod+shift+k (go/search-in-page): the command-table arm only scopes an
+   already-open palette; the chord must also open it when closed *)
+let open_in_page () =
+  match !latest_t with
+  | Some st ->
+      if not (get st).open_ then open_palette st;
+      set_in st (fun v -> { v with filter = Some G_current_page; input = "" });
+      (match Web_dom.doc_query ".cp__cmdk-search-input" with
+       | Some el -> Web_dom.el_set_value el ""
+       | None -> ());
+      refresh st
+  | None -> ()

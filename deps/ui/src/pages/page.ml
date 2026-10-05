@@ -260,7 +260,8 @@ let title_content (page : Model.page) : t =
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:"pt-bh" ~style_class:"block-head-wrap"
             [ dom ~key:"pt-w" ~style_class:"w-full inline"
-                [ Render.wrap ~self:uuid page.page_title ]
+                [ Render.wrap ~cls:"block-title-wrap ls-title-text"
+                    ~self:uuid page.page_title ]
             ]
         ]
     ]
@@ -326,11 +327,10 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     [ dom ~key:"pt-inner" ~style_class:"w-full relative"
         [ dom ~key:"pt-block"
             ~style_class_signal:
-              (Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-                   if S.String_set.mem uuid st.S.selected then
+              (Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+                   if S.String_set.mem uuid selected then
                      "selected ls-block swipe-item"
-                   else "ls-block swipe-item"))
-            ~id:("ls-block-" ^ uuid)
+                   else "ls-block swipe-item"))            ~id:("ls-block-" ^ uuid)
             ~attrs:
               [ ("blockid", uuid); ("containerid", uuid)
               ; ("data-block-title", page.page_title)
@@ -347,7 +347,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 ~attrs:
                   [ ( "style"
                     , "margin-left: "
-                      ^ if icon_el = None then "-30px" else "-36px" )
+                      ^ if icon_el = None then "-55px" else "-61px" )
                   ]
                 ~events:"mouseenter mouseleave"
                 ~on_dom_event:(fun name _ ->
@@ -370,7 +370,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                     | None -> ())
                 [ dom ~key:"pt-ctrl"
                     ~style_class:
-                      ("is-with-icon"
+                      ("is-with-icon w-6"
                       ^ (if title_collapsed then " bullet-closed" else "")
                       ^ " bullet-hidden block-control-wrap flex flex-row \
                          items-center h-6")
@@ -457,15 +457,22 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                flex-row gap-1 items-center"
                                             ([ dom ~key:"pt-cw"
                                                  ~style_class:
-                                                   "flex flex-1 w-full \
+                                                   "flex flex-col flex-1 \
+                                                    w-full gap-2 \
                                                     block-content-wrapper"
                                                  ~attrs:
                                                    [ ( "style"
                                                      , "display: flex" ) ]
-                                                 [ (if m.editing_title then
-                                                      title_editor page
-                                                    else title_content page)
-                                                 ]
+                                                 ((if m.editing_title then
+                                                    []
+                                                  else
+                                                    [ Properties_area.title_actions
+                                                        page ])
+                                                @ [ (if m.editing_title then
+                                                       title_editor page
+                                                     else
+                                                       title_content page)
+                                                  ])
                                              ]
                                             @ title_tag_chips page)
                                         ]
@@ -476,6 +483,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                     ]
                 ]
             ]
+        ; (* cljs db-properties-cp: the page properties area sits
+             inside the title's .ls-block, after .block-main-container *)
+          Properties_area.page_area page
         ]
       ]
     ; (* cljs plugin slot extension point after the title block *)
@@ -532,6 +542,36 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     body
     ) ctx parent
 
+(* .block-add-button — the imperative Add_button.ensure_all doc-scan can't
+   inject elements natively (no real DOM), so the element is emitted
+   declaratively here with the same shape build_el produces. Clicks reach
+   Editor_actions.append_block via the document-level click listener
+   matching closest ".block-add-button". has_children drives the same
+   opacity class build_el computes. *)
+let add_button_el ?puuid ~(has_children : 'a -> bool Signal.signal) : t =
+ fun context parent ->
+  let hc = has_children context in
+  (dom ~key:"bab"
+     ~style_class_signal:
+       (Logseq_dom.class_signal hc (fun has ->
+            "ls-block block-add-button flex-1 flex-col rounded-sm \
+             cursor-text transition-opacity ease-in duration-100 !py-0 "
+            ^ (if has then "opacity-0" else "opacity-50")))
+     ~attrs:
+       (("tabindex", "0")
+        :: (match puuid with
+            | Some u -> [ ("parentblockid", u) ]
+            | None -> []))
+     ~events:"click"
+     [ dom ~key:"bab-row" ~style_class:"flex flex-row"
+         [ dom ~key:"bab-inner" ~style_class:"flex items-center"
+             ~attrs:[ ("style", "height:28px;margin-left:22px;") ]
+             [ dom ~key:"bab-bc" ~tag:"span"
+                 ~style_class:"bullet-container"
+                 [ dom ~key:"bab-b" ~tag:"span" ~style_class:"bullet" [] ]
+             ] ] ])
+    context parent
+
 let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
     ?(scope = "main") ?(container = true) (blocks : Model.block list) : t =
   let inner_attrs =
@@ -552,7 +592,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
           ~attrs:
             [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
-              ~estimate_size:(fun _ -> 32.)
+              ~estimate_size:(fun _ -> 32.) ~initial_rows:48
               ~data_sig:(fun ctx ->
                 Some
                   (Signal.value
@@ -564,12 +604,12 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
                     Some (S.top_level_uuid e.S.uuid)
                 | _ -> None)
               ~pin_sig:(fun () ->
-                if S.ready () then Some (S.signal ()) else None)
-              ~render:(Tree.block_row ~library ~scope) items ] ]
+                if S.ready () then Some (S.editing_sig ()) else None)
+              ~render:(Tree.block_row ~library ~scope ~virtualize) items ] ]
     else
       [ dom ~key:"blw" ~style_class:"blocks-list-wrap"
           ~attrs:[ ("data-level", "0") ]
-          (List.map (Tree.block_row ~library ~scope) blocks) ]
+          (List.map (Tree.block_row ~library ~scope ~virtualize) blocks) ]
   in
   (* cljs page-root-virtual-list: .blocks-container.flex-1[containerid]
      wraps the .blocks-list-wrap block list; journal-page's
@@ -587,7 +627,12 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
   dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
     ~attrs:[ ("style", "margin-left: -20px") ]
     [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~attrs:(("data-cid", scope) :: inner_attrs) body
+        ~attrs:(("data-cid", scope) :: inner_attrs)
+        (body
+         @ [ add_button_el ?puuid
+               ~has_children:(fun ctx ->
+                 Signal.constant ctx.Lui_ui.ui_scheduler (blocks <> []))
+           ])
     ]
 
 (* cljs components/block.cljs grouped-blocks-container: refs render
@@ -1255,8 +1300,14 @@ let page_key (p : Model.page option) =
   | None -> (None, None)
 
 let page_route (r : Model.route) =
+  (* routes whose content repaints through their own signals — the
+     region dyn must stay mounted across data publishes or every
+     outliner op rebuilds the whole page (journals: journals_sig pushes
+     merged day records into each item; pages: page_sig) *)
   match r with
-  | Model.Page _ | Model.Block_zoom _ | Model.Library -> true
+  | Model.Page _ | Model.Block_zoom _ | Model.Library | Model.Journals
+  | Model.Home ->
+      true
   | _ -> false
 
 let scope_of_route (r : Model.route) =
@@ -1295,7 +1346,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
       ~attrs:[ ("data-level", "0") ]
       [ Logseq_dom.keyed ~source:blocks_sig ~key:Tree.block_key
           ~cmp:String.compare
-          ~mount:(Tree.block_row_sig ~library ~scope) ]
+          ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true) ]
   in
   (* a virtualized list captures its data array at mount, so it can't
      ride the keyed path — rebuild it on a new blocks spine; windowed
@@ -1304,13 +1355,10 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
       ~attrs:
         [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
-      [ Logseq_dom.dyn ~equal:(fun a b -> a == b)
-          (fun (bs : Model.block list) ->
-            Virt_list.list ~key_of:Tree.block_key
-              ~estimate_size:(fun _ -> 32.)
-              ~render:(Tree.block_row ~library ~scope)
-              (Array.of_list bs))
-          blocks_sig ]
+      [ Virt_list.rows_sig ~key:Tree.block_key ~cmp:String.compare
+          ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true)
+          ~initial_rows:48
+          ~estimate_size:(fun _ -> 32.) blocks_sig ]
   in
   (* if_/dyn branches must mount a node — the keyed/virt choice can't be
      a dynamic child, so pick once per region mount; either renderer is
@@ -1337,6 +1385,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                | Some u -> [ ("containerid", u) ]
                | None -> [])
             [ Logseq_dom.if_ ~test:nonempty list_el ]
+        ; add_button_el ?puuid ~has_children:(fun _ -> nonempty)
         ]
     ]
 
@@ -1361,7 +1410,10 @@ let top_view (m : Model.t) : t =
        | _ ->
            dom ~key:"ptm" ~attrs:[ ("style", "display:contents") ]
              (breadcrumbs page.page_title
-              @ [ title_row m page ]
+              @ [ title_row m page
+                ; (* cljs bidirectional-properties-area: sibling of the
+                     blocks list inside .page-inner *)
+                  Properties_area.bidi_area page ]
               @
               if page.page_is_library then [ library_add_pages_button ]
               else []))
@@ -1498,16 +1550,31 @@ let region (ms : Model.t Signal.signal) : t =
         && a.page_missing = b.page_missing
         && page_key a.route_page = page_key b.route_page
       in
-      if page_route a.route && page_route b.route then shell
-      else
-        shell
-        && a.data_gen = b.data_gen
-        && a.editing_title = b.editing_title
-        && a.page_menu = b.page_menu
-        && a.confirm = b.confirm
-        && a.unlinked_open = b.unlinked_open
-        && a.unlinked_search = b.unlinked_search
-        && a.unlinked_query = b.unlinked_query)
+      let r =
+        if page_route a.route && page_route b.route then shell
+        else
+          shell
+          && a.data_gen = b.data_gen
+          && a.editing_title = b.editing_title
+          && a.page_menu = b.page_menu
+          && a.confirm = b.confirm
+          && a.unlinked_open = b.unlinked_open
+          && a.unlinked_search = b.unlinked_search
+          && a.unlinked_query = b.unlinked_query
+      in
+      (* journals keep repaint-on-publish semantics only for the
+         placeholder<->list structural transition — day-record splices
+         repaint through journals_sig without a region remount *)
+      let r =
+        if not r then r
+        else
+          match a.route, b.route with
+          | (Model.Journals | Model.Home), (Model.Journals | Model.Home)
+            when a.data_gen <> b.data_gen ->
+              a.journals = [] = (b.journals = [])
+          | _ -> r
+      in
+      r)
     (fun (m : Model.t) ->
       match m.phase, m.route with
       | Model.Ready, (Model.Journals | Model.Home) ->
@@ -1516,14 +1583,28 @@ let region (ms : Model.t Signal.signal) : t =
           dom ~key:"journals-root"
             [ journals_view_ms ms; Selection_bar.view () ]
       | Model.Ready, Model.Not_found n -> not_found_view n
+      | Model.Ready, Model.Graph_view ->
+          (* the link-graph canvas isn't ported to the native renderer
+             yet — an explicit empty state instead of the 404 chrome *)
+          dom ~key:"gv" ~style_class:"page"
+            [ box ~key:"gv-inner"
+                ~style_class:"flex flex-col items-center justify-center py-32"
+                [ box ~key:"gv-i" ~style_class:"text-gray-9 mb-4"
+                    [ Icons.icon ~size:48. "hierarchy" ]
+                ; text ~key:"gv-t" ~value:(I18n.t "nav/graph-view")
+                    ~style_class:"text-2xl font-semibold text-gray-12 mb-2" []
+                ; text ~key:"gv-d"
+                    ~value:"Graph view isn't available in this app yet."
+                    ~style_class:"text-gray-10" []
+                ]
+            ]
       | Model.Ready, Model.All_pages ->
           (* cljs all_pages.cljs renders .ls-all-pages inside the page
              wrapper — the objects view mounts declaratively here *)
           dom ~key:"graphs-view" ~style_class:"ls-all-pages w-full mx-auto"
             [ Views_view.view ~kind:Views_state.KAllPages
                 ~owner:(Wire.String "$$$views") ]
-      | Model.Ready, Model.All_graphs -> box ~key:"graphs-view" []
-      | Model.Ready, Model.Settings -> Settings_page.view m
+      | Model.Ready, Model.All_graphs -> box ~key:"graphs-view" []      | Model.Ready, Model.Settings -> Settings_page.view m
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, _ -> (
           match m.route_page, m.page_missing with

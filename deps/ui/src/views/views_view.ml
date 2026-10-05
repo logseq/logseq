@@ -628,4 +628,4 @@ let refresh_live_insts () =
 
 let () =
   install_ops ();
-  Runtime.on_sync refresh_live_insts
+  ignore (Runtime.on_sync (fun _ -> refresh_live_insts ()))

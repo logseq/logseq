@@ -130,11 +130,11 @@ let delete uuid =
 
 let editing_sig uuid =
   Signal.map
-    (fun (st : S.t) ->
-      match st.S.editing with
+    (fun e ->
+      match e with
       | Some e -> e.S.uuid = uuid
       | None -> false)
-    (S.signal ())
+    (S.editing_sig ())
 
 (* same shell as the block editor's textarea — the document-level
    editor listeners key off .editor-wrapper / #edit-block-<uuid> *)

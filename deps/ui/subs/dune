@@ -1,0 +1,12 @@
+; The data-subscription/update layer: worker wire protocol (Wire),
+; decode to the app model (Decode), the reducer (Update), worker-delta
+; splicing (Page_delta), subscribed data stores (Subs_state), and the
+; broadcast -> splice-or-reload pipeline (Subs). Everything below the
+; view/editor layers — logseq_ui depends on it, never the reverse.
+(library
+ (name logseq_subs)
+ (wrapped false)
+ (modes melange)
+ (libraries lui melange-webapi melange.dom)
+ (preprocess
+  (pps melange.ppx lui.ppx)))

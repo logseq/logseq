@@ -40,6 +40,36 @@ let snapshot_slot_value snap rk =
         slots
   | _ -> None
 
+(* the slot's declared watch ({keys: #{affected-keys}, all?: bool}) —
+   sync-db-changes refreshes gate on these so an unrelated tx doesn't
+   refetch a resource it couldn't change. ([], true) = unknown —
+   refresh conservatively *)
+let snapshot_slot_watch snap rk : W.t list * bool =
+  match W.get snap "slots" with
+  | Some (W.Map slots) ->
+      List.find_map
+        (fun (k, v) ->
+          match k with
+          | W.Array (W.Keyword "resource" :: rk' :: _) when rk' = rk -> (
+              match W.get v "watch" with
+              | Some w ->
+                  let keys =
+                    match W.get w "keys" with
+                    | Some ws -> W.elems ws
+                    | None -> []
+                  in
+                  let all =
+                    match W.get w "all?" with
+                    | Some (W.Bool b) -> b
+                    | _ -> true
+                  in
+                  Some (keys, all)
+              | None -> Some ([], true))
+          | _ -> None)
+        slots
+      |> Option.value ~default:([], true)
+  | _ -> ([], true)
+
 (* view entity fields used by views *)
 type view_ent =
   { vu : string (* block/uuid *)

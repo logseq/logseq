@@ -139,6 +139,12 @@ let run () =
   Graph.build_search_index repo;
   (* initial route resolution (deep link or home) *)
   Router.resolve ();
+  (* the pre-route hash stays "" until the first navigation, and
+     set_location_hash refuses to push "" onto the back stack — so the
+     very first in-app nav was un-undoable. Seed the home hash so the
+     first nav can go back. *)
+  if Platform.location_hash () = "" then
+    Platform.replace_url_fragment "#/";
   Js.Promise.resolve ())
   |> Js.Promise.catch (fun err ->
          Platform.console_error ("boot failed", err);

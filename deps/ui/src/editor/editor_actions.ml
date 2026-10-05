@@ -44,7 +44,7 @@ let sync_buffer uuid v =
    (enter_edit awaits the title ref before updating S.editing), so the
    rest wait for the next pass rather than applying against the stale
    editing block *)
-let focus_passes = ref 0
+let focus_attempts = ref 0
 
 (* replayed keys can re-enter the queue through the flush their op
    triggers — the gate keeps a nested pass from replaying twice *)
@@ -63,45 +63,44 @@ let drain_pending_focus_actions () =
            Platform.console_error ("queued key replay failed", e));
         drain_gate := false
 
-let focus_miss () =
-  incr focus_passes;
-  if !focus_passes >= 60 then (
-    S.pending_focus := None;
-    focus_passes := 0;
-    drain_pending_focus_actions ())
-  else if !focus_passes = 1 || !focus_passes mod 10 = 5 then
-    (* the editing row can sit outside the virtual window — a scroll
-       jump (Home/End, a remount, an insert below the viewport edge)
-       unmounts it and focus passes would spin on a textarea that can't
-       render. Pulling its item key back into the rendered range
-       remounts the row so focus can land *)
-    match !S.pending_focus with
-    | Some (u, _, _) -> !(S.scroll_key_into_view) (S.top_level_uuid u)
-    | None -> ()
+(* the dom id of the el el_focus was last sent for — re-emitting the op
+   every retry saturates the host's op queue while the focus event still
+   hasn't had a turn, which is exactly what keeps ae from resolving *)
+let last_focus_emitted : string option ref = ref None
 
-let focus_pending () =
+let rec apply_focus () =
+  (* a stale retry timer can fire after its arm was consumed or replaced;
+     queued keys belong to the next landing, not the void — replay them
+     against the live editing state instead of dropping the presses *)
   match !S.pending_focus with
   | None -> drain_pending_focus_actions ()
   | Some (uuid, caret, armed_ms) -> (
       if !(S.code_focus) ~caret uuid then (
         (* CodeMirror-backed code block: cm.focus() + setCursor landed *)
         S.pending_focus := None;
-        focus_passes := 0;
-        drain_pending_focus_actions ())
-      else
+        focus_attempts := 0;
+        last_focus_emitted := None;
+        drain_pending_focus_actions ())      else
       match D.textarea_of uuid with
       | Some el -> (
           D.autosize_textarea el;
-          D.el_focus el;
+          (* emit the focus op once per target: the host applies it when
+             the element materializes, so re-emitting just floods the
+             main-thread queue — each op costs a render invalidation *)
+          let key = D.el_dom_id el in
+          if key <> !last_focus_emitted then begin
+            D.el_focus el;
+            last_focus_emitted := key
+          end;
           (* a pending apply+refresh can still replace this node after
              landing — only consume the pending state once the element
-             really holds focus; otherwise leave the arm for the next
-             pass *)
-          match D.active_element with
+             really holds focus; otherwise keep retrying so the remounted
+             editor gets it *)
+          match D.active_element () with
           | Some ae when ae == el ->
               S.pending_focus := None;
-              focus_passes := 0;
-              (* a landing that ran late (remount during a remote-tx
+              focus_attempts := 0;
+              last_focus_emitted := None;              (* a landing that ran late (remount during a remote-tx
                  refresh) must not stomp the caret: if the user typed
                  since this focus was requested, the stored caret is
                  stale — keep where the DOM put it *)
@@ -110,27 +109,72 @@ let focus_pending () =
                 let c = max 0 (min caret len) in
                 D.el_set_selection_range el c c);
               drain_pending_focus_actions ()
-          | _ -> focus_miss ())
-      | None -> focus_miss ())
+          | ae ->
+              prerr_endline
+                ("PERF focus-retry t="
+                 ^ string_of_float (Platform.date_now_ms () /. 1000.)
+                 ^ " uuid=" ^ uuid ^ " ae="
+                 ^ (match ae with
+                    | Some _ -> "some(other)"
+                    | None -> "none"));
+              flush stderr;
+              retry_focus ())
+      | None ->
+          (* emit the focus op by dom id even before the textarea mounts —
+             the host queues it per ref and applies on registration, so
+             responder lands at attach rather than the next poll tick *)
+          let key = "edit-block-" ^ uuid in
+          if Some key <> !last_focus_emitted then begin
+            D.focus_dom_id key;
+            last_focus_emitted := Some key
+          end;
+          retry_focus ())
+
+and retry_focus () =
+  incr focus_attempts;
+  if !focus_attempts < 50 then begin
+    (* the editing row can sit outside the virtual window — a scroll
+       jump (Home/End, a remount, an insert below the viewport edge)
+       unmounts it and focus retries would spin forever on a textarea
+       that can't render. Pulling its item key back into the rendered
+       range remounts the row so focus can land *)
+    if !focus_attempts = 1 || !focus_attempts mod 10 = 5 then
+      (match !S.pending_focus with
+       | Some (u, _, _) ->
+           (* flat stream keys are the block's own uuid — no more
+              top-level key like the nested list had *)
+           !(S.scroll_key_into_view) u
+       | None -> ());
+    D.set_timeout apply_focus 12
+  end
+  else (
+    S.pending_focus := None;
+    focus_attempts := 0;
+    last_focus_emitted := None;
+    drain_pending_focus_actions ())
+
+(* flush-time pass over pending focus — main.ml and the test driver run
+   one pass per UI flush; the retry loop rides the same entry point *)
+let focus_pending () = apply_focus ()
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   (* pending_focus_actions intentionally kept: keys queued during the
      remount window belong to the next focus landing as well *)
-  focus_passes := 0;
+  focus_attempts := 0;
   (* usually the textarea already exists — land right away; otherwise
      the arm rides the next flush pass *)
-  focus_pending ()
+  D.set_timeout apply_focus 0
 
 (* set pending focus, then run [p]; re-apply focus after it resolves so
    a remounted textarea still ends up focused *)
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
-  focus_passes := 0;
-  focus_pending ();
+  focus_attempts := 0;
+  D.set_timeout apply_focus 0;
   ignore
     (let* () = p in
-     focus_pending ();
+     D.set_timeout apply_focus 0;
      Js.Promise.resolve ())
 
 (* persisted/worker truth; display_title layers committed-but-unrefreshed
@@ -188,6 +232,12 @@ let scope_of_uuid uuid =
   | Some el -> scope_of_el el
   | None -> "main"
 
+let perf_keys =
+  lazy
+    (match Sys.getenv_opt "LOGSEQ_PERF" with
+     | Some _ -> true
+     | None -> false)
+
 let enter_edit ?scope uuid caret =
   let scope =
     match scope with Some sc -> sc | None -> scope_of_uuid uuid
@@ -205,6 +255,8 @@ let enter_edit ?scope uuid caret =
              (cljs id-ref->title-ref) *)
           ignore
             (let* buffer = Ops.title_for_edit (String.trim (display_title uuid)) in
+            (if Lazy.force perf_keys then
+               Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             S.set (fun st ->
                 { st with
                   S.editing = Some { uuid; buffer; scope; base = buffer }
@@ -240,6 +292,8 @@ let exit_edit ~select =
          already paints the committed text *)
       if buf <> model_title e.uuid then
         S.override_title e.uuid (Ops.normalized_title e.uuid buf);
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
       S.set (fun st ->
           { st with
             S.editing = None
@@ -262,6 +316,8 @@ let blur_commit () =
       let buf = live_buffer e.uuid in
       if buf <> model_title e.uuid then
         S.override_title e.uuid (Ops.normalized_title e.uuid buf);
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF editing-clear src=blur uuid=%s\n%!" e.uuid);
       S.set (fun st -> { st with S.editing = None });
       commit e.uuid buf
 
@@ -274,6 +330,8 @@ let flush_edit () =
   | Some e ->
       cancel_pending_focus ();
       let buf = live_buffer e.uuid in
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF editing-clear src=flush uuid=%s\n%!" e.uuid);
       S.set (fun st -> { st with S.editing = None });
       if buf <> model_title e.uuid then
         ignore
@@ -318,6 +376,31 @@ let library_context () =
   | Some p -> p.Model.page_is_library
   | None -> false
 
+(* optimistic model edits apply to whichever store the block lives in:
+   the standalone page route, or the day page inside current_journals.
+   The worker delta stays authoritative and splices the real record over
+   these placeholders when it lands *)
+let optimistic_edit (f : Model.page -> Model.page option) =
+  match !Runtime.current_page with
+  | Some page -> (
+      match f page with
+      | Some page' ->
+          Page_delta.mark_own_commit page';
+          Runtime.send (Action.Page_loaded page')
+      | None -> ())
+  | None -> (
+      let rec loop acc = function
+        | [] -> ()
+        | (p : Model.page) :: rest -> (
+            match f p with
+            | Some p' ->
+                Runtime.send
+                  (Action.Journals_spliced
+                     (List.rev_append acc (p' :: rest)))
+            | None -> loop (p :: acc) rest)
+      in
+      loop [] !Runtime.current_journals)
+
 (* cljs keydown-new-block: Enter on an empty last child outdents it
    instead of inserting a sibling (when no right sibling exists) *)
 let outdent_empty_last_child uuid e b =
@@ -332,11 +415,34 @@ let outdent_empty_last_child uuid e b =
           ignore (Ops.apply_and_refresh [ Ops.indent_outdent [ uuid ] false ]);
           true)
     | _ -> false
+(* cljs compute-fst-snd-block-text: the new block's half is triml'd *)
+let ltrim s =
+  let n = String.length s in
+  let rec go i =
+    if
+      i < n
+      && (s.[i] = ' ' || s.[i] = '\t' || s.[i] = '\r' || s.[i] = '\n'
+         || s.[i] = '\012')
+    then go (i + 1)
+    else i
+  in
+  String.sub s (go 0) (n - go 0)
+
 let split_at_cursor uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid && outdent_empty_last_child uuid e b ->
       ()
   | Some e, Some b when e.uuid = uuid ->
+      let perf = Sys.getenv_opt "LOGSEQ_PERF" <> None in
+      let t_last = ref (Platform.date_now_ms ()) in
+      let mark name =
+        if perf then (
+          let now = Platform.date_now_ms () in
+          Printf.eprintf "[perf] split.%s %.1fms\n%!" name
+            (now -. !t_last);
+          t_last := now)
+      in
+      mark "entry";
       let buf, pos =
         match D.textarea_of uuid with
         | Some el -> (D.el_value el, D.el_selection_start el)
@@ -356,13 +462,14 @@ let split_at_cursor uuid =
       else
         let pos = max 0 (min pos (String.length buf)) in
         let before = String.sub buf 0 pos in
-        let after = String.sub buf pos (String.length buf - pos) in
+        let after = ltrim (String.sub buf pos (String.length buf - pos)) in
         let new_uuid = Platform.random_uuid () in
         let library = library_context () in
         let sibling =
           library || S.is_collapsed_in ~scope:e.S.scope uuid
           || b.Model.block_children = []
         in
+        mark "prelude";
         let p =
           (let* a =
             Js.Promise.all
@@ -373,34 +480,32 @@ let split_at_cursor uuid =
             [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
             ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
         in
+        mark "ops";
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
-        (match (Runtime.model ()).Model.route_page with
-         | Some page -> (
-             match
-               Model.split_insert page ~uuid ~before
-                 ~new_block:
-                   (Model.empty_block ~uuid:new_uuid ~title:after
-                      ~is_page:library)
-                 ~sibling
-             with
-             | Some page' ->
-                 Page_delta.mark_own_commit page';
-                 Runtime.push_page_items page';
-                 Runtime.send (Action.Page_loaded page')
-             | None -> ())
-         | None -> ());
+        optimistic_edit (fun p ->
+            Model.split_insert p ~uuid ~before
+              ~new_block:
+                (Model.empty_block ~uuid:new_uuid ~title:after
+                   ~is_page:library)
+              ~sibling);
+        mark "splice";
         (* the exit-edit repaint lands before the worker delta — pin the
            saved title so the row doesn't flash the pre-split text *)
         S.override_title uuid (Ops.normalized_title uuid before);
+        mark "title";
         (* S.set (not silent): the old textarea must unmount before the
            next keypress, or keystrokes keep landing in the stale editor *)
+        (if Lazy.force perf_keys then
+           Printf.eprintf "PERF editing-set src=split uuid=%s\n%!" new_uuid);
         S.set (fun st ->
             { st with
               S.editing =
                 Some { uuid = new_uuid; buffer = after; scope = e.scope; base = after } });
-        with_focus_after new_uuid 0 p
+        mark "editing";
+        with_focus_after new_uuid 0 p;
+        mark "focus-arm"
   | _ -> ()
 
 (* shift+Enter on a code surface (or any non-splitting editor) appends a
@@ -423,26 +528,18 @@ let insert_sibling_after uuid =
               [ Ops.block_map ~title:"" ~page:library new_uuid ]
               uuid ~sibling ])
       in
-      (match (Runtime.model ()).Model.route_page with
-       | Some page -> (
-           match
-             Model.split_insert page ~uuid ~before:buf
-               ~new_block:
-                 (Model.empty_block ~uuid:new_uuid ~title:""
-                    ~is_page:library)
-               ~sibling
-           with
-           | Some page' ->
-               Page_delta.mark_own_commit page';
-               Runtime.push_page_items page';
-               Runtime.send (Action.Page_loaded page')
-           | None -> ())
-       | None -> ());
+      optimistic_edit (fun p ->
+          Model.split_insert p ~uuid ~before:buf
+            ~new_block:
+              (Model.empty_block ~uuid:new_uuid ~title:"" ~is_page:library)
+            ~sibling);
       (* the exit-edit repaint lands before the worker delta — pin the
          saved title so the row doesn't flash the stale title *)
       S.override_title uuid (Ops.normalized_title uuid buf);
       (* S.set (not silent): the old textarea must unmount before the
          next keypress, or keystrokes keep landing in the stale editor *)
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF editing-set src=sibling uuid=%s\n%!" new_uuid);
       S.set (fun st ->
           { st with
             S.editing =
@@ -842,18 +939,10 @@ let indent_or_outdent ~indent =
       (* optimistic local reparent: the DOM moves in this task instead of
          remounting when the async worker refresh lands (e2e boundingBox
          races that remount). Worker refresh stays authoritative. *)
-      (match (Runtime.model ()).Model.route_page, parent_original with
-       | Some page, None -> (
-           match
-             (if indent then Model.indent_blocks else Model.outdent_blocks)
-               page uuids
-           with
-           | Some page' ->
-               Page_delta.mark_own_commit page';
-               Runtime.push_page_items page';
-               Runtime.send (Action.Page_loaded page')
-           | None -> ())
-       | _ -> ());
+      if parent_original = None then
+        optimistic_edit (fun p ->
+            (if indent then Model.indent_blocks else Model.outdent_blocks)
+              p uuids);
       with_focus_after focus
         (String.length (live_buffer focus))
         (Ops.apply_and_refresh
@@ -863,13 +952,9 @@ let move_blocks_up_down up =
   match selected_uuids () with
   | [] -> ()
   | uuids ->
-      (match (Runtime.model ()).Model.route_page with
-       | Some page ->
-           let page' = Model.move_selected_top_blocks page uuids up in
-           Page_delta.mark_own_commit page';
-           Runtime.push_page_items page';
-           Runtime.send (Action.Page_loaded page')
-       | None -> ());
+      optimistic_edit (fun p ->
+          let p' = Model.move_selected_top_blocks p uuids up in
+          if p' == p then None else Some p');
       ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])
 
 let delete_selection () =
@@ -1057,15 +1142,6 @@ let copy_selection_text () =
    Block-structured text extracts into blocks worker-side; text split
    by blank lines becomes one block per paragraph; anything else is a
    plain text insert. *)
-
-let ltrim s =
-  let n = String.length s in
-  let rec go i =
-    if i < n && (s.[i] = ' ' || s.[i] = '\t' || s.[i] = '\r') then
-      go (i + 1)
-    else i
-  in
-  String.sub s (go 0) (n - go 0)
 
 let is_url s =
   let t = String.trim s in

@@ -998,7 +998,13 @@ let open_ac t kind editor =
             | Some pop ->
                 (* --available-height propagates to #ui__ac-inner's own
                    max-height; lift it to read the real rendered height
-                   (the list's own CSS max still applies) *)
+                   (the list's own CSS max still applies). The lift must
+                   stay the last override while measuring — the rect
+                   reads back asynchronously, so clamping right after
+                   would mask the lifted frame; restore the clamp only
+                   when the loop ends without a flip. The lifted frame
+                   renders clipped at the window edge either way, so it
+                   is not visible to the user. *)
                 Web_dom.el_style_set_property pop "--available-height"
                   "2000px";
                 let rect = Web_dom.el_bounding_rect pop in
@@ -1015,8 +1021,7 @@ let open_ac t kind editor =
                 if fx <> a.flipx then
                   set_ac t (Some { a with flipx = fx });
                 let h = Web_dom.rect_height rect in
-                let below = Web_dom.win_inner_height -. a.y -. 8. in
-                let above = a.cy -. 8. in
+                let below = Web_dom.win_inner_height -. a.y -. 8. in                let above = a.cy -. 8. in
                 if h > below && above > below then (
                   (* avail is the constraint, h the measured render —
                      the inner's own max-height subtracts chrome from
@@ -1026,11 +1031,10 @@ let open_ac t kind editor =
                   let h_eff = Float.min h avail in
                   let top' = Float.max 4.0 (a.cy -. 8. -. h_eff) in
                   set_ac t (Some { a with flip = Some (top', avail) }))
-                else (
+                else if tries <= 0 then
                   Web_dom.el_style_set_property pop "--available-height"
-                    (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 8.));
-                  retry tries)
-            | None -> retry tries)
+                    (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 8.))
+                else retry tries            | None -> retry tries)
         | None -> retry tries)
     | None -> retry tries
     | _ -> ()
@@ -1095,9 +1099,8 @@ let overtype_skip el =
 
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el ev =
-  overtype_skip el;  let pos = Web_dom.el_selection_start el in
-
-  match (get t).ac with
+  overtype_skip el;
+  let pos = Web_dom.el_selection_start el in  match (get t).ac with
   | Some ac ->
       let v = Web_dom.el_value el in
       let trig_missing =
@@ -1294,11 +1297,30 @@ let erase_trigger_text (ac : ac) =
   Web_dom.el_set_selection_range el tpos tpos;
   Web_dom.el_focus el
 ;;
+(* cljs auto-complete/meta-complete on a tag item inserts the tag
+   inline: "#last-part" (page-ref-wrapped when the last namespace part
+   has whitespace, or not wrapped at all when the "#" already sits
+   inside a [[ pair]). *)
+let inline_tag_text ac title =
+  let last_part =
+    match String.rindex_opt title '/' with
+    | Some i -> S.sub title (i + 1) (S.length title - i - 1)
+    | None -> title
+  in
+  let v = Web_dom.el_value ac.editor in
+  let pos = Web_dom.el_selection_start ac.editor in
+  if pos >= 2 && pos <= S.length v && S.sub v (pos - 2) 2 = "[["
+  then "#" ^ last_part
+  else if
+    S.exists (fun c -> c = ' ' || c = '\t' || c = '\n') last_part
+  then "#[[" ^ last_part ^ "]]"
+  else "#" ^ last_part
+
 (* cljs tag-on-chosen-handler: strip the "#query" fragment, then either
    keep "#title" inline (existing page) or attach the tag as a class via
    block/tags (existing class or a new "New tag" class). The "New tag"
    row always takes the class path even when a plain page exists. *)
-let apply_tag t ac ~create title =
+let apply_tag t ac ~create ~inline title =
   (* the page-title textarea isn't registered as a block editor —
      resolve it to the current page entity instead *)
   let buuid_opt, title_edit =
@@ -1330,24 +1352,40 @@ let apply_tag t ac ~create title =
              Outliner_ops.apply_parsed_and_refresh ~rest
                [ (buuid, Web_dom.el_value ac.editor) ])
       in
+      (* cljs tag-in-page-auto-complete?: "#" typed inside a [[ pair
+         still erases the query but skips the tag/class attach — the
+         page-ref autocomplete owns that context *)
+      let tag_in_ref () =
+        let v = Web_dom.el_value ac.editor in
+        let pos = Web_dom.el_selection_start ac.editor in
+        pos + 2 <= S.length v && S.sub v pos 2 = "]]"
+      in
+      let insert () =
+        (* cljs: class items erase "#q" on enter but insert "#wrapped"
+           on mod+enter (inline-tag?; the Page class is exempt) *)
+        emit ac.editor ac.tpos
+          (if inline && title <> "Page" then inline_tag_text ac title
+           else "")
+      in
       let create_and_tag () =
-        emit ac.editor ac.tpos "";
+        insert ();
         close_ac t;
-        ignore
-          (let* _ =
-             Runtime.invoke3 "thread-api/apply-outliner-ops"
-               (Wire.String repo_v)
-               (Wire.Array [ Outliner_ops.create_class title ])
-               (Wire.Map [])
-           in
-           let* e =
-            Runtime.invoke2 "thread-api/get-case-page"
-              (Wire.String repo_v) (Wire.String title)
-          in
-          (match Wire.map_get_int e "db/id" with
-           | Some dbid -> save_and_tag dbid
-           | None -> ());
-          Js.Promise.resolve ())
+        if not (tag_in_ref ()) then
+          ignore
+            (let* _ =
+               Runtime.invoke3 "thread-api/apply-outliner-ops"
+                 (Wire.String repo_v)
+                 (Wire.Array [ Outliner_ops.create_class title ])
+                 (Wire.Map [])
+             in
+             let* e =
+               Runtime.invoke2 "thread-api/get-case-page"
+                 (Wire.String repo_v) (Wire.String title)
+             in
+             (match Wire.map_get_int e "db/id" with
+              | Some dbid -> save_and_tag dbid
+              | None -> ());
+             Js.Promise.resolve ())
       in
       if create then create_and_tag ()
       else
@@ -1363,23 +1401,25 @@ let apply_tag t ac ~create title =
               | Some dbid ->
                   (match Wire.get w "db/ident" with
                    | Some _ ->
-                       emit ac.editor ac.tpos "";
+                       insert ();
                        close_ac t;
-                       save_and_tag dbid;
+                       if not (tag_in_ref ()) then save_and_tag dbid;
                        Js.Promise.resolve ()
                    | None ->
                        (* cljs tag-on-chosen-handler: a plain page
                           chosen in the hashtag search is converted
                           to a class, then attached via block/tags *)
-                       emit ac.editor ac.tpos "";
+                       insert ();
                        close_ac t;
-                       let* _ =
-                         Runtime.invoke2
-                           "thread-api/convert-page-to-tag"
-                           (Wire.String repo_v) (Wire.Int dbid)
-                       in
-                       save_and_tag dbid;
-                       Js.Promise.resolve ()))
+                       if tag_in_ref () then Js.Promise.resolve ()
+                       else
+                         let* _ =
+                           Runtime.invoke2
+                             "thread-api/convert-page-to-tag"
+                             (Wire.String repo_v) (Wire.Int dbid)
+                         in
+                         save_and_tag dbid;
+                         Js.Promise.resolve ()))
           | _ ->
               create_and_tag ();
               Js.Promise.resolve ())
@@ -1471,7 +1511,7 @@ let run_query t ac ~advanced =
           Outliner_ops.apply_parsed ~rest
             [ (quuid, title); (buuid, "") ])
 
-let apply_item t ac it =
+let apply_item t ac ~meta it =
   match it.ai_act with
   | Switch kind ->
       erase_trigger_text ac;
@@ -1514,8 +1554,8 @@ let apply_item t ac it =
         pid tag
   | Run_query advanced -> run_query t ac ~advanced
 
-  | Tag_apply title -> apply_tag t ac ~create:false title
-  | Tag_create title -> apply_tag t ac ~create:true title
+  | Tag_apply title -> apply_tag t ac ~create:false ~inline:meta title
+  | Tag_create title -> apply_tag t ac ~create:true ~inline:meta title
   | Template_apply uuid -> apply_template t ac uuid
   | Noop -> close_ac t
 ;;
@@ -1552,14 +1592,23 @@ let set_chosen t i =
 let apply_index t i =
   match (get t).ac with
   | Some ac ->
-      Option.iter (fun it -> apply_item t ac it) (List.nth_opt ac.items i)
+      Option.iter (fun it -> apply_item t ac ~meta:false it)
+        (List.nth_opt ac.items i)
   | None -> ()
 ;;
 
-let apply_chosen t =
-  match (get t).ac with
-  | Some ac -> apply_index t ac.chosen
-  | None -> ()
+(* cljs on-enter when no item matched: page/block refs hop the caret
+   past the closing ]] / )) and close; template search clears the
+   editor action; slash and hashtag have no on-enter — the key is
+   consumed and the popup stays open *)
+let ac_on_enter t ac =
+  match ac.kind with
+  | Page_ref | Page_embed | Embed_ref | Block_ref ->
+      let pos = Web_dom.el_selection_start ac.editor in
+      Web_dom.el_set_selection_range ac.editor (pos + 2) (pos + 2);
+      close_ac t
+  | Template_search -> close_ac t
+  | Slash | Tag_search -> ()
 ;;
 
 (* true if the keydown was consumed by the open popup *)
@@ -1599,9 +1648,20 @@ let ac_keydown t ev =
         match Web_dom.ev_key ev with
         | "ArrowDown" -> move_chosen t 1; true
         | "ArrowUp" -> move_chosen t (-1); true
-        | ("Enter" | "Tab") -> apply_chosen t; true
-        | "Escape" -> close_ac t; true
-        | _ ->
+        (* cljs binds ctrl+n/ctrl+p alongside the arrows *)
+        | "n" when Web_dom.ev_ctrl ev -> move_chosen t 1; true
+        | "p" when Web_dom.ev_ctrl ev -> move_chosen t (-1); true
+        (* cljs enter/meta-complete/shift-complete: apply the chosen
+           item — mod+enter inlines a tag — or the kind's on-enter when
+           no item matched. shift+enter shares enter: no AC supplies
+           on-shift-chosen. Tab is NOT an ac binding on master
+           (:editor/indent) — it falls through to the editor keymap *)
+        | "Enter" -> (
+            (match List.nth_opt ac.items ac.chosen with
+             | Some it -> apply_item t ac ~meta:(Web_dom.ev_meta ev) it
+             | None -> ac_on_enter t ac);
+            true)
+        | "Escape" -> close_ac t; true        | _ ->
             (let el =
                Option.value (Web_dom.ev_target ev) ~default:ac.editor
              in

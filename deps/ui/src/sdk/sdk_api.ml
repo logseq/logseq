@@ -56,13 +56,13 @@ let sdk_ui_methods : (string * api_fn) list =
 let dict_of methods =
   let d = Js.Dict.empty () in
   List.iter (fun (name, f) -> Js.Dict.set d name f) methods;
-  d
+  Sdk_convert.json_obj d
 
 let install () =
-  let logseq = Js.Json.object_ (Js.Dict.empty ()) in
-  Web_dom.js_set logseq "api" (dict_of api_methods);
-  let sdk = Js.Json.object_ (Js.Dict.empty ()) in
-  Web_dom.js_set sdk "ui" (dict_of sdk_ui_methods);
-  Web_dom.js_set logseq "sdk" sdk;
-  Worker_client.set_global "logseq" logseq;
+  let logseq : Js.Json.t Js.Dict.t = Js.Dict.empty () in
+  Js.Dict.set logseq "api" (dict_of api_methods);
+  let sdk : Js.Json.t Js.Dict.t = Js.Dict.empty () in
+  Js.Dict.set sdk "ui" (dict_of sdk_ui_methods);
+  Js.Dict.set logseq "sdk" (Sdk_convert.json_obj sdk);
+  Worker_client.set_global "logseq" (Sdk_convert.json_obj logseq);
   Plugin_host.setup ()

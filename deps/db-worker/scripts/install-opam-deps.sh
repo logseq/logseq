@@ -28,6 +28,11 @@ opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
 opam pin add -y -n angstrom git+https://github.com/logseq/angstrom#fork
 opam pin add -y -n xmlm git+https://github.com/logseq/xmlm#master
 opam pin add -y -n mldoc git+https://github.com/logseq/mldoc#master
+# Re-resolve the git-branch pins: `opam pin add` alone treats an already
+# installed .dev package as satisfied, so a moved upstream ref never
+# rebuilds and the switch silently keeps a stale checkout.
+opam update
+opam upgrade -y datascript_ocaml datascript-ocaml-melange datascript-ocaml-native persistent_sorted_set_ocaml melange-edn-core melange-edn-melange melange-edn-native melange-transit-core melange-transit-melange melange-transit-native rrbvec angstrom xmlm mldoc
 opam install . --deps-only --with-test --yes
 
 # Windows: the libsqlite3-0.dll bundled with the opam cygwin sysroot is

@@ -1,0 +1,264 @@
+; Generate apple/dicts_gen.ml from the shared cljs dicts — same shape as
+; the src/ rule; the dicts dir lives outside this dune-project
+; (../../src/resources/dicts), so it can't be a tracked dep — run
+; `dune build --force` to pick up dict edits.
+(rule
+ (target dicts_gen.ml)
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../tools/dict_gen.exe} \"$DUNE_SOURCEROOT/../../src/resources/dicts\" %{target}")))
+
+; Same for the emoji table — regenerates from resources/js/emoji-data.js
+; (outside the project) so emoji-mart upgrades can't leave a stale copy.
+(rule
+ (target emoji_mart_data.ml)
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../tools/emoji_gen.exe} \"$DUNE_SOURCEROOT/../../resources/js/emoji-data.js\" %{target}")))
+
+; Icon-name table for the native icon picker — assets/icon-names.json is
+; inside this project so it stays a tracked dep.
+(rule
+ (target icon_names_data.ml)
+ (deps ../assets/icon-names.json)
+ (action
+  (run %{exe:../tools/icon_names_gen.exe} %{deps} %{target})))
+
+(rule
+ (copy ../subs/action.ml action.ml))
+(rule
+ (copy ../src/app/boot.ml boot.ml))
+(rule
+ (copy ../subs/decode.ml decode.ml))
+(rule
+ (copy ../src/app/graph.ml graph.ml))
+(rule
+ (copy ../subs/model.ml model.ml))
+(rule
+ (copy ../subs/page_delta.ml page_delta.ml))
+(rule
+ (copy ../subs/subs.ml subs.ml))
+(rule
+ (copy ../subs/subs_state.ml subs_state.ml))
+(rule
+ (copy ../src/app/runtime.ml runtime.ml))
+(rule
+ (copy ../subs/update.ml update.ml))
+(rule
+ (copy ../src/app/view.ml view.ml))
+(rule
+ (copy ../src/app/worker_events.ml worker_events.ml))
+(rule
+ (copy ../src/blocks/add_button.ml add_button.ml))
+(rule
+ (copy ../src/blocks/query_builder.ml query_builder.ml))
+(rule
+ (copy ../src/blocks/selection_bar.ml selection_bar.ml))
+(rule
+ (copy ../src/blocks/tree.ml tree.ml))
+(rule
+ (copy ../src/cards/cards_state.ml cards_state.ml))
+(rule
+ (copy ../src/cards/cards_view.ml cards_view.ml))
+(rule
+ (copy ../src/cmdk/commands_data.ml commands_data.ml))
+(rule
+ (copy ../src/comments/comments_view.ml comments_view.ml))
+(rule
+ (copy ../src/core/edn.ml edn.ml))
+(rule
+ (copy ../src/core/i18n.ml i18n.ml))
+(rule
+ (copy ../src/core/menu_item.ml menu_item.ml))
+(rule
+ (copy ../src/core/overlay.ml overlay.ml))
+(rule
+ (copy ../subs/promise_ext.ml promise_ext.ml))
+(rule
+ (copy ../src/core/state_cell.ml state_cell.ml))
+(rule
+ (copy ../src/core/str_util.ml str_util.ml))
+(rule
+ (copy ../src/core/ui_parts.ml ui_parts.ml))
+(rule
+ (copy ../subs/wire.ml wire.ml))
+(rule
+ (copy ../src/dialogs/dialogs_state.ml dialogs_state.ml))
+(rule
+ (copy ../src/dialogs/dialogs_view.ml dialogs_view.ml))
+(rule
+ (copy ../src/dialogs/login_view.ml login_view.ml))
+(rule
+ (copy ../src/dialogs/quick_add_state.ml quick_add_state.ml))
+(rule
+ (copy ../src/dialogs/quick_add_view.ml quick_add_view.ml))
+(rule
+ (copy ../src/dialogs/ui_requests.ml ui_requests.ml))
+(rule
+ (copy ../src/editor/block_parse.ml block_parse.ml))
+(rule
+ (copy ../src/editor/block_selection.ml block_selection.ml))
+(rule
+ (copy ../src/editor/editor_actions.ml editor_actions.ml))
+(rule
+ (copy ../src/editor/editor_commands.ml editor_commands.ml))
+(rule
+ (copy ../src/editor/editor_embed.ml editor_embed.ml))
+(rule
+ (copy ../src/editor/editor_keys.ml editor_keys.ml))
+(rule
+ (copy ../src/editor/editor_state.ml editor_state.ml))
+(rule
+ (copy ../src/editor/outliner_ops.ml outliner_ops.ml))
+(rule
+ (copy ../src/export/export_formats.ml export_formats.ml))
+(rule
+ (copy ../src/export/export_state.ml export_state.ml))
+(rule
+ (copy ../src/export/export_view.ml export_view.ml))
+(rule
+ (copy ../src/export/publish_view.ml publish_view.ml))
+(rule
+ (copy ../src/extension/pdf_state.ml pdf_state.ml))
+(rule
+ (copy ../src/graphs/graphs_meta.ml graphs_meta.ml))
+(rule
+ (copy ../src/graphs/graphs_mount.ml graphs_mount.ml))
+(rule
+ (copy ../src/graphs/graphs_ops.ml graphs_ops.ml))
+(rule
+ (copy ../src/graphs/graphs_view.ml graphs_view.ml))
+(rule
+ (copy ../src/graphs/collaborators.ml collaborators.ml))
+ (rule
+ (copy ../src/graphs/asset_progress.ml asset_progress.ml))
+(rule
+ (copy ../src/graphs/importer.ml importer.ml))
+(rule
+ (copy ../src/graphs/new_graph.ml new_graph.ml))
+(rule
+ (copy ../src/graphs/recycle.ml recycle.ml))
+(rule
+ (copy ../src/graphs/rtc_error.ml rtc_error.ml))
+(rule
+ (copy ../src/graphs/rtc_flows.ml rtc_flows.ml))
+(rule
+ (copy ../src/graphs/rtc_ops.ml rtc_ops.ml))
+(rule
+ (copy ../src/graphs/zip.ml zip.ml))
+(rule
+ (copy ../src/graphs/exporter.ml exporter.ml))
+(rule
+ (copy ../src/popups/tooltip.ml tooltip.ml))
+(rule
+ (copy ../src/pages/page.ml page.ml))
+(rule
+ (copy ../src/pages/page_ops.ml page_ops.ml))
+(rule
+ (copy ../src/popups/popups_state.ml popups_state.ml))
+(rule
+ (copy ../src/popups/popups_view.ml popups_view.ml))
+(rule
+ (copy ../src/properties/properties_area.ml properties_area.ml))
+(rule
+ (copy ../src/properties/properties_calendar.ml properties_calendar.ml))
+(rule
+ (copy ../src/properties/properties_dialog.ml properties_dialog.ml))
+(rule
+ (copy ../src/properties/properties_menu.ml properties_menu.ml))
+(rule
+ (copy ../src/properties/properties_popup.ml properties_popup.ml))
+(rule
+ (copy ../src/properties/properties_select.ml properties_select.ml))
+(rule
+ (copy ../src/properties/properties_state.ml properties_state.ml))
+(rule
+ (copy ../src/properties/properties_view.ml properties_view.ml))
+(rule
+ (copy ../src/render/render.ml render.ml))
+(rule
+ (copy ../src/render/render_calc.ml render_calc.ml))
+(rule
+ (copy ../src/render/render_dom.ml render_dom.ml))
+(rule
+ (copy ../src/render/render_html.ml render_html.ml))
+(rule
+ (copy ../src/render/render_inline.ml render_inline.ml))
+(rule
+ (copy ../src/render/render_state.ml render_state.ml))
+(rule
+ (copy ../src/routing/router.ml router.ml))
+(rule
+ (copy ../src/sdk/sdk_api.ml sdk_api.ml))
+(rule
+ (copy ../src/sdk/sdk_config.ml sdk_config.ml))
+(rule
+ (copy ../src/sdk/sdk_read.ml sdk_read.ml))
+(rule
+ (copy ../src/sdk/sdk_ui.ml sdk_ui.ml))
+(rule
+ (copy ../src/sdk/title_refs.ml title_refs.ml))
+(rule
+ (copy ../src/settings/keymap_data.ml keymap_data.ml))
+(rule
+ (copy ../src/settings/settings_state.ml settings_state.ml))
+ (rule
+ (copy ../src/settings/settings_controls.ml settings_controls.ml))
+(rule
+ (copy ../src/settings/settings_url_view.ml settings_url_view.ml))
+(rule
+ (copy ../src/settings/settings_view.ml settings_view.ml))
+(rule
+ (copy ../src/sidebar/left_sidebar_view.ml left_sidebar_view.ml))
+(rule
+ (copy ../src/sidebar/right_sidebar_view.ml right_sidebar_view.ml))
+(rule
+ (copy ../src/toasts/toast.ml toast.ml))
+(rule
+ (copy ../src/toasts/toasts_view.ml toasts_view.ml))
+(rule
+ (copy ../src/views/views_builder.ml views_builder.ml))
+(rule
+ (copy ../src/views/views_db.ml views_db.ml))
+(rule
+ (copy ../src/views/views_head.ml views_head.ml))
+(rule
+ (copy ../src/views/views_state.ml views_state.ml))
+(rule
+ (copy ../src/views/views_view.ml views_view.ml))
+(rule
+ (copy ../src/views/views_wire.ml views_wire.ml))
+
+(library
+ (name logseq_ui_apple)
+ (wrapped false)
+ (modules (:standard \ native_embed))
+ (modes native)
+ (libraries
+   lui
+   ocaml-signal
+   melange-transit-core
+   melange-transit-native
+   melange-edn-core
+   melange-edn-native
+   yojson
+   ptime
+   uri
+   unix
+   threads.posix
+   digestif str)
+ (preprocess
+  (pps lui.ppx)))
+
+(executable
+ (name native_embed)
+ (modules native_embed)
+ (libraries logseq_ui_apple)
+ (foreign_stubs
+  (language c)
+  (names logseq_lui_bridge))
+ (modes (native object)))

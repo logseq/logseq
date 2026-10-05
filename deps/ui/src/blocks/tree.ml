@@ -43,12 +43,12 @@ let block_key (b : Model.block) =
 
 (* -- per-row signals -- *)
 
-let row_class_str (b : Model.block) uuid (st : S.t) =
+let row_class_str (b : Model.block) uuid (selected : S.String_set.t) =
   let order_list = b.Model.block_order_list = Some "number" in
   let blank = String.trim b.block_title = "" in
   let embed = b.Model.block_link <> None in
   (* cljs :class order — dynamic flags first, base classes last *)
-  (if S.String_set.mem uuid st.selected then "selected " else "")
+  (if S.String_set.mem uuid selected then "selected " else "")
   ^ (if order_list then "is-order-list " else "")
   ^ (if blank then "is-blank " else "")
   ^ (if embed then "embed-block " else "")
@@ -57,26 +57,30 @@ let row_class_str (b : Model.block) uuid (st : S.t) =
 
 let row_class_sig uuid blank embed (b : Model.block) =
   ignore (blank, embed);
-  Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-      row_class_str b uuid st)
+  Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+      row_class_str b uuid selected)
 
 (* same class signal driven by a per-item block signal — keyed rows get
    fresh block records on republish, so blank/embed/order-list must not
    be captured at mount *)
 let row_class_sig_of (bs : Model.block Signal.signal) =
   Logseq_dom.class_signal
-    (Signal.map2 (fun a b -> (a, b)) bs (S.signal ()))
-    (fun ((b : Model.block), (st : S.t)) ->
+    (Signal.map2 (fun a b -> (a, b)) bs (S.selected_sig ()))
+    (fun ((b : Model.block), selected) ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_class_str b uuid st)
+      row_class_str b uuid selected)
 
 (* effective collapse for a block: scoped UI overrides, then persisted
-   set || view default — Editor_state.effective_collapsed_in on the
-   signal value *)
+   set || view default — one-shot on the state record, or projected on
+   the [collapse_view] carried by [collapse_sig] *)
 let effective_collapsed_st ~scope uuid default (st : S.t) =
   S.effective_collapsed_in ~scope uuid default st
 
-let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
+let effective_collapsed_cv ~scope uuid default (v : S.collapse_view) =
+  S.effective_collapsed_in_view ~scope uuid default v
+
+let row_attrs_of ~scope ~depth uuid (b : Model.block)
+    (v : S.collapse_view) =
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
   [ ("id", "ls-block-" ^ uuid)
@@ -91,8 +95,7 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
   ; ( "data-collapsed"
     , string_of_bool
         (has_children
-         && effective_collapsed_st ~scope uuid b.block_default_collapsed
-              st) )
+         && effective_collapsed_cv ~scope uuid b.block_default_collapsed v) )
   ; ("data-db-collapsable", string_of_bool b.Model.block_db_collapsable)
   ; (* cljs level = render depth (config :level, 0 at page root), not the
        db block/level *)
@@ -105,20 +108,20 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
      else [])
 
 let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
-  Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
-      row_attrs_of ~scope ~depth uuid b st)
+  Logseq_dom.attrs_signal (S.collapse_sig ()) (fun v ->
+      row_attrs_of ~scope ~depth uuid b v)
 
 let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
   Logseq_dom.attrs_signal
-    (Signal.map2 (fun a b -> (a, b)) bs (S.signal ()))
-    (fun ((b : Model.block), (st : S.t)) ->
+    (Signal.map2 (fun a b -> (a, b)) bs (S.collapse_sig ()))
+    (fun ((b : Model.block), v) ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_attrs_of ~scope ~depth uuid b st)
+      row_attrs_of ~scope ~depth uuid b v)
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
   Signal.map
-    (effective_collapsed_st ~scope uuid b.block_default_collapsed)
-    (S.signal ())
+    (effective_collapsed_cv ~scope uuid b.block_default_collapsed)
+    (S.collapse_sig ())
 
 (* cljs data-has-heading on .block-main-container: block.css shifts the
    control wrap down so the bullet tracks the heading's first line *)
@@ -175,7 +178,12 @@ let icon_el uuid (icon : Model.icon) : t =
   if icon.icon_kind = "emoji" then
     dom ~key:("ic-" ^ uuid) ~tag:"span" ~style_class:"ui__icon"
       [ dom ~key:("ice-" ^ uuid) ~tag:"em-emoji"
-          ~attrs:[ ("id", icon.icon_id) ] []
+          ~attrs:
+            [ ("id", icon.icon_id)
+            ; ( "data-emoji"
+              , Option.value ~default:""
+                  (Emoji_mart.emoji_char icon.icon_id) ) ]
+          []
       ]
   else
     dom ~key:("ic-" ^ uuid) ~tag:"span"
@@ -251,8 +259,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                | None ->
                    dom ~key:("b-" ^ uuid) ~tag:"span"
                      ~style_class_signal:
-                       (Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-                            if S.String_set.mem uuid st.selected then
+                       (Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+                            if S.String_set.mem uuid selected then
                               "selected bullet"
                             else "bullet"))
                      ~attrs:[ ("blockid", uuid) ]
@@ -316,15 +324,14 @@ let content_el uuid (b : Model.block) : t =
                match Render.title_outer_class b with
                | Some cls ->
                    [ dom ~key:("bt-" ^ uuid) ~style_class:cls
-                       (Render.title_block ~self:uuid
+                       (Render.title_block ~self:uuid ~annot:true
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
                    ]
                | None ->
-                   Render.title_block ~self:uuid
+                   Render.title_block ~self:uuid ~annot:true
                      ~resolved:(S.title_for uuid b.block_title)
-                     b)
-        ]
+                     b)        ]
     ]
 
 let editor_el uuid scope : t =
@@ -342,12 +349,12 @@ let editor_el uuid scope : t =
        the stale buffer and overwrite in-progress typing *)
     Signal.cutoff ( = )
       (Signal.map
-         (fun (st : S.t) ->
-           match st.S.editing with
-           | Some e when e.uuid = uuid && e.scope = scope ->
-               Lui_protocol.StringValue e.buffer
+         (fun e ->
+           match e with
+           | Some e when e.S.uuid = uuid && e.S.scope = scope ->
+               Lui_protocol.StringValue e.S.buffer
            | _ -> Lui_protocol.StringValue "")
-         (S.signal ()))
+         (S.editing_sig ()))
   in
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
@@ -405,12 +412,12 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
               if editing && editable then editor_el uuid scope
               else content_wrapper uuid b))
     (Signal.map
-       (fun (st : S.t) ->
-         match st.editing with
-         | Some e -> e.uuid = uuid && e.scope = scope
+       (fun e ->
+         match e with
+         | Some e -> e.S.uuid = uuid && e.S.scope = scope
 
          | None -> false)
-       (S.signal ()))
+       (S.editing_sig ()))
 
 (* -- tags chips (components/block.cljs tags-cp): sibling of the content
    wrapper so they stay visible while the block is being edited. Tags that
@@ -525,11 +532,11 @@ let () =
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    (b : Model.block) : t =
+    ?(virtualize = false) (b : Model.block) : t =
 
  fun ctx parent ->
   S.ensure ctx;
-  (row_el ~depth ~editable ~library scope b) ctx parent
+  (row_el ~depth ~editable ~library ~virtualize scope b) ctx parent
 
 
 (* the .block-main-container subtree — everything inside .ls-block
@@ -589,13 +596,17 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                 ]
                             ]
                         ]
+                    ; (* .positioned-properties.block-left chips render
+                         inline at the end of .block-main-content *)
+                      Properties_area.block_left_chips ~uuid
                     ]
                 ]
             ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
 
-and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
+and row_el ~depth ~editable ~virtualize scope ~(library : bool)
+    (b : Model.block) : t =
 
   let uuid = Option.value b.block_uuid ~default:"" in
   if b.Model.block_is_comments_area then Comments_view.area_el b
@@ -611,6 +622,9 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
     ~style_class_signal:(row_class_sig uuid blank embed b)
     ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
     [ row_main ~editable ~library scope b
+    ; (* .ls-block-content-indent: block properties area + block-below
+         pills, sibling of .block-main-container *)
+      Properties_area.block_area ~uuid
     ; (* cljs custom-query* — the live query shell sits below
          .block-main-container, not inside the title row *)
       (if Render.is_query_block b then Render.query_below_el uuid
@@ -619,14 +633,14 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
          Render.query_below_el uuid
        else Logseq_dom.nothing)
     ; (if has_children && not (Comments.is_comments_area b) then
-         children_el ~depth ~editable ~library uuid scope b
+         children_el ~depth ~editable ~library ~virtualize uuid scope b
        else Logseq_dom.nothing)
     ]
 
 (* keyed-row variant of row_el: the .ls-block shell is a stable node
    (keyed reconcile needs a node per item) and the content inside it is
    rebuilt only when the row's own block record changes *)
-and row_sig ~depth ~editable ~library scope
+and row_sig ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
   let b0 = Signal.get bs in
   let key = block_key b0 in
@@ -663,10 +677,12 @@ and row_sig ~depth ~editable ~library scope
         (fun ((b : Model.block), _g, _i) ->
           row_main ~editable ~library scope b)
         (Signal.map2
-           (fun (b : Model.block) (_st : S.t) ->
+           (fun (b : Model.block) (_tick : int) ->
              let g, i = Render_inline.invalidation () in
              (b, g, i))
-           bs (S.signal ()))
+           bs (S.invalidation_sig ()))
+    ; Properties_area.block_area
+        ~uuid:(Option.value b0.Model.block_uuid ~default:"")
     ; (if Render.is_query_block b0 then
          Render.query_below_el
            (Option.value b0.Model.block_uuid ~default:"")
@@ -674,53 +690,116 @@ and row_sig ~depth ~editable ~library scope
          Render.query_below_el
            (Option.value b0.Model.block_uuid ~default:"")
        else Logseq_dom.nothing)
-    ; row_children ~depth ~editable ~library scope bs
+    ; row_children ~depth ~editable ~library ~virtualize scope bs
     ]
 
-and row_children ~depth ~editable ~library scope
+and row_children ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
-  Logseq_dom.dyn
-    ~equal:(fun ((a : Model.block), ca) ((b : Model.block), cb) ->
-      a == b && ca = cb)
-    (fun (b, collapsed) ->
-      if collapsed || Comments.is_comments_area b || S.children_of b = []
-      then Logseq_dom.nothing
-      else
+  (* gate only on show/hide: children membership changes go through the
+     keyed list inside children_dom — remounting the whole subtree on
+     every splice (indent/outdent/collapse-adjacent edits) rebuilt
+     ~110 nodes per op *)
+  let show_sig =
+    Signal.map2
+      (fun (b : Model.block) (v : S.collapse_view) ->
         let uuid = Option.value b.block_uuid ~default:"" in
-        children_dom ~depth ~editable ~library uuid scope b)
-    (Signal.map2
-       (fun (b : Model.block) (st : S.t) ->
-         let uuid = Option.value b.block_uuid ~default:"" in
-         ( b
-         , effective_collapsed_st ~scope uuid b.block_default_collapsed
-             st ))
-       bs (S.signal ()))
+        not
+          (effective_collapsed_cv ~scope uuid b.block_default_collapsed v
+          || Comments.is_comments_area b
+          || S.children_of b = []))
+      bs (S.collapse_sig ())
+  in
+  Logseq_dom.dyn ~equal:(fun (a : bool) (b : bool) -> a = b)
+    (fun show ->
+      if not show then Logseq_dom.nothing
+      else
+        let b = Signal.get bs in
+        let uuid = Option.value b.block_uuid ~default:"" in
+        children_dom ~depth ~editable ~library ~virtualize uuid scope
+          bs)
+    show_sig
 
 and block_row_sig
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    (bs : Model.block Signal.signal) : t =
+    ?(virtualize = false) (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   S.ensure ctx;
   let b0 = Signal.get bs in
   (if b0.Model.block_is_comments_area then Comments_view.area_el b0
-   else row_sig ~depth ~editable ~library scope bs) ctx parent
+   else row_sig ~depth ~editable ~library ~virtualize scope bs)
+    ctx parent
 
-and children_dom ~depth ~editable ~library uuid scope (b : Model.block) : t =
+(* rough rendered height of an unmounted subtree — cljs
+   estimate-children-height: a fixed 32px row height per descendant,
+   counting through loaded children slots up to depth 8 *)
+and estimate_children_height (b : Model.block) : float =
+  let rec count depth acc (bs : Model.block list) =
+    if depth >= 8 then acc + List.length bs
+    else
+      List.fold_left
+        (fun a c -> count (depth + 1) (a + 1) (S.children_of c))
+        acc bs
+  in
+  float_of_int (count 0 0 (S.children_of b)) *. 32.
+
+(* the content of .block-children: cljs virtualizable-block-list is the
+   render-children at every nesting level — a sibling list of >=64 gets
+   its own windowed list inside .blocks-list-wrap *)
+and child_list ~depth ~editable ~library ~virtualize uuid scope
+    (bs : Model.block Signal.signal) : t =
+  let kids = S.children_of (Signal.get bs) in
+  dom ~key:("blw-" ^ uuid) ~style_class:"blocks-list-wrap"
+    ~attrs:
+      (("data-level", string_of_int (depth + 1))
+       :: (if List.length kids >= 64 then [ ("data-virtuoso-scroller", "true") ]
+           else []))
+    (if virtualize && List.length kids >= 64 then
+       [ Virt_list.list ~key_of:block_key ~estimate_size:(fun _ -> 32.)
+           ~initial_rows:48
+           ~render:(block_row ~scope ~editable ~depth:(depth + 1) ~library
+                      ~virtualize)
+           (Array.of_list kids) ]
+     else
+       (* keyed like the top-level list: indent/outdent/move splices a
+          row in or out and only that row's node moves — siblings keep
+          their DOM identity instead of the whole subtree remounting *)
+       [ Logseq_dom.keyed ~source:(Signal.map S.children_of bs)
+           ~key:block_key ~cmp:String.compare
+           ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
+                     ~library ~virtualize) ])
+
+and children_dom ~depth ~editable ~library ~virtualize uuid scope
+    (bs : Model.block Signal.signal) : t =
+  let b = Signal.get bs in
   dom ~key:("children-" ^ uuid)
     ~style_class:"block-children-container flex"
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~attrs:[ ("blockid", uuid) ] []
-    ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-        (List.map (block_row ~scope ~editable ~depth:(depth + 1) ~library)
-           (S.children_of b))
+    ; (* cljs lazy-block-children: inside :virtualize? pages the
+         .block-children div is a lazy mount boundary — an
+         estimated-height placeholder until it nears the viewport *)
+      (if virtualize then
+         Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
+           ~min_height:(estimate_children_height b)
+           ~render:(fun () ->
+             child_list ~depth ~editable ~library ~virtualize uuid scope
+               bs)
+       else
+         dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
+           [ child_list ~depth ~editable ~library ~virtualize uuid scope
+               bs
+           ])
     ]
 
-and children_el ~depth ~editable ~library uuid scope (b : Model.block) : t =
-
+and children_el ~depth ~editable ~library ~virtualize uuid scope
+    (b : Model.block) : t =
+ fun ctx parent ->
+  let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
   if_
     ~test:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
-    (children_dom ~depth ~editable ~library uuid scope b)
+    (children_dom ~depth ~editable ~library ~virtualize uuid scope bs)
+    ctx parent
 
 (* Read-only row for linked-reference lists: same shell as row_el but the
    content never swaps to editor_el — a block shown in .references can
@@ -779,11 +858,13 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                 ]
                             ]
                         ]
+                    ; Properties_area.block_left_chips ~uuid
                     ]
                 ]
             ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
+    ; Properties_area.block_area ~uuid
     ; (if has_children then children_static_el ~depth ~library uuid b
        else Logseq_dom.nothing)
     ])
@@ -819,14 +900,18 @@ let debounced_embed_refresh = Web_dom.debounce 150
 let chain_embed_worker () =
   if not !embed_chained then begin
     embed_chained := true;
-    Runtime.on_sync (fun () ->
-        debounced_embed_refresh (fun () ->
-            Hashtbl.iter
-              (fun _ f ->
-                try f ()
-                with e ->
-                  Platform.console_error ("embed refresh failed", e))
-              embed_refreshes))
+    (* embeds fetch whole page trees by name — their content can change
+       under affected-keys we don't know the uuids for, so they keep
+       the watch-all default *)
+    ignore
+      (Runtime.on_sync (fun _affected ->
+           debounced_embed_refresh (fun () ->
+               Hashtbl.iter
+                 (fun _ f ->
+                   try f ()
+                   with e ->
+                     Platform.console_error ("embed refresh failed", e))
+                 embed_refreshes)))
   end
 
 let fetch_embed_blocks name st =
@@ -856,6 +941,47 @@ let rec same_blocks a b =
       && same_blocks xs ys
   | _ -> false
 
+(* embed block cap: an embed renders at most this many blocks; a larger
+   node opens through the click-through row instead of inflating the
+   embed *)
+let embed_block_cap = 50
+
+(* prune a fetched tree to the first [cap] blocks in depth-first order;
+   returns the pruned tree and whether anything was dropped *)
+let cap_embed_blocks cap blocks =
+  let n = ref 0 and dropped = ref false in
+  let rec go_list = function
+    | [] -> []
+    | bs when !n >= cap ->
+        dropped := true;
+        ignore bs;
+        []
+    | b :: rest ->
+        incr n;
+        let b' =
+          { b with
+            Model.block_children = go_list b.Model.block_children
+          ; block_embed_children = go_list b.Model.block_embed_children
+          }
+        in
+        b' :: go_list rest
+  in
+  let out = go_list blocks in
+  (out, !dropped)
+
+(* the overflow row — clicking it navigates to the embedded node's own
+   detail page *)
+let embed_more_el (name : string) : t =
+  dom ~key:"embed-more" ~tag:"div"
+    ~style_class:"embed-more ls-block cursor-pointer text-sm opacity-70"
+    ~attrs:[ ("tabindex", "0") ]
+    ~events:"click"
+    ~on_dom_event:(fun n _ ->
+      if n = "click" then
+        Runtime.send (Action.Navigate_to (Model.Page name)))
+    [ dom ~key:"embed-more-t" ~tag:"span" ~text:(I18n.t "ui/show-more")
+        [] ]
+
 let page_embed (name : string) : t =
  fun ctx parent ->
   chain_embed_worker ();
@@ -872,10 +998,12 @@ let page_embed (name : string) : t =
       Hashtbl.remove embed_refreshes id);
   (dyn ~equal:same_blocks
      (fun blocks ->
+       let shown, capped = cap_embed_blocks embed_block_cap blocks in
        (* embed copies render read-only — the same uuid can exist in the
           sidebar/main tree, and only that instance should own the textarea *)
        dom ~key:"embed-page" ~tag:"div" ~style_class:"embed-page"
-         (List.map (block_row ~scope:"embed" ~editable:false) blocks))
+         (List.map (block_row ~scope:"embed" ~editable:false) shown
+          @ (if capped then [ embed_more_el name ] else [])))
      (Signal.value st))
     ctx parent
 
