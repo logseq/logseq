@@ -46,10 +46,13 @@ let main root =
   Logseq_dom.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
+  Logseq_virt.register registry;
   let renderer =
     Lui_web.create_with_extensions root (Icons.app_icons ()) registry
       (Lui_protocol.String_map.add Logseq_editor.identifier
-         Logseq_editor.adapter Dom_adapter.adapters)
+         Logseq_editor.adapter Dom_adapter.adapters
+       |> Lui_protocol.String_map.add Logseq_virt.identifier
+            Logseq_virt.adapter)
   in
   let app =
     Lui_app.create_with_extensions (Lui_web.backend renderer) registry
@@ -61,13 +64,13 @@ let main root =
       let changed = Lui_app.send app action in
       Platform.perf_time "flush" (fun () ->
           ignore (Lui_app.flush app);
-          Virtual_scroll.sync ());
+          Logseq_virt.sync ());
       changed);
   Runtime.app_flush :=
     (fun () ->
       Platform.perf_time "flush" (fun () ->
           ignore (Lui_app.flush app);
-          Virtual_scroll.sync ();
+          Logseq_virt.sync ();
           (* one focus pass per flush — a pending arm (or keys queued
              during the remount window) progresses as the DOM
              re-patches *)
@@ -77,12 +80,12 @@ let main root =
          Platform.perf_time "event" (fun () ->
              ignore (Lui_app.dispatch_event app event);
              let flushed = Lui_app.flush app in
-             Virtual_scroll.sync ();
+             Logseq_virt.sync ();
              flushed)));
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
   Lui_web.mount renderer (Lui_app.root_node app) root;
-  Virtual_scroll.sync ();
+  Logseq_virt.sync ();
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();

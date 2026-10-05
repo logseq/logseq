@@ -910,6 +910,8 @@ let table_el inst (s : V.vstate) : t =
                 [ box
                     [ box
                         ~accessibility_identifier:"virtuoso-item-list"
+                        ~data_attrs:
+                          [ ("data-testid", "virtuoso-item-list") ]
                         [ row_stream inst cols (all_row_uuids s) ] ] ]
             ; add_row_footer inst ] ] ]
 
@@ -925,6 +927,7 @@ let grouped_table inst ~rows : t =
         [ box ~style_class:"relative"
             [ table_header inst cols
             ; box ~accessibility_identifier:"virtuoso-item-list"
+                ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
                 [ row_stream inst cols rows ]
             ]
         ]

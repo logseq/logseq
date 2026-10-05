@@ -567,12 +567,11 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
     if blocks = [] then []
     else if Virt_list.enabled ~virtualize (Array.length items) then
       (* cljs parity: .blocks-list-wrap carries
-         data-virtuoso-scroller; rows are .ls-virt-row[data-index] >
-         .ls-block *)
-      [ (* TODO(component): data-level/data-virtuoso-scroller are the
-           imperative virtuoso/dnd scaffold contract *)
-        dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
-          ~attrs:
+         data-level/data-virtuoso-scroller so the visibility sync and
+         dnd/drag paths can find the scroller boundary; rows are
+         .ls-virt-row[data-index] > .ls-block *)
+      [ box ~key:"blw-virt" ~style_class:"blocks-list-wrap"
+          ~data_attrs:
             [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
               ~estimate_size:(fun _ -> 32.) ~initial_rows:48
@@ -590,9 +589,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
                 if S.ready () then Some (S.editing_sig ()) else None)
               ~render:(Tree.block_row ~library ~scope ~virtualize) items ] ]
     else
-      [ (* TODO(component): data-level is imperative scaffold *)
-        dom ~key:"blw" ~style_class:"blocks-list-wrap"
-          ~attrs:[ ("data-level", "0") ]
+      [ box ~key:"blw" ~style_class:"blocks-list-wrap"
+          ~data_attrs:[ ("data-level", "0") ]
           (List.map (Tree.block_row ~library ~scope ~virtualize) blocks) ]
   in
   (* cljs page-root-virtual-list: .blocks-container.flex-1[containerid]
@@ -601,8 +599,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
   let body =
     if not container then list_wrap
     else
-      [ (* TODO(component): containerid is the imperative block
-           container contract *)
+      [ (* containerid is outside the data-* attribute vocabulary — it
+           stays a dom attr until the block-container contract moves *)
         dom ~key:"blc" ~style_class:"blocks-container flex-1"
           ~attrs:
             (match puuid with
@@ -611,9 +609,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
           list_wrap ]
   in
   column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-    [ (* TODO(component): data-cid/data-pu are imperative handles *)
-      dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~attrs:(("data-cid", scope) :: inner_attrs)
+    [ box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
+        ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
          @ [ add_button_el ?puuid
                ~has_children:(fun ctx ->
@@ -768,12 +765,12 @@ let group_breadcrumb key (titles : string list) : t =
    data-index from the .ls-virt-row wrapper instead (a second data-index
    inside would double-measure). ~parents maps group page name ->
    ancestor titles for the namespace breadcrumb *)
-let ref_group ?(extra_attrs = []) ?(parents = []) (name, blocks) : t =
+let ref_group ?(data_attrs = []) ?(style = "") ?(parents = [])
+    (name, blocks) : t =
   let key = "rg-" ^ name in
-  (* TODO(component): extra_attrs carries the virtuoso index attrs
-     (data-index/data-item-index/overflow-anchor style) — imperative
-     scaffold *)
-  dom ~key ~attrs:extra_attrs
+  (* logseq-virt region carries the static-mode index attrs
+     (data-index/data-item-index/overflow-anchor style) *)
+  Logseq_virt.region ~key ~data_attrs ~style
     [ column ~key:"gi"
         [ foldable_title (key ^ "-t")
             (box ~key:"grp"
@@ -820,38 +817,36 @@ let ref_groups_virt key ?(parents = [])
     (groups : (string * Model.block list) list) : t =
   let items = Array.of_list groups in
   (* virtualize at group granularity — a tag page can carry hundreds of
-     source-page groups; group rows measure dynamically like journals *)
-  (* TODO(component): the virtuoso scaffold (data-virtuoso-scroller/
-     data-viewport-type/item-list index attrs + inline styles) is the
-     imperative scroller contract — keep as dom *)
+     source-page groups; group rows measure dynamically like journals.
+     The scaffold attrs (data-virtuoso-scroller/data-viewport-type/
+     data-testid=item-list) and the inline styles that are not in the
+     data_attrs vocabulary go through logseq-virt regions *)
   if Virt_list.enabled ~virtualize:true (Array.length items) then
-    dom ~key ~style_class:"group-list-view"
-      ~attrs:[ ("data-virtuoso-scroller", "true")
-             ; ("style", "position: relative;") ]
+    Logseq_virt.region ~key ~style_class:"group-list-view"
+      ~data_attrs:[ ("data-virtuoso-scroller", "true") ]
+      ~style:"position: relative;"
       [ Virt_list.list
           ~list_attrs:[ ("data-viewport-type", "window") ]
           ~key_of:(fun (name, _) -> name)
           ~estimate_size:(fun _ -> 120.)
           ~render:(ref_group ~parents) items ]
   else
-    dom ~key ~style_class:"group-list-view"
-      ~attrs:[ ("data-virtuoso-scroller", "true")
-             ; ("style", "position: relative;") ]
-      [ dom ~key:"vp" ~attrs:[ ("data-viewport-type", "window") ]
-          [ dom ~key:"il"
-              ~attrs:
-                [ ("data-testid", "virtuoso-item-list")
-                ; ( "style"
-                  , "box-sizing: border-box; margin-top: 0px; \
-                     padding-bottom: 0px; padding-top: 0px;" ) ]
+    Logseq_virt.region ~key ~style_class:"group-list-view"
+      ~data_attrs:[ ("data-virtuoso-scroller", "true") ]
+      ~style:"position: relative;"
+      [ box ~key:"vp" ~data_attrs:[ ("data-viewport-type", "window") ]
+          [ Logseq_virt.region ~key:"il"
+              ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
+              ~style:
+                "box-sizing: border-box; margin-top: 0px; \
+                 padding-bottom: 0px; padding-top: 0px;"
               (List.mapi
                  (fun i g ->
                    ref_group ~parents
-                     ~extra_attrs:
+                     ~data_attrs:
                        [ ("data-index", string_of_int i)
-                       ; ("data-item-index", string_of_int i)
-                       ; ("style", "overflow-anchor: none;") ]
-                     g)
+                       ; ("data-item-index", string_of_int i) ]
+                     ~style:"overflow-anchor: none;" g)
                  groups)
           ]
       ]
@@ -1129,20 +1124,16 @@ let journal_item_sig (ms : Model.t Signal.signal)
                        ps ms)
                 ]
             ; column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-                [ (* TODO(component): data-cid/data-pu are imperative
-                     handles *)
-                  dom ~key:"page-blocks-inner"
+                [ box ~key:"page-blocks-inner"
                     ~style_class:"page-blocks-inner relative"
-                    ~attrs:
+                    ~data_attrs:
                       [ ("data-cid", "main"); ("data-pu", key) ]
                     (* cljs plain-block-list emits no .blocks-list-wrap
                        on empty pages *)
                     [ Logseq_dom.if_ ~test:nonempty
-                        ((* TODO(component): data-level is imperative
-                            scaffold *)
-                         dom ~key:"blw"
+                        (box ~key:"blw"
                            ~style_class:"blocks-list-wrap"
-                           ~attrs:[ ("data-level", "0") ]
+                           ~data_attrs:[ ("data-level", "0") ]
                            [ Logseq_dom.keyed ~source:blocks_sig
                                ~key:Tree.block_key ~cmp:String.compare
                                ~mount:(Tree.block_row_sig ~scope:"main")
@@ -1187,6 +1178,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
         [ box ~key:"jvp"
             [ box ~key:"jil"
                 ~accessibility_identifier:"virtuoso-item-list"
+                ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
                 [ Logseq_dom.if_
                     ~test:(Signal.map (fun js -> js = []) journals_sig)
                     (box ~key:"jp" ~padding:24
@@ -1281,22 +1273,19 @@ let blocks_sig_of (ms : Model.t Signal.signal) =
 let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
   let blocks_sig = blocks_sig_of ms in
   let nonempty = Signal.map (fun bs -> bs <> []) blocks_sig in
-  (* TODO(component): data-level/data-virtuoso-scroller are the
-     imperative virtuoso/dnd scaffold contract *)
   let keyed_list =
-    dom ~key:"blw" ~style_class:"blocks-list-wrap"
-      ~attrs:[ ("data-level", "0") ]
+    box ~key:"blw" ~style_class:"blocks-list-wrap"
+      ~data_attrs:[ ("data-level", "0") ]
       [ Logseq_dom.keyed ~source:blocks_sig ~key:Tree.block_key
           ~cmp:String.compare
           ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true) ]
   in
-  (* TODO(component): same virtuoso scaffold contract as blw. A
-     virtualized list captures its data array at mount, so it can't
+  (* A virtualized list captures its data array at mount, so it can't
      ride the keyed path — rebuild it on a new blocks spine; windowed
      rendering stays active for big pages outside rtc-test *)
   let virt_list =
-    dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
-      ~attrs:
+    box ~key:"blw-virt" ~style_class:"blocks-list-wrap"
+      ~data_attrs:
         [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
       [ Virt_list.rows_sig ~key:Tree.block_key ~cmp:String.compare
           ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true)
@@ -1314,16 +1303,16 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
   in
   (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
   column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-    [ (* TODO(component): data-cid/data-pu are imperative handles *)
-      dom ~key:"page-blocks-inner"
+    [ box ~key:"page-blocks-inner"
         ~style_class:"page-blocks-inner relative"
-        ~attrs:
+        ~data_attrs:
           (("data-cid", scope)
            :: (match puuid with
                | Some u -> [ ("data-pu", u) ]
                | None -> []))
-        [ (* TODO(component): containerid is the imperative block
-             container contract *)
+        [ (* containerid is outside the data-* attribute vocabulary —
+             it stays a dom attr until the block-container contract
+             moves *)
           dom ~key:"blc" ~style_class:"blocks-container flex-1"
             ~attrs:
               (match puuid with

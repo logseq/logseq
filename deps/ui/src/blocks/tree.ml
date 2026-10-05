@@ -699,10 +699,11 @@ and estimate_children_height (b : Model.block) : float =
 and child_list ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
   let kids = S.children_of (Signal.get bs) in
-  dom ~key:("blw-" ^ uuid) ~style_class:"blocks-list-wrap"
-    ~attrs:
+  box ~key:("blw-" ^ uuid) ~style_class:"blocks-list-wrap"
+    ~data_attrs:
       (("data-level", string_of_int (depth + 1))
-       :: (if List.length kids >= 64 then [ ("data-virtuoso-scroller", "true") ]
+       :: (if List.length kids >= 64 then
+             [ ("data-virtuoso-scroller", "true") ]
            else []))
     (if virtualize && List.length kids >= 64 then
        [ Virt_list.list ~key_of:block_key ~estimate_size:(fun _ -> 32.)
