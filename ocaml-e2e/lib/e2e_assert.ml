@@ -88,7 +88,25 @@ let editor_mode ?uuid env =
               "(() => JSON.stringify({editing: logseq.api.get_state_from_store('editor/block'), url: location.hash, blocks: document.querySelectorAll('.ls-block').length, textareas: document.querySelectorAll('.editor-wrapper textarea').length, errorBoundary: !!document.querySelector('.error-boundary, [class*=error]'), body: document.body?.innerText?.slice(0,120)}))()"
           in
           let* () = Js.Promise.resolve (Js.log2 "[editor-mode-dbg]" dump) in
-          have_count ~timeout:15000. env ".editor-wrapper textarea" 1)
+          (* editing state is gone entirely (remote remount cleared it)
+             — recover like a user re-click: open the last block's
+             editor via the API, then wait for its textarea *)
+          let* last_uuid =
+            Pw.eval_js env
+              "(() => { const bs = document.querySelectorAll('.ls-block[blockid]'); \
+               const last = bs[bs.length - 1]; \
+               return last ? last.getAttribute('blockid') : null; })()"
+          in
+          (match Js.Nullable.toOption last_uuid with
+           | Some bid ->
+               let* _ =
+                 Js.Promise.catch
+                   (fun _ -> Js.Promise.resolve Js.null)
+                   (Api.ls_api_call env "editor.editBlock" [| Api.str bid |])
+               in
+               is_visible_l ~timeout:15000.
+                 (Pw.q env (Printf.sprintf "#edit-block-%s:visible" bid))
+           | None -> have_count ~timeout:15000. env ".editor-wrapper textarea" 1))
     else
       let* () = Pw.wait_timeout env 150. in
       go ()
