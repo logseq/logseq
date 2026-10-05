@@ -12,16 +12,16 @@ module S = Editor_state
 
 let dom = Logseq_dom.dom
 
-let action_btn key ?(title = "") ?(text = "") on_click children : t =
-  dom ~key ~tag:"button"
-    ~attrs:
-      ([ ("type", "button"); ("tabindex", "0") ]
-       @
-       if title = "" then [] else [ ("title", title) ])
+(* title moves to ~label (the a11y name on native hosts); icon buttons
+   carry ~icon, text buttons ~text — the button kind supplies
+   type=button and the icon/label spans on web *)
+let action_btn key ?(title = "") ?(text = "") ?icon on_click : t =
+  button ~key
     ~style_class:"ui__button selection-action-button"
-    ~text ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
-    children
+    ?icon
+    ~label:title ~text
+    ~on_press:(fun _ -> on_click ())
+    []
 
 (* popover opened under the bar for the current selection (the dialog's
    own current_target resolves the selected uuids for batch ops) *)
@@ -144,6 +144,11 @@ and node () : t = (
           | Some blk ->
               let l, t, _r, _b, _w = Web_dom.bounding_rect_fields blk in
               let below = t -. 2. in
+              (* TODO(component): the bar is positioned by a computed
+                 inline style (fixed left/top off the anchor block's
+                 bounding rect) and carries data-keep-selection for the
+                 document mousedown listener — no typed props cover
+                 either, so the shell stays dom *)
               dom ~key:"sbar"
                 ~style_class:
                   "ui__toolbar selection-action-bar flex items-center"
@@ -153,42 +158,37 @@ and node () : t = (
                         "position:fixed;left:%.0fpx;top:%.0fpx;z-index:998;pointer-events:none"
                         l (t -. 48.) )
                   ; ("data-keep-selection", "true") ]
-                [ dom ~key:"sbg"
-                    ~attrs:[ ("style", "pointer-events:auto") ]
+                [ row ~key:"sbg"
+                    ~cross:`center
                     ~style_class:
                       "ui__toolbar-group selection-action-group \
-                       inline-flex items-center"
+                       inline-flex pointer-events-auto"
                     [ action_btn "sab-tags" ~title:(I18n.t "property/set-tags")
+                        ~icon:(`app "hash")
                         (fun () -> open_prop_dlg ~remove:false)
-                        [ Icons.icon ~size:13. "hash" ]
                     ; action_btn "sab-cmt"
                         ~title:(I18n.t "block.comments/add-comment")
+                        ~icon:(`app "message-circle")
                         (fun () -> Comments.add_comment ())
-                        [ Icons.icon ~size:13. "message-circle" ]
                     ; action_btn "sab-cpy" ~text:(I18n.t "ui/copy")
                         (fun () ->
                           Editor_actions.copy_selection_text ();
                           Editor_actions.clear_selection ())
-                        []
                     ; action_btn "sab-setp"
                         ~text:(I18n.t "property/set-property")
                         (fun () -> open_prop_dlg ~remove:false)
-                        []
                     ; action_btn "sab-unset"
                         ~text:(I18n.t "property/unset-property")
                         (fun () -> open_prop_dlg ~remove:true)
-                        []
-                    ; action_btn "sab-del"
+                    ; action_btn "sab-del" ~icon:`trash
                         (fun () -> Editor_actions.delete_selection ())
-                        [ Icons.icon ~size:13. "trash" ]
-                    ; action_btn "sab-dots"
+                    ; action_btn "sab-dots" ~icon:(`app "dots")
                         (fun () ->
                           match !(Popups_state.active) with
                           | Some st ->
                               Popups_state.open_cm st ~x:l ~y:below
                                 ~block_id:first ~multi:true
                           | None -> ())
-                        [ Icons.icon ~size:13. "dots" ]
                     ]
                 ]))
       source )
