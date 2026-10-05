@@ -320,6 +320,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
          Web_dom.el_get_attr tb "data-db-collapsable" = Some "true"
      | None -> false)
   in
+  (* cljs *control-show? atom: the fold caret appears only while the
+     pointer is over the title row, and only for collapsable titles *)
+  let caret_hover = Signal.state ctx.Lui_ui.ui_scheduler false in
   let body =
     (* cljs db-page-title: the page title is a full block row —
        .ls-block > .is-page-title-row > bullet control + nested
@@ -347,54 +350,43 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
               ; ( "data-db-collapsable"
                 , if page.Model.page_db_collapsable then "true" else "false" )
               ; ("data-block-format", "markdown") ]
-            [ (* TODO(component): mouseenter/leave drives the hover
-                 fold caret and the margin-left style has no prop —
-                 imperative surface, keep as dom *)
-              dom ~key:"pt-row"
+            [ (* the -61px/-55px margins the cljs inline style carried
+                 live on .is-page-title-row (+ .ls-pt-no-icon) in
+                 lui-core.css *)
+              row ~key:"pt-row"
                 ~style_class:
-                  "block-main-container flex flex-row gap-1 is-page-title-row"
-                ~attrs:
-                  [ ( "style"
-                    , "margin-left: "
-                      ^ if icon_el = None then "-55px" else "-61px" )
-                  ]
-                ~events:"mouseenter mouseleave"
-                ~on_dom_event:(fun name _ ->
-                  (* cljs *control-show? atom: caret appears only while
-                     hovering the title row, and only for collapsable
-                     titles *)
-                  if collapsable_title () then
-                    match
-                      Web_dom.query_selector ".ls-page-title .block-control > span"
-                    with
-                    | Some el ->
-                        if name = "mouseenter" then (
-                          Web_dom.el_class_remove el "control-hide";
-                          Web_dom.el_class_add el "control-show";
-                          Web_dom.el_class_add el "cursor-pointer")
-                        else (
-                          Web_dom.el_class_add el "control-hide";
-                          Web_dom.el_class_remove el "control-show";
-                          Web_dom.el_class_remove el "cursor-pointer")
-                    | None -> ())
+                  ("block-main-container flex flex-row gap-1 \
+                    is-page-title-row"
+                   ^ if icon_el = None then " ls-pt-no-icon" else "")
+                ~on_pointer_enter:(fun _ ->
+                  if collapsable_title () then (
+                    Signal.set caret_hover true;
+                    Runtime.flush ()))
+                ~on_pointer_leave:(fun _ ->
+                  if Signal.get_state caret_hover then (
+                    Signal.set caret_hover false;
+                    Runtime.flush ()))
                 [ row ~key:"pt-ctrl" ~cross:`center ~width:24 ~height:24
                     ~style_class:
                       ("is-with-icon"
                       ^ (if title_collapsed then " bullet-closed" else "")
                       ^ " bullet-hidden block-control-wrap")
                     [ (let cs =
-                          (* TODO(component): the hover code queries
-                             ".block-control > span" — keep a real span
-                             until the caret migrates *)
-                          dom ~key:"pt-cs" ~tag:"span"
-                            ~style_class:"control-hide"
-                            [ box ~key:"pt-ra"
-                                ~style_class:
-                                  ("rotating-arrow"
+                          Ui_parts.class_signal
+                            (Signal.value caret_hover)
+                            (fun hover ->
+                              (if hover then "control-show cursor-pointer"
+                               else "control-hide")
+                              ^ " rotating-arrow"
+                              ^
+                              if title_collapsed then " collapsed"
+                              else " not-collapsed")
+                            (box ~key:"pt-ra"
+                               ~style_class:
+                                 ("control-hide rotating-arrow"
                                   ^ if title_collapsed then " collapsed"
                                     else " not-collapsed")
-                                [ Ui_parts.rotating_arrow "pt-arw" ]
-                            ]
+                               [ Ui_parts.rotating_arrow "pt-arw" ])
                         in
                         Ui_parts.pressable
                           ~on_press:(fun _ ->
@@ -611,9 +603,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
           list_wrap ]
   in
   column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-    [ (* TODO(component): data-cid/data-pu are imperative handles *)
-      dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~attrs:(("data-cid", scope) :: inner_attrs)
+    [ box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
+        ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
          @ [ add_button_el ?puuid
                ~has_children:(fun ctx ->
@@ -700,10 +691,10 @@ let refs_view_head key ?on_search title count : t =
             [ row ~key:"vh-si" ~cross:`center
                 [ view_ghost_btn "vh-sb" ?on_click:on_search "search" 15. ] ]
         ; box ~key:"vh-type" ~style_class:"view-action-type"
-            [ (* TODO(component): property-value-inner[data-type] is the
-                 property-cell contract — keep until the trigger rework *)
-              dom ~key:"vh-tv" ~style_class:"w-full property-value-inner"
-                ~attrs:[ ("data-type", "default") ]
+            [ (* property-value-inner[data-type] is the property-cell
+                 trigger contract (jtrigger/open-value flows) *)
+              box ~key:"vh-tv" ~style_class:"w-full property-value-inner"
+                ~data_attrs:[ ("data-type", "default") ]
                 [ box ~key:"vh-tj"
                     ~accessibility_identifier:("trigger-" ^ key)
                     ~grow:1. ~style_class:"jtrigger"
@@ -777,14 +768,13 @@ let ref_group ?(extra_attrs = []) ?(parents = []) (name, blocks) : t =
     [ column ~key:"gi"
         [ foldable_title (key ^ "-t")
             (box ~key:"grp"
-               [ (* TODO(component): a.page-ref[data-ref][draggable] is
-                    read by sidebar_state/right-sidebar — imperative
-                    link contract *)
-                 dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
-                   ~attrs:
+               [ (* a.page-ref[data-ref][draggable] is read by
+                    sidebar_state/right-sidebar *)
+                 link ~key:"grl" ~style_class:"page-ref relative"
+                   ~data_attrs:
                      [ ("tabindex", "0"); ("draggable", "true")
                      ; ("data-ref", String.lowercase_ascii name) ]
-                   [ text ~key:"grs" ~value:name [] ]
+                   ~text:name []
                ])
         ; foldable_content (key ^ "-b")
             (* cljs: .-ml-2 > div#<viewid> > div(partition) >
@@ -864,9 +854,9 @@ let references_row (b : Model.block) : t =
       column
         ~key:("ref-row-" ^ Option.value b.block_uuid ~default:"")
         ~style_class:"references-item"
-        [ (* TODO(component): a[data-ref] read by sidebar_state *)
-          dom ~key:"pn" ~tag:"a" ~style_class:"page-ref"
-            ~attrs:[ ("data-ref", pname) ] ~text:pname []
+        [ (* a.page-ref[data-ref] is read by sidebar_state *)
+          link ~key:"pn" ~style_class:"page-ref"
+            ~data_attrs:[ ("data-ref", pname) ] ~text:pname []
         ; Tree.block_row_static b
         ]
   | None -> Tree.block_row_static b
@@ -880,9 +870,9 @@ let ref_item (b : Model.block) : t =
     [ (match b.Model.block_page_name with
        | None -> box []
        | Some name ->
-           (* TODO(component): a[data-ref] read by sidebar_state *)
-           dom ~tag:"a" ~style_class:"references-item-page"
-             ~attrs:[ ("data-ref", name) ]
+           (* a.references-item-page[data-ref] is read by sidebar_state *)
+           link ~style_class:"references-item-page"
+             ~data_attrs:[ ("data-ref", name) ]
              ~text:name [])
     ; Tree.block_row b
     ]
@@ -1108,12 +1098,11 @@ let journal_item_sig (ms : Model.t Signal.signal)
       "journal-item content relative"
       ^ if is_last () then " journal-last-item" else "")
     (column ~key:("ji-" ^ key)
-    [ (* TODO(component): data-page-tags is the page-wrap plugin
-         contract — imperative attr *)
-      dom ~key:("jiw-" ^ key)
+    [ (* data-page-tags is the page-wrap plugin contract *)
+      box ~key:("jiw-" ^ key)
         ~style_class:
           "flex-1 page relative cp__page-inner-wrap is-journals"
-        ~attrs:(page_wrap_attrs p0)
+        ~data_attrs:(page_wrap_attrs p0)
         [ column ~key:("jip-" ^ key) ~gap:32
             ~style_class:"relative page-inner"
             [ row ~key:("jit-" ^ key) ~main:`space_between
@@ -1129,20 +1118,17 @@ let journal_item_sig (ms : Model.t Signal.signal)
                        ps ms)
                 ]
             ; column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-                [ (* TODO(component): data-cid/data-pu are imperative
-                     handles *)
-                  dom ~key:"page-blocks-inner"
+                [ (* data-cid/data-pu are imperative handles *)
+                  box ~key:"page-blocks-inner"
                     ~style_class:"page-blocks-inner relative"
-                    ~attrs:
+                    ~data_attrs:
                       [ ("data-cid", "main"); ("data-pu", key) ]
                     (* cljs plain-block-list emits no .blocks-list-wrap
                        on empty pages *)
                     [ Logseq_dom.if_ ~test:nonempty
-                        ((* TODO(component): data-level is imperative
-                            scaffold *)
-                         dom ~key:"blw"
+                        (box ~key:"blw"
                            ~style_class:"blocks-list-wrap"
-                           ~attrs:[ ("data-level", "0") ]
+                           ~data_attrs:[ ("data-level", "0") ]
                            [ Logseq_dom.keyed ~source:blocks_sig
                                ~key:Tree.block_key ~cmp:String.compare
                                ~mount:(Tree.block_row_sig ~scope:"main")
@@ -1314,10 +1300,10 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
   in
   (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
   column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-    [ (* TODO(component): data-cid/data-pu are imperative handles *)
-      dom ~key:"page-blocks-inner"
+    [ (* data-cid/data-pu are imperative handles *)
+      box ~key:"page-blocks-inner"
         ~style_class:"page-blocks-inner relative"
-        ~attrs:
+        ~data_attrs:
           (("data-cid", scope)
            :: (match puuid with
                | Some u -> [ ("data-pu", u) ]
@@ -1461,20 +1447,20 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
     | Some p -> p.page_uuid
     | None -> None
   in
-  ((* TODO(component): dynamic attrs (data-page-tags) have no
-      component equivalent; the class signal rides Ui_parts.class_signal on
-      standard kinds but can't share the node with attrs *)
-   dom ~key:"page" ~style_class_signal:(Logseq_dom.class_signal ms page_cls)
-      ~attrs_signal_v:(Logseq_dom.attrs_signal ms wrap_attrs_of)
-    [ column ~key:"page-inner" ~gap:32
-        ~style_class:"relative page-inner"
-        [ reactive ~equal:top_eq top_view ms
-        ; page_tabs_el m0
-        ; blocks_area ~scope ~library ?puuid ms
-        ]
-    ; reactive ~equal:refs_eq refs_wrap ms
-    ; Selection_bar.view ()
-    ])
+  (* the class signal rides Ui_parts.class_signal (kinds take only a
+     static ~style_class); the dynamic data-page-tags wrap attrs ride
+     ~data_attrs_signal *)
+  (Ui_parts.class_signal ms page_cls
+     (box ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
+        [ column ~key:"page-inner" ~gap:32
+            ~style_class:"relative page-inner"
+            [ reactive ~equal:top_eq top_view ms
+            ; page_tabs_el m0
+            ; blocks_area ~scope ~library ?puuid ms
+            ]
+        ; reactive ~equal:refs_eq refs_wrap ms
+        ; Selection_bar.view ()
+        ]))
     ctx parent
 
 (* the route-root dynamic segment — page routes keep the region mounted

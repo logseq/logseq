@@ -360,12 +360,11 @@ let item_body st idx (it : Sidebar_state.item) =
              ; object_tabs_host it
              ; box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
-                 [ (* TODO(component): data-cid is read by
-                      editor_actions' [data-cid] closest queries — no
-                      prop carries it *)
-                   dom ~key:("pbin-" ^ it.key)
+                 [ (* data-cid is read by editor_actions' [data-cid]
+                      closest queries *)
+                   box ~key:("pbin-" ^ it.key)
                      ~style_class:"page-blocks-inner relative"
-                     ~attrs:[ ("data-cid", "sidebar") ]
+                     ~data_attrs:[ ("data-cid", "sidebar") ]
                      (List.map
                         (Tree.block_row ~scope:"sidebar")
                         it.blocks)

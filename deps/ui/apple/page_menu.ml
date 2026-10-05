@@ -215,21 +215,18 @@ let confirm_view (c : Model.confirm) =
     Runtime.send (Action.Confirm_set None);
     Runtime.flush ()
   in
-  (* TODO(component): backdrop dismiss filters click events on
-     targetClass — no component equivalent for event-target
-     inspection *)
-  dom ~key:"alertdlg-overlay" ~tag:"div"
+  (* backdrop dismiss: only the overlay itself closes — the press-detail
+     payload's target_class is the deepest hit *)
+  Lui_elements.column ~key:"alertdlg-overlay"
     ~style_class:"ui__alert-dialog-overlay"
-    ~events:"click"
-    ~on_dom_event:(fun name payload ->
-      (* only the backdrop itself dismisses — clicks inside the
-         content bubble here but target the dialog *)
-      if
-        name = "click"
-        && I18n.contains
-             (Platform.payload_str payload "targetClass")
-             "ui__alert-dialog-overlay"
-      then close ())
+    ~on_press_detail:(fun ev ->
+      match ev with
+      | Lui_protocol.PressDetail (_, d) ->
+          if
+            I18n.contains d.Lui_protocol.target_class
+              "ui__alert-dialog-overlay"
+          then close ()
+      | _ -> ())
     [ Lui_elements.column ~key:"alertdlg"
         ~style_class:"ui__alert-dialog-content"
         [ (* cljs dialog-confirm title: flex gap-2 items-center >

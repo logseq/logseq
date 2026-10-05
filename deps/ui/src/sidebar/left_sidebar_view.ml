@@ -335,66 +335,48 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     | Some u -> u
     | None -> p.Model.page_title
   in
-  let open_lp payload =
-    let x = Platform.payload_num payload "clientX" in
-    let y = Platform.payload_num payload "clientY" in
-    Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~x ~y
-  in
   (* li wrapper: list_item would emit a <button> on web around the
      interactive .link-item anchor + dots button (nested interactives) —
-     a plain container keeps the class hook without the wrong semantics *)
-  box ~key ~style_class:li_class
-    [ (* TODO(component): the anchor's click handling needs the raw DOM
-         event — shift+click opens the page in the sidebar and clicks on
-         the dots button (targetClass) open the lp menu at pointer
-         coordinates; LUI press events carry neither modifiers nor
-         coordinates. data-lp-* attrs feed the document-level contextmenu
-         handler in sidebar_state. Keep the smallest dom anchor until a
-         logseq-link extension owns this. *)
-      dom ~tag:"a" ~style_class:"link-item group"
-        ~attrs:
+     a column keeps the class hook, and its press-detail handler reads
+     the deepest hit's class (dots button -> lp menu, anything else ->
+     navigate; shift opens in the right sidebar). The data-lp-* attrs
+     still feed the document-level contextmenu handler in
+     sidebar_state. *)
+  column ~key ~style_class:li_class
+    ~on_press_detail:(fun ev ->
+      match ev with
+      | Lui_protocol.PressDetail (_, d) ->
+          let cls = d.Lui_protocol.target_class in
+          if
+            Str_util.contains cls "sidebar-page-actions"
+            || Str_util.contains cls "ls-icon-dots"
+          then
+            Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~x:d.x
+              ~y:d.y
+          else
+            let shift = d.Lui_protocol.modifiers land 2 <> 0 in
+            (* navigate by title: #/page/<uuid> hashes hit the
+               Router.page_ref lookup-ref bug (see sidebar_state). *)
+            if shift then
+              match p.Model.page_uuid with
+              | Some u -> Sidebar_state.open_uuid st u
+              | None -> ()
+            else
+              Sidebar_state.navigate_to_page
+                (match p.Model.page_title with
+                 | "" -> Option.value p.Model.page_uuid ~default:""
+                 | title -> title)
+      | _ -> ())
+    [ link ~style_class:"link-item group"
+        ~data_attrs:
           [ ("data-lp-ref", lp_ref)
           ; ("data-lp-recent", if recent then "1" else "0") ]
-        ~events:"click"
-        ~on_dom_event:(fun name payload ->
-          if name = "click" then (
-            let cls =
-              match payload with
-              | Some pl -> (
-                  try Platform.event_str (Js.Json.parseExn pl) "targetClass"
-                  with _ -> "")
-              | None -> ""
-            in
-            if
-              Str_util.contains cls "sidebar-page-actions"
-              || Str_util.contains cls "ls-icon-dots" then
-              open_lp payload
-            else
-              let shift =
-                match payload with
-                | Some pl -> (
-                    try Sidebar_state.jbool "shiftKey" (Js.Json.parseExn pl)
-                    with _ -> false)
-                | None -> false
-              in
-              (* navigate by title: #/page/<uuid> hashes hit the
-                 Router.page_ref lookup-ref bug (see sidebar_state). *)
-              if shift then
-                match p.Model.page_uuid with
-                | Some u -> Sidebar_state.open_uuid st u
-                | None -> ()
-              else
-                Sidebar_state.navigate_to_page
-                  (match p.Model.page_title with
-                   | "" -> Option.value p.Model.page_uuid ~default:""
-                   | title -> title)))
         [ box ~style_class:"page-icon" [ icon_ "file" ]
         ; text ~style_class:"page-title" ~value:p.Model.page_title []
-        (* TODO(component): cljs .sidebar-page-actions dots button inside
-           .link-item — kept as dom so its class hooks
-           (sidebar-page-actions, ls-icon-dots) still reach the anchor's
-           targetClass check; migrates with the link extension *)
-        ; dom ~tag:"button"
+        (* cljs .sidebar-page-actions dots button inside .link-item —
+           its class hooks (sidebar-page-actions, ls-icon-dots) still
+           reach the row's target_class check *)
+        ; button ~variant:`ghost ~size:`icon
             ~style_class:
               (* cljs shui/button :size :sm :variant :ghost + the
                  sidebar-page-actions tail classes *)
@@ -409,11 +391,10 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                !bg-transparent right-0 top-0 px-1.5 scale-75 \
                opacity-40 hover:opacity-80 active:opacity-100 text-sm \
                transition-colors ui__button whitespace-nowrap"
-            (* cljs [:i.relative {:style {:top "4px"}} (tabler-icon "dots")] —
-               tabler-icon default size 18 *)
-            [ dom ~tag:"i" ~style_class:"relative"
-                ~attrs:[ ("style", "top: 4px") ]
-                [ Icons.icon ~size:18. "dots" ] ] ]
+            (* cljs [:i.relative {:style {:top "4px"}}] — the top offset
+               rides a stylesheet rule now *)
+            [ Icons.icon ~size:18. ~cls:"relative" "dots" ]
+        ]
     ]
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a

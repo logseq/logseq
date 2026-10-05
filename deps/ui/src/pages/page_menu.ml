@@ -150,10 +150,9 @@ let user_item () : Lui_elements.t =
   let email = Option.value (Rtc_flows.email ()) ~default:"" in
   let masked = Signal.state ctx.Lui_ui.ui_scheduler true in
   let maskedv = Signal.value masked in
-  (* TODO(component): e2e requires div[role='menuitem'] — role/tabindex
-     have no component prop *)
-  dom ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"
-    ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
+  (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs *)
+  box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"
+    ~data_attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
     [ column ~key:"u-span" ~style_class:"relative"
         [ text ~key:"u-name" ~value:username []
         ; row ~key:"u-mail" ~cross:`center
@@ -303,35 +302,36 @@ let confirm_view (c : Model.confirm) =
     Runtime.send (Action.Confirm_set None);
     Runtime.flush ()
   in
-  (* TODO(component): backdrop dismiss needs the targetClass payload *)
-  dom ~key:"alertdlg-overlay" ~tag:"div"
+  (* backdrop dismiss: only the overlay itself closes — clicks inside
+     the content bubble here but target the dialog *)
+  column ~key:"alertdlg-overlay"
     ~style_class:"ui__alert-dialog-overlay"
-    ~events:"click"
-    ~on_dom_event:(fun name payload ->
-      (* only the backdrop itself dismisses — clicks inside the
-         content bubble here but target the dialog *)
-      if
-        name = "click"
-        && I18n.contains
-             (Platform.payload_str payload "targetClass")
-             "ui__alert-dialog-overlay"
-      then close ())
-    [ (* TODO(component): e2e requires div[role='alertdialog'] *)
-      dom ~key:"alertdlg" ~tag:"div"
-        ~attrs:[ ("role", "alertdialog") ]
+    ~on_press_detail:(fun ev ->
+      match ev with
+      | Lui_protocol.PressDetail (_, d) ->
+          if
+            I18n.contains d.Lui_protocol.target_class
+              "ui__alert-dialog-overlay"
+          then close ()
+      | _ -> ())
+    [ (* e2e requires div[role='alertdialog'] *)
+      box ~key:"alertdlg"
+        ~data_attrs:[ ("role", "alertdialog") ]
         ~style_class:"ui__alert-dialog-content"
-        [ (* TODO(component): heading is a leaf kind — keep h2 while
-             an icon can sit inside the title *)
-          dom ~key:"adlg-t" ~tag:"h2"
-            ~style_class:"ui__alert-dialog-title"
-            [ (match icon_opt with
-               | Some i ->
-                   (* cljs dialog-confirm title: flex gap-2 items-center
-                      > icon + text *)
-                   row ~key:"adlg-tw" ~gap:8 ~cross:`center
-                     ~style_class:"ls-alert-title"
-                     [ i; text ~key:"adlg-tx" ~value:title [] ]
-               | None -> text ~key:"adlg-tx" ~value:title []) ]
+        [ (* cljs dialog-confirm title: flex gap-2 items-center > icon +
+             text; the heading kind is a leaf, so the row carries the
+             pair and ~as_ keeps the h2 tag *)
+          (match icon_opt with
+           | Some i ->
+               row ~key:"adlg-tw" ~gap:8 ~cross:`center
+                 ~style_class:"ls-alert-title"
+                 [ i
+                 ; heading ~key:"adlg-t" ~level:2 ~as_:`H2
+                     ~style_class:"ui__alert-dialog-title" ~value:title []
+                 ]
+           | None ->
+               heading ~key:"adlg-t" ~level:2 ~as_:`H2
+                 ~style_class:"ui__alert-dialog-title" ~value:title [])
         ; text ~key:"adlg-d" ~style_class:desc_cls ~value:desc []
         ; row ~key:"adlg-f" ~style_class:"ui__alert-dialog-footer"
             [ button ~key:"adlg-cancel" ~variant:`outline

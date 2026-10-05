@@ -842,6 +842,11 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 
           .sidebar-page-actions {
             display: none;
+
+            /* cljs [:i.relative {:style {:top "4px"}}] around the dots icon */
+            .ls-icon-dots {
+              top: 4px;
+            }
           }
         }
       }
@@ -1620,6 +1625,14 @@ a.page-title {
       top: 0.625rem;
     }
   }
+}
+
+.block-main-container.is-page-title-row {
+  margin-left: -61px;
+}
+
+.block-main-container.is-page-title-row.ls-pt-no-icon {
+  margin-left: -55px;
 }
 
 .block-main-container.is-page-title-row > .block-control-wrap {
@@ -2653,8 +2666,8 @@ html.custom-scrollbar {
 }
 
 a.close svg,
-span.rotating-arrow svg,
-span.rotating-arrow .lui-icon {
+.rotating-arrow svg,
+.rotating-arrow .lui-icon {
   color: var(--ls-primary-text-color);
 }
 
