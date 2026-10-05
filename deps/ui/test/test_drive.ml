@@ -122,7 +122,10 @@ let dom_event ?payload (n : M.node) name =
   S.extension_event (s ()) ~node:n.M.id ~identifier:ident ~name:"dom-event"
     ~fields
 
-let click_node n = dom_event n "click"
+let click_node n =
+  if String.length n.M.kind > 10 && String.sub n.M.kind 0 10 = "extension:"
+  then dom_event n "click"
+  else S.press (s ()) n.M.id
 
 let click_sel str =
   match first str with
