@@ -68,10 +68,19 @@ let wait_editing_uuid env =
   loop ()
 
 let get_edit_block_container env =
-  let* () = E2e_assert.have_count ~timeout:15000. env editor_q 1 in
-  Js.Promise.resolve
-    (Playwright.locator_first
-       (Pw.qq env ".ls-block" ~has:(Pw.q env editor_q)))
+  (* the editing block's uuid identifies the live editor — the plain
+     count=1 check flakes when a stale textarea coexists briefly *)
+  let* u = wait_editing_uuid env in
+  match u with
+  | Some uuid ->
+      Js.Promise.resolve
+        (Playwright.locator_first
+           (Pw.qq env ".ls-block" ~has:(Pw.q env ("#edit-block-" ^ uuid))))
+  | None ->
+      let* () = E2e_assert.have_count ~timeout:30000. env editor_q 1 in
+      Js.Promise.resolve
+        (Playwright.locator_first
+           (Pw.qq env ".ls-block" ~has:(Pw.q env editor_q)))
 
 (** replaces the focused input's value with [text] *)
 let input env text = Pw.fill env "*:focus" text

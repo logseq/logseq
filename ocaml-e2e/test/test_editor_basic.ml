@@ -1135,7 +1135,20 @@ let () =
         let* () = Pw.wait_for_hidden env journal_selector in
         let* () = set_journals_scroll_position env "start" in
         (* the virtualized remount is slow under parallel load *)
-        let* () = Pw.wait_for ~timeout:60000. env last_block_selector in
+        let* () =
+          Pw.catch_timeout
+            (Js.Promise.then_ (fun () -> Js.Promise.resolve ())
+               (Pw.wait_for ~timeout:60000. env last_block_selector))
+            (fun () ->
+              let* dump =
+                Pw.eval_js env
+                  "(() => JSON.stringify({scrollTop: document.querySelector('#main-content-container')?.scrollTop, scrollH: document.querySelector('#main-content-container')?.scrollHeight, items: [...document.querySelectorAll('#journals .journal-item')].map(i => ({blocks: i.querySelectorAll('.ls-block').length, txt: i.textContent.slice(0,80)})), virtuoso: document.querySelectorAll('#journals [data-virtuoso-scroller]').length}))()"
+              in
+              let* () =
+                Js.Promise.resolve (Js.log2 "[journal-remount-dbg]" dump)
+              in
+              Pw.wait_for ~timeout:1000. env last_block_selector)
+        in
         let* metrics = journals_layout_metrics env in
         let* remounted_height =
           mounted_journal_height env first_block_title
