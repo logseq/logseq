@@ -174,15 +174,41 @@ let remove_remote_graph env graph_name =
   remove_graph env ~menu_item:".delete-remote-graph-menu-item" graph_name
 
 let switch_graph env to_graph_name ~wait_sync ~need_input_password =
-  let* () = goto_all_graphs env in
-  let* () =
-    Pw.click_l
-      (Playwright.locator_last
-         (Pw.q env
-            (Printf.sprintf
-               "div[data-testid='logseq_db_%s'] span:has-text('%s')"
-               to_graph_name to_graph_name)))
+  (* clicking the graph row can hit a stale element while the all-graphs
+     list re-renders — verify the app actually navigated away from #/ and
+     retry the click, instead of waiting on a page that never loads *)
+  let rec click_until_navigated tries =
+    let* () = goto_all_graphs env in
+    let* () =
+      Pw.click_l
+        (Playwright.locator_last
+           (Pw.q env
+              (Printf.sprintf
+                 "div[data-testid='logseq_db_%s'] span:has-text('%s')"
+                 to_graph_name to_graph_name)))
+    in
+    let deadline = Js.Date.now () +. 15000. in
+    let rec poll () =
+      let* hash =
+        Pw.eval_js env "(() => location.hash)()"
+        |> Js.Promise.then_ (fun h ->
+               Js.Promise.resolve
+                 (match Js.Json.decodeString h with
+                  | Some s -> s
+                  | None -> ""))
+      in
+      if hash <> "#/" && hash <> "" then Js.Promise.resolve true
+      else if Js.Date.now () > deadline then Js.Promise.resolve false
+      else
+        let* () = Pw.wait_timeout env 250. in
+        poll ()
+    in
+    let* navigated = poll () in
+    if navigated then Js.Promise.resolve ()
+    else if tries <= 1 then Js.Promise.resolve ()
+    else click_until_navigated (tries - 1)
   in
+  let* () = click_until_navigated 3 in
   let* () =
     if wait_sync then
       let* () =
