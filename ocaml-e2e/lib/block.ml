@@ -33,22 +33,37 @@ let rec open_last_block ?(in_retry = false) env =
          .ls-block-classed too) and dispatch a real insert-new-block.  An
          open editor means the last block is already being edited — keep
          hands off. *)
-      let rec click_last tries =
+      let deadline = Js.Date.now () +. 60000. in
+      let rec click_last () =
         (* gate on the app's editing state, not DOM textareas — a stale
            editor stays mounted and would skip the click forever *)
         let* editing = Util.editing_uuid env in
         if editing <> None then Js.Promise.resolve ()
+        else if Js.Date.now () > deadline then
+          Js.Promise.reject
+            (Failure "open_last_block: no editor opened within 60s")
         else
           Js.Promise.catch
-            (fun e ->
-              if tries <= 0 then Playwright.throw_error e
-              else
-                let* () = Pw.wait_timeout env 300. in
-                click_last (tries - 1))
+            (fun _ ->
+              let* () = Pw.wait_timeout env 300. in
+              click_last ())
             (let* el = last_page_block_content env in
-             Pw.click_l el)
+             let* () = Pw.click_l el in
+             (* the click can land on a stale element and still
+                "succeed" — verify editing state actually appeared
+                before giving the editor 60s to mount *)
+             let click_deadline = Js.Date.now () +. 5000. in
+             let rec wait_editing () =
+               let* u = Util.editing_uuid env in
+               if u <> None || Js.Date.now () > click_deadline then
+                 Js.Promise.resolve ()
+               else
+                 let* () = Pw.wait_timeout env 150. in
+                 wait_editing ()
+             in
+             wait_editing ())
       in
-      click_last 80 (* ~24s — .block-content can mount late *)
+      click_last ()
   in
   if in_retry then E2e_assert.editor_mode env
   else
