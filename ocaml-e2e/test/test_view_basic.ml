@@ -358,12 +358,19 @@ let () =
       Pw.click_l
         (has_text env "Status" "[role='menuitemcheckbox']")
     in
+    (* confirm the group-by toggle registered before leaving the menu —
+       otherwise a lost click surfaces later as missing group bodies *)
     let* _ =
-      E2e_assert.is_visible_l ~timeout:15000.
+      E2e_assert.is_visible_l ~timeout:10000.
+        (has_text env "Status"
+           "[role='menuitemcheckbox'][aria-checked='true']")
+    in
+    let* _ =
+      E2e_assert.is_visible_l ~timeout:30000.
         (has_text env "Open" ".ls-view-body")
     in
     let* _ =
-      E2e_assert.is_visible_l ~timeout:15000.
+      E2e_assert.is_visible_l ~timeout:30000.
         (has_text env "Closed" ".ls-view-body")
     in
     let* () = Util.double_esc env in
