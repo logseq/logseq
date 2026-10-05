@@ -327,10 +327,6 @@ final class NSReferenceBox {
     // delivers the click itself.
     mouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) {
       event in
-      if LogseqRuntime.perfLogging {
-        FileHandle.standardError.write(
-          "DBG mu-down t=\(CFAbsoluteTimeGetCurrent())\n".data(using: .utf8)!)
-      }
       guard let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
@@ -352,25 +348,13 @@ final class NSReferenceBox {
     // never consumed.
     mouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) {
       event in
-      if LogseqRuntime.perfLogging {
-        FileHandle.standardError.write(
-          "DBG mu-up t=\(CFAbsoluteTimeGetCurrent())\n".data(using: .utf8)!)
-      }
       guard let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
       guard let hit = LogseqFrameStore.hitTest(point),
         let context = LogseqElementRegistry.shared.contextOwning(nodeID: hit.nodeID)
       else {
-        FileHandle.standardError.write(
-          "DBG mouseUp no-hit at \(Int(point.x)),\(Int(point.y))\n"
-            .data(using: .utf8)!)
         return event
-      }
-      if LogseqRuntime.perfLogging {
-        FileHandle.standardError.write(
-          "DBG mu-hit node=\(hit.nodeID) tag=\(hit.tag) at \(Int(point.x)),\(Int(point.y))\n"
-            .data(using: .utf8)!)
       }
       let flags = event.modifierFlags
       runOnMainDeferred {

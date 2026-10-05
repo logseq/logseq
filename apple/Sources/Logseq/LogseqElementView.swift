@@ -824,11 +824,6 @@ struct LogseqElementView: View {
       || (rowAttrs["data-db-collapsable"] as? String) == "true"
     probe.arrowCollapsed = (rowAttrs["data-collapsed"] as? String) == "true"
     if !bailReason.isEmpty {
-      if LogseqRuntime.perfLogging {
-        FileHandle.standardError.write(
-          "DBG probe-bail node=\(nodeID) why=\(bailReason)\n"
-            .data(using: .utf8)!)
-      }
       return nil
     }
     // Siblings of the main container (children column, properties area)
@@ -972,9 +967,6 @@ struct LogseqElementView: View {
     // frame later via onScrollGeometryChange, and an eager first frame would
     // lay out the entire 8k-node feed before virtualization could engage.
     if LogseqPerf.detail, children.count >= logseqVirtualColumnThreshold {
-      FileHandle.standardError.write(
-        "DBG virt-cand id=\(context.nodeID) kids=\(children.count) space=\(scrollEnv.space) vp=\(Int(scrollEnv.viewport)) cM=\(style.centerMain) cC=\(style.centerCross) txt=\(!effectiveText.isEmpty) html=\(!html.isEmpty)\n"
-          .data(using: .utf8)!)
     }
     guard scrollEnv.space != 0,
           !style.centerMain, !style.centerCross,
@@ -987,9 +979,6 @@ struct LogseqElementView: View {
       if oof || s.grow || s.fullHeight || s.outOfFlowFillY { return false }
     }
     if LogseqPerf.detail {
-      FileHandle.standardError.write(
-        "DBG virt id=\(context.nodeID) kids=\(children.count)\n"
-          .data(using: .utf8)!)
     }
     return true
   }
@@ -2575,8 +2564,6 @@ private struct LogseqFlatBlockRow: View {
         on: nodeID, name: "dom-event",
         values: ["name": .string("click"), "payload": .string(json)])
     } catch {
-      FileHandle.standardError.write(
-        "DBG emitClick FAIL node=\(nodeID) err=\(error)\n".data(using: .utf8)!)
     }
   }
 
@@ -2665,11 +2652,6 @@ private struct LogseqFlatBlockRow: View {
             }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
               action: { rect in
-                if LogseqRuntime.perfLogging {
-                  FileHandle.standardError.write(
-                    "DBG contentalias node=\(probe.contentID > 0 ? probe.contentID : probe.mainContainerID) r=\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width))x\(Int(rect.height))\n"
-                      .data(using: .utf8)!)
-                }
                 LogseqFrameStore.setAlias(
                   probe.contentID > 0 ? probe.contentID : probe.mainContainerID,
                   rect, tag: "div")
@@ -2807,9 +2789,6 @@ private struct LogseqFlatSpineResolved {
           probe == nil
           ? .bail : (probe!.textareaID > 0 ? .editor : .folded)
         if LogseqRuntime.perfLogging, kind != .folded {
-          FileHandle.standardError.write(
-            "DBG spine-entry node=\(id) key=\((a["blockid"] as? String) ?? "?") kind=\(kind)\n"
-              .data(using: .utf8)!)
         }
         out.entries.append(
           LogseqFlatSpineEntry(
@@ -2961,11 +2940,6 @@ private struct LogseqFlatSpineRow: View {
       .onHover { inside in hoveredBorder = inside ? index : -1 }
       .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
         action: { rect in
-          if LogseqRuntime.perfLogging {
-            FileHandle.standardError.write(
-              "DBG strip border=\(borderID) row=\(entry.key) d=\(entry.depth) i=\(index) r=\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width))x\(Int(rect.height))\n"
-                .data(using: .utf8)!)
-          }
           LogseqFrameStore.setAlias(borderID, rect, tag: "div")
         }
       .padding(.leading, x - 2)
@@ -2986,11 +2960,6 @@ private struct LogseqFlatSpineRow: View {
     .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
       action: { rect in
         if entry.kind != .bail {
-          if LogseqRuntime.perfLogging {
-            FileHandle.standardError.write(
-              "DBG rowalias node=\(entry.nodeID) key=\(entry.key) d=\(entry.depth) r=\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width))x\(Int(rect.height))\n"
-                .data(using: .utf8)!)
-          }
           LogseqFrameStore.setAlias(entry.nodeID, rect, tag: "div")
         }
       }
