@@ -329,6 +329,10 @@ let can_history_forward () = !fwd_stack <> []
 let search_ref = ref ""
 let location_search () = !search_ref
 
+(* hosts pass the launched URL's query through here; tests use it to
+   reach flags like rtc-test mode *)
+let set_location_search s = search_ref := s
+
 let on_hash_change f = hash_change_fns := f :: !hash_change_fns
 
 (* URLSearchParams = k=v&.. query, percent-decoded *)
