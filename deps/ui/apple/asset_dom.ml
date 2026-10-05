@@ -8,7 +8,7 @@ module S = Editor_state
 module W = Wire
 
 let dom = Logseq_dom.dom
-let t = Logseq_dom.dom ~tag:"raw-text" []
+let t = Lui_elements.spacer ~key:"asset-dom" []
 
 let upload_files (_files : Js.Json.t array) : unit = ()
 
@@ -176,6 +176,10 @@ let upload_paths (paths : string list) =
                ignore (Outliner_ops.resync_open_editor ());
              Js.Promise.resolve ())
 
+(* TODO(component): hidden file input clicked imperatively via
+   `input#upload-file` (editor_actions.trigger_asset_upload) — the
+   file_picker kind is request-driven, not query-click, so this stays
+   a logseq-input until the trigger is rewired *)
 let upload_input key : Lui_elements.t =
   dom ~key ~tag:"input"
     ~attrs:[ ("type", "file"); ("hidden", "") ; ("id", "upload-file") ]
@@ -194,9 +198,10 @@ let file_cell_el (w : Wire.t) : Lui_elements.t =
       (Wire.map_get_string w "logseq.property.asset/type") ~default:""
   in
   let file = uuid ^ "." ^ ext in
-  dom ~style_class:"block-content overflow-hidden"
-    ~attrs:[ ("style", "max-height: 30px") ]
-    [ dom ~tag:"img"
+  Lui_elements.box ~style_class:"block-content" ~max_height:30
+    [ (* TODO(component): data-asset-file is the Swift asset-resolution
+         contract — no component attr channel *)
+      dom ~tag:"img"
         ~attrs:[ ("title", file); ("data-asset-file", file) ]
         [] ]
 
@@ -219,6 +224,8 @@ let file_cell (w : Wire.t) : Views_dom.el =
 let block_view uuid (b : Model.block) : Lui_elements.t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let is_pdf = ext = "pdf" in
+  (* TODO(component): data-asset-* attrs are the native
+     asset-resolution contract — no component attr channel *)
   dom ~key:("asset-" ^ uuid) ~tag:"div"
     ~style_class:
       ("asset-container" ^ if is_pdf then " ls-pdf-asset" else "")
@@ -229,10 +236,10 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
       if name = "click" && is_pdf then
         Pdf_assets.open_pdf_file ~uuid ~ext ~b)
     [ (if is_pdf then
-         dom ~tag:"a"
+         Lui_elements.text ~key:("asset-link-" ^ uuid)
            ~style_class:"ls-pdf-asset-link"
-           ~text:(uuid ^ "." ^ ext) []
-       else Logseq_dom.nothing) ]
+           ~value:(uuid ^ "." ^ ext) []
+       else Lui_elements.spacer ~key:("asset-empty-" ^ uuid) []) ]
 
 let install () =
   (* window-level file drop — the Swift host posts

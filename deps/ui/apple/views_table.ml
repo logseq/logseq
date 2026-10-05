@@ -20,6 +20,8 @@ module L = Lui_protocol
 
 type t = Lui_elements.t
 
+open Lui_elements
+
 let dom = D.dom
 let if_ = D.if_
 let keyed = D.keyed
@@ -30,9 +32,8 @@ let refresh inst = (V.ops ()).V.o_refresh inst
 
 (* schema icon names -> builtin variants; every other name resolves
    through the app icon registry (tabler svgs + custom paths like
-   "caret-right" registered in app_icons) — keep in sync with
-   src/views/views_table.ml *)
-let icon_of (name : string) : Lui_elements.icon =
+   "caret-right" registered in app_icons) *)
+let icon_of (name : string) : icon =
   match name with
   | "alert" -> `alert
   | "archive" -> `archive
@@ -90,7 +91,7 @@ let icon_of (name : string) : Lui_elements.icon =
 (* component-kind icon carrying the same ls-icon-* marker classes the
    imperative span emitted (ui__icon comes from the kind itself) *)
 let icon_el ?(cls = "") name : t =
-  Lui_elements.icon ~name:(icon_of name) ~point_size:16
+  icon ~name:(icon_of name) ~point_size:16
     ~style_class:
       ("ls-icon-" ^ name ^ if cls = "" then "" else " " ^ cls)
     []
@@ -98,8 +99,7 @@ let icon_el ?(cls = "") name : t =
 (* icons whose glyph flips with state (sort direction) — a reactive
    prop on one icon node, no remount *)
 let icon_dyn (sig_ : string Signal.signal) : t =
-  Lui_elements.icon ~name_signal:(Signal.map icon_of sig_) ~point_size:16
-    []
+  icon ~name:(reactive icon_of sig_) ~point_size:16 []
 
 (* ---------- columns ---------- *)
 
@@ -174,13 +174,8 @@ let column_size (c : V.column) =
   | "block/created-at" | "block/updated-at" -> 160
   | _ -> 180
 
-let size_style c =
-  let w = string_of_int (column_size c) in
-  "width:" ^ w ^ "px;min-width:" ^ w ^ "px"
-
-let inner_cls ?(select = false) () =
-  "flex align-middle w-full overflow-x-clip items-center"
-  ^ if select then " px-0" else " border-r px-2"
+let inner_cell children =
+  row ~cross:`center ~padding_horizontal:8 children
 
 let created_column : V.column =
   builtin_column "block/created-at" I.created_at "datetime" ()
@@ -341,75 +336,31 @@ let cell_value blk (c : V.column) : W.t =
 
 (* ---------- cells ---------- *)
 
-(* cljs shui checkbox renders a styled button[role=checkbox] with a
-   plain input[type=checkbox] sibling; the label toggles .peer styles *)
-let checkbox_cls ~jtrigger show =
-  "ui__checkbox peer h-4 w-4 shrink-0 rounded-sm border border-primary \
-   cursor-pointer flex transition-opacity focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring \
-   focus-visible:ring-offset-2 ring-offset-background \
-   disabled:cursor-not-allowed disabled:opacity-50 \
-   data-[checked]:bg-primary data-[checked]:text-primary-foreground"
-  ^ (if jtrigger then " jtrigger" else "")
-  ^ if show then " opacity-100" else " opacity-0"
-
-(* declarative shui checkbox: `shown` derives the checked bit from the
-   vstate; a mount-scoped hover state (label mouseover/out, like the old
-   imperative class flip) shows an unchecked box on hover *)
-let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle ~hover : t =
-  dom ~tag:"button" ~id
-    ~style_class_signal:
-      (Signal.map2
-         (fun (s : V.vstate) h ->
-           L.StringValue (checkbox_cls ~jtrigger (h || shown s)))
-         inst.V.st.Signal.state_signal hover.Signal.state_signal)
-    ~attrs_signal_v:
-      (D.attrs_signal inst.V.st.Signal.state_signal (fun s ->
-           let on = shown s in
-           [ ("type", "button"); ("tabindex", "0"); ("role", "checkbox")
-           ; ("aria-label", aria_label)
-           ; ("aria-checked", if on then "true" else "false")
-           ; ((if on then "data-checked" else "data-unchecked"), "") ]))
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then on_toggle (not (shown (V.get inst))))
+(* declarative checkbox: `shown` derives the checked bit from the
+   vstate. The label-hover reveal (mouseover/mouseout) is DOM-only and
+   gone — the box is always visible now *)
+let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
+  checkbox ~accessibility_identifier:id ~label:aria_label
+    ~style_class:(if jtrigger then "jtrigger" else "")
+    ~checked:(reactive shown (sig_of inst))
+    ~on_toggle:(fun ev ->
+      match ev with
+      | L.ToggleChanged (_, on) -> on_toggle on
+      | _ -> ())
     []
 
-(* cljs mounts a visually-hidden native input sibling inside the label
-   (1px clipped fixed box); a normal checkbox would overlap the button
-   and swallow its clicks *)
-let checkbox_hidden_input : t =
-  dom ~tag:"input"
-    ~attrs:
-      [ ("tabindex", "-1"); ("aria-hidden", "true"); ("type", "checkbox")
-      ; ( "style"
-        , "clip-path: inset(50%); overflow: hidden; white-space: nowrap; \
-           border: 0px; padding: 0px; width: 1px; height: 1px; margin: \
-           -1px; position: fixed; top: 0px; left: 0px;" ) ]
-    []
-
-(* cljs row-checkbox: label.jtrigger > shui checkbox; opacity flips on
-   hover of the label *)
+(* cljs row-checkbox: label.jtrigger > shui checkbox *)
 let select_cell inst ~row_uuid ~blk : t =
- fun ctx parent ->
-  let hover = Signal.state ctx.Lui_ui.ui_scheduler false in
   let dbid =
     match W.map_get_int blk "db/id" with
     | Some n -> string_of_int n
     | None -> row_uuid
   in
-  dom ~style_class:(inner_cls ~select:true ())
-    [ dom ~tag:"label"
-        ~style_class:
-          " jtrigger h-8 w-8 flex items-center justify-center \
-           cursor-pointer"
-        ~attrs:
-          [ ("for", dbid ^ "-checkbox"); ("data-table-row-select", "true") ]
-        ~events:"mouseover mouseout"
-        ~on_dom_event:(fun name _ ->
-          Runtime.signal_set hover (name = "mouseover"))
+  row ~cross:`center
+    [ row ~cross:`center ~main:`center ~width:32 ~height:32
+        ~style_class:"jtrigger"
         [ checkbox_el inst ~jtrigger:true ~id:(dbid ^ "-checkbox")
-            ~aria_label:I.select_row ~hover
+            ~aria_label:I.select_row
             ~shown:(fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
             ~on_toggle:(fun on ->
               V.update inst (fun s ->
@@ -417,76 +368,63 @@ let select_cell inst ~row_uuid ~blk : t =
                     V.selected =
                       (if on then V.Sset.add row_uuid s.V.selected
                        else V.Sset.remove row_uuid s.V.selected)
-                  }))
-        ; checkbox_hidden_input ]
+                  })) ]
     ]
-    ctx parent
 
 let open_row_sidebar row_uuid =
   Web_dom.dispatch_custom "ls:open-right-sidebar"
     (Js.Json.object_
        (Js.Dict.fromList [ ("uuid", Js.Json.string row_uuid) ]))
 
+let goto_page name =
+  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ name))
+
 let title_cell inst ~row_uuid ~blk (c : V.column) : t =
   let title = Wr.prop_text (cell_value blk c) in
   match inst.V.kind, W.get blk "block/name" with
   | V.KAllPages, Some (W.String name) ->
       (* cljs page-title-cell: div.flex.h-full.min-w-0.items-center >
-         a.page-ref.truncate; href prefers block/uuid *)
+         a.page-ref.truncate; href prefers block/uuid — the component
+         version is a pressable text; `title` (tooltip) has no prop *)
       let page_name =
         if row_uuid <> "" then row_uuid
         else if name <> "" then name
         else title
       in
-      dom ~style_class:(inner_cls ())
-        [ dom ~style_class:"flex h-full min-w-0 items-center"
-            [ dom ~tag:"a" ~style_class:"page-ref truncate"
-                ~attrs:
-                  [ ("href", "#/page/" ^ page_name); ("title", title) ]
-                ~text:title [] ]
+      inner_cell
+        [ row ~cross:`center ~grow:1.
+            [ text ~style_class:"page-ref" ~value:title
+                ~on_press:(fun _ -> goto_page page_name) [] ]
         ]
   | _ ->
       (* cljs table-block-title: flex row of text + hover "Open" ghost
-         buttons (.-right-1.absolute) that open the row in the sidebar *)
-      let open_btn_cls =
-        E.button_cls ~variant:"ghost"
-          ~cls:
-            "!p-1 w-6 h-6 bg-gray-01 opacity-0 transition-opacity \
-             duration-100 ease-in text-muted-foreground"
-          ()
-      in
+         buttons (.-right-1.absolute) that open the row in the sidebar —
+         the hover-only visibility is DOM-only; the buttons are always
+         rendered now *)
       let ghost icon_name title_ =
-        dom ~tag:"button" ~style_class:open_btn_cls
-          ~attrs:[ ("type", "button"); ("title", title_) ]
-          ~events:"click"
-          ~on_dom_event:(fun name _ ->
-            if name = "click" then open_row_sidebar row_uuid)
-          [ icon_el icon_name ]
+        button ~variant:`ghost ~size:`icon ~icon:(icon_of icon_name)
+          ~style_class:"bg-gray-01 text-muted-foreground" ~label:title_
+          ~on_press:(fun _ -> open_row_sidebar row_uuid) []
       in
-      dom ~style_class:(inner_cls ())
-        [ dom
-            ~style_class:
-              "table-block-title relative flex items-center items-center \
-               w-full h-full cursor-pointer"
-            ~events:"click"
-            ~on_dom_event:(fun name _ ->
-              if name = "click" then open_row_sidebar row_uuid)
-            [ dom ~style_class:"flex flex-row" [ dom ~text:title [] ]
-            ; dom ~style_class:"-right-1 absolute"
-                [ dom ~style_class:"flex flex-row items-center"
-                    [ ghost "arrow-right" I.open_
-                    ; ghost "layout-sidebar-right" I.open_in_sidebar ] ]
-            ]
-        ]
+      inner_cell
+        [ Ui_parts.pressable
+            ~on_press:(fun _ -> open_row_sidebar row_uuid)
+            (row ~cross:`center ~grow:1.
+               ~style_class:"table-block-title"
+               [ row [ text ~value:title [] ]
+               ; row ~cross:`center
+                   [ ghost "arrow-right" I.open_
+                   ; ghost "layout-sidebar-right" I.open_in_sidebar ]
+               ]) ]
 
 let prop_cell ~blk (c : V.column) : t =
   match cell_value blk c with
   | W.Map _ as v when Wr.ref_uuid v <> None ->
       let t_ = Option.value (Wr.ref_title v) ~default:"" in
       let href = Option.value (Wr.ref_uuid v) ~default:t_ in
-      dom ~style_class:(inner_cls ())
-        [ dom ~tag:"a" ~style_class:"page-ref"
-            ~attrs:[ ("href", "#/page/" ^ href) ] ~text:t_ [] ]
+      inner_cell
+        [ text ~style_class:"page-ref" ~value:t_
+            ~on_press:(fun _ -> goto_page href) [] ]
   | W.Array xs when c.V.c_many ->
       (* cljs pv: .property-value-inner > .multi-values > select-items;
          the implicit Page class is hidden *)
@@ -505,69 +443,34 @@ let prop_cell ~blk (c : V.column) : t =
             let t_ = Wr.prop_text x in
             if c.V.c_id = "block/tags" then
               (* cljs select-item -> page-cp {:tag?} ->
-                 a.relative.tag[data-ref][data-uuid][draggable] > span *)
-              let attrs =
-                ("data-ref", String.lowercase_ascii t_)
-                :: (match Wr.ref_uuid x with
-                    | Some u -> [ ("data-uuid", u) ]
-                    | None -> [])
-                @ [ ("draggable", "true"); ("tabindex", "0") ]
-              in
-              [ dom ~style_class:"select-item cursor-pointer"
-                  [ dom ~tag:"a" ~style_class:"relative tag" ~attrs
-                      [ dom ~tag:"span" ~text:("#" ^ t_) [] ] ] ]
+                 a.relative.tag[data-ref][data-uuid][draggable] > span —
+                 the data-*/draggable/tabindex markers are DOM-only and
+                 dropped; the tag carries no href so it stays inert *)
+              [ box ~style_class:"select-item"
+                  [ text ~style_class:"relative tag" ~value:("#" ^ t_) [] ]
+              ]
             else
-              (if i > 0
-               then
-                 [ dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", ",") ] [] ]
-               else [])
-              @ [ dom
-                    [ dom ~tag:"a" ~style_class:"page-ref"
-                        ~attrs:
-                          [ ( "href"
-                            , "#/page/"
-                              ^ Option.value (Wr.ref_uuid x) ~default:t_ )
-                          ]
-                        ~text:t_ [] ] ])
+              (if i > 0 then [ text ~value:"," [] ] else [])
+              @ [ box
+                    [ text ~style_class:"page-ref" ~value:t_
+                        ~on_press:(fun _ ->
+                          goto_page
+                            (Option.value (Wr.ref_uuid x) ~default:t_))
+                        [] ] ])
              items)
       in
-      dom ~style_class:(inner_cls ())
-        [ dom ~style_class:"property-value-inner w-full"
-            [ dom
-                ~style_class:
-                  "flex flex-1 flex-row flex-wrap gap-1 items-center \
-                   jtrigger min-w-0 multi-values"
-                item_els ] ]
+      inner_cell
+        [ box ~style_class:"property-value-inner"
+            [ row ~cross:`center ~grow:1. ~gap:4
+                ~style_class:"jtrigger multi-values" item_els ] ]
   | W.Bool b when c.V.c_type = "checkbox" ->
-      dom ~style_class:(inner_cls ())
-        [ dom ~tag:"input"
-            ~attrs:
-              ([ ("type", "checkbox"); ("disabled", "true") ]
-               @ if b then [ ("checked", "checked") ] else [])
-            [] ]
-  | v ->
-      dom ~style_class:(inner_cls ())
-        [ dom ~text:(fmt_cell_value c v) [] ]
-
-(* cljs title attr on cells = the string cell value only — numeric and
-   datetime cells render none *)
-let cell_title blk (c : V.column) =
-  match c.V.c_id with
-  | "select" | "id" -> None
-  | _ -> (
-      match cell_value blk c with
-      | W.Int _ | W.Int64 _ | W.Date_ms _ -> None
-      | v -> (
-          match fmt_cell_value c v with
-          | "" -> None
-          | t -> Some t))
+      inner_cell [ checkbox ~checked:b ~disabled:true [] ]
+  | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
 
 let cell_el inst ~row_uuid ~blk (c : V.column) : t =
-  let title_attr =
-    match cell_title blk c with Some t -> [ ("title", t) ] | None -> []
-  in
-  dom ~style_class:"ls-table-cell flex relative h-full"
-    ~attrs:([ ("style", size_style c); ("tabindex", "0") ] @ title_attr)
+  (* the cljs `title` tooltip and tabindex have no component props *)
+  box ~style_class:"ls-table-cell" ~width:(column_size c)
+    ~min_width:(column_size c)
     [ (match c.V.c_id with
        | "select" -> select_cell inst ~row_uuid ~blk
        | "block/title" -> title_cell inst ~row_uuid ~blk c
@@ -589,18 +492,12 @@ let sortable c =
     (List.mem c.V.c_id
        [ "select"; "id"; "block/page"; "block.temp/refs-count" ])
 
-(* cljs header-checkbox: opacity-100 while hovered or any selection *)
+(* cljs header-checkbox: the hover reveal is DOM-only — always
+   visible now *)
 let header_select_cell inst : t =
- fun ctx parent ->
-  let hover = Signal.state ctx.Lui_ui.ui_scheduler false in
   let shown (s : V.vstate) = not (V.Sset.is_empty s.V.selected) in
-  dom ~tag:"label"
-    ~style_class:"h-8 w-8 flex items-center justify-center cursor-pointer"
-    ~attrs:[ ("for", "header-checkbox") ]
-    ~events:"mouseover mouseout"
-    ~on_dom_event:(fun name _ ->
-      Runtime.signal_set hover (name = "mouseover"))
-    [ checkbox_el inst ~jtrigger:false ~id:"header-checkbox" ~hover ~shown
+  row ~cross:`center ~main:`center ~width:32 ~height:32
+    [ checkbox_el inst ~jtrigger:false ~id:"header-checkbox" ~shown
         ~aria_label:I.select_all
         ~on_toggle:(fun on ->
           V.update inst (fun s ->
@@ -611,38 +508,28 @@ let header_select_cell inst : t =
                        (fun acc u -> V.Sset.add u acc)
                        s.V.selected (all_row_uuids s)
                    else V.Sset.empty)
-              }))
-    ; checkbox_hidden_input ]
-    ctx parent
+              })) ]
 
 (* cljs header-cp: text-variant button holding the title span and a sort
-   arrow for the active sort column *)
+   arrow for the active sort column — the arrow's presence is
+   signal-gated (shape change -> if_), its glyph a reactive prop *)
 let header_button inst (c : V.column) : t =
-  dom ~tag:"button"
-    ~style_class:
-      (E.button_cls ~variant:"text"
-         ~cls:
-           "inline-flex items-center h-8 !pl-2 !px-2 !py-0 \
-            hover:text-foreground w-full justify-start"
-         ())
-    ~attrs:[ ("type", "button") ]
-    [ dom ~tag:"span"
-        ~style_class:"max-w-full overflow-hidden text-ellipsis"
-        ~attrs:[ ("title", c.V.c_name) ] ~text:c.V.c_name []
-    ; (let sort_sig =
-         Signal.map
-           (fun (s : V.vstate) ->
-             List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
-           inst.V.st.Signal.state_signal
-       in
-       if_ ~test:(Signal.map (fun o -> o <> None) sort_sig)
-         (icon_dyn
-            (Signal.map
-               (fun o ->
-                 match o with
-                 | Some x when x.V.s_asc -> "arrow-up"
-                 | _ -> "arrow-down")
-               sort_sig))) ]
+  let sort_sig =
+    Signal.map
+      (fun (s : V.vstate) ->
+        List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
+      inst.V.st.Signal.state_signal
+  in
+  button ~variant:`ghost ~size:`sm ~text:c.V.c_name ~grow:1.
+    ~main:`start ~height:32 ~padding_horizontal:8
+    [ if_ ~test:(Signal.map (fun o -> o <> None) sort_sig)
+        (icon_dyn
+           (Signal.map
+              (fun o ->
+                match o with
+                | Some x when x.V.s_asc -> "arrow-up"
+                | _ -> "arrow-down")
+              sort_sig)) ]
 
 let set_column_sort inst (c : V.column) asc =
   V.update inst (fun s ->
@@ -746,9 +633,10 @@ let header_cell inst (c : V.column) : t =
   in
   match c.V.c_id with
   | "select" ->
-      dom ~style_class:cls ~attrs:[ ("style", size_style c) ]
+      box ~style_class:cls ~width:(column_size c)
+        ~min_width:(column_size c)
         [ header_select_cell inst ]
-  | _ -> (
+  | _ ->
       let menu () =
         match E.get_element_by_id (header_cell_id inst c) with
         | Some anchor -> (
@@ -762,12 +650,11 @@ let header_cell inst (c : V.column) : t =
                        (sort_menu_items inst c)))
         | None -> ()
       in
-      dom ~style_class:cls ~id:(header_cell_id inst c)
-        ~attrs:[ ("style", size_style c) ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ -> if name = "click" then menu ())
-        [ header_button inst c
-        ; dom ~tag:"a" ~style_class:"ls-table-resize-handle" [] ])
+      Ui_parts.pressable ~on_press:(fun _ -> menu ())
+        (box ~style_class:cls ~accessibility_identifier:(header_cell_id inst c)
+           ~width:(column_size c) ~min_width:(column_size c)
+           [ header_button inst c
+           ; box ~style_class:"ls-table-resize-handle" [] ])
 
 (* ---------- action bar ---------- *)
 
@@ -826,34 +713,27 @@ let delete_selected inst () =
 let action_bar inst : t =
   let isig = sig_of inst in
   if_ ~test:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
-    (dom ~style_class:"table-action-bar absolute top-0 left-8"
-       [ dom
-           ~style_class:
-             "ls-table-actions flex flex-row items-center gap-1 bg-gray-01"
-           ~attrs:[ ("style", "z-index:101") ]
-           [ dom ~style_class:"selection-count px-2"
-               ~text_signal:
-                 (D.reactive_text
+    (box ~style_class:"table-action-bar absolute top-0 left-8"
+       [ row ~gap:4 ~cross:`center ~background:"secondary"
+           ~style_class:"ls-table-actions"
+           [ text ~style_class:"selection-count" ~padding_horizontal:8
+               ~value:
+                 (reactive
                     (fun (s : V.vstate) ->
                       I.selected_count (V.Sset.cardinal s.V.selected))
                     isig)
                []
-           ; dom ~tag:"button"
-               ~style_class:
-                 "inline-flex items-center justify-center whitespace-nowrap \
-                  rounded-md text-sm font-medium transition-colors h-8 w-8"
-               ~events:"click"
-               ~on_dom_event:(fun name _ ->
-                 if name = "click" then delete_selected inst ())
-               [ icon_el "trash" ]
+           ; button ~variant:`ghost ~size:`icon ~icon:`trash
+               ~on_press:(fun _ -> delete_selected inst ()) []
            ]
        ])
 
 (* ---------- table ---------- *)
 
-(* dnd-kit mounts these a11y nodes inside each DndContext; cljs hides
-   both inline (the described node is display:none, the live region a
-   clipped 1px fixed box) *)
+(* TODO(component): dnd-kit a11y nodes — display:none inline style,
+   role=status + aria-live/aria-atomic, and the DndDescribedBy-*/
+   DndLiveRegion-* ids have no component-kind props; kept as minimal
+   dom so screen-reader drag instructions survive *)
 let dnd_described n : t =
   dom ~id:("DndDescribedBy-" ^ n) ~attrs:[ ("style", "display: none;") ]
     ~text:
@@ -897,38 +777,30 @@ let flat_items (s : V.vstate) = List.map (row_item_of s) (all_row_uuids s)
 let keyed_row_key (u, blk) =
   u ^ "|" ^ string_of_int (Hashtbl.hash blk)
 
+(* TODO(component): the imperative side still reads `blockid` /
+   data-id off .ls-block rows (dnd/block_dnd, editor/block_selection);
+   component kinds can't emit them — the uuid lands on
+   ~accessibility_identifier (ls-block-<uuid>) until those readers
+   switch to it *)
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
-  let data_id =
-    match W.map_get_int blk "db/id" with
-    | Some n -> string_of_int n
-    | None -> row_uuid
-  in
-  let cell_wrap c = dom ~style_class:"h-full" [ cell_el inst ~row_uuid ~blk c ] in
+  let cell_wrap c = box ~height:33 [ cell_el inst ~row_uuid ~blk c ] in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  dom
-    ~style_class:
-      "ls-table-row ls-block flex flex-row items-center border-b \
-       transition-colors hover:bg-muted/50 \
-       data-[state=selected]:bg-muted bg-gray-01 items-stretch"
-    ~attrs:
-      [ ("data-id", data_id); ("blockid", row_uuid); ("tabIndex", "0") ]
+  row ~cross:`stretch
+    ~style_class:"ls-table-row ls-block"
+    ~accessibility_identifier:("ls-block-" ^ row_uuid)
     [ (* cljs: .sticky-columns holds pinned cells, sibling .flex.flex-row
          holds the unpinned ones — each cell wrapped in .h-full *)
-      dom ~style_class:"flex flex-row sticky-columns"
+      row ~style_class:"sticky-columns"
         (List.map cell_wrap pinned)
-    ; dom ~style_class:"flex flex-row"
+    ; row
         (List.map cell_wrap free
          @ (match show_add_property inst with
             | Some _ ->
-                [ dom ~style_class:"h-full"
-                    [ dom ~style_class:"ls-table-cell flex relative h-full"
-                        [ dom
-                            ~style_class:
-                              "align-middle flex items-center \
-                               overflow-x-clip w-full"
-                            [] ] ] ]
+                [ box
+                    [ box ~style_class:"ls-table-cell"
+                        [ row ~cross:`center ~grow:1. [] ] ] ]
             | None -> [])) ]
 
 (* rows keyed under a parent — Virt_list for >=64 rows, keyed
@@ -959,7 +831,7 @@ let row_stream inst cols uuids : t =
     keyed ~source:items_sig ~key:keyed_row_key ~cmp:String.compare
       ~mount:(fun item_sig ->
         let u, blk = Signal.get item_sig in
-        dom [ row_el inst cols ~row_uuid:u ~blk ])
+        row_el inst cols ~row_uuid:u ~blk)
       ctx parent
 
 (* the header — one static mount per body snapshot; sort arrow is a
@@ -967,55 +839,39 @@ let row_stream inst cols uuids : t =
 let table_header inst cols : t =
   let cell_item c =
     let cell = header_cell inst c in
-    if c.V.c_id = "select" then dom ~id:"Select" [ cell ]
-    else dom ~attrs:[ ("role", "button") ] [ cell ]
+    if c.V.c_id = "select" then
+      box ~accessibility_identifier:"Select" [ cell ]
+    else box [ cell ]
   in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  dom ~style_class:"ls-table-header border-y transition-colors bg-gray-01"
-    ~attrs:[ ("style", "z-index:9") ]
-    [ dom ~style_class:"flex flex-row sticky-columns"
+  row ~style_class:"ls-table-header"
+    [ row ~style_class:"sticky-columns"
         (List.map cell_item pinned @ [ dnd_described "0"; dnd_live "0" ])
-    ; dom ~style_class:"flex flex-row"
+    ; row
         (List.map cell_item free
          @ (match show_add_property inst with
             | Some p ->
                 (* cljs add-property-button: trailing "New property"
                    header cell on class-objects tables only *)
-                [ dom ~id:"add property"
-                    [ dom ~style_class:"ls-table-header-cell !border-0"
-                        [ dom ~tag:"button"
-                            ~style_class:
-                              (E.button_cls ~variant:"text"
-                                 ~cls:
-                                   "h-8 !pl-2 !px-2 !py-0 \
-                                    hover:text-foreground w-full \
-                                    justify-start"
-                                 ())
-                            ~attrs:[ ("type", "button") ]
-                            ~events:"click"
-                            ~on_dom_event:(fun name _ ->
-                              if name = "click" then
-                                match p.Model.page_uuid with
-                                | Some uuid -> (
-                                    match
-                                      E.get_element_by_id "add property"
-                                    with
-                                    | Some _ ->
-                                        Properties_dialog.open_dialog
-                                          { Properties_dialog.uuid
-                                          ; uuids = []
-                                          ; db_id = p.Model.page_db_id
-                                          ; is_tag = true
-                                          ; title = p.Model.page_title
-                                          }
-                                    | None -> ())
-                                | None -> ())
-                            [ icon_el "plus"
-                            ; dom ~tag:"raw-text"
-                                ~attrs:[ ("data-raw-text", I.new_property) ]
-                                [] ] ] ] ]
+                [ box ~accessibility_identifier:"add property"
+                    [ box ~style_class:"ls-table-header-cell"
+                        [ button ~variant:`ghost ~size:`sm ~icon:`plus
+                            ~text:I.new_property ~grow:1. ~main:`start
+                            ~height:32 ~padding_horizontal:8
+                            ~on_press:(fun _ ->
+                              match p.Model.page_uuid with
+                              | Some uuid ->
+                                  Properties_dialog.open_dialog
+                                    { Properties_dialog.uuid
+                                    ; uuids = []
+                                    ; db_id = p.Model.page_db_id
+                                    ; is_tag = true
+                                    ; title = p.Model.page_title
+                                    }
+                              | None -> ())
+                            [] ] ] ]
             | None -> [])
          @ [ dnd_described "1"; dnd_live "1" ])
     ; action_bar inst ]
@@ -1033,34 +889,30 @@ let add_row_footer inst : t =
     | V.KAllPages | V.KQuery _ -> false
   in
   if has_add_object then
-    dom ~style_class:"ls-table-footer fade-in faster"
-      [ dom
-          ~style_class:
-            "py-1 px-2 cursor-pointer flex flex-row items-center gap-1 \
-             text-muted-foreground hover:text-foreground w-full text-sm \
-             border-b"
-          ~events:"click"
-          ~on_dom_event:(fun name _ ->
-            if name = "click" then (V.ops ()).V.o_add_object inst)
-          [ icon_el "plus"; dom ~text:I.new_ [] ] ]
-  else D.nothing
+    box ~style_class:"ls-table-footer"
+      [ Ui_parts.pressable
+          ~on_press:(fun _ -> (V.ops ()).V.o_add_object inst)
+          (row ~gap:4 ~cross:`center ~padding_horizontal:8
+             ~padding_vertical:4 ~foreground:"muted-foreground" ~grow:1.
+             [ icon_el "plus"; text ~value:I.new_ [] ]) ]
+  else spacer ~key:"no-footer" []
 
 (* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
    .force-visible-scrollbar > .relative > [header; body rows] *)
 let table_el inst (s : V.vstate) : t =
   let cols = visible_columns s in
-  dom ~style_class:"ls-table w-full caption-bottom text-sm table-fixed"
-    [ dom
-        ~style_class:
-          "ls-table-rows content overflow-x-auto force-visible-scrollbar"
-        [ dom ~style_class:"relative"
+  box ~style_class:"ls-table"
+    [ scroll ~orientation:`horizontal
+        ~style_class:"ls-table-rows content force-visible-scrollbar"
+        [ box ~style_class:"relative"
             [ table_header inst cols
             ; (* cljs Virtuoso mounts the rows under
                  [data-testid=virtuoso-item-list] inside two bare wrapper
                  divs; each row sits in a bare item div *)
-              dom
-                [ dom
-                    [ dom ~attrs:[ ("data-testid", "virtuoso-item-list") ]
+              box
+                [ box
+                    [ box
+                        ~accessibility_identifier:"virtuoso-item-list"
                         [ row_stream inst cols (all_row_uuids s) ] ] ]
             ; add_row_footer inst ] ] ]
 
@@ -1070,14 +922,12 @@ let grouped_table inst ~rows : t =
  fun ctx parent ->
   let s = V.get inst in
   let cols = visible_columns s in
-  dom ~style_class:"ls-table w-full caption-bottom text-sm table-fixed"
-    [ dom
-        ~style_class:
-          "ls-table-rows content overflow-x-auto force-visible-scrollbar"
-        [ dom ~style_class:"relative"
+  box ~style_class:"ls-table"
+    [ scroll ~orientation:`horizontal
+        ~style_class:"ls-table-rows content force-visible-scrollbar"
+        [ box ~style_class:"relative"
             [ table_header inst cols
-            ; dom
-                ~attrs:[ ("data-testid", "virtuoso-item-list") ]
+            ; box ~accessibility_identifier:"virtuoso-item-list"
                 [ row_stream inst cols rows ]
             ]
         ]
@@ -1086,14 +936,16 @@ let grouped_table inst ~rows : t =
 
 (* ---------- list + gallery ---------- *)
 
+(* TODO(component): blockid attrs dropped like row_el —
+   .ls-block[blockid] readers in dnd/block_dnd must move to the
+   ls-block-<uuid> accessibility_identifier *)
 let list_row_el ~row_uuid ~title : t =
-  dom ~style_class:"ls-block"
-    ~attrs:[ ("blockid", row_uuid); ("id", "ls-block-" ^ row_uuid) ]
-    [ dom ~style_class:"block-main-container flex flex-row gap-1"
-        [ dom ~style_class:"block-content inline"
-            ~attrs:[ ("blockid", row_uuid) ]
-            [ dom ~tag:"span" ~style_class:"block-title-wrap" ~text:title []
-            ] ] ]
+  box ~style_class:"ls-block"
+    ~accessibility_identifier:("ls-block-" ^ row_uuid)
+    [ row ~gap:4 ~style_class:"block-main-container"
+        [ box ~style_class:"block-content"
+            ~accessibility_identifier:("block-content-" ^ row_uuid)
+            [ text ~style_class:"block-title-wrap" ~value:title [] ] ] ]
 
 let row_title s u =
   match Hashtbl.find_opt s.V.blocks u with
@@ -1103,81 +955,56 @@ let row_title s u =
       | None -> "")
   | None -> ""
 
-let gallery_card_el ~title : t = dom ~style_class:"ls-card-item" ~text:title []
+let gallery_card_el ~title : t =
+  box ~style_class:"ls-card-item" [ text ~value:title [] ]
 
 (* ---------- foldable groups ---------- *)
 
-(* cljs svg/caret-right inside .rotating-arrow *)
-let caret_svg =
-  "<svg class=\"h-4 w-4\" aria-hidden=\"true\" version=\"1.1\" \
-   viewBox=\"0 0 192 512\" fill=\"currentColor\" display=\"inline-block\" \
-   style=\"margin-left: 2px\"><path d=\"M0 384.662V127.338c0-17.818 \
-   21.543-26.741 34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
-   28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z\" \
-   fill-rule=\"evenodd\"/></svg>"
-
 (* cljs ui/foldable: .flex.flex-col > (.ls-foldable-title.content +
    .ls-foldable-content > .ls-foldable-content-inner). The caret toggles
-   control-show only while the title is hovered (or while collapsed). *)
+   control-show only while the title is hovered — hover is DOM-only, so
+   the caret is always shown; its rotated state rides a reactive
+   style_class via Ui_parts.class_signal. caret-right is a custom path
+   icon (registered in app_icons). *)
 let foldable inst ~key ~title ~(body : t) : t =
- fun ctx parent ->
-  let hover = Signal.state ctx.Lui_ui.ui_scheduler false in
   let collapsed_sig =
     Signal.map
       (fun (s : V.vstate) -> V.Sset.mem key s.V.collapsed_groups)
       inst.V.st.Signal.state_signal
   in
-  dom ~style_class:"flex flex-col"
-    [ dom ~style_class:"ls-foldable-title content"
-        ~events:"mouseover mouseout"
-        ~on_dom_event:(fun name _ ->
-          Runtime.signal_set hover (name = "mouseover"))
-        [ dom ~style_class:"flex-1 flex-row foldable-title"
-            [ dom
-                ~style_class:
-                  "flex flex-row items-center ls-foldable-header gap-1"
-                [ dom ~tag:"a"
-                    ~style_class:
-                      "ls-foldable-title-control block-control opacity-50 \
-                       hover:opacity-100"
-                    ~attrs:[ ("style", "width:14px;height:16px") ]
-                    ~events:"pointerdown"
-                    ~on_dom_event:(fun name _ ->
-                      if name = "pointerdown" then
-                        V.update inst (fun s ->
-                            { s with
-                              V.collapsed_groups =
-                                (if V.Sset.mem key s.V.collapsed_groups
-                                 then V.Sset.remove key s.V.collapsed_groups
-                                 else V.Sset.add key s.V.collapsed_groups)
-                            }))
-                    [ dom ~tag:"span"
-                        ~style_class_signal:
-                          (Signal.map2
-                             (fun c h ->
-                               L.StringValue
-                                 (if c || h then "control-show cursor-pointer"
-                                  else "control-hide"))
-                             collapsed_sig hover.Signal.state_signal)
-                        [ dom ~tag:"span"
-                            ~style_class_signal:
-                              (D.class_signal collapsed_sig (fun c ->
-                                   "rotating-arrow"
-                                   ^ if c then " collapsed"
-                                     else " not-collapsed"))
-                            ~html:caret_svg [] ] ]
+  column
+    [ row ~style_class:"ls-foldable-title content"
+        [ row ~grow:1. ~style_class:"foldable-title"
+            [ row ~cross:`center ~gap:4
+                ~style_class:"ls-foldable-header"
+                [ Ui_parts.pressable
+                    ~on_press:(fun _ ->
+                      V.update inst (fun s ->
+                          { s with
+                            V.collapsed_groups =
+                              (if V.Sset.mem key s.V.collapsed_groups
+                               then V.Sset.remove key s.V.collapsed_groups
+                               else V.Sset.add key s.V.collapsed_groups)
+                          }))
+                    (box ~style_class:
+                       "ls-foldable-title-control block-control \
+                        control-show cursor-pointer"
+                       ~width:14 ~height:16
+                       [ Ui_parts.class_signal collapsed_sig
+                           (fun c ->
+                             "rotating-arrow"
+                             ^ if c then " collapsed"
+                               else " not-collapsed")
+                           (box ~key:"caret"
+                              [ icon ~name:(`app "caret-right")
+                                  ~point_size:16 [] ]) ])
                 ; title ] ]
         ]
-    ; dom
-        ~style_class_signal:
-          (D.class_signal collapsed_sig (fun c ->
-               "ls-foldable-content" ^ if c then " is-collapsed" else ""))
-        ~attrs_signal_v:
-          (D.attrs_signal collapsed_sig (fun c ->
-               [ ("aria-hidden", string_of_bool c) ]))
-        [ dom ~style_class:"ls-foldable-content-inner" [ body ] ]
-    ]
-    ctx parent
+    ; Ui_parts.class_signal collapsed_sig
+        (fun c ->
+          "ls-foldable-content" ^ if c then " is-collapsed" else "")
+        (box ~key:"content"
+           [ box ~style_class:"ls-foldable-content-inner" [ body ] ]) ]
 
 let group_title s gv =
   match gv with
@@ -1233,7 +1060,7 @@ let render_list inst s : t =
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(dom ~text:(group_title s g.Wr.gv) [])
+               ~title:(text ~value:(group_title s g.Wr.gv) [])
                ~body:(list_stream inst g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
@@ -1241,21 +1068,21 @@ let render_list inst s : t =
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(dom ~text:(group_title s g.Wr.glv) [])
+               ~title:(text ~value:(group_title s g.Wr.glv) [])
                ~body:
                  (D.fragment
                     (List.mapi
                        (fun j (buuid, rows) ->
                          foldable inst
                            ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                           ~title:(dom ~text:(row_title s buuid) [])
+                           ~title:(text ~value:(row_title s buuid) [])
                            ~body:(list_stream inst rows))
                        g.Wr.glparts)))
            gs)
   | _ -> list_stream inst (all_row_uuids s)
 
 let render_gallery inst s : t =
-  dom ~style_class:"flex flex-row flex-wrap gap-2 p-2"
+  row ~gap:8 ~padding:8 ~columns:4
     [ keyed
         ~source:
           (Signal.map
@@ -1277,7 +1104,7 @@ let render_table inst s : t =
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(dom ~text:(group_title s g.Wr.gv) [])
+               ~title:(text ~value:(group_title s g.Wr.gv) [])
                ~body:(grouped_table inst ~rows:g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
@@ -1285,26 +1112,28 @@ let render_table inst s : t =
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(dom ~text:(group_title s g.Wr.glv) [])
+               ~title:(text ~value:(group_title s g.Wr.glv) [])
                ~body:
                  (D.fragment
                     (List.mapi
                        (fun j (buuid, rows) ->
                          foldable inst
                            ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                           ~title:(dom ~text:(row_title s buuid) [])
+                           ~title:(text ~value:(row_title s buuid) [])
                            ~body:(grouped_table inst ~rows))
                        g.Wr.glparts)))
            gs)
   | _ ->
       (* cljs view-table wraps the table in a random-uuid div *)
-      dom ~id:(Platform.random_uuid ()) [ table_el inst s ]
+      box ~accessibility_identifier:(Platform.random_uuid ())
+        [ table_el inst s ]
 
 let body_el inst (s : V.vstate) ~(filters : t) : t =
-  dom ~style_class:"ls-view-body flex flex-col gap-2 grid mt-1"
+  column ~gap:8 ~style_class:"ls-view-body"
     [ filters
     ; (if s.V.loading then
-         dom ~style_class:"p-2 text-sm opacity-50" ~text:I.loading_ []
+         text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground"
+           []
        else
          D.fragment
            [ (match s.V.display_type with
@@ -1313,8 +1142,8 @@ let body_el inst (s : V.vstate) ~(filters : t) : t =
               | _ -> render_table inst s)
            ; (match s.V.data with
               | Wr.VFlat { rows = []; _ } ->
-                  dom ~style_class:"p-2 text-sm opacity-50"
-                    ~text:I.no_matched_result []
-              | _ -> D.nothing)
+                  text ~value:I.no_matched_result ~padding:8
+                    ~foreground:"muted-foreground" []
+              | _ -> spacer ~key:"no-empty-notice" [])
            ])
     ]

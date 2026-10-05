@@ -366,17 +366,15 @@ let load_view (a : Model.pdf_asset) =
 let viewer_el : Lui_elements.t =
  fun context parent ->
   let view_s = view_signal context in
-  Logseq_dom.dyn
-    ~equal:(fun (a : Model.pdf_asset option) b ->
+  (reactive ~equal:(fun (a : Model.pdf_asset option) b ->
       match a, b with
       | Some x, Some y -> x.pdf_identity = y.pdf_identity
       | None, None -> true
-      | _ -> false)
-    (fun ao ->
+      | _ -> false) (fun ao ->
       match ao with
       | None ->
           set_view None;
-          Logseq_dom.nothing
+          Lui_elements.spacer ~key:"pdf-none" []
       | Some a ->
           (match get_view () with
            | Some v when v.asset.pdf_identity = a.pdf_identity -> ()
@@ -384,6 +382,8 @@ let viewer_el : Lui_elements.t =
           (* the whole viewer — canvas, toolbar, sidebar, popovers — is
              the native logseq-pdf component; OCaml supplies only data
              (hls/page/scale/modes/flags) and receives annotation events *)
+          (* TODO(component): logseq-pdf native extension widget —
+             events + on_dom_event have no component equivalent *)
           Logseq_dom.dom ~tag:"pdf"
             ~style_class:"w-full h-full"
             ~events
@@ -393,20 +393,18 @@ let viewer_el : Lui_elements.t =
                    match vo with
                    | Some v -> attrs_of_view v
                    | None -> [ "path", a.Model.pdf_url ]))
-            [])
-    (asset_signal context)
+            []) (asset_signal context))
     context parent
 
 (* the sibling of #left-container in #app-container: grows to take the
-   right half only while a pdf is open *)
+   right half only while a pdf is open. No ~grow_signal prop exists, so
+   the reactive grow rides the style_class channel. *)
 let container_el ~key ~id : Lui_elements.t =
- fun context parent ->
-  Logseq_dom.dom ~key ~id
-    ~style_class_signal:
-      (Logseq_dom.class_signal
-         (asset_signal context)
-         (fun ao -> if Option.is_some ao then "grow" else ""))
-    [ viewer_el ] context parent
+ fun context ->
+  Ui_parts.class_signal (asset_signal context)
+    (fun ao -> if Option.is_some ao then "grow" else "")
+    (Lui_elements.box ~key ~accessibility_identifier:id [ viewer_el ])
+    context
 
 let install () =
   Pdf_state.open_request :=

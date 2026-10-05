@@ -410,6 +410,11 @@ let cm_host inst : Lui_elements.t =
         | QDatalog _ -> (V.get inst).V.qsrc
         | QBlank -> ""
       in
+      (* TODO(component): contenteditable source editor — the
+         .CodeMirror host + contenteditable <pre> are imperative DOM
+         integration points (attach_cm binds keydown/input listeners
+         and reads text content). No component equivalent; migrates
+         with the editor-surface extension. *)
       let n =
         D.dom ~id:(cm_host_id inst) ~style_class:"CodeMirror"
           [ D.dom ~tag:"pre" ~style_class:"CodeMirror-line"

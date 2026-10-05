@@ -1,2 +1,2 @@
 (* Native stub *)
-let t = Logseq_dom.dom ~tag:"raw-text" []
+let t = Lui_elements.spacer ~key:"pdf-utils" []
