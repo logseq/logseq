@@ -128,7 +128,9 @@ let leave_context_menu_by_shift_tab env =
 let choose_move_target env target =
   let* () = Pw.fill env "input[placeholder=\"Move blocks to\"]" target in
   let result =
-    Playwright.locator_first (Pw.get_by_test_id env target)
+    Playwright.locator_first
+      (Pw.q env
+         (Printf.sprintf "[data-testid='%s']:visible" target))
   in
   let* _ = Assert.is_visible_l result in
   Pw.click_l result

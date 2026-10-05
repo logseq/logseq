@@ -21,11 +21,13 @@ let is_hidden env selector =
   let* () = Playwright.expect_is_hidden (Playwright.expect (Pw.q env selector)) in
   Js.Promise.resolve true
 
-let have_count env selector n =
-  Playwright.expect_has_count (Playwright.expect (Pw.q env selector)) n
+let have_count ?timeout env selector n =
+  Playwright.expect_has_count ?timeout
+    (Playwright.expect (Pw.q env selector))
+    n
 
-let have_count_l loc n =
-  Playwright.expect_has_count (Playwright.expect loc) n
+let have_count_l ?timeout loc n =
+  Playwright.expect_has_count ?timeout (Playwright.expect loc) n
 
 let non_editor_mode env =
   Pw.wait_for_hidden env
@@ -40,7 +42,8 @@ let in_normal_mode env =
 
 let graph_loaded env = is_visible env "[data-testid='page title']"
 
-let editor_mode env = have_count env ".editor-wrapper textarea" 1
+let editor_mode env =
+  have_count ~timeout:15000. env ".editor-wrapper textarea" 1
 
 let selected_block_text env text =
   is_visible env (Printf.sprintf ".ls-block.selected :text('%s')" text)

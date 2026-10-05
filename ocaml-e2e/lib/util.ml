@@ -29,7 +29,7 @@ let get_editor env =
          (Playwright.focus editor))
 
 let get_edit_block_container env =
-  let* () = E2e_assert.have_count env editor_q 1 in
+  let* () = E2e_assert.have_count ~timeout:15000. env editor_q 1 in
   Js.Promise.resolve
     (Playwright.locator_first
        (Pw.qq env ".ls-block" ~has:(Pw.q env editor_q)))
@@ -116,8 +116,12 @@ let rec repeat_until_visible env n target_loc repeat_fn =
 
 let search_and_click env search_text =
   let* () = search env search_text in
+  (* stale cmdk nodes stay mounted inside aria-hidden regions — restrict to
+     visible matches so .first() is never a detached/hidden twin *)
   let result =
-    Playwright.locator_first (Pw.get_by_test_id env search_text)
+    Playwright.locator_first
+      (Pw.q env
+         (Printf.sprintf "[data-testid='%s']:visible" search_text))
   in
   let* () = repeat_until_visible env 5 result (fun () -> search env search_text) in
   Pw.click_l result

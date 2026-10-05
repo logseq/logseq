@@ -25,12 +25,14 @@ let switch_to_marketplace env =
 let search_plugin env term =
   Pw.fill env ".cp__plugins-page input[placeholder*='Search']" term
 
-(* Clicks the installation button for the first visible plugin card *)
+(* Clicks the installation button for the first visible plugin card.
+   [text-is] is exact match — [has-text] is substring and also matches the
+   disabled "Installed" button once the plugin is already installed. *)
 let click_install_button env =
   Pw.click_l
     (Playwright.locator_first
        (Pw.q env
-          ".cp__plugins-item-card .ctl a.btn:has-text('Install')"))
+          ".cp__plugins-item-card .ctl a.btn:text-is('Install')"))
 
 (* Waits for the plugin to show as installed *)
 let wait_for_plugin_installed env =
@@ -43,8 +45,17 @@ let switch_to_installed env =
   Pw.wait_for env ".cp__plugins-installed"
 
 let close_plugins_dialog env =
-  let* () = K.esc env in
-  Pw.wait_for_hidden env ".cp__plugins-page"
+  (* esc only closes the top-most dialog and can be swallowed by focus state;
+     the dialog's own close button is the deterministic path *)
+  let* () =
+    Pw.click_l
+      (Playwright.locator_first (Pw.q env ".ui__dialog-close"))
+  in
+  let* () = Pw.wait_for_hidden env ".cp__plugins-page" in
+  (* portal overlays linger in the DOM permanently; a selector wait only sees
+     the first one — poll until NO overlay is data-state=open *)
+  Playwright.wait_for_function (Env.page env)
+    "document.querySelectorAll('.ui__dialog-overlay[data-state=\"open\"]').length === 0"
 
 let ensure_journals_calendar_installed env =
   let* () = open_plugins_dialog env in
@@ -56,7 +67,7 @@ let ensure_journals_calendar_installed env =
   in
   let* visible =
     Pw.visible env
-      ".cp__plugins-item-card .ctl a.btn:has-text('Install')"
+      ".cp__plugins-item-card .ctl a.btn:text-is('Install')"
   in
   let* () =
     if visible then
@@ -76,7 +87,8 @@ let journals_calendar_card env =
 let set_journals_calendar_enabled env enabled =
   let card = journals_calendar_card env in
   let toggle =
-    Playwright.locator_locator card "button[role='switch']"
+    (* base-ui Switch renders <span role="switch">, not <button> *)
+    Playwright.locator_locator card "[role='switch']"
   in
   let* checked = Pw.attr_l toggle "aria-checked" in
   let* () =
@@ -182,9 +194,9 @@ let set_journals_calendar_enabled env enabled =
   let* () = search_plugin env "Journals calendar" in
   let* () = set_journals_calendar_enabled env false in
   let* () = close_plugins_dialog env in
-  let* () = Pw.click env ".toolbar-plugins-manager-trigger" in
+  (* disabled plugins unregister their toolbar items, so with no other items
+     the manager trigger unmounts entirely — assert unregistration directly *)
   let* () = go_to_today_count 0 in
-  let* () = K.esc env in
 
   let* () = open_plugins_dialog env in
   let* () = switch_to_installed env in
