@@ -80,7 +80,10 @@ Ui_parts.pressable ~on_press:(fun _ -> f ()) (row ~key ~style_class:cls children
 
 - `~key` 原样保留；`~id`/`data-ref`/`#ref` → `~accessibility_identifier`
 - "render nothing" → `spacer ~key:"…" []`（anchor 节点）；条件挂载用 `if_ ~test`
-- `dyn`/`keyed`/`fragment` 用法不变（Logseq_dom 的 own/信号托管
+- **结构分支优先普通 OCaml `if`/`List.map`** —— `if_`/`keyed`/`dyn`
+  只在分支条件/列表成员挂在 signal 上（需要随 signal 重发结构）时用；
+  条件静态或只需初始化时求值的直接写普通 `if`/条件拼 list，更直白
+- `fragment` 用法不变（Logseq_dom 的 own/信号托管
   暂时保留 —— 其内部实现会随 dom() 删除一起改造，call site 不用管）
 - `~text` → `text ~value:"…"`；`~html` → children 元素
 - `aria-label` → `~label`（button 等 kind 的 a11y 名称参数）
