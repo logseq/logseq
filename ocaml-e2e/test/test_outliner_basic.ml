@@ -563,7 +563,23 @@ let () =
     let* env = env in
     let* () = Fixtures.new_logseq_page env in
     let* () = B.new_blocks env [ "focused-root"; "focused-child" ] in
-    let* () = K.arrow_up env in
+    (* ArrowUp can be swallowed under load — then editing stays on the
+       child, root_id captures the child's uuid, and every downstream
+       step self-consistently zooms/verifies the WRONG block. Press
+       until the editing content actually becomes focused-root. *)
+    let rec arrow_to_root tries =
+      let* () = K.arrow_up env in
+      let* () = Util.wait_timeout env 200. in
+      let* content = Util.get_edit_content env in
+      if content = Some "focused-root" then Js.Promise.resolve ()
+      else if tries <= 1 then
+        Js.Promise.reject
+          (Failure
+             ("arrow_up never reached focused-root, editing="
+              ^ Option.value ~default:"none" content))
+      else arrow_to_root (tries - 1)
+    in
+    let* () = arrow_to_root 4 in
     let* (root_id : string Js.Nullable.t) =
       current_editing_block_id env
     in
