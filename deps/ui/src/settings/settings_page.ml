@@ -294,7 +294,7 @@ let date_format_row ctx =
                   Signal.set mst (not (Signal.get_state mst));
                   Runtime.flush ())
                 []
-            ; Logseq_dom.dyn ~equal:( == ) (fun open_ ->
+            ; reactive ~equal:( == ) (fun open_ ->
                   if open_ then dfmt_menu ~key:"dfmt" mst options current
                   else spacer ~key:"dfmt-m-x" [])
                 (Signal.value mst)
@@ -642,7 +642,7 @@ let article ~modal ctx =
               (reactive (fun (s : S.t) -> tab_title s.tab) (S.signal ()))
             []
         ]
-    ; dyn ~equal:( = ) (fun (s : S.t) -> pane_of ~modal ctx s.tab)
+    ; reactive (fun (s : S.t) -> pane_of ~modal ctx s.tab)
         (S.signal ())
     ]
 
@@ -730,7 +730,7 @@ let appearance_body (x, y) : t =
           [ column ~key:"appearance_settings"
               ~accessibility_identifier:"appearance_settings"
               ~style_class:"cp__settings-appearance-dialog-inner"
-              [ dyn ~equal:( == ) (fun (_ : S.t) ->
+              [ reactive ~equal:( == ) (fun (_ : S.t) ->
                     column ~key:"app-rows" (appearance_rows ctx))
                   (S.signal ()) ]
           ]

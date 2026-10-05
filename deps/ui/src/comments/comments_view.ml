@@ -226,12 +226,11 @@ let add_box st (area_uuid : string) : t =
 
 let header st (area_uuid : string) (count : int) (targets : int) : t =
   row ~key:("ch-" ^ area_uuid) ~style_class:"ls-comments-header"
-    ( [ dyn
-          ~equal:(fun a b -> a = b)
+    ( [ reactive
           (fun editing ->
             (* cljs comments-area-title-view: the label swaps for the
                standard block editor while the area title is edited —
-               the subtree shape changes, so dyn stays *)
+               the subtree shape changes, so reactive stays *)
             if editing then
               box ~key:("cte-" ^ area_uuid)
                 ~style_class:"ls-comments-title-editor"
@@ -274,7 +273,7 @@ let area_el (b : Model.block) : t =
   let comments =
     List.filter (fun c -> c.Model.block_is_comment) b.Model.block_children
   in
-  (dyn ~equal:(fun (a : area_st) b -> a = b)
+  (reactive
      (fun _st ->
        column ~key:("area-" ^ area_uuid)
          ~style_class:"ls-comments-area"

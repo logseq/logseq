@@ -176,7 +176,7 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
             Signal.set mst (not (Signal.get_state mst));
             Runtime.flush ())
           []
-      ; Logseq_dom.dyn ~equal:( == ) (fun open_ ->
+      ; reactive ~equal:( == ) (fun open_ ->
             if open_ then lang_menu ~key st mst
             else spacer ~key:(key ^ "-lm-x") [])
           (Signal.value mst)

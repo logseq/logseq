@@ -14,7 +14,6 @@ open Lui_elements
 module D = Logseq_dom
 
 let dom = D.dom
-let dyn = D.dyn
 let t = Sidebar_state.t
 
 (* component icon: tabler names go through the `app:` registry (the only
@@ -138,7 +137,7 @@ let plugins_menu st =
     [ menu_box ~key:"menu-box" ~extra_cls:" toolbar-plugins-manager-content"
         ~style:
           "position:fixed;top:64px;right:16px;z-index:999;min-width:200px"
-        (dyn ~equal:Stdlib.( = )
+        (reactive
            (fun _dirty ->
              column ~key:"pm-body"
                (List.map item_row (Plugin_host.toolbar_items ())))
@@ -203,7 +202,7 @@ let menu_host st =
          (Signal.value st.nav_checked)
          (Signal.value st.favorited))
   in
-  dyn ~equal:(fun a b -> a = b)
+  reactive
     (fun (menu, _checked, _favorited) ->
       match menu with
       | "nav-edit" -> nav_edit_menu st
@@ -306,7 +305,7 @@ let nav_group ms st =
                     (row ~style_class:"as-edit"
                        [ icon_ "filter-edit" ]) ] ]
         ; box ~key:"nav-bd" ~style_class:"bd"
-            [ dyn ~equal:(fun a b -> a = b)
+            [ reactive
                 (fun (route, (checked, tag_titles)) ->
                   column ~key:"navs" ~style_class:"sidebar-navigations"
                     (* cljs journals item navigates on click; its anchor
@@ -420,8 +419,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
    child — favorites passes a child only when non-empty, recent always
    passes a ul (so an empty Recent still shows .bd > ul.text-sm).
-   has-children rides on the items signal via class_signal; the inner dyn
-   stays because the bd subtree's shape changes with the list *)
+   has-children rides on the items signal via class_signal; the inner
+   reactive stays because the bd subtree's shape changes with the list *)
 let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
     ~always_bd ~recent =
   Ui_parts.class_signal items_sig
@@ -437,7 +436,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                        [ text ~value:label [] ] ]
                ; box ~key:(key ^ "-b") ~style_class:"b"
                    [ icon_ ~cls:"more" ~size:15 "chevron-right" ] ]
-           ; dyn
+           ; reactive
                ~equal:(fun a b ->
                  List.map
                    (fun (p : Model.page) -> (p.page_uuid, p.page_title))
@@ -486,7 +485,7 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
   let owner =
     st.Sidebar_state.open_menu.Signal.state_signal.Signal.owner
   in
-  dyn ~equal:Stdlib.( = )
+  reactive
     (fun _dirty ->
       match
         ( Plugin_host.toolbar_items () <> []

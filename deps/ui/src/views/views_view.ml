@@ -3,7 +3,7 @@
    .page-tabs, right-sidebar object tabs, .custom-query-results shells).
    The element owns the inst lifecycle (create on mount, dispose on
    unmount), kicks the data-load chain, and implements view CRUD /
-   object creation / export. The body repaints through a dyn on the
+   object creation / export. The body repaints through a reactive on the
    vstate signal — nothing scans the DOM to find mounted views. *)
 
 open Promise_ext
@@ -155,7 +155,7 @@ let view_el inst : t =
             [ Views_table.foldable inst ~key:"view"
                 ~title:(Views_head.render_head inst)
                 ~body:
-                  (D.dyn ~equal:body_eq
+                  (reactive ~equal:body_eq
                      (fun s ->
                        Views_table.body_el inst s
                          ~filters:(Views_head.filters_row inst))
@@ -213,7 +213,7 @@ let query_content inst (s : V.vstate) : t =
 let query_view_el inst : t =
   D.fragment
     [ box ~style_class:"views-query-inner"
-        [ D.dyn ~equal:body_eq
+        [ reactive ~equal:body_eq
             (fun s ->
               column
                 [ (* dsl queries (and blank ones) get the builder panel;
@@ -519,7 +519,7 @@ let install_ops () =
     ; o_refresh_src =
         (fun inst src ->
           (* the caller supplies the fresh query source — skip the
-             get_blocks re-read and evaluate immediately; the dyn repaints
+             get_blocks re-read and evaluate immediately; the reactive repaints
              as soon as rows land instead of waiting for the row-data
              roundtrip *)
           V.update inst

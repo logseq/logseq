@@ -3,7 +3,7 @@
    the first selected block. The bar offers Set tags, Add comment, Copy,
    Set property, Unset property, delete and the dots selection menu.
 
-   Mounted once per page container as a dyn over the Editor_state
+   Mounted once per page container as a reactive over the Editor_state
    signal; when the selected set is empty it renders nothing. *)
 
 open Lui_elements
@@ -92,7 +92,7 @@ let install_listeners () =
       true)
 
 (* cljs hides the action-bar while another popup is up — fold the
-   popup/cmdk flags into the same dyn source (nested dyn has no parent
+   popup/cmdk flags into the same reactive source (nested reactive has no parent
    node to anchor to) *)
 let rec view () : t =
   (* the editor state signal only exists once a block row has mounted —
@@ -128,8 +128,7 @@ and node () : t = (
       in
       with_cmdk
     in
-    dyn
-      ~equal:(fun a b -> a = b)
+    reactive
       (fun ( (sel : string list)
            , (bar : bool)
            , (popup : bool)
