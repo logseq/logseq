@@ -22,22 +22,28 @@ let press_all env ?delay keys = Pw.press_all env ?delay keys
    textarea and swallow the keypress entirely. *)
 let live_editor_js =
   "(() => { \
+   document.querySelectorAll('[data-e2e-live]').forEach(t => t.removeAttribute('data-e2e-live')); \
    const st = logseq.api.get_state_from_store('editor/block'); \
    const u = st && st.uuid; \
-   if (u && document.getElementById('edit-block-' + u)) \
-   return 'live:' + u; \
+   if (u) { \
+   const ts = [...document.querySelectorAll('#edit-block-' + CSS.escape(u))] \
+   .filter(t => t.offsetParent !== null); \
+   if (ts.length) { ts[ts.length - 1].setAttribute('data-e2e-live', '1'); return 'live'; } } \
    const ae = document.activeElement; \
    if (ae && ae.closest && ae.closest('.editor-wrapper')) return 'focus'; \
+   const vs = [...document.querySelectorAll('.editor-wrapper textarea')] \
+   .filter(t => t.offsetParent !== null); \
+   if (vs.length) { vs[vs.length - 1].setAttribute('data-e2e-live', '1'); return 'mark'; } \
    return 'fallback'; })()"
 
-let press_in_editor env ?delay key =
+let press_in_editor env ?delay ?timeout key =
   let* (target : string) = Pw.eval_js env live_editor_js in
-  if String.length target > 5 && String.sub target 0 5 = "live:" then
-    let id = String.sub target 5 (String.length target - 5) in
-    Playwright.locator_press ?delay (Pw.q env ("#edit-block-" ^ id)) key
+  if target = "live" || target = "mark" then
+    Playwright.locator_press ?delay ?timeout (Pw.q env "[data-e2e-live='1']")
+      key
   else if target = "focus" then Pw.press env ?delay key
   else
-    Playwright.locator_press ?delay
+    Playwright.locator_press ?delay ?timeout
       (Pw.q env ".editor-wrapper textarea:visible >> nth=-1")
       key
 let enter env = Pw.press env "Enter"

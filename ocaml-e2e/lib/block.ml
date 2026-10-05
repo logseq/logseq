@@ -130,10 +130,22 @@ let new_block env title =
     | Some _ -> Js.Promise.resolve ()
     | None -> open_last_block env
   in
-  let* last_id = Pw.attr env Util.editor_q_first "id" in
-  let last_id = match last_id with
-    | Some id -> id
-    | None -> failwith "editor textarea has no id"
+  (* the editing block's uuid is the source of truth for the live
+     editor's id — a stale sibling textarea can share the DOM and make
+     nth-based ids point at a dead editor *)
+  let* live_id =
+    Pw.eval_js env
+      "(() => { const st = logseq.api.get_state_from_store('editor/block'); \
+       return st && st.uuid ? 'edit-block-' + st.uuid : null; })()"
+  in
+  let* last_id =
+    match Js.Nullable.toOption live_id with
+    | Some id -> Js.Promise.resolve id
+    | None ->
+        Pw.attr env Util.editor_q_first "id"
+        |> Js.Promise.then_ (function
+             | Some id -> Js.Promise.resolve id
+             | None -> failwith "editor textarea has no id")
   in
   let* () = Util.move_cursor_to_end env in
   (* element-targeted Enter: page.keyboard.press dies silently when
@@ -149,9 +161,7 @@ let new_block env title =
       Js.Promise.catch
         (fun _ -> Js.Promise.resolve false)
         (let* () =
-           Playwright.locator_press ~timeout:8000.
-             (Pw.q env ".editor-wrapper textarea >> nth=0")
-             "Enter"
+           Keyboard.press_in_editor env ~timeout:8000. "Enter"
          in
          Js.Promise.resolve true)
     in

@@ -1,6 +1,7 @@
 val press : Env.t -> ?delay:float -> string -> unit Js.Promise.t
 val press_all : Env.t -> ?delay:float -> string list -> unit Js.Promise.t
-val press_in_editor : Env.t -> ?delay:float -> string -> unit Js.Promise.t
+val press_in_editor :
+  Env.t -> ?delay:float -> ?timeout:float -> string -> unit Js.Promise.t
 val enter : Env.t -> unit Js.Promise.t
 val enter_in_editor : Env.t -> unit Js.Promise.t
 val esc : Env.t -> unit Js.Promise.t
