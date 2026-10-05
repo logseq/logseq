@@ -247,7 +247,7 @@ let toggle_pw ctx =
         ~text_signal:(Logseq_dom.reactive_text (fun (s : pst) -> s.password) st_sig)
         []
     ; if_
-        ~test:
+        ~test_signal:
           (Signal.map (fun (s : pst) -> Str_util.trim s.password <> "") st_sig)
         (dom ~key:"pub-eye" ~tag:"button"
            ~style_class:
@@ -262,10 +262,10 @@ let toggle_pw ctx =
                Signal.update (st ctx) (fun x ->
                    { x with visible = not x.visible }))
            [ if_
-               ~test:(Signal.map (fun (s : pst) -> s.visible) st_sig)
+               ~test_signal:(Signal.map (fun (s : pst) -> s.visible) st_sig)
                (Icons.icon ~size:15. "eye-off")
            ; if_
-               ~test:
+               ~test_signal:
                  (Signal.map (fun (s : pst) -> not s.visible) st_sig)
                (Icons.icon ~size:15. "eye") ]) ]
 

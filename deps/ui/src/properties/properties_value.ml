@@ -486,10 +486,10 @@ let scalar_edit_cell ctx row : t =
     add_active_edit ctx row;
     close_editor := (fun () -> commit true));
   (column ~gap:0 ~grow:1.0
-     [ if_ ~test:(Signal.map (fun e -> not e) (Signal.value editing))
+     [ if_ ~test_signal:(Signal.map (fun e -> not e) (Signal.value editing))
          (value_button ~text:initial ~on_press:(fun _ ->
               open_editor ~steal:true ()))
-     ; if_ ~test:(Signal.value editing)
+     ; if_ ~test_signal:(Signal.value editing)
          (text_field ~autofocus:true ?submit_on_enter:Sel.submit_on_enter_opt
             ~text:(edit_buffer ctx row)
             ~on_input:(fun ev ->
@@ -538,7 +538,7 @@ let date_view ctx row : t =
            (if D.value_empty_p value then ""
             else date_display (D.row_type row) value)
          ~on_press:(fun _ -> Runtime.signal_set open_ true)
-     ; if_ ~test:(Signal.value open_)
+     ; if_ ~test_signal:(Signal.value open_)
          (dropdown_menu ~anchor:`below ~anchor_alignment:`start
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
@@ -671,7 +671,7 @@ let extends_view ctx row : t =
                  Runtime.signal_set open_ true)
                []
            ])
-     ; if_ ~test:(Signal.value open_)
+     ; if_ ~test_signal:(Signal.value open_)
          (dropdown_menu ~anchor:`below ~anchor_alignment:`start
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
@@ -740,7 +740,7 @@ let closed_value_view ctx row : t =
                    in
                    Runtime.signal_set items_st (Some items);
                    Runtime.signal_set open_ true)))
-     ; if_ ~test:(Signal.value open_)
+     ; if_ ~test_signal:(Signal.value open_)
          (dropdown_menu ~anchor:`below ~anchor_alignment:`stretch
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> close ())
@@ -776,7 +776,7 @@ let node_view ctx row : t =
                ~on_press:(fun _ -> Runtime.signal_set open_ true)
                []
            ])
-     ; if_ ~test:(Signal.value open_)
+     ; if_ ~test_signal:(Signal.value open_)
          (fun context' parent' ->
            let block = D.uuid_ref ctx.block_uuid in
            let prop = D.row_prop row in

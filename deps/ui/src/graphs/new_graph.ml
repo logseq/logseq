@@ -30,7 +30,7 @@ let checkbox ~key ~id ~checked ~on_click =
          checked)
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
-    [ if_ ~test:checked
+    [ if_ ~test_signal:checked
         (dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check ls-icon-sm"
            []) ]
 
@@ -122,7 +122,7 @@ let body (_ms : Model.t Signal.signal) : t =
                     ~style_class:"ls-ng-label"
                     ~attrs:[ ("for", "rtc-sync") ]
                     ~text:T.use_sync_label []
-                ; if_ ~test:(Signal.value cloud)
+                ; if_ ~test_signal:(Signal.value cloud)
                     (dom ~key:"ng-e2ee-row"
                        ~style_class:"ls-ng-row ls-ng-sub"
                        [ checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"

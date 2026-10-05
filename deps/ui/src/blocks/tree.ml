@@ -723,7 +723,7 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
        (* keyed like the top-level list: indent/outdent/move splices a
           row in or out and only that row's node moves — siblings keep
           their DOM identity instead of the whole subtree remounting *)
-       [ Logseq_dom.keyed ~source:(Signal.map S.children_of bs)
+       [ Logseq_dom.keyed ~source_signal:(Signal.map S.children_of bs)
            ~key:block_key ~cmp:String.compare
            ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
                      ~library ~virtualize) ])
@@ -758,7 +758,7 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
  fun ctx parent ->
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
   if_
-    ~test:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
+    ~test_signal:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
     (children_dom ~depth ~editable ~library ~virtualize uuid scope bs)
     ctx parent
 

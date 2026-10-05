@@ -136,18 +136,17 @@ let trace_equal name eq a b =
     Printf.eprintf "[dyn-remount] %s\n%!" name;
   r
 
-let dyn ~equal f (source : 'a Signal.signal) : Lui_elements.t =
- fun context parent ->
-  Lui_elements.dyn ~equal f (own context source) context parent
+(* dyn/if_/keyed own their signal sources inside Lui_elements — derived
+   signals are tied to the node scope there, so these wrappers only
+   adjust signatures. *)
+let dyn ?equal f (source : 'a Signal.signal) : Lui_elements.t =
+  Lui_elements.dyn ?equal f source
 
-let if_ ~test children : Lui_elements.t =
- fun context parent ->
-  Lui_elements.if_ ~test:(own context test) children context parent
+let if_ ~test_signal children : Lui_elements.t =
+  Lui_elements.if_ ~test_signal children
 
-let keyed ~source ~key ~cmp ~mount : Lui_elements.t =
- fun context parent ->
-  Lui_elements.keyed ~source:(own context source) ~key ~cmp
-    ~mount context parent
+let keyed ~source_signal ~key ~cmp ~mount : Lui_elements.t =
+  Lui_elements.keyed ~source_signal ~key ~cmp ~mount
 
 let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(style_class = "")

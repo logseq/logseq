@@ -53,10 +53,19 @@ gpui-table、pdf/media）。
 
 ## reactive 约定
 
-值/文本/class 的变化用 `~*_signal` reactive props（ppx 写法
-`~p:(reactive f s)`），不用 `dyn` 整体重挂。`dyn`/`if_`/`keyed`
-只用于结构性分支（列表增删、显隐切换、互斥面板）。共享 `own`
-信号托管逻辑不变。
+**禁止直接调用 `dyn` / `Logseq_dom.dyn`** —— `dyn` 只是 `lui_ppx`
+的展开目标，不是用户 API。全部反应式写法只有四种：
+
+| 场景 | 写法 |
+|---|---|
+| 值/文本/class/prop 变 | `~p:(reactive f s)`（prop 位置） |
+| model → 整段子树重发 | `[ reactive f s ]`（children 位置，含 `~equal:eq` 可选） |
+| signal 驱动的挂载/卸载 | `if_ ~test_signal:s child` |
+| signal 驱动的列表 | `keyed ~source_signal:s ~key ~cmp ~mount` |
+
+默认比较器是 `(=)`，只有自定义比较粒度时才写 `~equal:eq`。
+`own`（derived-signal scope 托管）已下沉进 `Lui_elements.dyn/if_/keyed`
+内部，ppx 展开自动继承，call site 不用管。
 
 ## 事件映射
 
@@ -79,13 +88,13 @@ Ui_parts.pressable ~on_press:(fun _ -> f ()) (row ~key ~style_class:cls children
 ## 其余约定
 
 - `~key` 原样保留；`~id`/`data-ref`/`#ref` → `~accessibility_identifier`
-- "render nothing" → `spacer ~key:"…" []`（anchor 节点）；条件挂载用 `if_ ~test`
-- **结构分支优先普通 OCaml `if`/`List.map`** —— `if_`/`keyed`/`dyn`
+- "render nothing" → `spacer ~key:"…" []`（anchor 节点）；条件挂载用 `if_ ~test_signal`
+- **结构分支优先普通 OCaml `if`/`List.map`** —— `reactive`/`if_`/`keyed`
   只在分支条件/列表成员挂在 signal 上（需要随 signal 重发结构）时用；
   条件静态或只需初始化时求值的直接写普通 `if`/条件拼 list，更直白
-- **`dyn`/`if_` 里包 `dyn` 几乎是错的** —— 内层变化的如果只是属性
-  （icon/text/value），降级成 `~prop:(reactive ...)`；只有子树形状真的
-  变才留 dyn。例：眼睛按钮不随 `visible` 重建，`~icon:(reactive
+- **children `reactive`/`if_` 里再包反应式子树几乎是错的** —— 内层
+  变化的如果只是属性（icon/text/value），降级成 `~prop:(reactive ...)`；
+  只有子树形状真的变才嵌套。例：眼睛按钮不随 `visible` 重建，`~icon:(reactive
   (fun vis -> if vis then `app "eye-off" else `eye) visible)` 就够
 - `fragment` 用法不变（Logseq_dom 的 own/信号托管
   暂时保留 —— 其内部实现会随 dom() 删除一起改造，call site 不用管）

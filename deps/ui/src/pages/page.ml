@@ -1138,13 +1138,13 @@ let journal_item_sig (ms : Model.t Signal.signal)
                       [ ("data-cid", "main"); ("data-pu", key) ]
                     (* cljs plain-block-list emits no .blocks-list-wrap
                        on empty pages *)
-                    [ Logseq_dom.if_ ~test:nonempty
+                    [ Logseq_dom.if_ ~test_signal:nonempty
                         ((* TODO(component): data-level is imperative
                             scaffold *)
                          dom ~key:"blw"
                            ~style_class:"blocks-list-wrap"
                            ~attrs:[ ("data-level", "0") ]
-                           [ Logseq_dom.keyed ~source:blocks_sig
+                           [ Logseq_dom.keyed ~source_signal:blocks_sig
                                ~key:Tree.block_key ~cmp:String.compare
                                ~mount:(Tree.block_row_sig ~scope:"main")
                            ])
@@ -1189,11 +1189,11 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
             [ box ~key:"jil"
                 ~accessibility_identifier:"virtuoso-item-list"
                 [ Logseq_dom.if_
-                    ~test:(Signal.map (fun js -> js = []) journals_sig)
+                    ~test_signal:(Signal.map (fun js -> js = []) journals_sig)
                     (box ~key:"jp" ~padding:24
                        ~style_class:
                          "journal-item-placeholder animate-pulse" [])
-                ; Logseq_dom.keyed ~source:journals_sig
+                ; Logseq_dom.keyed ~source_signal:journals_sig
                     ~key:(fun (p : Model.page) ->
                       Option.value p.Model.page_uuid
                         ~default:p.Model.page_title)
@@ -1287,7 +1287,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
   let keyed_list =
     dom ~key:"blw" ~style_class:"blocks-list-wrap"
       ~attrs:[ ("data-level", "0") ]
-      [ Logseq_dom.keyed ~source:blocks_sig ~key:Tree.block_key
+      [ Logseq_dom.keyed ~source_signal:blocks_sig ~key:Tree.block_key
           ~cmp:String.compare
           ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true) ]
   in
@@ -1330,7 +1330,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
               (match puuid with
                | Some u -> [ ("containerid", u) ]
                | None -> [])
-            [ Logseq_dom.if_ ~test:nonempty list_el ]
+            [ Logseq_dom.if_ ~test_signal:nonempty list_el ]
         ; add_button_el ?puuid ~has_children:(fun _ -> nonempty)
         ]
     ]

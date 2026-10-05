@@ -309,7 +309,7 @@ let ac_inner (st : S.t) : t =
   in
   scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
     ~style_class:"hide-scrollbar"
-    [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
+    [ keyed ~source_signal:units_sig ~key:unit_key ~cmp:Stdlib.compare
         ~mount:(fun u_sig ->
           (* the key fingerprints the unit fully, so sampling once is
              stable *)
@@ -396,7 +396,7 @@ let ac_popover (st : S.t) : t =
     [ ac_inner st
     ; (* cljs page-search-aux: mod+enter hint under the tag list *)
       if_
-        ~test:
+        ~test_signal:
           (Signal.map
              (fun (v : S.view) ->
                match v.S.ac with
@@ -655,7 +655,7 @@ let cm_popover (st : S.t) : t =
            | None -> attrs_v [])
          st.S.vs.Signal.state_signal)
     [ box ~key:"cm-wrap"
-        [ keyed ~source:entries_sig ~key:(fun ((i, _) : int * S.cm_item) -> i)
+        [ keyed ~source_signal:entries_sig ~key:(fun ((i, _) : int * S.cm_item) -> i)
             ~cmp:Stdlib.compare
             ~mount:(fun entry_sig -> cm_item_el st entry_sig) ]
     ; dyn ~equal:Stdlib.( = )
@@ -1127,8 +1127,8 @@ let render (_ms : Model.t Signal.signal) : t =
   in
   let body =
     Logseq_dom.fragment
-      [ if_ ~test:ac_open (ac_popover st)
-      ; if_ ~test:cm_open (cm_popover st)
+      [ if_ ~test_signal:ac_open (ac_popover st)
+      ; if_ ~test_signal:cm_open (cm_popover st)
       ; pv_dyn st ]
   in
   body context parent

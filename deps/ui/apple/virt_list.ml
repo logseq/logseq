@@ -124,13 +124,13 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
                      ])))
           ~events:"lazy-mount"
           ~on_dom_event:(fun _name _payload -> Signal.set near true)
-          [ D.if_ ~test:ns (render it) ]
+          [ D.if_ ~test_signal:ns (render it) ]
     in
     D.dom ~style_class:list_class ~events:"virt-end"
       ~attrs_signal_v:attrs_sig
       ~on_dom_event:(fun _name _payload -> on_end ())
       [ D.keyed
-          ~source:(Signal.map Array.to_list source_sig)
+          ~source_signal:(Signal.map Array.to_list source_sig)
           ~key:key_of_versioned ~cmp:String.compare
           ~mount:(fun item_sig -> row_mount (Signal.get item_sig)) ]
       ctx parent
@@ -191,10 +191,10 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
                    ])))
         ~events:"lazy-mount"
         ~on_dom_event:(fun _name _payload -> Signal.set near true)
-        [ D.if_ ~test:ns (mount item_sig) ]
+        [ D.if_ ~test_signal:ns (mount item_sig) ]
   in
   (D.dom ~style_class:"ls-virt-list" ~events:"virt-end"
      ~attrs_signal_v:attrs_sig
      ~on_dom_event:(fun _name _payload -> on_end ())
-     [ D.keyed ~source ~key ~cmp ~mount:row_mount ])
+     [ D.keyed ~source_signal:source ~key ~cmp ~mount:row_mount ])
     ctx parent

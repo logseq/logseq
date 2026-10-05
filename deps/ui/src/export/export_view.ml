@@ -52,7 +52,7 @@ let checkbox ctx ~key ~cls ~show ~on ~on_toggle =
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_toggle ())
     [ if_
-        ~test:(Signal.map on (Signal.value (S.st ctx)))
+        ~test_signal:(Signal.map on (Signal.value (S.st ctx)))
         (dom ~key:(key ^ "-in") ~tag:"span"
            ~attrs:[ ("data-state", "checked") ]
            [ dom ~key:(key ^ "-ck") ~tag:"svg" ~style_class:"h-4 w-4"
@@ -142,7 +142,7 @@ let fmt_btn ctx key label fmt cls =
 
 let copy_save_row ctx =
   if_
-    ~test:
+    ~test_signal:
       (Signal.map
          (fun (st : S.t) -> st.content <> None || st.png <> None)
          (Signal.value (S.st ctx)))
@@ -230,7 +230,7 @@ let png_preview ctx =
   dom ~key:"export-preview-png"
     ~style_class:"flex items-center justify-center relative"
     [ if_
-        ~test:
+        ~test_signal:
           (Signal.map
              (fun (st : S.t) -> st.png = None)
              (Signal.value (S.st ctx)))

@@ -795,7 +795,7 @@ let choices_pane_view m ~set_pane ~close : t =
   (column ~gap:0
      [ scroll ~max_height:240
          [ keyed
-             ~source:(Signal.value choices_st)
+             ~source_signal:(Signal.value choices_st)
              ~key:(fun c ->
                Option.value (D.entity_uuid_of c) ~default:(D.ref_title c))
              ~cmp:String.compare
@@ -850,10 +850,10 @@ let default_value_pane_view m ~close : t =
   let editing = Signal.state sched false in
   let buffer = Signal.state sched "" in
   (column ~gap:0
-     [ if_ ~test:(Signal.map (fun e -> not e) (Signal.value editing))
+     [ if_ ~test_signal:(Signal.map (fun e -> not e) (Signal.value editing))
          (menu_item ~text:(I18n.t "property/set-default-value")
             ~on_press:(fun _ -> Runtime.signal_set editing true) [])
-     ; if_ ~test:(Signal.value editing)
+     ; if_ ~test_signal:(Signal.value editing)
          (text_field ~autofocus:true ?submit_on_enter:Properties_select.submit_on_enter_opt
             ~text:""
             ~on_input:(fun ev ->

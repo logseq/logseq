@@ -84,7 +84,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
   in
   row ~key ~style_class:"ls-toggle-password-input" ~cross:`center
     [ field
-    ; if_ ~test:(Signal.map (fun v -> v <> "") (Signal.value value))
+    ; if_ ~test_signal:(Signal.map (fun v -> v <> "") (Signal.value value))
         (button ~key:(key ^ "-eye") ~variant:`ghost
            ~style_class:"ls-eye-btn"
            ~label:I18n.e2ee_show_password
@@ -127,7 +127,7 @@ let view (r : Dialogs_state.ui_request) : t =
                       ~autofocus:false
                       ~placeholder:I18n.e2ee_password_again_ph
                       ~on_enter:submit_now
-                  ; if_ ~test:warn.Signal.state_signal
+                  ; if_ ~test_signal:warn.Signal.state_signal
                       (text ~key:"mm"
                          ~style_class:"ls-warn-text"
                          ~value:I18n.e2ee_password_not_matched

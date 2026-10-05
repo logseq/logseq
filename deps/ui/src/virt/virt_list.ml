@@ -439,7 +439,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ~attrs:list_attrs
     [ D.dom ~key:("vs-" ^ list_id) ~style_class:"ls-virt-spacer"
         ~attrs_signal_v:spacer_attrs
-        [ keyed ~source:(Signal.map (fun s -> s.v_rows) vstate_sig)
+        [ keyed ~source_signal:(Signal.map (fun s -> s.v_rows) vstate_sig)
             ~key:(fun r -> row_version_key versions r) ~cmp:String.compare
             ~mount:row_mount
         ]

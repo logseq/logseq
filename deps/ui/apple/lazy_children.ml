@@ -26,5 +26,5 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
      ~events:"lazy-mount"
      ~on_dom_event:(fun name _payload ->
        if name = "lazy-mount" then Signal.set near true)
-     [ D.if_ ~test:near_sig (render ()) ])
+     [ D.if_ ~test_signal:near_sig (render ()) ])
     ctx parent
