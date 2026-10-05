@@ -57,39 +57,46 @@ let rec open_last_block ?(in_retry = false) env =
       (E2e_assert.editor_mode env)
 
 let save_block env text =
-  let* () = E2e_assert.have_count ~timeout:15000. env Util.editor_q 1 in
-  let* () = Pw.click env Util.editor_q_first in
-  let* () = Pw.fill env Util.editor_q_first text in
+  (* target the live editing block's textarea — a stale sibling can hold
+     nth=0/nth=-1 and silently absorb the fill; have_count=1 also flakes
+     when a dying copy coexists during a remount *)
+  let* u = Util.wait_editing_uuid env in
+  let* editor_q =
+    match u with
+    | Some uuid ->
+        Js.Promise.resolve
+          (Printf.sprintf "#edit-block-%s:visible >> nth=-1" uuid)
+    | None ->
+        let* () =
+          E2e_assert.have_count ~timeout:15000. env Util.editor_q 1
+        in
+        Js.Promise.resolve Util.editor_q_first
+  in
+  let* () = Pw.click env editor_q in
+  let* () = Pw.fill env editor_q text in
   (* a remount mid-fill can drop the text into the dying editor —
      verify the value and refill (bounded) *)
+  let read_value () =
+    Js.Promise.catch
+      (fun _ -> Js.Promise.resolve "<gone>")
+      (Pw.input_value env editor_q)
+  in
   let rec verify_fill n =
-    let* editors = Pw.qs env Util.editor_q in
-    let* v =
-      if Array.length editors = 0 then Js.Promise.resolve "<no editor>"
-      else
-        Js.Promise.catch (fun _ -> Js.Promise.resolve "<gone>")
-          (Pw.input_value env Util.editor_q_first)
-    in
+    let* v = read_value () in
     if v = text then Js.Promise.resolve ()
     else if n <= 1 then Js.Promise.resolve ()
     else
       let* () =
         Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-          (Pw.fill env Util.editor_q_first text)
+          (Pw.fill env editor_q text)
       in
       verify_fill (n - 1)
   in
   let* () = verify_fill 3 in
-  (* poll the live .value of the first editor — a textarea's has-text
-     match does not track the value under remounts *)
+  (* poll the live .value — a textarea's has-text match does not track
+     the value under remounts *)
   let rec wait_value deadline =
-    let* editors = Pw.qs env Util.editor_q in
-    let* v =
-      if Array.length editors = 0 then Js.Promise.resolve "<no editor>"
-      else
-        Js.Promise.catch (fun _ -> Js.Promise.resolve "<gone>")
-          (Pw.input_value env Util.editor_q_first)
-    in
+    let* v = read_value () in
     if v = text then Js.Promise.resolve ()
     else if Js.Date.now () > deadline then
       Js.Promise.reject
@@ -187,10 +194,35 @@ let new_block env title =
          in
          Js.Promise.resolve true)
     in
-    if pressed then Js.Promise.resolve ()
+    (* the insert op moves the app's editing state to the new block —
+       confirm it moved: a delivered-but-dropped Enter (remote remount
+       ate the keydown) looks exactly like a swallowed one. Re-press
+       only while the state is still on the old block, so a late insert
+       can never mint a duplicate block. *)
+    let* moved =
+      if pressed then
+        let deadline = Js.Date.now () +. 6000. in
+        let rec moved_loop () =
+          let* u = Util.editing_uuid env in
+          match u with
+          | Some u when u <> last_uuid -> Js.Promise.resolve true
+          | _ ->
+              if Js.Date.now () > deadline then Js.Promise.resolve false
+              else
+                let* () = Util.wait_timeout env 150. in
+                moved_loop ()
+        in
+        moved_loop ()
+      else Js.Promise.resolve false
+    in
+    if moved then Js.Promise.resolve ()
     else if n <= 1 then Js.Promise.resolve ()
     else
-      let* () = open_last_block ~in_retry:true env in
+      let* () =
+        Js.Promise.catch
+          (fun _ -> Js.Promise.resolve ())
+          (open_last_block ~in_retry:true env)
+      in
       enter_new_block (n - 1)
   in
   let* () = enter_new_block 3 in
