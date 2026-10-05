@@ -116,8 +116,30 @@ let new_block env title =
   let* () = Util.move_cursor_to_end env in
   (* element-targeted Enter: page.keyboard.press dies silently when
      *:focus is <body> after a remount — a swallowed Enter leaves no new
-     block and focus_new_block just times out *)
-  let* () = Keyboard.press_in_editor env "Enter" in
+     block and focus_new_block just times out. The editor itself can
+     vanish between open_last_block and the press when a remote tx
+     remounts the view — re-open and retry instead of waiting 30s on a
+     textarea that never comes back. *)
+  let rec enter_new_block n =
+    (* short timeout on the press: if the editor vanished mid-remount the
+       locator would otherwise burn the full 30s before we can re-open *)
+    let* pressed =
+      Js.Promise.catch
+        (fun _ -> Js.Promise.resolve false)
+        (let* () =
+           Playwright.locator_press ~timeout:8000.
+             (Pw.q env ".editor-wrapper textarea >> nth=0")
+             "Enter"
+         in
+         Js.Promise.resolve true)
+    in
+    if pressed then Js.Promise.resolve ()
+    else if n <= 1 then Js.Promise.resolve ()
+    else
+      let* () = open_last_block ~in_retry:true env in
+      enter_new_block (n - 1)
+  in
+  let* () = enter_new_block 3 in
   let* () = focus_new_block env ~previous_editor_id:last_id in
   (* the block's own textarea id is derived from the block uuid, so it
      survives editor remounts; read/fill it directly instead of
