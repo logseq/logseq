@@ -45,6 +45,7 @@
 ## Agent-Specific Notes
 - Use repo-local skills discovered under `.agents/skills/`; load the matching `SKILL.md` before editing files or proposing changes.
 - **i18n (mandatory)**: Always load `.agents/skills/logseq-i18n/SKILL.md` before any change that adds, edits, or removes user-facing UI text, regardless of whether other skills also apply.
+- **deps/ui LUI (mandatory)**: Always load `.agents/skills/logseq-lui/SKILL.md` before any change under `deps/ui/`. Direct `dyn` calls are forbidden; `reactive` is the only reactive form.
 - Review notes live in `prompts/review.md`; check them when preparing changes.
 - Runtime, sync, CLI, rendering, search, and Graph View engineering guidance is consolidated in `docs/agent-guide/implemented/architecture/2026-08-24-logseq-runtime-and-engineering-guide.md`; current source and tests remain authoritative.
 - For db-sync D1 schema changes, add or update a Cloudflare worker SQL migration under `deps/db-sync/worker/migrations/`; do not rely on ad hoc runtime-only schema migration code.
