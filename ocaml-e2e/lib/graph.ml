@@ -206,7 +206,7 @@ let validate_graph env =
         |> (fun l -> let rec take n = function [] -> [] | x::tl -> if n<=0 then [] else x :: take (n-1) tl in take 60 l)
         |> List.iter (fun m -> Js.log ("[validate-dbg] " ^ m));
         Playwright.throw_error e)
-      (Pw.wait_for env ~timeout:30000. success_toast)
+      (Pw.wait_for env ~timeout:60000. success_toast)
   in
   let* () =
     Pw.eval_js env

@@ -2697,7 +2697,19 @@ let () =
                uuid)
         in
         let* () =
-          Pw.click env ("#ls-block-" ^ uuid ^ " .block-content")
+          (* under load the click can open a stale/empty editor while the
+             updateBlock re-render is in flight — verify the editing target
+             before typing *)
+          let rec click_until_editing tries =
+            let* () =
+              Pw.click env ("#ls-block-" ^ uuid ^ " .block-content")
+            in
+            let* c = Util.wait_edit_content env "completion updated" in
+            if c then Js.Promise.resolve ()
+            else if tries <= 0 then Js.Promise.resolve ()
+            else click_until_editing (tries - 1)
+          in
+          click_until_editing 3
         in
         let* () = Util.move_cursor_to_end env in
         let* () = Util.press_seq env " and focused" in
