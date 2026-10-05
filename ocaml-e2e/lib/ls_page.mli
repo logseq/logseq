@@ -7,3 +7,4 @@ val set_tag_extends :
   Env.t -> ?retry_count:int -> string list -> unit Js.Promise.t
 val convert_to_tag :
   ?extends:string list -> Env.t -> string -> unit Js.Promise.t
+val wait_page_name : Env.t -> string -> string Js.Promise.t

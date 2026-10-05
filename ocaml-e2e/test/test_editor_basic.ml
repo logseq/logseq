@@ -1357,16 +1357,34 @@ let () =
             [ 0; 1; 2 ]
         in
         let* () = Util.wait_timeout env 800. in
-        let new_logs =
-          List.filter
-            (fun l -> not (List.mem l old_logs))
-            (console_logs env)
+        (* worker perf logs travel over the console-message pipe and can lag
+           under suite load; poll the counts (still asserts exactly 3). *)
+        let collect () =
+          let new_logs =
+            List.filter
+              (fun l -> not (List.mem l old_logs))
+              (console_logs env)
+          in
+          ( new_logs
+          , worker_op_logs new_logs "[:insert-blocks]"
+            @ worker_op_logs new_logs "[:save-block :insert-blocks]"
+          , worker_op_logs new_logs "[:delete-blocks]" )
         in
-        let enter_logs =
-          worker_op_logs new_logs "[:insert-blocks]"
-          @ worker_op_logs new_logs "[:save-block :insert-blocks]"
+        let rec poll n =
+          let new_logs, enter_logs, delete_logs = collect () in
+          if
+            List.length enter_logs >= 3 && List.length delete_logs >= 3
+            || n <= 0
+          then Js.Promise.resolve (new_logs, enter_logs, delete_logs)
+          else
+            let* () = Util.wait_timeout env 300. in
+            poll (n - 1)
         in
-        let delete_logs = worker_op_logs new_logs "[:delete-blocks]" in
+        let* new_logs, enter_logs, delete_logs = poll 30 in
+        if List.length enter_logs <> 3 || List.length delete_logs <> 3 then
+          List.iter
+            (fun l -> Js.log ("new-log-line: " ^ l))
+            new_logs;
         Fest.deep_equal (List.length enter_logs) 3 Fest.expect;
         Fest.deep_equal (List.length delete_logs) 3 Fest.expect;
         let bad =
@@ -2720,7 +2738,7 @@ let () =
                (Loc.filter env ".page-reference .page-ref"
                   ~has_text:target_page))
         in
-        let* name2 = Page.get_page_name env in
+        let* name2 = Page.wait_page_name env target_page in
         Fest.deep_equal name2 target_page Fest.expect;
         let* () = Page.goto_page env host_page in
         let* _ =
@@ -2787,7 +2805,7 @@ let () =
                (Loc.filter env ".page-reference .page-ref"
                   ~has_text:target_page))
         in
-        let* name2 = Page.get_page_name env in
+        let* name2 = Page.wait_page_name env target_page in
         Fest.deep_equal name2 target_page Fest.expect;
         let* () = Page.goto_page env host_page in
         let* _ =

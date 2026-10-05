@@ -125,10 +125,160 @@ let page_sync_state env p =
       let* blocks = Util.settled_page_blocks_contents env in
       Js.Promise.resolve (tx, Array.to_list blocks))
 
+(* Failure diagnostic: dump each page's uuid -> (block/order, parent
+   uuid) map from the frontend datascript state so a block-list
+   divergence can be classified as order-value vs parent-membership
+   without inspecting DOM positions. *)
+let order_map env p =
+  Env.with_page env p (fun () ->
+      Pw.eval_js env
+        "(async () => { \
+         const q = globalThis.logseq && logseq.api && \
+         logseq.api.datascript_query; if (!q) return {err:'no-q'}; const q1 = '[:find ?u ?o ?pe \
+         :where [?b :block/uuid ?u] [(get-else $ ?b :block/order \"\") \
+         ?o] [(get-else $ ?b :block/parent -1) ?pe]]'; const q2 = \
+         '[:find ?e ?u :where [?e :block/uuid ?u]]'; const rows = await \
+         q(q1); const eids = await q(q2); const e2u = new \
+         Map(eids.map(r => [r[0], r[1]])); const m = {}; for (const \
+         [u,o,pe] of rows) m[u] = [o, e2u.get(pe) ?? String(pe)]; return \
+         m; })()")
+
+let order_map_diff m1 m2 =
+  match Js.Json.decodeObject m1, Js.Json.decodeObject m2 with
+  | Some d1, Some d2 ->
+      Js.Dict.entries d1
+      |> Array.to_list
+      |> List.filter_map (fun (u, v1) ->
+             match Js.Dict.get d2 u with
+             | None -> Some (Printf.sprintf "%s only-in-p1=%s" u (Js.Json.stringify v1))
+             | Some v2 ->
+                 if Js.Json.stringify v1 = Js.Json.stringify v2 then None
+                 else
+                   Some
+                     (Printf.sprintf "%s p1=%s p2=%s" u
+                        (Js.Json.stringify v1) (Js.Json.stringify v2)))
+      |> (fun diffs ->
+      Printf.sprintf "%d diffs: %s" (List.length diffs)
+        (String.concat "; " (List.filteri (fun i _ -> i < 8) diffs)))
+  | _ -> "order-map undecodable"
+
+(* Per-page render report: rebuild the expected document order from the
+   frontend datascript state (parent links + order sort at each level)
+   and locate the first position where the actual .ls-block sequence
+   diverges from it — a mismatch means the DOM is stale relative to the
+   page's own db rather than a cross-client data divergence. *)
+let render_report env p =
+  Env.with_page env p (fun () ->
+      Pw.eval_js env
+        "(async () => { \
+         const q = globalThis.logseq && logseq.api && \
+         logseq.api.datascript_query; if (!q) return {err:'no-q'}; \
+         const q1 = '[:find ?u ?o ?pe ?t :where [?b :block/uuid ?u] \
+         [(get-else $ ?b :block/order \"\") ?o] \
+         [(get-else $ ?b :block/parent -1) ?pe] \
+         [(get-else $ ?b :block/title \"\") ?t]]'; \
+         const q2 = '[:find ?e ?u :where [?e :block/uuid ?u]]'; \
+         const rows = await q(q1); const eids = await q(q2); \
+         const e2u = new Map(eids.map(r => [r[0], r[1]])); \
+         const titles = new Map(rows.map(r => [r[0], r[3]])); \
+         const kids = new Map(); \
+         for (const [u,o,pe] of rows) { \
+           const pu = e2u.get(pe) ?? 'ROOT'; \
+           if (!kids.has(pu)) kids.set(pu, []); \
+           kids.get(pu).push([u, String(o)]); } \
+         for (const [, l] of kids) l.sort((a,b) => a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0); \
+         const exp = []; const seen = new Set(); \
+         const dfs = (pu) => { for (const [u] of (kids.get(pu) || [])) { \
+           if (seen.has(u)) continue; seen.add(u); exp.push(u); dfs(u); } }; \
+         dfs('ROOT'); \
+         const dom = [...document.querySelectorAll('.ls-page-blocks \
+         [blockid]')].map(el => el.getAttribute('blockid')); \
+         let idx = -1; const n = Math.max(dom.length, exp.length); \
+         for (let i = 0; i < n; i++) if (dom[i] !== exp[i]) { idx = i; break; } \
+         const w = (arr, i) => arr.slice(Math.max(0, i-2), i+5).map(u => \
+           (titles.get(u) || '?') + '|' + String(u).slice(0,8)); \
+         return { nDom: dom.length, nExp: exp.length, idx, \
+                  dom: idx < 0 ? [] : w(dom, idx), \
+                  exp: idx < 0 ? [] : w(exp, idx) }; })()")
+
+let render_report_str json =
+  match Js.Json.decodeObject json with
+  | None -> "render-report undecodable"
+  | Some o ->
+      let s k =
+        match Js.Dict.get o k with
+        | Some v -> Js.Json.stringify v
+        | None -> "?"
+      in
+      Printf.sprintf "nDom=%s nExp=%s idx=%s dom=%s exp=%s" (s "nDom")
+        (s "nExp") (s "idx") (s "dom") (s "exp")
+
 let assert_two_pages_synced env p1 p2 =
   let* tx1, blocks1 = page_sync_state env p1 in
   let* tx2, blocks2 = page_sync_state env p2 in
-  Fest.deep_equal blocks1 blocks2 Fest.expect;
+  (* slot patches are computed on the worker display conn and can trail the
+     datoms shipped in the same delta; give the render loop a bounded window
+     to flush before comparing (clj gets this slack from JVM latency). *)
+  let rec converge n b1 b2 =
+    if b1 = b2 then Js.Promise.resolve (b1, b2)
+    else if n <= 0 then Js.Promise.resolve (b1, b2)
+    else
+      let* () =
+        Env.with_page env p1 (fun () ->
+            Pw.catch_timeout (Rtc.wait_idle env) (fun () ->
+                Js.Promise.resolve ()))
+      in
+      let* () =
+        Env.with_page env p2 (fun () ->
+            Pw.catch_timeout (Rtc.wait_idle env) (fun () ->
+                Js.Promise.resolve ()))
+      in
+      let* () = Util.wait_timeout env 500. in
+      let* _, b1' = page_sync_state env p1 in
+      let* _, b2' = page_sync_state env p2 in
+      converge (n - 1) b1' b2'
+  in
+  let* blocks1, blocks2 = converge 16 blocks1 blocks2 in
+  let* () =
+    Js.Promise.catch
+      (fun _ ->
+         let* m1 = order_map env p1 in
+         let* m2 = order_map env p2 in
+         let* r1 = render_report env p1 in
+         let* r2 = render_report env p2 in
+         let first_diff a b =
+           let rec go i a b =
+             match (a, b) with
+             | x :: xs, y :: ys -> if x <> y then i else go (i + 1) xs ys
+             | [], [] -> -1
+             | _ -> i
+           in
+           go 0 a b
+         in
+         let window i xs =
+           xs |> List.mapi (fun j x -> (j, x))
+           |> List.filter (fun (j, _) -> j >= i - 2 && j <= i + 4)
+           |> List.map (fun (j, x) -> Printf.sprintf "%d:%s" j x)
+         in
+         let d = first_diff blocks1 blocks2 in
+         let w xs = "[" ^ String.concat "; " (window d xs) ^ "]" in
+         let _ =
+           Js.log
+             (Printf.sprintf
+                "order-map-diff: %s\nrender-p1: %s\nrender-p2: %s\nblocks-diff: i=%d n1=%d n2=%d p1=%s p2=%s"
+                (order_map_diff m1 m2) (render_report_str r1)
+                (render_report_str r2) d
+                (List.length blocks1) (List.length blocks2) (w blocks1)
+                (w blocks2))
+         in
+         Fest.deep_equal blocks1 blocks2 Fest.expect;
+         Js.Promise.resolve ())
+      (Js.Promise.then_
+         (fun () ->
+            Fest.deep_equal blocks1 blocks2 Fest.expect;
+            Js.Promise.resolve ())
+         (Js.Promise.resolve ()))
+  in
   Fest.deep_equal tx1.Rtc.local_tx tx1.Rtc.remote_tx Fest.expect;
   Fest.deep_equal tx2.Rtc.local_tx tx2.Rtc.remote_tx Fest.expect;
   Js.Promise.resolve ()
