@@ -254,6 +254,7 @@ let load_view_data inst =
   let key = Db.key_view_data inst.V.view_uuid ctx in
   Db.snapshots
     ~f:(fun snap ->
+      V.note_watch inst snap key;
       match Wr.snapshot_slot_value snap key with
       | None ->
           inst.V.data <- Wr.VEmpty;
@@ -311,6 +312,7 @@ let load_views inst ~on_done =
   let key = Db.key_views inst.V.owner inst.V.feature in
   Db.snapshots
     ~f:(fun snap ->
+      V.note_watch inst snap key;
       match Wr.snapshot_slot_value snap key with
       | Some (W.Array uuids) | Some (W.List uuids) -> (
           let us = List.filter_map W.as_uuid uuids in
@@ -339,6 +341,7 @@ let owner_uuid inst f =
       let key = Db.key_page_identity name in
       Db.snapshots
         ~f:(fun snap ->
+          V.note_watch inst snap key;
           match Wr.snapshot_slot_value snap key with
           | Some (W.Uuid u) -> f u
           | _ -> ())
@@ -531,13 +534,14 @@ let mount_query ~block_uuid ~container : V.inst =
    debounced so a burst of tx broadcasts coalesces into one refetch *)
 let debounced_refresh_queries = D.debounce 150
 
-let refresh_query_insts () =
+let refresh_query_insts affected =
   debounced_refresh_queries (fun () ->
       let dead = ref [] in
       Hashtbl.iter
         (fun uuid inst ->
-          if D.el_is_connected inst.V.container then refresh inst
-          else dead := uuid :: !dead)
+          if not (D.el_is_connected inst.V.container) then
+            dead := uuid :: !dead
+          else if V.inst_hits inst affected then refresh inst)
         query_insts;
       (* drop insts whose query block is gone — mount_query re-creates an
          equivalent inst from worker state if the block re-renders *)

@@ -846,14 +846,18 @@ let debounced_embed_refresh = Editor_dom.debounce 150
 let chain_embed_worker () =
   if not !embed_chained then begin
     embed_chained := true;
-    Runtime.on_sync (fun () ->
-        debounced_embed_refresh (fun () ->
-            Hashtbl.iter
-              (fun _ f ->
-                try f ()
-                with e ->
-                  Platform.console_error ("embed refresh failed", e))
-              embed_refreshes))
+    (* embeds fetch whole page trees by name — their content can change
+       under affected-keys we don't know the uuids for, so they keep
+       the watch-all default *)
+    ignore
+      (Runtime.on_sync (fun _affected ->
+           debounced_embed_refresh (fun () ->
+               Hashtbl.iter
+                 (fun _ f ->
+                   try f ()
+                   with e ->
+                     Platform.console_error ("embed refresh failed", e))
+                 embed_refreshes)))
   end
 
 let fetch_embed_blocks name st =

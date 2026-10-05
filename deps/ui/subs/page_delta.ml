@@ -31,6 +31,11 @@ type parsed =
   ; canon : Wire.t SMap.t
   ; deleted : SSet.t
   ; patches : patch SMap.t
+  ; affected : Wire.t list
+      (** the worker's affected-keys ([tag] / [tag value] vectors —
+          render_affected_keys.ml): which resources this tx can
+          invalidate. Sync subs gate on these instead of refetching
+          on every batch *)
   }
 
 let uuid_pairs (w : Wire.t) : (string * Wire.t) list =
@@ -96,7 +101,12 @@ let parse (delta : Wire.t) : parsed option =
             | None -> m)
           SMap.empty (uuid_pairs children_w)
       in
-      Some { rev; canon; deleted; patches }
+      let affected =
+        match Wire.get delta "affected-keys" with
+        | Some w -> Wire.elems w
+        | None -> []
+      in
+      Some { rev; canon; deleted; patches; affected }
   | _ -> None
 
 (* rev of the tx that produced the current materialized page state —
@@ -136,8 +146,13 @@ let with_apply_queue (f : unit -> 'a Js.Promise.t) : 'a Js.Promise.t =
     let* () = !apply_queue in
     f ()
   in
+  (* the queued successor must resolve on EITHER outcome — a then_-only
+     chain stays rejected after the first failed apply and every later
+     enqueue binds onto that rejection and never runs *)
   apply_queue :=
-    Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p;
+    Js.Promise.catch
+      (fun _ -> Js.Promise.resolve ())
+      (Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p);
   p
 
 let note_applied rev =
@@ -413,6 +428,18 @@ let delta_uuids (delta : Wire.t) : string list =
         (SSet.fold (fun u acc -> u :: acc) p.deleted [])
   | None -> []
 
+(* the delta's affected-keys — sync subs intersect these with their
+   resource watches to skip refetches the tx couldn't change *)
+let delta_affected (delta : Wire.t) : Wire.t list =
+  match parse delta with Some p -> p.affected | None -> []
+
+(* a refetched tree already contains every received delta's effects —
+   marking the failed batch's revs applied after a refetch seeds the
+   basis so the NEXT broadcast splices instead of refetching again
+   (self-heals in one refetch instead of being stuck on the slow path) *)
+let note_applied_of_delta (delta : Wire.t) =
+  match parse delta with Some p -> note_applied p.rev | None -> ()
+
 (* does the delta touch this page's tree: a membership patch keys the
    page uuid (top-level children list) or any canon/deleted/patch uuid
    lives inside the block tree *)
@@ -427,7 +454,13 @@ let delta_touches_parsed (p : parsed) (page : Model.page) : bool =
     || List.exists block_touches b.Model.block_embed_children
   in
   (match page.Model.page_uuid with
-   | Some pu -> SMap.mem pu p.patches
+   | Some pu ->
+       (* a canon/deleted row keyed by the page entity's own uuid is a
+          page-level change — rename, delete, tag drop. Missing it made
+          those deltas read as Unchanged and the rename/delete never
+          reached the UI *)
+       SMap.mem pu p.patches || SMap.mem pu p.canon
+       || SSet.mem pu p.deleted
    | None -> false)
   || List.exists block_touches page.Model.page_blocks
 

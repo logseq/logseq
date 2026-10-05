@@ -1005,8 +1005,8 @@ let apply_queued _page delta =
                if perf then
                  Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
            | _ -> ());
-          Js.Promise.resolve (a, touched))
-      | None -> Js.Promise.resolve (None, touched))
+          Js.Promise.resolve (a, touched, deltas))
+      | None -> Js.Promise.resolve (None, touched, deltas))
 
 (* journals-route fold of the op response (+ any deferred deltas) —
    the route page lives in current_journals, so the page-route splice
@@ -1060,8 +1060,12 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
                          rest
                in
                let* js' = refetch [] start_js in
-               if still_current then
+               if still_current then (
                  Runtime.send (Action.Journals_loaded js');
+                 (* the refetched days already contain these deltas'
+                    effects — marking their revs seeds the basis so the
+                    next broadcast splices instead of refetching *)
+                 List.iter Page_delta.note_applied_of_delta deltas);
                Js.Promise.resolve ())
            | None -> refresh_page ()))
       |> Js.Promise.then_ (fun () ->
@@ -1074,7 +1078,7 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   with
   | Some delta, Some page -> (
       let route_at_start = !Runtime.current_route in
-      let* applied, touched = apply_queued page delta in
+      let* applied, touched, deltas = apply_queued page delta in
       match applied with
       | Some page' when page_still_current route_at_start page' ->
           (* the spliced rows are authoritative for the uuids the tx
@@ -1101,11 +1105,22 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
       | Some _ ->
           (* page moved on mid-splice — this page is gone *)
           Js.Promise.resolve ()
-      | None -> refresh_page ())
+      | None ->
+          let* () = refresh_page () in
+          (* the fresh fetch contains every attempted delta — seed the
+             basis so later broadcasts splice *)
+          List.iter Page_delta.note_applied_of_delta deltas;
+          Js.Promise.resolve ())
   | Some delta, None when !Runtime.current_journals <> [] ->
       (* journals / other route-less views keep their pages in
          current_journals — splice the delta into the day it touches *)
       refresh_journals_via_delta delta
+  | Some delta, None ->
+      (* no page store — the fresh reload already contains the delta's
+         effects; seed the basis after it so later broadcasts splice *)
+      let* () = refresh_page () in
+      Page_delta.note_applied_of_delta delta;
+      Js.Promise.resolve ()
   | _ -> refresh_page ()
 
 let apply_and_refresh ?opts ops =

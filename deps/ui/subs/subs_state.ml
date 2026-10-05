@@ -137,15 +137,58 @@ let on_page_loaded uuid f = after_page_load := Some (uuid, f)
 (* "sync-db-changes" subscribers — one ordered list (drained by
    Subs.apply_pending) instead of each area monkey-patching
    Worker_client.on_message. A failing handler is logged and the rest
-   still run. *)
-let sync_subs : (unit -> unit) list ref = ref []
+   still run.
 
-let on_sync f = sync_subs := !sync_subs @ [ f ]
+   Each sub declares a [watch] over the delta's affected-keys so an
+   unrelated tx doesn't refetch it: [w_tags] matches a key vector's
+   leading tag ([tag] or [tag value] — e.g. "page-membership"),
+   [w_keys] matches whole vectors (e.g. [:entity uuid]), [w_all]
+   refreshes on every batch. [affected = []] means the broadcast
+   carried no key info — run everything (conservative fallback). *)
+type watch =
+  { w_all : bool
+  ; w_tags : string list
+  ; w_keys : Wire.t list
+  }
 
-let run_sync_subs () =
+let watch_all = { w_all = true; w_tags = []; w_keys = [] }
+let watch_tags tags = { w_all = false; w_tags = tags; w_keys = [] }
+
+type sync_sub =
+  { mutable watch : watch
+  ; run : Wire.t list -> unit
+  }
+
+let sync_subs : sync_sub list ref = ref []
+
+let on_sync ?(watch = watch_all) run : sync_sub =
+  let s = { watch; run } in
+  sync_subs := !sync_subs @ [ s ];
+  s
+
+(* watches that follow live data (e.g. sidebar items) re-declare after
+   each refresh *)
+let set_watch s w = s.watch <- w
+
+let watch_key tag v = Wire.Array [ Wire.Keyword tag; v ]
+let watch_key_uuid tag u = watch_key tag (Wire.Uuid u)
+
+let key_tag (k : Wire.t) =
+  match Wire.elems k with
+  | Wire.Keyword t :: _ | Wire.String t :: _ -> Some t
+  | _ -> None
+
+let run_sync_subs (affected : Wire.t list) =
+  let tags = List.filter_map key_tag affected in
+  let hits w =
+    w.w_all
+    || List.exists (fun t -> List.mem t w.w_tags) tags
+    || List.exists (fun k -> List.mem k affected) w.w_keys
+  in
   List.iter
-    (fun f ->
-      try f ()
-      with e ->
-        Platform.console_error ("sync-db-changes handler failed", e))
+    (fun s ->
+      if affected = [] || hits s.watch then
+        try s.run affected
+        with e ->
+          Platform.console_error ("sync-db-changes handler failed", e))
     !sync_subs

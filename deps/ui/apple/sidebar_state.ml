@@ -728,22 +728,54 @@ let unfavorite st uuid =
 
 (* ---------- model / worker wiring ---------- *)
 
-let on_sync st =
+(* affected-keys gating: page-set tags (membership/lookup/rename/
+   journal/recycle/class changes) refresh the lists; a right-sidebar
+   item refreshes when its own entity/children key hits — a block edit
+   on the open page no longer refetches the whole sidebar *)
+let page_set_tags =
+  [ "page-membership"; "page-lookup"; "route-page"; "journals"
+  ; "recycle-roots"; "class-tree" ]
+
+let item_hits affected st =
+  List.exists
+    (fun (i : item) ->
+      match i.uuid with
+      | Some u ->
+          List.exists
+            (fun k ->
+              k = Subs_state.watch_key_uuid "entity" u
+              || k = Subs_state.watch_key_uuid "children" u)
+            affected
+      | None -> false)
+    (Signal.get_state st.items)
+
+let on_sync st affected =
   match (!model_ref).Model.repo with
   | Some repo ->
       (* the route reload comes from Worker_events.dispatch's debounced
          Router.reload — refetching it here too doubled the work per
          broadcast *)
-      load_favorites repo st;
-      load_recents repo st;
-      refresh_favorited repo st;
-      refresh_items repo st
+      let sets_hit =
+        affected = []
+        || List.exists
+             (fun k ->
+               match Subs_state.key_tag k with
+               | Some t -> List.mem t page_set_tags
+               | None -> false)
+             affected
+      in
+      if sets_hit then begin
+        load_favorites repo st;
+        load_recents repo st;
+        refresh_favorited repo st
+      end;
+      if sets_hit || item_hits affected st then refresh_items repo st
   | None -> ()
 
 let install_worker_hook st =
   if not !hook_installed then begin
     hook_installed := true;
-    Runtime.on_sync (fun () -> on_sync st)
+    ignore (Runtime.on_sync (on_sync st))
   end
 
 let page_key (p : Model.page) =

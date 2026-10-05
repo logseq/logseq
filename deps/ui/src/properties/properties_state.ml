@@ -293,6 +293,27 @@ let drop_row ~owner_uuid ~title =
    round of get-display-properties calls. *)
 let refresh_pending = ref false
 
+(* does the batch's affected-keys touch this area — the area's own
+   entity/display-properties keys plus the global property/schema tags
+   (renames via page-lookup reach value chips; property-config and
+   class-tree can reshape any area). [] = no info -> refresh all *)
+let area_hit affected key =
+  let uuid =
+    match String.index_opt key ':' with
+    | Some i -> String.sub key (i + 1) (String.length key - i - 1)
+    | None -> key
+  in
+  List.exists
+    (fun k ->
+      match W.elems k with
+      | W.Keyword ("property-config" | "class-tree" | "page-lookup")
+        :: _ ->
+          true
+      | W.Keyword ("entity" | "display-properties") :: W.Uuid u :: _ ->
+          u = uuid
+      | _ -> false)
+    affected
+
 let refresh_all () =
   if !refresh_pending then ()
   else (
@@ -300,6 +321,23 @@ let refresh_all () =
     Editor_dom.set_timeout (fun () ->
         refresh_pending := false;
         List.iter (fun a -> ignore (guarded a.a_fetch)) (live_areas ()))
+      150)
+
+(* sync-sub entry: same debounce, but only refetches areas whose key
+   the delta actually touched *)
+let refresh_affected affected =
+  if !refresh_pending then ()
+  else if affected = [] then refresh_all ()
+  else (
+    refresh_pending := true;
+    Editor_dom.set_timeout (fun () ->
+        refresh_pending := false;
+        (* prunes dead areas as a side effect, like refresh_all *)
+        ignore (live_areas ());
+        Hashtbl.iter
+          (fun key a ->
+            if area_hit affected key then ignore (guarded a.a_fetch))
+          areas)
       150)
 
 (* immediate rebuild for commit paths (sdk writes) — skips the 150ms
@@ -331,7 +369,7 @@ let chained = ref false
 let chain_worker () =
   if not !chained then begin
     chained := true;
-    Runtime.on_sync refresh_all
+    ignore (Runtime.on_sync refresh_affected)
   end
 
 

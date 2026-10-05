@@ -204,7 +204,7 @@ let ensure_query_shells roots =
    page side *)
 let debounced_refresh = D.debounce 150
 
-let refresh_query_insts () =
+let refresh_query_insts affected =
   debounced_refresh (fun () ->
       let dead = ref [] in
       Hashtbl.iter
@@ -217,7 +217,8 @@ let refresh_query_insts () =
                    Views_view.refresh_query_insts — running them again here
                    would refetch twice per broadcast *)
                 ()
-            | _ -> Views_view.refresh inst)
+            | _ ->
+                if V.inst_hits inst affected then Views_view.refresh inst)
         insts;
       (* a detached container never comes back — the observer mounts a
          fresh inst when the route re-renders — so drop the bookkeeping
@@ -240,7 +241,7 @@ let worker_chained = ref false
 let chain_worker () =
   if not !worker_chained then begin
     worker_chained := true;
-    Runtime.on_sync (fun () -> Views_view.refresh_query_insts ())
+    ignore (Runtime.on_sync Views_view.refresh_query_insts)
   end
 
 let scan roots =

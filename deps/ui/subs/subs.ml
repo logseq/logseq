@@ -14,8 +14,10 @@ open Promise_ext
 type hooks =
   { reload : unit -> unit
       (** full route reload — the delta-less/failed-splice fallback *)
-  ; after_apply : unit -> unit
-      (** refresh views mounted outside the model (query instances) *)
+  ; after_apply : Wire.t list -> unit
+      (** refresh views mounted outside the model (query instances);
+          the batch's unioned affected-keys let insts skip txs that
+          can't change them *)
   ; refresh_page_side : Model.page -> unit
       (** the side-fetches a page load also runs (refs, unlinked) *)
   ; prune_overrides : string list -> unit
@@ -41,6 +43,10 @@ type hooks =
   ; refetch_page : Model.page -> Model.page option Js.Promise.t
       (** block-level fallback: a delta that can't splice refetches only
           the affected page/day's blocks — never the whole route *)
+  ; resync_editing : unit -> unit
+      (** remote tx landed — re-read the editing block's title into the
+          buffer like cljs update-editing-block-title-if-changed!, so a
+          later commit can't overwrite the remote rename *)
   }
 
 let hooks : hooks option ref = ref None
@@ -59,9 +65,17 @@ let hooks_or_fail () =
    continuous flood can't postpone the refresh forever. *)
 let pending_deltas : Wire.t list ref = ref []
 let pending_unknown_delta = ref false
+(* cljs pipeline also treats tx-meta :outliner-op = :apply-template as
+   remote work — a template apply echo re-runs the editing-buffer
+   resync even when its delta is already applied *)
+let pending_apply_template = ref false
 let reload_pending = ref false
 let reload_first_ms = ref 0.0
 let reload_last_ms = ref 0.0
+(* bumping the generation disarms a scheduled fire_reload — a route
+   change clears the stash and must not let a timer armed for the old
+   route fire a reload onto the new one *)
+let reload_gen = ref 0
 
 (* each full-route reload pays a worker fetch plus ~280ms of whole-tree
    rebuild+flush; the app caps reload cadence while an editor is open *)
@@ -72,8 +86,12 @@ let reload_max_wait_ms = 2000.0
 let edit_input_idle_ms = 750.0
 
 let clear_pending_deltas () =
+  incr reload_gen;
   pending_deltas := [];
-  pending_unknown_delta := false
+  pending_unknown_delta := false;
+  pending_apply_template := false;
+  reload_pending := false;
+  reload_first_ms := 0.0
 
 let perf_enabled =
   lazy (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
@@ -105,23 +123,26 @@ let rec schedule_reload () =
   if !reload_first_ms = 0.0 then reload_first_ms := !reload_last_ms;
   if not !reload_pending then (
     reload_pending := true;
-    (hooks_or_fail ()).schedule fire_reload)
+    let gen = !reload_gen in
+    (hooks_or_fail ()).schedule (fun () -> fire_reload gen))
 
-and fire_reload () =
-  let h = hooks_or_fail () in
-  let now = Platform.date_now_ms () in
-  let flood_active =
-    now -. !reload_last_ms < reload_debounce_ms
-    && now -. !reload_first_ms < reload_max_wait_ms
-  in
-  if flood_active || h.ui_busy ~now ~last_fire:!reload_last_fire_ms
-  then h.schedule fire_reload
-  else (
-    reload_pending := false;
-    reload_first_ms := 0.0;
-    reload_last_fire_ms := now;
-    Platform.perf_mark "reload:fire";
-    ignore (apply_pending ()))
+and fire_reload gen =
+  if gen <> !reload_gen then ()
+  else
+    let h = hooks_or_fail () in
+    let now = Platform.date_now_ms () in
+    let flood_active =
+      now -. !reload_last_ms < reload_debounce_ms
+      && now -. !reload_first_ms < reload_max_wait_ms
+    in
+    if flood_active || h.ui_busy ~now ~last_fire:!reload_last_fire_ms
+    then h.schedule (fun () -> fire_reload gen)
+    else (
+      reload_pending := false;
+      reload_first_ms := 0.0;
+      reload_last_fire_ms := now;
+      Platform.perf_mark "reload:fire";
+      ignore (apply_pending ()))
 
 (* splice the stashed tx deltas into the subscribed stores; fall back
    to the full route reload when a broadcast carried no delta, the
@@ -133,10 +154,21 @@ and apply_pending () : unit Js.Promise.t =
      strict broadcast splices build on the right basis *)
   let deltas = Page_delta.drain_deferred () @ !pending_deltas in
   let unknown = !pending_unknown_delta in
+  let apply_template = !pending_apply_template in
   clear_pending_deltas ();
+  (* unioned affected-keys of the batch; [] = unknown/no info -> sync
+     subs run unfiltered *)
+  let affected =
+    if deltas = [] then []
+    else List.concat_map Page_delta.delta_affected deltas
+  in
   let finish () =
-    perf_time "after_apply" h.after_apply;
-    perf_time "sync_subs" Subs_state.run_sync_subs
+    perf_time "after_apply" (fun () -> h.after_apply affected);
+    perf_time "sync_subs"
+      (fun () -> Subs_state.run_sync_subs affected);
+    (* every path that calls finish is a remote/non-own batch — a dup
+       echo of our own op never reaches it *)
+    h.resync_editing ()
   in
   (* sync subs (sidebar recents/favorites, views queries, embed
      refresh) are graph-wide — a delta that touches no mounted page can
@@ -145,7 +177,8 @@ and apply_pending () : unit Js.Promise.t =
   match (!Subs_state.current_page, deltas, unknown) with
   | Some _, _ :: _, false -> (
       let all_dup =
-        List.for_all Page_delta.delta_already_applied deltas
+        (not apply_template)
+        && List.for_all Page_delta.delta_already_applied deltas
       in
       let prune () =
         h.prune_overrides
@@ -209,9 +242,24 @@ and apply_pending () : unit Js.Promise.t =
               let* fresh = h.refetch_page p in
               match fresh with
               | Some p' ->
-                  h.publish_page p';
-                  h.refresh_page_side p';
-                  if not all_dup then prune ();
+                  (* the route may have moved on while the fetch was
+                     in flight — publishing would clobber the new
+                     route's store with the old page *)
+                  (match !Subs_state.current_page with
+                   | Some c when c == p ->
+                       h.publish_page p';
+                       h.refresh_page_side p';
+                       if not all_dup then prune ();
+                       (* the refetched tree already contains these
+                          deltas' effects — mark their revs so the next
+                          broadcast splices instead of refetching *)
+                       List.iter Page_delta.note_applied_of_delta
+                         deltas;
+                       (* finish() already ran against the pre-refetch
+                          model — resync the editing buffer again now
+                          that the fresh tree is in *)
+                       h.resync_editing ()
+                   | _ -> ());
                   Js.Promise.resolve ()
               | None ->
                   h.reload ();
@@ -225,7 +273,8 @@ and apply_pending () : unit Js.Promise.t =
       then
         let start_js = !Subs_state.current_journals in
         let all_dup =
-          List.for_all Page_delta.delta_already_applied deltas
+          (not apply_template)
+          && List.for_all Page_delta.delta_already_applied deltas
         in
         let* merged =
           Page_delta.with_apply_queue (fun () ->
@@ -279,6 +328,9 @@ and apply_pending () : unit Js.Promise.t =
              | Some js'
                when !Subs_state.current_journals == start_js ->
                  h.publish_journals js';
+                 (* refetched days already contain the deltas' effects
+                    — mark so the next broadcast splices *)
+                 List.iter Page_delta.note_applied_of_delta deltas;
                  if not all_dup then begin
                    finish ();
                    h.prune_overrides
@@ -306,6 +358,14 @@ let on_db_changes (payload : Wire.t) =
    | None ->
        pending_unknown_delta := true;
        h.invalidate_pull_caches ());
+  (match
+     Option.bind (Wire.get payload "tx-meta")
+       (fun tm -> Wire.get tm "outliner-op")
+   with
+   | Some (Wire.Keyword "apply-template")
+   | Some (Wire.String "apply-template") ->
+       pending_apply_template := true
+   | _ -> ());
   (* cljs pipeline.cljs publish-plugin-hook! — fire plugin db hooks for
      the tx report before the UI reloads *)
   h.fire_db_hooks payload;

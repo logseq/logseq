@@ -74,6 +74,11 @@ type inst =
   ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
   ; mutable props_loaded : bool
   ; ref_titles : (string, string) Hashtbl.t (* referenced uuid -> title *)
+  ; mutable watch : (W.t list * bool) option
+      (** unioned [:resource] slot watches recorded as snapshots land
+          (Views_wire.snapshot_slot_watch): keys + all?. None until the
+          first snapshot — refresh conservatively. Sync subs skip an
+          inst the batch's affected-keys can't reach *)
   }
 
 let next_id = ref 0
@@ -119,6 +124,7 @@ let make ~kind ~feature ~owner ~container : inst =
     ; props_loaded = false
     ; ref_titles = Hashtbl.create 8
     ; asset_class = false
+    ; watch = None
     }
 
 (* -- wire encode/decode of persisted table state -- *)
@@ -302,6 +308,26 @@ let persist_hidden inst =
     "logseq.property.table/hidden-columns"
     (W.Array (List.map (fun k -> W.Keyword k) (Sset.elements inst.hidden)))
     (fun () -> ())
+
+(* fold a snapshot slot's watch into the inst's union — repeated
+   resources accumulate keys; all? sticks once set *)
+let note_watch (inst : inst) (snap : W.t) (rk : W.t) =
+  let keys, all = Views_wire.snapshot_slot_watch snap rk in
+  inst.watch <-
+    Some
+      (match inst.watch with
+       | None -> (keys, all)
+       | Some (ks, a) -> (ks @ keys, a || all))
+
+(* can this batch's affected-keys reach the inst — [] = no info ->
+   refresh *)
+let inst_hits (inst : inst) (affected : W.t list) =
+  if affected = [] then true
+  else
+    match inst.watch with
+    | None | Some (_, true) -> true
+    | Some (keys, false) ->
+        List.exists (fun k -> List.mem k keys) affected
 
 let persist_display_type inst =
   Views_db.set_view_property inst.view_uuid "logseq.property.view/type"

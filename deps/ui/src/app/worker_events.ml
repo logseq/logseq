@@ -125,6 +125,8 @@ let init () =
         (fun p -> Runtime.send (Action.Page_loaded p))
     ; publish_journals =
         (fun js -> Runtime.send (Action.Journals_loaded js))
+    ; resync_editing =
+        (fun () -> ignore (Outliner_ops.resync_open_editor ()))
     ; refetch_page =
         (fun p ->
           match !Runtime.current_repo with

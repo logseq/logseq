@@ -189,6 +189,7 @@ let run inst (f : unit -> unit) =
                  let key = Db.key_query spec in
                  Db.snapshots
                    ~f:(fun snap ->
+                     V.note_watch inst snap key;
                      (match Wr.snapshot_slot_value snap key with
                       | Some v -> decode_result inst v
                       | None -> inst.V.query_error <- Some "query failed");
