@@ -315,11 +315,10 @@ let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   load_folder ctx;
   column ~key:"export" ~style_class:"export"
-    [ (* TODO(component): .export h1.title.ls-mb keys on the h1 tag —
-         heading renders a div[role=heading], keep dom until the rule
-         moves to a class selector *)
-      Logseq_dom.dom ~key:"ex-h" ~tag:"h1" ~style_class:"title ls-mb"
-        ~text:T.export_title []
+    [ (* .export h1.title.ls-mb keys on the h1 tag — ~as_ retags the
+         heading element *)
+      heading ~key:"ex-h" ~level:1 ~as_:`H1 ~style_class:"title ls-mb"
+        ~value:T.export_title []
     ; column ~key:"ex-list" ~style_class:"ls-ex-list"
         ([ link ~key:"ex-db" T.export_sqlite_db T.export_sqlite_desc
              export_binary

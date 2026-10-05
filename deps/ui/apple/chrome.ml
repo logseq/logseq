@@ -207,9 +207,9 @@ let rtc_tx_text (r : Model.rtc) =
   Printf.sprintf "{:local-tx %s, :remote-tx %s}"
     (tx r.rtc_local_tx) (tx r.rtc_remote_tx)
 
-(* TODO(component): the rtc indicator stays dom — its hidden rtc-tx
-   element (data-testid) is an e2e EDN contract and the mount keeps the
-   sync emitters alive; the semantic toolbar twin is rtc_item *)
+(* hidden rtc-tx element (data-testid) is an e2e EDN contract; the
+   mount keeps the sync emitters alive — the semantic toolbar twin is
+   rtc_item *)
 let rtc_indicator (ms : Model.t Signal.signal) : t =
   reactive (fun (r : Model.rtc option) ->
       match r with
@@ -231,21 +231,17 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
             ^ (if idle then " idle" else "")
             ^ (if queuing then " queuing" else "")
           in
-          Logseq_dom.dom ~key:"rtc" ~style_class:"cp__rtc-sync"
-            [ Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
-                ~attrs:[ ("data-testid", "rtc-tx") ]
-                ~text:(rtc_tx_text r) []
-            ; Logseq_dom.dom ~key:"rtc-ind"
-                ~style_class:
-                  "cp__rtc-sync-indicator flex flex-row items-center \
-                   gap-1"
-                [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
-                    ~style_class:cls
-                    ~attrs:
-                      [ ("type", "button"); ("aria-label", "rtc sync") ]
-                    [ Logseq_dom.dom ~key:"rtc-i" ~tag:"i"
-                        ~style_class:"ti ti-cloud" [] ]
-                ]
+          box ~key:"rtc" ~style_class:"cp__rtc-sync"
+            [ box ~key:"rtc-tx" ~style_class:"hidden"
+                ~accessibility_identifier:"rtc-tx"
+                ~data_attrs:[ ("data-testid", "rtc-tx") ]
+                [ Lui_elements.text ~key:"rtc-tx-v"
+                    ~value:(rtc_tx_text r) [] ]
+            ; row ~key:"rtc-ind" ~cross:`center ~gap:4
+                ~style_class:"cp__rtc-sync-indicator"
+                [ Lui_elements.button ~key:"rtc-btn" ~variant:`ghost
+                    ~size:`icon ~style_class:cls ~label:"rtc sync"
+                    ~icon:(`app "cloud") [] ]
             ])
     (Signal.map (fun (m : Model.t) -> m.rtc) ms)
 
@@ -259,15 +255,16 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
 (* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
    carries .open/.closed; only renders contents while open *)
 let right_sidebar (ms : Model.t Signal.signal) =
-  (* TODO(component): #right-sidebar is read imperatively
-     (sidebar_state get_element_by_id); kinds are invisible to the
-     imperative overlay *)
-  Logseq_dom.dom ~key:"right-sidebar" ~id:"right-sidebar"
-    ~style_class_signal:
-      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-           "cp__right-sidebar h-screen "
-           ^ if m.right_sidebar_open then "open" else "closed"))
-    [ Right_sidebar_view.render ms ]
+  (* #right-sidebar is read imperatively (sidebar_state
+     get_element_by_id) — the id rides ~accessibility_identifier,
+     .open/.closed the class_signal wrapper *)
+  Ui_parts.class_signal ms
+    (fun (m : Model.t) ->
+      "cp__right-sidebar h-screen "
+      ^ if m.right_sidebar_open then "open" else "closed")
+    (box ~key:"right-sidebar"
+       ~accessibility_identifier:"right-sidebar"
+       [ Right_sidebar_view.render ms ])
 
 (* left_sidebar.cljs:570 — div#left-sidebar.cp__sidebar-left-layout
    holds .left-sidebar-inner (contents) + .shade-mask + .left-sidebar-
@@ -301,20 +298,21 @@ let main_content (ms : Model.t Signal.signal) =
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
     [ left_sidebar ms
-    ; (* TODO(component): #main-content-container is queried by
-         graphs/recycle.ml; the data-is-* attrs and
-         .cp__sidebar-main-content/.mx-auto classes are imperative
-         contracts (graphs_view, container.cljs hooks) — keep dom *)
-      Logseq_dom.dom ~key:"main-content" ~id:"main-content-container"
+    ; (* #main-content-container is queried by graphs/recycle.ml —
+         the id rides ~accessibility_identifier; the data-is-* attrs
+         are imperative contracts (graphs_view, container.cljs hooks)
+         carried by data_attrs_signal *)
+      box ~key:"main-content"
+        ~accessibility_identifier:"main-content-container"
         ~style_class:
           "scrollbar-spacing w-full flex justify-center flex-row outline-none relative"
-        ~attrs_signal_v:
-          (Logseq_dom.attrs_signal ms (fun (_ : Model.t) ->
-               [ ("data-is-margin-less-pages", "false") ]))
-        [ Logseq_dom.dom ~key:"main-inner"
+        ~data_attrs_signal:
+          (Signal.map (fun (_ : Model.t) ->
+               [ ("data-is-margin-less-pages", "false") ]) ms)
+        [ box ~key:"main-inner"
             ~style_class:"cp__sidebar-main-content"
-            ~attrs_signal_v:
-              (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
+            ~data_attrs_signal:
+              (Signal.map (fun (m : Model.t) ->
                    (* cljs container.cljs: data-is-full-width on margin-less +
                       all-pages/all-files/my-publishing routes *)
                    let marginless =
@@ -323,7 +321,7 @@ let main_content (ms : Model.t Signal.signal) =
                    match m.route with
                    | Model.All_pages ->
                        ("data-is-full-width", "true") :: marginless
-                   | _ -> marginless))
+                   | _ -> marginless) ms)
             [ Logseq_dom.dom ~key:"content-wrap"
                 ~attrs_signal_v:
                   (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
@@ -348,9 +346,9 @@ let main_content (ms : Model.t Signal.signal) =
    mounted overlay mid-batch). cljs mounts them via portals, which
    are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
-  (* TODO(component): .cp__overlays is an imperative handle —
-     popups_state el_closest walks ancestors to it *)
-  Logseq_dom.dom ~key:"overlays" ~style_class:"cp__overlays"
+  (* .cp__overlays is an imperative handle — popups_state el_closest
+     walks ancestors to it; the class anchor is unchanged *)
+  box ~key:"overlays" ~style_class:"cp__overlays"
     [ Cmdk_view.render ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms

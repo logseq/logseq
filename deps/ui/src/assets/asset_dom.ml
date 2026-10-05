@@ -576,22 +576,21 @@ let asset_container uuid (b : Model.block) : t =
        ; action_bar uuid b ])
       context parent
 
-(* TODO(component): pointerdown -> window pointermove/pointerup drag
-   has no component equivalent — imperative pointer events *)
+(* pointerdown -> window pointermove/pointerup drag — the window
+   listeners stay imperative (start_drag); only the trigger uses a
+   kind event *)
 let resize_handle uuid side : t =
   let cls =
     match side with
     | `Left -> "handle-left image-resize"
     | `Right -> "handle-right image-resize"
   in
-  dom ~key:("rh-" ^ uuid ^ (if side = `Left then "l" else "r"))
-    ~tag:"span" ~style_class:cls
-    ~events:"pointerdown"
-    ~on_dom_event:(fun name payload ->
-      match name, payload with
-      | "pointerdown", Some _ ->
-          start_drag ~side ~uuid
-            ~start_x:(Platform.payload_num payload "clientX")
+  text ~key:("rh-" ^ uuid ^ (if side = `Left then "l" else "r"))
+    ~style_class:cls
+    ~on_pointer_down:(fun ev ->
+      match ev with
+      | Lui_protocol.PointerDown (_, d) ->
+          start_drag ~side ~uuid ~start_x:d.Lui_protocol.x
       | _ -> ())
     []
 

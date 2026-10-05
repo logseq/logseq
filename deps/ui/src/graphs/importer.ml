@@ -112,27 +112,8 @@ let on_change id () =
       | files -> run_files id files)
   | None -> ()
 
-(* svg/logo 28 — three hard-coded ellipses from components/svg.cljs *)
-(* TODO(component): inline custom svg — no icon kind support until it
-   is registered as an app icon *)
-let logo_svg () =
-  let ellipse transform rx ry =
-    dom ~tag:"ellipse"
-      ~attrs:
-        [ ("transform", transform); ("rx", rx); ("ry", ry) ]
-      []
-  in
-  dom ~tag:"svg"
-    ~attrs:
-      [ ("fill", "currentColor"); ("viewBox", "0 0 21 21")
-      ; ("height", "28"); ("width", "28") ]
-    [ ellipse "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
-        "3.29236" "2.04373"
-    ; ellipse "matrix(-0.495846 0.868411 -0.825718 -0.564084 3.97209 5.54515)"
-        "2.95326" "3.37606"
-    ; ellipse "matrix(0.987073 0.160274 -0.239143 0.970984 13.0843 14.72)"
-        "7.78547" "6.13006"
-    ]
+(* svg/logo 28 — three hard-coded ellipses from components/svg.cljs,
+   registered as the "logseq-logo" app icon in Icons.custom_icons *)
 
 (* TODO(component): stays dom — .importer .d > label.action-input keys
    on the label tag and the nested <input type=file> click activation
@@ -143,7 +124,8 @@ let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
   dom ~key:id ~tag:"label"
     ~style_class:"action-input"
     [ box ~key:(id ^ "-ic") ~style_class:"as-flex-center"
-        [ dom ~key:(id ^ "-ico") ~tag:"i" [ logo_svg () ] ]
+        [ icon ~key:(id ^ "-ico") ~name:(`app "logseq-logo")
+            ~point_size:28 [] ]
     ; column ~key:(id ^ "-t")
         ~style_class:"ls-imp-field"
         [ dom ~key:(id ^ "-s") ~tag:"strong" ~text:label []
@@ -179,11 +161,12 @@ let items () =
 let article () =
   column ~key:"import" ~style_class:"importer"
     [ column ~key:"imp-c" ~style_class:"c"
-        [ (* TODO(component): .importer .c h1/h2 key on the heading tags
-             — heading renders a div[role=heading], keep dom until the
-             rules move to class selectors *)
-          dom ~key:"imp-h" ~tag:"h1" ~text:T.import_title []
-        ; dom ~key:"imp-d" ~tag:"h2" ~text:T.import_desc [] ]
+        [ (* .importer .c h1/h2 key on the heading tags — ~as_ retags
+             the heading element so the CSS contract holds *)
+          heading ~key:"imp-h" ~level:1 ~as_:`H1
+            ~value:T.import_title []
+        ; heading ~key:"imp-d" ~level:2 ~as_:`H2
+            ~value:T.import_desc [] ]
     ; column ~key:"imp-l" ~style_class:"d" (items ()) ]
 
 (* route view — cljs setups/setups-container :importer wraps the article in
@@ -192,12 +175,13 @@ let view () : t =
   column ~key:"importer" ~style_class:"cp__onboarding-setups"
     [ column ~key:"imp-card"
         ~style_class:"inner-card"
-        [ (* TODO(component): .inner-card > h1.ls-imp-title / > h2 key on
-             the heading tags — keep dom until the rules move to class
-             selectors *)
-          dom ~key:"imp-th" ~tag:"h1" ~style_class:"ls-imp-title"
-            ~text:T.import_existing_notes []
-        ; dom ~key:"imp-td" ~tag:"h2" ~text:T.import_later []
+        [ (* .inner-card > h1.ls-imp-title / > h2 key on
+             the heading tags — ~as_ retags the heading element *)
+          heading ~key:"imp-th" ~level:1 ~as_:`H1
+            ~style_class:"ls-imp-title"
+            ~value:T.import_existing_notes []
+        ; heading ~key:"imp-td" ~level:2 ~as_:`H2
+            ~value:T.import_later []
         ; article () ]
     ]
 

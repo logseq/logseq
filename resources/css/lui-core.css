@@ -2482,11 +2482,26 @@ button[role='checkbox'][data-state='unchecked'] {
     line-height: 1;
   }
 
-  svg {
+  svg,
+  .lui-icon {
     display: block;
     flex: 0 0 auto;
     width: 0.9em;
     height: 0.9em;
+  }
+
+  /* icon kind paints via --lui-icon-image mask (no base .lui-icon rule
+     in this sheet) */
+  .lui-icon {
+    background-color: currentColor;
+    mask-image: var(--lui-icon-image);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-image: var(--lui-icon-image);
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
   }
 
   &:hover {

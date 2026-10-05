@@ -485,7 +485,7 @@ let gid_of_name = function
 
 (* cljs group header: title click toggles more/less; the trailing link
    (hidden while a filter is active) shows a compact mod+down/up hint *)
-let group_header (g : S.group) : t =
+let group_header (st : S.t) (g : S.group) : t =
   if g.S.gid = S.G_create then spacer ~key:"gh-none" []
   else
     let count = if g.S.gtotal >= 99 then "99+" else string_of_int g.S.gtotal in
@@ -494,24 +494,19 @@ let group_header (g : S.group) : t =
       if g.S.gexpanded then (I18n.t "ui/show-less", "mod up")
       else (I18n.t "ui/show-more", "mod down")
     in
+    let toggle _ = S.toggle_expand st g.S.gid (not g.S.gexpanded) in
     row ~key:"gheader" ~style_class:"cp__cmdk-group-header"
-      [ (* TODO(component): [data-cmdk-group] is read by the delegated
-           handle_click (closest) — imperative handle *)
-        Logseq_dom.dom ~key:"gtitle"
-          ~style_class:"cp__cmdk-group-title"
-          ~attrs:[ ("data-cmdk-group", gid_name g.S.gid) ]
-          ~text:g.S.gtitle []
+      [ text ~key:"gtitle" ~style_class:"cp__cmdk-group-title"
+          ~value:g.S.gtitle ~on_press:toggle []
       ; text ~key:"gcount" ~style_class:"cp__cmdk-group-count"
           ~value:count []
       ; spacer ~key:"gsp" ~style_class:"cp__cmdk-group-spacer" []
       ; if can_toggle && not g.S.gfilter_active then
-          (* TODO(component): [data-cmdk-group] delegated click target *)
-          Logseq_dom.dom ~key:"gmore" ~tag:"a"
-            ~style_class:"cp__cmdk-group-more"
-            ~attrs:[ ("data-cmdk-group", gid_name g.S.gid) ]
-            [ row ~key:"gmore-i" ~style_class:"cp__cmdk-group-more-inner"
-                [ text ~key:"lbl" ~value:label []; compact_shortcut sc ]
-            ]
+          Ui_parts.pressable ~on_press:toggle
+            (row ~key:"gmore" ~style_class:"cp__cmdk-group-more"
+               [ row ~key:"gmore-i" ~style_class:"cp__cmdk-group-more-inner"
+                   [ text ~key:"lbl" ~value:label []; compact_shortcut sc ]
+               ])
         else spacer ~key:"gmore-none" []
       ]
 
@@ -523,7 +518,7 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
     [ reactive ~equal:(fun (a : S.group) (b : S.group) ->
           a.S.gtitle = b.S.gtitle && a.S.gtotal = b.S.gtotal
           && a.S.gexpanded = b.S.gexpanded
-          && a.S.gfilter_active = b.S.gfilter_active) (fun g -> group_header g) group_sig
+          && a.S.gfilter_active = b.S.gfilter_active) (fun g -> group_header st g) group_sig
     ; column ~key:"results" ~style_class:"search-results"
         [ keyed ~source:items_sig ~key:S.item_dom_key
             ~cmp:Stdlib.compare
@@ -543,18 +538,15 @@ let groups_body st : t =
      ~mount:(fun group_sig -> group_el st group_sig))
     ctx parent
 
-let search_only_chip gid =
+let search_only_chip st (gid : S.group_id) =
   column ~key:"search-only" ~style_class:"cp__cmdk-search-only"
     [ row ~key:"row" ~style_class:"cp__cmdk-search-only-row"
         [ text ~key:"lbl" ~value:(I18n.t "cmdk.filter/only-label") []
         ; text ~key:"grp" ~style_class:"cp__cmdk-search-only-name"
             ~value:(gid_label gid) []
-        ; (* TODO(component): [data-cmdk-clear-filter] is read by the
-             delegated handle_click (closest) — imperative handle *)
-          Logseq_dom.dom ~key:"clr" ~tag:"button"
+        ; button ~key:"clr" ~icon:`x ~size:`icon
             ~style_class:"cp__cmdk-search-only-clear"
-            ~attrs:[ ("data-cmdk-clear-filter", "true") ]
-            [ Icons.icon "x" ]
+            ~on_press:(fun _ -> S.clear_filter st) []
         ]
     ]
 
@@ -570,13 +562,14 @@ let scroller st : t =
   let input_sig =
     Signal.map (fun (v : S.view) -> v.S.input) st.S.vs.Signal.state_signal
   in
-  (* TODO(component): .cp__cmdk-scroller is queried by cmdk_state
-     (scroll-into-view) — imperative handle *)
-  Logseq_dom.dom ~key:"scroller" ~style_class:scroller_class
+  (* .cp__cmdk-scroller is queried by cmdk_state (scroll-into-view) —
+     the class anchor is unchanged *)
+  scroll ~key:"scroller" ~orientation:`vertical
+    ~style_class:scroller_class
     [ reactive ~equal:(fun (a : S.group_id option) b -> a = b) (fun f ->
           match f with
           | None -> spacer ~key:"flt-none" []
-          | Some gid -> search_only_chip gid) (Signal.map (fun (v : S.view) -> v.S.filter) st.S.vs.Signal.state_signal)
+          | Some gid -> search_only_chip st gid) (Signal.map (fun (v : S.view) -> v.S.filter) st.S.vs.Signal.state_signal)
     ; groups_body st
     ; reactive ~equal:(fun (a : string * bool) b -> a = b) (fun (q, has) ->
           if not has && q <> "" then
@@ -589,30 +582,23 @@ let scroller st : t =
 let input_row st : t =
  fun ctx parent ->
   row ~key:"input-row" ~style_class:"cp__cmdk-input-row"
-    [ (* TODO(component): .cp__cmdk-search-input is queried/focused by
-         cmdk_state and carries imperative input events — imperative
-         handle *)
-      Logseq_dom.dom ~key:"input" ~tag:"input"
-        ~style_class:"cp__cmdk-search-input"
-        ~attrs_signal_v:(Logseq_dom.reactive_attrs
-             (fun (v : S.view) ->
-               [ ( "placeholder"
-                 , if v.S.move_mode then
-                     I18n.t "cmdk.input/move-blocks-placeholder"
-                   else I18n.t "cmdk.input/default-placeholder" )
-               ; ("autocomplete", "off"); ("autocapitalize", "off") ])
-             st.S.vs.Signal.state_signal)
-        ~events:"input"
-        ~on_dom_event:(fun name payload ->
-          if name = "input" then (
-            let q =
-              Option.value
-                (Option.bind payload (fun p ->
-                     Dom_ext.payload_string p "value"))
-                ~default:""
-            in
-            S.on_input st q))
-        []
+    [ (* .cp__cmdk-search-input is queried/focused by cmdk_state —
+         the class anchor is unchanged; no placeholder_signal exists,
+         so the move_mode reactive remounts the input *)
+      reactive
+        (fun (v : S.view) ->
+          input ~key:"input" ~style_class:"cp__cmdk-search-input"
+            ~grow:1.
+            ~placeholder:
+              (if v.S.move_mode then
+                 I18n.t "cmdk.input/move-blocks-placeholder"
+               else I18n.t "cmdk.input/default-placeholder")
+            ~on_input:(fun ev ->
+              match ev with
+              | Lui_protocol.TextChanged (_, q) -> S.on_input st q
+              | _ -> ())
+            [])
+        st.S.vs.Signal.state_signal
     ]
     ctx parent
 
@@ -726,12 +712,12 @@ let hints st : t =
     ]
 
 let palette st : t =
-  (* TODO(component): .cp__cmdk is the delegated-event scope for
-     outside-click and hover-highlight closest checks — imperative
-     handle *)
-  Logseq_dom.dom ~key:"cmdk"
+  (* .cp__cmdk is the delegated-event scope for outside-click and
+     hover-highlight closest checks — the class anchor is unchanged;
+     data-keep-selection rides ~data_attrs *)
+  box ~key:"cmdk"
     ~style_class:"cp__cmdk"
-    ~attrs:[ ("data-keep-selection", "true") ]
+    ~data_attrs:[ ("data-keep-selection", "true") ]
     [ input_row st; scroller st; hints st ]
 
 (* -- delegated event listeners (installed once per mount) ------------ *)
@@ -882,9 +868,9 @@ let modal_shell st =
         [ heading ~level:2 ~key:"title"
             ~style_class:"ui__dialog-title hidden" []
         ; box ~key:"main" ~style_class:"ui__dialog-main-content"
-            [ (* TODO(component): .cp__cmdk__modal bounds outside-click
-                 dismissal (closest) — imperative handle *)
-              Logseq_dom.dom ~key:"modal"
+            [ (* .cp__cmdk__modal bounds outside-click dismissal
+                 (closest) — the class anchor is unchanged *)
+              column ~key:"modal"
                 ~style_class:"cp__cmdk__modal"
                 [ palette st ]
             ]

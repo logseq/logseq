@@ -23,15 +23,26 @@ module D = Render_dom
    text↔children transition remounts: LUI applies the textContent write
    before the child removal within a batch, which would detach the
    tracked child early. *)
+(* non-span tag is always h1..h6 (callers pass ~tag:("h" ^ lvl)) *)
+let h_element_tag tag =
+  match tag with
+  | "h1" -> (1, `H1)
+  | "h2" -> (2, `H2)
+  | "h3" -> (3, `H3)
+  | "h4" -> (4, `H4)
+  | "h5" -> (5, `H5)
+  | "h6" -> (6, `H6)
+  | _ -> invalid_arg ("wrap: not a heading tag: " ^ tag)
+
 let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) s : t =
   if tag <> "span" then
-    (* TODO(component): h1..h6.block-title-wrap are e2e contract; the
-       `heading` kind renders div[role=heading] on web, not hN *)
+    (* h1..h6.block-title-wrap are e2e contract *)
     match Render_inline.plain_text s, prefix with
     | Some text, None ->
-        D.el ~key:("btw-t-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
-          ~text []
+        let level, as_tag = h_element_tag tag in
+        heading ~key:("btw-t-" ^ tag) ~level ~as_:as_tag ~style_class:cls
+          ~data_attrs:wrap_attrs ~value:text []
     | Some text, Some p ->
         (* annotation blocks carry plain hl text — prefix-link sibling +
            raw text node (cljs puts the title children after .prefix-link) *)
@@ -283,14 +294,13 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
              Js.Promise.resolve ())
       |> ignore);
   (box
-     [ (* TODO(component): <code>/<pre> carry element-tag semantics
-          (:not(pre) > code styling, pre whitespace) — no kind
-          equivalent; the result text itself rides a signal prop *)
-       D.el ~tag:"code" ~text:(I18n.t "view/results") []
+     [ (* <code>/<pre> carry element-tag semantics (:not(pre) > code
+          styling, pre whitespace); the result text itself rides a
+          signal prop *)
+       text ~key:"rsc" ~as_:`Code ~value:(I18n.t "view/results") []
      ; box ~style_class:"results mt-1"
-         [ D.el ~tag:"pre" ~style_class:"code"
-             ~text_signal:(Logseq_dom.reactive_text Fun.id
-                 (Signal.value st))
+         [ text ~key:"rsp" ~as_:`Pre ~style_class:"code"
+             ~value_signal:(Signal.value st)
              [] ] ])
     context parent
 
@@ -398,9 +408,9 @@ let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
 
   | None ->
       if deprecated_quote s then
-        [ (* TODO(component): data-node-type attr is an e2e selector *)
-          D.el ~key:"rc-quote" ~tag:"div"
-            ~attrs:[ ("data-node-type", "quote") ]
+        [ (* data-node-type attr is an e2e selector *)
+          box ~key:"rc-quote"
+            ~data_attrs:[ ("data-node-type", "quote") ]
             [ deprecated_warning "block/deprecated-quote" ] ]
       else if deprecated_query s then
         [ deprecated_warning "block/deprecated-query-syntax" ]

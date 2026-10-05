@@ -29,7 +29,6 @@ let scroller_class = "cp__cmdk-scroller"
 
 (* [data-cmdk-item] is the semantic hook; the visuals live in
    lui-overlay.css. cursor comes from data-hoverable, not a class *)
-let row_base_class = ""
 
 (* -- shui shortcut port (deps/shui/src/logseq/shui/shortcut.cljs) ---- *)
 
@@ -325,14 +324,11 @@ let hl_segments ~query ~text : (bool * string) list =
 (* cljs [:span {:data-testid text} seg/span ... seg/mark] — mark gets
    padding 0 border-radius 0; data-testid is the original (unmarked)
    title *)
-(* TODO(component): stays dom — [data-testid] is the e2e locator
-   (cmdk_scroll_basic_test counts [data-testid^=prefix] results) and
-   [data-cmdk-item] mark keys on the mark tag; kinds emit neither *)
 let hl_span key (item_sig : S.item Signal.signal)
     (title_of : S.item -> string) : t =
-  dom ~key ~tag:"span"
-    ~attrs_signal_v:
-      (Logseq_dom.reactive_attrs
+  text ~key
+    ~data_attrs:
+      (reactive
          (fun it ->
            let plain =
              String.concat ""
@@ -354,7 +350,7 @@ let hl_span key (item_sig : S.item Signal.signal)
         ~mount:(fun seg ->
           reactive
             (fun (_, hl, txt) ->
-              if hl then dom ~key:"hl" ~tag:"mark" ~text:txt []
+              if hl then text ~key:"hl" ~as_:`Mark ~value:txt []
               else text ~key:"tx" ~value:txt [])
             seg)
     ]
@@ -372,8 +368,6 @@ let wrapper_attrs it =
   [ ("data-item-index", string_of_int it.S.idx)
   ; ("data-item-key", it.S.ikey)
   ]
-
-let row_class (_it : S.item) = row_base_class
 
 let row_data_attrs (it : S.item) =
   let hoverable = it.S.imouse in
@@ -404,17 +398,15 @@ let shortcut_slot (item_sig : S.item Signal.signal) : t =
            item_sig
        ])
 
-(* TODO(component): the two wrappers stay dom — data-item-index /
-   data-item-key drive the delegated click + mousemove dispatch, and
-   [data-cmdk-item][data-hoverable][data-highlighted][data-kb-highlighted]
-   is the lui-overlay.css row contract (and the e2e locator); kinds emit
-   no data-* attrs *)
+(* data-item-index / data-item-key drive the delegated click +
+   mousemove dispatch; [data-cmdk-item][data-hoverable][data-highlighted]
+   [data-kb-highlighted] is the lui-overlay.css row contract (and the
+   e2e locator) *)
 let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
-  dom ~key:"item-wrap"
-    ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun it -> wrapper_attrs it) item_sig)
-    [ dom ~key:"item"
-        ~style_class_signal:(Logseq_dom.reactive_class (fun it -> row_class it) item_sig)
-        ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun it -> row_data_attrs it) item_sig)
+  box ~key:"item-wrap"
+    ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
+    [ box ~key:"item"
+        ~data_attrs:(reactive (fun it -> row_data_attrs it) item_sig)
         [ if_
             ~test:
               (Signal.map (fun (it : S.item) -> it.S.header <> None)
@@ -782,11 +774,11 @@ let hints st : t =
     ]
 
 let palette st : t =
-  (* TODO(component): data-keep-selection is a closest() contract
-     (container.cljs + selection_bar.ml) — kinds emit no data-* attrs *)
-  dom ~key:"cmdk"
+  (* data-keep-selection is a closest() contract (container.cljs +
+     selection_bar.ml) *)
+  box ~key:"cmdk"
     ~style_class:"cp__cmdk"
-    ~attrs:[ ("data-keep-selection", "true") ]
+    ~data_attrs:[ ("data-keep-selection", "true") ]
     [ input_row st; scroller st; hints st ]
 
 (* -- delegated event listeners (installed once per mount) ------------ *)

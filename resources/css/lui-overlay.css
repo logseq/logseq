@@ -5366,6 +5366,20 @@ select.form-select {
   flex-shrink: 0;
 }
 
+/* icon kind paints via --lui-icon-image mask (no base .lui-icon rule
+   in this sheet) */
+.action-input .lui-icon {
+  background-color: currentColor;
+  mask-image: var(--lui-icon-image);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-image: var(--lui-icon-image);
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
 .link-block {
   cursor: pointer;
 }

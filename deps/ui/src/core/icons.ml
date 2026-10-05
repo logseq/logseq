@@ -241,7 +241,25 @@ let custom_icons : (string * string) list =
        fill=\"currentColor\"><path fill-rule=\"evenodd\" \
        d=\"M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
        128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 \
-       0 402.48 0 384.662z\"/></svg>" ) ]
+       0 402.48 0 384.662z\"/></svg>" )
+  ; (* cljs video.cljs clock icon, rendered inside a.youtube-timestamp *)
+    ( "youtube-timestamp-icon"
+    , "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"currentColor\" \
+       viewBox=\"0 0 20 20\"><path clip-rule=\"evenodd\" \
+       fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 \
+       1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 \
+       101.415-1.415L11 9.586V6z\"/></svg>" )
+  ; (* cljs components/svg.cljs logo — three ellipses, rendered on the
+       importer action-input rows *)
+    ( "logseq-logo"
+    , "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"currentColor\" \
+       viewBox=\"0 0 21 21\" height=\"28\" width=\"28\"><ellipse \
+       transform=\"matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 \
+       2.59206)\" rx=\"3.29236\" ry=\"2.04373\"/><ellipse \
+       transform=\"matrix(-0.495846 0.868411 -0.825718 -0.564084 3.97209 \
+       5.54515)\" rx=\"2.95326\" ry=\"3.37606\"/><ellipse \
+       transform=\"matrix(0.987073 0.160274 -0.239143 0.970984 13.0843 \
+       14.72)\" rx=\"7.78547\" ry=\"6.13006\"/></svg>" ) ]
 ;;
 
 let app_icons () : string Lui_protocol.String_map.t =

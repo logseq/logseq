@@ -70,7 +70,17 @@ let has_tok n tok =
 
 let check_tok name n tok = check name (has_tok n tok)
 
-let attr_val (n : M.node) k =
+(* dom ~attrs serializes into the "attrs" prop as JSON; kind ~data_attrs
+   lands as the "data-attrs" prop — check both *)
+let rec attr_val (n : M.node) k =
+  match M.string_prop n "data-attrs" with
+  | Some payload -> (
+    match List.assoc_opt k (Lui_protocol.data_attrs_decode payload) with
+    | Some _ as v -> v
+    | None -> attr_val_dom n k)
+  | None -> attr_val_dom n k
+
+and attr_val_dom (n : M.node) k =
   match M.string_prop n "attrs" with
   | None -> None
   | Some body ->
@@ -511,8 +521,8 @@ let test_render_libs_dom () =
          (subtree_contains a (fun c ->
               has_tok c "youtube-timestamp-label"
               && M.string_prop c "text" = Some "01:23"));
-       check "ts clock svg"
-         (subtree_contains a (fun c -> c.M.kind = "extension:logseq-svg"))
+       check "ts clock icon"
+         (subtree_contains a (fun c -> c.M.kind = "icon"))
    | [] -> check "youtube-timestamp node" false);
   (match
      find_where (fun n -> attr_val n "id" = Some "youtube-player-7xTGNNLPyMI")
