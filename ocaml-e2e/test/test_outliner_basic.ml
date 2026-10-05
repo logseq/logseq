@@ -573,7 +573,18 @@ let () =
                     Pw.eval_js env
                       "(() => JSON.stringify({url: location.hash, crumbs: [...document.querySelectorAll('.breadcrumb a')].map(a => a.textContent), blocks: [...document.querySelectorAll('.ls-block .block-title-wrap, .ls-block .block-content')].map(e => e.textContent).slice(0,10), main: (document.querySelector('main')?.innerText || '').slice(0,300)}))()"
                   in
-                  let* () = Js.Promise.resolve (Js.log2 "focused-dom" dump) in
+                  let* (tree : Js.Json.t) =
+                    Api.ls_api_call env "editor.getPageBlocksTree"
+                      [| Api.str "page 1" |]
+                  in
+                  let* () =
+                    Js.Promise.resolve
+                      (Js.log2 "focused-dom" dump)
+                  in
+                  let* () =
+                    Js.Promise.resolve
+                      (Js.log2 "focused-tree" (Js.Json.stringify tree))
+                  in
                   Playwright.throw_error e)
                (B.jump_to_block env "focused-root")
            in
@@ -1118,6 +1129,9 @@ let () =
       else drag_until (tries - 1)
     in
     let* () = drag_until 3 in
+    (* let the drag's tx reach the undo stack before undoing — an early
+       undo pops the previous op and the tree never returns to initial *)
+    let* () = Util.wait_timeout env 500. in
     let* () = undo_and_wait_for_content_tree env initial in
     Fixtures.validate_graph env)
 
