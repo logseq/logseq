@@ -545,13 +545,31 @@ let () =
     in
     (* zoom-in routes async and the chord can land during a remount; retry
        until the hash reflects the focused block (bounded) *)
-    let rec zoom_until_root tries =
-      let* () = zoom_in_shortcut env in
-      let* () = Util.wait_timeout env 500. in
+    let rec hash_has_root deadline =
       let* (hash : string) = current_location_hash env in
-      if Util.contains_sub hash root_id then Js.Promise.resolve ()
+      if Util.contains_sub hash root_id then Js.Promise.resolve true
+      else if Js.Date.now () > deadline then Js.Promise.resolve false
+      else
+        let* () = Util.wait_timeout env 250. in
+        hash_has_root deadline
+    in
+    let rec zoom_until_root tries =
+      (* the editor unmounts right after a successful zoom, so a press
+         that raced the route can throw — still check the hash *)
+      let* () =
+        Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+          (zoom_in_shortcut env)
+      in
+      let* ok = hash_has_root (Js.Date.now () +. 3000.) in
+      if ok then Js.Promise.resolve ()
       else if tries <= 1 then
-        Js.Promise.reject (Failure "zoom-in did not focus root block")
+        let* (dbg : string) =
+          Pw.eval_js env
+            "(() => JSON.stringify({hash: location.hash, editing: document.querySelector('.editor-wrapper textarea')?.closest('[blockid]')?.getAttribute('blockid') ?? null, active: document.activeElement?.tagName}))()"
+        in
+        Js.Promise.reject
+          (Failure
+             ("zoom-in did not focus root block root=" ^ root_id ^ " " ^ dbg))
       else zoom_until_root (tries - 1)
     in
     let* () = zoom_until_root 4 in
@@ -674,7 +692,7 @@ let () =
     let* () = collapse_block_by_arrow env "collapsed parent" in
     let* () = B.jump_to_block env "collapsed parent" in
     let* () = Util.move_cursor_to_end env in
-    let* () = K.enter env in
+    let* () = Keyboard.enter_in_editor env in
     let* () = K.tab env in
     let* () = Util.type_in_editor env "new child" in
     let* _ =
@@ -984,7 +1002,7 @@ let () =
     let* () = K.press env "a" in
     let* () = K.backspace env in
     let* () = K.press env "a" in
-    let* () = K.enter env in
+    let* () = Keyboard.enter_in_editor env in
     let* () = Util.wait_timeout env 700. in
     let* () = Util.exit_edit env in
     let* contents = Util.get_page_blocks_contents env in
@@ -1071,7 +1089,7 @@ let () =
       | _ -> ("?", -1)
     in
     Fest.deep_equal got ("bc", 1) Fest.expect;
-    let* () = K.enter env in
+    let* () = Keyboard.enter_in_editor env in
     let* () = Util.wait_timeout env 1000. in
     let* () = assert_tree after_enter in
     let* () = undo_and_wait_for_content_tree env after_backspace in

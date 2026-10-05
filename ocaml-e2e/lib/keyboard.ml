@@ -15,6 +15,7 @@ let press_in_editor env ?delay key =
     (Pw.q env ".editor-wrapper textarea >> nth=0")
     key
 let enter env = Pw.press env "Enter"
+let enter_in_editor env = press_in_editor env "Enter"
 let esc env = Pw.press env "Escape"
 let backspace env = Pw.press env "Backspace"
 let delete env = Pw.press env "Delete"
