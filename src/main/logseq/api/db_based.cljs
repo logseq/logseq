@@ -404,6 +404,45 @@
                          "Nothing refers to this entity.")}
           false))))))
 
+(defn get-title-holders [title]
+  (let [repo (state/get-current-repo)
+        query "[:find [(pull ?entity [:block/uuid :block/title :block/name :db/ident :block/tags :logseq.property/deleted-at {:block/tags [:db/ident]}]) ...] :in $ ?title :where [?entity :block/title ?title]]"]
+    (p/let [entities (db-async/<q repo {:transact-db? false}
+                                  (cljs.reader/read-string query)
+                                  title)]
+      (bean/->js (sdk-utils/normalize-keyword-for-json entities false)))))
+
+(defn get-title-inventory []
+  (let [repo (state/get-current-repo)]
+    (p/let [page-class (db-async/<q repo {} '[:find ?class . :where [?class :db/ident :logseq.class/Page]])
+            tag-class (db-async/<q repo {} '[:find ?class . :where [?class :db/ident :logseq.class/Tag]])
+            entities (db-async/<q
+                      repo
+                      {:transact-db? false}
+                      '[:find [(pull ?entity [:db/id :block/uuid :block/title :block/name
+                                              :logseq.property/deleted-at {:block/tags [:db/id]}]) ...]
+                        :in $ [?class ...]
+                        :where [?entity :block/tags ?class]]
+                      [page-class tag-class])]
+      (bean/->js
+       (mapv (fn [entity]
+               (let [tag-ids (set (map :db/id (:block/tags entity)))]
+                 {:id (:db/id entity)
+                  :uuid (:block/uuid entity)
+                  :title (:block/title entity)
+                  :kind (if (contains? tag-ids tag-class) "tag" "page")
+                  :recycled (some? (:logseq.property/deleted-at entity))}))
+             entities)))))
+
+(defn get-journal-candidates []
+  (let [repo (state/get-current-repo)]
+    (p/let [journals (db-async/<q
+                     repo
+                     {:transact-db? false}
+                     '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/journal-day]) ...]
+                       :where [?page :block/journal-day _]])]
+      (bean/->js (sdk-utils/normalize-keyword-for-json journals false)))))
+
 (def ^:private inspect-page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 

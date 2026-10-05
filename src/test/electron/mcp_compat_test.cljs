@@ -145,6 +145,14 @@
                                                       (count property-values) " property value(s).")
                                                  "Nothing refers to this entity.")}
                                   false)))
+                              "logseq.DB.getTitleHolders"
+                              (let [entities (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :db/ident
+                                                                         :block/tags :logseq.property/deleted-at
+                                                                         {:block/tags [:db/ident]}]) ...]
+                                                   :in $ ?title
+                                                   :where [?entity :block/title ?title]]
+                                                 @conn (first args))]
+                                (clj->js (sdk-utils/normalize-keyword-for-json entities false)))
                 "logseq.DB.deletePage"
                 (let [entity (d/entity @conn [:block/uuid (uuid (first args))])]
                   (if (some #(= 159 (:db/id %)) (:block/tags entity))
@@ -1167,6 +1175,7 @@
                     (is (some #(= "logseq.DB.getBlockTree" (first %)) @calls))
                     (is (some #(= "logseq.DB.getBacklinks" (first %)) @calls))
                     (is (some #(= "logseq.DB.search" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getTitleHolders" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1376,9 +1385,26 @@
   (is (= {:title "Inbox" :available true :held_by []}
          (mcp-compat/title-availability-result "Inbox" [])))
   (let [result (mcp-compat/title-availability-result
-                "Inbox" [{:uuid "page-1" :name "inbox"}])]
+      "Inbox" [{:uuid "page-1" :name "inbox" :tags [{:ident :logseq.class/Page}]}
+          {:uuid "tag-1" :name "inbox" :tags [{:ident :logseq.class/Tag}]}
+          {:uuid "property-1" :name "inbox" :tags [{:ident :logseq.class/Property}]}])]
     (is (= false (:available result)))
-    (is (= "page" (:kind (first (:held_by result)))))))
+    (is (= ["page" "tag" "property"] (mapv :kind (:held_by result))))))
+
+(deftest is-title-available-uses-db-holder-api
+  (let [title "Inbox"
+        calls (atom [])
+        api (recording-api calls #js [#js {"uuid" "page-1" "title" title "name" "inbox"}])]
+    (async done
+      (-> (mcp-compat/is-title-available api #js {"title" title})
+          (p/then (fn [result]
+                    (is (= [["logseq.DB.getTitleHolders" [title]]] @calls))
+                    (is (false? (:available result)))
+                    (is (= "page" (get-in result [:held_by 0 :kind])))
+                    (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (js/queueMicrotask done)))))))
 
 (deftest list-orphan-tags-queries-unused-tag-entities
   (let [calls (atom [])
@@ -1599,26 +1625,24 @@
         inventory #js [#js {"id" 10
                             "uuid" "00000000-0000-4000-8000-000000000010"
                             "title" "Creativity"
-                            "name" "creativity"
-                            "tags" #js [#js {"id" 1}]}
+                            "kind" "page"
+                            "recycled" false}
                        #js {"id" 11
                             "uuid" "00000000-0000-4000-8000-000000000011"
                             "title" "Creativity"
-                            "name" "creativity"
-                            "logseq.property/deleted-at" 100
-                            "tags" #js [#js {"id" 1}]}]
+                            "kind" "page"
+                            "recycled" true}]
         api (fn [method args]
               (swap! calls conj [method args])
-              (let [query (first args)]
+              (if (= method "logseq.DB.getTitleInventory")
+                inventory
+                (let [query (first args)]
                 (cond
-                  (string/includes? query ":logseq.class/Page") 1
-                  (string/includes? query ":logseq.class/Tag") 2
-                  (string/includes? query "pull ?e") inventory
                   (string/includes? query "or-join") @aliases
                   (string/includes? query ":block/title \"\"") #js []
                   (string/includes? query "(count ?block)") #js [#js [10 2] #js [11 0]]
                   (string/includes? query "(count ?holder)") #js []
-                  :else nil)))]
+                  :else nil))))]
     (async done
       (-> (p/let [dead-stub (mcp-compat/find-duplicate-titles api #js {"normalize" "exact"})
                   _ (reset! aliases #js [#js [9 11]])
@@ -1637,7 +1661,10 @@
                       (is (= 5 (:rank alias-group)))
                       (is (= 1 (:titles_examined live-only)))
                       (is (= [] (:groups live-only)))
-                      (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls)))
+                      (is (= 3 (count (filter #(= "logseq.DB.getTitleInventory" (first %)) @calls))))
+                      (is (every? #(contains? #{"logseq.DB.getTitleInventory" "logseq.DB.datascriptQuery"}
+                                             (first %))
+                                  @calls)))
                     (done)))
           (p/catch (fn [error]
                      (is false (str error))

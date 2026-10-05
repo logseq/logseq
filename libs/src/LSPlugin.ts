@@ -976,6 +976,14 @@ export interface IDBProxy {
   getTag: IEditorProxy['getTag']
   getTagUsers: (tagUuid: BlockUUID) => Promise<Array<BlockEntity | PageEntity>>
   getBacklinks: (targetUuid: BlockUUID) => Promise<Record<string, any>>
+  getTitleHolders: (title: string) => Promise<Array<Record<string, any>>>
+  getTitleInventory: () => Promise<Array<{
+    id: EntityID
+    uuid: BlockUUID
+    title: string
+    kind: 'page' | 'tag'
+    recycled: boolean
+  }>>
   inspectPage: (
     pageUuid: BlockUUID,
     detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'

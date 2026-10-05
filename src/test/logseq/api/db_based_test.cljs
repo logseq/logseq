@@ -255,6 +255,29 @@
                    (is false (str error))))
         (p/finally done))))
 
+      (deftest get-title-holders-api-returns-all-exact-title-entity-kinds
+        (test-helper/load-test-files
+         [{:page {:block/title "ExactCollision"}}])
+        (async done
+          (-> (api-test/with-plugin-api
+            (fn []
+          (p/let [_ (db-based-api/create-tag "ExactCollision" nil)
+              _ (db-based-api/upsert-property "ExactCollision" #js {:type "default"} nil)
+              entities (db-based-api/get-title-holders "ExactCollision")
+                holders (api-test/js->clj-kw entities)
+                inventory (db-based-api/get-title-inventory)
+                inventory (api-test/js->clj-kw inventory)
+                inventory-kinds (set (map :kind inventory))]
+              (is (= 3 (count holders)))
+              (is (= #{":plugin.class._test_plugin/ExactCollision"
+                   ":plugin.property._test_plugin/ExactCollision"}
+                 (set (keep :ident holders))))
+              (is (= #{"page" "tag"}
+                     (set (map :kind (filter #(= "ExactCollision" (:title %)) inventory))))))))
+          (p/catch (fn [error]
+             (is false (str error))))
+          (p/finally done))))
+
 (deftest get-page-block-uuids-api-returns-flat-page-descendants
   (test-helper/load-test-files
    [{:page {:block/title "UUID API Page"}

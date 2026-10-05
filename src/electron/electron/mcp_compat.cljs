@@ -354,9 +354,10 @@
   (let [idents (set (keep #(or (:ident %) (:db/ident %))
                           (or (:tags entity) (:block/tags entity) [])))]
     (cond
-      (or (:name entity) (:block/name entity)) "page"
       (contains? idents :logseq.class/Property) "property"
       (contains? idents :logseq.class/Tag) "tag"
+      (or (contains? idents :logseq.class/Page)
+          (:name entity) (:block/name entity)) "page"
       (:ident entity) "property"
       (:db/ident entity) "property"
       :else "block")))
@@ -376,18 +377,9 @@
 
 (defn is-title-available
   [api-fn args]
-  (let [title (aget args "title")
-        query "[:find [(pull ?entity [:block/uuid :block/title :block/name :db/ident
-                                       :block/tags :logseq.property/deleted-at
-                                       {:block/tags [:db/ident]}]) ...]
-                 :in $ ?title
-                 :where [?entity :block/title ?title]]"]
-    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query title])
-            entities (js->clj result :keywordize-keys true)
-            entities (if (and (= 1 (count entities))
-                              (vector? (first entities)))
-                       (first entities)
-                       entities)]
+  (let [title (aget args "title")]
+    (p/let [result (api-fn "logseq.DB.getTitleHolders" [title])
+      entities (js->clj result :keywordize-keys true)]
       (title-availability-result title entities))))
 
 (defn list-recycled
@@ -2333,30 +2325,15 @@
         include-recycled? (not (false? (aget args "include_recycled")))]
     (when-not (contains? #{"exact" "loose" "fuzzy"} normalize)
       (throw (js/Error. "normalize must be exact, loose, or fuzzy")))
-    (p/let [page-class (api-fn "logseq.DB.datascriptQuery"
-                               ["[:find ?class . :where [?class :db/ident :logseq.class/Page]]"])
-            tag-class (api-fn "logseq.DB.datascriptQuery"
-                              ["[:find ?class . :where [?class :db/ident :logseq.class/Tag]]"])
-            inventory-result (api-fn "logseq.DB.datascriptQuery"
-                                     ["[:find [(pull ?e [:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at {:block/tags [:db/id]}]) ...] :in $ [?class ...] :where [?e :block/tags ?class]]"
-                                      #js [page-class tag-class]])
-            inventory (query-result-rows inventory-result)
+        (p/let [inventory-result (api-fn "logseq.DB.getTitleInventory" [])
+          inventory (js->clj inventory-result :keywordize-keys true)
             candidates (->> inventory
                             (keep (fn [entity]
-                                    (let [title (or (:title entity) (:block/title entity))
-                                          deleted-at (or (:logseq.property/deleted-at entity)
-                                                         (:deleted-at entity))
-                                          recycled? (some? deleted-at)
-                                          id (or (:id entity) (:db/id entity))
-                                          class-ids (set (keep #(or (:id %) (:db/id %))
-                                                               (or (:tags entity) (:block/tags entity))))]
-                                      (when (and (map? entity) (seq title) id
-                                                 (or include-recycled? (not recycled?)))
-                                        {:id id
-                                         :uuid (or (:uuid entity) (:block/uuid entity))
-                                         :title title
-                                         :kind (if (contains? class-ids tag-class) "tag" "page")
-                                         :recycled (boolean recycled?)}))))
+                (when (and (map? entity)
+                     (seq (:title entity))
+                     (:id entity)
+                     (or include-recycled? (not (:recycled entity))))
+                  entity)))
                             vec)
             groups (group-title-candidates candidates normalize)]
       (if (empty? groups)
@@ -2514,11 +2491,11 @@
   {:listPages ["logseq.DB.listPages"]
    :listJournals ["logseq.DB.datascriptQuery"]
    :getPage ["logseq.cli.getPageData"]
-  :searchBlocks ["logseq.DB.search"]
+   :searchBlocks ["logseq.DB.search"]
    :listTags ["logseq.DB.listTags"]
    :listProperties ["logseq.DB.listProperties"]
    :getPageUUID ["logseq.DB.datascriptQuery"]
-  :pageStats ["logseq.DB.getPageStats"]
+   :pageStats ["logseq.DB.getPageStats"]
    :inspectPage ["logseq.DB.inspectPage"]
    :getTagUUID ["logseq.DB.getTagsByName"]
    :creatTag ["logseq.DB.createTag"]
@@ -2542,14 +2519,14 @@
    :repairLinks ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.createTag" "logseq.DB.updateBlock"]
    :getTag ["logseq.DB.getTag"]
    :getTagUsers ["logseq.DB.getTagUsers"]
-  :getPropertyIndent ["logseq.DB.getPropertiesByTitle"]
+   :getPropertyIndent ["logseq.DB.getPropertiesByTitle"]
    :getBlock ["logseq.DB.getBlock"]
-  :getBlockUUID ["logseq.DB.getPageBlockUUIDs"]
-  :getBlockTree ["logseq.DB.getBlockTree"]
-  :findBacklinks ["logseq.DB.getBacklinks"]
-  :findOrphans ["logseq.DB.getPageBlockUUIDs"]
-   :isTitleAvailable ["logseq.DB.datascriptQuery"]
-   :findDuplicateTitles ["logseq.DB.datascriptQuery"]
+   :getBlockUUID ["logseq.DB.getPageBlockUUIDs"]
+   :getBlockTree ["logseq.DB.getBlockTree"]
+   :findBacklinks ["logseq.DB.getBacklinks"]
+   :findOrphans ["logseq.DB.getPageBlockUUIDs"]
+   :isTitleAvailable ["logseq.DB.getTitleHolders"]
+   :findDuplicateTitles ["logseq.DB.getTitleInventory" "logseq.DB.datascriptQuery"]
    :getProperyUsers ["logseq.DB.datascriptQuery"]
    :createProperty ["logseq.DB.upsertProperty"]
    :removeProperty ["logseq.DB.datascriptQuery" "logseq.DB.removeBlockProperty"]
@@ -2574,6 +2551,7 @@
   "logseq.DB.getPageBlockUUIDs" ["00000000-0000-4000-8000-000000000999"]
   "logseq.DB.getBlockTree" ["00000000-0000-4000-8000-000000000999" 20 1000]
   "logseq.DB.getBacklinks" ["00000000-0000-4000-8000-000000000999"]
+  "logseq.DB.getTitleHolders" ["__mcp_capability_probe__"]
   "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
