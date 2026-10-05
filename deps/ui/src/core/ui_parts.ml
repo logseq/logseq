@@ -15,6 +15,15 @@ let pressable ~on_press (elem : t) : t =
   register_press context node on_press;
   node
 
+(* reactive style_class — kinds take only a static ~style_class, so bind
+   StyleClass on the mounted node (same wrap pattern as pressable) *)
+let class_signal source f (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  Lui_ui.string_property_signal context node Lui_protocol.StyleClass
+    (Signal.map f source);
+  node
+
 (* cljs mock-textarea style: hidden caret mirror for popup placement,
    consumed on the imperative side by dom_ext.mock_text_el/build_mock_text *)
 let mock_text_style =
