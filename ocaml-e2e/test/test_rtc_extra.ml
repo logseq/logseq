@@ -29,18 +29,30 @@ let ready : (Env.t * Env.t) Js.Promise.t Lazy.t =
                Util.login_test_account env2) )
      in
      let* () =
-       Env.with_page env1 (Env.page env1) (fun () ->
-           Graph.new_graph env1 graph_name ~enable_sync:true
-             ~graph_e2ee:false ())
-     in
-     let* () =
-       Env.with_page env2 (Env.page env2) (fun () ->
-           let* () = Graph.wait_for_remote_graph env2 graph_name in
-           let* _ =
-             Graph.switch_graph env2 graph_name ~wait_sync:true
-               ~need_input_password:true
-           in
-           Js.Promise.resolve ())
+       Js.Promise.catch
+         (fun e ->
+           Js.log "[rtc-dbg] graph-setup failed";
+           Env.with_page env1 (Env.page env1) (fun () ->
+               Rtc.dump_sync_logs env1;
+               Js.Promise.resolve ())
+           |> Js.Promise.then_ (fun () ->
+                  Env.with_page env2 (Env.page env2) (fun () ->
+                      Js.log "[rtc-dbg] --p2 setup logs--";
+                      Rtc.dump_sync_logs env2;
+                      Js.Promise.resolve ()))
+           |> Js.Promise.then_ (fun () -> Playwright.throw_error e))
+         (let* () =
+            Env.with_page env1 (Env.page env1) (fun () ->
+                Graph.new_graph env1 graph_name ~enable_sync:true
+                  ~graph_e2ee:false ())
+          in
+          Env.with_page env2 (Env.page env2) (fun () ->
+              let* () = Graph.wait_for_remote_graph env2 graph_name in
+              let* _ =
+                Graph.switch_graph env2 graph_name ~wait_sync:true
+                  ~need_input_password:true
+              in
+              Js.Promise.resolve ()))
      in
      (* browsers may already be closed when this hook runs (after-hooks are
         FIFO and the shared pages' close is registered first): removing the
@@ -532,15 +544,16 @@ let () =
          in
          let* n_blocks = Playwright.count (Pw.q env ".ls-block") in
          let* n_pb = Playwright.count (Pw.q env ".ls-page-blocks") in
+         let* n_sb = Playwright.count (Pw.q env "#search-button") in
          let* cur =
            Playwright.text_content
              (Pw.q env "div[data-testid='page title'] .block-title-wrap")
          in
          Js.log
            (Printf.sprintf
-              "[rtc-dbg] p1 url=%s blocks=%d page-blocks=%d title=%s"
+              "[rtc-dbg] p1 url=%s blocks=%d page-blocks=%d search-btn=%d title=%s"
               (Option.value ~default:"?" (Js.Json.decodeString url))
-              n_blocks n_pb (Option.value ~default:"" cur));
+              n_blocks n_pb n_sb (Option.value ~default:"" cur));
          let* () =
            Env.with_page env p2 (fun () ->
                let* url2 =
@@ -550,17 +563,23 @@ let () =
                    Playwright.count
                      (Pw.q env ".ls-page-blocks .page-blocks-inner .ls-block")
                in
+               let* n_sb2 = Playwright.count (Pw.q env "#search-button") in
                Js.log
                  (Printf.sprintf
-                    "[rtc-dbg] p2 url=%s page-inner-blocks=%d"
+                    "[rtc-dbg] p2 url=%s page-inner-blocks=%d search-btn=%d"
                     (Option.value ~default:"?" (Js.Json.decodeString url2))
-                    nb2);
+                    nb2 n_sb2);
                Js.log "[rtc-dbg] --p2 logs--";
                Rtc.dump_sync_logs env;
                Js.Promise.resolve ())
          in
          Js.log "[rtc-dbg] --p1 logs--";
          Rtc.dump_sync_logs env;
+         Js.log "[rtc-dbg] --p1 console tail--";
+         List.iteri
+           (fun i m ->
+              if i < 80 then Js.log ("[rtc-dbg-all] " ^ m) else ())
+           (Env.console_logs env);
          Playwright.throw_error e)
       (let* () = new_rtc_page env1 p1 p2 in
     let prefix = "rtc-page-test-" in
