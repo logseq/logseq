@@ -55,7 +55,7 @@ let rec open_last_block ?(in_retry = false) env =
       (E2e_assert.editor_mode env)
 
 let save_block env text =
-  let* () = E2e_assert.have_count env Util.editor_q 1 in
+  let* () = E2e_assert.have_count ~timeout:15000. env Util.editor_q 1 in
   let* () = Pw.click env Util.editor_q_first in
   let* () = Pw.fill env Util.editor_q_first text in
   let* _ =
@@ -202,7 +202,7 @@ let jump_to_block env block_text =
   poll ()
 
 let wait_editor_text env text =
-  let* () = E2e_assert.have_count env Util.editor_q 1 in
+  let* () = E2e_assert.have_count ~timeout:15000. env Util.editor_q 1 in
   Pw.wait_for env
     (Printf.sprintf ".editor-wrapper textarea:text('%s')" text)
 

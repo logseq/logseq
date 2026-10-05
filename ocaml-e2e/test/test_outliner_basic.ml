@@ -563,7 +563,14 @@ let () =
              Js.Promise.catch
                (fun _ ->
                   Pw.click env
-                    "[data-testid='page title'] .block-title-wrap, [data-testid='page title'] .block-content, .ls-page-title .block-title-wrap, .ls-page-title .block-content")
+                    "[data-testid='page title'] .block-title-wrap, [data-testid='page title'] .block-content, .ls-page-title .block-title-wrap, .ls-page-title .block-content"
+                  |> Js.Promise.catch (fun e ->
+                      let* dump =
+                        Pw.eval_js env
+                          "(() => JSON.stringify({url: location.hash, title: !!document.querySelector('[data-testid=\"page title\"], .ls-page-title'), blocks: document.querySelectorAll('.ls-block').length, main: (document.querySelector('main')?.innerText || '').slice(0,300)}))()"
+                      in
+                      let* () = Js.Promise.resolve (Js.log2 "focused-dom" dump) in
+                      Playwright.throw_error e))
                (B.jump_to_block env "focused-root")
            in
            Util.wait_editor_visible env)

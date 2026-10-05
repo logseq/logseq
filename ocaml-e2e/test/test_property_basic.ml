@@ -69,7 +69,11 @@ let add_new_properties env title_prefix =
                 Pw.click_l (Util.get_by_text env "Skip choosing tag" false)
               in
               let* () =
-                Util.input env (title_prefix ^ "-Node-value")
+                (* the value picker's search field sits in a focus-trapped
+                   popover; *:focus can resolve to the popover div itself
+                   under load — fill the field directly *)
+                Pw.fill env ".ui__popover-content input"
+                  (title_prefix ^ "-Node-value")
               in
               Pw.click_l (Util.get_by_text env "New option:" false)
           | _ -> Js.Promise.resolve ()
