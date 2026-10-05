@@ -56,7 +56,7 @@ let assert_query_count env n =
     (fun e ->
        let* dump =
          Pw.eval_js env
-           "(() => { const el = document.querySelector('.custom-query-results'); return el ? el.textContent.slice(0,200) : 'no-results' })()"
+           "(() => { const r = document.querySelector('.custom-query-results'); const b = document.querySelector('.cp__query-builder'); return JSON.stringify({results: r ? r.textContent.slice(0,200) : 'no-results', builder: b ? b.textContent.replace(/\\s+/g,' ').slice(0,200) : 'no-builder', clauses: [...document.querySelectorAll('.cp__query-builder .query-clause')].map(c => c.textContent.slice(0,60))}) })()"
        in
        let* () = Js.Promise.resolve (Js.log2 "query-results-dump" dump) in
        Playwright.throw_error e)
