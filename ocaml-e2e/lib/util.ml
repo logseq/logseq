@@ -110,6 +110,28 @@ let cmdk_open env =
        (Pw.wait_for env ~timeout:2000. ".cp__cmdk-search-input"))
     (fun () -> Js.Promise.resolve false)
 
+(* stale overlays linger under load and intercept header clicks; esc them
+   until none report data-state=open, then dump any survivor for diagnosis *)
+let wait_overlays_closed env =
+  let rec loop n =
+    let* (count : float) =
+      Pw.eval_js env
+        "(() => document.querySelectorAll(\".ui__dialog-overlay[data-state='open']\").length)()"
+    in
+    if count = 0. then Js.Promise.resolve ()
+    else if n <= 0 then
+      let* dump =
+        Pw.eval_js env
+          "(() => JSON.stringify([...document.querySelectorAll('.ui__dialog-overlay[data-state=\\\"open\\\"]')].map(e => e.className.slice(0,100) + '|' + (e.textContent||'').replace(/\\s+/g,' ').slice(0,150))))()"
+      in
+      Js.Promise.resolve (Js.log2 "stale-overlay" dump)
+    else
+      let* () = Keyboard.press env "Escape" in
+      let* () = wait_timeout env 400. in
+      loop (n - 1)
+  in
+  loop 10
+
 let search env text =
   let* already = Pw.visible env ".cp__cmdk-search-input" in
   let* () =
@@ -119,6 +141,7 @@ let search env text =
       if opened then Js.Promise.resolve ()
       else
         let* () = double_esc env in
+        let* () = wait_overlays_closed env in
         let* () = Pw.wait_for env ~timeout:15000. "#search-button" in
         let* _ = E2e_assert.in_normal_mode env in
         let* () = Pw.click env "#search-button" in
