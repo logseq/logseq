@@ -27,8 +27,6 @@ module V = Properties_value
 module Menu = Properties_menu
 module W = Wire
 
-let dom = Logseq_dom.dom
-
 (* ---------- row views ---------- *)
 
 (* the key (name + bullet) opens the property menu — the dropdown_menu
@@ -38,8 +36,8 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
   let sched = context.Lui_ui.ui_scheduler in
   let menu_open = Signal.state sched false in
   (column ~gap:0 ~style_class:"property-key-inner jtrigger-view"
-     [ dom ~key:"pk-b" ~style_class:"bullet-container"
-         [ dom ~tag:"span" ~style_class:"bullet" [] ]
+     [ box ~key:"pk-b" ~style_class:"bullet-container"
+         [ box ~style_class:"bullet" [] ]
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~style_class:"property-k flex select-none jtrigger w-full"
          ~label:(D.row_title row)
@@ -63,10 +61,9 @@ let value_cell ctx row : t =
   Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0
     ~style_class:"ls-block property-value-container property-value-panel"
     ((if show_panel_bullet row then
-        [ dom ~key:"vpb" ~style_class:"property-panel-bullet"
-            ~attrs:[ ("aria-hidden", "true") ]
-            [ dom ~tag:"span" ~style_class:"bullet-container"
-                [ dom ~tag:"span" ~style_class:"bullet" [] ]
+        [ box ~key:"vpb" ~style_class:"property-panel-bullet"
+            [ box ~style_class:"bullet-container"
+                [ box ~style_class:"bullet" [] ]
             ]
         ]
       else [])
@@ -255,8 +252,8 @@ let block_area ~uuid : t =
   let key = block_key uuid in
   let st = block_state context uuid in
   let node =
-    (dyn ~equal:(Logseq_dom.trace_equal "block_area" (fun (a : S.area_data) b -> a = b))
-       (fun d ->
+    (reactive
+       (fun (d : S.area_data) ->
           if d.rows = [] && d.hidden = [] && d.below = [] then
             (* dyn branch roots must keep identical props: set-prop
                diffs on stack kind (gap/style-class) are unsupported
@@ -268,8 +265,8 @@ let block_area ~uuid : t =
               ~style_class:"ls-block-content-indent"
               ((if d.rows = [] && d.hidden = [] then []
                 else
-                  [ dom ~key:("parea-" ^ uuid)
-                      ~attrs:[ ("id", uuid); ("tabindex", "0") ]
+                  [ column ~key:("parea-" ^ uuid)
+                      ~accessibility_identifier:uuid
                       ~style_class:
                         "ls-properties-area ls-block-properties"
                       [ panel_view ctx ~owner_is_tag:false
@@ -297,8 +294,8 @@ let block_left_chips ~uuid : t =
   let key = block_key uuid in
   let st = block_state context uuid in
   let node =
-    (dyn ~equal:(Logseq_dom.trace_equal "block_left_chips" (fun (a : S.area_data) (b : S.area_data) -> a.left = b.left))
-       (fun d ->
+    (reactive
+       (fun (d : S.area_data) ->
           if d.left = [] then
             row ~gap:8 ~cross:`center
               ~style_class:"positioned-properties block-left" []
@@ -312,7 +309,8 @@ let block_left_chips ~uuid : t =
                      ~style_class:"property-value-inner"
                      [ V.view ctx r ])
                  d.left))
-       (Signal.map (fun (d : S.area_data) -> d) (Signal.value st)))
+       (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
+       ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.left = b.left))
       context parent
   in
   S.note_area_node ~key node;
@@ -337,8 +335,9 @@ let title_actions (p : Model.page) : t =
       ~label:text ~text ~on_press []
   in
   let node =
-    (dom ~key:"pta" ~id:anchor_id
-       ~style_class:"ls-page-title-actions flex flex-row items-center gap-2"
+    (row ~key:"pta" ~accessibility_identifier:anchor_id
+       ~cross:`center ~gap:8
+       ~style_class:"ls-page-title-actions"
        [ add_btn
            (I18n.t "command.editor/add-property-icon")
            (fun _ ->
@@ -504,8 +503,8 @@ let page_area (p : Model.page) : t =
       && (Editor_state.is_collapsed uuid || p.Model.page_is_tag)
     in
     let node =
-      (dyn ~equal:(Logseq_dom.trace_equal "page_area" (fun (a : S.area_data) b -> a = b))
-         (fun d ->
+      (reactive
+         (fun (d : S.area_data) ->
             if title_collapsed then column ~gap:0 []
             else if
               (not p.Model.page_is_tag)
@@ -514,8 +513,8 @@ let page_area (p : Model.page) : t =
             then column ~gap:0 []
             else
               let ctx = page_ctx p key uuid in
-              dom ~key:("parea-" ^ uuid)
-                ~attrs:[ ("id", uuid); ("tabindex", "0") ]
+              column ~key:("parea-" ^ uuid)
+                ~accessibility_identifier:uuid
                 ~style_class:"ls-properties-area ls-page-properties"
                 [ panel_view ctx ~owner_is_tag:p.Model.page_is_tag
                     ~owner_title:p.Model.page_title
@@ -545,8 +544,8 @@ let bidi_area (p : Model.page) : t =
                 ~db_id:p.Model.page_db_id)
   in
   let node =
-    (dyn ~equal:(Logseq_dom.trace_equal "bidi_area" (fun (a : S.area_data) (b : S.area_data) -> a.bidi = b.bidi))
-       (fun d ->
+    (reactive
+       (fun (d : S.area_data) ->
           if d.bidi = [] then
             column ~gap:8 ~grow:1.0
               ~style_class:"w-full ls-bidirectional-properties mt-8" []
@@ -581,7 +580,8 @@ let bidi_area (p : Model.page) : t =
                          ]
                      ])
                  d.bidi))
-       (Signal.map (fun (d : S.area_data) -> d) (Signal.value st)))
+       (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
+       ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.bidi = b.bidi))
       context parent
   in
   S.note_area_node ~key node;
@@ -632,16 +632,15 @@ let sidebar_area ~uuid ~db_id ~title ~is_tag : t =
     }
   in
   let node =
-    (dyn ~equal:(Logseq_dom.trace_equal "sb_area"
-                   (fun (a : S.area_data) b -> a = b))
-       (fun d ->
+    (reactive
+       (fun (d : S.area_data) ->
           if (not is_tag) && d.rows = [] && d.hidden = [] then
             (* cljs: (and empty-full empty-hidden (not class?)) →
                just [new-property], no .ls-properties-area *)
             new_property_btn ctx ~for_class:false ~owner_title:title
           else
-            dom ~key:("parea-" ^ uuid)
-              ~attrs:[ ("id", "sbprops-" ^ uuid); ("tabindex", "0") ]
+            column ~key:("parea-" ^ uuid)
+              ~accessibility_identifier:("sbprops-" ^ uuid)
               ~style_class:"ls-page-properties ls-properties-area"
               (panel_view ctx ~owner_is_tag:is_tag ~owner_title:title
                  ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])

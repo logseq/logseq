@@ -2444,8 +2444,16 @@ button[role='checkbox'][data-state='unchecked'] {
   }
 }
 
-/* cljs block-title-aux: the class-Query settings button is opacity-0
-   until the head row is hovered */
+/* cljs block-title-aux: the class-Query settings button is a muted
+   icon that stays opacity-0 until the head row is hovered (was
+   text-muted-foreground ml-2 transition-opacity opacity-0) */
+.ls-query-setting {
+  opacity: 0;
+  transition: opacity .3s ease-in;
+  margin-left: 8px;
+  color: var(--ls-secondary-text-color, var(--lx-gray-11));
+}
+
 .block-head-wrap:hover .ls-query-setting,
 .ls-query-setting:focus-visible {
   opacity: 1;

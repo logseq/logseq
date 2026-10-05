@@ -297,7 +297,7 @@ let view ~placeholder ?new_option ?(on_enter_text = None)
       | [] -> ()
   in
   let list_view =
-    dyn ~equal:(fun a b -> a.q = b.q && a.searched == b.searched)
+    reactive ~equal:(fun a b -> a.q = b.q && a.searched == b.searched)
       (fun s ->
          let vis =
            visible_items ~items ~filter:s.q ~searched:s.searched

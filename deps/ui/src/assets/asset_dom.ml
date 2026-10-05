@@ -261,8 +261,11 @@ let upload_files (files : Js.Json.t array) =
 (* hidden <input type=file> inside every editor — cljs
    components/editor.cljs image-uploader; the slash command clicks it *)
 let upload_input key : t =
-  dom ~key ~style_class:"image-uploader"
-    [ dom ~key:(key ^ "-in") ~tag:"input" ~id:"upload-file"
+  box ~key
+    [ (* TODO(component): <input type=file> has no component equivalent —
+         the picker is imperative (the slash command clicks #upload-file
+         and reads el.files) *)
+      dom ~key:(key ^ "-in") ~tag:"input" ~id:"upload-file"
         ~attrs:[ ("type", "file"); ("hidden", "") ]
         ~events:"change"
         ~on_dom_event:(fun name _ ->
@@ -412,22 +415,17 @@ let menu_items uuid (b : Model.block) : Views_popup.menu_item list =
 (* ---------- render ---------- *)
 
 let action_bar uuid b : t =
-  dom ~key:("aab-" ^ uuid) ~style_class:"asset-action-bar"
-    ~attrs:[ ("aria-hidden", "true") ]
-    [ dom ~key:("aabbtn-" ^ uuid) ~tag:"button"
-        ~id:("asset-menu-btn-" ^ uuid)
-        ~style_class:"h-6 w-6 inline-flex items-center justify-center"
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then
-            match B.query_selector ("#asset-menu-btn-" ^ uuid) with
-            | Some el ->
-                Views_popup.show_menu ~anchor:el
-                  (menu_items uuid b)
-            | None -> ())
-        [ dom ~key:("aabi-" ^ uuid) ~tag:"i"
-            ~style_class:"ti ti-dots-vertical" [] ]
-    ]
+  box ~key:("aab-" ^ uuid)
+    [ button ~key:("aabbtn-" ^ uuid) ~variant:`ghost ~size:`icon
+        ~accessibility_identifier:("asset-menu-btn-" ^ uuid)
+        ~icon:(`app "dots-vertical")
+        ~on_press:(fun _ ->
+          match B.query_selector ("#asset-menu-btn-" ^ uuid) with
+          | Some el ->
+              Views_popup.show_menu ~anchor:el
+                (menu_items uuid b)
+          | None -> ())
+        [] ]
 
 let img_attrs uuid (b : Model.block) =
   (* cljs img-metadata: resize-metadata width, else 250 *)
@@ -538,6 +536,10 @@ let asset_img uuid (b : Model.block) file : t =
     | Some u -> u
     | None -> ""
   in
+  (* TODO(component): blob-URL <img> — the `image` kind takes an opaque
+     int handle and no src/URL prop; the load event records
+     asset/width+height and #asset-img-<uuid> is queried by the lightbox
+     and resize paths *)
   dom ~key:("acimg-" ^ uuid) ~tag:"img"
     ~style_class:"rounded-sm relative fade-in fade-in-faster"
     ~attrs:
@@ -549,8 +551,7 @@ let asset_img uuid (b : Model.block) file : t =
     []
 
 let asset_placeholder : t =
-  dom ~key:"acph" ~style_class:"img-placeholder asset-container"
-    ~attrs:[ ("style", "width: 250px") ] []
+  box ~key:"acph" ~style_class:"asset-container" ~width:250 []
 
 let asset_container uuid (b : Model.block) : t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
@@ -559,24 +560,24 @@ let asset_container uuid (b : Model.block) : t =
     let ready = ready_for uuid ext context in
     (if not (Signal.get ready.Signal.state_signal) then
        resolve_img uuid file ext ready);
-    (dom ~key:("ac-" ^ uuid) ~style_class:"asset-container"
-       ~events:"click"
-       ~on_dom_event:(fun name payload ->
-         (* clicks on the action bar inside the container must not open the
-            lightbox — cljs stops propagation on the trigger instead *)
-         let on_img =
-           let s = Platform.payload_str payload "targetId" in
-           String.length s >= 10 && String.sub s 0 10 = "asset-img-"
-         in
-         if name = "click" && on_img then
-           match B.query_selector ("#asset-img-" ^ uuid) with
-           | Some img -> open_lightbox img
-           | None -> ())
-       [ dyn ~equal:(=) (fun r -> if r then asset_img uuid b file else asset_placeholder)
+    (* the lightbox press lives on the img branch only — clicks on the
+       action bar (sibling, outside the pressable) must not open it *)
+    (box ~key:("ac-" ^ uuid) ~style_class:"asset-container"
+       [ reactive (fun r ->
+             if r then
+               Ui_parts.pressable
+                 ~on_press:(fun _ ->
+                   match B.query_selector ("#asset-img-" ^ uuid) with
+                   | Some img -> open_lightbox img
+                   | None -> ())
+                 (asset_img uuid b file)
+             else asset_placeholder)
            ready.Signal.state_signal
        ; action_bar uuid b ])
       context parent
 
+(* TODO(component): pointerdown -> window pointermove/pointerup drag
+   has no component equivalent — imperative pointer events *)
 let resize_handle uuid side : t =
   let cls =
     match side with
@@ -595,10 +596,10 @@ let resize_handle uuid side : t =
     []
 
 let image_block uuid (b : Model.block) : t =
-  let align = Option.value b.Model.block_asset_align ~default:"left" in
-  dom ~key:("ri-" ^ uuid) ~style_class:"ls-resize-inner w-full select-none"
-    [ dom ~key:("rim-" ^ uuid)
-        ~style_class:("ls-resize-image rounded-md align-" ^ align)
+  box ~key:("ri-" ^ uuid) ~style_class:"ls-resize-inner"
+    [ (* ls-resize-image is an imperative query handle (start_drag) *)
+      box ~key:("rim-" ^ uuid) ~corner_radius:6
+        ~style_class:"ls-resize-image"
         [ asset_container uuid b
         ; resize_handle uuid `Left
         ; resize_handle uuid `Right ] ]
@@ -607,10 +608,9 @@ let image_block uuid (b : Model.block) : t =
 let file_block uuid (b : Model.block) : t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let file = uuid ^ "." ^ ext in
-  dom ~key:("af-" ^ uuid) ~style_class:"asset-ref"
-    [ dom ~key:("afl-" ^ uuid) ~tag:"a"
-        ~attrs:[ ("href", "#"); ("download", file); ("title", file) ]
-        ~text:file [] ]
+  (* cljs <a download title> — download/title have no props *)
+  box ~key:("af-" ^ uuid)
+    [ link ~key:("afl-" ^ uuid) ~url:"#" ~text:file [] ]
 
 (* cljs asset-link pdf branch — a.asset-ref.is-pdf; data-url resolves to
    the blob object URL async (attrs signal so the patch lands in place) *)
@@ -639,20 +639,15 @@ let pdf_block uuid (b : Model.block) : t =
   let file = uuid ^ ".pdf" in
   let href = "../assets/" ^ file in
   let st = pdf_url_sig uuid file context in
-  (dom ~key:("pdf-" ^ uuid) ~tag:"a" ~style_class:"asset-ref is-pdf"
-     ~attrs_signal_v:
-       (Logseq_dom.attrs_signal st.Signal.state_signal
-          (fun url ->
-            [ ("data-href", href); ("data-url", url)
-            ; ("draggable", "true") ]))
-     ~events:"click"
-     ~on_dom_event:(fun name _ ->
-       if name = "click" then
-         let url = Signal.get st.Signal.state_signal in
-         Pdf_assets.open_pdf_file ~original_path:href
-           ~href:(if url = "" then href else url)
-           ~b)
-     ~text:b.Model.block_title [])
+  (* cljs a.asset-ref.is-pdf — the click opens the in-app pdf viewer (not
+     a navigation), and data-href/data-url have no readers, so this is a
+     pressable label, not a link *)
+  (Ui_parts.pressable ~on_press:(fun _ ->
+       let url = Signal.get st.Signal.state_signal in
+       Pdf_assets.open_pdf_file ~original_path:href
+         ~href:(if url = "" then href else url) ~b)
+     (text ~key:("pdf-" ^ uuid) ~value:b.Model.block_title
+        ~style_class:"asset-ref is-pdf" []))
     context parent
 
 (* whole asset branch — .asset-block-wrap replaces .block-content inside
@@ -664,18 +659,13 @@ let block_view uuid (b : Model.block) : t =
     | Some "pdf" -> pdf_block uuid b
     | _ -> file_block uuid b
   in
-  dom ~key:("abw-" ^ uuid)
-    ~style_class:"flex flex-col asset-block-wrap w-full"
-    [ dom ~key:("abcc-" ^ uuid) ~style_class:"flex flex-1" [ body ]
-    ; dom ~key:("abt-" ^ uuid)
-        ~style_class:"asset-title-slot text-xs opacity-60 mt-1 cursor-text"
-        ~attrs:[ ("style", "min-height: 24px") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Editor_actions.enter_edit uuid 0)
-        [ dom ~key:("abtt-" ^ uuid) ~tag:"span"
-            ~style_class:"block-title-wrap"
-            ~text:b.Model.block_title [] ] ]
+  column ~key:("abw-" ^ uuid) ~style_class:"asset-block-wrap"
+    [ box ~key:("abcc-" ^ uuid) ~grow:1. [ body ]
+    ; Ui_parts.pressable
+        ~on_press:(fun _ -> Editor_actions.enter_edit uuid 0)
+        (box ~key:("abt-" ^ uuid) ~min_height:24
+           [ text ~key:("abtt-" ^ uuid) ~value:b.Model.block_title
+               ~style_class:"block-title-wrap" [] ]) ]
 
 (* File-column cell for the Asset class tag page (cljs objects.cljs
    build-class-object-columns :file). The object-url resolves async —
@@ -698,9 +688,10 @@ let file_cell_el (w : W.t) : t =
           Runtime.signal_set src url;
           Js.Promise.resolve ())
           |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())));
-  dom ~style_class:"block-content overflow-hidden"
-    ~attrs:[ ("style", "max-height: 30px") ]
-    [ dom ~tag:"img"
+  box ~style_class:"block-content" ~max_height:30
+    [ (* TODO(component): async blob-URL <img> — no URL/src prop on the
+         image kind *)
+      dom ~tag:"img"
         ~attrs_signal_v:
           (Logseq_dom.attrs_signal src.Signal.state_signal (fun u ->
                ("title", file)

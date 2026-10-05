@@ -28,16 +28,15 @@ let el ?key ~tag ?(attrs = []) ?(events = "") ?(style_class = "")
   Logseq_dom.dom ?key ~tag ~attrs ~events ~style_class ?style_class_signal
     ?attrs_signal_v ?text_signal ?id_signal ~id ~text ?on_dom_event children
 
-(* Plain text run — a real DOM text node. cljs hiccup emits raw strings
-   interleaved with elements; LUI's own text nodes render as
-   span.lui-text (an extra element), so a <raw-text> placeholder is
-   mounted at the exact DOM position and the MutationObserver in
-   Web_dom swaps it for a real text node. *)
-let txt (s : string) : t =
- fun context parent ->
-  Web_dom.ensure_raw_text_observer ();
-  Logseq_dom.dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] []
-    context parent
+(* Plain text run — a `text` kind (span.lui-text on web). cljs hiccup
+   emits raw strings interleaved with elements; the kind keeps the run
+   as an inline element so it renders on native hosts too *)
+let txt (s : string) : t = text ~value:s []
 
 let text_of_class_signal source f =
   Signal.map (fun v -> Lui_protocol.StringValue (f v)) source
+
+(* Sites that stay on [el]/[dom] carry a (* TODO(component): ... *) note
+   — they bind attrs, events or element-tag semantics that have no
+   component-kind equivalent (data-* query hooks, delegated clicks,
+   element-selector CSS, imperative mounts, blob/img/iframes). *)

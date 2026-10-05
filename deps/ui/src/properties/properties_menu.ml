@@ -959,7 +959,7 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
   (dropdown_menu ~anchor:`below ~anchor_alignment:`start
      ~anchor_offset:4.0 ~min_width:200
      ~on_dismiss:(fun _ -> close ())
-     [ dyn ~equal:(fun a b -> a = b)
+     [ reactive
          (fun p ->
             (* stable root: same-kind prop diffs across dyn branches
                emit unsupported set-prop ops on native *)

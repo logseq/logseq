@@ -15,16 +15,20 @@ let find_sub s i pat =
   in
   go i
 
-let bracket s =
-  D.el ~tag:"span" ~style_class:"text-gray-500 bracket" [ D.txt s ]
+let bracket s = text ~style_class:"bracket" ~value:s []
 
 (* cljs page-reference wraps the anchor in .preview-ref-link *)
 let preview_link inner =
-  D.el ~tag:"span" [ D.el ~tag:"span" ~style_class:"preview-ref-link" [ inner ] ]
+  text [ text ~style_class:"preview-ref-link" [ inner ] ]
 
 
 (* ---------- emitters ---------- *)
 
+(* TODO(component): a.page-ref/a.tag carry imperative hooks —
+   data-ref/data-uuid are read by document-delegated clicks
+   (sidebar_state.on_doc_click), hover previews (popups_view
+   a[data-ref]) and cljs-parity selectors (a.tag[data-ref][data-uuid]
+   [draggable] > span); no kind props exist for data-* attrs *)
 let page_link ~(tag : bool) ?label ?uuid_sig name =
   let name = String.trim name in
   let text =
@@ -264,6 +268,8 @@ let name_uuid_state context name =
   sync := false;
   st
 
+(* TODO(component): target=_blank has no `link` prop — the kind would
+   navigate the app tab away *)
 let external_link href label_els =
   D.el ~tag:"a" ~style_class:"external-link"
     ~attrs:[ ("href", href); ("target", "_blank") ] label_els
@@ -271,6 +277,7 @@ let external_link href label_els =
 (* ((uuid)) (deprecated form) / #[[uuid]] -> resolved block title via
    thread-api/pull — lazy: the anchor mounts empty and fills when the
    pull returns *)
+(* TODO(component): delegated a.page-ref click + data-ref attr *)
 let block_ref_anchor uuid : t =
  fun context parent ->
   let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
@@ -280,11 +287,15 @@ let block_ref_anchor uuid : t =
     ~text_signal:(Logseq_dom.reactive_text Fun.id title_sig)
     [] context parent
 
+(* TODO(component): .page-reference[data-ref] is a delegated-event +
+   hover-preview hook *)
 let block_ref uuid =
   D.el ~tag:"span" ~style_class:"page-reference"
     ~attrs:[ ("data-ref", uuid) ]
     [ block_ref_anchor uuid ]
 
+(* TODO(component): <img src=url> — the `image` kind takes an opaque
+   int handle, no src/URL prop *)
 let image_el ~src ~alt =
   (* cljs asset-container / image-or-fallback *)
   D.el ~tag:"span" ~style_class:"asset-container image normalize"
@@ -296,12 +307,18 @@ let image_el ~src ~alt =
         []
     ]
 
+(* TODO(component): inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/
+   <sub>/<sup>/<strong>/<kbd> styling comes from element-selector CSS
+   (:not(pre) > code, mark {…}) — `text` renders span.lui-text and would
+   lose it all; no kind props exist for inline emphasis *)
 let code_span s = D.el ~tag:"code" [ D.txt s ]
 
 (* cljs extensions/latex: span.latex-inline (inline) / div.latex (block)
    with class "initial", a generated id, and a span.opacity-0 child
    holding the raw tex; the Render_libs doc-scan lazy-loads katex.min.js +
-   mhchem.min.js and calls katex.render into the element. *)
+   mhchem.min.js and calls katex.render into the element.
+   TODO(component): imperative render target — the pending render
+   resolves the mount by generated id #ls-katex-*. *)
 let katex_el ~block ~display tex : t =
  fun context parent ->
   Render_libs.ensure ();
@@ -339,7 +356,9 @@ let seconds_display seconds =
   if h = "00" then m ^ ":" ^ s else h ^ ":" ^ m ^ ":" ^ s
 
 (* cljs youtube/timestamp: a.youtube-timestamp with the clock icon +
-   seconds->display label; the click handler lives in Render_libs *)
+   seconds->display label; the click handler lives in Render_libs.
+   TODO(component): delegated click (el_closest a.youtube-timestamp)
+   and .youtube-timestamp-label query *)
 let timestamp_el seconds : t =
  fun context parent ->
   Render_libs.ensure ();
@@ -359,8 +378,10 @@ let timestamp_el seconds : t =
         [] ]
     context parent
 
+(* TODO(component): element-tag semantics (same as code_span) *)
 let emph tag children = D.el ~tag children
 
+(* TODO(component): em-emoji custom element — imperative emoji render *)
 let emoji_el name =
   (* em-emoji custom element fallback — see render_dom.ml TODO. *)
   D.el ~tag:"em-emoji" ~id:name []
@@ -387,9 +408,8 @@ let date_label y m d =
 (* cljs components/block.cljs timestamp: span.timestamp keeps the
    literal <YYYY-MM-DD ...> text inline (active attr marks <..> vs [..]) *)
 let timestamp_text_el ~literal =
-  D.el ~tag:"span" ~style_class:"timestamp"
-    ~attrs:[ ("active", "true") ]
-    [ D.txt literal ]
+  (* cljs span.timestamp[active] — the active attr has no readers *)
+  text ~style_class:"timestamp" ~value:literal []
 
 (* ---------- cloze ---------- *)
 
@@ -400,22 +420,19 @@ let cloze_el answer cue : t =
   let open_ = Signal.state context.Lui_ui.ui_scheduler false in
   let sig_ = Signal.value open_ in
   let hidden_text = match cue with Some c -> "(" ^ c ^ ")" | None -> "[...]" in
-  let revealed = D.el ~tag:"span" [ D.txt ("[" ^ answer ^ "]") ] in
-  let hidden = D.el ~tag:"span" ~text:hidden_text [] in
-  let toggle _name _payload =
-    Runtime.signal_set open_ (not (Signal.get_state open_))
-  in
-  D.el ~tag:"span"
-    ~style_class_signal:(Logseq_dom.reactive_class (fun o -> if o then "cloze cloze-revealed" else "cloze") sig_)
-    ~attrs_signal_v:(Logseq_dom.reactive_attrs
-         (fun o ->
-           [ ("role", "button"); ("tabindex", "0")
-           ; ("aria-pressed", string_of_bool o) ])
-         sig_)
-    ~events:"click keydown" ~on_dom_event:toggle
-    [ dyn ~equal:(Logseq_dom.trace_equal "render_inline" (fun a b -> (a : bool) = b))
-        (fun o -> if o then revealed else hidden)
-        sig_ ]
+  (* keydown (Enter/Space) has no component equivalent — click toggles.
+     role/button+tabindex+aria-pressed have no kind props *)
+  (Ui_parts.pressable
+     ~on_press:(fun _ ->
+       Runtime.signal_set open_ (not (Signal.get_state open_)))
+     (Ui_parts.class_signal sig_
+        (fun o -> if o then "cloze cloze-revealed" else "cloze")
+        (text
+           ~value_signal:(Signal.map
+                (fun o ->
+                  if o then "[" ^ answer ^ "]" else hidden_text)
+                sig_)
+           [])))
     context parent
 
 (* ---------- macros ---------- *)
@@ -477,6 +494,8 @@ let first_arg args =
   | Some i -> String.sub args 0 i
   | None -> args
 
+(* TODO(component): <iframe> embeds are imperative (youtube
+   enablejsapi postMessage seek, plugin-loaded src) — no iframe kind *)
 (* cljs youtube-video iframe + attrs; enablejsapi=1 is required for the
    timestamp seek postMessage. The shell stays .embed-block (e2e contract
    waits on it); cljs wraps in .video-embed-shell/.video-embed-frame. *)
@@ -555,6 +574,8 @@ and try_match ~refs ~self s i : (t * int) option =
   | '<' -> try_lt ~refs ~self s i
   | ':' -> try_emoji s i
   | 'h' -> try_url s i
+  (* TODO(component): <br> has no kind; a raw newline inside a text
+     run collapses in inline flow *)
   | '\n' -> Some (D.el ~tag:"br" [], 1)
   | _ -> None
 
@@ -582,7 +603,7 @@ and try_bracket ~refs ~self s i =
 and page_ref ?(tag = false) ~refs ~self name =
   let name = String.trim name in
   if Wire.is_uuid_string name then
-    if List.mem name refs then D.el ~tag:"span" []
+    if List.mem name refs then text []
     else if tag then resolved_tag_ref ~refs ~self name
     else resolved_ref ~refs ~self name
   else
@@ -593,6 +614,7 @@ and page_ref ?(tag = false) ~refs ~self name =
     if tag then
       preview_link (page_link ~tag:true ~uuid_sig name) context parent
     else
+      (* TODO(component): span.page-reference[data-ref] — ref hook *)
       D.el ~tag:"span" ~style_class:"page-reference"
         ~attrs:[ ("data-ref", name) ]
         ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun u -> [ ("data-ref", if u = "" then name else u) ])
@@ -602,6 +624,9 @@ and page_ref ?(tag = false) ~refs ~self name =
         ; bracket "]]" ]
         context parent
 
+(* TODO(component): a.page-ref.broken / span.page-reference carry
+   data-ref/data-uuid delegation hooks — same imperative reason as
+   page_link *)
 (* [[uuid]] — resolved via thread-api/pull.  cljs drops the
    .page-reference chrome when the uuid does not resolve: the row is just
    a bare a.page-ref.broken holding the literal [[uuid]] text.  Resolved
@@ -616,9 +641,11 @@ and resolved_ref ~refs ~self uuid : t =
   let child_refs =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
-  dyn
-    ~equal:(fun (a : string * bool) b -> a = b)
+  (reactive
     (fun (title, is_page) ->
+      (* TODO(component): data-ref/data-uuid/tabindex/draggable attrs
+         are delegated-event + dnd hooks (a.page-ref) — imperative
+         anchor chrome, minimal dom stays *)
       if title = "" then
         (* pull in flight — keep the chrome so the row does not shift *)
         D.el ~tag:"span" ~style_class:"page-reference"
@@ -642,9 +669,10 @@ and resolved_ref ~refs ~self uuid : t =
                       D.el ~tag:"span"
                         (parse ~refs:child_refs ~self:uuid title)) ])
           ; bracket "]]" ])
-    (Signal.value st)
+    (Signal.value st))
     context parent
 
+(* TODO(component): a.tag[data-uuid][data-ref] delegation hooks *)
 (* #[[uuid]] — same lazy resolution, rendered as a .tag anchor *)
 and resolved_tag_ref ~refs ~self uuid : t =
  fun context parent ->
@@ -672,16 +700,17 @@ and macro_el ~refs:_refs ~self:_self body =
           cloze_el (String.trim (String.sub args 0 j)) (Some cue)
       | _ -> cloze_el (String.trim args) None)
   | "query" ->
-      D.el ~tag:"div" ~style_class:"warning"
-        ~text:(U.t "block.macro/query-deprecated") []
+      box ~style_class:"warning"
+        [ text ~value:(U.t "block.macro/query-deprecated") [] ]
   | "namespace" ->
-      D.el ~tag:"div" ~style_class:"warning"
-        ~text:(U.tf "block.macro/namespace-deprecated" [ U.t "library/title" ])
-        []
+      box ~style_class:"warning"
+        [ text
+            ~value:(U.tf "block.macro/namespace-deprecated" [ U.t "library/title" ])
+            [] ]
   | "embed" ->
       (* cljs: {{embed}} is deprecated — renders a warning, not an embed *)
-      D.el ~tag:"div" ~style_class:"warning"
-        ~text:(U.t "block.macro/embed-deprecated") []
+      box ~style_class:"warning"
+        [ text ~value:(U.t "block.macro/embed-deprecated") [] ]
   | "youtube" | "video" -> (
       let url = first_arg args in
       match youtube_id url with
@@ -862,6 +891,7 @@ and try_lt ~refs ~self s i =
       match try_html_tag ~refs ~self s i with
       | Some hit -> Some hit
       | None ->
+          (* TODO(component): <br> has no component kind *)
           if Str_util.starts_at s i "<br>" then Some (D.el ~tag:"br" [], 4)
           else if Str_util.starts_at s i "<br/>" then Some (D.el ~tag:"br" [], 5)
           else None)
