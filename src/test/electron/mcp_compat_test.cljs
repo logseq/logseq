@@ -1513,6 +1513,25 @@
                 (is (= [["logseq.DB.getAssetAttributeNames" []]] @calls))
                 (done))))))
 
+(deftest get-tag-uuid-uses-db-api-and-preserves-ambiguous-candidates
+  (let [calls (atom [])
+        tags #js [#js {"uuid" "tag-1"} #js {"uuid" "tag-2"}]
+        api (recording-api calls tags)]
+    (async done
+      (-> (mcp-compat/get-tag-uuid api #js {"title" "Project"})
+          (p/then (fn [result]
+                    (is (= [["logseq.DB.getTagsByName" ["Project"]]] @calls))
+                    (is (= {:found false
+                            :title "Project"
+                            :tag_uuid nil
+                            :reason "2 tags share this title; use a UUID"
+                            :candidates ["tag-1" "tag-2"]}
+                           result))
+                    (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (js/queueMicrotask done)))))))
+
 (deftest list-journals-sorts-and-limits-the-cheap-listing
   (let [calls (atom [])
         journals #js [#js {"id" 1 "title" "Older" "journal-day" 20250101}
