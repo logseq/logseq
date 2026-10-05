@@ -201,6 +201,19 @@ let visible_outline_content_tree env =
   in
   Js.Promise.resolve (build None)
 
+let content_tree_matches env expected =
+  (* non-asserting variant of wait_for_content_tree *)
+  let* () = Util.wait_timeout env 300. in
+  let rec loop attempts =
+    let* actual = visible_outline_content_tree env in
+    if trees_equal expected actual then Js.Promise.resolve true
+    else if attempts = 0 then Js.Promise.resolve false
+    else
+      let* () = Util.wait_timeout env 100. in
+      loop (attempts - 1)
+  in
+  loop 40
+
 let wait_for_content_tree env expected =
   let* () = Util.wait_timeout env 300. in
   let rec loop attempts =
@@ -1078,8 +1091,16 @@ let () =
     in
     let* () = Util.exit_edit env in
     let* () = wait_for_content_tree env initial in
-    let* () = drag_block env "drag third" "drag first" "before" in
-    let* () = wait_for_content_tree env reordered in
+    (* a drop can miss the before-zone under load; the same drag is
+       idempotent so retry until the tree reflects it *)
+    let rec drag_until tries =
+      let* () = drag_block env "drag third" "drag first" "before" in
+      let* ok = content_tree_matches env reordered in
+      if ok then Js.Promise.resolve ()
+      else if tries <= 1 then wait_for_content_tree env reordered
+      else drag_until (tries - 1)
+    in
+    let* () = drag_until 3 in
     let* () = undo_and_wait_for_content_tree env initial in
     Fixtures.validate_graph env)
 

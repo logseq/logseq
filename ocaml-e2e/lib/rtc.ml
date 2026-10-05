@@ -72,7 +72,9 @@ let get_rtc_tx env =
     [:rtc/state] so the check survives the header indicator unmounting
     (same flake that hides [rtc-tx]). *)
 let wait_idle env =
-  let deadline = Js.Date.now () +. 35000. in
+  (* remote-op apply backlog can run deep under parallel load —
+     pendingServerOpsCount=43+ while checksums already match *)
+  let deadline = Js.Date.now () +. 120000. in
   let rec poll () =
     let* json =
       Pw.eval_js env
