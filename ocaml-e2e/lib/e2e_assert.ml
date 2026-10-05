@@ -43,7 +43,34 @@ let in_normal_mode env =
 let graph_loaded env = is_visible env "[data-testid='page title']"
 
 let editor_mode env =
-  have_count ~timeout:15000. env ".editor-wrapper textarea" 1
+  (* counting ALL .editor-wrapper textareas flakes under remount churn:
+     transient 0 while every editor remounts, transient 2 while a
+     stale-but-mounted editor coexists (dup ids). The app's editing
+     state is authoritative — wait for the editing block's editor to be
+     visible. *)
+  let deadline = Js.Date.now () +. 45000. in
+  let rec go () =
+    let* u =
+      Pw.eval_js env
+        "(() => { const st = logseq.api.get_state_from_store('editor/block'); \
+         return st && st.uuid ? st.uuid : null; })()"
+      |> Js.Promise.then_ (fun u -> Js.Promise.resolve (Js.Nullable.toOption u))
+    in
+    let* ok =
+      match u with
+      | Some uuid ->
+          Pw.count env (Printf.sprintf "#edit-block-%s:visible" uuid)
+          |> Js.Promise.then_ (fun n -> Js.Promise.resolve (n > 0))
+      | None -> Js.Promise.resolve false
+    in
+    if ok then Js.Promise.resolve ()
+    else if Js.Date.now () > deadline then
+      have_count ~timeout:15000. env ".editor-wrapper textarea" 1
+    else
+      let* () = Pw.wait_timeout env 150. in
+      go ()
+  in
+  go ()
 
 let selected_block_text env text =
   is_visible env (Printf.sprintf ".ls-block.selected :text('%s')" text)
