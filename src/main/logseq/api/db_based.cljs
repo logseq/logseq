@@ -443,6 +443,16 @@
                        :where [?page :block/journal-day _]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json journals false)))))
 
+(defn list-recycled []
+  (let [repo (state/get-current-repo)]
+    (p/let [entities (db-async/<q
+                      repo
+                      {:transact-db? false}
+                      '[:find [(pull ?entity [:block/uuid :block/name :block/title
+                                              :logseq.property/deleted-at]) ...]
+                        :where [?entity :logseq.property/deleted-at _]])]
+      (bean/->js (sdk-utils/normalize-keyword-for-json entities false)))))
+
 (def ^:private inspect-page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 

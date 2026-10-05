@@ -278,6 +278,21 @@
              (is false (str error))))
           (p/finally done))))
 
+(deftest get-journal-candidates-api-returns-journal-day-entities
+  (test-helper/load-test-files
+   [{:page {:block/title "Journal Candidate API" :block/journal-day 20250101}}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [result (db-based-api/get-journal-candidates)
+                    journals (api-test/js->clj-kw result)]
+              (is (some #(and (= "Journal Candidate API" (:title %))
+                              (= 20250101 (:journal-day %)))
+                        journals)))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest get-page-block-uuids-api-returns-flat-page-descendants
   (test-helper/load-test-files
    [{:page {:block/title "UUID API Page"}

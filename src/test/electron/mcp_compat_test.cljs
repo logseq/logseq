@@ -1176,6 +1176,7 @@
                     (is (some #(= "logseq.DB.getBacklinks" (first %)) @calls))
                     (is (some #(= "logseq.DB.search" (first %)) @calls))
                     (is (some #(= "logseq.DB.getTitleHolders" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getJournalCandidates" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1493,7 +1494,7 @@
               (fn [result]
                 (is (= ["Newest" "Middle"] (mapv :title result)))
                 (is (= 1 (count @calls)))
-                (is (= "logseq.DB.datascriptQuery" (first (first @calls))))
+                (is (= "logseq.DB.getJournalCandidates" (first (first @calls))))
                 (done))))))
 
 (deftest list-journals-counts-in-four-queries-and-zero-fills

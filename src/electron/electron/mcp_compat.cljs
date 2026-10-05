@@ -384,14 +384,8 @@
 
 (defn list-recycled
   [api-fn _args]
-  (let [query "[:find [(pull ?page [:block/uuid :block/name :block/title
-                                      :logseq.property/deleted-at]) ...]
-                 :where [?page :logseq.property/deleted-at _]]"]
-    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
-            pages (js->clj result :keywordize-keys true)]
-      (if (and (= 1 (count pages)) (vector? (first pages)))
-        (first pages)
-        pages))))
+  (p/let [result (api-fn "logseq.DB.listRecycled" [])]
+    (js->clj result :keywordize-keys true)))
 
 (defn list-status
   [api-fn _args]
@@ -2235,9 +2229,8 @@
                          (js/Number.isInteger limit)
                          (pos? limit))))
       (throw (js/Error. "limit must be a positive integer")))
-    (p/let [result (api-fn "logseq.DB.datascriptQuery"
-                           ["[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/journal-day]) ...] :where [?page :block/journal-day _]]"])
-            journals (->> (query-result-rows result)
+        (p/let [result (api-fn "logseq.DB.getJournalCandidates" [])
+          journals (->> (js->clj result :keywordize-keys true)
                           (sort-by #(or (:journal-day %) (:block/journal-day %) 0) >)
                           vec)
             total (count journals)
@@ -2489,7 +2482,7 @@
 
 (def ^:private capability-tool-routes
   {:listPages ["logseq.DB.listPages"]
-   :listJournals ["logseq.DB.datascriptQuery"]
+  :listJournals ["logseq.DB.getJournalCandidates" "logseq.DB.datascriptQuery"]
    :getPage ["logseq.cli.getPageData"]
    :searchBlocks ["logseq.DB.search"]
    :listTags ["logseq.DB.listTags"]
@@ -2534,7 +2527,7 @@
    :deleteProperty ["logseq.DB.datascriptQuery"
               "logseq.DB.removeProperty"
               "logseq.DB.removeBlock"]
-   :listRecycled ["logseq.DB.datascriptQuery"]
+  :listRecycled ["logseq.DB.listRecycled"]
    :listStatus ["logseq.DB.datascriptQuery"]
    :listClosedValues ["logseq.DB.datascriptQuery"]
    :listOrphanTags ["logseq.DB.datascriptQuery"]
@@ -2552,6 +2545,8 @@
   "logseq.DB.getBlockTree" ["00000000-0000-4000-8000-000000000999" 20 1000]
   "logseq.DB.getBacklinks" ["00000000-0000-4000-8000-000000000999"]
   "logseq.DB.getTitleHolders" ["__mcp_capability_probe__"]
+  "logseq.DB.getJournalCandidates" []
+  "logseq.DB.listRecycled" []
   "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
