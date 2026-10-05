@@ -17,9 +17,13 @@ let block_uuid_of (db : db) (e : int) : string option =
   | Some d -> (match d.v with Uuid u -> Some u | String s -> Some s | _ -> None)
   | None -> None
 
-let fix_duplicate_orders (conn : conn) (tx_data : datom list)
-    (tx_meta : tx_meta) : unit =
-  let db = Conn.db conn in
+(* Compute the fix ops against a db without transacting. Keyed by
+   block/uuid lookup-refs so the result can be applied to any conn whose
+   state matches the db it was computed on — computing against the server
+   conn's confirmed state makes every client derive the SAME fix ops for a
+   concurrent-insert collision (display conns differ per client because
+   they mix pending ops into the sibling sets). *)
+let dup_order_fix_ops (db : db) (tx_data : datom list) : tx_op list =
   let updates =
     List.filter
       (fun (d : datom) ->
@@ -72,16 +76,29 @@ let fix_duplicate_orders (conn : conn) (tx_data : datom list)
              List.iteri
                (fun i eid ->
                   let order = List.nth new_orders i in
-                  fixes :=
-                    Add (Entity_id eid, "block/order", String order) :: !fixes)
+                  let uuid =
+                    Option.value (block_uuid_of db eid) ~default:""
+                  in
+                  if uuid <> "" then
+                    fixes :=
+                      Add
+                        ( Lookup_ref ("block/uuid", Uuid uuid)
+                        , "block/order"
+                        , String order )
+                      :: !fixes)
                same_sorted
            end
        | _ -> ())
     groups;
-  if !fixes <> [] then begin
+  List.rev !fixes
+
+let fix_duplicate_orders (conn : conn) (tx_data : datom list)
+    (tx_meta : tx_meta) : unit =
+  let fixes = dup_order_fix_ops (Conn.db conn) tx_data in
+  if fixes <> [] then begin
     let _report =
       (* cljs (merge tx-meta {:op :fix-duplicate-order}) — overwrites :op *)
-      transact_conn conn (List.rev !fixes)
+      transact_conn conn fixes
         ~tx_meta:
           (List.filter (fun (k, _) -> k <> "op") tx_meta
            @ [ ("op", Keyword "fix-duplicate-order") ])
