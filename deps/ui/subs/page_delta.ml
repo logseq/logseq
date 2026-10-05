@@ -486,7 +486,16 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
       if already_applied p.rev then Js.Promise.resolve Unchanged
       else if not (delta_touches_parsed p page) then
         Js.Promise.resolve Unchanged
-      else if strict && not (structural_ok p) then
+      else if strict && !basis <> None && not (structural_ok p) then
+        (* [basis] is unset only right after a full fetch, which
+           already contains every committed tx — trust it and let the
+           fold seed the rev via note_applied. Gating here would send
+           the first structural broadcast after ANY load to a whole-page
+           refetch (the refetch publishes through Page_loaded, which
+           resets basis again, so it could never self-heal). A dropped
+           intermediate broadcast is the only residual risk and is
+           still caught by the per-delta already_applied checks on
+           later folds. *)
         Js.Promise.resolve Failed
       else
         (* decode + enrich the canonical rows up front — tag titles and

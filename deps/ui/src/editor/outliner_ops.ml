@@ -965,6 +965,7 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
 let apply_queued _page delta =
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
+  let route_at_start = !Runtime.current_route in
   let perf =
     match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false
   in
@@ -996,6 +997,7 @@ let apply_queued _page delta =
           (match a with
            | Some p'
              when p' != base
+                  && !Runtime.current_route = route_at_start
                   &&
                   (match !Runtime.current_page with
                    | Some c -> c == base
@@ -1086,11 +1088,10 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
              refresh_page does, but keep in-flight commits the tx
              didn't cover *)
           S.prune_overrides touched;
-          (* push the spliced tree straight into the mounted virtual
-             list before Page_loaded — the items signal repaints only
-             the touched rows, and matching container fields then let
-             update.ml skip the data_gen bump (no page remount) *)
-          Runtime.send (Action.Page_loaded page');
+          (* the queue already published Page_loaded — a second send
+             would take the not-own-commit branch and wipe basis/
+             applied/deferred via Page_delta.reset right after the
+             splice populated them *)
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)
           !Runtime.refresh_page_side page';

@@ -83,7 +83,6 @@ let reload_last_fire_ms = ref 0.0
 
 let reload_debounce_ms = 400.0
 let reload_max_wait_ms = 2000.0
-let edit_input_idle_ms = 750.0
 
 let clear_pending_deltas () =
   incr reload_gen;
@@ -189,36 +188,42 @@ and apply_pending () : unit Js.Promise.t =
          replace block fields wholesale, so a stale arm publishing last
          would blank rows the newer model already advanced *)
       let* merged =
-        Page_delta.with_apply_queue (fun () ->
-            match !Subs_state.current_page with
-            | Some base -> (
-                let rec fold (p : Model.page) = function
-                  | [] -> Js.Promise.resolve (Page_delta.Applied p)
-                  | d :: rest -> (
-                      let* applied =
-                        perf_time_p "apply_to_page"
-                          (Page_delta.apply_to_page ~strict:true
-                             (h.helpers_of p) p d)
-                      in
-                      match applied with
-                      | Page_delta.Applied p' -> fold p' rest
-                      | Page_delta.Unchanged -> fold p rest
-                      | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
-                in
-                let* m = fold base deltas in
-                (match m with
-                 | Page_delta.Applied p'
-                   when p' != base
-                        &&
-                        (match !Subs_state.current_page with
-                         | Some c -> c == base
-                         | None -> false) ->
-                     perf_time "publish_page" (fun () -> h.publish_page p');
-                     perf_time "refresh_side" (fun () ->
-                         h.refresh_page_side p')
-                 | _ -> ());
-                Js.Promise.resolve m)
-            | None -> Js.Promise.resolve Page_delta.Failed)
+        Js.Promise.catch
+          (fun _ ->
+            (* a rejected fold (enrichment/refetch helpers can reject)
+               must not swallow the batch — treat it as an unspliceable
+               delta so the refetch/reload fallback still runs *)
+            Js.Promise.resolve Page_delta.Failed)
+          (Page_delta.with_apply_queue (fun () ->
+              match !Subs_state.current_page with
+              | Some base -> (
+                  let rec fold (p : Model.page) = function
+                    | [] -> Js.Promise.resolve (Page_delta.Applied p)
+                    | d :: rest -> (
+                        let* applied =
+                          perf_time_p "apply_to_page"
+                            (Page_delta.apply_to_page ~strict:true
+                               (h.helpers_of p) p d)
+                        in
+                        match applied with
+                        | Page_delta.Applied p' -> fold p' rest
+                        | Page_delta.Unchanged -> fold p rest
+                        | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
+                  in
+                  let* m = fold base deltas in
+                  (match m with
+                   | Page_delta.Applied p'
+                     when p' != base
+                          &&
+                          (match !Subs_state.current_page with
+                           | Some c -> c == base
+                           | None -> false) ->
+                       perf_time "publish_page" (fun () -> h.publish_page p');
+                       perf_time "refresh_side" (fun () ->
+                           h.refresh_page_side p')
+                   | _ -> ());
+                  Js.Promise.resolve m)
+              | None -> Js.Promise.resolve Page_delta.Failed))
       in
       (* a broadcast carrying only deltas we already spliced from our
          own op response has nothing new to publish — skip the subs
@@ -239,7 +244,11 @@ and apply_pending () : unit Js.Promise.t =
              blocks, never the whole route *)
           match !Subs_state.current_page with
           | Some p -> (
-              let* fresh = h.refetch_page p in
+              let* fresh =
+                Js.Promise.catch
+                  (fun _ -> Js.Promise.resolve None)
+                  (h.refetch_page p)
+              in
               match fresh with
               | Some p' ->
                   (* the route may have moved on while the fetch was
@@ -277,20 +286,22 @@ and apply_pending () : unit Js.Promise.t =
           && List.for_all Page_delta.delta_already_applied deltas
         in
         let* merged =
-          Page_delta.with_apply_queue (fun () ->
-              let rec go js = function
-                | [] -> Js.Promise.resolve (Page_delta.Applied js)
-                | d :: rest -> (
-                    let* applied =
-                      Page_delta.apply_to_journals ~strict:true
-                        h.helpers_of js d
-                    in
-                    match applied with
-                    | Page_delta.Applied js' -> go js' rest
-                    | Page_delta.Unchanged -> go js rest
-                    | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
-              in
-              go start_js deltas)
+          Js.Promise.catch
+            (fun _ -> Js.Promise.resolve Page_delta.Failed)
+            (Page_delta.with_apply_queue (fun () ->
+                let rec go js = function
+                  | [] -> Js.Promise.resolve (Page_delta.Applied js)
+                  | d :: rest -> (
+                      let* applied =
+                        Page_delta.apply_to_journals ~strict:true
+                          h.helpers_of js d
+                      in
+                      match applied with
+                      | Page_delta.Applied js' -> go js' rest
+                      | Page_delta.Unchanged -> go js rest
+                      | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
+                in
+                go start_js deltas))
         in
         (match merged with
          | Page_delta.Applied js' when js' != start_js
@@ -318,7 +329,11 @@ and apply_pending () : unit Js.Promise.t =
                | (p : Model.page) :: rest ->
                    if not (touched p) then refetch (p :: acc) rest
                    else
-                     let* fresh = h.refetch_page p in
+                     let* fresh =
+                       Js.Promise.catch
+                         (fun _ -> Js.Promise.resolve None)
+                         (h.refetch_page p)
+                     in
                      (match fresh with
                       | Some p' -> refetch (p' :: acc) rest
                       | None -> Js.Promise.resolve None)
