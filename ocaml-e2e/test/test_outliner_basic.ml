@@ -14,13 +14,24 @@ let env = Fixtures.shared_open_page ()
 (* --- helpers ------------------------------------------------------------ *)
 
 let block_text_position env text =
-  let* found = Pw.find_one_by_text env "span" text in
-  match found with
-  | Some loc ->
-      let* _ = Assert.is_visible_l loc in
-      let* x, _ = Util.bounding_xy_l loc in
-      Js.Promise.resolve x
-  | None -> Js.Promise.reject (Failure ("span not found: " ^ text))
+  (* poll: the block list re-renders after ops; a one-shot query can hit
+     the gap between remounts *)
+  let deadline = Js.Date.now () +. 8000. in
+  let rec poll () =
+    let* found = Pw.find_one_by_text env "span" text in
+    match found with
+    | Some loc ->
+        let* _ = Assert.is_visible_l loc in
+        let* x, _ = Util.bounding_xy_l loc in
+        Js.Promise.resolve x
+    | None ->
+        if Js.Date.now () > deadline then
+          Js.Promise.reject (Failure ("span not found: " ^ text))
+        else
+          let* () = Util.wait_timeout env 150. in
+          poll ()
+  in
+  poll ()
 
 let block_q title =
   Printf.sprintf
@@ -516,17 +527,18 @@ let () =
     let root_id =
       Option.get (Js.Nullable.toOption root_id)
     in
-    let* () = zoom_in_shortcut env in
-    let* () = Util.wait_timeout env 400. in
-    let* (hash : string) = current_location_hash env in
-    let* () =
-      if not (Util.contains_sub hash root_id) then
-        let* () = zoom_in_shortcut env in
-        Util.wait_timeout env 400.
-      else Js.Promise.resolve ()
+    (* zoom-in routes async and the chord can land during a remount; retry
+       until the hash reflects the focused block (bounded) *)
+    let rec zoom_until_root tries =
+      let* () = zoom_in_shortcut env in
+      let* () = Util.wait_timeout env 500. in
+      let* (hash : string) = current_location_hash env in
+      if Util.contains_sub hash root_id then Js.Promise.resolve ()
+      else if tries <= 1 then
+        Js.Promise.reject (Failure "zoom-in did not focus root block")
+      else zoom_until_root (tries - 1)
     in
-    let* (hash : string) = current_location_hash env in
-    Fest.deep_equal (Util.contains_sub hash root_id) true Fest.expect;
+    let* () = zoom_until_root 4 in
     let* () =
       Js.Promise.catch
         (fun _ ->

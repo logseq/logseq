@@ -32,7 +32,18 @@ let assert_class_navigations env =
         let* _ = E2e_assert.is_visible env selector in
         let* () = E2e_assert.have_count env selector 1 in
         let* () = Pw.click env selector in
-        let* name = Ls_page.get_page_name env in
+        (* the click routes async; poll the title instead of reading once —
+           clj's JVM latency covered the gap *)
+        let deadline = Js.Date.now () +. 8000. in
+        let rec wait_name () =
+          let* name = Ls_page.get_page_name env in
+          if name = title || Js.Date.now () > deadline then
+            Js.Promise.resolve name
+          else
+            let* () = Util.wait_timeout env 150. in
+            wait_name ()
+        in
+        let* name = wait_name () in
         Fest.equal name title Fest.expect;
         go rest
   in
