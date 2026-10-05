@@ -655,8 +655,7 @@ let () =
            Util.wait_editor_visible env)
         (Util.wait_editor_visible env)
     in
-    let* content = Util.get_edit_content env in
-    Fest.deep_equal content (Some "focused-root") Fest.expect;
+    let* _ = Util.wait_edit_content env "focused-root" in
     let* (before_hash : string) = current_location_hash env in
     let* before_blocks = Util.get_page_blocks_contents env in
     let* () = K.tab env in
@@ -667,8 +666,7 @@ let () =
     let* () = Util.wait_timeout env 100. in
     let* () = K.meta_shift_arrow_down env in
     let* () = Util.wait_timeout env 100. in
-    let* content = Util.get_edit_content env in
-    Fest.deep_equal content (Some "focused-root") Fest.expect;
+    let* _ = Util.wait_edit_content env "focused-root" in
     let* (hash : string) = current_location_hash env in
     Fest.deep_equal hash before_hash Fest.expect;
     let* blocks = Util.get_page_blocks_contents env in

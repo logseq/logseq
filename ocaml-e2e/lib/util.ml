@@ -147,7 +147,10 @@ let search_and_click env search_text =
       (Pw.q env
          (Printf.sprintf "[data-testid='%s']:visible" search_text))
   in
-  let* () = repeat_until_visible env 5 result (fun () -> search env search_text) in
+  let* () =
+    (* index queries lag under -j8; each retry re-fills the search box *)
+    repeat_until_visible env 8 result (fun () -> search env search_text)
+  in
   Pw.click_l result
 
 let wait_editor_gone ?(editor = editor_q) env =
