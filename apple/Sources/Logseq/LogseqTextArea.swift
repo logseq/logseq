@@ -257,6 +257,17 @@ struct LogseqTextArea: NSViewRepresentable {
            #selector(NSResponder.moveParagraphForwardAndModifySelection(_:)):
         key = "ArrowDown"; which = 40
         swallow = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+      case #selector(NSResponder.deleteBackward(_:)),
+           #selector(NSResponder.deleteBackwardByDecomposingPreviousCharacter(_:)):
+        // Char deletes arrive via the input path; this emit exists for
+        // the caret-0 case where the native edit is a no-op and OCaml's
+        // keymap merges the block with its previous sibling.
+        key = "Backspace"; which = 8
+        swallow = false
+      case #selector(NSResponder.deleteForward(_:)):
+        // Same — caret-at-end is a native no-op; OCaml merges forward.
+        key = "Delete"; which = 46
+        swallow = false
       case #selector(NSResponder.moveLeft(_:)),
            #selector(NSResponder.moveLeftAndModifySelection(_:)),
            #selector(NSResponder.moveBackward(_:)),

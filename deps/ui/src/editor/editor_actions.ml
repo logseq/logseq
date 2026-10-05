@@ -248,6 +248,12 @@ let scope_of_uuid uuid =
   | Some el -> scope_of_el el
   | None -> "main"
 
+let perf_keys =
+  lazy
+    (match Sys.getenv_opt "LOGSEQ_PERF" with
+     | Some _ -> true
+     | None -> false)
+
 let enter_edit ?scope uuid caret =
   let scope =
     match scope with Some sc -> sc | None -> scope_of_uuid uuid
@@ -265,6 +271,8 @@ let enter_edit ?scope uuid caret =
              (cljs id-ref->title-ref) *)
           ignore
             (let* buffer = Ops.title_for_edit (String.trim (display_title uuid)) in
+            (if Lazy.force perf_keys then
+               Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             S.set (fun st ->
                 { st with
                   S.editing = Some { uuid; buffer; scope; base = buffer }
@@ -300,6 +308,8 @@ let exit_edit ~select =
          already paints the committed text *)
       if buf <> model_title e.uuid then
         S.override_title e.uuid (Ops.normalized_title e.uuid buf);
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
       S.set (fun st ->
           { st with
             S.editing = None
@@ -322,6 +332,8 @@ let blur_commit () =
       let buf = live_buffer e.uuid in
       if buf <> model_title e.uuid then
         S.override_title e.uuid (Ops.normalized_title e.uuid buf);
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF editing-clear src=blur uuid=%s\n%!" e.uuid);
       S.set (fun st -> { st with S.editing = None });
       commit e.uuid buf
 
@@ -334,6 +346,8 @@ let flush_edit () =
   | Some e ->
       cancel_pending_focus ();
       let buf = live_buffer e.uuid in
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF editing-clear src=flush uuid=%s\n%!" e.uuid);
       S.set (fun st -> { st with S.editing = None });
       if buf <> model_title e.uuid then
         ignore
@@ -377,6 +391,30 @@ let library_context () =
   match !Runtime.current_page with
   | Some p -> p.Model.page_is_library
   | None -> false
+
+(* optimistic model edits apply to whichever store the block lives in:
+   the standalone page route, or the day page inside current_journals.
+   The worker delta stays authoritative and splices the real record over
+   these placeholders when it lands *)
+let optimistic_edit (f : Model.page -> Model.page option) =
+  match !Runtime.current_page with
+  | Some page -> (
+      match f page with
+      | Some page' ->
+          Page_delta.mark_own_commit page';
+          Runtime.send (Action.Page_loaded page')
+      | None -> ())
+  | None -> (
+      let rec loop acc = function
+        | [] -> ()
+        | (p : Model.page) :: rest -> (
+            match f p with
+            | Some p' ->
+                Runtime.send
+                  (Action.Journals_loaded (List.rev_append acc (p' :: rest)))
+            | None -> loop (p :: acc) rest)
+      in
+      loop [] !Runtime.current_journals)
 
 (* cljs keydown-new-block: Enter on an empty last child outdents it
    instead of inserting a sibling (when no right sibling exists) *)
@@ -461,20 +499,12 @@ let split_at_cursor uuid =
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
-        (match !Runtime.current_page with
-         | Some page -> (
-             match
-               Model.split_insert page ~uuid ~before
-                 ~new_block:
-                   (Model.empty_block ~uuid:new_uuid ~title:after
-                      ~is_page:library)
-                 ~sibling
-             with
-             | Some page' ->
-                 Page_delta.mark_own_commit page';
-                 Runtime.send (Action.Page_loaded page')
-             | None -> ())
-         | None -> ());
+        optimistic_edit (fun p ->
+            Model.split_insert p ~uuid ~before
+              ~new_block:
+                (Model.empty_block ~uuid:new_uuid ~title:after
+                   ~is_page:library)
+              ~sibling);
         mark "splice";
         (* the exit-edit repaint lands before the worker delta — pin the
            saved title so the row doesn't flash the pre-split text *)
@@ -482,6 +512,8 @@ let split_at_cursor uuid =
         mark "title";
         (* S.set (not silent): the old textarea must unmount before the
            next keypress, or keystrokes keep landing in the stale editor *)
+        (if Lazy.force perf_keys then
+           Printf.eprintf "PERF editing-set src=split uuid=%s\n%!" new_uuid);
         S.set (fun st ->
             { st with
               S.editing =
@@ -511,25 +543,18 @@ let insert_sibling_after uuid =
               [ Ops.block_map ~title:"" ~page:library new_uuid ]
               uuid ~sibling ])
       in
-      (match !Runtime.current_page with
-       | Some page -> (
-           match
-             Model.split_insert page ~uuid ~before:buf
-               ~new_block:
-                 (Model.empty_block ~uuid:new_uuid ~title:""
-                    ~is_page:library)
-               ~sibling
-           with
-           | Some page' ->
-               Page_delta.mark_own_commit page';
-               Runtime.send (Action.Page_loaded page')
-           | None -> ())
-       | None -> ());
+      optimistic_edit (fun p ->
+          Model.split_insert p ~uuid ~before:buf
+            ~new_block:
+              (Model.empty_block ~uuid:new_uuid ~title:"" ~is_page:library)
+            ~sibling);
       (* the exit-edit repaint lands before the worker delta — pin the
          saved title so the row doesn't flash the stale title *)
       S.override_title uuid (Ops.normalized_title uuid buf);
       (* S.set (not silent): the old textarea must unmount before the
          next keypress, or keystrokes keep landing in the stale editor *)
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF editing-set src=sibling uuid=%s\n%!" new_uuid);
       S.set (fun st ->
           { st with
             S.editing =
@@ -929,17 +954,10 @@ let indent_or_outdent ~indent =
       (* optimistic local reparent: the DOM moves in this task instead of
          remounting when the async worker refresh lands (e2e boundingBox
          races that remount). Worker refresh stays authoritative. *)
-      (match !Runtime.current_page, parent_original with
-       | Some page, None -> (
-           match
-             (if indent then Model.indent_blocks else Model.outdent_blocks)
-               page uuids
-           with
-           | Some page' ->
-               Page_delta.mark_own_commit page';
-               Runtime.send (Action.Page_loaded page')
-           | None -> ())
-       | _ -> ());
+      if parent_original = None then
+        optimistic_edit (fun p ->
+            (if indent then Model.indent_blocks else Model.outdent_blocks)
+              p uuids);
       with_focus_after focus
         (String.length (live_buffer focus))
         (Ops.apply_and_refresh
@@ -949,12 +967,9 @@ let move_blocks_up_down up =
   match selected_uuids () with
   | [] -> ()
   | uuids ->
-      (match !Runtime.current_page with
-       | Some page ->
-           let page' = Model.move_selected_top_blocks page uuids up in
-           Page_delta.mark_own_commit page';
-           Runtime.send (Action.Page_loaded page')
-       | None -> ());
+      optimistic_edit (fun p ->
+          let p' = Model.move_selected_top_blocks p uuids up in
+          if p' == p then None else Some p');
       ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])
 
 let delete_selection () =
