@@ -1392,6 +1392,17 @@ let replay_pending_txs repo (conn : conn)
   let pending = pending_txs repo () in
   if pending = [] then 0
   else begin
+    Worker_log.info "db-sync/replay-pending"
+      [ "repo", repo
+      ; "count", string_of_int (List.length pending)
+      ; "ops"
+      , String.concat ","
+          (List.map
+             (fun (t : Sync_client_op.local_tx_entry) ->
+                Printf.sprintf "%s:%s"
+                  (Option.value t.outliner_op ~default:"?")
+                  (String.sub t.tx_id 0 8))
+             pending) ];
     let failed = ref 0 in
     (* nested replay (a failed entry's mark_failed rebuilds and replays
        again) must not clear the flag for the outer pass — a leaked
@@ -1433,6 +1444,16 @@ let replay_pending_txs repo (conn : conn)
 let display_db_from_server (server_db : db) : db =
   { server_db with storage_ref = None }
 
+(* The display conn's max_tx must never regress on a server-state rebind:
+   the frontend drops any render delta whose rev is not strictly greater
+   than the last applied one, so a rebound (smaller) counter makes the
+   next local op emit a delta that collides with an already-emitted rev
+   and gets silently ignored — the UI then shows stale state (e.g. an
+   indent that the db no longer has, plus duplicate editor rows). *)
+let display_db_rebind_floor (rebound : db) ~(floor : int) : db =
+  if rebound.max_tx < floor then { rebound with max_tx = floor }
+  else rebound
+
 let display_conn_from_server (server_db : db) : conn =
   Datascript.conn_from_db (display_db_from_server server_db)
 
@@ -1447,7 +1468,9 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
   | Some server_conn, Some display_conn ->
       let db_before = Conn.db display_conn in
       Conn.update_db display_conn (fun _ ->
-          display_db_from_server (Conn.db server_conn));
+          display_db_rebind_floor
+            (display_db_from_server (Conn.db server_conn))
+            ~floor:db_before.max_tx);
       let replay_reports = ref [] in
       let lid =
         Datascript.listen display_conn "pending-replay-collect"
@@ -1463,7 +1486,9 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
               (failed entries are out of pending now) so no residue
               leaks into the projection *)
            Conn.update_db display_conn (fun _ ->
-               display_db_from_server (Conn.db server_conn));
+               display_db_rebind_floor
+                 (display_db_from_server (Conn.db server_conn))
+                 ~floor:db_before.max_tx);
            replay_reports := [];
            ignore (replay_pending_txs repo display_conn (Some db_before))
          end
@@ -2006,7 +2031,9 @@ let split_off_server_if_remote ?(unapply_pending = true) repo : unit =
            let failed = replay_pending_txs repo display (Some db) in
            if failed > 0 then begin
              Conn.update_db display (fun _ ->
-                 display_db_from_server (Conn.db conn));
+                 display_db_rebind_floor
+                   (display_db_from_server (Conn.db conn))
+                   ~floor:db.max_tx);
              ignore (replay_pending_txs repo display None)
            end
          with exn ->
