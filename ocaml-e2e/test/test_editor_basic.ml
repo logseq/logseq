@@ -2120,7 +2120,14 @@ let () =
             (Playwright.locator_first
                (Pw.q env "pre.CodeMirror-line"))
         in
-        let* () = Util.input env "const value = 1;\nvalue + 1;" in
+        let* () =
+          (* CodeMirror hides a real textarea as its input — fill it
+             directly; *:focus can resolve elsewhere under load *)
+          Pw.wait_for env ~timeout:15000. ".CodeMirror textarea"
+        in
+        let* () =
+          Pw.fill env ".CodeMirror textarea" "const value = 1;\nvalue + 1;"
+        in
         let* () = K.esc env in
         let* () = Util.exit_edit env in
         let* _ =
