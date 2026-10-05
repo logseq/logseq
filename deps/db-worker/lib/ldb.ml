@@ -313,18 +313,31 @@ let get_journal_page_by_day db (journal_day : int) : entity option =
   | Some (d, _) -> ent_of_id db d.e
   | None -> None
 
-(* ldb/sort-by-order — cljs sort-by :block/order; nil sorts first. *)
+(* ldb/sort-by-order — cljs sort-by :block/order; nil sorts first. Ties
+   break on :block/uuid: equal orders (fractional-key collisions between
+   concurrent clients) must render in the same sibling order on every
+   conn — the input sequence is conn-local eid order, which differs
+   between the owner's replayed display conn and remote clients' server
+   conns and silently diverges the rendered order until the duplicate
+   fix lands. *)
 let sort_by_order (ents : entity list) : entity list =
   let order_of (e : entity) =
     match value e "block/order" with Some (String s) -> Some s | _ -> None
   in
+  let uuid_of (e : entity) =
+    match value e "block/uuid" with
+    | Some (Uuid u) | Some (String u) -> u
+    | _ -> ""
+  in
   List.stable_sort
     (fun a b ->
-      match (order_of a, order_of b) with
-      | None, None -> 0
-      | None, Some _ -> -1
-      | Some _, None -> 1
-      | Some x, Some y -> String.compare x y)
+       match (order_of a, order_of b) with
+       | None, None -> String.compare (uuid_of a) (uuid_of b)
+       | None, Some _ -> -1
+       | Some _, None -> 1
+       | Some x, Some y ->
+           let c = String.compare x y in
+           if c <> 0 then c else String.compare (uuid_of a) (uuid_of b))
     ents
 
 

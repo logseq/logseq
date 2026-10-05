@@ -890,7 +890,13 @@ let parent_membership db (parent_uuid : string) (parent_id : entity_id)
         membership_row parent_uuid parent_recycled child_id attrs)
       child_ids
     |> List.stable_sort (fun a b ->
-           Db_order.compare_order a.mc_order b.mc_order)
+           (* uuid tiebreak on equal orders — the Avet input sequence is
+              conn-local eid order, which differs between the owner's
+              replayed display conn and remote clients' server conns and
+              would diverge the shipped sibling order while a duplicate
+              order key exists *)
+           let c = Db_order.compare_order a.mc_order b.mc_order in
+           if c <> 0 then c else String.compare a.mc_uuid b.mc_uuid)
   )
 
 let order_wire (o : string option) : Wire.t =
