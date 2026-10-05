@@ -18,7 +18,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 
 | Tool | Inputs / key contract | Current reference route | First native route | Later candidate |
 |---|---|---|---|---|
-| `capabilities` | `include_diagnostics?`, `probe_writes?` | capability probes | read-only by default; write-dependent methods are `unknown/not-probed`; explicit mutation probes require `probe_writes: true` | local safe-default and opt-in tests pass; same-graph read-only recheck pending; `createPage` remains unprobed |
+| `capabilities` | `include_diagnostics?`, `probe_writes?` | capability probes | read-only by default; write-dependent methods are `unknown/not-probed`; explicit mutation probes require `probe_writes: true` | PASS: three stable same-graph read-only runs on 2.0.1; 21 read routes available, 6 invalid-argument read probes unknown but independently live-passed, 23 write routes skipped; `createPage` remains unprobed |
 | `getPage` | page name | full page with child blocks | existing `get_page_data` export via `logseq.DB.getPageData`; no duplicate getter | production route switched; focused local route and capability checks pass; same-graph page read passed before route switch; live recheck pending |
 | `getPageUUID` | title | `getPage`, query | existing `DB.datascriptQuery` compatibility lookup | use existing APIs behind DB aliases; duplicate `getPagesByTitle` implementation removed; same-graph live read passed for both recorded fixture titles |
 | `isTitleAvailable` | title | exact-title holders across entity kinds, including recycled markers | dedicated `logseq.DB.getTitleHolders`; MCP classifies page/tag/property/block and preserves `held_by` | production route switched; local tests pass; same-graph live held/available checks passed |

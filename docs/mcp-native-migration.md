@@ -197,21 +197,25 @@ envelope without duplicating the CLI implementation. Local route, capability,
 and SDK checks pass; the same-graph live read used the prior CLI route, so a
 read-only recheck through the DB alias is still required.
 
-On 2026-10-05 Claude completed a same-graph read-only sweep: 28 read tools were
-exercised, with 27 PASS, 0 FAIL, and `capabilities` BLOCKED because its
-diagnostics probe write routes. The corrected `getBlockUUID` retry returned nine
-descendants. The graph remained unchanged (68 pages, 21 tags, one recycled page)
-and no writes were made. The earlier page count of 62 was a miscount. `listAssets`
-returned an empty array but remains an explicitly unverified discovery probe,
-not a complete asset inventory. Orphan-tag/property results were cross-checked
-through their holder tools. The UUID-titled tag, duplicate-title pages, recycled
-outline, and Oct 4 blocks were left untouched.
+On 2026-10-05 Claude completed a same-graph read-only sweep: all 28 read tools
+PASS, with no FAIL and no writes. The corrected `getBlockUUID` retry returned
+nine descendants. The graph remained unchanged (68 pages, 21 tags, one recycled
+page); the earlier page count of 62 was a miscount. Orphan-tag/property results
+were cross-checked through their holder tools. The UUID-titled tag, duplicate-
+title pages, recycled outline, and Oct 4 blocks were left untouched.
+
+Claude then ran `capabilities` three times with `probe_writes: false`; results
+were stable on Logseq 2.0.1. Twenty-one read routes were available. Six read
+routes remained `unknown` because invalid probe arguments returned not-found or
+null, but each passed its independent live read. Twenty-three write routes were
+skipped, and `createPage` was not probed. `listAssets` returned an empty array
+but remains an explicitly unverified discovery probe, not a complete asset
+inventory.
 
 The initial read-only run skipped `capabilities` because its probes could invoke
-mutation routes. A safe default has since been implemented: read methods are
-probed, while write-dependent methods are reported as `unknown/not-probed`.
-Local tests cover the default and explicit opt-in modes; rerun the safe mode on
-the same graph to close the remaining capability check.
+mutation routes. The safe default now probes read methods and reports
+write-dependent methods as `unknown/not-probed`; local tests cover the default
+and explicit opt-in modes. The same-graph safe-mode capability check is complete.
 
 Focused local checks pass, including compilation, resolver normalization, and
 the `getBlockUUID` MCP adapter test. The full `electron.mcp-compat-test`
