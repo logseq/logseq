@@ -3720,13 +3720,17 @@ let test_views_table2 () =
     (Views_table.cell_value blk user_col = Wire.Int 9);
   check "cell_value missing -> Nil"
     (Views_table.cell_value (wmap []) user_col = Wire.Nil);
-  (* cell_title: select/id none, empty none *)
-  check "cell_title select none"
-    (Views_table.cell_title blk Views_table.select_column = None);
-  check "cell_title value"
-    (Views_table.cell_title blk Views_table.title_column = Some "T");
-  check "cell_title empty none"
-    (Views_table.cell_title (wmap []) Views_table.title_column = None)
+  (* title text: select/id none, empty none *)
+  let title_text blk col =
+    match Views_wire.prop_text (Views_table.cell_value blk col) with
+    | "" -> None
+    | t -> Some t
+  in
+  check "title_text select none"
+    (title_text blk Views_table.select_column = None);
+  check "title_text value" (title_text blk Views_table.title_column = Some "T");
+  check "title_text empty none"
+    (title_text (wmap []) Views_table.title_column = None)
 
 (* ---- Properties_data pure helpers ---- *)
 
