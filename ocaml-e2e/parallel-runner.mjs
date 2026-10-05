@@ -172,43 +172,47 @@ function extractNames(filePath) {
   return names;
 }
 
-function newestTimings() {
+function allTimings() {
   const dir = path.join(HERE, ".parallel-logs");
   try {
-    let best = null;
+    const found = [];
     for (const sub of fs.readdirSync(dir)) {
       const p = path.join(dir, sub, "timings.json");
       try {
-        const mtime = fs.statSync(p).mtimeMs;
-        if (!best || mtime > best.mtime) best = { p, mtime };
+        found.push({ p, mtime: fs.statSync(p).mtimeMs });
       } catch {}
     }
-    return best?.p ?? null;
+    return found.sort((a, b) => a.mtime - b.mtime).map((x) => x.p);
   } catch {
-    return null;
+    return [];
   }
 }
 
 function loadEstimates() {
-  const p =
-    opt.timings === "auto" ? newestTimings() : opt.timings === "none" ? null : opt.timings;
+  const paths =
+    opt.timings === "auto" ? allTimings() : opt.timings === "none" ? [] : [opt.timings];
   const byFile = {};
   for (const [file, secs] of Object.entries(DEFAULT_EST_SECS))
     byFile[file] = { tests: {}, secs };
-  if (!p) return byFile;
-  try {
-    const d = JSON.parse(fs.readFileSync(p, "utf8"));
-    for (const f of d.files ?? []) {
-      const m = byFile[f.file]?.tests ?? {};
-      // Same name can appear twice (TAP + spec summary): keep the max.
-      for (const t of f.tests ?? []) m[t.name] = Math.max(m[t.name] ?? 0, t.ms);
-      const secs = Object.values(m).reduce((a, x) => a + x, 0) / 1000;
-      byFile[f.file] = { tests: m, secs: secs || (byFile[f.file]?.secs ?? f.secs) };
-    }
-    return byFile;
-  } catch {
-    return byFile;
+  // Merge every timings file oldest→newest: a file's estimate comes from the
+  // most recent run that covered it (partial runs don't poison the rest).
+  for (const p of paths) {
+    try {
+      const d = JSON.parse(fs.readFileSync(p, "utf8"));
+      // Aggregate shard entries of the same file before assigning.
+      const perFile = {};
+      for (const f of d.files ?? []) {
+        const m = (perFile[f.file] ??= {});
+        // Same name can appear twice (TAP + spec summary): keep the max.
+        for (const t of f.tests ?? []) m[t.name] = Math.max(m[t.name] ?? 0, t.ms);
+      }
+      for (const [file, m] of Object.entries(perFile)) {
+        const secs = Object.values(m).reduce((a, x) => a + x, 0) / 1000;
+        byFile[file] = { tests: m, secs: secs || (byFile[file]?.secs ?? 0) };
+      }
+    } catch {}
   }
+  return byFile;
 }
 
 // Split `names` into k roughly time-balanced groups (greedy LPT).
@@ -278,6 +282,18 @@ function discover() {
     if (slowNames.length && k === 1) k = 2; // mixed file: must shard to split slow out
     if (k <= 1) {
       tasks.push({ ...t, estSecs: normalEstSecs });
+      continue;
+    }
+    if (slowNames.length && normalNames.length === 1) {
+      // 1 normal + slow test(s): emit the normal test as its own task so the
+      // slow test(s) stay excluded.
+      const n = normalNames[0];
+      tasks.push({
+        ...t,
+        shardNames: [n],
+        namePattern: `^${escRe(n)}$`,
+        estSecs: normalEstSecs,
+      });
       continue;
     }
     k = Math.min(k, normalNames.length);
