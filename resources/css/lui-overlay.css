@@ -2665,7 +2665,8 @@ div[data-keep-selection].menu-links-wrapper {
   place-items: center;
 }
 
-.cp__settings-inner aside > .cp__settings-header > .ui__icon > svg {
+.cp__settings-inner aside > .cp__settings-header > .ui__icon > svg,
+.cp__settings-inner aside > .cp__settings-header > .ui__icon.lui-icon {
   width: 1.5rem;
   height: 1.5rem;
 }
@@ -2938,7 +2939,8 @@ h1.cp__settings-category-title::first-letter {
   pointer-events: none;
 }
 
-.shortcut-toolbar-row .search-icon .ui__icon svg {
+.shortcut-toolbar-row .search-icon .ui__icon svg,
+.shortcut-toolbar-row .search-icon .ui__icon.lui-icon {
   width: 15px;
   height: 15px;
 }
