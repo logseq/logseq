@@ -92,6 +92,30 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest get-asset-attribute-names-preserves-discovery-query
+  (test-helper/load-test-files
+   [{:page {:block/title "Asset Attribute Holder"}
+     :blocks [{:block/title "Asset Attribute Block"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [block (test-helper/find-block-by-content "Asset Attribute Block")]
+              (p/let [asset-property (db-based-api/upsert-property "asset-probe" #js {:type "string"} nil)
+                      ordinary-property (db-based-api/upsert-property "ordinary-probe" #js {:type "string"} nil)
+                      asset-ident (:ident (api-test/js->clj-kw asset-property))
+                      ordinary-ident (:ident (api-test/js->clj-kw ordinary-property))
+                      _ (db-property-handler/set-block-property!
+                         (:db/id block) (keyword (subs asset-ident 1)) "asset value")
+                      _ (db-property-handler/set-block-property!
+                         (:db/id block) (keyword (subs ordinary-ident 1)) "ordinary value")
+                      result (db-based-api/get-asset-attribute-names)
+                      attributes (api-test/js->clj-kw result)]
+                (is (some #{asset-ident} attributes))
+                (is (not (some #{ordinary-ident} attributes)))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest get-property-users-preserves-literals-and-resolves-entities
   (test-helper/load-test-files
    [{:page {:block/title "Property Users Page"}

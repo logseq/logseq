@@ -995,6 +995,7 @@ export interface IDBProxy {
     value: any
     value_entity: Record<string, any> | null
   }>>
+  getAssetAttributeNames: () => Promise<Array<string>>
   inspectPage: (
     pageUuid: BlockUUID,
     detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'

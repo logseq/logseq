@@ -223,6 +223,7 @@
 (def ^:export get_orphan_tags db-based-api/get-orphan-tags)
 (def ^:export get_orphan_properties db-based-api/get-orphan-properties)
 (def ^:export get_property_users db-based-api/get-property-users)
+(def ^:export get_asset_attribute_names db-based-api/get-asset-attribute-names)
 (def ^:export inspect_page db-based-api/inspect-page)
 (def ^:export get_page_stats db-based-api/get-page-stats)
 (def ^:export get_page_block_uuids db-based-api/get-page-block-uuids)

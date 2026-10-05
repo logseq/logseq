@@ -515,6 +515,18 @@
                           properties))]
       (bean/->js (sdk-utils/normalize-keyword-for-json orphans false)))))
 
+(defn get-asset-attribute-names []
+  (let [repo (state/get-current-repo)]
+    (p/let [attributes (db-async/<q
+                        repo
+                        {:transact-db? false}
+                        '[:find [?attr ...]
+                          :where
+                          [_ ?attr _]
+                          [(str ?attr) ?name]
+                          [(clojure.string/includes? ?name "asset")]])]
+      (bean/->js (mapv str attributes)))))
+
 (def ^:private property-users-ident-pattern
   #"(?i):[a-z][\w.-]*/[\w.?!+-]+")
 

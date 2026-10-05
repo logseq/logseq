@@ -1183,6 +1183,7 @@
                     (is (some #(= "logseq.DB.getOrphanTags" (first %)) @calls))
                     (is (some #(= "logseq.DB.getOrphanProperties" (first %)) @calls))
                     (is (some #(= "logseq.DB.getPropertyUsers" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getAssetAttributeNames" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1497,7 +1498,7 @@
                 (is (= [["logseq.DB.getOrphanProperties" []]] @calls))
                 (done))))))
 
-(deftest list-assets-uses-unverified-attribute-discovery-query
+(deftest list-assets-uses-db-api-and-preserves-unverified-probe
   (let [calls (atom [])
         attributes #js [":logseq.property/asset/url" ":logseq.property/asset/remote-metadata"]
         api (fn [method args]
@@ -1506,14 +1507,10 @@
     (async done
       (p/then (mcp-compat/list-assets api #js {})
               (fn [result]
-                (let [[method [query]] (first @calls)]
-                  (is (= [":logseq.property/asset/url"
-                           ":logseq.property/asset/remote-metadata"]
-                         result))
-                  (is (= "logseq.DB.datascriptQuery" method))
-                  (is (= 1 (count (second (first @calls)))))
-                  (is (string/includes? query "clojure.string/includes?"))
-                  (is (string/includes? query "\"asset\"")))
+                (is (= [":logseq.property/asset/url"
+                        ":logseq.property/asset/remote-metadata"]
+                       result))
+                (is (= [["logseq.DB.getAssetAttributeNames" []]] @calls))
                 (done))))))
 
 (deftest list-journals-sorts-and-limits-the-cheap-listing

@@ -423,12 +423,8 @@
 
 (defn list-assets
   [api-fn _args]
-  (let [query "[:find [?attr ...] :where [_ ?attr _] [(str ?attr) ?s] [(clojure.string/includes? ?s \"asset\")]]"]
-    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
-            attributes (js->clj result :keywordize-keys true)]
-      (if (and (= 1 (count attributes)) (vector? (first attributes)))
-        (first attributes)
-        attributes))))
+  (p/let [result (api-fn "logseq.DB.getAssetAttributeNames" [])]
+    (js->clj result :keywordize-keys true)))
 
     (defn get-property-ident
       [api-fn args]
@@ -2474,7 +2470,7 @@
   :listClosedValues ["logseq.DB.getClosedValues"]
   :listOrphanTags ["logseq.DB.getOrphanTags"]
   :listOrphanProperties ["logseq.DB.getOrphanProperties"]
-   :listAssets ["logseq.DB.datascriptQuery"]})
+  :listAssets ["logseq.DB.getAssetAttributeNames"]})
 
 (def ^:private capability-probe-args
   {"logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
@@ -2494,6 +2490,7 @@
   "logseq.DB.getOrphanTags" []
   "logseq.DB.getOrphanProperties" []
   "logseq.DB.getPropertyUsers" [":logseq.property/status"]
+  "logseq.DB.getAssetAttributeNames" []
   "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []

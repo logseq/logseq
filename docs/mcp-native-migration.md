@@ -86,9 +86,10 @@ single `:db/ident` without guessing, and `getBlock` uses an exact UUID query
 that rejects page entities. `getTagUsers` now queries all page and block
 holders for an exact tag UUID. `listOrphanTags` uses the Tag class and reverse
 `:block/_tags` relation to list unused tags. `listOrphanProperties` validates
-each property ident before sequentially checking whether it has any values.
-`listAssets` preserves the reference server's unverified attribute-name
-discovery query. `listJournals` now uses a bounded query adapter and preserves
+each property ident before checking whether it has any values. `listAssets`
+uses `logseq.DB.getAssetAttributeNames` to preserve the reference server's
+unverified attribute-name discovery query; it is not a complete asset inventory.
+`listJournals` now uses a bounded query adapter and preserves
 the optional four-query count envelope. `pageStats` now reports bounded page
 counts, nested-page/orphan classification, and alias relations. `inspectPage`
 now supports page, blocks, tags, properties, declared, and all detail levels.
