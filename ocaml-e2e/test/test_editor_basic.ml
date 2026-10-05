@@ -1740,7 +1740,7 @@ let () =
         let* () = B.new_block env "" in
         let* before = Util.page_blocks_count env in
         let* () = Keyboard.enter_in_editor env in
-        let* after = Util.page_blocks_count env in
+        let* after = Util.wait_page_blocks_count env (before + 1) in
         Fest.deep_equal after (before + 1) Fest.expect;
         let* _ = Assert.have_count env Util.editor_q 1 in
         let* () = B.save_block env "first line second line" in
