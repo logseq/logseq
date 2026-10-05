@@ -94,11 +94,9 @@ let reactions_el uuid (rs : (string * int) list) : t =
              button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id)
                ~style_class:"ls-reaction"
                ~on_press:(fun _ -> toggle_reaction uuid emoji_id)
-               [ (* TODO(component): em-emoji is a custom element that
-                    renders the platform emoji for an id — no component
-                    kind *)
-                 dom ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id)
-                   ~tag:"em-emoji" ~attrs:[ ("id", emoji_id) ] []
+               [ Logseq_emoji.el
+                   ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id)
+                   ~name:emoji_id ()
                ; text ~key:("rxc-" ^ uuid ^ "-" ^ emoji_id)
                    ~value:(string_of_int count) []
                ])

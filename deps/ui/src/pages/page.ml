@@ -280,8 +280,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   let icon_el =
     match page.page_icon, page.page_is_tag, page.page_is_property with
     | Some ("emoji", eid), _, _ ->
-        (* TODO(component): em-emoji is a custom element — no kind *)
-        Some (dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [])
+        Some (Logseq_emoji.el ~key:"pt-e" ~name:eid ())
     | Some (_, iid), _, _ -> Some (Icons.icon ~size:38. iid)
     | None, true, _ -> Some (Icons.icon ~size:38. "hash")
     | None, _, true -> Some (Icons.icon ~size:38. "letter-p")

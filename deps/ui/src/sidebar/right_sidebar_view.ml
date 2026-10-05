@@ -174,9 +174,7 @@ let item_title (it : Sidebar_state.item) =
       let icon_els =
         match it.icon with
         | Some ("emoji", eid) ->
-            (* TODO(component): em-emoji is a custom element resolved by
-               the emoji extension — no icon kind covers it *)
-            [ dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [] ]
+            [ Logseq_emoji.el ~key:"pt-e" ~name:eid () ]
         | Some (_, iid) ->
             [ icon_ ~key:"pt-ti" ~cls:("ls-icon-" ^ iid) iid ]
         | None ->

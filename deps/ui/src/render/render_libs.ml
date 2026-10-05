@@ -91,7 +91,9 @@ let rec render_katex_one el =
       let display =
         match Hashtbl.find_opt pending_display id with
         | Some d -> d
-        | None -> D.el_tag el = "DIV"
+        (* logseq-katex mounts are always spans — data-display is the
+           tag-independent fallback *)
+        | None -> D.el_get_attr el "data-display" = Some "true"
       in
       match !katex_state with
       | Failed -> katex_fallback el tex

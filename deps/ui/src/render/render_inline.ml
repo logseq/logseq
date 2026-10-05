@@ -313,23 +313,12 @@ let image_el ~src ~alt =
    lose it all; no kind props exist for inline emphasis *)
 let code_span s = D.el ~tag:"code" [ D.txt s ]
 
-(* cljs extensions/latex: span.latex-inline (inline) / div.latex (block)
-   with class "initial", a generated id, and a span.opacity-0 child
-   holding the raw tex; the Render_libs doc-scan lazy-loads katex.min.js +
-   mhchem.min.js and calls katex.render into the element.
-   TODO(component): imperative render target — the pending render
-   resolves the mount by generated id #ls-katex-*. *)
-let katex_el ~block ~display tex : t =
- fun context parent ->
-  Render_libs.ensure ();
-  let id = "ls-katex-" ^ Platform.random_uuid () in
-  Render_libs.katex_register_pending id display;
-  D.el
-    ~tag:(if block then "div" else "span")
-    ~style_class:(if block then "latex initial" else "latex-inline initial")
-    ~id
-    [ D.el ~tag:"span" ~style_class:"opacity-0" ~text:tex [] ]
-    context parent
+(* cljs extensions/latex: the logseq-katex extension slot carries the
+   .latex/.latex-inline classes, a generated #ls-katex-* id, and a
+   .opacity-0 child holding the raw tex; the Render_libs doc-scan
+   lazy-loads katex.min.js + mhchem.min.js and calls katex.render into
+   the slot. *)
+let katex_el ~block ~display tex : t = Logseq_katex.el ~block ~display ~tex ()
 
 (* cljs extensions/video/youtube parse-timestamp:
    ^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$ or ^\d+$ (plain seconds) *)
@@ -381,10 +370,7 @@ let timestamp_el seconds : t =
 (* TODO(component): element-tag semantics (same as code_span) *)
 let emph tag children = D.el ~tag children
 
-(* TODO(component): em-emoji custom element — imperative emoji render *)
-let emoji_el name =
-  (* em-emoji custom element fallback — see render_dom.ml TODO. *)
-  D.el ~tag:"em-emoji" ~id:name []
+let emoji_el name = Logseq_emoji.el ~name ()
 
 (* ---------- <day> dates ---------- *)
 

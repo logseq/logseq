@@ -21,7 +21,7 @@ Each site is classified by the *primary* missing vocabulary:
 |---|---|---|
 | attrs | 60 | `data_attrs` prop (typed attr-pair list, signal-capable) on container/leaf kinds; migrate `closest`-reading consumers to it or to `accessibility_identifier` node ids |
 | prop | 35 | see table — biggest single win: positioned overlay kind (`~at:`/`~anchor`, `~role`, `~keep_selection`) covering 13 fixed-position shells |
-| extension | 24 | formal `logseq-*` extension family (editor, emoji, codemirror, virt-list/lazy, embed, katex, pdf) + keep `el` as the raw-element escape hatch for user markup |
+| extension | 18 | formal `logseq-*` extension family (editor, emoji, codemirror, virt-list/lazy, embed, katex, pdf) + keep `el` as the raw-element escape hatch for user markup |
 | event | 11 | enrich press/pointer payloads: `{modifiers, client_x, client_y, target, interactive}` + pointerdown/up, pointer-enter/leave, contextmenu |
 | css | 6 | rewrite element selectors to class anchors, or an `~as:` element-override prop on `heading`/`text`/`button` |
 | dom-op | 6 | new ops on the existing channel: `click`/`open-file-picker`, `download`, `scroll-into-view`/`focus` by node id |
@@ -35,10 +35,12 @@ Each site is classified by the *primary* missing vocabulary:
    of ~15 prop/event sites (~75 sites total). This is *not* the forbidden
    `~attrs` JSON hatch: it's a typed, channel-limited vocabulary the ppx can
    validate and native hosts can ignore or map.
-2. **Extension family** — `logseq-editor` (5), `logseq-emoji` (5),
-   `logseq-virt`/`logseq-lazy` spine (5), `logseq-codemirror` (3),
-   `logseq-embed` (2), `logseq-katex` (1), `logseq-pdf` (1, already exists on
-   Apple), raw-element escape for user markup (2). Unblocks 24 sites.
+2. **Extension family** — `logseq-editor` (5), `logseq-virt`/`logseq-lazy`
+   spine (5), `logseq-codemirror` (3), `logseq-embed` (2), `logseq-pdf`
+   (1, already exists on Apple), raw-element escape for user markup (2).
+   Unblocks 18 sites. `logseq-em-emoji` and `logseq-katex` are registered
+   (src/extension/logseq_emoji.ml, logseq_katex.ml) with apple twins
+   emitting the same generic wire shape as before.
 3. **Positioned overlay kind** — `~at:(x,y)` / `~anchor:` + `~role`,
    `~available_height`, keep-selection marker. Unblocks 13 fixed-position
    shells (menus, popovers, dialogs, not-found overlay) plus `selection_bar`.
@@ -182,7 +184,7 @@ interactive descendant)}`; plus `pointerdown`/`pointerup`,
 | src/sidebar/left_sidebar_view.ml:347 | `page_item_el` | `dom ~tag:"a" .link-item` `events:"click"` reads `targetClass`,`shiftKey`,`clientX`,`clientY`; `data-lp-*` attrs feed doc `contextmenu` | full press payload + contextmenu | press payload `{modifiers, x, y, target}` + `~on_context_menu`; `data_attrs` for `data-lp-*` |
 | apple/page_menu.ml:218 | `confirm_view` | same scrim `targetClass` pattern | same | same |
 
-## extension — 24 sites
+## extension — 18 sites
 
 Genuinely platform-special widgets (per the SKILL.md policy) plus the raw
 `el` escape hatch for user-authored markup.
@@ -194,15 +196,9 @@ Genuinely platform-special widgets (per the SKILL.md policy) plus the raw
 | src/core/ui_parts.ml:57 | `editor_wrapper` | `dom .editor-wrapper` | `logseq-editor` | same |
 | src/pages/page.ml:152 | `title_editor` | `textarea#edit-block-<uuid>` `events:"keydown blur"` (`key`,`value` payloads) | `logseq-editor` | editor conduit events (`key`/`blur`) per the extension doc |
 | apple/comments.ml:153 | `title_editor_el` | `textarea#edit-block-<uuid>` | `logseq-editor` | same |
-| src/pages/page.ml:283 | `page_title_el` | `dom ~tag:"em-emoji"` attr `id` | `logseq-emoji` | emoji extension resolving platform glyphs |
-| src/blocks/tree.ml:176 | `icon_el` | `dom` span > `em-emoji` attrs `id`,`data-emoji` | `logseq-emoji` | same (+`data_attrs` for `data-emoji` if the channel needs it) |
-| src/comments/comments_view.ml:97 | `reactions_el` | `dom ~tag:"em-emoji"` | `logseq-emoji` | same |
-| src/sidebar/right_sidebar_view.ml:177 | `item_title` | `dom ~tag:"em-emoji"` | `logseq-emoji` | same |
-| src/render/render_inline.ml:384 | `emoji_el` | `D.el ~tag:"em-emoji" ~id:name` | `logseq-emoji` | same |
 | src/render/render.ml:218 | `code_block` | `textarea#edit-block-<uuid>` + `data-lang`; CM mounts on `.code-editor textarea`, resolves via `#ls-block-<uuid>` | `logseq-codemirror` | CM host extension (mount point + `lang`/`uuid` props + edit events) |
 | src/views/views_query.ml:410 | `cm_host` | `dom .CodeMirror > pre.CodeMirror-line[contenteditable][role=textbox]`; `attach_cm` binds listeners imperatively | `logseq-codemirror` | same extension hosts the query source editor |
 | apple/views_query.ml:413 | `cm_host` | same twin | `logseq-codemirror` | same |
-| src/render/render_inline.ml:320 | `katex_el` | `div/span.latex(-inline).initial` `#ls-katex-*` + hidden tex span; `render_libs` pending-render resolves by id | `logseq-katex` | katex extension (tex prop + display flag; host renders) |
 | src/render/render_inline.ml:497 | `youtube_iframe`/`embed_iframe` | `.embed-block > iframe` (youtube enablejsapi attrs; plugin src) | `logseq-embed` | iframe/embed extension carrying `src`,`allow`,…; timestamp seek via postMessage stays host-side |
 | src/dialogs/plugin_readme.ml:178 | `body` | `iframe.lsp-frame-readme src=./marketplace.html?repo=…` | `logseq-embed` | same embed extension |
 | src/render/render_html.ml:105 | `el_of_node` | `D.el ~tag ~attrs` for arbitrary `@@html` fragments | (raw-element escape) | No new protocol — `D.el`/`dom` stays as the *documented* raw-element escape for user markup; rename if `dom` must die |
