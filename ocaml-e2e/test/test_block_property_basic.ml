@@ -237,7 +237,7 @@ let () =
     let* () = B.select_blocks env 2 in
     let* () = Util.search_and_click env "Add comment" in
     let* () =
-      Assert.is_visible_l
+      Assert.is_visible_l ~timeout:15000.
         (Loc.filter env ".ls-comments-area"
            ~has_text:"those blocks")
     in

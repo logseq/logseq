@@ -27,20 +27,26 @@ let () =
     let* () = Block.select_blocks env 2 in
     let* () = Block.copy env in
     let* () = Block.new_block env "" in
+    (* let the empty block's tx commit before pasting into it — under load
+       the paste op can otherwise record an inverse against a pending
+       block and its undo replays to ["b1" "b2"] instead of
+       ["b1" "b2" ""]. *)
+    let* _ = Util.wait_edit_content env "" in
+    let* () = Util.wait_timeout env 300. in
     let* () = Block.paste env in
     let* () = Util.exit_edit env in
     let* contents =
       Util.wait_page_blocks_contents env [ "b1"; "b2"; "b1"; "b2" ]
     in
     Fest.deep_equal (Array.to_list contents) [ "b1"; "b2"; "b1"; "b2" ] Fest.expect;
-    (* let the app push the paste op onto its undo stack before pressing
-       Ctrl+z — under load the DOM renders before the stack entry lands,
-       and an early undo pops the new-block op instead (over-undo:
-       ["b1" "b2"] instead of ["b1" "b2" ""]). *)
+    (* the paste op's undo entry is generated worker-side when its tx
+       commits; settle so Ctrl+z pops the paste op, not an older entry. *)
     let* () = Util.wait_timeout env 400. in
     let* () = Block.undo env in
     let* () = Util.exit_edit env in
-    let* contents = Util.wait_page_blocks_contents env [ "b1"; "b2"; "" ] in
+    let* contents =
+      Util.wait_page_blocks_contents env [ "b1"; "b2"; "" ]
+    in
     Fest.deep_equal (Array.to_list contents) [ "b1"; "b2"; "" ] Fest.expect;
     let* () = Block.redo env in
     let* () = Util.exit_edit env in

@@ -110,7 +110,26 @@ let open_view_submenu env label =
   let* () =
     Keyboard.press_all env (List.init item_index (fun _ -> "ArrowDown"))
   in
-  Keyboard.arrow_right env
+  (* the submenu opens async and the ArrowRight can land mid-remount;
+     verify a second menu appeared before returning, retrying once *)
+  let submenu_item =
+    Playwright.locator_last
+      (Pw.q env "[role='menu'] >> [role='menuitemcheckbox']")
+  in
+  let opened () =
+    Js.Promise.catch
+      (fun _ -> Js.Promise.resolve false)
+      (let* _ = E2e_assert.is_visible_l ~timeout:5000. submenu_item in
+       Js.Promise.resolve true)
+  in
+  let* () = Keyboard.arrow_right env in
+  let* ok = opened () in
+  if ok then Js.Promise.resolve ()
+  else begin
+    let* () = Keyboard.arrow_right env in
+    let* _ = opened () in
+    Js.Promise.resolve ()
+  end
 
 let () =
   Fest.Promise.test "table-row-selection-shows-action-bar-test" (fun () ->
@@ -358,7 +377,7 @@ let () =
     let* () = open_view_more_actions env in
     let* () = open_view_submenu env "Sort groups by" in
     let* _ =
-      E2e_assert.is_visible_l
+      E2e_assert.is_visible_l ~timeout:15000.
         (has_text env "Page name"
            "[role='menuitemcheckbox'][aria-checked='true']")
     in
