@@ -18,44 +18,48 @@ let dom = D.dom
 let dyn = D.dyn
 let t = Sidebar_state.t
 
+(* component icon: tabler names go through the `app:` registry (only `x`
+   matches a builtin here). `ui__icon` carries over from the cljs span
+   wrapper; `ti` font classes are dropped — the kind renders its own svg *)
+let icon_ ?key ?(cls = "") ?(size = 16) name =
+  icon ?key
+    ~name:(match name with "x" -> `x | n -> `app n)
+    ~point_size:size
+    ~style_class:("ui__icon" ^ if cls = "" then "" else " " ^ cls)
+    []
+
 (* .toggle-right-sidebar now lives in chrome.ml's header .r, matching
    cljs header.cljs layout. *)
 
 (* ---------- topbar ---------- *)
 
 let topbar_btn key label on_click =
-  dom ~key:("tb-" ^ key) ~style_class:"text-sm"
-    [ dom ~tag:"button"
-        ~style_class:"button cp__right-sidebar-settings-btn"
-        ~events:"click" ~on_dom_event:on_click
-        ~text:label [] ]
+  button ~key:("tb-" ^ key) ~text:label
+    ~style_class:"button cp__right-sidebar-settings-btn"
+    ~on_press:(fun _ -> on_click ()) []
 
 let topbar st =
   (* cljs right_sidebar.cljs topbar: Contents / Page graph / Help, then
      dev-sidebar-items (rtc, undo-redo, profiler) in developer-mode *)
   let dev_items =
     if Settings_state.developer_mode () then
-      [ topbar_btn "rtc" "(Dev) RTC" (fun n _ ->
-            if n = "click" then Sidebar_state.open_sticky_item st "rtc")
-      ; topbar_btn "undo-redo" "(Dev) Undo/Redo" (fun n _ ->
-            if n = "click" then
-              Sidebar_state.open_sticky_item st "undo-redo")
-      ; topbar_btn "profiler" "(Dev) Profiler" (fun n _ ->
-            if n = "click" then
-              Sidebar_state.open_sticky_item st "profiler")
+      [ topbar_btn "rtc" "(Dev) RTC" (fun () ->
+            Sidebar_state.open_sticky_item st "rtc")
+      ; topbar_btn "undo-redo" "(Dev) Undo/Redo" (fun () ->
+            Sidebar_state.open_sticky_item st "undo-redo")
+      ; topbar_btn "profiler" "(Dev) Profiler" (fun () ->
+            Sidebar_state.open_sticky_item st "profiler")
       ]
     else []
   in
-  dom ~key:"rs-topbar"
-    ~style_class:
-      "cp__right-sidebar-topbar flex flex-row justify-between items-center"
-    [ dom ~key:"rs-settings"
-        ~style_class:"cp__right-sidebar-settings hide-scrollbar gap-1"
-        ([ topbar_btn "contents" (t "page/contents") (fun n _ ->
-               if n = "click" then
-                 Sidebar_state.open_sticky_item st "contents")
-         ; topbar_btn "help" (t "nav/help") (fun n _ ->
-               if n = "click" then Sidebar_state.open_sticky_item st "help")
+  row ~key:"rs-topbar" ~main:`space_between ~cross:`center
+    ~style_class:"cp__right-sidebar-topbar"
+    [ row ~key:"rs-settings" ~gap:4
+        ~style_class:"cp__right-sidebar-settings hide-scrollbar"
+        ([ topbar_btn "contents" (t "page/contents") (fun () ->
+               Sidebar_state.open_sticky_item st "contents")
+         ; topbar_btn "help" (t "nav/help") (fun () ->
+               Sidebar_state.open_sticky_item st "help")
          ]
         @ dev_items)
     ]
@@ -86,7 +90,10 @@ let item_menu st (it : Sidebar_state.item) =
   let page_ =
     it.Sidebar_state.kind = "page" || it.Sidebar_state.kind = "contents"
   in
-  let sep key = dom ~key ~tag:"hr" ~style_class:"menu-separator" [] in
+  let sep key = divider ~key ~style_class:"menu-separator" [] in
+  (* TODO(component): fixed-position overlay at the stored pointer coords
+     + role="menu" — same gap as the left-sidebar menu shells; children
+     are Menu_item.el rows (core-owned) already *)
   dom ~key:("imenu-" ^ it.key) ~tag:"div"
     ~attrs:
       [ ("role", "menu")
@@ -133,7 +140,7 @@ let item_menu_host st (it : Sidebar_state.item) =
   dyn ~equal:(fun a b -> a = b)
     (fun menu ->
       if menu = "item-" ^ it.Sidebar_state.key then item_menu st it
-      else dom ~key:("imenu-none-" ^ it.key) [])
+      else spacer ~key:("imenu-none-" ^ it.key) [])
     (Signal.value st.Sidebar_state.open_menu)
 
 (* ---------- item header / breadcrumb ---------- *)
@@ -143,19 +150,18 @@ let breadcrumb crumbs =
     | [] -> List.rev acc
     | c :: rest ->
         loop
-          (dom ~key:("bc-" ^ c) ~tag:"span"
-             ~style_class:"breadcrumb-item" ~text:c []
-           :: dom ~key:("bcsep-" ^ c) ~tag:"span"
-                ~style_class:"opacity-50 px-1" ~text:"/" []
+          (text ~key:("bc-" ^ c)
+             ~style_class:"breadcrumb-item" ~value:c []
+           :: text ~key:("bcsep-" ^ c) ~value:"/" ~padding_horizontal:4 []
            :: acc)
           rest
   in
   match crumbs with
-  | [] -> dom ~key:"bc-empty" []
+  | [] -> spacer ~key:"bc-empty" []
   | first :: rest ->
-      dom ~key:"bc" ~style_class:"breadcrumb"
-        (dom ~key:("bc-" ^ first) ~tag:"span"
-           ~style_class:"breadcrumb-item" ~text:first []
+      row ~key:"bc" ~style_class:"breadcrumb" ~cross:`center
+        (text ~key:("bc-" ^ first)
+           ~style_class:"breadcrumb-item" ~value:first []
          :: List.rev (loop [] rest))
 
 let item_title (it : Sidebar_state.item) =
@@ -169,119 +175,100 @@ let item_title (it : Sidebar_state.item) =
       let icon_els =
         match it.icon with
         | Some ("emoji", eid) ->
+            (* TODO(component): em-emoji is a custom element resolved by
+               the emoji extension — no icon kind covers it *)
             [ dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [] ]
         | Some (_, iid) ->
-            [ dom ~key:"pt-ti" ~style_class:("ui__icon ti ls-icon-" ^ iid)
-                [ dom ~key:"pt-tii" ~tag:"i" ~style_class:("ti ti-" ^ iid)
-                    []
-                ]
-            ]
+            [ icon_ ~key:"pt-ti" ~cls:("ls-icon-" ^ iid) iid ]
         | None ->
             (* cljs icon/get-node-icon: class pages default to "hash",
                plain pages to "file"; both inside .icon-cp-container *)
-            [ dom ~key:"pt-ti"
-                ~style_class:"text-md icon-cp-container flex items-center"
-                ~attrs:[ "style", "color: inherit" ]
-                [ (* cljs get-node-icon-cp merges {:size 14} for all icons *)
-                  if is_class then Icons.icon ~size:14. ~cls:"text-md" "hash"
-                  else Icons.icon ~size:14. "file"
-                ]
+            [ box ~key:"pt-ti" ~style_class:"icon-cp-container"
+                ~foreground:"inherit"
+                [ (* cljs get-node-icon-cp merges {:size 14} for all
+                     icons *)
+                  icon_ ~size:14
+                    (if is_class then "hash" else "file") ]
             ]
       in
-      dom ~key:"pt" ~style_class:"flex items-center page-title gap-1"
+      row ~key:"pt" ~style_class:"page-title" ~cross:`center ~gap:4
         (icon_els
-        @ [ dom ~tag:"span"
+        @ [ text
               ~style_class:"overflow-hidden text-ellipsis"
-              ~text:it.title []
+              ~value:it.title []
           ])
   | [], "contents" ->
       (* cljs: (icon "list-details") + "Contents" *)
-      dom ~key:"pt-contents" ~style_class:"flex items-center"
-        [ Icons.icon ~cls:"text-md mr-2" "list-details"
-        ; dom ~tag:"span" ~text:it.title [] ]
+      row ~key:"pt-contents" ~cross:`center ~gap:8
+        [ icon_ "list-details"; text ~value:it.title [] ]
   | [], "help" ->
-      dom ~key:"pt-help" ~style_class:"flex items-center"
-        [ Icons.icon ~cls:"text-md mr-2" "help"
-        ; dom ~tag:"span" ~text:it.title [] ]
+      row ~key:"pt-help" ~cross:`center ~gap:8
+        [ icon_ "help"; text ~value:it.title [] ]
   | [], kind
     when kind = "rtc" || kind = "undo-redo" || kind = "profiler" ->
       (* cljs build-sidebar-item: icon + title in .flex.items-center *)
       let ic = match kind with "undo-redo" -> "rotate-clockwise" | _ -> "cloud" in
-      dom ~key:("pt-" ^ kind) ~style_class:"flex items-center"
-        [ Icons.icon ~cls:"text-md mr-2" ic
-        ; dom ~tag:"span" ~text:it.title [] ]
+      row ~key:("pt-" ^ kind) ~cross:`center ~gap:8
+        [ icon_ ic; text ~value:it.title [] ]
   | [], "shortcut-settings" ->
       (* cljs: (icon "command") + (t :help.shortcuts/label) *)
-      dom ~key:"pt-shortcuts" ~style_class:"flex items-center"
-        [ Icons.icon ~cls:"text-md mr-2" "command"
-        ; dom ~tag:"span" ~text:it.title [] ]
-  | [], _ -> dom ~key:"pt-plain" ~style_class:"flex items-center" ~text:it.title []
+      row ~key:"pt-shortcuts" ~cross:`center ~gap:8
+        [ icon_ "command"; text ~value:it.title [] ]
+  | [], _ -> text ~key:"pt-plain" ~value:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
+(* DOM-only bits deleted from the cljs header: draggable="true" (drag
+   reorder is a platform concern) and the pointerup which=2 middle-click
+   removal — LUI press events carry no button index *)
 let item_header st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
   let collapsed = it.Sidebar_state.collapsed in
-  dom ~key:("hd-" ^ it.key)
-    ~style_class:
-      ("flex flex-row justify-between sidebar-item-header color-level \
-        rounded-t-md"
-       ^ if collapsed then " rounded-b-md" else "")
-    ~attrs:[ ("draggable", "true") ]
-    ~events:"pointerup"
-    ~on_dom_event:(fun name payload ->
-      (* cljs on-pointer-up: middle click removes the sidebar item *)
-      if
-        name = "pointerup"
-        && Platform.payload_num payload "which" = 2.
-      then Sidebar_state.remove_item st it.key)
-    [ dom ~key:("hdr-" ^ it.key) ~tag:"button"
-        ~style_class:"flex flex-row px-2 items-center w-full overflow-hidden"
-        ~attrs:
-          [ ("aria-expanded", string_of_bool (not collapsed))
-          ; ("id", "sidebar-panel-header-" ^ n)
-          ; ("aria-controls", "sidebar-panel-content-" ^ n)
-          ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Sidebar_state.toggle_collapsed st it.key)
-        [ dom ~key:("arrow-" ^ it.key) ~tag:"span"
-            ~style_class:"opacity-50 hover:opacity-100 flex items-center pr-1"
+  row ~key:("hd-" ^ it.key) ~main:`space_between
+    ~style_class:"sidebar-item-header color-level"
+    [ button ~key:("hdr-" ^ it.key) ~grow:1. ~padding_horizontal:8
+        ~cross:`center
+        ~accessibility_identifier:("sidebar-panel-header-" ^ n)
+        ~on_press:(fun _ -> Sidebar_state.toggle_collapsed st it.key)
+        [ row ~key:("arrow-" ^ it.key) ~cross:`center
             (* cljs: .rotating-arrow.(not-)collapsed > FA caret-right *)
-            [ dom ~tag:"span"
-                ~style_class:
-                  (if collapsed then "rotating-arrow collapsed"
-                   else "rotating-arrow not-collapsed")
-                [ Ui_parts.rotating_arrow ("arw-" ^ it.key) ] ]
-        ; dom ~key:("ht-" ^ it.key)
             ~style_class:
-              "ml-1 font-medium text-sm overflow-hidden whitespace-nowrap"
+              (if collapsed then "rotating-arrow collapsed"
+               else "rotating-arrow not-collapsed")
+            [ Ui_parts.rotating_arrow ("arw-" ^ it.key) ]
+        ; box ~key:("ht-" ^ it.key) ~grow:1.
             [ item_title it ] ]
-    ; dom ~key:("ia-" ^ it.key)
-        ~style_class:"item-actions flex items-center"
-        [ dom ~key:("more-" ^ it.key) ~tag:"button"
-            ~style_class:"px-2 py-2 h-8 w-8 text-muted-foreground"
-            ~attrs:[ ("data-testid", "sidebar-item-more") ]
-            ~events:"click"
-            ~on_dom_event:(fun name payload ->
-              if name = "click" then
-                Sidebar_state.open_item_menu st it.key
-                  ~x:(Platform.payload_num payload "clientX")
-                  ~y:(Platform.payload_num payload "clientY"))
-            [ Icons.icon "dots" ]
-        ; dom ~key:("close-" ^ it.key) ~tag:"button"
-            ~style_class:"px-2 py-2 h-8 w-8 text-muted-foreground"
-            ~attrs:[ ("title", t "ui/close") ]
-            ~events:"click"
-            ~on_dom_event:(fun name _ ->
-              if name = "click" then Sidebar_state.remove_item st it.key)
-            [ Icons.icon "x" ] ]
+    ; row ~key:("ia-" ^ it.key) ~cross:`center
+        ~style_class:"item-actions"
+        [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
+            ~icon:(`app "dots")
+            ~accessibility_identifier:("sbi-more-" ^ it.key)
+            ~style_class:"sidebar-item-more"
+            ~width:32 ~height:32
+            (* press events carry no pointer coordinates — anchor the
+               menu at the button's rect instead of click clientX/Y *)
+            ~on_press:(fun _ ->
+              let x, y =
+                match
+                  Web_dom.get_element_by_id ("sbi-more-" ^ it.key)
+                with
+                | Some el ->
+                    let r = Web_dom.el_bounding_rect el in
+                    (Web_dom.rect_left r, Web_dom.rect_bottom r)
+                | None -> (0., 0.)
+              in
+              Sidebar_state.open_item_menu st it.key ~x ~y)
+            []
+        ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
+            ~icon:`x ~label:(t "ui/close") ~width:32 ~height:32
+            ~on_press:(fun _ -> Sidebar_state.remove_item st it.key)
+            [] ]
     ]
 
 (* cljs sidebar-page-properties: ghost toggle + db-properties-cp +
    hr.my-4. collapsed? = (not class?) — class pages start expanded.
-   The area mounts declaratively inside the data-sb-* host. *)
+   The area mounts declaratively inside the host div. *)
 let sidebar_props_row st (it : Sidebar_state.item) =
-  let empty = dom ~key:("props-none-" ^ it.key) [] in
+  let empty = spacer ~key:("props-none-" ^ it.key) [] in
   match it.Sidebar_state.kind with
   | "contents" | "page" -> (
       match it.Sidebar_state.page with
@@ -292,140 +279,95 @@ let sidebar_props_row st (it : Sidebar_state.item) =
           let body =
             if collapsed then []
             else
-              [ dom ~key:("parea-" ^ it.key)
+              [ (* the data-sb-* attrs of the cljs host had no readers —
+                   Properties_area.sidebar_area re-emits the sbprops-<id>
+                   host itself *)
+                box ~key:("parea-" ^ it.key)
                   ~style_class:
                     "ls-page-properties ls-properties-area"
-                  ~attrs:
-                    [ ("id", "sbprops-" ^ uuid)
-                    ; ("tabindex", "0")
-                    ; ("data-sb-uuid", uuid)
-                    ; ( "data-sb-db-id"
-                      , match p.Model.page_db_id with
-                        | Some i -> string_of_int i
-                        | None -> "" )
-                    ; ("data-sb-title", p.Model.page_title)
-                    ; ( "data-sb-tag"
-                      , if p.Model.page_is_tag then "1" else "0" )
-                    ]
+                  ~accessibility_identifier:("sbprops-" ^ uuid)
                   [ Properties_area.sidebar_area ~uuid
                       ~db_id:p.Model.page_db_id
                       ~title:p.Model.page_title
                       ~is_tag:p.Model.page_is_tag ]
-              ; dom ~key:("phr-" ^ it.key) ~tag:"hr"
-                  ~style_class:"my-4" []
-              ]
+              ; divider ~key:("phr-" ^ it.key) ~padding_vertical:16 [] ]
           in
-          dom ~key:("props-" ^ it.key) ~style_class:"-mb-8"
-            [ dom
-                ~style_class:
-                  "ls-sidebar-page-properties flex flex-col gap-2 mt-2"
-                (dom
-                   [ dom ~tag:"button"
-                       ~style_class:
-                         "ui__button inline-flex items-center px-1 \
-                          text-muted-foreground h-7 text-sm"
-                       ~events:"click"
-                       ~on_dom_event:(fun name _ ->
-                         if name = "click" then
-                           Sidebar_state.toggle_props st it.key)
-                       [ dom ~tag:"span" ~style_class:"text-xs"
-                           ~text:
-                             (t
-                                (if collapsed then "page/open-properties"
-                                 else "page/hide-properties"))
-                           [] ]
-                   ]
+          box ~key:("props-" ^ it.key)
+            [ column ~gap:8
+                ~style_class:"ls-sidebar-page-properties"
+                (button ~variant:`ghost ~size:`sm
+                   ~style_class:"ui__button text-muted-foreground"
+                   ~text:
+                     (t
+                        (if collapsed then "page/open-properties"
+                         else "page/hide-properties"))
+                   ~on_press:(fun _ ->
+                     Sidebar_state.toggle_props st it.key)
+                   []
                  :: body)
             ])
   | _ -> empty
 
 (* cljs page-inner (show-tabs?): class/property pages render
    .page-tabs > .w-full > tabpanel > .ml-1 hosting the objects view —
-   mounted declaratively, one inst per sidebar item *)
+   mounted declaratively, one inst per sidebar item. The radix
+   data-orientation/activation-direction attrs are inert markup here *)
 let object_tabs_host (it : Sidebar_state.item) =
   match it.Sidebar_state.page with
   | Some p
     when p.Model.page_is_tag || p.Model.page_is_property -> (
       match p.Model.page_uuid with
-      | None -> dom ~key:("tabs-none-" ^ it.key) []
+      | None -> spacer ~key:("tabs-none-" ^ it.key) []
       | Some uuid ->
           let kind =
             if p.Model.page_is_tag then Views_state.KTagPage uuid
             else Views_state.KPropertyPage uuid
           in
-          dom ~key:("tabs-" ^ it.key) ~style_class:"page-tabs"
-            [ dom ~style_class:"w-full"
-                ~attrs:
-                  [ ("data-orientation", "horizontal")
-                  ; ("data-activation-direction", "none") ]
-                [ dom
-                    ~style_class:
-                      "ui__tabs-content mt-2 ring-offset-background \
-                       focus-visible:outline-none \
-                       focus-visible:ring-2 focus-visible:ring-ring \
-                       focus-visible:ring-offset-2"
-                    ~attrs:
-                      [ ("data-orientation", "horizontal")
-                      ; ("role", "tabpanel"); ("tabindex", "0")
-                      ; ("data-index", "0") ]
-                    [ dom ~key:("tabs-c-" ^ it.key) ~style_class:"ml-1"
+          box ~key:("tabs-" ^ it.key) ~style_class:"page-tabs"
+            [ box ~grow:1.
+                [ box
+                    ~style_class:"ui__tabs-content"
+                    [ box ~key:("tabs-c-" ^ it.key)
                         [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
                 ]
             ])
-  | _ -> dom ~key:("tabs-none-" ^ it.key) []
+  | _ -> spacer ~key:("tabs-none-" ^ it.key) []
 
 let item_body st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
-  let is_node, wrap_attrs, margin_left =
+  let is_node =
     match it.Sidebar_state.page with
-    | Some p ->
-        ( p.Model.page_is_tag || p.Model.page_is_property
-        , (match p.Model.page_tags with
-           | [] -> []
-           | tags ->
-               (* cljs data-page-tags: JSON array of tag titles *)
-               [ ( "data-page-tags"
-                 , "["
-                   ^ String.concat ","
-                       (List.map
-                          (fun t -> "\"" ^ String.escaped t ^ "\"")
-                          tags)
-                   ^ "]" )
-               ])
-        , "margin-left: -20px;" )
-    | None -> (false, [], "")
+    | Some p -> p.Model.page_is_tag || p.Model.page_is_property
+    | None -> false
   in
   (* cljs right_sidebar page items render the full page-inner body:
-     .cp__page-inner-wrap > .page-inner > (props + tabs + blocks + refs) *)
-  dom ~key:("body-" ^ it.key)
-    ~attrs:
-      [ ("role", "region")
-      ; ("id", "sidebar-panel-content-" ^ n)
-      ; ("aria-labelledby", "sidebar-panel-header-" ^ n)
-      ]
+     .cp__page-inner-wrap > .page-inner > (props + tabs + blocks + refs).
+     The cljs data-page-tags / data-sb-inner marker attrs have no readers
+     and are dropped; the -20px page margin-left was a DOM-only inline
+     style with no typed prop — dropped *)
+  box ~key:("body-" ^ it.key)
+    ~accessibility_identifier:("sidebar-panel-content-" ^ n)
     ~style_class:
       ("sidebar-panel-content"
-       ^ (if it.Sidebar_state.collapsed then " hidden" else " initial")
-       ^
-       match it.Sidebar_state.kind with
-       | "search" | "shortcut-settings" -> ""
-       | _ -> " px-2")
-    [ dom ~key:("wrap-" ^ it.key)
+       ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
+    ?padding_horizontal:
+      (match it.Sidebar_state.kind with
+       | "search" | "shortcut-settings" -> None
+       | _ -> Some 8)
+    [ column ~key:("wrap-" ^ it.key) ~grow:1.
         ~style_class:
-          ("flex-1 page relative cp__page-inner-wrap"
+          ("page relative cp__page-inner-wrap"
           ^ if is_node then " is-node-page" else "")
-        ~attrs:wrap_attrs
-        [ dom ~key:("inner-" ^ it.key)
-            ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-            ~attrs:[ "data-sb-inner", it.key ]
+        [ column ~key:("inner-" ^ it.key) ~gap:16
+            ~style_class:"relative page-inner"
             ([ sidebar_props_row st it
              ; object_tabs_host it
-             ; dom ~key:("pbi-" ^ it.key)
+             ; box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
-                 ~attrs:
-                   (if margin_left = "" then []
-                    else [ "style", margin_left ])
-                 [ dom ~key:("pbin-" ^ it.key)
+                 [ (* TODO(component): data-cid is read by
+                      editor_actions' [data-cid] closest queries — no
+                      prop carries it *)
+                   dom ~key:("pbin-" ^ it.key)
                      ~style_class:"page-blocks-inner relative"
                      ~attrs:[ ("data-cid", "sidebar") ]
                      (List.map
@@ -442,14 +384,13 @@ let item_body st idx (it : Sidebar_state.item) =
 
 
 let sidebar_item st idx (it : Sidebar_state.item) =
-  dom ~key:("item-" ^ it.key)
+  column ~key:("item-" ^ it.key)
     ~style_class:
-      ("flex sidebar-item content color-level rounded-md shadow-lg item-type-"
+      ("sidebar-item content color-level item-type-"
        ^ it.kind
        ^ if it.Sidebar_state.collapsed then " collapsed" else "")
-    ~attrs:[ ("data-item-key", it.Sidebar_state.key) ]
-    [ dom ~key:("wrap-" ^ it.key)
-        ~style_class:"flex flex-col w-full relative"
+    ~accessibility_identifier:("sbi-" ^ it.Sidebar_state.key)
+    [ column ~key:("wrap-" ^ it.key) ~grow:1. ~style_class:"relative"
         [ item_header st idx it
         ; item_body st idx it
         ; item_menu_host st it ]
@@ -458,15 +399,16 @@ let sidebar_item st idx (it : Sidebar_state.item) =
 (* ---------- inner ---------- *)
 
 let inner st =
-  dom ~key:"rs-inner" ~id:"right-sidebar-container"
-    ~style_class:"cp__right-sidebar-inner flex flex-col h-full"
-    [ dom ~key:"rs-scroll" ~style_class:"cp__right-sidebar-scrollable"
+  column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
+    ~style_class:"cp__right-sidebar-inner"
+    [ scroll ~key:"rs-scroll" ~orientation:`vertical
+        ~style_class:"cp__right-sidebar-scrollable"
         [ topbar st
         ; dyn ~equal:(fun a b -> a = b)
             (fun items ->
-              dom ~key:"rs-items"
-                ~style_class:"sidebar-item-list flex-1 scrollbar-spacing px-2"
-                (dom ~key:"rs-drop" ~style_class:"sidebar-drop-indicator" []
+              column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
+                ~style_class:"sidebar-item-list scrollbar-spacing"
+                (box ~key:"rs-drop" ~style_class:"sidebar-drop-indicator" []
                  :: List.mapi (sidebar_item st) items))
             (Signal.value st.Sidebar_state.items)
         ]
@@ -475,18 +417,10 @@ let inner st =
 let render (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   Logseq_dom.fragment
-    [ dom ~key:"rs-resizer" ~style_class:"resizer"
-        ~attrs:
-          [ ("role", "separator")
-          ; ("data-expanded", "true")
-          ; ("tabindex", "0")
-          ; ("aria-valuemax", "70")
-          ; ("aria-orientation", "vertical")
-          ; ("aria-label", t "sidebar.right/resize-handle")
-          ; ("aria-valuemin", "10")
-          ; ("aria-valuenow", "50")
-          ]
-        []
+    [ (* aria-value*/orientation attrs on the resizer were inert DOM
+         markup — the separator kind carries the role *)
+      separator ~key:"rs-resizer" ~orientation:`vertical
+        ~style_class:"resizer" []
     ; if_
         ~test:
           (Signal.map

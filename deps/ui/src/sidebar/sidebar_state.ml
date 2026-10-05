@@ -1049,14 +1049,19 @@ let on_doc_contextmenu st ev =
         click_target "#right-sidebar .sidebar-item-header" ev
       with
       | Some hdr -> (
-          match closest hdr ".sidebar-item[data-item-key]" with
+          (* sidebar items carry their key on accessibility_identifier
+             (element id "sbi-<key>") since the component migration *)
+          match closest hdr ".sidebar-item" with
           | Some it -> (
               prevent_default ev;
-              match Web_dom.el_get_attr it "data-item-key" with
-              | Some key ->
-                  open_item_menu st key ~x:(ev_client_x ev)
-                    ~y:(ev_client_y ev)
-              | None -> ())
+              match Web_dom.el_get_attr it "id" with
+              | Some id
+                when String.length id > 4
+                     && String.sub id 0 4 = "sbi-" ->
+                  open_item_menu st
+                    (String.sub id 4 (String.length id - 4))
+                    ~x:(ev_client_x ev) ~y:(ev_client_y ev)
+              | _ -> ())
           | None -> ())
       | None -> ())
 ;;
@@ -1068,7 +1073,7 @@ let on_doc_click st ev =
     match
       click_target
         ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
-         .sidebar-page-actions, [data-testid='sidebar-item-more']"
+         .sidebar-page-actions, .sidebar-item-more"
         ev
     with
     | Some _ -> ()
@@ -1104,7 +1109,8 @@ let on_doc_click st ev =
       then
         match
           click_target
-            "#left-sidebar .sidebar-navigations a, #left-sidebar .favorites .bd, \
+            "#left-sidebar .sidebar-navigations .item, \
+             #left-sidebar .favorites .bd, \
              #left-sidebar .recent .bd, #left-sidebar .nav-header"
             ev
         with
