@@ -109,8 +109,14 @@ let init () =
     ; after_apply = Views_mount.refresh_query_insts
     ; refresh_page_side = (fun p -> !Runtime.refresh_page_side p)
     ; prune_overrides = Editor_state.prune_overrides
-    ; invalidate_pull_uuids = Render_inline.invalidate_pull_uuids
-    ; invalidate_pull_caches = Render_inline.invalidate_pull_caches
+    ; invalidate_pull_uuids =
+        (fun uuids ->
+          Render_inline.invalidate_pull_uuids uuids;
+          Editor_state.bump_invalidation ())
+    ; invalidate_pull_caches =
+        (fun () ->
+          Render_inline.invalidate_pull_caches ();
+          Editor_state.bump_invalidation ())
     ; fire_db_hooks = Plugin_host.fire_db_hooks
     ; helpers_of = Outliner_ops.delta_helpers
     ; ui_busy

@@ -287,32 +287,54 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_hl_image = None
   }
 
+(* spine-only transform: apply [f] to the deepest siblings list where
+   [here] holds for some member, rebuilding records only along that
+   list's ancestor spine. Untouched blocks keep their record identity so
+   keyed compare / row [==] checks take the fast path. Returns None when
+   no list matches — pure search, no allocation *)
+let map_list_where (here : block -> bool) (f : block list -> block list)
+    (blocks : block list) : block list option =
+  let rec map_list (blocks : block list) : block list option =
+    if List.exists here blocks then Some (f blocks)
+    else
+      let rec seek acc = function
+        | [] -> None
+        | b :: rest -> (
+            match map_list b.block_children with
+            | Some children' ->
+                Some
+                  (List.rev_append acc
+                     ({ b with block_children = children' } :: rest))
+            | None -> seek (b :: acc) rest)
+      in
+      seek [] blocks
+  in
+  map_list blocks
+
 (* optimistic Enter: retitle the split block and insert the new block as
    its next sibling (or first child when the op expands into children).
    The worker delta stays authoritative — it lands ~100ms later with the
    same uuid and splices the real record over this placeholder *)
 let split_insert (page : page) ~uuid ~before ~(new_block : block) ~sibling
     : page option =
-  let changed = ref false in
-  let rec go (blocks : block list) : block list =
+  let edit blocks =
     List.concat_map
       (fun b ->
-        let children = go b.block_children in
-        if b.block_uuid = Some uuid then (
-          changed := true;
-          if sibling then
-            [ { b with block_title = before; block_children = children }
-            ; new_block ]
+        if b.block_uuid = Some uuid then
+          if sibling then [ { b with block_title = before }; new_block ]
           else
             [ { b with
                 block_title = before
-              ; block_children = new_block :: children
-              } ])
-        else [ { b with block_children = children } ])
+              ; block_children = new_block :: b.block_children
+              } ]
+        else [ b ])
       blocks
   in
-  let blocks' = go page.page_blocks in
-  if !changed then Some { page with page_blocks = blocks' } else None
+  Option.map
+    (fun blocks' -> { page with page_blocks = blocks' })
+    (map_list_where
+       (fun b -> b.block_uuid = Some uuid)
+       edit page.page_blocks)
 
 (* optimistic indent: move the selected run under its previous sibling so
    the reparent repaints synchronously (the async worker refresh then
@@ -325,6 +347,8 @@ let indent_blocks (page : page) (uuids : string list) : page option =
     match b.block_uuid with Some u -> List.mem u sel | None -> false
   in
   let changed = ref false in
+  (* the selection sits inside one siblings list — absorb_runs there;
+     deeper lists are unreachable by a real indent selection *)
   let absorb_runs (blocks : block list) : block list =
     let rec loop acc = function
       | b1 :: b2 :: rest when (not (is_sel b1)) && is_sel b2 -> (
@@ -350,14 +374,12 @@ let indent_blocks (page : page) (uuids : string list) : page option =
     in
     loop [] blocks
   in
-  let rec go (blocks : block list) : block list =
-    absorb_runs
-      (List.map
-         (fun b -> { b with block_children = go b.block_children })
-         blocks)
-  in
-  let blocks' = go page.page_blocks in
-  if !changed then Some { page with page_blocks = blocks' } else None
+  match
+    map_list_where is_sel absorb_runs page.page_blocks
+  with
+  | Some blocks' when !changed ->
+      Some { page with page_blocks = blocks' }
+  | _ -> None
 
 (* optimistic outdent: lift selected children out of their parent and
    reinsert them after it *)
@@ -369,36 +391,27 @@ let outdent_blocks (page : page) (uuids : string list) : page option =
   let changed = ref false in
   (* outdent = move the selected run to be siblings right after their
      parent, then move the run's former right-siblings under the LAST
-     outdented block (cljs/worker get_right_siblings drag). *)
-  let rec go (blocks : block list) : block list =
+     outdented block (cljs/worker get_right_siblings drag). Operates on
+     the one siblings list containing the parent *)
+  let lift blocks =
     List.concat_map
       (fun b ->
-        let children = go b.block_children in
-        (* only direct selected children lift out — a selected block the
-           recursive call already pulled up from deeper has outdented
-           once and must keep its new position *)
-        let direct c =
-          List.exists
-            (fun (o : block) -> o.block_uuid = c.block_uuid && is_sel o)
-            b.block_children
-        in
-        let inside = List.filter direct children in
-        match inside with
-        | [] -> [ { b with block_children = children } ]
+        match List.filter is_sel b.block_children with
+        | [] -> [ b ]
         | _ ->
             changed := true;
             (* children after the last selected become its children;
                children before the first selected stay with the parent *)
             let prefix, after =
               let rec split acc = function
-                | c :: tl when not (direct c) -> split (c :: acc) tl
+                | c :: tl when not (is_sel c) -> split (c :: acc) tl
                 | rest -> List.rev acc, rest
               in
-              split [] children
+              split [] b.block_children
             in
             let selected, suffix =
               let rec take acc = function
-                | c :: tl when direct c -> take (c :: acc) tl
+                | c :: tl when is_sel c -> take (c :: acc) tl
                 | rest -> List.rev acc, rest
               in
               take [] after
@@ -416,8 +429,14 @@ let outdent_blocks (page : page) (uuids : string list) : page option =
             { b with block_children = prefix } :: selected)
       blocks
   in
-  let blocks' = go page.page_blocks in
-  if !changed then Some { page with page_blocks = blocks' } else None
+  match
+    map_list_where
+      (fun b -> List.exists is_sel b.block_children)
+      lift page.page_blocks
+  with
+  | Some blocks' when !changed ->
+      Some { page with page_blocks = blocks' }
+  | _ -> None
 
 (* optimistic reorder for move-up/down: only handles the common case of a
    contiguous run of top-level blocks; anything else is left for the worker

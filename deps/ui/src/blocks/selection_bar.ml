@@ -108,9 +108,9 @@ let rec view () : t =
 and node () : t = (
     install_listeners ();
     let sel_sig =
-      Signal.map
-        (fun (st : S.t) -> (Editor_actions.selected_uuids (), st.S.action_bar))
-        (S.signal ())
+      Signal.map2
+        (fun _sel bar -> (Editor_actions.selected_uuids (), bar))
+        (S.selected_sig ()) (S.action_bar_sig ())
     in
     let source =
       let base =

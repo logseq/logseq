@@ -397,6 +397,16 @@ let split_at_cursor uuid =
   | Some e, Some b when e.uuid = uuid && outdent_empty_last_child uuid e b ->
       ()
   | Some e, Some b when e.uuid = uuid ->
+      let perf = Sys.getenv_opt "LOGSEQ_PERF" <> None in
+      let t_last = ref (Platform.date_now_ms ()) in
+      let mark name =
+        if perf then (
+          let now = Platform.date_now_ms () in
+          Printf.eprintf "[perf] split.%s %.1fms\n%!" name
+            (now -. !t_last);
+          t_last := now)
+      in
+      mark "entry";
       let buf, pos =
         match D.textarea_of uuid with
         | Some el -> (D.el_value el, D.el_selection_start el)
@@ -423,6 +433,7 @@ let split_at_cursor uuid =
           library || S.is_collapsed_in ~scope:e.S.scope uuid
           || b.Model.block_children = []
         in
+        mark "prelude";
         let p =
           (let* a =
             Js.Promise.all
@@ -433,6 +444,7 @@ let split_at_cursor uuid =
             [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
             ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
         in
+        mark "ops";
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
@@ -450,16 +462,20 @@ let split_at_cursor uuid =
                  Runtime.send (Action.Page_loaded page')
              | None -> ())
          | None -> ());
+        mark "splice";
         (* the exit-edit repaint lands before the worker delta — pin the
            saved title so the row doesn't flash the pre-split text *)
         S.override_title uuid (Ops.normalized_title uuid before);
+        mark "title";
         (* S.set (not silent): the old textarea must unmount before the
            next keypress, or keystrokes keep landing in the stale editor *)
         S.set (fun st ->
             { st with
               S.editing =
                 Some { uuid = new_uuid; buffer = after; scope = e.scope; base = after } });
-        with_focus_after new_uuid 0 p
+        mark "editing";
+        with_focus_after new_uuid 0 p;
+        mark "focus-arm"
   | _ -> ()
 
 (* shift+Enter on a code surface (or any non-splitting editor) appends a

@@ -43,12 +43,12 @@ let block_key (b : Model.block) =
 
 (* -- per-row signals -- *)
 
-let row_class_str (b : Model.block) uuid (st : S.t) =
+let row_class_str (b : Model.block) uuid (selected : S.String_set.t) =
   let order_list = b.Model.block_order_list = Some "number" in
   let blank = String.trim b.block_title = "" in
   let embed = b.Model.block_link <> None in
   (* cljs :class order — dynamic flags first, base classes last *)
-  (if S.String_set.mem uuid st.selected then "selected " else "")
+  (if S.String_set.mem uuid selected then "selected " else "")
   ^ (if order_list then "is-order-list " else "")
   ^ (if blank then "is-blank " else "")
   ^ (if embed then "embed-block " else "")
@@ -57,26 +57,30 @@ let row_class_str (b : Model.block) uuid (st : S.t) =
 
 let row_class_sig uuid blank embed (b : Model.block) =
   ignore (blank, embed);
-  Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-      row_class_str b uuid st)
+  Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+      row_class_str b uuid selected)
 
 (* same class signal driven by a per-item block signal — keyed rows get
    fresh block records on republish, so blank/embed/order-list must not
    be captured at mount *)
 let row_class_sig_of (bs : Model.block Signal.signal) =
   Logseq_dom.class_signal
-    (Signal.map2 (fun a b -> (a, b)) bs (S.signal ()))
-    (fun ((b : Model.block), (st : S.t)) ->
+    (Signal.map2 (fun a b -> (a, b)) bs (S.selected_sig ()))
+    (fun ((b : Model.block), selected) ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_class_str b uuid st)
+      row_class_str b uuid selected)
 
 (* effective collapse for a block: scoped UI overrides, then persisted
-   set || view default — Editor_state.effective_collapsed_in on the
-   signal value *)
+   set || view default — one-shot on the state record, or projected on
+   the [collapse_view] carried by [collapse_sig] *)
 let effective_collapsed_st ~scope uuid default (st : S.t) =
   S.effective_collapsed_in ~scope uuid default st
 
-let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
+let effective_collapsed_cv ~scope uuid default (v : S.collapse_view) =
+  S.effective_collapsed_in_view ~scope uuid default v
+
+let row_attrs_of ~scope ~depth uuid (b : Model.block)
+    (v : S.collapse_view) =
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
   [ ("id", "ls-block-" ^ uuid)
@@ -89,8 +93,7 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
   ; ( "data-collapsed"
     , string_of_bool
         (has_children
-         && effective_collapsed_st ~scope uuid b.block_default_collapsed
-              st) )
+         && effective_collapsed_cv ~scope uuid b.block_default_collapsed v) )
   ; ("data-db-collapsable", string_of_bool b.Model.block_db_collapsable)
   ; (* cljs level = render depth (config :level, 0 at page root), not the
        db block/level *)
@@ -106,20 +109,20 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
      else [])
 
 let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
-  Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
-      row_attrs_of ~scope ~depth uuid b st)
+  Logseq_dom.attrs_signal (S.collapse_sig ()) (fun v ->
+      row_attrs_of ~scope ~depth uuid b v)
 
 let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
   Logseq_dom.attrs_signal
-    (Signal.map2 (fun a b -> (a, b)) bs (S.signal ()))
-    (fun ((b : Model.block), (st : S.t)) ->
+    (Signal.map2 (fun a b -> (a, b)) bs (S.collapse_sig ()))
+    (fun ((b : Model.block), v) ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_attrs_of ~scope ~depth uuid b st)
+      row_attrs_of ~scope ~depth uuid b v)
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
   Signal.map
-    (effective_collapsed_st ~scope uuid b.block_default_collapsed)
-    (S.signal ())
+    (effective_collapsed_cv ~scope uuid b.block_default_collapsed)
+    (S.collapse_sig ())
 
 (* cljs data-has-heading on .block-main-container: block.css shifts the
    control wrap down so the bullet tracks the heading's first line *)
@@ -257,8 +260,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                | None ->
                    dom ~key:("b-" ^ uuid) ~tag:"span"
                      ~style_class_signal:
-                       (Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-                            if S.String_set.mem uuid st.selected then
+                       (Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+                            if S.String_set.mem uuid selected then
                               "selected bullet"
                             else "bullet"))
                      ~attrs:[ ("blockid", uuid) ]
@@ -343,12 +346,12 @@ let editor_el uuid scope : t =
        the stale buffer and overwrite in-progress typing *)
     Signal.cutoff ( = )
       (Signal.map
-         (fun (st : S.t) ->
-           match st.S.editing with
-           | Some e when e.uuid = uuid && e.scope = scope ->
-               Lui_protocol.StringValue e.buffer
+         (fun e ->
+           match e with
+           | Some e when e.S.uuid = uuid && e.S.scope = scope ->
+               Lui_protocol.StringValue e.S.buffer
            | _ -> Lui_protocol.StringValue "")
-         (S.signal ()))
+         (S.editing_sig ()))
   in
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
@@ -406,12 +409,12 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
               if editing && editable then editor_el uuid scope
               else content_wrapper uuid b))
     (Signal.map
-       (fun (st : S.t) ->
-         match st.editing with
-         | Some e -> e.uuid = uuid && e.scope = scope
+       (fun e ->
+         match e with
+         | Some e -> e.S.uuid = uuid && e.S.scope = scope
 
          | None -> false)
-       (S.signal ()))
+       (S.editing_sig ()))
 
 (* -- tags chips (components/block.cljs tags-cp): sibling of the content
    wrapper so they stay visible while the block is being edited. Tags that
@@ -627,10 +630,10 @@ and row_sig ~depth ~editable ~library ~virtualize scope
         (fun ((b : Model.block), _g, _i) ->
           row_main ~editable ~library scope b)
         (Signal.map2
-           (fun (b : Model.block) (_st : S.t) ->
+           (fun (b : Model.block) (_tick : int) ->
              let g, i = Render_inline.invalidation () in
              (b, g, i))
-           bs (S.signal ()))
+           bs (S.invalidation_sig ()))
     ; Properties_area.block_area
         ~uuid:(Option.value b0.Model.block_uuid ~default:"")
     ; row_children ~depth ~editable ~library ~virtualize scope bs
@@ -644,14 +647,13 @@ and row_children ~depth ~editable ~library ~virtualize scope
      ~110 nodes per op *)
   let show_sig =
     Signal.map2
-      (fun (b : Model.block) (st : S.t) ->
+      (fun (b : Model.block) (v : S.collapse_view) ->
         let uuid = Option.value b.block_uuid ~default:"" in
         not
-          (effective_collapsed_st ~scope uuid b.block_default_collapsed
-              st
+          (effective_collapsed_cv ~scope uuid b.block_default_collapsed v
           || Comments.is_comments_area b
           || S.children_of b = []))
-      bs (S.signal ())
+      bs (S.collapse_sig ())
   in
   Logseq_dom.dyn ~equal:(fun (a : bool) (b : bool) -> a = b)
     (fun show ->

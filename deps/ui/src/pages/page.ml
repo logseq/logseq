@@ -348,8 +348,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     [ dom ~key:"pt-inner" ~style_class:"w-full relative"
         [ dom ~key:"pt-block"
             ~style_class_signal:
-              (Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-                   if S.String_set.mem uuid st.S.selected then
+              (Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+                   if S.String_set.mem uuid selected then
                      "selected ls-block"
                    else "ls-block"))
             ~id:("ls-block-" ^ uuid)
@@ -625,7 +625,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
                     Some (S.top_level_uuid e.S.uuid)
                 | _ -> None)
               ~pin_sig:(fun () ->
-                if S.ready () then Some (S.signal ()) else None)
+                if S.ready () then Some (S.editing_sig ()) else None)
               ~render:(Tree.block_row ~library ~scope ~virtualize) items ] ]
     else
       [ dom ~key:"blw" ~style_class:"blocks-list-wrap"
