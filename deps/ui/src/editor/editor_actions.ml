@@ -392,6 +392,19 @@ let outdent_empty_last_child uuid e b =
           ignore (Ops.apply_and_refresh [ Ops.indent_outdent [ uuid ] false ]);
           true)
     | _ -> false
+(* cljs compute-fst-snd-block-text: the new block's half is triml'd *)
+let ltrim s =
+  let n = String.length s in
+  let rec go i =
+    if
+      i < n
+      && (s.[i] = ' ' || s.[i] = '\t' || s.[i] = '\r' || s.[i] = '\n'
+         || s.[i] = '\012')
+    then go (i + 1)
+    else i
+  in
+  String.sub s (go 0) (n - go 0)
+
 let split_at_cursor uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid && outdent_empty_last_child uuid e b ->
@@ -426,7 +439,7 @@ let split_at_cursor uuid =
       else
         let pos = max 0 (min pos (String.length buf)) in
         let before = String.sub buf 0 pos in
-        let after = String.sub buf pos (String.length buf - pos) in
+        let after = ltrim (String.sub buf pos (String.length buf - pos)) in
         let new_uuid = Platform.random_uuid () in
         let library = library_context () in
         let sibling =
@@ -1129,15 +1142,6 @@ let copy_selection_text () =
    Block-structured text extracts into blocks worker-side; text split
    by blank lines becomes one block per paragraph; anything else is a
    plain text insert. *)
-
-let ltrim s =
-  let n = String.length s in
-  let rec go i =
-    if i < n && (s.[i] = ' ' || s.[i] = '\t' || s.[i] = '\r') then
-      go (i + 1)
-    else i
-  in
-  String.sub s (go 0) (n - go 0)
 
 let starts_with s prefix =
   let lp = String.length prefix in

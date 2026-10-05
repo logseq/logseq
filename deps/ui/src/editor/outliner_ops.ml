@@ -39,6 +39,9 @@ let title_kvs t =
    insert tx then dissocs block/page so the block lives only under
    block/parent. ?link carries a [:block/link db-id] embed edge. *)
 let block_map ?title ?(page = false) ?link uuid =
+  (* cljs wrap-parse-block saves (string/trim title); trim at the single
+     constructor so every insert path matches *)
+  let title = Option.map String.trim title in
   Wire.Map
     ([ str "block/uuid" (Wire.Uuid uuid) ]
     @ (match title with
