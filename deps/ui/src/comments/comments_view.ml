@@ -88,17 +88,19 @@ let reactions_el uuid (rs : (string * int) list) : t =
   match rs with
   | [] -> Logseq_dom.nothing
   | _ ->
-      dom ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
+      row ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
         (List.map
            (fun (emoji_id, count) ->
-             dom ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id) ~tag:"button"
+             button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id)
                ~style_class:"ls-reaction"
-               ~events:"click"
-               ~on_dom_event:(fun _ _ -> toggle_reaction uuid emoji_id)
-               [ dom ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id) ~tag:"em-emoji"
-                   ~attrs:[ ("id", emoji_id) ] []
-               ; dom ~key:("rxc-" ^ uuid ^ "-" ^ emoji_id) ~tag:"span"
-                   ~text:(string_of_int count) []
+               ~on_press:(fun _ -> toggle_reaction uuid emoji_id)
+               [ (* TODO(component): em-emoji is a custom element that
+                    renders the platform emoji for an id — no component
+                    kind *)
+                 dom ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id)
+                   ~tag:"em-emoji" ~attrs:[ ("id", emoji_id) ] []
+               ; text ~key:("rxc-" ^ uuid ^ "-" ^ emoji_id)
+                   ~value:(string_of_int count) []
                ])
            rs)
 
@@ -114,21 +116,22 @@ let open_reaction_picker uuid (btn_id : string) =
 (* -- comment row ---------------------------------------------------- *)
 
 let comment_actions st (cuuid : string) : t =
-  let btn key icon title action =
-    dom ~key ~tag:"button"
+  let btn key icn title action =
+    button ~key
       ~style_class:"ls-comment-action"
-      ~attrs:
-        [ ("title", title); ("aria-label", title); ("type", "button")
-        ; ("id", key); ("style", "pointer-events:auto") ]
-      ~events:"click" ~on_dom_event:(fun _ _ -> action ())
-      [ dom ~key:(key ^ "-i") ~tag:"i" ~style_class:("ti ti-" ^ icon) [] ]
+      ~label:title
+      ~accessibility_identifier:key
+      ~variant:`ghost ~size:`icon ~icon:icn
+      ~on_press:(fun _ -> action ())
+      []
   in
-  dom ~key:("ca-" ^ cuuid) ~style_class:"ls-comment-actions"
-    [ btn ("cr-" ^ cuuid) "mood-smile" (I.t "command.editor/add-reaction")
+  row ~key:("ca-" ^ cuuid) ~style_class:"ls-comment-actions"
+    [ btn ("cr-" ^ cuuid) (`app "mood-smile")
+        (I.t "command.editor/add-reaction")
         (fun () -> open_reaction_picker cuuid ("cr-" ^ cuuid))
-    ; btn ("ce-" ^ cuuid) "edit" (I.t "editor/click-to-edit") (fun () ->
+    ; btn ("ce-" ^ cuuid) `edit (I.t "editor/click-to-edit") (fun () ->
           Signal.set st { (Signal.get_state st) with editing = Some cuuid })
-    ; btn ("cd-" ^ cuuid) "trash" (I.t "ui/delete") (fun () ->
+    ; btn ("cd-" ^ cuuid) `trash (I.t "ui/delete") (fun () ->
           delete_comment cuuid)
     ]
 
@@ -137,35 +140,34 @@ let comment_body st (c : Model.block) : t =
   let st_v = Signal.get_state st in
   match st_v.editing with
   | Some e when e = cuuid ->
-      dom ~key:("cbx-" ^ cuuid) ~style_class:"ls-comment-box-editor"
-        [ dom ~key:("cbte-" ^ cuuid) ~tag:"textarea"
-            ~attrs:[ ("aria-label", I.t "block.comments/placeholder") ]
-            ~text:c.Model.block_title ~events:"keydown"
-            ~on_dom_event:(fun _ payload ->
-              let key = Platform.payload_str payload "key" in
-              let shift = Platform.payload_bool payload "shiftKey" in
-              let v = Platform.payload_str payload "value" in
-              match key with
-              | "Escape" ->
-                  Signal.set st
-                    { (Signal.get_state st) with editing = None }
-              | "Enter" when not shift ->
-                  save_comment cuuid v;
-                  Signal.set st
-                    { (Signal.get_state st) with editing = None }
+      (* Escape-cancel has no component equivalent — only Enter saves;
+         clicking the edit action of another row exits the editor *)
+      let latest = ref c.Model.block_title in
+      box ~key:("cbx-" ^ cuuid) ~style_class:"ls-comment-box-editor"
+        [ textarea ~key:("cbte-" ^ cuuid)
+            ~label:(I.t "block.comments/placeholder")
+            ~text:c.Model.block_title
+            ~submit_on_enter:true
+            ~on_input:(fun ev ->
+              match ev with
+              | Lui_protocol.TextChanged (_, s) -> latest := s
               | _ -> ())
+            ~on_submit:(fun _ ->
+              save_comment cuuid !latest;
+              Signal.set st
+                { (Signal.get_state st) with editing = None })
             []
         ]
   | _ ->
-      dom ~key:("cb-" ^ cuuid) ~style_class:"ls-comment-body"
+      box ~key:("cb-" ^ cuuid) ~style_class:"ls-comment-body"
         (Render.title c.Model.block_title @ [ reactions_el cuuid c.block_reactions ])
 
 let comment_row st (c : Model.block) : t =
   let cuuid = Option.value c.Model.block_uuid ~default:"" in
-  dom ~key:("row-" ^ cuuid) ~style_class:"ls-comment-row"
-    ~attrs:[ ("data-comment-uuid", cuuid) ]
-    [ dom ~key:("cm-" ^ cuuid) ~style_class:"ls-comment-main"
-        [ dom ~key:("cmx-" ^ cuuid) ~style_class:"ls-comment-meta" []
+  box ~key:("row-" ^ cuuid) ~style_class:"ls-comment-row"
+    ~accessibility_identifier:("comment-" ^ cuuid)
+    [ box ~key:("cm-" ^ cuuid) ~style_class:"ls-comment-main"
+        [ box ~key:("cmx-" ^ cuuid) ~style_class:"ls-comment-meta" []
         ; comment_body st c
         ]
     ; comment_actions st cuuid
@@ -178,57 +180,44 @@ let add_box st (area_uuid : string) : t =
   let open_ = (Signal.get_state st).box_open || draft = "" in
   let inner =
     if open_ then
-      [ dom ~key:("cbta-" ^ area_uuid) ~tag:"textarea"
-          ~attrs:
-            [ ("placeholder", I.t "block.comments/placeholder")
-            ; ("aria-label", I.t "block.comments/placeholder") ]
-          ~text:draft ~events:"input keydown"
-          ~on_dom_event:(fun name payload ->
-            match name with
-            | "input" ->
-                save_draft area_uuid (Platform.payload_str payload "value")
-            | "keydown" -> (
-                let key = Platform.payload_str payload "key" in
-                let shift = Platform.payload_bool payload "shiftKey" in
-                let v = Platform.payload_str payload "value" in
-                match key with
-                | "Escape" ->
-                    save_draft area_uuid v;
-                    Signal.set st
-                      { (Signal.get_state st) with box_open = false }
-                | "Enter" when not shift -> submit_comment area_uuid v
-                | _ -> ())
+      (* Escape-collapse has no component equivalent — the draft still
+         persists via on_input so reopening restores it *)
+      let latest = ref draft in
+      [ textarea ~key:("cbta-" ^ area_uuid)
+          ~placeholder:(I.t "block.comments/placeholder")
+          ~label:(I.t "block.comments/placeholder")
+          ~text:draft ~submit_on_enter:true
+          ~on_input:(fun ev ->
+            match ev with
+            | Lui_protocol.TextChanged (_, s) ->
+                latest := s;
+                save_draft area_uuid s
             | _ -> ())
+          ~on_submit:(fun _ -> submit_comment area_uuid !latest)
           []
       ]
     else
-      [ dom ~key:("cbrp-" ^ area_uuid)
-          ~style_class:"ls-comment-reply-placeholder"
-          ~attrs:[ ("role", "button"); ("tabindex", "0") ]
-          ~text:draft ~events:"click"
-          ~on_dom_event:(fun _ _ ->
+      [ Ui_parts.pressable
+          ~on_press:(fun _ ->
             Signal.set st
               { (Signal.get_state st) with box_open = true })
-          []
+          (box ~key:("cbrp-" ^ area_uuid)
+             ~style_class:"ls-comment-reply-placeholder"
+             [ text ~key:("cbrpt-" ^ area_uuid) ~value:draft [] ])
       ]
   in
-  dom ~key:("cadd-" ^ area_uuid) ~style_class:"ls-comment-add"
-    [ dom ~key:("cbox-" ^ area_uuid) ~style_class:"ls-comment-box"
+  box ~key:("cadd-" ^ area_uuid) ~style_class:"ls-comment-add"
+    [ box ~key:("cbox-" ^ area_uuid) ~style_class:"ls-comment-box"
         ( inner
-        @ [ dom ~key:("cbact-" ^ area_uuid)
+        @ [ box ~key:("cbact-" ^ area_uuid)
               ~style_class:"ls-comment-box-actions"
-              [ dom ~key:("cbsub-" ^ area_uuid) ~tag:"button"
+              [ button ~key:("cbsub-" ^ area_uuid)
                   ~style_class:"ls-comment-submit"
-                  ~attrs:
-                    [ ("title", I.t "ui/submit")
-                    ; ("aria-label", I.t "ui/submit")
-                    ; ("type", "button") ]
-                  ~events:"click"
-                  ~on_dom_event:(fun _ _ ->
+                  ~label:(I.t "ui/submit")
+                  ~variant:`ghost ~size:`icon ~icon:`send
+                  ~on_press:(fun _ ->
                     submit_comment area_uuid (load_draft area_uuid))
-                  [ dom ~key:("cbsi-" ^ area_uuid) ~tag:"i"
-                      ~style_class:"ti ti-send" []
-                  ]
+                  []
               ]
           ] )
     ]
@@ -236,42 +225,42 @@ let add_box st (area_uuid : string) : t =
 (* -- area ----------------------------------------------------------- *)
 
 let header st (area_uuid : string) (count : int) (targets : int) : t =
-  dom ~key:("ch-" ^ area_uuid) ~style_class:"ls-comments-header"
+  row ~key:("ch-" ^ area_uuid) ~style_class:"ls-comments-header"
     ( [ dyn
           ~equal:(fun a b -> a = b)
           (fun editing ->
             (* cljs comments-area-title-view: the label swaps for the
-               standard block editor while the area title is edited *)
+               standard block editor while the area title is edited —
+               the subtree shape changes, so dyn stays *)
             if editing then
-              dom ~key:("cte-" ^ area_uuid)
+              box ~key:("cte-" ^ area_uuid)
                 ~style_class:"ls-comments-title-editor"
                 [ Comments.title_editor_el area_uuid ]
             else
-              dom ~key:("cl-" ^ area_uuid) ~tag:"button"
+              button ~key:("cl-" ^ area_uuid)
                 ~style_class:"ls-comments-label"
-                ~attrs:
-                  [ ("title", I.t "editor/click-to-edit")
-                  ; ("aria-label", I.t "editor/click-to-edit")
-                  ; ("type", "button") ]
-                ~events:"click"
-                ~on_dom_event:(fun _ _ ->
+                ~label:(I.t "editor/click-to-edit")
+                ~variant:`ghost
+                ~on_press:(fun _ ->
                   (* cljs edit-comments-area-title! → edit-block! *)
                   Editor_actions.enter_edit area_uuid 0)
-                ~text:(I.t "block.comments/label") [])
+                [ text ~key:("clt-" ^ area_uuid)
+                    ~value:(I.t "block.comments/label") [] ])
           (Comments.editing_sig area_uuid)
-      ; dom ~key:("cc-" ^ area_uuid) ~tag:"span"
+      ; text ~key:("cc-" ^ area_uuid)
           ~style_class:"ls-comments-count"
-          ~text:(string_of_int count) []
+          ~value:(string_of_int count) []
       ]
     @
     if targets > 1 then
-      [ dom ~key:("ct-" ^ area_uuid) ~tag:"button"
+      [ button ~key:("ct-" ^ area_uuid)
           ~style_class:"ls-comments-targets-toggle"
-          ~attrs:[ ("type", "button") ] ~events:"click"
-          ~on_dom_event:(fun _ _ ->
+          ~variant:`ghost
+          ~on_press:(fun _ ->
             let v = Signal.get_state st in
             Signal.set st { v with targets_open = not v.targets_open })
-          ~text:(I.t "block.comments/on-those-blocks") []
+          [ text ~key:("ctt-" ^ area_uuid)
+              ~value:(I.t "block.comments/on-those-blocks") [] ]
       ]
     else [] )
 
@@ -287,21 +276,21 @@ let area_el (b : Model.block) : t =
   in
   (dyn ~equal:(fun (a : area_st) b -> a = b)
      (fun _st ->
-       dom ~key:("area-" ^ area_uuid)
+       column ~key:("area-" ^ area_uuid)
          ~style_class:"ls-comments-area"
-         ~attrs:[ ("data-area-uuid", area_uuid) ]
+         ~accessibility_identifier:("area-" ^ area_uuid)
          [ header st area_uuid (List.length comments)
              b.Model.block_comment_targets
          ; (if (Signal.get_state st).targets_open
                && b.Model.block_comment_targets > 1
             then
-              dom ~key:("cts-" ^ area_uuid)
+              box ~key:("cts-" ^ area_uuid)
                 ~style_class:"ls-comments-targets" []
             else box ~key:("cts0-" ^ area_uuid) [])
          ; (match comments with
             | [] -> box ~key:("cl0-" ^ area_uuid) []
             | _ ->
-                dom ~key:("cl-" ^ area_uuid)
+                column ~key:("cl-" ^ area_uuid)
                   ~style_class:"ls-comments-list"
                   (List.map (comment_row st) comments))
          ; add_box st area_uuid
