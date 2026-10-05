@@ -635,7 +635,7 @@ let header_button inst (c : V.column) : t =
              List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
            inst.V.st.Signal.state_signal
        in
-       if_ ~test_signal:(Signal.map (fun o -> o <> None) sort_sig)
+       if_ ~test:(Signal.map (fun o -> o <> None) sort_sig)
          (icon_dyn
             (Signal.map
                (fun o ->
@@ -825,7 +825,7 @@ let delete_selected inst () =
 
 let action_bar inst : t =
   let isig = sig_of inst in
-  if_ ~test_signal:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
+  if_ ~test:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
     (dom ~style_class:"table-action-bar absolute top-0 left-8"
        [ dom
            ~style_class:
@@ -956,7 +956,7 @@ let row_stream inst cols uuids : t =
       (Array.of_list items)
       ctx parent
   else
-    keyed ~source_signal:items_sig ~key:keyed_row_key ~cmp:String.compare
+    keyed ~source:items_sig ~key:keyed_row_key ~cmp:String.compare
       ~mount:(fun item_sig ->
         let u, blk = Signal.get item_sig in
         dom [ row_el inst cols ~row_uuid:u ~blk ])
@@ -1220,7 +1220,7 @@ let list_stream inst uuids : t =
       (Array.of_list items)
       ctx parent
   else
-    keyed ~source_signal:items_sig ~key:keyed_row_key ~cmp:String.compare
+    keyed ~source:items_sig ~key:keyed_row_key ~cmp:String.compare
       ~mount:(fun item_sig ->
         let u, blk = Signal.get item_sig in
         list_row_el ~row_uuid:u ~title:(title_of (V.get inst) (u, blk)))
@@ -1257,7 +1257,7 @@ let render_list inst s : t =
 let render_gallery inst s : t =
   dom ~style_class:"flex flex-row flex-wrap gap-2 p-2"
     [ keyed
-        ~source_signal:
+        ~source:
           (Signal.map
              (fun (s' : V.vstate) -> flat_items s')
              inst.V.st.Signal.state_signal)

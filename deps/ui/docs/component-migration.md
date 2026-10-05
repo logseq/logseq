@@ -65,8 +65,8 @@ vocabulary is four forms:
 |---|---|
 | value/text/class/prop change | `~p:(reactive f s)` (prop position) |
 | model → whole-subtree re-emit | `[ reactive f s ]` (children position, optional `~equal:eq`) |
-| signal-driven mount/unmount | `if_ ~test_signal:s child` |
-| signal-driven list | `keyed ~source_signal:s ~key ~cmp ~mount` |
+| signal-driven mount/unmount | `if_ ~test:s child` |
+| signal-driven list | `keyed ~source:s ~key ~cmp ~mount` |
 
 The default comparator is `(=)`; write `~equal:eq` only for a custom
 comparison granularity. `own` (derived-signal scope ownership) has been
@@ -95,7 +95,7 @@ Ui_parts.pressable ~on_press:(fun _ -> f ()) (row ~key ~style_class:cls children
 
 - `~key` stays as-is; `~id`/`data-ref`/`#ref` → `~accessibility_identifier`
 - "render nothing" → `spacer ~key:"…" []` (anchor node); conditional
-  mounting uses `if_ ~test_signal`
+  mounting uses `if_ ~test`
 - **Prefer plain OCaml `if`/`List.map` for structure** — use
   `reactive`/`if_`/`keyed` only when the branch condition or list
   membership hangs off a signal (needs to re-emit structure on publish);

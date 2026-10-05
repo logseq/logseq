@@ -519,7 +519,7 @@ let header_button inst (c : V.column) : t =
   in
   button ~variant:`ghost ~size:`sm ~text:c.V.c_name ~grow:1.
     ~main:`start ~height:32 ~padding_horizontal:8
-    [ if_ ~test_signal:(Signal.map (fun o -> o <> None) sort_sig)
+    [ if_ ~test:(Signal.map (fun o -> o <> None) sort_sig)
         (icon_dyn
            (Signal.map
               (fun o ->
@@ -709,7 +709,7 @@ let delete_selected inst () =
 
 let action_bar inst : t =
   let isig = sig_of inst in
-  if_ ~test_signal:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
+  if_ ~test:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
     (box ~style_class:"table-action-bar absolute top-0 left-8"
        [ row ~gap:4 ~cross:`center ~background:"secondary"
            ~style_class:"ls-table-actions"
@@ -825,7 +825,7 @@ let row_stream inst cols uuids : t =
       (Array.of_list items)
       ctx parent
   else
-    keyed ~source_signal:items_sig ~key:keyed_row_key ~cmp:String.compare
+    keyed ~source:items_sig ~key:keyed_row_key ~cmp:String.compare
       ~mount:(fun item_sig ->
         let u, blk = Signal.get item_sig in
         row_el inst cols ~row_uuid:u ~blk)
@@ -1044,7 +1044,7 @@ let list_stream inst uuids : t =
       (Array.of_list items)
       ctx parent
   else
-    keyed ~source_signal:items_sig ~key:keyed_row_key ~cmp:String.compare
+    keyed ~source:items_sig ~key:keyed_row_key ~cmp:String.compare
       ~mount:(fun item_sig ->
         let u, blk = Signal.get item_sig in
         list_row_el ~row_uuid:u ~title:(title_of (V.get inst) (u, blk)))
@@ -1081,7 +1081,7 @@ let render_list inst s : t =
 let render_gallery inst s : t =
   row ~gap:8 ~padding:8 ~columns:4
     [ keyed
-        ~source_signal:
+        ~source:
           (Signal.map
              (fun (s' : V.vstate) -> flat_items s')
              inst.V.st.Signal.state_signal)

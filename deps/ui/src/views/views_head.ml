@@ -115,7 +115,7 @@ let view_tab inst (v : Wr.view_ent) : t =
            [ icon_el (view_type_icon v) ]
        ; text ~value:(V.display_title v) []
        ; if_
-           ~test_signal:
+           ~test:
              (Signal.map
                 (fun (s : V.vstate) ->
                   s.V.view_uuid = v.Wr.vu && inst.V.feature <> "query-result"
@@ -131,7 +131,7 @@ let view_tab inst (v : Wr.view_ent) : t =
 let tabs_el inst ~dim : t =
   row ~style_class:"views"
     [ D.keyed
-        ~source_signal:(Signal.map (fun (s : V.vstate) -> s.V.views) (sig_of inst))
+        ~source:(Signal.map (fun (s : V.vstate) -> s.V.views) (sig_of inst))
         ~key:(fun (v : Wr.view_ent) -> v.Wr.vu)
         ~cmp:String.compare
         ~mount:(fun v_sig -> view_tab inst (Signal.get v_sig))
@@ -568,7 +568,7 @@ let search_el inst : t =
                     | None -> ())
                   0
               end)
-        ; if_ ~test_signal:open_sig
+        ; if_ ~test:open_sig
             (row
                [ search_field ~style_class:"ls-search-input"
                    ~accessibility_identifier:input_id
@@ -681,7 +681,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
 
 let filters_row inst : t =
  fun ctx parent ->
-  if_ ~test_signal:(Signal.map (fun s -> s.V.filters <> []) (sig_of inst))
+  if_ ~test:(Signal.map (fun s -> s.V.filters <> []) (sig_of inst))
     (fun ctx parent ->
       let s = V.get inst in
       let chips =

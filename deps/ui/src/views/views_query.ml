@@ -399,7 +399,7 @@ let cm_host inst : Lui_elements.t =
   let open_sig =
     Signal.map (fun s -> s.V.query_editor_open) inst.V.st.Signal.state_signal
   in
-  D.if_ ~test_signal:open_sig
+  D.if_ ~test:open_sig
     (fun ctx parent ->
       let cur =
         match parse_src (V.get inst).V.qsrc with

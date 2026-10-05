@@ -422,7 +422,7 @@ let render (ms : Model.t Signal.signal) : t =
       separator ~key:"rs-resizer" ~orientation:`vertical
         ~style_class:"resizer" []
     ; if_
-        ~test_signal:
+        ~test:
           (Signal.map
              (fun (m : Model.t) -> m.Model.right_sidebar_open)
              ms)

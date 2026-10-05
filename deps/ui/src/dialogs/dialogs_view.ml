@@ -201,7 +201,7 @@ let render (ms : Model.t Signal.signal) : t =
     Signal.map (fun (d : Dialogs_state.t) -> d.ui_request) ds
   in
   Logseq_dom.fragment
-    [ keyed ~source_signal:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
+    [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
         ~mount:(fun name_sig ->
           (* name is stable per key — sample once *)
           let v = dialog_view (Signal.get name_sig) ms in

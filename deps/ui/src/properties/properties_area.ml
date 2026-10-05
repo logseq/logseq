@@ -46,7 +46,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
          ~text:(D.row_title row)
          ~on_press:(fun _ -> Runtime.signal_set menu_open true)
          []
-     ; if_ ~test_signal:(Signal.value menu_open)
+     ; if_ ~test:(Signal.value menu_open)
          (Menu.menu_view ~owner_uuid:ctx.block_uuid ~owner_id:ctx.block_id
             ~owner_is_tag ~owner_title ~refresh:ctx.refresh
             ~close:(fun () -> Runtime.signal_set menu_open false)

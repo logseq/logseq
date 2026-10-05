@@ -134,11 +134,11 @@ let trace_equal name eq a b =
 let dyn ?equal f (source : 'a Signal.signal) : Lui_elements.t =
   Lui_elements.dyn ?equal f source
 
-let if_ ~test_signal children : Lui_elements.t =
-  Lui_elements.if_ ~test_signal children
+let if_ ~test children : Lui_elements.t =
+  Lui_elements.if_ ~test children
 
-let keyed ~source_signal ~key ~cmp ~mount : Lui_elements.t =
-  Lui_elements.keyed ~source_signal ~key ~cmp ~mount
+let keyed ~source ~key ~cmp ~mount : Lui_elements.t =
+  Lui_elements.keyed ~source ~key ~cmp ~mount
 
 let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(style_class = "")

@@ -582,7 +582,7 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
         (fun g -> group_header g)
         group_sig
     ; Logseq_dom.dom ~key:"results" ~style_class:"search-results"
-        [ keyed ~source_signal:items_sig ~key:S.item_dom_key
+        [ keyed ~source:items_sig ~key:S.item_dom_key
             ~cmp:Stdlib.compare
             ~mount:(fun item_sig -> item_row st item_sig)
         ]
@@ -595,7 +595,7 @@ let groups_body st : t =
   let groups_sig =
     Signal.map (fun (v : S.view) -> v.S.groups) st.S.vs.Signal.state_signal
   in
-  (keyed ~source_signal:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
+  (keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
      ~cmp:Stdlib.compare
      ~mount:(fun group_sig -> group_el st group_sig))
     ctx parent
@@ -972,4 +972,4 @@ let render (_ms : Model.t Signal.signal) : t =
   (* The keyed box gives the conditional its own reconcile-stable parent:
      spliced directly under #app-container its dynamic segment goes stale
      after navigation and later mounts emit an inconsistent op batch *)
-  box ~key:"cmdk_view" [ if_ ~test_signal:open_sig (modal_shell st) ] context parent
+  box ~key:"cmdk_view" [ if_ ~test:open_sig (modal_shell st) ] context parent
