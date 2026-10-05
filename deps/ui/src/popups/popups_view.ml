@@ -189,7 +189,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
         ~on_press:(fun _ ->
           S.apply_index st (Signal.get item_sig).S.ai_idx)
         [ text ~key:"flex1"
-            [ dyn
+            [ reactive
                 ~equal:(fun (a : S.ac_item * S.view) (b : S.ac_item * S.view) ->
                   let ai, av = a and bi, bv = b in
                   ai.S.ai_label = bi.S.ai_label
@@ -538,8 +538,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
   (* keyed mounts run with parent=None, so the entry point must be a real
      node — wrap the dynamic branch in a box *)
   box ~key:"cm-entry"
-    [ dyn
-      ~equal:(fun (a : S.cm_item) b -> a = b)
+    [ reactive
       (function
       | S.Ci_sep ->
           divider ~key:"sep"
@@ -595,7 +594,7 @@ let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
 ;;
 
 (* (idx, x, y, items) while a Sub_menu is open; None otherwise — the
-   tuple feeds dyn so the submenu mounts lazily with live coords *)
+   tuple feeds reactive so the submenu mounts lazily with live coords *)
 let cm_sub_state (st : S.t)
     : (int * float * float * S.cm_item list) option Signal.signal =
   Signal.map
@@ -658,7 +657,7 @@ let cm_popover (st : S.t) : t =
         [ keyed ~source:entries_sig ~key:(fun ((i, _) : int * S.cm_item) -> i)
             ~cmp:Stdlib.compare
             ~mount:(fun entry_sig -> cm_item_el st entry_sig) ]
-    ; dyn ~equal:Stdlib.( = )
+    ; reactive
         (fun sub ->
           match sub with
           | Some (_, x, y, items) -> cm_sub_el st x y items
@@ -828,8 +827,8 @@ let pv_popover (p : S.pv) : t =
 let pv_dyn (st : S.t) : t =
   (* see ac_popover: signals must be built per mount *)
  fun context parent ->
-  (dyn
-     ~equal:(fun a b -> a == b)
+  (reactive
+     ~equal:( == )
      (fun pv ->
        match pv with
        | None -> Logseq_dom.nothing

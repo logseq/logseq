@@ -63,7 +63,7 @@ let toast_item (t : Model.toast) : t =
       ctx parent
 
 let render (ms : Model.t Signal.signal) : t =
-  dyn
+  reactive
     ~equal:(fun (a : Model.t) (b : Model.t) -> a.toasts = b.toasts)
     (fun (m : Model.t) ->
       match m.toasts with

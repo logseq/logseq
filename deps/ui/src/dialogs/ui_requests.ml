@@ -6,7 +6,6 @@
 
 open Lui_elements
 
-let dyn = Logseq_dom.dyn
 let if_ = Logseq_dom.if_
 
 let resolve id result =
@@ -70,7 +69,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
   let field =
     (* the kind itself switches (secure_field <-> text_field), so this
        branch is structural — a reactive prop can't express it *)
-    dyn ~equal:( = )
+    reactive
       (fun vis ->
         let ctor = if vis then text_field else secure_field in
         ctor ~key:(key ^ "-i")

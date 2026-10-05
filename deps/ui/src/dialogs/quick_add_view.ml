@@ -28,7 +28,7 @@ let body (_ms : Model.t Signal.signal) : t =
              container region — carried as the a11y id until the
              imperative [data-cid] lookup migrates *)
           ~accessibility_identifier:"quick-add"
-          [ dyn ~equal:(fun a b -> a == b)
+          [ reactive ~equal:( == )
               (fun blocks ->
                 column ~key:"qa-list"
                   ~style_class:"page-blocks-inner"

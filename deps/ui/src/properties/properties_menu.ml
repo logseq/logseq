@@ -961,7 +961,7 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
      ~on_dismiss:(fun _ -> close ())
      [ reactive
          (fun p ->
-            (* stable root: same-kind prop diffs across dyn branches
+            (* stable root: same-kind prop diffs across reactive branches
                emit unsupported set-prop ops on native *)
             column ~gap:0
               [ (match p with

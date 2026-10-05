@@ -10,7 +10,6 @@
 open Promise_ext
 open Lui_elements
 
-let dyn = Logseq_dom.dyn
 let t = I18n.t
 
 let text_of ev =
@@ -381,7 +380,7 @@ let body (_ms : Model.t Signal.signal) : t =
   in
   let pair a b = (a, b) in
   let node =
-    dyn ~equal:Stdlib.( = )
+    reactive
       (fun (tab_now, _dirty) ->
         column ~key:"plugins-page"
           ~style_class:"cp__plugins-page web-platform"
@@ -396,7 +395,7 @@ let body (_ms : Model.t Signal.signal) : t =
               ]
           ; box ~key:"pl-panels" ~style_class:"panels"
               [ (if tab_now = "marketplace" then
-                   dyn ~equal:Stdlib.( = )
+                   reactive
                      (fun ((search, cat), (pkg_now, load_now)) ->
                        market_panel ~key:"mkt" ~search ~cat
                          ~search_st:mkt_search ~cat_st:mkt_cat
@@ -408,7 +407,7 @@ let body (_ms : Model.t Signal.signal) : t =
                         (Signal.map2 pair
                            (Signal.value pkgs) (Signal.value loading)))
                  else
-                   dyn ~equal:Stdlib.( = )
+                   reactive
                      (fun (search, cat) ->
                        installed_panel ~key:"inst" ~search ~cat
                          ~search_st:inst_search ~cat_st:inst_cat)
@@ -659,7 +658,7 @@ let settings_body (_ms : Model.t Signal.signal) : t =
   ignore (Plugin_host.dirty_signal owner);
   let pair a b = (a, b) in
   let node =
-    dyn ~equal:Stdlib.( = )
+    reactive
       (fun (_d, code) ->
         match !(Plugin_host.open_settings_pid) with
         | None -> spacer ~key:"ps-empty" []

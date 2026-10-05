@@ -15,7 +15,6 @@ open Lui_elements
 module D = Logseq_dom
 
 let dom = D.dom
-let dyn = D.dyn
 let t = Sidebar_state.t
 
 (* component icon: tabler names go through the `app:` registry (only `x`
@@ -137,7 +136,7 @@ let item_menu st (it : Sidebar_state.item) =
         else []))
 
 let item_menu_host st (it : Sidebar_state.item) =
-  dyn ~equal:(fun a b -> a = b)
+  reactive
     (fun menu ->
       if menu = "item-" ^ it.Sidebar_state.key then item_menu st it
       else spacer ~key:("imenu-none-" ^ it.key) [])
@@ -404,7 +403,7 @@ let inner st =
     [ scroll ~key:"rs-scroll" ~orientation:`vertical
         ~style_class:"cp__right-sidebar-scrollable"
         [ topbar st
-        ; dyn ~equal:(fun a b -> a = b)
+        ; reactive
             (fun items ->
               column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
                 ~style_class:"sidebar-item-list scrollbar-spacing"

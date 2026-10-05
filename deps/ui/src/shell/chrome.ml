@@ -19,7 +19,6 @@ open Lui_elements
 
 module Wd = Web_dom
 
-let dyn = Logseq_dom.dyn
 
 let skip_to_main =
   button ~key:"skip" ~accessibility_identifier:"skip-to-main"
@@ -401,9 +400,7 @@ let toggle_rtc_details () =
   | None -> open_rtc_details ()
 
 let rtc_indicator (ms : Model.t Signal.signal) : t =
-  dyn
-    ~equal:(fun (a : string option * Model.rtc option)
-                  (b : string option * Model.rtc option) -> a = b)
+  reactive
     (fun ((repo : string option), (r : Model.rtc option)) ->
       Rtc_flows.refresh_db_rtc_uuid repo;
       last_rtc := r;
@@ -471,7 +468,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
    sub-type isn't *-completed; gated on logged-in only (header.cljs) *)
 let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
     =
-  dyn ~equal:( = )
+  reactive
     (fun (active : bool) ->
       if not (Rtc_flows.logged_in () && active) then
         spacer ~key:"td-off" ~style_class:"hidden" []
@@ -495,7 +492,7 @@ let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
    cljs use-db-rtc-uuid (the button can flash on a remote graph until
    the uuid resolves — cljs has the same window) *)
 let local_graph_sync_button (ms : Model.t Signal.signal) : t =
-  dyn ~equal:( = )
+  reactive
     (fun ((repo : string option), (repos : string list), (_rtc : Model.rtc option)) ->
       (* m.rtc joins the input so the db-sync-start broadcast after an
          upload re-renders — refresh_db_rtc_uuid then resolves the new
@@ -530,7 +527,7 @@ let loader_svg : t = spinner ~key:"ldr" []
 (* cljs header.cljs search-index-progress — renders while the worker
    reports its FTS index build for the current repo *)
 let index_progress (ms : Model.t Signal.signal) : t =
-  dyn
+  reactive
     ~equal:(fun (a : Model.t) (b : Model.t) ->
       a.index_build = b.index_build)
     (fun (m : Model.t) ->
@@ -567,7 +564,7 @@ let left_menu_button =
 (* cljs header.cljs: home button hidden on the :home route and on a
    custom home page *)
 let home_button ms =
-  dyn
+  reactive
     ~equal:(fun (a : Model.t) (b : Model.t) -> a.route = b.route)
     (fun (m : Model.t) ->
       match m.route with
@@ -604,7 +601,7 @@ let header (ms : Model.t Signal.signal) =
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r drag-region overflow-x-hidden"
         [ row ~key:"head-crumb" ~grow:1.
-            [ dyn
+            [ reactive
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
                   (* only the zoomed-block trail renders here *)
                   Option.map
@@ -757,7 +754,7 @@ let overlays (ms : Model.t Signal.signal) =
     ; Cards_view.render ms
     ; Toasts_view.render ms
     ; Properties_view.overlays
-    ; dyn
+    ; reactive
         ~equal:(fun (a : Model.t) (b : Model.t) ->
           (* the menu reads only page scalars — comparing them skips the
              per-publish deep [=] on the whole route page record *)
@@ -788,7 +785,7 @@ let overlays (ms : Model.t Signal.signal) =
                  b.route_page)
         (fun m -> Page_menu.dialog_view m)
         ms
-    ; dyn
+    ; reactive
         ~equal:(fun (a : Model.t) (b : Model.t) ->
           a.appearance = b.appearance)
         (fun m ->
@@ -884,7 +881,7 @@ let help_area (ms : Model.t Signal.signal) : t =
             ~on_press:(fun _ ->
               Runtime.send Action.Help_toggle; Runtime.flush ())
             (box ~key:"help-inner" ~style_class:"inner" [ help_svg ]) ]
-    ; dyn
+    ; reactive
         ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
         (fun (m : Model.t) ->
           if m.help_open then help_menu_popup
@@ -893,7 +890,7 @@ let help_area (ms : Model.t Signal.signal) : t =
     ]
 
 (* cljs page.cljs not-found: replaces the whole app chrome. Rendered
-   as a fixed overlay (remounting the whole app tree inside a dyn
+   as a fixed overlay (remounting the whole app tree inside a reactive
    hits a retained-store crash on the swap). *)
 let not_found_page : t =
   (* .cp__not-found (stylesheet) carries the fixed-overlay positioning the
@@ -938,7 +935,7 @@ let shell (ms : Model.t Signal.signal) : t =
     ; overlays ms
     ; export_anchors
     ; help_area ms
-    ; dyn
+    ; reactive
             ~equal:(fun (a : Model.t) (b : Model.t) ->
               match a.route, b.route with
               | Model.Not_found _, Model.Not_found _ -> true

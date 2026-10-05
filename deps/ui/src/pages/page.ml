@@ -1067,7 +1067,7 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
   | None -> false
 
 (* journal item backed by the journals signal — the outer keyed
-   collection keeps the item mounted across publishes, a title dyn
+   collection keeps the item mounted across publishes, a title reactive
    repaints title/icon/tag edits, the block list is the same keyed
    collection the page route uses (a delta splice repaints only the
    touched rows), and the refs section repaints when page_linked_refs
@@ -1118,7 +1118,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
         [ column ~key:("jip-" ^ key) ~gap:32
             ~style_class:"relative page-inner"
             [ row ~key:("jit-" ^ key) ~main:`space_between
-                [ Logseq_dom.dyn ~equal:title_eq
+                [ reactive ~equal:title_eq
                     (fun (p, editing_title) ->
                       page_title_el
                         { (Signal.get ms) with
@@ -1155,7 +1155,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
             (* cljs journal-page: #today-queries div on the today item,
                then one .fade-in.delay refs section (unlinked refs are
                suppressed on the home route) *)
-            [ Logseq_dom.dyn ~equal:jrefs_eq
+            [ reactive ~equal:jrefs_eq
                 (fun (p : Model.page) ->
                   column ~key:("jrefs-i-" ^ key) ~gap:32
                     ((if is_today_journal p then
@@ -1242,7 +1242,7 @@ let page_key (p : Model.page option) =
 
 let page_route (r : Model.route) =
   (* routes whose content repaints through their own signals — the
-     region dyn must stay mounted across data publishes or every
+     region reactive must stay mounted across data publishes or every
      outliner op rebuilds the whole page (journals: journals_sig pushes
      merged day records into each item; pages: page_sig) *)
   match r with
@@ -1304,7 +1304,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
           ~initial_rows:48
           ~estimate_size:(fun _ -> 32.) blocks_sig ]
   in
-  (* if_/dyn branches must mount a node — the keyed/virt choice can't be
+  (* if_/reactive branches must mount a node — the keyed/virt choice can't be
      a dynamic child, so pick once per region mount; either renderer is
      correct at any size, the threshold is only an optimization *)
   let list_el =
@@ -1339,7 +1339,7 @@ let title_row (m : Model.t) (page : Model.page) : t =
   row ~key:"page-title-row" ~main:`space_between
     [ page_title_el m page ]
 
-(* dyn bodies mount a single node — display:contents keeps the segment
+(* reactive bodies mount a single node — display:contents keeps the segment
    transparent to .page-inner's grid so its children lay out like the
    direct rows the static build emitted *)
 let top_view (m : Model.t) : t =
@@ -1469,20 +1469,20 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
       ~attrs_signal_v:(Logseq_dom.attrs_signal ms wrap_attrs_of)
     [ column ~key:"page-inner" ~gap:32
         ~style_class:"relative page-inner"
-        [ Logseq_dom.dyn ~equal:top_eq top_view ms
+        [ reactive ~equal:top_eq top_view ms
         ; page_tabs_el m0
         ; blocks_area ~scope ~library ?puuid ms
         ]
-    ; Logseq_dom.dyn ~equal:refs_eq refs_wrap ms
+    ; reactive ~equal:refs_eq refs_wrap ms
     ; Selection_bar.view ()
     ])
     ctx parent
 
 (* the route-root dynamic segment — page routes keep the region mounted
-   across data publishes (the keyed/dyn segments inside repaint
+   across data publishes (the keyed/reactive segments inside repaint
    themselves); all other routes keep repaint-on-data semantics *)
 let region (ms : Model.t Signal.signal) : t =
-  Logseq_dom.dyn
+  reactive
     ~equal:(fun (a : Model.t) (b : Model.t) ->
       let shell =
         a.phase = b.phase

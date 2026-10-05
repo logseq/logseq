@@ -18,7 +18,7 @@
 
    Reactivity (view runs once): the editing/selected/collapsed sets live in
    Editor_state's signal; each row derives its class/attrs/branch from it via
-   style_class_signal, attrs_signal_v, dyn and if_. *)
+   style_class_signal, attrs_signal_v, reactive and if_. *)
 
 open Promise_ext
 open Lui_elements
@@ -371,7 +371,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
      entirely in normal mode — .block-title-wrap must be absent for the
      edited block or e2e counts a stale title *)
 
-  dyn ~equal:(fun a b -> a = b)
+  reactive
     (fun editing ->
       match b.Model.block_asset_type with
       | Some _ ->
@@ -630,7 +630,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
   dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig_of bs)
     ~attrs_signal_v:(row_attrs_sig_of ~scope ~depth bs)
-    [ Logseq_dom.dyn
+    [ reactive
         ~equal:
           (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
           a == b && ga = gb && not (gen_bumped a ia ib))
@@ -669,7 +669,7 @@ and row_children ~depth ~editable ~library ~virtualize scope
           || S.children_of b = []))
       bs (S.collapse_sig ())
   in
-  Logseq_dom.dyn ~equal:(fun (a : bool) (b : bool) -> a = b)
+  reactive
     (fun show ->
       if not show then Logseq_dom.nothing
       else
@@ -882,7 +882,7 @@ let fetch_embed_blocks name st =
                 Platform.console_error ("embed blocks fetch failed", e);
                 Js.Promise.resolve ())))
 
-(* cheap dyn equality for fetched trees: uuid + title covers structure
+(* cheap reactive equality for fetched trees: uuid + title covers structure
    and content edits; a full structural compare walks every field of a
    rebuilt-per-fetch tree on each publish *)
 let rec same_blocks a b =
@@ -947,7 +947,7 @@ let page_embed (name : string) : t =
   (* a destroyed embed must stop refetching on every tx broadcast *)
   Signal.on_dispose ctx.ui_scope (fun () ->
       Hashtbl.remove embed_refreshes id);
-  (dyn ~equal:same_blocks
+  (reactive ~equal:same_blocks
      (fun blocks ->
        let shown, capped = cap_embed_blocks embed_block_cap blocks in
        (* embed copies render read-only — the same uuid can exist in the

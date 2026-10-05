@@ -84,7 +84,7 @@ module Uuid_gens = Stdlib.Map.Make (String)
 (* republish key for keyed rows: a keyed item keeps its mount whenever
    the spliced/refetched record is structurally equal, so rows whose
    rendered text depends on a touched entity would paint stale resolved
-   refs forever. Pair [(reset_gen, uuid_gens)] into the row's dyn key:
+   refs forever. Pair [(reset_gen, uuid_gens)] into the row's reactive key:
    [reset_gen] bumps on invalidate-all (remounts every row — a rare
    unknown-delta path), and each invalidated uuid carries a fresh
    generation so re-invalidating a previously-touched entity still

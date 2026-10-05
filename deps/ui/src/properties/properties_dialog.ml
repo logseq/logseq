@@ -498,7 +498,7 @@ let dialog_content d : t =
   d.d_phase_sig <- Some phase_sig;
   (reactive
      (fun p ->
-        (* stable root: same-kind prop diffs across dyn branches emit
+        (* stable root: same-kind prop diffs across reactive branches emit
            unsupported set-prop ops on native *)
         column ~gap:0
           [ (match p with

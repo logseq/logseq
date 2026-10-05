@@ -14,7 +14,7 @@ let opt_row st i label =
 (* the deck picker is a select trigger + anchored dropdown_menu —
    mounted = presented on every host; on_dismiss covers outside-tap *)
 let opts_box st =
-  dyn ~equal:(fun (a : bool * Cards_state.deck list) b -> a = b)
+  reactive
     (fun (opts_open, decks) ->
       if not opts_open then spacer ~key:"opts-closed" []
       else
@@ -137,8 +137,7 @@ let card_view st _pos phase title =
     ]
 
 let cards_body st =
-  dyn
-    ~equal:(fun (a : string list * int * string) b -> a = b)
+  reactive
     (fun (cards, pos, phase) ->
       match List.nth_opt cards pos with
       | None ->
@@ -206,6 +205,6 @@ let modal st =
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in
-  dyn ~equal:(fun a b -> a = b)
+  reactive
     (fun open_ -> if open_ then modal st else Logseq_dom.nothing)
     (Signal.value st.Cards_state.open_)

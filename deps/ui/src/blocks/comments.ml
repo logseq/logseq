@@ -153,8 +153,7 @@ let title_editor_el uuid : t =
 (* cljs comments-area-title-view: the label swaps for the block editor
    while the area's title is being edited *)
 let title_cell uuid (b : Model.block) : t =
-  dyn
-    ~equal:(fun a b -> a = b)
+  reactive
     (fun editing ->
       if editing then
         box ~key:("cte-" ^ uuid) ~style_class:"ls-comments-title-editor"

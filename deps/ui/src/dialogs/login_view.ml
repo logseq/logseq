@@ -9,7 +9,6 @@
 open Promise_ext
 open Lui_elements
 
-let dyn = Logseq_dom.dyn
 module T = I18n
 
 (* Cognito constants live in Rtc_ops (they're sync config the worker
@@ -517,7 +516,7 @@ let body (_ms : Model.t Signal.signal) : t =
   Signal.update (auth_st ctx) (fun _ ->
       { tab = Login; err = ""; session_user = session_username () });
   let fields = fields_of ctx in
-  (dyn ~equal:( == ) (fun a ->
+  (reactive ~equal:( == ) (fun a ->
        box ~key:"login" ~style_class:"cp__user-login"
          [ panel ctx fields a ])
      (auth_st ctx).Signal.state_signal)

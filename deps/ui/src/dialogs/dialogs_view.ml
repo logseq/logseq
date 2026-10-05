@@ -8,7 +8,6 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-let dyn = Logseq_dom.dyn
 let keyed = Logseq_dom.keyed
 
 let overlay_cls = "ui__dialog-overlay"
@@ -225,17 +224,17 @@ let render (ms : Model.t Signal.signal) : t =
                   16)
            with _ -> ());
           v)
-    ; dyn ~equal:( == ) (fun c ->
+    ; reactive ~equal:( == ) (fun c ->
           match c with
           | Some c -> confirm_view c
           | None -> spacer ~key:"cfrm-none" [])
         confirm_sig
-    ; dyn ~equal:( == ) (fun p ->
+    ; reactive ~equal:( == ) (fun p ->
           match p with
           | Some p -> prompt_view p
           | None -> spacer ~key:"prmt-none" [])
         prompt_sig
-    ; dyn ~equal:( == ) (fun r ->
+    ; reactive ~equal:( == ) (fun r ->
           match r with
           | Some r -> Ui_requests.view r
           | None -> spacer ~key:"ureq-none" [])

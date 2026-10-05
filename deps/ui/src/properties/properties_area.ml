@@ -255,7 +255,7 @@ let block_area ~uuid : t =
     (reactive
        (fun (d : S.area_data) ->
           if d.rows = [] && d.hidden = [] && d.below = [] then
-            (* dyn branch roots must keep identical props: set-prop
+            (* reactive branch roots must keep identical props: set-prop
                diffs on stack kind (gap/style-class) are unsupported
                on native and abort the whole reconcile *)
             column ~gap:2 ~style_class:"ls-block-content-indent" []
