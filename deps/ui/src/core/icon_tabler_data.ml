@@ -35,3 +35,8 @@ let tabler_children name : (string * (string * string) list) list =
       match Js.Dict.get dict name with
       | None -> []
       | Some v -> decode_children v)
+
+let tabler_names () : string list =
+  match Js.Undefined.toOption children_table_u with
+  | None -> []
+  | Some dict -> Array.to_list (Js.Dict.keys dict)

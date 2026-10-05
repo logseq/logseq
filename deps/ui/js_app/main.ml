@@ -45,8 +45,8 @@ let main root =
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
   let renderer =
-    Lui_web.create_with_extensions root Lui_protocol.String_map.empty
-      registry Dom_adapter.adapters
+    Lui_web.create_with_extensions root (Icons.app_icons ()) registry
+      Dom_adapter.adapters
   in
   let app =
     Lui_app.create_with_extensions (Lui_web.backend renderer) registry

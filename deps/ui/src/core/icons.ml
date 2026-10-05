@@ -169,6 +169,102 @@ let base_svg ~size ?(cls = "") name : Lui_elements.t list =
              kids) ]
 ;;
 
+(* `app:` icon registry for the web `icon` kind — name -> data URI of the
+   svg markup. Merges the tabler-children table with the custom
+   `window.tablerIcons` extension pack, mirroring `icon`'s lookup order
+   (ext pack wins on a name clash). *)
+external encode_uri_component : string -> string = "encodeURIComponent"
+[@@mel.scope "window"]
+
+let svg_of_children ~size name kids =
+  let attrs =
+    List.map
+      (fun (k, v) -> Printf.sprintf " %s=\"%s\"" k v)
+      (tabler_svg_attrs ~size ~filled:(is_filled name) name "")
+  in
+  let child_markup =
+    List.map
+      (fun (tag, attrs) ->
+        Printf.sprintf "<%s%s></%s>" tag
+          (String.concat ""
+             (List.map (fun (k, v) -> Printf.sprintf " %s=\"%s\"" k v) attrs))
+          tag)
+      kids
+  in
+  Printf.sprintf "<svg%s>%s</svg>" (String.concat "" attrs)
+    (String.concat "" child_markup)
+;;
+
+let data_uri_of_svg svg =
+  "data:image/svg+xml," ^ encode_uri_component svg
+;;
+
+(* Serialize a `window.tablerIcons` react-element tree back to svg
+   markup — same walk as `els_of_react` but producing a string. *)
+let rec markup_of_react (v : Js.Json.t) : string =
+  match Js.Json.decodeObject v with
+  | Some obj -> element_markup obj
+  | None -> (
+      match Js.Json.decodeArray v with
+      | Some arr -> String.concat "" (List.map markup_of_react (Array.to_list arr))
+      | None -> (
+          match Js.Json.decodeString v with
+          | Some s -> s
+          | None -> ""))
+
+and element_markup obj : string =
+  let tag =
+    match Option.bind (Js.Dict.get obj "type") Js.Json.decodeString with
+    | Some t -> t
+    | None -> ""
+  in
+  let props =
+    match Option.bind (Js.Dict.get obj "props") Js.Json.decodeObject with
+    | Some p -> p
+    | None -> Js.Dict.empty ()
+  in
+  let attrs =
+    List.filter_map attr_of (Array.to_list (Js.Dict.entries props))
+    |> List.map (fun (k, v) -> Printf.sprintf " %s=\"%s\"" k v)
+    |> String.concat ""
+  in
+  let children =
+    match Js.Dict.get props "children" with
+    | Some c -> markup_of_react c
+    | None -> ""
+  in
+  if tag = "" then children
+  else Printf.sprintf "<%s%s>%s</%s>" tag attrs children tag
+;;
+
+let app_icons () : string Lui_protocol.String_map.t =
+  let base =
+    Icon_tabler_data.tabler_names ()
+    |> List.filter_map (fun name ->
+           match Icon_tabler_data.tabler_children name with
+           | [] -> None
+           | kids ->
+               Some (name, data_uri_of_svg (svg_of_children ~size:24. name kids)))
+  in
+  let ext =
+    match tabler_icons () with
+    | None -> []
+    | Some dict ->
+        Array.to_list (Js.Dict.keys dict)
+        |> List.filter_map (fun key ->
+               if String.starts_with ~prefix:"Icon" key then
+                 match Js.Dict.get dict key with
+                 | Some f ->
+                     let name = kebab (String.sub key 4 (String.length key - 4)) in
+                     Some (name, data_uri_of_svg (markup_of_react (f (icon_props 24.))))
+                 | None -> None
+               else None)
+  in
+  List.fold_left
+    (fun m (k, v) -> Lui_protocol.String_map.add k v m)
+    Lui_protocol.String_map.empty (base @ ext)
+;;
+
 (* equivalent of (shui/tabler-icon name) *)
 let icon ?(size = 18.) ?(cls = "") name : Lui_elements.t =
   let cls = if cls = "" then "" else " " ^ cls in
