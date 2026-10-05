@@ -15,7 +15,6 @@ open Promise_ext
 open Lui_elements
 module T = I18n
 
-let dom = Logseq_dom.dom
 let dyn = Logseq_dom.dyn
 
 type member =
@@ -149,23 +148,12 @@ let initials name =
   else if String.length s >= 2 then String.uppercase_ascii (String.sub s 0 2)
   else String.uppercase_ascii s
 
-let avatar ~key ?(cls = "") ?(title = "") ~name ~uuid () : t =
-  dom ~key ~tag:"span"
-    ~style_class:
-      ("ui__avatar relative flex h-10 w-10 shrink-0 overflow-hidden \
-        rounded-full " ^ cls)
-    ~attrs:
-      ([ ("style", "app-region:no-drag") ]
-      @ if title = "" then [] else [ ("title", title) ])
-    [ dom ~key:(key ^ "-fb") ~tag:"span"
-        ~style_class:
-          "ui__avatar-fallback flex h-full w-full items-center \
-           justify-center rounded-full bg-muted"
-        ~attrs:
-          [ ( "style"
-            , Printf.sprintf "background-color:%s;font-size:11px"
-                (uuid_color uuid) ) ]
-        ~text:(initials name) [] ]
+(* cljs avatar.cljs user-avatar: rounded initials chip tinted by
+   uuid-color (the app-region:no-drag attr has no component equivalent;
+   avatars are text-only so far) *)
+let avatar ~key ?(size = 40) ?(title = "") ~name ~uuid () : t =
+  avatar ~key ~width:size ~height:size ~style_class:"ui__avatar"
+    ~background:(uuid_color uuid) ~text:(initials name) ~label:title []
 
 (* ---------- members panel (dialog body) ---------- *)
 
@@ -300,32 +288,26 @@ let body (_ms : Model.t Signal.signal) : t =
     | None -> ()
   in
   let root =
-    dom ~key:"collab" ~style_class:"p-2 -mb-8"
-      [ dom ~key:"collab-h" ~tag:"h1" ~style_class:"text-3xl -mt-2 -ml-2"
-          ~text:(T.t "collaboration/members") []
-      ; dom ~key:"collab-w" ~style_class:"panel-wrap is-collaboration mb-8"
-          [ dom ~key:"collab-m" ~style_class:"flex flex-col gap-2 mt-4"
-              [ dom ~key:"collab-users"
-                  ~style_class:"users flex flex-col gap-1 ls-collab-users" []
-              ; dom ~key:"collab-form" ~style_class:"flex flex-col gap-4 mt-4"
-                  [ dom ~key:"collab-inv" ~style_class:"ls-collab-invite"
-                      [ dom ~key:"collab-in" ~tag:"input"
-                          ~style_class:"ui__input"
-                          ~attrs:
-                            [ ( "placeholder"
-                              , T.t "collaboration/email-address" )
-                            ; ("autocomplete", "off"); ("type", "text") ]
-                          ~events:"keydown"
-                          ~on_dom_event:(fun n p ->
-                            match n, Platform.payload_str p "key" with
-                            | "keydown", "Enter" -> submit ()
-                            | _ -> ())
+    column ~key:"collab" ~style_class:"p-2 -mb-8"
+      [ heading ~key:"collab-h" ~level:1
+          ~style_class:"text-3xl -mt-2 -ml-2"
+          ~value:(T.t "collaboration/members") []
+      ; column ~key:"collab-w"
+          ~style_class:"panel-wrap is-collaboration mb-8"
+          [ column ~key:"collab-m" ~gap:8 ~style_class:"mt-4"
+              [ column ~key:"collab-users" ~gap:4
+                  ~style_class:"users ls-collab-users" []
+              ; column ~key:"collab-form" ~gap:16 ~style_class:"mt-4"
+                  [ box ~key:"collab-inv" ~style_class:"ls-collab-invite"
+                      [ input ~key:"collab-in" ~style_class:"ui__input"
+                          ~placeholder:(T.t "collaboration/email-address")
+                          ~submit_on_enter:true
+                          ~on_submit:(fun _ -> submit ())
                           [] ]
-                  ; dom ~key:"collab-invite-btn" ~tag:"button"
+                  ; button ~key:"collab-invite-btn"
                       ~style_class:"ui__button ls-btn-primary"
-                      ~text:(T.t "collaboration/invite") ~events:"click"
-                      ~on_dom_event:(fun n _ ->
-                        if n = "click" then submit ())
+                      ~text:(T.t "collaboration/invite")
+                      ~on_press:(fun _ -> submit ())
                       []
                   ]
               ]
@@ -351,29 +333,23 @@ let widget (ms : Model.t Signal.signal) : t =
         && (!Rtc_flows.db_rtc_uuid <> None || r <> None)
       in
       if not visible then
-        dom ~key:"collab-off" ~style_class:"hidden" []
+        box ~key:"collab-off" ~style_class:"hidden" []
       else
         let users =
           match r with Some r -> r.rtc_online_users | None -> []
         in
-        dom ~key:"collab"
-          ~style_class:
-            "rtc-collaborators flex gap-1 text-sm bg-gray-01 items-center"
-          ([ dom ~key:"collab-btn" ~tag:"button"
-               ~style_class:
-                 "ui__button as-ghost h-6 w-6 p-1 inline-flex \
-                  items-center justify-center box-content"
-               ~attrs:
-                 [ ("type", "button")
-                 ; ("aria-label", "rtc collaborators") ]
-               ~events:"click"
-               ~on_dom_event:(fun n _ ->
-                 if n = "click" then
-                   Dialogs_state.open_ "rtc-collaborators")
-               [ Icons.icon ~size:20. ~cls:"" "user-plus" ] ]
+        row ~key:"collab" ~gap:4 ~cross:`center
+          ~style_class:"rtc-collaborators"
+          ([ button ~key:"collab-btn" ~size:`icon
+               ~style_class:"ui__button as-ghost"
+               ~icon:(`app "user-plus")
+               ~label:"rtc collaborators"
+               ~on_press:(fun _ ->
+                 Dialogs_state.open_ "rtc-collaborators")
+               [] ]
           @ List.map
               (fun (u : Model.rtc_user) ->
-                avatar ~key:("av-" ^ u.ru_uuid) ~cls:"w-5 h-5"
+                avatar ~key:("av-" ^ u.ru_uuid) ~size:20
                   ~title:(Option.value u.ru_email ~default:"")
                   ~name:u.ru_name ~uuid:u.ru_uuid ())
               users))

@@ -113,6 +113,8 @@ let on_change id () =
   | None -> ()
 
 (* svg/logo 28 — three hard-coded ellipses from components/svg.cljs *)
+(* TODO(component): inline custom svg — no icon kind support until it
+   is registered as an app icon *)
 let logo_svg () =
   let ellipse transform rx ry =
     dom ~tag:"ellipse"
@@ -132,12 +134,17 @@ let logo_svg () =
         "7.78547" "6.13006"
     ]
 
+(* TODO(component): stays dom — .importer .d > label.action-input keys
+   on the label tag and the nested <input type=file> click activation
+   has no component equivalent (file_picker cannot expose accept /
+   webkitdirectory / web File objects; strong/small are tag-selected by
+   .action-input CSS) *)
 let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
   dom ~key:id ~tag:"label"
     ~style_class:"action-input"
-    [ dom ~key:(id ^ "-ic") ~style_class:"as-flex-center"
+    [ box ~key:(id ^ "-ic") ~style_class:"as-flex-center"
         [ dom ~key:(id ^ "-ico") ~tag:"i" [ logo_svg () ] ]
-    ; dom ~key:(id ^ "-t")
+    ; column ~key:(id ^ "-t")
         ~style_class:"ls-imp-field"
         [ dom ~key:(id ^ "-s") ~tag:"strong" ~text:label []
         ; dom ~key:(id ^ "-d") ~tag:"small" ~text:desc [] ]
@@ -170,22 +177,26 @@ let items () =
   ]
 
 let article () =
-  dom ~key:"import" ~tag:"article"
-    ~style_class:"importer"
-    [ dom ~key:"imp-c" ~style_class:"c text-center"
-        [ dom ~key:"imp-h" ~tag:"h1" ~text:T.import_title []
+  column ~key:"import" ~style_class:"importer"
+    [ column ~key:"imp-c" ~style_class:"c"
+        [ (* TODO(component): .importer .c h1/h2 key on the heading tags
+             — heading renders a div[role=heading], keep dom until the
+             rules move to class selectors *)
+          dom ~key:"imp-h" ~tag:"h1" ~text:T.import_title []
         ; dom ~key:"imp-d" ~tag:"h2" ~text:T.import_desc [] ]
-    ; dom ~key:"imp-l" ~style_class:"d" (items ()) ]
+    ; column ~key:"imp-l" ~style_class:"d" (items ()) ]
 
 (* route view — cljs setups/setups-container :importer wraps the article in
    .cp__onboarding-setups > .inner-card with a title/subtitle header *)
 let view () : t =
-  dom ~key:"importer" ~style_class:"cp__onboarding-setups"
-    [ dom ~key:"imp-card"
+  column ~key:"importer" ~style_class:"cp__onboarding-setups"
+    [ column ~key:"imp-card"
         ~style_class:"inner-card"
-        [ dom ~key:"imp-th" ~tag:"h1" ~style_class:"ls-imp-title"
-            [ dom ~key:"imp-ts" ~tag:"span"
-                ~text:T.import_existing_notes [] ]
+        [ (* TODO(component): .inner-card > h1.ls-imp-title / > h2 key on
+             the heading tags — keep dom until the rules move to class
+             selectors *)
+          dom ~key:"imp-th" ~tag:"h1" ~style_class:"ls-imp-title"
+            ~text:T.import_existing_notes []
         ; dom ~key:"imp-td" ~tag:"h2" ~text:T.import_later []
         ; article () ]
     ]
