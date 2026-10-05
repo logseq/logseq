@@ -390,6 +390,9 @@ external wait_for_function :
 external expect : locator -> assertion = "expect"
 [@@mel.module "@playwright/test"]
 
+external expect_configure : 'opts Js.t -> unit = "expect.configure"
+[@@mel.module "@playwright/test"]
+
 external expect_is_visible_opts :
   (assertion[@mel.this]) -> 'opts Js.t -> unit Js.Promise.t = "toBeVisible"
 [@@mel.send]

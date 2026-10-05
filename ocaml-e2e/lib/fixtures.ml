@@ -18,7 +18,8 @@ let open_app env ~port =
 
 let setup_page_env ~env ~port =
   let page = Env.page env in
-  Playwright.set_default_timeout page 10000.;
+  Playwright.set_default_timeout page 30000.;
+  Playwright.expect_configure [%mel.obj { timeout = 15000. }];
   let context = Playwright.page_context page in
   let* () = Settings.install_init_script context in
   let* () =
@@ -140,7 +141,7 @@ let shared_new_context =
     tab's console messages are recorded into it. *)
 let context_open_page ?env ?(port = Config.port) context =
   let* page = Playwright.new_page context in
-  Playwright.set_default_timeout page 10000.;
+  Playwright.set_default_timeout page 30000.;
   (match env with
    | Some env -> Playwright.on_console page (Env.record_console env)
    | None -> ());

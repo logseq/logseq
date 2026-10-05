@@ -6,6 +6,20 @@ open Fest.Promise
 let get_page_name env =
   Util.get_text env "div[data-testid='page title'] .block-title-wrap"
 
+(** The title element stays mounted across navigations; its text updates
+    async.  Poll until it reads [page_name] (bounded). *)
+let wait_page_name env page_name =
+  let rec loop n =
+    let* t = get_page_name env in
+    if String.lowercase_ascii t = String.lowercase_ascii page_name then
+      Js.Promise.resolve t
+    else if n <= 0 then Js.Promise.resolve t
+    else
+      let* () = Util.wait_timeout env 250. in
+      loop (n - 1)
+  in
+  loop 20
+
 (** clj's goto-page only clicks the search result; a dropped click can
     leave the client on whatever page it was on (e.g. today's journal),
     which later ops then write into.  Poll the visible page title and
