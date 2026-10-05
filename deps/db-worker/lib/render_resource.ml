@@ -2819,9 +2819,41 @@ let render_snapshots db (request : Wire.t) (runtime : runtime) : Wire.t =
   let resource_entries =
     List.map
       (fun rk ->
-        match rk with
-        | Wire.Array key -> (rk, resource_entry db key runtime)
-        | _ -> (rk, resource_entry db [ rk ] runtime))
+        let key =
+          match rk with
+          | Wire.Array key -> key
+          | _ -> [ rk ]
+        in
+        match resource_entry db key runtime with
+        | entry -> (rk, entry)
+        | exception e -> (
+            (* A resource request can outlive its entity on the display
+               conn: mark_failed rebinds and deferred/pending replays
+               drop entities for a window, and a permanently dropped
+               entity's slot is torn down by the next delta anyway. A
+               :error slot throws inside render → error boundary → dead
+               page, so a uuid-keyed entry degrades to a watched empty
+               value; the slot reloads when the entity materializes. *)
+            let uuid_opt =
+              match key with
+              | [ _; Wire.Uuid u; _ ] | [ _; Wire.Uuid u ] -> Some u
+              | _ -> None
+            in
+            match e, uuid_opt with
+            | Dispatcher.Exn_info ("Missing renderer resource entity", _),
+              Some u ->
+                Worker_log.warn "render/resource-entry-missing"
+                  [ "key", Transit_codec.to_string (Wire.Array key) ];
+                ( rk
+                , { watch_keys = [ watch_entity u ]
+                  ; watch_all = false
+                  ; value = Wire.Map []
+                  ; slots = [] } )
+            | _ ->
+                Worker_log.warn "render/resource-entry-failed"
+                  [ "key", Transit_codec.to_string (Wire.Array key)
+                  ; "error", Printexc.to_string e ];
+                raise e))
       resources_req
   in
   let block_slots', block_groups = block_snapshot_slots db blocks_req in
