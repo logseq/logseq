@@ -425,7 +425,8 @@ final class NSReferenceBox {
       try? JSONSerialization.data(withJSONObject: dbg)
         .write(to: URL(fileURLWithPath: "/tmp/cm-hit.json"))
     }
-    guard let context = LogseqElementRegistry.shared.context(forNode: nodeID)
+    guard
+      let context = LogseqElementRegistry.shared.contextOwning(nodeID: nodeID)
     else { return }
     var payload: [String: Any] = [
       "clientX": Double(point.x),
