@@ -17,5 +17,10 @@ serde_json = "1"
 anyhow = "1"
 libc = "0.2"
 
+[dev-dependencies]
+# test-support exposes TestAppContext/#[gpui_kit::test] for the headless
+# smoke test in src/main.rs
+gpui-kit = { version = "0.7", features = ["test-support"] }
+
 [build-dependencies]
 serde_json = "1"

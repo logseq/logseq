@@ -379,7 +379,7 @@
 (library
  (name logseq_ui_gpui)
  (wrapped false)
- (modules (:standard \ native_embed))
+ (modules (:standard \ native_embed drive drive_test test_check fake_worker))
  (modes native)
  (libraries
    lui
@@ -405,3 +405,30 @@
   (language c)
   (names logseq_lui_bridge))
  (modes (native object)))
+
+; native drive tests — the same replay+dispatch harness and check/promise
+; helpers test/test_drive.ml uses under melange, run against the native
+; platform twin. drive_test.ml is the native-only driver (document keydown
+; via Platform.emit_event, localStorage via Platform.local_storage_get,
+; rtc-test via Platform.set_location_search).
+(rule
+ (copy ../test/drive.ml drive.ml))
+(rule
+ (copy ../test/test_check.ml test_check.ml))
+(rule
+ (copy ../test/fake_worker.ml fake_worker.ml))
+
+; the bridge's js-name C stubs (atob, require, loadDictFile, …) under a
+; distinct object name — a dir can't hold two foreign_stubs groups that
+; compile the same .c
+(rule
+ (copy ../apple/logseq_lui_bridge.c drive_test_bridge.c))
+
+(test
+ (name drive_test)
+ (modules drive_test drive test_check fake_worker)
+ (libraries logseq_ui_gpui)
+ (foreign_stubs
+  (language c)
+  (names drive_test_bridge))
+ (modes native))
