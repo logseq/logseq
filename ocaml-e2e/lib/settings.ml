@@ -33,15 +33,20 @@ let test_env_ready env =
   |> Js.Promise.catch (fun _ -> Js.Promise.resolve false)
 
 let refresh_test_env env =
-  let rec loop attempt =
-    let* () = Pw.refresh env in
-    let* _ = E2e_assert.graph_loaded env in
-    let* ready = test_env_ready env in
-    if ready then Js.Promise.resolve true
-    else if attempt < 2 then loop (attempt + 1)
-    else wait_test_env_ready env
-  in
-  loop 0
+  (* The init script installs the test env before the first navigation, so a
+     fresh page is usually already ready — check first and skip the reload. *)
+  let* already_ready = test_env_ready env in
+  if already_ready then Js.Promise.resolve true
+  else
+    let rec loop attempt =
+      let* () = Pw.refresh env in
+      let* _ = E2e_assert.graph_loaded env in
+      let* ready = test_env_ready env in
+      if ready then Js.Promise.resolve true
+      else if attempt < 2 then loop (attempt + 1)
+      else wait_test_env_ready env
+    in
+    loop 0
 
 let developer_mode env =
   let* () = Pw.eval_js env e2e_init_script in

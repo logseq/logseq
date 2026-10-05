@@ -15,6 +15,6 @@ let headless = env_opt "E2E_HEADLESS" <> Some "false"
 let slow_mo =
   match Option.bind (env_opt "E2E_SLOW_MO") float_of_string_opt with
   | Some v -> v
-  | None -> 100.
+  | None -> 30.
 
 let mac = false
