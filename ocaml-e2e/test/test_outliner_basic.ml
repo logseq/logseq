@@ -603,8 +603,23 @@ let () =
                     Pw.eval_js env
                       "(() => JSON.stringify({url: location.hash, blocks: [...document.querySelectorAll('.ls-block .block-title-wrap, .ls-block .block-content')].map(e => e.textContent).slice(0,10)}))()"
                   in
+                  let* page_name =
+                    Js.Promise.catch
+                      (fun _ -> Js.Promise.resolve "?")
+                      (Ls_page.get_page_name env)
+                  in
+                  let* (tree : Js.Json.t) =
+                    Api.ls_api_call env "editor.getPageBlocksTree"
+                      [| Api.str page_name |]
+                  in
                   let* () =
                     Js.Promise.resolve (Js.log2 "focused-dom" dump)
+                  in
+                  let* () =
+                    Js.Promise.resolve
+                      (Js.log2
+                         (Printf.sprintf "focused-tree %s" page_name)
+                         (Js.Json.stringify tree))
                   in
                   Playwright.throw_error e)
                (B.jump_to_block env "focused-root")
