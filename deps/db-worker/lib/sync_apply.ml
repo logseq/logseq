@@ -1016,54 +1016,93 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
              Hashtbl.replace page_ref_of k v
        | _ -> ())
     tx_data;
-  List.filter_map
-    (fun item ->
-       match item with
-       | Wire.Array l | Wire.List l when List.length l >= 4 -> (
-           let e = List.nth l 1 and a = List.nth l 2 and v = List.nth l 3 in
-           match missing_uuid_of e with
-           | Some u ->
-               failwith ("pending tx references missing block " ^ u)
-           | None ->
-               (* property-pair drop: a user/logseq property attr that
-                  resolves nowhere on the new base was remotely deleted —
-                  keep everything else (schema attrs like block/name have
-                  no ident entity to resolve against). *)
-               let dead_property_attr =
-                 match a with
-                 | Wire.Keyword a' | Wire.String a' ->
-                     Db_property.property a' && not (attr_live a)
-                 | _ -> false
-               in
-               if dead_property_attr then None
-               else (
-                 match a with
-                 | Wire.Keyword "block/parent" when is_missing_ref v -> (
-                     match
-                       Hashtbl.find_opt page_ref_of
-                         (Transit_codec.to_string e)
-                     with
-                     | Some pv -> (
-                         match item with
-                         | Wire.Array l ->
-                             Some
-                               (Wire.Array
-                                  (List.mapi
-                                     (fun i x -> if i = 3 then pv else x)
-                                     l))
-                         | Wire.List l ->
-                             Some
-                               (Wire.List
-                                  (List.mapi
-                                     (fun i x -> if i = 3 then pv else x)
-                                     l))
-                         | _ -> Some item)
-                     | None -> None)
-                 | Wire.Keyword a'
-                   when ref_attr db a' && is_missing_ref v -> None
-                 | _ -> Some item))
-       | _ -> Some item)
-    tx_data
+  (* when a parent add is dropped (missing target, no fallback) its
+     paired `db/retract e "block/parent"` must go too — otherwise the
+     entity loses its pre-tx parent and validate-tx-report rejects the
+     parentless block, failing the whole entry *)
+  let parent_edge_dropped : (string, unit) Hashtbl.t = Hashtbl.create 4 in
+  let rewrite_v_at3 (item : Wire.t) (pv : Wire.t) : Wire.t option =
+    match item with
+    | Wire.Array l ->
+        Some (Wire.Array (List.mapi (fun i x -> if i = 3 then pv else x) l))
+    | Wire.List l ->
+        Some (Wire.List (List.mapi (fun i x -> if i = 3 then pv else x) l))
+    | _ -> Some item
+  in
+  (* ancestor fallback continued: no in-tx `block/page` add — converge to
+     the entity's live page on db so the moved block lands at page root
+     rather than going orphan *)
+  let db_page_ref (e : Wire.t) : Wire.t option =
+    try
+      match Datascript.entity db (Ds_wire.entity_ref_of_transit e) with
+      | Some ent -> (
+          match Ldb.ref_ent ent "block/page" with
+          | Some page -> Some (Wire.Int page.id)
+          | None -> None)
+      | None -> None
+    with _ -> None
+  in
+  let rewritten =
+    List.filter_map
+      (fun item ->
+         match item with
+         | Wire.Array l | Wire.List l when List.length l >= 4 -> (
+             let op = List.nth l 0 and e = List.nth l 1
+             and a = List.nth l 2 and v = List.nth l 3 in
+             match missing_uuid_of e with
+             | Some u ->
+                 failwith ("pending tx references missing block " ^ u)
+             | None ->
+                 (* property-pair drop: a user/logseq property attr that
+                    resolves nowhere on the new base was remotely deleted —
+                    keep everything else (schema attrs like block/name have
+                    no ident entity to resolve against). *)
+                 let dead_property_attr =
+                   match a with
+                   | Wire.Keyword a' | Wire.String a' ->
+                       Db_property.property a' && not (attr_live a)
+                   | _ -> false
+                 in
+                 if dead_property_attr then None
+                 else (
+                   match a with
+                   | Wire.Keyword "block/parent" when is_missing_ref v -> (
+                       match op with
+                       | Wire.Keyword "db/retract" ->
+                           (* retracting an unresolvable parent value is a
+                              no-op — drop it *)
+                           None
+                       | _ -> (
+                           match
+                             Hashtbl.find_opt page_ref_of
+                               (Transit_codec.to_string e)
+                           with
+                           | Some pv -> rewrite_v_at3 item pv
+                           | None -> (
+                               match db_page_ref e with
+                               | Some pv -> rewrite_v_at3 item pv
+                               | None ->
+                                   Hashtbl.replace parent_edge_dropped
+                                     (Transit_codec.to_string e) ();
+                                   None)))
+                   | Wire.Keyword a'
+                     when ref_attr db a' && is_missing_ref v -> None
+                   | _ -> Some item))
+         | _ -> Some item)
+      tx_data
+  in
+  if Hashtbl.length parent_edge_dropped = 0 then rewritten
+  else
+    List.filter
+      (fun item ->
+         match item with
+         | Wire.Array (op :: e :: a :: _) | Wire.List (op :: e :: a :: _)
+           when op = Wire.keyword "db/retract"
+                && a = Wire.keyword "block/parent"
+                && Hashtbl.mem parent_edge_dropped (Transit_codec.to_string e) ->
+             false
+         | _ -> true)
+      rewritten
 
 let entity_of_wire_ref (db : db) (v : Wire.t) : entity option =
   match v with
@@ -1632,26 +1671,12 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
   in
   let online = Sync_state.online () in
   let upload_stopped_state = upload_stopped repo in
-  let pending_count = Sync_client_op.get_pending_local_tx_count repo in
   let ready =
     conn <> None
     && local_tx = remote_tx
     && inflight = [] && ws_open_state && online
     && not upload_stopped_state
   in
-  if pending_count > 0 && not ready then
-    Worker_log.info "db-sync/flush-pending-skipped"
-      [ "repo", repo
-      ; "pending-local-tx-count", string_of_int pending_count
-      ; "has-db?", string_of_bool (conn <> None)
-      ; ( "local-tx"
-        , match local_tx with Some t -> string_of_int t | None -> "nil" )
-      ; ( "remote-tx"
-        , match remote_tx with Some t -> string_of_int t | None -> "nil" )
-      ; "inflight-count", string_of_int (List.length inflight)
-      ; "ws-open?", string_of_bool ws_open_state
-      ; "online?", string_of_bool online
-      ; "upload-stopped?", string_of_bool upload_stopped_state ];
   if not ready then Db_worker_effect.pure ()
   else
     match conn with
