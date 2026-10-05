@@ -6,7 +6,17 @@ type t =
   ; console_logs : string Queue.t
   }
 
-let make page = { page; console_logs = Queue.create () }
+(* every env's own page gets a console queue at [make]; with_page reuses an
+   existing env to drive a foreign page (e.g. the second client in rtc
+   tests), so keep a page→queue registry and have [console_logs] answer the
+   queue of whichever page the env currently drives. *)
+let page_queues : (Playwright.page * string Queue.t) list ref = ref []
+
+let make page =
+  let q = Queue.create () in
+  page_queues := (page, q) :: !page_queues;
+  { page; console_logs = q }
+
 let page env = env.page
 
 let with_page env p f =
@@ -23,4 +33,12 @@ let with_page env p f =
 let record_console env msg =
   Queue.add (Playwright.console_text msg) env.console_logs
 
-let console_logs env = Queue.fold (fun acc m -> m :: acc) [] env.console_logs
+let console_logs env =
+  let q =
+    match
+      List.find_opt (fun (p, _) -> p == env.page) !page_queues
+    with
+    | Some (_, q) -> q
+    | None -> env.console_logs
+  in
+  Queue.fold (fun acc m -> m :: acc) [] q

@@ -133,4 +133,4 @@ let () =
     Fest.deep_equal (Array.to_list refs) [ block_title ] Fest.expect;
     (* cleanup *)
     let* () = Graph.remove_remote_graph env2 graph_name in
-    Rtc.validate_graphs_in_2_pages env1 (Env.page env1) (Env.page env2))
+    Rtc.validate_graphs_in_2_envs env1 env2)
