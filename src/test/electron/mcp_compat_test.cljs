@@ -1802,12 +1802,8 @@
         property #js {"id" 41 "ident" ident "title" "Flag"}
         api (fn [method args]
               (swap! calls conj [method args])
-              (when (and (= method "logseq.DB.datascriptQuery")
-                         (string/includes? (first args) "pull ?property"))
-                property)
-              (if (and (= method "logseq.DB.datascriptQuery")
-                       (string/includes? (first args) "pull ?holder"))
-                #js [#js [#js {"uuid" "holder-1"} true]]
+              (if (= method "logseq.DB.getPropertyUsers")
+                #js [#js {"holder" #js {"uuid" "holder-1"} "value" true}]
                 (when (and (= method "logseq.DB.datascriptQuery")
                            (string/includes? (first args) "pull ?property"))
                   property)))]
@@ -1833,16 +1829,16 @@
         api (fn [method args]
               (swap! calls conj [method args])
               (case method
+                "logseq.DB.getPropertyUsers"
+                (if (= 1 (swap! usage-reads inc))
+                  #js [#js {"holder" #js {"uuid" "holder-1"} "value" true}]
+                  #js [])
                 "logseq.DB.removeProperty" (do (reset! property-present false) nil)
                 "logseq.DB.removeBlock" nil
                 "logseq.DB.datascriptQuery"
                 (let [query (first args)]
                   (cond
                     (string/includes? query "created-from-property") #js [value-uuid]
-                    (string/includes? query "pull ?holder")
-                    (if (= 1 (swap! usage-reads inc))
-                      #js [#js [#js {"uuid" "holder-1"} true]]
-                      #js [])
                     (string/includes? query "pull ?property")
                     (when @property-present property)
                     :else nil))

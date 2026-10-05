@@ -2465,7 +2465,8 @@
    :createProperty ["logseq.DB.upsertProperty"]
    :removeProperty ["logseq.DB.datascriptQuery" "logseq.DB.removeBlockProperty"]
    :addProperty ["logseq.DB.datascriptQuery" "logseq.DB.upsertBlockProperty"]
-   :deleteProperty ["logseq.DB.datascriptQuery"
+  :deleteProperty ["logseq.DB.datascriptQuery"
+          "logseq.DB.getPropertyUsers"
               "logseq.DB.removeProperty"
               "logseq.DB.removeBlock"]
   :listRecycled ["logseq.DB.listRecycled"]
