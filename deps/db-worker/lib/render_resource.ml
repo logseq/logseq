@@ -1071,6 +1071,7 @@ let render_block_bidirectional_properties db key _runtime =
          (fun (g : Ldb.bidirectional_group) ->
            Wire.Map
              [ (Wire.keyword "class-uuid", Wire.Uuid (entity_uuid db g.class_.id))
+             ; (Wire.keyword "title", Wire.String g.title)
              ; ( Wire.keyword "entity-uuids"
                , Wire.Array
                    (List.map (fun (e : entity) -> Wire.Uuid (entity_uuid db e.id))
