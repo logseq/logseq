@@ -37,17 +37,44 @@ let focused_date_picker_day env =
   let* s : string = Pw.eval_js env script in
   Js.Promise.resolve (Js.Json.parseExn s)
 
+(* Focus lands on the calendar day asynchronously after the picker opens or
+   an arrow keypress; a one-shot read can catch the pre-focus window under
+   load. Poll until a focused day matching the label constraint appears,
+   returning the last read either way so the assertions still decide. *)
+let wait_focused_day env ?eq ?ne () =
+  let rec go n =
+    let* j = focused_date_picker_day env in
+    let focused = Option.value ~default:false (Api.get_bool j "focused") in
+    let label = Api.get_string j "label" in
+    let ok =
+      (match eq with None -> true | Some l -> label = l)
+      && (match ne with None -> true | Some l -> label <> l)
+    in
+    if focused && ok then Js.Promise.resolve j
+    else if n <= 0 then
+      let* active =
+        Pw.eval_js env
+          "(() => { const a = document.activeElement; return JSON.stringify({tag: a?.tagName, cls: a?.className, role: a?.getAttribute?.('role'), days: document.querySelectorAll('.ui__calendar button').length, focusables: [...document.querySelectorAll('.ui__calendar *')].filter(e => e.tabIndex >= 0).map(e => e.tagName + '.' + e.className).slice(0,8)}); })()"
+      in
+      let () = Js.log2 "wait_focused_day exhausted" active in
+      Js.Promise.resolve j
+    else
+      let* () = Util.wait_timeout env 100. in
+      go (n - 1)
+  in
+  go 40
+
 let assert_date_picker_keyboard_navigation env command =
   let* () = Block.new_block env (command ^ " keyboard test") in
   let* () = Util.input_command env command in
   let* () = Pw.wait_for env date_picker_day_selector in
-  let* initial = focused_date_picker_day env in
+  let* initial = wait_focused_day env () in
   Fest.deep_equal
     (Option.value ~default:false (Api.get_bool initial "focused"))
     true Fest.expect;
   Fest.deep_equal (opaque_color (Api.get_string initial "bg")) true Fest.expect;
   let* () = Keyboard.arrow_right env in
-  let* right = focused_date_picker_day env in
+  let* right = wait_focused_day env ~ne:(Api.get_string initial "label") () in
   Fest.deep_equal
     (Option.value ~default:false (Api.get_bool right "focused"))
     true Fest.expect;
@@ -56,12 +83,12 @@ let assert_date_picker_keyboard_navigation env command =
     true Fest.expect;
   Fest.deep_equal (opaque_color (Api.get_string right "bg")) true Fest.expect;
   let* () = Keyboard.arrow_left env in
-  let* back = focused_date_picker_day env in
+  let* back = wait_focused_day env ~eq:(Api.get_string initial "label") () in
   Fest.deep_equal (Api.get_string back "label") (Api.get_string initial "label")
     Fest.expect;
   Fest.deep_equal (opaque_color (Api.get_string back "bg")) true Fest.expect;
   let* () = Keyboard.arrow_down env in
-  let* down = focused_date_picker_day env in
+  let* down = wait_focused_day env ~ne:(Api.get_string initial "label") () in
   Fest.deep_equal
     (Option.value ~default:false (Api.get_bool down "focused"))
     true Fest.expect;
@@ -69,7 +96,7 @@ let assert_date_picker_keyboard_navigation env command =
     (Api.get_string down "label" <> Api.get_string initial "label")
     true Fest.expect;
   let* () = Keyboard.arrow_up env in
-  let* up = focused_date_picker_day env in
+  let* up = wait_focused_day env ~eq:(Api.get_string initial "label") () in
   Fest.deep_equal (Api.get_string up "label") (Api.get_string initial "label")
     Fest.expect;
   let* () = Keyboard.enter env in
@@ -663,7 +690,19 @@ let () =
     let* () = Fixtures.new_logseq_page env in
     let* () = Block.new_block env "" in
     let* () = Util.input_command env "calculator" in
-    let* () = Util.input env "1 + 2" in
+    (* The command's :codemirror/focus step races with the menu close (the
+       rAF workaround in code.cljs exists for exactly this); if it loses,
+       `*:focus` stays in the menu search and the expression never reaches
+       the code block. Click into the code view itself and type there —
+       CodeMirror when mounted, the raw textarea fallback otherwise. *)
+    let* () = Pw.wait_for env ".extensions__code" in
+    let* cm = Pw.visible env ".extensions__code .CodeMirror" in
+    let* () =
+      if cm then
+        let* () = Pw.click env ".extensions__code .CodeMirror" in
+        Util.press_seq env ~delay:20. "1 + 2"
+      else Pw.fill env ".extensions__code textarea" "1 + 2"
+    in
     let* () = Pw.wait_for env "div.extensions__code-calc-output-line" in
     let* t = Util.get_text env "div.extensions__code-calc-output-line" in
     Fest.deep_equal t "3" Fest.expect;

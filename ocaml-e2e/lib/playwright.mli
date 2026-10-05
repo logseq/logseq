@@ -112,9 +112,10 @@ external input_value : locator -> string Js.Promise.t = "inputValue"
 external get_attribute : locator -> string -> string option Js.Promise.t
   = "getAttribute"
 [@@mel.send]
-external bounding_box : locator -> bounding_box option Js.Promise.t
+external bounding_box : locator -> bounding_box Js.Nullable.t Js.Promise.t
   = "boundingBox"
 [@@mel.send]
+external locator_page : locator -> page = "page" [@@mel.send]
 external box_x : bounding_box -> float = "x" [@@mel.get]
 external box_y : bounding_box -> float = "y" [@@mel.get]
 external box_width : bounding_box -> float = "width" [@@mel.get]

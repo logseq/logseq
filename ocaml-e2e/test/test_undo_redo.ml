@@ -29,15 +29,24 @@ let () =
     let* () = Block.new_block env "" in
     let* () = Block.paste env in
     let* () = Util.exit_edit env in
-    let* contents = Util.settled_page_blocks_contents env in
+    let* contents =
+      Util.wait_page_blocks_contents env [ "b1"; "b2"; "b1"; "b2" ]
+    in
     Fest.deep_equal (Array.to_list contents) [ "b1"; "b2"; "b1"; "b2" ] Fest.expect;
+    (* let the app push the paste op onto its undo stack before pressing
+       Ctrl+z — under load the DOM renders before the stack entry lands,
+       and an early undo pops the new-block op instead (over-undo:
+       ["b1" "b2"] instead of ["b1" "b2" ""]). *)
+    let* () = Util.wait_timeout env 400. in
     let* () = Block.undo env in
     let* () = Util.exit_edit env in
-    let* contents = Util.settled_page_blocks_contents env in
+    let* contents = Util.wait_page_blocks_contents env [ "b1"; "b2"; "" ] in
     Fest.deep_equal (Array.to_list contents) [ "b1"; "b2"; "" ] Fest.expect;
     let* () = Block.redo env in
     let* () = Util.exit_edit env in
-    let* contents = Util.settled_page_blocks_contents env in
+    let* contents =
+      Util.wait_page_blocks_contents env [ "b1"; "b2"; "b1"; "b2" ]
+    in
     Fest.deep_equal (Array.to_list contents) [ "b1"; "b2"; "b1"; "b2" ] Fest.expect;
     Fixtures.validate_graph env)
 

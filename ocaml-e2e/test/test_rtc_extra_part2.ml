@@ -227,15 +227,57 @@ let dom_uuids env p =
              |> List.filter_map Js.Json.decodeString
          | None -> []))
 
+(* The DOM block list is virtualized — long pages mount only a ~13-row
+   window and each client sits at a different scroll offset, so comparing
+   rendered rows is meaningless. The sync contract is on the data both
+   clients render from: rebuild the full expected document tree (parent
+   links + order sort, depth-first) from each page's frontend datascript
+   state and compare uuid|title sequences — strict, scroll-independent. *)
+let expected_tree env p =
+  Env.with_page env p (fun () ->
+      let* j =
+        Pw.eval_js env
+          "(async () => { \
+           const q = globalThis.logseq && logseq.api && \
+           logseq.api.datascript_query; if (!q) return ['NO-QUERY']; \
+           const q1 = '[:find ?u ?o ?pe ?t :where [?b :block/uuid ?u] \
+           [(get-else $ ?b :block/order \"\") ?o] \
+           [(get-else $ ?b :block/parent -1) ?pe] \
+           [(get-else $ ?b :block/title \"\") ?t]]'; \
+           const q2 = '[:find ?e ?u :where [?e :block/uuid ?u]]'; \
+           const rows = await q(q1); const eids = await q(q2); \
+           const e2u = new Map(eids.map(r => [r[0], r[1]])); \
+           const titles = new Map(rows.map(r => [r[0], r[3]])); \
+           const kids = new Map(); \
+           for (const [u,o,pe] of rows) { \
+             const pu = e2u.get(pe) ?? 'ROOT'; \
+             if (!kids.has(pu)) kids.set(pu, []); \
+             kids.get(pu).push([u, String(o)]); } \
+           for (const [, l] of kids) l.sort((a,b) => a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0); \
+           const exp = []; const seen = new Set(); \
+           const dfs = (pu) => { for (const [u] of (kids.get(pu) || [])) { \
+             if (seen.has(u)) continue; seen.add(u); \
+             exp.push(String(u) + '|' + (titles.get(u) || '')); dfs(u); } }; \
+           dfs('ROOT'); \
+           return JSON.stringify(exp); })()"
+      in
+      Js.Promise.resolve
+        (match Js.Json.decodeArray j with
+         | Some a ->
+             Array.to_list a |> List.filter_map Js.Json.decodeString
+         | None -> [ "UNDECODABLE" ]))
+
 let assert_two_pages_synced env p1 p2 =
   let* tx1, blocks1 = page_sync_state env p1 in
   let* tx2, blocks2 = page_sync_state env p2 in
+  let* tree1 = expected_tree env p1 in
+  let* tree2 = expected_tree env p2 in
   (* slot patches are computed on the worker display conn and can trail the
-     datoms shipped in the same delta; give the render loop a bounded window
+     datoms shipped in the same delta; give the sync loop a bounded window
      to flush before comparing (clj gets this slack from JVM latency). *)
-  let rec converge n b1 b2 =
-    if b1 = b2 then Js.Promise.resolve (b1, b2)
-    else if n <= 0 then Js.Promise.resolve (b1, b2)
+  let rec converge n t1 t2 =
+    if t1 = t2 then Js.Promise.resolve (t1, t2)
+    else if n <= 0 then Js.Promise.resolve (t1, t2)
     else
       let* () =
         Env.with_page env p1 (fun () ->
@@ -248,11 +290,11 @@ let assert_two_pages_synced env p1 p2 =
                 Js.Promise.resolve ()))
       in
       let* () = Util.wait_timeout env 500. in
-      let* _, b1' = page_sync_state env p1 in
-      let* _, b2' = page_sync_state env p2 in
-      converge (n - 1) b1' b2'
+      let* t1' = expected_tree env p1 in
+      let* t2' = expected_tree env p2 in
+      converge (n - 1) t1' t2'
   in
-  let* blocks1, blocks2 = converge 16 blocks1 blocks2 in
+  let* tree1, tree2 = converge 16 tree1 tree2 in
   let* () =
     Js.Promise.catch
       (fun _ ->
@@ -274,27 +316,25 @@ let assert_two_pages_synced env p1 p2 =
            |> List.filter (fun (j, _) -> j >= i - 2 && j <= i + 4)
            |> List.map (fun (j, x) -> Printf.sprintf "%d:%s" j x)
          in
-         let d = first_diff blocks1 blocks2 in
+         let d = first_diff tree1 tree2 in
          let w xs = "[" ^ String.concat "; " (window d xs) ^ "]" in
-         let* u1 = dom_uuids env p1 in
-         let* u2 = dom_uuids env p2 in
-         let du = first_diff u1 u2 in
-         let wu xs = "[" ^ String.concat "; " (window du xs) ^ "]" in
+         let d2 = first_diff blocks1 blocks2 in
+         let w2 xs = "[" ^ String.concat "; " (window d2 xs) ^ "]" in
          let _ =
            Js.log
              (Printf.sprintf
-                "order-map-diff: %s\nrender-p1: %s\nrender-p2: %s\nblocks-diff: i=%d n1=%d n2=%d p1=%s p2=%s\nuuids-diff: i=%d n1=%d n2=%d p1=%s p2=%s"
+                "order-map-diff: %s\nrender-p1: %s\nrender-p2: %s\ntree-diff: i=%d n1=%d n2=%d p1=%s p2=%s\ndom-blocks-diff: i=%d n1=%d n2=%d p1=%s p2=%s"
                 (order_map_diff m1 m2) (render_report_str r1)
                 (render_report_str r2) d
-                (List.length blocks1) (List.length blocks2) (w blocks1)
-                (w blocks2) du (List.length u1) (List.length u2) (wu u1)
-                (wu u2))
+                (List.length tree1) (List.length tree2) (w tree1)
+                (w tree2) d2 (List.length blocks1) (List.length blocks2)
+                (w2 blocks1) (w2 blocks2))
          in
-         Fest.deep_equal blocks1 blocks2 Fest.expect;
+         Fest.deep_equal tree1 tree2 Fest.expect;
          Js.Promise.resolve ())
       (Js.Promise.then_
          (fun () ->
-            Fest.deep_equal blocks1 blocks2 Fest.expect;
+            Fest.deep_equal tree1 tree2 Fest.expect;
             Js.Promise.resolve ())
          (Js.Promise.resolve ()))
   in

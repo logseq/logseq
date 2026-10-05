@@ -57,10 +57,22 @@ let input_value env selector = Playwright.input_value (q env selector)
 let input_value_l loc = Playwright.input_value loc
 
 let bounding_xy_l loc =
-  let* box = Playwright.bounding_box loc in
-  match box with
-  | Some b -> Js.Promise.resolve (Playwright.box_x b, Playwright.box_y b)
-  | None -> Js.Promise.reject (Failure "bounding_xy_l: element not visible")
+  (* boundingBox resolves null while the element is mid-remount (detached or
+     not yet laid out); poll briefly instead of failing on the transient. *)
+  let rec go attempts_left =
+    let* box = Playwright.bounding_box loc in
+    match Js.Nullable.toOption box with
+    | Some b -> Js.Promise.resolve (Playwright.box_x b, Playwright.box_y b)
+    | None ->
+        if attempts_left <= 0 then
+          Js.Promise.reject (Failure "bounding_xy_l: element not visible")
+        else
+          let* () =
+            Playwright.wait_for_timeout (Playwright.locator_page loc) 50.
+          in
+          go (attempts_left - 1)
+  in
+  go 60
 
 (* {2 Navigation} *)
 

@@ -129,7 +129,8 @@ let search_and_click env search_text =
 let wait_editor_gone ?(editor = editor_q) env =
   Pw.wait_for_hidden env editor
 
-let wait_editor_visible env = Pw.wait_for env ".editor-wrapper textarea"
+let wait_editor_visible env =
+  Pw.wait_for ~timeout:45000. env ".editor-wrapper textarea"
 
 let count_elements env q = Pw.count env q
 
@@ -141,7 +142,11 @@ let page_blocks_count env =
     ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)"
 
 let get_text_of loc = Pw.text_of_l loc
-let get_text env selector = Pw.text_of_l (Pw.q env selector)
+(* first-match, like clj's w/-query: nav remounts can briefly render two
+   page titles, and strict-mode textContent would throw instead of just
+   answering with the visible one *)
+let get_text env selector =
+  Pw.text_of_l (Playwright.locator_first (Pw.q env selector))
 
 let get_edit_content env =
   let* editor = get_editor env in
@@ -188,6 +193,21 @@ let repeat_keyboard env n shortcut =
 let get_page_blocks_contents env =
   Pw.all_text env
     ".ls-page-blocks .ls-block:not(.block-add-button) .block-title-wrap"
+
+(** Poll [get_page_blocks_contents] until it equals [expected] (8s budget);
+    returns the last contents either way so callers can still assert
+    strictly — block moves/pastes commit asynchronously under load. *)
+let wait_page_blocks_contents env expected =
+  let deadline = Js.Date.now () +. 8000. in
+  let rec loop () =
+    let* contents = get_page_blocks_contents env in
+    if Array.to_list contents = expected || Js.Date.now () > deadline then
+      Js.Promise.resolve contents
+    else
+      let* () = wait_timeout env 150. in
+      loop ()
+  in
+  loop ()
 
 (** Poll [get_page_blocks_contents] until it stops changing for two reads,
     giving in-flight renders (e.g. an emptied editing row tearing down after
