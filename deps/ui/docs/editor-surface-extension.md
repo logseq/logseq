@@ -1,123 +1,124 @@
-# Editor surface extension design
+# Editor surface: shared rich-text editor (Out-style)
 
-Status: draft. Feeds gpui-plan M4 (编辑体验) and the remaining
-`TODO(component)` keep-sites in `src/pages/page.ml`, `src/blocks/tree.ml`,
-`src/core/ui_parts.ml` (editor_wrapper/editor_inner/mock_text), and
-`src/core/web_dom.ml` (textarea_of/build_mock_text/caret_popup_pos).
+Status: draft. Feeds gpui-plan M4 (编辑体验) and the `TODO(component)`
+keep-sites in `src/pages/page.ml`, `src/blocks/tree.ml`,
+`src/core/ui_parts.ml`, `src/core/web_dom.ml`.
 
-## Why an extension, not a kind
+Supersedes the earlier "native widget per platform" sketch: the editor
+is **rendered by LUI nodes from shared OCaml** — the same view code runs
+on web/apple/gpui. Platform hosts provide only a text-input conduit and
+text measurement. This follows Out's split (`core/src` editing model +
+thin platform adapters), but for the db version and with the render side
+shared too, since deps/ui view code is already cross-platform OCaml.
 
-The block editor is the one place where a component kind cannot carry the
-contract:
+## What we take from Out (logseq/Out)
 
-- Each platform must use a *native* text widget to get IME composition,
-  selection, spellcheck, and touch keyboards: `textarea` on web,
-  `NSTextView` on Apple, `gpui-component` Editor on GPUI. A `editor` kind
-  in the shared schema would force every host to implement the same
-  contract anyway — that is exactly what the extension channel exists for
-  ("只有平台特殊扩展的才可以走扩展").
-- The contract is mostly *commands and event payloads*, not props:
-  set-selection-range, caret-rect, keydown with caret context, blur.
-  Props alone cannot express these.
-- Logseq-specific (block uuid, editing scope, mock-text caret mirror) —
-  does not belong in `Lui_elements` core.
+- **Run segmentation** (`core/src/inline_markup.ml`): block source → flat
+  positioned runs covering 100% of bytes — `Plain`, `Delim` (grey only
+  while caret is inside its reveal range), `Atomic` (collapse to a pill
+  while caret is outside). Typora-style WYSIWYG editing.
+- **Editing model** (`core/src/editor_view.ml`): caret arithmetic in a
+  consistent unit, `delim_shown` reveal rule, first/last-line detection
+  for arrow-key focus moves, `shape` signature so typing inside a plain
+  span skips the structural rebuild, keymap → semantic `key_action`
+  (split/indent/merge/focus-next/select-next/menu/palette…).
+- **Keymap table** mirroring OG semantics — the platform collects raw
+  keys, the model decides.
 
-## Component spec: `logseq-editor`
+## What differs (db version, not file version)
 
-Replaces `.editor-wrapper > .editor-inner > textarea#edit-block-<uuid> +
-.mock-text` and every `Web_dom.textarea_of`/`el_set_selection_range`/
-`caret_popup_pos` call site.
+- Buffer/commit goes through `block/title` transactions — no md/org
+  serialization, no DOM-walk round-trip.
+- Run segmentation consumes our own inline parser
+  (`src/render/render_inline.ml` already produces db-semantic display
+  spans); the edit-mode run layer is added alongside it, not ported from
+  Out's file-syntax parser.
+- Menu/completion data sources (`/`, `[[`, `((`, `#`) query the db, not
+  file-derived indexes.
+- We are not blocked on Out's unfinished surfaces (table/property
+  editing) — block-type coverage follows our db schema.
 
-### Props
+## Architecture
 
-| prop | type | notes |
-|---|---|---|
-| `block-id` | string | replaces the `edit-block-<uuid>` element id; the host scopes lookups by node id, not document-wide id |
-| `value` / `value_signal` | string | model buffer; web keeps the existing cutoff dedup so unrelated publishes never overwrite in-progress typing |
-| `placeholder` | string | |
-| `multiline` | bool | block editor vs single-line inputs |
-| `autofocus` | bool | focus on mount (press-seq resolves `*:focus` before the pending-focus retry) |
-| `editing` | bool | whether this instance currently owns the edit session (tree mounts only one editor per scope) |
+```
+deps/ui/src/editor/
+  edit_runs.ml      — block source → Plain/Delim/Atomic runs (db parser)
+  edit_model.ml     — buffer, caret, selection, reveal, shape, keymap
+  edit_view.ml      — runs → Lui_elements tree (shared, one impl)
+  edit_input.ml     — input/composition event → model updates
 
-### Events (host → OCaml, payload JSON)
+platform conduit (the only per-platform code)
+  web    — hidden input + DOM text measurement (Range.getClientRects
+           works on real text nodes — no mock-text needed)
+  apple  — UIKeyInput/NSTextInputClient conduit + TextKit measurement
+  gpui   — gpui text-input/IME handler + text layout measurement
+```
 
-| event | payload | replaces |
-|---|---|---|
-| `input` | `{value, selectionStart, selectionEnd}` | live_buffer reads of `.value` |
-| `keydown` | `{key, value, selectionStart, selectionEnd, shiftKey, ctrlKey, metaKey, altKey, repeat, composing}` | `events:"keydown"` + `el_selection_start/end` reads |
-| `blur` | `{value}` | `events:"blur"` commit path |
-| `compositionstart` / `compositionend` | `{value}` | IME gating that currently lives in keydown filtering |
+### Rendered structure (shared OCaml emits)
 
-Every event carries the caret coordinates the handler needs so
-`editor_keys.ml`/`editor_actions.ml` stop round-tripping into the DOM.
+```
+block-editor (column)
+  line (row, one per source line)
+    run nodes: text (plain), text ~visible:reveal (delim),
+               pill component (atomic, non-editable)
+  selection overlay + caret element (LUI nodes)
+  hidden input sink node (the extension — see below)
+```
 
-### Commands (OCaml → host)
+### Extension: `logseq-editor` (input conduit only)
 
-Same channel family as `Host.dom_op`, scoped to the extension node id:
+The extension carries **no visual content** — it is the platform's
+text-input/IME/measurement channel bound to one block editor:
 
-| command | args | replaces |
-|---|---|---|
-| `focus` | `{position: "start"\|"end"\|index}` | `el_focus` + `el_set_selection_range el n n` |
-| `set-selection-range` | `{start, end}` | `Web_dom.el_set_selection_range` |
-| `caret-rect` | — → `{left, top, lineTop}` | `caret_popup_pos` + the whole `.mock-text` mirror |
-| `scroll-height` | — → `px` | auto-grow measurement |
+- **props**: `block-id`, `caret` (UTF-16 offset), `composition`
+  (marked-text range while IME is active)
+- **events** → OCaml: `key {key, mods, repeat}`, `insert {text}`,
+  `delete {kind: backward|forward|word|line}`, `composition {state,
+  text, range}`, `focus`/`blur`, `pointer {offset}` (hit-tested text
+  position for click-to-place-caret and drag-select)
+- **commands** OCaml → host: `set-input-focus`, `caret-rect {offset} →
+  {x, y, h}` and `line-ranges`/`offset-at {x, y}` — implemented per
+  platform on the rendered run nodes (web: Range.getClientRects /
+  caretRangeFromPoint on the run text nodes; apple: TextKit
+  layoutManager; gpui: editor text layout)
 
-`caret-rect` is the key replacement: today `build_mock_text` rebuilds a
-hidden grapheme-per-span mirror just to measure caret position. Each
-platform has a real API instead — web can keep mock-text internally,
-Apple `NSTextView` layoutManager, GPUI the editor's own text layout.
+Selection highlight and the caret blink are LUI-rendered (shared), so
+the conduit never draws text itself.
 
-## Per-platform implementation
+## Hard parts (flagged early)
 
-- **web**: the current `dom ~tag:"textarea"` + `mock_text` code moves
-  *under* the extension registration (`logseq-editor` handled by the
-  existing web extension host). View code swaps `dom`/`Ui_parts.editor_*`
-  for the extension node; `Web_dom.textarea_of`/`caret_popup_pos` become
-  command handlers. Zero behavior change for e2e locators — the
-  extension emits the same `.editor-wrapper` DOM.
-- **apple**: NSTextView representable behind the extension; mock-text is
-  dropped (layoutManager gives caret rects). `apple/logseq_dom.ml`
-  textarea path retires with it.
-- **gpui**: `gpui-component` editor entity per node (stateful — hold it
-  in the node map like SelectState/TableState). Caret rect from the
-  editor's line layout. IME composition is platform-native by
-  construction.
-
-## Sibling embeds (out of scope, same pattern)
-
-These stay `dom` until their own extension lands; the editor spec is the
-template:
-
-- **CodeMirror** (`block_display_type = "code"`) — the mounted instance
-  IS the editor; needs a `logseq-codemirror` extension (web keeps the
-  mount, apple/gpui stub or native equivalent).
-- **katex** — mounts by generated `#ls-katex-*` id; `logseq-katex`
-  extension (web: katex render; others: stub/degraded text).
-- **pdf/media/em-emoji** — platform embeds, already on the "extension
-  only for platform-specific" list.
+- **Line breaking is host-side.** OCaml doesn't know where wraps land;
+  `caret-rect`/`offset-at` must answer over wrapped visual lines, so the
+  host measures against the real rendered nodes. First/last-line focus
+  moves use `caret-rect` + `offset-at`, not OCaml arithmetic.
+- **IME composition**: conduit reports `composition` events; the model
+  marks the composing range and renders it (underlined run) instead of
+  committing until `compositionend`.
+- **ed-pad/ed-tail quirks still apply on web**: a caret landing after a
+  trailing hidden delimiter needs a zero-width landing node per line —
+  keep an `ed-pad`-style trailing span in the emitted line structure.
+- **Perf**: `shape` signature skip-rebuild per keystroke; typing must
+  stay O(local run diff), never re-segment the page.
+- **Long blocks**: per-line containers keep patches narrow; no full-block
+  remount on delimiter reveal (reveal is `~visible`/`class_signal` on the
+  run node).
 
 ## Migration order
 
-1. Register `logseq-editor` in the web extension host; move
-   `Ui_parts.editor_wrapper/editor_inner/mock_text` + `Web_dom`
-   textarea helpers under its implementation (no view-code change yet).
-2. Swap `editor_el` (tree.ml) and the page-title editor (page.ml) to the
-   extension node; route `editor_keys`/`editor_actions` through events +
-   commands. Delete `Web_dom.textarea_of`/`build_mock_text`/
-   `caret_popup_pos` call sites.
-3. Apple twin: NSTextView extension impl; drop the apple mock-text/
-   textarea copies.
-4. GPUI: gpui-component editor; M4 e2e (typing, IME, popup caret
-   positioning, selection ops) via `TestAppContext`.
-5. Then the sibling embeds above, each its own PR.
+1. `edit_runs` + `edit_model` + unit tests (pure OCaml, no platform).
+2. `edit_view` rendering block source as run nodes + `logseq-editor`
+   web conduit (hidden input wiring input/composition/key/caret-rect).
+3. Swap `editor_el` (tree.ml) and page-title editor (page.ml) to it;
+   delete `Web_dom.textarea_of`/`build_mock_text`/`caret_popup_pos` and
+   `Ui_parts.editor_*`.
+4. Apple conduit (UIKeyInput) + gpui conduit; keymap/model already
+   shared so each is adapter-only work.
+5. M4 e2e: typing, IME (中文 composition), delimiter reveal, popup caret
+   positioning, block select, split/merge.
 
-## What this does NOT solve
+## Explicitly out of scope
 
-The remaining ~140 `TODO(component)` sites are mostly **delegated-event
-data-\* contracts** (`data-ref`, `data-cid`, `containerid`, `blockid`,
-`data-cmdk-item`), **virtuoso/virtualization scaffold**
-(`data-virtuoso-scroller`, `data-level`, lazy-mount), and **event payload
-gaps** (shiftKey/interactive clicks, mouseenter/leave). Those need their
-own answers — likely a `logseq-virt` extension for virtualization and a
-small "opaque handle" convention for imperative lookups — and are tracked
-separately in `component-migration.md`'s leftover inventory.
+CodeMirror code blocks, katex, pdf/media/em-emoji embeds — separate
+extensions (platform-specific by the same rule). The ~140 other
+`TODO(component)` sites (delegated-event `data-*` contracts, virtuoso
+scaffold, event payload gaps) are tracked in `component-migration.md`.
