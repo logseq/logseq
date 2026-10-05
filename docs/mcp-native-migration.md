@@ -194,8 +194,8 @@ export was introduced.
 `getPage` now calls the existing `get_page_data` export through
 `logseq.DB.getPageData`, preserving its page-name argument and result/error
 envelope without duplicating the CLI implementation. Local route, capability,
-and SDK checks pass; the same-graph live read used the prior CLI route, so a
-read-only recheck through the DB alias is still required.
+and SDK checks pass. Its same-graph DB-route recheck returned the retained
+fixture's expected UUID/title and four blocks without modifying the graph.
 
 On 2026-10-05 Claude completed a same-graph read-only sweep: all 28 read tools
 PASS, with no FAIL and no writes. The corrected `getBlockUUID` retry returned
