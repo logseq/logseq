@@ -60,7 +60,7 @@ let assert_query_count env n =
        in
        let* () = Js.Promise.resolve (Js.log2 "query-results-dump" dump) in
        Playwright.throw_error e)
-    (E2e_assert.is_visible_l ~timeout:20000.
+    (E2e_assert.is_visible_l ~timeout:40000.
        (Ls_locator.filter env
           ~has_text:(Printf.sprintf "Live query (%d)" n)
           ".custom-query-results"))

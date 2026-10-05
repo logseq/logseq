@@ -2159,10 +2159,10 @@ let () =
           B.new_blocks env
             [ "multi a"; "multi a child"; "multi b"; "multi b child" ]
         in
-        let* () = K.tab env in
-        let* () = K.arrow_up env in
-        let* () = K.arrow_up env in
-        let* () = K.tab env in
+        let* () = K.press_in_editor env "Tab" in
+        let* () = K.press_in_editor env "ArrowUp" in
+        let* () = K.press_in_editor env "ArrowUp" in
+        let* () = K.press_in_editor env "Tab" in
         let* tree =
           Api.ls_api_call env "editor.getPageBlocksTree"
             [| Api.str page_name |]
@@ -2173,8 +2173,8 @@ let () =
           | None -> -1
         in
         Fest.deep_equal (len tree) 2 Fest.expect;
-        let* () = K.arrow_down env in
-        let* () = K.arrow_down env in
+        let* () = K.press_in_editor env "ArrowDown" in
+        let* () = K.press_in_editor env "ArrowDown" in
         let* () = B.select_blocks env 2 in
         let* () = K.tab env in
         let* indented =

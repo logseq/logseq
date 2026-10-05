@@ -14,6 +14,12 @@ let env = Fixtures.shared_open_page ()
 (* --- helpers ------------------------------------------------------------ *)
 
 let block_text_position env text =
+  (* the newest blocks sit below the virtual-scroll window on long
+     synced pages — they are not mounted until scrolled into view *)
+  let* () =
+    Pw.eval_js env
+      "(() => { const el = document.querySelector('.ls-page-blocks'); if (el) el.scrollIntoView(false); else window.scrollTo(0, document.body.scrollHeight); })()"
+  in
   (* poll: the block list re-renders after ops; a one-shot query can hit
      the gap between remounts *)
   let deadline = Js.Date.now () +. 8000. in
@@ -601,7 +607,7 @@ let () =
                (fun e ->
                   let* (dump : string) =
                     Pw.eval_js env
-                      "(() => JSON.stringify({url: location.hash, blocks: [...document.querySelectorAll('.ls-block .block-title-wrap, .ls-block .block-content')].map(e => e.textContent).slice(0,10)}))()"
+                      "(() => JSON.stringify({url: location.hash, blocks: [...document.querySelectorAll('.ls-block')].map(e => (e.getAttribute('blockid')||'?') + '|' + (e.textContent||'').replace(/\\s+/g,' ').slice(0,60)).slice(0,12)}))()"
                   in
                   let* page_name =
                     Js.Promise.catch

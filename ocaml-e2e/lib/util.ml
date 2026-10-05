@@ -214,6 +214,15 @@ let repeat_keyboard env n shortcut =
   in
   go n
 
+let repeat_keyboard_in_editor env n shortcut =
+  let rec go i =
+    if i <= 0 then Js.Promise.resolve ()
+    else
+      let* () = Keyboard.press_in_editor env ~delay:20. shortcut in
+      go (i - 1)
+  in
+  go n
+
 let get_page_blocks_contents env =
   Pw.all_text env
     ".ls-page-blocks .ls-block:not(.block-add-button) .block-title-wrap"

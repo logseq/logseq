@@ -337,5 +337,12 @@ let toggle_property env property_title property_value =
   Keyboard.enter env
 
 let select_blocks env n =
-  let* () = Util.repeat_keyboard env n "Shift+ArrowUp" in
+  (* element-targeted while editing: *:focus can be <body> after a
+     remount and the shift-chord is then silently dropped *)
+  let* editor = Util.get_editor env in
+  let* () =
+    match editor with
+    | Some _ -> Util.repeat_keyboard_in_editor env n "Shift+ArrowUp"
+    | None -> Util.repeat_keyboard env n "Shift+ArrowUp"
+  in
   Util.wait_timeout env 200.
