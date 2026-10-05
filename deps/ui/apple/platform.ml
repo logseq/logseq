@@ -71,6 +71,20 @@ let save_state () =
      close_out oc
    with _ -> ())
 
+(* cljs storage.cljs reads with reader/read-string and writes pr-str,
+   so cljs-stored strings appear double-quoted. Strip/add that quoting
+   at the storage boundary. *)
+let storage_unquote s =
+  let len = String.length s in
+  if len >= 2 && String.get s 0 = '"' && String.get s (len - 1) = '"' then
+    String.sub s 1 (len - 2)
+  else s
+
+let storage_quote v = "\"" ^ v ^ "\""
+
+(* the native window title is host-managed — the call is a no-op *)
+let set_document_title (_ : string) : unit = ()
+
 let local_storage_get k =
   load_state ();
   Hashtbl.find_opt ls k
@@ -378,6 +392,16 @@ let history_forward () =
 
 let copy_to_clipboard s = request_host "clipboard-write" s
 
+(* window.open → the Swift host shells out to the system browser *)
+let open_url (u : string) = Host.open_url u
+
+let clipboard_write_text (s : string) : unit Js.Promise.t =
+  ignore (copy_to_clipboard s);
+  Js.Promise.resolve ()
+
+let clipboard_read_text () : string Js.Promise.t =
+  Js.Promise.resolve ""
+
 (* ---------- misc ---------- *)
 
 let decode_uri = Uri.pct_decode
@@ -518,3 +542,14 @@ let get_attribute (el : Js.Json.t) (name : string) : string option =
           | Some v -> Js.Json.decodeString v
           | None -> None))
   | _ -> None
+
+(* recycle-view timestamp — host-side formatting not wired yet *)
+let fmt_time (_ : float) : string = ""
+
+(* window reload is a web concept — native restarts through the host *)
+let location_reload () : unit = ()
+
+(* no browser origin on native — "open in another tab" isn't a native
+   concept; share/other-tab URLs degrade to the graph fragment *)
+let location_origin = ""
+let location_pathname = ""

@@ -3,4 +3,5 @@ node_modules/
 dist/
 apple/dicts_gen.ml
 apple/emoji_mart_data.ml
+apple/icon_names_data.ml
 compile_commands.json

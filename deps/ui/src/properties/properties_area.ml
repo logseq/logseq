@@ -342,7 +342,7 @@ let title_actions (p : Model.page) : t =
        [ add_btn
            (I18n.t "command.editor/add-property-icon")
            (fun _ ->
-             match Properties_dom.doc_query ("#" ^ anchor_id) with
+             match Web_dom.doc_query ("#" ^ anchor_id) with
              | Some anchor ->
                  Icon_picker.open_picker ~anchor
                    ~del:(p.Model.page_icon <> None)

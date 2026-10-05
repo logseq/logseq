@@ -44,7 +44,7 @@ let ui_input_cls = "ui__input ls-ep-input"
 (* cljs get-tabler-icons enumerates @tabler/icons-react exports in order
    and csk-prettifies them into display names ("Abacus Off"); the bundled
    list in Icon_picker_names keeps (display, kebab) pairs in that order. *)
-let icon_items () = Array.to_list Icon_picker_names.items
+let icon_items () = Array.to_list !Icon_picker_names.items
 
 (* cljs icon-cp strips spaces from the display name to form the id/title:
    "A B 2" -> "AB2" *)

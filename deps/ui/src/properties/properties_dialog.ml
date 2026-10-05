@@ -534,12 +534,12 @@ let view : t =
 
 (* a second open replaces the dialog — cljs treats it as the single
    active modal *)
-let open_dialog ?(remove = false) target =
+let open_dialog ?(remove = false) ?(phase = Prop_select) target =
   (* a second open replaces every popup — cljs treats it as the single
      active modal *)
   S.close_overlays ();
   S.close_all_view_overlays ();
-  let d = { d_target = target; d_remove = remove; d_phase = Prop_select
+  let d = { d_target = target; d_remove = remove; d_phase = phase
           ; d_phase_sig = None } in
   current := Some d;
   publish (Some d)
@@ -574,6 +574,22 @@ let current_target () : target option =
 let open_for_block uuid =
   open_dialog
     { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
+
+(* cljs :editor/new-property {:property-key ident}: the dialog jumps
+   straight to the value-editing phase for the named property — a
+   dedicated picker (date input, closed-value select, node select) —
+   across the whole block selection *)
+let open_for_block_with_property ~uuids uuid ~ident =
+  (let* prop =
+    D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ])
+  in
+  (match D.untag prop with
+   | W.Map _ as p ->
+       open_dialog ~phase:(Value_edit p)
+         { uuid; uuids; db_id = None; is_tag = false; title = "" }
+   | _ -> ());
+  Js.Promise.resolve ())
+  |> ignore
 
 let open_for_current () =
   match current_target () with Some t -> open_dialog t | None -> ()

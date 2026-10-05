@@ -2,8 +2,6 @@
    render as plain text on native until ported *)
 open Promise_ext
 
-let ensure () = ()
-
 (* KaTeX/hljs slots — pending registrations are pushed to the host so
    the Swift logseq-code/logseq-math extensions render natively
    (Highlightr / SwiftMath). *)

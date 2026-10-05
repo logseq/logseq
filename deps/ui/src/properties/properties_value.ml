@@ -227,24 +227,20 @@ let ms_of_value = function
   | _ -> None
 
 (* datetime values arrive as journal-page ref summaries — the day is
-   block/journal-day (yyyymmdd); fall back to a raw ms number *)
-let ms_of_datetime_value (v : W.t) : float option =
+   block/journal-day (yyyymmdd); fall back to a raw ms number. The
+   journal day must render as-is: routing it through a UTC-ms epoch
+   and local getters would shift the day in timezones behind UTC *)
+let ymd_of_datetime_value (v : W.t) : (int * int * int) option =
   match ms_of_value v with
-  | Some ms -> Some ms
+  | Some ms -> Some (ymd_of_ms ms)
   | None -> (
       match W.get v "block/journal-day" with
-      | Some (W.Int d) ->
-          let y = d / 10000 and m = d mod 10000 / 100 and dd = d mod 100 in
-          Some
-            (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
-               ~date:(float dd) ())
+      | Some (W.Int d) -> Some (d / 10000, d mod 10000 / 100, d mod 100)
       | _ -> None)
 
 let date_display ty value =
-  match ty = "datetime", ms_of_datetime_value value with
-  | true, Some ms ->
-      let y, m, d = ymd_of_ms ms in
-      Render_inline.date_label y m d
+  match ty = "datetime", ymd_of_datetime_value value with
+  | true, Some (y, m, d) -> Render_inline.date_label y m d
   | _ -> D.value_display value
 
 (* ---------- select pickers (choices / node refs) ---------- *)

@@ -383,7 +383,6 @@ let initialize platform_code host_code (_payload : string) : string =
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
-  Views_mount.install ();
   Menu_bar.install ();
   Router.init ();
   Rtc_flows.init ();

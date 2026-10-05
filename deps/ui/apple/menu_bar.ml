@@ -24,7 +24,7 @@ let install () =
       (match tab with
       | Some t ->
           (* survives the mount-time activate which defaults the tab *)
-          Settings_state.request_tab t;
+          Settings_state.open_at t;
           Dialogs_state.open_ "settings";
           if Settings_state.ready () then (
             (* pane already mounted — switch live and drop the pending

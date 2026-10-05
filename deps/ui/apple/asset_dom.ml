@@ -184,6 +184,26 @@ let upload_input key : Lui_elements.t =
 let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()
 
+(* cljs objects.cljs build-class-object-columns :file — native version:
+   the Swift renderer resolves the file path from data-asset-file (same
+   contract as the imperative file_cell) *)
+let file_cell_el (w : Wire.t) : Lui_elements.t =
+  let uuid = Option.value (Wire.map_get_uuid w "block/uuid") ~default:"" in
+  let ext =
+    Option.value
+      (Wire.map_get_string w "logseq.property.asset/type") ~default:""
+  in
+  let file = uuid ^ "." ^ ext in
+  dom ~style_class:"block-content overflow-hidden"
+    ~attrs:[ ("style", "max-height: 30px") ]
+    [ dom ~tag:"img"
+        ~attrs:[ ("title", file); ("data-asset-file", file) ]
+        [] ]
+
+(* web opens PhotoSwipe on pdf preview thumbs; native shows previews
+   inline via the asset extension tag — nothing to lightbox *)
+let preview_images (_items : Wire.t list) : unit = ()
+
 (* minimal asset render — the asset extension tag carries the block
    uuid + stored file path so the Swift renderer can resolve it *)
 let file_cell (w : Wire.t) : Views_dom.el =

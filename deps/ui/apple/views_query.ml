@@ -1,11 +1,13 @@
-(* ported from deps/ui/src/views/views_query.ml *)
+(* ported from deps/ui/src/views/views_query.ml — date externals
+   swapped for Js.Date; keep in sync upstream *)
 (* Custom queries — the query source lives on the hidden
    logseq.property/query value block of a logseq.class/Query-tagged
    block (cljs db-model); this builds the [:query spec] resource,
    decodes rows, and implements the query source editor shell
    (.ls-query-setting → fake CodeMirror editing). *)
 
-module D = Views_dom
+module D = Logseq_dom
+module E = Web_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
@@ -18,13 +20,11 @@ type qsrc =
   | QDsl of string
   | QDatalog of W.t
 
-let date_now () : Js.Json.t = Js.Json.number (Js.Date.now ())
-let d_year (_ : Js.Json.t) : int =
-  (Unix.localtime (Js.Date.now () /. 1000.)).tm_year + 1900
-let d_month (_ : Js.Json.t) : int =
-  (Unix.localtime (Js.Date.now () /. 1000.)).tm_mon
-let d_date (_ : Js.Json.t) : int =
-  (Unix.localtime (Js.Date.now () /. 1000.)).tm_mday
+(* melange Date externals → Js.Date (epoch-ms float) on the native twin *)
+let date_now () : Js.Date.t = Js.Date.now ()
+let d_year (d : Js.Date.t) : int = int_of_float (Js.Date.getFullYear d)
+let d_month (d : Js.Date.t) : int = int_of_float (Js.Date.getMonth d)
+let d_date (d : Js.Date.t) : int = int_of_float (Js.Date.getDate d)
 
 let today_day () =
   let d = date_now () in
@@ -41,13 +41,12 @@ let parse_src (s : string) : qsrc =
 
 (* -- [:query spec] construction — only the worker-allowed keys -- *)
 
-let common_pairs inst block_uuid =
+let common_pairs block_uuid =
   let page_title =
     match !Runtime.current_page with
     | Some p -> [ (W.kw "current-page-title", W.String p.M.page_title) ]
     | None -> []
   in
-  ignore inst;
   [ (W.kw "current-block-uuid", W.Uuid block_uuid)
   ; (W.kw "today-day", W.Int (today_day ()))
   ; (W.kw "remove-block-children?", W.Bool true)
@@ -75,18 +74,18 @@ let needs_config = function
       | _ -> false)
   | _ -> false
 
-let spec_of inst cfg block_uuid = function
+let spec_of cfg block_uuid = function
   | QDsl s ->
       Ok
         (W.Map
            ([ (W.kw "kind", W.Keyword "dsl"); (W.kw "query", W.String s) ]
-           @ common_pairs inst block_uuid))
+           @ common_pairs block_uuid))
   | QDatalog m -> (
       match W.get m "query" with
       | Some (W.Array ((W.Keyword "find" | W.Symbol "find") :: _) as q) ->
           let pairs =
             [ (W.kw "kind", W.Keyword "datalog"); (W.kw "query", q) ]
-            @ common_pairs inst block_uuid
+            @ common_pairs block_uuid
           in
           let pairs =
             match W.get m "inputs" with
@@ -136,87 +135,103 @@ let spec_of inst cfg block_uuid = function
 let decode_result inst (v : W.t) =
   match W.get v "error" with
   | Some e ->
-      inst.V.query_error <-
-        Some
-          (Option.value (W.map_get_string e "message") ~default:"query error");
-      inst.V.query_rows <- [];
-      inst.V.query_scalar_rows <- [];
-      inst.V.query_view <- W.Nil
+      V.update inst (fun s ->
+          { s with
+            V.query_error =
+              Some
+                (Option.value (W.map_get_string e "message")
+                   ~default:"query error")
+          ; query_rows = []
+          ; query_scalar_rows = []
+          ; query_view = W.Nil
+          })
   | None -> (
-      inst.V.query_error <- None;
       let items =
         match W.get v "rows" with
         | Some w -> W.elems w
         | None -> W.elems v
       in
       let uuids = List.filter_map W.as_uuid items in
-      if items <> [] && List.length uuids = List.length items then (
-        inst.V.query_rows <- uuids;
-        inst.V.query_scalar_rows <- [])
-      else (
-        inst.V.query_rows <- [];
-        inst.V.query_scalar_rows <- items);
-      (* :view fn result — hiccup wire; Nil means render the default table *)
-      inst.V.query_view <- Option.value (W.get v "view") ~default:W.Nil)
+      if items <> [] && List.length uuids = List.length items then
+        V.update inst (fun s ->
+            { s with
+              V.query_error = None
+            ; query_rows = uuids
+            ; query_scalar_rows = []
+            ; query_view = Option.value (W.get v "view") ~default:W.Nil
+            })
+      else
+        V.update inst (fun s ->
+            { s with
+              V.query_error = None
+            ; query_rows = []
+            ; query_scalar_rows = items
+            ; query_view = Option.value (W.get v "view") ~default:W.Nil
+            }))
 
-(* uuids inside the :view hiccup hydrate to titles via inst.blocks *)
+(* uuids inside the :view hiccup hydrate to titles via inst blocks *)
 let rec collect_uuids w acc =
   match w with
   | W.Uuid u -> u :: acc
-  | W.Array xs | W.List xs | W.Set xs -> List.fold_left (fun a x -> collect_uuids x a) acc xs
-  | W.Map kvs -> List.fold_left (fun a (k, v) -> collect_uuids v (collect_uuids k a)) acc kvs
+  | W.Array xs | W.List xs | W.Set xs ->
+      List.fold_left (fun a x -> collect_uuids x a) acc xs
+  | W.Map kvs ->
+      List.fold_left (fun a (k, v) -> collect_uuids v (collect_uuids k a)) acc kvs
   | _ -> acc
 
 let run inst (f : unit -> unit) =
   match inst.V.kind with
-  | V.KQuery { block_uuid } ->
-      let src =
-        (* fresh title lookup happens in refresh before run; qsrc holds the
-           latest extracted source *)
-        match inst.V.kind with
-        | V.KQuery _ -> inst.V.qsrc
-        | _ -> ""
-      in
-      (match parse_src src with
-       | QBlank ->
-           inst.V.query_rows <- [];
-           inst.V.query_scalar_rows <- [];
-           inst.V.query_view <- W.Nil;
-           f ()
-       | src_kind ->
-           let run_with_cfg cfg =
-             match spec_of inst cfg block_uuid src_kind with
-             | Error msg ->
-                 inst.V.query_error <- Some msg;
-                 f ()
-             | Ok spec ->
-                 let key = Db.key_query spec in
-                 Db.snapshots
-                   ~f:(fun snap ->
-                     (match Wr.snapshot_slot_value snap key with
-                      | Some v -> decode_result inst v
-                      | None -> inst.V.query_error <- Some "query failed");
-                     (match inst.V.query_view with
-                      | W.Nil -> f ()
-                      | view ->
-                          let uuids = collect_uuids view [] in
-                          Db.get_blocks uuids ~metadata:true (fun ents ->
-                              List.iter
-                                (fun b ->
-                                  match W.map_get_uuid b "block/uuid" with
-                                  | Some u -> Hashtbl.replace inst.V.blocks u b
-                                  | None -> ())
-                                ents;
-                              f ())))
-                   [ Db.resource_query spec ]
-           in
-           if needs_config src_kind then
-             Sdk_config.read_config (Runtime.repo ())
-             |> Js.Promise.then_ (fun cfg ->
-                    run_with_cfg cfg;
-                    Js.Promise.resolve ())
-             |> ignore
-           else run_with_cfg (W.Map []))
+  | V.KQuery { block_uuid } -> (
+      let src = (V.get inst).V.qsrc in
+      match parse_src src with
+      | QBlank ->
+          V.update inst (fun s ->
+              { s with
+                V.query_rows = []
+              ; query_scalar_rows = []
+              ; query_view = W.Nil
+              });
+          f ()
+      | src_kind ->
+          let run_with_cfg cfg =
+            match spec_of cfg block_uuid src_kind with
+            | Error msg ->
+                V.update inst (fun s -> { s with V.query_error = Some msg });
+                f ()
+            | Ok spec ->
+                let key = Db.key_query spec in
+                Db.snapshots
+                  ~f:(fun snap ->
+                    (match Wr.snapshot_slot_value snap key with
+                     | Some v -> decode_result inst v
+                     | None ->
+                         V.update inst (fun s ->
+                             { s with V.query_error = Some "query failed" }));
+                    (match (V.get inst).V.query_view with
+                     | W.Nil -> f ()
+                     | view ->
+                         let uuids = collect_uuids view [] in
+                         Db.get_blocks uuids ~metadata:true (fun ents ->
+                             V.update inst (fun s ->
+                                 let blocks = Hashtbl.copy s.V.blocks in
+                                 List.iter
+                                   (fun b ->
+                                     match W.map_get_uuid b "block/uuid" with
+                                     | Some u ->
+                                         Hashtbl.replace blocks u b
+                                     | None -> ())
+                                   ents;
+                                 { s with V.blocks });
+                             f ())))
+                  [ Db.resource_query spec ]
+          in
+          if needs_config src_kind then
+            Sdk_config.read_config (Runtime.repo ())
+            |> Js.Promise.then_ (fun cfg ->
+                   run_with_cfg cfg;
+                   Js.Promise.resolve ())
+            |> ignore
+          else run_with_cfg (W.Map []))
   | _ -> f ()
 
 (* the hidden value block created by create-property-text-block for
@@ -252,20 +267,20 @@ let refresh_block inst f =
            | b :: _ ->
                (match query_value_block b with
                 | Some vb ->
-                    inst.V.query_block_uuid <-
-                      Option.value (W.map_get_uuid vb "block/uuid")
-                        ~default:"";
-                    (* while the source editor is open the in-flight text
-                       is authoritative — don't clobber qsrc with the
-                       last-saved title, which lags the keystrokes *)
-                    if not inst.V.query_editor_open then
-                      inst.V.qsrc <-
+                    let qsrc =
+                      (* while the source editor is open the in-flight text
+                         is authoritative — don't clobber qsrc with the
+                         last-saved title, which lags the keystrokes *)
+                      if (V.get inst).V.query_editor_open then
+                        (V.get inst).V.qsrc
+                      else
                         Option.value (W.map_get_string vb "block/title")
-                          ~default:"";
+                          ~default:""
+                    in
                     (* id-refs in the stored source resolve through the
                        value block's block/refs — collect uuid -> title
                        so clause chips can show titles (cljs page-title) *)
-                    Hashtbl.reset inst.V.ref_titles;
+                    let ref_titles = Hashtbl.create 8 in
                     (match W.get vb "block/refs" with
                      | Some (W.Array xs) | Some (W.List xs)
                      | Some (W.Set xs) ->
@@ -276,23 +291,34 @@ let refresh_block inst f =
                                , W.map_get_string r "block/title" )
                              with
                              | Some u, Some t ->
-                                 Hashtbl.replace inst.V.ref_titles u t
+                                 Hashtbl.replace ref_titles u t
                              | _ -> ())
                            xs
                      | _ -> ());
-                    inst.V.is_advanced <-
-                      (match
-                         W.get vb "logseq.property.node/display-type"
-                       with
-                       | Some (W.Keyword s) | Some (W.String s) ->
-                           s = "code"
-                       | _ -> false)
+                    let is_advanced =
+                      match W.get vb "logseq.property.node/display-type" with
+                      | Some (W.Keyword s) | Some (W.String s) -> s = "code"
+                      | _ -> false
+                    in
+                    V.update inst (fun s ->
+                        { s with
+                          V.query_block_uuid =
+                            Option.value (W.map_get_uuid vb "block/uuid")
+                              ~default:""
+                        ; qsrc
+                        ; ref_titles
+                        ; is_advanced
+                        })
                 | None ->
-                    inst.V.query_block_uuid <- "";
-                    if not inst.V.query_editor_open then inst.V.qsrc <- "";
-                    inst.V.is_advanced <- false);
+                    V.update inst (fun s ->
+                        { s with
+                          V.query_block_uuid = ""
+                        ; qsrc =
+                            (if s.V.query_editor_open then s.V.qsrc else "")
+                        ; is_advanced = false
+                        }));
                (match Wr.decode_view_ent b with
-                | Some v -> V.apply_view_entity inst v
+                | Some v -> V.update inst (fun s -> V.apply_view_entity s v)
                 | None -> ())
            | [] -> ());
           f ())
@@ -309,8 +335,9 @@ let refresh_block inst f =
 let save_src inst src =
   match inst.V.kind with
   | V.KQuery { block_uuid } ->
-      if inst.V.query_block_uuid <> "" then
-        Db.save_block_title inst.V.query_block_uuid src (fun () -> ())
+      let s = V.get inst in
+      if s.V.query_block_uuid <> "" then
+        Db.save_block_title s.V.query_block_uuid src (fun () -> ())
       else
         Db.get_blocks [ block_uuid ] ~metadata:true ~children:true
           ~include_property_block:true
@@ -321,75 +348,84 @@ let save_src inst src =
                 | Some vb -> (
                     match W.map_get_uuid vb "block/uuid" with
                     | Some u ->
-                        inst.V.query_block_uuid <- u;
+                        V.update inst (fun s ->
+                            { s with V.query_block_uuid = u });
                         Db.save_block_title u src (fun () -> ())
                     | None -> ())
                 | None -> ())
             | [] -> ())
   | _ -> ()
 
-let open_editor inst (shell : D.el) =
-  let cur =
-    match parse_src inst.V.qsrc with
-    | QDsl s -> s
-    | QDatalog _ -> inst.V.qsrc
-    | QBlank -> ""
-  in
-  let line =
-    D.h ~tag:"pre"
-      ~cls:"CodeMirror-line"
-      ~attrs:
-        [ ("contenteditable", "true"); ("role", "textbox")
-        ; ("spellcheck", "false") ]
-      ~text:cur ()
-  in
-  let cm = D.h ~cls:"CodeMirror" ~children:[ line ] () in
-  (match D.query_inside shell ".CodeMirror" with
-   | Some old -> D.el_remove old
-   | None -> ());
-  D.el_append_child shell cm;
-  inst.V.query_editor_open <- true;
-  D.focus_end line;
-  (* cljs's CodeMirror editor evaluates as you type — fire the query eval
-     immediately on input (the spec carries the source; it does not wait
-     for the save to land) and persist the title on a debounce *)
-  let autosave = D.debounce 300 in
-  D.el_add_listener line "input" (fun _ ->
-      let src = D.el_text_content line |> String.trim in
-      (V.ops ()).V.o_refresh_src inst src;
-      autosave (fun () -> save_src inst src));
-  D.el_add_listener line "keydown" (fun ev ->
-      match Editor_dom.ev_key ev with
-      | "Escape" ->
-          Editor_dom.prevent_default ev;
-          let src = D.el_text_content line |> String.trim in
-          (* cljs keeps the editor open after Esc commits; the next tx
-             broadcast re-renders the shell anyway. The eval already ran
-             on input — only re-run it if the text changed since, and
-             always persist the final source. *)
-          if src <> inst.V.qsrc then (V.ops ()).V.o_refresh_src inst src;
-          save_src inst src
-      | "Enter" ->
-          (* single-line editor contract *)
-          Editor_dom.prevent_default ev
-      | _ -> ())
+let cm_host_id inst = "vcm-" ^ string_of_int inst.V.id
 
-(* toggle the raw-source editor for `inst` inside `shell` — called from
-   the delegated click handler in Views_mount *)
-let toggle_source_editor inst (shell : D.el) =
-  (* a page remount can swap the shell between wiring and the click —
-     retarget to the live shell holding this inst's container *)
-  let shell =
-    if D.el_is_connected shell then shell
-    else
-      match
-        Editor_dom.el_closest inst.V.container ".custom-query-results"
-      with
-      | Some live -> live
-      | None -> shell
+(* post-mount: wire the editable line's input/keydown imperatively —
+   Enter/Escape need preventDefault, which the declarative event layer
+   intentionally doesn't expose. The element itself is mounted by the
+   declarative tree (if_ on query_editor_open). *)
+let attach_cm inst =
+  match E.get_element_by_id (cm_host_id inst) with
+  | None -> ()
+  | Some cm -> (
+      match E.el_query cm "pre.CodeMirror-line" with
+      | None -> ()
+      | Some line ->
+          (* cljs's CodeMirror editor evaluates as you type — fire the
+             query eval immediately on input (the spec carries the source;
+             it does not wait for the save to land) and persist the title
+             on a debounce *)
+          let autosave = E.debounce 300 in
+          E.el_on line "input" (fun _ ->
+              let src = E.el_text_content line |> String.trim in
+              (V.ops ()).V.o_refresh_src inst src;
+              autosave (fun () -> save_src inst src));
+          E.el_on line "keydown" (fun ev ->
+              match E.ev_key ev with
+              | "Escape" ->
+                  E.ev_prevent_default ev;
+                  let src = E.el_text_content line |> String.trim in
+                  (* cljs keeps the editor open after Esc commits; the next
+                     tx broadcast re-renders the shell anyway. The eval
+                     already ran on input — only re-run it if the text
+                     changed since, and always persist the final source. *)
+                  if src <> (V.get inst).V.qsrc then
+                    (V.ops ()).V.o_refresh_src inst src;
+                  save_src inst src
+              | "Enter" ->
+                  (* single-line editor contract *)
+                  E.ev_prevent_default ev
+              | _ -> ()))
+
+(* the .CodeMirror host — declarative: mounts/unmounts on
+   query_editor_open; listeners attach once the node is in the DOM *)
+let cm_host inst : Lui_elements.t =
+ fun ctx parent ->
+  let open_sig =
+    Signal.map (fun s -> s.V.query_editor_open) inst.V.st.Signal.state_signal
   in
-  match D.query_inside shell ".CodeMirror" with
-  | Some cm ->
-      D.el_remove cm;
-      inst.V.query_editor_open <- false
-  | None -> open_editor inst shell
+  D.if_ ~test:open_sig
+    (fun ctx parent ->
+      let cur =
+        match parse_src (V.get inst).V.qsrc with
+        | QDsl s -> s
+        | QDatalog _ -> (V.get inst).V.qsrc
+        | QBlank -> ""
+      in
+      let n =
+        D.dom ~id:(cm_host_id inst) ~style_class:"CodeMirror"
+          [ D.dom ~tag:"pre" ~style_class:"CodeMirror-line"
+              ~attrs:
+                [ ("contenteditable", "true"); ("role", "textbox")
+                ; ("spellcheck", "false") ]
+              ~text:cur []
+          ]
+          ctx parent
+      in
+      E.set_timeout (fun () -> attach_cm inst) 0;
+      n)
+    ctx parent
+
+(* toggle the raw-source editor for `inst` — called from the
+   .ls-query-setting button in the query shell *)
+let toggle_source_editor inst =
+  V.update inst (fun s ->
+      { s with V.query_editor_open = not s.V.query_editor_open })

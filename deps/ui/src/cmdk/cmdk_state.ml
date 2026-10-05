@@ -1564,8 +1564,8 @@ let open_in_page () =
   | Some st ->
       if not (get st).open_ then open_palette st;
       set_in st (fun v -> { v with filter = Some G_current_page; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-       | Some el -> Dom_ext.set_value el ""
+      (match Web_dom.doc_query ".cp__cmdk-search-input" with
+       | Some el -> Web_dom.el_set_value el ""
        | None -> ());
       refresh st
   | None -> ()

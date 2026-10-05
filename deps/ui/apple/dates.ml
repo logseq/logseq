@@ -47,3 +47,20 @@ let short_date_of_ts ts =
 (* d + delta days *)
 let add_days (d : Js.Date.t) delta =
   Js.Date.fromFloat (Js.Date.getTime d +. float_of_int delta *. 86400000.)
+
+let ordinal_suffix d =
+  match d mod 100 with
+  | 11 | 12 | 13 -> "th"
+  | _ -> (
+      match d mod 10 with
+      | 1 -> "st"
+      | 2 -> "nd"
+      | 3 -> "rd"
+      | _ -> "th")
+
+let month_abbr =
+  [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep"; "Oct"
+   ; "Nov"; "Dec" |]
+
+let journal_title_ymd ~y ~m ~d =
+  Printf.sprintf "%s %d%s, %d" month_abbr.(m - 1) d (ordinal_suffix d) y

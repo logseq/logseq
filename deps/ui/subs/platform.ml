@@ -149,7 +149,24 @@ external replace_state :
 
 let replace_url_fragment hash = replace_state Js.Json.null "" hash
 
-let on_hash_change f = Web_dom.add_window_listener "hashchange" (fun _ -> f ())
+external add_window_listener : string -> (Js.Json.t -> unit) -> unit
+  = "addEventListener" [@@mel.scope "window"]
+
+external open_url : string -> unit = "open" [@@mel.scope "window"]
+
+external qs_all_arr : string -> Js.Json.t array = "querySelectorAll"
+  [@@mel.scope "document"]
+
+external get_attribute : Js.Json.t -> string -> string option
+  = "getAttribute" [@@mel.send] [@@mel.return nullable]
+
+(* uuid list of .ls-block.selected blocks, in DOM order *)
+let selected_block_uuids () =
+  qs_all_arr ".ls-block.selected"
+  |> Array.to_list
+  |> List.filter_map (fun el -> get_attribute el "blockid")
+
+let on_hash_change f = add_window_listener "hashchange" (fun _ -> f ())
 
 external history_back : unit -> unit = "back" [@@mel.scope "history"]
 external history_forward : unit -> unit = "forward" [@@mel.scope "history"]
@@ -179,6 +196,14 @@ let utf8 : string -> string =
     "function (s) { var u8 = new Uint8Array(s.length); for (var i = 0; i < \
      s.length; i++) u8[i] = s.charCodeAt(i) & 0xff; return new \
      TextDecoder().decode(u8) }"]
+
+external js_get : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
+
+(* base name for the same accessor — shared src calls Platform.json_prop *)
+let json_prop = js_get
+
+let set_document_title : string -> unit =
+  [%mel.raw "function (t) { document.title = t }"]
 
 external navigator_ : Js.Json.t = "navigator"
 external navigator_platform : Js.Json.t -> string = "platform" [@@mel.get]
@@ -210,7 +235,7 @@ external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 let payload_str json key =
   match Option.map json_parse json with
   | Some json -> (
-      match Js.Json.decodeString (Web_dom.js_get json key) with
+      match Js.Json.decodeString (js_get json key) with
       | Some s -> s
       | None -> "")
   | None -> ""
@@ -227,7 +252,7 @@ let payload_str_opt json key =
 let payload_bool json key =
   match Option.map json_parse json with
   | Some json -> (
-      match Js.Json.decodeBoolean (Web_dom.js_get json key) with
+      match Js.Json.decodeBoolean (js_get json key) with
       | Some b -> b
       | None -> false)
   | None -> false
@@ -235,14 +260,14 @@ let payload_bool json key =
 let payload_num json key =
   match Option.map json_parse json with
   | Some json -> (
-      match Js.Json.decodeNumber (Web_dom.js_get json key) with
+      match Js.Json.decodeNumber (js_get json key) with
       | Some n -> n
       | None -> 0.)
   | None -> 0.
 
 (* raw DOM event field, e.g. keydown "key" *)
 let event_str ev key =
-  match Js.Json.decodeString (Web_dom.js_get ev key) with
+  match Js.Json.decodeString (js_get ev key) with
   | Some s -> s
   | None -> ""
 

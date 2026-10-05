@@ -1160,11 +1160,12 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
                         j d
                     in
                     match applied with
-                    | Some j' when j' != j ->
+                    | Page_delta.Applied j' ->
                         arr.(i) <- j';
                         owners := j' :: !owners;
                         Js.Promise.resolve `Applied
-                    | _ -> try_cands rest)
+                    | Page_delta.Failed -> Js.Promise.resolve `Unmatched
+                    | Page_delta.Unchanged -> try_cands rest)
               in
               try_cands cands
           in
@@ -1198,7 +1199,11 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match
     (Option.bind resp (fun r -> Wire.get r "delta"), (Runtime.model ()).Model.route_page)
   with
-  | Some delta, None -> (
+  | Some delta, None when !Runtime.current_journals <> [] -> (
+      (* journals / other route-less views keep their pages in
+         current_journals — splice the delta into the day it touches.
+         Inside the Journals/Home route the splice is keyed-list
+         repaint; off-route the day store still updates *)
       match Runtime.route () with
       | Model.Journals | Model.Home -> (
           let* ok = splice_journals [ delta ] in
@@ -1208,7 +1213,7 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
             ignore (Runtime.hooks.refresh_property_areas ());
             Js.Promise.resolve ())
           else refresh_page ())
-      | _ -> refresh_page ())
+      | _ -> refresh_journals_via_delta delta)
   | Some delta, Some page -> (
       let route_at_start = Runtime.route () in
       let* applied, touched, deltas = apply_queued page delta in      match applied with
@@ -1242,10 +1247,6 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
              basis so later broadcasts splice *)
           List.iter Page_delta.note_applied_of_delta deltas;
           Js.Promise.resolve ())
-  | Some delta, None when !Runtime.current_journals <> [] ->
-      (* journals / other route-less views keep their pages in
-         current_journals — splice the delta into the day it touches *)
-      refresh_journals_via_delta delta
   | Some delta, None ->
       (* no page store — the fresh reload already contains the delta's
          effects; seed the basis after it so later broadcasts splice *)

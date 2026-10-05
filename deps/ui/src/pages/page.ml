@@ -1223,31 +1223,6 @@ let journal_item_sig (ms : Model.t Signal.signal)
                 ps
             ]
         ]
-
-let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
-  let key = Runtime.journal_item_key p in
-  (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
-     containing the same editable db-page-title row as a page; the last
-     item drops its separator border via .journal-last-item *)
-  dom ~key:("ji-" ^ key)
-    ~style_class:
-      ("journal-item content relative" ^ if last then " journal-last-item" else "")
-    [ (fun ctx parent ->
-        (* delta-splices push the merged page into the item's signal —
-           only that day remounts; the outer journals list (and other
-           days' DOM) survives *)
-        let p_sig = Runtime.journal_page_sig ctx.Lui_ui.ui_scheduler p in
-        let blocks_sig =
-          Signal.map
-            (fun (p' : Model.page) -> p'.page_blocks)
-            (Signal.value p_sig)
-        in
-        (Logseq_dom.dyn ~equal:journal_meta_equal
-           (fun (p' : Model.page) ->
-             journal_item_inner m ~blocks_sig
-               ~page_sig:(Signal.value p_sig) p')
-           (Signal.value p_sig))
-          ctx parent)
     ]
 
 (* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:

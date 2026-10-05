@@ -3,6 +3,7 @@
    state/use-theme-mode! and theme.cljs DOM effects.
    Storage keys use cljs storage.cljs `(name key)` semantics. *)
 
+open Lui_elements
 
 let dom = Logseq_dom.dom
 module T = I18n

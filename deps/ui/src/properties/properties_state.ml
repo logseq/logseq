@@ -335,7 +335,7 @@ let refresh_affected affected =
   else if affected = [] then refresh_all ()
   else (
     refresh_pending := true;
-    Editor_dom.set_timeout (fun () ->
+    Web_dom.set_timeout (fun () ->
         refresh_pending := false;
         (* prunes dead areas as a side effect, like refresh_all *)
         ignore (live_areas ());

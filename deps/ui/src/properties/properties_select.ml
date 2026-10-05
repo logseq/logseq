@@ -10,7 +10,6 @@
 
 open Promise_ext
 open Lui_elements
-open Web_dom
 
 type item =
   { it_title : string
@@ -19,21 +18,6 @@ type item =
   ; it_new : bool (* renders via the "New option:" affordance *)
   ; it_strong : bool (* title leaf is <strong> (cljs property select) *)
   ; on_choose : unit -> unit
-  }
-
-type select_config =
-  { placeholder : string
-  ; items : item list
-  ; mutable filter : string
-  ; mutable chosen : int
-  ; new_option : (string -> unit) option (* on_new text *)
-  ; on_escape : unit -> unit
-  ; on_enter_text : (string -> unit) option (* Enter with no items *)
-  ; on_search : (string -> item list Js.Promise.t) option
-        (* async item source — bypasses the static substring filter *)
-  ; mutable searched : item list option
-  ; mutable results_inner : Web_dom.el option
-  ; mutable results_py : Web_dom.el option
   }
 
 let item ?(tip = "") ?(icon = "") ?(strong = false) title on_choose =
@@ -113,8 +97,7 @@ type sel_state =
 (* The query-builder filter pickers still mount this widget inside an
    imperative anchored popover — keep the el-based builder until that
    surface is itself ported to LUI components. *)
-open Editor_dom
-open Properties_dom
+open Web_dom
 
 type select_config =
   { cfg_placeholder : string
@@ -126,8 +109,8 @@ type select_config =
   ; on_enter_text : (string -> unit) option
   ; on_search_cfg : (string -> item list Js.Promise.t) option
   ; mutable searched : item list option
-  ; mutable results_inner : Editor_dom.el option
-  ; mutable results_py : Editor_dom.el option
+  ; mutable results_inner : Web_dom.el option
+  ; mutable results_py : Web_dom.el option
   }
 
 let cfg_visible cfg =

@@ -153,24 +153,28 @@ and retry_focus () =
     last_focus_emitted := None;
     drain_pending_focus_actions ())
 
+(* flush-time pass over pending focus — main.ml and the test driver run
+   one pass per UI flush; the retry loop rides the same entry point *)
+let focus_pending () = apply_focus ()
+
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   (* pending_focus_actions intentionally kept: keys queued during the
      remount window belong to the next focus landing as well *)
-  focus_passes := 0;
+  focus_attempts := 0;
   (* usually the textarea already exists — land right away; otherwise
      the arm rides the next flush pass *)
-  focus_pending ()
+  D.set_timeout apply_focus 0
 
 (* set pending focus, then run [p]; re-apply focus after it resolves so
    a remounted textarea still ends up focused *)
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
-  focus_passes := 0;
-  focus_pending ();
+  focus_attempts := 0;
+  D.set_timeout apply_focus 0;
   ignore
     (let* () = p in
-     focus_pending ();
+     D.set_timeout apply_focus 0;
      Js.Promise.resolve ())
 
 (* persisted/worker truth; display_title layers committed-but-unrefreshed

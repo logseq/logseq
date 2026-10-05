@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <caml/alloc.h>
+#include <caml/fail.h>
 #include <caml/callback.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
@@ -319,4 +320,73 @@ LUI_EXPORT int64_t lui_ocaml_root_node(void) {
   }
   caml_enter_blocking_section();
   return node;
+}
+
+/* ---------- web-external shims -------------------------------------------
+   Shared (melange) sources copied into the apple library declare
+   `external` names the browser provides. On native the C linker still
+   needs the symbol:
+
+   - atob: actually called (rtc_flows JWT decode) — real base64 decode.
+   - require / loadDictFile / loadIconNames: lazy-asset loaders; on
+     apple all dicts and icon names are compiled in, so they must never
+     run — fail loudly if reached. */
+
+static const char b64_alphabet[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static int b64_val(char c) {
+  const char *p = strchr(b64_alphabet, c);
+  return p == NULL ? -1 : (int)(p - b64_alphabet);
+}
+
+value atob(value input) {
+  CAMLparam1(input);
+  CAMLlocal1(out);
+  mlsize_t n = caml_string_length(input);
+  const char *src = String_val(input);
+  /* output ≤ n*3/4 + slack for '=' handling */
+  char *buf = malloc(n + 1);
+  if (buf == NULL) caml_failwith("atob: oom");
+  mlsize_t w = 0;
+  for (mlsize_t i = 0; i < n;) {
+    int vals[4] = {0, 0, 0, 0};
+    int pad = 0;
+    for (int k = 0; k < 4; k++) {
+      if (i >= n) {
+        pad = 4 - k;
+        vals[k] = 0;
+      } else if (src[i] == '=') {
+        pad++;
+        vals[k] = 0;
+        i++;
+      } else {
+        int v = b64_val(src[i]);
+        if (v < 0) { free(buf); caml_failwith("atob: bad base64"); }
+        vals[k] = v;
+        i++;
+      }
+    }
+    buf[w++] = (char)((vals[0] << 2) | (vals[1] >> 4));
+    if (pad < 2) buf[w++] = (char)((vals[1] << 4) | (vals[2] >> 2));
+    if (pad < 1) buf[w++] = (char)((vals[2] << 6) | vals[3]);
+  }
+  out = caml_alloc_initialized_string(w, buf);
+  free(buf);
+  CAMLreturn(out);
+}
+
+value require(value arg) {
+  caml_failwith("require: lazy-asset chunks are web-only on native");
+  return Val_unit;
+}
+
+value loadDictFile(value arg, value name) {
+  caml_failwith("loadDictFile: dicts are compiled in on native");
+  return Val_unit;
+}
+
+value loadIconNames(value arg) {
+  caml_failwith("loadIconNames: icon names are compiled in on native");
+  return Val_unit;
 }

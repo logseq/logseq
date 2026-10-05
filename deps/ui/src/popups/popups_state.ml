@@ -1307,8 +1307,8 @@ let inline_tag_text ac title =
     | Some i -> S.sub title (i + 1) (S.length title - i - 1)
     | None -> title
   in
-  let v = Dom_ext.value ac.editor in
-  let pos = Dom_ext.selection_start ac.editor in
+  let v = Web_dom.el_value ac.editor in
+  let pos = Web_dom.el_selection_start ac.editor in
   if pos >= 2 && pos <= S.length v && S.sub v (pos - 2) 2 = "[["
   then "#" ^ last_part
   else if
@@ -1356,8 +1356,8 @@ let apply_tag t ac ~create ~inline title =
          still erases the query but skips the tag/class attach — the
          page-ref autocomplete owns that context *)
       let tag_in_ref () =
-        let v = Dom_ext.value ac.editor in
-        let pos = Dom_ext.selection_start ac.editor in
+        let v = Web_dom.el_value ac.editor in
+        let pos = Web_dom.el_selection_start ac.editor in
         pos + 2 <= S.length v && S.sub v pos 2 = "]]"
       in
       let insert () =
@@ -1604,8 +1604,8 @@ let apply_index t i =
 let ac_on_enter t ac =
   match ac.kind with
   | Page_ref | Page_embed | Embed_ref | Block_ref ->
-      let pos = Dom_ext.selection_start ac.editor in
-      Dom_ext.set_selection_range ac.editor (pos + 2) (pos + 2);
+      let pos = Web_dom.el_selection_start ac.editor in
+      Web_dom.el_set_selection_range ac.editor (pos + 2) (pos + 2);
       close_ac t
   | Template_search -> close_ac t
   | Slash | Tag_search -> ()

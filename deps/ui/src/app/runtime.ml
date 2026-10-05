@@ -17,11 +17,11 @@ let repo () = Option.value (model ()).Model.repo ~default:""
 let route () = (model ()).Model.route
 
 (* mirrors of model fields for non-view consumers (sdk bridge, events) *)
-let current_repo : string option ref = ref None
+let current_repo = Subs_state.current_repo
 (* the subscribed-data stores live in the subs package (logseq_subs) —
    these aliases keep every consumer on the same refs *)
 let current_page = Subs_state.current_page
-let current_route : Model.route option ref = ref None
+let current_route = Subs_state.current_route
 
 (* journals view renders several pages at once — editor actions like
    append/find need access to every journal item's blocks *)
@@ -46,88 +46,25 @@ let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
    latest-entry projections *)
 let rtc_log_handler : (Wire.t -> unit) ref = ref (fun _ -> ())
 
-(* set by graphs_ops (avoids a Worker_events -> Graphs_ops -> Boot
-   module cycle): remote-graph-gone broadcast refreshes the remote
-   list and the all-graphs view *)
-let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
+(* the cycle-breaking callback record lives in subs_state so update.ml
+   can reach it without a Runtime dependency *)
+type hooks = Subs_state.app_hooks
 
-(* set by graphs_ops (same cycle-avoidance): worker add-repo broadcast
-   appends a downloaded graph to the local list *)
-let add_repo : (string -> unit) ref = ref (fun _ -> ())
+let hooks = Subs_state.app_hooks
 
-(* Worker_events clears its stashed broadcast deltas on every route
-   change (avoids a Runtime -> Worker_events cycle) *)
-let on_navigate : (unit -> unit) ref = ref (fun () -> ())
-
-(* the rest of the cycle-breaking callbacks, one documented record —
-   each field is registered once by its owning module *)
-type hooks =
-  { (* graphs_ops — fetch + remember the graph's worker uuid after
-       Boot_graph_ready *)
-    mutable on_graph_opened : string -> unit
-  ; (* rtc_flows — graph-switch sync trigger on Boot_graph_ready *)
-    mutable rtc_graph_ready : string -> unit
-  ; (* router — clears its loading_route dedupe when a route load
-       commits or fails *)
-    mutable nav_load_done : unit -> unit
-  ; (* router — refetch one journal item's linked refs and republish
-       through the keyed collection *)
-    mutable refresh_journal_side : Model.page -> unit
-  ; (* outliner_ops — refresh the current view after mutations made
-       outside the editor (sdk bridge) *)
-    mutable refresh_after_ops : unit -> unit Js.Promise.t
-  ; (* properties_state — rebuild mounted property areas (they hold
-       worker data outside the model) without the 150ms debounce *)
-    mutable refresh_property_areas : unit -> unit Js.Promise.t
-  }
-
-let hooks =
-  { on_graph_opened = (fun _ -> ())
-  ; rtc_graph_ready = (fun _ -> ())
-  ; nav_load_done = (fun () -> ())
-  ; refresh_journal_side = (fun _ -> ())
-  ; refresh_after_ops = (fun () -> Js.Promise.resolve ())
-  ; refresh_property_areas = (fun () -> Js.Promise.resolve ())
-  }
+(* imperative popup root for dialogs mounted outside the declarative
+   tree (views / property dialogs) *)
+let editor_popup_root : Js.Json.t option ref = ref None
 
 let on_sync = Subs_state.on_sync
 let run_sync_subs = Subs_state.run_sync_subs
 
-(* the open graph's worker uuid — carried as ?graph-id=<uuid> inside the
-   location hash (e.g. "#/page/u?graph-id=u") like cljs
-   current-graph-query-params, so deep links and reloads resolve a repo *)
-let current_graph_uuid : string option ref = ref None
-
-(* append ?graph-id=<uuid> to an in-app hash route when the uuid is known *)
-let nav_hash route =
-  match !current_graph_uuid with
-  | Some u when u <> "" -> route ^ "?graph-id=" ^ u
-  | _ -> route
-
-(* add the missing graph-id to the current hash without firing hashchange *)
-let sync_hash_graph_id () =
-  match !current_graph_uuid with
-  | Some u when u <> "" -> (
-      match Platform.location_hash () with
-      | "" | "#" | "#/" ->
-          Platform.replace_url_fragment ("#/?graph-id=" ^ u)
-      | h ->
-          if String.index_opt h '?' = None then
-            Platform.replace_url_fragment (h ^ "?graph-id=" ^ u))
-  | _ -> ()
-
-(* cljs add-page-to-recent! fires only inside redirect-to-page! — i.e.
-   explicit in-app page navigations, not boot/hashchange loads. Call
-   sites that correspond to redirect-to-page! mark the navigation here;
-   the recents hook consumes the mark when the page becomes Ready. *)
-let nav_user_initiated : bool ref = ref false
-
-let mark_nav () = nav_user_initiated := true
-
-let take_nav_mark () =
-  let v = !nav_user_initiated in
-  nav_user_initiated := false;
-  v
+let current_graph_uuid = Subs_state.current_graph_uuid
+let nav_hash = Subs_state.nav_hash
+let sync_hash_graph_id = Subs_state.sync_hash_graph_id
+let nav_user_initiated = Subs_state.nav_user_initiated
+let mark_nav = Subs_state.mark_nav
+let take_nav_mark = Subs_state.take_nav_mark
 
 let load_gen = Subs_state.load_gen
 
@@ -140,9 +77,7 @@ let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
    appends a downloaded graph to the local list *)
 let add_repo : (string -> unit) ref = ref (fun _ -> ())
 
-(* Worker_events clears its stashed broadcast deltas on every route
-   change (avoids a Runtime -> Worker_events cycle) *)
-let on_navigate : (unit -> unit) ref = ref (fun () -> ())
+let on_navigate = Subs_state.on_navigate
 
 (* items signals live in the subs package — same store for both
    platforms (the native twin mounts the same mounted-list protocol) *)

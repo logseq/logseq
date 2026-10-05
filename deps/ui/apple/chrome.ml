@@ -75,7 +75,7 @@ let dots_btn =
       Dom_ext.toolbar_dots_pos := pos;
       Runtime.send
         (Action.Page_menu_set
-           (Option.map (fun (x, y) -> (x, y, true)) pos)))
+           (Option.map (fun (x, y) -> (x, y, true, None)) pos)))
     []
 
 (* Out puts back/forward in the navigation group; the native hash

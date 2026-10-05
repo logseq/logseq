@@ -9,74 +9,74 @@ open Model
 let effects (action : Action.t) : unit =
   match action with
   | Action.Boot_graph_ready repo ->
-      Runtime.current_repo := Some repo;
-      Runtime.current_graph_uuid := None;
-      Runtime.hooks.on_graph_opened repo;
-      Runtime.hooks.rtc_graph_ready repo
+      Subs_state.current_repo := Some repo;
+      Subs_state.current_graph_uuid := None;
+      Subs_state.app_hooks.on_graph_opened repo;
+      Subs_state.app_hooks.rtc_graph_ready repo
   | Action.Graph_closed ->
-      Runtime.current_repo := None;
-      Runtime.current_page := None;
-      Runtime.current_route := None
+      Subs_state.current_repo := None;
+      Subs_state.current_page := None;
+      Subs_state.current_route := None
   | Action.Page_loaded page ->
-      Runtime.hooks.nav_load_done ();
+      Subs_state.app_hooks.nav_load_done ();
       (* a fresh full-fetch replaces the tree at an unknown rev — the
          delta basis only survives splices applied through Page_delta *)
       if not (Page_delta.is_own_commit page) then Page_delta.reset ();
-      Runtime.current_page := Some page;
+      Subs_state.current_page := Some page;
       (* splice-merged loads republish the same page: push the items
          into the mounted list's signal so rows repaint even when the
          view skips a remount *)
-      Runtime.push_page_items page;
+      Subs_state.push_page_items page;
       (* cljs route.cljs update-page-title!: document.title follows the
          loaded page's title *)
-      Web_dom.set_document_title page.Model.page_title;
-      Runtime.sync_hash_graph_id ();
-      (match !Runtime.after_page_load, page.Model.page_uuid with
+      Platform.set_document_title page.Model.page_title;
+      Subs_state.sync_hash_graph_id ();
+      (match !Subs_state.after_page_load, page.Model.page_uuid with
        | Some (want, f), Some u when u = want ->
-           Runtime.after_page_load := None;
+           Subs_state.after_page_load := None;
            f ()
        | _ -> ())
   | Action.Page_load_failed ->
-      Runtime.hooks.nav_load_done ();
-      Runtime.after_page_load := None
+      Subs_state.app_hooks.nav_load_done ();
+      Subs_state.after_page_load := None
   | Action.Journals_loaded js ->
-      Runtime.hooks.nav_load_done ();
+      Subs_state.app_hooks.nav_load_done ();
       (* a fresh full-fetch replaces every journal tree at an unknown
          rev — the delta basis only survives splices applied through
          Page_delta *)
       Page_delta.reset ();
-      Runtime.push_journals_items js
+      Subs_state.push_journals_items js
   | Action.Journals_spliced js ->
-      Runtime.hooks.nav_load_done ();
-      Runtime.push_journals_items js
+      Subs_state.app_hooks.nav_load_done ();
+      Subs_state.push_journals_items js
   | Action.Navigate_to r ->
       Page_delta.reset ();
-      Runtime.clear_page_items ();
-      Runtime.clear_journal_items ();
-      !Runtime.on_navigate ();
-      Runtime.current_page := None;
-      Runtime.current_route := Some r;
+      Subs_state.clear_page_items ();
+      Subs_state.clear_journal_items ();
+      !(Subs_state.on_navigate) ();
+      Subs_state.current_page := None;
+      Subs_state.current_route := Some r;
       (* in-graph routes always carry ?graph-id — navigation call sites
          write raw hashes, so re-append it here after the hash settles *)
       (match r with
        | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
-       | _ -> Runtime.sync_hash_graph_id ());
+       | _ -> Subs_state.sync_hash_graph_id ());
       (* cljs route.cljs static-title for non-page routes (page routes
          get their title when Page_loaded lands) *)
       (match r with
-       | Model.Home -> Web_dom.set_document_title "Logseq"
+       | Model.Home -> Platform.set_document_title "Logseq"
        | Model.Journals ->
-           Web_dom.set_document_title (I18n.t "nav/all-journals")
+           Platform.set_document_title ((!Subs_state.i18n) "nav/all-journals")
        | Model.All_pages ->
-           Web_dom.set_document_title (I18n.t "nav.all-pages/title")
+           Platform.set_document_title ((!Subs_state.i18n) "nav.all-pages/title")
        | Model.All_graphs ->
-           Web_dom.set_document_title (I18n.t "mobile.tab/graphs")
+           Platform.set_document_title ((!Subs_state.i18n) "mobile.tab/graphs")
        | Model.Settings ->
-           Web_dom.set_document_title (I18n.t "nav/settings")
+           Platform.set_document_title ((!Subs_state.i18n) "nav/settings")
        | Model.Import ->
-           Web_dom.set_document_title (I18n.t "import/title")
-       | Model.Library | Model.Not_found _ ->
-           Web_dom.set_document_title "Logseq"
+           Platform.set_document_title ((!Subs_state.i18n) "import/title")
+       | Model.Library | Model.Graph_view | Model.Not_found _ ->
+           Platform.set_document_title "Logseq"
        | Model.Page _ | Model.Block_zoom _ -> ())
   | _ -> ()
 
@@ -105,7 +105,7 @@ let update (model : t) (action : Action.t) : t =
              | Some p
                when { p with Model.page_blocks = [] }
                     = { page with page_blocks = [] }
-                    && Runtime.has_page_items ~scope:"main"
+                    && Subs_state.has_page_items ~scope:"main"
                          ~puuid:page.Model.page_uuid -> true
              | _ -> false
            then model.data_gen

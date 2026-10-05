@@ -470,11 +470,6 @@ let delta_touches (delta : Wire.t) (page : Model.page) : bool =
   | Some p -> delta_touches_parsed p page
   | None -> false
 
-(* apply [delta] to [page]:
-   [Unchanged] — delta already applied or irrelevant to this tree (the
-   caller must not publish, refetch, or refresh anything);
-   [Applied p'] — merged in place, untouched subtrees keep identity;
-   [Failed] — relevant but unspliceable: refetch only this page/day.
 (* every uuid a delta addresses — canon rows + tombstones + membership
    patch parents: the owner-detection key set for multi-page views
    (journals), where the page holding the touched tree must be found
@@ -487,7 +482,11 @@ let delta_keys (delta : Wire.t) : string list =
            (SSet.fold (fun u acc -> u :: acc) p.deleted []))
   | None -> []
 
-
+(* apply [delta] to [page]:
+   [Unchanged] — delta already applied or irrelevant to this tree (the
+   caller must not publish, refetch, or refresh anything);
+   [Applied p'] — merged in place, untouched subtrees keep identity;
+   [Failed] — relevant but unspliceable: refetch only this page/day.
    [~strict] (broadcast path) requires every membership patch to be
    contiguous with our materialized rev; the op-response path passes
    ~strict:false — its patches are absolute set-ops from a tx we just

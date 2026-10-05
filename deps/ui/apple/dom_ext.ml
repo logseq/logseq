@@ -639,9 +639,6 @@ let el_remove_attr (el : element) (name : string) : unit =
 let rect_width (r : rect) : float =
   Option.value (num_prop "width" r) ~default:0.
 
-let rect_top (r : rect) : float =
-  Option.value (num_prop "top" r) ~default:0.
-
 let bool_prop (name : string) (j : Js.Json.t) : bool option =
   match j with
   | Js.Json.JObject kvs ->

@@ -18,6 +18,42 @@ let last_rtc : Model.rtc option ref = ref None
    unchanged rebroadcast would be dropped and the indicator stay hidden *)
 let reset_rtc () = last_rtc := None
 
+(* The worker's search-index build reports progress through this
+   remoteInvoke; without a handler the worker->main comlink call hangs
+   and the build never settles. Feeds the header's
+   .search-index-progress widget — cljs
+   persist_db/browser.cljs thread-api/search-index-build-progress *)
+let on_index_progress repo (payload : Wire.t) =
+  let str k =
+    match Wire.get payload k with
+    | Some (Wire.String s | Wire.Keyword s) -> s
+    | _ -> ""
+  in
+  let status = str "status" in
+  let build_id =
+    match Wire.get payload "build-id" with
+    | Some (Wire.String s) -> Some s
+    | _ -> None
+  in
+  Runtime.send
+    (Action.Search_index_progress
+       { Model.ip_repo = repo
+       ; ip_status = status
+       ; ip_stage = str "stage"
+       ; ip_progress =
+           Option.value (Wire.map_get_int payload "progress") ~default:0
+       ; ip_build_id = build_id
+       });
+  Runtime.flush ();
+  match status, build_id with
+  | "completed", Some bid ->
+      Web_dom.set_timeout
+        (fun () ->
+          Runtime.send (Action.Search_index_hide (repo, bid));
+          Runtime.flush ())
+        1500
+  | _ -> ()
+
 let dispatch kind payload =
   match kind with
   | "thread-api/search-index-build-progress" -> (
@@ -130,6 +166,7 @@ let ui_busy ~now ~last_fire =
 let init () =
   (* the subscription pipeline's touch points into the app — one place
      to read every edge between worker events and the UI *)
+  Subs_state.i18n := I18n.t;
   Subs.install_hooks
     { Subs.reload = Router.reload
     ; refresh_page_side = (fun p -> !Runtime.refresh_page_side p)

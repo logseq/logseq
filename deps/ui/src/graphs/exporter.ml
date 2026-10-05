@@ -123,83 +123,15 @@ let link ~key label desc on_click =
    hourly writes of <graph-dir>/db.sqlite with the old file rotated into
    <graph-dir>/backups/. *)
 
-type dir_handle
-
-type file_handle
-
-type writable_
-
-external show_dir_picker : Js.Json.t -> dir_handle Js.Promise.t =
-  "showDirectoryPicker" [@@mel.scope "window"]
-
-let picker_supported : unit -> bool =
-  [%mel.raw
-    "function () { return typeof window.showDirectoryPicker === \
-     'function' }"]
-
-external h_name : dir_handle -> string = "name" [@@mel.get]
-
-external get_dir :
-  dir_handle -> string -> Js.Json.t -> dir_handle Js.Promise.t =
-  "getDirectoryHandle" [@@mel.send]
-
-external get_file :
-  dir_handle -> string -> Js.Json.t -> file_handle Js.Promise.t =
-  "getFileHandle" [@@mel.send]
-
-external fh_get_file : file_handle -> Js.Json.t Js.Promise.t =
-  "getFile" [@@mel.send]
-
-external file_size : Js.Json.t -> float = "size" [@@mel.get]
-
-external file_text : Js.Json.t -> string Js.Promise.t = "text"
-  [@@mel.send]
-
-external fh_move :
-  file_handle -> dir_handle -> string -> unit Js.Promise.t = "move"
-  [@@mel.send]
-
-external fh_writable : file_handle -> writable_ Js.Promise.t =
-  "createWritable" [@@mel.send]
-
-external w_write :
-  writable_ -> Js.Typed_array.Uint8Array.t -> unit Js.Promise.t =
-  "write" [@@mel.send]
-
-external w_close : writable_ -> unit Js.Promise.t = "close"
-  [@@mel.send]
-
-external set_interval : (unit -> unit) -> int -> int =
-  "setInterval" [@@mel.scope "window"]
-
-external clear_interval : int -> unit = "clearInterval"
-  [@@mel.scope "window"]
-
 let create_opts = Js.Json.object_ (Js.Dict.fromList [ ("create", Js.Json.boolean true) ])
 
 let picker_opts =
   Js.Json.object_
     (Js.Dict.fromList [ ("mode", Js.Json.string "readwrite") ])
 
-let truncate_old_versions : dir_handle -> unit Js.Promise.t =
-  [%mel.raw
-    "async function (dir) { const names = []; for await (const e of \
-     dir.values()) if (e.kind === 'file') names.push(e.name); for \
-     (const n of names.sort().reverse().slice(12)) await \
-     dir.removeEntry(n); }"]
-
-let str_to_u8 (s : string) =
-  let u8 = Js.Typed_array.Uint8Array.fromLength (String.length s) in
-  String.iteri (fun i c -> Js.Typed_array.Uint8Array.unsafe_set u8 i (Char.code c)) s;
-  u8
-
-let decode_u8 : Js.Typed_array.Uint8Array.t -> string Js.Promise.t =
-  [%mel.raw
-    "async function (u8) { return new TextDecoder().decode(u8) }"]
-
 let backup_folder_key = "logseq.kv/graph-backup-folder"
 
-let handle_ref : dir_handle option ref = ref None
+let handle_ref : Web_dom.dir_handle option ref = ref None
 
 let interval_ref : int option ref = ref None
 
@@ -244,30 +176,30 @@ let backup_now () =
   | None -> Js.Promise.resolve `err
   | Some dir ->
       let repo_name = short_repo () in
-      (let* graph_dir = get_dir dir repo_name create_opts in
-       let* backups = get_dir graph_dir "backups" create_opts in
-       let* fh = get_file graph_dir "db.sqlite" create_opts in
-       let* f = fh_get_file fh in
-       let* ftext = file_text f in
+      (let* graph_dir = Web_dom.get_dir dir repo_name create_opts in
+       let* backups = Web_dom.get_dir graph_dir "backups" create_opts in
+       let* fh = Web_dom.get_file graph_dir "db.sqlite" create_opts in
+       let* f = Web_dom.fh_get_file fh in
+       let* ftext = Web_dom.file_text f in
        let* w =
          Runtime.invoke1 "thread-api/export-db-binary"
            (Wire.String (repo ()))
        in
        match w with
        | Wire.Binary data ->
-           let* decoded = decode_u8 (str_to_u8 data) in
+           let* decoded = Web_dom.decode_u8 (Web_dom.str_to_u8 data) in
            if ftext = decoded then Js.Promise.resolve `unchanged
            else (
-             (if file_size f > 0. then
-                fh_move fh backups
+             (if Web_dom.file_size f > 0. then
+                Web_dom.fh_move fh backups
                   (Printf.sprintf "%.0f.db.sqlite" (Platform.date_now_ms ()))
               else Js.Promise.resolve ())
              |> Js.Promise.then_ (fun () ->
-                    let* _ = truncate_old_versions backups in
-                    let* fh2 = get_file graph_dir "db.sqlite" create_opts in
-                    let* wr = fh_writable fh2 in
-                    let* _ = w_write wr (str_to_u8 data) in
-                    w_close wr)
+                    let* _ = Web_dom.truncate_old_versions backups in
+                    let* fh2 = Web_dom.get_file graph_dir "db.sqlite" create_opts in
+                    let* wr = Web_dom.fh_writable fh2 in
+                    let* _ = Web_dom.w_write wr (Web_dom.str_to_u8 data) in
+                    Web_dom.w_close wr)
              |> Js.Promise.then_ (fun () -> Js.Promise.resolve `written))
        | _ -> Js.Promise.resolve `err)
       |> Js.Promise.catch (fun _ ->
@@ -276,11 +208,11 @@ let backup_now () =
 
 let auto_backup_interval () =
   (match !interval_ref with
-   | Some i -> clear_interval i
+   | Some i -> Web_dom.clear_interval i
    | None -> ());
   interval_ref :=
     Some
-      (set_interval
+      (Web_dom.set_interval
          (fun () ->
            ignore
              (backup_now () |> Js.Promise.then_ (fun r ->
@@ -289,8 +221,8 @@ let auto_backup_interval () =
          (60 * 60 * 1000))
 
 let choose_folder ctx =
-  (let* dir = show_dir_picker picker_opts in
-   let name = h_name dir in
+  (let* dir = Web_dom.show_dir_picker picker_opts in
+   let name = Web_dom.h_name dir in
    handle_ref := Some dir;
    let* _ = write_kv name in
    set_folder ctx (Some name);
@@ -302,7 +234,7 @@ let choose_folder ctx =
 let clear_folder ctx =
   handle_ref := None;
   (match !interval_ref with
-   | Some i -> clear_interval i; interval_ref := None
+   | Some i -> Web_dom.clear_interval i; interval_ref := None
    | None -> ());
   ignore
     (let* _ = retract_kv () in
@@ -329,7 +261,7 @@ let auto_backup ctx =
   dom ~key:"ab" ~style_class:"flex flex-col gap-4"
     [ dom ~key:"ab-h" ~style_class:"font-medium opacity-50"
         ~text:(T.t "export.backup/schedule") []
-    ; (if not (picker_supported ()) then
+    ; (if not (Web_dom.picker_supported ()) then
          dom ~key:"ab-na"
            [ dom ~key:"ab-na-s" ~tag:"span"
                ~text:(T.t "export.backup/unsupported-desc") [] ]

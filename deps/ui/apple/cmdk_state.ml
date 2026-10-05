@@ -80,14 +80,52 @@ let initial_view =
   ; expanded = []; hl = -1; mouse = false; filter = None
   ; recents = []; tip = 0 }
 
+(* FTS5 highlight markers the worker embeds in search-result titles
+   (`$pfts_2lqh>$match$<pfts_2lqh$`); title comparisons strip them *)
+let pfts_open = "$pfts_2lqh>$"
+let pfts_close = "$<pfts_2lqh$"
+
+let find_sub sub s start =
+  let n = String.length s and m = String.length sub in
+  let rec go i =
+    if i + m > n then -1
+    else if String.sub s i m = sub then i
+    else go (i + 1)
+  in
+  go start
+
+let strip_pfts text =
+  let n = String.length text in
+  let lo = String.length pfts_open and lc = String.length pfts_close in
+  let buf = Buffer.create n in
+  let rec go pos =
+    let i = find_sub pfts_open text pos in
+    if i < 0 then Buffer.add_substring buf text pos (n - pos)
+    else
+      let j = find_sub pfts_close text (i + lo) in
+      if j < 0 then Buffer.add_substring buf text pos (n - pos)
+      else begin
+        Buffer.add_substring buf text pos (i - pos);
+        Buffer.add_substring buf text (i + lo) (j - i - lo);
+        go (j + lc)
+      end
+  in
+  go 0;
+  Buffer.contents buf
+
 let latest_vs : view Signal.signal option ref = ref None
 let latest_t : t option ref = ref None
+
+(* the palette singleton — lets keyboard shortcuts dispatch command ids
+   through the same run_command path palette items take *)
+let latest_st : t option ref = ref None
 
 let make scheduler : t =
   let vs = Signal.state scheduler initial_view in
   let st = { vs; gen = ref 0 } in
   latest_vs := Some vs.Signal.state_signal;
   latest_t := Some st;
+  latest_st := Some st;
   st
 
 let get st = Signal.get st.vs.state_signal
@@ -98,6 +136,11 @@ let open_signal () =
   match !latest_vs with
   | Some vs -> Some (Signal.map (fun v -> v.open_) vs)
   | None -> None
+
+let is_open () =
+  match open_signal () with
+  | Some s -> Signal.get s
+  | None -> false
 
 (* View-derived flags are baked into every item and group at publish
    time so keyed rows never subscribe the view signal themselves: a row
@@ -1368,6 +1411,27 @@ let run_highlighted st =
 
 (* shift+enter opens the highlighted page/block in the right sidebar
    (cljs cmdk on-shift-enter -> ui/open-in-right-sidebar) *)
+(* keyboard-shortcut entry point: run a command id exactly as the
+   palette would. Palette-shaped commands open the palette in the right
+   mode first; everything else dispatches straight through run_command *)
+let dispatch_id (cid : string) =
+  match !latest_st with
+  | Some st -> (
+      match cid with
+      | "go/search" -> open_palette st
+      | "command-palette/toggle" ->
+          if (get st).open_ then close st
+          else begin
+            open_palette st;
+            set_in st (fun v -> { v with filter = Some G_commands; input = "" });
+            refresh st
+          end
+      | "go/search-in-page" | "editor/move-blocks" | "go/search-themes" ->
+          if not (get st).open_ then open_palette st;
+          run_command st (Runtime.model ()).Model.repo cid
+      | _ -> run_command st (Runtime.model ()).Model.repo cid)
+  | None -> ()
+
 let run_highlighted_sidebar st =
   let v = get st in
   match item_at v v.hl with

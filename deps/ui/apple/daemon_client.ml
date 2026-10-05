@@ -157,6 +157,11 @@ let new_uuid () =
   String.sub hex 0 8 ^ "-" ^ String.sub hex 8 4 ^ "-" ^ String.sub hex 12 4
   ^ "-" ^ String.sub hex 16 4 ^ "-" ^ String.sub hex 20 12
 
+let jobj (kvs : (string * Js.Json.t) list) : Js.Json.t =
+  Js.Json.JObject kvs
+
+let json_stringify (j : Js.Json.t) : string = Js.Json.stringify j
+
 (* createGraph — ensure the graph dir exists and state.json says
    phase=available so the daemon's admission check passes. *)
 let ensure_graph_created (repo : string) : unit =

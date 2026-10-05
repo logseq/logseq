@@ -717,7 +717,7 @@ let url_button ~key ~label ~on_open =
 let storage_url key default =
   match Platform.local_storage_get key with
   | Some v ->
-      let v = V.unquote v in
+      let v = Platform.storage_unquote v in
       if String.trim v = "" then default else v
   | None -> default
 

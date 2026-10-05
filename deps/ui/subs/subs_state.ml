@@ -32,6 +32,10 @@ let journals_sig scheduler : Model.page array Signal.state =
       journals_items := Some s;
       s
 
+(* repo the boot sequence opened — update.ml sets it so route loads and
+   commands know which repo to hit (runtime.ml aliases it for src) *)
+let current_repo : string option ref = ref None
+
 let push_journals_items (js : Model.page list) =
   match !journals_items with
   | Some s ->
@@ -192,3 +196,84 @@ let run_sync_subs (affected : Wire.t list) =
         with e ->
           Platform.console_error ("sync-db-changes handler failed", e))
     !sync_subs
+
+(* ---- app-level runtime state + cycle-breaking hooks ----
+   update.ml (same library) writes these; runtime.ml aliases them so src
+   code keeps its Runtime.* surface *)
+
+let current_route : Model.route option ref = ref None
+
+(* the open graph's worker uuid — carried as ?graph-id=<uuid> inside the
+   location hash (e.g. "#/page/u?graph-id=u") like cljs
+   current-graph-query-params, so deep links and reloads resolve a repo *)
+let current_graph_uuid : string option ref = ref None
+
+(* append ?graph-id=<uuid> to an in-app hash route when the uuid is known *)
+let nav_hash route =
+  match !current_graph_uuid with
+  | Some u when u <> "" -> route ^ "?graph-id=" ^ u
+  | _ -> route
+
+(* add the missing graph-id to the current hash without firing hashchange *)
+let sync_hash_graph_id () =
+  match !current_graph_uuid with
+  | Some u when u <> "" -> (
+      match Platform.location_hash () with
+      | "" | "#" | "#/" ->
+          Platform.replace_url_fragment ("#/?graph-id=" ^ u)
+      | h ->
+          if String.index_opt h '?' = None then
+            Platform.replace_url_fragment (h ^ "?graph-id=" ^ u))
+  | _ -> ()
+
+(* cljs add-page-to-recent! fires only inside redirect-to-page! — i.e.
+   explicit in-app page navigations, not boot/hashchange loads. Call
+   sites that correspond to redirect-to-page! mark the navigation here;
+   the recents hook consumes the mark when the page becomes Ready. *)
+let nav_user_initiated : bool ref = ref false
+
+let mark_nav () = nav_user_initiated := true
+
+let take_nav_mark () =
+  let v = !nav_user_initiated in
+  nav_user_initiated := false;
+  v
+
+(* Worker_events clears its stashed broadcast deltas on every route
+   change (avoids a Runtime -> Worker_events cycle) *)
+let on_navigate : (unit -> unit) ref = ref (fun () -> ())
+
+(* the rest of the cycle-breaking callbacks, one documented record —
+   each field is registered once by its owning module *)
+type app_hooks =
+  { (* graphs_ops — fetch + remember the graph's worker uuid after
+       Boot_graph_ready *)
+    mutable on_graph_opened : string -> unit
+  ; (* rtc_flows — graph-switch sync trigger on Boot_graph_ready *)
+    mutable rtc_graph_ready : string -> unit
+  ; (* router — clears its loading_route dedupe when a route load
+       commits or fails *)
+    mutable nav_load_done : unit -> unit
+  ; (* router — refetch one journal item's linked refs and republish
+       through the keyed collection *)
+    mutable refresh_journal_side : Model.page -> unit
+  ; (* outliner_ops — refresh the current view after mutations made
+       outside the editor (sdk bridge) *)
+    mutable refresh_after_ops : unit -> unit Js.Promise.t
+  ; (* properties_state — rebuild mounted property areas (they hold
+       worker data outside the model) without the 150ms debounce *)
+    mutable refresh_property_areas : unit -> unit Js.Promise.t
+  }
+
+(* i18n lookup for document titles — installed by src at init (I18n
+   lives outside this library) *)
+let i18n : (string -> string) ref = ref (fun k -> k)
+
+let app_hooks =
+  { on_graph_opened = (fun _ -> ())
+  ; rtc_graph_ready = (fun _ -> ())
+  ; nav_load_done = (fun () -> ())
+  ; refresh_journal_side = (fun _ -> ())
+  ; refresh_after_ops = (fun () -> Js.Promise.resolve ())
+  ; refresh_property_areas = (fun () -> Js.Promise.resolve ())
+  }

@@ -210,7 +210,7 @@ let nav r =
     Platform.set_location_hash (Runtime.nav_hash h);
     (* an identical hash fires no hashchange — still let resolve run so
        the same-route refresh path loads data *)
-    Platform.dispatch "ls:navigate" Js.Json.null);
+    Web_dom.dispatch_custom "ls:navigate" Js.Json.null);
   true
 
 (* dispatch through the shared command table (cljs :shortcut handler
@@ -251,7 +251,7 @@ let seq_second prefix key =
   | "g", "h" -> nav Model.Home
   | "g", "j" -> nav Model.Journals
   | "g", "s" ->
-      Settings_state.request_tab "keymap";
+      Settings_state.open_at "keymap";
       Dialogs_state.open_ "settings";
       true
   | "g", "f" -> Sidebar_state.open_cards (); true
@@ -301,7 +301,7 @@ let seq_prefix ev key =
   match key with
   | ("g" | "t" | "p" | "c") when not (D.ev_shift ev) ->
       seq_pending := Some (key, Platform.date_now_ms ());
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       true
   | _ -> false
 
@@ -320,7 +320,7 @@ let seq_key ev =
           Platform.date_now_ms () -. t0 <= seq_window_ms
           && seq_second prefix key
         then (
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           true)
         else seq_prefix ev key
     | None -> seq_prefix ev key
@@ -336,25 +336,25 @@ let global_chord ev =
      move-mode, and a second handler on the same chord toggles the
      palette straight back off *)
   | "k" when meta && shift ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       Cmdk_state.open_in_page ();
       true
   | "p" when meta && shift ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       Cmdk_state.open_latest ();
       true
   | "p" when meta ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       (match A.selected_uuids () with
        | u :: _ -> Properties_dialog.open_for_block u
        | [] -> Properties_dialog.open_for_current ());
       true
   | "[" when meta ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       Platform.history_back ();
       true
   | "]" when meta ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       Platform.history_forward ();
       true
   | "f" when meta && shift -> run_cid "page/toggle-favorite"; true
@@ -449,7 +449,7 @@ let follow_link el ~sidebar =
         | Some sst -> Sidebar_state.open_uuid sst u
         | None -> ())
       else ignore (nav (Model.Block_zoom u))
-  | Some (`Url u) -> Browser_ui.open_url u
+  | Some (`Url u) -> Platform.open_url u
   | None -> ()
 
 (* kill-ring style ops work on the live textarea + synced buffer *)
@@ -481,7 +481,7 @@ let kill_word_back el uuid =
     (String.sub v 0 !i ^ String.sub v p (String.length v - p))
     !i
 
-let move_word el dir =
+let move_caret_word el dir =
   let v = D.el_value el in
   let is_sep c = c = ' ' || c = '\n' || c = '\t' in
   let i = ref (D.el_selection_start el) in
@@ -594,30 +594,30 @@ let on_editor_key ev uuid el =
         (* ctrl edit keys — before the mod cases: mods ⊃ ctrl *)
         | "l" when D.ev_ctrl ev && not (D.ev_meta ev) ->
             (* editor/clear-block *)
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             replace_buffer el uuid "" 0
         | "u" when D.ev_ctrl ev && not (D.ev_meta ev) ->
             (* editor/kill-line-before *)
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             kill_line_before el uuid
         | "w" when D.ev_ctrl ev && not (D.ev_meta ev) ->
             (* editor/forward-kill-word — cljs names it forward but it
                deletes the word behind the caret *)
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             kill_word_back el uuid
         | "b" when D.ev_ctrl ev && shift && not (D.ev_meta ev) ->
             (* editor/backward-word *)
-            D.prevent_default ev;
-            move_word el (-1)
+            D.ev_prevent_default ev;
+            move_caret_word el (-1)
         | "f" when D.ev_ctrl ev && shift && not (D.ev_meta ev) ->
             (* editor/forward-word *)
-            D.prevent_default ev;
-            move_word el 1
+            D.ev_prevent_default ev;
+            move_caret_word el 1
         | "n" when D.ev_ctrl ev && not (D.ev_meta ev) ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.arrow_nav uuid false
         | "p" when D.ev_ctrl ev && not (D.ev_meta ev) ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.arrow_nav uuid true
         | "z" when mods ev ->
             D.ev_prevent_default ev;
@@ -911,9 +911,6 @@ let on_normal_key ev =
            Popups_state.emit_cmd "add-property"
              [ "block", Js.Json.string u ]
        | [] -> ())
-  | "p" when selected () && not (mods ev) ->
-      D.ev_prevent_default ev;
-      arm_pending_p ()
   | "Backspace" | "Delete" when selected () ->
       D.ev_prevent_default ev;
       A.delete_selection ()
@@ -1022,19 +1019,12 @@ let on_normal_key ev =
           A.quick_add ()
       | "c" when D.ev_meta ev ->
           (* editor/copy and copy-text share the text-copy path *)
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           run_cid "editor/copy"
       | "x" when D.ev_meta ev && not shift ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           run_cid "editor/cut"
       | _ -> ())
-
-(* while an autocomplete popup is open its own document listener
-   (registered after ours) owns Enter/Tab/Escape/arrows — skip *)
-let ac_popup_open () =
-  match D.get_element_by_id "ui__ac-inner" with
-  | Some _ -> true
-  | None -> false
 
 (* is [target] the editor surface of block [uuid] — its own textarea or
    the CodeMirror line inside its editor wrapper *)
@@ -1064,7 +1054,7 @@ let is_other_block_editor uuid target =
    synchronously so it never sees this window — apply text edits to the
    pending buffer at the pending caret and replay structural ops once
    focus lands *)
-let rec on_pending_focus_key ev e caret =
+let on_pending_focus_key ev e caret =
   let buf = e.S.buffer in
   let len = String.length buf in
   (* pending_focus caret is derived from the live textarea, which can
@@ -1119,7 +1109,7 @@ let rec on_pending_focus_key ev e caret =
   in
   (match D.ev_key ev with
   | "Backspace" ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       patch_at (fun b c ->
           if c = 0 then (
             queue (fun () -> A.merge_prev e.S.uuid);
@@ -1129,7 +1119,7 @@ let rec on_pending_focus_key ev e caret =
             ^ String.sub b c (String.length b - c)
             , c - 1 ))
   | "Delete" ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       patch_at (fun b c ->
           if c = String.length b then (
             queue (fun () -> A.merge_next e.S.uuid);
@@ -1273,7 +1263,7 @@ let on_keydown ev =
                   (* a click on a different block is mid-dispatch: the
                      press belongs to the block being entered, not the
                      one still marked editing *)
-                  D.prevent_default ev;
+                  D.ev_prevent_default ev;
                   queue_racing_key ev u
               | _ -> on_pending_focus_key ev e caret)
           | Some e, _
@@ -1290,7 +1280,7 @@ let on_keydown ev =
                   (* a click on a different block is mid-dispatch: the
                      press belongs to the block being entered, not the
                      one still marked editing *)
-                  D.prevent_default ev;
+                  D.ev_prevent_default ev;
                   queue_racing_key ev u
               | _ ->
                   (* pending_focus was consumed on a node the following
@@ -1364,7 +1354,7 @@ let on_keydown ev =
                           || key = "Backspace" || key = "Tab")
                        && (not (D.ev_composing ev))
                        && not (mods ev || D.ev_alt ev) ->
-                    D.prevent_default ev;
+                    D.ev_prevent_default ev;
                     queue_racing_key ev u
                 | _ -> on_normal_key ev))))
   end

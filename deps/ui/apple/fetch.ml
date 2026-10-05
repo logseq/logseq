@@ -11,8 +11,9 @@ module BodyInit = struct
   let make (s : string) : t = s
 end
 
+type http_method = Get | Post | Put | Delete
+
 module RequestInit = struct
-  type http_method = Get | Post | Put | Delete
   type t =
     { http_method : http_method
     ; headers : HeadersInit.t
