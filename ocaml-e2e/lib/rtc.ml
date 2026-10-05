@@ -41,7 +41,9 @@ let get_rtc_tx env =
     }
 
 let dump_sync_logs env =
-  let kws = [ "sync"; "rtc"; "RTC"; "ws"; "error"; "Error"; "fail"; "exn" ] in
+  let kws =
+    [ "sync"; "rtc"; "RTC"; "ws"; "error"; "Error"; "fail"; "exn"; "render" ]
+  in
   let has_any m =
     List.exists
       (fun k ->

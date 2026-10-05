@@ -42,10 +42,17 @@ let ready : (Env.t * Env.t) Js.Promise.t Lazy.t =
            in
            Js.Promise.resolve ())
      in
+     (* browsers may already be closed when this hook runs (after-hooks are
+        FIFO and the shared pages' close is registered first): removing the
+        remote graph is best-effort teardown *)
      Fixtures.after (fun () ->
-         Env.with_page env2 (Env.page env2) (fun () ->
-             let* _ = Graph.remove_remote_graph env2 graph_name in
-             Js.Promise.resolve ()));
+         Js.Promise.catch
+           (fun e ->
+             ignore e;
+             Js.Promise.resolve ())
+           (Env.with_page env2 (Env.page env2) (fun () ->
+                let* _ = Graph.remove_remote_graph env2 graph_name in
+                Js.Promise.resolve ())));
      Js.Promise.resolve (env1, env2))
 
 (* :each fixture *)
@@ -102,7 +109,31 @@ let validate_task_blocks env page1 page2 =
             let* () = Assert.have_count env (".ls-icon-" ^ icon) n in
             check rest
       in
-      check icon_counts)
+      Js.Promise.catch
+        (fun e ->
+           let* n_blocks =
+             Playwright.count (Pw.q env ".ls-block")
+           in
+           let* n_icons =
+             Playwright.count (Pw.q env ".ui__icon")
+           in
+           let* cur =
+             Playwright.text_content
+               (Pw.q env "div[data-testid='page title'] .block-title-wrap")
+           in
+           let page_name = Option.value ~default:"" cur in
+           Js.log
+             (Printf.sprintf
+                "[rtc-dbg] p1 dom: blocks=%d icons=%d page=%s"
+                n_blocks n_icons page_name);
+           let* () =
+             Env.with_page env page2 (fun () ->
+                 Rtc.dump_sync_logs env;
+                 Js.Promise.resolve ())
+           in
+           Rtc.dump_sync_logs env;
+           Playwright.throw_error e)
+        (check icon_counts))
 
 let rec iter_seq f = function
   | [] -> Js.Promise.resolve ()
