@@ -16,6 +16,13 @@ GitHub `logseq/db-test` issues with the `import` label were audited on 2026-06-2
 
 ## Fixed and Covered Cases
 
+### Built-in property name collision with tags (`#scheduled`)
+
+- Source issue: [db-test#1009](https://github.com/logseq/db-test/issues/1009).
+- Case: file graph has an inline tag whose name matches a built-in property (e.g. `#scheduled`), imported with **Import all tags** / `convert-all-tags? true`.
+- Expected import behavior: do not convert that tag into a class (keep page-ref behavior). The built-in property entity must keep its `:db/ident` and schema; graph validation must pass.
+- Regression test: `logseq.graph-parser.exporter-test/import-does-not-corrupt-built-in-property-when-tag-name-collides`.
+
 ### Legacy journal filename refs
 
 - Source issue: #906.
