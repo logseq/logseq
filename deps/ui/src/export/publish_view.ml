@@ -6,7 +6,6 @@
 open Promise_ext
 open Lui_elements
 
-let dom = Logseq_dom.dom
 module W = Wire
 type pst = {
   page_uuid : string option;
@@ -33,23 +32,6 @@ let pending : (string * int option) option ref = ref None
 
 let arm uuid db_id = pending := Some (uuid, db_id)
 
-
-let btn_base =
-  "ui__button inline-flex cursor-pointer items-center justify-center \
-   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-   ring-offset-background transition-colors focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring \
-   focus-visible:ring-offset-2 disabled:pointer-events-none \
-   disabled:opacity-50 select-none"
-
-let input_cls =
-  "ui__input flex h-10 w-full rounded-md border border-input \
-   bg-background px-3 py-2 text-sm ring-offset-background file:border-0 \
-   file:bg-transparent file:text-sm file:font-medium \
-   placeholder:text-muted-foreground focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring \
-   focus-visible:ring-offset-2 disabled:cursor-not-allowed \
-   disabled:opacity-50"
 
 
 (* cljs util/time-ms *)
@@ -216,58 +198,54 @@ let submit ctx =
   end
 
 let ghost_btn () =
-  dom ~key:"pub-cancel" ~tag:"button"
-    ~style_class:
-      (btn_base
-     ^ " h-10 rounded px-4 py-2 hover:bg-secondary/70 \
-        hover:text-secondary-foreground active:opacity-80 as-ghost")
-    ~attrs:[ ("type", "button") ] ~events:"click"
-    ~on_dom_event:(fun n _ ->
-      if n = "click" then Dialogs_state.close_top ())
-    ~text:(I18n.t "ui/cancel") []
+  button ~key:"pub-cancel" ~variant:`ghost
+    ~style_class:"ui__button as-ghost"
+    ~text:(I18n.t "ui/cancel")
+    ~on_press:(fun _ -> Dialogs_state.close_top ())
+    []
 
+(* password input + trailing visibility toggle — the field kind itself
+   swaps (secure_field <-> input), a structural branch, so if_ mounts the
+   alternative; the eye icon is just a prop flip -> ~icon_signal *)
 let toggle_pw ctx =
   let st_sig = Signal.value (st ctx) in
-  dom ~key:"pub-pw-wrap" ~style_class:"ls-toggle-password-input relative"
-    [ dom ~key:"pub-pw" ~tag:"input" ~style_class:input_cls
-        ~attrs_signal_v:(Logseq_dom.reactive_attrs
-             (fun (s : pst) ->
-               [ ("type", if s.visible then "text" else "password")
-               ; ("placeholder", I18n.t "publish/password-optional-placeholder") ])
-             st_sig)
-        ~events:"input"
-        ~on_dom_event:(fun n payload ->
-          if n = "input" then
-            match payload with
-            | Some _ ->
-                Signal.update (st ctx) (fun s ->
-                    { s with
-                      password = Platform.payload_str payload "value" })
-            | None -> ())
-        ~text_signal:(Logseq_dom.reactive_text (fun (s : pst) -> s.password) st_sig)
+  let pw_input ~key ~visible =
+    let value_sig = Signal.map (fun (s : pst) -> s.password) st_sig in
+    let on_input ev =
+      match ev with
+      | Lui_protocol.TextChanged (_, v) ->
+          Signal.update (st ctx) (fun s -> { s with password = v })
+      | _ -> ()
+    in
+    let placeholder = I18n.t "publish/password-optional-placeholder" in
+    if visible then
+      input ~key ~style_class:"ui__input" ~placeholder
+        ~text_signal:value_sig ~on_input []
+    else
+      secure_field ~key ~style_class:"ui__input" ~placeholder
+        ~text_signal:value_sig ~on_input
+        ~submit_on_enter:true
+        ~on_submit:(fun _ -> submit ctx)
         []
+  in
+  overlay ~key:"pub-pw-wrap" ~alignment:`trailing
+    ~style_class:"ls-toggle-password-input"
+    [ reactive
+        (fun visible -> pw_input ~key:"pub-pw" ~visible)
+        (Signal.map (fun (s : pst) -> s.visible) st_sig)
     ; if_
         ~test:
           (Signal.map (fun (s : pst) -> Str_util.trim s.password <> "") st_sig)
-        (dom ~key:"pub-eye" ~tag:"button"
-           ~style_class:
-             (btn_base
-            ^ " h-8 rounded px-3 py-1 hover:bg-secondary/70 \
-               hover:text-secondary-foreground active:opacity-80 as-ghost \
-               absolute right-1")
-           ~attrs:[ ("type", "button"); ("style", "top: 6px") ]
-           ~events:"click"
-           ~on_dom_event:(fun n _ ->
-             if n = "click" then
-               Signal.update (st ctx) (fun x ->
-                   { x with visible = not x.visible }))
-           [ if_
-               ~test:(Signal.map (fun (s : pst) -> s.visible) st_sig)
-               (Icons.icon ~size:15. "eye-off")
-           ; if_
-               ~test:
-                 (Signal.map (fun (s : pst) -> not s.visible) st_sig)
-               (Icons.icon ~size:15. "eye") ]) ]
+        (button ~key:"pub-eye" ~variant:`ghost ~size:`sm
+           ~style_class:"ui__button as-ghost"
+           ~icon:(reactive
+                (fun (s : pst) ->
+                  if s.visible then `app "eye-off" else `app "eye")
+                st_sig)
+           ~on_press:(fun _ ->
+             Signal.update (st ctx) (fun x ->
+                 { x with visible = not x.visible }))
+           []) ]
 
 let body (_ms : Model.t Signal.signal) : t =
   fun ctx parent ->
@@ -284,32 +262,21 @@ let body (_ms : Model.t Signal.signal) : t =
         ; password = ""
         ; visible = false
         ; publishing = false });
-    dom ~key:"publish" ~tag:"form"
-      ~style_class:"flex flex-col gap-4 p-2"
-      ~attrs:[ ("onsubmit", "return false") ]
-      ~events:"submit"
-      ~on_dom_event:(fun n _ -> if n = "submit" then submit ctx)
-      [ dom ~key:"pub-t" ~style_class:"text-lg font-medium"
-          ~text:(I18n.t "publish/dialog-title") []
-      ; dom ~key:"pub-d" ~style_class:"text-sm opacity-70"
-          ~text:(I18n.t "publish/dialog-desc") []
+    (* cljs <form onsubmit> -> column; Enter submits through the
+       field's ~on_submit *)
+    column ~key:"publish" ~gap:16 ~padding:8
+      [ text ~key:"pub-t" ~value:(I18n.t "publish/dialog-title") []
+      ; text ~key:"pub-d" ~value:(I18n.t "publish/dialog-desc") []
       ; toggle_pw ctx
-      ; dom ~key:"pub-btns" ~style_class:"flex justify-end gap-2"
+      ; row ~key:"pub-btns" ~main:`end_ ~gap:8
           [ ghost_btn ()
-          ; dom ~key:"pub-submit" ~tag:"button"
-              ~style_class:
-                (btn_base
-               ^ " h-10 rounded px-4 py-2 bg-primary \
-                  text-primary-foreground hover:bg-primary/90")
-              ~attrs_signal_v:(Logseq_dom.reactive_attrs
-                   (fun (s : pst) ->
-                     [ ("type", "submit"); ("autofocus", "") ]
-                     @ if s.publishing then [ ("disabled", "") ] else [])
+          ; button ~key:"pub-submit" ~variant:`primary
+              ~style_class:"ui__button as-solid" ~autofocus:true
+              ~disabled:(reactive
+                   (fun (s : pst) -> s.publishing)
                    (Signal.value st))
-              ~events:"click"
-              ~on_dom_event:(fun n _ ->
-                if n = "click" then submit ctx)
-              ~text_signal:(Logseq_dom.reactive_text
+              ~on_press:(fun _ -> submit ctx)
+              ~text:(reactive
                    (fun (s : pst) ->
                      if s.publishing then "Publishing..." else "Publish")
                    (Signal.value st))

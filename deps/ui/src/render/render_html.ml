@@ -102,6 +102,8 @@ let rec el_of_node = function
   | Text s ->
       if String.trim s = "" then [] else [ D.txt (decode_entities s) ]
   | Elem (tag, attrs, kids) ->
+      (* TODO(component): @@html parses arbitrary tags/attrs — no
+         fixed component kind maps a parsed fragment *)
       [ D.el ~tag ~attrs (List.concat_map el_of_node kids) ]
 
 and decode_entities s =

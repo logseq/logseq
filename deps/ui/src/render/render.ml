@@ -25,19 +25,32 @@ module D = Render_dom
    tracked child early. *)
 let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) s : t =
-  match Render_inline.plain_text s, prefix with
-  | Some text, None ->
-      D.el ~key:("btw-t-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
-        ~text []
-  | Some text, Some p ->
-      (* annotation blocks carry plain hl text — prefix-link sibling +
-         raw text node (cljs puts the title children after .prefix-link) *)
-      D.el ~key:("btw-a-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
-        [ p; D.txt text ]
-  | None, _ ->
-      D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
-        ((match prefix with Some p -> [ p ] | None -> [])
-         @ Render_inline.parse ~self s)
+  if tag <> "span" then
+    (* TODO(component): h1..h6.block-title-wrap are e2e contract; the
+       `heading` kind renders div[role=heading] on web, not hN *)
+    match Render_inline.plain_text s, prefix with
+    | Some text, None ->
+        D.el ~key:("btw-t-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
+          ~text []
+    | Some text, Some p ->
+        (* annotation blocks carry plain hl text — prefix-link sibling +
+           raw text node (cljs puts the title children after .prefix-link) *)
+        D.el ~key:("btw-a-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
+          [ p; D.txt text ]
+    | None, _ ->
+        D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
+          ((match prefix with Some p -> [ p ] | None -> [])
+           @ Render_inline.parse ~self s)
+  else
+    match Render_inline.plain_text s, prefix with
+    | Some v, None ->
+        text ~key:("btw-t-" ^ tag) ~style_class:cls ~value:v []
+    | Some v, Some p ->
+        text ~key:("btw-a-" ^ tag) ~style_class:cls [ p; D.txt v ]
+    | None, _ ->
+        text ~key:("btw-c-" ^ tag) ~style_class:cls
+          ((match prefix with Some p -> [ p ] | None -> [])
+           @ Render_inline.parse ~self s)
 
 (* #..###### markdown heading at title start *)
 let heading_level s =
@@ -82,7 +95,7 @@ let deprecated_latex_export s =
        "latex"
 
 let deprecated_warning key =
-  D.el ~tag:"div" ~style_class:"warning" ~text:(I18n.t key) []
+  box ~style_class:"warning" [ text ~value:(I18n.t key) [] ]
 
 (* #+BEGIN_SRC lang\n...\n#+END_SRC or a markdown ```lang\n...\n``` fence —
    code block; plain pre.CodeMirror-line fallback (real CodeMirror mount
@@ -146,41 +159,34 @@ let calc_results_el code =
   | [] -> None
   | lines ->
       Some
-        (D.el ~tag:"div" ~style_class:"extensions__code-calc pr-2"
+        (column ~style_class:"extensions__code-calc"
            (List.map
               (fun line ->
-                D.el ~tag:"div"
-                  ~style_class:"extensions__code-calc-output-line"
-                  ~text:line [])
+                text ~style_class:"extensions__code-calc-output-line"
+                  ~value:line [])
               lines))
 
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
    with a language picker button + copy button. Handlers live in
    Code_mirror (open_lang_picker/copy_button). *)
 let code_block_actions ~self lang =
-  D.el ~key:"cba" ~tag:"div" ~style_class:"code-block-actions"
-    [ D.el ~key:"sl" ~tag:"button"
+  (* the language picker is anchored by the .select-language query in
+     Code_mirror — the class stays *)
+  row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
+    [ button ~key:"sl" ~variant:`ghost ~size:`sm
         ~style_class:"select-language ls-code-action"
-        ~attrs:[ ("type", "button"); ("blockid", self) ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Code_mirror.open_lang_picker self)
-        [ D.el ~key:"t" ~tag:"span"
-            ~text:
-              (if lang <> "" then lang
-               else I18n.t "editor/code-language-placeholder")
-            []
-        ; Icons.icon ~size:14. "chevron-down"
-        ]
-    ; D.el ~key:"cp" ~tag:"button"
+        ~text:
+          (if lang <> "" then lang
+           else I18n.t "editor/code-language-placeholder")
+        ~icon:`chevron_down ~icon_placement:`trailing
+        ~on_press:(fun _ -> Code_mirror.open_lang_picker self)
+        []
+    ; button ~key:"cp" ~variant:`ghost ~size:`sm
         ~style_class:"ls-code-action"
-        ~attrs:[ ("type", "button") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Code_mirror.copy_button self)
-        [ Icons.icon ~size:14. "copy"
-        ; D.el ~key:"l" ~tag:"span" ~text:(I18n.t "ui/copy") []
-        ]
+        ~icon:`copy ~icon_placement:`leading
+        ~text:(I18n.t "ui/copy")
+        ~on_press:(fun _ -> Code_mirror.copy_button self)
+        []
     ]
 
 (* cljs src-cp + extensions/code.cljs editor DOM:
@@ -198,21 +204,22 @@ let code_block ?(self = "") ?(extra = []) lang code =
     | l -> l
   in
   let calc = lang = "calc" in
-  D.el ~key:("fcb-" ^ self) ~tag:"div"
-    ~style_class:"ui-fenced-code-editor flex w-full"
-    [ D.el ~key:"wrap" ~tag:"div" ~style_class:"ls-code-editor-wrap"
+  row ~key:("fcb-" ^ self) ~grow:1.0
+    ~style_class:"ui-fenced-code-editor"
+    [ box ~key:"wrap" ~style_class:"ls-code-editor-wrap"
         [ code_block_actions ~self lang
-        ; D.el ~key:"ec" ~tag:"div"
-            ~style_class:"extensions__code flex flex-1"
-            ~attrs:(if calc then [ ("data-lang", "calc") ] else [])
+        ; row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"
             ([ (if lang <> "" && not calc then
-                 D.el ~key:"lang" ~tag:"div"
+                 text ~key:"lang"
                    ~style_class:"extensions__code-lang"
-                   ~text:(String.lowercase_ascii lang) []
+                   ~value:(String.lowercase_ascii lang) []
                else Logseq_dom.fragment [])
-             ; D.el ~key:"ce" ~tag:"div"
-                 ~style_class:"code-editor flex flex-1 flex-row w-full"
-                 [ D.el ~key:"ta" ~tag:"textarea"
+             ; row ~key:"ce" ~grow:1.0 ~style_class:"code-editor"
+                 [ (* TODO(component): CodeMirror mounts on
+                      .code-editor textarea and reads data-lang /
+                      resolves the block via #ls-block-<uuid> —
+                      imperative editor host, minimal dom stays *)
+                   D.el ~key:"ta" ~tag:"textarea"
                      ~id:("edit-block-" ^ self)
                      ~attrs:
                        (if lang <> "" then [ ("data-lang", lang) ]
@@ -226,8 +233,8 @@ let code_block ?(self = "") ?(extra = []) lang code =
                           (* cljs mounts .extensions__code-calc for calc
                              blocks even when empty —
                              Code_mirror.update_calc fills it on change *)
-                          D.el ~key:"calc" ~tag:"div"
-                            ~style_class:"extensions__code-calc pr-2" [])
+                          column ~key:"calc"
+                            ~style_class:"extensions__code-calc" [])
                  ]
              ]
             @ extra)
@@ -275,13 +282,16 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
               | w -> Runtime.signal_set st (Edn.to_string w));
              Js.Promise.resolve ())
       |> ignore);
-  Logseq_dom.dyn ~equal:(Logseq_dom.trace_equal "render" (fun a b -> (a : string) = b))
-    (fun s ->
-      D.el ~tag:"div"
-        [ D.el ~tag:"code" ~text:(I18n.t "view/results") []
-        ; D.el ~tag:"div" ~style_class:"results mt-1"
-            [ D.el ~tag:"pre" ~style_class:"code" ~text:s [] ] ])
-    (Signal.value st)
+  (box
+     [ (* TODO(component): <code>/<pre> carry element-tag semantics
+          (:not(pre) > code styling, pre whitespace) — no kind
+          equivalent; the result text itself rides a signal prop *)
+       D.el ~tag:"code" ~text:(I18n.t "view/results") []
+     ; box ~style_class:"results mt-1"
+         [ D.el ~tag:"pre" ~style_class:"code"
+             ~text_signal:(Logseq_dom.reactive_text Fun.id
+                 (Signal.value st))
+             [] ] ])
     context parent
 
 (* cljs block-title-aux query-setting: class-Query blocks get a ghost
@@ -289,28 +299,23 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
    hovered) that toggles the query source editor inside the block's
    below-row .custom-query-results view *)
 let query_setting_el ~block_uuid =
-  D.el ~key:"qs" ~tag:"button"
-    ~style_class:
-      "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6 \
-       transition-opacity ease-in duration-300 opacity-0"
-    ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then Views_view.toggle_query_editor ~block_uuid)
-    [ Icons.icon ~size:14. "settings" ]
+  button ~key:"qs" ~variant:`ghost ~size:`icon
+    ~style_class:"ls-query-setting ls-small-icon"
+    ~label:(I18n.t "block/set-query")
+    ~icon:`settings
+    ~on_press:(fun _ -> Views_view.toggle_query_editor ~block_uuid)
+    []
 
 (* cljs cards-block?: logseq.class/Cards tag adds a "Practice" ghost
    button next to the title that opens the flashcards modal
    ([:modal/show-cards] -> ls:open-cards) *)
 let practice_el =
-  D.el ~key:"pr" ~tag:"button"
-    ~style_class:"!px-1 text-xs text-muted-foreground"
-    ~attrs:
-      [ ("type", "button"); ("title", I18n.t "block/practice-cards") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then Web_dom.dispatch_custom "ls:open-cards" Js.Json.null)
-    [ D.el ~tag:"span" ~text:(I18n.t "block/practice") [] ]
+  button ~key:"pr" ~variant:`ghost ~size:`sm
+    ~label:(I18n.t "block/practice-cards")
+    ~text:(I18n.t "block/practice")
+    ~on_press:(fun _ ->
+      Web_dom.dispatch_custom "ls:open-cards" Js.Json.null)
+    []
 
 let is_query_block (b : Model.block) =
   List.mem "logseq.class/Query" b.Model.block_tag_idents
@@ -323,9 +328,9 @@ let is_cards_block (b : Model.block) =
    (a sibling inside .ls-block) — mounted declaratively as a KQuery view
    (.views-query-inner + raw-source .CodeMirror when the editor is open) *)
 let query_below_el uuid =
-  D.el ~key:("cq-" ^ uuid) ~tag:"div" ~style_class:"custom-query"
-    [ D.el ~tag:"div" ~style_class:"bd"
-        [ D.el ~tag:"div" ~style_class:"custom-query-results"
+  box ~key:("cq-" ^ uuid) ~style_class:"custom-query"
+    [ box ~style_class:"bd"
+        [ box ~style_class:"custom-query-results"
             [ Views_view.view
                 ~kind:(Views_state.KQuery { block_uuid = uuid })
                 ~owner:(Wire.Uuid uuid) ]
@@ -350,8 +355,9 @@ let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
              .block-content keeps its clickable area (cljs does the same
              via the mldoc linebreak node it emits for empty content) *)
           if s = "" then
-            D.el ~key:"btw-empty" ~tag:"span" ~style_class:"block-title-wrap"
-              [ D.el ~key:"btw-br" ~tag:"br" [] ]
+            text ~key:"btw-empty" ~style_class:"block-title-wrap"
+              [ (* TODO(component): <br> has no component kind *)
+                D.el ~key:"btw-br" ~tag:"br" [] ]
           else wrap ~self ~wrap_attrs ~prefix s)
 
 
@@ -392,7 +398,8 @@ let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
 
   | None ->
       if deprecated_quote s then
-        [ D.el ~key:"rc-quote" ~tag:"div"
+        [ (* TODO(component): data-node-type attr is an e2e selector *)
+          D.el ~key:"rc-quote" ~tag:"div"
             ~attrs:[ ("data-node-type", "quote") ]
             [ deprecated_warning "block/deprecated-quote" ] ]
       else if deprecated_query s then
@@ -412,9 +419,8 @@ let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
             in
             match ordered_prefix s with
             | Some (num, rest) ->
-                [ D.el ~key:"rc-typed-list" ~tag:"span"
-                    ~style_class:"typed-list"
-                    [ D.el ~tag:"label" ~text:num [] ]
+                [ text ~key:"rc-typed-list" ~style_class:"typed-list"
+                    [ label ~value:num [] ]
                 ; content ?heading ~self ~wrap_attrs ~prefix rest ]
                 @ tail
             | None ->
@@ -445,7 +451,7 @@ let title_block ?(self = "") ?resolved ?(annot = false)
       let lang = Option.value b.Model.block_code_lang ~default:"" in
       [ code_block ~self lang s ]
   | Some "math" ->
-      [ D.el ~tag:"div" ~style_class:"math-block"
+      [ box ~style_class:"math-block"
           [ Render_inline.katex_el ~block:true ~display:true s ] ]
   | _ -> (
       match src_eval_parts s with

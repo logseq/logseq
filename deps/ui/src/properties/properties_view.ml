@@ -65,7 +65,8 @@ let overlays : t =
  fun context parent ->
   let vos = S.view_overlays context in
   (column ~gap:0
-     [ dyn ~equal:(fun a b ->
+     [ reactive
+         ~equal:(fun a b ->
             List.map (fun (v : S.view_overlay) -> v.vo_key) a
             = List.map (fun (v : S.view_overlay) -> v.vo_key) b)
          (fun vos ->

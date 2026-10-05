@@ -281,7 +281,7 @@ let async_select ~placeholder ?new_option ?on_search fetch : t =
     (let* items = fetch in
      Runtime.signal_set items_st (Some items);
      Js.Promise.resolve ());
-  (dyn ~equal:(fun a b -> Option.is_some a = Option.is_some b)
+  (reactive ~equal:(fun a b -> Option.is_some a = Option.is_some b)
      (fun m ->
         match m with
         | None -> column ~gap:2 []
@@ -496,7 +496,7 @@ let dialog_content d : t =
  fun context parent ->
   let phase_sig = Signal.state context.Lui_ui.ui_scheduler d.d_phase in
   d.d_phase_sig <- Some phase_sig;
-  (dyn ~equal:(fun a b -> a = b)
+  (reactive
      (fun p ->
         (* stable root: same-kind prop diffs across dyn branches emit
            unsupported set-prop ops on native *)
@@ -516,7 +516,7 @@ let dialog_content d : t =
 let view : t =
  fun context parent ->
   let s = state_signal context.Lui_ui.ui_scheduler in
-  (dyn ~equal:(fun a b -> Option.is_some a = Option.is_some b)
+  (reactive ~equal:(fun a b -> Option.is_some a = Option.is_some b)
      (fun dopt ->
         match dopt with
         | None -> column ~gap:2 []

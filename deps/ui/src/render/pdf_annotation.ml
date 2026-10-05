@@ -120,6 +120,9 @@ let open_hl_lightbox ?clicked_id () =
   end
 
 (* cljs asset-action-bar button inside .hl-area *)
+(* TODO(component): pointerdown/click dom events (open-lightbox ref
+   tracking) plus a <i class=ti-*> icon child have no component
+   equivalent *)
 let area_btn ~key ~title ~icon ~onclick : t =
   D.el ~key ~tag:"button" ~style_class:"asset-action-btn"
     ~attrs:[ ("title", title); ("tabindex", "-1") ]
@@ -130,9 +133,12 @@ let area_btn ~key ~title ~icon ~onclick : t =
 
 (* cljs area-display: .hl-area(style?) > .asset-container >
    .asset-action-bar + img.w-full *)
+(* TODO(component): inline style width + blob-URL <img> with
+   #hl-area-img-<uuid> queried by the lightbox path — no component
+   equivalent for style attrs / img src *)
 let area_display (b : Model.block) context : t =
   let st = hl_img_sig b context in
-  Logseq_dom.dyn ~equal:( = ) (fun r ->
+  reactive (fun r ->
       match r with
       | None -> Logseq_dom.nothing
       | Some r ->
@@ -190,6 +196,8 @@ let prefix_el (b : Model.block) : t =
     | Some p -> "P" ^ string_of_int p
     | None -> "P?"
   in
+  (* TODO(component): delegated pointerdown handler that reads the
+     event target's class — no component event carries the DOM target *)
   (D.el ~key:"pf" ~tag:"span" ~style_class:"prefix-link"
      ~events:"pointerdown"
      ~on_dom_event:(fun name payload ->
