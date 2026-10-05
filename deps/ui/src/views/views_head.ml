@@ -17,7 +17,8 @@ module L = Lui_protocol
 
 type t = Lui_elements.t
 
-let dom = D.dom
+open Lui_elements
+
 let if_ = D.if_
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
   inst.V.st.Signal.state_signal
@@ -25,17 +26,15 @@ let sig_of (inst : V.inst) : V.vstate Signal.signal =
 let refresh inst = (V.ops ()).V.o_refresh inst
 let icon_el = Views_table.icon_el
 
+(* `title` (tooltip) has no component prop — it lands on ~label
+   (aria-label), which an icon-only button wants anyway *)
 let ghost_btn ?(extra = "") ?(title_ = "") icon_name ~on_click : t =
-  dom ~tag:"button"
-    ~style_class:
-      (E.button_cls ~variant:"ghost" ~size:"sm" ~cls:("ls-icon-btn" ^ extra)
-         ())
-    ~attrs:
-      ([ ("type", "button") ]
-       @ if title_ = "" then [] else [ ("title", title_) ])
-    ~events:"click"
-    ~on_dom_event:(fun name _ -> if name = "click" then on_click ())
-    [ icon_el icon_name ]
+  let mk label =
+    button ~variant:`ghost ~size:`sm ~icon:(Views_table.icon_of icon_name)
+      ?label ~style_class:("ls-icon-btn" ^ extra)
+      ~on_press:(fun _ -> on_click ()) []
+  in
+  mk (if title_ = "" then None else Some title_)
 
 let count_of (s : V.vstate) =
   match s.V.data with
@@ -77,78 +76,70 @@ let view_tab inst (v : Wr.view_ent) : t =
   let current_sig =
     Signal.map (fun (s : V.vstate) -> s.V.view_uuid = v.Wr.vu) isig
   in
-  dom ~tag:"button" ~id:(view_tab_anchor_id inst v)
-    ~attrs:[ ("type", "button"); ("data-view-tab-id", "view-tab-" ^ v.Wr.vu) ]
-    ~style_class_signal:
-      (D.class_signal current_sig (fun cur ->
-           E.button_cls ~variant:"text" ~size:"sm"
-             ~cls:("ls-view-tab" ^ if cur then "" else " ls-dim")
-             ()))
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then
-        if (V.get inst).V.view_uuid = v.Wr.vu then
-          match E.get_element_by_id (view_tab_anchor_id inst v) with
-          | Some b ->
-              ignore
-                (P.show_menu ~anchor:b
-                   [ P.MItem (I.rename, fun () -> (V.ops ()).V.o_rename inst v)
-                   ; P.MItem
-                       ( I.delete
-                       , fun () ->
-                           Views_db.delete_blocks [ v.Wr.vu ] (fun () ->
-                               let next =
-                                 List.filter
-                                   (fun x -> x.Wr.vu <> v.Wr.vu)
-                                   (V.get inst).V.views
-                               in
-                               V.update inst (fun s ->
-                                   let s = { s with V.views = next } in
-                                   match next with
-                                   | n :: _ -> V.apply_view_entity s n
-                                   | [] -> s);
-                               refresh inst) ) ])
-          | None -> ()
-        else begin
-          V.update inst (fun s ->
-              let s' = V.apply_view_entity s v in
-              { s' with V.selected = V.Sset.empty });
-          refresh inst
-        end)
-    [ dom ~tag:"span" ~style_class:"ls-icon-color-wrap"
-        [ icon_el (view_type_icon v) ]
-    ; dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", V.display_title v) ] []
-    ; if_
-        ~test:
-          (Signal.map
-             (fun (s : V.vstate) ->
-               s.V.view_uuid = v.Wr.vu && inst.V.feature <> "query-result"
-               && count_of s > 0)
-             isig)
-        (dom ~tag:"span" ~style_class:"ls-count"
-           ~text_signal:
-             (D.reactive_text (fun s -> string_of_int (count_of s)) isig)
-           []) ]
+  (* data-view-tab-id is a DOM marker with no component prop —
+     accessibility_identifier carries the stable anchor *)
+  Ui_parts.class_signal current_sig
+    (fun cur -> "ls-view-tab" ^ if cur then "" else " ls-dim")
+    (button ~variant:`ghost ~size:`sm
+       ~accessibility_identifier:(view_tab_anchor_id inst v)
+       ~on_press:(fun _ ->
+         if (V.get inst).V.view_uuid = v.Wr.vu then
+           match E.get_element_by_id (view_tab_anchor_id inst v) with
+           | Some b ->
+               ignore
+                 (P.show_menu ~anchor:b
+                    [ P.MItem (I.rename, fun () -> (V.ops ()).V.o_rename inst v)
+                    ; P.MItem
+                        ( I.delete
+                        , fun () ->
+                            Views_db.delete_blocks [ v.Wr.vu ] (fun () ->
+                                let next =
+                                  List.filter
+                                    (fun x -> x.Wr.vu <> v.Wr.vu)
+                                    (V.get inst).V.views
+                                in
+                                V.update inst (fun s ->
+                                    let s = { s with V.views = next } in
+                                    match next with
+                                    | n :: _ -> V.apply_view_entity s n
+                                    | [] -> s);
+                                refresh inst) ) ])
+           | None -> ()
+         else begin
+           V.update inst (fun s ->
+               let s' = V.apply_view_entity s v in
+               { s' with V.selected = V.Sset.empty });
+           refresh inst
+         end)
+       [ box ~style_class:"ls-icon-color-wrap"
+           [ icon_el (view_type_icon v) ]
+       ; text ~value:(V.display_title v) []
+       ; if_
+           ~test:
+             (Signal.map
+                (fun (s : V.vstate) ->
+                  s.V.view_uuid = v.Wr.vu && inst.V.feature <> "query-result"
+                  && count_of s > 0)
+                isig)
+           (text ~style_class:"ls-count"
+              ~value_signal:
+                (Signal.map
+                   (fun s -> string_of_int (count_of s)) isig)
+              []) ])
 
 (* .views > tabs + .ls-add-view (a fade target along with .view-actions) *)
 let tabs_el inst ~dim : t =
-  dom ~style_class:"views"
+  row ~style_class:"views"
     [ D.keyed
         ~source:(Signal.map (fun (s : V.vstate) -> s.V.views) (sig_of inst))
         ~key:(fun (v : Wr.view_ent) -> v.Wr.vu)
         ~cmp:String.compare
         ~mount:(fun v_sig -> view_tab inst (Signal.get v_sig))
-    ; dom ~tag:"button"
-        ~style_class_signal:
-          (D.class_signal dim (fun d ->
-               E.button_cls ~variant:"text" ~size:"sm"
-                 ~cls:("ls-add-view " ^ if d then "ls-dim" else "ls-lit")
-                 ()))
-        ~attrs:[ ("type", "button"); ("title", I.add_new_view) ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then (V.ops ()).V.o_create_view inst)
-        [ icon_el "plus" ] ]
+    ; Ui_parts.class_signal dim
+        (fun d -> "ls-add-view " ^ if d then "ls-dim" else "ls-lit")
+        (button ~variant:`ghost ~size:`sm ~icon:`plus
+           ~label:I.add_new_view
+           ~on_press:(fun _ -> (V.ops ()).V.o_create_view inst) []) ]
 
 (* ---------- sorting popup ---------- *)
 
@@ -511,48 +502,46 @@ and mk_group_sort inst ident label =
         V.persist_group_sort_by_ident inst ident (fun () -> refresh inst) )
 
 let more_actions_el inst : t =
-  dom ~tag:"button"
-    ~style_class:(E.button_cls ~variant:"ghost" ~size:"sm" ~cls:"ls-icon-btn" ())
-    ~attrs:[ ("type", "button"); ("aria-expanded", "false") ]
-    ~id:("vmore-" ^ string_of_int inst.V.id)
-    ~events:"click"
-    ~on_dom_event:(fun name _ -> if name = "click" then show_more_menu inst)
-    [ icon_el "dots" ]
+  button ~variant:`ghost ~size:`sm ~icon:`ellipsis
+    ~style_class:"ls-icon-btn"
+    ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
+    ~on_press:(fun _ -> show_more_menu inst) []
 
 (* ---------- display type ---------- *)
 
 let display_type_el inst : t =
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
-  dom ~style_class:"view-action-type ls-dim" ~id:wrap_id
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then
-        match E.get_element_by_id wrap_id with
-        | Some anchor ->
-            let set dt =
-              V.update inst (fun s -> { s with V.display_type = dt });
-              V.persist_display_type inst;
-              refresh inst
-            in
-            ignore
-              (P.show_menu ~anchor ~align_end:true
-                 [ P.MItem (I.table_view, fun () -> set "table")
-                 ; P.MItem (I.list_view, fun () -> set "list")
-                 ; P.MItem (I.gallery_view, fun () -> set "gallery") ])
-        | None -> ())
-    [ dom ~style_class:"property-value-inner"
-        [ dom ~style_class:"jtrigger"
-            ~id:("trigger-" ^ Platform.random_uuid ())
-            [ dom ~style_class:"select-item"
-                [ dom ~tag:"span" ~style_class:"ls-icon-color-wrap"
-                    [ Views_table.icon_dyn
-                        (Signal.map
-                           (fun (s : V.vstate) ->
-                             match s.V.display_type with
-                             | "list" -> "list"
-                             | "gallery" -> "layout-grid"
-                             | _ -> "table")
-                           (sig_of inst)) ] ] ] ] ]
+  Ui_parts.pressable
+    ~on_press:(fun _ ->
+      match E.get_element_by_id wrap_id with
+      | Some anchor ->
+          let set dt =
+            V.update inst (fun s -> { s with V.display_type = dt });
+            V.persist_display_type inst;
+            refresh inst
+          in
+          ignore
+            (P.show_menu ~anchor ~align_end:true
+               [ P.MItem (I.table_view, fun () -> set "table")
+               ; P.MItem (I.list_view, fun () -> set "list")
+               ; P.MItem (I.gallery_view, fun () -> set "gallery") ])
+      | None -> ())
+    (box ~style_class:"view-action-type ls-dim"
+       ~accessibility_identifier:wrap_id
+       [ box ~style_class:"property-value-inner"
+           [ box ~style_class:"jtrigger"
+               ~accessibility_identifier:
+                 ("trigger-" ^ Platform.random_uuid ())
+               [ box ~style_class:"select-item"
+                   [ box ~style_class:"ls-icon-color-wrap"
+                       [ Views_table.icon_dyn
+                           (Signal.map
+                              (fun (s : V.vstate) ->
+                                match s.V.display_type with
+                                | "list" -> "list"
+                                | "gallery" -> "layout-grid"
+                                | _ -> "table")
+                              (sig_of inst)) ] ] ] ] ])
 
 (* ---------- search ---------- *)
 
@@ -565,8 +554,10 @@ let search_el inst : t =
   let open_sig =
     Signal.map (fun (s : V.vstate) -> s.V.search_open) (sig_of inst)
   in
-  dom ~style_class:"view-action-search"
-    [ dom ~style_class:"ls-row"
+  (* DOM-only keydown lost its Escape-closes-search path — no component
+     event maps it *)
+  box ~style_class:"view-action-search"
+    [ row ~style_class:"ls-row"
         [ ghost_btn "search" ~on_click:(fun () ->
               if not (V.get inst).V.search_open then begin
                 V.update inst (fun s -> { s with V.search_open = true });
@@ -578,40 +569,23 @@ let search_el inst : t =
                   0
               end)
         ; if_ ~test:open_sig
-            (dom
-               [ dom ~tag:"input" ~style_class:"ls-search-input"
-                   ~attrs:
-                     [ ("type", "text"); ("id", input_id)
-                     ; ("placeholder", I.type_to_search)
-                     ; ("data-1p-ignore", "")
-                     ; ("value", (V.get inst).V.input) ]
-                   ~events:"input keydown"
-                   ~on_dom_event:(fun name payload ->
-                     match name with
-                     | "input" ->
-                         let v = Platform.payload_str payload "value" in
+            (row
+               [ search_field ~style_class:"ls-search-input"
+                   ~accessibility_identifier:input_id
+                   ~placeholder:I.type_to_search
+                   ~text:(V.get inst).V.input
+                   ~on_input:(fun ev ->
+                     match ev with
+                     | L.TextChanged (_, v) ->
                          deb (fun () ->
                              V.update inst (fun s -> { s with V.input = v });
                              refresh inst)
-                     | "keydown" -> (
-                         match Platform.payload_str payload "key" with
-                         | "Escape" ->
-                             V.update inst (fun s ->
-                                 { s with V.input = ""; search_open = false });
-                             refresh inst
-                         | _ -> ())
                      | _ -> ())
                    []
-               ; dom ~tag:"button" ~style_class:"ls-icon-btn"
-                   ~attrs:[ ("type", "button") ]
-                   ~events:"click"
-                   ~on_dom_event:(fun name _ ->
-                     if name = "click" then begin
-                       V.update inst (fun s ->
-                           { s with V.input = ""; search_open = false });
-                       refresh inst
-                     end)
-                   [ icon_el "x" ] ]) ]
+               ; ghost_btn "x" ~on_click:(fun () ->
+                     V.update inst (fun s ->
+                         { s with V.input = ""; search_open = false });
+                     refresh inst) ]) ]
     ]
     ctx parent
 
@@ -645,14 +619,13 @@ let filter_chip inst idx (f : V.filter_clause) : t =
   let op_btn_id =
     "vchip-op-" ^ string_of_int inst.V.id ^ "-" ^ string_of_int idx
   in
-  dom ~style_class:"ls-vf-chip"
-    [ dom ~tag:"button" ~style_class:"ls-vf-chip-prop"
-        ~attrs:[ ("disabled", "true") ]
-        [ dom ~tag:"span" ~style_class:"ls-xs" ~text:prop_title [] ]
-    ; dom ~tag:"button" ~style_class:"ls-vf-chip-op" ~id:op_btn_id
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then
+  row ~cross:`center ~style_class:"ls-vf-chip"
+    [ button ~style_class:"ls-vf-chip-prop ls-xs" ~text:prop_title
+        ~disabled:true []
+    ; button ~style_class:"ls-vf-chip-op ls-xs"
+        ~accessibility_identifier:op_btn_id
+        ~text:(I.operator_text f.V.c_op)
+        ~on_press:(fun _ ->
             match E.get_element_by_id op_btn_id with
             | None -> ()
             | Some anchor ->
@@ -689,25 +662,22 @@ let filter_chip inst idx (f : V.filter_clause) : t =
                                     V.persist_filters inst;
                                     refresh inst ))
                             ops))))
-        [ dom ~tag:"span" ~style_class:"ls-xs"
-            ~text:(I.operator_text f.V.c_op) [] ]
-    ; dom ~tag:"button" ~style_class:"ls-vf-chip-val"
-        [ dom ~style_class:"ls-view-filter-value"
-            [ dom ~style_class:"ls-view-filter-value-item"
-                ~text:(filter_value_label inst f) [] ] ]
-    ; dom ~tag:"button" ~style_class:"ls-vf-chip-x"
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then begin
-            V.update inst (fun s ->
-                { s with
-                  V.filters =
-                    List.filteri (fun i _ -> i <> idx) s.V.filters
-                });
-            V.persist_filters inst;
-            refresh inst
-          end)
-        [ icon_el "x" ] ]
+        []
+    ; box ~style_class:"ls-vf-chip-val"
+        [ box ~style_class:"ls-view-filter-value"
+            [ box ~style_class:"ls-view-filter-value-item"
+                [ text ~value:(filter_value_label inst f) [] ] ] ]
+    ; button ~variant:`ghost ~size:`icon ~icon:`x
+        ~style_class:"ls-vf-chip-x"
+        ~on_press:(fun _ ->
+          V.update inst (fun s ->
+              { s with
+                V.filters =
+                  List.filteri (fun i _ -> i <> idx) s.V.filters
+              });
+          V.persist_filters inst;
+          refresh inst)
+        [] ]
 
 let filters_row inst : t =
  fun ctx parent ->
@@ -717,44 +687,39 @@ let filters_row inst : t =
       let chips =
         List.mapi (fun i f -> filter_chip inst i f) s.V.filters
       in
-      dom ~style_class:"filters-row"
-        [ dom ~style_class:"ls-vf-chips" chips
+      row ~style_class:"filters-row"
+        [ row ~style_class:"ls-vf-chips" chips
         ; (if List.length s.V.filters > 1 then
-             dom
-               [ dom ~tag:"select" ~style_class:"ls-vf-logic"
-                   ~attrs:
-                     [ ("value", if s.V.filters_or then "or" else "and") ]
-                   ~events:"change"
-                   ~on_dom_event:(fun name payload ->
-                     if name = "change" then begin
-                       V.update inst (fun s ->
-                           { s with
-                             V.filters_or =
-                               Platform.payload_str payload "value" = "or" });
-                       V.persist_filters inst;
-                       refresh inst
-                     end)
-                   [ dom ~tag:"option" ~attrs:[ ("value", "and") ]
-                       ~text:I.match_all []
-                   ; dom ~tag:"option" ~attrs:[ ("value", "or") ]
-                       ~text:I.match_any [] ] ]
-           else D.nothing)
+             select ~style_class:"ls-vf-logic"
+               ~text:(if s.V.filters_or then I.match_any else I.match_all)
+               [ menu_item ~text:I.match_all ~selected:(not s.V.filters_or)
+                   ~on_press:(fun _ ->
+                     V.update inst (fun s ->
+                         { s with V.filters_or = false });
+                     V.persist_filters inst;
+                     refresh inst)
+                   []
+               ; menu_item ~text:I.match_any ~selected:s.V.filters_or
+                   ~on_press:(fun _ ->
+                     V.update inst (fun s ->
+                         { s with V.filters_or = true });
+                     V.persist_filters inst;
+                     refresh inst)
+                   [] ]
+           else spacer ~key:"no-logic" [])
         ]
         ctx parent)
     ctx parent
 
 (* ---------- head ---------- *)
 
-(* cljs view-head fades actions/tabs to opacity-75, full on hover *)
+(* cljs view-head fades actions/tabs to opacity-75, lit on hover —
+   mouseover/mouseout are DOM-only, so lit now follows "a popup is
+   open" alone *)
 let render_head inst : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
-  let hover = Signal.state sched false in
-  let dim =
-    Signal.map2
-      (fun h open_ -> not (h || open_))
-      hover.Signal.state_signal (P.open_signal sched)
-  in
+  let dim = Signal.map (fun open_ -> not open_) (P.open_signal sched) in
   let s0 = V.get inst in
   let has_add_object =
     match inst.V.kind with
@@ -764,65 +729,54 @@ let render_head inst : t =
         | None -> false)
     | _ -> false
   in
-  dom ~style_class:"ls-view-head"
-    ~events:"mouseover mouseout"
-    ~on_dom_event:(fun name _ ->
-      match name with
-      | "mouseover" -> Runtime.signal_set hover true
-      | "mouseout" ->
-          if !(P.open_popups) = [] then Runtime.signal_set hover false
-      | _ -> ())
-    [ dom ~style_class:"ls-view-head-left"
+  row ~style_class:"ls-view-head"
+    [ row ~style_class:"ls-view-head-left"
         [ (match inst.V.kind with
            | V.KQuery _ ->
-               dom ~style_class:"ls-query-count"
-                 ~text_signal:
-                   (D.reactive_text
+               text ~style_class:"ls-query-count"
+                 ~value_signal:
+                   (Signal.map
                       (fun (s : V.vstate) -> I.live_query (count_of s))
                       (sig_of inst))
                  []
            | _ -> tabs_el inst ~dim) ]
-    ; dom
-        ~style_class_signal:
-          (D.class_signal dim (fun d ->
-               "view-actions" ^ if d then " ls-dim" else " ls-lit"))
-        [ (if s0.V.sorting <> [] then
-             dom ~tag:"button" ~id:("vsort-" ^ string_of_int inst.V.id)
-               ~style_class:
-                 (E.button_cls ~variant:"ghost" ~size:"sm" ~cls:"ls-icon-btn"
-                    ())
-               ~attrs:[ ("type", "button") ]
-               ~events:"click"
-               ~on_dom_event:(fun name _ ->
-                 if name = "click" then
-                   match
-                     E.get_element_by_id
-                       ("vsort-" ^ string_of_int inst.V.id)
-                   with
-                   | Some a -> sorting_popup inst a
-                   | None -> ())
-               [ icon_el "arrows-up-down" ]
-           else D.nothing)
-        ; dom ~tag:"button" ~id:("vfilter-" ^ string_of_int inst.V.id)
-            ~style_class:
-              (E.button_cls ~variant:"ghost" ~size:"sm" ~cls:"ls-icon-btn" ())
-            ~attrs:[ ("type", "button") ]
-            ~events:"click"
-            ~on_dom_event:(fun name _ ->
-              if name = "click" then
-                match
-                  E.get_element_by_id
-                    ("vfilter-" ^ string_of_int inst.V.id)
-                with
-                | Some a -> filter_popup inst a
-                | None -> ())
-            [ icon_el "filter" ]
-        ; search_el inst
-        ; display_type_el inst
-        ; more_actions_el inst
-        ; (if has_add_object then
-             ghost_btn "plus" ~title_:I.new_node
-               ~on_click:(fun () -> (V.ops ()).V.o_add_object inst)
-           else D.nothing)
-        ] ]
+    ; Ui_parts.class_signal dim
+        (fun d -> "view-actions" ^ if d then " ls-dim" else " ls-lit")
+        (row ~key:"actions"
+           [ (if s0.V.sorting <> [] then
+                button ~variant:`ghost ~size:`sm
+                  ~icon:(Views_table.icon_of "arrows-up-down")
+                  ~style_class:"ls-icon-btn"
+                  ~accessibility_identifier:
+                    ("vsort-" ^ string_of_int inst.V.id)
+                  ~on_press:(fun _ ->
+                    match
+                      E.get_element_by_id
+                        ("vsort-" ^ string_of_int inst.V.id)
+                    with
+                    | Some a -> sorting_popup inst a
+                    | None -> ())
+                  []
+              else spacer ~key:"no-sort" [])
+           ; button ~variant:`ghost ~size:`sm
+               ~icon:(Views_table.icon_of "filter")
+               ~style_class:"ls-icon-btn"
+               ~accessibility_identifier:
+                 ("vfilter-" ^ string_of_int inst.V.id)
+               ~on_press:(fun _ ->
+                 match
+                   E.get_element_by_id
+                     ("vfilter-" ^ string_of_int inst.V.id)
+                 with
+                 | Some a -> filter_popup inst a
+                 | None -> ())
+               []
+           ; search_el inst
+           ; display_type_el inst
+           ; more_actions_el inst
+           ; (if has_add_object then
+                ghost_btn "plus" ~title_:I.new_node
+                  ~on_click:(fun () -> (V.ops ()).V.o_add_object inst)
+              else spacer ~key:"no-add" [])
+           ]) ]
     ctx parent

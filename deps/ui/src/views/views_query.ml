@@ -407,6 +407,10 @@ let cm_host inst : Lui_elements.t =
         | QDatalog _ -> (V.get inst).V.qsrc
         | QBlank -> ""
       in
+      (* TODO(component): fake-CodeMirror host + contenteditable
+         pre.CodeMirror-line have no component equivalent — attach_cm
+         queries the pre inside this host and wires input/keydown
+         preventDefault imperatively (same escape as the real editor) *)
       let n =
         D.dom ~id:(cm_host_id inst) ~style_class:"CodeMirror"
           [ D.dom ~tag:"pre" ~style_class:"CodeMirror-line"

@@ -8,7 +8,6 @@
    document.body (ephemeral, dismissed by scrim) anchored to the button
    element resolved by id. *)
 
-module D = Logseq_dom
 module E = Web_dom
 module V = Views_state
 module W = Wire
@@ -17,9 +16,9 @@ module I = I18n
 module P = Views_popup
 module Db = Views_db
 
-type t = Lui_elements.t
+open Lui_elements
 
-let dom = D.dom
+type t = Lui_elements.t
 
 type barg = { a_dsl : string; a_disp : string }
 
@@ -577,79 +576,67 @@ let add_id inst loc = "qba-" ^ string_of_int inst.V.id ^ "-" ^ loc_key loc
 let rec clause_el inst ~tree ~loc (c : clause) : t =
   match c with
   | COp (op, xs) ->
-      dom ~key:("qc-" ^ loc_key loc) ~style_class:"query-builder-clause"
-        [ dom ~key:"oc" ~style_class:"operator-clause flex flex-row items-center"
-            [ dom ~key:"bl" ~tag:"span" ~style_class:"clause-bracket" ~text:"(" []
+      box ~key:("qc-" ^ loc_key loc) ~style_class:"query-builder-clause"
+        [ row ~key:"oc" ~cross:`center ~style_class:"operator-clause"
+            [ text ~key:"bl" ~style_class:"clause-bracket" ~value:"(" []
             ; clauses_group inst ~tree ~loc:(loc @ [ 0 ]) ~kind:op ~clauses:xs
-            ; dom ~key:"br" ~tag:"span" ~style_class:"clause-bracket" ~text:")" []
+            ; text ~key:"br" ~style_class:"clause-bracket" ~value:")" []
             ]
         ]
   | _ ->
       let id = clause_id inst loc in
-      dom ~key:("qc-" ^ loc_key loc) ~style_class:"query-builder-clause"
-        [ dom ~key:"btn"
-            ~style_class:
-              "query-builder-clause-btn flex flex-row items-center gap-2 \
-               px-1 rounded border"
-            [ dom ~key:"a" ~tag:"a" ~id ~style_class:"flex query-clause"
-                ~text:(clause_label inst c)
-                ~events:"click"
-                ~on_dom_event:(fun name _ ->
-                  if name = "click" then
-                    match E.get_element_by_id id with
-                    | Some anchor ->
-                        clause_popup inst ~tree ~loc ~anchor
-                          ~is_op_clause:false
-                    | None -> ())
+      box ~key:("qc-" ^ loc_key loc) ~style_class:"query-builder-clause"
+        [ row ~key:"btn" ~gap:8 ~padding_horizontal:4 ~cross:`center
+            ~border_width:1 ~corner_radius:4
+            ~style_class:"query-builder-clause-btn"
+            [ text ~key:"a" ~accessibility_identifier:id
+                ~style_class:"query-clause" ~value:(clause_label inst c)
+                ~on_press:(fun _ ->
+                  match E.get_element_by_id id with
+                  | Some anchor ->
+                      clause_popup inst ~tree ~loc ~anchor ~is_op_clause:false
+                  | None -> ())
                 []
             ]
         ]
 
 and op_label_el inst ~tree ~loc kind : t =
   let id = op_id inst loc in
-  dom ~key:("qbo-" ^ loc_key loc) ~tag:"a" ~id
-    ~style_class:"flex text-sm query-clause"
-    ~text:(String.uppercase_ascii kind)
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then
-        match E.get_element_by_id id with
-        | Some anchor -> clause_popup inst ~tree ~loc ~anchor ~is_op_clause:true
-        | None -> ())
+  text ~key:("qbo-" ^ loc_key loc) ~accessibility_identifier:id
+    ~style_class:"query-clause"
+    ~value:(String.uppercase_ascii kind)
+    ~on_press:(fun _ ->
+      match E.get_element_by_id id with
+      | Some anchor -> clause_popup inst ~tree ~loc ~anchor ~is_op_clause:true
+      | None -> ())
     []
 
 and add_filter_btn inst ~tree ~loc ~with_label : t =
   let id = add_id inst loc in
-  dom ~key:("qba-" ^ loc_key loc) ~tag:"button" ~id
-    ~style_class:"jtrigger !px-1 h-6 add-filter text-muted-foreground"
-    ~attrs:[ ("type", "button") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then
-        match E.get_element_by_id id with
-        | Some anchor -> picker inst ~tree ~loc ~anchor
-        | None -> ())
-    ( [ Views_table.icon_el "plus" ]
-    (* cljs emits the "filter" label as a direct text node — playwright
-       :text() only matches own text, not descendant elements *)
-    @ if with_label then
-        [ dom ~key:"lbl" ~tag:"raw-text" ~attrs:[ ("data-raw-text", I.filter) ] [] ]
-      else [] )
+  button ~key:("qba-" ^ loc_key loc) ~accessibility_identifier:id
+    ~icon:`plus ~size:`sm ~height:24 ~foreground:"muted-foreground"
+    ?text:(if with_label then Some I.filter else None)
+    ~style_class:"jtrigger add-filter"
+    ~on_press:(fun _ ->
+      match E.get_element_by_id id with
+      | Some anchor -> picker inst ~tree ~loc ~anchor
+      | None -> ())
+    []
 
 and clauses_group inst ~tree ~loc ~kind ~clauses : t =
   let parens = loc = [ 0 ] && (kind <> "and" || List.length clauses > 1) in
-  dom ~key:("qg-" ^ loc_key loc) ~style_class:"clauses-group"
+  box ~key:("qg-" ^ loc_key loc) ~style_class:"clauses-group"
     ( (if parens then
-         [ dom ~key:"pl" ~tag:"span" ~style_class:"clause-bracket" ~text:"(" [] ]
+         [ text ~key:"pl" ~style_class:"clause-bracket" ~value:"(" [] ]
        else [])
     @ (if not (loc = [ 0 ] && kind = "and" && List.length clauses <= 1) then
-         [ dom ~key:"opl" ~style_class:"query-builder-clause"
+         [ box ~key:"opl" ~style_class:"query-builder-clause"
              [ op_label_el inst ~tree ~loc kind ]
          ]
        else [])
     @ List.mapi (fun i c -> clause_el inst ~tree ~loc:(loc @ [ i + 1 ]) c) clauses
     @ (if parens then
-         [ dom ~key:"pr" ~tag:"span" ~style_class:"clause-bracket" ~text:")" [] ]
+         [ text ~key:"pr" ~style_class:"clause-bracket" ~value:")" [] ]
        else [])
     @ (if loc <> [ 0 ] then
          [ add_filter_btn inst ~tree ~loc ~with_label:false ]
@@ -657,8 +644,8 @@ and clauses_group inst ~tree ~loc ~kind ~clauses : t =
 
 (* the builder panel rendered inside .custom-query-results for dsl queries *)
 let builder_el inst ~tree : t =
-  dom ~style_class:"cp__query-builder"
-    [ dom ~key:"f" ~style_class:"cp__query-builder-filter"
+  box ~style_class:"cp__query-builder"
+    [ box ~key:"f" ~style_class:"cp__query-builder-filter"
         ( (match !tree with
            | COp ("and", []) -> []
            | t ->
