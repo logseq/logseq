@@ -214,19 +214,6 @@ let parent_patch base_rev rev (db_after : db) (parent_uuid : string)
 let build_children_patches rev (tx_report : tx_report) : Wire.t =
   let base_rev = tx_report.db_before.max_tx in
   let ops = membership_operations tx_report in
-  (match ops with
-   | [] -> ()
-   | _ ->
-       Worker_log.info "render-delta/children-ops"
-         ([ "rev", string_of_int rev
-          ; "base", string_of_int base_rev
-          ; "tx-count", string_of_int (List.length tx_report.tx_data) ]
-          @ List.concat_map
-              (fun (parent_uuid, (rm, up)) ->
-                [ "parent", parent_uuid
-                ; "rm", string_of_int (List.length rm)
-                ; "up", string_of_int (List.length up) ])
-              ops));
   ops
   |> List.filter_map
        (fun (parent_uuid, ops) ->
