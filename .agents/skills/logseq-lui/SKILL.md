@@ -84,9 +84,10 @@ keyed ~source:items_s ~key:(fun it -> it.id) ~cmp:Int.compare
   through `reactive` sugar); never read the DOM or shared refs for view
   state.
 - Do not plumb `Signal.value`/manual subscription wiring by hand.
-- Derived-signal ownership (`own`) is handled inside
-  `Lui_elements.dyn/if_/keyed` — ppx-expanded calls inherit it
-  automatically; do not add a second ownership layer.
+- `dyn`/`if_`/`keyed` do NOT own the signals they consume: derive
+  signals once at section emit and share them across mounts; a fresh
+  `Signal.map` inside a remounting branch body leaks an upstream
+  subscription on each remount.
 - `Logseq_dom.own` exists only for `extension_property_signal` binding;
   it is not for view code.
 
