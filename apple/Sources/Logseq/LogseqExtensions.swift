@@ -68,7 +68,11 @@ enum LogseqExtensionFingerprint {
     "pdf",
   ]
 
-  static let identifiers = tags.map { "logseq-" + $0 }
+  /// `tags` mirror the `logseq-<tag>` dom twins; `identifiers` adds the
+  /// dedicated widget extensions that may nest inside them — must stay
+  /// in sync with `child_identifiers` in apple/logseq_dom.ml (it feeds
+  /// the fingerprint's `children:`).
+  static let identifiers = tags.map { "logseq-" + $0 } + ["logseq-codemirror"]
   private static let profiles = ["web/web", "macos/swiftui"]
 
   private static let propertySchemas: [LogseqExtensionFingerprint.Property] = [

@@ -42,7 +42,10 @@ let tags =
   ; "pdf" ]
 let identifier tag = "logseq-" ^ tag
 
-let child_identifiers = List.map identifier tags
+(* dedicated widget extensions (logseq-codemirror) nest inside
+   logseq-<tag> parents the same way tags nest in each other *)
+let child_identifiers =
+  List.map identifier tags @ [ Logseq_codemirror.identifier ]
 
 let schema_of tag =
   Lui_extension.component (identifier tag)

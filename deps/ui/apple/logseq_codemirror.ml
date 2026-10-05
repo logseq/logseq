@@ -7,7 +7,7 @@
    role mounts the vendored CM5 on an interior textarea; query role
    builds the fake-CM contenteditable surface). On the native backends
    the extension registers with a platform-gated impl — see
-   LogseqExtensions.swift for the SwiftUI stub.
+   LogseqExtensions.swift / LogseqCodeMirror.swift for the native host.
 
    Emits one event kind:
      cm-event {name: string (required), value/key: string (optional)} *)
