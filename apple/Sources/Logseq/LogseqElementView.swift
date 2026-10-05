@@ -1157,26 +1157,56 @@ struct LogseqElementView: View {
 
   /// Synthetic lifecycle events — always emitted regardless of `wired`,
   /// the OCaml side consumes them to keep its live-element set truthful.
-  /// Emitted on the next main-actor tick: a synchronous emit during apply
-  /// gets deferred to the end of apply and then re-enters the OCaml runtime
-  /// while the outer C call is still on the stack. Unmounts go through the
-  /// registry's anchor context: a node dropped by the patch is exactly when
-  /// its own emit would throw "unknown extension event" and lose the unmount.
+  /// Lifecycle emits are bookkeeping for OCaml's live_ids set — a remount
+  /// produces one per node, and each emit used to run a synchronous OCaml
+  /// dispatch+flush on the main thread (~0.3ms), so a ~100-node mount
+  /// starved the attach pass for ~37ms. Coalesce them: ids accumulate per
+  /// runloop tick and ship as ONE dom-event carrying {ids:[...]}. Mounts
+  /// use the last-seen live context; unmounts go through the registry's
+  /// anchor context (a node dropped by the patch is exactly when its own
+  /// emit would throw "unknown extension event").
+  private static var pendingMounts: Set<String> = []
+  private static var pendingUnmounts: Set<String> = []
+  private static var lifecycleEmitter: LUIAppleExtensionViewContext?
+  private static var lifecycleFlushQueued = false
+
   private func emitLifecycle(_ name: String) {
     let id = domID
     guard !id.isEmpty else { return }
+    Self.lifecycleEmitter = context
+    if name == "element-unmount" {
+      Self.pendingMounts.remove(id)
+      Self.pendingUnmounts.insert(id)
+    } else {
+      Self.pendingUnmounts.remove(id)
+      Self.pendingMounts.insert(id)
+    }
+    guard !Self.lifecycleFlushQueued else { return }
+    Self.lifecycleFlushQueued = true
+    Task { @MainActor in
+      Self.lifecycleFlushQueued = false
+      let mounts = Self.pendingMounts
+      let unmounts = Self.pendingUnmounts
+      Self.pendingMounts = []
+      Self.pendingUnmounts = []
+      Self.flushLifecycle("element-mount", ids: mounts)
+      Self.flushLifecycle("element-unmount", ids: unmounts)
+    }
+  }
+
+  private static func flushLifecycle(_ name: String, ids: Set<String>) {
+    guard !ids.isEmpty else { return }
     let emitter =
       name == "element-unmount"
-      ? LogseqElementRegistry.shared.eventAnchor : context
-    Task { @MainActor [emitter] in
-      guard let emitter,
-        let data = try? JSONSerialization.data(withJSONObject: ["id": id]),
-        let json = String(data: data, encoding: .utf8)
-      else { return }
-      try? emitter.emit(
-        name: "dom-event",
-        values: ["name": .string(name), "payload": .string(json)])
-    }
+      ? (LogseqElementRegistry.shared.eventAnchor ?? lifecycleEmitter)
+      : lifecycleEmitter
+    guard let emitter,
+      let data = try? JSONSerialization.data(withJSONObject: ["ids": Array(ids)]),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    try? emitter.emit(
+      name: "dom-event",
+      values: ["name": .string(name), "payload": .string(json)])
   }
 
   func emit(_ name: String, payload: [String: Any] = [:]) {

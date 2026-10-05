@@ -760,19 +760,37 @@ let () =
       flush stderr)
     true;
   document_add_listener "blur" (fun _ -> last_active_id := None) true;
+  (* the host coalesces lifecycle emits per tick into one dom-event
+     carrying {ids:[...]} — a per-node emit costs a full dispatch+flush
+     on the main thread each, which starved the attach pass on remounts *)
   document_add_listener "element-mount"
     (fun ev ->
-      match Dom_ext.str_prop "id" ev with
-      | Some id when id <> "" -> Hashtbl.replace live_ids id ()
-      | _ -> ())
+      let mark id = if id <> "" then Hashtbl.replace live_ids id () in
+      (match Dom_ext.prop "ids" ev with
+       | Js.Json.JArray ids ->
+           Array.iter
+             (function Js.Json.JString id -> mark id | _ -> ())
+             ids
+       | _ -> (
+           match Dom_ext.str_prop "id" ev with
+           | Some id -> mark id
+           | _ -> ())))
     true;
   document_add_listener "element-unmount"
     (fun ev ->
-      match Dom_ext.str_prop "id" ev with
-      | Some id ->
-          Hashtbl.remove live_ids id;
-          Hashtbl.remove live_fields id
-      | _ -> ())
+      let unmark id =
+        Hashtbl.remove live_ids id;
+        Hashtbl.remove live_fields id
+      in
+      (match Dom_ext.prop "ids" ev with
+       | Js.Json.JArray ids ->
+           Array.iter
+             (function Js.Json.JString id -> unmark id | _ -> ())
+             ids
+       | _ -> (
+           match Dom_ext.str_prop "id" ev with
+           | Some id -> unmark id
+           | _ -> ())))
     true;
   (* refresh live fields from the target snapshot carried by every event
      — the host always injects the text view's current value there, so

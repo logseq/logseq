@@ -268,9 +268,12 @@ private func drainPatchQueue() {
   // journals feed ~40ms later) merges into ONE apply = ONE mount pass —
   // worth waiting for since every pass re-lays-out the whole tree. The
   // 250ms cap bounds worst-case wait if the feed is slow. Interactive
-  // patches keep the 6ms window so typing stays inside one frame.
+  // patches keep the 3ms window so typing stays inside one frame.
   let launching = now - LogseqRuntime.launchAbsTime < 1.0
-  let quietWindow: CFAbsoluteTime = launching ? 0.06 : 0.006
+  // Interactive ops emit singleton gens (a second gen lands ~40ms+
+  // later — unmergeable), so the quiet window is pure latency; 1ms
+  // still catches the rare sub-tick sibling.
+  let quietWindow: CFAbsoluteTime = launching ? 0.06 : 0.001
   let cap: CFAbsoluteTime = launching ? 0.25 : 0.045
   if !pendingPatchBatches.isEmpty,
     now - lastPatchRecvAt < quietWindow,
