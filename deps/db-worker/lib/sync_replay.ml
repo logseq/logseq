@@ -1263,6 +1263,60 @@ let pending_property_attrs (pending : Sync_client_op.local_tx_entry list)
          acc (tx_items_of e.tx))
     SSet.empty pending
 
+(* block/uuid adds inside a pending entry's verbatim .tx — the entities
+   that entry will create once uploaded. *)
+let entry_created_uuids (local_tx : Sync_client_op.local_tx_entry)
+    : string list =
+  List.filter_map
+    (fun item ->
+       match item with
+       | Wire.Array l | Wire.List l
+         when List.length l >= 4
+              && List.nth l 0 = Wire.keyword "db/add"
+              && List.nth l 2 = Wire.keyword "block/uuid" -> (
+           match List.nth l 3 with
+           | Wire.Uuid u -> Some u
+           | _ -> None)
+       | _ -> None)
+    (tx_items_of local_tx.tx)
+
+let rec uuids_in_wire (w : Wire.t) : string list =
+  match w with
+  | Wire.Uuid u -> [ u ]
+  | Wire.Array xs | Wire.List xs | Wire.Set xs ->
+      List.concat_map uuids_in_wire xs
+  | Wire.Map kvs ->
+      List.concat_map
+        (fun (k, v) -> uuids_in_wire k @ uuids_in_wire v)
+        kvs
+  | Wire.Tagged (_, v) -> uuids_in_wire v
+  | _ -> []
+
+(* a replayed entry whose ops reference uuids that another still-pending
+   entry will create must NOT be marked failed: the verbatim upload
+   applies entries in order, so the dep lands on the server first and
+   the next rebase resolves. cljs fails such entries eagerly, which
+   loses the op whenever a remote apply races the first upload after
+   reconnect — deterministically killing offline work on the behind
+   client (rtc-page-test). Defer instead: the entry stays pending; it
+   fails naturally if the dep entry itself ever dies. *)
+let references_pending_uuid (db : db)
+    ~(pending : Sync_client_op.local_tx_entry list)
+    (local_tx : Sync_client_op.local_tx_entry) : bool =
+  let pending_created =
+    List.concat_map
+      (fun (e : Sync_client_op.local_tx_entry) ->
+         if e.tx_id = local_tx.tx_id then [] else entry_created_uuids e)
+      pending
+  in
+  List.exists
+    (fun u ->
+       List.mem u pending_created
+       && (match Outliner_op.entity_of_uuid db u with
+          | Some e -> List.length (Datascript.entity_attrs e) <= 1
+          | None -> true))
+    (List.concat_map uuids_in_wire local_tx.forward_outliner_ops)
+
 let replay_pending_entry (repo : string) (conn : conn)
     (rebase_db_before : db option) ~(pending_attrs : SSet.t)
     (local_tx : Sync_client_op.local_tx_entry) : unit =
@@ -1272,20 +1326,7 @@ let replay_pending_entry (repo : string) (conn : conn)
      pending). When every block/uuid the tx creates already exists, the
      op's effects are already materialized — replaying it again would
      fail resolving targets that no longer exist even on db_before. *)
-  let created_uuids =
-    List.filter_map
-      (fun item ->
-         match item with
-         | Wire.Array l | Wire.List l
-           when List.length l >= 4
-                && List.nth l 0 = Wire.keyword "db/add"
-                && List.nth l 2 = Wire.keyword "block/uuid" -> (
-             match List.nth l 3 with
-             | Wire.Uuid u -> Some u
-             | _ -> None)
-         | _ -> None)
-      (tx_items_of local_tx.tx)
-  in
+  let created_uuids = entry_created_uuids local_tx in
   let already_materialized =
     created_uuids <> []
     && List.for_all
@@ -1423,18 +1464,28 @@ let replay_pending_txs repo (conn : conn)
             try
               replay_pending_entry repo conn rebase_db_before
                 ~pending_attrs local_tx
-            with e ->
-              incr failed;
-              Worker_log.warn "db-sync/pending-replay-failed"
-                [ "repo", repo
-                ; "tx-id", local_tx.tx_id
-                ; "outliner-op"
-                , Option.value local_tx.outliner_op ~default:""
-                ; "ops"
-                , Transit_codec.to_string
-                    (Wire.Array local_tx.forward_outliner_ops)
-                ; "error", Printexc.to_string e ];
-              ignore (mark_failed_txs repo [ local_tx.tx_id ]))
+            with e -> (
+              match e with
+              | Dispatcher.Exn_info ("invalid rebase op", _)
+                  when references_pending_uuid (Conn.db conn) ~pending
+                         local_tx ->
+                  Worker_log.info "db-sync/replay-deferred"
+                    [ "repo", repo
+                    ; "tx-id", local_tx.tx_id
+                    ; "outliner-op"
+                    , Option.value local_tx.outliner_op ~default:"" ]
+              | _ ->
+                  incr failed;
+                  Worker_log.warn "db-sync/pending-replay-failed"
+                    [ "repo", repo
+                    ; "tx-id", local_tx.tx_id
+                    ; "outliner-op"
+                    , Option.value local_tx.outliner_op ~default:""
+                    ; "ops"
+                    , Transit_codec.to_string
+                        (Wire.Array local_tx.forward_outliner_ops)
+                    ; "error", Printexc.to_string e ];
+                  ignore (mark_failed_txs repo [ local_tx.tx_id ])))
          pending
      with e ->
        Sync_state.pending_replay := prev_replay;
