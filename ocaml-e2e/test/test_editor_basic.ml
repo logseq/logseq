@@ -1369,10 +1369,7 @@ let () =
               (console_logs env)
           in
           ( new_logs
-          , (* a new-block Enter applies as :insert-blocks or coalesces
-               into the fill's :save-block under load *)
-            worker_op_logs new_logs "insert-blocks"
-            @ worker_op_logs new_logs "save-block"
+          , worker_op_logs new_logs "insert-blocks"
           , worker_op_logs new_logs "delete-blocks" )
         in
         let rec poll n =
