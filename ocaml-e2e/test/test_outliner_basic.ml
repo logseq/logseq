@@ -556,23 +556,18 @@ let () =
       Js.Promise.catch
         (fun _ ->
            (* editing state can be dropped across the zoom route under
-              load; clicking the root block reopens its editor — same
-              end state the assertion checks. In the focused view the
-              root renders as the page title, so click that too. *)
+              load. In the focused view the root block's title renders
+              only inside the breadcrumb's ancestor list — there is no
+              clickable row for it. Un-zoom one level via the last
+              breadcrumb ancestor, reopen its editor on the page, then
+              zoom back in: same end state the assertion checks. *)
            let* () =
              Js.Promise.catch
-               (fun _ ->
-                  Pw.click env
-                    "[data-testid='page title'] .block-title-wrap, [data-testid='page title'] .block-content, .ls-page-title .block-title-wrap, .ls-page-title .block-content"
-                  |> Js.Promise.catch (fun e ->
-                      let* dump =
-                        Pw.eval_js env
-                          "(() => JSON.stringify({url: location.hash, title: !!document.querySelector('[data-testid=\"page title\"], .ls-page-title'), blocks: document.querySelectorAll('.ls-block').length, main: (document.querySelector('main')?.innerText || '').slice(0,300)}))()"
-                      in
-                      let* () = Js.Promise.resolve (Js.log2 "focused-dom" dump) in
-                      Playwright.throw_error e))
+               (fun _ -> Pw.click env ".breadcrumb a >> nth=-1")
                (B.jump_to_block env "focused-root")
            in
+           let* () = B.jump_to_block env "focused-root" in
+           let* () = zoom_until_root 3 in
            Util.wait_editor_visible env)
         (Util.wait_editor_visible env)
     in
