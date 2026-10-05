@@ -44,7 +44,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `listJournals` | `with_counts?`, `limit?` | journal-day candidates, descending sort, limit; optional count indexes | `logseq.DB.getJournalCandidates` supplies the same candidate fields; MCP retains sort/limit/count behavior | production route switched for candidates; local DB, MCP, and capability tests pass; live validation pending |
 | `listTags` | `expand?` | existing `list_tags` wrapper | same exported list API via `logseq.DB.listTags`; preserve expand option and namespaced payload | production route switched; local route and API tests pass; live validation pending |
 | `listProperties` | `expand?` | existing `list_properties` wrapper | same exported list API via `logseq.DB.listProperties`; preserve expand option and namespaced payload | production route switched; local route and API tests pass; live validation pending |
-| `listClosedValues` | none | reverse closed-value query | query adapter | DB read |
+| `listClosedValues` | none | property/value pairs from `:block/closed-value-property` | dedicated `logseq.DB.getClosedValues` preserves the two-entity row shape | production route switched; local MCP, capability, SDK type, and compilation checks pass; live validation pending |
 | `listOrphanTags` | none | missing reverse tag query | query adapter | DB read |
 | `listOrphanProperties` | none | one query per property ident | query adapter | DB read |
 | `listAssets` | none | discovery query; unverified | query adapter, preserve status | DB read after asset model verified |

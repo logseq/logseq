@@ -1179,6 +1179,7 @@
                     (is (some #(= "logseq.DB.getJournalCandidates" (first %)) @calls))
                     (is (some #(= "logseq.DB.listRecycled" (first %)) @calls))
                     (is (some #(= "logseq.DB.getStatusRows" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getClosedValues" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1433,6 +1434,22 @@
                     (is (= [["logseq.DB.getStatusRows" []]] @calls))
                     (is (= "Task" (get-in result [0 0 :title])))
                     (is (= ":logseq.property/status.todo" (get-in result [0 1 :ident])))
+                    (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (js/queueMicrotask done)))))))
+
+(deftest list-closed-values-uses-db-api
+  (let [calls (atom [])
+        rows #js [#js [#js {"ident" "user.property/priority" "title" "Priority"}
+                      #js {"ident" "user.property/priority.high" "title" "High" "order" "a"}]]
+        api (recording-api calls rows)]
+    (async done
+      (-> (mcp-compat/list-closed-values api #js {})
+          (p/then (fn [result]
+                    (is (= [["logseq.DB.getClosedValues" []]] @calls))
+                    (is (= "Priority" (get-in result [0 0 :title])))
+                    (is (= "High" (get-in result [0 1 :title])))
                     (js/queueMicrotask done)))
           (p/catch (fn [error]
                      (is false (str error))

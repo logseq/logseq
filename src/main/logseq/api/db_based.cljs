@@ -463,6 +463,16 @@
                     :where [?entity :logseq.property/status ?value]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json rows false)))))
 
+(defn get-closed-values []
+  (let [repo (state/get-current-repo)]
+    (p/let [rows (db-async/<q
+                  repo
+                  {:transact-db? false}
+                  '[:find (pull ?property [:db/ident :block/title])
+                         (pull ?value [:db/ident :block/title :block/order])
+                    :where [?value :block/closed-value-property ?property]])]
+      (bean/->js (sdk-utils/normalize-keyword-for-json rows false)))))
+
 (def ^:private inspect-page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 

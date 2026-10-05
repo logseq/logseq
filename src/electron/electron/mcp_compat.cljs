@@ -394,14 +394,8 @@
 
 (defn list-closed-values
   [api-fn _args]
-  (let [query "[:find (pull ?property [:db/ident :block/title])
-                      (pull ?value [:db/ident :block/title :block/order])
-                 :where [?value :block/closed-value-property ?property]]"]
-    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
-            rows (js->clj result :keywordize-keys true)]
-      (if (and (= 1 (count rows)) (vector? (first rows)))
-        (first rows)
-        rows))))
+  (p/let [result (api-fn "logseq.DB.getClosedValues" [])]
+    (js->clj result :keywordize-keys true)))
 
 (defn list-orphan-tags
   [api-fn _args]
@@ -2522,7 +2516,7 @@
               "logseq.DB.removeBlock"]
   :listRecycled ["logseq.DB.listRecycled"]
   :listStatus ["logseq.DB.getStatusRows"]
-   :listClosedValues ["logseq.DB.datascriptQuery"]
+  :listClosedValues ["logseq.DB.getClosedValues"]
    :listOrphanTags ["logseq.DB.datascriptQuery"]
    :listOrphanProperties ["logseq.DB.getAllProperties" "logseq.DB.datascriptQuery"]
    :listAssets ["logseq.DB.datascriptQuery"]})
@@ -2541,6 +2535,7 @@
   "logseq.DB.getJournalCandidates" []
   "logseq.DB.listRecycled" []
   "logseq.DB.getStatusRows" []
+  "logseq.DB.getClosedValues" []
   "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
