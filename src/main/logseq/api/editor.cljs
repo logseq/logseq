@@ -161,13 +161,26 @@
                  (route-handler/redirect-to-page! (:block/uuid page')))]
        (some-> page' sdk-utils/result->js)))))
 
+(def ^:private date-only-yyyy-mm-dd-re #"\d{4}-\d{2}-\d{2}")
+
+(defn journal-page-input->yyyy-mm-dd
+  "Resolve createJournalPage input to a yyyy-MM-dd calendar day.
+
+  A date-only YYYY-MM-DD string is that exact calendar day in every time zone.
+  Date objects, local date-time strings, and numeric timestamps use the local
+  calendar day of the parsed instant."
+  [date]
+  (if (and (string? date) (re-matches date-only-yyyy-mm-dd-re date))
+    date
+    (let [parsed (js/Date. date)]
+      (when-not (js/isNaN (.getTime parsed))
+        (-> (gdate/Date. parsed)
+            (date-time-util/format "yyyy-MM-dd"))))))
+
 (defn create_journal_page
   [^js date]
-  (let [date (js/Date. date)]
-    (when-let [datestr (and (not (js/isNaN (.getTime date)))
-                            (-> (gdate/Date. date)
-                                (date-time-util/format "yyyy-MM-dd")))]
-      (create_page datestr nil #js {:journal true :redirect false}))))
+  (when-let [datestr (journal-page-input->yyyy-mm-dd date)]
+    (create_page datestr nil #js {:journal true :redirect false})))
 
 (defn delete_page
   [name]

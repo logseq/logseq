@@ -366,9 +366,15 @@
     (-> (api-test/with-plugin-api
           (fn []
             (p/let [journal (api-editor/create_journal_page (js/Date. "2024-01-15T12:00:00Z"))
-                    today (api-editor/get_today_page)]
+                    today (api-editor/get_today_page)
+                    from-date-only (api-editor/create_journal_page "2026-12-01")
+                    from-date-only-map (api-test/js->clj-kw from-date-only)]
               (is (some? journal))
-              (is (some? (or today journal))))))
+              (is (some? (or today journal)))
+              (is (some? from-date-only))
+              (is (= 20261201 (or (:journalDay from-date-only-map)
+                                  (:journal-day from-date-only-map)
+                                  (:block/journal-day from-date-only-map)))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
@@ -459,6 +465,28 @@
 
 (deftest create-journal-page-rejects-invalid-date
   (is (nil? (api-editor/create_journal_page (js/Date. "not-a-date")))))
+
+(deftest journal-page-input-date-only-string-is-calendar-day
+  ;; ECMAScript parses YYYY-MM-DD as UTC midnight. West of UTC, reading local
+  ;; fields from that Date is the previous calendar day (db-test#1400).
+  (let [utc-parsed (js/Date. "2026-12-01")
+        naive-local (let [month (inc (.getMonth utc-parsed))
+                          day (.getDate utc-parsed)]
+                      (str (.getFullYear utc-parsed) "-"
+                           (when (< month 10) "0") month "-"
+                           (when (< day 10) "0") day))]
+    (is (= "2026-12-01" (api-editor/journal-page-input->yyyy-mm-dd "2026-12-01")))
+    (is (= "2026-01-01" (api-editor/journal-page-input->yyyy-mm-dd "2026-01-01")))
+    (when (pos? (.getTimezoneOffset utc-parsed))
+      (is (= "2026-11-30" naive-local)
+          "west of UTC, Date + local fields shifts a date-only string back one day"))))
+
+(deftest journal-page-input-keeps-local-day-for-datetime-date-and-ms
+  (is (= "2026-12-01" (api-editor/journal-page-input->yyyy-mm-dd "2026-12-01T12:00:00")))
+  (is (= "2026-12-01" (api-editor/journal-page-input->yyyy-mm-dd (js/Date. 2026 11 1))))
+  (is (= "2026-12-01" (api-editor/journal-page-input->yyyy-mm-dd (.getTime (js/Date. 2026 11 1)))))
+  (is (nil? (api-editor/journal-page-input->yyyy-mm-dd "not-a-date")))
+  (is (nil? (api-editor/journal-page-input->yyyy-mm-dd (js/Date. "not-a-date")))))
 
 (deftest edit-exit-and-code-editor-helpers
   (let [edited (atom nil)
