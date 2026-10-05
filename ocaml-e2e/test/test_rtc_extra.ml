@@ -481,7 +481,7 @@ let () =
               in
               let* () = K.shift_arrow_down env in
               let* () = K.meta_shift_arrow_down env in
-              let* () = Keyboard.enter_in_editor env in
+              let* () = K.enter env in
               B.indent env))
     in
     validate_2 env p1 p2)

@@ -577,34 +577,34 @@ let () =
       Js.Promise.catch
         (fun _ ->
            (* editing state can be dropped across the zoom route under
-              load. In the focused view the root block's title renders
-              only inside the breadcrumb's ancestor list — there is no
-              clickable row for it. Un-zoom one level via the last
-              breadcrumb ancestor, reopen its editor on the page, then
-              zoom back in: same end state the assertion checks. *)
-           let* () =
-             Js.Promise.catch
-               (fun _ -> Pw.click env ".breadcrumb a >> nth=-1")
-               (B.jump_to_block env "focused-root")
+              load. Zoom back out to the page (alt+left — the focused
+              view's breadcrumb has no ancestor links for a top-level
+              block), reopen the editor on the row, then zoom back in:
+              same end state the assertion checks. *)
+           let rec hash_lacks_root deadline =
+             let* (h : string) = current_location_hash env in
+             if not (Util.contains_sub h root_id) then
+               Js.Promise.resolve true
+             else if Js.Date.now () > deadline then
+               Js.Promise.resolve false
+             else
+               let* () = Util.wait_timeout env 250. in
+               hash_lacks_root deadline
            in
+           let* () =
+             K.press env
+               (if Config.mac then "Meta+," else "Alt+ArrowLeft")
+           in
+           let* _ = hash_lacks_root (Js.Date.now () +. 3000.) in
            let* () =
              Js.Promise.catch
                (fun e ->
-                  let* dump =
+                  let* (dump : string) =
                     Pw.eval_js env
-                      "(() => JSON.stringify({url: location.hash, crumbs: [...document.querySelectorAll('.breadcrumb a')].map(a => a.textContent), blocks: [...document.querySelectorAll('.ls-block .block-title-wrap, .ls-block .block-content')].map(e => e.textContent).slice(0,10), main: (document.querySelector('main')?.innerText || '').slice(0,300)}))()"
-                  in
-                  let* (tree : Js.Json.t) =
-                    Api.ls_api_call env "editor.getPageBlocksTree"
-                      [| Api.str "page 1" |]
+                      "(() => JSON.stringify({url: location.hash, blocks: [...document.querySelectorAll('.ls-block .block-title-wrap, .ls-block .block-content')].map(e => e.textContent).slice(0,10)}))()"
                   in
                   let* () =
-                    Js.Promise.resolve
-                      (Js.log2 "focused-dom" dump)
-                  in
-                  let* () =
-                    Js.Promise.resolve
-                      (Js.log2 "focused-tree" (Js.Json.stringify tree))
+                    Js.Promise.resolve (Js.log2 "focused-dom" dump)
                   in
                   Playwright.throw_error e)
                (B.jump_to_block env "focused-root")
