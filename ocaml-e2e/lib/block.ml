@@ -61,20 +61,42 @@ let save_block env text =
   (* a remount mid-fill can drop the text into the dying editor —
      verify the value and refill (bounded) *)
   let rec verify_fill n =
-    let* v = Pw.input_value env Util.editor_q_first in
+    let* editors = Pw.qs env Util.editor_q in
+    let* v =
+      if Array.length editors = 0 then Js.Promise.resolve "<no editor>"
+      else
+        Js.Promise.catch (fun _ -> Js.Promise.resolve "<gone>")
+          (Pw.input_value env Util.editor_q_first)
+    in
     if v = text then Js.Promise.resolve ()
     else if n <= 1 then Js.Promise.resolve ()
     else
-      let* () = Pw.fill env Util.editor_q_first text in
+      let* () =
+        Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+          (Pw.fill env Util.editor_q_first text)
+      in
       verify_fill (n - 1)
   in
   let* () = verify_fill 3 in
-  let* _ =
-    E2e_assert.is_visible_l ~timeout:15000.
-      (Playwright.locator_first
-         (Ls_locator.filter env Util.editor_q ~has_text:text))
+  (* poll the live .value of the first editor — a textarea's has-text
+     match does not track the value under remounts *)
+  let rec wait_value deadline =
+    let* editors = Pw.qs env Util.editor_q in
+    let* v =
+      if Array.length editors = 0 then Js.Promise.resolve "<no editor>"
+      else
+        Js.Promise.catch (fun _ -> Js.Promise.resolve "<gone>")
+          (Pw.input_value env Util.editor_q_first)
+    in
+    if v = text then Js.Promise.resolve ()
+    else if Js.Date.now () > deadline then
+      Js.Promise.reject
+        (Failure ("save_block: editor value never became " ^ text))
+    else
+      let* () = Util.wait_timeout env 200. in
+      wait_value deadline
   in
-  Js.Promise.resolve ()
+  wait_value (Js.Date.now () +. 15000.)
 
 let focus_new_block env ~previous_editor_id =
   let new_editor =
