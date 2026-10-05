@@ -216,6 +216,45 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest get-backlinks-api-validates-target-and-returns-empty-groups
+  (is (thrown-with-msg? js/Error #"target_uuid must be a UUID"
+                        (db-based-api/get-backlinks "not-a-uuid")))
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [result (db-based-api/get-backlinks "00000000-0000-4000-8000-000000000999")
+                    backlinks (api-test/js->clj-kw result)]
+              (is (= "00000000-0000-4000-8000-000000000999" (:target_uuid backlinks)))
+              (is (zero? (:total backlinks)))
+              (is (empty? (:refs backlinks)))
+              (is (empty? (:tagged backlinks)))
+              (is (empty? (:property_values backlinks)))
+              (is (= "Nothing refers to this entity." (:diagnostic backlinks))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest get-backlinks-api-finds-direct-tag-holders
+  (test-helper/load-test-files
+   [{:page {:block/title "Backlink API Page"}
+     :blocks [{:block/title "Backlink API Block"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [block (test-helper/find-block-by-content "Backlink API Block")]
+              (p/let [tag (db-based-api/create-tag "Backlink API Tag" nil)
+                      tag-map (api-test/js->clj-kw tag)
+                      _ (db-based-api/add-block-tag (:block/uuid block) (:uuid tag-map))
+                      result (db-based-api/get-backlinks (:uuid tag-map))
+                      backlinks (api-test/js->clj-kw result)]
+                (is (= 3 (:total backlinks)))
+                (is (= [(str (:block/uuid block))] (mapv :uuid (:tagged backlinks))))
+                (is (= [(str (:block/uuid block))] (mapv :uuid (:refs backlinks))))
+                (is (= "Tags" (get-in backlinks [:property_values 0 :property :title])))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest get-page-block-uuids-api-returns-flat-page-descendants
   (test-helper/load-test-files
    [{:page {:block/title "UUID API Page"}
@@ -233,6 +272,39 @@
                 (is (= [page-uuid] (mapv :page_uuid blocks)))
                 (is (= (:db/id page) (get-in blocks [0 :page :id])))
                 (is (= (:db/id page) (get-in blocks [0 :parent :id])))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest get-block-tree-api-preserves-tree-bounds-and-root-classification
+  (test-helper/load-test-files
+   [{:page {:block/title "Tree API Page"}
+     :blocks [{:block/title "Tree API Parent"
+               :build/children [{:block/title "Tree API Child"}]}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [page (test-helper/find-page-by-title "Tree API Page")
+                  parent (test-helper/find-block-by-content "Tree API Parent")
+                  block-uuid (str (:block/uuid parent))
+                  page-uuid (str (:block/uuid page))]
+              (p/let [tree (db-based-api/get-block-tree block-uuid 20 10)
+                      root-only (db-based-api/get-block-tree block-uuid 0 10)
+                      page-result (db-based-api/get-block-tree page-uuid 20 10)
+                      missing (db-based-api/get-block-tree "00000000-0000-4000-8000-000000000999" 20 10)
+                      tree (api-test/js->clj-kw tree)
+                      root-only (api-test/js->clj-kw root-only)
+                      page-result (api-test/js->clj-kw page-result)
+                      missing (api-test/js->clj-kw missing)]
+                (is (true? (:found tree)))
+                (is (= "Tree API Parent" (get-in tree [:block :title])))
+                (is (= ["Tree API Child"] (mapv :title (get-in tree [:block :children]))))
+                (is (= 2 (:node_count tree)))
+                (is (= 1 (:node_count root-only)))
+                (is (true? (:truncated root-only)))
+                (is (= [] (get-in root-only [:block :children])))
+                (is (= "target is a page, not a block" (:reason page-result)))
+                (is (false? (:found missing)))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))

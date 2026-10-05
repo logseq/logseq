@@ -353,6 +353,57 @@
                                tag-uuid)]
       (sdk-utils/result->js users))))
 
+    (declare <inspect-page-query inspect-page-structural-property?)
+
+(defn get-backlinks [target-uuid]
+  (when-not (util/uuid-string? target-uuid)
+    (throw (js/Error. "target_uuid must be a UUID")))
+  (let [repo (state/get-current-repo)
+        target-uuid* (sdk-utils/uuid-or-throw-error target-uuid)]
+    (p/let [target-id (<inspect-page-query
+                       repo
+                       "[:find ?target . :in $ ?uuid :where [?target :block/uuid ?uuid]]"
+                       target-uuid*)
+            refs (if target-id
+                   (<inspect-page-query
+                    repo
+                    "[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...] :in $ ?target :where [?entity :block/refs ?target]]"
+                    target-id)
+                   [])
+            tagged (if target-id
+                     (<inspect-page-query
+                      repo
+                      "[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...] :in $ ?target :where [?entity :block/tags ?target]]"
+                      target-id)
+                     [])
+            property-class (<inspect-page-query
+                            repo
+                            "[:find ?class . :where [?class :db/ident :logseq.class/Property]]")
+            value-rows (if target-id
+                         (<inspect-page-query
+                          repo
+                          "[:find (pull ?entity [:block/uuid :block/title :block/name :block/page]) (pull ?property [:db/ident :block/title]) :in $ ?target ?class :where [?property :block/tags ?class] [?property :db/ident ?attribute] [?entity ?attribute ?target]]"
+                          target-id property-class)
+                         [])]
+      (let [property-values (->> value-rows
+                                (remove #(inspect-page-structural-property? (second %)))
+                                (mapv (fn [[holder property]]
+                                        {:holder holder :property property})))
+            total (+ (count refs) (count tagged) (count property-values))]
+        (bean/->js
+         (sdk-utils/normalize-keyword-for-json
+          {:target_uuid target-uuid
+           :total total
+           :refs refs
+           :tagged tagged
+           :property_values property-values
+           :diagnostic (if (pos? total)
+                         (str (count refs) " reference(s), "
+                              (count tagged) " tag holder(s), "
+                              (count property-values) " property value(s).")
+                         "Nothing refers to this entity.")}
+          false))))))
+
 (def ^:private inspect-page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 
@@ -633,6 +684,60 @@
         (bean/->js
          (mapv #(assoc % :page_uuid page-uuid)
                (sort-by #(str (:order %)) (descendants root))))))))
+
+(defn- page-block-tree-result [block-uuid root max-depth max-nodes]
+  (cond
+    (nil? root)
+    {:found false :block_uuid block-uuid :block nil :node_count 0 :truncated false}
+
+    (:name root)
+    {:found false :block_uuid block-uuid :block nil :node_count 0 :truncated false
+     :reason "target is a page, not a block"}
+
+    :else
+    (let [count* (atom 0)
+          truncated* (atom false)
+          visited* (atom #{})]
+      (letfn [(build [node depth]
+                (when (contains? @visited* (:uuid node))
+                  (throw (js/Error. "Block hierarchy contains a cycle")))
+                (swap! visited* conj (:uuid node))
+                (swap! count* inc)
+                (let [children (sort-by #(str (:order %)) (:_parent node))
+                      node' (dissoc node :_parent)]
+                  (if (or (>= depth max-depth)
+                          (>= @count* max-nodes))
+                    (do
+                      (when (seq children) (reset! truncated* true))
+                      (assoc node' :children []))
+                    (assoc node' :children
+                           (reduce (fn [built child]
+                                     (if (< @count* max-nodes)
+                                       (conj built (build child (inc depth)))
+                                       (do
+                                         (reset! truncated* true)
+                                         (reduced built))))
+                                   [] children)))))]
+        {:found true
+         :block_uuid block-uuid
+         :block (build root 0)
+         :node_count @count*
+         :truncated @truncated*}))))
+
+(defn get-block-tree [block-uuid max-depth max-nodes]
+  (when-not (util/uuid-string? block-uuid)
+    (throw (js/Error. "block_uuid must be a UUID")))
+  (when-not (and (number? max-depth) (js/Number.isInteger max-depth)
+                 (<= 0 max-depth 100))
+    (throw (js/Error. "max_depth must be an integer between 0 and 100")))
+  (when-not (and (number? max-nodes) (js/Number.isInteger max-nodes)
+                 (<= 1 max-nodes 1000))
+    (throw (js/Error. "max_nodes must be an integer between 1 and 1000")))
+  (let [repo (state/get-current-repo)
+        block-uuid* (sdk-utils/uuid-or-throw-error block-uuid)
+        tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+    (p/let [root (<inspect-page-query repo tree-query block-uuid*)]
+      (bean/->js (page-block-tree-result block-uuid root max-depth max-nodes)))))
 
 (defn get-tags-by-name [name]
   (p/let [tags (get-tags name)]

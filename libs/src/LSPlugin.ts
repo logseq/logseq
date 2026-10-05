@@ -970,16 +970,23 @@ export interface IDBProxy {
    * Run a datascript query with parameters.
    */
   datascriptQuery: <T = any>(query: string, ...inputs: Array<any>) => Promise<T>
+  search: <T = any>(query: string, options?: Record<string, any>) => Promise<T>
 
   getBlock: IEditorProxy['getBlock']
   getTag: IEditorProxy['getTag']
   getTagUsers: (tagUuid: BlockUUID) => Promise<Array<BlockEntity | PageEntity>>
+  getBacklinks: (targetUuid: BlockUUID) => Promise<Record<string, any>>
   inspectPage: (
     pageUuid: BlockUUID,
     detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'
   ) => Promise<Record<string, any>>
   getPageStats: (pageUuid: BlockUUID) => Promise<Record<string, any>>
   getPageBlockUUIDs: (pageUuid: BlockUUID) => Promise<Array<Partial<BlockEntity> & { page_uuid: BlockUUID }>>
+  getBlockTree: (
+    blockUuid: BlockUUID,
+    maxDepth?: number,
+    maxNodes?: number
+  ) => Promise<Record<string, any>>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<BlockEntity | null>
   listTags: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>
   listProperties: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>

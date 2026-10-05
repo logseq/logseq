@@ -276,77 +276,32 @@
       [api-fn args]
       (let [block-uuid (aget args "block_uuid")
             max-depth (or (aget args "max_depth") 20)
-            max-nodes (or (aget args "max_nodes") 1000)
-            query (str "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order "
-                       "{:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} "
-                       "{:block/_parent ...}]) . :where [?root :block/uuid " (uuid-query-input block-uuid) "]]")]
+            max-nodes (or (aget args "max_nodes") 1000)]
         (when-not (and (number? max-depth) (js/Number.isInteger max-depth) (<= 0 max-depth 100))
           (throw (js/Error. "max_depth must be an integer between 0 and 100")))
         (when-not (and (number? max-nodes) (js/Number.isInteger max-nodes) (<= 1 max-nodes 1000))
           (throw (js/Error. "max_nodes must be an integer between 1 and 1000")))
-        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
-                root (js->clj result :keywordize-keys true)]
-          (letfn [(descendants [node]
-                    (mapcat (fn [child]
-                              (cons (assoc (dissoc child :_parent)
-                                           :parent_uuid (get-in child [:parent :uuid]))
-                                    (descendants child)))
-                            (:_parent node)))]
-            (block-tree-result block-uuid (when root (dissoc root :_parent))
-                               (vec (descendants root)) max-depth max-nodes)))))
+        (p/let [result (api-fn "logseq.DB.getBlockTree" [block-uuid max-depth max-nodes])]
+          (js->clj result :keywordize-keys true))))
 
         (defn find-backlinks
           [api-fn args]
-          (let [target-uuid (aget args "target_uuid")
-            holder "[:block/uuid :block/title :block/name :block/page]"
-            refs-query (str "[:find [(pull ?entity " holder ") ...] :in $ ?target-uuid"
-              " :where [?target :block/uuid ?target-uuid] [?entity :block/refs ?target]]")
-            tags-query (str "[:find [(pull ?entity " holder ") ...] :in $ ?target-uuid"
-              " :where [?target :block/uuid ?target-uuid] [?entity :block/tags ?target]]")
-            values-query (str "[:find (pull ?entity " holder ") "
-                  "(pull ?property [:db/ident :block/title]) "
-                  ":in $ ?target-uuid :where [?target :block/uuid ?target-uuid] "
-                  "[?property :db/ident ?attribute] "
-                  "[?entity ?attribute ?target]]")]
-            (p/let [refs-result (api-fn "logseq.DB.datascriptQuery" [refs-query (uuid-query-input target-uuid)])
-            tags-result (api-fn "logseq.DB.datascriptQuery" [tags-query (uuid-query-input target-uuid)])
-            values-result (api-fn "logseq.DB.datascriptQuery" [values-query (uuid-query-input target-uuid)])
-            refs (js->clj refs-result :keywordize-keys true)
-            tagged (js->clj tags-result :keywordize-keys true)
-            values (js->clj values-result :keywordize-keys true)
-            refs (if (and (= 1 (count refs)) (vector? (first refs))) (first refs) refs)
-            tagged (if (and (= 1 (count tagged)) (vector? (first tagged))) (first tagged) tagged)
-            values (filterv #(not (structural-property-value? (second %))) values)
-            property-values (mapv (fn [[holder property]]
-                    {:holder holder :property property}) values)
-            total (+ (count refs) (count tagged) (count property-values))]
-          {:target_uuid target-uuid
-           :total total
-           :refs refs
-           :tagged tagged
-           :property_values property-values
-           :diagnostic (if (pos? total)
-                 (str (count refs) " reference(s), "
-                  (count tagged) " tag holder(s), "
-                  (count property-values) " property value(s).")
-                 "Nothing refers to this entity.")})))
+          (let [target-uuid (aget args "target_uuid")]
+            (p/let [result (api-fn "logseq.DB.getBacklinks" [target-uuid])]
+              (js->clj result :keywordize-keys true))))
 
 (defn find-orphans
   [api-fn args]
-  (let [page-uuid (aget args "page_uuid")
-        query "[:find [(pull ?block [:block/uuid :block/title :block/page
-                                      :block/parent :block/order]) ...]
-                 :in $ ?page-uuid
-                 :where
-                 [?page :block/uuid ?page-uuid]
-                 [?block :block/parent+ ?page]
-                 [?block :block/page ?stored-page]
-                 (not [?stored-page :block/uuid ?page-uuid])]" ]
-    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query (uuid-query-input page-uuid)])
-            rows (js->clj result :keywordize-keys true)
-            rows (if (and (= 1 (count rows)) (vector? (first rows)))
-                   (first rows)
-                   rows)]
+  (let [page-uuid (aget args "page_uuid")]
+    (p/let [result (api-fn "logseq.DB.getPageBlockUUIDs" [page-uuid])
+            blocks (js->clj result :keywordize-keys true)
+            rows (filterv (fn [block]
+                            (let [page (page-stats-field block :page)
+                                  stored-page-uuid (when (map? page)
+                                                     (page-stats-field page :uuid))]
+                              (and stored-page-uuid
+                                   (not= page-uuid stored-page-uuid))))
+                          blocks)]
       {:page_uuid page-uuid
        :orphans rows
        :count (count rows)
@@ -2437,7 +2392,7 @@
 
 (defn search-blocks
   [call-api-fn args]
-  (call-api-fn "logseq.app.search"
+  (call-api-fn "logseq.DB.search"
                [(aget args "searchTerm") #js {:enable-snippet? false}]))
 
 (defn repair-links
@@ -2559,7 +2514,7 @@
   {:listPages ["logseq.DB.listPages"]
    :listJournals ["logseq.DB.datascriptQuery"]
    :getPage ["logseq.cli.getPageData"]
-   :searchBlocks ["logseq.app.search"]
+  :searchBlocks ["logseq.DB.search"]
    :listTags ["logseq.DB.listTags"]
    :listProperties ["logseq.DB.listProperties"]
    :getPageUUID ["logseq.DB.datascriptQuery"]
@@ -2590,9 +2545,9 @@
   :getPropertyIndent ["logseq.DB.getPropertiesByTitle"]
    :getBlock ["logseq.DB.getBlock"]
   :getBlockUUID ["logseq.DB.getPageBlockUUIDs"]
-   :getBlockTree ["logseq.DB.datascriptQuery"]
-   :findBacklinks ["logseq.DB.datascriptQuery"]
-   :findOrphans ["logseq.DB.datascriptQuery"]
+  :getBlockTree ["logseq.DB.getBlockTree"]
+  :findBacklinks ["logseq.DB.getBacklinks"]
+  :findOrphans ["logseq.DB.getPageBlockUUIDs"]
    :isTitleAvailable ["logseq.DB.datascriptQuery"]
    :findDuplicateTitles ["logseq.DB.datascriptQuery"]
    :getProperyUsers ["logseq.DB.datascriptQuery"]
@@ -2617,6 +2572,8 @@
    "logseq.DB.inspectPage" ["00000000-0000-4000-8000-000000000999" "page"]
   "logseq.DB.getPageStats" ["00000000-0000-4000-8000-000000000999"]
   "logseq.DB.getPageBlockUUIDs" ["00000000-0000-4000-8000-000000000999"]
+  "logseq.DB.getBlockTree" ["00000000-0000-4000-8000-000000000999" 20 1000]
+  "logseq.DB.getBacklinks" ["00000000-0000-4000-8000-000000000999"]
   "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
@@ -2640,7 +2597,7 @@
    "logseq.DB.removeBlockProperty" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.removeProperty" ["__mcp_capability_probe__"]
    "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
-   "logseq.app.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
+  "logseq.DB.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
 
 (def ^:private capability-absent-markers
   ["no method found" "unknown method" "not supported" "not implemented"

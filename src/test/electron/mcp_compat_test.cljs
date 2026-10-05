@@ -19,6 +19,33 @@
     (swap! calls conj [method args])
     result))
 
+(defn- fixture-block-tree
+  [conn block-uuid max-depth max-nodes]
+  (let [db @conn
+        root-id (:db/id (d/entity db [:block/uuid (uuid block-uuid)]))
+        root-entity (when root-id (d/pull db '[*] root-id))
+        root (when root-entity
+           (js->clj (clj->js (sdk-utils/normalize-keyword-for-json root-entity true))
+               :keywordize-keys true))]
+    (letfn [(descendants [parent-id]
+              (mapcat (fn [child-id]
+                        (let [child (d/pull db '[*] child-id)
+                              parent-uuid (:block/uuid (d/entity db parent-id))
+                              child-map (-> (js->clj (clj->js (sdk-utils/normalize-keyword-for-json child true))
+                                                    :keywordize-keys true)
+                                            (assoc :parent_uuid (str parent-uuid)))]
+                          (cons child-map (descendants child-id))))
+                      (d/q '[:find [?child ...]
+                             :in $ ?parent
+                             :where [?child :block/parent ?parent]]
+                           db parent-id)))]
+      (mcp-compat/block-tree-result
+       block-uuid
+       root
+       (if root-id (vec (descendants root-id)) [])
+       max-depth
+       max-nodes))))
+
 (defn- page-fixture
   []
   (let [page-uuid "00000000-0000-4000-8000-000000000160"
@@ -79,6 +106,45 @@
                                                 :where [?tag :block/uuid ?tag-uuid] [?holder :block/tags ?tag]]
                                               @conn tag-uuid)]
                                 (clj->js (sdk-utils/normalize-keyword-for-json users false)))
+                              "logseq.DB.getBlockTree"
+                              (clj->js (fixture-block-tree conn (first args) (second args) (nth args 2)))
+                              "logseq.DB.getBacklinks"
+                              (let [target-uuid (uuid (first args))
+                                    target-id (d/q '[:find ?target . :in $ ?uuid
+                                                    :where [?target :block/uuid ?uuid]]
+                                                  @conn target-uuid)
+                                    refs (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...]
+                                                :in $ ?target
+                                                :where [?entity :block/refs ?target]]
+                                              @conn target-id)
+                                    tagged (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...]
+                                                  :in $ ?target
+                                                  :where [?entity :block/tags ?target]]
+                                                @conn target-id)
+                                    properties (d/q '[:find (pull ?entity [:block/uuid :block/title :block/name :block/page])
+                                                          (pull ?property [:db/ident :block/title])
+                                                      :in $ ?target ?class
+                                                      :where [?property :block/tags ?class]
+                                                             [?property :db/ident ?attribute]
+                                                             [?entity ?attribute ?target]]
+                                                    @conn target-id 157)
+                                    property-values (mapv (fn [[holder property]]
+                                                            {:holder holder :property property})
+                                                          properties)
+                                    total (+ (count refs) (count tagged) (count property-values))]
+                                (clj->js
+                                 (sdk-utils/normalize-keyword-for-json
+                                  {:target_uuid (str target-uuid)
+                                   :total total
+                                   :refs refs
+                                   :tagged tagged
+                                   :property_values property-values
+                                   :diagnostic (if (pos? total)
+                                                 (str (count refs) " reference(s), "
+                                                      (count tagged) " tag holder(s), "
+                                                      (count property-values) " property value(s).")
+                                                 "Nothing refers to this entity.")}
+                                  false)))
                 "logseq.DB.deletePage"
                 (let [entity (d/entity @conn [:block/uuid (uuid (first args))])]
                   (if (some #(= 159 (:db/id %)) (:block/tags entity))
@@ -276,7 +342,7 @@
         tag-uuid "00000000-0000-4000-8000-000000000166"]
     (d/transact! conn [{:db/id 166 :block/uuid (uuid tag-uuid) :block/title "Test Tag" :block/tags [159]}
                       {:db/id 160 :block/tags [166]}
-                      {:db/id 168 :db/ident :plugin.property/smoke-link :block/title "Link property"}
+                      {:db/id 168 :db/ident :plugin.property/smoke-link :block/title "Link property" :block/tags [157]}
                       {:db/id 161 :block/refs [160] :plugin.property/smoke-link 160}])
     (async done
       (-> (p/let [tag (mcp-compat/get-tag api #js {"tag_uuid" tag-uuid})
@@ -286,6 +352,7 @@
             (is (= tag-uuid (:uuid tag)))
             (is (= [page-uuid] (mapv :uuid holders)))
             (is (some #(= "logseq.DB.getTagUsers" (first %)) @calls))
+            (is (some #(= "logseq.DB.getBacklinks" (first %)) @calls))
             (is (= [block-uuid] (mapv :uuid (:refs links))))
             (is (= block-uuid (get-in links [:property_values 0 :holder :uuid])))
             (js/queueMicrotask done))
@@ -1069,7 +1136,7 @@
     (is (= false (aget (first (second (nth @calls 2))) "expand")))
     (is (= "logseq.DB.listProperties" (first (nth @calls 3))))
     (is (= true (aget (first (second (nth @calls 3))) "expand")))
-    (is (= ["logseq.app.search" "needle"]
+    (is (= ["logseq.DB.search" "needle"]
           [(first (nth @calls 4)) (first (second (nth @calls 4)))]))))
 
 (deftest capabilities-reports-only-the-registered-reference-routes
@@ -1097,6 +1164,9 @@
                     (is (some #(= "logseq.DB.getPropertiesByTitle" (first %)) @calls))
                     (is (some #(= "logseq.DB.getPageStats" (first %)) @calls))
                     (is (some #(= "logseq.DB.getPageBlockUUIDs" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getBlockTree" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getBacklinks" (first %)) @calls))
+                    (is (some #(= "logseq.DB.search" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
