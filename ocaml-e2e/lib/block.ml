@@ -81,11 +81,28 @@ let save_block env text =
     | Some uuid ->
         Js.Promise.resolve
           (Printf.sprintf "#edit-block-%s:visible >> nth=-1" uuid)
-    | None ->
-        let* () =
-          E2e_assert.have_count ~timeout:15000. env Util.editor_q 1
-        in
-        Js.Promise.resolve Util.editor_q_first
+    | None -> (
+        (* editing state may point at a block whose textarea never
+           mounted (remote-tx remount) — force-reopen it via the API *)
+        let* st = Util.editing_uuid env in
+        match st with
+        | Some uuid ->
+            let* _ =
+              Js.Promise.catch
+                (fun _ -> Js.Promise.resolve Js.null)
+                (Api.ls_api_call env "editor.editBlock" [| Api.str uuid |])
+            in
+            let* _ =
+              E2e_assert.is_visible_l ~timeout:15000.
+                (Pw.q env (Printf.sprintf "#edit-block-%s:visible" uuid))
+            in
+            Js.Promise.resolve
+              (Printf.sprintf "#edit-block-%s:visible" uuid)
+        | None ->
+            let* () =
+              E2e_assert.have_count ~timeout:15000. env Util.editor_q 1
+            in
+            Js.Promise.resolve Util.editor_q_first)
   in
   let* () = Pw.click env editor_q in
   let* () = Pw.fill env editor_q text in

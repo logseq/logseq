@@ -65,11 +65,16 @@ let editor_mode ?uuid env =
     in
     if ok then Js.Promise.resolve ()
     else if Js.Date.now () > deadline then (
-      match uuid with
+      (* a remote-tx remount can leave editing state pointing at a block
+         whose editor never mounts — reopen it through the API and wait
+         for its textarea instead of counting textareas that never come *)
+      let target =
+        match uuid with
+        | Some _ -> uuid
+        | None -> u
+      in
+      match target with
       | Some uuid ->
-          (* a remote-tx remount can wipe the editing state entirely —
-             reopen the block's editor through the API and wait for its
-             textarea instead of counting textareas that never come *)
           let* _ =
             Js.Promise.catch
               (fun _ -> Js.Promise.resolve Js.null)
