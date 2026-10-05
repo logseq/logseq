@@ -215,10 +215,26 @@ let repeat_keyboard env n shortcut =
   go n
 
 let repeat_keyboard_in_editor env n shortcut =
+  (* re-check per press: a chord can switch the app out of editing mode
+     (e.g. shift+arrow enters block selection and unmounts the textarea),
+     so a one-time check cannot be trusted across the sequence *)
   let rec go i =
     if i <= 0 then Js.Promise.resolve ()
     else
-      let* () = Keyboard.press_in_editor env ~delay:20. shortcut in
+      let* editors = Pw.qs env editor_q in
+      let* () =
+        if Array.length editors > 0 then
+          Keyboard.press_in_editor env ~delay:20. shortcut
+        else
+          let* rows = Pw.qs env ".ls-page-blocks .block-content" in
+          if Array.length rows > 0 then
+            (* no editor (e.g. block-selection mode): deliver to the
+               last block row — focusing body drops chords silently *)
+            Playwright.locator_press ~delay:20.
+              (Pw.q env ".ls-page-blocks .block-content >> nth=-1")
+              shortcut
+          else Keyboard.press env ~delay:20. shortcut
+      in
       go (i - 1)
   in
   go n
