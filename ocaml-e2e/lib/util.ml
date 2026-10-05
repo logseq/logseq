@@ -236,7 +236,17 @@ let search_and_click env search_text =
   in
   let* () =
     (* index queries lag under -j8; each retry re-fills the search box *)
-    repeat_until_visible env 8 result (fun () -> search env search_text)
+    Js.Promise.catch
+      (fun e ->
+        let* dump =
+          Pw.eval_js env
+            "(() => JSON.stringify({input: document.querySelector('.cp__cmdk-search-input')?.value, items: [...document.querySelectorAll('[data-testid]')].filter(el => el.offsetParent !== null).slice(0, 30).map(el => el.dataset.testid + ' :: ' + el.textContent.replace(/\\s+/g, ' ').slice(0, 60)), results: [...document.querySelectorAll('.search-results > div, .cp__cmdk [role=option]')].slice(0, 30).map(el => el.textContent.replace(/\\s+/g, ' ').slice(0, 80))}))()"
+        in
+        let* () =
+          Js.Promise.resolve (Js.log2 "[search-dbg]" dump)
+        in
+        Playwright.throw_error e)
+      (repeat_until_visible env 12 result (fun () -> search env search_text))
   in
   Pw.click_l result
 
