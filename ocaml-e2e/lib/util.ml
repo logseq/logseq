@@ -220,19 +220,28 @@ let get_text_of loc = Pw.text_of_l loc
 let get_text env selector =
   Pw.text_of_l (Playwright.locator_first (Pw.q env selector))
 
+(* Reads prefer the focused textarea (the live editor) and then the first
+   *visible* one — a detached/stale textarea can sit at nth=0 and shadow the
+   real editor's value. *)
+let edit_content_js =
+  "(() => { const ae = document.activeElement; \
+   if (ae && ae.matches && ae.matches('.editor-wrapper textarea')) \
+   return ae.value; \
+   const ts = [...document.querySelectorAll('.editor-wrapper textarea')] \
+   .filter(t => t.offsetParent !== null || t === document.activeElement); \
+   return ts.length ? ts[0].value : null; })()"
+
 let get_edit_content env =
-  let* editor = get_editor env in
-  match editor with
-  | Some e -> Js.Promise.then_ (fun v -> Js.Promise.resolve (Some v)) (Pw.input_value_l e)
-  | None -> Js.Promise.resolve None
+  let* v = Pw.eval_js env edit_content_js in
+  Js.Promise.resolve (Js.Nullable.toOption v)
 
 (** [edit_content]: the focused editor's value as a plain string — clj's
     [(util/get-edit-content)] = [(.inputValue (util/get-editor))], which fails
     when no editor is open. *)
 let edit_content env =
-  let* editor = get_editor env in
-  match editor with
-  | Some e -> Pw.input_value_l e
+  let* v = get_edit_content env in
+  match v with
+  | Some s -> Js.Promise.resolve s
   | None -> Js.Promise.reject (Failure "edit_content: no editor open")
 
 (** waits until the editing textarea's content equals [expected].

@@ -74,17 +74,8 @@ let take_outliner_op_perf perf_id =
 
 (* cljs transaction.cljs log-outliner-op-perf! — the endpoint-level perf
    log emitted by :thread-api/apply-outliner-ops. dev (goog.DEBUG) logs
-   every op; OUTLINER-PERF-LOGGING (e2e builds) logs only op-names +
-   worker-apply-ms for the three e2e op sets. *)
-let e2e_perf_op_names =
-  [ [ "insert-blocks" ]; [ "save-block"; "insert-blocks" ]; [ "delete-blocks" ] ]
-
-let op_names_of (data : Wire.t) : string list =
-  match Wire.get "op-names" data with
-  | Some (Wire.Array xs) | Some (Wire.List xs) ->
-      List.filter_map (function Wire.Keyword s -> Some s | _ -> None) xs
-  | _ -> []
-
+   every op; OUTLINER-PERF-LOGGING (e2e builds) logs every op's slim
+   [:op-names :worker-apply-ms] projection. *)
 let log_tx_outliner_op_perf (data : Wire.t) =
   match Wire.get "perf-id" data with
   | Some (Wire.String _) | Some (Wire.Uuid _) ->
@@ -96,9 +87,11 @@ let log_tx_outliner_op_perf (data : Wire.t) =
       if !Sync_state.dev_or_test then
         Worker_log.info ":db-worker/outliner-op-perf"
           [ ("data", Ds_wire.edn_of_transit data') ]
-      else if !Sync_state.outliner_perf_logging
-              && List.mem (op_names_of data') e2e_perf_op_names then
-        (* cljs select-keys [:op-names :worker-apply-ms] *)
+      else if !Sync_state.outliner_perf_logging then
+        (* cljs logs every op under goog.DEBUG; restricting to
+           e2e_perf_op_names silently drops ops whose names merged
+           (e.g. [:insert-blocks :delete-blocks]) under load.
+           select-keys [:op-names :worker-apply-ms] *)
         let slim =
           Wire.Map
             (List.filter
