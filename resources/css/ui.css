@@ -113,6 +113,25 @@
 
 .ui__toaster-viewport .ui__toast {
   pointer-events: auto;
+  /* stacking index from DOM position — newest toast is the last child.
+     The view layer emits no per-node inline styles; toasts beyond 16
+     fall back to index 0 (frontmost), they are below the cap anyway. */
+  --toast-index: 0;
+  &:nth-last-child(2) { --toast-index: 1; }
+  &:nth-last-child(3) { --toast-index: 2; }
+  &:nth-last-child(4) { --toast-index: 3; }
+  &:nth-last-child(5) { --toast-index: 4; }
+  &:nth-last-child(6) { --toast-index: 5; }
+  &:nth-last-child(7) { --toast-index: 6; }
+  &:nth-last-child(8) { --toast-index: 7; }
+  &:nth-last-child(9) { --toast-index: 8; }
+  &:nth-last-child(10) { --toast-index: 9; }
+  &:nth-last-child(11) { --toast-index: 10; }
+  &:nth-last-child(12) { --toast-index: 11; }
+  &:nth-last-child(13) { --toast-index: 12; }
+  &:nth-last-child(14) { --toast-index: 13; }
+  &:nth-last-child(15) { --toast-index: 14; }
+  &:nth-last-child(16) { --toast-index: 15; }
   --gap: 0.75rem;
   --peek: 0.75rem;
   --scale: calc(1 - (var(--toast-index) * 0.1));

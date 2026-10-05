@@ -6,6 +6,15 @@ open Lui_elements
 
 let dom = Logseq_dom.dom
 
+(* Pressable container: container kinds take no ~on_press, so wrap the
+   element and register Press on the mounted node. *)
+let pressable ~on_press (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  enable context node Lui_protocol.PressEnabled;
+  register_press context node on_press;
+  node
+
 (* cljs mock-textarea style: hidden caret mirror for popup placement,
    consumed on the imperative side by dom_ext.mock_text_el/build_mock_text *)
 let mock_text_style =
