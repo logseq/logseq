@@ -100,7 +100,10 @@ let url_entity_val (ctx : vctx) (opts : vopts) (v : value) : bool =
          | Some (String title) ->
              if opts.skip_strict_url then true
              else blank_str title || url_str title || macro_str title
-         | _ -> false)
+         (* cljs: [string/blank?] on a nil title is true — a URL
+            property created without a value has no title yet and is
+            valid; skip-strict still requires a string title *)
+         | _ -> not opts.skip_strict_url)
     | None -> false
 
 (* db-property-type/text-entity? *)
