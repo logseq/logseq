@@ -103,7 +103,10 @@ let new_block env title =
     | None -> failwith "editor textarea has no id"
   in
   let* () = Util.move_cursor_to_end env in
-  let* () = Keyboard.enter env in
+  (* element-targeted Enter: page.keyboard.press dies silently when
+     *:focus is <body> after a remount — a swallowed Enter leaves no new
+     block and focus_new_block just times out *)
+  let* () = Keyboard.press_in_editor env "Enter" in
   let* () = focus_new_block env ~previous_editor_id:last_id in
   (* the block's own textarea id is derived from the block uuid, so it
      survives editor remounts; read/fill it directly instead of

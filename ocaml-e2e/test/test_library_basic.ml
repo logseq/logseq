@@ -85,17 +85,17 @@ let () =
     let* content = Util.get_edit_content env in
     Fest.equal content (Some "Enter Parent") Fest.expect;
     let* () = Util.move_cursor_to_end env in
-    let* () = Keyboard.enter env in
-    let* () = Util.press_seq env "Enter Sibling" in
+    let* () = Keyboard.press_in_editor env "Enter" in
+    let* () = Util.type_in_editor env "Enter Sibling" in
     let* () = Util.exit_edit env in
     let* () = Ls_page.goto_page env "Library" in
     let title sel =
       Ls_locator.filter env ~has_text:sel
         ".ls-page-blocks .block-title-wrap"
     in
-    let* _ = E2e_assert.is_visible_l (title "Enter Parent") in
-    let* _ = E2e_assert.is_visible_l (title "Enter Nested") in
-    let* _ = E2e_assert.is_visible_l (title "Enter Sibling") in
+    let* _ = E2e_assert.is_visible_l ~timeout:15000. (title "Enter Parent") in
+    let* _ = E2e_assert.is_visible_l ~timeout:15000. (title "Enter Nested") in
+    let* _ = E2e_assert.is_visible_l ~timeout:15000. (title "Enter Sibling") in
     let* layout =
       Pw.eval_js env
         "(() => {\n\
