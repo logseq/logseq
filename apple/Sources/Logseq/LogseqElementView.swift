@@ -795,6 +795,14 @@ struct LogseqElementView: View {
         }
         if case .string(let classes) = context.childProperty(node: id, "style-class") {
           let cs = Set(classes.split(separator: " ").map(String.init))
+          // .block-children-container holds nested ls-block rows, not this
+          // row's own nodes — descending into it lets a descendant's
+          // textarea mark this row .editor (and makes a deeper row's
+          // block-content-inner win the control/content ids whenever the
+          // container precedes block-main-container in child order).
+          // The spine consumes the container separately; in the nested
+          // fold it stays mounted via probe.siblings.
+          if cs.contains("block-children-container") { continue }
           if cs.contains("latex") || cs.contains("latex-inline") { bailReason = "latex"; break }
           if cs.contains("block-main-container") { probe.mainContainerID = id }
           if cs.contains("block-control") { probe.controlID = id }
