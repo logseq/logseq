@@ -2417,9 +2417,29 @@ let () =
         let* () =
           B.new_blocks env [ "copy parent"; "copy child"; "copy sibling" ]
         in
-        let* () = K.arrow_up env in
+        (* arrow keys go to *:focus and can be eaten by a remount —
+           verify the editing block actually moved before indenting,
+           otherwise the selection below copies the wrong blocks *)
+        let rec move_to_block key target tries =
+          let* content = Util.get_edit_content env in
+          if content = Some target then Js.Promise.resolve ()
+          else if tries <= 0 then
+            let* _ = Util.wait_edit_content env target in
+            Js.Promise.resolve ()
+          else if content = None then
+            (* no live editor — re-open the target block's own *)
+            let* () = Pw.click_l (Util.get_by_text env target true) in
+            let* () = K.press env "Control+e" in
+            let* () = Util.wait_timeout env 200. in
+            move_to_block key target (tries - 1)
+          else
+            let* () = key env in
+            let* () = Util.wait_timeout env 150. in
+            move_to_block key target (tries - 1)
+        in
+        let* () = move_to_block K.arrow_up "copy child" 3 in
         let* () = B.indent env in
-        let* () = K.arrow_down env in
+        let* () = move_to_block K.arrow_down "copy sibling" 3 in
         let* () = B.select_blocks env 3 in
         let* () = B.copy env in
         let* () = Page.new_page env target_page in
