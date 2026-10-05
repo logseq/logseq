@@ -3,15 +3,49 @@
 
 open Fest.Promise
 
-let goto_page env page_name =
-  Pw.catch_timeout
-    (Util.search_and_click env page_name)
-    (fun () ->
-      let* () = Keyboard.esc env in
-      Util.search_and_click env page_name)
-
 let get_page_name env =
   Util.get_text env "div[data-testid='page title'] .block-title-wrap"
+
+(** clj's goto-page only clicks the search result; a dropped click can
+    leave the client on whatever page it was on (e.g. today's journal),
+    which later ops then write into.  Poll the visible page title and
+    retry the whole search+click until the app actually lands. *)
+let goto_page env page_name =
+  let landed () =
+    Pw.catch_timeout
+      (let* t = get_page_name env in
+       if String.lowercase_ascii t = String.lowercase_ascii page_name
+       then Js.Promise.resolve true
+       else Js.Promise.resolve false)
+      (fun () -> Js.Promise.resolve false)
+  in
+  let rec wait_landed n =
+    let* ok = landed () in
+    if ok then Js.Promise.resolve true
+    else if n <= 0 then Js.Promise.resolve false
+    else
+      let* () = Util.wait_timeout env 200. in
+      wait_landed (n - 1)
+  in
+  let rec attempt n =
+    if n <= 0 then
+      Js.Promise.reject
+        (Failure ("goto_page: never landed on " ^ page_name))
+    else
+      let* () =
+        Pw.catch_timeout
+          (Util.search_and_click env page_name)
+          (fun () ->
+            let* () = Keyboard.esc env in
+            Util.search_and_click env page_name)
+      in
+      let* ok = wait_landed 40 in
+      if ok then Js.Promise.resolve ()
+      else
+        let* () = Keyboard.esc env in
+        attempt (n - 1)
+  in
+  attempt 3
 
 let new_page env title =
   let create_item env =

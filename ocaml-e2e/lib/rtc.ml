@@ -32,41 +32,78 @@ let int_after ~label text =
         if stop = start then None
         else int_of_string_opt (String.sub text start (stop - start))
 
+(** Reads [local-tx]/[remote-tx] straight from [:rtc/state] via
+    [logseq.api.get_state_from_store] — same source the [rtc-tx] DOM node
+    renders, but immune to the header indicator unmounting. *)
 let get_rtc_tx env =
-  let* text = Playwright.text_content (Pw.get_by_test_id env "rtc-tx") in
-  let text = Option.value ~default:"" text in
-  Js.Promise.resolve
-    { local_tx = int_after ~label:"local-tx" text
-    ; remote_tx = int_after ~label:"remote-tx" text
-    }
+  let deadline = Js.Date.now () +. 30000. in
+  let rec poll () =
+    let* json =
+      Pw.eval_js env
+        "(() => { const s = logseq.api.get_state_from_store('rtc/state'); \
+         return s ? {localTx: s.localTx ?? null, remoteTx: s.remoteTx ?? \
+         null} : null; })()"
+    in
+    let field name =
+      match Js.Json.decodeObject json with
+      | Some obj -> (
+          match Js.Dict.get obj name with
+          | Some v ->
+              Js.Json.decodeNumber v
+              |> Option.map (fun f -> int_of_float f)
+          | None -> None)
+      | None -> None
+    in
+    match field "localTx", field "remoteTx" with
+    | Some _, Some _ | Some _, None | None, Some _ ->
+        Js.Promise.resolve
+          { local_tx = field "localTx"; remote_tx = field "remoteTx" }
+    | None, None ->
+        if Js.Date.now () > deadline then
+          Js.Promise.resolve { local_tx = None; remote_tx = None }
+        else
+          let* () = Util.wait_timeout env 250. in
+          poll ()
+  in
+  poll ()
 
-let dump_sync_logs env =
-  let kws =
-    [ "sync"; "rtc"; "RTC"; "ws"; "error"; "Error"; "fail"; "exn"; "render" ]
-  in
-  let has_any m =
-    List.exists
-      (fun k ->
-        let open Js.String in
-        includes ~search:k m)
-      kws
-  in
-  let rec take n = function
-    | [] -> []
-    | x :: tl -> if n <= 0 then [] else x :: take (n - 1) tl
-  in
-  Env.console_logs env
-  |> List.filter has_any
-  |> take 40
-  |> List.rev
-  |> List.iter (fun m -> Js.log ("[rtc-dbg] " ^ m))
-
+(** Same predicate as the cljs [indicator-button-class] idle state —
+    rtc-lock open, zero pending local/asset/server ops — read from
+    [:rtc/state] so the check survives the header indicator unmounting
+    (same flake that hides [rtc-tx]). *)
 let wait_idle env =
-  Js.Promise.catch
-    (fun e ->
-      dump_sync_logs env;
-      Playwright.throw_error e)
-    (Pw.wait_for env ~timeout:35000. "button.cloud.on.idle")
+  let deadline = Js.Date.now () +. 35000. in
+  let rec poll () =
+    let* json =
+      Pw.eval_js env
+        "(() => { const s = logseq.api.get_state_from_store('rtc/state') || \
+         {}; const online = \
+         logseq.api.get_state_from_store('network/online?'); const local = s.localTx ?? 0; \
+         const remote = s.remoteTx ?? 0; const pendingLocal = \
+         s.unpushedBlockUpdateCount ?? 0; const pendingAsset = \
+         s.pendingAssetOpsCount ?? 0; const pendingServer = \
+         s.pendingServerOpsCount ?? Math.max(0, remote - local); const open = \
+         !!s.rtcLock; return (online && open && pendingLocal === 0 && \
+         pendingAsset === 0 && pendingServer === 0); })()"
+    in
+    match Js.Json.decodeBoolean json with
+    | Some true -> Js.Promise.resolve ()
+    | _ ->
+        if Js.Date.now () > deadline then
+          let* snap =
+            Pw.eval_js env
+              "JSON.stringify(logseq.api.get_state_from_store('rtc/state'))"
+          in
+          Js.Promise.reject
+            (Failure
+               (Printf.sprintf "wait-idle: rtc/state not idle, state=%s"
+                  (Option.value ~default:"null"
+                     (Js.Json.decodeString snap))))
+        else
+          let* () = Util.wait_timeout env 500. in
+          poll ()
+  in
+  poll ()
 
 (** exec [body], then wait for the rtc-tx to advance past the previous max
     with local-tx = remote-tx. Returns the new tx numbers. *)
@@ -100,11 +137,10 @@ let with_wait_tx_updated env body =
 
 let wait_tx_update_to env new_tx =
   let rec loop i last =
-    if i <= 0 then (
-      dump_sync_logs env;
+    if i <= 0 then
       Js.Promise.reject
         (Failure
-           (Printf.sprintf "wait-tx-update-to %d, last local-tx %d" new_tx last)))
+           (Printf.sprintf "wait-tx-update-to %d, last local-tx %d" new_tx last))
     else
       let* () = Util.wait_timeout env 1000. in
       let* () = wait_idle env in
