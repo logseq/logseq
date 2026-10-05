@@ -367,6 +367,11 @@ final class NSReferenceBox {
             .data(using: .utf8)!)
         return event
       }
+      if LogseqRuntime.perfLogging {
+        FileHandle.standardError.write(
+          "DBG mu-hit node=\(hit.nodeID) tag=\(hit.tag) at \(Int(point.x)),\(Int(point.y))\n"
+            .data(using: .utf8)!)
+      }
       let flags = event.modifierFlags
       runOnMainDeferred {
         LogseqPlatform.emitClick(

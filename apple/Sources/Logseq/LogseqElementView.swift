@@ -373,7 +373,12 @@ struct LogseqElementView: View {
 
   private var core: some View {
     content
-      .id(context.nodeID)
+      // Flat-spine hoisted nodes (editing textarea) keep one stable id —
+      // OCaml re-mints the node id on every reparent but the view must
+      // survive the move. The env is cleared inside the subtree so only
+      // the hoisted element takes it.
+      .id(spineStableID ?? String(context.nodeID))
+      .environment(\.logseqStableID, nil)
       // Base page frames arrive via the backend `onFramesReport` channel
       // (LogseqFrameStore.baseEntries); this overlay/imperative report is
       // the only per-element geometry hook left — it feeds the z≥1000
@@ -454,6 +459,8 @@ struct LogseqElementView: View {
         }
       }
   }
+
+  @Environment(\.logseqStableID) private var spineStableID: String?
 
   @ViewBuilder private var content: some View {
     if Self.bareMode {
@@ -694,6 +701,18 @@ struct LogseqElementView: View {
       }
     } else if children.isEmpty && html.isEmpty {
       styledText
+    } else if tag == "div", classSet.contains("blocks-list-wrap") {
+      if isSpineConsumedWrap {
+        // Nested .blocks-list-wrap under an .ls-block is consumed by the
+        // enclosing flat spine — its rows render as flat list entries.
+        EmptyView()
+      } else {
+        // Spine root: the whole block subtree renders as one flat,
+        // uuid-keyed ForEach — reparents become same-list moves instead
+        // of cross-ForEach destroy+create.
+        LogseqFlatSpineView(context: context)
+          .modifier(LogseqStyleModifier(style: style, tag: tag))
+      }
     } else if let flat = flatRowProbe {
       // Composite row: the ~30-node ls-block subtree folds into one view —
       // descendants never mount, so a row costs ~1 ext-view not ~30.
@@ -713,6 +732,24 @@ struct LogseqElementView: View {
     }
   }
 
+  /// Ancestor walk: this wrap sits inside a `.block-children` under an
+  /// `.ls-block` — the enclosing flat spine already renders its rows, so
+  /// the wrap itself must not render a second (nested) spine.
+  private var isSpineConsumedWrap: Bool {
+    var cur = context.parentID(of: context.nodeID)
+    var hops = 0
+    while let id = cur, hops < 64 {
+      if case .string(let c) = context.childProperty(node: id, "style-class"),
+        c.split(separator: " ").contains("ls-block")
+      {
+        return true
+      }
+      cur = context.parentID(of: id)
+      hops += 1
+    }
+    return false
+  }
+
   /// Non-nil when this element is an `ls-block` row whose whole subtree is
   /// safe to composite-render: only the inline-text / icon tags below, no
   /// editor textarea, media, or custom components. Rows holding an open
@@ -720,15 +757,27 @@ struct LogseqElementView: View {
   /// mount so their bespoke views stay interactive.
   private var flatRowProbe: LogseqFlatRowProbe? {
     guard tag == "div", classSet.contains("ls-block") else { return nil }
+    return Self.makeFlatRowProbe(
+      context: context, nodeID: context.nodeID, rowAttrs: attrs)
+  }
+
+  /// Shared probe for nested folded rows and flat-spine entries — a
+  /// bounded DFS over the row's subtree (pure property reads). A
+  /// `textarea` no longer bails: the row is marked editable so the spine
+  /// can hoist the editor leaf to a stable-id slot.
+  static func makeFlatRowProbe(
+    context: LUIAppleExtensionViewContext, nodeID: Int,
+    rowAttrs: [String: Any]
+  ) -> LogseqFlatRowProbe? {
     var probe = LogseqFlatRowProbe()
     var bailReason = ""
-    var stack = context.childIDs
+    var stack = context.childIDs(of: nodeID)
     var steps = 0
     let allowed: Set<String> = [
       "div", "span", "a", "raw-text", "em-emoji", "kbd", "strong", "em",
       "code", "u", "mark", "b", "i", "sup", "sub", "small", "br", "label",
       "svg", "path", "g", "defs", "use", "circle", "rect", "line",
-      "polyline", "polygon", "ellipse", "tspan",
+      "polyline", "polygon", "ellipse", "tspan", "textarea", "input",
     ]
     while let id = stack.popLast() {
       steps += 1
@@ -736,6 +785,14 @@ struct LogseqElementView: View {
       if let ident = context.extensionIdentifier(of: id) {
         let t = String(ident.dropFirst("logseq-".count))
         guard allowed.contains(t) else { bailReason = "tag:" + t; break }
+        if t == "textarea" {
+          probe.textareaID = id
+          continue
+        }
+        if t == "input" {
+          probe.inputID = id
+          continue
+        }
         if case .string(let classes) = context.childProperty(node: id, "style-class") {
           let cs = Set(classes.split(separator: " ").map(String.init))
           if cs.contains("latex") || cs.contains("latex-inline") { bailReason = "latex"; break }
@@ -754,19 +811,21 @@ struct LogseqElementView: View {
       }
       for c in context.childIDs(of: id) { stack.append(c) }
     }
-    // Flat rows carry the fold state on the .ls-block element itself:
-    // children are stream siblings, never a nested
-    // .block-children-container inside the row.
     probe.hasChildren =
-      (attrs["haschild"] as? String) == "true"
-      || (attrs["data-db-collapsable"] as? String) == "true"
-    probe.arrowCollapsed = (attrs["data-collapsed"] as? String) == "true"
+      (rowAttrs["haschild"] as? String) == "true"
+      || (rowAttrs["data-db-collapsable"] as? String) == "true"
+    probe.arrowCollapsed = (rowAttrs["data-collapsed"] as? String) == "true"
     if !bailReason.isEmpty {
+      if LogseqRuntime.perfLogging {
+        FileHandle.standardError.write(
+          "DBG probe-bail node=\(nodeID) why=\(bailReason)\n"
+            .data(using: .utf8)!)
+      }
       return nil
     }
     // Siblings of the main container (children column, properties area)
     // keep their normal mount.
-    for c in context.childIDs where c != probe.mainContainerID {
+    for c in context.childIDs(of: nodeID) where c != probe.mainContainerID {
       probe.siblings.append(c)
     }
     return probe
@@ -1171,15 +1230,24 @@ struct LogseqElementView: View {
   private static var lifecycleFlushQueued = false
 
   private func emitLifecycle(_ name: String) {
-    let id = domID
+    Self.queueLifecycle(domID: domID, name: name, context: context)
+  }
+
+  /// Lifecycle emit for nodes whose views are folded into composite
+  /// parents (flat-spine rows) — same batching, reachable without an
+  /// element view instance.
+  static func queueLifecycle(
+    domID id: String, name: String,
+    context: LUIAppleExtensionViewContext
+  ) {
     guard !id.isEmpty else { return }
-    Self.lifecycleEmitter = context
+    lifecycleEmitter = context
     if name == "element-unmount" {
-      Self.pendingMounts.remove(id)
-      Self.pendingUnmounts.insert(id)
+      pendingMounts.remove(id)
+      pendingUnmounts.insert(id)
     } else {
-      Self.pendingUnmounts.remove(id)
-      Self.pendingMounts.insert(id)
+      pendingUnmounts.remove(id)
+      pendingMounts.insert(id)
     }
     guard !Self.lifecycleFlushQueued else { return }
     Self.lifecycleFlushQueued = true
@@ -1261,6 +1329,21 @@ private struct LogseqGrowYKey: LayoutValueKey {
 /// Marks views re-rendered inside LogseqOverlayLayer — a `fillsOverlay`
 /// descendant must NOT hoist again: its parent already provides window
 /// bounds and (for dialog overlays) the centering layout the web relies on.
+/// Stable identity override for spine-hoisted nodes: the flat spine
+/// mounts a node's view keyed by block uuid, so `.id` must follow the
+/// uuid (survives reparent), not the re-minted node id. Cleared inside
+/// the hoisted subtree by `core` so only the anchored element takes it.
+private struct LogseqStableIDKey: EnvironmentKey {
+  static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+  var logseqStableID: String? {
+    get { self[LogseqStableIDKey.self] }
+    set { self[LogseqStableIDKey.self] = newValue }
+  }
+}
+
 private struct LogseqInOverlayKey: EnvironmentKey {
   static let defaultValue = false
 }
@@ -2346,6 +2429,8 @@ struct LogseqFlatRowProbe {
   var controlID = -1        // a.block-control (collapse arrow)
   var bulletID = -1         // a.bullet-link-wrap (bullet target)
   var contentID = -1        // .block-content-inner (text-click target)
+  var textareaID = -1       // editing row — hoisted editor leaf
+  var inputID = -1          // hidden upload input beside the textarea
   var arrowCollapsed = false
   var hasChildren = false
   var siblings: [Int] = []  // children column / properties area — mounted
@@ -2361,6 +2446,13 @@ struct LogseqFlatRowProbe {
 private struct LogseqFlatBlockRow: View {
   let probe: LogseqFlatRowProbe
   let context: LUIAppleExtensionViewContext
+  /// Spine mode: the .block-children-container sibling is consumed by the
+  /// flat list (rows after this one), never mounted inside the row.
+  var inSpine = false
+  /// Editing row: the textarea mounts directly (fresh node-id identity —
+  /// a reparent recreates the view rather than orphaning it on a
+  /// cross-ForEach move).
+  var editorNodeID = -1
   @State private var hovering = false
 
   private struct Run {
@@ -2525,23 +2617,56 @@ private struct LogseqFlatBlockRow: View {
     .frame(width: 24, height: 20)
   }
 
+  private var mountedSiblings: [Int] {
+    guard inSpine else { return probe.siblings }
+    return probe.siblings.filter { id in
+      guard case .string(let c) = context.childProperty(node: id, "style-class")
+      else { return true }
+      return !c.split(separator: " ").contains("block-children-container")
+    }
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(alignment: .firstTextBaseline, spacing: 2) {
         bulletZone
-        Text(attributed)
-          .font(.system(size: 14))
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-          .onTapGesture {
-            emitClick(on: probe.contentID > 0 ? probe.contentID : probe.mainContainerID)
+        if editorNodeID > 0 {
+          // Editing row: the real textarea. Its identity stays the
+          // (reminted) node id — a reparent therefore destroys and
+          // recreates the view instead of attempting a cross-ForEach
+          // move, which orphans the platform view.
+          context.nodeView(of: editorNodeID)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
+              action: { rect in
+                LogseqFrameStore.setAlias(editorNodeID, rect, tag: "textarea")
+              }
+          if probe.inputID > 0 {
+            // The hidden upload input sits next to the textarea inside
+            // .editor-inner — keep a real mount so file picking works.
+            context.nodeView(of: probe.inputID)
+              .frame(width: 0, height: 0)
           }
-          .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
-            action: { rect in
-              LogseqFrameStore.setAlias(
-                probe.contentID > 0 ? probe.contentID : probe.mainContainerID,
-                rect, tag: "div")
+        } else {
+          Text(attributed)
+            .font(.system(size: 14))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture {
+              emitClick(on: probe.contentID > 0 ? probe.contentID : probe.mainContainerID)
             }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
+              action: { rect in
+                if LogseqRuntime.perfLogging {
+                  FileHandle.standardError.write(
+                    "DBG contentalias node=\(probe.contentID > 0 ? probe.contentID : probe.mainContainerID) r=\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width))x\(Int(rect.height))\n"
+                      .data(using: .utf8)!)
+                }
+                LogseqFrameStore.setAlias(
+                  probe.contentID > 0 ? probe.contentID : probe.mainContainerID,
+                  rect, tag: "div")
+              }
+        }
       }
       .environment(\.openURL, OpenURLAction { url in
         guard url.scheme == "lseq-node",
@@ -2550,19 +2675,342 @@ private struct LogseqFlatBlockRow: View {
         emitClick(on: id)
         return .handled
       })
-      ForEach(probe.siblings, id: \.self) { sibling in
+      ForEach(mountedSiblings, id: \.self) { sibling in
         context.content(for: sibling)
       }
     }
     .onDisappear {
       for id in [probe.controlID, probe.bulletID, probe.contentID,
-                 probe.mainContainerID] where id > 0 {
+                 probe.mainContainerID, editorNodeID] where id > 0 {
         LogseqFrameStore.clearAlias(id)
       }
     }
     .onHover { inside in
       hovering = inside
       emitHover(inside ? "mouseenter" : "mouseleave")
+    }
+  }
+}
+
+// MARK: - flat block spine
+
+/// One flat-list entry in a `.blocks-list-wrap` spine. Rows are keyed by
+/// block uuid (`blockid` attr) so a reparent — which OCaml emits as
+/// Remove+Insert with fresh node ids — reads as a same-ForEach move: the
+/// row view, and for editing rows the hoisted NSTextView, survives.
+private struct LogseqFlatSpineEntry {
+  var nodeID: Int
+  var key: String
+  var depth: Int
+  /// `.block-children-left-border` node ids of ancestor containers,
+  /// index 0 = depth-1 column. Synthesized per-depth guide + hit strip.
+  var borderIDs: [Int]
+  var kind: Kind
+  var probe: LogseqFlatRowProbe?
+  var domID = ""
+  var spacerHeight: CGFloat = 0
+
+  enum Kind {
+    case folded   // LogseqFlatBlockRow composite
+    case editor   // folded shell + hoisted textarea
+    case bail     // heavy content — real node view, uuid-stable id
+    case spacer   // lazy .block-children placeholder
+  }
+}
+
+private struct LogseqFlatSpineResolved {
+  var entries: [LogseqFlatSpineEntry] = []
+  var virtListID: Int?
+  var stamp = -1
+}
+
+/// DFS resolver + cache for a spine's flat row list. Re-runs only when
+/// the wrap's `measureStamp` changes; per-row probes are cached by each
+/// row's own stamp so an untouched row costs no property reads.
+@MainActor private enum LogseqFlatSpineStore {
+  private static var cache: [Int: LogseqFlatSpineResolved] = [:]
+  private static var probeCache: [Int: (stamp: Int, probe: LogseqFlatRowProbe?)] = [:]
+
+  static func resolve(
+    context: LUIAppleExtensionViewContext, wrapID: Int
+  ) -> LogseqFlatSpineResolved {
+    let stamp = context.measureStamp(of: wrapID)
+    if let hit = cache[wrapID], hit.stamp == stamp { return hit }
+    let resolved = walk(context: context, wrapID: wrapID, stamp: stamp)
+    cache[wrapID] = resolved
+    return resolved
+  }
+
+  static func evict(_ wrapID: Int) {
+    cache.removeValue(forKey: wrapID)
+    if probeCache.count > 20_000 { probeCache = [:] }
+  }
+
+  private static func classSet(
+    _ context: LUIAppleExtensionViewContext, of id: Int
+  ) -> Set<String> {
+    guard case .string(let c) = context.childProperty(node: id, "style-class")
+    else { return [] }
+    return Set(c.split(separator: " ").map(String.init))
+  }
+
+  private static func attrs(
+    _ context: LUIAppleExtensionViewContext, of id: Int
+  ) -> [String: Any] {
+    guard case .string(let j) = context.childProperty(node: id, "attrs")
+    else { return [:] }
+    return LogseqParseMemo.attrs(j)
+  }
+
+  private static func minHeight(_ attrs: [String: Any]) -> CGFloat {
+    guard let style = attrs["style"] as? String,
+      let r = style.range(of: "min-height:"),
+      let end = style[r.upperBound...].firstIndex(of: "p"),
+      let v = Double(style[r.upperBound..<end])
+    else { return 24 }
+    return CGFloat(v)
+  }
+
+  private static func walk(
+    context: LUIAppleExtensionViewContext, wrapID: Int, stamp: Int
+  ) -> LogseqFlatSpineResolved {
+    var out = LogseqFlatSpineResolved(stamp: stamp)
+    // (nodeID, depth, ancestor border ids)
+    var stack: [(Int, Int, [Int])] =
+      context.childIDs(of: wrapID).reversed().map { ($0, 0, []) }
+    var steps = 0
+    while let (id, depth, borders) = stack.popLast() {
+      steps += 1
+      if steps > 500_000 { break }
+      let cls = classSet(context, of: id)
+      if cls.contains("ls-block") {
+        let a = attrs(context, of: id)
+        let nodeStamp = context.measureStamp(of: id)
+        let probe: LogseqFlatRowProbe?
+        if let c = probeCache[id], c.stamp == nodeStamp {
+          probe = c.probe
+        } else {
+          probe = LogseqElementView.makeFlatRowProbe(
+            context: context, nodeID: id, rowAttrs: a)
+          probeCache[id] = (nodeStamp, probe)
+        }
+        let collapsed = (a["data-collapsed"] as? String) == "true"
+        let kind: LogseqFlatSpineEntry.Kind =
+          probe == nil
+          ? .bail : (probe!.textareaID > 0 ? .editor : .folded)
+        if LogseqRuntime.perfLogging, kind != .folded {
+          FileHandle.standardError.write(
+            "DBG spine-entry node=\(id) key=\((a["blockid"] as? String) ?? "?") kind=\(kind)\n"
+              .data(using: .utf8)!)
+        }
+        out.entries.append(
+          LogseqFlatSpineEntry(
+            nodeID: id,
+            key: (a["blockid"] as? String) ?? "n\(id)",
+            depth: depth, borderIDs: borders, kind: kind, probe: probe,
+            domID: a["id"] as? String ?? ""))
+        guard !collapsed else { continue }
+        for c in context.childIDs(of: id).reversed()
+        where classSet(context, of: c).contains("block-children-container") {
+          let border =
+            context.childIDs(of: c).first {
+              classSet(context, of: $0).contains("block-children-left-border")
+            } ?? -1
+          stack.append((c, depth + 1, borders + [border]))
+        }
+      } else if cls.contains("block-children") {
+        let a = attrs(context, of: id)
+        // `data-lazy-mount` persists after the lazy children mount —
+        // it only gates the initial fill — so a node with children is
+        // walked normally and only a still-empty lazy one is a spacer.
+        if a["data-lazy-mount"] != nil,
+          context.childIDs(of: id).isEmpty
+        {
+          out.entries.append(
+            LogseqFlatSpineEntry(
+              nodeID: id, key: "lazy-\(id)", depth: depth,
+              borderIDs: borders, kind: .spacer,
+              spacerHeight: minHeight(a)))
+        } else {
+          for c in context.childIDs(of: id).reversed() {
+            stack.append((c, depth, borders))
+          }
+        }
+      } else {
+        if cls.contains("ls-virt-list"), out.virtListID == nil {
+          out.virtListID = id
+        }
+        for c in context.childIDs(of: id).reversed() {
+          stack.append((c, depth, borders))
+        }
+      }
+    }
+    return out
+  }
+}
+
+/// The flat render of a `.blocks-list-wrap` spine root: one LazyVStack
+/// covering every block row at every depth. The model tree stays nested
+/// (DOM/probe/plugin semantics untouched); only the view topology is
+/// flat, so a reparent is a same-ForEach move instead of a destroy.
+private struct LogseqFlatSpineView: View {
+  let context: LUIAppleExtensionViewContext
+  /// Master `.block-children-container { margin-left: 29px }`.
+  private static let indentPerDepth: CGFloat = 29
+
+  var body: some View {
+    // measureStamp subscription: re-resolve only when a descendant commits.
+    let resolved = LogseqFlatSpineStore.resolve(
+      context: context, wrapID: context.nodeID)
+    LazyVStack(alignment: .leading, spacing: 0) {
+      ForEach(resolved.entries, id: \.key) { entry in
+        LogseqFlatSpineRow(
+          entry: entry, context: context,
+          indentPerDepth: Self.indentPerDepth)
+        .onAppear {
+          if entry.key == resolved.entries.last?.key,
+            let listID = resolved.virtListID
+          {
+            DispatchQueue.main.async {
+              try? context.emit(
+                on: listID, name: "dom-event",
+                values: [
+                  "name": .string("virt-end"), "payload": .string("{}"),
+                ])
+            }
+          }
+        }
+      }
+    }
+    .onDisappear { LogseqFlatSpineStore.evict(context.nodeID) }
+  }
+}
+
+/// One row in the flat spine: synthesized indent guides + border hit
+/// strips, then the folded/editor/bail content.
+private struct LogseqFlatSpineRow: View {
+  let entry: LogseqFlatSpineEntry
+  let context: LUIAppleExtensionViewContext
+  let indentPerDepth: CGFloat
+  @State private var hoveredBorder = -1
+
+  private var rowContext: LUIAppleExtensionViewContext {
+    context.context(of: entry.nodeID)
+  }
+
+  private func register() {
+    let rowCtx = rowContext
+    LogseqElementRegistry.shared.register(
+      "node-\(entry.nodeID)", LogseqElementHandle(nodeID: entry.nodeID))
+    LogseqElementRegistry.shared.registerContext(rowCtx)
+    guard !entry.domID.isEmpty else { return }
+    LogseqElementRegistry.shared.register(
+      entry.domID, LogseqElementHandle(nodeID: entry.nodeID))
+    LogseqElementRegistry.shared.registerAnchor(entry.domID, rowCtx)
+    LogseqElementView.queueLifecycle(
+      domID: entry.domID, name: "element-mount", context: rowCtx)
+  }
+
+  private func unregister() {
+    LogseqElementRegistry.shared.unregister("node-\(entry.nodeID)")
+    LogseqElementRegistry.shared.unregisterContext(entry.nodeID)
+    guard !entry.domID.isEmpty else { return }
+    LogseqElementRegistry.shared.unregister(entry.domID)
+    LogseqElementView.queueLifecycle(
+      domID: entry.domID, name: "element-unmount", context: rowContext)
+  }
+
+  /// One synthesized `.block-children` border-left line + the 4px
+  /// `.block-children-left-border` hover/click strip (master parity:
+  /// 1px guideline, 4px transparent zone that greys on hover and
+  /// collapses the parent block on click via closest()).
+  @ViewBuilder private func borderStrip(_ index: Int, _ borderID: Int)
+    -> some View
+  {
+    let x = indentPerDepth * CGFloat(index + 1)
+    Rectangle()
+      .fill(Color.secondary.opacity(hoveredBorder == index ? 0.5 : 0.14))
+      .frame(width: 1)
+      .padding(.leading, x)
+      .allowsHitTesting(false)
+    Color.clear
+      .frame(width: 4)
+      .contentShape(Rectangle())
+      .onHover { inside in hoveredBorder = inside ? index : -1 }
+      .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
+        action: { rect in
+          if LogseqRuntime.perfLogging {
+            FileHandle.standardError.write(
+              "DBG strip border=\(borderID) row=\(entry.key) d=\(entry.depth) i=\(index) r=\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width))x\(Int(rect.height))\n"
+                .data(using: .utf8)!)
+          }
+          LogseqFrameStore.setAlias(borderID, rect, tag: "div")
+        }
+      .padding(.leading, x - 2)
+      .onDisappear { LogseqFrameStore.clearAlias(borderID) }
+  }
+
+  var body: some View {
+    ZStack(alignment: .topLeading) {
+      content
+        .padding(.leading, indentPerDepth * CGFloat(entry.depth))
+      ForEach(entry.borderIDs.indices, id: \.self) { i in
+        if entry.borderIDs[i] > 0 {
+          borderStrip(i, entry.borderIDs[i])
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
+      action: { rect in
+        if entry.kind != .bail {
+          if LogseqRuntime.perfLogging {
+            FileHandle.standardError.write(
+              "DBG rowalias node=\(entry.nodeID) key=\(entry.key) d=\(entry.depth) r=\(Int(rect.minX)),\(Int(rect.minY)),\(Int(rect.width))x\(Int(rect.height))\n"
+                .data(using: .utf8)!)
+          }
+          LogseqFrameStore.setAlias(entry.nodeID, rect, tag: "div")
+        }
+      }
+    .onAppear { register() }
+    .onDisappear {
+      unregister()
+      if entry.kind != .bail { LogseqFrameStore.clearAlias(entry.nodeID) }
+    }
+    .onChange(of: entry.nodeID) { _, _ in register() }
+  }
+
+  @ViewBuilder private var content: some View {
+    switch entry.kind {
+    case .folded, .editor:
+      if let probe = entry.probe {
+        LogseqFlatBlockRow(
+          probe: probe, context: rowContext, inSpine: true,
+          editorNodeID: entry.kind == .editor ? probe.textareaID : -1)
+      } else {
+        EmptyView()
+      }
+    case .bail:
+      // Heavy row (media/code/latex): full DOM mount. Identity stays the
+      // node id — reparents remount instead of orphaning platform views
+      // on a cross-ForEach move.
+      context.nodeView(of: entry.nodeID)
+    case .spacer:
+      // Lazy .block-children placeholder — the zero-content node never
+      // gets its own onAppear, so the spacer emits lazy-mount for it.
+      Color.clear
+        .frame(height: entry.spacerHeight)
+        .onAppear {
+          let id = entry.nodeID
+          DispatchQueue.main.async {
+            try? context.emit(
+              on: id, name: "dom-event",
+              values: [
+                "name": .string("lazy-mount"),
+                "payload": .string("{\"nodeId\":\(id)}"),
+              ])
+          }
+        }
     }
   }
 }

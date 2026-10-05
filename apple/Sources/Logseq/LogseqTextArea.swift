@@ -63,7 +63,7 @@ final class LogseqBlockTextView: NSTextView {
     super.viewDidMoveToWindow()
     if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
       FileHandle.standardError.write(
-        "PERF attach t=\(CFAbsoluteTimeGetCurrent()) id=\(domID ?? "-") win=\(window != nil)\n"
+        "PERF attach t=\(CFAbsoluteTimeGetCurrent()) id=\(domID ?? "-") win=\(window != nil) p=\(Unmanaged.passUnretained(self).toOpaque())\n"
           .data(using: .utf8)!)
     }
     if let window, window.firstResponder !== self,
@@ -132,6 +132,11 @@ struct LogseqTextArea: NSViewRepresentable {
       LogseqElementRegistry.shared.register(domID, context.coordinator)
     }
     textView.string = text
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+      FileHandle.standardError.write(
+        "PERF mkview t=\(CFAbsoluteTimeGetCurrent()) id=\(domID) p=\(Unmanaged.passUnretained(textView).toOpaque())\n"
+          .data(using: .utf8)!)
+    }
     return scrollView
   }
 
