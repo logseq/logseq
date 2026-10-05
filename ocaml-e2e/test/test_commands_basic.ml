@@ -524,7 +524,14 @@ let () =
     let* () = Block.new_block env "" in
     let* () = check "tomorrow" in
     let* () = Block.new_block env "" in
-    let* () = check "date picker" in
+    (* /date picker only opens the calendar; nothing is inserted until a day is
+       selected, matching the keyboard-navigation test which presses Enter. *)
+    let* () = Util.input_command env "date picker" in
+    let* () = Pw.wait_for env date_picker_day_selector in
+    let* () = Keyboard.enter env in
+    let* () = Pw.wait_for_hidden env ".ui__calendar" in
+    let* text = Util.get_edit_content env in
+    Fest.deep_equal (is_date_ref text) true Fest.expect;
     Fixtures.validate_graph env)
 
 let () =
