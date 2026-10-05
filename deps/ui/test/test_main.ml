@@ -3983,6 +3983,7 @@ let test_scan_gate () =
     (Runtime.scan_gate_should g ~gen:7 ~now:1000.)
 
 let () =
+  Edit_model_test.run ();
   test_move ();
   test_update ();
   test_decode ();

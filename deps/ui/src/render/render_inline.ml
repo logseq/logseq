@@ -524,7 +524,27 @@ let embed_iframe src =
     [ D.el ~tag:"iframe" ~attrs:[ ("src", src) ] [] ]
 
 
-(* ---------- matchers (return (element, chars consumed)) ---------- *)
+(* ---------- matchers (return (element, chars consumed, run spec)) ---------- *)
+
+(* Edit-mode run spec — how one matched construct's bytes decompose for
+   the shared editor's run layer (deps/ui/src/editor/edit_runs.ml).
+   Derived inside the same matchers as [parse] so the two can never
+   disagree about what matched or how many bytes it consumed:
+   - Rs_plain: the match renders as literal source text; no hidden markup.
+   - Rs_atomic (display, cls): the whole byte range is one non-editable
+     unit — a pill while the caret is outside, raw source while inside.
+   - Rs_wrapped (open_len, close_len, re_parse, cls): open/close delimiter
+     bytes around inner content; when [re_parse] the inner range
+     tokenizes again (nested emphasis), otherwise it is literal (code). *)
+type run_spec =
+  | Rs_plain
+  | Rs_atomic of string * string
+  | Rs_wrapped of int * int * bool * string
+
+(* One positioned match for the edit layer: [tok_start, tok_stop) are
+   byte offsets into the scanned string. Gaps between tokens are plain
+   text by definition. *)
+type span_tok = { tok_start : int; tok_stop : int; tok_spec : run_spec }
 
 (* refs: uuids/names of the enclosing reference chain (cljs :ref-set) —
    a ref whose target is in it renders nothing, breaking self- and
@@ -547,7 +567,7 @@ let rec parse ?(refs = []) ?(self = "") s =
       ())
     else
       match try_match ~refs ~self s i with
-      | Some (e, len) ->
+      | Some (e, len, _) ->
           flush ();
           push e;
           go (i + len)
@@ -558,7 +578,7 @@ let rec parse ?(refs = []) ?(self = "") s =
   go 0;
   List.rev !els
 
-and try_match ~refs ~self s i : (t * int) option =
+and try_match ~refs ~self s i : (t * int * run_spec) option =
   match s.[i] with
   | '[' -> try_bracket ~refs ~self s i
   | '#' -> try_hash ~refs ~self s i
@@ -576,7 +596,7 @@ and try_match ~refs ~self s i : (t * int) option =
   | 'h' -> try_url s i
   (* TODO(component): <br> has no kind; a raw newline inside a text
      run collapses in inline flow *)
-  | '\n' -> Some (D.el ~tag:"br" [], 1)
+  | '\n' -> Some (D.el ~tag:"br" [], 1, Rs_plain)
   | _ -> None
 
 (* [[page]] / [label](url) *)
@@ -584,7 +604,11 @@ and try_bracket ~refs ~self s i =
   if Str_util.starts_at s i "[[" then
     match find_sub s (i + 2) "]]" with
     | j when j > i + 2 ->
-        Some (page_ref ~refs ~self (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
+        let inner = String.sub s (i + 2) (j - i - 2) in
+        Some
+          ( page_ref ~refs ~self inner
+          , j + 2 - i
+          , Rs_atomic (String.trim inner, "ed-page-ref") )
     | _ -> None
   else
     match find_sub s (i + 1) "](" with
@@ -593,7 +617,10 @@ and try_bracket ~refs ~self s i =
         | k when k > j + 2 ->
             let label = String.sub s (i + 1) (j - i - 1) in
             let url = String.sub s (j + 2) (k - j - 2) in
-            Some (external_link url (parse ~refs ~self label), k + 1 - i)
+            Some
+              ( external_link url (parse ~refs ~self label)
+              , k + 1 - i
+              , Rs_atomic ((if label = "" then url else label), "ed-link") )
         | _ -> None)
     | _ -> None
 
@@ -737,7 +764,8 @@ and try_hash ~refs ~self s i =
           ( (if Wire.is_uuid_string inner
              then preview_link (resolved_tag_ref ~refs ~self inner)
              else page_ref ~tag:true ~refs ~self inner)
-          , j + 2 - i )
+          , j + 2 - i
+          , Rs_atomic ("#" ^ inner, "ed-tag") )
     | _ -> None
   else
     let n = String.length s in
@@ -770,7 +798,7 @@ and try_hash ~refs ~self s i =
           let st = name_uuid_state context name in
           page_link ~tag:true ~uuid_sig:(Signal.value st) name context parent
         in
-        Some (preview_link link, k + 1)
+        Some (preview_link link, k + 1, Rs_atomic ("#" ^ name, "ed-tag"))
 
 (* deprecated ((uuid)) block-ref form — cljs db-mode parses it to a
    Link/Block_ref but renders it back out as literal ((uuid)) text *)
@@ -787,7 +815,7 @@ and try_image s i =
         | k when k > j + 2 ->
             let alt = String.sub s (i + 2) (j - i - 2) in
             let src = String.sub s (j + 2) (k - j - 2) in
-            Some (image_el ~src ~alt, k + 1 - i)
+            Some (image_el ~src ~alt, k + 1 - i, Rs_atomic (alt, "ed-image"))
         | _ -> None)
     | _ -> None
   else None
@@ -796,7 +824,10 @@ and try_image s i =
 and try_code s i =
   match find_sub s (i + 1) "`" with
   | j when j > i + 1 ->
-      Some (code_span (String.sub s (i + 1) (j - i - 1)), j + 1 - i)
+      Some
+        ( code_span (String.sub s (i + 1) (j - i - 1))
+        , j + 1 - i
+        , Rs_wrapped (1, 1, false, "ed-code") )
   | _ -> None
 
 (* **bold** / *italic* *)
@@ -805,15 +836,17 @@ and try_star ~refs ~self s i =
     match find_sub s (i + 2) "**" with
     | j when j > i + 2 ->
         Some
-          (emph "b" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2))),
-           j + 2 - i)
+          ( emph "b" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          , j + 2 - i
+          , Rs_wrapped (2, 2, true, "ed-bold") )
     | _ -> None
   else
     match find_sub s (i + 1) "*" with
     | j when j > i + 1 ->
         Some
-          (emph "i" (parse ~refs ~self (String.sub s (i + 1) (j - i - 1))),
-           j + 1 - i)
+          ( emph "i" (parse ~refs ~self (String.sub s (i + 1) (j - i - 1)))
+          , j + 1 - i
+          , Rs_wrapped (1, 1, true, "ed-italic") )
     | _ -> None
 
 (* __bold__ / _italic_ *)
@@ -822,15 +855,17 @@ and try_uscore ~refs ~self s i =
     match find_sub s (i + 2) "__" with
     | j when j > i + 2 ->
         Some
-          (emph "b" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2))),
-           j + 2 - i)
+          ( emph "b" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          , j + 2 - i
+          , Rs_wrapped (2, 2, true, "ed-bold") )
     | _ -> None
   else
     match find_sub s (i + 1) "_" with
     | j when j > i + 1 ->
         Some
-          (emph "i" (parse ~refs ~self (String.sub s (i + 1) (j - i - 1))),
-           j + 1 - i)
+          ( emph "i" (parse ~refs ~self (String.sub s (i + 1) (j - i - 1)))
+          , j + 1 - i
+          , Rs_wrapped (1, 1, true, "ed-italic") )
     | _ -> None
 
 (* ~~strike~~ *)
@@ -839,8 +874,9 @@ and try_strike ~refs ~self s i =
     match find_sub s (i + 2) "~~" with
     | j when j > i + 2 ->
         Some
-          (emph "del" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2))),
-           j + 2 - i)
+          ( emph "del" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          , j + 2 - i
+          , Rs_wrapped (2, 2, true, "ed-strike") )
     | _ -> None
   else None
 
@@ -850,8 +886,9 @@ and try_hl ~refs ~self s i =
     match find_sub s (i + 2) "^^" with
     | j when j > i + 2 ->
         Some
-          (emph "mark" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2))),
-           j + 2 - i)
+          ( emph "mark" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          , j + 2 - i
+          , Rs_wrapped (2, 2, true, "ed-hl") )
     | _ -> None
   else None
 
@@ -861,17 +898,19 @@ and try_math s i =
     match find_sub s (i + 2) "$$" with
     | j when j > i + 2 ->
         Some
-          (katex_el ~block:false ~display:true
-             (String.sub s (i + 2) (j - i - 2))
-          , j + 2 - i)
+          ( katex_el ~block:false ~display:true
+              (String.sub s (i + 2) (j - i - 2))
+          , j + 2 - i
+          , Rs_atomic (String.sub s (i + 2) (j - i - 2), "ed-latex") )
     | _ -> None
   else
     match find_sub s (i + 1) "$" with
     | j when j > i + 1 ->
         Some
-          (katex_el ~block:false ~display:false
-             (String.sub s (i + 1) (j - i - 1))
-          , j + 1 - i)
+          ( katex_el ~block:false ~display:false
+              (String.sub s (i + 1) (j - i - 1))
+          , j + 1 - i
+          , Rs_atomic (String.sub s (i + 1) (j - i - 1), "ed-latex") )
     | _ -> None
 
 (* {{macro ...}} *)
@@ -879,7 +918,11 @@ and try_macro ~refs ~self s i =
   if Str_util.starts_at s i "{{" then
     match find_sub s (i + 2) "}}" with
     | j when j > i + 2 ->
-        Some (macro_el ~refs ~self (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
+        let body = String.sub s (i + 2) (j - i - 2) in
+        Some
+          ( macro_el ~refs ~self body
+          , j + 2 - i
+          , Rs_atomic ("{{" ^ fst (macro_args body) ^ "}}", "ed-macro") )
     | _ -> None
   else None
 
@@ -892,8 +935,10 @@ and try_lt ~refs ~self s i =
       | Some hit -> Some hit
       | None ->
           (* TODO(component): <br> has no component kind *)
-          if Str_util.starts_at s i "<br>" then Some (D.el ~tag:"br" [], 4)
-          else if Str_util.starts_at s i "<br/>" then Some (D.el ~tag:"br" [], 5)
+          if Str_util.starts_at s i "<br>" then
+            Some (D.el ~tag:"br" [], 4, Rs_atomic ("br", "ed-br"))
+          else if Str_util.starts_at s i "<br/>" then
+            Some (D.el ~tag:"br" [], 5, Rs_atomic ("br", "ed-br"))
           else None)
 
 (* <2026-09-27 Sun ...> — date starting with a digit *)
@@ -908,7 +953,8 @@ and try_date s i =
     | j when j > i + 10 ->
         Some
           ( timestamp_text_el ~literal:(String.sub s i (j + 1 - i))
-          , j + 1 - i )
+          , j + 1 - i
+          , Rs_plain )
     | _ -> None
   else None
 
@@ -929,8 +975,9 @@ and try_html_tag ~refs ~self s i =
           let inner = String.sub s (i + open_len) (j - i - open_len) in
           let dom_tag = match t with "ins" -> "u" | "s" -> "del" | x -> x in
           Some
-            (emph dom_tag (parse ~refs ~self inner),
-             j + String.length close - i)
+            ( emph dom_tag (parse ~refs ~self inner)
+            , j + String.length close - i
+            , Rs_wrapped (open_len, String.length close, true, "ed-" ^ t) )
       | _ -> None
     else None
   in
@@ -946,7 +993,8 @@ and try_emoji s i =
   let rec stop j = if j < n && is_name_char s.[j] then stop (j + 1) else j in
   let j = stop (i + 1) in
   if j < n && s.[j] = ':' && j - i - 1 >= 1 && j - i - 1 <= 32 then
-    Some (emoji_el (String.sub s (i + 1) (j - i - 1)), j + 1 - i)
+    let name = String.sub s (i + 1) (j - i - 1) in
+    Some (emoji_el name, j + 1 - i, Rs_atomic (":" ^ name ^ ":", "ed-emoji"))
   else None
 
 (* s renders as one bare text node when no inline markup fires —
@@ -974,5 +1022,23 @@ and try_url s i =
     in
     let j = stop i in
     let url = String.sub s i (j - i) in
-    Some (external_link url [ D.txt url ], j - i))
+    Some
+      (external_link url [ D.txt url ], j - i, Rs_atomic (url, "ed-url")))
   else None
+
+(* Edit-mode token scan over [s]: the same matcher table as [parse],
+   returning positioned span tokens instead of elements (the element is
+   still constructed — a cheap closure, no DOM work at match time — and
+   dropped). Ref resolution is irrelevant to source splitting, so
+   refs/self stay empty. Gaps between tokens are literal plain text. *)
+let match_tokens s : span_tok list =
+  let n = String.length s in
+  let rec go i acc =
+    if i >= n then List.rev acc
+    else
+      match try_match ~refs:[] ~self:"" s i with
+      | Some (_, len, tok_spec) ->
+          go (i + len) ({ tok_start = i; tok_stop = i + len; tok_spec } :: acc)
+      | None -> go (i + 1) acc
+  in
+  go 0 []
