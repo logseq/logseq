@@ -333,9 +333,7 @@ let test_context_menu () =
          find_where (fun n -> has_tok n "ls-context-menu-content")
        in
        check "context menu open" (menu <> []);
-       let items =
-         find_where (fun n -> attr_val n "role" = Some "menuitem")
-       in
+       let items = find_where (fun n -> n.M.kind = "menu-item") in
        check "context menu items" (items <> []);
        Popups_state.close_cm t;
        flush ();
@@ -351,8 +349,11 @@ let test_dialogs () =
   (match find_where (fun n -> has_tok n "ui__dialog-content") with
    | dlg :: _ ->
        check "settings dialog content" true;
+       (* settings dialogs carry no title — the parity marker is the
+          main-content body *)
        check "dialog title"
-         (subtree_contains dlg (fun n -> has_tok n "ui__dialog-title"))
+         (subtree_contains dlg
+            (fun n -> has_tok n "ui__dialog-main-content"))
    | [] -> check "settings dialog content" false);
   (* confirm layer: div[role=alertdialog] *)
   Dialogs_state.ask ~title:"Delete it?" ~desc:"no undo" ~on_confirm:(fun () ->
@@ -360,7 +361,7 @@ let test_dialogs () =
     ();
   flush ();
   check "confirm dialog"
-    (find_where (fun n -> attr_val n "role" = Some "alertdialog") <> []);
+    (find_where (fun n -> has_tok n "ui__alert-dialog-content") <> []);
   Dialogs_state.close_all ();
   flush ();
   check "dialogs closed"
@@ -384,12 +385,12 @@ let test_confirm () =
     (Action.Confirm_set
        (Some (Model.Confirm_delete_page ("puuid", "P Title", false))));
   check "alertdialog layer"
-    (find_where (fun n -> attr_val n "role" = Some "alertdialog") <> []);
+    (find_where (fun n -> has_tok n "ui__alert-dialog-content") <> []);
   has "text:\"Confirm\"";
   has "text:\"Cancel\"";
   send (Action.Confirm_set None);
   check "alertdialog closed"
-    (find_where (fun n -> attr_val n "role" = Some "alertdialog") = [])
+    (find_where (fun n -> has_tok n "ui__alert-dialog-content") = [])
 
 let test_toasts () =
   send
