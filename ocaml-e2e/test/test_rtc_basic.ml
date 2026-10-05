@@ -8,7 +8,9 @@ let () =
   Fest.Promise.test "rtc-basic-test" (fun () ->
     let* env1, env2 = pages in
     let graph_name =
-      Printf.sprintf "rtc-graph-%.0f" (Js.Date.getTime (Js.Date.make ()))
+      Printf.sprintf "rtc-graph-%.0f-%04x"
+        (Js.Date.getTime (Js.Date.make ()))
+        (int_of_float (Js.Math.random () *. 65536.) land 0xffff)
     in
     let page_names =
       [ "rtc-test-page0"; "rtc-test-page1"; "rtc-test-page2"; "rtc-test-page3" ]

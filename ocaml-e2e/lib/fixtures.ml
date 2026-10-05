@@ -199,15 +199,18 @@ let with_validate_graph env body =
 (* {2 RTC fixtures} *)
 
 let inst_string () =
-  (* yyyy-MM-dd'T'HH-mm-ss in UTC *)
+  (* yyyy-MM-dd'T'HH-mm-ss in UTC + a random suffix: parallel rtc shards
+     can start within the same second and would otherwise collide on the
+     generated remote-graph name (ambiguous-graph-match) *)
   let d = Js.Date.make () in
-  Printf.sprintf "%04d-%02d-%02dT%02d-%02d-%02d"
+  Printf.sprintf "%04d-%02d-%02dT%02d-%02d-%02d-%04x"
     (int_of_float (Js.Date.getUTCFullYear d))
     (int_of_float (Js.Date.getUTCMonth d) + 1)
     (int_of_float (Js.Date.getUTCDate d))
     (int_of_float (Js.Date.getUTCHours d))
     (int_of_float (Js.Date.getUTCMinutes d))
     (int_of_float (Js.Date.getUTCSeconds d))
+    (int_of_float (Js.Math.random () *. 65536.) land 0xffff)
 
 let new_logseq_page_in_rtc env page1 page2 ?name () =
   let page_name = ref "" in
