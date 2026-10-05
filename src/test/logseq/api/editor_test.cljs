@@ -17,6 +17,7 @@
             [logseq.api.db-based :as db-based-api]
             [logseq.api.editor :as api-editor]
             [logseq.api.test-helper :as api-test]
+            [logseq.db :as ldb]
             [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
@@ -367,14 +368,13 @@
           (fn []
             (p/let [journal (api-editor/create_journal_page (js/Date. "2024-01-15T12:00:00Z"))
                     today (api-editor/get_today_page)
-                    from-date-only (api-editor/create_journal_page "2026-12-01")
-                    from-date-only-map (api-test/js->clj-kw from-date-only)]
+                    from-date-only (api-editor/create_journal_page "2026-12-01")]
               (is (some? journal))
               (is (some? (or today journal)))
               (is (some? from-date-only))
-              (is (= 20261201 (or (:journalDay from-date-only-map)
-                                  (:journal-day from-date-only-map)
-                                  (:block/journal-day from-date-only-map)))))))
+              (let [created (ldb/get-journal-page-by-day (conn/get-db) 20261201)]
+                (is (= 20261201 (:block/journal-day created)))
+                (is (not (re-find #"(?i)nov" (str (:block/title created)))))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
