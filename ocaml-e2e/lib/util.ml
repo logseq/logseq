@@ -80,7 +80,14 @@ let exit_edit env =
          if left || tries <= 1 then Js.Promise.resolve ()
          else try_esc (tries - 1)
        in
-       try_esc 5
+       let* () = try_esc 5 in
+       (* a swallowed esc (modal/overlay stole focus) leaves the editor
+          mounted forever — force the app state out via the API *)
+       let* still = Pw.visible env editor_q_first in
+       if still then
+         let* _ = Api.ls_api_call env "editor.exitEditingMode" [| Api.bool false |] in
+         Js.Promise.resolve ()
+       else Js.Promise.resolve ()
    | None -> Js.Promise.resolve ())
   |> Js.Promise.then_ (fun () ->
          let* _ = E2e_assert.non_editor_mode env in
@@ -190,6 +197,19 @@ let blocks_count env =
 let page_blocks_count env =
   Pw.count env
     ".ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)"
+
+(** Poll [page_blocks_count] until it reaches [n] (8s budget); returns the
+    last observed count so callers can assert the exact value. *)
+let wait_page_blocks_count env n =
+  let deadline = Js.Date.now () +. 8000. in
+  let rec loop () =
+    let* c = page_blocks_count env in
+    if c = n || Js.Date.now () > deadline then Js.Promise.resolve c
+    else
+      let* () = wait_timeout env 200. in
+      loop ()
+  in
+  loop ()
 
 let get_text_of loc = Pw.text_of_l loc
 (* first-match, like clj's w/-query: nav remounts can briefly render two

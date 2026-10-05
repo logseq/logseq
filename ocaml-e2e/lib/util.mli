@@ -23,6 +23,7 @@ val wait_editor_visible : Env.t -> 'a Js.Promise.t
 val count_elements : Env.t -> string -> int Js.Promise.t
 val blocks_count : Env.t -> int Js.Promise.t
 val page_blocks_count : Env.t -> int Js.Promise.t
+val wait_page_blocks_count : Env.t -> int -> int Js.Promise.t
 val get_text_of : Playwright.locator -> string Js.Promise.t
 val get_text : Env.t -> string -> string Js.Promise.t
 val get_edit_content : Env.t -> string option Js.Promise.t

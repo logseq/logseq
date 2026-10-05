@@ -396,6 +396,20 @@ let () =
         (Ls_locator.filter env ~has_text:empty_reference
            ".cp__select-results a.menu-link")
     in
+    let* () =
+      (* a stale popover can swallow the add clicks — verify the clause
+         actually committed before asserting the result count *)
+      Pw.catch_timeout
+        (Js.Promise.then_ (fun () -> Js.Promise.resolve ())
+           (Pw.wait_for env ~timeout:10000.
+              ".cp__query-builder .query-clause"))
+        (fun () ->
+          let* dump =
+            Pw.eval_js env
+              "(() => JSON.stringify({selectResults: document.querySelector('.cp__select-results')?.textContent.replace(/\\s+/g,' ').slice(0,200) || 'none', menuLinks: [...document.querySelectorAll('a.menu-link')].map(a => a.textContent.slice(0,40)).slice(0,10), popovers: document.querySelectorAll('.ui__popover-content, .ui__dropdown-menu-content').length}))()"
+          in
+          Js.Promise.resolve (Js.log2 "clause-add-miss" dump))
+    in
     let* _ = assert_query_count env 0 in
     let* () =
       E2e_assert.have_count env ".custom-query-results .ls-table-row" 0
