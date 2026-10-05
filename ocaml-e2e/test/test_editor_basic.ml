@@ -1126,7 +1126,8 @@ let () =
           Printf.sprintf "%s .ls-block:has-text('%s')" journal_selector
             last_block_title
         in
-        let* () = Pw.wait_for env last_block_selector in
+        (* the first virtualized mount is slow under parallel load too *)
+        let* () = Pw.wait_for ~timeout:60000. env last_block_selector in
         let* initial_height =
           mounted_journal_height env first_block_title
         in

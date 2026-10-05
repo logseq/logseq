@@ -74,6 +74,19 @@ let maybe_input_e2ee_password env =
     ~input_password:(fun () -> input_e2ee_password env)
     ()
 
+let cloud_idle_dump env =
+  let* dump =
+    Pw.eval_js env
+      "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), log: logseq.api.get_state_from_store('rtc/log'), user: logseq.api.get_state_from_store('user/info'), loginUser: logseq.api.get_state_from_store('auth/current-login-user'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none', url: location.hash, dialogs: [...document.querySelectorAll('.ui__dialog, [role=dialog], [data-radix-popper-content-wrapper]')].map(d => (d.className || '') + ' :: ' + d.innerText.replace(/\\s+/g, ' ').slice(0, 200)), inputs: [...document.querySelectorAll('.ui__dialog input, [role=dialog] input')].map(i => i.placeholder || i.type), rtcToggle: document.querySelector('button#rtc-sync') ? document.querySelector('button#rtc-sync').outerHTML.slice(0, 200) : 'absent', toasts: [...document.querySelectorAll('.ui__toast')].map(t => t.textContent.slice(0,200))}))()"
+  in
+  let* () = Js.Promise.resolve (Js.log2 "cloud-idle-timeout" dump) in
+  Env.console_logs env |> List.rev
+  |> (fun l ->
+      let rec take n = function [] -> [] | x :: tl -> if n <= 0 then [] else x :: take (n - 1) tl in
+      take 50 l)
+  |> List.iter (fun m -> Js.log ("[cloud-idle-console] " ^ m));
+  Js.Promise.resolve ()
+
 let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
   let* () = Util.search_and_click env "Add a DB graph" in
   let* () = Pw.wait_for env "h2:text(\"Create a new graph\")" in
@@ -111,13 +124,19 @@ let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
   let* () =
     if enable_sync then
       let* () = maybe_input_e2ee_password env in
+      (* the cloud button mounts as soon as the rtc indicator becomes
+         visible (repo registered + logged in); if it never mounts the
+         graph was created local — dump state instead of burning the
+         whole idle wait *)
+      let* () =
+        Pw.wait_for env ~timeout:120000. "button.cloud"
+        |> Js.Promise.catch (fun e ->
+            let* () = cloud_idle_dump env in
+            Playwright.throw_error e)
+      in
       Pw.wait_for env ~timeout:300000. cloud_ready_indicator
       |> Js.Promise.catch (fun e ->
-          let* dump =
-            Pw.eval_js env
-              "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), log: logseq.api.get_state_from_store('rtc/log'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none', url: location.hash, header: document.querySelector('.cp__header')?.innerText.replace(/\\s+/g,' ').slice(0,300), toasts: [...document.querySelectorAll('.ui__toast')].map(t => t.textContent.slice(0,200))}))()"
-          in
-          let* () = Js.Promise.resolve (Js.log2 "cloud-idle-timeout" dump) in
+          let* () = cloud_idle_dump env in
           Playwright.throw_error e)
     else Js.Promise.resolve ()
   in
@@ -170,13 +189,15 @@ let switch_graph env to_graph_name ~wait_sync ~need_input_password =
         if need_input_password then maybe_input_e2ee_password env
         else Js.Promise.resolve ()
       in
+      let* () =
+        Pw.wait_for env ~timeout:120000. "button.cloud"
+        |> Js.Promise.catch (fun e ->
+            let* () = cloud_idle_dump env in
+            Playwright.throw_error e)
+      in
       Pw.wait_for env ~timeout:300000. cloud_ready_indicator
       |> Js.Promise.catch (fun e ->
-          let* dump =
-            Pw.eval_js env
-              "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), log: logseq.api.get_state_from_store('rtc/log'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none', url: location.hash, header: document.querySelector('.cp__header')?.innerText.replace(/\\s+/g,' ').slice(0,300), toasts: [...document.querySelectorAll('.ui__toast')].map(t => t.textContent.slice(0,200))}))()"
-          in
-          let* () = Js.Promise.resolve (Js.log2 "cloud-idle-timeout" dump) in
+          let* () = cloud_idle_dump env in
           Playwright.throw_error e)
     else Js.Promise.resolve ()
   in
