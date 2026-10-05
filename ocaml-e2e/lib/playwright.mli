@@ -13,6 +13,7 @@ type dialog
 external error_name : Js.Promise.error -> string option = "name" [@@mel.get]
 external error_message : Js.Promise.error -> string option = "message"
 [@@mel.get]
+external error_arg1 : Js.Promise.error -> string option = "_1" [@@mel.get]
 val is_timeout_error : Js.Promise.error -> bool
 exception Promise_error of string
 val throw_error : Js.Promise.error -> 'a

@@ -517,9 +517,55 @@ let () =
     let env = env1 in
     let p1 = Env.page env1 in
     let p2 = Env.page env2 in
-    let* () = new_rtc_page env1 p1 p2 in
+    Js.Promise.catch
+      (fun e ->
+         Js.log
+           ("[rtc-dbg] err: "
+           ^ Option.value ~default:"?" (Playwright.error_name e)
+           ^ " / "
+           ^ Option.value ~default:"?" (Playwright.error_message e)
+           ^ " arg1="
+           ^ Option.value ~default:"?" (Playwright.error_arg1 e));
+         Js.log e;
+         let* url =
+           Pw.eval_js env "location.href"
+         in
+         let* n_blocks = Playwright.count (Pw.q env ".ls-block") in
+         let* n_pb = Playwright.count (Pw.q env ".ls-page-blocks") in
+         let* cur =
+           Playwright.text_content
+             (Pw.q env "div[data-testid='page title'] .block-title-wrap")
+         in
+         Js.log
+           (Printf.sprintf
+              "[rtc-dbg] p1 url=%s blocks=%d page-blocks=%d title=%s"
+              (Option.value ~default:"?" (Js.Json.decodeString url))
+              n_blocks n_pb (Option.value ~default:"" cur));
+         let* () =
+           Env.with_page env p2 (fun () ->
+               let* url2 =
+                 Pw.eval_js env "location.href"
+               in
+               let* nb2 =
+                   Playwright.count
+                     (Pw.q env ".ls-page-blocks .page-blocks-inner .ls-block")
+               in
+               Js.log
+                 (Printf.sprintf
+                    "[rtc-dbg] p2 url=%s page-inner-blocks=%d"
+                    (Option.value ~default:"?" (Js.Json.decodeString url2))
+                    nb2);
+               Js.log "[rtc-dbg] --p2 logs--";
+               Rtc.dump_sync_logs env;
+               Js.Promise.resolve ())
+         in
+         Js.log "[rtc-dbg] --p1 logs--";
+         Rtc.dump_sync_logs env;
+         Playwright.throw_error e)
+      (let* () = new_rtc_page env1 p1 p2 in
     let prefix = "rtc-page-test-" in
     (* create same name page in different clients while offline *)
+    Js.log "[rtc-dbg] page-test leg1: same-name offline create";
     let* () =
       with_stop_restart_rtc env [ p1; p2 ]
         [ ( p1
@@ -545,6 +591,7 @@ let () =
               Page.new_page env (prefix ^ "1")))
     in
     let* () = validate_2 env p1 p2 in
+    Js.log "[rtc-dbg] page-test leg2: page-2 create";
     (* client1 adds blocks on page-2, client2 deletes page-2 *)
     let page_name = prefix ^ "2" in
     let latest = ref 0 in
@@ -563,6 +610,7 @@ let () =
           Js.Promise.resolve ())
     in
     let* () = validate_2 env p1 p2 in
+    Js.log "[rtc-dbg] page-test leg2b: delete page-2";
     let* () =
       with_stop_restart_rtc env [ p1; p2 ]
         [ ( p1
@@ -587,12 +635,14 @@ let () =
           Env.with_page env p2 (fun () -> Page.delete_page env page_name))
     in
     let* () = validate_2 env p1 p2 in
+    Js.log "[rtc-dbg] page-test leg3: rename page-3";
     (* page rename *)
     let page_name = prefix ^ "3" in
     let* _ =
       Fixtures.new_logseq_page_in_rtc env p1 p2 ~name:page_name ()
     in
     let* () = validate_2 env p1 p2 in
+    Js.log "[rtc-dbg] page-test leg3b: rename both";
     let* () =
       with_stop_restart_rtc env [ p1; p2 ]
         [ ( p1
@@ -617,7 +667,7 @@ let () =
           Env.with_page env p2 (fun () ->
               Page.rename_page env page_name (page_name ^ "-rename2")))
     in
-    validate_2 env p1 p2)
+    validate_2 env p1 p2))
 
 let () =
   if Util.is_main "test_rtc_extra.js" then

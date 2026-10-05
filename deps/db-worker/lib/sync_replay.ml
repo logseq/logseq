@@ -1313,6 +1313,7 @@ let replay_pending_entry (repo : string) (conn : conn)
            resolved, canonical tx replaces the stored op so subsequent
            rebuilds/upload/confirm replay the same concrete tx data. *)
         let reports = ref [] in
+        let explicit_result = ref false in
         let lid =
           Datascript.listen conn "pending-resolve-collect"
             (fun r -> reports := r :: !reports)
@@ -1320,8 +1321,11 @@ let replay_pending_entry (repo : string) (conn : conn)
         (try
            List.iter
              (fun op ->
-                ignore
-                  (replay_canonical_outliner_op conn op rebase_db_before))
+                match
+                  replay_canonical_outliner_op conn op rebase_db_before
+                with
+                | Some _ -> explicit_result := true
+                | None -> ())
              ops
          with e ->
            Datascript.unlisten conn lid;
@@ -1332,12 +1336,15 @@ let replay_pending_entry (repo : string) (conn : conn)
             (fun (r : tx_report) -> r.tx_data)
             (List.rev !reports)
         in
-        if datoms = [] && ops <> [] then
+        if datoms = [] && ops <> [] && not !explicit_result then
           (* every canonical op re-executed to nothing — validation
              rejected them on the new base (e.g. a move whose resolved
              target is now inside the moved subtree). Without a failure
              the stale verbatim .tx would still upload and confirm,
-             applying exactly what the rebase rejected *)
+             applying exactly what the rebase rejected. An op returning
+             a result (create-page converging to the existing page)
+             produces no datoms by design — cljs marks such replays
+             :no-op and keeps the verbatim pending, so exempt them *)
           invalid_rebase_op (Wire.keyword "replay-no-effect")
             (Wire.Map
                [ Wire.keyword "tx-id", Wire.String local_tx.tx_id
@@ -1423,6 +1430,9 @@ let replay_pending_txs repo (conn : conn)
                 ; "tx-id", local_tx.tx_id
                 ; "outliner-op"
                 , Option.value local_tx.outliner_op ~default:""
+                ; "ops"
+                , Transit_codec.to_string
+                    (Wire.Array local_tx.forward_outliner_ops)
                 ; "error", Printexc.to_string e ];
               ignore (mark_failed_txs repo [ local_tx.tx_id ]))
          pending
