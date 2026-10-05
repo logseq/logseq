@@ -42,10 +42,7 @@ let press_in_editor env ?delay ?timeout key =
     Playwright.locator_press ?delay ?timeout (Pw.q env "[data-e2e-live='1']")
       key
   else if target = "focus" then Pw.press env ?delay key
-  else
-    Playwright.locator_press ?delay ?timeout
-      (Pw.q env ".editor-wrapper textarea:visible >> nth=-1")
-      key
+  else Pw.press env ?delay key
 let enter env = Pw.press env "Enter"
 let enter_in_editor env = press_in_editor env "Enter"
 let esc env = Pw.press env "Escape"

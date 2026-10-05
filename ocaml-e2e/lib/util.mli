@@ -3,6 +3,8 @@ val editor_q : string
 val editor_q_first : string
 val get_active_element : Env.t -> Playwright.locator
 val get_editor : Env.t -> Playwright.locator option Js.Promise.t
+val editing_uuid : Env.t -> string option Js.Promise.t
+val wait_editing_uuid : Env.t -> string option Js.Promise.t
 val get_edit_block_container : Env.t -> Playwright.locator Js.Promise.t
 val input : Env.t -> string -> unit Js.Promise.t
 val press_seq : Env.t -> ?delay:float -> string -> unit Js.Promise.t

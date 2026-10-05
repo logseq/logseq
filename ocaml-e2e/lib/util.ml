@@ -30,6 +30,43 @@ let get_editor env =
          (fun () -> Js.Promise.resolve (Some editor))
          (Playwright.focus editor))
 
+let editing_uuid env =
+  Pw.eval_js env
+    "(() => { const st = logseq.api.get_state_from_store('editor/block'); \
+     return st && st.uuid ? st.uuid : null; })()"
+  |> Js.Promise.then_ (fun u -> Js.Promise.resolve (Js.Nullable.toOption u))
+
+let editing_uuid_js =
+  "(() => { const st = logseq.api.get_state_from_store('editor/block'); \
+   return st && st.uuid ? st.uuid : null; })()"
+
+(* Polls the app's own editing state and returns the live editor's uuid
+   (the id of its textarea is 'edit-block-' ^ uuid). A stale/dying editor
+   can stay mounted and visible while editing has already moved on, so
+   DOM visibility alone is not a reliable "is editing" check. *)
+let wait_editing_uuid env =
+  let deadline = Js.Date.now () +. 15000. in
+  let rec loop () =
+    let* u = Pw.eval_js env editing_uuid_js in
+    match Js.Nullable.toOption u with
+    | Some uuid ->
+        let* mounted =
+          Pw.count env ("#edit-block-" ^ uuid)
+          |> Js.Promise.then_ (fun n -> Js.Promise.resolve (n > 0))
+        in
+        if mounted then Js.Promise.resolve (Some uuid)
+        else if Js.Date.now () > deadline then Js.Promise.resolve None
+        else
+          let* () = wait_timeout env 150. in
+          loop ()
+    | None ->
+        if Js.Date.now () > deadline then Js.Promise.resolve None
+        else
+          let* () = wait_timeout env 150. in
+          loop ()
+  in
+  loop ()
+
 let get_edit_block_container env =
   let* () = E2e_assert.have_count ~timeout:15000. env editor_q 1 in
   Js.Promise.resolve

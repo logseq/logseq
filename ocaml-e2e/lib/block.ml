@@ -34,8 +34,10 @@ let rec open_last_block ?(in_retry = false) env =
          open editor means the last block is already being edited — keep
          hands off. *)
       let rec click_last tries =
-        let* editors = Pw.qs env Util.editor_q in
-        if Array.length editors >= 1 then Js.Promise.resolve ()
+        (* gate on the app's editing state, not DOM textareas — a stale
+           editor stays mounted and would skip the click forever *)
+        let* editing = Util.editing_uuid env in
+        if editing <> None then Js.Promise.resolve ()
         else
           Js.Promise.catch
             (fun e ->
@@ -125,28 +127,21 @@ let focus_new_block env ~previous_editor_id =
           previous_editor_id))
 
 let new_block env title =
-  let* editor = Util.get_editor env in
-  let* () = match editor with
-    | Some _ -> Js.Promise.resolve ()
-    | None -> open_last_block env
-  in
-  (* the editing block's uuid is the source of truth for the live
+  (* gate on the app's editing state and use its uuid for the live
      editor's id — a stale sibling textarea can share the DOM and make
      nth-based ids point at a dead editor *)
-  let* live_id =
-    Pw.eval_js env
-      "(() => { const st = logseq.api.get_state_from_store('editor/block'); \
-       return st && st.uuid ? 'edit-block-' + st.uuid : null; })()"
-  in
-  let* last_id =
-    match Js.Nullable.toOption live_id with
-    | Some id -> Js.Promise.resolve id
+  let rec ensure_editing n =
+    let* u = Util.editing_uuid env in
+    match u with
+    | Some uuid -> Js.Promise.resolve uuid
     | None ->
-        Pw.attr env Util.editor_q_first "id"
-        |> Js.Promise.then_ (function
-             | Some id -> Js.Promise.resolve id
-             | None -> failwith "editor textarea has no id")
+        if n <= 0 then Js.Promise.reject (Failure "editor did not open")
+        else
+          let* () = open_last_block ~in_retry:true env in
+          ensure_editing (n - 1)
   in
+  let* last_uuid = ensure_editing 3 in
+  let last_id = "edit-block-" ^ last_uuid in
   let* () = Util.move_cursor_to_end env in
   (* element-targeted Enter: page.keyboard.press dies silently when
      *:focus is <body> after a remount — a swallowed Enter leaves no new
