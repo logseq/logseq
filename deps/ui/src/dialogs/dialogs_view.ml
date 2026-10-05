@@ -21,16 +21,10 @@ let btn_style = "ui__button ls-btn"
    outside the card report the content class rather than the overlay's.
    Deeper card children emit their own classes, so a direct
    ui__dialog-content hit is still a backdrop click. *)
-let is_overlay_click payload =
-  let tc = Platform.payload_str payload "targetClass" in
+let is_overlay_class tc =
   tc <> ""
   && List.exists
-       (fun needle ->
-         let ln = String.length needle and lt = String.length tc in
-         let rec go i =
-           i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
-         in
-         go 0)
+       (fun needle -> Str_util.contains tc needle)
        [ "ui__dialog-overlay"; "ui__dialog-content" ]
 
 let close_btn =
@@ -69,12 +63,15 @@ let title_of = function
   | "new-graph" | "add-graph" -> I18n.create_new_graph
   | _ -> ""
 let dialog_view name (ms : Model.t Signal.signal) : t =
-  (* TODO(component): the scrim stays a minimal dom wrapper — backdrop
-     dismissal needs the click target's class (deepest hit), and a
-     component Press only reports the pressed node's id. *)
-  dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
-    ~on_dom_event:(fun n p ->
-      if n = "click" && is_overlay_click p then Dialogs_state.close_top ())
+  (* the scrim is a column so the press detail payload can carry the
+     click target's class (deepest hit) for backdrop dismissal *)
+  column ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls
+    ~on_press_detail:(fun ev ->
+      match ev with
+      | Lui_protocol.PressDetail (_, d) ->
+          if is_overlay_class d.Lui_protocol.target_class then
+            Dialogs_state.close_top ()
+      | _ -> ())
     [ column ~key:("dlg-c-" ^ name)
         ~style_class:(content_cls ^ " ls-dialog-" ^ name)
         (* cljs shui dialog/core: h2.ui__dialog-title (only when the
@@ -98,23 +95,18 @@ let btn key label extra act =
     []
 
 let confirm_view (c : Dialogs_state.confirm) =
-  (* TODO(component): same targetClass limitation as dialog_view —
-     the scrim keeps a minimal dom wrapper. *)
-  dom ~key:"cfrm-ov"
-    ~style_class:"ui__alert-dialog-overlay" ~events:"click"
-    ~on_dom_event:(fun n payload ->
-      if
-        n = "click"
-        && let tc = Platform.payload_str payload "targetClass" in
-           let needle = "ui__alert-dialog-overlay" in
-           let ln = String.length needle
-           and lt = String.length tc in
-           let rec go i =
-             i + ln <= lt
-             && (String.sub tc i ln = needle || go (i + 1))
-           in
-           go 0
-      then Dialogs_state.close_confirm ())
+  (* same target_class pattern as dialog_view — only the alert overlay
+     itself dismisses *)
+  column ~key:"cfrm-ov"
+    ~style_class:"ui__alert-dialog-overlay"
+    ~on_press_detail:(fun ev ->
+      match ev with
+      | Lui_protocol.PressDetail (_, d) ->
+          if
+            Str_util.contains d.Lui_protocol.target_class
+              "ui__alert-dialog-overlay"
+          then Dialogs_state.close_confirm ()
+      | _ -> ())
     [ column ~key:"cfrm"
         ~style_class:"ui__alert-dialog-content"
         (* cljs dialog/alert-inner: a confirm! with plain content
