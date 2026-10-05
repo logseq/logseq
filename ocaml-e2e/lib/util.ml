@@ -82,9 +82,11 @@ let exit_edit env =
        in
        let* () = try_esc 5 in
        (* a swallowed esc (modal/overlay stole focus) leaves the editor
-          mounted forever — force the app state out via the API *)
-       let* still = Pw.visible env editor_q_first in
-       if still then
+          mounted forever — force the app state out via the API. nth=0
+          alone is unreliable: a stale detached textarea can sit first *)
+       let* still =
+         Pw.count env ".editor-wrapper textarea:visible" in
+       if still > 0 then
          let* _ = Api.ls_api_call env "editor.exitEditingMode" [| Api.bool false |] in
          Js.Promise.resolve ()
        else Js.Promise.resolve ()
