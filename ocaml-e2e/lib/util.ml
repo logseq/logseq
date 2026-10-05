@@ -8,7 +8,9 @@ let editor_q = ".editor-wrapper textarea"
 
 (* the same edited block can render a second editor instance inside the
    references sidebar — resolve the primary one, not a strict single match *)
-let editor_q_first = editor_q ^ " >> nth=0"
+(* the live editor = last *visible* textarea; a stale/dying textarea can
+   sit at nth=0 and shadow reads or absorb fills *)
+let editor_q_first = editor_q ^ ":visible >> nth=-1"
 
 let get_active_element env = Pw.q env "*:focus"
 
