@@ -3,6 +3,8 @@
    and the [role]/[data-*] hooks); the emit side carries only the
    semantic class names. *)
 
+open Lui_elements
+
 let base_cls = "ui__dropdown-menu-item"
 
 (* context-menu variant (same semantics — kept for call-site parity) *)
@@ -15,20 +17,20 @@ let graphs_cls = base_cls
 
 let separator_cls = "ui__dropdown-menu-separator"
 
+(* imperative callers (properties_menu, code_mirror) still emit these on
+   their own divs *)
 let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 
-(* retained-tree item: click handler + label in an inner div
-   (e2e queries [role=menuitem] > div:text) *)
+(* retained-tree item: the menu_item kind renders a role=option button
+   with icon/label/check spans; [attrs] is accepted for call-site
+   compatibility but ignored — role/tabindex are carried by the kind *)
 let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
     ?(after = []) ~label ~on_click () =
-  Logseq_dom.dom ~key ~style_class:cls ~attrs ~events:"click"
-    ~on_dom_event:(fun name _ -> if name = "click" then on_click ())
-    (before
-    @ [ Logseq_dom.dom ~key:(key ^ "-l") ~text:label [] ]
-    @ after)
+  ignore attrs;
+  menu_item ~key ~style_class:cls ~text:label
+    ~on_press:(fun _ -> on_click ())
+    (before @ after)
 
-(* retained-tree item with the label as direct text (delegated-handler
-   surfaces like the block context menu) *)
+(* retained-tree separator *)
 let separator ~key =
-  Logseq_dom.dom ~key ~attrs:[ ("role", "separator") ]
-    ~style_class:separator_cls []
+  separator ~key ~style_class:separator_cls []

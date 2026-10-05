@@ -41,31 +41,25 @@ let ghost_btn_cls ?(extra = "") () =
    active:opacity-80 as-ghost"
   ^ if extra = "" then "" else " " ^ extra
 
+(* TODO(component): editor surface — mock_text/editor_inner/editor_wrapper
+   collapse into a `logseq-editor` extension node per the migration spec;
+   imperative code queries .mock-text/.editor-inner/.block-editor, so the
+   dom fragments stay until that extension lands. *)
 let mock_text ~key : t =
   dom ~key ~style_class:"mock-text"
     ~attrs:[ ("style", mock_text_style) ]
     []
 
+(* TODO(component): editor surface — see mock_text *)
 let editor_inner ~key children : t =
   dom ~key ~style_class:"editor-inner flex flex-1 block-editor" children
 
+(* TODO(component): editor surface — see mock_text *)
 let editor_wrapper ~key ~id children : t =
   dom ~key ~style_class:"editor-wrapper flex flex-1 w-full" ~id children
 
-(* cljs arrow svg inside .control-hide/.rotating-arrow *)
+(* cljs arrow svg inside .control-hide/.rotating-arrow — the custom
+   FontAwesome caret path is registered as app: icon "rotating-arrow"
+   in Icons.custom_icons *)
 let rotating_arrow key : t =
-  dom ~key ~tag:"svg"
-    ~style_class:"h-4 w-4"
-    ~attrs:
-      [ ("aria-hidden", "true"); ("version", "1.1")
-      ; ("viewBox", "0 0 192 512"); ("fill", "currentColor")
-      ; ("display", "inline-block"); ("style", "margin-left: 2px") ]
-    [ dom ~key:"p" ~tag:"path"
-        ~attrs:
-          [ ( "d"
-            , "M0 384.662V127.338c0-17.818 21.543-26.741 \
-               34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
-               28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z" )
-          ; ("fill-rule", "evenodd") ]
-        []
-    ]
+  icon ~key ~name:(`app "rotating-arrow") ~point_size:16 []

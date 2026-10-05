@@ -1,8 +1,10 @@
 (* Base-ui style tooltips for static chrome. Triggers carry
    data-tooltip="Label" (optionally data-tooltip-keys="⌘ K" for the
-   keycap row like ui/with-shortcut); the listeners here show a
-   .ui__tooltip-content bubble below the trigger after the hover delay,
-   flipped above at the viewport bottom. *)
+   keycap row like ui/with-shortcut); migrated component kinds emit
+   their tip text as aria-label instead (data-* attrs have no typed-prop
+   channel), so [aria-label] triggers match too. The listeners here
+   show a .ui__tooltip-content bubble below the trigger after the hover
+   delay, flipped above at the viewport bottom. *)
 
 module D = Web_dom
 
@@ -54,7 +56,12 @@ let content_el ~text ~keys =
   tip
 
 let show_for trig =
-  match D.el_get_attr trig "data-tooltip" with
+  let tip_text =
+    match D.el_get_attr trig "data-tooltip" with
+    | Some t when t <> "" -> Some t
+    | _ -> D.el_get_attr trig "aria-label"
+  in
+  match tip_text with
   | None | Some "" -> ()
   | Some text ->
       hide ();
@@ -88,7 +95,7 @@ let on_mouseover ev =
   match D.ev_target ev with
   | None -> ()
   | Some el -> (
-      match D.el_closest el "[data-tooltip]" with
+      match D.el_closest el "[data-tooltip], [aria-label]" with
       | Some trig -> (
           match !armed_on with
           | Some cur when cur == trig -> ()

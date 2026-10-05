@@ -1,47 +1,70 @@
 (* Icons — mirrors shui icon v2 (`logseq.shui.icon.v2/root`).
 
-   `window.tablerIcons` (resources/js/tabler.ext.js, Logseq's custom icon
-   pack) holds factory functions returning React-element-shaped objects via
-   the index.html shim; we walk that object tree into logseq-* elements
-   (svg/path/...) so the glyphs stay identical to the cljs SVG output.
+   Icon names resolve through the component `icon` kind's `~name`:
+   names in the LUI builtin set emit `~name:`x` directly; every other
+   (kebab-cased) name goes through the `app:` icon registry
+   (`app_icons ()` below feeds the web renderer's map, built from the
+   tabler-children table plus the `window.tablerIcons` extension pack).
+   Names found nowhere render the host's missing-glyph fallback —
+   the old `ti ti-*`/`tie tie-*` font-glyph fallback is gone (font
+   glyphs can't ride the icon kind; they'd double-render under its
+   svg mask). *)
 
-   Names not in the pack fall back to font icons exactly like cljs
-   `font-icon`: `tie tie-<name>` for tabler-extension names, `ti ti-<name>`
-   otherwise (kebab-cased, matching csk/->PascalCase in reverse). *)
-
-module D = Logseq_dom
-
-external tabler_icons_u : (Js.Json.t -> Js.Json.t) Js.Dict.t Js.Undefined.t
-  = "tablerIcons"
-  [@@mel.scope "window"]
-
-let tabler_icons () =
-  Js.Undefined.toOption tabler_icons_u
-
-(* shui v2 tabler-extension-icon-names *)
-let tie_names =
-  [ "add-link"; "app-feature"; "block"; "block-search"; "cloud-exclamation"
-  ; "connector"; "group"; "h-auto"; "heading-off"; "internal-link"
-  ; "link-to-block"; "link-to-page"; "link-to-whiteboard"
-  ; "move-to-sidebar-right"; "new-block"; "new-page"; "new-whiteboard"
-  ; "new-whiteboard-element"; "object-compact"; "object-expanded"
-  ; "open-as-page"; "page"; "page-search"; "references-hide"
-  ; "references-show"; "select-cursor"; "text"; "ungroup"; "whiteboard"
-  ; "whiteboard-element"; "whiteboard-search" ]
-;;
-
-let pascal name =
-  (* csk/->PascalCase: "pageRef" -> "PageRef", "calendar-dots" ->
-     "CalendarDots", "h-1" -> "H1" *)
-  let b = Buffer.create (String.length name) in
-  let up = ref true in
-  String.iter
-    (fun c ->
-      if c = '-' || c = '_' || c = ' ' then up := true
-      else if !up then (Buffer.add_char b (Char.uppercase_ascii c); up := false)
-      else Buffer.add_char b c)
-    name;
-  Buffer.contents b
+(* builtin name -> `name (the 45-name builtin set of Lui_elements.icon) *)
+let builtin_of_name (name : string) : Lui_elements.icon option =
+  match name with
+  | "alert" -> Some `alert
+  | "archive" -> Some `archive
+  | "arrow-down" -> Some `arrow_down
+  | "arrow-right" -> Some `arrow_right
+  | "arrow-up" -> Some `arrow_up
+  | "check" -> Some `check
+  | "check-circle" -> Some `check_circle
+  | "chevron-down" -> Some `chevron_down
+  | "chevron-left" -> Some `chevron_left
+  | "chevron-right" -> Some `chevron_right
+  | "chevron-up" -> Some `chevron_up
+  | "circle-dot" -> Some `circle_dot
+  | "clock" -> Some `clock
+  | "copy" -> Some `copy
+  | "download" -> Some `download
+  | "edit" -> Some `edit
+  | "ellipsis" -> Some `ellipsis
+  | "external-link" -> Some `external_link
+  | "eye" -> Some `eye
+  | "file-text" -> Some `file_text
+  | "folder" -> Some `folder
+  | "folder-open" -> Some `folder_open
+  | "git-branch" -> Some `git_branch
+  | "git-merge" -> Some `git_merge
+  | "git-pull-request" -> Some `git_pull_request
+  | "info" -> Some `info
+  | "menu" -> Some `menu
+  | "mic" -> Some `mic
+  | "moon" -> Some `moon
+  | "music" -> Some `music
+  | "panel-left" -> Some `panel_left
+  | "panel-right" -> Some `panel_right
+  | "pause" -> Some `pause
+  | "play" -> Some `play
+  | "plus" -> Some `plus
+  | "refresh-cw" -> Some `refresh_cw
+  | "repeat" -> Some `repeat
+  | "save" -> Some `save
+  | "search" -> Some `search
+  | "send" -> Some `send
+  | "settings" -> Some `settings
+  | "shuffle" -> Some `shuffle
+  | "skip-back" -> Some `skip_back
+  | "skip-forward" -> Some `skip_forward
+  | "sun" -> Some `sun
+  | "terminal" -> Some `terminal
+  | "trash" -> Some `trash
+  | "volume" -> Some `volume
+  | "wrench" -> Some `wrench
+  | "x" -> Some `x
+  | "x-circle" -> Some `x_circle
+  | _ -> None
 ;;
 
 let kebab name =
@@ -62,6 +85,36 @@ let kebab name =
         prev_dash := false))
     name;
   Buffer.contents b
+;;
+
+(* resolve a cljs icon name (camelCase or spaced ok) to an icon value:
+   builtin names emit the builtin, everything else the app: registry *)
+let name_ref name : Lui_elements.icon =
+  let n = kebab name in
+  match builtin_of_name n with
+  | Some b -> b
+  | None -> `app n
+;;
+
+(* extension-pack icon names — the imperative icon path in web_dom.ml
+   still falls back to `tie tie-*` font classes for these *)
+let tie_names =
+  [ "add-link"; "app-feature"; "block"; "block-search"; "cloud-exclamation"
+  ; "connector"; "group"; "h-auto"; "heading-off"; "internal-link"
+  ; "link-to-block"; "link-to-page"; "link-to-whiteboard"
+  ; "move-to-sidebar-right"; "new-block"; "new-page"; "new-whiteboard"
+  ; "new-whiteboard-element"; "object-compact"; "object-expanded"
+  ; "open-as-page"; "page"; "page-search"; "references-hide"
+  ; "references-show"; "select-cursor"; "text"; "ungroup"; "whiteboard"
+  ; "whiteboard-element"; "whiteboard-search" ]
+;;
+
+external tabler_icons_u : (Js.Json.t -> Js.Json.t) Js.Dict.t Js.Undefined.t
+  = "tablerIcons"
+  [@@mel.scope "window"]
+
+let tabler_icons () =
+  Js.Undefined.toOption tabler_icons_u
 ;;
 
 let string_of_prop v =
@@ -86,53 +139,10 @@ let attr_of (k, v) =
     Option.map (fun s -> (name, s)) (string_of_prop v)
 ;;
 
-(* react-element object -> logseq-* element tree *)
-let rec els_of_react (v : Js.Json.t) : Lui_elements.t list =
-  match Js.Json.decodeObject v with
-  | Some obj -> element_el obj
-  | None -> (
-      match Js.Json.decodeArray v with
-      | Some arr -> List.concat_map els_of_react (Array.to_list arr)
-      | None -> (
-          match Js.Json.decodeString v with
-          | Some s when String.trim s <> "" -> [ D.dom ~tag:"span" ~text:s [] ]
-          | _ -> []))
-
-and element_el obj : Lui_elements.t list =
-  let tag = Option.bind (Js.Dict.get obj "type") Js.Json.decodeString in
-  let props =
-    match Option.bind (Js.Dict.get obj "props") Js.Json.decodeObject with
-    | Some p -> p
-    | None -> Js.Dict.empty ()
-  in
-  let attrs = List.filter_map attr_of (Array.to_list (Js.Dict.entries props)) in
-  let children =
-    match Js.Dict.get props "children" with
-    | Some c -> els_of_react c
-    | None -> []
-  in
-  match tag with
-  | Some t -> [ D.dom ~tag:t ~attrs children ]
-  | None -> children (* Fragment / non-string type: splice children *)
-;;
-
 let icon_props size =
   let d = Js.Dict.empty () in
   Js.Dict.set d "size" (Js.Json.number size);
   Js.Json.object_ d
-;;
-
-(* Some <svg tree> when the custom pack defines Icon<Pascal name> *)
-let ext_svg ?(size = 18.) name =
-  match tabler_icons () with
-  | None -> None
-  | Some dict -> (
-      match Js.Dict.get dict ("Icon" ^ pascal name) with
-      | Some f -> (
-          match els_of_react (f (icon_props size)) with
-          | [] -> None
-          | els -> Some els)
-      | None -> None)
 ;;
 
 (* @tabler/icons-react svg attrs (size -> width/height) *)
@@ -154,20 +164,6 @@ let tabler_svg_attrs ~size ~filled name cls : (string * string) list =
   @ base @ [ ("class", "tabler-icon tabler-icon-" ^ name ^ cls) ]
 
 let is_filled name = String.ends_with ~suffix:"-filled" name
-
-let base_svg ~size ?(cls = "") name : Lui_elements.t list =
-  (* the tabler children data is kebab-keyed; callers pass cljs icon
-     names verbatim (camelCase or spaced), so normalize first *)
-  let n = kebab name in
-  match Icon_tabler_data.tabler_children n with
-  | [] -> []
-  | kids ->
-      [ D.dom ~tag:"svg"
-          ~attrs:(tabler_svg_attrs ~size ~filled:(is_filled n) n (" " ^ cls))
-          (List.map
-             (fun (tag, attrs) -> D.dom ~tag ~attrs [])
-             kids) ]
-;;
 
 (* `app:` icon registry for the web `icon` kind — name -> data URI of the
    svg markup. Merges the tabler-children table with the custom
@@ -237,6 +233,17 @@ and element_markup obj : string =
   else Printf.sprintf "<%s%s>%s</%s>" tag attrs children tag
 ;;
 
+(* custom svgs with no tabler counterpart — registered so `app:`
+   icon names resolve (consumed by e.g. Ui_parts.rotating_arrow) *)
+let custom_icons : (string * string) list =
+  [ ( "rotating-arrow"
+    , "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 192 512\" \
+       fill=\"currentColor\"><path fill-rule=\"evenodd\" \
+       d=\"M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
+       128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 \
+       0 402.48 0 384.662z\"/></svg>" ) ]
+;;
+
 let app_icons () : string Lui_protocol.String_map.t =
   let base =
     Icon_tabler_data.tabler_names ()
@@ -260,42 +267,32 @@ let app_icons () : string Lui_protocol.String_map.t =
                  | None -> None
                else None)
   in
+  let custom =
+    List.map (fun (k, svg) -> (k, data_uri_of_svg svg)) custom_icons
+  in
+  (* later entries win on a clash: ext pack over the tabler table,
+     custom app icons over both *)
   List.fold_left
     (fun m (k, v) -> Lui_protocol.String_map.add k v m)
-    Lui_protocol.String_map.empty (base @ ext)
+    Lui_protocol.String_map.empty (base @ ext @ custom)
 ;;
 
 (* equivalent of (shui/tabler-icon name) *)
 let icon ?(size = 18.) ?(cls = "") name : Lui_elements.t =
   let cls = if cls = "" then "" else " " ^ cls in
-  match ext_svg ~size name with
-  | Some els ->
-      D.dom ~tag:"span" ~style_class:("ui__icon ti ls-icon-" ^ name ^ cls) els
-  | None -> (
-      match base_svg ~size name with
-      | (_ :: _) as els ->
-          D.dom ~tag:"span" ~style_class:("ui__icon ti ls-icon-" ^ name ^ cls)
-            els
-      | [] ->
-          (* cljs font-icon keeps the raw name in the glyph class *)
-          let prefix =
-            if List.mem (kebab name) tie_names then "tie tie-"
-            else "ti ti-"
-          in
-          D.dom ~tag:"span" ~style_class:("ui__icon " ^ prefix ^ name ^ cls)
-            [])
+  let n = kebab name in
+  Lui_elements.icon ~name:(name_ref name) ~point_size:(int_of_float size)
+    ~style_class:("ui__icon ls-icon-" ^ n ^ cls) []
 ;;
 
-(* raw icon svg without the ui__icon span wrapper — cljs renders the
+(* raw icon without the ui__icon span wrapper — cljs renders the
    svg directly where the call site already provides positioning (e.g.
    submenu chevrons) *)
 let raw ?(size = 18.) ?(cls = "") name : Lui_elements.t =
-  match ext_svg ~size name with
-  | Some (el :: _) -> el
-  | Some [] | None -> (
-      match base_svg ~size ~cls name with
-      | el :: _ -> el
-      | [] -> D.dom ~tag:"i" ~style_class:("ti ti-" ^ kebab name) [])
+  Lui_elements.icon ~name:(name_ref name) ~point_size:(int_of_float size)
+    ~style_class:cls []
+;;
 
-(* bare font glyph without the ui__icon wrapper (existing call sites) *)
-let font name = D.dom ~tag:"i" ~style_class:("ti ti-" ^ kebab name) []
+(* bare glyph without the ui__icon wrapper (existing call sites) — now
+   resolves through the icon registry like [raw] *)
+let font name = raw name

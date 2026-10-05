@@ -415,6 +415,10 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   in
   let row_mount (row_sig : vrow Signal.signal) : t =
     let row = Signal.get row_sig in
+    (* TODO(component): imperative DOM integration point — the row's
+       data-index attr + absolute translateY style are read by the
+       MutationObserver/Virtualizer measure path; needs an extension
+       kind carrying per-row attrs to migrate. *)
     D.dom ~key:("vr-" ^ row_version_key versions row)
       ~style_class:"ls-virt-row"
       ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun it -> row_attrs !margin it) row_sig)
@@ -426,6 +430,11 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       attach ctx st margin list_id scroll_parent_id data versions key_of
         overscan estimate_size pin_key pin_sig data_sig same_item on_end)
     0;
+  (* TODO(component): virtualizer integration — the outer list element's
+     id feeds getElementById attach (scroll parent binding, scroll_to_key
+     registry) and [list_attrs] carries caller data-* hooks; the inner
+     spacer's height is a signal-driven style. Both need a dom surface
+     until a virtual-list extension carries them. *)
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs
     [ D.dom ~key:("vs-" ^ list_id) ~style_class:"ls-virt-spacer"

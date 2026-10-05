@@ -236,7 +236,8 @@ blockquote {
     padding: 0 0.5rem;
   }
 
-  &[data-is-full-width='true'] {
+  &[data-is-full-width='true'],
+  &.is-full-width {
     max-width: 100vw;
   }
 
@@ -255,6 +256,28 @@ blockquote {
 
 .ls-wide-mode .cp__sidebar-main-content {
   max-width: var(--ls-main-content-max-width-wide);
+}
+
+/* cljs container.cljs: div.mx-auto.pb-24 around main-content; the
+   --flush variant covers home/margin-less routes (margin-bottom: 0) */
+.cp__content-wrap {
+  margin-left: auto;
+  margin-right: auto;
+  padding-bottom: 6rem;
+  margin-bottom: 120px;
+}
+
+.cp__content-wrap--flush {
+  margin-bottom: 0;
+}
+
+/* cljs page.cljs not-found fixed overlay (was an inline style) */
+.cp__not-found {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  min-height: 100vh;
+  background: var(--ls-primary-background-color);
 }
 
 /* ============================== Header =================================== */
@@ -385,9 +408,9 @@ blockquote {
     background-color: var(--ls-quaternary-background-color);
   }
 
-  .search-index-progress__bar-fill {
-    height: 100%;
-    transition: all 200ms;
+  /* the progress kind draws its fill via ::before +
+     --lui-progress-position */
+  .search-index-progress__bar::before {
     background-color: var(--ls-link-text-color);
   }
 }
@@ -859,11 +882,13 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
   background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
 }
 
-.rotating-arrow svg {
+.rotating-arrow svg,
+.rotating-arrow .lui-icon {
   transition: transform 100ms ease-in;
 }
 
-.rotating-arrow.not-collapsed svg {
+.rotating-arrow.not-collapsed svg,
+.rotating-arrow.not-collapsed .lui-icon {
   transform: rotate(90deg);
 }
 
@@ -2547,7 +2572,8 @@ html.custom-scrollbar {
 }
 
 a.close svg,
-span.rotating-arrow svg {
+span.rotating-arrow svg,
+span.rotating-arrow .lui-icon {
   color: var(--ls-primary-text-color);
 }
 
