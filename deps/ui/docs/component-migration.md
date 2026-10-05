@@ -83,6 +83,10 @@ Ui_parts.pressable ~on_press:(fun _ -> f ()) (row ~key ~style_class:cls children
 - **结构分支优先普通 OCaml `if`/`List.map`** —— `if_`/`keyed`/`dyn`
   只在分支条件/列表成员挂在 signal 上（需要随 signal 重发结构）时用；
   条件静态或只需初始化时求值的直接写普通 `if`/条件拼 list，更直白
+- **`dyn`/`if_` 里包 `dyn` 几乎是错的** —— 内层变化的如果只是属性
+  （icon/text/value），降级成 `~prop:(reactive ...)`；只有子树形状真的
+  变才留 dyn。例：眼睛按钮不随 `visible` 重建，`~icon:(reactive
+  (fun vis -> if vis then `app "eye-off" else `eye) visible)` 就够
 - `fragment` 用法不变（Logseq_dom 的 own/信号托管
   暂时保留 —— 其内部实现会随 dom() 删除一起改造，call site 不用管）
 - `~text` → `text ~value:"…"`；`~html` → children 元素
