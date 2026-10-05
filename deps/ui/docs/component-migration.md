@@ -128,6 +128,23 @@ Ui_parts.pressable ~on_press:(fun _ -> f ()) (row ~key ~style_class:cls children
   —— 其查找逻辑随 editor surface extension 一并处理，视图层先迁、
   imperative 引用逐个改 `accessibility_identifier`/node id
 
+## editor surface（平台特有 → extension）
+
+`editor_wrapper`/`editor_inner`/`mock_text` 三元组 + 内部 textarea
+是编辑器表面（可编辑区 + caret mirror 供 popup 定位）。它是平台
+特有件 —— 收拢成单个 `logseq-editor` extension 节点，各 host 在
+extension 内部实现自己的可编辑 surface：
+
+- web：extension 内部仍挂 DOM 结构（textarea + caret mirror），
+  imperative_dom 从 class/id 查询改为 extension 节点 id 直接索引
+- GPUI：真实编辑控件（gpui-component InputState editor 或自绘
+  block editor surface）
+- SwiftUI：原生 TextEditor/UITextView 桥
+
+`#ref`/`data-ref`/`.editor-inner`/`.mock-text`/`.block-editor` 这些
+imperative 查询句柄随 extension 一并收编 —— 视图层不再有 DOM 句柄，
+imperative 侧按 node id + `#ref` 快照定位（与 dom-op 通道同一套）。
+
 ## 验收
 
 每个迁移包（一目录）：
