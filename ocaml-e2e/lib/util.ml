@@ -237,8 +237,9 @@ let edit_content_js =
   "(() => { \
    const st = logseq.api.get_state_from_store('editor/block'); \
    const u = st && st.uuid; \
-   if (u) { const t = document.getElementById('edit-block-' + u); \
-   if (t) return t.value; } \
+   if (u) { const ts = [...document.querySelectorAll('#edit-block-' + CSS.escape(u))] \
+   .filter(t => t.offsetParent !== null); \
+   if (ts.length) return ts[ts.length - 1].value; } \
    const ae = document.activeElement; \
    if (ae && ae.matches && ae.matches('.editor-wrapper textarea')) \
    return ae.value; \
@@ -362,10 +363,12 @@ let refresh_until_graph_loaded env =
   E2e_assert.graph_loaded env
 
 let move_cursor_to_end env =
-  Pw.press_all env ~delay:20. [ "ControlOrMeta+a"; "ArrowRight" ]
+  let* () = Keyboard.press_in_editor env ~delay:20. "ControlOrMeta+a" in
+  Keyboard.press_in_editor env ~delay:20. "ArrowRight"
 
 let move_cursor_to_start env =
-  Pw.press_all env ~delay:20. [ "ControlOrMeta+a"; "ArrowLeft" ]
+  let* () = Keyboard.press_in_editor env ~delay:20. "ControlOrMeta+a" in
+  Keyboard.press_in_editor env ~delay:20. "ArrowLeft"
 
 let input_command env command =
   let* content = get_edit_content env in
