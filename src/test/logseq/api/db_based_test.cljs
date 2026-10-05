@@ -47,6 +47,51 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest get-orphan-tags-excludes-tags-with-direct-holders
+  (async done
+    (test-helper/load-test-files
+     [{:page {:block/title "Orphan Tag Holder"}}])
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [unused (db-based-api/create-tag "UnusedTag" nil)
+                    used (db-based-api/create-tag "UsedTag" nil)
+                    page (test-helper/find-page-by-title "Orphan Tag Holder")
+                    _ (db-based-api/add-block-tag (:block/uuid page) "UsedTag")
+                    tag-result (db-based-api/get-orphan-tags)
+                    tags (api-test/js->clj-kw tag-result)
+                    tag-uuids (set (map :uuid tags))
+                    unused-uuid (:uuid (api-test/js->clj-kw unused))
+                    used-uuid (:uuid (api-test/js->clj-kw used))]
+              (is (contains? tag-uuids unused-uuid))
+              (is (not (contains? tag-uuids used-uuid)))
+              (is (= "UnusedTag" (:title (some #(when (= unused-uuid (:uuid %)) %) tags)))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest get-orphan-properties-excludes-properties-with-values
+  (test-helper/load-test-files
+   [{:page {:block/title "Orphan Property Holder"}
+     :blocks [{:block/title "Property Value Holder"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [block (test-helper/find-block-by-content "Property Value Holder")]
+              (p/let [unused (db-based-api/upsert-property "orphan-unused" #js {:type "number"} nil)
+                      used (db-based-api/upsert-property "orphan-used" #js {:type "string"} nil)
+                      unused-ident (:ident (api-test/js->clj-kw unused))
+                      used-ident (:ident (api-test/js->clj-kw used))
+                      _ (db-property-handler/set-block-property!
+                         (:db/id block) (keyword (subs used-ident 1)) "value")
+                      result (db-based-api/get-orphan-properties)
+                      orphans (api-test/js->clj-kw result)
+                      by-ident (into {} (map (juxt :ident identity) orphans))]
+                (is (= "number" (get-in by-ident [unused-ident :type])))
+                (is (not (contains? by-ident used-ident)))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest get-properties-by-title-filters-to-property-definitions
   (async done
     (-> (api-test/with-plugin-api

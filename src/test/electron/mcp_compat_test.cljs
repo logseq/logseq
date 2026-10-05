@@ -1180,6 +1180,8 @@
                     (is (some #(= "logseq.DB.listRecycled" (first %)) @calls))
                     (is (some #(= "logseq.DB.getStatusRows" (first %)) @calls))
                     (is (some #(= "logseq.DB.getClosedValues" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getOrphanTags" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getOrphanProperties" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1455,12 +1457,12 @@
                      (is false (str error))
                      (js/queueMicrotask done)))))))
 
-(deftest list-orphan-tags-queries-unused-tag-entities
+(deftest list-orphan-tags-uses-db-api
   (let [calls (atom [])
-        tags #js [#js {"db/id" 17
-                       "db/ident" "plugin.tag/Unused"
-                       "block/uuid" "tag-1"
-                       "block/title" "Unused"}]
+        tags #js [#js {"id" 17
+                       "ident" "plugin.tag/Unused"
+                       "uuid" "tag-1"
+                       "title" "Unused"}]
         api (fn [method args]
               (swap! calls conj [method args])
               tags)
@@ -1468,33 +1470,22 @@
     (async done
       (p/then operation
               (fn [result]
-                (let [[method [query]] (first @calls)]
-                  (is (= [{:db/id 17
-                           :db/ident "plugin.tag/Unused"
-                           :block/uuid "tag-1"
-                           :block/title "Unused"}]
-                         result))
-                  (is (= "logseq.DB.datascriptQuery" method))
-                  (is (string/includes? query ":block/_tags)")))
+                (is (= [["logseq.DB.getOrphanTags" []]] @calls))
+                (is (= [{:db/id 17
+                         :db/ident "plugin.tag/Unused"
+                         :block/uuid "tag-1"
+                         :block/title "Unused"}]
+                       result))
                 (done))))))
 
-(deftest list-orphan-properties-validates-query-idents
+(deftest list-orphan-properties-uses-db-api
   (let [calls (atom [])
-     properties #js [#js {"ident" ":plugin.property/Unused"
-              "title" "Unused"
-              "logseq.property/type" "number"}
-            #js {"ident" ":plugin.property/Used"
-              "title" "Used"
-              "logseq.property/type" "string"}
-            #js {"ident" "unqualified"
-              "title" "Unsafe"}]
+        properties #js [#js {"ident" ":plugin.property/Unused"
+                             "title" "Unused"
+                             "type" "number"}]
         api (fn [method args]
               (swap! calls conj [method args])
-              (if (= "logseq.DB.getAllProperties" method)
-                properties
-                (if (string/includes? (first args) ":plugin.property/Used")
-                  #js [#js {:uuid "holder-1"}]
-                  #js [])))]
+              properties)]
     (async done
       (p/then (mcp-compat/list-orphan-properties api #js {})
               (fn [result]
@@ -1502,12 +1493,7 @@
                          :title "Unused"
                          :type "number"}]
                        result))
-                (is (= ["logseq.DB.getAllProperties"
-                        "logseq.DB.datascriptQuery"
-                        "logseq.DB.datascriptQuery"]
-                       (mapv first @calls)))
-                (is (not-any? #(string/includes? (first (second %)) "unqualified")
-                              (rest @calls)))
+                (is (= [["logseq.DB.getOrphanProperties" []]] @calls))
                 (done))))))
 
 (deftest list-assets-uses-unverified-attribute-discovery-query

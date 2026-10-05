@@ -473,6 +473,48 @@
                     :where [?value :block/closed-value-property ?property]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json rows false)))))
 
+(defn get-orphan-tags []
+  (let [repo (state/get-current-repo)]
+    (p/let [tag-class (db-async/<q repo {}
+                                 '[:find ?class .
+                                   :where [?class :db/ident :logseq.class/Tag]])
+            tags (db-async/<q
+                  repo
+                  {:transact-db? false}
+                  '[:find [(pull ?tag [:db/id :db/ident :block/uuid :block/title]) ...]
+                    :in $ [?class ...]
+                    :where
+                    [?tag :block/tags ?class]
+                    (not-join [?tag]
+                      [?holder :block/tags ?tag])]
+                  [tag-class])]
+      (bean/->js (sdk-utils/normalize-keyword-for-json tags false)))))
+
+(def ^:private orphan-property-ident-pattern
+  #"(?i):[a-z][\w.-]*/[\w.?!+-]+")
+
+(defn get-orphan-properties []
+  (let [repo (state/get-current-repo)]
+    (p/let [properties (db-async/<get-all-properties repo {})
+            used-idents (db-async/<q
+                         repo
+                         {:transact-db? false}
+                         '[:find [?ident ...]
+                           :where [_ ?ident _]])
+            used-idents (set used-idents)
+            orphans (into []
+                          (keep (fn [property]
+                                  (let [ident (:db/ident property)
+                                        type (:logseq.property/type property)]
+                                    (when (and (keyword? ident)
+                                               (re-matches orphan-property-ident-pattern (str ident))
+                                               (not (contains? used-idents ident)))
+                                      {:ident (str ident)
+                                       :title (:block/title property)
+                                       :type (if (keyword? type) (name type) type)})))
+                          properties))]
+      (bean/->js (sdk-utils/normalize-keyword-for-json orphans false)))))
+
 (def ^:private inspect-page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 

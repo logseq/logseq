@@ -988,6 +988,8 @@ export interface IDBProxy {
   listRecycled: () => Promise<Array<Record<string, any>>>
   getStatusRows: () => Promise<Array<[Record<string, any>, Record<string, any>]>>
   getClosedValues: () => Promise<Array<[Record<string, any>, Record<string, any>]>>
+  getOrphanTags: () => Promise<Array<Record<string, any>>>
+  getOrphanProperties: () => Promise<Array<{ ident: string; title: string; type: string | null }>>
   inspectPage: (
     pageUuid: BlockUUID,
     detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'
