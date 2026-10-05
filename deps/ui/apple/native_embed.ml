@@ -322,6 +322,7 @@ let initialize platform_code host_code (_payload : string) : string =
   in
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_codemirror.register registry;
   let app =
     Lui_app.create_with_extensions backend registry Model.initial
       Update.update View.view

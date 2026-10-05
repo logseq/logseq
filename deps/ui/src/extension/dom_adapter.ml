@@ -431,3 +431,4 @@ let adapters : web_extension_adapter String_map.t =
     String_map.empty Logseq_dom.tags
   |> String_map.add Logseq_emoji.identifier emoji_adapter
   |> String_map.add Logseq_katex.identifier katex_adapter
+  |> String_map.add Logseq_codemirror.identifier Cm_adapter.adapter

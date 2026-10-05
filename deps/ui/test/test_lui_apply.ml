@@ -69,6 +69,7 @@ let make_renderer () =
   Stub_dom.set_field host "ownerDocument" (Stub_dom.document ());
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_codemirror.register registry;
   Lui_web.create_with_extensions (as_node host) Wv.String_map.empty
     registry Dom_adapter.adapters
 

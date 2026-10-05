@@ -191,9 +191,10 @@ let code_block_actions ~self lang =
 
 (* cljs src-cp + extensions/code.cljs editor DOM:
    .ui-fenced-code-editor > .ls-code-editor-wrap > (.code-block-actions +
-   .extensions__code > .extensions__code-lang? + .code-editor > textarea
-   + calc-results?). Code_mirror mounts the real CodeMirror on the
-   textarea via the document mutation scan (vendored codemirror@5) —
+   .extensions__code > .extensions__code-lang? + .code-editor >
+   logseq-codemirror > textarea + calc-results?). The extension adapter
+   emits the textarea and mounts the real CodeMirror on it (vendored
+   codemirror@5) —
    DOM structure matches cljs so both display and edit look identical.
    ~extra appends inside .extensions__code (the src-eval .results div). *)
 let code_block ?(self = "") ?(extra = []) lang code =
@@ -215,16 +216,12 @@ let code_block ?(self = "") ?(extra = []) lang code =
                    ~value:(String.lowercase_ascii lang) []
                else Logseq_dom.fragment [])
              ; row ~key:"ce" ~grow:1.0 ~style_class:"code-editor"
-                 [ (* TODO(component): CodeMirror mounts on
-                      .code-editor textarea and reads data-lang /
-                      resolves the block via #ls-block-<uuid> —
-                      imperative editor host, minimal dom stays *)
-                   D.el ~key:"ta" ~tag:"textarea"
-                     ~id:("edit-block-" ^ self)
-                     ~attrs:
-                       (if lang <> "" then [ ("data-lang", lang) ]
-                        else [])
-                     ~text:code []
+                 [ (* logseq-codemirror block role: the adapter emits the
+                      textarea#edit-block-<uuid>[data-lang] surface and
+                      mounts CM on it (editor/code_mirror.ml owns the
+                      instance) *)
+                   Logseq_codemirror.cm ~key:"ta" ~uuid:self ~lang
+                     ~value:code ~source_role:"block" ()
                  ; (if not calc then Logseq_dom.fragment []
                     else
                       match calc_results_el code with

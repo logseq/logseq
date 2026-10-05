@@ -353,47 +353,10 @@ let save_src inst src =
             | [] -> ())
   | _ -> ()
 
-let cm_host_id inst = "vcm-" ^ string_of_int inst.V.id
-
-(* post-mount: wire the editable line's input/keydown imperatively —
-   Enter/Escape need preventDefault, which the declarative event layer
-   intentionally doesn't expose. The element itself is mounted by the
-   declarative tree (if_ on query_editor_open). *)
-let attach_cm inst =
-  match E.get_element_by_id (cm_host_id inst) with
-  | None -> ()
-  | Some cm -> (
-      match E.el_query cm "pre.CodeMirror-line" with
-      | None -> ()
-      | Some line ->
-          (* cljs's CodeMirror editor evaluates as you type — fire the
-             query eval immediately on input (the spec carries the source;
-             it does not wait for the save to land) and persist the title
-             on a debounce *)
-          let autosave = E.debounce 300 in
-          E.el_on line "input" (fun _ ->
-              let src = E.el_text_content line |> String.trim in
-              (V.ops ()).V.o_refresh_src inst src;
-              autosave (fun () -> save_src inst src));
-          E.el_on line "keydown" (fun ev ->
-              match E.ev_key ev with
-              | "Escape" ->
-                  E.ev_prevent_default ev;
-                  let src = E.el_text_content line |> String.trim in
-                  (* cljs keeps the editor open after Esc commits; the next
-                     tx broadcast re-renders the shell anyway. The eval
-                     already ran on input — only re-run it if the text
-                     changed since, and always persist the final source. *)
-                  if src <> (V.get inst).V.qsrc then
-                    (V.ops ()).V.o_refresh_src inst src;
-                  save_src inst src
-              | "Enter" ->
-                  (* single-line editor contract *)
-                  E.ev_prevent_default ev
-              | _ -> ()))
-
 (* the .CodeMirror host — declarative: mounts/unmounts on
-   query_editor_open; listeners attach once the node is in the DOM *)
+   query_editor_open. The logseq-codemirror adapter owns the
+   contenteditable line and reports edits over cm-event; Enter/Escape
+   preventDefault applies synchronously inside the adapter listener. *)
 let cm_host inst : Lui_elements.t =
  fun ctx parent ->
   let open_sig =
@@ -407,22 +370,30 @@ let cm_host inst : Lui_elements.t =
         | QDatalog _ -> (V.get inst).V.qsrc
         | QBlank -> ""
       in
-      (* TODO(component): fake-CodeMirror host + contenteditable
-         pre.CodeMirror-line have no component equivalent — attach_cm
-         queries the pre inside this host and wires input/keydown
-         preventDefault imperatively (same escape as the real editor) *)
-      let n =
-        D.dom ~id:(cm_host_id inst) ~style_class:"CodeMirror"
-          [ D.dom ~tag:"pre" ~style_class:"CodeMirror-line"
-              ~attrs:
-                [ ("contenteditable", "true"); ("role", "textbox")
-                ; ("spellcheck", "false") ]
-              ~text:cur []
-          ]
-          ctx parent
-      in
-      E.set_timeout (fun () -> attach_cm inst) 0;
-      n)
+      (* cljs's CodeMirror editor evaluates as you type — fire the query
+         eval immediately on input (the spec carries the source; it does
+         not wait for the save to land) and persist on a debounce *)
+      let autosave = E.debounce 300 in
+      Logseq_codemirror.cm ~key:"cm" ~source_role:"query" ~value:cur
+        ~style_class:"CodeMirror"
+        ~on_event:(fun ~name ~value ~key ->
+          match (name, key) with
+          | "input", _ ->
+              let src = Option.value value ~default:"" |> String.trim in
+              (V.ops ()).V.o_refresh_src inst src;
+              autosave (fun () -> save_src inst src)
+          | "key", Some "Escape" ->
+              let src = Option.value value ~default:"" |> String.trim in
+              (* cljs keeps the editor open after Esc commits; the next
+                 tx broadcast re-renders the shell anyway. The eval
+                 already ran on input — only re-run it if the text
+                 changed since, and always persist the final source. *)
+              if src <> (V.get inst).V.qsrc then
+                (V.ops ()).V.o_refresh_src inst src;
+              save_src inst src
+          | _ -> ())
+        ()
+        ctx parent)
     ctx parent
 
 (* toggle the raw-source editor for `inst` — called from the

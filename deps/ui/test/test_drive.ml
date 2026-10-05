@@ -27,6 +27,7 @@ let mount () =
   Stub_dom.install ();
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_codemirror.register registry;
   let view ctx ms send =
     ms_ref := Some ms;
     View.view ctx ms send
@@ -451,6 +452,7 @@ let views_session : (Model.t, Action.t) S.t option ref = ref None
 let test_views_table () =
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_codemirror.register registry;
   let vs =
     S.mount ~registry ~profile:Logseq_dom.web_profile ~initial:Model.initial
       ~reducer:Update.update
@@ -526,17 +528,17 @@ let test_render_libs_dom () =
          "strict-origin-when-cross-origin"
    | [] -> check "youtube iframe node" false);
   (* display-mode code block = .extensions__code > .code-editor >
-     textarea[data-lang] — CodeMirror mounts onto the textarea in the
-     browser and generates .CodeMirror-line nodes, so the patch tree
-     itself only carries the mount surface *)
+     logseq-codemirror — the patch tree carries the extension node's
+     props; the web adapter emits the textarea mount surface and mounts
+     CodeMirror client-side *)
   (match
      find_where
        (fun n ->
-         n.M.kind = "extension:logseq-textarea"
-         && attr_val n "data-lang" = Some "clojure")
+         n.M.kind = "extension:logseq-codemirror"
+         && M.string_prop n "lang" = Some "clojure")
    with
-   | p :: _ -> check "code text" (M.string_prop p "text" = Some "(+ 1 2)")
-   | [] -> check "code-editor textarea node" false)
+   | p :: _ -> check "code text" (M.string_prop p "value" = Some "(+ 1 2)")
+   | [] -> check "code-editor node" false)
 
 (* ---------------- async stage: worker-fed views ---------------- *)
 

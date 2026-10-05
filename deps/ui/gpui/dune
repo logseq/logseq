@@ -65,6 +65,8 @@
 (rule
  (copy ../apple/logseq_dom.ml logseq_dom.ml))
 (rule
+ (copy ../apple/logseq_codemirror.ml logseq_codemirror.ml))
+(rule
  (copy ../apple/logseq_emoji.ml logseq_emoji.ml))
 (rule
  (copy ../apple/logseq_katex.ml logseq_katex.ml))
