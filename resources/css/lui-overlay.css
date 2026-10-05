@@ -462,7 +462,8 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 #ui__ac-inner .menu-link:hover,
-#ui__ac-inner .menu-link.chosen {
+#ui__ac-inner .menu-link.chosen,
+#ui__ac-inner .menu-link[data-selected] {
   background: var(--lx-gray-04,
       var(--ls-menu-hover-color, hsl(var(--secondary))));
 }
@@ -492,7 +493,8 @@ div[data-keep-selection].menu-links-wrapper {
   left: 1px;
 }
 
-.cp__commands-slash .menu-link.chosen .ui__icon {
+.cp__commands-slash .menu-link.chosen .ui__icon,
+.cp__commands-slash .menu-link[data-selected] .ui__icon {
   opacity: 1;
 }
 
@@ -1217,18 +1219,23 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .cp__select-main .menu-link.chosen .type-icon,
+.cp__select-main .menu-link[data-selected] .type-icon,
 .cp__select-main .menu-link:hover .type-icon {
   color: var(--ls-search-icon-hover-color);
 }
 
 .cp__select-main .menu-link.chosen,
-.cp__select-main .menu-link.chosen p {
+.cp__select-main .menu-link.chosen p,
+.cp__select-main .menu-link[data-selected],
+.cp__select-main .menu-link[data-selected] p {
   background: var(--lx-gray-03, var(--ls-a-chosen-bg, var(--rx-gray-03)));
   color: var(--ls-secondary-text-color);
 }
 
 .dark .cp__select-main .menu-link.chosen,
-.dark .cp__select-main .menu-link.chosen p {
+.dark .cp__select-main .menu-link.chosen p,
+.dark .cp__select-main .menu-link[data-selected],
+.dark .cp__select-main .menu-link[data-selected] p {
   background: var(--lx-gray-02, var(--ls-a-chosen-bg, var(--rx-gray-02)));
 }
 
