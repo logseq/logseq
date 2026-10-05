@@ -3,7 +3,18 @@
    div.text and div[role='alertdialog'], which LUI menu/dialog nodes do
    not emit. *)
 
+open Lui_elements
+
 let dom = Logseq_dom.dom
+
+(* ~label has no _signal variant — bind a string property signal on the
+   mounted node instead (same pattern as Page.class_signal_el) *)
+let prop_signal_el (prop : Lui_protocol.property) (source : 'a Signal.signal)
+    (f : 'a -> string) (el : t) : t =
+ fun ctx parent ->
+  let node = el ctx parent in
+  Lui_ui.string_property_signal ctx node prop (Signal.map f source);
+  node
 
 let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 
@@ -129,14 +140,6 @@ let mask_email email =
       let c = email.[i] in
       if sep c || i = !first || i = !last then c else '*')
 
-let ghost_icon_btn_cls =
-  "ui__button inline-flex cursor-pointer items-center justify-center \
-   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-   ring-offset-background transition-colors focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
-   disabled:pointer-events-none disabled:opacity-50 select-none \
-   hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 \
-   as-ghost box-content overflow-hidden"
 
 (* cljs header.cljs logged-in user block: separator + inert menuitem
    with username, masked email (eye toggle) and a hover-reveal logout
@@ -146,70 +149,48 @@ let user_item () : Lui_elements.t =
   let username = Option.value (Rtc_flows.username ()) ~default:"" in
   let email = Option.value (Rtc_flows.email ()) ~default:"" in
   let masked = Signal.state ctx.Lui_ui.ui_scheduler true in
+  let maskedv = Signal.value masked in
+  (* TODO(component): e2e requires div[role='menuitem'] — role/tabindex
+     have no component prop *)
   dom ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"
     ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
-    [ dom ~key:"u-span" ~tag:"span"
-        ~style_class:"flex flex-col relative group pt-1 w-full"
-        [ dom ~key:"u-name" ~tag:"b" ~style_class:"leading-none"
-            ~text:username []
-        ; dom ~key:"u-mail" ~tag:"small" ~style_class:"opacity-70"
-            [ dom ~key:"u-addr" ~tag:"span"
-                ~style_class:"ls-email-address inline-flex items-center"
-                ~attrs_signal_v:
-                  (Logseq_dom.reactive_attrs
-                     (fun m -> [ ("data-masked", string_of_bool m) ])
-                     (Signal.value masked))
-                [ dom ~key:"u-addr-t" ~tag:"span"
-                    ~text_signal:
-                      (Logseq_dom.reactive_text
-                         (fun m -> if m then mask_email email else email)
-                         (Signal.value masked))
-                    []
-                ; Logseq_dom.dyn ~equal:( = )
-                    (fun m ->
-                      dom ~key:"u-eye" ~tag:"button"
-                        ~style_class:
-                          (ghost_icon_btn_cls
-                          ^ " ml-1 inline-flex h-auto w-auto min-w-0 \
-                             border-0 bg-transparent p-0 text-current \
-                             opacity-70 hover:opacity-100")
-                        ~attrs:
-                          [ ("type", "button")
-                          ; ( "aria-label"
-                            , I18n.t
-                                (if m then "account/show-email-address"
-                                 else "account/hide-email-address") )
-                          ]
-                        ~events:"click"
-                        ~on_dom_event:(fun n _ ->
-                          if n = "click" then begin
-                            Signal.set masked
-                              (not (Signal.get_state masked));
-                            Runtime.flush ()
-                          end)
-                        [ Icons.icon ~size:14. ~cls:""
-                            (if m then "eye" else "eye-off") ])
-                    (Signal.value masked)
-                ]
+    [ column ~key:"u-span" ~style_class:"relative"
+        [ text ~key:"u-name" ~value:username []
+        ; row ~key:"u-mail" ~cross:`center
+            ~style_class:"ls-email-address"
+            [ text ~key:"u-addr-t"
+                ~value_signal:
+                  (Signal.map
+                     (fun m -> if m then mask_email email else email)
+                     maskedv)
+                []
+            ; prop_signal_el Lui_protocol.AccessibilityLabel maskedv
+                (fun m ->
+                  I18n.t
+                    (if m then "account/show-email-address"
+                     else "account/hide-email-address"))
+                (button ~key:"u-eye" ~variant:`ghost ~size:`icon
+                   ~style_class:"ui__button as-ghost"
+                   ~icon:
+                     (reactive
+                        (fun m -> if m then `eye else `app "eye-off")
+                        maskedv)
+                   ~on_press:(fun _ ->
+                     Signal.set masked (not (Signal.get_state masked));
+                     Runtime.flush ())
+                   [])
             ]
-        ; dom ~key:"u-logout" ~tag:"button"
-            ~style_class:
-              (ghost_icon_btn_cls
-              ^ " absolute right-1 top-3 h-auto w-auto min-w-0 border-0 \
-                 bg-transparent p-0 text-red-rx-09 opacity-0 \
-                 group-hover:opacity-100")
-            ~attrs:
-              [ ("type", "button")
-              ; ("aria-label", I18n.t "ui/logout")
-              ]
-            ~events:"click"
-            ~on_dom_event:(fun n _ ->
-              if n = "click" then begin
-                Rtc_flows.sign_out ();
-                Runtime.send (Action.Page_menu_set None);
-                Runtime.flush ()
-              end)
-            [ Icons.icon ~size:18. ~cls:"" "logout" ]
+        ; (* the opacity-0/group-hover reveal and absolute right-1 top-3
+             positioning have no component equivalent — the logout
+             button renders inline until an imperative pass restyles it *)
+          button ~key:"u-logout" ~variant:`ghost ~size:`icon
+            ~style_class:"ui__button as-ghost"
+            ~label:(I18n.t "ui/logout") ~icon:(`app "logout")
+            ~on_press:(fun _ ->
+              Rtc_flows.sign_out ();
+              Runtime.send (Action.Page_menu_set None);
+              Runtime.flush ())
+            []
         ]
     ]
     ctx parent
@@ -277,6 +258,8 @@ let view (x, y, with_app_items) (p : Model.page option) =
         (Float.max 8. (Float.min (x -. 140.) (inner_width -. 288.)))
         y (y +. 8.)
   in
+  (* TODO(component): position:fixed coordinates come through a style
+     attr and role=menu has no component prop *)
   dom ~key:"page-menu" ~tag:"div"
     (* toolbar dots menu is w-64 (cljs header.cljs); the page
        right-click keeps the context-menu look *)
@@ -291,11 +274,6 @@ let view (x, y, with_app_items) (p : Model.page option) =
          page_items p @ [ separator "pg-app" ] @ global_items ()
      | Some p, false -> page_items p
      | None, _ -> global_items ())
-
-let btn key label cls act =
-  dom ~key ~tag:"button" ~style_class:cls ~text:label ~events:"click"
-    ~on_dom_event:(fun name _ -> if name = "click" then act ())
-    []
 
 (* div[role='alertdialog'] — Confirm / Cancel *)
 let confirm_view (c : Model.confirm) =
@@ -325,6 +303,7 @@ let confirm_view (c : Model.confirm) =
     Runtime.send (Action.Confirm_set None);
     Runtime.flush ()
   in
+  (* TODO(component): backdrop dismiss needs the targetClass payload *)
   dom ~key:"alertdlg-overlay" ~tag:"div"
     ~style_class:"ui__alert-dialog-overlay"
     ~events:"click"
@@ -337,28 +316,33 @@ let confirm_view (c : Model.confirm) =
              (Platform.payload_str payload "targetClass")
              "ui__alert-dialog-overlay"
       then close ())
-    [ dom ~key:"alertdlg" ~tag:"div"
+    [ (* TODO(component): e2e requires div[role='alertdialog'] *)
+      dom ~key:"alertdlg" ~tag:"div"
         ~attrs:[ ("role", "alertdialog") ]
         ~style_class:"ui__alert-dialog-content"
-        [ dom ~key:"adlg-t" ~tag:"h2"
+        [ (* TODO(component): heading is a leaf kind — keep h2 while
+             an icon can sit inside the title *)
+          dom ~key:"adlg-t" ~tag:"h2"
             ~style_class:"ui__alert-dialog-title"
             [ (match icon_opt with
                | Some i ->
                    (* cljs dialog-confirm title: flex gap-2 items-center
                       > icon + text *)
-                   dom ~key:"adlg-tw" ~style_class:"ls-alert-title"
-                     [ i; dom ~key:"adlg-tx" ~text:title [] ]
-               | None -> dom ~key:"adlg-tx" ~text:title []) ]
-        ; dom ~key:"adlg-d" ~tag:"div"
-            ~style_class:desc_cls ~text:desc []
-        ; dom ~key:"adlg-f" ~tag:"div"
-            ~style_class:"ui__alert-dialog-footer"
-            [ btn "adlg-cancel" I18n.cancel
-                "ui__button ls-btn-outline" close
-            ; btn "adlg-confirm" I18n.confirm
-                "ui__button ls-btn-primary" (fun () ->
+                   row ~key:"adlg-tw" ~gap:8 ~cross:`center
+                     ~style_class:"ls-alert-title"
+                     [ i; text ~key:"adlg-tx" ~value:title [] ]
+               | None -> text ~key:"adlg-tx" ~value:title []) ]
+        ; text ~key:"adlg-d" ~style_class:desc_cls ~value:desc []
+        ; row ~key:"adlg-f" ~style_class:"ui__alert-dialog-footer"
+            [ button ~key:"adlg-cancel" ~variant:`outline
+                ~text:I18n.cancel ~style_class:"ui__button"
+                ~on_press:(fun _ -> close ()) []
+            ; button ~key:"adlg-confirm" ~variant:`primary
+                ~text:I18n.confirm ~style_class:"ui__button"
+                ~on_press:(fun _ ->
                   close ();
                   act ())
+                []
             ]
         ]
     ]
