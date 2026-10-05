@@ -36,6 +36,9 @@ type block =
   ; block_tag_idents : string list (* resolved tag idents, same filtering *)
   ; block_tag_db_ids : int list (* aligned with block_tags — chip ctx menu *)
   ; block_page_name : string option (* containing page, for ref rows *)
+  ; block_page_uuid : string option (* containing page uuid — ref-group
+                                       namespace breadcrumbs resolve the
+                                       page's ancestors through it *)
   ; block_reactions : (string * int) list (* emoji-id, count *)
   ; block_is_comments_area : bool
   ; block_is_comment : bool
@@ -155,6 +158,12 @@ type confirm =
 
 (* rtc-sync-state broadcast projection — the fields the header indicator
    and e2e rtc-tx element need (components/rtc/indicator.cljs) *)
+type rtc_user =
+  { ru_uuid : string (* user/uuid *)
+  ; ru_name : string (* user/name *)
+  ; ru_email : string option (* user/email *)
+  }
+
 type rtc =
   { rtc_lock : bool (* ws open *)
   ; rtc_ws_state : string
@@ -163,6 +172,29 @@ type rtc =
   ; rtc_pending_local : int (* unpushed-block-update-count *)
   ; rtc_pending_asset : int
   ; rtc_pending_server : int
+  ; rtc_online_users : rtc_user list (* online-users *)
+  ; rtc_missing_files : string list (* missing-asset-upload-files :file *)
+  }
+
+(* :search/index-build — worker search-index progress pushed through the
+   thread-api/search-index-build-progress remoteInvoke (cljs
+   persist_db/browser.cljs). Rendered by the header widget *)
+type index_build =
+  { ib_visible : bool
+  ; ib_running : bool
+  ; ib_status : string (* "" | "idle" | "running" | "completed" *)
+  ; ib_progress : int (* 0-100 *)
+  ; ib_repo : string
+  ; ib_build_id : string option
+  }
+
+(* one decoded search-index-build-progress event *)
+type index_progress_event =
+  { ip_repo : string
+  ; ip_status : string
+  ; ip_stage : string (* "search-index" | "vector-index" *)
+  ; ip_progress : int
+  ; ip_build_id : string option
   }
 
 (* worker :notification broadcast -> toast *)
@@ -183,6 +215,9 @@ type t =
                            the chrome, not the route-level 404 *)
   ; journals : page list
   ; page_refs : block list
+  ; ref_parents : (string * string list) list
+    (* group page name -> ancestor titles (farthest-first) — linked/unlinked
+       ref groups on namespaced source pages render a .breadcrumb--inline *)
   ; unlinked_refs : block list
   ; unlinked_exists : bool (* cljs :block-unlinked-ref-exists — gates
                               whether the collapsed section renders at all *)
@@ -191,8 +226,10 @@ type t =
   ; left_sidebar_open : bool
   ; right_sidebar_open : bool
   ; editing_title : bool
-  ; page_menu : (float * float * bool) option
-    (* click position + with_app_items (toolbar dots vs page context menu) *)
+  ; page_menu : (float * float * bool * string option) option
+    (* click position + with_app_items (toolbar dots vs page context
+       menu) + the menu page uuid; uuid None = resolve from the current
+       route like cljs right-sidebar/get-current-page *)
   ; appearance : (float * float) option
     (* cljs :ui/toggle-appearance popup anchored to .toolbar-dots-btn *)
   ; confirm : confirm option
@@ -204,6 +241,12 @@ type t =
   ; help_open : bool
   ; unlinked_blocks : block list
   ; rtc : rtc option
+  ; index_build : index_build
+  ; (* latest rtc.log/download|upload sub-type activity — the cljs
+       *downloading?/*uploading? atoms behind the header
+       downloading-detail/uploading-detail buttons *)
+    rtc_downloading : bool
+  ; rtc_uploading : bool
   ; data_gen : int (* bumped whenever a block/page-bearing field is
                       reassigned — cheap revision for dyn ~equal so
                       block trees are never structurally compared *)
@@ -217,6 +260,7 @@ let initial =
   ; page_missing = false
   ; journals = []
   ; page_refs = []
+  ; ref_parents = []
   ; unlinked_refs = []
   ; unlinked_exists = false
   ; repos = []
@@ -239,6 +283,16 @@ let initial =
   ; help_open = false
   ; unlinked_blocks = []
   ; rtc = None
+  ; index_build =
+      { ib_visible = false
+      ; ib_running = false
+      ; ib_status = ""
+      ; ib_progress = 0
+      ; ib_repo = ""
+      ; ib_build_id = None
+      }
+  ; rtc_downloading = false
+  ; rtc_uploading = false
   ; data_gen = 0
   }
 
@@ -258,6 +312,7 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_tag_idents = []
   ; block_tag_db_ids = []
   ; block_page_name = None
+  ; block_page_uuid = None
   ; block_reactions = []
   ; block_is_comments_area = false
   ; block_is_comment = false

@@ -449,7 +449,7 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
   match ids with
   | [] -> Js.Promise.resolve blocks
   | _ -> (
-      match !Runtime.current_repo with
+      match (Runtime.model ()).Model.repo with
       | None -> Js.Promise.resolve blocks
       | Some repo ->
           let* titles = tag_titles repo ids in
@@ -690,6 +690,53 @@ let fetch_zoom_parents repo uuid : Model.block list Js.Promise.t =
             | Wire.Map _ -> Some (Decode.block_of_wire w)
             | _ -> None))
 
+(* namespace breadcrumbs on linked/unlinked ref groups: each group's
+   source page resolves its ancestor chain (farthest-first titles) via
+   get-block-parents; non-namespaced pages return [] and keep the empty
+   .ml-6 slot, matching cljs's absent breadcrumb *)
+let fetch_ref_group_parents ~stale:(is_stale : unit -> bool)
+    (refs : Model.block list) =
+  match (Runtime.model ()).Model.repo with
+  | None -> ()
+  | Some repo ->
+      let seen = Hashtbl.create 8 in
+      let pages =
+        List.filter_map
+          (fun (b : Model.block) ->
+            match b.Model.block_page_uuid, b.Model.block_page_name with
+            | Some u, Some n when not (Hashtbl.mem seen u) ->
+                Hashtbl.add seen u n;
+                Some (u, n)
+            | _ -> None)
+          refs
+      in
+      if pages <> [] then
+        let fetch (u, n) =
+          (let* w =
+             Runtime.invoke2 "thread-api/get-block-parents"
+               (Wire.String repo)
+               (Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
+           in
+           let titles =
+             Wire.elems w
+             |> List.filter_map (fun p -> Wire.map_get_string p "block/title")
+           in
+           Js.Promise.resolve (n, titles))
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve (n, []))
+        in
+        ignore
+          ((let* arr =
+              Js.Promise.all (Array.of_list (List.map fetch pages))
+            in
+            Js.Promise.resolve
+              (if not (is_stale ()) then
+                 let entries =
+                   List.filter (fun (_, ts) -> ts <> []) (Array.to_list arr)
+                 in
+                 if entries <> [] then
+                   Runtime.send (Action.Ref_parents_loaded entries)))
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
+
 (* refetch unlinked refs for the current page — a block-title edit can
    create or remove a text mention; the send is guarded so an in-flight
    fetch can't overwrite a page the user navigated to *)
@@ -697,10 +744,10 @@ let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   (* gated on the unlinked section being open — get-unlinked-references
      scans every block/title datom, so a collapsed section must not pay
      it on every refresh. The fold toggle's send flips
-     Runtime.unlinked_open before its fetch, so opening still fetches *)
-  if not !Runtime.unlinked_open then ()
+     model.unlinked_open before its fetch, so opening still fetches *)
+  if not (Runtime.model ()).Model.unlinked_open then ()
   else
-  match !Runtime.current_repo, p.Model.page_db_id with
+  match (Runtime.model ()).Model.repo, p.Model.page_db_id with
   | Some repo, Some id ->
       ignore
         ((let* w =
@@ -708,9 +755,10 @@ let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
              (Wire.Int id)
          in
          Js.Promise.resolve
-           (if not (is_stale ()) then
-              Runtime.send
-                (Action.Unlinked_loaded (Decode.blocks_of_wire w))))
+           (if not (is_stale ()) then (
+              let refs = Decode.blocks_of_wire w in
+              Runtime.send (Action.Unlinked_loaded refs);
+              fetch_ref_group_parents ~stale:is_stale refs)))
          |> Js.Promise.catch (fun e ->
                 Platform.console_error ("get-unlinked-refs failed", e);
                 Js.Promise.resolve ()))
@@ -722,7 +770,7 @@ let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
    state (the fold control can't be clicked when the section is absent). *)
 let fetch_unlinked_exists ~stale:(is_stale : unit -> bool)
     (p : Model.page) =
-  match !Runtime.current_repo, p.Model.page_uuid with
+  match (Runtime.model ()).Model.repo, p.Model.page_uuid with
   | Some repo, Some uuid ->
       let rk =
         Wire.Array
@@ -757,21 +805,21 @@ let fetch_unlinked_exists ~stale:(is_stale : unit -> bool)
 let refresh_gen = ref 0
 
 let refresh_page () : unit Js.Promise.t =
-  let route_at_start = !Runtime.current_route in
+  let route_at_start = Runtime.route () in
   incr refresh_gen;
   let gen = !refresh_gen in
-  match (!Runtime.current_repo, !Runtime.current_page) with
+  match ((Runtime.model ()).Model.repo, (Runtime.model ()).Model.route_page) with
   | Some repo, Some page -> (
       incr Runtime.load_gen;
       fetch_unlinked_refs
-        ~stale:(fun () -> !Runtime.current_route <> route_at_start)
+        ~stale:(fun () -> Runtime.route () <> route_at_start)
         page;
       fetch_unlinked_exists
-        ~stale:(fun () -> !Runtime.current_route <> route_at_start)
+        ~stale:(fun () -> Runtime.route () <> route_at_start)
         page;
       let blocks_p =
-        match !Runtime.current_route, page.Model.page_uuid with
-        | Some (Model.Block_zoom _), Some u ->
+        match Runtime.route (), page.Model.page_uuid with
+        | Model.Block_zoom _, Some u ->
             let* v = fetch_zoom_blocks repo u in
             (blocks_of_tree_wire repo page) v
         | _ -> fetch_page_blocks repo page
@@ -783,8 +831,8 @@ let refresh_page () : unit Js.Promise.t =
       else
         let page = { page with Model.page_blocks = blocks } in
         let* page =
-          (match !Runtime.current_route with
-           | Some (Model.Block_zoom uuid) ->
+          (match Runtime.route () with
+           | Model.Block_zoom uuid ->
                let* page_parents = fetch_zoom_parents repo uuid in
                Js.Promise.resolve
                  { page with Model.page_parents }
@@ -797,7 +845,7 @@ let refresh_page () : unit Js.Promise.t =
         (* the user may have navigated while the
            refetch was in-flight — never
            overwrite the new route's page *)
-        if !Runtime.current_route = route_at_start then
+        if Runtime.route () = route_at_start then
           Runtime.send (Action.Page_loaded page);
         Js.Promise.resolve ())
       |> Js.Promise.catch (fun e ->
@@ -815,23 +863,37 @@ let save_timer = ref 0
 let pending_save : (string * string) option ref = ref None
 
 let cancel_pending_save () =
-  Editor_dom.clear_timeout !save_timer;
+  Web_dom.clear_timeout !save_timer;
   pending_save := None
 
-let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
-  (* cljs saves the editing buffer on keydown before structure ops —
-     flush the queued keystroke save instead of dropping it, so ops like
-     indent/move don't lose text typed within the debounce window *)
+(* op names for error logging — nested op payloads are
+   [[op-name ...] ...] arrays or lists wrapping the same *)
+let op_names ops =
+  String.concat ","
+    (List.map
+       (fun o ->
+         match o with
+         | Wire.Array (Wire.Array (Wire.Keyword name :: _) :: _)
+         | Wire.List (Wire.Array (Wire.Keyword name :: _) :: _)
+         | Wire.Array (Wire.Keyword name :: _) -> name
+         | _ -> "?")
+       ops)
+
+(* cljs saves the editing buffer on keydown before structure ops —
+   flush the queued keystroke save instead of dropping it, so ops like
+   indent/move don't lose text typed within the debounce window *)
+let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
+    =
   match !pending_save with
   | Some (uuid, title) ->
       pending_save := None;
       let* sop = save_block_parsed uuid title in
-      let* () = apply [ sop ] in
-      apply ~opts ops
+      let* _ = apply_result [ sop ] in
+      apply_result ~opts ops
   | None -> (
-      Editor_dom.clear_timeout !save_timer;
-      match !Runtime.current_repo with
-      | None -> Js.Promise.resolve ()
+      Web_dom.clear_timeout !save_timer;
+      match (Runtime.model ()).Model.repo with
+      | None -> Js.Promise.resolve None
       | Some repo ->
           let opts =
             match opts with
@@ -849,24 +911,16 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
           (match Wire.get r "delta" with
            | Some d -> Page_delta.stash_deferred d
            | None -> ());
-          Js.Promise.resolve ())
+          Js.Promise.resolve (Some r))
           |> Js.Promise.catch (fun e ->
                  Platform.console_error
-                   ( "apply-outliner-ops failed"
-                   , String.concat ","
-                       (List.map
-                          (fun o ->
-                            match o with
-                            | Wire.Array
-                                (Wire.Array (Wire.Keyword name :: _) :: _)
-                            | Wire.List
-                                (Wire.Array (Wire.Keyword name :: _) :: _)
-                            | Wire.Array (Wire.Keyword name :: _) -> name
-                            | _ -> "?")
-                          ops)
-                   , e );
+                   ("apply-outliner-ops failed", op_names ops, e);
                  Toast.error (I18n.t "ui/save-changes-error");
-                 Js.Promise.resolve ()))
+                 Js.Promise.resolve None))
+
+let apply ?opts ops =
+  let* _ = apply_result ?opts ops in
+  Js.Promise.resolve ()
 
 (* While an editor is open a per-op fetch+rebuild starves keystroke
    dispatch under RTC traffic (~200-300ms of whole-page reconcile per
@@ -881,10 +935,10 @@ let refresh_page_deferred () : unit Js.Promise.t =
 
 (* the stale-commit guard for a spliced page — the resolve/fill_embeds
    roundtrips may outlive the page they were started on *)
-let page_still_current (route : Model.route option) (page : Model.page) =
-  !Runtime.current_route = route
+let page_still_current (route : Model.route) (page : Model.page) =
+  Runtime.route () = route
   &&
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some c -> c == page
   | None -> false
 
@@ -896,37 +950,6 @@ let apply_parsed ?opts ~rest pairs =
   in
   apply ?opts (Array.to_list a @ rest)
 
-(* same ops as [apply] but the promise carries the worker response
-   — callers that act on inserted uuids need {:blocks [...]} (cljs
-   insert-blocks! result) *)
-let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
-    =
-  match !pending_save with
-  | Some (uuid, title) ->
-      pending_save := None;
-      let* sop = save_block_parsed uuid title in
-      let* () = apply [ sop ] in
-      apply_result ~opts ops
-  | None -> (
-      Editor_dom.clear_timeout !save_timer;
-      match !Runtime.current_repo with
-      | None -> Js.Promise.resolve None
-      | Some repo ->
-          let opts =
-            match opts with
-            | Wire.Map kvs ->
-                Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
-            | _ -> opts
-          in
-          (let* r =
-            Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-              (Wire.Array ops) opts
-          in
-          Js.Promise.resolve (Some r))
-          |> Js.Promise.catch (fun e ->
-                 Platform.console_error ("apply-outliner-ops failed", e);
-                 Js.Promise.resolve None))
-
 (* page-delta splice path: op responses carry the worker's render delta
    ({blocks, deleted, children, rev}) — patch only the touched rows
    instead of refetching+remounting the whole page (cljs apply-delta!).
@@ -934,14 +957,14 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
 let delta_helpers (page : Model.page) : Page_delta.helpers =
   { Page_delta.resolve =
       (fun bs ->
-        match !Runtime.current_repo with
+        match (Runtime.model ()).Model.repo with
         | None -> resolve_block_tags bs
         | Some repo ->
             let* () = prefetch_anchor_refs repo bs in
             resolve_block_tags bs)
   ; fill_embeds =
       (fun bs ->
-        match !Runtime.current_repo with
+        match (Runtime.model ()).Model.repo with
         | None -> Js.Promise.resolve bs
         | Some repo ->
             let collapsed = ref S.String_set.empty in
@@ -953,7 +976,7 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
   ; merge_collapsed
   ; refresh_page_fields =
       (fun p ->
-        match !Runtime.current_repo with
+        match (Runtime.model ()).Model.repo with
         | Some repo -> resolve_page_tags repo p
         | None -> Js.Promise.resolve p)
   }
@@ -975,7 +998,7 @@ let apply_queued _page delta =
      block fields wholesale, so a stale arm publishing last would blank
      rows the newer model already advanced *)
   Page_delta.with_apply_queue (fun () ->
-      match !Runtime.current_page with
+      match (Runtime.model ()).Model.route_page with
       | Some base -> (
           let h = delta_helpers base in
           let rec go page = function
@@ -999,7 +1022,7 @@ let apply_queued _page delta =
              when p' != base
                   && !Runtime.current_route = route_at_start
                   &&
-                  (match !Runtime.current_page with
+                  (match (Runtime.model ()).Model.route_page with
                    | Some c -> c == base
                    | None -> false) ->
                let t0 = ms () in
@@ -1074,14 +1097,121 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
              S.prune_overrides touched;
              Js.Promise.resolve ()))
 
+(* Journals/Home counterpart of apply_queued: each delta belongs to
+   the journal page whose tree consumes it. The owner is found via a
+   uuid -> journal index over the delta's address keys (canon rows,
+   tombstones, membership-patch parents) — a non-owner journal can't
+   consume the patches and apply_to_page fails on it, so candidates
+   are tried in order. Fold + publish inside the apply queue, like
+   apply_queued. Returns false when any delta can't splice — the
+   caller falls back to a full reload *)
+let splice_journals ?(strict = false) (deltas : Wire.t list) :
+    bool Js.Promise.t =
+  let deltas = Page_delta.drain_deferred () @ deltas in
+  let touched = List.concat_map Page_delta.delta_uuids deltas in
+  let build_index (js : Model.page list) =
+    let idx = Hashtbl.create 512 in
+    List.iteri
+      (fun i (p : Model.page) ->
+        (match p.Model.page_uuid with
+         | Some u -> Hashtbl.replace idx u i
+         | None -> ());
+        let rec walk (b : Model.block) =
+          (match b.Model.block_uuid with
+           | Some u -> Hashtbl.replace idx u i
+           | None -> ());
+          List.iter walk b.Model.block_children;
+          List.iter walk b.Model.block_embed_children
+        in
+        List.iter walk p.Model.page_blocks)
+      js;
+    idx
+  in
+  Page_delta.with_apply_queue (fun () ->
+      let base = (Runtime.model ()).Model.journals in
+      match base with
+      | [] -> Js.Promise.resolve false
+      | _ ->
+          let arr = Array.of_list base in
+          let idx = ref (build_index base) in
+          let owners = ref [] in
+          let rec fold_delta ~retried d =
+            if Page_delta.delta_already_applied d then
+              Js.Promise.resolve `Applied
+            else
+              let cands =
+                List.sort_uniq compare
+                  (List.filter_map
+                     (fun k -> Hashtbl.find_opt !idx k)
+                     (Page_delta.delta_keys d))
+              in
+              let rec try_cands = function
+                | [] ->
+                    if retried then Js.Promise.resolve `Unmatched
+                    else (
+                      (* a uuid an earlier delta in this batch created
+                         isn't in the index yet — rebuild and retry *)
+                      idx := build_index (Array.to_list arr);
+                      fold_delta ~retried:true d)
+                | i :: rest -> (
+                    let j = arr.(i) in
+                    let* applied =
+                      Page_delta.apply_to_page ~strict (delta_helpers j)
+                        j d
+                    in
+                    match applied with
+                    | Some j' when j' != j ->
+                        arr.(i) <- j';
+                        owners := j' :: !owners;
+                        Js.Promise.resolve `Applied
+                    | _ -> try_cands rest)
+              in
+              try_cands cands
+          in
+          let rec fold = function
+            | [] -> Js.Promise.resolve true
+            | d :: rest -> (
+                let* r = fold_delta ~retried:false d in
+                match r with
+                | `Applied -> fold rest
+                | `Unmatched -> Js.Promise.resolve false)
+          in
+          let* ok = fold deltas in
+          (if ok then
+             match (Runtime.model ()).Model.journals with
+             | cur when cur == base ->
+                 if !owners <> [] then begin
+                   (* fold and publish inside the apply queue so a
+                      racing arm can't interleave between our splice
+                      and our publish *)
+                   Runtime.send
+                     (Action.Journals_spliced (Array.to_list arr));
+                   S.prune_overrides touched;
+                   List.iter
+                     (fun p -> Runtime.hooks.refresh_journal_side p)
+                     !owners
+                 end
+             | _ -> ());
+          Js.Promise.resolve ok)
+
 let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match
-    (Option.bind resp (fun r -> Wire.get r "delta"), !Runtime.current_page)
+    (Option.bind resp (fun r -> Wire.get r "delta"), (Runtime.model ()).Model.route_page)
   with
+  | Some delta, None -> (
+      match Runtime.route () with
+      | Model.Journals | Model.Home -> (
+          let* ok = splice_journals [ delta ] in
+          if ok then (
+            (* property areas hold worker data outside the spliced
+               model — refresh them like the page-route path *)
+            ignore (Runtime.hooks.refresh_property_areas ());
+            Js.Promise.resolve ())
+          else refresh_page ())
+      | _ -> refresh_page ())
   | Some delta, Some page -> (
-      let route_at_start = !Runtime.current_route in
-      let* applied, touched, deltas = apply_queued page delta in
-      match applied with
+      let route_at_start = Runtime.route () in
+      let* applied, touched, deltas = apply_queued page delta in      match applied with
       | Some page' when page_still_current route_at_start page' ->
           (* the spliced rows are authoritative for the uuids the tx
              touched — drop their committed-buffer title overrides like
@@ -1101,7 +1231,7 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
              is a full-area refetch and would gate the caller's next
              step (the Enter refocus mounts the new editor ~150ms
              late) on cosmetic property chips *)
-          ignore (!Runtime.refresh_property_areas ());
+          ignore (Runtime.hooks.refresh_property_areas ());
           Js.Promise.resolve ()
       | Some _ ->
           (* page moved on mid-splice — this page is gone *)
@@ -1163,7 +1293,7 @@ let schedule_save uuid title =
   cancel_pending_save ();
   pending_save := Some (uuid, title);
   save_timer :=
-    Editor_dom.set_timeout_id
+    Web_dom.set_timeout_id
       (fun () ->
         pending_save := None;
         ignore
@@ -1207,7 +1337,7 @@ let title_for_edit (title : string) : string Js.Promise.t =
   match toks with
   | [] -> Js.Promise.resolve title
   | _ -> (
-      match !Runtime.current_repo with
+      match (Runtime.model ()).Model.repo with
       | None -> Js.Promise.resolve title
       | Some repo ->
           let uuids = List.map (fun (_, _, _, u) -> u) toks in
@@ -1294,8 +1424,8 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
                        { e' with S.buffer = title; base = title }
                     }
                 | _ -> st);
-            match Editor_dom.textarea_of e.uuid with
-            | Some el -> Editor_dom.el_set_value el title
+            match Web_dom.textarea_of e.uuid with
+            | Some el -> Web_dom.el_set_value el title
             | None -> ()
           end;
           Js.Promise.resolve ()
@@ -1305,7 +1435,7 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
 
 let undo () =
   cancel_pending_save ();
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | Some repo ->
       (let* _ = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
       let* () = refresh_page () in
@@ -1318,7 +1448,7 @@ let undo () =
 
 let redo () =
   cancel_pending_save ();
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | Some repo ->
       (let* _ = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
       let* () = refresh_page () in
@@ -1331,4 +1461,4 @@ let redo () =
 
 (* sdk bridge (and other non-editor mutation paths) refresh the view
    through this Runtime hook *)
-let () = Runtime.refresh_after_ops := (fun () -> refresh_page ())
+let () = Runtime.hooks.refresh_after_ops <- (fun () -> refresh_page ())

@@ -308,10 +308,29 @@ let find_sub_ci sub low start =
   in
   go start
 
+(* cljs cmdk/highlight-content-query parses the worker's pfts markers
+   into span/mark segments via text-util/cut-by *)
+let pfts_segments text : (bool * string) list =
+  let n = String.length text in
+  let lo = String.length S.pfts_open and lc = String.length S.pfts_close in
+  let rec go pos acc =
+    let i = S.find_sub S.pfts_open text pos in
+    if i < 0 then List.rev ((false, String.sub text pos (n - pos)) :: acc)
+    else
+      let j = S.find_sub S.pfts_close text (i + lo) in
+      if j < 0 then List.rev ((false, String.sub text pos (n - pos)) :: acc)
+      else
+        go (j + lc)
+          ((true, String.sub text (i + lo) (j - i - lo))
+           :: (false, String.sub text pos (i - pos)) :: acc)
+  in
+  go 0 []
+
 (* leftmost match across query terms (whitespace-split); ties keep the
    earliest term like a JS "a|b" alternation *)
 let hl_segments ~query ~text : (bool * string) list =
-  if String.trim query = "" || text = "" then [ (false, text) ]
+  if S.find_sub S.pfts_open text 0 >= 0 then pfts_segments text
+  else if String.trim query = "" || text = "" then [ (false, text) ]
   else
     (* indices must stay byte-aligned with [text]: cljs highlights via a
        case-insensitive regex on the raw title, so lowercase the original
@@ -351,10 +370,13 @@ let hl_segments ~query ~text : (bool * string) list =
       go 0 []
 
 (* cljs [:span {:data-testid text} seg/span ... seg/mark] — mark gets
-   padding 0 border-radius 0 *)
+   padding 0 border-radius 0; data-testid is the original (unmarked)
+   title *)
 let highlight_el key query text =
+  let segs = hl_segments ~query ~text in
+  let plain = String.concat "" (List.map snd segs) in
   Logseq_dom.dom ~key ~tag:"span"
-    ~attrs:[ ("data-testid", text) ]
+    ~attrs:[ ("data-testid", plain) ]
     (List.mapi
        (fun i (hl, seg) ->
          if hl then
@@ -363,7 +385,7 @@ let highlight_el key query text =
          else
            Logseq_dom.dom ~key:(Printf.sprintf "tx%d" i) ~tag:"span"
              ~text:seg [])
-       (List.filter (fun (_, s) -> s <> "") (hl_segments ~query ~text)))
+       (List.filter (fun (_, s) -> s <> "") segs))
 
 let badge_el key =
   Logseq_dom.dom ~key ~tag:"span"
@@ -644,8 +666,7 @@ let input_row st : t =
           if name = "input" then (
             let q =
               Option.value
-                (Option.bind payload (fun p ->
-                     Dom_ext.payload_string p "value"))
+                (Platform.payload_str_opt payload "value")
                 ~default:""
             in
             S.on_input st q))
@@ -786,88 +807,88 @@ let palette st : t =
 let int_of_string_opt s =
   try Some (int_of_string s) with _ -> None
 
-let handle_keydown st (ev : Dom_ext.event) =
+let handle_keydown st (ev : Web_dom.ev) =
   let v = S.get st in
   if v.S.open_ then
-    match Dom_ext.key_ ev with
-    | Some "Escape" ->
+    match Web_dom.ev_key ev with
+    | "Escape" ->
         if S.clear_or_close st then (
-          Dom_ext.prevent_default ev;
-          Dom_ext.stop_propagation ev)
-    | Some "ArrowDown" ->
-        Dom_ext.prevent_default ev;
-        if Dom_ext.meta_key ev || Dom_ext.ctrl_key ev then
+          Web_dom.ev_prevent_default ev;
+          Web_dom.ev_stop_propagation ev)
+    | "ArrowDown" ->
+        Web_dom.ev_prevent_default ev;
+        if Web_dom.ev_meta ev || Web_dom.ev_ctrl ev then
           Option.iter (fun gid -> S.toggle_expand st gid true) (S.hl_group st)
         else S.move_hl st 1
-    | Some "ArrowUp" ->
-        Dom_ext.prevent_default ev;
-        if Dom_ext.meta_key ev || Dom_ext.ctrl_key ev then
+    | "ArrowUp" ->
+        Web_dom.ev_prevent_default ev;
+        if Web_dom.ev_meta ev || Web_dom.ev_ctrl ev then
           Option.iter (fun gid -> S.toggle_expand st gid false) (S.hl_group st)
         else S.move_hl st (-1)
-    | Some "n" when Dom_ext.ctrl_key ev ->
-        Dom_ext.prevent_default ev;
+    | "n" when Web_dom.ev_ctrl ev ->
+        Web_dom.ev_prevent_default ev;
         S.move_hl st 1
-    | Some "p" when Dom_ext.ctrl_key ev ->
-        Dom_ext.prevent_default ev;
+    | "p" when Web_dom.ev_ctrl ev ->
+        Web_dom.ev_prevent_default ev;
         S.move_hl st (-1)
-    | Some "Enter" ->
-        Dom_ext.prevent_default ev;
-        Dom_ext.stop_propagation ev;
-        if Dom_ext.shift_key ev then S.run_highlighted_sidebar st
+    | "Enter" ->
+        Web_dom.ev_prevent_default ev;
+        Web_dom.ev_stop_propagation ev;
+        if Web_dom.ev_shift ev then S.run_highlighted_sidebar st
         else S.run_highlighted st
-    | Some "k" when Dom_ext.meta_key ev || Dom_ext.ctrl_key ev ->
-        Dom_ext.prevent_default ev;
+    | "k" when Web_dom.ev_meta ev || Web_dom.ev_ctrl ev ->
+        Web_dom.ev_prevent_default ev;
         S.close st
     | _ -> ()
   else
-    match Dom_ext.key_ ev with
-    | Some "k"
-      when (Dom_ext.meta_key ev || Dom_ext.ctrl_key ev)
-           && not (Dom_ext.shift_key ev || Dom_ext.alt_key ev) ->
-        Dom_ext.prevent_default ev;
+    match Web_dom.ev_key ev with
+    | "k"
+      when (Web_dom.ev_meta ev || Web_dom.ev_ctrl ev)
+           && not (Web_dom.ev_shift ev || Web_dom.ev_alt ev) ->
+        Web_dom.ev_prevent_default ev;
         S.open_palette st
-    | Some "m"
-      when (Dom_ext.meta_key ev || Dom_ext.ctrl_key ev)
-           && Dom_ext.shift_key ev ->
+    | "m"
+      when (Web_dom.ev_meta ev || Web_dom.ev_ctrl ev)
+           && Web_dom.ev_shift ev ->
         (* cljs mod+shift+m -> editor/move-blocks -> cmdk move mode *)
-        Dom_ext.prevent_default ev;
+        Web_dom.ev_prevent_default ev;
         S.open_palette ~move:true st
     | _ -> ()
 
-let handle_click st (ev : Dom_ext.event) =
-  match Dom_ext.target ev with
+let handle_click st (ev : Web_dom.ev) =
+  match Web_dom.ev_target ev with
   | None -> ()
   | Some el ->
-      (match Dom_ext.closest el "#search-button" with
+      (match Web_dom.el_closest el "#search-button" with
        | Some _ -> S.open_palette st
        | None ->
            (* outside click closes: the (unstyled) LUI backdrop does not
               cover the page, so dismiss here too *)
            if (S.get st).S.open_
-              && Dom_ext.closest el ".cp__cmdk__modal" = None
+              && Web_dom.el_closest el ".cp__cmdk__modal" = None
            then S.close st);
-      (match Dom_ext.closest el ".cp__cmdk [data-cmdk-clear-filter]" with
+      (match Web_dom.el_closest el ".cp__cmdk [data-cmdk-clear-filter]" with
        | Some _ ->
-           Dom_ext.prevent_default ev;
+           Web_dom.ev_prevent_default ev;
            S.clear_filter st
        | None -> ());
       (match
-         Dom_ext.closest el ".cp__cmdk [data-cmdk-group]"
+         Web_dom.el_closest el ".cp__cmdk [data-cmdk-group]"
        with
        | Some g -> (
-           Dom_ext.prevent_default ev;
+           Web_dom.ev_prevent_default ev;
            match
              Option.bind
-               (Dom_ext.get_attribute g "data-cmdk-group") gid_of_name
+               (Web_dom.el_get_attr g "data-cmdk-group") gid_of_name
            with
            | Some gid ->
                let v = S.get st in
                S.toggle_expand st gid (not (List.mem gid v.S.expanded))
            | None -> ())
        | None ->
-           match Dom_ext.closest el ".cp__cmdk [data-item-key]" with
+           match Web_dom.el_closest el ".cp__cmdk [data-item-key]" with
            | Some wrap -> (
-               match Dom_ext.get_attribute wrap "data-item-key" with
+               match Web_dom.el_get_attr wrap "data-item-key" with
                | Some key ->
                    let v = S.get st in
                    (match
@@ -880,20 +901,20 @@ let handle_click st (ev : Dom_ext.event) =
                | None -> ())
            | None -> ())
 
-let handle_mousemove st (ev : Dom_ext.event) =
+let handle_mousemove st (ev : Web_dom.ev) =
   let v = S.get st in
-  if v.S.open_ && (Dom_ext.movement_x ev <> 0.0 || Dom_ext.movement_y ev <> 0.0)
+  if v.S.open_ && (Web_dom.ev_movement_x ev <> 0.0 || Web_dom.ev_movement_y ev <> 0.0)
   then
-    match Dom_ext.target ev with
+    match Web_dom.ev_target ev with
     | Some el -> (
-        match Dom_ext.closest el ".cp__cmdk" with
+        match Web_dom.el_closest el ".cp__cmdk" with
         | Some _ -> (
             let idx =
               Option.bind
-                (Dom_ext.closest el ".cp__cmdk [data-item-index]")
+                (Web_dom.el_closest el ".cp__cmdk [data-item-index]")
                 (fun wrap ->
                   Option.bind
-                    (Dom_ext.get_attribute wrap "data-item-index")
+                    (Web_dom.el_get_attr wrap "data-item-index")
                     int_of_string_opt)
             in
             match idx with
@@ -904,9 +925,9 @@ let handle_mousemove st (ev : Dom_ext.event) =
     | None -> ()
 
 let install_listeners st =
-  Dom_ext.add_document_listener "keydown" (handle_keydown st) true;
-  Dom_ext.add_document_listener "click" (handle_click st) true;
-  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) true
+  Web_dom.add_document_listener "keydown" (handle_keydown st) true;
+  Web_dom.add_document_listener "click" (handle_click st) true;
+  Web_dom.add_document_listener "mousemove" (handle_mousemove st) true
 
 (* modal shell mirrors shui dialog markup: overlay + centered
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
@@ -943,7 +964,7 @@ let render (_ms : Model.t Signal.signal) : t =
   let st = S.make context.Lui_ui.ui_scheduler in
   (* empty-conditional slots render as <raw-text> placeholders; the
      observer swap must be armed before cmdk mounts on a fresh page *)
-  Editor_dom.ensure_raw_text_observer ();
+  Web_dom.ensure_raw_text_observer ();
   install_listeners st;
   let open_sig =
     Signal.map (fun (v : S.view) -> v.S.open_) st.S.vs.Signal.state_signal

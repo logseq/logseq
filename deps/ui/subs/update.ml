@@ -1,6 +1,84 @@
-(* Pure reducer: Model.t -> Action.t -> Model.t *)
+(* Reducer: Model.t -> Action.t -> Model.t, plus the per-action effect
+   pass (Update.apply) — one dispatch path for every action, whether it
+   arrives through Runtime.send or a LUI event. *)
 
 open Model
+
+(* side effects of actions — run inside the dispatch (Update.apply) on
+   the pre-update action, before the state transition *)
+let effects (action : Action.t) : unit =
+  match action with
+  | Action.Boot_graph_ready repo ->
+      Runtime.current_repo := Some repo;
+      Runtime.current_graph_uuid := None;
+      Runtime.hooks.on_graph_opened repo;
+      Runtime.hooks.rtc_graph_ready repo
+  | Action.Graph_closed ->
+      Runtime.current_repo := None;
+      Runtime.current_page := None;
+      Runtime.current_route := None
+  | Action.Page_loaded page ->
+      Runtime.hooks.nav_load_done ();
+      (* a fresh full-fetch replaces the tree at an unknown rev — the
+         delta basis only survives splices applied through Page_delta *)
+      if not (Page_delta.is_own_commit page) then Page_delta.reset ();
+      Runtime.current_page := Some page;
+      (* splice-merged loads republish the same page: push the items
+         into the mounted list's signal so rows repaint even when the
+         view skips a remount *)
+      Runtime.push_page_items page;
+      (* cljs route.cljs update-page-title!: document.title follows the
+         loaded page's title *)
+      Web_dom.set_document_title page.Model.page_title;
+      Runtime.sync_hash_graph_id ();
+      (match !Runtime.after_page_load, page.Model.page_uuid with
+       | Some (want, f), Some u when u = want ->
+           Runtime.after_page_load := None;
+           f ()
+       | _ -> ())
+  | Action.Page_load_failed ->
+      Runtime.hooks.nav_load_done ();
+      Runtime.after_page_load := None
+  | Action.Journals_loaded js ->
+      Runtime.hooks.nav_load_done ();
+      (* a fresh full-fetch replaces every journal tree at an unknown
+         rev — the delta basis only survives splices applied through
+         Page_delta *)
+      Page_delta.reset ();
+      Runtime.push_journals_items js
+  | Action.Journals_spliced js ->
+      Runtime.hooks.nav_load_done ();
+      Runtime.push_journals_items js
+  | Action.Navigate_to r ->
+      Page_delta.reset ();
+      Runtime.clear_page_items ();
+      Runtime.clear_journal_items ();
+      !Runtime.on_navigate ();
+      Runtime.current_page := None;
+      Runtime.current_route := Some r;
+      (* in-graph routes always carry ?graph-id — navigation call sites
+         write raw hashes, so re-append it here after the hash settles *)
+      (match r with
+       | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
+       | _ -> Runtime.sync_hash_graph_id ());
+      (* cljs route.cljs static-title for non-page routes (page routes
+         get their title when Page_loaded lands) *)
+      (match r with
+       | Model.Home -> Web_dom.set_document_title "Logseq"
+       | Model.Journals ->
+           Web_dom.set_document_title (I18n.t "nav/all-journals")
+       | Model.All_pages ->
+           Web_dom.set_document_title (I18n.t "nav.all-pages/title")
+       | Model.All_graphs ->
+           Web_dom.set_document_title (I18n.t "mobile.tab/graphs")
+       | Model.Settings ->
+           Web_dom.set_document_title (I18n.t "nav/settings")
+       | Model.Import ->
+           Web_dom.set_document_title (I18n.t "import/title")
+       | Model.Library | Model.Not_found _ ->
+           Web_dom.set_document_title "Logseq"
+       | Model.Page _ | Model.Block_zoom _ -> ())
+  | _ -> ()
 
 let update (model : t) (action : Action.t) : t =
   match action with
@@ -10,6 +88,7 @@ let update (model : t) (action : Action.t) : t =
          reports — a stale "on.idle" would let e2e switch-graph proceed
          while the navigation is still in flight *)
       { model with phase = Ready; repo = Some repo; rtc = None }
+  | Graph_closed -> { model with repo = None; rtc = None }
   | Repos_loaded repos -> { model with repos }
   | Page_loaded page ->
       { model with
@@ -25,7 +104,9 @@ let update (model : t) (action : Action.t) : t =
              match model.route_page with
              | Some p
                when { p with Model.page_blocks = [] }
-                    = { page with page_blocks = [] } -> true
+                    = { page with page_blocks = [] }
+                    && Runtime.has_page_items ~scope:"main"
+                         ~puuid:page.Model.page_uuid -> true
              | _ -> false
            then model.data_gen
            else model.data_gen + 1)
@@ -36,35 +117,34 @@ let update (model : t) (action : Action.t) : t =
       ; page_missing = true
       ; data_gen = model.data_gen + 1
       }
-  | Journals_loaded js ->
-      { model with
-        journals = js
-      ; data_gen =
-          (let rec prefix_same a b =
-             match a, b with
-             | [], _ -> true
-             | (x : Model.page) :: xs, (y : Model.page) :: ys ->
-                 { x with Model.page_blocks = [] }
-                 = { y with Model.page_blocks = [] }
-                 && prefix_same xs ys
-             | _ -> false
-           in
-           if
-             (* delta splices only move page_blocks and pagination only
-                appends days — both reach the mounted journals list
-                through its data signal, so skipping the gen bump keeps
-                the outer list (and the scroll offset) alive. The first
-                load ([] -> days) still bumps: the placeholder has to
-                swap for the list *)
-             model.journals <> [] && prefix_same model.journals js
-           then model.data_gen
-           else model.data_gen + 1)
-      }
+  | Journals_loaded js | Journals_spliced js ->
+      (* the journals view is signal-driven end to end (keyed items,
+         keyed blocks, dyn'd refs) — a publish never needs a data_gen
+         bump; the collections repaint or reconcile themselves *)
+      { model with journals = js }
   | Refs_loaded refs ->
       { model with
         page_refs = refs
       ; data_gen =
           (if refs = model.page_refs then model.data_gen
+           else model.data_gen + 1)
+      }
+  | Ref_parents_loaded entries ->
+      (* merge into the keyed assoc — linked and unlinked fetches each
+         contribute their own group pages; an unchanged merge keeps the
+         same list so refs_eq's physical compare holds *)
+      let merged =
+        List.fold_left
+          (fun acc (k, v) ->
+            match List.assoc_opt k acc with
+            | Some v' when v' = v -> acc
+            | _ -> (k, v) :: List.remove_assoc k acc)
+          model.ref_parents entries
+      in
+      { model with
+        ref_parents = merged
+      ; data_gen =
+          (if merged == model.ref_parents then model.data_gen
            else model.data_gen + 1)
       }
   | Unlinked_loaded refs ->
@@ -87,6 +167,7 @@ let update (model : t) (action : Action.t) : t =
       ; route_page = None
       ; page_missing = false
       ; page_refs = []
+      ; ref_parents = []
       ; unlinked_refs = []
       ; unlinked_exists = false
       ; editing_title = false
@@ -145,6 +226,60 @@ let update (model : t) (action : Action.t) : t =
   | Help_toggle -> { model with help_open = not model.help_open }
   | Rtc_state rtc -> { model with rtc = Some rtc }
   | Rtc_state_clear -> { model with rtc = None }
+  | Search_index_progress ev ->
+      (* cljs persist_db/browser.cljs thread-api/search-index-build-progress:
+         :running shows + tracks, :completed shows at 100% (the event
+         layer sends Search_index_hide 1.5s later), :idle hides unless
+         the last build completed. vector-index stages aren't surfaced *)
+      let ib = model.index_build in
+      let visible_repo =
+        model.repo = Some ev.ip_repo || ib.ib_repo = ev.ip_repo
+      in
+      if (not visible_repo) || ev.ip_stage = "vector-index" then model
+      else
+        let keep =
+          { ib with
+            ib_status = ev.ip_status
+          ; ib_repo = ev.ip_repo
+          ; ib_build_id =
+              (match ev.ip_build_id with
+               | Some _ -> ev.ip_build_id
+               | None -> ib.ib_build_id)
+          }
+        in
+        (match ev.ip_status with
+         | "idle" ->
+             if ib.ib_status = "completed" then model
+             else
+               { model with
+                 index_build =
+                   { keep with ib_visible = false; ib_running = false }
+               }
+         | "running" | "completed" ->
+             { model with
+               index_build =
+                 { keep with
+                   ib_visible = true
+                 ; ib_running = ev.ip_status = "running"
+                 ; ib_progress = max 0 (min 100 ev.ip_progress)
+                 }
+             }
+         | _ -> model)
+  | Search_index_hide (repo, build_id) ->
+      let ib = model.index_build in
+      if ib.ib_repo = repo && ib.ib_build_id = Some build_id then
+        { model with index_build = { ib with ib_visible = false } }
+      else model
+  | Rtc_flow_flags { downloading; uploading } ->
+      { model with rtc_downloading = downloading
+      ; rtc_uploading = uploading
+      }
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model
+
+(* the single dispatch path — every action gets its effect pass, then
+   the state transition (wired as the Lui_app reducer in main.ml) *)
+let apply (model : t) (action : Action.t) : t =
+  effects action;
+  update model action

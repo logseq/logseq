@@ -14,10 +14,6 @@ open Promise_ext
 type hooks =
   { reload : unit -> unit
       (** full route reload — the delta-less/failed-splice fallback *)
-  ; after_apply : Wire.t list -> unit
-      (** refresh views mounted outside the model (query instances);
-          the batch's unioned affected-keys let insts skip txs that
-          can't change them *)
   ; refresh_page_side : Model.page -> unit
       (** the side-fetches a page load also runs (refs, unlinked) *)
   ; prune_overrides : string list -> unit
@@ -162,7 +158,6 @@ and apply_pending () : unit Js.Promise.t =
     else List.concat_map Page_delta.delta_affected deltas
   in
   let finish () =
-    perf_time "after_apply" (fun () -> h.after_apply affected);
     perf_time "sync_subs"
       (fun () -> Subs_state.run_sync_subs affected);
     (* every path that calls finish is a remote/non-own batch — a dup

@@ -3,6 +3,19 @@
 
 open Test_check
 
+(* tests exercising model-derived readers stub the live model through
+   Runtime.read_model *)
+let model_stub = ref Model.initial
+
+let () = Runtime.read_model := (fun () -> !model_stub)
+
+let set_page p = model_stub := { !model_stub with Model.route_page = p }
+
+let set_journals js =
+  model_stub := { !model_stub with Model.journals = js }
+
+let set_route r = model_stub := { !model_stub with Model.route = r }
+
 (* ---- Model.move_selected_top_blocks ---- *)
 
 let test_move () =
@@ -281,17 +294,17 @@ let test_update_popups () =
   check "title edit done" (not m2.editing_title);
   (* page_menu / appearance / confirm are mutually exclusive *)
   let m3 =
-    Update.update m2 (Action.Page_menu_set (Some (10., 20., true)))
+    Update.update m2 (Action.Page_menu_set (Some (10., 20., true, None)))
   in
-  check "page_menu set" (m3.page_menu = Some (10., 20., true));
+  check "page_menu set" (m3.page_menu = Some (10., 20., true, None));
   let m4 = Update.update m3 (Action.Appearance_set (Some (1., 2.))) in
   check "appearance clears page_menu"
     (m4.appearance = Some (1., 2.) && m4.page_menu = None);
   let m5 =
-    Update.update m4 (Action.Page_menu_set (Some (3., 4., false)))
+    Update.update m4 (Action.Page_menu_set (Some (3., 4., false, None)))
   in
   check "page_menu clears appearance"
-    (m5.page_menu = Some (3., 4., false) && m5.appearance = None);
+    (m5.page_menu = Some (3., 4., false, None) && m5.appearance = None);
   let m6 =
     Update.update m5
       (Action.Confirm_set
@@ -333,7 +346,7 @@ let test_update_popups2 () =
   let dirty =
     { Model.initial with
       Model.editing_title = true
-    ; page_menu = Some (0., 0., true)
+    ; page_menu = Some (0., 0., true, None)
     ; appearance = Some (1., 1.)
     ; unlinked_open = true
     ; unlinked_search = true
@@ -435,13 +448,13 @@ let test_fuzzy2 () =
   check "len dist equal" (Fuzzy.str_len_distance "abc" "xyz" = 1.0);
   check "len dist empty" (Fuzzy.str_len_distance "" "" = 1.0);
   check "len dist half" (Fuzzy.str_len_distance "ab" "abcd" = 0.5);
-  check "starts_with" (Fuzzy.starts_with "foobar" "foo");
+  check "starts_with" (Str_util.starts_with "foobar" "foo");
   check "starts_with neg"
-    (not (Fuzzy.starts_with "foo" "foobar"));
-  check "index_of empty" (Fuzzy.index_of "abc" "" = Some 0);
-  check "index_of mid" (Fuzzy.index_of "abc" "bc" = Some 1);
-  check "index_of miss" (Fuzzy.index_of "abc" "bd" = None);
-  check "index_of longer" (Fuzzy.index_of "ab" "abc" = None);
+    (not (Str_util.starts_with "foo" "foobar"));
+  check "index_of empty" (Str_util.index_of "abc" "" = Some 0);
+  check "index_of mid" (Str_util.index_of "abc" "bc" = Some 1);
+  check "index_of miss" (Str_util.index_of "abc" "bd" = None);
+  check "index_of longer" (Str_util.index_of "ab" "abc" = None);
   check "score exact > substring"
     (Fuzzy.score "foo" "foobar" > Fuzzy.score "foo" "xfoox");
   check "score substring > subsequence"
@@ -626,7 +639,7 @@ let test_title_refs2 () =
   let tm = Title_refs.new_tag_map "Baz" "u2" in
   (match Wire.get tm "db/ident" with
    | Some (Wire.Keyword i) ->
-       check "new_tag_map ident" (Fuzzy.starts_with i "user.class/Baz-")
+       check "new_tag_map ident" (Str_util.starts_with i "user.class/Baz-")
    | _ -> check "new_tag_map ident" false);
   check "new_tag_map tags + extends"
     (Wire.get tm "block/tags"
@@ -905,15 +918,14 @@ let test_editor_state () =
     (not (Editor_state.selection_active ()))
 
 let test_editor_state_rt () =
-  let saved_page = !Runtime.current_page
-  and saved_journals = !Runtime.current_journals in
+  let saved_model = !model_stub in
   let gc = block "g" "gc" in
   let coll =
     { (block ~children:[ gc ] "c" "child") with
       Model.block_default_collapsed = true }
   in
   let t1 = block "t1" "a" and t2 = block "t2" "b" in
-  Runtime.current_page := Some (page [ coll; t1; t2 ]);
+  set_page (Some (page [ coll; t1; t2 ]));
   eqi "flat_all includes collapsed subtree" 4
     (List.length (Editor_state.flat_all ()));
   let vis = Editor_state.flat_visible () in
@@ -922,7 +934,7 @@ let test_editor_state_rt () =
        (fun (b : Model.block) -> Option.value b.block_uuid ~default:"")
        vis
      = [ "c"; "t1"; "t2" ]);
-  check "find via current_page" (Option.is_some (Editor_state.find "g"));
+  check "find via route_page" (Option.is_some (Editor_state.find "g"));
   (match Editor_state.find_parent "t1" with
    | Some (None, i) -> check "top-level parent idx" (i = 1)
    | _ -> check "top-level parent idx" false);
@@ -949,12 +961,11 @@ let test_editor_state_rt () =
   check "effective_collapsed default false"
     (not (Editor_state.effective_collapsed t1));
   (* journals fallback when no page is loaded *)
-  Runtime.current_page := None;
-  Runtime.current_journals := [ page [ block "j" "j" ] ];
+  set_page None;
+  set_journals [ page [ block "j" "j" ] ];
   eqi "page_blocks journals fallback" 1
     (List.length (Editor_state.page_blocks ()));
-  Runtime.current_page := saved_page;
-  Runtime.current_journals := saved_journals
+  model_stub := saved_model
 
 (* ---- Outliner_ops pure op builders ---- *)
 
@@ -1008,16 +1019,16 @@ let test_outliner_ops2 () =
   (* normalized_title: markdown heading split out unless the block has a
      display type (the saved map itself is built async via
      block_map_parsed — Title_refs resolves entities through the worker) *)
-  let saved_page = !Runtime.current_page in
-  Runtime.current_page := None;
+  let saved_model = !model_stub in
+  set_page None;
   eqs "normalized_title strips heading" "hello [[P]]"
     (Outliner_ops.normalized_title "u" "  ## hello [[P]]");
   let codeblk =
     { (block "cb" "x") with Model.block_display_type = Some "code" } in
-  Runtime.current_page := Some (page [ codeblk ]);
+  set_page (Some (page [ codeblk ]));
   eqs "normalized_title code" "## raw"
     (Outliner_ops.normalized_title "cb" " ## raw");
-  Runtime.current_page := saved_page;
+  model_stub := saved_model;
   check "delete_blocks op"
     (match op_name_args (Outliner_ops.delete_blocks [ "a" ]) with
      | Some ("delete-blocks", [ Wire.List [ Wire.Uuid "a" ]; Wire.Map [] ]) ->
@@ -1205,17 +1216,15 @@ let test_cmdk_items () =
    | _ -> check "create tag item" false);
   (* filter rows: leading current-page row only when a page is current *)
   eqi "filters no page" 5 (List.length (Cmdk_state.filter_items ()));
-  let saved_route = !Runtime.current_route
-  and saved_page = !Runtime.current_page in
-  Runtime.current_route := Some (Model.Page "x");
-  Runtime.current_page := Some (page []);
+  let saved_model = !model_stub in
+  set_route (Model.Page "x");
+  set_page (Some (page []));
   let fs = Cmdk_state.filter_items () in
   check "filters with page"
     (List.length fs = 6
     && (List.hd fs).Cmdk_state.act
        = Cmdk_state.Set_filter Cmdk_state.G_current_page);
-  Runtime.current_route := saved_route;
-  Runtime.current_page := saved_page;
+  model_stub := saved_model;
   check "file_items empty q" (Cmdk_state.file_items "" = []);
   check "file_items match"
     (match Cmdk_state.file_items "config" with
@@ -1257,10 +1266,9 @@ let test_cmdk_rows () =
     (ib.iicon = "point-filled" && ib.act = Cmdk_state.Open_block "bu2"
     && ib.header = Some "P" && ib.ikey = "node-bu2-3");
   (* current-page badge needs the page route + loaded page *)
-  let saved_route = !Runtime.current_route
-  and saved_page = !Runtime.current_page in
-  Runtime.current_route := Some (Model.Page "x");
-  Runtime.current_page := Some (page []);
+  let saved_model = !model_stub in
+  set_route (Model.Page "x");
+  set_page (Some (page []));
   check "badge page on current page"
     (Cmdk_state.badge_of row true "p" = Cmdk_state.Text_badge);
   check "badge block on current page"
@@ -1268,8 +1276,7 @@ let test_cmdk_rows () =
      = Cmdk_state.Header_badge);
   check "badge other page"
     (Cmdk_state.badge_of row true "other" = Cmdk_state.No_badge);
-  Runtime.current_route := saved_route;
-  Runtime.current_page := saved_page;
+  model_stub := saved_model;
   (* search opts *)
   let so = Cmdk_state.search_opts ~dev:true true 20 in
   check "search_opts move-mode"
@@ -2175,11 +2182,17 @@ let test_views_db () =
 
 (* ---- views_state codecs + query ---- *)
 
-external stub_el : Views_dom.el = "null"
+let test_sched = Signal.scheduler ()
 
 let mk_view_inst feature =
-  Views_state.make ~kind:(Views_state.KQuery { block_uuid = "b1" })
-    ~feature ~owner:Wire.Nil ~container:stub_el
+  Views_state.make ~sched:test_sched
+    ~kind:(Views_state.KQuery { block_uuid = "b1" })
+    ~feature ~owner:Wire.Nil
+
+(* Signal.set stages until stabilize — publish before reading V.get *)
+let vget inst =
+  Signal.stabilize test_sched;
+  Views_state.get inst
 
 let test_views_state () =
   let s =
@@ -2226,21 +2239,24 @@ let test_views_state () =
      = ([], true));
   (* ctx_of: query-result emits row uuids; filters land when set *)
   let inst = mk_view_inst "query-result" in
-  inst.Views_state.sorting <-
-    [ { Views_state.s_id = "p/a"; s_asc = false } ];
-  inst.input <- "q";
-  inst.query_rows <- [ "r1" ];
-  inst.filters <- f;
-  inst.filters_or <- true;
+  Views_state.set inst
+    { (vget inst) with
+      Views_state.sorting = [ { Views_state.s_id = "p/a"; s_asc = false } ]
+    ; input = "q"
+    ; query_rows = [ "r1" ]
+    ; filters = f
+    ; filters_or = true
+    };
+  let vs = vget inst in
   let ctx = Views_state.ctx_of inst in
   check "ctx feature"
     (Wire.get ctx "feature-type" = Some (Wire.Keyword "query-result"));
   check "ctx sorting"
-    (Wire.get ctx "sorting" = Some (Views_state.sorting_to_wire inst.sorting));
+    (Wire.get ctx "sorting" = Some (Views_state.sorting_to_wire vs.sorting));
   check "ctx input" (Wire.get ctx "input" = Some (Wire.String "q"));
   check "ctx filters"
     (Wire.get ctx "filters"
-     = Some (Views_state.filters_to_wire inst.filters inst.filters_or));
+     = Some (Views_state.filters_to_wire vs.filters vs.filters_or));
   check "ctx query rows"
     (Wire.get ctx "query-row-uuids"
      = Some (Wire.Array [ Wire.Uuid "r1" ]));
@@ -2248,7 +2264,9 @@ let test_views_state () =
     (Wire.get ctx "initial-row-count" = None);
   check "ctx group-by"
     (let inst2 = mk_view_inst "x" in
-     inst2.Views_state.group_by <- Some "p/g";
+     Views_state.update inst2 (fun s ->
+         { s with Views_state.group_by = Some "p/g" });
+     Signal.stabilize test_sched;
      Wire.get (Views_state.ctx_of inst2) "group-by-property-ident"
      = Some (Wire.Keyword "p/g"))
 
@@ -2275,7 +2293,7 @@ let test_views_query () =
   (* spec_of *)
   let inst = mk_view_inst "query-result" in
   (match
-     Views_query.spec_of inst (Wire.Map []) "b1" (Views_query.QDsl "(task)")
+     Views_query.spec_of (Wire.Map []) "b1" (Views_query.QDsl "(task)")
    with
    | Ok spec ->
        check "spec dsl kind"
@@ -2289,9 +2307,9 @@ let test_views_query () =
    | Error _ -> check "spec dsl" false);
   check "spec blank error"
     (Result.is_error
-       (Views_query.spec_of inst (Wire.Map []) "b1" Views_query.QBlank));
+       (Views_query.spec_of (Wire.Map []) "b1" Views_query.QBlank));
   (match
-     Views_query.spec_of inst (Wire.Map []) "b1"
+     Views_query.spec_of (Wire.Map []) "b1"
        (Views_query.QDatalog
           (Edn.parse
              "{:query [:find ?e :where [?e :block/title ?t]] :inputs [:today]}"))
@@ -2303,37 +2321,44 @@ let test_views_query () =
    | Error _ -> check "spec datalog" false);
   check "spec datalog missing query"
     (Result.is_error
-       (Views_query.spec_of inst (Wire.Map []) "b1"
+       (Views_query.spec_of (Wire.Map []) "b1"
           (Views_query.QDatalog (wmap [ "x", Wire.Int 1 ]))));
   (* current page title lands in the spec *)
-  let saved_page = !Runtime.current_page in
+  let saved_model = !model_stub and saved_cp = !Runtime.current_page in
+  set_page (Some (page []));
+  (* views still read the derived mirror — set both for this check *)
   Runtime.current_page := Some (page []);
   (match
-     Views_query.spec_of inst (Wire.Map []) "b1" (Views_query.QDsl "x")
+     Views_query.spec_of (Wire.Map []) "b1" (Views_query.QDsl "x")
    with
    | Ok spec ->
        check "spec page title"
          (Wire.get spec "current-page-title" = Some (Wire.String "p"))
    | Error _ -> check "spec page title" false);
-  Runtime.current_page := saved_page;
+  model_stub := saved_model;
+  Runtime.current_page := saved_cp;
   (* decode_result *)
   Views_query.decode_result inst
     (wmap [ "error", wmap [ "message", Wire.String "boom" ] ]);
+  let vs1 = vget inst in
   check "decode error"
-    (inst.Views_state.query_error = Some "boom"
-    && inst.query_rows = [] && inst.query_scalar_rows = []);
+    (vs1.Views_state.query_error = Some "boom"
+    && vs1.query_rows = [] && vs1.query_scalar_rows = []);
   Views_query.decode_result inst
     (wmap [ "rows", Wire.Array [ Wire.Uuid "u1"; Wire.Uuid "u2" ] ]);
+  let vs2 = vget inst in
   check "decode rows"
-    (inst.query_error = None && inst.query_rows = [ "u1"; "u2" ]
-    && inst.query_scalar_rows = []);
+    (vs2.query_error = None && vs2.query_rows = [ "u1"; "u2" ]
+    && vs2.query_scalar_rows = []);
   Views_query.decode_result inst (Wire.Array [ Wire.Int 1; Wire.Int 2 ]);
+  let vs3 = vget inst in
   check "decode scalar rows"
-    (inst.query_rows = []
-    && inst.query_scalar_rows = [ Wire.Int 1; Wire.Int 2 ]);
+    (vs3.query_rows = []
+    && vs3.query_scalar_rows = [ Wire.Int 1; Wire.Int 2 ]);
   (* mixed uuid+scalar goes to scalar rows *)
   Views_query.decode_result inst (Wire.Array [ Wire.Uuid "u1"; Wire.Int 2 ]);
-  check "decode mixed -> scalars" (inst.query_scalar_rows <> []);
+  check "decode mixed -> scalars"
+    ((vget inst).Views_state.query_scalar_rows <> []);
   (* query_value_block *)
   let parent =
     wmap
@@ -2442,7 +2467,8 @@ let ac_it ?group label =
   Popups_state.mk_item ~key:label ~label ?group Popups_state.Noop
 
 let mk_ac kind =
-  { Popups_state.kind; x = 0.; y = 0.; cy = 0.; flip = None; query = ""
+  { Popups_state.kind; x = 0.; y = 0.; cy = 0.; flip = None; flipx = None
+    ; query = ""
   ; tpos = 0; tlen = 0
   ; items = []; chosen = 0; editor = Js.Json.null; auuid = "" }
 
@@ -2639,16 +2665,16 @@ let test_editor_actions () =
     (Outliner_ops.last_inserted_uuid
        (Some (wmap [ "result", wmap [ "blocks", Wire.Array [] ] ]))
      = None);
-  (* Runtime.current_page-backed pure fns *)
-  let saved_page = !Runtime.current_page in
-  Runtime.current_page :=
-    Some
+  (* model route_page-backed pure fns *)
+  let saved_model = !model_stub in
+  set_page
+    (Some
       (page
          [ block ~children:[ block "ca" "CA" ] "a" "A"
          ; block ~children:[ block "gc" "GC" ] "p1" "P1"
          ; block ~children:[ block "gc2" "GC2" ] "p2" "P2"
          ; { (block "top" "T") with
-             Model.block_order_list = Some "1." } ]);
+             Model.block_order_list = Some "1." } ]));
   check "is_descendant"
     (Editor_actions.is_descendant "gc" "p1"
     && not (Editor_actions.is_descendant "gc" "p2")
@@ -2687,10 +2713,10 @@ let test_editor_actions () =
   check "drop_own_order_list no prop"
     (not (Editor_actions.drop_own_order_list "p1" "  " false));
   check "library_context false" (not (Editor_actions.library_context ()));
-  Runtime.current_page :=
-    Some { (page []) with Model.page_is_library = true };
+  set_page
+    (Some { (page []) with Model.page_is_library = true });
   check "library_context true" (Editor_actions.library_context ());
-  Runtime.current_page := saved_page
+  model_stub := saved_model
 
 (* ---- update: remaining arms ---- *)
 
@@ -2702,7 +2728,8 @@ let test_update2 () =
   let rtc =
     { Model.rtc_lock = true; rtc_ws_state = "on"
     ; rtc_local_tx = Some 3; rtc_remote_tx = Some 4
-    ; rtc_pending_local = 1; rtc_pending_asset = 2; rtc_pending_server = 3 }
+    ; rtc_pending_local = 1; rtc_pending_asset = 2; rtc_pending_server = 3
+    ; rtc_online_users = []; rtc_missing_files = [] }
   in
   let m2 = Update.update m1 (Action.Rtc_state rtc) in
   check "rtc_state sets" (m2.Model.rtc = Some rtc);
@@ -2957,10 +2984,10 @@ let test_graphs_ops () =
   Graphs_ops.repos := saved
 
 let test_boot () =
-  eqs "unquote" "x" (Boot.unquote "\"x\"");
-  eqs "unquote bare" "x" (Boot.unquote "x");
-  eqs "unquote empty" "" (Boot.unquote "\"\"");
-  eqs "unquote single" "\"" (Boot.unquote "\"")
+  eqs "unquote" "x" (Platform.storage_unquote "\"x\"");
+  eqs "unquote bare" "x" (Platform.storage_unquote "x");
+  eqs "unquote empty" "" (Platform.storage_unquote "\"\"");
+  eqs "unquote single" "\"" (Platform.storage_unquote "\"")
 
 (* ---- update: Toast_dismiss_key + confirm reset on navigate ---- *)
 
@@ -3042,7 +3069,8 @@ let test_views_pinned () =
    | None -> check "vpinned decodes idents only" false);
   let inst = mk_view_inst "x" in
   (match Views_wire.decode_view_ent ent with
-   | Some v -> Views_state.apply_view_entity inst v
+   | Some v ->
+       Views_state.update inst (fun s -> Views_state.apply_view_entity s v)
    | None -> check "pinned applied" false);
   let col id =
     { Views_state.c_id = id; c_name = ""; c_type = "default"
@@ -3050,12 +3078,12 @@ let test_views_pinned () =
   in
   (* select/id are always pinned, the rest come from inst.pinned *)
   check "is_pinned select/id always"
-    (Views_table.is_pinned inst (col "select")
-    && Views_table.is_pinned inst (col "id"));
+    (Views_table.is_pinned (vget inst) (col "select")
+    && Views_table.is_pinned (vget inst) (col "id"));
   check "is_pinned member"
-    (Views_table.is_pinned inst (col "user/rating"));
+    (Views_table.is_pinned (vget inst) (col "user/rating"));
   check "is_pinned non-member"
-    (not (Views_table.is_pinned inst (col "p/other")))
+    (not (Views_table.is_pinned (vget inst) (col "p/other")))
 
 (* ---- edn/wire edge cases ---- *)
 
@@ -3145,11 +3173,11 @@ let test_title_refs3 () =
 
 let test_selected_uuids () =
   (* no mounted editor state -> empty selection -> empty list *)
-  let saved_page = !Runtime.current_page in
-  Runtime.current_page := Some (page [ block "a" "A"; block "b" "B" ]);
+  let saved_model = !model_stub in
+  set_page (Some (page [ block "a" "A"; block "b" "B" ]));
   check "selected_uuids empty sel"
     (Editor_actions.selected_uuids () = []);
-  Runtime.current_page := saved_page
+  model_stub := saved_model
 
 (* ---- Update.update: remaining arm ---- *)
 
@@ -3222,7 +3250,7 @@ let test_decode7 () =
 let json_obj kvs =
   let d = Js.Dict.empty () in
   List.iter (fun (k, v) -> Js.Dict.set d k v) kvs;
-  Sdk_convert.json_obj d
+  Js.Json.object_ d
 
 let test_sdk_convert2 () =
   (* entity maps with uuid+title gain content/fullTitle aliases *)
@@ -3864,17 +3892,13 @@ let test_props_value () =
   check "parse_date pad" (Properties_value.parse_date "2026-9-27" = None);
   check "ms_of_value int" (Properties_value.ms_of_value (Wire.Int 5) = Some 5.);
   check "ms_of_value no" (Properties_value.ms_of_value (Wire.String "x") = None);
-  (* journal-day map -> utc midnight of that day *)
-  let ms =
-    Properties_value.ms_of_datetime_value
-      (wmap [ ("block/journal-day", Wire.Int 20260927) ])
-  in
-  check "ms_of_datetime_value journal-day"
-    (ms = Some (Js.Date.utc ~year:2026. ~month:8. ~date:27. ()));
-  check "ms_of_datetime_value raw"
-    (Properties_value.ms_of_datetime_value (Wire.Int 9) = Some 9.);
-  check "ms_of_datetime_value none"
-    (Properties_value.ms_of_datetime_value (wmap []) = None)
+  (* journal-day map -> the day itself, no tz round-trip *)
+  check "ymd_of_datetime_value journal-day"
+    (Properties_value.ymd_of_datetime_value
+       (wmap [ ("block/journal-day", Wire.Int 20260927) ])
+    = Some (2026, 9, 27));
+  check "ymd_of_datetime_value none"
+    (Properties_value.ymd_of_datetime_value (wmap []) = None)
 
 let test_props_value2 () =
   let mkchoice classes =

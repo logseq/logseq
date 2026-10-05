@@ -11,7 +11,7 @@ open Promise_ext
 open Lui_elements
 
 module S = Editor_state
-module D = Editor_dom
+module D = Web_dom
 module W = Wire
 module U = I18n
 
@@ -34,7 +34,7 @@ let reveal uuid =
   | Some blk -> (
       el_scroll_into_view blk;
       match
-        Properties_dom.doc_query
+        Web_dom.query_selector
           ("#ls-block-" ^ uuid ^ " .ls-comment-add textarea")
       with
       | Some el -> D.el_focus el
@@ -44,7 +44,7 @@ let reveal uuid =
 (* cljs add-comment-to-blocks! → ensure-comments-area-for-blocks then
    reveal; the endpoint inserts the area child when it does not exist yet *)
 let ensure_for uuids =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -100,7 +100,7 @@ let insert_comment_op area_uuid text =
   Outliner_ops.insert_blocks [ blk ] area_uuid ~sibling:false
 
 let add_box_of area_uuid =
-  Properties_dom.doc_query
+  Web_dom.query_selector
     ("#ls-block-" ^ area_uuid ^ " .ls-comment-add textarea")
 
 let submit area_uuid =
@@ -116,7 +116,7 @@ let submit area_uuid =
   | None -> ()
 
 let delete uuid =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | Some repo ->
       ignore
         (let* _ =

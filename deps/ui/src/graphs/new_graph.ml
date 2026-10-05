@@ -35,8 +35,8 @@ let checkbox ~key ~id ~checked ~on_click =
            []) ]
 
 let name_input () =
-  match Browser_ui.qs ".new-graph input" with
-  | Some el -> Browser_ui.value el |> String.trim
+  match Web_dom.query_selector ".new-graph input" with
+  | Some el -> Web_dom.el_value el |> String.trim
   | None -> ""
 
 let invalid_name name = Graphs_ops.invalid_chars name <> []
@@ -83,14 +83,15 @@ let body (_ms : Model.t Signal.signal) : t =
   let creating = Signal.state ctx.ui_scheduler false in
   let node =
     dom ~key:"new-graph" ~style_class:"new-graph"
-      [ dom ~key:"ng-h" ~tag:"h2"
-          ~style_class:
-            "ui__dialog-title" ~text:T.create_new_graph []
-      ; dom ~key:"ng-in" ~tag:"input"
+      [ dom ~key:"ng-in" ~tag:"input"
+          ~style_class:"ui__input"
           ~attrs:
             [ ("placeholder", T.graph_name_placeholder)
             ; ("autocomplete", "off")
             ; ("type", "text")
+            (* cljs shui/input is h-10; .ui__input defaults to the 29px
+               compact variant *)
+            ; ("style", "height:2.5rem")
             ]
           ~events:"keydown"
           ~on_dom_event:(fun n p ->
@@ -104,7 +105,11 @@ let body (_ms : Model.t Signal.signal) : t =
                 | _ -> ())
             | _ -> ())
           []
-      ; if Platform.rtc_test_mode () then
+      ; (* cljs new-db-graph-inner: the sync row shows when
+           user-handler/rtc-group? (dev build, custom sync server, or a
+           cognito rtc group). ?rtc-test=true keeps it reachable in e2e
+           without auth *)
+        if Platform.rtc_test_mode () || Rtc_flows.rtc_group () then
           dom ~key:"ng-rtc" ~style_class:"ls-ng-rtc"
             [ dom ~key:"ng-rtc-row"
                 ~style_class:"ls-ng-row"
@@ -133,11 +138,9 @@ let body (_ms : Model.t Signal.signal) : t =
                        ])
                 ]
             ]
-        else box ~key:"ng-no-rtc" []
+        else box ~key:"ng-no-rtc" ~style_class:"hidden" []
       ; dom ~key:"ng-submit" ~tag:"button" ~text:T.submit ~events:"click"
-          ~style_class:
-            "inline-flex items-center justify-center rounded-md text-sm \
-             font-medium bg-primary text-primary-foreground px-4 py-2"
+          ~style_class:"ui__button ls-btn-primary"
           ~attrs_signal_v:(Logseq_dom.reactive_attrs
                (fun c -> if c then [ ("disabled", "true") ] else [])
                (Signal.value creating))
@@ -147,10 +150,10 @@ let body (_ms : Model.t Signal.signal) : t =
       ]
   in
   ignore
-    (Browser_ui.set_timeout
+    (Web_dom.set_timeout_id
        (fun () ->
-         match Browser_ui.qs ".new-graph input" with
-         | Some el -> Browser_ui.focus el
+         match Web_dom.query_selector ".new-graph input" with
+         | Some el -> Web_dom.el_focus el
          | None -> ())
        32);
   node ctx parent

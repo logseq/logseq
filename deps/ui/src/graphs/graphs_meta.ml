@@ -55,7 +55,7 @@ let upsert repo fields =
 
 (* merge {:last-seen-at now :_v now} (+ :created-at on first sight) *)
 let touch repo =
-  let now = Int64.of_float (Browser_ui.now_ms ()) in
+  let now = Int64.of_float (Platform.date_now_ms ()) in
   let fields =
     [ (Wire.kw "last-seen-at", Wire.Int64 now)
     ; (Wire.kw "_v", Wire.Int64 now) ]

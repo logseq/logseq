@@ -18,8 +18,8 @@ importers:
         specifier: 3.17.11
         version: 3.17.11
       codemirror:
-        specifier: 5.65.18
-        version: 5.65.18
+        specifier: 5.65.21
+        version: 5.65.21
       comlink:
         specifier: ^4.4.2
         version: 4.4.2
@@ -28,7 +28,7 @@ importers:
         version: 0.8.874
     devDependencies:
       vite:
-        specifier: ^8.0.10
+        specifier: ^8.3.2
         version: 8.3.2
 
 packages:
@@ -156,8 +156,8 @@ packages:
   '@tanstack/virtual-core@3.17.11':
     resolution: {integrity: sha512-+ILjvtHup6Y2hzQ6YzwMgX1Q+oQpxEGOXCEsCNaPoIP0VxMbizIBTmYTDtkerkIQS8/CbP1BRuyt8V/8BCsy1g==}
 
-  codemirror@5.65.18:
-    resolution: {integrity: sha512-Gaz4gHnkbHMGgahNt3CA5HBk5lLQBqmD/pBgeB4kQU6OedZmqMBjlRF0LSrp2tJ4wlLNPm2FfaUd1pDy0mdlpA==}
+  codemirror@5.65.21:
+    resolution: {integrity: sha512-6teYk0bA0nR3QP0ihGMoxuKzpl5W80FpnHpBJpgy66NK3cZv5b/d/HY8PnRvfSsCG1MTfr92u2WUl+wT0E40mQ==}
 
   comlink@4.4.2:
     resolution: {integrity: sha512-OxGdvBmJuNKSCMO4NTl1L47VRp6xn2wG4F/2hYzB6tiCb709otOxtEYCSvK80PtjODfXXZu8ds+Nw5kVCjqd2g==}
@@ -418,7 +418,7 @@ snapshots:
 
   '@tanstack/virtual-core@3.17.11': {}
 
-  codemirror@5.65.18: {}
+  codemirror@5.65.21: {}
 
   comlink@4.4.2: {}
 

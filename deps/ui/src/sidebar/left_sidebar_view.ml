@@ -181,7 +181,7 @@ let lp_menu st =
       let items =
         (if recent then []
          else
-           [ item (t "sidebar.left/unfavorite") "star-off" [ "⌘"; "⇧"; "F" ]
+           [ item (t "page/unfavorite") "star-off" [ "⌘"; "⇧"; "F" ]
                (fun () ->
                  if Wire.is_uuid_string target then
                    Sidebar_state.unfavorite st target) ])
@@ -269,7 +269,7 @@ let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
     ~on_click:(fun name _ ->
       if name = "click" then (
         Platform.set_location_hash (Runtime.nav_hash hash);
-        Platform.dispatch "ls:navigate" Js.Json.null))
+        Web_dom.dispatch_custom "ls:navigate" Js.Json.null))
     ()
 
 let tag_nav ~active_route class_ label titles =
@@ -302,11 +302,6 @@ let nav_items ~active_route (checked, tag_titles) =
             (nav_route ~class_:"all-pages-nav"
                ~active:(active_route = Model.All_pages) ~title:(t "nav.all-pages/label")
                ~icon_name:"files" "#/all-pages")
-      | "graph-view" ->
-          Some
-            (nav_route ~class_:"graph-view-nav" ~active:false
-               ~title:(t "nav/graph-view") ~icon_name:"hierarchy"
-               ~shortcut:"g g" "#/graph")
       | "tag/tasks" -> tag_nav ~active_route "tasks" "nav/tasks" tag_titles
       | "tag/assets" -> tag_nav ~active_route "assets" "nav/assets" tag_titles
       | _ -> None)
@@ -354,7 +349,7 @@ let nav_group ms st =
                          if name = "click" then (
                            Platform.set_location_hash
                              (Runtime.nav_hash "#/");
-                           Platform.dispatch "ls:navigate" Js.Json.null))
+                           Web_dom.dispatch_custom "ls:navigate" Js.Json.null))
                        ())
                     :: nav_items ~active_route:route (checked, tag_titles)
                   ))
@@ -365,14 +360,6 @@ let nav_group ms st =
 
 (* ---------- favorites / recents ---------- *)
 
-let str_contains hay needle =
-  let lh = String.length hay and ln = String.length needle in
-  let rec go i =
-    i + ln <= lh
-    && (String.sub hay i ln = needle || go (i + 1))
-  in
-  go 0
-;;
 
 let page_item_el st (p : Model.page) ~li_class ~recent ~key =
   let lp_ref =
@@ -401,8 +388,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
               | None -> ""
             in
             if
-              str_contains cls "sidebar-page-actions"
-              || str_contains cls "ls-icon-dots" then
+              Str_util.contains cls "sidebar-page-actions"
+              || Str_util.contains cls "ls-icon-dots" then
               open_lp payload
             else
               let shift =
@@ -429,12 +416,24 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
         (* cljs .sidebar-page-actions dots button inside .link-item *)
         ; dom ~tag:"button"
             ~style_class:
-              "sidebar-page-actions absolute !bg-transparent right-0 top-0 \
-               px-1.5 scale-75 opacity-40 hover:opacity-80 \
-               active:opacity-100"
+              (* cljs shui/button :size :sm :variant :ghost + the
+                 sidebar-page-actions tail classes *)
+              "active:opacity-80 as-ghost cursor-pointer \
+               disabled:pointer-events-none disabled:opacity-50 \
+               focus-visible:outline-none focus-visible:ring-2 \
+               focus-visible:ring-ring focus-visible:ring-offset-2 \
+               font-medium gap-1 h-7 hover:bg-secondary/70 \
+               hover:text-secondary-foreground inline-flex items-center \
+               justify-center py-1 ring-offset-background rounded \
+               rounded-md select-none sidebar-page-actions absolute \
+               !bg-transparent right-0 top-0 px-1.5 scale-75 \
+               opacity-40 hover:opacity-80 active:opacity-100 text-sm \
+               transition-colors ui__button whitespace-nowrap"
+            (* cljs [:i.relative {:style {:top "4px"}} (tabler-icon "dots")] —
+               tabler-icon default size 18 *)
             [ dom ~tag:"i" ~style_class:"relative"
                 ~attrs:[ ("style", "top: 4px") ]
-                [ icon "dots" ] ] ]
+                [ Icons.icon ~size:18. "dots" ] ] ]
     ]
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
@@ -551,7 +550,11 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
             ~style_class:"item flex items-center gap-1 select-none"
             ~events:"click"
             ~on_dom_event:(fun n _ ->
-              if n = "click" then Sidebar_state.open_dialog "graphs")
+              if n = "click" then
+                (* cljs opens a repos dropdown menu here; until that menu
+                   exists, land on the All graphs page (graph switching,
+                   create, and row actions live there) *)
+                Platform.set_location_hash (Runtime.nav_hash "#/graphs"))
             [ dom ~key:"gsel-th" ~tag:"span" ~style_class:"thumb"
                 [ icon "topology-star" ]
             ; dom ~key:"gsel-n" ~tag:"strong"

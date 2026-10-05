@@ -155,6 +155,7 @@ let with_apply_queue (f : unit -> 'a Js.Promise.t) : 'a Js.Promise.t =
       (Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p);
   p
 
+
 let note_applied rev =
   applied := ISet.add rev !applied;
   (* bound the set — a long session of ops would otherwise grow it *)
@@ -474,6 +475,19 @@ let delta_touches (delta : Wire.t) (page : Model.page) : bool =
    caller must not publish, refetch, or refresh anything);
    [Applied p'] — merged in place, untouched subtrees keep identity;
    [Failed] — relevant but unspliceable: refetch only this page/day.
+(* every uuid a delta addresses — canon rows + tombstones + membership
+   patch parents: the owner-detection key set for multi-page views
+   (journals), where the page holding the touched tree must be found
+   before splicing *)
+let delta_keys (delta : Wire.t) : string list =
+  match parse delta with
+  | Some p ->
+      SMap.fold (fun u _ acc -> u :: acc) p.canon
+        (SMap.fold (fun u _ acc -> u :: acc) p.patches
+           (SSet.fold (fun u acc -> u :: acc) p.deleted []))
+  | None -> []
+
+
    [~strict] (broadcast path) requires every membership patch to be
    contiguous with our materialized rev; the op-response path passes
    ~strict:false — its patches are absolute set-ops from a tx we just

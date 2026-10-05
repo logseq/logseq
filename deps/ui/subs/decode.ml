@@ -381,6 +381,10 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
            | Some t -> Some t
            | None -> Wire.map_get_string w "block/page-name")
        | _ -> Wire.map_get_string w "block/page-name")
+  ; block_page_uuid =
+      (match Wire.get w "block/page" with
+       | Some (Wire.Map _ as p) -> Wire.map_get_uuid p "block/uuid"
+       | _ -> Wire.map_get_uuid w "block/page-uuid")
   ; block_tag_idents = tag_idents
   ; block_icon = block_icon_of_wire w
   ; block_tag_icons = List.filter_map block_icon_of_wire tag_entries
@@ -684,6 +688,29 @@ let rtc_of_wire (w : Wire.t) : Model.rtc =
     | _ -> ""
   in
   let int k = Option.value (Wire.map_get_int w k) ~default:0 in
+  let online_users =
+    match Wire.get w "online-users" with
+    | Some (Wire.Array us) | Some (Wire.List us) ->
+        List.filter_map
+          (fun u ->
+            match Wire.get u "user/uuid" with
+            | Some (Wire.String uuid) ->
+                let name =
+                  match Wire.get u "user/name" with
+                  | Some (Wire.String n) -> n
+                  | _ -> uuid
+                in
+                Some
+                  { Model.ru_uuid = uuid; ru_name = name
+                  ; ru_email =
+                      (match Wire.get u "user/email" with
+                       | Some (Wire.String e) -> Some e
+                       | _ -> None)
+                  }
+            | _ -> None)
+          us
+    | _ -> []
+  in
   { Model.rtc_lock =
       Option.value (Option.bind (Wire.get w "rtc-lock") Wire.as_bool)
         ~default:false
@@ -693,4 +720,15 @@ let rtc_of_wire (w : Wire.t) : Model.rtc =
   ; rtc_pending_local = int "unpushed-block-update-count"
   ; rtc_pending_asset = int "pending-asset-ops-count"
   ; rtc_pending_server = int "pending-server-ops-count"
+  ; rtc_online_users = online_users
+  ; rtc_missing_files =
+      (match Wire.get w "missing-asset-upload-files" with
+       | Some (Wire.Array xs) | Some (Wire.List xs) ->
+           List.filter_map
+             (fun f ->
+               match Wire.get f "file" with
+               | Some (Wire.String s) -> Some s
+               | _ -> None)
+             xs
+       | _ -> [])
   }

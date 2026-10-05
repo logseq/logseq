@@ -38,11 +38,13 @@ let already_exists name =
   List.mem (Graph.full_graph_name name) !repos
 
 (* remote graphs known to the sync server:
-   (name-without-prefix, uuid, e2ee?) *)
-let remote_graphs : (string * string * bool) list ref = ref []
+   (name-without-prefix, uuid, e2ee?, role) — role is the caller's
+   graph_members role ("manager" | "member"), cljs
+   :graph<->user-user-type *)
+let remote_graphs : (string * string * bool * string) list ref = ref []
 
 let list_remote_graphs () =
-  Rtc_ops.sync_app_state !Runtime.current_repo;
+  Rtc_ops.sync_app_state (Runtime.model ()).Model.repo;
   (let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in
   let entries =
     match w with
@@ -62,7 +64,9 @@ let list_remote_graphs () =
               | Some (Wire.Bool b) -> b
               | _ -> false
             in
-            Some (name, id, e2ee)
+            let role =
+              Option.value (Wire.map_get_string g "role") ~default:"" in
+            Some (name, id, e2ee, role)
         | _ -> None)
       entries;
   Js.Promise.resolve !remote_graphs)
@@ -107,6 +111,7 @@ let refresh () =
 let add_repo repo =
   if not (List.mem repo !repos) then begin
     repos := !repos @ [ repo ];
+    Runtime.send (Action.Repos_loaded !repos);
     !on_repos_changed ()
   end
 
@@ -129,7 +134,6 @@ let navigate_journal repo =
   if !nav_req = seq then begin
     Worker_events.reset_rtc ();
     Runtime.send (Action.Boot_graph_ready repo);
-    Runtime.current_repo := Some repo;
     Graph.build_search_index repo;
     Platform.set_location_hash (Runtime.nav_hash "#/");
     Router.resolve ()
@@ -197,8 +201,12 @@ let delete_remote_http uuid =
                [| ("Authorization", "Bearer " ^ token) |])
           ()
       in
-      (let* _ = Fetch.fetchWithInit ("https://api.logseq.io/graphs/" ^ uuid) init in
-      Js.Promise.resolve true)
+      (let* _ =
+         Fetch.fetchWithInit
+           (Rtc_ops.http_base () ^ "/graphs/" ^ uuid)
+           init
+       in
+       Js.Promise.resolve true)
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("remote graph delete failed", e);
              Js.Promise.resolve false)
@@ -230,13 +238,13 @@ let delete_graph repo ~remote =
     in
     if not ok then Js.Promise.resolve ()
     else
-      match !Runtime.current_repo = Some repo, !repos with
+      match (Runtime.model ()).Model.repo = Some repo, !repos with
       | true, next :: _ ->
           Toast.success (T.removed_redirecting repo next);
           navigate_journal next
       | true, [] ->
           Toast.success (T.removed repo);
-          Runtime.current_repo := None;
+          Runtime.send Action.Graph_closed;
           Router.resolve ();
           Js.Promise.resolve ()
       | false, _ ->
@@ -246,10 +254,10 @@ let delete_graph repo ~remote =
   if remote then
     match
       List.find_opt
-        (fun (n, _, _) -> n = short_name repo)
+        (fun (n, _, _, _) -> n = short_name repo)
         !remote_graphs
     with
-    | Some (_, uuid, _) ->
+    | Some (_, uuid, _, _) ->
         let* remote_ok = delete_remote_http uuid in
         if remote_ok then finish ()
         else (
@@ -259,20 +267,56 @@ let delete_graph repo ~remote =
   else finish ()
 
 let ask_delete ~remote repo =
+  (* cljs delete-local-graph!/delete-remotely: confirm with
+     :title = confirm-desc, :description = delete-warning *)
   Dialogs_state.ask
-    ~title:(if remote then T.delete_remote_graph else T.delete_local_graph)
-    ~desc:
-      ((if remote then T.delete_remote_confirm repo
-        else T.delete_local_confirm repo)
-      ^ " " ^ T.delete_warning)
+    ~title:
+      (if remote then T.delete_remote_confirm repo
+       else T.delete_local_confirm repo)
+    ~desc:T.delete_warning
     ~on_confirm:(fun () -> ignore (delete_graph repo ~remote))
+    ()
+
+(* cljs sync.cljs <rtc-upload-graph!: sync-auth-state ->
+   db-sync-upload-graph -> <get-remote-graphs -> <rtc-start!. Worker
+   failures resolve as error transits — toast the known ones and skip
+   list/start like the cljs rejected chain *)
+let upload repo =
+  let* () =
+    (* cljs <ensure-current-graph-for-upload! — switch first so the
+       upload binds the open repo *)
+    if (Runtime.model ()).Model.repo = Some repo then Js.Promise.resolve ()
+    else navigate_journal repo
+  in
+  Rtc_ops.sync_app_state (Some repo);
+  Rtc_ops.set_sync_config ();
+  let* w =
+    Runtime.invoke1 "thread-api/db-sync-upload-graph" (Wire.String repo)
+  in
+  if Rtc_error.is_error w then begin
+    Rtc_error.report_outcome "upload-graph" w;
+    Js.Promise.resolve ()
+  end
+  else begin
+    let* _ = list_remote_graphs () in
+    Rtc_ops.start repo;
+    Js.Promise.resolve ()
+  end
+
+(* cljs repo.cljs upload-local-graph-with-confirm!: confirm dialog
+   (content-only alert) then the upload chain *)
+let ask_upload repo =
+  Dialogs_state.ask
+    ~title:""
+    ~desc:(I18n.t1 "graph/upload-local-confirm-desc" (short_name repo))
+    ~on_confirm:(fun () -> ignore (upload repo))
     ()
 
 (* after a graph opens, fetch + remember its worker uuid; in-graph routes
    carry ?graph-id=<uuid> inside the hash so deep links and reloads can
    resolve back to the repo (cljs handler.graph/remember-current-graph-id-in-tab!) *)
 let () =
-  Runtime.on_graph_opened := fun repo ->
+  Runtime.hooks.on_graph_opened <- fun repo ->
     ignore
       (let* w = Runtime.invoke1 "thread-api/get-graph-uuid" (Wire.String repo) in
       (* cljs graph_tab/set-tab-graph! — sessionStorage keys so a

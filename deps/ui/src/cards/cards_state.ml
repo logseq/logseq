@@ -285,9 +285,9 @@ let init (ms : Model.t Signal.signal) : t =
         }
       in
       st_ref := Some st;
-      Platform.on_document_event "ls:open-cards" (fun _ ->
+      Web_dom.on_document_event "ls:open-cards" (fun _ ->
           open_modal st);
-      Platform.on_document_event "keydown" (fun ev -> on_keydown ev st);
+      Web_dom.on_document_event "keydown" (fun ev -> on_keydown ev st);
       st
 
 let ensure ms = ignore (init ms)

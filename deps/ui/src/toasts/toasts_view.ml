@@ -27,10 +27,13 @@ let toast_item (t : Model.toast) (idx : int) : t =
   (* stylesheet stacks toasts via --toast-index *)
   let style = Printf.sprintf "--toast-index:%d" idx in
   fun ctx parent ->
-    (* cljs notification.cljs: error toasts persist (duration 0), other
-       kinds auto-dismiss *)
+    (* cljs notification.cljs: error toasts persist (duration 0);
+       internal show! calls auto-dismiss at 1500ms, sdk show_msg
+       (keyed) at 2000ms *)
     if t.toast_kind <> "error" then
-      Toast.schedule_dismiss ~ms:5000 t.toast_id;
+      Toast.schedule_dismiss
+        ~ms:(if t.toast_key = None then 1500 else 2000)
+        t.toast_id;
     (dom ~key:("toast-" ^ string_of_int t.toast_id)
        (* radix restores pointer events per toast — the viewport is
           pointer-events:none so toasts must re-enable *)
@@ -47,7 +50,7 @@ let toast_item (t : Model.toast) (idx : int) : t =
                    ~events:"click"
                    ~on_dom_event:(fun name _ ->
                      if name = "click" then Toast.dismiss t.toast_id)
-                   []
+                   [ Icons.raw ~cls:"ls-icon-sm" "x" ]
                ]
            ; dom ~key:"ti-body" ~style_class:"ui__toast-body"
                [ dom ~key:"ti-text" ~style_class:"ui__toast-text"

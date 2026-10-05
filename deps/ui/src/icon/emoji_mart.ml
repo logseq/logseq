@@ -26,29 +26,42 @@ let mart_emojis = lazy (data_prop "emojis")
 let mart_aliases = lazy (data_prop "aliases")
 let mart_sheet = lazy (data_prop "sheet")
 
-external mart_init : Js.Json.t -> unit = "init" [@@mel.module "emoji-mart"]
+(* the npm lib ships as a lazy chunk (shims/lazy_assets.mjs
+   loadEmojiMart) — a literal require would pull it into main.js, so
+   init/search reach the module through the memoized promise. <em-emoji>
+   elements render unupgraded until init lands, then the browser
+   upgrades them — so boot fires and forgets. *)
+external raw_require : string -> Js.Json.t = "require"
 
-external mart_search_index : Js.Json.t = "SearchIndex"
-  [@@mel.module "emoji-mart"]
+external shim_load_emoji_mart : Js.Json.t -> Js.Json.t Js.Promise.t
+  = "loadEmojiMart"
+  [@@mel.send]
+
+external mart_init : Js.Json.t -> Js.Json.t -> unit = "init"
+  [@@mel.send]
+
+external mart_search_index : Js.Json.t -> Js.Json.t = "SearchIndex"
+  [@@mel.get]
 
 external mart_search :
   Js.Json.t -> string -> Js.Json.t array Js.Promise.t
   = "search" [@@mel.send]
 
-let installed = ref false
+let mart_load =
+  lazy
+    (shim_load_emoji_mart (raw_require "lui-shims/lazy-assets")
+     |> Js.Promise.then_ (fun m ->
+            let data = Js.Dict.empty () in
+            Js.Dict.set data "categories" (Lazy.force mart_categories);
+            Js.Dict.set data "emojis" (Lazy.force mart_emojis);
+            Js.Dict.set data "aliases" (Lazy.force mart_aliases);
+            Js.Dict.set data "sheet" (Lazy.force mart_sheet);
+            let opts = Js.Dict.empty () in
+            Js.Dict.set opts "data" (Js.Json.object_ data);
+            mart_init m (Js.Json.object_ opts);
+            Js.Promise.resolve m))
 
-let install () =
-  if not !installed then begin
-    installed := true;
-    let data = Js.Dict.empty () in
-    Js.Dict.set data "categories" (Lazy.force mart_categories);
-    Js.Dict.set data "emojis" (Lazy.force mart_emojis);
-    Js.Dict.set data "aliases" (Lazy.force mart_aliases);
-    Js.Dict.set data "sheet" (Lazy.force mart_sheet);
-    let opts = Js.Dict.empty () in
-    Js.Dict.set opts "data" (Js.Json.object_ data);
-    mart_init (Js.Json.object_ opts)
-  end
+let install () = ignore (Lazy.force mart_load)
 
 (* mart id -> native glyph (skins[0].native). The native apple twin reads
    the same field from its generated table; DOM renderers pass it as
@@ -75,7 +88,7 @@ let emoji_id_valid (id : string) : bool =
   | None -> false
 
 let json_str (j : Js.Json.t) (k : string) : string option =
-  Js.Json.decodeString (Platform.json_prop j k)
+  Js.Json.decodeString (Web_dom.js_get j k)
 
 (* search entries arrive as {id, name, skins} *)
 let entry_of_json (j : Js.Json.t) : (string * string) option =
@@ -88,7 +101,8 @@ let search (q : string) (f : (string * string) list -> unit) =
   if String.trim q = "" then f []
   else
     ignore
-      ((let* arr = mart_search mart_search_index q in
+      ((let* m = Lazy.force mart_load in
+       let* arr = mart_search (mart_search_index m) q in
        Js.Promise.resolve
          (f (List.filter_map entry_of_json (Array.to_list arr))))
       |> Js.Promise.catch (fun e ->

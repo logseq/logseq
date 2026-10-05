@@ -4,14 +4,14 @@
    toggle. *)
 
 open Promise_ext
-open Properties_dom
+open Web_dom
 module D = Properties_data
 module W = Wire
 
 (* ---------- overlay stack ---------- *)
 
 type overlay =
-  { el : Editor_dom.el
+  { el : Web_dom.el
   ; on_escape : unit -> unit
   }
 
@@ -21,7 +21,7 @@ let overlays : overlay list ref = ref []
    LUI-managed, so any model flush reconciles its children and wipes
    foreign nodes (dialogs vanished mid-interaction). Body-level mount is
    safe; e2e locators are class-scoped. *)
-let overlays_root () = doc_query "body"
+let overlays_root () = query_selector "body"
 
 (* cljs shui popups dismiss on window mousedown outside their root: a
    click drops every overlay stacked above the innermost overlay that
@@ -44,7 +44,7 @@ let install_outside_close =
 let push_overlay el ~on_escape =
   install_outside_close ();
   (match overlays_root () with
-   | Some root -> Editor_dom.el_append_child root el
+   | Some root -> Web_dom.el_append_child root el
    | None -> ());
   overlays := { el; on_escape } :: !overlays
 
@@ -65,6 +65,11 @@ let close_overlays () =
   overlays := []
 
 let overlay_open () = !overlays <> []
+
+(* hit-test against mounted overlay roots — registered state, no
+   selector list *)
+let overlay_contains el =
+  List.exists (fun o -> el_contains o.el el) !overlays
 
 (* Escape pops the top overlay; the global keydown handler installs this. *)
 let handle_escape () =
@@ -318,7 +323,7 @@ let refresh_all () =
   if !refresh_pending then ()
   else (
     refresh_pending := true;
-    Editor_dom.set_timeout (fun () ->
+    Web_dom.set_timeout (fun () ->
         refresh_pending := false;
         List.iter (fun a -> ignore (guarded a.a_fetch)) (live_areas ()))
       150)
@@ -352,7 +357,7 @@ let refresh_all_now () =
 
 (* sdk apply_ops awaits this before resolving — avoids a
    properties->sdk dependency cycle *)
-let () = Runtime.refresh_property_areas := refresh_all_now
+let () = Runtime.hooks.refresh_property_areas <- refresh_all_now
 
 (* Immediate refresh for flows that must render before the next user
    action (e.g. a pending inline editor must mount before the user can

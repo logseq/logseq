@@ -3,8 +3,7 @@
    (today by default) gets aria-selected="true". Picking a day calls
    [on_pick day] with the journal YYYYMMDD int and closes the popup. *)
 
-open Editor_dom
-open Properties_dom
+open Web_dom
 
 let days_in_month ~year ~month0 =
   (* day 0 of next month = last day of this month *)
@@ -32,7 +31,7 @@ let day_cell ~today ~on_pick day =
         ]
   in
   let btn = mk ~cls:"ui__calendar-day" "button" ~attrs:[ ("type", "button") ] in
-  el_set_text btn (string_of_int (day mod 100));
+  el_set_text_content btn (string_of_int (day mod 100));
   el_listen btn "click" (fun _ev -> on_pick day) false;
   el_append_child cell btn;
   cell

@@ -54,22 +54,6 @@ let str_len_distance s1 s2 =
     let mined = Float.min c1 c2 in
     1.0 -. (maxed -. mined) /. maxed
 
-let starts_with s prefix =
-  let n = String.length prefix in
-  String.length s >= n && String.sub s 0 n = prefix
-
-let index_of s sub =
-  let n = String.length sub and m = String.length s in
-  if n = 0 then Some 0
-  else if n > m then None
-  else
-    let rec find i =
-      if i > m - n then None
-      else if String.sub s i n = sub then Some i
-      else find (i + 1)
-    in
-    find 0
-
 let score oquery ostr =
   let query = search_normalize (clean_str oquery) in
   let original_s = search_normalize (clean_str ostr) in
@@ -78,8 +62,8 @@ let score oquery ostr =
     if qi >= qlen then
       score'
       +. str_len_distance query original_s
-      +. (if starts_with original_s query then max_string_length +. 10.
-          else if index_of original_s query <> None then max_string_length
+      +. (if Str_util.starts_with original_s query then max_string_length +. 10.
+          else if Str_util.index_of original_s query <> None then max_string_length
           else 0.)
       +. if si >= slen then 1.0 else 0.0
     else if si >= slen then 0.0

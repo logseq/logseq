@@ -6,36 +6,25 @@
 
 open Promise_ext
 module W = Wire
-module B = Browser_ui
 module S = Export_state
 module F = Export_formats
 
 (* html2canvas vendored UMD — cljs export.cljs get-image-blob *)
 type canvas
 
-external html2canvas_ : B.E.t -> Js.Json.t -> canvas Js.Promise.t =
+external html2canvas_ : Web_dom.el -> Js.Json.t -> canvas Js.Promise.t =
   "html2canvas" [@@mel.scope "window"]
 
 external canvas_to_blob :
   canvas -> (Webapi.Blob.t Js.Nullable.t -> unit) -> string -> unit =
   "toBlob" [@@mel.send]
 
-external computed_style : B.E.t -> Js.Json.t = "getComputedStyle"
-  [@@mel.scope "window"]
 
-external css_prop : Js.Json.t -> string -> string = "getPropertyValue"
-  [@@mel.send]
 
-external el_scroll_height : B.E.t -> float = "scrollHeight" [@@mel.get]
-external body_el : B.E.t = "body" [@@mel.scope "document"]
 
-external blob_as_file : Webapi.Blob.t -> Webapi.File.t = "%identity"
 
-let clipboard_write_png : Webapi.Blob.t -> unit Js.Promise.t =
-  [%mel.raw
-    "function (b) { \
-       return navigator.clipboard.write([new ClipboardItem({'image/png': b})]) \
-     }"]
+
+
 
 (* cljs export-common/get-content-config defaults *)
 let content_config =
@@ -47,12 +36,17 @@ let content_config =
 let indent_unit = "\t"
 
 let repo () =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | Some r -> r
   | None -> "logseq_db_Demo"
 
 let uuids_v st =
-  match st.S.page_uuid with Some u -> W.List [ W.Uuid u ] | None -> W.List []
+  match st.S.block_uuids with
+  | [] -> (
+      match st.S.page_uuid with
+      | Some u -> W.List [ W.Uuid u ]
+      | None -> W.List [])
+  | us -> W.List (List.map (fun u -> W.Uuid u) us)
 
 let tree_opts_v (st : S.t) =
   W.Map
@@ -114,54 +108,81 @@ let export_structured (st : S.t) =
      | _ -> content)
 
 let export_edn (st : S.t) =
-  let page_id =
-    match st.page_uuid with
-    | Some u -> W.List [ W.Keyword "block/uuid"; W.Uuid u ]
-    | None -> (
-        match st.page_db_id with
-        | Some id -> W.Int id
-        | None -> W.Nil)
+  let uuid_id u = W.List [ W.Keyword "block/uuid"; W.Uuid u ] in
+  let options_v =
+    match st.block_uuids with
+    | [ u ] ->
+        (* cljs <export-edn-helper :block — no validation *)
+        W.Map
+          [ (W.kw "export-type", W.Keyword "block")
+          ; (W.kw "block-id", uuid_id u) ]
+    | _ :: _ as us ->
+        W.Map
+          [ (W.kw "export-type", W.Keyword "selected-nodes")
+          ; (W.kw "node-ids", W.List (List.map uuid_id us)) ]
+    | [] ->
+        let page_id =
+          match st.page_uuid with
+          | Some u -> uuid_id u
+          | None -> (
+              match st.page_db_id with
+              | Some id -> W.Int id
+              | None -> W.Nil)
+        in
+        W.Map
+          [ (W.kw "export-type", W.Keyword "page")
+          ; (W.kw "page-id", page_id) ]
   in
   let* w =
     Runtime.invoke2 "thread-api/export-edn" (W.String (repo ()))
-      (W.Map [ (W.kw "export-type", W.Keyword "page"); (W.kw "page-id", page_id) ])
+      options_v
   in
   Js.Promise.resolve (Edn.to_string w)
 
-(* cljs get-image-blob for a page export — selector is always
-   #main-content-container; page zoom/x/y/width/height cljs pulls from
-   the block-selection path do not apply here (scale 1, x/y 0) *)
+(* cljs get-image-blob — page export snapshots #main-content-container;
+   a block export snapshots [blockid='<top-level-id>'] (windowHeight is
+   page-only in cljs). *)
 let export_png (st : S.t Signal.state) =
   Signal.update st (fun s -> { s with png = None });
   Runtime.flush ();
-  match B.qs "#main-content-container" with
+  let cur = Signal.get_state st in
+  let selector =
+    match cur.S.block_uuids with
+    | u :: _ -> "[blockid='" ^ u ^ "']"
+    | [] -> "#main-content-container"
+  in
+  match Web_dom.query_selector selector with
   | None -> ()
   | Some container ->
-      let cur = Signal.get_state st in
       let background =
         if cur.S.png_transparent then "transparent"
         else
           match
-            css_prop
-              (computed_style body_el)
+            Web_dom.style_get_property
+              (Web_dom.el_computed_style Web_dom.document_body)
               "--ls-primary-background-color"
           with
           | "" -> "transparent"
           | v -> v
       in
       let options =
-        B.json_props
-          [ "allowTaint", Js.Json.boolean true
-          ; "useCORS", Js.Json.boolean true
-          ; "backgroundColor", B.str_to_json background
-          ; "x", Js.Json.number 0.
-          ; "y", Js.Json.number 0.
-          ; "width", Js.Json.null
-          ; "height", Js.Json.null
-          ; "scrollX", Js.Json.number 0.
-          ; "scrollY", Js.Json.number 0.
-          ; "scale", Js.Json.number 1.
-          ; "windowHeight", Js.Json.number (el_scroll_height container) ]
+        Web_dom.json_props
+          ([ "allowTaint", Js.Json.boolean true
+           ; "useCORS", Js.Json.boolean true
+           ; "backgroundColor", Js.Json.string background
+           ; "x", Js.Json.number 0.
+           ; "y", Js.Json.number 0.
+           ; "width", Js.Json.null
+           ; "height", Js.Json.null
+           ; "scrollX", Js.Json.number 0.
+           ; "scrollY", Js.Json.number 0.
+           ; "scale", Js.Json.number 1. ]
+          @ (match cur.S.block_uuids with
+             | [] ->
+                 [ ( "windowHeight"
+                   , Js.Json.number
+                       (Web_dom.el_scroll_height container) ) ]
+             | _ -> []))
       in
       (let* cv = html2canvas_ container options in
        canvas_to_blob cv
@@ -169,17 +190,17 @@ let export_png (st : S.t Signal.state) =
            match Js.Nullable.toOption blob with
            | Some blob ->
                (match (Signal.get_state st).png_url with
-                | Some old -> Webapi.Url.revokeObjectURL old
+                | Some old -> Web_dom.revoke_object_url old
                 | None -> ());
                let url =
-                 Webapi.Url.createObjectURL (blob_as_file blob)
+                 Web_dom.create_object_url blob
                in
                Signal.update st (fun s ->
                    { s with png = Some blob; png_url = Some url });
                Runtime.flush ();
                (* cljs sets img#export-preview .src imperatively *)
-               (match B.qs "#export-preview" with
-                | Some img -> B.set_attr img "src" url
+               (match Web_dom.query_selector "#export-preview" with
+                | Some img -> Web_dom.el_set_attr img "src" url
                 | None -> ())
            | None -> ())
          "image/png";
@@ -236,7 +257,7 @@ let copied_flash (st : S.t Signal.state) p =
   (let* _ = p in
   Signal.update st (fun s -> { s with copied = true });
   Runtime.flush ();
-  B.later ~ms:2000 (fun () ->
+  Web_dom.later ~ms:2000 (fun () ->
       Signal.update st (fun s -> { s with copied = false });
       Runtime.flush ());
   Js.Promise.resolve ())
@@ -252,19 +273,19 @@ let copy (st : S.t Signal.state) =
 (* cljs ClipboardItem path for the png blob *)
 let copy_png (st : S.t Signal.state) =
   match (Signal.get_state st).png with
-  | Some b -> copied_flash st (clipboard_write_png b)
+  | Some b -> copied_flash st (Platform.clipboard_write_blob b)
   | None -> ()
 
 let download_blob ~filename (blob : Webapi.Blob.t) =
-  let url = Webapi.Url.createObjectURL (blob_as_file blob) in
-  let a = B.create "a" in
-  B.set_attr a "href" url;
-  B.set_attr a "download" filename;
-  (match B.qs "body" with Some b -> B.append b a | None -> ());
-  B.click a;
-  B.later ~ms:0 (fun () ->
-      B.remove a;
-      Webapi.Url.revokeObjectURL url)
+  let url = Web_dom.create_object_url blob in
+  let a = Web_dom.create_element "a" in
+  Web_dom.el_set_attr a "href" url;
+  Web_dom.el_set_attr a "download" filename;
+  (match Web_dom.query_selector "body" with Some b -> Web_dom.el_append_child b a | None -> ());
+  Web_dom.el_click a;
+  Web_dom.later ~ms:0 (fun () ->
+      Web_dom.el_remove a;
+      Web_dom.revoke_object_url url)
 
 (* cljs filename: "logseq_" + (t/now) + ext — txt for text else format *)
 let save_to_file (st : S.t Signal.state) =
@@ -273,7 +294,7 @@ let save_to_file (st : S.t Signal.state) =
   | S.Png, _, Some blob ->
       download_blob
         ~filename:
-          (Printf.sprintf "logseq_%s.png" (B.fmt_time (B.now_ms ())))
+          (Printf.sprintf "logseq_%s.png" (Platform.fmt_time (Platform.date_now_ms ())))
         blob
   | S.Png, _, None -> ()
   | _, Some content, _ ->
@@ -293,8 +314,8 @@ let save_to_file (st : S.t Signal.state) =
         | S.Edn -> "text/plain"
         | S.Png -> "image/png"
       in
-      B.download_text
+      Web_dom.download_text
         ~filename:
-          (Printf.sprintf "logseq_%s.%s" (B.fmt_time (B.now_ms ())) ext)
+          (Printf.sprintf "logseq_%s.%s" (Platform.fmt_time (Platform.date_now_ms ())) ext)
         ~mime content
   | _, None, _ -> ()

@@ -58,6 +58,7 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "publish-page" -> Publish_view.body ms
   | "sync-server" -> Settings_url_view.sync_body ms
   | "publish-server" -> Settings_url_view.publish_body ms
+  | "rtc-collaborators" -> Collaborators.body ms
 
   | "quick-add" -> Quick_add_view.body ms
   | _ -> box ~key:("empty-" ^ name) []
@@ -69,7 +70,13 @@ let label_of = function
   | "settings" -> Some "app-settings"
   | "plugins" -> Some "plugins-dashboard"
   | "plugin-readme" -> Some "plugin-readme"
+  | "login" -> Some "user-login"
+  | "new-graph" | "add-graph" -> Some "new-db-graph"
   | _ -> None
+(* cljs dialog-open! :title — h2.ui__dialog-title text (hidden when none) *)
+let title_of = function
+  | "new-graph" | "add-graph" -> I18n.create_new_graph
+  | _ -> ""
 let dialog_view name (ms : Model.t Signal.signal) : t =
   let is_settings = name = "settings" in
   let z = Dialogs_state.z_index name in
@@ -84,7 +91,11 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
         ~attrs:
           ([ ("data-state", "open")
            ; ( "style"
-             , Printf.sprintf "z-index:%d" z )
+             , Printf.sprintf "z-index:%d%s" z
+                 (match name with
+                  (* cljs dialog-open! {:style {:max-width "500px"}} *)
+                  | "new-graph" | "add-graph" -> ";max-width:500px"
+                  | _ -> "") )
            ]
           @
           match label_of name with
@@ -92,9 +103,12 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
           | None -> [ ("role", "dialog") ])
         (* cljs shui dialog/core: h2.ui__dialog-title (hidden when the
            dialog has no title) then .ui__dialog-main-content > body *)
-        [ dom ~key:("dlg-t-" ^ name) ~tag:"h2"
-            ~style_class:"ui__dialog-title hidden"
-            []
+        [ (let title = title_of name in
+           dom ~key:("dlg-t-" ^ name) ~tag:"h2"
+             ~style_class:
+               ("ui__dialog-title" ^ if title = "" then " hidden" else "")
+             ~text:title
+             [])
         ; dom ~key:("dlg-m-" ^ name) ~style_class:"ui__dialog-main-content"
             [ body_of name ms ]
         ; close_btn ]
@@ -132,12 +146,24 @@ let confirm_view (c : Dialogs_state.confirm) =
           [ ("role", "alertdialog")
           ; ("style", Printf.sprintf "z-index:%d" z) ]
         ~style_class:"ui__alert-dialog-content"
-        [ dom ~key:"cfrm-t" ~tag:"h2"
-            ~style_class:"ui__alert-dialog-title"
-            ~text:c.title []
-        ; dom ~key:"cfrm-d" ~tag:"div"
-            ~style_class:"ui__alert-dialog-description"
-            ~text:c.desc []
+        [ (* cljs dialog/alert-inner: a confirm! with plain content
+             renders ui__alert-dialog-main-content only — no header *)
+          (if c.title = "" then
+             dom ~key:"cfrm-m"
+               ~style_class:"ui__alert-dialog-main-content"
+               [ dom ~key:"cfrm-mc" ~tag:"p"
+                   ~style_class:"font-medium mb-6" ~text:c.desc [] ]
+           else
+             dom ~key:"cfrm-h"
+               ~style_class:"ui__alert-dialog-header"
+               [ dom ~key:"cfrm-t" ~tag:"h2"
+                   ~style_class:"ui__alert-dialog-title" ~text:c.title []
+               ; if c.desc = "" then Logseq_dom.dom ~key:"cfrm-dx" []
+                 else
+                   dom ~key:"cfrm-d" ~tag:"div"
+                     ~style_class:"ui__alert-dialog-description"
+                     ~text:c.desc []
+               ])
         ; dom ~key:"cfrm-f"
             ~style_class:"ui__alert-dialog-footer"
             [ btn "cfrm-cancel" I18n.cancel "ls-btn-outline"
@@ -150,8 +176,8 @@ let confirm_view (c : Dialogs_state.confirm) =
 
 let prompt_view (p : Dialogs_state.prompt) =
   let submit () =
-    match Browser_ui.qs ".ui__dialog-content .form-input" with
-    | Some el -> Dialogs_state.submit_prompt (Browser_ui.value el)
+    match Web_dom.query_selector ".ui__dialog-content .form-input" with
+    | Some el -> Dialogs_state.submit_prompt (Web_dom.el_value el)
     | None -> ()
   in
   let input_events name payload =
@@ -219,7 +245,27 @@ let render (ms : Model.t Signal.signal) : t =
     [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
         ~mount:(fun name_sig ->
           (* name is stable per key — sample once *)
-          dialog_view (Signal.get name_sig) ms)
+          let v = dialog_view (Signal.get name_sig) ms in
+          (* radix Dialog focuses the dialog's [autofocus] element on open
+             when it has one, else the content container itself (the
+             close button never gets a focus ring) *)
+          (try
+             ignore
+               (Web_dom.set_timeout
+                  (fun () ->
+                    match
+                      Web_dom.query_selector ".ui__dialog-content [autofocus]"
+                    with
+                    | Some el -> Web_dom.el_focus el
+                    | None -> (
+                        match Web_dom.query_selector ".ui__dialog-content" with
+                        | Some el ->
+                            Web_dom.el_set_attr el "tabindex" "-1";
+                            Web_dom.el_focus el
+                        | None -> ()))
+                  16)
+           with _ -> ());
+          v)
     ; dyn ~equal:( == ) (fun c ->
           match c with
           | Some c -> confirm_view c

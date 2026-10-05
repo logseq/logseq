@@ -1,12 +1,8 @@
-(* Browser platform helpers: document/window access outside LUI's
-   abstraction (boot mounting, hash routing, localStorage, globals the
-   e2e contract requires). *)
+(* Browser platform services: storage, location/history, navigator,
+   console/timing, crypto/pfs — everything that is NOT DOM element FFI
+   (that lives in Web_dom). *)
 
 open Promise_ext
-module W = Webapi.Dom
-
-external document_ : W.Document.t = "document"
-external location_ : Js.Json.t = "location"
 
 type loc
 
@@ -24,8 +20,13 @@ external search_of : loc -> string = "search" [@@mel.get]
 
 let location_search () = search_of location_obj
 
-external get_element_by_id : string -> W.Element.t option
-  = "getElementById" [@@mel.scope "document"] [@@mel.return nullable]
+external reload_loc : loc -> unit = "reload" [@@mel.send]
+
+let location_reload () = reload_loc location_obj
+
+external location_origin : string = "location.origin"
+
+external location_pathname : string = "location.pathname"
 
 external local_storage_obj : Js.Json.t option = "localStorage"
   [@@mel.scope "globalThis"] [@@mel.return nullable]
@@ -51,6 +52,17 @@ let local_storage_set k v =
 let local_storage_remove k =
   match local_storage_obj with Some s -> ls_remove_item s k | None -> ()
 
+(* cljs storage.cljs reads with reader/read-string and writes pr-str,
+   so cljs-stored strings appear double-quoted ("\"en\""). Strip/add
+   that quoting at the storage boundary. *)
+let storage_unquote s =
+  let len = String.length s in
+  if len >= 2 && String.get s 0 = '"' && String.get s (len - 1) = '"' then
+    String.sub s 1 (len - 2)
+  else s
+
+let storage_quote v = "\"" ^ v ^ "\""
+
 (* sessionStorage — cljs graph_tab.cljs persists the per-tab graph so a
    reload restores it; absent outside the browser *)
 external session_storage_obj : Js.Json.t option = "sessionStorage"
@@ -63,47 +75,25 @@ let session_storage_get k =
 let session_storage_set k v =
   match session_storage_obj with Some s -> ls_set_item s k v | None -> ()
 
-external document_element : Js.Json.t = "document.documentElement"
-external document_body : Js.Json.t = "document.body"
-
-external set_lang : Js.Json.t -> string -> unit = "lang" [@@mel.set]
-
-let document_set_lang s = set_lang document_element s
-
-external dataset_of : Js.Json.t -> Js.Json.t = "dataset" [@@mel.get]
-
-external dataset_set :
-  Js.Json.t -> string -> string -> unit = "" [@@mel.set_index]
-
-(* generic object field set, e.g. el.style.visibility *)
-external set_prop : Js.Json.t -> string -> Js.Json.t -> unit = ""
-  [@@mel.set_index]
-
-let document_set_data name value =
-  dataset_set (dataset_of document_element) name value
-
-let body_set_data name value =
-  dataset_set (dataset_of document_body) name value
-
-let body_rm_data : string -> unit =
-  [%mel.raw "function (k) { delete document.body.dataset[k] }"]
-
-let root_add_class : string -> unit =
-  [%mel.raw "function (c) { document.documentElement.classList.add(c) }"]
-
-let root_rm_class : string -> unit =
-  [%mel.raw "function (c) { document.documentElement.classList.remove(c) }"]
-
-let body_add_class : string -> unit =
-  [%mel.raw "function (c) { document.body.classList.add(c) }"]
-
-let body_rm_class : string -> unit =
-  [%mel.raw "function (c) { document.body.classList.remove(c) }"]
-
 external console_log : 'a -> unit = "log" [@@mel.scope "console"]
 external console_error : 'a -> unit = "error" [@@mel.scope "console"]
 
 external date_now_ms : unit -> float = "now" [@@mel.scope "Date"]
+
+external make_date : float -> Js.Json.t = "Date" [@@mel.new]
+
+external date_to_string : Js.Json.t -> string = "toLocaleString"
+  [@@mel.send]
+
+(* cljs i18n/locale-format-date: d.toLocaleDateString(locale,
+   {year numeric, month short, day numeric}) e.g. "Sep 28, 2026";
+   undefined locale = runtime default *)
+let date_to_localedate : Js.Json.t -> string =
+  [%mel.raw
+    "function (d) { return d.toLocaleDateString(undefined, \
+     { year: 'numeric', month: 'short', day: 'numeric' }) }"]
+
+let fmt_time ms = date_to_localedate (make_date ms)
 
 external perf_now : unit -> float = "now" [@@mel.scope "performance"]
 
@@ -124,10 +114,6 @@ external error_message :
 (* Melange wraps JS rejections as Js.Exn.Error whose payload is the real
    error in field _1 *)
 external error_inner : Js.Promise.error -> 'a = "_1" [@@mel.get]
-
-external add_event_listener :
-  string -> (Js.Json.t -> unit) -> unit = "addEventListener"
-  [@@mel.scope "window"]
 
 type url_search_params
 
@@ -163,41 +149,39 @@ external replace_state :
 
 let replace_url_fragment hash = replace_state Js.Json.null "" hash
 
-let on_hash_change f =
-  add_event_listener "hashchange" (fun _ -> f ())
+let on_hash_change f = Web_dom.add_window_listener "hashchange" (fun _ -> f ())
 
 external history_back : unit -> unit = "back" [@@mel.scope "history"]
 external history_forward : unit -> unit = "forward" [@@mel.scope "history"]
 
+let clipboard_write_blob : Webapi.Blob.t -> unit Js.Promise.t =
+  [%mel.raw
+    "function (b) {        return navigator.clipboard.write([new ClipboardItem({'image/png': b})])      }"]
+
 external clipboard_write_text : string -> unit Js.Promise.t = "writeText"
-  [@@mel.scope "navigator.clipboard"]
+  [@@mel.scope ("navigator", "clipboard")]
+
+external clipboard_read_text : unit -> string Js.Promise.t = "readText"
+  [@@mel.scope ("navigator", "clipboard")]
 
 let copy_to_clipboard s = ignore (clipboard_write_text s)
-
-external add_document_listener :
-  string -> (Js.Json.t -> unit) -> unit = "addEventListener"
-  [@@mel.scope "document"]
-
-(* CustomEvents dispatched on document do not bubble to window *)
-let on_document_event name f = add_document_listener name f
 
 external decode_uri : string -> string = "decodeURIComponent"
 
 external encode_uri_component : string -> string = "encodeURIComponent"
-
-external js_escape : string -> string = "escape"
-
 (* OCaml source literals hold UTF-8 bytes; Melange hands them to JS as a
-   byte-string so non-ASCII renders mojibake. Percent-encode each byte then
-   UTF-8 decode to obtain the real JS string. Only safe for literals — worker
-   (transit-decoded) strings are already proper JS strings and would throw. *)
-let utf8 s = decode_uri (js_escape s)
+   byte-string so non-ASCII renders mojibake. Copy the byte chars into a
+   Uint8Array and UTF-8 decode to obtain the real JS string. Only safe for
+   literals — worker (transit-decoded) strings are already proper JS strings
+   and would throw. *)
+let utf8 : string -> string =
+  [%mel.raw
+    "function (s) { var u8 = new Uint8Array(s.length); for (var i = 0; i < \
+     s.length; i++) u8[i] = s.charCodeAt(i) & 0xff; return new \
+     TextDecoder().decode(u8) }"]
 
 external navigator_ : Js.Json.t = "navigator"
 external navigator_platform : Js.Json.t -> string = "platform" [@@mel.get]
-
-external clipboard_write_text : string -> unit = "writeText"
-  [@@mel.scope ("navigator", "clipboard")]
 
 (* cljs (or util/mac? util/win32?) — goog platform detection *)
 let desktop_os () =
@@ -219,7 +203,6 @@ let is_mac () =
   go 0
 
 external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
-external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
 (* string field from a JSON payload (dom-event "payload", already an
    option — None reads as the empty object so callers don't need
@@ -227,15 +210,24 @@ external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 let payload_str json key =
   match Option.map json_parse json with
   | Some json -> (
-      match Js.Json.decodeString (json_prop json key) with
+      match Js.Json.decodeString (Web_dom.js_get json key) with
       | Some s -> s
       | None -> "")
   | None -> ""
 
+(* same, keeping the option for callers that need presence *)
+let payload_str_opt json key =
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeObject json with
+      | Some d -> Option.bind (Js.Dict.get d key) Js.Json.decodeString
+      | None -> None)
+  | None -> None
+
 let payload_bool json key =
   match Option.map json_parse json with
   | Some json -> (
-      match Js.Json.decodeBoolean (json_prop json key) with
+      match Js.Json.decodeBoolean (Web_dom.js_get json key) with
       | Some b -> b
       | None -> false)
   | None -> false
@@ -243,14 +235,14 @@ let payload_bool json key =
 let payload_num json key =
   match Option.map json_parse json with
   | Some json -> (
-      match Js.Json.decodeNumber (json_prop json key) with
+      match Js.Json.decodeNumber (Web_dom.js_get json key) with
       | Some n -> n
       | None -> 0.)
   | None -> 0.
 
 (* raw DOM event field, e.g. keydown "key" *)
 let event_str ev key =
-  match Js.Json.decodeString (json_prop ev key) with
+  match Js.Json.decodeString (Web_dom.js_get ev key) with
   | Some s -> s
   | None -> ""
 
@@ -261,12 +253,6 @@ external navigator_on_line : bool = "navigator.onLine"
 
 (* util/network-online? *)
 let online () = navigator_on_line
-
-external visibility_state : string = "visibilityState"
-  [@@mel.scope "document"]
-
-(* cljs flows/document-visibility-state *)
-let document_visible () = visibility_state = "visible"
 
 external random_uuid : unit -> string = "randomUUID"
   [@@mel.scope "crypto"]
@@ -341,26 +327,3 @@ let strip_db_prefix repo =
    vite `define`; guarded so the node test runner (no define) is safe. *)
 let dev_build : bool =
   [%mel.raw "typeof logseq_dev !== 'undefined' && logseq_dev"]
-
-(* dispatch a DOM CustomEvent on document — cross-area comms *)
-external custom_event : string -> Js.Json.t -> Js.Json.t = "CustomEvent"
-  [@@mel.new]
-
-external dispatch_event : Js.Json.t -> unit = "document.dispatchEvent"
-
-let dispatch name detail =
-  dispatch_event
-    (custom_event name
-       (Js.Json.object_ (Js.Dict.fromList [ ("detail", detail) ])))
-
-external query_selector_all : string -> Js.Json.t array
-  = "querySelectorAll" [@@mel.scope "document"]
-
-external get_attribute : Js.Json.t -> string -> string option
-  = "getAttribute" [@@mel.send] [@@mel.return nullable]
-
-(* uuid list of .ls-block.selected blocks, in DOM order *)
-let selected_block_uuids () =
-  query_selector_all ".ls-block.selected"
-  |> Array.to_list
-  |> List.filter_map (fun el -> get_attribute el "blockid")

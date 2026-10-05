@@ -497,7 +497,7 @@ let insert_batch_block a b c _d =
               (Wire.elems w)
           in
           resolved
-            (Sdk_convert.json_arr
+            (Js.Json.array
                (Array.of_list
                   (List.map Sdk_convert.json_of_wire
                      blocks))))
@@ -515,12 +515,12 @@ let append_block_in_page a b c _d =
     match page_arg with
     | Some p -> Js.Promise.resolve p
     | None -> (
-        match !Runtime.current_page with
+        match (Runtime.model ()).Model.route_page with
         | Some p ->
             Js.Promise.resolve
               (Option.value ~default:"" p.Model.page_uuid)
         | None ->
-            let r = Option.value ~default:"" !Runtime.current_repo in
+            let r = Option.value ~default:"" (Runtime.model ()).Model.repo in
             let* page_w =
               Runtime.invoke2 "thread-api/get-journal-page-by-day"
                 (Wire.String r)

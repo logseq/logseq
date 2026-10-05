@@ -18,14 +18,13 @@
        via the ls:editor-command listener in editor/editor_commands.ml. *)
 
 open Lui_elements
-open Editor_dom
+open Web_dom
 module S = Properties_state
 module Dialog = Properties_dialog
 
 (* ---------- global keys ---------- *)
 
 let last_semi = ref 0.0
-let last_p = ref 0.0
 
 let on_keydown ev =
   if ev_composing ev then ()
@@ -37,28 +36,25 @@ let on_keydown ev =
           || Dialog.handle_escape ()
           || S.handle_escape ()
         then (
-          prevent_default ev;
-          stop_propagation ev)
+          ev_prevent_default ev;
+          ev_stop_propagation ev)
     | "p" when (ev_meta ev || ev_ctrl ev) && ev_alt ev ->
-        prevent_default ev;
+        ev_prevent_default ev;
         Dialog.open_for_current ()
     | "p" when ev_meta ev || ev_ctrl ev ->
-        prevent_default ev;
+        ev_prevent_default ev;
         Dialog.open_for_current ()
     | ";" when is_editable_target (ev_target ev) ->
         let t = Js.Date.now () in
         if t -. !last_semi < 500.0 then (
           last_semi := 0.0;
-          prevent_default ev;
+          ev_prevent_default ev;
           Dialog.open_for_current ())
         else last_semi := t
-    | "p" when not (is_editable_target (ev_target ev)) ->
-        last_p := Js.Date.now ()
-    | "a" when not (is_editable_target (ev_target ev)) ->
-        if Js.Date.now () -. !last_p < 800.0 then (
-          last_p := 0.0;
-          S.toggle_hidden ();
-          S.refresh_all ())
+    (* selection-mode `p <key>` sequences are owned by the chord layer in
+       editor_keys (cljs keymap): p d/s/p/t open the named property's
+       dedicated picker, p i the icon picker, p r the emoji reaction
+       picker, p a toggles hidden — not this generic sheet *)
     | _ -> ()
 
 (* ---------- overlays view ---------- *)
@@ -82,14 +78,12 @@ let overlays : t =
 
 (* ---------- install ---------- *)
 
-let installed = ref false
+let installed = State_cell.Once.make ()
 
 let install () =
-  if !installed then ()
-  else (
-    installed := true;
+  State_cell.Once.run installed (fun () ->
     S.chain_worker ();
-    document_add_listener "keydown" on_keydown true)
+    add_document_listener "keydown" on_keydown true)
 
 (* Module init runs at bundle load (every module in the lib is linked
    into js_app). *)

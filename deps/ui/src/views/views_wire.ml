@@ -181,6 +181,12 @@ type view_data =
 let uuids_of w =
   W.elems w |> List.filter_map (fun x -> W.as_uuid x)
 
+(* normalized group value {kind:entity, uuid} -> uuid *)
+let group_value_uuid (v : W.t) : string option =
+  match W.as_keyword (Option.value (W.get v "kind") ~default:W.Nil) with
+  | Some "entity" -> W.as_uuid (Option.value (W.get v "uuid") ~default:W.Nil)
+  | _ -> None
+
 let decode_view_data (v : W.t) : view_data =
   match v with
   | W.Map _ -> (

@@ -2,6 +2,8 @@
 
 module W = Webapi.Dom
 
+open Promise_ext
+
 (* forward uncaught errors/rejections to console.error so the e2e console
    dumps see them (Playwright's console event misses pageerror) *)
 external add_window_listener : string -> (Js.Json.t -> unit) -> unit =
@@ -48,8 +50,9 @@ let main root =
   in
   let app =
     Lui_app.create_with_extensions (Lui_web.backend renderer) registry
-      Model.initial Update.update View.view
+      Model.initial Update.apply View.view
   in
+  Runtime.read_model := (fun () -> Lui_app.model app);
   Runtime.app_send :=
     (fun action ->
       let changed = Lui_app.send app action in
@@ -61,7 +64,11 @@ let main root =
     (fun () ->
       Platform.perf_time "flush" (fun () ->
           ignore (Lui_app.flush app);
-          Virtual_scroll.sync ()));
+          Virtual_scroll.sync ();
+          (* one focus pass per flush — a pending arm (or keys queued
+             during the remount window) progresses as the DOM
+             re-patches *)
+          Editor_actions.focus_pending ()));
   ignore
     (Lui_web.set_event_handler renderer (fun event ->
          Platform.perf_time "event" (fun () ->
@@ -76,16 +83,22 @@ let main root =
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
-  Views_mount.install ();
+  (* views mount declaratively at their host sites — no
+     Views_mount observer *)
   Router.init ();
   Rtc_flows.init ();
   ignore (Boot.run ())
 
+(* gate first render on the active locale: non-English dicts arrive as
+   lazy chunks (en is embedded, resolves immediately) *)
 let () =
   Printexc.record_backtrace true;
   match W.Document.getElementById "root" W.document with
   | None -> ()
-  | Some root -> (
-      try main root
-      with error ->
-        W.Element.setTextContent root (Printexc.to_string error))
+  | Some root ->
+      ignore
+        ((let* () = I18n.init () in
+          (try main root
+           with error ->
+             W.Element.setTextContent root (Printexc.to_string error));
+          Js.Promise.resolve ()))

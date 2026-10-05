@@ -46,7 +46,10 @@ let initial =
   ; inv_tick = 0
   }
 
-let st : t Signal.state option ref = ref None
+include State_cell.Make (struct
+  type nonrec t = t
+  let name = "editor"
+end)
 
 (* focus request consumed after the next DOM flush — ops remount the page
    subtree, so the textarea must be re-focused once it exists again *)
@@ -54,7 +57,7 @@ let pending_focus : (string * int * float) option ref = ref None
 
 (* editing keys that arrive while a structure op's textarea is still
    remounting (keydown landed on <body>): queued here and replayed by
-   apply_focus once the refreshed model and DOM exist *)
+   focus_pending once the refreshed model and DOM exist *)
 let pending_focus_actions : (unit -> unit) list ref = ref []
 
 (* wall-clock of the last editing-textarea key/input event; worker_events
@@ -102,17 +105,7 @@ let ensure (ctx : Lui_ui.ui_context) =
       on_init := [];
       st := Some (Signal.state ctx.ui_scheduler init)
 
-let ready () = Option.is_some !st
-
-let state () =
-  match !st with
-  | Some s -> s
-  | None -> failwith "editor state not mounted"
-
-let value () = Signal.get_state (state ())
-
 (* the state as a read-only signal for dyn/if_/class_signal consumers *)
-let signal () = (state ()).Signal.state_signal
 
 (* per-field derived signals, created once alongside the coarse record —
    every mounted row leaves ~15 subscriptions behind, so a bare [S.set]
@@ -192,11 +185,6 @@ let bump_invalidation () =
 (* updates that must repaint now (called from document listeners, outside
    LUI's event dispatch); Signal.update composes with any pending staged
    value so deferred on_init writes aren't lost *)
-let set f =
-  let st = state () in
-  Signal.update st f;
-  Runtime.flush ()
-
 (* updates with no visual dependency — folded into the next flush *)
 let set_silent f =
   let st = state () in
@@ -208,7 +196,17 @@ let set_silent f =
 let read () =
   match !st with Some s -> Signal.get_state s | None -> initial
 
-let editing () = (read ()).editing
+(* imperative readers get the pending (not-yet-published) value:
+   Signal.update composes onto it, so a published snapshot can lag the
+   edit buffer by several keystrokes during a remount window — caret
+   math and mount renders must see the latest *)
+let editing () =
+  match !st with
+  | Some s -> (
+      match !(s.Signal.pending) with
+      | Some v -> v.editing
+      | None -> (read ()).editing)
+  | None -> initial.editing
 
 let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None
@@ -286,16 +284,16 @@ let effective_collapsed ?(scope = "main") (b : Model.block) =
 let anchor () = (read ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
-(* -- model helpers over !Runtime.current_page -- *)
+(* -- model helpers over (Runtime.model ()).Model.route_page -- *)
 
 let page_blocks () =
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some p -> p.Model.page_blocks
   | None ->
       (* journals view renders every journal item's blocks in the same
          page flow *)
       List.concat_map (fun (p : Model.page) -> p.Model.page_blocks)
-        !Runtime.current_journals
+        (Runtime.model ()).Model.journals
 
 (* blocks a row actually displays: a :block/link (embed) block renders the
    linked page's fetched blocks in place of its own children — so lookups

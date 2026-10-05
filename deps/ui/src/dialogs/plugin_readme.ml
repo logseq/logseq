@@ -20,8 +20,6 @@
 
 open Lui_elements
 open Promise_ext
-module B = Browser_ui
-
 let dom = Logseq_dom.dom
 
 external fetch_ : string -> Js.Json.t Js.Promise.t = "fetch"
@@ -166,8 +164,8 @@ let open_readme (item : Js.Json.t) =
        | Some html ->
            pending := Some { url; repo = ""; repository; html };
            Dialogs_state.open_ "plugin-readme";
-           (match B.qs "#ls-plugin-readme-content" with
-            | Some el -> B.inner_html_set el html
+           (match Web_dom.query_selector "#ls-plugin-readme-content" with
+            | Some el -> Web_dom.el_set_inner_html el html
             | None -> ());
            Js.Promise.resolve ()
        | None ->
@@ -191,7 +189,7 @@ let body (_ms : Model.t Signal.signal) : t =
          ~on_dom_event:(fun name payload ->
            if name = "click" then
           let href = Platform.payload_str payload "href" in
-          if String.trim href <> "" then B.open_url href)
+          if String.trim href <> "" then Web_dom.win_open href)
          [ (if t.repository = "" then Logseq_dom.nothing
             else
               dom ~key:"rd-repo"

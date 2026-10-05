@@ -20,35 +20,12 @@ let initial =
   ; tick = 0
   }
 
-let st : t Signal.state option ref = ref None
+include State_cell.Make (struct
+  type nonrec t = t
+  let name = "settings"
+end)
 
-(* tab requested before the pane mounts (menubar "menu-open-settings"
-   {tab}) — consumed by the next activate (the mount-time settings
-   effect), which otherwise defaults the tab to "general". The plain
-   set_tab path cannot run before mount because the state signal does
-   not exist yet. *)
-let pending_tab : string option ref = ref None
-
-let request_tab tab = pending_tab := Some tab
-
-let clear_pending_tab () = pending_tab := None
-
-let ensure (ctx : Lui_ui.ui_context) =
-  match !st with
-  | Some _ -> ()
-  | None -> st := Some (Signal.state ctx.ui_scheduler initial)
-
-let ready () = Option.is_some !st
-
-let state () =
-  match !st with Some s -> s | None -> failwith "settings state not mounted"
-
-let value () = Signal.get_state (state ())
-let signal () = (state ()).Signal.state_signal
-
-let set f =
-  Signal.update (state ()) f;
-  Runtime.flush ()
+let ensure ctx = mount ctx initial
 
 (* storage-backed toggles don't touch `config` — bump tick so the pane
    dyn re-renders. Toggles are reachable without the pane mounted (cmdk
@@ -59,8 +36,17 @@ let poke () =
 let repo = Runtime.repo
 
 let set_tab tab =
-  Platform.body_set_data "settingsTab" tab;
+  Web_dom.body_set_data "settingsTab" tab;
   set (fun s -> { s with tab })
+
+(* cljs open-settings! <tab> — the tab the next activate applies.
+   Consumed once; a plain open always lands on general like cljs's
+   :ui/settings-open? = true *)
+let pending_tab : string option ref = ref None
+
+let open_at tab = pending_tab := Some tab
+
+let clear_pending_tab () = pending_tab := None
 
 (* common-util/page-name-sanity-lc approximation: lowercase + strip boundary
    slashes (path normalization is not needed for the settings lookups) *)
@@ -128,17 +114,13 @@ let load () =
 let activate () =
   let tab =
     match !pending_tab with
-    | Some t ->
-        pending_tab := None;
-        t
+    | Some t -> pending_tab := None; t
     | None -> "general"
   in
-  Platform.body_set_data "settingsTab" tab;
-  if ready () then (
-    Signal.set (state ()) { (value ()) with tab };
-    load ())
+  Web_dom.body_set_data "settingsTab" tab;
+  if ready () then (Signal.set (state ()) { (value ()) with tab }; load ())
 
-let deactivate () = Platform.body_rm_data "settingsTab"
+let deactivate () = Web_dom.body_rm_data "settingsTab"
 
 (* ---- config.edn accessors ---- *)
 
@@ -231,8 +213,8 @@ let toggle_wide_mode () =
   let v = not (storage_bool "wide-mode" ~default:false) in
   storage_set_bool "wide-mode" v;
   poke ();
-  match Browser_ui.qs "#app-container-wrapper" with
-  | Some el -> (if v then Browser_ui.add_class else Browser_ui.rm_class) el "ls-wide-mode"
+  match Web_dom.query_selector "#app-container-wrapper" with
+  | Some el -> (if v then Web_dom.el_class_add else Web_dom.el_class_remove) el "ls-wide-mode"
   | None -> ()
 
 let toggle_shortcut_tooltip () =
@@ -265,15 +247,15 @@ let current_accent () =
      unset = no active swatch *)
   match Platform.local_storage_get "radix-color" with
   | Some v -> (
-      let v = Settings_view.unquote v in
+      let v = Platform.storage_unquote v in
       if String.length v > 0 && v.[0] = ':' then
         String.sub v 1 (String.length v - 1)
       else v)
   | None -> ""
 
 let set_accent name =
-  Platform.local_storage_set "radix-color" (Settings_view.quoted (":" ^ name));
-  Platform.document_set_data "color" name;
+  Platform.local_storage_set "radix-color" (Platform.storage_quote (":" ^ name));
+  Web_dom.doc_set_data "color" name;
   poke ()
 
 (* ---- editor font (state/set-editor-font! + theme.cljs effect) ---- *)
@@ -288,7 +270,7 @@ let default_font_cfg = { ftype = "default"; fglobal = false }
 let current_editor_font () =
   match Platform.local_storage_get "editor-font" with
   | Some v -> (
-      match Edn.parse (Settings_view.unquote v) with
+      match Edn.parse (Platform.storage_unquote v) with
       | Wire.Map kvs ->
           let m = Wire.Map kvs in
           { ftype =
@@ -305,14 +287,14 @@ let current_editor_font () =
 
 let write_editor_font cfg =
   Platform.local_storage_set "editor-font"
-    (Settings_view.quoted
+    (Platform.storage_quote
        (Edn.to_string
           (Wire.Map
              [ (Wire.Keyword "type", Wire.String cfg.ftype)
              ; (Wire.Keyword "global", Wire.Bool cfg.fglobal)
              ])));
-  Platform.document_set_data "font" cfg.ftype;
-  Platform.document_set_data "font-global"
+  Web_dom.doc_set_data "font" cfg.ftype;
+  Web_dom.doc_set_data "font-global"
     (if cfg.fglobal then "true" else "false");
   poke ()
 

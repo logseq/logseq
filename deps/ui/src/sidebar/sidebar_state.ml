@@ -19,7 +19,7 @@
 open Promise_ext
 let t = I18n.t
 
-let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
+let default_navs = [ "flashcards"; "all-pages" ]
 
 (* A rendered right-sidebar entry. kind maps to .item-type-<kind>. *)
 type item =
@@ -48,8 +48,16 @@ type t =
   }
 
 let st_ref : t option ref = ref None
-let model_ref : Model.t ref = ref Model.initial
-let hook_installed = ref false
+
+(* the live model signal — stored at init so document-event handlers
+   read current model state without a shadow ref of their own *)
+let model_signal : Model.t Signal.signal option ref = ref None
+
+let model () =
+  match !model_signal with
+  | Some ms -> Signal.get ms
+  | None -> Model.initial
+let hook_installed = State_cell.Once.make ()
 let loaded_repo : string option ref = ref None
 let last_page_key : string option ref = ref None
 
@@ -97,24 +105,231 @@ let detail_string name ev =
       | None -> None)
   | None -> None
 
-external set_el_width :
-  Webapi.Dom.Element.t -> string -> unit = "width" [@@mel.set]
-  [@@mel.scope "style"]
-
 (* #right-sidebar is chrome.ml's wrapper and carries no width; the
    resizer writes the persisted width inline, so we mirror that for
    .cp__right-sidebar.open to have a visible box. *)
 let sync_right_sidebar_width () =
-  match Platform.get_element_by_id "right-sidebar" with
+  match Web_dom.get_element_by_id "right-sidebar" with
   | Some el ->
       let width =
         match Platform.local_storage_get "ls-right-sidebar-width" with
         | Some w -> w
         | None -> "40%"
       in
-      set_el_width el
-        (if (!model_ref).Model.right_sidebar_open then width else "0px")
+      Web_dom.el_style_set_property el "width"
+        (if (model ()).Model.right_sidebar_open then width else "0px")
   | None -> ()
+
+(* ---------- resizers ----------
+   cljs left_sidebar.cljs/sidebar-resizer + right_sidebar.cljs/sidebar-
+   resizer: interact.js drag clamps the left panel to [240,460]px
+   (persisted :ls-left-sidebar-width, restored into
+   --ls-left-sidebar-width on mount) and the right panel to
+   [max(0.1,320/vw),0.7] of the viewport (persisted
+   "ls-right-sidebar-width"). Raw mousedown/move/up tracking here (no
+   interact.js in LUI). *)
+
+external doc_root : Js.Json.t = "document.documentElement"
+
+external style_set_prop :
+  Js.Json.t -> string -> string -> unit
+  = "setProperty" [@@mel.scope "style"] [@@mel.send]
+
+external style_set_width_j : Js.Json.t -> string -> unit = "width"
+  [@@mel.scope "style"] [@@mel.set]
+
+external class_add : Js.Json.t -> string -> unit = "add"
+  [@@mel.scope "classList"] [@@mel.send]
+
+external class_rm : Js.Json.t -> string -> unit = "remove"
+  [@@mel.scope "classList"] [@@mel.send]
+
+
+let left_resizing : Js.Json.t option ref = ref None
+let right_resizing = ref false
+
+let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
+
+(* cljs restores the persisted left width on mount *)
+let sync_left_sidebar_width () =
+  match Platform.local_storage_get "ls-left-sidebar-width" with
+  | Some w -> style_set_prop doc_root "--ls-left-sidebar-width" w
+  | None -> ()
+
+let set_right_width width =
+  Platform.local_storage_set "ls-right-sidebar-width" width;
+  (* cljs persist-right-sidebar-width! also feeds :ui/sidebar-width;
+     the inline write keeps the panel at the dragged size without
+     waiting for the next model publish *)
+  match Web_dom.query_selector "#right-sidebar" with
+  | Some el -> style_set_width_j el width
+  | None -> ()
+
+let on_resizer_mousedown ev =
+  match click_target ".left-sidebar-resizer" ev with
+  | Some el -> (
+      prevent_default ev;
+      left_resizing := Some el;
+      class_add doc_root "is-resizing-buf";
+      class_add el "is-active";
+      match closest el "#left-sidebar" with
+      | Some sb -> class_add sb "is-resizing"
+      | None -> ())
+  | None -> (
+      match click_target "#right-sidebar > .resizer" ev with
+      | Some _ ->
+          prevent_default ev;
+          right_resizing := true;
+          class_add doc_root "is-resizing-buf"
+      | None -> ())
+
+let on_resizer_mousemove ev =
+  (match !left_resizing with
+   | Some _ ->
+       let w = clampf 240. 460. (ev_client_x ev) in
+       let s = Printf.sprintf "%.2fpx" w in
+       style_set_prop doc_root "--ls-left-sidebar-width" s;
+       Platform.local_storage_set "ls-left-sidebar-width" s
+   | None -> ()
+  );
+  if !right_resizing then begin
+    let vw = Web_dom.win_inner_width in
+    let lo = max 0.1 (320. /. vw) in
+    let ratio = clampf lo 0.7 ((vw -. ev_client_x ev) /. vw) in
+    set_right_width (Printf.sprintf "%g%%" (ratio *. 100.))
+  end
+
+(* ---------- edge-swipe + small-viewport behavior (cljs
+   left_sidebar.cljs) ----------
+   touchstart/move/end on #left-sidebar: a rightward drag from the
+   collapsed rail opens the sidebar, a leftward drag while open closes
+   it. While |dx| > 20px the layout carries .is-touching and
+   .left-sidebar-inner follows the finger via translate3d; the
+   shade-mask opacity tracks the drag ratio. Below 640px taps on
+   navigation targets inside the sidebar also close it. *)
+
+external touch_item :
+  Js.Json.t -> int -> Js.Json.t = "item" [@@mel.scope "touches"] [@@mel.send]
+
+external touches_length :
+  Js.Json.t -> int = "length" [@@mel.scope "touches"] [@@mel.get]
+
+external el_offset_width : Js.Json.t -> float = "offsetWidth" [@@mel.get]
+
+(* cljs util/sm-breakpoint? — document.documentElement.offsetWidth < 640 *)
+let sm_breakpoint () = el_offset_width doc_root < 640.
+
+let touch_before : (float * float) option ref = ref None
+let touch_dx = ref 0.
+let touch_pending = ref false
+
+let left_touch_x ev i =
+  if touches_length ev > i then Some (ev_client_x (touch_item ev i))
+  else None
+
+let left_touch_y ev i =
+  if touches_length ev > i then Some (ev_client_y (touch_item ev i))
+  else None
+
+let set_el_style el name v = style_set_prop el name v
+
+let apply_touch_drag sb dx =
+  let open_ = (model ()).Model.left_sidebar_open in
+  (match Web_dom.query_selector "#left-sidebar .left-sidebar-inner" with
+   | Some inner ->
+       let w = el_offset_width inner in
+       let tx =
+         if dx > 0. then
+           (* opening drag: reveal from -100% toward 0 *)
+           let clamped = if dx > w then w else dx in
+           Printf.sprintf "translate3d(calc(%.0fpx - 100%%), 0, 0)"
+             clamped
+         else
+           (* closing drag: shift left in px (cljs magnifies the ratio
+              to -% — px keeps the finger-tracking feel without the
+              off-screen jump) *)
+           Printf.sprintf "translate3d(%.0fpx, 0, 0)" dx
+       in
+       set_el_style inner "transform" tx;
+       (match Web_dom.query_selector "#left-sidebar > .shade-mask" with
+        | Some mask ->
+            let ratio =
+              if dx > 0. then clampf 0. 1. (dx /. w)
+              else clampf 0. 1. (1. +. (dx /. w))
+            in
+            (* the mask only matters while open or while opening; when
+               closed and not yet pending keep it transparent *)
+            if open_ || dx > 0. then
+              set_el_style mask "opacity"
+                (Printf.sprintf "%.2f" ratio)
+        | None -> ())
+   | None -> ());
+  if not !touch_pending then (
+    touch_pending := true;
+    class_add sb "is-touching")
+
+let clear_touch_drag () =
+  touch_before := None;
+  touch_dx := 0.;
+  touch_pending := false;
+  (match Web_dom.query_selector "#left-sidebar" with
+   | Some sb -> class_rm sb "is-touching"
+   | None -> ());
+  (match Web_dom.query_selector "#left-sidebar .left-sidebar-inner" with
+   | Some inner -> set_el_style inner "transform" ""
+   | None -> ());
+  match Web_dom.query_selector "#left-sidebar > .shade-mask" with
+  | Some mask -> set_el_style mask "opacity" ""
+  | None -> ()
+
+let on_doc_touchstart ev =
+  match click_target "#left-sidebar" ev with
+  | Some _ -> (
+      match left_touch_x ev 0, left_touch_y ev 0 with
+      | Some x, Some y -> touch_before := Some (x, y)
+      | _ -> ())
+  | None -> ()
+
+let on_doc_touchmove ev =
+  match !touch_before with
+  | Some (bx, _by) -> (
+      match left_touch_x ev 0 with
+      | Some ax ->
+          let dx = ax -. bx in
+          touch_dx := dx;
+          if Float.abs dx > 20. then
+            (match Web_dom.query_selector "#left-sidebar" with
+             | Some sb -> apply_touch_drag sb dx
+             | None -> ())
+      | None -> ())
+  | None -> ()
+
+let on_doc_touchend _ev =
+  if !touch_pending then begin
+    let open_ = (model ()).Model.left_sidebar_open in
+    let dx = !touch_dx in
+    (* cljs: >40px rightward opens the closed sidebar; >30px leftward
+       closes the open one *)
+    if (not open_ && dx > 40.) || (open_ && dx < -30.) then
+      Runtime.send Action.Toggle_left_sidebar
+  end;
+  clear_touch_drag ()
+
+let on_resizer_mouseup _ev =
+  (match !left_resizing with
+   | Some el -> (
+       left_resizing := None;
+       class_rm doc_root "is-resizing-buf";
+       class_rm el "is-active";
+       match closest el "#left-sidebar" with
+       | Some sb -> class_rm sb "is-resizing"
+       | None -> ())
+   | None -> ()
+  );
+  if !right_resizing then begin
+    right_resizing := false;
+    class_rm doc_root "is-resizing-buf"
+  end
 
 (* ---------- storage ---------- *)
 
@@ -253,8 +468,19 @@ let load_nav_tag_titles repo st =
            [ Option.map (fun t -> ("assets", t)) asset
            ; Option.map (fun t -> ("tasks", t)) task ]))
 
+(* cljs right-sidebar/get-current-page falls back to today's journal
+   on non-page routes — the same resolution page_menu applies *)
+let menu_page (m : Model.t) =
+  match m.Model.route_page with
+  | Some p -> Some p
+  | None ->
+      List.find_opt
+        (fun (p : Model.page) ->
+          p.page_journal_day = Some (Dates.today_journal_day ()))
+        m.Model.journals
+
 let refresh_favorited repo st =
-  match !Runtime.current_page with
+  match menu_page (Runtime.model ()) with
   | Some p -> (
       match p.Model.page_uuid with
       | Some u ->
@@ -285,7 +511,7 @@ let push_page_route target =
   in
   Runtime.mark_nav ();
   Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
-  Platform.dispatch "ls:navigate" Js.Json.null
+  Web_dom.dispatch_custom "ls:navigate" Js.Json.null
 
 (* cljs redirect-to-page!: route-info first — hidden and
    private-built-in pages warn instead of navigating, and alias pages
@@ -329,12 +555,12 @@ let fetch_blocks (p : Model.page) =
 let open_dialog name =
   let o = Js.Dict.empty () in
   Js.Dict.set o "name" (Js.Json.string name);
-  Platform.dispatch "ls:open-dialog" (Js.Json.object_ o)
+  Web_dom.dispatch_custom "ls:open-dialog" (Js.Json.object_ o)
 
-let open_cards () = Platform.dispatch "ls:open-cards" Js.Json.null
+let open_cards () = Web_dom.dispatch_custom "ls:open-cards" Js.Json.null
 
 let ensure_right_open () =
-  if not (!model_ref).Model.right_sidebar_open then
+  if not (model ()).Model.right_sidebar_open then
     Runtime.send Action.Toggle_right_sidebar
 
 (* ---------- right-sidebar items ---------- *)
@@ -560,7 +786,7 @@ let remove_rest st key =
 
 let clear_items st =
   Runtime.signal_set st.items [];
-  if (!model_ref).Model.right_sidebar_open then
+  if (model ()).Model.right_sidebar_open then
     Runtime.send Action.Toggle_right_sidebar
 ;;
 
@@ -617,15 +843,6 @@ let open_sticky_item st kind =
         (match static_item "help" "help" (t "nav/help") with
          | Some it -> push_item st it
          | None -> ())
-    | "page-graph" when not (has_item st "page-graph") -> (
-        (* cljs sidebar-add-block! :page-graph requires a current page *)
-        match !Runtime.current_page with
-        | Some _ -> (
-            match static_item "page-graph" "page-graph" "graph.page/title"
-            with
-            | Some it -> push_item st it
-            | None -> ())
-        | None -> ())
     | (("rtc" | "undo-redo" | "profiler") as kind)
       when not (has_item st kind) -> (
         let label =
@@ -686,30 +903,35 @@ let refresh_items repo st =
 
 (* ---------- favorites ---------- *)
 
-let toggle_favorite st =
-  match !Runtime.current_page, (!model_ref).Model.repo with
-  | Some p, Some repo -> (
-      match p.Model.page_uuid with
-      | Some u ->
-          (* the cached favorited signal can still hold the previous page's
-             flag right after navigation; ask the worker for this page's
-             state instead of toggling from stale UI state *)
+let toggle_favorite_uuid st u =
+  match (model ()).Model.repo with
+  | Some repo ->
+      (* the cached favorited signal can still hold the previous page's
+         flag right after navigation; ask the worker for this page's
+         state instead of toggling from stale UI state *)
+      then_keep
+        (Runtime.invoke2 "thread-api/favorited-page?" (Wire.String repo)
+           (Wire.Uuid u))
+        (fun w ->
+          let fav = Wire.as_bool w = Some true in
           then_keep
-            (Runtime.invoke2 "thread-api/favorited-page?"
-               (Wire.String repo) (Wire.Uuid u))
-            (fun w ->
-              let fav = Wire.as_bool w = Some true in
-              then_keep
-                (Runtime.invoke3 "thread-api/set-page-favorite"
-                   (Wire.String repo) (Wire.Uuid u) (Wire.Bool (not fav)))
-                (fun _ ->
-                  load_favorites repo st;
-                  refresh_favorited repo st))
+            (Runtime.invoke3 "thread-api/set-page-favorite" (Wire.String repo)
+               (Wire.Uuid u) (Wire.Bool (not fav)))
+            (fun _ ->
+              load_favorites repo st;
+              refresh_favorited repo st))
+  | None -> ()
+
+let toggle_favorite st =
+  match menu_page (Runtime.model ()) with
+  | Some p -> (
+      match p.Model.page_uuid with
+      | Some u -> toggle_favorite_uuid st u
       | None -> ())
-  | _ -> ()
+  | None -> ()
 
 let unfavorite st uuid =
-  match (!model_ref).Model.repo with
+  match (model ()).Model.repo with
   | Some repo ->
       then_keep
         (Runtime.invoke3 "thread-api/set-page-favorite" (Wire.String repo)
@@ -741,8 +963,7 @@ let item_hits affected st =
     (Signal.get_state st.items)
 
 let on_sync st affected =
-  match (!model_ref).Model.repo with
-  | Some repo ->
+  match (model ()).Model.repo with  | Some repo ->
       (* the route reload comes from Worker_events.dispatch's debounced
          Router.reload — refetching it here too doubled the work per
          broadcast *)
@@ -764,18 +985,14 @@ let on_sync st affected =
   | None -> ()
 
 let install_worker_hook st =
-  if not !hook_installed then begin
-    hook_installed := true;
-    ignore (Runtime.on_sync (on_sync st))
-  end
-
+  State_cell.Once.run hook_installed (fun () ->
+    ignore (Runtime.on_sync (on_sync st)))
 let page_key (p : Model.page) =
   match p.Model.page_uuid with
   | Some u -> "u:" ^ u
   | None -> "d:" ^ string_of_int (Option.value p.Model.page_db_id ~default:0)
 
 let on_model st (m : Model.t) =
-  model_ref := m;
   (match m.Model.repo with
    | Some repo when !loaded_repo <> Some repo ->
        loaded_repo := Some repo;
@@ -821,10 +1038,10 @@ let on_doc_contextmenu st ev =
   match click_target "#left-sidebar a.link-item" ev with
   | Some el -> (
       prevent_default ev;
-      match Platform.get_attribute el "data-lp-ref" with
+      match Web_dom.el_get_attr el "data-lp-ref" with
       | Some target ->
           open_lp_menu st ~target
-            ~recent:(Platform.get_attribute el "data-lp-recent" = Some "1")
+            ~recent:(Web_dom.el_get_attr el "data-lp-recent" = Some "1")
             ~x:(ev_client_x ev) ~y:(ev_client_y ev)
       | None -> ())
   | None -> (
@@ -835,7 +1052,7 @@ let on_doc_contextmenu st ev =
           match closest hdr ".sidebar-item[data-item-key]" with
           | Some it -> (
               prevent_default ev;
-              match Platform.get_attribute it "data-item-key" with
+              match Web_dom.el_get_attr it "data-item-key" with
               | Some key ->
                   open_item_menu st key ~x:(ev_client_x ev)
                     ~y:(ev_client_y ev)
@@ -860,21 +1077,53 @@ let on_doc_click st ev =
   | Some el -> (
       match
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
-           resolved title, which drifts out of sync on rename *)
-        match Platform.get_attribute el "data-uuid" with
-        | Some u -> Some u
-        | None -> Platform.get_attribute el "data-ref"
+           resolved title, which drifts out of sync on rename. tag chips
+           keep the uuid on the .block-tag wrapper *)
+        (match Web_dom.el_get_attr el "data-uuid" with
+         | Some u when u <> "" -> Some u
+         | _ -> (
+             match
+               Option.bind (closest el ".block-tag[data-tag-uuid]")
+                 (fun chip -> Web_dom.el_get_attr chip "data-tag-uuid")
+             with
+             | Some u when u <> "" -> Some u
+             | _ -> Web_dom.el_get_attr el "data-ref"))
       with
       | Some ref_ ->
+          (* cljs open-page-ref: shift+click opens in the sidebar, any other
+             click (mod included) navigates *)
           if jbool "shiftKey" ev then open_ref st ref_
-          else if not (jbool "metaKey" ev || jbool "ctrlKey" ev) then
-            navigate_to_page ref_
+          else navigate_to_page ref_
       | None -> ())
   | None ->
-      if jbool "shiftKey" ev then
+      (* cljs left_sidebar.cljs: below the sm breakpoint a tap on a
+         navigation target inside the open sidebar closes it *)
+      if
+        sm_breakpoint ()
+        && (model ()).Model.left_sidebar_open
+      then
+        match
+          click_target
+            "#left-sidebar .sidebar-navigations a, #left-sidebar .favorites .bd, \
+             #left-sidebar .recent .bd, #left-sidebar .nav-header"
+            ev
+        with
+        | Some _ -> Runtime.send Action.Toggle_left_sidebar
+        | None ->
+            if jbool "shiftKey" ev then
+              match click_target "[data-testid='page title']" ev with
+              | Some _ -> (
+                  match (Runtime.model ()).Model.route_page with
+                  | Some p -> (
+                      match p.Model.page_uuid with
+                      | Some u -> open_uuid st u
+                      | None -> ())
+                  | None -> ())
+              | None -> ()
+      else if jbool "shiftKey" ev then
         match click_target "[data-testid='page title']" ev with
         | Some _ -> (
-            match !Runtime.current_page with
+            match (Runtime.model ()).Model.route_page with
             | Some p -> (
                 match p.Model.page_uuid with
                 | Some u -> open_uuid st u
@@ -888,7 +1137,7 @@ let on_doc_keydown st ev =
       match Worker_client.json_string k with
       | Some "Escape" ->
           if Signal.get_state st.open_menu <> "" then close_menu st
-          else if (!model_ref).Model.appearance <> None then
+          else if (model ()).Model.appearance <> None then
             Runtime.send (Action.Appearance_set None)
 
       (* mod+shift+f = :page/toggle-favorite (cljs shortcut config) *)
@@ -914,6 +1163,7 @@ let init (ms : Model.t Signal.signal) : t =
         }
       in
       st_ref := Some st;
+      model_signal := Some ms;
       (* sidebar item blocks are editable: expose them to Editor_state.find
          so click-to-edit works on .cp__right-sidebar block rows *)
       Editor_state.add_block_source (fun uuid ->
@@ -921,13 +1171,20 @@ let init (ms : Model.t Signal.signal) : t =
             (fun (it : item) -> Editor_state.find_in it.blocks uuid)
             (Signal.get_state st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
-      Platform.on_document_event "ls:open-right-sidebar" (fun ev ->
+      Web_dom.on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with
           | Some u -> open_uuid st u
           | None -> ());
-      Platform.on_document_event "click" (on_doc_click st);
-      Platform.on_document_event "contextmenu" (on_doc_contextmenu st);
-      Platform.on_document_event "keydown" (on_doc_keydown st);
+      Web_dom.on_document_event "click" (on_doc_click st);
+      Web_dom.on_document_event "contextmenu" (on_doc_contextmenu st);
+      Web_dom.on_document_event "keydown" (on_doc_keydown st);
+      Web_dom.on_document_event "mousedown" on_resizer_mousedown;
+      Web_dom.on_document_event "mousemove" on_resizer_mousemove;
+      Web_dom.on_document_event "mouseup" on_resizer_mouseup;
+      Web_dom.on_document_event "touchstart" on_doc_touchstart;
+      Web_dom.on_document_event "touchmove" on_doc_touchmove;
+      Web_dom.on_document_event "touchend" on_doc_touchend;
+      sync_left_sidebar_width ();
       st
 
 let ensure ms = init ms

@@ -8,12 +8,10 @@ open Lui_elements
 
 let dom = Logseq_dom.dom
 module T = I18n
-module B = Browser_ui
-
 let finish_import repo label =
   let short = Graphs_ops.short_name repo in
   Toast.success (T.import_finished label short);
-  B.later ~ms:4000 (fun () ->
+  Web_dom.later ~ms:4000 (fun () ->
       ignore (Graphs_ops.refresh ());
       ignore (Graphs_ops.navigate_journal repo))
 
@@ -43,16 +41,16 @@ let ask_name_and_run label run =
   ()
 
 let import_sqlite_db repo file =
-  let* buf = file |> B.file_buffer in
+  let* buf = file |> Web_dom.file_buffer in
   let* _ =
     (Runtime.invoke2 "thread-api/import-db-binary"
        (Wire.String repo)
-       (Wire.Binary (B.u8_of_buffer buf)))
+       (Wire.Binary (Web_dom.u8_of_buffer buf)))
   in
   Js.Promise.resolve true
 
 let import_edn repo file =
-  let* text = file |> B.file_text in
+  let* text = file |> Web_dom.file_text in
   match (try Some (Edn.parse text) with _ -> None) with
   | None ->
       Toast.warning T.import_invalid_edn;
@@ -65,10 +63,10 @@ let import_edn repo file =
       Js.Promise.resolve true
 
 let file_item f =
-  let* text = f |> B.file_text in
+  let* text = f |> Web_dom.file_text in
   Js.Promise.resolve
     (Wire.Map
-       [ (Wire.kw "path", Wire.String (B.file_name f))
+       [ (Wire.kw "path", Wire.String (Web_dom.file_name f))
        ; (Wire.kw "content", Wire.String text)
        ])
 
@@ -76,7 +74,7 @@ let import_file_graph repo files =
   match files with
   | config :: rest ->
       let* files_w = Js.Promise.all (Array.of_list (List.map file_item rest)) in
-      let* cfg = (B.file_text config) in
+      let* cfg = (Web_dom.file_text config) in
         let* _ =
         Runtime.invoke "thread-api/import-file-graph"
           [ Wire.String repo
@@ -107,9 +105,9 @@ let run_files kind files =
   | _ -> ()
 
 let on_change id () =
-  match B.qs ("#" ^ id) with
+  match Web_dom.query_selector ("#" ^ id) with
   | Some el -> (
-      match Array.to_list (B.files_of el) with
+      match Array.to_list (Web_dom.el_files el) with
       | [] -> ()
       | files -> run_files id files)
   | None -> ()

@@ -18,8 +18,7 @@
 
 open Promise_ext
 open Lui_elements
-module D = struct include Editor_dom include Properties_dom end
-module E = Editor_dom
+module D = Web_dom
 module I = I18n
 module Ops = Outliner_ops
 
@@ -67,7 +66,7 @@ let save_comment cuuid (text : string) =
      Ops.apply_and_refresh [ sop ])
 
 let delete_comment cuuid =
-  match !Runtime.current_repo with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -104,7 +103,7 @@ let reactions_el uuid (rs : (string * int) list) : t =
            rs)
 
 let open_reaction_picker uuid (btn_id : string) =
-  match D.doc_query ("[id='" ^ btn_id ^ "']") with
+  match D.query_selector ("[id='" ^ btn_id ^ "']") with
   | None -> ()
   | Some anchor ->
       Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->

@@ -8,8 +8,6 @@ open Lui_elements
 
 let dom = Logseq_dom.dom
 module W = Wire
-module B = Browser_ui
-
 type pst = {
   page_uuid : string option;
   page_db_id : int option;
@@ -18,22 +16,18 @@ type pst = {
   publishing : bool;
 }
 
-let st_ref : pst Signal.state option ref = ref None
+include State_cell.Make (struct
+  type t = pst
+  let name = "publish"
+end)
 
 let st ctx =
-  match !st_ref with
-  | Some s -> s
-  | None ->
-      let s =
-        Signal.state ctx.Lui_ui.ui_scheduler
-          { page_uuid = None
-          ; page_db_id = None
-          ; password = ""
-          ; visible = false
-          ; publishing = false }
-      in
-      st_ref := Some s;
-      s
+  get_or_init ctx.Lui_ui.ui_scheduler
+    { page_uuid = None
+    ; page_db_id = None
+    ; password = ""
+    ; visible = false
+    ; publishing = false }
 
 let pending : (string * int option) option ref = ref None
 
@@ -46,7 +40,7 @@ let btn_base =
    ring-offset-background transition-colors focus-visible:outline-none \
    focus-visible:ring-2 focus-visible:ring-ring \
    focus-visible:ring-offset-2 disabled:pointer-events-none \
-   disabled:opacity-50 select-none h-7 rounded px-3 py-1"
+   disabled:opacity-50 select-none"
 
 let input_cls =
   "ui__input flex h-10 w-full rounded-md border border-input \
@@ -57,15 +51,9 @@ let input_cls =
    focus-visible:ring-offset-2 disabled:cursor-not-allowed \
    disabled:opacity-50"
 
-let trim s =
-  let n = String.length s in
-  let a = ref 0 and b = ref (n - 1) in
-  while !a < n && (s.[!a] = ' ' || s.[!a] = '\t' || s.[!a] = '\n') do incr a done;
-  while !b >= !a && (s.[!b] = ' ' || s.[!b] = '\t' || s.[!b] = '\n') do decr b done;
-  if !b < !a then "" else String.sub s !a (!b - !a + 1)
 
 (* cljs util/time-ms *)
-let now_ms () = B.now_ms () |> int_of_float |> string_of_int
+let now_ms () = Platform.date_now_ms () |> int_of_float |> string_of_int
 
 let json_str b k v =
   Buffer.add_string b (Printf.sprintf "\"%s\":\"%s\"," k v)
@@ -111,7 +99,7 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
     ~schema_version =
   let body_wire =
     let items = map_items payload in
-    let pw = trim st.password in
+    let pw = Str_util.trim st.password in
     let items =
       if pw = "" then items
       else items @ [ (W.kw "page-password", W.String pw) ]
@@ -119,7 +107,7 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
     W.Map items
   in
   let body = Transit.to_string body_wire in
-  let* content_hash = Asset_store.sha256_hex (B.binary_to_u8 body) in
+  let* content_hash = Asset_store.sha256_hex (Web_dom.binary_to_u8 body) in
   let meta =
     meta_json ~graph_uuid ~page_uuid ~block_count ~schema_version
       ~content_hash ~content_len:(String.length body)
@@ -140,7 +128,7 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
                 , W.Int (String.length body))
               ; (W.kw "owner_sub", W.Nil)
               ; (W.kw "owner_username", W.Nil)
-              ; (W.kw "created_at", W.Int (B.now_ms () |> int_of_float)) ] ) ])
+              ; (W.kw "created_at", W.Int (Platform.date_now_ms () |> int_of_float)) ] ) ])
   in
   let headers =
     [| ("content-type", "application/transit+json")
@@ -179,7 +167,7 @@ let submit ctx =
              | None -> W.Int (Option.get cur.page_db_id)
            in
            let repo =
-             match !Runtime.current_repo with
+             match (Runtime.model ()).Model.repo with
              | Some r -> r
              | None -> "logseq_db_Demo"
            in
@@ -231,8 +219,8 @@ let ghost_btn () =
   dom ~key:"pub-cancel" ~tag:"button"
     ~style_class:
       (btn_base
-     ^ " hover:bg-secondary/70 hover:text-secondary-foreground \
-        active:opacity-80 as-ghost")
+     ^ " h-10 rounded px-4 py-2 hover:bg-secondary/70 \
+        hover:text-secondary-foreground active:opacity-80 as-ghost")
     ~attrs:[ ("type", "button") ] ~events:"click"
     ~on_dom_event:(fun n _ ->
       if n = "click" then Dialogs_state.close_top ())
@@ -260,12 +248,13 @@ let toggle_pw ctx =
         []
     ; if_
         ~test:
-          (Signal.map (fun (s : pst) -> trim s.password <> "") st_sig)
+          (Signal.map (fun (s : pst) -> Str_util.trim s.password <> "") st_sig)
         (dom ~key:"pub-eye" ~tag:"button"
            ~style_class:
              (btn_base
-            ^ " hover:bg-secondary/70 hover:text-secondary-foreground \
-               active:opacity-80 as-ghost absolute right-1")
+            ^ " h-8 rounded px-3 py-1 hover:bg-secondary/70 \
+               hover:text-secondary-foreground active:opacity-80 as-ghost \
+               absolute right-1")
            ~attrs:[ ("type", "button"); ("style", "top: 6px") ]
            ~events:"click"
            ~on_dom_event:(fun n _ ->
@@ -310,7 +299,8 @@ let body (_ms : Model.t Signal.signal) : t =
           ; dom ~key:"pub-submit" ~tag:"button"
               ~style_class:
                 (btn_base
-               ^ " bg-primary text-primary-foreground hover:bg-primary/90")
+               ^ " h-10 rounded px-4 py-2 bg-primary \
+                  text-primary-foreground hover:bg-primary/90")
               ~attrs_signal_v:(Logseq_dom.reactive_attrs
                    (fun (s : pst) ->
                      [ ("type", "submit"); ("autofocus", "") ]

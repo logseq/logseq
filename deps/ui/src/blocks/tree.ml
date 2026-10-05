@@ -53,7 +53,7 @@ let row_class_str (b : Model.block) uuid (selected : S.String_set.t) =
   ^ (if blank then "is-blank " else "")
   ^ (if embed then "embed-block " else "")
   ^ (if Comments.is_comments_area b then "is-comments-area " else "")
-  ^ "ls-block"
+  ^ "ls-block swipe-item"
 
 let row_class_sig uuid blank embed (b : Model.block) =
   ignore (blank, embed);
@@ -88,6 +88,8 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block)
   ; ("containerid", uuid)
   ; ("data-block-title", b.block_title)
   ; ("data-comment-item", string_of_bool b.Model.block_is_comment)
+  ; ("data-comments-area"
+    , string_of_bool (Comments.is_comments_area b))
   ; ("data-block-format", "markdown")
   ; ("haschild", string_of_bool has_children)
   ; ( "data-collapsed"
@@ -99,9 +101,6 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block)
        db block/level *)
     ("level", string_of_int depth)
   ]
-  @ (if Comments.is_comments_area b then
-       [ ("data-comments-area", "true") ]
-     else [])
   (* cljs sets blockid to the linked entity's uuid and
      originalblockid to the linking block's — we keep blockid as the
      embed block's own uuid so delegated editing/ops resolve it *)
@@ -288,18 +287,18 @@ let arrow_hover ~scope ~uuid ~(b : Model.block) name _payload =
   in
   if not (collapsable || collapsed) then ()
   else
-    match Browser_ui.qs ("#ctrlspan-" ^ scope ^ "-" ^ uuid) with
+    match Web_dom.query_selector ("#ctrlspan-" ^ scope ^ "-" ^ uuid) with
     | None -> ()
     | Some el -> (
         match name with
         | "mouseenter" ->
-            Browser_ui.rm_class el "control-hide";
-            Browser_ui.add_class el "control-show";
-            Browser_ui.add_class el "cursor-pointer"
+            Web_dom.el_class_remove el "control-hide";
+            Web_dom.el_class_add el "control-show";
+            Web_dom.el_class_add el "cursor-pointer"
         | "mouseleave" ->
-            Browser_ui.add_class el "control-hide";
-            Browser_ui.rm_class el "control-show";
-            Browser_ui.rm_class el "cursor-pointer"
+            Web_dom.el_class_add el "control-hide";
+            Web_dom.el_class_remove el "control-show";
+            Web_dom.el_class_remove el "cursor-pointer"
         | _ -> ())
 
 (* -- content vs editor -- *)
@@ -322,13 +321,17 @@ let content_el uuid (b : Model.block) : t =
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
             (if b.Model.block_is_query then [ Query_builder.block_el uuid b ]
              else
-               [ dom ~key:("bt-" ^ uuid) ~style_class:"inline w-full"
-                   (Render.title_block ~self:uuid
-                      ~annot:true
-                      ~resolved:(S.title_for uuid b.block_title)
-                      b)
-               ])
-        ]
+               match Render.title_outer_class b with
+               | Some cls ->
+                   [ dom ~key:("bt-" ^ uuid) ~style_class:cls
+                       (Render.title_block ~self:uuid ~annot:true
+                          ~resolved:(S.title_for uuid b.block_title)
+                          b)
+                   ]
+               | None ->
+                   Render.title_block ~self:uuid ~annot:true
+                     ~resolved:(S.title_for uuid b.block_title)
+                     b)        ]
     ]
 
 let editor_el uuid scope : t =
@@ -421,6 +424,67 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
    still appear inline in the title ("#tag") are skipped — they render in
    the title itself. -- *)
 
+(* cljs block-tag: hovering the chip swaps the leading # for an x that
+   removes the tag value off the owner entity (block or page). Private
+   tags never show the x. *)
+let tag_hover hid xid name _payload =
+  match Web_dom.query_selector ("#" ^ hid), Web_dom.query_selector ("#" ^ xid) with
+  | Some h, Some x -> (
+      match name with
+      | "mouseenter" ->
+          Web_dom.el_class_add h "hidden";
+          Web_dom.el_class_remove x "hidden"
+      | "mouseleave" ->
+          Web_dom.el_class_remove h "hidden";
+          Web_dom.el_class_add x "hidden"
+      | _ -> ())
+  | _ -> ()
+
+let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
+  let priv = private_tag_ident ident in
+  let hid = "tagh-" ^ key and xid = "tagx-" ^ key in
+  dom ~key:("tag-" ^ key)
+    ~style_class:("block-tag" ^ if priv then " private-tag" else "")
+    (* cljs keeps the tag entity in the chip's click closure; the
+       delegated context-menu handler reads it off data attrs instead *)
+    ~attrs:
+      [ ("data-tag-uuid", tuuid)
+      ; ("data-tag-id", string_of_int dbid)
+      ; ("data-tag-title", tag)
+      ; ("data-tag-priv", if priv then "true" else "false") ]
+    ~events:(if priv then "" else "mouseenter mouseleave")
+    ~on_dom_event:(tag_hover hid xid)
+    [ dom ~key:("tc-" ^ key) ~style_class:"flex items-center"
+        [ dom ~key:("th-" ^ key) ~tag:"a" ~id:hid
+            ~style_class:"hash-symbol select-none flex" ~text:"#" []
+        ; (if priv then Logseq_dom.nothing
+           else
+             dom ~key:("tx-" ^ key) ~tag:"a" ~id:xid
+               ~style_class:
+                 "tag-x hash-symbol hidden cursor-pointer select-none flex"
+               ~attrs:[ ("title", I18n.t "block/remove-this-tag") ]
+               ~text:"x"
+               ~events:"click"
+               ~on_dom_event:(fun name _ ->
+                 match name with
+                 | "click" ->
+                     ignore
+                       (Outliner_ops.apply_and_refresh
+                          [ Outliner_ops.op "delete-property-value"
+                              [ Wire.Uuid owner_uuid
+                              ; Wire.Keyword "block/tags"
+                              ; Wire.Int dbid ] ])
+                 | _ -> ())
+               [])
+        ; dom ~key:("ta-" ^ key) ~tag:"a"
+            ~style_class:"tag relative"
+            ~attrs:
+              [ ("tabindex", "0"); ("draggable", "true")
+              ; ("data-uuid", tuuid)
+              ; ("data-ref", String.lowercase_ascii tag) ]
+            [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
+        ] ]
+
 let tags_el uuid (b : Model.block) : t =
   let quads =
     try List.map2
@@ -449,32 +513,8 @@ let tags_el uuid (b : Model.block) : t =
       dom ~key:("tags-" ^ uuid) ~style_class:"block-tags gap-1"
         (List.mapi
            (fun i (tag, tuuid, ident, dbid) ->
-             (* cljs block-tag: .block-tag > .flex.items-center >
-                a.hash-symbol("#") + a.tag[data-ref] *)
-             let priv = private_tag_ident ident in
-             dom ~key:("tag-" ^ uuid ^ "-" ^ string_of_int i)
-               ~style_class:
-                 ("block-tag" ^ if priv then " private-tag" else "")
-               (* cljs keeps the tag entity in the chip's click closure;
-                  the delegated context-menu handler reads it off data
-                  attrs instead *)
-               ~attrs:
-                 [ ("data-tag-uuid", tuuid)
-                 ; ("data-tag-id", string_of_int dbid)
-                 ; ("data-tag-title", tag)
-                 ; ("data-tag-priv", if priv then "true" else "false") ]
-               [ dom ~key:("tc-" ^ uuid ^ "-" ^ string_of_int i)
-                   ~style_class:"flex items-center"
-                   [ dom ~key:("th-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
-                       ~style_class:"hash-symbol select-none flex" ~text:"#" []
-                   ; dom ~key:("ta-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
-                       ~style_class:"tag relative"
-                       ~attrs:
-                         [ ("tabindex", "0"); ("draggable", "true")
-                         ; ("data-ref", String.lowercase_ascii tag) ]
-                       [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
-                   ]
-               ])
+             tag_chip ~key:(uuid ^ "-" ^ string_of_int i) ~owner_uuid:uuid
+               ~tag ~tuuid ~ident ~dbid)
            tags)
 
 
@@ -488,7 +528,7 @@ let () =
   Editor_keys.install_once ();
   Add_button.install ();
   Asset_dom.install ();
-  Editor_dom.ensure_raw_text_observer ()
+  Web_dom.ensure_raw_text_observer ()
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
@@ -585,6 +625,13 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     ; (* .ls-block-content-indent: block properties area + block-below
          pills, sibling of .block-main-container *)
       Properties_area.block_area ~uuid
+    ; (* cljs custom-query* — the live query shell sits below
+         .block-main-container, not inside the title row *)
+      (if Render.is_query_block b then Render.query_below_el uuid
+       else if Render.is_cards_block b then
+         (* class-Cards blocks get the same results shell *)
+         Render.query_below_el uuid
+       else Logseq_dom.nothing)
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library ~virtualize uuid scope b
        else Logseq_dom.nothing)
@@ -636,6 +683,13 @@ and row_sig ~depth ~editable ~library ~virtualize scope
            bs (S.invalidation_sig ()))
     ; Properties_area.block_area
         ~uuid:(Option.value b0.Model.block_uuid ~default:"")
+    ; (if Render.is_query_block b0 then
+         Render.query_below_el
+           (Option.value b0.Model.block_uuid ~default:"")
+       else if Render.is_cards_block b0 then
+         Render.query_below_el
+           (Option.value b0.Model.block_uuid ~default:"")
+       else Logseq_dom.nothing)
     ; row_children ~depth ~editable ~library ~virtualize scope bs
     ]
 
@@ -841,7 +895,7 @@ let embed_chained = ref false
 
 (* a broadcast can arrive per applied op — coalesce embed refetches into
    one fan-out per burst so N embeds issue N fetches, not N x ops *)
-let debounced_embed_refresh = Editor_dom.debounce 150
+let debounced_embed_refresh = Web_dom.debounce 150
 
 let chain_embed_worker () =
   if not !embed_chained then begin

@@ -88,9 +88,9 @@ let route_anchor () =
 let anchor_timer = ref 0
 
 let rec poll_anchor anchor n =
-  match Editor_dom.get_element_by_id anchor with
+  match Web_dom.get_element_by_id anchor with
   | Some el ->
-      Editor_dom.el_scroll_into_view el;
+      Web_dom.el_scroll_into_view el;
       if String.length anchor > 36 then
         let tail =
           String.sub anchor (String.length anchor - 36) 36
@@ -98,20 +98,20 @@ let rec poll_anchor anchor n =
         if Wire.is_uuid_string tail then
           Editor_actions.select_single tail
         else (
-          Editor_dom.el_class_add el "block-highlight";
+          Web_dom.el_class_add el "block-highlight";
           anchor_timer :=
-            Editor_dom.set_timeout_id
+            Web_dom.set_timeout_id
               (fun () ->
-                Editor_dom.el_class_remove el "block-highlight")
+                Web_dom.el_class_remove el "block-highlight")
               4000)
   | None ->
       if n < 120 then
         anchor_timer :=
-          Editor_dom.set_timeout_id (fun () -> poll_anchor anchor (n + 1))
+          Web_dom.set_timeout_id (fun () -> poll_anchor anchor (n + 1))
             50
 
 let jump_to_anchor anchor =
-  Editor_dom.clear_timeout !anchor_timer;
+  Web_dom.clear_timeout !anchor_timer;
   poll_anchor anchor 0
 
 let fetch_blocks (p : Model.page) =
@@ -153,8 +153,9 @@ let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
 let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   (let* blocks = fetch_refs_blocks p in
   Js.Promise.resolve
-    (if not (is_stale ()) then
-       Runtime.send (Action.Refs_loaded blocks)))
+    (if not (is_stale ()) then (
+       Runtime.send (Action.Refs_loaded blocks);
+       Outliner_ops.fetch_ref_group_parents ~stale:is_stale blocks)))
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("get-block-refs failed", e);
          Js.Promise.resolve ())
@@ -172,7 +173,8 @@ let journals_loading_more = ref false
 let collect_journal p =
   let* p' = fetch_blocks p in
   let* refs = fetch_refs_blocks p' in
-  Js.Promise.resolve
+  (* title-tag chips need tag uuids/id for their context menu *)
+  Outliner_ops.resolve_page_tags (repo ())
     { p' with Model.page_linked_refs = refs }
 
 let journal_summaries w =
@@ -194,14 +196,14 @@ let load_journals () =
   let* arr = Js.Promise.all (Array.of_list (List.map collect_journal pages)) in
   let* js = Js.Promise.resolve (Array.to_list arr) in
   Js.Promise.resolve
-    (match !Runtime.current_route with
-     | Some (Model.Journals | Model.Home) ->
+    (match Runtime.route () with
+     | Model.Journals | Model.Home ->
          Runtime.send (Action.Journals_loaded js)
      | _ -> ()))
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("load_journals failed", e);
-         (match !Runtime.current_route with
-          | Some (Model.Journals | Model.Home) ->
+         (match Runtime.route () with
+          | Model.Journals | Model.Home ->
               Runtime.send Action.Page_load_failed
           | _ -> ());
          Js.Promise.resolve ())
@@ -265,7 +267,7 @@ let load_more_journals () : unit Js.Promise.t =
 
 (* drop a send when the route moved on while the fetch was in-flight —
    otherwise a slow stale load overwrites the page the user navigated to *)
-let stale (route : Model.route) = !Runtime.current_route <> Some route
+let stale (route : Model.route) = Runtime.route () <> route
 
 (* routes that already committed a route_page — a same-route reload can
    race a mid-apply sync tx and read the page as missing; that transient
@@ -279,7 +281,7 @@ let loaded_route : Model.route option ref = ref None
 let loading_route : Model.route option ref = ref None
 
 let stale_page (p : Model.page) () =
-  match !Runtime.current_page with
+  match (Runtime.model ()).Model.route_page with
   | Some c -> c.Model.page_uuid <> p.Model.page_uuid
   | None -> true
 
@@ -391,8 +393,8 @@ let load_home () =
       load_journals ())
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("load_home failed", e);
-         (match !Runtime.current_route with
-          | Some Model.Home -> Runtime.send Action.Page_load_failed
+         (match Runtime.route () with
+          | Model.Home -> Runtime.send Action.Page_load_failed
           | _ -> ());
          Js.Promise.resolve ())
 
@@ -463,8 +465,8 @@ let load_block_zoom uuid =
                    zoom target is no longer routed *)
                 if
                   gen = !Runtime.load_gen
-                  && !Runtime.current_route
-                     = Some (Model.Block_zoom uuid)
+                  && Runtime.route ()
+                     = Model.Block_zoom uuid
                 then (
                   Editor_state.clear_overrides ();
                   loaded_route
@@ -512,8 +514,8 @@ let load_block_zoom uuid =
                                ("load_block_zoom parents failed", e);
                              if
                                gen = !Runtime.load_gen
-                               && !Runtime.current_route
-                                  = Some (Model.Block_zoom uuid)
+                               && Runtime.route ()
+                                  = Model.Block_zoom uuid
                              then (
                                if
                                  !loaded_route
@@ -579,10 +581,10 @@ let load_route (route : Model.route) =
 let resolve () =
   Platform.perf_mark "router:resolve";
   let route = parse_hash () in
-  (match !Runtime.current_route with
-  | Some r when r = route ->
+  (match Runtime.route () with
+  | r when r = route ->
       (* our own set_location_hash (or a repeat hashchange) for the route
-         already shown — Navigate_to would blank route_page/current_page
+         already shown — Navigate_to would blank route_page
          while the same data refetches; just refresh in place. A load
          for this same route already in flight (the push's second
          resolve) is skipped entirely — the dedupe clears on commit *)
@@ -616,17 +618,15 @@ let reload_timer = ref 0
 
 let reload () =
   Platform.perf_mark "router:reload";
-  Editor_dom.clear_timeout !reload_timer;
+  Web_dom.clear_timeout !reload_timer;
   reload_timer :=
-    Editor_dom.set_timeout_id
+    Web_dom.set_timeout_id
       (fun () ->
-        match !Runtime.current_route with
-        | Some r -> load_route r
-        | None -> resolve ())
+        load_route (Runtime.route ()))
       30
 
 let init () =
-  Runtime.nav_load_done := (fun () -> loading_route := None);
+  Runtime.hooks.nav_load_done <- (fun () -> loading_route := None);
   (* the cheap side-fetches a delta-spliced refresh still needs — linked
      refs plus the unlinked section's exists/list checks *)
   Runtime.refresh_page_side :=
@@ -635,9 +635,32 @@ let init () =
       fetch_refs ~stale p;
       Outliner_ops.fetch_unlinked_refs ~stale p;
       Outliner_ops.fetch_unlinked_exists ~stale p);
+  (* delta-spliced journals update: the owning journal's linked refs
+     still need their cheap refresh (a block-title edit can create or
+     remove a mention) — refetch just that page's refs and republish *)
+  Runtime.hooks.refresh_journal_side <-
+    (fun p ->
+      ignore
+        ((let* refs = fetch_refs_blocks p in
+          Js.Promise.resolve
+            (match Runtime.route () with
+             | Model.Journals | Model.Home ->
+                 Runtime.send
+                   (Action.Journals_spliced
+                      (List.map
+                         (fun (j : Model.page) ->
+                           if j.Model.page_uuid = p.Model.page_uuid then
+                             { j with Model.page_linked_refs = refs }
+                           else j)
+                         (Runtime.model ()).Model.journals))
+             | _ -> ()))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error
+                  ("journal refs refresh failed", e);
+                Js.Promise.resolve ())));
   Platform.on_hash_change resolve;
-  Platform.on_document_event "ls:navigate" (fun _ -> resolve ());
-  Platform.add_document_listener "keydown" (fun ev ->
+  Web_dom.on_document_event "ls:navigate" (fun _ -> resolve ());
+  Web_dom.on_document_event "keydown" (fun ev ->
       if Platform.event_str ev "key" = "Escape" then (
         Runtime.send Action.Dismiss_all;
         Runtime.flush ()))

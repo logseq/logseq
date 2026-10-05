@@ -41,7 +41,25 @@ let selector_row st =
         ~on_dom_event:(fun name _ ->
           if name = "click" then Cards_state.toggle_opts st)
         ~style_class:"ls-cards-select"
-        [ opts_box st ]
+        [ (* cljs shui/select-trigger: current deck label + chevron *)
+          dom ~key:"val" ~style_class:"ls-cards-select-value"
+            [ dyn ~equal:(fun (a : int * Cards_state.deck list) b -> a = b)
+                (fun (sel, decks) ->
+                  let label =
+                    if sel < 0 then t_ "flashcard/all-cards"
+                    else
+                      match List.nth_opt decks sel with
+                      | Some d -> d.Cards_state.deck_label
+                      | None -> t_ "flashcard/all-cards"
+                  in
+                  dom ~key:"lbl" ~tag:"span"
+                    [ text ~key:"t" ~value:label [] ])
+                (Signal.map2
+                   (fun a b -> (a, b))
+                   (Signal.value st.Cards_state.sel)
+                   (Signal.value st.Cards_state.decks))
+            ; icon "chevron-down" ]
+        ; opts_box st ]
     ; dom ~key:"add" ~tag:"button" ~id:"ls-cards-add"
         ~attrs:[ ("title", t_ "flashcard/add-cards-query-tooltip") ]
         ~style_class:"ls-icon-btn"
@@ -143,12 +161,16 @@ let cards_body st =
     (fun (cards, pos, phase) ->
       match List.nth_opt cards pos with
       | None ->
+          (* cljs: (empty? all-block-ids) -> "Time to create a card!" + the
+             "#Card"/cloze hint, not the review-finished message *)
           dom ~key:"empty" ~style_class:"ls-card content ls-ml"
-            [ dom ~key:"h" ~tag:"h2" ~style_class:"ls-strong"
-                [ text ~key:"t"
-                    ~value:
-                      (t_ "flashcard.review/finished")
-                    [] ] ]
+            [ dom ~key:"h" ~tag:"h2" ~style_class:"font-medium"
+                [ text ~key:"t" ~value:(t_ "flashcard.empty/title") [] ]
+            ; dom ~key:"d" ~tag:"div"
+                [ dom ~key:"p" ~tag:"p"
+                    [ text ~key:"t"
+                        ~value:(I18n.t1 "flashcard.empty/desc" "#Card")
+                        [] ] ] ]
       | Some title ->
           dom ~key:"cards" ~style_class:"ls-cards-col"
             [ card_view st pos phase title ])
@@ -198,11 +220,19 @@ let modal st =
            bg-background p-6 shadow-lg ui__dialog-zoom-in"
         ~attrs:
           [ ("data-state", "open"); ("role", "dialog")
-          ; ("label", "flashcards__cp") ]
-        [ dom ~key:"cards-modal" ~id:"cards-modal"
-            ~style_class:"ls-cards-stack"
-            [ selector_row st; cards_body st ] ]
-    ]
+          ; ("label", "flashcards__cp")
+          ; ("style", "transform: translate(-50%, -50%)") ]
+        [ dom ~key:"cards-main" ~style_class:"ui__dialog-main-content"
+            [ dom ~key:"cards-modal" ~id:"cards-modal"
+                ~style_class:"ls-cards-stack"
+                [ selector_row st; cards_body st ] ]
+        ; dom ~key:"cards-close" ~tag:"button"
+            ~style_class:"ui__dialog-close"
+            ~attrs:[ ("type", "button") ]
+            ~events:"click"
+            ~on_dom_event:(fun name _ ->
+              if name = "click" then Cards_state.close st)
+            [ Icons.raw ~cls:"ls-icon-sm" "x" ] ]    ]
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in

@@ -3,7 +3,6 @@
    state/use-theme-mode! and theme.cljs DOM effects.
    Storage keys use cljs storage.cljs `(name key)` semantics. *)
 
-open Lui_elements
 
 let dom = Logseq_dom.dom
 module T = I18n
@@ -20,41 +19,36 @@ let languages =
   ; ("sk", "Slovenčina"); ("fa", "فارسی"); ("id", "Bahasa Indonesia")
   ; ("cs", "Čeština"); ("ar", "العربية") ]
 
-let unquote s =
-  let l = String.length s in
-  if l >= 2 && s.[0] = '"' && s.[l - 1] = '"' then String.sub s 1 (l - 2)
-  else s
-
-let quoted v = "\"" ^ v ^ "\""
-
 (* cljs :ui/system-theme? default is (or util/mac? util/win32?) *)
 let current_mode () =
   let system =
     match Platform.local_storage_get "system-theme?" with
-    | Some v -> unquote v = "true"
+    | Some v -> Platform.storage_unquote v = "true"
     | None -> Platform.desktop_os ()
   in
   if system then "system"
   else
     match Platform.local_storage_get "theme" with
     | Some v -> (
-        match unquote v with "dark" -> "dark" | _ -> "light")
+        match Platform.storage_unquote v with
+        | "dark" -> "dark"
+        | _ -> "light")
     | None -> "light"
 
 (* theme.cljs container effect: dataset.theme + .dark class on
    documentElement, dark-theme vs white-theme light-theme on body *)
 let apply_theme_dom effective =
-  Platform.document_set_data "theme" effective;
+  Web_dom.doc_set_data "theme" effective;
   if effective = "dark" then (
-    Platform.root_add_class "dark";
-    Platform.body_add_class "dark-theme";
-    Platform.body_rm_class "light-theme";
-    Platform.body_rm_class "white-theme")
+    Web_dom.doc_add_class "dark";
+    Web_dom.body_add_class "dark-theme";
+    Web_dom.body_rm_class "light-theme";
+    Web_dom.body_rm_class "white-theme")
   else (
-    Platform.root_rm_class "dark";
-    Platform.body_rm_class "dark-theme";
-    Platform.body_add_class "white-theme";
-    Platform.body_add_class "light-theme")
+    Web_dom.doc_rm_class "dark";
+    Web_dom.body_rm_class "dark-theme";
+    Web_dom.body_add_class "white-theme";
+    Web_dom.body_add_class "light-theme")
 
 (* state/use-theme-mode!: set dataset.theme + storage; system follows
    prefers-color-scheme *)
@@ -62,23 +56,32 @@ let use_mode mode =
   let effective =
     if mode = "system" then (
       Platform.local_storage_set "system-theme?" "true";
-      if Browser_ui.prefers_dark () then "dark" else "light")
+      if Web_dom.prefers_dark () then "dark" else "light")
     else (
       Platform.local_storage_set "system-theme?" "false";
       mode)
   in
   (* cljs stores the *effective* mode in :ui/theme even under system *)
   apply_theme_dom effective;
-  Platform.local_storage_set "theme" (quoted effective)
+  Platform.local_storage_set "theme" (Platform.storage_quote effective)
 
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with
-  | Some v -> unquote v
+  | Some v -> Platform.storage_unquote v
   | None -> "en"
 
 let set_language code =
-  Platform.local_storage_set "preferred-language" (quoted code);
-  Platform.document_set_lang code
+  Platform.local_storage_set "preferred-language"
+    (Platform.storage_quote code);
+  Web_dom.doc_set_lang code;
+  (* fetch the new locale first so the reload boots straight into it;
+     `let x = t "..."` bindings freeze at module load so a full reload is
+     the honest swap — same as before lazy dicts *)
+  ignore
+    (I18n.load code
+     |> Js.Promise.then_ (fun () ->
+            Platform.location_reload ();
+            Js.Promise.resolve ()))
 
 let lang_label_for code =
   match List.find_opt (fun (k, _) -> k = code) languages with
@@ -211,7 +214,7 @@ let toggle_theme () =
   let cur =
     match current_mode () with
     | "system" ->
-        if Browser_ui.prefers_dark () then "dark" else "light"
+        if Web_dom.prefers_dark () then "dark" else "light"
     | m -> m
   in
   use_mode (if cur = "dark" then "light" else "dark")

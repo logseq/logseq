@@ -11,19 +11,14 @@ type t =
 
 let empty = { page_uuid = None; blocks = [] }
 let latest = ref empty
-let st : t Signal.state option ref = ref None
+include State_cell.Make (struct
+  type nonrec t = t
+  let name = "quick-add"
+end)
 
-let ensure (ctx : Lui_ui.ui_context) =
-  match !st with
-  | Some _ -> ()
-  | None -> st := Some (Signal.state ctx.ui_scheduler !latest)
+let ensure ctx = mount ctx !latest
 
 let value () = !latest
-
-let signal () =
-  match !st with
-  | Some s -> s.Signal.state_signal
-  | None -> failwith "quick-add state not mounted"
 
 let set f =
   latest := f !latest;
@@ -38,7 +33,7 @@ let reset () = set (fun _ -> empty)
 (* re-pull the page's block tree after an outliner op — the dialog list is
    outside .page-blocks-inner, so refresh_page does not cover it *)
 let reload () =
-  match !Runtime.current_repo, !latest.page_uuid with
+  match (Runtime.model ()).Model.repo, !latest.page_uuid with
   | Some repo, Some puuid ->
       ignore
         (let* w =

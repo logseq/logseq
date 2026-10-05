@@ -1,8 +1,11 @@
 (* dict_gen — build-time generator for i18n dicts.
 
    Reads src/resources/dicts/*.edn (cljs tongue dicts) and emits
-   src/dicts_gen.ml: one `(string * string) array` per locale plus a
-   `dicts` list keyed by locale name (en, zh-CN, ...).
+   src/dicts_gen.ml: the `en` entries as a `(string * string) array` plus
+   `dict_files`, a (locale, edn filename) list for every other locale —
+   non-English dicts load lazily — shims/lazy_assets.mjs turns each edn
+   file into a bundler chunk that i18n.ml parses at runtime with Edn —
+   keeping ~4.4MB of string tables out of main.js.
 
    Only string-valued entries are emitted. cljs fn-valued entries
    (plural/rich templates like :graph/node-count) are skipped — their OCaml
@@ -204,17 +207,17 @@ let () =
         List.map
           (fun f ->
             let loc = locale_of_file f in
-            let entries = parse_file (Filename.concat dicts_dir f) in
-            emit_dict loc entries;
-            loc)
+            if loc = "en" then
+              emit_dict loc (parse_file (Filename.concat dicts_dir f));
+            (loc, f))
           files
       in
       Buffer.add_string b
-        "let dicts : (string * (string * string) array) list = [\n";
+        "let dict_files : (string * string) list = [\n";
       List.iter
-        (fun loc ->
-          Buffer.add_string b
-            (Printf.sprintf "  (%S, %s);\n" loc (ident_of_locale loc)))
+        (fun (loc, f) ->
+          if loc <> "en" then
+            Buffer.add_string b (Printf.sprintf "  (%S, %S);\n" loc f))
         locales;
       Buffer.add_string b "]\n";
       let oc = open_out_bin out_path in

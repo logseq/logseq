@@ -53,14 +53,19 @@ let page_items (p : Model.page) =
         in
         [ item "fav" label (fun () ->
               Runtime.send (Action.Page_menu_set None);
-              Sidebar_state.toggle_favorite st) ]
+              match p.page_uuid with
+              | Some u -> Sidebar_state.toggle_favorite_uuid st u
+              | None -> Sidebar_state.toggle_favorite st) ]
     | None -> []
   in
   let export_page =
     item "exp-page" I18n.export_page (fun () ->
         Runtime.send (Action.Page_menu_set None);
         (match p.page_uuid with
-         | Some u -> Export_state.arm u p.page_db_id
+         | Some u ->
+             (* cljs export-blocks gets [page-uuid] as the selection —
+                top-level-uuids is always non-empty, hiding the PNG tab *)
+             Export_state.arm u p.page_db_id ~has_top_level:true
          | None -> ());
         Sidebar_state.open_dialog "export-page")
   in
@@ -107,9 +112,112 @@ let page_items (p : Model.page) =
   in
   fav @ del @ [ export_page; publish_page ] @ convert @ dev
 
+(* cljs util/email.cljs mask-email: '@' and '.' stay visible plus the
+   first and last non-separator chars; the rest become '*' *)
+let mask_email email =
+  let n = String.length email in
+  let sep c = c = '@' || c = '.' in
+  let first = ref (-1) and last = ref (-1) in
+  String.iteri
+    (fun i c ->
+      if not (sep c) then begin
+        if !first < 0 then first := i;
+        last := i
+      end)
+    email;
+  String.init n (fun i ->
+      let c = email.[i] in
+      if sep c || i = !first || i = !last then c else '*')
+
+let ghost_icon_btn_cls =
+  "ui__button inline-flex cursor-pointer items-center justify-center \
+   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+   ring-offset-background transition-colors focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+   disabled:pointer-events-none disabled:opacity-50 select-none \
+   hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 \
+   as-ghost box-content overflow-hidden"
+
+(* cljs header.cljs logged-in user block: separator + inert menuitem
+   with username, masked email (eye toggle) and a hover-reveal logout
+   ghost button (cljs prevents the menuitem's own select) *)
+let user_item () : Lui_elements.t =
+ fun ctx parent ->
+  let username = Option.value (Rtc_flows.username ()) ~default:"" in
+  let email = Option.value (Rtc_flows.email ()) ~default:"" in
+  let masked = Signal.state ctx.Lui_ui.ui_scheduler true in
+  dom ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"
+    ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
+    [ dom ~key:"u-span" ~tag:"span"
+        ~style_class:"flex flex-col relative group pt-1 w-full"
+        [ dom ~key:"u-name" ~tag:"b" ~style_class:"leading-none"
+            ~text:username []
+        ; dom ~key:"u-mail" ~tag:"small" ~style_class:"opacity-70"
+            [ dom ~key:"u-addr" ~tag:"span"
+                ~style_class:"ls-email-address inline-flex items-center"
+                ~attrs_signal_v:
+                  (Logseq_dom.reactive_attrs
+                     (fun m -> [ ("data-masked", string_of_bool m) ])
+                     (Signal.value masked))
+                [ dom ~key:"u-addr-t" ~tag:"span"
+                    ~text_signal:
+                      (Logseq_dom.reactive_text
+                         (fun m -> if m then mask_email email else email)
+                         (Signal.value masked))
+                    []
+                ; Logseq_dom.dyn ~equal:( = )
+                    (fun m ->
+                      dom ~key:"u-eye" ~tag:"button"
+                        ~style_class:
+                          (ghost_icon_btn_cls
+                          ^ " ml-1 inline-flex h-auto w-auto min-w-0 \
+                             border-0 bg-transparent p-0 text-current \
+                             opacity-70 hover:opacity-100")
+                        ~attrs:
+                          [ ("type", "button")
+                          ; ( "aria-label"
+                            , I18n.t
+                                (if m then "account/show-email-address"
+                                 else "account/hide-email-address") )
+                          ]
+                        ~events:"click"
+                        ~on_dom_event:(fun n _ ->
+                          if n = "click" then begin
+                            Signal.set masked
+                              (not (Signal.get_state masked));
+                            Runtime.flush ()
+                          end)
+                        [ Icons.icon ~size:14. ~cls:""
+                            (if m then "eye" else "eye-off") ])
+                    (Signal.value masked)
+                ]
+            ]
+        ; dom ~key:"u-logout" ~tag:"button"
+            ~style_class:
+              (ghost_icon_btn_cls
+              ^ " absolute right-1 top-3 h-auto w-auto min-w-0 border-0 \
+                 bg-transparent p-0 text-red-rx-09 opacity-0 \
+                 group-hover:opacity-100")
+            ~attrs:
+              [ ("type", "button")
+              ; ("aria-label", I18n.t "ui/logout")
+              ]
+            ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then begin
+                Rtc_flows.sign_out ();
+                Runtime.send (Action.Page_menu_set None);
+                Runtime.flush ()
+              end)
+            [ Icons.icon ~size:18. ~cls:"" "logout" ]
+        ]
+    ]
+    ctx parent
+
 (* app-wide entries mirror the cljs header dots menu
    (components/header.cljs toolbar-dots-menu): dialogs dispatch
-   ls:open-dialog, Recycle navigates to its page. *)
+   ls:open-dialog, Recycle navigates to its page. Logged in: cljs drops
+   the Login item and appends hr + the user block instead. *)
 let global_items () =
   let close () = Runtime.send (Action.Page_menu_set None) in
   [ icon_item "settings" I18n.settings "settings" (fun () ->
@@ -122,12 +230,12 @@ let global_items () =
         close ();
         (* cljs :ui/toggle-appearance anchors the appearance popup to the
            dots trigger, same as the menu itself *)
-        match Dom_ext.doc_query_selector ".toolbar-dots-btn" with
+        match Web_dom.query_selector ".toolbar-dots-btn" with
         | Some el ->
-            let r = Dom_ext.bounding_rect el in
+            let r = Web_dom.el_bounding_rect el in
             Runtime.send
               (Action.Appearance_set
-                 (Some (Dom_ext.rect_right r, Dom_ext.rect_bottom r +. 4.)))
+                 (Some (Web_dom.rect_right r, Web_dom.rect_bottom r +. 4.)))
         | None -> ())
   ; icon_item "recycle" I18n.recycle "trash" (fun () ->
         close ();
@@ -139,10 +247,14 @@ let global_items () =
   ; icon_item "import" I18n.import_ "file-upload" (fun () ->
         close ();
         Platform.set_location_hash "#/import")
-  ; icon_item "login" I18n.login "user" (fun () ->
-        close ();
-        Sidebar_state.open_dialog "login")
   ]
+  @
+  if Rtc_flows.logged_in () then
+    [ separator "acct-hr"; user_item () ]
+  else
+    [ icon_item "login" I18n.login "user" (fun () ->
+          close ();
+          Sidebar_state.open_dialog "login") ]
 
 external inner_width : float = "innerWidth" [@@mel.scope "window"]
 
@@ -251,10 +363,26 @@ let confirm_view (c : Model.confirm) =
         ]
     ]
 
+(* cljs right-sidebar/get-current-page falls back to today's journal on
+   every route that isn't :page/:file — the toolbar dots menu always
+   offers the page section *)
+let resolve_menu_page (m : Model.t) uuid =
+  let by_uuid u (p : Model.page) = p.page_uuid = Some u in
+  match uuid, m.route_page with
+  | Some u, Some p when by_uuid u p -> m.route_page
+  | Some u, _ -> List.find_opt (by_uuid u) m.journals
+  | None, Some _ -> m.route_page
+  | None, None ->
+      List.find_opt
+        (fun (p : Model.page) ->
+          p.page_journal_day = Some (Dates.today_journal_day ()))
+        m.journals
+
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
   match m.page_menu with
-  | Some (x, y, with_app) -> view (x, y, with_app) m.route_page
+  | Some (x, y, with_app, uuid) ->
+      view (x, y, with_app) (resolve_menu_page m uuid)
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c

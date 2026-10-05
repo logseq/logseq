@@ -1,5 +1,6 @@
-// Bundles the Melange-emitted CommonJS tree into static/js/main.js,
-// loaded by resources/index.html as a deferred classic script.
+// Bundles the Melange-emitted ESM tree into static/js/main.js (+ lazy
+// chunks for i18n dicts and CodeMirror modes), loaded by
+// resources/index.html as a module script.
 // Build order: `dune build js_app` (in deps/ui), then `vite build`.
 // Modes:
 //   vite build                      -> dev bundle: readable, full sourcemaps,
@@ -9,12 +10,24 @@
 // vite defaults env.mode to "production" for every build, so the flag is
 // detected on argv, not through ConfigEnv.mode.
 import { execSync } from "node:child_process";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
 import { defineConfig } from "vite";
 
 const entry = resolve(
   import.meta.dirname,
   "_build/default/js_app/js_app/js_app/main.js",
+);
+
+// Resolve codemirror the same way the emitted tree's require() calls do,
+// so the lazy mode chunks register onto the same CodeMirror instance.
+const cmModeDir = join(
+  dirname(
+    createRequire(import.meta.url).resolve("codemirror/package.json", {
+      paths: [import.meta.dirname],
+    }),
+  ),
+  "mode",
 );
 
 let revision = "";
@@ -47,6 +60,16 @@ export default defineConfig(() => {
           find: /^(.*\/)?printf\.js$/,
           replacement: resolve(import.meta.dirname, "shims/printf.js"),
         },
+        {
+          // Lazy dict/codemirror-mode chunk loaders (shims/lazy_assets.mjs).
+          find: "lui-shims/lazy-assets",
+          replacement: resolve(import.meta.dirname, "shims/lazy_assets.mjs"),
+        },
+        {
+          // import.meta.glob target for CodeMirror modes.
+          find: /^@codemirror-modes/,
+          replacement: cmModeDir,
+        },
       ],
     },
     define: {
@@ -61,8 +84,7 @@ export default defineConfig(() => {
     build: {
       lib: {
         entry,
-        formats: ["iife"],
-        name: "LogseqUI",
+        formats: ["es"],
         fileName: () => "main.js",
       },
       outDir: resolve(import.meta.dirname, "../../static/js"),
@@ -74,7 +96,7 @@ export default defineConfig(() => {
       // in the shipped file.
       sourcemap: production ? "hidden" : true,
       rollupOptions: {
-        output: { codeSplitting: false },
+        output: { chunkFileNames: "chunks/[name]-[hash].js" },
       },
     },
   };

@@ -20,6 +20,12 @@ let reset_rtc () = last_rtc := None
 
 let dispatch kind payload =
   match kind with
+  | "thread-api/search-index-build-progress" -> (
+      (* daemon path — the native worker Broadcast.to_clients the same
+         [repo, payload] args the browser worker sends via remoteInvoke *)
+      match Wire.args_list payload with
+      | [ Wire.String repo; progress ] -> on_index_progress repo progress
+      | _ -> ())
   | "notification" -> (
       match Decode.toast_of_wire payload with
       | Some t ->
@@ -39,6 +45,26 @@ let dispatch kind payload =
           Runtime.send (Action.Rtc_state rtc);
           Runtime.flush ())
   | "rtc-log" -> !Runtime.rtc_log_handler payload
+  | "rtc-asset-upload-download-progress" -> (
+      (* cljs :rtc/asset-upload-download-progress — per-asset
+         {direction,loaded,total}; accumulated for the indicator
+         popup's asset rows *)
+      match
+        ( Wire.map_get_string payload "repo"
+        , Wire.map_get_string payload "asset-id"
+        , Wire.get payload "progress" )
+      with
+      | Some repo, Some asset_id, Some progress -> (
+          match
+            ( Wire.map_get_string progress "direction"
+            , Wire.map_get_int progress "loaded"
+            , Wire.map_get_int progress "total" )
+          with
+          | Some direction, Some loaded, Some total ->
+              Asset_progress.note ~repo ~asset_id ~direction
+                ~loaded ~total
+          | _ -> ())
+      | _ -> ())
   | "db-worker/ui-request" -> Ui_requests.handle payload
   | "asset-file-write-finish" -> (
       (* worker finished writing a downloaded asset to pfs — set src on
@@ -63,7 +89,7 @@ let dispatch kind payload =
 
 (* sdk show_msg/close_msg dispatch `ls:toast`/`ls:toast-close`
    CustomEvents on document — same toast path as worker notifications. *)
-let detail_json ev = Platform.json_prop ev "detail"
+let detail_json ev = Web_dom.js_get ev "detail"
 
 (* UI-side deferral for the debounced reload — see Subs.fire_reload:
    typing, menus/popups, recent pointer input, and the editing-session
@@ -92,7 +118,7 @@ let ui_busy ~now ~last_fire =
   in
   let popup_open =
     (* same overlay surfaces as editor_keys' outside-click routing *)
-    Editor_dom.query_selector
+    Web_dom.query_selector
       "#ui__ac, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form, .ls-property-dialog"
     <> None
   in
@@ -106,7 +132,6 @@ let init () =
      to read every edge between worker events and the UI *)
   Subs.install_hooks
     { Subs.reload = Router.reload
-    ; after_apply = Views_mount.refresh_query_insts
     ; refresh_page_side = (fun p -> !Runtime.refresh_page_side p)
     ; prune_overrides = Editor_state.prune_overrides
     ; invalidate_pull_uuids =
@@ -120,7 +145,7 @@ let init () =
     ; fire_db_hooks = Plugin_host.fire_db_hooks
     ; helpers_of = Outliner_ops.delta_helpers
     ; ui_busy
-    ; schedule = (fun f -> Editor_dom.set_timeout f 150)
+    ; schedule = (fun f -> Web_dom.set_timeout f 150)
     ; publish_page =
         (fun p -> Runtime.send (Action.Page_loaded p))
     ; publish_journals =
@@ -149,10 +174,14 @@ let init () =
     };
   (* the worker's search-index build reports progress through this
      remoteInvoke; without a handler the worker->main comlink call hangs
-     and the build never settles *)
+     and the build never settles. Feeds the header's
+     .search-index-progress widget — cljs
+     persist_db/browser.cljs thread-api/search-index-build-progress *)
   Worker_client.register_api "thread-api/search-index-build-progress"
     (fun args ->
-      ignore args;
+      (match args with
+       | [ Wire.String repo; payload ] -> on_index_progress repo payload
+       | _ -> ());
       Js.Promise.resolve Wire.Nil);
   Runtime.on_navigate := (fun () ->
       Subs.clear_pending_deltas ();
@@ -161,13 +190,13 @@ let init () =
          on the freshly loaded page *)
       Editor_actions.cancel_pending_focus ();
       if Editor_state.ready () then Editor_actions.clear_selection ());
-  Editor_dom.document_add_listener "pointerdown"
+  Web_dom.add_document_listener "pointerdown"
     (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
     true;
-  Editor_dom.document_add_listener "keydown"
+  Web_dom.add_document_listener "keydown"
     (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
     true;
-  Platform.on_document_event "ls:toast" (fun ev ->
+  Web_dom.on_document_event "ls:toast" (fun ev ->
       let d = detail_json ev in
       let text =
         match Js.Json.decodeObject d with
@@ -201,7 +230,7 @@ let init () =
            ; toast_key = key
            });
       Runtime.flush ());
-  Platform.on_document_event "ls:toast-close" (fun ev ->
+  Web_dom.on_document_event "ls:toast-close" (fun ev ->
       (* sdk close_msg targets one notification by its show_msg key;
          a missing key clears nothing — Toasts_clear stays internal *)
       match Js.Json.decodeObject (detail_json ev) with

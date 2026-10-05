@@ -91,12 +91,16 @@ type ac =
   ; flip : (float * float) option
     (* Some (top, avail-h) once the popup measured too tall for the
        space below the caret — base-ui avoidCollisions flips it above *)
+  ; flipx : float option
+    (* Some left' when the popup measured wider than the space to the
+       right of the caret — base-ui flips align start->end, so the
+       right edge lands at the caret; x keeps the caret anchor *)
   ; query : string
   ; tpos : int (* query-trigger offset (the "/" "[[" "((" "#" start) *)
   ; tlen : int
   ; items : ac_item list
   ; chosen : int
-  ; editor : Dom_ext.element
+  ; editor : Web_dom.el
   ; auuid : string (* editing uuid the popup was opened on — a remount
      swaps editing_uuid before the position check can run *)
   }
@@ -136,6 +140,9 @@ type pv =
   { pv_x : float
   ; pv_y : float
   ; pv_title : string
+  ; pv_page : Model.page option (* feeds the title actions — cljs
+                                     page-preview renders page-cp with
+                                     with-actions? *)
   ; pv_blocks : Model.block list
   }
 
@@ -205,6 +212,29 @@ let ac_open () =
   | Some t -> (get t).ac <> None
   | None -> false
 
+(* THE "is the pointer over popup UI" check — hit-tests mounted roots
+   rather than enumerating selector lists: every popup mounts either
+   inside the .cp__overlays chrome container (ac/cm/pv, cmdk, dialogs,
+   toasts, page menu) or registers a body-level root it owns
+   (Properties_state overlays, Editor_commands inline popups) *)
+let inside el =
+  Web_dom.el_closest el ".cp__overlays" <> None
+  || Properties_state.overlay_contains el
+  ||
+  (match !Runtime.editor_popup_root with
+   | Some root -> Web_dom.el_contains root el
+   | None -> false)
+
+(* whether any popup layer is up, for code paths that only need the
+   boolean (the per-layer popup_signal above drives reactive chrome) *)
+let any_open () =
+  (match popup_signal () with
+   | Some s -> Signal.get s
+   | None -> false)
+  || Cmdk_state.is_open ()
+  || Properties_state.overlay_open ()
+  || !Runtime.editor_popup_root <> None
+
 (* popup bound to the block currently being edited (unanchored popups
    like cmdk-spawned search count as attached too) *)
 let ac_attached () =
@@ -227,13 +257,15 @@ let close_pv t = set_pv t None
 (* title + blocks of the page a .preview-ref-link points at — same bare
    uuid/name ref as sidebar_state.fetch_blocks *)
 
-let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
+let fetch_preview repo name
+    : (string * Model.page option * Model.block list) Js.Promise.t =
   let* info =
     Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
       (Wire.page_ref name)
   in
+  let page = Decode.page_of_summary info in
   let title =
-    match Decode.page_of_summary info with
+    match page with
     | Some p -> p.Model.page_title
     | None -> name
   in
@@ -242,7 +274,7 @@ let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
       (Wire.String repo) (Wire.page_ref name) Wire.Nil
   in
   Js.Promise.resolve
-    (title, Decode.blocks_of_wire w)
+    (title, page, Decode.blocks_of_wire w)
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
@@ -433,11 +465,6 @@ let slash_fallback =
 
 (* ---- filtering ---- *)
 
-let starts_with_ci hay needle =
-  let h = S.lowercase_ascii hay and n = S.lowercase_ascii needle in
-  let nl = S.length n in
-  nl <= S.length h && S.sub h 0 nl = n
-;;
 
 let rec take n xs =
   if n <= 0 then [] else match xs with [] -> [] | x :: tl -> x :: take (n - 1) tl
@@ -675,8 +702,12 @@ let block_item_of_row i w =
     | None -> Option.value (Cmdk_state.str_field w "block/uuid") ~default:""
   in
   (* cljs node-render for blocks: point-filled node icon and the parent
-     path in the breadcrumb row *)
-  mk_item ~key:it.Cmdk_state.ikey ~label:it.Cmdk_state.ititle ~node:true
+     path in the breadcrumb row. FTS rows carry
+     $pfts_2lqh>$..$<pfts_2lqh$ markers — strip them; the view's query
+     highlight still marks the hit *)
+  mk_item ~key:it.Cmdk_state.ikey
+    ~label:(Cmdk_state.strip_pfts it.Cmdk_state.ititle)
+    ~node:true
     ~node_icon:("point-filled", true)
     ~breadcrumb:(Option.value it.Cmdk_state.header ~default:"")
     (Emit ("[[" ^ uuid ^ "]]", 0));;
@@ -693,6 +724,10 @@ let run_block_search t ac =
      in
      let rows =
        match w with
+       | Wire.Map _ -> (
+           match Wire.get w "items" with
+           | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+           | _ -> [])
        | Wire.Array xs | Wire.List xs -> xs
        | _ -> []
      in
@@ -760,7 +795,7 @@ let run_node_search t ac =
             | new_items ->
                 let first_starts =
                   match matched with
-                  | m :: _ -> starts_with_ci m.ai_label a.query
+                  | m :: _ -> Str_util.starts_with_ci m.ai_label a.query
                   | [] -> false
                 in
                 if first_starts then
@@ -937,11 +972,11 @@ let load_templates t =
 (* ---- open / update ---- *)
 
 let open_ac t kind editor =
-  let x, y, cy = Dom_ext.caret_popup_pos editor in
+  let x, y, cy = Web_dom.caret_popup_pos editor in
   let tlen = trigger_len_of_kind kind in
-  let tpos = Dom_ext.selection_start editor - tlen in
+  let tpos = Web_dom.el_selection_start editor - tlen in
   let ac =
-    { kind; x; y; cy; flip = None; query = ""
+    { kind; x; y; cy; flip = None; flipx = None; query = ""
     ; tpos; tlen
     ; items = []; chosen = 0; editor
     ; auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" }
@@ -957,9 +992,9 @@ let open_ac t kind editor =
   let rec measure tries =
     match (get t).ac with
     | Some a when a.flip = None && a.kind = kind -> (
-        match Dom_ext.doc_query_selector "#ui__ac-inner" with
+        match Web_dom.query_selector "#ui__ac-inner" with
         | Some inner -> (
-            match Dom_ext.closest inner ".ui__popover-content" with
+            match Web_dom.el_closest inner ".ui__popover-content" with
             | Some pop ->
                 (* --available-height propagates to #ui__ac-inner's own
                    max-height; lift it to read the real rendered height
@@ -970,10 +1005,23 @@ let open_ac t kind editor =
                    when the loop ends without a flip. The lifted frame
                    renders clipped at the window edge either way, so it
                    is not visible to the user. *)
-                Dom_ext.style_set_property pop "--available-height" "2000px";
-                let h = Dom_ext.rect_height (Dom_ext.bounding_rect pop) in
-                let below = Dom_ext.window_inner_height () -. a.y -. 8. in
-                let above = a.cy -. 8. in
+                Web_dom.el_style_set_property pop "--available-height"
+                  "2000px";
+                let rect = Web_dom.el_bounding_rect pop in
+                (* base-ui flips align start->end when the popup would
+                   overflow the right viewport edge — the right edge
+                   lands at the caret; clamp to the margin when even
+                   that doesn't fit *)
+                let fx =
+                  let w = Web_dom.rect_width rect in
+                  if a.x +. w > Web_dom.win_inner_width -. 8. then
+                    Some (Float.max 8. (a.x -. w))
+                  else None
+                in
+                if fx <> a.flipx then
+                  set_ac t (Some { a with flipx = fx });
+                let h = Web_dom.rect_height rect in
+                let below = Web_dom.win_inner_height -. a.y -. 8. in                let above = a.cy -. 8. in
                 if h > below && above > below then (
                   (* avail is the constraint, h the measured render —
                      the inner's own max-height subtracts chrome from
@@ -984,32 +1032,31 @@ let open_ac t kind editor =
                   let top' = Float.max 4.0 (a.cy -. 8. -. h_eff) in
                   set_ac t (Some { a with flip = Some (top', avail) }))
                 else if tries <= 0 then
-                  Dom_ext.style_set_property pop "--available-height"
+                  Web_dom.el_style_set_property pop "--available-height"
                     (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 8.))
-                else retry tries
-            | None -> retry tries)
+                else retry tries            | None -> retry tries)
         | None -> retry tries)
     | None -> retry tries
     | _ -> ()
   and retry tries =
     if tries > 0 then
-      Dom_ext.set_timeout (fun () -> measure (tries - 1)) 16
+      Web_dom.set_timeout (fun () -> measure (tries - 1)) 16
   in
   measure 30;
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
    | Page_ref ->
-       let v = Dom_ext.value editor in
+       let v = Web_dom.el_value editor in
        let n = S.length v in
        let pos = ac.tpos + tlen in
        if not (pos + 1 < n && S.sub v pos 2 = "]]") then (
          let v' = S.sub v 0 pos ^ "]]" ^ S.sub v pos (n - pos) in
-         Dom_ext.set_value editor v';
+         Web_dom.el_set_value editor v';
          (match Editor_state.editing_uuid () with
           | Some uuid -> Editor_actions.sync_buffer uuid v'
           | None -> ());
-         Dom_ext.set_selection_range editor pos pos)
+         Web_dom.el_set_selection_range editor pos pos)
    | _ -> ());
   (match kind with
    | Page_ref | Page_embed | Embed_ref -> load_titles t
@@ -1038,25 +1085,24 @@ let query_closed ac q =
    the caret (the ghost pair we inserted) skips over it instead of
    inserting a duplicate *)
 let overtype_skip el =
-  let pos = Dom_ext.selection_start el in
-  let v = Dom_ext.value el in
+  let pos = Web_dom.el_selection_start el in
+  let v = Web_dom.el_value el in
   if
     pos >= 1 && pos < S.length v
-    && Dom_ext.selection_end el = pos
+    && Web_dom.el_selection_end el = pos
     && S.get v pos = S.get v (pos - 1)
     && (S.get v pos = ']' || S.get v pos = ')')
   then (
-    Dom_ext.set_value el
+    Web_dom.el_set_value el
       (S.sub v 0 (pos - 1) ^ S.sub v pos (S.length v - pos));
-    Dom_ext.set_selection_range el pos pos);;
+    Web_dom.el_set_selection_range el pos pos);;
 
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el ev =
   overtype_skip el;
-  let pos = Dom_ext.selection_start el in
-  match (get t).ac with
+  let pos = Web_dom.el_selection_start el in  match (get t).ac with
   | Some ac ->
-      let v = Dom_ext.value el in
+      let v = Web_dom.el_value el in
       let trig_missing =
         ac.tpos + ac.tlen > S.length v
         || S.sub v ac.tpos ac.tlen <> trigger_text_of_kind ac.kind
@@ -1103,7 +1149,7 @@ let on_editor_input t el ev =
              popup stays open with the buffer as its query. Only a real
              keystroke that removed the trigger (delete inputTypes)
              closes it. *)
-          let it = Dom_ext.input_type ev in
+          let it = Web_dom.ev_input_type ev in
           if S.length it >= 6 && S.sub it 0 6 = "delete" then close_ac t
           else
             ac_update t { ac with tpos = 0; tlen = 0 }
@@ -1120,7 +1166,7 @@ let on_editor_input t el ev =
             then close_ac t
             else ac_update t ac q
   | None ->
-      let v = Dom_ext.value el in
+      let v = Web_dom.el_value el in
       if pos < 1 || pos > S.length v then ()
       else
         let c = S.get v (pos - 1) in
@@ -1170,10 +1216,10 @@ let detail_obj pairs =
    equivalent to cljs's ls:editor-insert handler *)
 let insert_text (ac : ac) text back =
   let el = ac.editor in
-  let v = Dom_ext.value el in
+  let v = Web_dom.el_value el in
   let n = S.length v in
   let tpos = max 0 (min ac.tpos n) in
-  let pos = max tpos (min (Dom_ext.selection_start el) n) in
+  let pos = max tpos (min (Web_dom.el_selection_start el) n) in
   (* consume the autopaired ]] sitting right after the caret *)
   let pos =
     if (ac.kind = Page_ref || ac.kind = Embed_ref)
@@ -1182,42 +1228,42 @@ let insert_text (ac : ac) text back =
     else pos
   in
   let v' = S.sub v 0 tpos ^ text ^ S.sub v pos (n - pos) in
-  Dom_ext.set_value el v';
+  Web_dom.el_set_value el v';
   (match Editor_state.editing_uuid () with
    | Some uuid -> Editor_actions.sync_buffer uuid v'
    | None -> ());
   let caret = tpos + S.length text - back in
-  Dom_ext.set_selection_range el caret caret;
-  Dom_ext.focus el
+  Web_dom.el_set_selection_range el caret caret;
+  Web_dom.el_focus el
 
 let emit ?(exit = false) editor tpos text =
-  match Dom_ext.closest editor ".ls-page-title" with
+  match Web_dom.el_closest editor ".ls-page-title" with
   | Some _ ->
       (* the page-title editor isn't a block editor — splice the buffer
          directly instead of dispatching ls:editor-insert *)
-      let v = Dom_ext.value editor in
+      let v = Web_dom.el_value editor in
       let n = String.length v in
       let f = Int.max 0 (Int.min tpos n) in
-      let t_ = Int.max f (Int.min (Dom_ext.selection_start editor) n) in
+      let t_ = Int.max f (Int.min (Web_dom.el_selection_start editor) n) in
       let nv = String.sub v 0 f ^ text ^ String.sub v t_ (n - t_) in
       let caret = f + String.length text in
-      Dom_ext.set_value editor nv;
-      Dom_ext.set_text_content editor nv;
-      Dom_ext.set_selection_range editor caret caret;
-      Dom_ext.focus editor
+      Web_dom.el_set_value editor nv;
+      Web_dom.el_set_text_content editor nv;
+      Web_dom.el_set_selection_range editor caret caret;
+      Web_dom.el_focus editor
   | None ->
-      Dom_ext.dispatch_custom "ls:editor-insert"
+      Web_dom.dispatch_custom "ls:editor-insert"
         (detail_obj
            [ "text", Js.Json.string text
            ; "from", Js.Json.number (float_of_int tpos)
-           ; "to", Js.Json.number (float_of_int (Dom_ext.selection_start editor))
+           ; "to", Js.Json.number (float_of_int (Web_dom.el_selection_start editor))
            ; "exit", Js.Json.boolean exit ]);
       (* cljs refocuses the editor input after a chosen item *)
-      Dom_ext.focus editor
+      Web_dom.el_focus editor
 ;;
 
 let emit_cmd ?pos command extra =
-  Dom_ext.dispatch_custom "ls:editor-command"
+  Web_dom.dispatch_custom "ls:editor-command"
     (detail_obj
        (("command", Js.Json.string command)
         :: (match pos with
@@ -1233,10 +1279,10 @@ let emit_cmd ?pos command extra =
    anchor, and Switch keeps no literal text (cljs [:editor/input ""]) *)
 let erase_trigger_text (ac : ac) =
   let el = ac.editor in
-  let v = Dom_ext.value el in
+  let v = Web_dom.el_value el in
   let n = S.length v in
   let tpos = max 0 (min ac.tpos n) in
-  let pos = max tpos (min (Dom_ext.selection_start el) n) in
+  let pos = max tpos (min (Web_dom.el_selection_start el) n) in
   let pos =
     if (ac.kind = Page_ref || ac.kind = Embed_ref)
        && pos + 1 < n && S.sub v pos 2 = "]]"
@@ -1244,12 +1290,12 @@ let erase_trigger_text (ac : ac) =
     else pos
   in
   let v' = S.sub v 0 tpos ^ S.sub v pos (n - pos) in
-  Dom_ext.set_value el v';
+  Web_dom.el_set_value el v';
   (match Editor_state.editing_uuid () with
    | Some uuid -> Editor_actions.sync_buffer uuid v'
    | None -> ());
-  Dom_ext.set_selection_range el tpos tpos;
-  Dom_ext.focus el
+  Web_dom.el_set_selection_range el tpos tpos;
+  Web_dom.el_focus el
 ;;
 (* cljs auto-complete/meta-complete on a tag item inserts the tag
    inline: "#last-part" (page-ref-wrapped when the last namespace part
@@ -1281,9 +1327,9 @@ let apply_tag t ac ~create ~inline title =
     match Editor_state.editing_uuid () with
     | Some u -> (Some u, false)
     | None -> (
-        match Dom_ext.closest ac.editor ".ls-page-title" with
+        match Web_dom.el_closest ac.editor ".ls-page-title" with
         | Some _ -> (
-            match !Runtime.current_page with
+            match (Runtime.model ()).Model.route_page with
             | Some p -> (p.Model.page_uuid, true)
             | None -> (None, false))
         | None -> (None, false))
@@ -1304,7 +1350,7 @@ let apply_tag t ac ~create ~inline title =
           (if title_edit then Outliner_ops.apply_and_refresh rest
            else
              Outliner_ops.apply_parsed_and_refresh ~rest
-               [ (buuid, Dom_ext.value ac.editor) ])
+               [ (buuid, Web_dom.el_value ac.editor) ])
       in
       (* cljs tag-in-page-auto-complete?: "#" typed inside a [[ pair
          still erases the query but skips the tag/class attach — the
@@ -1382,7 +1428,7 @@ let apply_template t ac uuid =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
-      let buf = Dom_ext.value ac.editor in
+      let buf = Web_dom.el_value ac.editor in
       close_ac t;
       ignore
         (let* sop = Outliner_ops.save_block_parsed buuid buf in
@@ -1401,7 +1447,7 @@ let run_query t ac ~advanced =
   | Some buuid ->
       emit ac.editor ac.tpos "";
       close_ac t;
-      let title = Dom_ext.value ac.editor in
+      let title = Web_dom.el_value ac.editor in
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
@@ -1515,12 +1561,12 @@ let apply_item t ac ~meta it =
 ;;
 
 let chosen_scroll chosen =
-  Dom_ext.set_timeout
+  Web_dom.set_timeout
     (fun () ->
-      match Dom_ext.doc_query_selector "#ui__ac-inner" with
+      match Web_dom.query_selector "#ui__ac-inner" with
       | Some scroller -> (
-          match Dom_ext.doc_query_selector ("#ac-" ^ string_of_int chosen) with
-          | Some row -> Dom_ext.scroll_row_into_view ~scroller ~row
+          match Web_dom.query_selector ("#ac-" ^ string_of_int chosen) with
+          | Some row -> Web_dom.scroll_row_into_view ~scroller ~row
           | None -> ())
       | None -> ())
     0
@@ -1577,8 +1623,8 @@ let ac_on_enter t ac =
    detached where selectionStart reads 0 and the position check
    mis-closes an ac that is still valid *)
 let ac_position_closed ac el =
-  let pos = Dom_ext.selection_start el in
-  let v = Dom_ext.value el in
+  let pos = Web_dom.el_selection_start el in
+  let v = Web_dom.el_value el in
   let qend = pos - ac.tpos - ac.tlen in
   qend < 0 || qend > S.length v
   || query_closed ac (S.sub v (ac.tpos + ac.tlen) qend)
@@ -1599,33 +1645,32 @@ let ac_keydown t ev =
         close_ac t;
         false)
       else (
-        match Dom_ext.key_ ev with
-        | Some "ArrowDown" -> move_chosen t 1; true
-        | Some "ArrowUp" -> move_chosen t (-1); true
+        match Web_dom.ev_key ev with
+        | "ArrowDown" -> move_chosen t 1; true
+        | "ArrowUp" -> move_chosen t (-1); true
         (* cljs binds ctrl+n/ctrl+p alongside the arrows *)
-        | Some "n" when Dom_ext.ctrl_key ev -> move_chosen t 1; true
-        | Some "p" when Dom_ext.ctrl_key ev -> move_chosen t (-1); true
+        | "n" when Web_dom.ev_ctrl ev -> move_chosen t 1; true
+        | "p" when Web_dom.ev_ctrl ev -> move_chosen t (-1); true
         (* cljs enter/meta-complete/shift-complete: apply the chosen
            item — mod+enter inlines a tag — or the kind's on-enter when
            no item matched. shift+enter shares enter: no AC supplies
            on-shift-chosen. Tab is NOT an ac binding on master
            (:editor/indent) — it falls through to the editor keymap *)
-        | Some "Enter" -> (
+        | "Enter" -> (
             (match List.nth_opt ac.items ac.chosen with
-             | Some it -> apply_item t ac ~meta:(Dom_ext.meta_key ev) it
+             | Some it -> apply_item t ac ~meta:(Web_dom.ev_meta ev) it
              | None -> ac_on_enter t ac);
             true)
-        | Some "Escape" -> close_ac t; true
-        | _ ->
+        | "Escape" -> close_ac t; true        | _ ->
             (let el =
-               Option.value (Dom_ext.target ev) ~default:ac.editor
+               Option.value (Web_dom.ev_target ev) ~default:ac.editor
              in
              if ac_position_closed ac el then close_ac t);
             false)
 ;;
 
 let ac_mousemove t el =
-  match Dom_ext.get_attribute el "id" with
+  match Web_dom.el_get_attr el "id" with
   | Some id
     when S.length id > 3 && S.sub id 0 3 = "ac-" -> (
       match int_of_string_opt (S.sub id 3 (S.length id - 3)) with
@@ -1771,7 +1816,7 @@ let run_cm_item t label =
                Platform.set_location_hash
                  (Runtime.nav_hash ("#/page/" ^ tuuid))
            | "open-tag-sidebar" ->
-               Platform.dispatch "ls:open-right-sidebar"
+               Web_dom.dispatch_custom "ls:open-right-sidebar"
                  (Js.Json.object_
                     (Js.Dict.fromList
                        [ ("uuid", Js.Json.string tuuid) ]))

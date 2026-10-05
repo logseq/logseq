@@ -4,9 +4,7 @@
    files are out of scope). *)
 
 module W = Wire
-module D = Dom_ext
-module B = Browser_ui
-
+module D = Web_dom
 let ( let* ) = Pdf_utils.( let* )
 
 let repo () = Runtime.repo ()
@@ -70,19 +68,9 @@ let protocol_link s =
 let local_protocol_asset s =
   String.length s >= 8 && String.sub s 0 8 = "asset://"
 
-(* substring search without Str *)
-let find_sub ~sub s =
-  let n = String.length sub and m = String.length s in
-  let rec go i =
-    if i + n > m then None
-    else if String.sub s i n = sub then Some i
-    else go (i + 1)
-  in
-  go 0
-
 (* cljs get-in-repo-assets-full-filename — keep tail after "/assets/" *)
 let in_repo_assets_full_filename url =
-  match find_sub ~sub:"/assets/" url with
+  match Str_util.index_of "/assets/" url with
   | Some i -> String.sub url (i + 8) (String.length url - i - 8)
   | None -> url
 
@@ -284,7 +272,7 @@ let ensure_ref_block (asset : Model.pdf_asset) (hl : Model.hl)
            let image' = hl.hl_image <> None in
            let text =
              if image' then
-               B.date_to_localedate (B.make_date (Js.Date.now ()))
+               Platform.date_to_localedate (Platform.make_date (Js.Date.now ()))
              else hl.hl_text
            in
            let* color_kvs =
@@ -492,22 +480,22 @@ let goto_asset_block uuid =
 (* ---------- area image capture + persist ---------- *)
 
 external canvas_get_context :
-  D.element -> string -> Js.Json.t -> Js.Json.t = "getContext" [@@mel.send]
+  D.el -> string -> Js.Json.t -> Js.Json.t = "getContext" [@@mel.send]
 
 external ctx_draw_image :
-  Js.Json.t -> D.element -> float -> float -> float -> float -> float
+  Js.Json.t -> D.el -> float -> float -> float -> float -> float
   -> float -> float -> float -> unit = "drawImage" [@@mel.send]
 
 external ctx_set_smoothing : Js.Json.t -> bool -> unit
   = "imageSmoothingEnabled" [@@mel.set]
 
 external canvas_to_blob :
-  D.element -> (Js.Json.t -> unit) -> unit = "toBlob" [@@mel.send]
+  D.el -> (Js.Json.t -> unit) -> unit = "toBlob" [@@mel.send]
 
-external canvas_set_width : D.element -> float -> unit = "width"
+external canvas_set_width : D.el -> float -> unit = "width"
   [@@mel.set]
 
-external canvas_set_height : D.element -> float -> unit = "height"
+external canvas_set_height : D.el -> float -> unit = "height"
   [@@mel.set]
 
 external device_pixel_ratio : float = "devicePixelRatio"
@@ -580,12 +568,12 @@ let persist_hl_area_image ~(viewer : Pdf_state.viewer)
       let canvas = Pdf_utils.pv_canvas pv in
       let dpr = device_pixel_ratio in
       let dw = region.hl_w *. dpr and dh = region.hl_h *. dpr in
-      let c2 = Pdf_utils.create_el "canvas" in
+      let c2 = Web_dom.create_element "canvas" in
       canvas_set_width c2 dw;
       canvas_set_height c2 dh;
       let ctx =
         canvas_get_context c2 "2d"
-          (B.json_props [ "alpha", Js.Json.boolean false ])
+          (Web_dom.json_props [ "alpha", Js.Json.boolean false ])
       in
       ctx_set_smoothing ctx false;
       ctx_draw_image ctx canvas (region.hl_x1 *. dpr)

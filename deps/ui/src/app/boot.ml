@@ -5,34 +5,27 @@
 open Promise_ext
 let demo_graph = "Demo"
 
-(* storage values are edn-ish strings: "\"en\"" -> "en" *)
-let unquote s =
-  let len = String.length s in
-  if len >= 2 && String.get s 0 = '"' && String.get s (len - 1) = '"' then
-    String.sub s 1 (len - 2)
-  else s
-
 (* e2e contract: html lang reflects preferred-language storage key.
    Theme/accent/font/wide-mode mirror cljs theme.cljs container effects;
    storage keys use cljs `(name key)` semantics (namespace stripped). *)
 let apply_storage_env () =
   let lang =
     match Platform.local_storage_get "preferred-language" with
-    | Some v -> unquote v
+    | Some v -> Platform.storage_unquote v
     | None -> "en"
   in
-  Platform.document_set_lang lang;
+  Web_dom.doc_set_lang lang;
   let system =
     (* cljs state.cljs :ui/system-theme? defaults to true *)
     match Platform.local_storage_get "system-theme?" with
-    | Some v -> unquote v = "true"
+    | Some v -> Platform.storage_unquote v = "true"
     | None -> true
   in
   let theme =
-    if system then if Browser_ui.prefers_dark () then "dark" else "light"
+    if system then if Web_dom.prefers_dark () then "dark" else "light"
     else
       match Platform.local_storage_get "theme" with
-      | Some v -> unquote v
+      | Some v -> Platform.storage_unquote v
       | None -> "light"
   in
   Settings_view.apply_theme_dom theme;
@@ -40,36 +33,36 @@ let apply_storage_env () =
     (* cljs storage key is (name :ui/radix-color) = "radix-color" *)
     match Platform.local_storage_get "radix-color" with
     | Some v -> (
-        let v = unquote v in
+        let v = Platform.storage_unquote v in
         if String.length v > 0 && String.get v 0 = ':' then
           String.sub v 1 (String.length v - 1)
         else v)
     | None -> "logseq"
   in
-  Platform.document_set_data "color" accent;
+  Web_dom.doc_set_data "color" accent;
   (match Platform.local_storage_get "editor-font" with
    | Some v -> (
-       match Edn.parse (unquote v) with
+       match Edn.parse (Platform.storage_unquote v) with
        | Wire.Map kvs ->
            let m = Wire.Map kvs in
            (match Wire.get m "type" with
-            | Some (Wire.String t) -> Platform.document_set_data "font" t
+            | Some (Wire.String t) -> Web_dom.doc_set_data "font" t
             | _ -> ());
            (match Wire.get m "global" with
             | Some (Wire.Bool g) ->
-                Platform.document_set_data "font-global"
+                Web_dom.doc_set_data "font-global"
                   (if g then "true" else "false")
             | _ -> ())
        | _ -> ())
    | None -> ());
   let wide =
     match Platform.local_storage_get "wide-mode" with
-    | Some v -> unquote v = "true" || v = "true"
+    | Some v -> Platform.storage_unquote v = "true" || v = "true"
     | None -> false
   in
   if wide then
-    match Browser_ui.qs "#app-container-wrapper" with
-    | Some el -> Browser_ui.add_class el "ls-wide-mode"
+    match Web_dom.query_selector "#app-container-wrapper" with
+    | Some el -> Web_dom.el_class_add el "ls-wide-mode"
     | None -> ()
 
 (* pick the graph to open (cljs graph/resolve-startup-repo): the repo a
@@ -128,6 +121,10 @@ let run () =
     Runtime.send (Action.Repos_loaded repos);
     pick_graph repos
   in
+  (* pick_graph may have just created the repo (fresh profile -> Demo);
+     Repos_loaded fired before that create, so register it now — the
+     header's local-graph-sync-btn checks m.repos membership *)
+  if not (List.mem repo repos) then !Runtime.add_repo repo;
   let* _ = Graph.open_graph repo in
   let* repo =
     Graphs_meta.touch repo;

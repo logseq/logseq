@@ -7,20 +7,15 @@
    nearest registered equivalent plus a [data-tag] attribute recording
    the intended tag.
 
-   TODO(render): "h4" "h5" "h6" "ins" "del" "sup" "sub" "blockquote" and
-   "em-emoji" are not in Logseq_dom.tags.  Add them centrally in
-   src/extension/logseq_dom.ml so real tags are emitted (e2e asserts on
-   h4..h6 and em-emoji[id]); until then this module maps them to
-   fallbacks. *)
+   NOTE(render): tags not yet registered in [Logseq_dom.tags] mount as
+   the fallback below plus [data-tag]; register new tags centrally in
+   src/extension/logseq_dom.ml so real tags are emitted. *)
 
 open Lui_elements
 
 let registered_tag tag = List.mem tag Logseq_dom.tags
 
 let fallback_tag = function
-  | "ins" -> "u" (* underline semantics *)
-  | "em-emoji" -> "em"
-  | "h4" | "h5" | "h6" -> "h3"
   | _ -> "span"
 
 let el ?key ~tag ?(attrs = []) ?(events = "") ?(style_class = "")
@@ -37,10 +32,10 @@ let el ?key ~tag ?(attrs = []) ?(events = "") ?(style_class = "")
    interleaved with elements; LUI's own text nodes render as
    span.lui-text (an extra element), so a <raw-text> placeholder is
    mounted at the exact DOM position and the MutationObserver in
-   Editor_dom swaps it for a real text node. *)
+   Web_dom swaps it for a real text node. *)
 let txt (s : string) : t =
  fun context parent ->
-  Editor_dom.ensure_raw_text_observer ();
+  Web_dom.ensure_raw_text_observer ();
   Logseq_dom.dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] []
     context parent
 

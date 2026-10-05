@@ -56,6 +56,41 @@ type group =
   ; gfilter_active : bool (* view.filter = Some gid, baked by [decorate] *)
   }
 
+(* FTS5 highlight markers the worker embeds in search-result titles
+   (`$pfts_2lqh>$match$<pfts_2lqh$`); the view parses them for rendering,
+   title comparisons strip them *)
+let pfts_open = "$pfts_2lqh>$"
+let pfts_close = "$<pfts_2lqh$"
+
+let find_sub sub s start =
+  let n = String.length s and m = String.length sub in
+  let rec go i =
+    if i + m > n then -1
+    else if String.sub s i m = sub then i
+    else go (i + 1)
+  in
+  go start
+
+(* strip the pfts markers, keeping the marked text itself *)
+let strip_pfts text =
+  let n = String.length text in
+  let lo = String.length pfts_open and lc = String.length pfts_close in
+  let buf = Buffer.create n in
+  let rec go pos =
+    let i = find_sub pfts_open text pos in
+    if i < 0 then Buffer.add_substring buf text pos (n - pos)
+    else
+      let j = find_sub pfts_close text (i + lo) in
+      if j < 0 then Buffer.add_substring buf text pos (n - pos)
+      else begin
+        Buffer.add_substring buf text pos (i - pos);
+        Buffer.add_substring buf text (i + lo) (j - i - lo);
+        go (j + lc)
+      end
+  in
+  go 0;
+  Buffer.contents buf
+
 type view =
   { open_ : bool
   ; input : string
@@ -82,13 +117,16 @@ let initial_view =
 let latest_vs : view Signal.signal option ref = ref None
 let latest_t : t option ref = ref None
 
+(* the palette singleton — lets keyboard shortcuts dispatch command ids
+   through the same run_command path palette items take *)
+let latest_st : t option ref = ref None
+
 let make scheduler : t =
   let vs = Signal.state scheduler initial_view in
   latest_vs := Some vs.Signal.state_signal;
   let st = { vs; gen = ref 0 } in
-  latest_t := Some st;
+  latest_st := Some st;
   st
-
 let get st = Signal.get st.vs.state_signal
 
 (* whether the palette is open — chrome like the selection action-bar
@@ -97,6 +135,11 @@ let open_signal () =
   match !latest_vs with
   | Some vs -> Some (Signal.map (fun v -> v.open_) vs)
   | None -> None
+
+let is_open () =
+  match open_signal () with
+  | Some s -> Signal.get s
+  | None -> false
 
 (* View-derived flags are baked into every item and group at publish
    time so keyed rows never subscribe the view signal themselves: a row
@@ -274,9 +317,9 @@ let create_items q =
 (* cljs state/get-current-page equivalent — the :page route counts, and a
    block zoom is still a :page route there (path param = block uuid) *)
 let current_page_uuid () =
-  match !(Runtime.current_route) with
-  | Some (Model.Page _) | Some (Model.Block_zoom _) ->
-      Option.bind !(Runtime.current_page) (fun p -> p.Model.page_uuid)
+  match Runtime.route () with
+  | Model.Page _ | Model.Block_zoom _ ->
+      Option.bind (Runtime.model ()).Model.route_page (fun p -> p.Model.page_uuid)
   | _ -> None
 
 (* cljs `filters` — leading "Search only current page" row exists only
@@ -380,7 +423,8 @@ let item_of_row w i : item =
   in
   let title =
     match
-      [ str_field w "block.temp/original-title"; str_field w "block/title" ]
+      [ str_field w "block.temp/unique-title"
+      ; str_field w "block.temp/original-title"; str_field w "block/title" ]
       |> List.filter_map Fun.id
     with
     | t :: _ -> t
@@ -465,7 +509,7 @@ let node_exists q rows =
        (fun (it : item) ->
          match it.act with
          | Open_page _ ->
-             String.lowercase_ascii (String.trim it.ititle) = q'
+             String.lowercase_ascii (String.trim (strip_pfts it.ititle)) = q'
          | _ -> false)
        rows
 
@@ -535,7 +579,7 @@ let group_order v q rows total =
     ; gitems =
         (if String.trim q = "" then v.recents
          else
-           Fuzzy.fuzzy_search ~extract:(fun (it : item) -> it.ititle)
+           Fuzzy.fuzzy_search ~extract:(fun (it : item) -> strip_pfts it.ititle)
              ~limit:99 v.recents q)
     ; gtotal = List.length v.recents
     ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded
@@ -623,7 +667,7 @@ let refresh ?(clear = true) st =
   (* commands/filters are local — apply them synchronously so a hanging
      worker query (e.g. repo mid-transition) can't leave stale groups *)
   if clear then apply_results st v.input v.move_mode v.expanded [] 0;
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       ignore
@@ -732,7 +776,7 @@ let filter_of_name = function
 
 let save_last_search (v : view) =
   let repo =
-    Option.value !(Runtime.current_repo) ~default:"__no-repo__"
+    Option.value (Runtime.model ()).Model.repo ~default:"__no-repo__"
   in
   let entry =
     Js.Json.object_
@@ -760,7 +804,7 @@ let save_last_search (v : view) =
 
 let load_last_search () : (string * group_id option) option =
   let repo =
-    Option.value !(Runtime.current_repo) ~default:"__no-repo__"
+    Option.value (Runtime.model ()).Model.repo ~default:"__no-repo__"
   in
   match Platform.local_storage_get last_search_key with
   | None -> None
@@ -812,22 +856,22 @@ let open_palette ?(move = false) st =
   (* prime synchronously so commands show before the search lands *)
   apply_results st q move [] [] 0;
   refresh st;
-  (match !(Runtime.current_repo) with
+  (match (Runtime.model ()).Model.repo with
    | Some repo -> load_recents st repo
    | None -> ());
   let rec focus_input tries =
-    match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+    match Web_dom.query_selector ".cp__cmdk-search-input" with
     | Some el ->
-        Dom_ext.focus el;
+        Web_dom.el_focus el;
         if q <> "" then (
-          Dom_ext.set_value el q;
+          Web_dom.el_set_value el q;
           (* cljs mounts with the restored query fully selected
              (core.cljs (.select el)) so typing replaces it *)
-          Dom_ext.set_selection_range el 0 (String.length q))
+          Web_dom.el_set_selection_range el 0 (String.length q))
     | None ->
-        if tries > 0 then Dom_ext.set_timeout (fun () -> focus_input (tries - 1)) 20
+        if tries > 0 then Web_dom.set_timeout (fun () -> focus_input (tries - 1)) 20
   in
-  Dom_ext.set_timeout (fun () -> focus_input 20) 0
+  Web_dom.set_timeout (fun () -> focus_input 20) 0
 
 let close st =
   let v = get st in
@@ -848,8 +892,8 @@ let clear_or_close st =
   else if v.filter <> None && not v.move_mode then (clear_filter st; true)
   else if v.input <> "" then (
     set_in st (fun v -> { v with input = "" });
-    (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-     | Some el -> Dom_ext.set_value el ""
+    (match Web_dom.query_selector ".cp__cmdk-search-input" with
+     | Some el -> Web_dom.el_set_value el ""
      | None -> ());
     refresh st;
     true)
@@ -870,13 +914,13 @@ let move_hl st dir =
       else ((v.hl + dir) mod n + n) mod n
     in
     set_in st (fun v -> { v with hl = i; mouse = false });
-    (match Dom_ext.doc_query_selector ".cp__cmdk .cp__cmdk-scroller" with
+    (match Web_dom.query_selector ".cp__cmdk .cp__cmdk-scroller" with
      | Some scroller -> (
          match
-           Dom_ext.query_selector scroller
+           Web_dom.el_query scroller
              (Printf.sprintf "[data-item-index=\"%d\"]" i)
          with
-         | Some row -> Dom_ext.scroll_row_into_view ~scroller ~row
+         | Some row -> Web_dom.scroll_row_into_view ~scroller ~row
          | None -> ())
      | None -> ())
 
@@ -896,7 +940,7 @@ let toast msg cls =
   let d = Js.Dict.empty () in
   Js.Dict.set d "msg" (Js.Json.string msg);
   Js.Dict.set d "cls" (Js.Json.string cls);
-  Dom_ext.dispatch_custom "ls:toast" (Js.Json.object_ d)
+  Web_dom.dispatch_custom "ls:toast" (Js.Json.object_ d)
 
 let goto_page _repo uuid =
   (* navigation intent: commit and close any in-progress edit so the old
@@ -935,7 +979,7 @@ let created_uuid w =
   | _ -> None
 
 let apply_create op label on_ok =
-  match !(Runtime.current_repo) with
+  match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       (* navigation intent: commit and close any in-progress edit so the
@@ -1031,24 +1075,29 @@ let run_add_reaction st =
   | uuids -> (
       let anchor =
         match uuids with
-        | u :: _ -> Properties_dom.doc_query ("[blockid='" ^ u ^ "']")
+        | u :: _ -> Web_dom.query_selector ("[blockid='" ^ u ^ "']")
         | [] -> None
       in
       match anchor with
       | None -> ()
       | Some anchor ->
-          Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->
-              match c with
-              | Icon_picker.Emoji emoji_id ->
-                  ignore
-                    (Outliner_ops.apply_and_refresh
-                       (List.map
-                          (fun u ->
-                            Outliner_ops.op "toggle-reaction"
-                              [ Wire.Uuid u; Wire.String emoji_id
-                              ; Wire.Nil ])
-                          uuids))
-              | _ -> ()))
+          (* cljs icon-search {:tabs [[:emoji]] :default-tab :emoji} —
+             the reaction picker is emoji-only *)
+          ignore
+            (Icon_picker.open_picker_with_opts ~anchor ~del:false
+               ~opts:{ Icon_picker.emoji_only = true; sub = false }
+               ~on_chosen:(fun c ->
+                 match c with
+                 | Icon_picker.Emoji emoji_id ->
+                     ignore
+                       (Outliner_ops.apply_and_refresh
+                          (List.map
+                             (fun u ->
+                               Outliner_ops.op "toggle-reaction"
+                                 [ Wire.Uuid u; Wire.String emoji_id
+                                 ; Wire.Nil ])
+                             uuids))
+                 | _ -> ())))
 
 (* :editor/add-comment — ensure-comments-area-for-blocks over the block
    selection (or the edited block); the area renders once the refresh
@@ -1066,6 +1115,67 @@ let run_add_comment repo st =
         in
         Outliner_ops.refresh_page ())
   | _ -> ()
+
+(* :editor/add-property-icon — cljs opens the property dialog on
+   :logseq.property/icon, whose editing cell is the icon picker; LUI
+   opens the same picker chrome directly on the anchored block *)
+let run_add_property_icon st =
+  close st;
+  match target_uuids () with
+  | [] -> ()
+  | uuids -> (
+      let anchor =
+        match uuids with
+        | u :: _ -> Web_dom.query_selector ("[blockid='" ^ u ^ "']")
+        | [] -> None
+      in
+      match anchor with
+      | None -> ()
+      | Some anchor -> (
+          (let* first =
+             match uuids with
+             | u :: _ -> Properties_data.entity_by_uuid u
+             | [] -> Js.Promise.resolve Wire.Nil
+           in
+           let has_icon =
+             Properties_data.getf (Properties_data.untag first)
+               "logseq.property/icon"
+             <> None
+           in
+           Icon_picker.open_picker ~anchor ~del:has_icon
+             ~on_chosen:(fun c ->
+               let op_for u =
+                 match c with
+                 | Icon_picker.Remove ->
+                     Outliner_ops.op "remove-block-property"
+                       [ Wire.Uuid u
+                       ; Wire.Keyword "logseq.property/icon" ]
+                 | Icon_picker.Emoji id ->
+                     Outliner_ops.op "set-block-property"
+                       [ Wire.Uuid u
+                       ; Wire.Keyword "logseq.property/icon"
+                       ; Wire.Map
+                           [ Wire.Keyword "type", Wire.Keyword "emoji"
+                           ; Wire.Keyword "id", Wire.String id ] ]
+                 | Icon_picker.Tabler (id, color) ->
+                     Outliner_ops.op "set-block-property"
+                       [ Wire.Uuid u
+                       ; Wire.Keyword "logseq.property/icon"
+                       ; Wire.Map
+                           ([ Wire.Keyword "type"
+                            , Wire.Keyword "tabler-icon"
+                            ; Wire.Keyword "id", Wire.String id ]
+                           @ (match color with
+                              | Some c ->
+                                  [ Wire.Keyword "color"
+                                  , Wire.String c ]
+                              | None -> [])) ]
+               in
+               ignore
+                 (Outliner_ops.apply_and_refresh
+                    (List.map op_for uuids)));
+           Js.Promise.resolve ())
+          |> ignore))
 
 let with_sidebar f () =
   match !Sidebar_state.st_ref with
@@ -1156,12 +1266,20 @@ let shortcut_action cid : (unit -> unit) option =
   | "ui/select-theme-color" | "ui/customize-appearance" ->
       Some
         (fun () ->
-          Runtime.send (Action.Navigate_to Model.Settings);
-          Platform.set_location_hash (Runtime.nav_hash "#/settings"))
+          (* cljs :ui/toggle-appearance — appearance popup anchored to
+             the toolbar dots trigger *)
+          match Web_dom.query_selector ".toolbar-dots-btn" with
+          | Some el ->
+              let r = Web_dom.el_bounding_rect el in
+              Runtime.send
+                (Action.Appearance_set
+                   (Some
+                      (Web_dom.rect_right r, Web_dom.rect_bottom r +. 4.)))
+          | None -> ())
   | _ -> editor_action cid
 
 let rec run_item st it =
-  let repo = !(Runtime.current_repo) in
+  let repo = (Runtime.model ()).Model.repo in
   let v = get st in
   (match v.move_mode, it.act with
    | true, (Open_page target | Open_block target) -> run_move st target
@@ -1195,8 +1313,8 @@ let rec run_item st it =
    | Set_filter gid ->
        set_in st (fun v ->
            { v with filter = Some gid; input = "" });
-       (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-        | Some el -> Dom_ext.set_value el ""
+       (match Web_dom.query_selector ".cp__cmdk-search-input" with
+        | Some el -> Web_dom.el_set_value el ""
         | None -> ());
        refresh st
    | Run cid -> run_command st repo cid
@@ -1245,7 +1363,19 @@ and run_command st repo (cid : string) =
                   goto_page repo u;
                   Js.Promise.resolve ()
               | None -> Js.Promise.resolve ())
-          | None -> Js.Promise.resolve ())
+          | None ->
+              (* cljs redirect-to-journal!: a journal that doesn't exist
+                 yet goes through page/<create! — materialize it like the
+                 palette's create_page (worker infers block/journal-day
+                 from the title) *)
+              let title =
+                Dates.journal_title_of
+                  (Js.Date.make ~year:(float_of_int (day / 10000))
+                     ~month:(float_of_int (day / 100 mod 100 - 1))
+                     ~date:(float_of_int (day mod 100)) ())
+              in
+              create_page title;
+              Js.Promise.resolve ())
     | None -> ()
   in
   let rel_journal delta = (* today's journal +/- delta days *)
@@ -1254,7 +1384,7 @@ and run_command st repo (cid : string) =
       (Dates.journal_day_of (Dates.add_days (Dates.date_now ()) delta))
   in
   let cur_day () =
-    Option.bind !(Runtime.current_page) (fun p -> p.Model.page_journal_day)
+    Option.bind (Runtime.model ()).Model.route_page (fun p -> p.Model.page_journal_day)
   in
   (match Commands_data.command_by_id cid with
    | Some c -> record_invoke c
@@ -1265,16 +1395,23 @@ and run_command st repo (cid : string) =
          the palette to the nodes group — no recents/filters *)
       set_in st (fun v ->
           { v with move_mode = true; filter = Some G_nodes; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-       | Some el -> Dom_ext.set_value el ""; Dom_ext.focus el
+      (match Web_dom.query_selector ".cp__cmdk-search-input" with
+       | Some el -> Web_dom.el_set_value el ""; Web_dom.el_focus el
        | None -> ());
       refresh st
   | "go/search" -> () (* keep palette open on the input *)
   | "go/search-in-page" ->
       set_in st (fun v ->
           { v with filter = Some G_current_page; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-       | Some el -> Dom_ext.set_value el ""
+      (match Web_dom.query_selector ".cp__cmdk-search-input" with
+       | Some el -> Web_dom.el_set_value el ""
+       | None -> ());
+      refresh st
+  | "go/search-themes" ->
+      set_in st (fun v ->
+          { v with filter = Some G_themes; input = "" });
+      (match Web_dom.query_selector ".cp__cmdk-search-input" with
+       | Some el -> Web_dom.el_set_value el ""
        | None -> ());
       refresh st
   | "go/home" -> nav "#/" Model.Home
@@ -1282,7 +1419,18 @@ and run_command st repo (cid : string) =
   | "go/all-graphs" -> nav "#/graphs" Model.All_graphs
   | "go/graph-view" -> nav "#/graph" Model.Graph_view
   | "go/all-pages" -> nav "#/all-pages" Model.All_pages
-  | "ui/toggle-settings" -> nav "#/settings" Model.Settings
+  | "ui/toggle-settings" ->
+      (* cljs toggle-settings-modal! — toggles the settings dialog,
+         not the #/settings route *)
+      close st;
+      if Dialogs_state.is_open "settings" then
+        Dialogs_state.close_named "settings"
+      else Dialogs_state.open_ "settings"
+  | "go/keyboard-shortcuts" ->
+      (* cljs open-settings! :keymap — settings dialog on the keymap tab *)
+      close st;
+      Settings_state.open_at "keymap";
+      Dialogs_state.open_ "settings"
   | "sidebar/open-today-page" ->
       close st;
       goto_journal_day (Dates.today_journal_day ())
@@ -1324,13 +1472,30 @@ and run_command st repo (cid : string) =
   | "ui/toggle-theme" ->
       close st;
       Settings_view.toggle_theme ()
-  | "editor/add-property" | "editor/add-property-deadline"
-  | "editor/add-property-status" | "editor/add-property-priority"
-  | "editor/add-property-icon" ->
+  | "editor/add-property" ->
       close st;
       (match target_uuids () with
        | u :: _ -> Properties_dialog.open_for_block u
        | [] -> ())
+  (* cljs :editor/new-property {:property-key _} — the named property's
+     dedicated picker, not the generic property sheet *)
+  | "editor/add-property-deadline" | "editor/add-property-status"
+  | "editor/add-property-priority" | "editor/set-tags" ->
+      close st;
+      (match target_uuids () with
+       | u :: _ as uuids ->
+           Properties_dialog.open_for_block_with_property ~uuids u
+             ~ident:
+               (match cid with
+                | "editor/add-property-deadline" ->
+                    "logseq.property/deadline"
+                | "editor/add-property-status" ->
+                    "logseq.property/status"
+                | "editor/add-property-priority" ->
+                    "logseq.property/priority"
+                | _ -> "block/tags")
+       | [] -> ())
+  | "editor/add-property-icon" -> run_add_property_icon st
   | "editor/add-reaction" -> run_add_reaction st
   | "editor/add-comment" -> run_add_comment repo st
   | _ -> (
@@ -1343,6 +1508,27 @@ and run_command st repo (cid : string) =
 let run_highlighted st =
   let v = get st in
   match item_at v v.hl with Some it -> run_item st it | None -> ()
+
+(* keyboard-shortcut entry point: run a command id exactly as the
+   palette would. Palette-shaped commands open the palette in the right
+   mode first; everything else dispatches straight through run_command *)
+let dispatch_id (cid : string) =
+  match !latest_st with
+  | Some st -> (
+      match cid with
+      | "go/search" -> open_palette st
+      | "command-palette/toggle" ->
+          if (get st).open_ then close st
+          else begin
+            open_palette st;
+            set_in st (fun v -> { v with filter = Some G_commands; input = "" });
+            refresh st
+          end
+      | "go/search-in-page" | "editor/move-blocks" | "go/search-themes" ->
+          if not (get st).open_ then open_palette st;
+          run_command st (Runtime.model ()).Model.repo cid
+      | _ -> run_command st (Runtime.model ()).Model.repo cid)
+  | None -> ()
 
 (* shift+enter opens the highlighted page/block in the right sidebar
    (cljs cmdk on-shift-enter -> ui/open-in-right-sidebar) *)

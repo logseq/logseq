@@ -17,6 +17,8 @@
 
 open Lui_elements
 
+module Wd = Web_dom
+
 let dyn = Logseq_dom.dyn
 
 let skip_to_main =
@@ -35,39 +37,53 @@ let ghost_btn_cls ?(mid = "") ?(tail = "") () =
      rounded-md select-none text-sm " ^ tail
   ^ "transition-colors ui__button w-6 whitespace-nowrap"
 
-let icon_btn ~key ~id ~cls ~icon ~on_click =
+(* the trailing () discharges the optionals — without it a call that
+   skips ?tip_keys stays a partial application because the element
+   type t is itself a function type *)
+let icon_btn ?tip ?tip_keys ~key ~id ~cls ~icon ~on_click () =
   Logseq_dom.dom ~key ~tag:"button" ~id
     ~style_class:cls
-    ~attrs:[ ("type", "button") ]
+    ~attrs:
+      ([ ("type", "button") ]
+      @ (match tip with
+         | Some t -> [ ("data-tooltip", t) ]
+         | None -> [])
+      @ (match tip_keys with
+         | Some k -> [ ("data-tooltip-keys", k) ]
+         | None -> []))
     ~events:"click"
     ~on_dom_event:(fun name payload -> if name = "click" then on_click payload)
     [ Icons.icon ~size:20. ~cls:"" icon ]
 
+(* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
 let search_button =
   icon_btn ~key:"search-btn" ~id:"search-button" ~cls:(ghost_btn_cls ())
-    ~icon:"search"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_search)
+    ~icon:"search" ~tip:(I18n.t "nav/search") ~tip_keys:"⌘ K"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_search) ()
 
+(* cljs ui/tooltip (t :header/more) *)
 let dots_button =
   Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
     ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn " ())
-    ~attrs:[ ("type", "button") ]
+    ~attrs:
+      [ ("type", "button"); ("data-tooltip", I18n.t "header/more") ]
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       (* cljs anchors the dropdown to the trigger's right edge, not
          the click position *)
       if name = "click" then
         match
-          Dom_ext.doc_query_selector ".toolbar-dots-btn"
+          Web_dom.query_selector ".toolbar-dots-btn"
         with
         | Some el ->
-            let r = Dom_ext.bounding_rect el in
+            let r = Web_dom.el_bounding_rect el in
             Runtime.send
               (Action.Page_menu_set
                  (Some
-                    ( Dom_ext.rect_right r
-                    , Dom_ext.rect_bottom r +. 4.
-                    , true )))
+                    ( Web_dom.rect_right r
+                    , Web_dom.rect_bottom r +. 4.
+                    , true
+                    , None )))
         | None -> ())
     [ Icons.icon ~size:20. ~cls:"" "dots" ]
 
@@ -79,50 +95,526 @@ let rtc_tx_text (r : Model.rtc) =
   Printf.sprintf "{:local-tx %s, :remote-tx %s}"
     (tx r.rtc_local_tx) (tx r.rtc_remote_tx)
 
-let rtc_indicator (ms : Model.t Signal.signal) : t =
-  dyn ~equal:( = ) (fun (r : Model.rtc option) ->
-      match r with
-      | None -> Logseq_dom.dom ~key:"rtc-off" ~style_class:"hidden" []
-      | Some r ->
-          let open_ = Platform.online () && r.rtc_lock in
-          let syncing = open_ && r.rtc_pending_server > 0 in
-          let idle =
-            open_ && r.rtc_pending_local = 0
-            && r.rtc_pending_asset = 0 && r.rtc_pending_server = 0
-          in
-          let queuing =
-            r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
-          in
-          let cls =
-            "cloud ui__button"
-            ^ (if open_ then " on" else "")
-            ^ (if syncing then " syncing" else "")
-            ^ (if idle then " idle" else "")
-            ^ (if queuing then " queuing" else "")
-          in
-          Logseq_dom.dom ~key:"rtc" ~style_class:"cp__rtc-sync"
-            [ Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
-                ~attrs:[ ("data-testid", "rtc-tx") ]
-                ~text:(rtc_tx_text r) []
-            ; Logseq_dom.dom ~key:"rtc-ind"
-                ~style_class:
-                  "cp__rtc-sync-indicator flex flex-row items-center \
-                   gap-1"
-                [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
-                    ~style_class:cls
-                    ~attrs:
-                      [ ("type", "button"); ("aria-label", "rtc sync") ]
-                    [ Logseq_dom.dom ~key:"rtc-i" ~tag:"i"
-                        ~style_class:"ti ti-cloud" [] ]
-                ]
-            ])
-    (Signal.map (fun (m : Model.t) -> m.rtc) ms)
+(* cljs header.cljs rtc-indicator-visible? — the indicator shows when
+   the open repo is a remote/rtc graph: logged in, rtc-group, and the
+   graph's rtc uuid known (db-rtc-uuid) or sync already broadcasting
+   state. The uuid resolution lives in Rtc_flows (shared with
+   Collaborators) *)
+let last_rtc : Model.rtc option ref = ref None
 
+(* cljs indicator.cljs details — dropdown under the cloud button:
+   online/offline, pending counts, last-synced, debug toggle and a
+   Start sync action when the lock isn't open *)
+let rtc_details_popup : Wd.el option ref = ref None
+
+let close_rtc_details () =
+  match !rtc_details_popup with
+  | Some el ->
+      Wd.el_remove el;
+      rtc_details_popup := None
+  | None -> ()
+
+let el_ ?(cls = "") ?(text = "") () =
+  let d = Wd.create_element "div" in
+  Wd.el_set_class d cls;
+  if text <> "" then Wd.el_set_text_content d text;
+  d
+
+let pend_row cls_key n =
+  let d = el_ () in
+  let s = Wd.create_element "span" in
+  Wd.el_set_class s "font-medium mr-1";
+  Wd.el_set_text_content s (string_of_int n);
+  let l = Wd.create_element "span" in
+  Wd.el_set_text_content l (I18n.t cls_key);
+  Wd.el_append_child d s;
+  Wd.el_append_child d l;
+  d
+
+let rtc_debug_text (r : Model.rtc option) =
+  let lock =
+    match r with Some r -> if r.rtc_lock then ":open" else ":close"
+    | None -> ":close"
+  in
+  let num f = match r with Some r -> string_of_int (f r) | None -> "0" in
+  Printf.sprintf
+    "{:pending-local-ops %s\n :pending-asset-ops %s\n :pending-server-ops \
+     %s\n :local-tx %s\n :remote-tx %s\n :rtc-state %s}"
+    (num (fun r -> r.rtc_pending_local))
+    (num (fun r -> r.rtc_pending_asset))
+    (num (fun r -> r.rtc_pending_server))
+    (match r with
+     | Some r -> (
+         match r.rtc_local_tx with
+         | Some n -> string_of_int n
+         | None -> "nil")
+     | None -> "nil")
+    (match r with
+     | Some r -> (
+         match r.rtc_remote_tx with
+         | Some n -> string_of_int n
+         | None -> "nil")
+     | None -> "nil")
+    lock
+
+external ev_target : Js.Json.t -> Js.Json.t = "target" [@@mel.get]
+
+external el_contains : Wd.el -> Js.Json.t -> bool = "contains"
+  [@@mel.send]
+
+external ev_key : Js.Json.t -> string = "key" [@@mel.get]
+
+(* tabler alert-triangle glyph — cljs ui/icon inside the
+   missing-asset-files rows *)
+let alert_triangle_svg () =
+  let s = Web_dom.create_element "span" in
+  Web_dom.el_set_inner_html s
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" \
+     height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" \
+     stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" \
+     stroke-linejoin=\"round\" class=\"tabler-icon \
+     tabler-icon-alert-triangle \"><path d=\"M12 9v4\"/><path \
+     d=\"M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 \
+     1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z\"\
+     /><path d=\"M12 16h.01\"/></svg>";
+  s
+
+(* cljs missing-asset-files: <details.assets-missing-files> listing the
+   files waiting for an upload *)
+let missing_files_details (files : string list) =
+  let det = Web_dom.create_element "details" in
+  Web_dom.el_set_class det "assets-missing-files";
+  let sum = Web_dom.create_element "summary" in
+  Web_dom.el_set_text_content sum
+    (I18n.t1 "sync/missing-asset-files-count"
+       (string_of_int (List.length files)));
+  Web_dom.el_append_child det sum;
+  let inner = Web_dom.create_element "div" in
+  Web_dom.el_set_class inner "flex flex-col gap-1 text-sm";
+  List.iter
+    (fun f ->
+      let row = Web_dom.create_element "div" in
+      Web_dom.el_set_class row "flex flex-row gap-1 items-center";
+      Web_dom.el_append_child row (alert_triangle_svg ());
+      let sp = Web_dom.create_element "span" in
+      Web_dom.el_set_class sp "truncate";
+      Web_dom.el_set_text_content sp f;
+      Web_dom.el_append_child row sp;
+      Web_dom.el_append_child inner row)
+    files;
+  Web_dom.el_append_child det inner;
+  det
+
+(* cljs assets-progressing rows resolve block titles via <get-blocks;
+   fill each title span when the worker answers *)
+let enrich_asset_title (sp : Web_dom.el) (repo : string) (asset_id : string) =
+  ignore
+    (let open Promise_ext in
+    let* w =
+      Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+        (Wire.List
+           [ Wire.Map
+               [ (Wire.Keyword "id", Wire.String asset_id)
+               ; ( Wire.Keyword "opts"
+                 , Wire.Map [ (Wire.Keyword "children?", Wire.Bool false) ] )
+               ]
+           ])
+    in
+    (match w with
+     | Wire.Array items | Wire.List items ->
+         List.iter
+           (fun item ->
+             match Wire.get item "block" with
+             | Some b -> (
+                 match Wire.map_get_string b "block/title" with
+                 | Some t when t <> "" -> Web_dom.el_set_text_content sp t
+                 | _ -> ())
+             | _ -> ())
+           items
+     | _ -> ());
+    Js.Promise.resolve ())
+
+(* one-shot guards: the same click that opened the menu bubbles up to
+   document, and the doc listeners themselves can't be unbound *)
+let rtc_doc_hooked = ref false
+let rtc_open_guard = ref false
+
+let hook_rtc_doc_close () =
+  if not !rtc_doc_hooked then (
+    rtc_doc_hooked := true;
+    Wd.on_document_event "click" (fun ev ->
+        match !rtc_details_popup with
+        | Some el
+          when (not !rtc_open_guard) && not (el_contains el (ev_target ev))
+          -> close_rtc_details ()
+        | _ -> ());
+    Wd.on_document_event "keydown" (fun ev ->
+        if ev_key ev = "Escape" && !rtc_details_popup <> None then
+          close_rtc_details ()))
+
+let open_rtc_details () =
+  close_rtc_details ();
+  hook_rtc_doc_close ();
+  rtc_open_guard := true;
+  ignore (Wd.set_timeout (fun () -> rtc_open_guard := false) 0);
+  let r = !last_rtc in
+  let open_ =
+    match r with
+    | Some r -> Platform.online () && r.rtc_lock
+    | None -> false
+  in
+  let menu = Wd.create_element "div" in
+  Wd.el_set_class menu
+    "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
+     bg-popover p-1 text-popover-foreground shadow-md";
+  Wd.el_set_attr menu "role" "menu";
+  (match Wd.query_selector ".cp__rtc-sync-indicator .cloud" with
+   | Some anchor ->
+       let rect = Wd.el_bounding_rect anchor in
+       let left = Float.max 8.0 (Wd.rect_right rect -. 240.0) in
+       Wd.el_set_attr menu "style"
+         (Printf.sprintf
+            "position:fixed;left:%.0fpx;top:%.0fpx;width:240px"
+            left (Wd.rect_bottom rect +. 4.0))
+   | None -> ());
+  let info = el_ ~cls:"rtc-info flex flex-col gap-1 p-2 text-gray-11" () in
+  Wd.el_append_child info
+    (el_ ~cls:"font-medium mb-2"
+       ~text:(I18n.t (if Platform.online () then "sync/online" else "sync/offline"))
+       ());
+  let p_local =
+    match r with Some r -> r.rtc_pending_local | None -> 0
+  and p_asset =
+    match r with Some r -> r.rtc_pending_asset | None -> 0
+  and p_server =
+    match r with Some r -> r.rtc_pending_server | None -> 0
+  in
+  (* cljs asset-status-rows: missing files, remaining pending uploads,
+     live upload/download transfers — each row only while positive *)
+  let missing_files =
+    match r with Some r -> r.rtc_missing_files | None -> []
+  in
+  let missing_count = List.length missing_files in
+  let p_upload = max 0 (p_asset - missing_count) in
+  let n_up, n_down =
+    match (Runtime.model ()).Model.repo with
+    | Some repo -> Asset_progress.transfer_counts repo
+    | None -> (0, 0)
+  in
+  Web_dom.el_append_child info (pend_row "sync/pending-local-changes" p_local);
+  if missing_count > 0 then
+    Web_dom.el_append_child info (pend_row "sync/missing-asset-files" missing_count);
+  if p_upload > 0 then
+    Web_dom.el_append_child info (pend_row "sync/pending-asset-uploads" p_upload);
+  if n_up > 0 then
+    Web_dom.el_append_child info (pend_row "sync/assets-uploading" n_up);
+  if n_down > 0 then
+    Web_dom.el_append_child info (pend_row "sync/assets-downloading" n_down);
+  Web_dom.el_append_child info (pend_row "sync/pending-server-changes" p_server);
+  if missing_files <> [] then
+    Web_dom.el_append_child info (missing_files_details missing_files);
+  (* cljs assets-progressing: <details> per direction with
+     percent + block title *)
+  let in_flight =
+    match (Runtime.model ()).Model.repo with
+    | Some repo -> Asset_progress.in_flight repo
+    | None -> []
+  in
+  if in_flight <> [] then begin
+    let wrap = Web_dom.create_element "div" in
+    Web_dom.el_set_class wrap "assets-sync-progress flex flex-col gap-2";
+    List.iter
+      (fun (dir, label_key) ->
+        let rows =
+          List.filter
+            (fun (p : Asset_progress.t) ->
+              p.ap_direction = dir)
+            in_flight
+        in
+        if rows <> [] then begin
+          let det = Web_dom.create_element "details" in
+          let sum = Web_dom.create_element "summary" in
+          Web_dom.el_set_text_content sum
+            (I18n.t1 label_key (string_of_int (List.length rows)));
+          Web_dom.el_append_child det sum;
+          let inner = Web_dom.create_element "div" in
+          Web_dom.el_set_class inner "flex flex-col gap-1 text-sm";
+          List.iter
+            (fun (p : Asset_progress.t) ->
+              let row = Web_dom.create_element "div" in
+              Web_dom.el_set_class row "flex flex-row gap-1 items-center";
+              let pct = Web_dom.create_element "span" in
+              Web_dom.el_set_class pct "indicator-progress-pie";
+              Web_dom.el_set_text_content pct
+                (string_of_int
+                   (int_of_float
+                      (100.0 *. Float.of_int p.ap_loaded
+                      /. Float.of_int p.ap_total))
+                ^ "%");
+              Web_dom.el_append_child row pct;
+              let sp = Web_dom.create_element "span" in
+              Web_dom.el_set_class sp "truncate";
+              Web_dom.el_set_text_content sp p.ap_id;
+              (match (Runtime.model ()).Model.repo with
+               | Some repo -> enrich_asset_title sp repo p.ap_id
+               | None -> ());
+              Web_dom.el_append_child row sp;
+              Web_dom.el_append_child inner row)
+            rows;
+          Web_dom.el_append_child det inner;
+          Web_dom.el_append_child wrap det
+        end)
+      [ ("download", "sync/assets-downloading-count")
+      ; ("upload", "sync/assets-uploading-count") ];
+    Web_dom.el_append_child info wrap
+  end;
+  (match !Rtc_flows.last_sync_ms with
+   | Some ms ->
+       Wd.el_append_child info
+         (el_ ~cls:"text-sm"
+            ~text:
+              (I18n.t1 "sync/last-synced-time-label"
+                 (Platform.fmt_time (Int64.to_float ms)))
+            ())
+   | None -> ());
+  (* More debug info toggle *)
+  let dbg_link = Wd.create_element "a" in
+  Wd.el_set_class dbg_link "fade-link text-sm";
+  Wd.el_set_text_content dbg_link (I18n.t "sync/more-debug-info");
+  let dbg_on = ref false in
+  let dbg_el = ref (Wd.create_element "div") in
+  Wd.el_append_child info dbg_link;
+  Wd.el_on dbg_link "click" (fun _ ->
+      dbg_on := not !dbg_on;
+      if !dbg_on then (
+        let d = el_ ~cls:"rtc-info-debug" () in
+        let pre = Wd.create_element "pre" in
+        Wd.el_set_class pre "select-text";
+        Wd.el_set_text_content pre (rtc_debug_text r);
+        Wd.el_append_child d pre;
+        dbg_el := d;
+        Wd.el_append_child info d)
+      else Wd.el_remove !dbg_el);
+  (match Wd.query_selector "body" with Some b -> Wd.el_append_child b menu | None -> ());
+  (* Start sync (cljs: shown when rtc-state <> :open) *)
+  if not open_ then (
+    let row = el_ ~cls:"mt-4" () in
+    let btn = Wd.create_element "button" in
+    Wd.el_set_class btn
+      (Settings_controls.btn_cls ~variant:`Solid ~size:`Sm ());
+    Wd.el_set_attr btn "type" "button";
+    Wd.el_set_text_content btn (I18n.t "sync/start-sync");
+    Wd.el_on btn "click" (fun _ ->
+        close_rtc_details ();
+        match (Runtime.model ()).Model.repo with
+        | Some repo -> Rtc_ops.start repo
+        | None -> ());
+    Wd.el_append_child row btn;
+    Wd.el_append_child info row);
+  Wd.el_append_child menu info;
+  rtc_details_popup := Some menu
+
+let toggle_rtc_details () =
+  match !rtc_details_popup with
+  | Some _ -> close_rtc_details ()
+  | None -> open_rtc_details ()
+
+let rtc_indicator (ms : Model.t Signal.signal) : t =
+  dyn
+    ~equal:(fun (a : string option * Model.rtc option)
+                  (b : string option * Model.rtc option) -> a = b)
+    (fun ((repo : string option), (r : Model.rtc option)) ->
+      Rtc_flows.refresh_db_rtc_uuid repo;
+      last_rtc := r;
+      let visible =
+        (Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
+        && repo <> None
+        && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
+        || (Platform.rtc_test_mode () && repo <> None)
+      in
+      if not visible then
+        Logseq_dom.dom ~key:"rtc-off" ~style_class:"hidden" []
+      else (
+        let open_ =
+          Platform.online ()
+          && (match r with Some r -> r.rtc_lock | None -> false)
+        in
+        let syncing =
+          open_
+          && (match r with Some r -> r.rtc_pending_server > 0
+              | None -> false)
+        in
+        let idle =
+          open_
+          && (match r with
+             | Some r ->
+                 r.rtc_pending_local = 0 && r.rtc_pending_asset = 0
+                 && r.rtc_pending_server = 0
+             | None -> true)
+        in
+        let queuing =
+          match r with
+          | Some r -> r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
+          | None -> false
+        in
+        let cls =
+          ghost_btn_cls ()
+          ^ " cloud"
+          ^ (if open_ then " on" else "")
+          ^ (if syncing then " syncing" else "")
+          ^ (if idle then " idle" else "")
+          ^ (if queuing then " queuing" else "")
+        in
+        Logseq_dom.dom ~key:"rtc" ~style_class:"cp__rtc-sync"
+          [ (match r with
+             | Some r ->
+                 Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
+                   ~attrs:[ ("data-testid", "rtc-tx") ]
+                   ~text:(rtc_tx_text r) []
+             | None -> Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
+                           ~attrs:[ ("data-testid", "rtc-tx") ] [])
+          ; Logseq_dom.dom ~key:"rtc-ind"
+              ~style_class:
+                "cp__rtc-sync-indicator flex flex-row items-center gap-1"
+              [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
+                  ~style_class:cls
+                  ~attrs:
+                    [ ("type", "button"); ("aria-label", "rtc sync") ]
+                  ~events:"click"
+                  ~on_dom_event:(fun n _ ->
+                    if n = "click" then toggle_rtc_details ())
+                  [ Icons.icon ~size:20. ~cls:"" "cloud" ]
+              ]
+          ]))
+    (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)
+
+(* cljs indicator.cljs downloading-detail / uploading-detail — ghost
+   buttons visible while the latest rtc.log download|upload entry's
+   sub-type isn't *-completed; gated on logged-in only (header.cljs) *)
+let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
+    =
+  dyn ~equal:( = )
+    (fun (active : bool) ->
+      if not (Rtc_flows.logged_in () && active) then
+        Logseq_dom.dom ~key:"td-off" ~style_class:"hidden" []
+      else
+        Logseq_dom.dom ~key:"td" ~tag:"button"
+          ~style_class:"ui__button as-ghost opacity-50"
+          ~attrs:[ ("type", "button") ]
+          ~text:
+            (I18n.t
+               (if downloading then "sync/downloading"
+                else "sync/uploading"))
+          [])
+    (Signal.map
+       (fun (m : Model.t) ->
+         if downloading then m.rtc_downloading else m.rtc_uploading)
+       ms)
+
+(* cljs header.cljs local-graph-sync-button — cloud ghost button that
+   uploads the open local graph to the sync server. Visible when the
+   current repo is a local (non-remote, non-rtc) graph and the user is
+   logged in + rtc-group. The rtc-graph-uuid lookup is async, same as
+   cljs use-db-rtc-uuid (the button can flash on a remote graph until
+   the uuid resolves — cljs has the same window) *)
+let local_graph_sync_button (ms : Model.t Signal.signal) : t =
+  dyn ~equal:( = )
+    (fun ((repo : string option), (repos : string list), (_rtc : Model.rtc option)) ->
+      (* m.rtc joins the input so the db-sync-start broadcast after an
+         upload re-renders — refresh_db_rtc_uuid then resolves the new
+         uuid and hides the button *)
+      Rtc_flows.refresh_db_rtc_uuid repo;
+      let uploadable =
+        match repo with
+        | Some r ->
+            Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
+            && List.mem r repos
+            && !Rtc_flows.db_rtc_uuid = None
+        | None -> false
+      in
+      if uploadable then
+        Logseq_dom.dom ~key:"lgs" ~tag:"button"
+          ~style_class:
+            (ghost_btn_cls ~tail:"local-graph-sync-btn " ())
+          ~attrs:
+            [ ("type", "button")
+            ; ("aria-label", I18n.t "graph/use-sync-beta")
+            ; ("title", I18n.t "graph/use-sync-beta")
+            ]
+          ~events:"click"
+          ~on_dom_event:(fun n _ ->
+            match (Runtime.model ()).Model.repo with
+            | Some r when n = "click" -> Graphs_ops.ask_upload r
+            | _ -> ())
+          [ Icons.icon ~size:20. ~cls:"" "cloud" ]
+      else Logseq_dom.dom ~key:"lgs-off" ~style_class:"hidden" [])
+    (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)
+
+(* cljs components/svg.cljs loader-fn — the ui/loading spinner *)
+let loader_svg : t =
+  Logseq_dom.dom ~key:"ldr" ~tag:"svg"
+    ~attrs:
+      [ ("version", "1.1"); ("viewBox", "0 0 24 24"); ("fill", "none")
+      ; ("class", "animate-spin w-5 h-5"); ("display", "inline-block") ]
+    [ Logseq_dom.dom ~key:"ldr-c" ~tag:"circle"
+        ~attrs:
+          [ ("class", "opacity-25"); ("cx", "12"); ("cy", "12"); ("r", "10")
+          ; ("stroke", "currentColor"); ("stroke-width", "4") ]
+        []
+    ; Logseq_dom.dom ~key:"ldr-p" ~tag:"path"
+        ~attrs:
+          [ ("class", "opacity-75"); ("fill", "currentColor")
+          ; ( "d"
+            , "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 \
+               5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 \
+               7.938l3-2.647z" ) ]
+        []
+    ]
+
+(* cljs header.cljs search-index-progress — renders while the worker
+   reports its FTS index build for the current repo *)
+let index_progress (ms : Model.t Signal.signal) : t =
+  dyn
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      a.index_build = b.index_build)
+    (fun (m : Model.t) ->
+      let ib = m.Model.index_build in
+      if
+        (ib.ib_visible || ib.ib_running) && m.repo = Some ib.ib_repo
+      then
+        Logseq_dom.dom ~key:"sip" ~style_class:"search-index-progress"
+          [ Logseq_dom.dom ~key:"sip-l"
+              ~style_class:
+                "flex flex-row items-center inline icon-loading"
+              [ Logseq_dom.dom ~key:"sip-i" ~tag:"span"
+                  ~style_class:"icon flex items-center"
+                  [ loader_svg ] ]
+          ; Logseq_dom.dom ~key:"sip-t" ~tag:"span"
+              ~style_class:"search-index-progress__text"
+              ~text:
+                (I18n.tf "search/index-progress"
+                   [ string_of_int ib.ib_progress ])
+              []
+          ; Logseq_dom.dom ~key:"sip-b"
+              ~style_class:"search-index-progress__bar"
+              [ Logseq_dom.dom ~key:"sip-f"
+                  ~style_class:"search-index-progress__bar-fill"
+                  ~attrs:
+                    [ ( "style"
+                      , Printf.sprintf "width: %d%%" ib.ib_progress )
+                    ]
+                  [] ]
+          ]
+      else Logseq_dom.nothing)
+    ms
+
+(* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
     ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu " ())
-    ~icon:"menu-2"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
+    ~icon:"menu-2" ~tip:(I18n.t "header/toggle-left-sidebar")
+    ~tip_keys:"T L"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar) ()
 
 (* cljs header.cljs: home button hidden on the :home route and on a
    custom home page *)
@@ -134,9 +626,11 @@ let home_button ms =
       | Model.Home -> Logseq_dom.nothing
       | _ ->
           icon_btn ~key:"home-btn" ~id:"" ~cls:(ghost_btn_cls ())
-            ~icon:"home" ~on_click:(fun _ ->
+            ~icon:"home" ~tip:(I18n.t "nav/home")
+            ~on_click:(fun _ ->
               Platform.set_location_hash "#/";
-              Platform.dispatch "ls:navigate" Js.Json.null))
+              Web_dom.dispatch_custom "ls:navigate" Js.Json.null)
+            ())
     ms
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
@@ -145,22 +639,80 @@ let right_toggle_button ms =
   icon_btn ~key:"rs-toggle" ~id:""
     ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar " ())
     ~icon:"layout-sidebar-right"
+    ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~tip_keys:"T R"
     ~on_click:(fun _ ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
+    ()
 
 let header (ms : Model.t Signal.signal) =
+  (* cljs header.cljs sets inline fontSize:50 on .cp__header *)
   Logseq_dom.dom ~key:"head" ~tag:"div" ~id:"head"
     ~style_class:"cp__header drag-region"
+    ~attrs:[ ("style", "font-size: 50px") ]
     [ Logseq_dom.dom ~key:"head-inner"
         ~style_class:"l flex items-center drag-region"
         [ left_menu_button; search_button ]
     ; Logseq_dom.dom ~key:"head-r"
         ~style_class:
           "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
-        [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
+        [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1"
+            [ dyn
+                ~equal:(fun (a : Model.t) (b : Model.t) ->
+                  (* only the zoomed-block trail renders here *)
+                  Option.map
+                    (fun (p : Model.page) ->
+                      List.map
+                        (fun (pb : Model.block) -> pb.Model.block_uuid)
+                        p.Model.page_parents)
+                    a.Model.route_page
+                  = Option.map
+                      (fun (p : Model.page) ->
+                        List.map
+                          (fun (pb : Model.block) -> pb.Model.block_uuid)
+                          p.Model.page_parents)
+                      b.Model.route_page)
+                (fun (m : Model.t) ->
+                  (* cljs header.cljs block-breadcrumb: ancestor trail in
+                     the header only while zoomed into a block (the page
+                     itself carries its own breadcrumb) *)
+                  match m.Model.route_page with
+                  | Some p when p.Model.page_parents <> [] ->
+                      let item key ~href ~text =
+                        Logseq_dom.dom ~key ~tag:"a"
+                          ~style_class:"breadcrumb-item"
+                          ~attrs:[ ("href", href) ]
+                          ~text:text []
+                      in
+                      Logseq_dom.dom ~key:"head-bc"
+                        ~style_class:"breadcrumb"
+                        (List.mapi
+                           (fun i (pb : Model.block) ->
+                             item
+                               ("hbc-" ^ string_of_int i)
+                               ~href:
+                                 ("#/block/"
+                                 ^ Option.value pb.Model.block_uuid
+                                     ~default:"")
+                               ~text:pb.Model.block_title)
+                           p.Model.page_parents
+                        @ [ item "hbc-cur"
+                              ~href:
+                                ("#/block/"
+                                ^ Option.value p.Model.page_uuid
+                                    ~default:"")
+                              ~text:p.Model.page_title ])
+                  | _ -> Logseq_dom.dom ~key:"head-bc-empty" [])
+                ms ]
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
-            [ rtc_indicator ms
+            [ (* cljs header.cljs: inside the same rtc-indicator-visible?
+                 gate — collaborators then the cloud indicator *)
+              Collaborators.widget ms
+            ; rtc_indicator ms
+            ; transfer_detail_widget ~downloading:true ms
+            ; transfer_detail_widget ~downloading:false ms
+            ; local_graph_sync_button ms
+            ; index_progress ms
             ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders
                  .ui-items-container only when a plugin actually
@@ -273,6 +825,13 @@ let overlays (ms : Model.t Signal.signal) =
              per-publish deep [=] on the whole route page record *)
           a.page_menu = b.page_menu && a.confirm = b.confirm
           && a.data_gen = b.data_gen
+          && List.map
+               (fun (p : Model.page) -> (p.page_uuid, p.page_journal_day))
+               a.journals
+             = List.map
+                 (fun (p : Model.page) ->
+                   (p.page_uuid, p.page_journal_day))
+                 b.journals
           && Option.map
                (fun (p : Model.page) ->
                  ( p.page_uuid
@@ -465,7 +1024,9 @@ let shell (ms : Model.t Signal.signal) : t =
         [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
             ~style_class_signal:
               (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-                   if m.left_sidebar_open then "overflow-hidden"
+                   (* cljs container.cljs: overflow-hidden while RIGHT
+                      sidebar is open *)
+                   if m.right_sidebar_open then "overflow-hidden"
                    else "w-full"))
             [ header ms; main_content ms ]
         ; right_sidebar ms
