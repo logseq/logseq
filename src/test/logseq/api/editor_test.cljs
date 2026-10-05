@@ -477,6 +477,8 @@
                            (when (< day 10) "0") day))]
     (is (= "2026-12-01" (api-editor/journal-page-input->yyyy-mm-dd "2026-12-01")))
     (is (= "2026-01-01" (api-editor/journal-page-input->yyyy-mm-dd "2026-01-01")))
+    (is (nil? (api-editor/journal-page-input->yyyy-mm-dd "2026-13-01")))
+    (is (nil? (api-editor/journal-page-input->yyyy-mm-dd "2026-02-30")))
     (when (pos? (.getTimezoneOffset utc-parsed))
       (is (= "2026-11-30" naive-local)
           "west of UTC, Date + local fields shifts a date-only string back one day"))))

@@ -161,7 +161,14 @@
                  (route-handler/redirect-to-page! (:block/uuid page')))]
        (some-> page' sdk-utils/result->js)))))
 
-(def ^:private date-only-yyyy-mm-dd-re #"\d{4}-\d{2}-\d{2}")
+(def ^:private date-only-yyyy-mm-dd-re #"(\d{4})-(\d{2})-(\d{2})")
+
+(defn- valid-local-calendar-day?
+  [year month day]
+  (let [local (js/Date. year (dec month) day)]
+    (and (= year (.getFullYear local))
+         (= (dec month) (.getMonth local))
+         (= day (.getDate local)))))
 
 (defn journal-page-input->yyyy-mm-dd
   "Resolve createJournalPage input to a yyyy-MM-dd calendar day.
@@ -170,8 +177,12 @@
   Date objects, local date-time strings, and numeric timestamps use the local
   calendar day of the parsed instant."
   [date]
-  (if (and (string? date) (re-matches date-only-yyyy-mm-dd-re date))
-    date
+  (if-let [[_ ys ms ds] (and (string? date) (re-matches date-only-yyyy-mm-dd-re date))]
+    (let [year (js/parseInt ys 10)
+          month (js/parseInt ms 10)
+          day (js/parseInt ds 10)]
+      (when (valid-local-calendar-day? year month day)
+        date))
     (let [parsed (js/Date. date)]
       (when-not (js/isNaN (.getTime parsed))
         (-> (gdate/Date. parsed)
