@@ -77,31 +77,31 @@ let take_outliner_op_perf perf_id =
    every op; OUTLINER-PERF-LOGGING (e2e builds) logs every op's slim
    [:op-names :worker-apply-ms] projection. *)
 let log_tx_outliner_op_perf (data : Wire.t) =
-  match Wire.get "perf-id" data with
-  | Some (Wire.String _) | Some (Wire.Uuid _) ->
-      let data' =
-        match Wire.get "apply-ms" data with
-        | Some am -> Cljs_map.assoc data "worker-apply-ms" am
-        | None -> data
-      in
-      if !Sync_state.dev_or_test then
-        Worker_log.info ":db-worker/outliner-op-perf"
-          [ ("data", Ds_wire.edn_of_transit data') ]
-      else if !Sync_state.outliner_perf_logging then
-        (* cljs logs every op under goog.DEBUG; restricting to
-           e2e_perf_op_names silently drops ops whose names merged
-           (e.g. [:insert-blocks :delete-blocks]) under load.
-           select-keys [:op-names :worker-apply-ms] *)
-        let slim =
-          Wire.Map
-            (List.filter
-               (fun (k, _) ->
-                 k = Wire.keyword "op-names" || k = Wire.keyword "worker-apply-ms")
-               (Wire.as_map data'))
-        in
-        Worker_log.info ":db-worker/outliner-op-perf"
-          [ ("data", Ds_wire.edn_of_transit slim) ]
-  | _ -> ()
+  (* perf-id is informational for this endpoint-level line: callers that
+     forgot :ui/perf-id must not lose their whole log entry — the e2e
+     suite counts one line per apply-outliner-ops call. *)
+  let data' =
+    match Wire.get "apply-ms" data with
+    | Some am -> Cljs_map.assoc data "worker-apply-ms" am
+    | None -> data
+  in
+  if !Sync_state.dev_or_test then
+    Worker_log.info ":db-worker/outliner-op-perf"
+      [ ("data", Ds_wire.edn_of_transit data') ]
+  else if !Sync_state.outliner_perf_logging then
+    (* cljs logs every op under goog.DEBUG; restricting to
+       e2e_perf_op_names silently drops ops whose names merged
+       (e.g. [:insert-blocks :delete-blocks]) under load.
+       select-keys [:op-names :worker-apply-ms] *)
+    let slim =
+      Wire.Map
+        (List.filter
+           (fun (k, _) ->
+             k = Wire.keyword "op-names" || k = Wire.keyword "worker-apply-ms")
+           (Wire.as_map data'))
+    in
+    Worker_log.info ":db-worker/outliner-op-perf"
+      [ ("data", Ds_wire.edn_of_transit slim) ]
 
 (* cljs log-outliner-op-perf! — recorded only in dev (goog.DEBUG) *)
 let log_outliner_op_perf (data : Wire.t) =

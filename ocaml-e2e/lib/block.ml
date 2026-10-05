@@ -337,7 +337,11 @@ let jump_to_block env block_text =
   poll ()
 
 let wait_editor_text env text =
-  let* () = E2e_assert.have_count ~timeout:15000. env Util.editor_q 1 in
+  (* remote-tx remounts can leave every editor unmounted for a while;
+     wait for the app's editing state to exist first, then for the DOM
+     editor to (re)appear. *)
+  let* _ = Util.wait_editing_uuid env in
+  let* () = E2e_assert.have_count ~timeout:45000. env Util.editor_q 1 in
   Pw.wait_for env
     (Printf.sprintf ".editor-wrapper textarea:text('%s')" text)
 

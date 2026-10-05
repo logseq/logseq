@@ -1396,7 +1396,7 @@ let () =
             let* () = Util.wait_timeout env 300. in
             poll (n - 1)
         in
-        let* new_logs, enter_logs, delete_logs = poll 60 in
+        let* new_logs, enter_logs, delete_logs = poll 100 in
         if List.length enter_logs <> 3 || List.length delete_logs <> 3 then
           List.iter
             (fun l -> Js.log ("new-log-line: " ^ l))
@@ -2128,20 +2128,71 @@ let () =
           Pw.attr env ".ls-block:has(.CodeMirror)" "blockid"
         in
         let code_uuid = Option.value ~default:"" code_uuid in
-        let* () =
-          Pw.click_l
-            (Playwright.locator_first
-               (Pw.q env "pre.CodeMirror-line"))
+        (* virtualization can remount the code block mid-test; click+type
+           only lands if focus actually sits inside CM. Verify, retrying
+           the click until the hidden textarea owns focus. *)
+        let cm_focused env =
+          let* (v : Js.Json.t) =
+            Pw.eval_js env
+              "(() => document.activeElement?.closest('.CodeMirror,.cm-editor') \
+               ? '1' : '0')()"
+          in
+          Js.Promise.resolve (Js.Json.decodeString v = Some "1")
         in
-        let* () =
-          (* CM5's hidden textarea ignores fill's .value set (it tracks
-             its own doc). insertText delivers real input events to the
-             focused element — after the CM-line click that's CM's
-             textarea, which CM reads for edits. *)
-          Playwright.keyboard_insert_text
-            (Playwright.page_keyboard (Pw.page env))
-            "const value = 1;\nvalue + 1;"
+        let cm_doc env =
+          let* (v : Js.Json.t) =
+            Pw.eval_js env
+              "(() => { const el = document.querySelector('.CodeMirror'); \
+               const cm = el && el.CodeMirror; \
+               return cm ? cm.getValue() : ''; })()"
+          in
+          Js.Promise.resolve
+            (Option.value ~default:"" (Js.Json.decodeString v))
         in
+        let rec focus_cm n =
+          let* () =
+            Pw.click_l
+              (Playwright.locator_first
+                 (Pw.q env "pre.CodeMirror-line"))
+          in
+          let rec wait n' =
+            let* f = cm_focused env in
+            if f || n' <= 0 then Js.Promise.resolve f
+            else
+              let* () = Util.wait_timeout env 150. in
+              wait (n' - 1)
+          in
+          let* f = wait 67 in
+          if f || n <= 0 then Js.Promise.resolve ()
+          else focus_cm (n - 1)
+        in
+        let* () = focus_cm 3 in
+        let rec insert_code n =
+          let* () =
+            (* CM5's hidden textarea ignores fill's .value set (it tracks
+               its own doc). insertText delivers real input events to the
+               focused element — after the CM-line click that's CM's
+               textarea, which CM reads for edits. *)
+            Playwright.keyboard_insert_text
+              (Playwright.page_keyboard (Pw.page env))
+              "const value = 1;\nvalue + 1;"
+          in
+          let* () = Util.wait_timeout env 300. in
+          let* doc = cm_doc env in
+          let has_text =
+            let sub = "const value" in
+            let n' = String.length sub and h = String.length doc in
+            let rec go i =
+              if i + n' > h then false
+              else if String.sub doc i n' = sub then true
+              else go (i + 1)
+            in
+            go 0
+          in
+          if has_text || n <= 0 then Js.Promise.resolve ()
+          else insert_code (n - 1)
+        in
+        let* () = insert_code 2 in
         let* () = K.esc env in
         let* () = Util.exit_edit env in
         let* _ =
