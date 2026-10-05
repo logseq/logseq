@@ -1,1 +1,0 @@
-[{"directory":"_build/default/apple","file":"logseq_lui_bridge.c","arguments":["cc","-O2","-fno-strict-aliasing","-fwrapv","-pthread","-D_FILE_OFFSET_BITS=64","-Wall","-fdiagnostics-color=always","-g","-I","/Users/devin/.opam/5.5.0/lib/ocaml","-o","logseq_lui_bridge.o","-c","logseq_lui_bridge.c"]}]
