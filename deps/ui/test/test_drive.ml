@@ -792,6 +792,84 @@ let test_page_splice_row_level () =
     (block_row_ids [ "b1"; "b2" ]) [ List.hd before; List.nth before 1 ]
     show_ids
 
+let test_journal_reorder_move_collapse () =
+  (* move up/down republishes a swapped sibling order; indent/outdent is
+     a cross-parent move; collapse toggles children mount through
+     editor-state (no model change). All must stay far below a whole-day
+     remount. *)
+  send (Action.Navigate_to Model.Home);
+  let r2c = block "r2c" "kid" in
+  let b1 = block "r1" "one" in
+  let b2 = block "r2" "two" ~children:[ r2c ] in
+  let b3 = block "r3" "three" in
+  let b4 = block "r4" "four" in
+  send (Action.Journals_loaded [ journal_day [ b1; b2; b3; b4 ] ]);
+  flush ();
+  flush ();
+  check "reorder day mounted" (find_block "r4" <> None);
+  let before = block_row_ids [ "r1"; "r2"; "r2c"; "r3"; "r4" ] in
+  let ops0 = ops_now () in
+  send
+    (Action.Journals_loaded [ journal_day [ b1; b3; b2; b4 ] ]);
+  flush ();
+  let reorder_ops = ops_now () - ops0 in
+  check "journal reorder stays bounded"
+    (reorder_ops > 0 && reorder_ops < 100);
+  eq "reorder keeps every row's node id" before
+    (block_row_ids [ "r1"; "r2"; "r2c"; "r3"; "r4" ]) show_ids;
+  (* sibling DOM order: all_nodes is id-sorted, not visual — walk the
+     row's parent children instead *)
+  let sibling_order uuid =
+    match find_block uuid with
+    | Some { M.parent = Some pid; _ } ->
+        List.filter_map
+          (fun c -> attr_val c "blockid")
+          (List.filter (fun c -> has_tok c "ls-block")
+             (M.children (tree ()) pid))
+    | _ -> []
+  in
+  (match sibling_order "r2" with
+   | [ "r1"; "r3"; "r2"; "r4" ] -> check "reorder applied to mounted rows" true
+   | got ->
+       check
+         ("sibling order r1,r3,r2,r4 (got " ^ String.concat "," got ^ ")")
+         false);
+  (* indent/outdent: r2's child moves under r3 — a cross-parent keyed
+     move, remove from one list + insert into another *)
+  let ops1 = ops_now () in
+  let parents_before = block_row_ids [ "r2"; "r3" ] in
+  let b2' = { b2 with Model.block_children = [] } in
+  let b3' = { b3 with Model.block_children = [ r2c ] } in
+  send
+    (Action.Journals_loaded
+       [ journal_day [ b1; b3'; b2'; b4 ] ]);
+  flush ();
+  let move_ops = ops_now () - ops1 in
+  check "cross-parent move stays bounded" (move_ops > 0 && move_ops < 300);
+  eq "parent rows survive cross-parent move" parents_before
+    (block_row_ids [ "r2"; "r3" ]) show_ids;
+  (match find_block "r3", find_block "r2c" with
+   | Some r3, Some r2c ->
+       check "moved child mounted under new parent"
+         (subtree_contains r3 (fun n -> n.M.id = r2c.M.id))
+   | _ -> check "moved child row mounted" false);
+  (match find_block "r2", find_block "r2c" with
+   | Some r2, Some r2c ->
+       check "moved child gone from old parent"
+         (not (subtree_contains r2 (fun n -> n.M.id = r2c.M.id)))
+   | _ -> check "old parent row mounted" false);
+  (* collapse: children unmount through the editor-state override while
+     the published model is unchanged *)
+  let ops2 = ops_now () in
+  Editor_state.set_collapsed ~scope:"main" "r3" true;
+  flush ();
+  let collapse_ops = ops_now () - ops2 in
+  check "collapse unmounts children" (find_block "r2c" = None);
+  check "collapse stays bounded" (collapse_ops > 0 && collapse_ops < 100);
+  Editor_state.set_collapsed ~scope:"main" "r3" false;
+  flush ();
+  check "expand remounts children" (find_block "r2c" <> None)
+
 (* ---------------- runner ---------------- *)
 
 let run ~finish =
@@ -816,6 +894,7 @@ let run ~finish =
   test_render_libs_dom ();
   test_journal_splice_row_level ();
   test_page_splice_row_level ();
+  test_journal_reorder_move_collapse ();
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)
