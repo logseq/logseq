@@ -238,8 +238,9 @@ let assert_blocks_visible env blocks =
 let jump_to_block env block_text =
   (* poll: the block list can remount between the query and the click;
      fall back to substring match — .block-content can carry extra
-     whitespace/text in focused views *)
-  let deadline = Js.Date.now () +. 8000. in
+     whitespace/text in focused views. Under -j8 load a route change
+     (zoom-out) can leave the list unmounted for well over 8s. *)
+  let deadline = Js.Date.now () +. 15000. in
   let sub_sel =
     Printf.sprintf ".ls-block .block-content:has-text('%s')" block_text
   in

@@ -2132,7 +2132,7 @@ let () =
         let* () = K.esc env in
         let* () = Util.exit_edit env in
         let* _ =
-          Assert.is_visible_l
+          Assert.is_visible_l ~timeout:15000.
             (Loc.filter env ".extensions__code"
                ~has_text:"const value = 1")
         in
