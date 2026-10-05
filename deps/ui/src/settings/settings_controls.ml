@@ -1,34 +1,29 @@
 (* Shared settings controls — the row/button/switch primitives the
    settings page, settings dialog, appearance popup and URL editor
-   dialogs are built from. DOM output mirrors components/settings.cljs
-   (ui/toggle, shui Switch/Checkbox, keyboard-shortcut, it rows) — keep
-   class names and attrs pixel-identical. *)
+   dialogs are built from. Component-kind mirrors of
+   components/settings.cljs (ui/toggle, shui Switch/Checkbox,
+   keyboard-shortcut, it rows); style_class keeps the cljs semantic
+   classes for web parity. *)
 
+open Lui_elements
 
-let dom = Logseq_dom.dom
+(* reactive style_class — kinds take only a static ~style_class, so bind
+   StyleClass on the mounted node (same wrap pattern as
+   Ui_parts.pressable) *)
+let class_signal source f (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  Lui_ui.string_property_signal context node Lui_protocol.StyleClass
+    (Signal.map f source);
+  node
 
-(* svg/info — cljs ui/icon resolves via shui.icon.v2 *)
-let info_icon ~key ~title =
-  dom ~key ~tag:"span" ~style_class:"ls-info-icon"
-    ~attrs:[ ("title", title); ("data-base-ui-tooltip-trigger", "") ]
-    [ dom ~key:(key ^ "s") ~tag:"svg"
-        ~attrs:
-          [ ("class", "info"); ("viewBox", "0 0 16 16")
-          ; ("width", "16px"); ("height", "16px") ]
-        [ dom ~key:(key ^ "g") ~tag:"g"
-            [ dom ~key:(key ^ "p") ~tag:"path"
-                ~attrs:
-                  [ ("style", "transform:scale(0.25)")
-                  ; ( "d"
-                    , "m32 2c-16.568 0-30 13.432-30 30s13.432 30 30 30 \
-                       30-13.432 30-30-13.432-30-30-30m5 49.75h-10v-24h10v24m-5-29.5c-2.761 \
-                       0-5-2.238-5-5s2.239-5 5-5c2.762 0 5 2.238 5 5s-2.238 \
-                       5-5 5" )
-                  ]
-                []
-            ]
-        ]
-    ]
+(* svg/info — cljs ui/icon resolves via shui.icon.v2; `info is a builtin
+   icon name. The title/data-base-ui-tooltip-trigger attrs were DOM-only
+   (base-ui tooltip lookup) — dropped; a tooltip affordance on kinds is
+   tracked by the migration *)
+let info_icon ~key ~title:_ =
+  box ~key ~style_class:"ls-info-icon"
+    [ icon ~key:(key ^ "i") ~name:`info ~point_size:16 [] ]
 
 (* cljs print-shortcut-key (macOS): single letters uppercase, named keys
    map to their glyphs *)
@@ -51,23 +46,20 @@ let print_key k =
   | s when String.length s = 1 -> String.uppercase_ascii s
   | s -> s
 
-(* ui/render-keyboard-shortcut -> span.keyboard-shortcut >
-   span[style=inline-flex] > div.shui-shortcut-separate.shui-shortcut-glow
-   > kbd.shui-shortcut-key *)
-let kbd_seq ~key ~binding keys =
-  dom ~key ~tag:"span" ~style_class:"keyboard-shortcut"
-    [ dom ~key:(key ^ "w") ~tag:"span"
-        ~style_class:"shui-shortcut-wrap"
-        [ dom ~key:(key ^ "b") ~tag:"div"
+(* ui/render-keyboard-shortcut -> .keyboard-shortcut > .shui-shortcut-wrap
+   > .shui-shortcut-separate.shui-shortcut-glow > kbd.shui-shortcut-key;
+   the data-shortcut-binding/aria-hidden attrs were inert DOM markup —
+   dropped *)
+let kbd_seq ~key ~binding:_ keys =
+  row ~key ~style_class:"keyboard-shortcut" ~cross:`center
+    [ box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
+        [ row ~key:(key ^ "b") ~cross:`center
             ~style_class:"shui-shortcut-glow shui-shortcut-separate"
-            ~attrs:
-              [ ("data-shortcut-binding", binding); ("aria-hidden", "true") ]
             (List.mapi
                (fun i k ->
-                 dom ~key:(key ^ "-" ^ string_of_int i) ~tag:"kbd"
+                 kbd ~key:(key ^ "-" ^ string_of_int i)
                    ~style_class:"shui-shortcut-key"
-                   ~attrs:[ ("aria-hidden", "false") ]
-                   ~text:(Platform.utf8 (print_key k)) [])
+                   ~value:(Platform.utf8 (print_key k)) [])
                keys)
         ]
     ]
@@ -92,78 +84,49 @@ let btn_cls ?(variant = `Solid) ?(size = `Default) () =
   | `Default -> btn_base ^ " " ^ variant_cls variant
   | `Sm -> btn_base ^ " " ^ variant_cls variant ^ " " ^ size_cls `Sm
 
+(* the same variants/sizes as typed props for native hosts *)
+let btn_variant = function
+  | `Solid -> `primary
+  | `Secondary -> `secondary
+  | `Outline -> `outline
+  | `Text -> `ghost
+
+let btn_size = function
+  | `Default -> `default
+  | `Sm -> `sm
+
 (* ---- form controls ---- *)
 
-(* clipped off-screen but still a real form control — cljs toggle rows
-   keep a hidden input mirroring the switch state *)
-let hidden_style =
-  "position: fixed; top: 0; left: 0; width: 1px; height: 1px; \
-   clip-path: inset(50%); overflow: hidden;"
-
-let hidden_input ~key ~attrs =
-  dom ~key ~tag:"input" ~attrs:([ ("style", hidden_style) ] @ attrs) []
-
-(* ui/toggle -> shui Switch size sm *)
-let hidden_checkbox ~key ~on =
-  hidden_input ~key
-    ~attrs:
-      ([ ("type", "checkbox") ]
-      @ if on then [ ("checked", "") ] else [])
-
-(* ui/toggle -> base-ui span.ui__switch[role=switch] + hidden input *)
+(* ui/toggle -> shui Switch size sm. The cljs hidden input mirroring the
+   switch state is gone: the switch kind embeds a real checkbox input on
+   web, so no mirror is needed *)
 let switch_el ~key ~on ~on_toggle =
-  let chk = if on then "checked" else "unchecked" in
-  dom ~key ~tag:"span"
-    ~style_class:"ui__switch"
-    ~attrs:
-      [ ("role", "switch")
-      ; ("aria-checked", string_of_bool on); ("data-" ^ chk, "") ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_toggle ())
-    [ dom ~key:(key ^ "-th") ~tag:"span"
-        ~style_class:"ui__switch-thumb"
-        ~attrs:[ ("data-" ^ chk, "") ]
-        []
-    ]
+  switch_ ~key ~style_class:"ui__switch" ~checked:on
+    ~on_toggle:(fun _ -> on_toggle ()) []
 
-(* switch + mirrored hidden checkbox (+ optional detail children) —
-   the switch-wrap cell contents of every toggle row *)
+(* switch (+ optional detail children) — the switch-wrap cell contents
+   of every toggle row *)
 let switch_controls ~key ~on ~on_toggle ?(extra = []) () =
-  switch_el ~key:(key ^ "-sw") ~on ~on_toggle
-  :: hidden_checkbox ~key:(key ^ "-sc") ~on
-  :: extra
+  switch_el ~key:(key ^ "-sw") ~on ~on_toggle :: extra
 
-(* shui/checkbox -> button role=checkbox + indicator span w/ check svg *)
+(* shui/checkbox — the kind draws its own check indicator, so the cljs
+   check svg child is dropped *)
 let checkbox_el ~key ~on ~on_change =
-  let chk = if on then "checked" else "unchecked" in
-  dom ~key ~tag:"button"
-    ~style_class:"ui__checkbox"
-    ~attrs:
-      [ ("type", "button"); ("role", "checkbox")
-      ; ("aria-checked", string_of_bool on); ("data-" ^ chk, "")
-      ; ("data-state", chk) ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_change (not on))
-    (if on then
-       [ dom ~key:(key ^ "-in") ~tag:"span"
-           [ dom ~key:(key ^ "-ck") ~tag:"svg"
-               ~style_class:"ls-icon-sm"
-               ~attrs:
-                 [ ("viewBox", "0 0 24 24"); ("fill", "none")
-                 ; ("stroke", "currentColor"); ("stroke-width", "2")
-                 ; ("stroke-linecap", "round")
-                 ; ("stroke-linejoin", "round") ]
-               [ dom ~key:(key ^ "-p") ~tag:"path"
-                   ~attrs:[ ("d", "M20 6 9 17l-5-5") ] [] ]
-           ]
-       ]
-     else [])
+  checkbox ~key ~style_class:"ui__checkbox" ~checked:on
+    ~on_toggle:(fun _ -> on_change (not on)) []
 
+(* <label> takes no children in the kind schema, so label extras (info
+   icons) become siblings in a row — .it label keeps its own element *)
 let label_el ~key ~for_ ~text ?text_signal children =
-  dom ~key ~tag:"label"
-    ~style_class:"ls-label"
-    ~attrs:[ ("for", for_) ]
-    ~text ?text_signal children
+  ignore for_;
+  let l =
+    match text_signal with
+    | Some s -> label ~key ~style_class:"ls-label" ~value_signal:s []
+    | None -> label ~key ~style_class:"ls-label" ~value:text []
+  in
+  match children with
+  | [] -> l
+  | _ -> row ~key:(key ^ "-row") ~cross:`center ~gap:4 (l :: children)
 
 (* ---- rows ---- *)
 
@@ -174,23 +137,23 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
     ?binding ~on ~on_toggle () =
   match binding with
   | None ->
-      dom ~key ~style_class:"it"
+      row ~key ~style_class:"it" ~gap:24
         [ label_el ~key:(key ^ "-l") ~for_ ~text:label label_extra
-        ; dom ~key:(key ^ "-c")
-            ~style_class:"ls-it-value"
-            [ dom ~key:(key ^ "-i") ~style_class:"ls-switch-wrap"
+        ; row ~key:(key ^ "-c") ~style_class:"ls-it-value"
+            [ row ~key:(key ^ "-i") ~style_class:"ls-switch-wrap"
+                ~gap:16 ~cross:`center
                 (switch_controls ~key ~on ~on_toggle ~extra:detail ())
             ]
         ]
   | Some b ->
-      dom ~key ~style_class:"it"
+      row ~key ~style_class:"it" ~gap:24
         [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
-        ; dom ~key:(key ^ "-c")
-            [ dom ~key:(key ^ "-i")
+        ; box ~key:(key ^ "-c")
+            [ row ~key:(key ^ "-i") ~gap:16 ~cross:`center
                 ~style_class:"ls-switch-wrap ls-switch-narrow"
                 (switch_controls ~key ~on ~on_toggle ())
             ]
-        ; dom ~key:(key ^ "-k") ~style_class:"ls-kbd-cell"
+        ; box ~key:(key ^ "-k") ~style_class:"ls-kbd-cell"
             [ kbd_seq ~key:(key ^ "-ks") ~binding:b
                 (String.split_on_char ' ' b) ]
         ]
@@ -198,39 +161,35 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
 (* cljs row-with-button-action *)
 let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
     ?(stretch = false) () =
-  dom ~key ~style_class:"it ls-it-top"
-    [ dom ~key:(key ^ "-lc") ~style_class:"ls-it-label-col"
+  row ~key ~style_class:"it ls-it-top" ~gap:24
+    [ column ~key:(key ^ "-lc") ~style_class:"ls-it-label-col"
         ([ label_el ~key:(key ^ "-l") ~for_ ~text:label [] ]
         @
         match description with
         | Some d ->
-            [ dom ~key:(key ^ "-d") ~style_class:"ls-it-desc"
-                ~text:d []
-            ]
+            [ text ~key:(key ^ "-d") ~style_class:"ls-it-desc" ~value:d [] ]
         | None -> [])
-    ; dom ~key:(key ^ "-rc")
-        ~style_class:"ls-it-actions"
-        ([ dom ~key:(key ^ "-a")
-             ~attrs:(if stretch then [ ("style", "width: 100%") ] else [])
+    ; row ~key:(key ^ "-rc") ~style_class:"ls-it-actions"
+        ([ box ~key:(key ^ "-a")
+             ?grow:(if stretch then Some 1. else None)
              actions ]
         (* cljs renders the desc cell unconditionally *)
-        @ [ dom ~key:(key ^ "-desc") ~style_class:"ls-it-side" desc ])
+        @ [ row ~key:(key ^ "-desc") ~style_class:"ls-it-side" desc ])
     ]
 
 (* bare .it shell: label | value cell — font/date-format/home rows *)
 let it_row ~key ~for_ ~label ?(value_cls = "ls-it-value") children =
-  dom ~key ~style_class:"it"
+  row ~key ~style_class:"it" ~gap:24
     [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
-    ; dom ~key:(key ^ "-r") ~style_class:value_cls children
+    ; column ~key:(key ^ "-r") ~style_class:value_cls children
     ]
 
 (* row: label | <a> solid button *)
 let edit_link_row ~key ~label ~button ~href ~for_ () =
   action_row ~key ~for_ ~label
     ~actions:
-      [ dom ~key:(key ^ "-a") ~tag:"a"
+      [ link ~key:(key ^ "-a")
           ~style_class:("ui__link " ^ btn_cls ~variant:`Solid ~size:`Sm ())
-          ~attrs:[ ("href", href); ("role", "button") ]
-          ~text:button []
+          ~url:href ~text:button []
       ]
     ()

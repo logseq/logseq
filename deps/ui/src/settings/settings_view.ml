@@ -5,8 +5,8 @@
 
 open Lui_elements
 
-let dom = Logseq_dom.dom
 module T = I18n
+module C = Settings_controls
 
 let languages =
   [ ("en", "English"); ("fr", "Français"); ("de", "Deutsch")
@@ -125,35 +125,35 @@ let lang_menu ~key st mst =
            [])
        languages)
 
+(* li > i(mode swatch) + strong — list_item ~on_press; the .active
+   ring class and the mode-* swatch classes stay reactive via
+   class_signal since kinds take only a static ~style_class *)
 let theme_item ~st mode label =
-  dom ~key:("tm-" ^ mode) ~tag:"li"
-    ~style_class_signal:
-      (Logseq_dom.class_signal (Signal.value st)
-         (fun active -> if active = mode then "active" else ""))
-    ~events:"click"
-    ~on_dom_event:(fun n _ ->
-      if n = "click" then (
-        use_mode mode;
-        Signal.set st mode;
-        Runtime.flush ()))
-    [ dom ~key:("tmi-" ^ mode) ~tag:"i"
-        (* cljs: .radix only when an accent color is stored
-           (:ui/radix-color); mode-active draws the .active>i ring *)
-        ~style_class_signal:
-          (Logseq_dom.class_signal (Signal.value st)
-             (fun active ->
-               "mode-" ^ mode
-               ^ (if active = mode then " mode-active" else "")
-               ^ (if Platform.local_storage_get "radix-color" <> None
-                  then " radix"
-                  else "")))
-        []
-    ; dom ~key:("tms-" ^ mode) ~tag:"strong" ~text:label []
-    ]
+  C.class_signal (Signal.value st)
+    (fun active -> if active = mode then "active" else "")
+    (list_item ~key:("tm-" ^ mode)
+       ~selected:(reactive (fun active -> active = mode) (Signal.value st))
+       ~on_press:(fun _ ->
+         use_mode mode;
+         Signal.set st mode;
+         Runtime.flush ())
+       [ (* cljs: .radix only when an accent color is stored
+            (:ui/radix-color); mode-active draws the .active>i ring *)
+         C.class_signal (Signal.value st)
+           (fun active ->
+             "mode-" ^ mode
+             ^ (if active = mode then " mode-active" else "")
+             ^ (if Platform.local_storage_get "radix-color" <> None
+                then " radix"
+                else ""))
+           (box ~key:("tmi-" ^ mode) ~width:92 [])
+       ; text ~key:("tms-" ^ mode) ~value:label []
+       ])
 
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
 let theme_modes_ul ~st =
-  dom ~key:"tm" ~tag:"ul" ~style_class:"cp__theme-modes-options"
+  list ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
+    ~cross:`center
     [ theme_item ~st "light" T.theme_light
     ; theme_item ~st "dark" T.theme_dark
     ; theme_item ~st "system" T.theme_system
@@ -178,7 +178,7 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
           []
       ; Logseq_dom.dyn ~equal:( == ) (fun open_ ->
             if open_ then lang_menu ~key st mst
-            else Logseq_dom.nothing)
+            else spacer ~key:(key ^ "-lm-x") [])
           (Signal.value mst)
       ]
       uctx parent
@@ -193,16 +193,15 @@ let body (_ms : Model.t Signal.signal) : t =
     Signal.state ctx.ui_scheduler (lang_label_for (current_lang ()))
   in
   let node =
-    dom ~key:"settings" ~style_class:"cp__settings"
-      [ dom ~key:"st-h" ~tag:"h2"
-          ~style_class:
-            "ui__dialog-title" ~text:T.settings_title []
-      ; dom ~key:"st-theme" ~style_class:"ls-settings-col"
-          [ dom ~key:"st-tl" ~tag:"strong" ~text:T.theme_label []
+    column ~key:"settings" ~style_class:"cp__settings"
+      [ heading ~key:"st-h" ~level:2
+          ~style_class:"ui__dialog-title" ~value:T.settings_title []
+      ; column ~key:"st-theme" ~style_class:"ls-settings-col"
+          [ text ~key:"st-tl" ~value:T.theme_label []
           ; theme_modes_ul ~st:mode
           ]
-      ; dom ~key:"st-lang" ~style_class:"ls-settings-col"
-          [ dom ~key:"st-ll" ~tag:"strong" ~text:T.language_label []
+      ; column ~key:"st-lang" ~style_class:"ls-settings-col"
+          [ text ~key:"st-ll" ~value:T.language_label []
           ; lang_trigger ~ctx ~key:"st-ls" ~h_cls:"ls-select-lg"
               ~st:lang_label
           ]

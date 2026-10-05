@@ -6,7 +6,6 @@
 open Promise_ext
 open Lui_elements
 
-let dom = Logseq_dom.dom
 module T = I18n
 
 let default_sync_http = "https://api.logseq.io"
@@ -55,11 +54,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
     (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let url = Signal.state ctx.ui_scheduler (Option.value (get_url storage_key) ~default:"") in
-  let read_input () =
-    match Web_dom.query_selector ("#" ^ key ^ "-input") with
-    | Some el -> Web_dom.el_value el
-    | None -> Signal.get_state url
-  in
+  let read_input () = Signal.get_state url in
   let reset () =
     Platform.local_storage_remove storage_key;
     on_saved ();
@@ -78,46 +73,47 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
       Dialogs_state.close_top ())
   in
   let node =
-    dom ~key ~style_class:("cp__settings-" ^ key ^ "-cnt")
-      [ dom ~key:(key ^ "-h") ~tag:"h1"
-          ~style_class:"ls-dialog-title-lg" ~text:title []
-      ; dom ~key:(key ^ "-b") ~style_class:"ls-pad"
-          [ dom ~key:(key ^ "-d") ~tag:"p"
-              ~style_class:"ls-desc ls-mb-sm" ~text:desc []
-          ; dom ~key:(key ^ "-i") ~tag:"p"
-              [ dom ~key:(key ^ "-il") ~tag:"label"
-                  [ dom ~key:(key ^ "-is") ~tag:"strong" ~text:"URL" []
-                  ; dom ~key:(key ^ "-in") ~tag:"input"
-                      ~id:(key ^ "-input")
-                      ~style_class:"form-input is-small"
-                      ~attrs:
-                        [ ("value", Signal.get_state url)
-                        ; ("placeholder", placeholder)
-                        ; ("style", "width: 100%") ]
-                      []
-                  ]
+    column ~key ~style_class:("cp__settings-" ^ key ^ "-cnt")
+      [ heading ~key:(key ^ "-h") ~level:1
+          ~style_class:"ls-dialog-title-lg" ~value:title []
+      ; column ~key:(key ^ "-b") ~style_class:"ls-pad"
+          [ paragraph ~key:(key ^ "-d")
+              ~style_class:"ls-desc ls-mb-sm" ~value:desc []
+          ; box ~key:(key ^ "-i")
+              [ label ~key:(key ^ "-il") ~value:"URL" []
+              ; input ~key:(key ^ "-in")
+                  ~accessibility_identifier:(key ^ "-input")
+                  ~style_class:"form-input is-small"
+                  ~text:(Signal.get_state url) ~placeholder
+                  ~on_input:(fun ev ->
+                    match ev with
+                    | Lui_protocol.TextChanged (_, q) ->
+                        Runtime.signal_set url q
+                    | _ -> ())
+                  []
               ]
-          ; dom ~key:(key ^ "-btns") ~tag:"p"
+          ; row ~key:(key ^ "-btns") ~gap:8
               ~style_class:"ls-form-actions"
-              ([ dom ~key:(key ^ "-save") ~tag:"button"
+              ([ button ~key:(key ^ "-save")
+                   ~variant:(Settings_controls.btn_variant `Solid)
+                   ~size:`sm
                    ~style_class:
                      (Settings_controls.btn_cls ~variant:`Solid
                         ~size:`Sm ())
-                   ~attrs:[ ("type", "button") ]
-                   ~text:T.save ~events:"click"
-                   ~on_dom_event:(fun n _ -> if n = "click" then save ())
+                   ~text:T.save
+                   ~on_press:(fun _ -> save ())
                    [] ]
               @
               if Signal.get_state url = "" then []
               else
-                [ dom ~key:(key ^ "-reset") ~tag:"button"
+                [ button ~key:(key ^ "-reset")
+                    ~variant:(Settings_controls.btn_variant `Outline)
+                    ~size:`sm
                     ~style_class:
                       (Settings_controls.btn_cls ~variant:`Outline
                          ~size:`Sm ())
-                    ~attrs:[ ("type", "button") ]
-                    ~text:T.reset_default ~events:"click"
-                    ~on_dom_event:(fun n _ ->
-                      if n = "click" then reset ())
+                    ~text:T.reset_default
+                    ~on_press:(fun _ -> reset ())
                     []
                 ])
           ]
