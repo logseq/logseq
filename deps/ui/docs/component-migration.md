@@ -152,6 +152,39 @@ extension 内部实现自己的可编辑 surface：
 imperative 查询句柄随 extension 一并收编 —— 视图层不再有 DOM 句柄，
 imperative 侧按 node id + `#ref` 快照定位（与 dom-op 通道同一套）。
 
+### 收编清单（imperative 侧）
+
+`web_dom.ml`/`dom_ext.ml`/`editor_dom.ml` 里按 class/id 查询的入口，
+收编后改为 extension 节点 id 直接寻址：
+
+- `mock_text_el`/`build_mock_text`（caret mirror：每个 grapheme 一个
+  span，`mock-text_<i>` id，`\n` → "0"+`<br>`）——web extension 内部
+  继续维护这个 mirror DOM；`caret_popup_pos` 的量法不变，只是入口
+  从 `.editor-inner .mock-text` 查询变成 editor 节点 id 直达
+- `focus`/`set-selection-range`/`set-value`/`set-text-content` —
+  dom-op ref 从 `{#ref: id}` class/id 查询改为 `{node-id: n}` 直达
+  editor extension 节点；各 host 把 op 分发给自己的编辑 surface
+- `scroll-into-view`/`scroll-row-into-view` — 已由 dom-op 通道覆盖
+  （GPUI 端 scroll_tracked + ScrollHandle 已实现）
+- `.editor-inner`/`.block-editor`/`editor-wrapper` 三个 class — 从
+  视图层消失；web extension 在内部 DOM 上保留同名 class 以喂
+  `lui-editor.css`，native 不再消费
+
+### web extension 渲染形状
+
+```
+logseq-editor (extension node, ~ref 定位)
+└── <div class="editor-wrapper flex flex-1 w-full" id=...>
+    └── <div class="editor-inner flex flex-1 block-editor">
+        ├── children… (block content surface)
+        └── <div class="mock-text" style="…hidden abs…"></div>
+```
+
+DOM 结构与今天完全一致 —— imperative DOM 查询改的是"怎么找到
+editor"，不是"找到之后做什么"，CSS/mirror/caret 逻辑零改动。
+native 端（GPUI/SwiftUI）从同一 extension 节点读值：
+`focus`/selection ops → 原生编辑控件；measure → node_bounds。
+
 ## 验收
 
 每个迁移包（一目录）：
