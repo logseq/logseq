@@ -1444,14 +1444,15 @@ let replay_pending_txs repo (conn : conn)
 let display_db_from_server (server_db : db) : db =
   { server_db with storage_ref = None }
 
-(* The display conn's max_tx must never regress on a server-state rebind:
-   the frontend drops any render delta whose rev is not strictly greater
-   than the last applied one, so a rebound (smaller) counter makes the
-   next local op emit a delta that collides with an already-emitted rev
-   and gets silently ignored — the UI then shows stale state (e.g. an
-   indent that the db no longer has, plus duplicate editor rows). *)
+(* The display conn's max_tx must stay strictly ahead of every rev already
+   emitted on a server-state rebind: the frontend drops any render delta
+   whose rev is not strictly greater than the last applied one, and
+   db_before.max_tx is exactly that last applied rev — its delta already
+   shipped. A rebound counter equal to it makes the synthesized jump delta
+   collide and get silently ignored — the UI then shows stale state (e.g.
+   an indent the db no longer has, or children that never mount). *)
 let display_db_rebind_floor (rebound : db) ~(floor : int) : db =
-  if rebound.max_tx < floor then { rebound with max_tx = floor }
+  if rebound.max_tx <= floor then { rebound with max_tx = floor + 1 }
   else rebound
 
 let display_conn_from_server (server_db : db) : conn =
