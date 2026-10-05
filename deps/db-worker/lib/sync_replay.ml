@@ -1249,8 +1249,20 @@ let transact_remote_txs ?(display_db : db option) (conn : conn)
         let report =
           match tx_data with
           | [] -> None
-          | _ ->
-              Db_transact.transact conn tx_data (apply_tx_meta remote_tx)
+          | _ -> (
+              try Db_transact.transact conn tx_data (apply_tx_meta remote_tx)
+              with e ->
+                let items_dump =
+                  String.concat ","
+                    (List.map
+                       (fun (item : Wire.t) -> Transit_codec.to_string item)
+                       (List.filteri (fun i _ -> i < 40) tx_data))
+                in
+                Worker_log.error "db-sync/remote-tx-apply-failed"
+                  [ "outliner-op", remote_op
+                  ; "error", Printexc.to_string e
+                  ; "tx-items", items_dump ];
+                raise e)
         in
         let results' =
           match tx_data with
