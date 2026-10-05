@@ -239,8 +239,10 @@ let jump_to_block env block_text =
   (* poll: the block list can remount between the query and the click;
      fall back to substring match — .block-content can carry extra
      whitespace/text in focused views. Under -j8 load a route change
-     (zoom-out) can leave the list unmounted for well over 8s. *)
-  let deadline = Js.Date.now () +. 15000. in
+     (zoom-out) can leave .ls-block shells mounted while their
+     .block-content subtree is still absent for well over 15s — wait
+     on the row and then on the content inside it. *)
+  let deadline = Js.Date.now () +. 25000. in
   let sub_sel =
     Printf.sprintf ".ls-block .block-content:has-text('%s')" block_text
   in

@@ -82,7 +82,25 @@ let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
   let* () =
     if enable_sync then
       let* () = Pw.wait_for env ~timeout:3000. rtc_sync_toggle in
-      let* () = Pw.click env rtc_sync_toggle in
+      (* verify the toggle actually flipped — under parallel load the
+         first click can land while the control is still settling and
+         the graph is silently created local (cloud button never
+         mounts; rtc/state stays {}). Switches expose aria-checked. *)
+      let rec toggle_until_on tries =
+        let* (on : bool) =
+          Pw.eval_js env
+            "(() => document.querySelector('button#rtc-sync')?.getAttribute('aria-checked') === 'true' || document.querySelector('button#rtc-sync')?.dataset?.state === 'checked')()"
+        in
+        if on then Js.Promise.resolve ()
+        else if tries <= 0 then
+          Js.Promise.reject
+            (Failure "rtc-sync toggle did not switch on after retries")
+        else
+          let* () = Pw.click env rtc_sync_toggle in
+          let* () = Util.wait_timeout env 300. in
+          toggle_until_on (tries - 1)
+      in
+      let* () = toggle_until_on 4 in
       if not graph_e2ee then
         let* () = Pw.wait_for env ~timeout:3000. rtc_graph_e2ee_toggle in
         Pw.click env rtc_graph_e2ee_toggle
