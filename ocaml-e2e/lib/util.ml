@@ -110,9 +110,16 @@ let double_esc env =
 let cmdk_search_settle_ms = 400.
 
 let fill_cmdk_search env text =
-  (* clear first so a retry of the same query still fires input/onChange *)
-  let* () = Pw.fill env ".cp__cmdk-search-input" "" in
-  Pw.fill env ".cp__cmdk-search-input" text
+  (* clear first so a retry of the same query still fires input/onChange;
+     a remount mid-fill can drop the text — verify the box holds it *)
+  let rec fill_verified tries =
+    let* () = Pw.fill env ".cp__cmdk-search-input" "" in
+    let* () = Pw.fill env ".cp__cmdk-search-input" text in
+    let* v = Pw.input_value env ".cp__cmdk-search-input" in
+    if v = text || tries <= 1 then Js.Promise.resolve ()
+    else fill_verified (tries - 1)
+  in
+  fill_verified 3
 
 let cmdk_open env =
   let* () = Keyboard.press env "ControlOrMeta+k" in
