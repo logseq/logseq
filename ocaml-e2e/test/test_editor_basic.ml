@@ -1180,9 +1180,9 @@ let () =
       (fun env ->
         let* () = B.new_block env "rapid enter start" in
         let* () = K.enter env in
-        let* () = Util.press_seq env "rapid enter alpha" in
+        let* () = Util.type_in_editor env "rapid enter alpha" in
         let* () = K.enter env in
-        let* () = Util.press_seq env "rapid enter beta" in
+        let* () = Util.type_in_editor env "rapid enter beta" in
         let* () = Util.wait_timeout env 800. in
         let* st = editor_input_state env in
         let value =

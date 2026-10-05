@@ -75,6 +75,7 @@ let wait_idle env =
   (* remote-op apply backlog can run deep under parallel load —
      pendingServerOpsCount=43+ while checksums already match *)
   let deadline = Js.Date.now () +. 120000. in
+  let last_log = ref (Js.Date.now ()) in
   let rec poll () =
     let* json =
       Pw.eval_js env
@@ -91,11 +92,18 @@ let wait_idle env =
     match Js.Json.decodeBoolean json with
     | Some true -> Js.Promise.resolve ()
     | _ ->
-        if Js.Date.now () > deadline then
-          let* snap =
-            Pw.eval_js env
-              "JSON.stringify(logseq.api.get_state_from_store('rtc/state'))"
-          in
+        let now = Js.Date.now () in
+        let* snap =
+          Pw.eval_js env
+            "JSON.stringify(logseq.api.get_state_from_store('rtc/state'))"
+        in
+        (* log the snapshot every 30s — frozen pendingServer means the
+           remote-op apply is wedged, not just slow *)
+        if now -. !last_log > 30000. then begin
+          last_log := now;
+          Js.log2 "wait-idle pending" snap
+        end;
+        if now > deadline then
           Js.Promise.reject
             (Failure
                (Printf.sprintf "wait-idle: rtc/state not idle, state=%s"

@@ -97,7 +97,7 @@ let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
       |> Js.Promise.catch (fun e ->
           let* dump =
             Pw.eval_js env
-              "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none'}))()"
+              "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), log: logseq.api.get_state_from_store('rtc/log'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none'}))()"
           in
           let* () = Js.Promise.resolve (Js.log2 "cloud-idle-timeout" dump) in
           Playwright.throw_error e)
@@ -156,7 +156,7 @@ let switch_graph env to_graph_name ~wait_sync ~need_input_password =
       |> Js.Promise.catch (fun e ->
           let* dump =
             Pw.eval_js env
-              "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none'}))()"
+              "(() => JSON.stringify({rtc: logseq.api.get_state_from_store('rtc/state'), log: logseq.api.get_state_from_store('rtc/log'), btn: document.querySelector('button.cloud') ? document.querySelector('button.cloud').className : 'none'}))()"
           in
           let* () = Js.Promise.resolve (Js.log2 "cloud-idle-timeout" dump) in
           Playwright.throw_error e)

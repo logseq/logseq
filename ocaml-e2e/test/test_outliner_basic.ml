@@ -557,9 +557,14 @@ let () =
         (fun _ ->
            (* editing state can be dropped across the zoom route under
               load; clicking the root block reopens its editor — same
-              end state the assertion checks *)
+              end state the assertion checks. In the focused view the
+              root renders as the page title, so click that too. *)
            let* () =
-             B.jump_to_block env "focused-root"
+             Js.Promise.catch
+               (fun _ ->
+                  Pw.click env
+                    "[data-testid='page title'] .block-title-wrap, .ls-page-title .block-content")
+               (B.jump_to_block env "focused-root")
            in
            Util.wait_editor_visible env)
         (Util.wait_editor_visible env)
