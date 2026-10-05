@@ -195,6 +195,7 @@ let () =
     in
     (* add some task blocks while rtc disconnected on page1 *)
     let latest = ref 0 in
+    let* () = Js.Promise.resolve (Js.log "[rtb-dbg] phase1 insert offline") in
     let* () =
       with_stop_restart_rtc env [ p1 ]
         [ ( p1
@@ -205,6 +206,7 @@ let () =
     in
     let* () = validate_task_blocks env p1 p2 in
     let* () = validate_2 env p1 p2 in
+    let* () = Js.Promise.resolve (Js.log "[rtb-dbg] phase2 update offline") in
     (* update task blocks while rtc disconnected on page1 *)
     let* () =
       with_stop_restart_rtc env [ p1 ]
@@ -217,7 +219,9 @@ let () =
     let* () = validate_task_blocks env p1 p2 in
     let* () = validate_2 env p1 p2 in
 
+    let* () = Js.Promise.resolve (Js.log "[rtb-dbg] phase3 new page") in
     let* _ = new_rtc_page env1 p1 p2 in
+    let* () = Js.Promise.resolve (Js.log "[rtb-dbg] phase4 insert online") in
     (* perform same operations on page2 while keeping rtc connected *)
     let* () = insert_task_blocks_in_page2 latest in
     let* () =
@@ -227,6 +231,7 @@ let () =
     in
     let* () = validate_task_blocks env p1 p2 in
     let* () = validate_2 env p1 p2 in
+    let* () = Js.Promise.resolve (Js.log "[rtb-dbg] phase5 update online") in
     (* update task blocks while rtc connected *)
     let* () = update_task_blocks_in_page2 latest in
     let* () =
