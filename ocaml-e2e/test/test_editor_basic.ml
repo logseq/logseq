@@ -2121,12 +2121,13 @@ let () =
                (Pw.q env "pre.CodeMirror-line"))
         in
         let* () =
-          (* CodeMirror hides a real textarea as its input — fill it
-             directly; *:focus can resolve elsewhere under load *)
-          Pw.wait_for env ~timeout:15000. ".CodeMirror textarea"
-        in
-        let* () =
-          Pw.fill env ".CodeMirror textarea" "const value = 1;\nvalue + 1;"
+          (* CM5's hidden textarea ignores fill's .value set (it tracks
+             its own doc). insertText delivers real input events to the
+             focused element — after the CM-line click that's CM's
+             textarea, which CM reads for edits. *)
+          Playwright.keyboard_insert_text
+            (Playwright.page_keyboard (Pw.page env))
+            "const value = 1;\nvalue + 1;"
         in
         let* () = K.esc env in
         let* () = Util.exit_edit env in
