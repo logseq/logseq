@@ -37,6 +37,15 @@ shared too, since deps/ui view code is already cross-platform OCaml.
   file-derived indexes.
 - We are not blocked on Out's unfinished surfaces (table/property
   editing) — block-type coverage follows our db schema.
+- **Model offsets are units of the stored string**, not always bytes:
+  `Edit_model.create ~units` is `Bytes` (UTF-8 bytes — native OCaml and
+  test corpora) or `U16` (UTF-16 code units — web). On web the db text
+  is already a proper JS string, so `~units:U16` makes model offsets
+  identical to DOM Range offsets and the conduit needs no byte↔UTF-16
+  translation; native stays `Bytes` and translates at its own boundary
+  (NSString/gpui are UTF-16). The same offset value means different
+  things per platform, but offsets are view-local state — only text
+  content crosses into the db.
 
 ## Architecture
 
@@ -70,8 +79,10 @@ block-editor (column)
 The extension carries **no visual content** — it is the platform's
 text-input/IME/measurement channel bound to one block editor:
 
-- **props**: `block-id`, `caret` (UTF-16 offset), `composition`
-  (marked-text range while IME is active)
+- **props**: `block-id`, `caret` (model-unit offset), `composition`
+  (marked-text range while IME is active), `runs` (the emitted run
+  spans `start,end,kind;…` in document order — measurement zips it
+  against the rendered `.ed-r` elements)
 - **events** → OCaml: `key {key, mods, repeat}`, `insert {text}`,
   `delete {kind: backward|forward|word|line}`, `composition {state,
   text, range}`, `focus`/`blur`, `pointer {offset}` (hit-tested text
