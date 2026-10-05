@@ -1,5 +1,6 @@
 val wait_timeout : Env.t -> float -> unit Js.Promise.t
 val editor_q : string
+val editor_q_first : string
 val get_active_element : Env.t -> Playwright.locator
 val get_editor : Env.t -> Playwright.locator option Js.Promise.t
 val get_edit_block_container : Env.t -> Playwright.locator Js.Promise.t

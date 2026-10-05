@@ -173,17 +173,40 @@ let rec align_depth env depth target =
   else Js.Promise.resolve depth
 
 let new_block_safe env title =
+  let last_err = ref "" in
   let rec loop attempt =
     let* created =
       Js.Promise.catch
-        (fun _ -> Js.Promise.resolve false)
+        (fun e ->
+          (match Js.Json.stringifyAny (Obj.magic e) with
+           | Some s ->
+               last_err :=
+                 String.sub s 0 (min 160 (String.length s))
+           | None -> last_err := "nonstr-err");
+          Js.Promise.resolve false)
         (let* () = B.new_block env "" in
          let* () = B.save_block env title in
          Js.Promise.resolve true)
     in
     if created then Js.Promise.resolve ()
     else if attempt = 0 then
-      Js.Promise.reject (Failure ("new-block-safe failed: " ^ title))
+      let* probe =
+        Js.Promise.catch
+          (fun _ -> Js.Promise.resolve (Js.Json.string "ERR"))
+          (Pw.eval_js env
+             "JSON.stringify({editors: \
+              document.querySelectorAll('.editor-wrapper textarea').length, \
+              blocks: document.querySelectorAll('.ls-page-blocks .ls-block')\
+              .length, addBtns: \
+              document.querySelectorAll('.ls-page-blocks .block-add-button')\
+              .length, url: location.href})")
+      in
+      Js.Promise.reject
+        (Failure
+           (Printf.sprintf "new-block-safe failed: %s probe=%s err=%s"
+              title
+              (Option.value ~default:"null" (Js.Json.decodeString probe))
+              !last_err))
     else
       let* () = Util.exit_edit env in
       let* () = Util.wait_timeout env 80. in
@@ -232,11 +255,43 @@ let sync_by_trigger env p1 p2 tag checkpoints =
       let* _ = Rtc.wait_tx_update_to env remote in
       Js.Promise.resolve ())
 
-(* A deterministic RNG stand-in for java.util.Random. *)
-type rng = Random.State.t
+(* java.util.Random-compatible RNG — the clj test draws its action stream
+   with java.util.Random, so this reproduces the exact op sequence clj runs
+   for a given seed. *)
+type rng = { mutable seed : int64 }
 
-let rng_make seed = Random.State.make [| seed |]
-let rng_int rng bound = Random.State.int rng bound
+let rng_mask = 0xFFFF_FFFF_FFFFL (* 2^48 - 1 *)
+
+let rng_make seed =
+  { seed =
+      Int64.logand
+        (Int64.logxor (Int64.of_int seed) 0x5DEECE66DL)
+        rng_mask
+  }
+
+let rng_next rng bits =
+  rng.seed <-
+    Int64.logand
+      (Int64.add (Int64.mul rng.seed 0x5DEECE66DL) 0xBL)
+      rng_mask;
+  Int64.to_int (Int64.shift_right_logical rng.seed (48 - bits))
+
+let rng_int rng bound =
+  if bound <= 0 then invalid_arg "rng_int"
+  else if bound land (bound - 1) = 0 then
+    Int64.to_int
+      (Int64.shift_right
+         (Int64.mul (Int64.of_int bound) (Int64.of_int (rng_next rng 31)))
+         31)
+  else
+    let rec go () =
+      let bits = rng_next rng 31 in
+      let v = bits mod bound in
+      if bits - v + (bound - 1) <= 0x7FFFFFFF then v else go ()
+    in
+    go ()
+
+external frame_url : 'a -> string = "url" [@@mel.send]
 
 let seed_long_nested_page env p1 p2 (seed : int) =
   let seed_blocks =
@@ -292,7 +347,8 @@ let random_edit_actions =
 
 let random_edit_op env rng known_titles client_prefix round op_idx =
   let base = Printf.sprintf "%s-r%d-op%d" client_prefix round op_idx in
-  match random_edit_actions.(rng_int rng (Array.length random_edit_actions)) with
+  let pick = random_edit_actions.(rng_int rng (Array.length random_edit_actions)) in
+  match pick with
   | New ->
       let title = base ^ "-new" in
       let* () = new_block_safe env title in
@@ -320,6 +376,25 @@ let random_edit_op env rng known_titles client_prefix round op_idx =
       let* () = B.redo env in
       Js.Promise.resolve 0
 
+(* Wait until at most one editor textarea is mounted — the previous
+   op's editor unmount is async, and the next click otherwise races
+   into a transient 2-editor DOM (strict-mode violation). *)
+let wait_editor_settled env =
+  let rec poll n =
+    let* n_editors =
+      Pw.eval_js env
+        "document.querySelectorAll('.editor-wrapper textarea').length"
+    in
+    match Js.Json.decodeNumber n_editors with
+    | Some v when v <= 1. -> Js.Promise.resolve ()
+    | _ ->
+        if n <= 0 then Js.Promise.resolve ()
+        else
+          let* () = Util.wait_timeout env 50. in
+          poll (n - 1)
+  in
+  poll 60
+
 let local_random_edit_batch env rng known_titles client_prefix round =
   let ops =
     max 1
@@ -328,6 +403,7 @@ let local_random_edit_batch env rng known_titles client_prefix round =
   in
   let rec loop i undo_steps =
     if i < ops then
+      let* () = wait_editor_settled env in
       let* steps =
         random_edit_op env rng known_titles client_prefix round i
       in
@@ -370,13 +446,13 @@ let () =
     let rec round_loop round =
       if round < rounds then (
         (* Phase 1: random edits on both clients without forced sync *)
-        let* p1_steps =
-          Env.with_page env p1 (fun () ->
-              local_random_edit_batch env p1_rng known_titles "p1" round)
-        in
-        let* p2_steps =
-          Env.with_page env p2 (fun () ->
-              local_random_edit_batch env p2_rng known_titles "p2" round)
+        let* p1_steps, p2_steps =
+          Js.Promise.all2
+            ( Env.with_page env1 p1 (fun () ->
+                  local_random_edit_batch env1 p1_rng known_titles "p1"
+                    round), Env.with_page env2 p2 (fun () ->
+                  local_random_edit_batch env2 p2_rng known_titles "p2"
+                    round) )
         in
         let* p1_edit_tx =
           Env.with_page env p1 (fun () ->
@@ -391,13 +467,12 @@ let () =
                 (Option.value ~default:0 tx.Rtc.local_tx))
         in
         (* Phase 2: undo+redo both clients *)
-        let* () =
-          Env.with_page env p1 (fun () ->
-              local_undo_redo_batch env p1_steps)
-        in
-        let* () =
-          Env.with_page env p2 (fun () ->
-              local_undo_redo_batch env p2_steps)
+        let* (), () =
+          Js.Promise.all2
+            ( Env.with_page env1 p1 (fun () ->
+                  local_undo_redo_batch env1 p1_steps), Env.with_page
+                env2 p2 (fun () ->
+                  local_undo_redo_batch env2 p2_steps) )
         in
         let* p1_undo_tx =
           Env.with_page env p1 (fun () ->

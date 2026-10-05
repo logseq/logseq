@@ -6,18 +6,22 @@ let wait_timeout env ms = Pw.wait_timeout env ms
 
 let editor_q = ".editor-wrapper textarea"
 
+(* the same edited block can render a second editor instance inside the
+   references sidebar — resolve the primary one, not a strict single match *)
+let editor_q_first = editor_q ^ " >> nth=0"
+
 let get_active_element env = Pw.q env "*:focus"
 
 let get_editor env =
-  let editor = Pw.q env editor_q in
-  let* visible = Pw.visible env editor_q in
+  let editor = Pw.q env editor_q_first in
+  let* visible = Pw.visible env editor_q_first in
   if not visible then Js.Promise.resolve None
   else
     (* ensure cursor exists: sometimes the editor is up without a blinking
        cursor and subsequent key presses fail *)
     Js.Promise.catch
       (fun e ->
-        let* still_visible = Pw.visible env editor_q in
+        let* still_visible = Pw.visible env editor_q_first in
         if still_visible then Playwright.throw_error e
         else Js.Promise.resolve None)
       (Js.Promise.then_
@@ -44,7 +48,7 @@ let exit_edit env =
        let* left =
          Pw.catch_timeout
            (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
-              (Pw.wait_for_hidden env ~timeout:1000. editor_q))
+              (Pw.wait_for_hidden env ~timeout:1000. editor_q_first))
            (fun () -> Js.Promise.resolve false)
        in
        if left then Js.Promise.resolve ()

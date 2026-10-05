@@ -35,7 +35,7 @@ let rec open_last_block ?(in_retry = false) env =
          hands off. *)
       let rec click_last tries =
         let* editors = Pw.qs env Util.editor_q in
-        if Array.length editors = 1 then Js.Promise.resolve ()
+        if Array.length editors >= 1 then Js.Promise.resolve ()
         else
           Js.Promise.catch
             (fun e ->
@@ -56,11 +56,12 @@ let rec open_last_block ?(in_retry = false) env =
 
 let save_block env text =
   let* () = E2e_assert.have_count env Util.editor_q 1 in
-  let* () = Pw.click env Util.editor_q in
-  let* () = Pw.fill env Util.editor_q text in
+  let* () = Pw.click env Util.editor_q_first in
+  let* () = Pw.fill env Util.editor_q_first text in
   let* _ =
     E2e_assert.is_visible_l
-      (Ls_locator.filter env Util.editor_q ~has_text:text)
+      (Playwright.locator_first
+         (Ls_locator.filter env Util.editor_q ~has_text:text))
   in
   Js.Promise.resolve ()
 
@@ -96,7 +97,7 @@ let new_block env title =
     | Some _ -> Js.Promise.resolve ()
     | None -> open_last_block env
   in
-  let* last_id = Pw.attr env Util.editor_q "id" in
+  let* last_id = Pw.attr env Util.editor_q_first "id" in
   let last_id = match last_id with
     | Some id -> id
     | None -> failwith "editor textarea has no id"
@@ -226,28 +227,13 @@ let indent_outdent env ~indent =
         if moved x1 x2 then Js.Promise.resolve x2
         else
           (* the tx→render roundtrip remounted the editor mid-wait and the
-             keypress landed on body — or the worker's indent tx rendered a
-             duplicate editor for the same block (seen on cljs runs as a
-             strict-mode violation with two identical edit-block-* ids).
-             Dump the DOM shape for diagnosis, then refocus the same open
-             editor and press once more. *)
-          let* dom =
-            Pw.eval_js env
-              "(() => [...document.querySelectorAll('.editor-wrapper')].map(w => ({id: w.querySelector('textarea')?.id, tas: w.querySelectorAll('textarea').length, block: w.closest('.ls-block')?.dataset?.blockId})).map(JSON.stringify).join('\\n'))()"
-          in
-          (match Js.Json.decodeString dom with
-           | Some s -> Js.log ("[indent-dbg] wrappers: " ^ s)
-           | None -> ());
-          let* () = Pw.click env Util.editor_q in
+             keypress landed on body — refocus the open editor and press
+             once more *)
+          let* () = Pw.click env Util.editor_q_first in
           let* () =
             if indent then Keyboard.tab env else Keyboard.shift_tab env
           in
           let* x2 = wait_for_editor_x_change env x1 moved in
-          if not (moved x1 x2) then
-            Env.console_logs env
-            |> (fun l -> let rec take n = function [] -> [] | x::tl -> if n<=0 then [] else x :: take (n-1) tl in take 60 l)
-            |> List.rev
-            |> List.iter (fun m -> Js.log ("[indent-dbg] " ^ m));
           Js.Promise.resolve x2
       in
       if indent then Fest.ok (x1 < x2) Fest.expect else Fest.ok (x1 > x2) Fest.expect;
