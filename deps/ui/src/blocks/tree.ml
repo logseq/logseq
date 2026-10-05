@@ -173,17 +173,8 @@ let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
 
 let icon_el uuid (icon : Model.icon) : t =
   if icon.icon_kind = "emoji" then
-    (* TODO(component): em-emoji is a custom element carrying a
-       data-emoji attr — no component kind covers it *)
     dom ~key:("ic-" ^ uuid) ~tag:"span" ~style_class:"ui__icon"
-      [ dom ~key:("ice-" ^ uuid) ~tag:"em-emoji"
-          ~attrs:
-            [ ("id", icon.icon_id)
-            ; ( "data-emoji"
-              , Option.value ~default:""
-                  (Emoji_mart.emoji_char icon.icon_id) ) ]
-          []
-      ]
+      [ Logseq_emoji.el ~key:("ice-" ^ uuid) ~name:icon.icon_id () ]
   else
     (* tabler icon via the app registry — the icon kind renders its own
        svg/mask; the ti/ti-* font classes would double-render *)

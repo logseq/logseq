@@ -353,8 +353,81 @@ let adapter_of_tag tag : web_extension_adapter =
   ; web_extension_cleanup = cleanup
   }
 
+(* -- dedicated widget adapters -- *)
+
+(* logseq-em-emoji: a real <em-emoji> custom element; the name prop
+   lands on the id attr that emoji-mart's upgrade reads, data-emoji
+   carries the resolved native char for non-mart hosts *)
+let emoji_adapter : web_extension_adapter =
+  let set_property el prop value =
+    match (prop, value) with
+    | "name", StringValue s -> W.Element.setAttribute "id" s el
+    | "data-emoji", StringValue s ->
+        if s = "" then W.Element.removeAttribute "data-emoji" el
+        else W.Element.setAttribute "data-emoji" s el
+    | "style-class", StringValue s -> set_class el s
+    | _ -> ()
+  in
+  { web_extension_create =
+      (fun _node document emit ->
+        let el = W.Document.createElement "em-emoji" document in
+        emit_set el emit;
+        el)
+  ; web_extension_set_property = set_property
+  ; web_extension_remove_property =
+      (fun el prop ->
+        match prop with
+        | "name" -> W.Element.removeAttribute "id" el
+        | "data-emoji" -> W.Element.removeAttribute "data-emoji" el
+        | "style-class" -> set_class el ""
+        | _ -> ())
+  ; web_extension_cleanup = cleanup
+  }
+
+(* logseq-katex: the slot the render_libs doc-scan fills via
+   katex.render — always a <span> (adapter create runs before any prop
+   op, so the tag cannot depend on inline); a block slot carries
+   display:block instead, matching the old div.latex layout exactly *)
+let katex_adapter : web_extension_adapter =
+  let set_property el prop value =
+    match (prop, value) with
+    | "style-class", StringValue s -> set_class el s
+    | "accessibility-identifier", StringValue s ->
+        W.Element.setAttribute "id" s el
+    | "inline", BoolValue inline ->
+        if inline then W.Element.removeAttribute "style" el
+        else W.Element.setAttribute "style" "display:block" el
+    | "display", BoolValue b ->
+        (* render_katex_one resolves mode from the pending registry by
+           id; data-display is a self-describing fallback since the
+           mount is always a span now (tagName no longer tells block
+           from inline) *)
+        W.Element.setAttribute "data-display"
+          (if b then "true" else "false")
+          el
+    | _ -> ()
+  in
+  { web_extension_create =
+      (fun _node document emit ->
+        let el = W.Document.createElement "span" document in
+        emit_set el emit;
+        el)
+  ; web_extension_set_property = set_property
+  ; web_extension_remove_property =
+      (fun el prop ->
+        match prop with
+        | "style-class" -> set_class el ""
+        | "accessibility-identifier" -> W.Element.removeAttribute "id" el
+        | "inline" -> W.Element.removeAttribute "style" el
+        | "display" -> W.Element.removeAttribute "data-display" el
+        | _ -> ())
+  ; web_extension_cleanup = cleanup
+  }
+
 let adapters : web_extension_adapter String_map.t =
   List.fold_left
     (fun acc tag ->
       String_map.add (Logseq_dom.identifier tag) (adapter_of_tag tag) acc)
     String_map.empty Logseq_dom.tags
+  |> String_map.add Logseq_emoji.identifier emoji_adapter
+  |> String_map.add Logseq_katex.identifier katex_adapter
