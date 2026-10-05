@@ -86,7 +86,10 @@ let indent_into_collapsed_block_while_editing env =
   Js.Promise.resolve ()
 
 let zoom_in_shortcut env =
-  K.press env (if Config.mac then "Meta+Shift+." else "Alt+ArrowRight")
+  (* element-targeted: a page.keyboard press aimed at *:focus=<body>
+     is silently dropped; the shortcut works with the editor focused *)
+  K.press_in_editor env
+    (if Config.mac then "Meta+Shift+." else "Alt+ArrowRight")
 
 let current_location_hash env = Pw.eval_js env "window.location.hash"
 

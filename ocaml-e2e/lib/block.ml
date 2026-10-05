@@ -58,8 +58,19 @@ let save_block env text =
   let* () = E2e_assert.have_count ~timeout:15000. env Util.editor_q 1 in
   let* () = Pw.click env Util.editor_q_first in
   let* () = Pw.fill env Util.editor_q_first text in
+  (* a remount mid-fill can drop the text into the dying editor —
+     verify the value and refill (bounded) *)
+  let rec verify_fill n =
+    let* v = Pw.input_value env Util.editor_q_first in
+    if v = text then Js.Promise.resolve ()
+    else if n <= 1 then Js.Promise.resolve ()
+    else
+      let* () = Pw.fill env Util.editor_q_first text in
+      verify_fill (n - 1)
+  in
+  let* () = verify_fill 3 in
   let* _ =
-    E2e_assert.is_visible_l
+    E2e_assert.is_visible_l ~timeout:15000.
       (Playwright.locator_first
          (Ls_locator.filter env Util.editor_q ~has_text:text))
   in
