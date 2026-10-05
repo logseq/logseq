@@ -166,12 +166,16 @@ let track action =
       current_journals := js;
       push_journals_items js;
       (* republish each spliced day into its mounted item signal — the
-         journal item's dyn repaints without a stream remount *)
+         journal item's dyn repaints without a stream remount. When the
+         list length changed (Navigate_to resets current_journals while
+         the stale days still render) push every published day —
+         push_journal_page is a no-op for days with no mounted item *)
       if List.length old = List.length js then
         List.iter2
           (fun (o : Model.page) (n : Model.page) ->
             if o != n then push_journal_page n)
           old js
+      else List.iter push_journal_page js
   | Action.Navigate_to r ->
       Page_delta.reset ();
       clear_page_items ();
