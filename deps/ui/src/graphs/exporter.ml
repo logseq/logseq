@@ -265,45 +265,50 @@ let auto_backup ctx =
            [ text ~key:"ab-na-s"
                ~value:(T.t "export.backup/unsupported-desc") [] ]
        else
-         Logseq_dom.dyn ~equal:( == )
-           (fun folder ->
-             match folder with
-             | Some name ->
-                 column ~key:"ab-in" ~gap:16
-                   [ row ~key:"ab-row" ~gap:4 ~cross:`center
-                       ~style_class:"text-sm"
-                       [ text ~key:"ab-l" ~style_class:"opacity-50"
-                           ~value:(T.t "export.backup/folder") []
-                       ; text ~key:"ab-n" ~value:name []
-                       ; button ~key:"ab-x" ~size:`icon ~icon:`x
-                           ~style_class:"ui__button as-ghost"
-                           ~label:(T.t "export.backup/cancel")
-                           ~on_press:(fun _ -> clear_folder ctx)
-                           [] ]
-                   ; text ~key:"ab-note" ~style_class:"opacity-50 text-sm"
-                       ~value:(T.t "export.backup/hourly-note") []
-                   ; button ~key:"ab-go"
-                       ~style_class:"ui__button ls-btn-primary"
-                       ~text:(T.t "export.backup/backup-now")
-                       ~on_press:(fun _ ->
-                         ignore
-                           (backup_now ()
-                            |> Js.Promise.then_ (fun r ->
-                                   backup_notify r;
-                                   Js.Promise.resolve ()));
-                         auto_backup_interval ())
-                       [] ]
-             | None ->
-                 column ~key:"ab-in" ~gap:16
-                   [ button ~key:"ab-set"
-                       ~style_class:"ui__button ls-btn-primary"
-                       ~text:(T.t "export.backup/set-folder-first")
-                       ~on_press:(fun _ -> choose_folder ctx)
-                       []
-                   ; text ~key:"ab-note"
-                       ~style_class:"opacity-50 text-sm"
-                       ~value:(T.t "export.backup/hourly-note") [] ])
-           (folder_st ctx).Signal.state_signal)
+         let folder_sig = (folder_st ctx).Signal.state_signal in
+         Logseq_dom.fragment
+           [ Logseq_dom.if_
+               ~test:(Signal.map (fun f -> f <> None) folder_sig)
+               (column ~key:"ab-in" ~gap:16
+                  [ row ~key:"ab-row" ~gap:4 ~cross:`center
+                      ~style_class:"text-sm"
+                      [ text ~key:"ab-l" ~style_class:"opacity-50"
+                          ~value:(T.t "export.backup/folder") []
+                      ; text ~key:"ab-n"
+                          ~value:(reactive (function
+                            | Some name -> name | None -> "")
+                            folder_sig)
+                          []
+                      ; button ~key:"ab-x" ~size:`icon ~icon:`x
+                          ~style_class:"ui__button as-ghost"
+                          ~label:(T.t "export.backup/cancel")
+                          ~on_press:(fun _ -> clear_folder ctx)
+                          [] ]
+                  ; text ~key:"ab-note" ~style_class:"opacity-50 text-sm"
+                      ~value:(T.t "export.backup/hourly-note") []
+                  ; button ~key:"ab-go"
+                      ~style_class:"ui__button ls-btn-primary"
+                      ~text:(T.t "export.backup/backup-now")
+                      ~on_press:(fun _ ->
+                        ignore
+                          (backup_now ()
+                           |> Js.Promise.then_ (fun r ->
+                                  backup_notify r;
+                                  Js.Promise.resolve ()));
+                        auto_backup_interval ())
+                      [] ])
+           ; Logseq_dom.if_
+               ~test:(Signal.map (fun f -> f = None) folder_sig)
+               (column ~key:"ab-in" ~gap:16
+                  [ button ~key:"ab-set"
+                      ~style_class:"ui__button ls-btn-primary"
+                      ~text:(T.t "export.backup/set-folder-first")
+                      ~on_press:(fun _ -> choose_folder ctx)
+                      []
+                  ; text ~key:"ab-note"
+                      ~style_class:"opacity-50 text-sm"
+                      ~value:(T.t "export.backup/hourly-note") [] ])
+           ])
     ]
 
 let body (_ms : Model.t Signal.signal) : t =

@@ -15,7 +15,9 @@ open Promise_ext
 open Lui_elements
 module T = I18n
 
-let dyn = Logseq_dom.dyn
+let if_ = Logseq_dom.if_
+let keyed = Logseq_dom.keyed
+let fragment = Logseq_dom.fragment
 
 type member =
   { m_uuid : string
@@ -151,9 +153,12 @@ let initials name =
 (* cljs avatar.cljs user-avatar: rounded initials chip tinted by
    uuid-color (the app-region:no-drag attr has no component equivalent;
    avatars are text-only so far) *)
-let avatar ~key ?(size = 40) ?(title = "") ~name ~uuid () : t =
-  avatar ~key ~width:size ~height:size ~style_class:"ui__avatar"
-    ~background:(uuid_color uuid) ~text:(initials name) ~label:title []
+let avatar_of (usig : Model.rtc_user Signal.signal) : t =
+  let u = Signal.get usig in
+  Lui_elements.avatar ~key:u.ru_uuid ~width:20 ~height:20
+    ~style_class:"ui__avatar" ~background:(uuid_color u.ru_uuid)
+    ~text:(reactive (fun u -> initials u.Model.ru_name) usig)
+    ~label:(Option.value u.ru_email ~default:"") []
 
 (* ---------- members panel (dialog body) ---------- *)
 
@@ -324,33 +329,41 @@ let body (_ms : Model.t Signal.signal) : t =
    dialog; an avatar per online user (visible under the same
    rtc-indicator-visible? gate as the cloud indicator) *)
 let widget (ms : Model.t Signal.signal) : t =
-  dyn ~equal:( = )
-    (fun ((repo : string option), (r : Model.rtc option)) ->
-      Rtc_flows.refresh_db_rtc_uuid repo;
-      let visible =
+  let model_sig =
+    Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms
+  in
+  let vis_sig =
+    Signal.map
+      (fun ((repo : string option), (r : Model.rtc option)) ->
+        Rtc_flows.refresh_db_rtc_uuid repo;
         Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
         && repo <> None
-        && (!Rtc_flows.db_rtc_uuid <> None || r <> None)
-      in
-      if not visible then
-        box ~key:"collab-off" ~style_class:"hidden" []
-      else
-        let users =
-          match r with Some r -> r.rtc_online_users | None -> []
-        in
-        row ~key:"collab" ~gap:4 ~cross:`center
-          ~style_class:"rtc-collaborators"
-          ([ button ~key:"collab-btn" ~size:`icon
+        && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
+      model_sig
+  in
+  fragment
+    [ if_ ~test:(Signal.map not vis_sig)
+        (box ~key:"collab-off" ~style_class:"hidden" [])
+    ; if_ ~test:vis_sig
+        (row ~key:"collab" ~gap:4 ~cross:`center
+           ~style_class:"rtc-collaborators"
+           [ button ~key:"collab-btn" ~size:`icon
                ~style_class:"ui__button as-ghost"
                ~icon:(`app "user-plus")
                ~label:"rtc collaborators"
                ~on_press:(fun _ ->
                  Dialogs_state.open_ "rtc-collaborators")
-               [] ]
-          @ List.map
-              (fun (u : Model.rtc_user) ->
-                avatar ~key:("av-" ^ u.ru_uuid) ~size:20
-                  ~title:(Option.value u.ru_email ~default:"")
-                  ~name:u.ru_name ~uuid:u.ru_uuid ())
-              users))
-    (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)
+               []
+           ; keyed
+               ~source:
+                 (Signal.map
+                    (fun ((_, r) : string option * Model.rtc option) ->
+                      match r with
+                      | Some r -> r.rtc_online_users
+                      | None -> [])
+                    model_sig)
+               ~key:(fun (u : Model.rtc_user) -> u.ru_uuid)
+               ~cmp:Stdlib.compare
+               ~mount:avatar_of
+           ])
+    ]

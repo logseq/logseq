@@ -21,6 +21,7 @@ open Lui_elements
 let dom = Logseq_dom.dom
 let if_ = Logseq_dom.if_
 let keyed = Logseq_dom.keyed
+let fragment = Logseq_dom.fragment
 
 module S = Cmdk_state
 
@@ -327,19 +328,36 @@ let hl_segments ~query ~text : (bool * string) list =
 (* TODO(component): stays dom — [data-testid] is the e2e locator
    (cmdk_scroll_basic_test counts [data-testid^=prefix] results) and
    [data-cmdk-item] mark keys on the mark tag; kinds emit neither *)
-let highlight_el key query title =
-  let segs = hl_segments ~query ~text:title in
-  let plain = String.concat "" (List.map snd segs) in
+let hl_span key (item_sig : S.item Signal.signal)
+    (title_of : S.item -> string) : t =
   dom ~key ~tag:"span"
-    ~attrs:[ ("data-testid", plain) ]
-    (List.mapi
-       (fun i (hl, seg) ->
-         if hl then
-           dom ~key:(Printf.sprintf "hl%d" i) ~tag:"mark"
-             ~text:seg []
-         else
-           text ~key:(Printf.sprintf "tx%d" i) ~value:seg [])
-       (List.filter (fun (_, s) -> s <> "") segs))
+    ~attrs_signal_v:
+      (Logseq_dom.reactive_attrs
+         (fun it ->
+           let plain =
+             String.concat ""
+               (List.map snd
+                  (hl_segments ~query:it.S.iq ~text:(title_of it)))
+           in
+           [ ("data-testid", plain) ])
+         item_sig)
+    [ keyed
+        ~source:
+          (Signal.map
+             (fun it ->
+               hl_segments ~query:it.S.iq ~text:(title_of it)
+               |> List.filter (fun (_, s) -> s <> "")
+               |> List.mapi (fun i (hl, s) -> (i, hl, s)))
+             item_sig)
+        ~key:(fun (i, _, _) -> i)
+        ~cmp:Stdlib.compare
+        ~mount:(fun seg ->
+          reactive
+            (fun (_, hl, txt) ->
+              if hl then dom ~key:"hl" ~tag:"mark" ~text:txt []
+              else text ~key:"tx" ~value:txt [])
+            seg)
+    ]
 
 let badge_el key =
   text ~key ~style_class:"cp__cmdk-current-page-badge"
@@ -366,28 +384,25 @@ let row_data_attrs (it : S.item) =
   @ (if highlighted && not hoverable then [ ("data-kb-highlighted", "true") ]
      else [])
 
-let item_header (it : S.item) q =
-  match it.S.header with
-  | None -> spacer ~key:"hdr" []
-  | Some h ->
-      row ~key:"hdr" ~style_class:"breadcrumb cmdk-item-header"
-        ~cross:`center
-        [ highlight_el "hdr-hl" q h
-        ; (match it.S.ibadge with
-           | S.Header_badge -> badge_el "hb"
-           | _ -> spacer ~key:"hb" [])
-        ]
-
-let shortcut_row key it =
-  if it.S.isc = "" then spacer ~key []
-  else
-    (* TODO(component): the inline opacity style has no typed prop —
-       keep the smallest possible dom wrapper *)
-    dom ~key ~style_class:"shui-shortcut-row"
-      ~attrs:
-        [ ( "style"
-          , Printf.sprintf "opacity: %s" (if it.S.ihl then "1" else "0.9") ) ]
-      (shui_shortcut it.S.isc)
+(* TODO(component): the inline opacity style has no typed prop — keep
+   the smallest possible dom wrapper; isc still parses to kbd cells
+   inside a reactive slot remounting only on isc change *)
+let shortcut_slot (item_sig : S.item Signal.signal) : t =
+  if_
+    ~test:(Signal.map (fun (it : S.item) -> it.S.isc <> "") item_sig)
+    (dom ~key:"sc-row" ~style_class:"shui-shortcut-row"
+       ~attrs_signal_v:
+         (Logseq_dom.reactive_attrs
+            (fun it ->
+              [ ( "style"
+                , Printf.sprintf "opacity: %s"
+                    (if it.S.ihl then "1" else "0.9") ) ])
+            item_sig)
+       [ reactive
+           ~equal:(fun (a : S.item) b -> a.S.isc = b.S.isc)
+           (fun it -> fragment (shui_shortcut it.S.isc))
+           item_sig
+       ])
 
 (* TODO(component): the two wrappers stay dom — data-item-index /
    data-item-key drive the delegated click + mousemove dispatch, and
@@ -400,65 +415,63 @@ let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
     [ dom ~key:"item"
         ~style_class_signal:(Logseq_dom.reactive_class (fun it -> row_class it) item_sig)
         ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun it -> row_data_attrs it) item_sig)
-        [ dyn
-            ~equal:(fun (a : S.item) b ->
-              a.S.header = b.S.header && a.S.ibadge = b.S.ibadge
-              && a.S.iq = b.S.iq)
-            (fun (it : S.item) -> item_header it it.S.iq)
-            item_sig
+        [ if_
+            ~test:
+              (Signal.map (fun (it : S.item) -> it.S.header <> None)
+                 item_sig)
+            (row ~key:"hdr" ~style_class:"breadcrumb cmdk-item-header"
+               ~cross:`center
+               [ hl_span "hdr-hl" item_sig
+                   (fun it -> Option.value ~default:"" it.S.header)
+               ; if_
+                   ~test:
+                     (Signal.map
+                        (fun (it : S.item) ->
+                          it.S.ibadge = S.Header_badge)
+                        item_sig)
+                   (badge_el "hb")
+               ])
         ; row ~key:"main" ~style_class:"cmdk-item-main" ~cross:`start
             [ box ~key:"icon" ~style_class:"cmdk-item-icon"
-                [ dyn
-                    ~equal:(fun (a : S.item) b -> a.S.iicon = b.S.iicon)
-                    (fun (it : S.item) ->
-                      if it.S.iicon = "" then spacer ~key:"iccp" []
-                      else
-                        (* cljs icon-component/get-node-icon-cp wraps the
-                           glyph in .icon-cp-container *)
-                        box ~key:"iccp"
-                          ~style_class:"icon-cp-container"
-                          [ icon ~name:(`app it.S.iicon) ~point_size:14
-                              [] ])
-                    item_sig
+                [ if_
+                    ~test:
+                      (Signal.map
+                         (fun (it : S.item) -> it.S.iicon <> "")
+                         item_sig)
+                    ((* cljs icon-component/get-node-icon-cp wraps the
+                        glyph in .icon-cp-container *)
+                     box ~key:"iccp"
+                       ~style_class:"icon-cp-container"
+                       [ icon ~name:(reactive (fun it -> `app it.S.iicon) item_sig)
+                           ~point_size:14 [] ])
                 ]
             ; column ~key:"txt" ~style_class:"cmdk-item-body"
                 [ row ~key:"main-text"
                     ~style_class:"cp__cmdk-item-main-text"
-                    [ dyn
-                        ~equal:(fun (a : S.item) b ->
-                          a.S.ititle = b.S.ititle && a.S.iq = b.S.iq)
-                        (fun (it : S.item) ->
-                          highlight_el "label" it.S.iq it.S.ititle)
-                        item_sig
-                    ; dyn
-                        ~equal:(fun (a : S.item) b ->
-                          a.S.ibadge = b.S.ibadge)
-                        (fun (it : S.item) ->
-                          match it.S.ibadge with
-                          | S.Text_badge -> badge_el "tb"
-                          | _ -> spacer ~key:"tb" [])
-                        item_sig
-                    ; dyn
-                        ~equal:(fun (a : S.item) b ->
-                          a.S.info = b.S.info && a.S.iq = b.S.iq)
-                        (fun (it : S.item) ->
-                          match it.S.info with
-                          | None -> spacer ~key:"info" []
-                          | Some info ->
-                              text ~key:"info"
-                                ~style_class:"cp__cmdk-item-info"
-                                [ text ~key:"dash"
-                                    ~value:(Platform.utf8 " — ") []
-                                ; highlight_el "info-hl" it.S.iq info ])
-                        item_sig
+                    [ hl_span "label" item_sig (fun it -> it.S.ititle)
+                    ; if_
+                        ~test:
+                          (Signal.map
+                             (fun (it : S.item) ->
+                               it.S.ibadge = S.Text_badge)
+                             item_sig)
+                        (badge_el "tb")
+                    ; if_
+                        ~test:
+                          (Signal.map
+                             (fun (it : S.item) -> it.S.info <> None)
+                             item_sig)
+                        (text ~key:"info"
+                           ~style_class:"cp__cmdk-item-info"
+                           [ text ~key:"dash"
+                               ~value:(Platform.utf8 " — ") []
+                           ; hl_span "info-hl" item_sig
+                               (fun it ->
+                                 Option.value ~default:"" it.S.info)
+                           ])
                     ]
                 ]
-            ; dyn
-                ~equal:(fun (a : S.item) (b : S.item) ->
-                  a.S.isc = b.S.isc && a.S.idx = b.S.idx
-                  && a.S.ihl = b.S.ihl)
-                (fun it -> shortcut_row "sc-row" it)
-                item_sig
+            ; shortcut_slot item_sig
             ]
         ]
     ]
@@ -490,52 +503,59 @@ let gid_label = function
 (* cljs group header: title click toggles more/less; the trailing link
    (hidden while a filter is active) shows a compact mod+down/up hint *)
 let group_header (st : S.t) (g : S.group) : t =
-  if g.S.gid = S.G_create then spacer ~key:"gheader" []
-  else
-    let count = if g.S.gtotal >= 99 then "99+" else string_of_int g.S.gtotal in
-    let can_toggle = g.S.gtotal > g.S.glimit || g.S.gexpanded in
-    let label, sc =
-      if g.S.gexpanded then (I18n.t "ui/show-less", "mod up")
-      else (I18n.t "ui/show-more", "mod down")
-    in
-    let toggle _ =
-      S.toggle_expand st g.S.gid (not g.S.gexpanded)
-    in
-    row ~key:"gheader"
-      ~style_class:"cp__cmdk-group-header" ~cross:`center
-      ~main:`space_between
-      [ text ~key:"gtitle"
-          ~style_class:"cp__cmdk-group-title"
-          ~value:g.S.gtitle ~on_press:toggle []
-      ; text ~key:"gcount"
-          ~style_class:"cp__cmdk-group-count"
-          ~value:count []
-      ; spacer ~key:"gsp" ~style_class:"cp__cmdk-group-spacer" []
-      ; if can_toggle && not g.S.gfilter_active then
-          Ui_parts.pressable ~on_press:toggle
-            (row ~key:"gmore"
-               ~style_class:"cp__cmdk-group-more"
-               [ row ~key:"gmore-i"
-                   ~style_class:"cp__cmdk-group-more-inner"
-                   [ text ~key:"lbl" ~value:label []
-                   ; compact_shortcut sc
-                   ]
-               ])
-        else spacer ~key:"gmore" []
-      ]
+  let toggle _ =
+    S.toggle_expand st g.S.gid (not g.S.gexpanded)
+  in
+  row ~key:"gheader"
+    ~style_class:"cp__cmdk-group-header" ~cross:`center
+    ~main:`space_between
+    [ text ~key:"gtitle"
+        ~style_class:"cp__cmdk-group-title"
+        ~value:g.S.gtitle
+        ~on_press:toggle []
+    ; text ~key:"gcount"
+        ~style_class:"cp__cmdk-group-count"
+        ~value:
+          (if g.S.gtotal >= 99 then "99+"
+           else string_of_int g.S.gtotal)
+        []
+    ; spacer ~key:"gsp" ~style_class:"cp__cmdk-group-spacer" []
+    ; (if (g.S.gtotal > g.S.glimit || g.S.gexpanded)
+          && not g.S.gfilter_active
+       then
+         Ui_parts.pressable ~on_press:toggle
+           (row ~key:"gmore"
+              ~style_class:"cp__cmdk-group-more"
+              [ row ~key:"gmore-i"
+                  ~style_class:"cp__cmdk-group-more-inner"
+                  [ text ~key:"lbl"
+                      ~value:
+                        (if g.S.gexpanded then I18n.t "ui/show-less"
+                         else I18n.t "ui/show-more")
+                      []
+                  ; compact_shortcut
+                      (if g.S.gexpanded then "mod up" else "mod down")
+                  ]
+              ])
+       else spacer ~key:"gmore" [])
+    ]
 
 let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
   let items_sig =
     Signal.map (fun (g : S.group) -> g.S.gitems) group_sig
   in
   column ~key:"group" ~style_class:"cp__cmdk-group"
-    [ dyn
-        ~equal:(fun (a : S.group) (b : S.group) ->
-          a.S.gid = b.S.gid && a.S.gtitle = b.S.gtitle
-          && a.S.gtotal = b.S.gtotal && a.S.glimit = b.S.glimit
+    [ reactive
+        ~equal:(fun (a : S.group) b ->
+          (a.S.gid = S.G_create) = (b.S.gid = S.G_create)
+          && a.S.gtitle = b.S.gtitle
+          && a.S.gtotal = b.S.gtotal
+          && a.S.glimit = b.S.glimit
           && a.S.gexpanded = b.S.gexpanded
           && a.S.gfilter_active = b.S.gfilter_active)
-        (fun g -> group_header st g)
+        (fun g ->
+          if g.S.gid = S.G_create then spacer ~key:"gheader" []
+          else group_header st g)
         group_sig
     ; column ~key:"results" ~style_class:"search-results"
         [ keyed ~source:items_sig ~key:S.item_dom_key
@@ -556,7 +576,7 @@ let groups_body st : t =
      ~mount:(fun group_sig -> group_el st group_sig))
     ctx parent
 
-let search_only_chip st gid =
+let search_only_chip st (gid : S.group_id) =
   column ~key:"search-only" ~style_class:"cp__cmdk-search-only"
     [ row ~key:"row" ~style_class:"cp__cmdk-search-only-row"
         ~cross:`center
@@ -586,22 +606,20 @@ let scroller st : t =
   in
   scroll ~key:"scroller" ~orientation:`vertical
     ~style_class:scroller_class
-    [ dyn
-        ~equal:(fun (a : S.group_id option) b -> a = b)
-        (fun f ->
-          match f with
-          | None -> spacer ~key:"search-only" []
-          | Some gid -> search_only_chip st gid)
-        (Signal.map (fun (v : S.view) -> v.S.filter) st.S.vs.Signal.state_signal)
+    [ reactive
+        (fun (v : S.view) ->
+          match v.S.filter with
+          | Some gid -> search_only_chip st gid
+          | None -> spacer ~key:"chip" [])
+        st.S.vs.Signal.state_signal
     ; groups_body st
-    ; dyn
-        ~equal:(fun (a : string * bool) b -> a = b)
-        (fun (q, has) ->
-          if not has && q <> "" then
-            box ~key:"empty" ~style_class:"cp__cmdk-empty"
-              [ text ~key:"empty-t" ~value:(I18n.t "search/no-result") [] ]
-          else spacer ~key:"empty" [])
-        (Signal.map2 (fun q has -> (q, has)) input_sig has_items_sig)
+    ; if_
+        ~test:
+          (Signal.map2
+             (fun (q : string) has -> q <> "" && not has)
+             input_sig has_items_sig)
+        (box ~key:"empty" ~style_class:"cp__cmdk-empty"
+           [ text ~key:"empty-t" ~value:(I18n.t "search/no-result") [] ])
     ]
     ctx parent
 
@@ -617,7 +635,7 @@ let input_row st : t =
          command); no placeholder_signal exists, so a keyed remount
          swaps the placeholder — the caller re-focuses the input right
          after the state publish *)
-      dyn ~equal:( = )
+      reactive
         (fun move_mode ->
           input ~key:"input" ~style_class:"cp__cmdk-search-input"
             ~grow:1.
@@ -702,6 +720,16 @@ let hint_action_of (it : S.item) =
   | S.Open_block _ -> (`open_, true)
   | S.Open_file _ -> (`open_, false)
 
+let hint_variant (it : S.item option) : int =
+  match it with
+  | None -> 0
+  | Some it -> (
+      match hint_action_of it with
+      | `open_, has_block -> if has_block then 1 else 2
+      | `create, _ -> 3
+      | `filter, _ -> 4
+      | `trigger, _ -> 5)
+
 let action_hints (it : S.item option) =
   match it with
   | None -> spacer ~key:"actions" []
@@ -736,16 +764,17 @@ let hints st : t =
             [ text ~key:"hint-label"
                 ~style_class:"cp__cmdk-hints-label"
                 ~value:(I18n.t "cmdk.tip/label") []
-            ; dyn
-                ~equal:(fun (a : bool * int) b -> a = b)
-                tip_el
+            ; reactive tip_el
                 (Signal.map
                    (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
                    st.S.vs.Signal.state_signal)
             ]
         ]
-    ; dyn
-        ~equal:(fun (a : S.item option) b -> a = b)
+    ; (* the hint bar's shape is the action variant, not the item's
+         identity — remount only when the variant flips *)
+      reactive
+        ~equal:(fun (a : S.item option) b ->
+          hint_variant a = hint_variant b)
         action_hints
         (Signal.map
            (fun (v : S.view) -> S.item_at v v.S.hl)
