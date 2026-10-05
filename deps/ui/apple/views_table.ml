@@ -28,20 +28,78 @@ let sig_of (inst : V.inst) : V.vstate Signal.signal =
 
 let refresh inst = (V.ops ()).V.o_refresh inst
 
-(* <span class="ui__icon ti ls-icon-{name}">…</span> — identical markup
-   to the imperative Web_dom.icon (tabler svg or font-glyph fallback),
-   baked into the node's html prop *)
-let icon_el ?(cls = "") name : t =
-  let inner = E.el_inner_html (E.icon name) in
-  dom ~tag:"span"
-    ~style_class:
-      ("ui__icon ti ls-icon-" ^ name ^ if cls = "" then "" else " " ^ cls)
-    ~html:inner []
+(* schema icon names -> builtin variants; every other name resolves
+   through the app icon registry (tabler svgs + custom paths like
+   "caret-right" registered in app_icons) — keep in sync with
+   src/views/views_table.ml *)
+let icon_of (name : string) : Lui_elements.icon =
+  match name with
+  | "alert" -> `alert
+  | "archive" -> `archive
+  | "arrow-down" -> `arrow_down
+  | "arrow-right" -> `arrow_right
+  | "arrow-up" -> `arrow_up
+  | "check" -> `check
+  | "check-circle" -> `check_circle
+  | "chevron-down" -> `chevron_down
+  | "chevron-left" -> `chevron_left
+  | "chevron-right" -> `chevron_right
+  | "chevron-up" -> `chevron_up
+  | "circle-dot" -> `circle_dot
+  | "clock" -> `clock
+  | "copy" -> `copy
+  | "download" -> `download
+  | "edit" -> `edit
+  | "ellipsis" | "dots" -> `ellipsis
+  | "external-link" -> `external_link
+  | "eye" -> `eye
+  | "file-text" -> `file_text
+  | "folder" -> `folder
+  | "folder-open" -> `folder_open
+  | "git-branch" -> `git_branch
+  | "git-merge" -> `git_merge
+  | "git-pull-request" -> `git_pull_request
+  | "info" -> `info
+  | "menu" -> `menu
+  | "mic" -> `mic
+  | "moon" -> `moon
+  | "music" -> `music
+  | "panel-left" -> `panel_left
+  | "panel-right" -> `panel_right
+  | "pause" -> `pause
+  | "play" -> `play
+  | "plus" -> `plus
+  | "refresh-cw" -> `refresh_cw
+  | "repeat" -> `repeat
+  | "save" -> `save
+  | "search" -> `search
+  | "send" -> `send
+  | "settings" -> `settings
+  | "shuffle" -> `shuffle
+  | "skip-back" -> `skip_back
+  | "skip-forward" -> `skip_forward
+  | "sun" -> `sun
+  | "terminal" -> `terminal
+  | "trash" -> `trash
+  | "volume" -> `volume
+  | "wrench" -> `wrench
+  | "x" -> `x
+  | "x-circle" -> `x_circle
+  | n -> `app n
 
-(* icons whose glyph flips with state (sort direction) — remounts just
-   the icon node *)
+(* component-kind icon carrying the same ls-icon-* marker classes the
+   imperative span emitted (ui__icon comes from the kind itself) *)
+let icon_el ?(cls = "") name : t =
+  Lui_elements.icon ~name:(icon_of name) ~point_size:16
+    ~style_class:
+      ("ls-icon-" ^ name ^ if cls = "" then "" else " " ^ cls)
+    []
+
+(* icons whose glyph flips with state (sort direction) — a reactive
+   prop on one icon node, no remount *)
 let icon_dyn (sig_ : string Signal.signal) : t =
-  D.dyn ~equal:(=) (fun name -> icon_el name) sig_
+  Lui_elements.icon ~name_signal:(Signal.map icon_of sig_) ~point_size:16
+    []
 
 (* ---------- columns ---------- *)
 

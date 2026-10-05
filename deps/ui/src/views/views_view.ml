@@ -18,6 +18,8 @@ module A = Action
 module M = Model
 module Db = Views_db
 
+open Lui_elements
+
 type t = Lui_elements.t
 
 let dom = D.dom
@@ -104,15 +106,14 @@ let rec hiccup_els inst (w : W.t) : t list =
           ("class", shorthand_cls)
           :: List.filter (fun (k, _) -> k <> "class") attrs
       in
+      (* TODO(component): :view hiccup takes arbitrary user tags +
+         attrs — no fixed component kind; keep dom for element nodes *)
       [ dom ~tag ~attrs (List.concat_map (hiccup_els inst) children) ]
   | W.Array xs | W.List xs | W.Set xs ->
       List.concat_map (hiccup_els inst) xs
-  | W.String s ->
-      [ dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] [] ]
-  | W.Uuid u ->
-      [ dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", title_of_uuid inst u) ]
-          [] ]
-  | w -> [ dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", Edn.to_string w) ] [] ]
+  | W.String s -> [ text ~value:s [] ]
+  | W.Uuid u -> [ text ~value:(title_of_uuid inst u) [] ]
+  | w -> [ text ~value:(Edn.to_string w) [] ]
 
 (* ---------- elements ---------- *)
 
@@ -148,9 +149,9 @@ let body_eq (a : V.vstate) (b : V.vstate) =
    .flex.flex-col.gap-2.grid > foldable(key="view") with the whole body
    inside ls-foldable-content *)
 let view_el inst : t =
-  dom
-    [ dom ~style_class:"flex flex-col gap-2"
-        [ dom ~style_class:"flex flex-col gap-2 grid"
+  box
+    [ column ~gap:8
+        [ column ~gap:8
             [ Views_table.foldable inst ~key:"view"
                 ~title:(Views_head.render_head inst)
                 ~body:
@@ -174,29 +175,29 @@ let query_content inst (s : V.vstate) : t =
     | Views_query.QDsl d -> String.trim d = ""
     | _ -> false
   in
-  if is_dsl_blank then D.nothing
+  if is_dsl_blank then spacer ~key:"blank" []
   else if s.V.query_view <> W.Nil then
     (* :view fn output replaces the default table (cljs custom-query) *)
     D.fragment (hiccup_els inst s.V.query_view)
   else if s.V.query_scalar_rows <> [] then
-    dom ~tag:"ul"
+    list
       (List.map
          (fun item ->
-           let text =
+           let v =
              match item with
              | W.String s -> s
              | other -> Edn.to_string other
            in
-           dom ~tag:"li" ~text [])
+           list_item ~text:v [])
          s.V.query_scalar_rows)
   else if s.V.query_rows <> [] || not s.V.loading then
     (* block results → the query-result view. cljs renders the foldable
        live-query shell ("Live query (n)" head + view-actions + table)
        even when the result is empty — only the loading state replaces
        it *)
-    dom ~style_class:"query-result w-full"
-      [ dom ~style_class:"flex flex-col gap-2"
-          [ dom ~style_class:"flex flex-col gap-2 grid"
+    box ~style_class:"query-result"
+      [ column ~gap:8
+          [ column ~gap:8
               [ Views_table.foldable inst ~key:"qr"
                   ~title:(Views_head.render_head inst)
                   ~body:
@@ -206,21 +207,21 @@ let query_content inst (s : V.vstate) : t =
           ]
       ]
   else if s.V.loading then
-    dom ~style_class:"p-2 text-sm opacity-50" ~text:I.loading_ []
-  else dom ~style_class:"text-sm mt-2 opacity-90" ~text:I.no_matched_result []
+    text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground" []
+  else text ~value:I.no_matched_result ~padding_vertical:8 []
 
 let query_view_el inst : t =
   D.fragment
-    [ dom ~style_class:"views-query-inner"
+    [ box ~style_class:"views-query-inner"
         [ D.dyn ~equal:body_eq
             (fun s ->
-              dom
+              column
                 [ (* dsl queries (and blank ones) get the builder panel;
                      datalog don't *)
                   (match Views_query.parse_src s.V.qsrc with
-                   | Views_query.QDatalog _ -> D.nothing
+                   | Views_query.QDatalog _ -> spacer ~key:"builder-off" []
                    | _ ->
-                       if s.V.is_advanced then D.nothing
+                       if s.V.is_advanced then spacer ~key:"builder-off" []
                        else
                          Views_builder.builder_el inst
                            ~tree:(Views_builder.tree_for inst))
