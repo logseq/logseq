@@ -593,7 +593,30 @@ let validate_db_result (db : db) : db_result =
   ; dr_entities = r.entities
   ; dr_invalid_entity_ids = ids }
 
-let log_validation_errors (errors : Db_validate.grouped_error list) : unit =
+let prop_value_titles (db : db) (entity : value) : string =
+  match Malli.map_get "block/properties" entity with
+  | Some (Vector pairs) ->
+      String.concat ","
+        (List.filter_map
+           (fun p ->
+             match p with
+             | Vector [ _prop ; v ] -> (
+                 match v with
+                 | Ref id ->
+                     (match Ldb.ent_of_id db id with
+                      | Some e ->
+                          Some
+                            (match Ldb.string_value e "block/title" with
+                             | Some t -> Printf.sprintf "%d=%S" id t
+                             | None -> Printf.sprintf "%d=<no-title>" id)
+                      | None -> Some (Printf.sprintf "%d=<missing>" id))
+                 | _ -> None)
+             | _ -> None)
+           pairs)
+  | _ -> ""
+
+let log_validation_errors (db : db) (errors : Db_validate.grouped_error list)
+    : unit =
   List.iter
     (fun (ge : Db_validate.grouped_error) ->
       Worker_log.error "validate/invalid-entity"
@@ -608,6 +631,7 @@ let log_validation_errors (errors : Db_validate.grouped_error list) : unit =
         ; "dispatch-key", ge.ge_dispatch_key
         ; "entity"
         , Ds_wire.edn_of_transit (Ds_wire.transit_of_value ge.ge_entity)
+        ; "prop-value-titles", prop_value_titles db ge.ge_entity
         ; "errors"
         , Ds_wire.edn_of_transit
             (Ds_wire.transit_of_value (Malli.humanize ge.ge_errors)) ])
@@ -621,7 +645,7 @@ let humanize_grouped (ge : Db_validate.grouped_error) : Wire.t =
 
 let rec validate_and_fix_invalid_blocks (conn : conn) : db_result =
   let result = validate_db_result (Conn.db conn) in
-  log_validation_errors result.dr_errors;
+  log_validation_errors (Conn.db conn) result.dr_errors;
   if result.dr_errors <> [] && fix_invalid_blocks conn result.dr_errors then
     validate_and_fix_invalid_blocks conn
   else result
@@ -659,7 +683,7 @@ let validate_db ?(fix = true) (conn : conn) : Wire.t =
     if fix then validate_and_fix_invalid_blocks conn
     else
       let r = validate_db_result (Conn.db conn) in
-      log_validation_errors r.dr_errors;
+      log_validation_errors (Conn.db conn) r.dr_errors;
       r
   in
   let db = Conn.db conn in

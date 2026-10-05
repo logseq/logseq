@@ -566,7 +566,17 @@ let () =
                (fun _ -> Pw.click env ".breadcrumb a >> nth=-1")
                (B.jump_to_block env "focused-root")
            in
-           let* () = B.jump_to_block env "focused-root" in
+           let* () =
+             Js.Promise.catch
+               (fun e ->
+                  let* dump =
+                    Pw.eval_js env
+                      "(() => JSON.stringify({url: location.hash, crumbs: [...document.querySelectorAll('.breadcrumb a')].map(a => a.textContent), blocks: document.querySelectorAll('.ls-block').length, main: (document.querySelector('main')?.innerText || '').slice(0,300)}))()"
+                  in
+                  let* () = Js.Promise.resolve (Js.log2 "focused-dom" dump) in
+                  Playwright.throw_error e)
+               (B.jump_to_block env "focused-root")
+           in
            let* () = zoom_until_root 3 in
            Util.wait_editor_visible env)
         (Util.wait_editor_visible env)
