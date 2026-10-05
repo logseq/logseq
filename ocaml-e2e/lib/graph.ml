@@ -93,7 +93,7 @@ let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
   let* () =
     if enable_sync then
       let* () = maybe_input_e2ee_password env in
-      Pw.wait_for env ~timeout:180000. cloud_ready_indicator
+      Pw.wait_for env ~timeout:300000. cloud_ready_indicator
       |> Js.Promise.catch (fun e ->
           let* dump =
             Pw.eval_js env
@@ -152,7 +152,7 @@ let switch_graph env to_graph_name ~wait_sync ~need_input_password =
         if need_input_password then maybe_input_e2ee_password env
         else Js.Promise.resolve ()
       in
-      Pw.wait_for env ~timeout:180000. cloud_ready_indicator
+      Pw.wait_for env ~timeout:300000. cloud_ready_indicator
       |> Js.Promise.catch (fun e ->
           let* dump =
             Pw.eval_js env
