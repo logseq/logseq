@@ -600,17 +600,33 @@ let prop_value_titles (db : db) (entity : value) : string =
         (List.filter_map
            (fun p ->
              match p with
-             | Vector [ _prop ; v ] -> (
-                 match v with
-                 | Ref id ->
-                     (match Ldb.ent_of_id db id with
+             | Vector [ prop ; v ] -> (
+                 let id_opt =
+                   match v with
+                   | Ref id -> Some id
+                   | Int64 i -> Datascript.Util.int64_to_int i
+                   | _ -> None
+                 in
+                 let prop_ident =
+                   match prop with
+                   | Map _ -> (
+                       match Malli.map_get "db/ident" prop with
+                       | Some (Keyword k) -> k
+                       | Some (String k) -> k
+                       | _ -> "?")
+                   | Keyword k -> k
+                   | _ -> "?"
+                 in
+                 match id_opt with
+                 | Some id -> (
+                     match Ldb.ent_of_id db id with
                       | Some e ->
                           Some
                             (match Ldb.string_value e "block/title" with
-                             | Some t -> Printf.sprintf "%d=%S" id t
-                             | None -> Printf.sprintf "%d=<no-title>" id)
-                      | None -> Some (Printf.sprintf "%d=<missing>" id))
-                 | _ -> None)
+                             | Some t -> Printf.sprintf "%s:%d=%S" prop_ident id t
+                             | None -> Printf.sprintf "%s:%d=<no-title>" prop_ident id)
+                      | None -> Some (Printf.sprintf "%s:%d=<missing>" prop_ident id))
+                 | None -> Some (Printf.sprintf "%s:<%s>" prop_ident "non-ref"))
              | _ -> None)
            pairs)
   | _ -> ""

@@ -7,7 +7,7 @@ val have_count_l : ?timeout:float -> Playwright.locator -> int -> unit Js.Promis
 val non_editor_mode : Env.t -> 'a Js.Promise.t
 val in_normal_mode : Env.t -> bool Js.Promise.t
 val graph_loaded : Env.t -> bool Js.Promise.t
-val editor_mode : Env.t -> unit Js.Promise.t
+val editor_mode : ?uuid:string -> Env.t -> unit Js.Promise.t
 val selected_block_text : Env.t -> string -> bool Js.Promise.t
 val to_have_text_re :
   ?timeout:'a -> Playwright.locator -> 'b -> unit Js.Promise.t
