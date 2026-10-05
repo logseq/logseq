@@ -865,7 +865,7 @@ let on_doc_click st ev =
     with
     | Some _ -> ()
     | None -> close_menu st);
-  match click_target "a.page-ref" ev with
+  match click_target "a.page-ref, a.tag" ev with
   | Some el -> (
       match
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the

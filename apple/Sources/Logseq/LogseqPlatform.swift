@@ -351,7 +351,8 @@ final class NSReferenceBox {
       guard let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
-      guard let hit = LogseqFrameStore.hitTest(point),
+      let hit = LogseqFrameStore.hitTest(point)
+      guard let hit,
         let context = LogseqElementRegistry.shared.contextOwning(nodeID: hit.nodeID)
       else {
         return event

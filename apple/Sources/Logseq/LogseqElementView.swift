@@ -2130,12 +2130,35 @@ struct LogseqFrameEntry: Equatable {
       if let overlay = overlayEntries[preferID], overlay.rect.contains(point) {
         return (preferID, overlay.tag)
       }
+      // A strictly smaller nested alias (a link run inside the content
+      // region) beats a larger preferred frame.
+      var smallest: (id: Int, entry: LogseqFrameEntry)?
+      for (id, entry) in aliasEntries where entry.rect.contains(point) {
+        let area = entry.rect.width * entry.rect.height
+        if smallest == nil
+          || area < smallest!.entry.rect.width * smallest!.entry.rect.height
+        {
+          smallest = (id, entry)
+        }
+      }
       if let alias = aliasEntries[preferID], alias.rect.contains(point) {
+        if let s = smallest,
+          s.entry.rect.width * s.entry.rect.height
+            < alias.rect.width * alias.rect.height
+        {
+          return (s.id, s.entry.tag)
+        }
         return (preferID, alias.tag)
       }
       if let base = baseEntries[preferID], base.rect.contains(point),
         let tag = tag(of: preferID), tag != "path"
       {
+        if let s = smallest,
+          s.entry.rect.width * s.entry.rect.height
+            < base.rect.width * base.rect.height
+        {
+          return (s.id, s.entry.tag)
+        }
         return (preferID, tag)
       }
     }
@@ -2433,13 +2456,197 @@ struct LogseqFlatRowProbe {
   var siblings: [Int] = []  // children column / properties area — mounted
 }
 
+/// NSTextView-backed display text for composite rows. SwiftUI `Text`
+/// never delivered .link taps through `openURL` here (explicit ancestor
+/// taps and the frame-monitor both resolve first), so the flat row
+/// renders inline runs through TextKit instead.
+/// The composite row's text — a display-only NSTextView. Clicks never
+/// reach it (SwiftUI doesn't route mouse events into representables);
+/// instead it reports each link run's glyph rect so the frame store's
+/// alias hit-test resolves link clicks onto the `a` node's subtree and
+/// plain text onto the content node — same monitor path everything
+/// else uses.
+final class LogseqInlineTextView: NSTextView {
+  /// (nodeID, rect in window coords) for every link run — recomputed
+  /// after layout and reported only when changed.
+  var onLinkRects: ([(Int, CGRect)]) -> Void = { _ in }
+  private var lastLinkKey = ""
+
+  init() {
+    let ts = NSTextStorage()
+    let lm = NSLayoutManager()
+    let tc = NSTextContainer()
+    ts.addLayoutManager(lm)
+    lm.addTextContainer(tc)
+    super.init(frame: .zero, textContainer: tc)
+    isEditable = false
+    isSelectable = false
+    isRichText = false
+    drawsBackground = false
+    textContainerInset = .zero
+    isVerticallyResizable = true
+    isHorizontallyResizable = false
+    textContainer?.widthTracksTextView = true
+    textContainer?.lineFragmentPadding = 0
+    font = .systemFont(ofSize: 14)
+  }
+
+  @available(*, unavailable) required init?(coder: NSCoder) {
+    fatalError()
+  }
+
+  override func layout() {
+    super.layout()
+    reportLinkRects()
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    reportLinkRects()
+  }
+
+  func reportLinkRects() {
+    guard let lm = layoutManager, let tc = textContainer,
+      let ts = textStorage, ts.length > 0
+    else {
+      if !lastLinkKey.isEmpty { lastLinkKey = ""; onLinkRects([]) }
+      return
+    }
+    lm.ensureLayout(for: tc)
+    let origin = textContainerOrigin
+    var out: [(Int, CGRect)] = []
+    ts.enumerateAttribute(
+      .link, in: NSRange(location: 0, length: ts.length)
+    ) { value, range, _ in
+      guard let url = value as? URL, url.scheme == "lseq-node",
+        let id = Int(url.host ?? ""), id > 0
+      else { return }
+      let glyphRange = lm.glyphRange(
+        forCharacterRange: range, actualCharacterRange: nil)
+      let local = lm.boundingRect(forGlyphRange: glyphRange, in: tc)
+        .offsetBy(dx: origin.x, dy: origin.y)
+      // View-local rects; the SwiftUI side offsets them by the view's
+      // .global frame so they land in the same space as every other
+      // alias/mouse point.
+      if !local.isEmpty {
+        out.append((id, local))
+      }
+    }
+    let key = out.map { "\($0.0):\(Int($0.1.minX))x\(Int($0.1.minY))" }
+      .joined(separator: "|")
+    if key != lastLinkKey {
+      lastLinkKey = key
+      onLinkRects(out)
+    }
+  }
+}
+
+private struct LogseqInlineTextRepresentable: NSViewRepresentable {
+  let attributed: NSAttributedString
+  let onLinkRects: ([(Int, CGRect)]) -> Void
+
+  func makeNSView(context: NSViewRepresentableContext<Self>)
+    -> LogseqInlineTextView
+  {
+    let v = LogseqInlineTextView()
+    v.textStorage?.setAttributedString(attributed)
+    v.onLinkRects = onLinkRects
+    return v
+  }
+
+  func updateNSView(
+    _ v: LogseqInlineTextView, context: NSViewRepresentableContext<Self>
+  ) {
+    if v.textStorage?.string != attributed.string {
+      v.textStorage?.setAttributedString(attributed)
+      v.invalidateIntrinsicContentSize()
+      v.reportLinkRects()
+    }
+    v.onLinkRects = onLinkRects
+  }
+
+  func sizeThatFits(
+    _ proposal: ProposedViewSize, nsView v: LogseqInlineTextView,
+    context: NSViewRepresentableContext<Self>
+  ) -> CGSize? {
+    guard let tc = v.textContainer, let lm = v.layoutManager else {
+      return nil
+    }
+    let tracked = tc.widthTracksTextView
+    tc.widthTracksTextView = false
+    defer { tc.widthTracksTextView = tracked }
+    // Measure at the proposed width; for unconstrained/ideal proposals
+    // measure at a generous bound so height answers stay honest, and
+    // report the used width rather than infinity.
+    let proposed = proposal.width
+    let measureW: CGFloat
+    if let proposed, proposed.isFinite, proposed > 0 {
+      measureW = proposed
+    } else {
+      measureW = 10_000
+    }
+    tc.containerSize = NSSize(
+      width: measureW, height: .greatestFiniteMagnitude)
+    lm.ensureLayout(for: tc)
+    let used = lm.usedRect(for: tc)
+    let w = proposed ?? used.width
+    return CGSize(width: w, height: used.height)
+  }
+}
+
+/// Registers the content-region alias plus one alias per link run so
+/// monitor hit-tests land on the `a` node's text child over link glyphs
+/// (OCaml's closest("a.page-ref") then navigates) and on the content
+/// node everywhere else.
+private struct LogseqInlineText: View {
+  let attributed: NSAttributedString
+  let contentNodeID: Int
+  @State private var linkIDs: [Int] = []
+  @State private var localLinks: [(Int, CGRect)] = []
+  @State private var globalFrame: CGRect = .zero
+
+  private func registerLinks(
+    _ links: [(Int, CGRect)], global g: CGRect
+  ) {
+    var fresh: [Int] = []
+    for (id, r) in links where !g.isEmpty {
+      LogseqFrameStore.setAlias(
+        id, r.offsetBy(dx: g.minX, dy: g.minY), tag: "a")
+      fresh.append(id)
+    }
+    for id in linkIDs where !fresh.contains(id) {
+      LogseqFrameStore.clearAlias(id)
+    }
+    linkIDs = fresh
+  }
+
+  var body: some View {
+    LogseqInlineTextRepresentable(
+      attributed: attributed,
+      onLinkRects: { rects in
+        localLinks = rects
+        registerLinks(rects, global: globalFrame)
+      })
+    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
+      action: { rect in
+        globalFrame = rect
+        LogseqFrameStore.setAlias(contentNodeID, rect, tag: "div")
+        registerLinks(localLinks, global: rect)
+      }
+    .onDisappear {
+      LogseqFrameStore.clearAlias(contentNodeID)
+      for id in linkIDs { LogseqFrameStore.clearAlias(id) }
+    }
+  }
+}
+
 /// One mounted view for a whole `ls-block` row: bullet zone + the inline
 /// text of every descendant concatenated into a single attributed string.
 /// The ~30-node DOM subtree under the row never mounts — on the 1k-journal
 /// benchmark this is what keeps first-paint mount inside the budget.
-/// Inline links carry a `lseq-node://<id>` .link attribute; tapping one
-/// routes through openURL and emits the real node's click so page refs
-/// still navigate.
+/// Inline links carry a `lseq-node://<id>` .link attribute; the inline
+/// text view hit-tests glyphs and emits the `a` node's click so page refs
+/// navigate like the real element path.
 private struct LogseqFlatBlockRow: View {
   let probe: LogseqFlatRowProbe
   let context: LUIAppleExtensionViewContext
@@ -2521,26 +2728,33 @@ private struct LogseqFlatBlockRow: View {
     return out
   }
 
-  private var attributed: AttributedString {
-    var all = AttributedString()
+  private var nsAttributed: NSAttributedString {
+    let out = NSMutableAttributedString()
     for run in runs {
-      var a = AttributedString(run.text)
-      var intent = a.inlinePresentationIntent ?? []
-      if run.bold { intent.insert(.stronglyEmphasized) }
-      if run.italic { intent.insert(.emphasized) }
-      if !intent.isEmpty { a.inlinePresentationIntent = intent }
+      var font = NSFont.systemFont(
+        ofSize: run.mono ? 12 : 14,
+        weight: run.bold ? .bold : .regular)
       if run.mono {
-        a.font = .system(size: 12, design: .monospaced)
+        font = NSFont.monospacedSystemFont(
+          ofSize: 12, weight: run.bold ? .bold : .regular)
       }
-      if run.underline { a.underlineStyle = .single }
-      if run.mark { a.backgroundColor = Color.yellow.opacity(0.45) }
+      if run.italic,
+        let italic = NSFont(
+          descriptor: font.fontDescriptor.withSymbolicTraits(.italic),
+          size: font.pointSize)
+      {
+        font = italic
+      }
+      var attrs: [NSAttributedString.Key: Any] = [.font: font]
+      if run.underline { attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+      if run.mark { attrs[.backgroundColor] = NSColor.yellow.withAlphaComponent(0.45) }
       if run.link {
-        a.foregroundColor = LogseqColors.link
-        a.link = URL(string: "lseq-node://\(run.nodeID)")
+        attrs[.foregroundColor] = NSColor(LogseqColors.link)
+        attrs[.link] = URL(string: "lseq-node://\(run.nodeID)")
       }
-      all += a
+      out.append(NSAttributedString(string: run.text, attributes: attrs))
     }
-    return all
+    return out
   }
 
   /// DOM-faithful click on a descendant node — same enrichment the real
@@ -2643,28 +2857,14 @@ private struct LogseqFlatBlockRow: View {
               .frame(width: 0, height: 0)
           }
         } else {
-          Text(attributed)
-            .font(.system(size: 14))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture {
-              emitClick(on: probe.contentID > 0 ? probe.contentID : probe.mainContainerID)
-            }
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) }
-              action: { rect in
-                LogseqFrameStore.setAlias(
-                  probe.contentID > 0 ? probe.contentID : probe.mainContainerID,
-                  rect, tag: "div")
-              }
+          LogseqInlineText(
+            attributed: nsAttributed,
+            contentNodeID: probe.contentID > 0
+              ? probe.contentID : probe.mainContainerID)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .fixedSize(horizontal: false, vertical: true)
         }
       }
-      .environment(\.openURL, OpenURLAction { url in
-        guard url.scheme == "lseq-node",
-          let id = Int(url.host ?? "")
-        else { return .systemAction }
-        emitClick(on: id)
-        return .handled
-      })
       ForEach(mountedSiblings, id: \.self) { sibling in
         context.content(for: sibling)
       }
