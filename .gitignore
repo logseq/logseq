@@ -102,6 +102,7 @@ deps/db-sync/data
 
 clj-e2e/.clj-kondo/imports
 _build/
+ocaml-e2e/.parallel-logs/
 /cli/_opam
 /cli/compile_commands.json
 /cli/.eglot-root
