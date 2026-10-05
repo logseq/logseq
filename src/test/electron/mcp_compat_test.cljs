@@ -23,7 +23,11 @@
   (is (= "db@get_page_block_uuids"
     (mcp-server/resolve-real-api-method "logseq.DB.getPageBlockUUIDs")))
   (is (= "db@get_title_inventory"
-    (mcp-server/resolve-real-api-method "logseq.DB.getTitleInventory"))))
+    (mcp-server/resolve-real-api-method "logseq.DB.getTitleInventory")))
+  (is (= "db@get_app_info"
+         (mcp-server/resolve-real-api-method "logseq.DB.getAppInfo")))
+  (is (= "db@check_current_is_db_graph"
+         (mcp-server/resolve-real-api-method "logseq.DB.checkCurrentIsDbGraph"))))
 
 (defn- fixture-block-tree
   [conn block-uuid max-depth max-nodes]
@@ -612,6 +616,34 @@
   (is (= mcp-compat/get-page-uuid (get-in mcp-server/data-tools [:getPageUUID :fn])))
   (is (= mcp-compat/update-block (get-in mcp-server/data-tools [:updateBlock :fn]))))
 
+(deftest mcp-api-tool-flags-api-errors-and-thrown-exceptions
+  (async done
+    (-> (p/let [api-error (mcp-server/call-data-tool
+                           (fn [method _args]
+                             (when (= method "logseq.DB.upsertProperty")
+                               #js {"error" "write denied"}))
+                           (fn [api-fn args] (mcp-compat/create-property api-fn args))
+                           #js {"title" "Denied" "schema" #js {"type" "default"}})
+                thrown-error (mcp-server/call-data-tool
+                              (fn [method _args]
+                                (if (= method "logseq.DB.datascriptQuery")
+                                  {:id 94 :uuid "00000000-0000-4000-8000-000000000094"
+                                   :title "Before" :parent {:id 91} :page {:id 90}}
+                                  (p/rejected (js/Error. "IPC failed"))))
+                              (fn [api-fn args] (mcp-compat/update-block api-fn args))
+                              #js {"block_uuid" "00000000-0000-4000-8000-000000000094"
+                                   "title" "After"})
+                api-error (js->clj api-error :keywordize-keys true)
+                thrown-error (js->clj thrown-error :keywordize-keys true)]
+          (is (true? (:isError api-error)))
+          (is (string/includes? (get-in api-error [:content 0 :text]) "API Error: write denied"))
+          (is (true? (:isError thrown-error)))
+          (is (string/includes? (get-in thrown-error [:content 0 :text]) "Unexpected API error: IPC failed"))
+          (js/queueMicrotask done))
+        (p/catch (fn [error]
+                   (is false (str error))
+                   (js/queueMicrotask done))))))
+
 (deftest mcp-server-starts-with-default-settings
   (let [server (mcp-server/create-mcp-api-server (fn [& _] nil))]
     (is (some? server))
@@ -630,6 +662,26 @@
                     (is (some? (d/entity @conn [:block/uuid (uuid block-uuid)])))
                     (done)))
           (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest delete-page-api-error-keeps-page-live-and-unverified
+  (let [{:keys [page-uuid conn api]} (page-fixture)
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.deletePage")
+                        #js {"error" "delete denied"}
+                        (api method args)))]
+    (async done
+      (-> (p/then (mcp-compat/delete-page wrapped-api #js {"page_uuid" page-uuid "verbose" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= "delete denied" (get-in result [:response :error])))
+                    (is (string/includes? (:diagnostic result) "page is still live"))
+                    (is (some? (d/entity @conn [:block/uuid (uuid page-uuid)])))
+                    (is (nil? (:logseq.property/deleted-at
+                               (d/entity @conn [:block/uuid (uuid page-uuid)]))))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "deletePage API error was not reported: " (.-message error)))
+                     (done)))))))
 
 (deftest delete-page-refuses-alias-loss-without-writing
   (let [{:keys [page-uuid conn api calls]} (page-fixture)]
@@ -689,6 +741,26 @@
                (done)))
           (p/catch (fn [error] (is false (.-message error)) (done)))))))
 
+(deftest clear-page-api-error-keeps-content-and-reports-unverified
+  (let [{:keys [page-uuid conn api calls]} (page-fixture)
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.removeBlock")
+                        (do
+                          (swap! calls conj [method args])
+                          #js {"error" "clear removal denied"})
+                        (api method args)))]
+    (async done
+      (-> (p/then (mcp-compat/clear-page wrapped-api #js {"page_uuid" page-uuid "verbose" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (string/includes? (:diagnostic result) "block is still present"))
+                    (is (some? (d/entity @conn 161)))
+                    (is (some #(= "logseq.DB.removeBlock" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "clearPage API error should preserve content: " (.-message error)))
+                     (done)))))))
+
 (deftest retitle-over-duplicate-parks-a-recycled-holder-with-identity-preserved
   (let [{:keys [page-uuid conn api]} (page-fixture)
         holder-uuid "00000000-0000-4000-8000-000000000165"]
@@ -723,6 +795,31 @@
                     (done)))
           (p/catch (fn [error] (is false (.-message error)) (done)))))))
 
+(deftest retitle-over-duplicate-api-error-retains-partial-rename-undo-guidance
+  (let [{:keys [page-uuid conn api]} (page-fixture)
+        holder-uuid "00000000-0000-4000-8000-000000000165"
+        wrapped-api (fn [method args]
+                      (if (and (= method "logseq.DB.renamePage") (= (first args) page-uuid))
+                        #js {"error" "source rename denied"}
+                        (api method args)))]
+    (d/transact! conn [{:db/id 165 :block/uuid (uuid holder-uuid) :block/name "wanted"
+                       :block/title "Wanted"}])
+    (async done
+      (-> (p/then (mcp-compat/retitle-over-duplicate
+                   wrapped-api #js {"from_uuid" page-uuid "to_title" "Wanted"})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= holder-uuid (get-in result [:parked :uuid])))
+                    (is (= "Wanted (parked)" (:block/title (d/entity @conn 165))))
+                    (is (= "Fixture" (:block/title (d/entity @conn 160))))
+                    (is (string/includes? (:diagnostic result) "Partially applied"))
+                    (is (string/includes? (:diagnostic result) holder-uuid))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "retitleOverDuplicate should report partial API failure: "
+                                    (.-message error)))
+                     (done)))))))
+
 (deftest outline-validation-detects-indentation-before-writing
   (is (= [{:path [0] :title "Parent"} {:path [0 0] :title "Child"}
           {:path [1] :title "Sibling"}]
@@ -748,6 +845,27 @@
                     (is (= 2 (count (filter #(= "logseq.DB.insertBatchBlock" (first %)) @calls))))
                     (done)))
           (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest outline-batch-api-error-reports-unverified-response
+  (let [{:keys [page-uuid api calls]} (page-fixture)
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.insertBatchBlock")
+                        (do
+                          (swap! calls conj [method args])
+                          #js {"error" "batch insert denied"})
+                        (api method args)))]
+    (async done
+      (-> (p/then (mcp-compat/create-page-of-blocks
+                   wrapped-api #js {"page_uuid" page-uuid "outline" "Parent" "verbose" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= "batch insert denied" (get-in result [:response :error])))
+                    (is (string/includes? (:diagnostic result) "unexpected inventory"))
+                    (is (= 1 (get-in result [:calls])))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "outline API error should return an unverified result: " (.-message error)))
+                     (done)))))))
 
 (deftest outline-dry-run-does-not-insert-any-blocks
   (let [{:keys [page-uuid api calls]} (page-fixture)]
@@ -800,6 +918,28 @@
                     (done)))
           (p/catch (fn [error] (is false (.-message error)) (done)))))))
 
+(deftest import-page-batch-api-error-reports-unverified-inventory
+  (let [{:keys [page-uuid api conn calls]} (page-fixture)
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.insertBatchBlock")
+                        (do
+                          (swap! calls conj [method args])
+                          #js {"error" "import batch denied"})
+                        (api method args)))]
+    (async done
+      (-> (p/then (mcp-compat/import-page
+                   wrapped-api #js {"target" page-uuid "markdown" #js ["New content"]})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (string/includes? (:diagnostic result) "unexpected inventory"))
+                    (is (empty? (:created_uuids result)))
+                    (is (some #(= "logseq.DB.insertBatchBlock" (first %)) @calls))
+                    (is (nil? (d/q '[:find ?e . :where [?e :block/title "New content"]] @conn)))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "importPage API error should be unverified: " (.-message error)))
+                     (done)))))))
+
 (deftest import-page-dry-run-never-resolves-or-creates-a-target
   (let [calls (atom [])]
     (async done
@@ -831,6 +971,32 @@
                     (is (= #{167} (set (map :db/id (:block/tags (d/entity @conn 161))))))
                     (done)))
           (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest repair-links-api-error-leaves-placeholder-unverified
+  (let [{:keys [page-uuid conn api calls]} (page-fixture)
+        linked-uuid "00000000-0000-4000-8000-000000000166"
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.updateBlock")
+                        (do
+                          (swap! calls conj [method args])
+                          #js {"error" "link rewrite denied"})
+                        (api method args)))]
+    (d/transact! conn [{:db/id 166 :block/uuid (uuid linked-uuid) :block/name "existing"
+                       :block/title "Existing" :block/tags [158]}
+                      {:db/id 161 :block/title "{{link:Existing}}"}])
+    (async done
+      (-> (p/then (mcp-compat/repair-links wrapped-api #js {"page_uuid" page-uuid})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= 0 (:blocks_updated result)))
+                    (is (= 1 (count (:unverified result))))
+                    (is (= "{{link:Existing}}" (:block/title (d/entity @conn 161))))
+                    (is (empty? (:block/refs (d/entity @conn 161))))
+                    (is (some #(= "logseq.DB.updateBlock" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "repairLinks API error should be reported: " (.-message error)))
+                     (done)))))))
 
 (deftest repair-links-uses-tag-titles-without-minting-uuid-named-tags
   (let [{:keys [page-uuid conn api calls]} (page-fixture)
@@ -1082,6 +1248,56 @@
                      (is false (str "migratePage failed: " (.-message error)))
                      (done)))))))
 
+(deftest migrate-page-moves-only-selected-top-level-blocks-through-db-api
+  (let [{:keys [root_uuid uuids api calls entities]} (batch-fixture)
+        target-uuid "00000000-0000-4000-8000-000000000140"
+        move-api (fn [method args]
+                   (if (= method "logseq.DB.moveBlock")
+                     (do
+                       (swap! calls conj [method args])
+                       (swap! entities update (first args) assoc
+                              :parent {:id 140 :uuid target-uuid}
+                              :page {:id 140} :order "A")
+                       nil)
+                     (api method args)))]
+    (swap! entities update root_uuid assoc :name "source")
+    (swap! entities assoc target-uuid {:id 140 :uuid target-uuid :name "target" :title "Target"})
+    (async done
+      (-> (p/then (mcp-compat/migrate-page
+                   move-api #js {"source_uuid" root_uuid "target_uuid" target-uuid "contains" "112"})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= [(second uuids)] (mapv :uuid (:planned result))))
+                    (is (= 1 (get-in result [:summary :landed])))
+                    (is (= 2 (:remaining result)))
+                    (is (some #(= "logseq.DB.moveBlock" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "migratePage failed: " (.-message error)))
+                     (done)))))))
+
+(deftest migrate-page-api-error-keeps-selected-block-at-source
+  (let [{:keys [root_uuid uuids api entities]} (batch-fixture)
+        target-uuid "00000000-0000-4000-8000-000000000140"
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.moveBlock")
+                        #js {"error" "migration move denied"}
+                        (api method args)))]
+    (swap! entities update root_uuid assoc :name "source")
+    (swap! entities assoc target-uuid {:id 140 :uuid target-uuid :name "target" :title "Target"})
+    (async done
+      (-> (p/then (mcp-compat/migrate-page
+                   wrapped-api #js {"source_uuid" root_uuid "target_uuid" target-uuid "contains" "112"})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= 3 (:remaining result)))
+                    (is (= 110 (get-in @entities [(second uuids) :parent :id])))
+                    (is (= 1 (get-in result [:summary :failed])))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "migratePage API error should keep the source: " (.-message error)))
+                     (done)))))))
+
 (deftest move-blocks-stops-and-reports-the-unattempted-remainder
   (let [{:keys [root_uuid uuids api]} (batch-fixture)
         wrapped-api (fn [method args]
@@ -1099,6 +1315,26 @@
                     (done)))
           (p/catch (fn [error]
                      (is false (str "moveBlocks failed: " (.-message error)))
+                     (done)))))))
+
+(deftest move-blocks-api-error-stops-and-reports-the-remainder
+  (let [{:keys [root_uuid uuids api]} (batch-fixture)
+        wrapped-api (fn [method args]
+                      (if (and (= method "logseq.DB.moveBlock") (= (first args) (second uuids)))
+                        #js {"error" "batch move denied"}
+                        (api method args)))]
+    (async done
+      (-> (p/then (mcp-compat/move-blocks
+                   wrapped-api #js {"block_uuids" (clj->js uuids)
+                                    "target_uuid" root_uuid "placement" "after"})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= [true false] (mapv :verified (:moved result))))
+                    (is (= [(last uuids)] (:not_attempted result)))
+                    (is (string/includes? (:diagnostic (second (:moved result))) "original parent"))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "moveBlocks API error should be reported: " (.-message error)))
                      (done)))))))
 
 (deftest split-block-truncates-only-after-verified-tail-placement
@@ -1134,6 +1370,24 @@
                      (is false (str "splitBlock failed: " (.-message error)))
                      (done)))))))
 
+(deftest split-block-preserves-original-when-tail-move-api-errors
+  (let [{:keys [root_uuid entities calls api]} (split-fixture true)
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.moveBlock")
+                        #js {"error" "tail move denied"}
+                        (api method args)))]
+    (async done
+      (-> (p/then (mcp-compat/split-block
+                   wrapped-api #js {"block_uuid" root_uuid "delimiter" "|"})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= "head|tail|end" (:title (get @entities root_uuid))))
+                    (is (not-any? #(= "logseq.DB.updateBlock" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "splitBlock API error should preserve original: " (.-message error)))
+                     (done)))))))
+
 (deftest compatibility-routes-preserve-api-contracts
   (let [calls (atom [])
   api (recording-api calls :ok)]
@@ -1158,8 +1412,8 @@
         api (fn [method args]
               (swap! calls conj [method args])
               (case method
-                "logseq.App.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
-                "logseq.App.checkCurrentIsDbGraph" true
+                "logseq.DB.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                "logseq.DB.checkCurrentIsDbGraph" true
                 "logseq.DB.getTagsByName" nil
                 #js []))]
     (async done
@@ -1214,7 +1468,10 @@
                     (is (some #(and (= "logseq.DB.upsertProperty" (:method %))
                                     (= "not-probed" (:basis %)))
                               (get-in result [:diagnostics :method_findings])))
-                    (is (= 2 (count (filter #(string/starts-with? (first %) "logseq.App.") @calls))))
+                    (is (= 2 (count (filter #(contains? #{"logseq.DB.getAppInfo"
+                                                          "logseq.DB.checkCurrentIsDbGraph"}
+                                                        (first %))
+                                           @calls))))
                     (done)))
           (p/catch (fn [error]
                      (is false (str error))
@@ -1225,8 +1482,8 @@
         api (fn [method args]
               (swap! calls conj [method args])
               (case method
-                "logseq.App.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
-                "logseq.App.checkCurrentIsDbGraph" true
+                "logseq.DB.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                "logseq.DB.checkCurrentIsDbGraph" true
                 "logseq.DB.upsertProperty" #js {"error" "invalid probe title"}
                 #js []))]
     (async done
@@ -1245,8 +1502,8 @@
 (deftest capabilities-refuses-non-db-graphs
   (let [api (fn [method _args]
               (js/Promise.resolve (case method
-                "logseq.App.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
-                "logseq.App.checkCurrentIsDbGraph" false
+                "logseq.DB.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                "logseq.DB.checkCurrentIsDbGraph" false
                 #js [])))]
     (async done
       (-> (p/then (mcp-compat/capabilities api #js {})
@@ -1263,8 +1520,8 @@
         denied-api (fn [method args]
                      (swap! denied-calls conj [method args])
                      (case method
-                       "logseq.App.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
-                       "logseq.App.checkCurrentIsDbGraph" false
+                       "logseq.DB.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                       "logseq.DB.checkCurrentIsDbGraph" false
                        nil))]
     (async done
       (-> (p/let [results (p/all [(p/catch (mcp-compat/capabilities denied-api #js {})
@@ -1273,7 +1530,7 @@
             (is (string/includes? (first results) "not a DB graph"))
             (is (true? (:found (second results))))
             (is (= block-uuid (get-in (second results) [:block :uuid])))
-            (is (= ["logseq.App.getAppInfo" "logseq.App.checkCurrentIsDbGraph"]
+                 (is (= ["logseq.DB.getAppInfo" "logseq.DB.checkCurrentIsDbGraph"]
                    (mapv first @denied-calls)))
             (js/queueMicrotask done))
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
@@ -1282,7 +1539,7 @@
   (let [calls (atom [])
         api (fn [method args]
               (swap! calls conj [method args])
-              (if (string/includes? (first args) "block/title ?title")
+              (if (= method "logseq.DB.getTitleHolders")
                 [{:uuid "existing-page" :title "Taken" :name "taken"
                   :tags [{:ident :logseq.class/Page}]}]
                 nil))]
@@ -1326,6 +1583,25 @@
                               (done)))))
           (p/catch (fn [error]
                      (is false (str "createPage unexpectedly failed: " (.-message error)))
+                     (done)))))))
+
+(deftest create-page-surfaces-db-api-errors-before-readback
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.getTitleHolders" []
+                "logseq.DB.createPage" #js {"error" "page creation denied"}
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/create-page api #js {"title" "Denied Page"})
+                  (fn [_]
+                    (is false "createPage must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "page creation denied"))
+                     (is (= ["logseq.DB.getTitleHolders" "logseq.DB.createPage"]
+                            (mapv first @calls)))
                      (done)))))))
 
 (deftest rename-page-verifies-the-original-uuid
@@ -1710,6 +1986,81 @@
                      (is false "inspectPage lookup rejected")
                      (done)))))))
 
+(deftest rename-page-surfaces-db-api-errors-before-readback
+  (let [page-uuid "00000000-0000-4000-8000-000000000085"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.datascriptQuery"
+                {:id 85 :uuid page-uuid :name "before" :title "Before"}
+                "logseq.DB.getTitleHolders" []
+                "logseq.DB.renamePage" #js {"error" "rename denied"}
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/rename-page
+                   api #js {"page_uuid" page-uuid "new_title" "After"})
+                  (fn [_]
+                    (is false "renamePage must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "rename denied"))
+                     (is (= ["logseq.DB.datascriptQuery" "logseq.DB.getTitleHolders"
+                             "logseq.DB.renamePage"]
+                            (mapv first @calls)))
+                     (done)))))))
+
+(deftest remove-block-api-error-retains-recovery-inventory
+  (let [root-uuid "00000000-0000-4000-8000-000000000102"
+        root {:id 102 :uuid root-uuid :title "Root"
+              :parent {:id 90} :page {:id 90}}
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.removeBlock" #js {"error" "remove denied"}
+                "logseq.DB.datascriptQuery"
+                (if (string/includes? (first args) "pull ?entity")
+                  root
+                  [])
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/remove-block api #js {"block_uuid" root-uuid "verbose" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= "remove denied" (get-in result [:response :error])))
+                    (is (= "Deletion was not observed; the block is still present"
+                           (:diagnostic result)))
+                    (is (= root-uuid (get-in result [:previous_entities 0 :uuid])))
+                    (is (= root-uuid (get-in result [:observed_entities 0 :uuid])))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "removeBlock should return its recovery inventory: " (.-message error)))
+                     (done)))))))
+
+(deftest rename-page-refuses-title-collisions-before-writing
+  (let [page-uuid "00000000-0000-4000-8000-000000000085"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.datascriptQuery"
+                {:id 85 :uuid page-uuid :name "before" :title "Before"}
+                "logseq.DB.getTitleHolders"
+                [{:uuid "00000000-0000-4000-8000-000000000086"
+                  :title "Taken" :name "taken"}]
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/rename-page
+                   api #js {"page_uuid" page-uuid "new_title" "Taken"})
+                  (fn [_]
+                    (is false "renamePage should reject a held title")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "already exists"))
+                     (is (not-any? #(= "logseq.DB.renamePage" (first %)) @calls))
+                     (done)))))))
+
 (deftest inspect-page-rejects-invalid-detail
   (is (thrown-with-msg? js/Error #"detail must be one of"
                         (mcp-compat/inspect-page (fn [& _] nil)
@@ -1880,6 +2231,33 @@
                               @calls))
                 (done))))))
 
+(deftest delete-property-surfaces-api-errors-before-value-cleanup
+  (let [ident ":plugin.property._test_plugin/Flag"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.getPropertyUsers" []
+                "logseq.DB.removeProperty" #js {"error" "property delete denied"}
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?property")
+                    {:id 41 :ident ident :title "Flag"}
+                    (string/includes? query "created-from-property") []
+                    :else nil))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/delete-property api #js {"property_ident" ident})
+                  (fn [_]
+                    (is false "deleteProperty must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "property delete denied"))
+                     (is (some #(= "logseq.DB.removeProperty" (first %)) @calls))
+                     (is (not-any? #(= "logseq.DB.removeBlock" (first %)) @calls))
+                     (done)))))))
+
 (deftest delete-property-verifies-removal-and-sweeps-value-blocks
   (let [ident ":plugin.property._test_plugin/Flag"
   value-uuid "00000000-0000-4000-8000-000000000170"
@@ -1955,6 +2333,34 @@
                      (is false (str error))))
           (p/finally done)))))
 
+(deftest remove-property-surfaces-api-errors-before-readback
+  (let [target-uuid "00000000-0000-4000-8000-000000000031"
+        ident ":plugin.property._test_plugin/Score"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.removeBlockProperty" #js {"error" "property value removal denied"}
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid")
+                    {:id 10 :uuid target-uuid :title "Target" (keyword ident) 7}
+                    (string/includes? query "db/ident")
+                    {:id 20 :ident ident :title "Score"}
+                    :else nil))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/remove-property
+                   api #js {"target_uuid" target-uuid "property_ident" ident})
+                  (fn [_]
+                    (is false "removeProperty must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "property value removal denied"))
+                     (is (= "logseq.DB.removeBlockProperty" (first (last @calls))))
+                     (done)))))))
+
 (deftest remove-property-reports-a-no-op-removal
   (let [target-uuid "00000000-0000-4000-8000-000000000032"
         ident ":plugin.property._test_plugin/Score"
@@ -2011,6 +2417,36 @@
            (p/catch (fn [error]
             (is false (str error))
             (done)))))))
+
+(deftest add-property-surfaces-api-errors-before-readback
+  (let [target-uuid "00000000-0000-4000-8000-000000000021"
+        ident ":plugin.property._test_plugin/Score"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.upsertBlockProperty" #js {"error" "property write denied"}
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid")
+                    {:id 10 :uuid target-uuid :title "Target"}
+                    (string/includes? query "db/ident")
+                    {:id 20 :ident ident :title "Score"
+                     ":logseq.property/type" "number"
+                     ":db/cardinality" "db.cardinality/one"}
+                    :else nil))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/add-property
+                   api #js {"target_uuid" target-uuid "property_ident" ident "value" 5})
+                  (fn [_]
+                    (is false "addProperty must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "property write denied"))
+                     (is (= "logseq.DB.upsertBlockProperty" (first (last @calls))))
+                     (done)))))))
 
 (deftest reference-property-values-must-be-entity-ids
   (is (false? (mcp-compat/valid-reference-property-value? "not-an-entity")))
@@ -2090,28 +2526,52 @@
                      (is (= 1 (count @calls)))
                      (done)))))))
 
+(deftest creat-tag-surfaces-db-api-errors-before-identity-readback
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.datascriptQuery" []
+                "logseq.DB.createTag" #js {"error" "tag creation denied"}
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/create-tag api #js {"title" "Denied Tag"})
+                  (fn [_]
+                    (is false "creatTag must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "tag creation denied"))
+                     (is (= ["logseq.DB.datascriptQuery" "logseq.DB.createTag"]
+                            (mapv first @calls)))
+                     (done)))))))
+
 (deftest delete-tag-requires-detach-acknowledgement-before-writing
   (let [tag-uuid "00000000-0000-4000-8000-000000000051"
         calls (atom [])
         api (fn [method args]
               (swap! calls conj [method args])
-              (let [query (first args)]
-                (cond
-                  (string/includes? query "pull ?tag")
-                  {:id 51 :uuid tag-uuid :ident ":plugin.class._test_plugin/Topic"
-                   :title "Topic"}
-                  (string/includes? query "pull ?child") []
-                  (string/includes? query "pull ?holder")
-                  [{:uuid "holder-1" :title "Uses Topic"}]
-                  :else [])))]
+              (case method
+                "logseq.DB.getTagUsers" [{:uuid "holder-1" :title "Uses Topic"}]
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?tag")
+                    {:id 51 :uuid tag-uuid :ident ":plugin.class._test_plugin/Topic"
+                     :title "Topic"}
+                    (string/includes? query "pull ?child") []
+                    :else []))
+                []))]
     (async done
-      (p/then (mcp-compat/delete-tag api #js {"tag_uuid" tag-uuid})
-              (fn [result]
-                (is (false? (:verified result)))
-                (is (string/includes? (:diagnostic result) "acknowledge_detach=true"))
-                (is (some? (:previous_state result)))
-                (is (not-any? #(= "logseq.DB.deletePage" (first %)) @calls))
-                (done))))))
+      (-> (p/then (mcp-compat/delete-tag api #js {"tag_uuid" tag-uuid})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (string/includes? (:diagnostic result) "acknowledge_detach=true"))
+                    (is (some? (:previous_state result)))
+                    (is (not-any? #(= "logseq.DB.deletePage" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "deleteTag acknowledgement check failed: " (.-message error)))
+                     (done)))))))
 
 (deftest delete-tag-requires-child-reparent-acknowledgement
   (let [tag-uuid "00000000-0000-4000-8000-000000000052"
@@ -2160,6 +2620,38 @@
                 (is (some #(= "logseq.DB.deletePage" (first %)) @calls))
                 (done))))))
 
+(deftest delete-tag-surfaces-db-api-errors-before-cleanup
+  (let [tag-uuid "00000000-0000-4000-8000-000000000053"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.deletePage" #js {"error" "tag delete denied"}
+                "logseq.DB.getTagUsers" []
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?tag")
+                    {:id 53 :uuid tag-uuid :ident ":plugin.class._test_plugin/Leaf"
+                     :title "Leaf"}
+                    (string/includes? query "pull ?child") []
+                    :else []))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/delete-tag
+                   api #js {"tag_uuid" tag-uuid "acknowledge_child_reparent" true
+                            "acknowledge_detach" true})
+                  (fn [_]
+                    (is false "deleteTag must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "tag delete denied"))
+                     (is (some #(= "logseq.DB.deletePage" (first %)) @calls))
+                     (is (= 1 (count (filter #(and (= "logseq.DB.datascriptQuery" (first %))
+                                                   (string/includes? (first (second %)) "pull ?tag"))
+                                              @calls))))
+                     (done)))))))
+
 (deftest add-tag-verifies-the-tag-relation-and-preserves-page-identity
   (let [target-uuid "00000000-0000-4000-8000-000000000061"
         tag-uuid "00000000-0000-4000-8000-000000000062"
@@ -2197,6 +2689,39 @@
                     (done)))
           (p/catch (fn [error]
                      (is false (str "addTag unexpectedly failed: " (.-message error)))
+                     (done)))))))
+
+(deftest add-tag-surfaces-db-api-errors-before-readback
+  (let [target-uuid "00000000-0000-4000-8000-000000000061"
+        tag-uuid "00000000-0000-4000-8000-000000000062"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.addBlockTag" #js {"error" "tag add denied"}
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid")
+                    {:id 61 :uuid target-uuid :name "inbox" :title "Inbox"}
+                    (string/includes? query "db/ident :logseq.class/Tag") 1
+                    (string/includes? query "?tag")
+                    {:id 62 :uuid tag-uuid :ident ":plugin.class._test_plugin/topic"
+                     :title "Topic" :tags [{:id 1 :ident :logseq.class/Tag}]}
+                    :else nil))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/add-tag
+                   api #js {"target_uuid" target-uuid "tag_uuid" tag-uuid})
+                  (fn [_]
+                    (is false "addTag must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "tag add denied"))
+                     (is (some #(= "logseq.DB.addBlockTag" (first %)) @calls))
+                     (is (= 1 (count (filter #(and (= "logseq.DB.datascriptQuery" (first %))
+                                                   (string/includes? (first (second %)) "block/uuid #uuid"))
+                                              @calls))))
                      (done)))))))
 
 (deftest remove-tag-preserves-other-tags-and-page-identity
@@ -2243,6 +2768,40 @@
                      (is false (str "removeTag unexpectedly failed: " (.-message error)))
                      (done)))))))
 
+(deftest remove-tag-surfaces-db-api-errors-before-readback
+  (let [target-uuid "00000000-0000-4000-8000-000000000071"
+        tag-uuid "00000000-0000-4000-8000-000000000072"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.removeBlockTag" #js {"error" "tag removal denied"}
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid")
+                    {:id 71 :uuid target-uuid :name "inbox" :title "Inbox"
+                     :tags [{:id 1 :ident :logseq.class/Page} {:id 72 :ident :plugin.class/topic}]}
+                    (string/includes? query "db/ident :logseq.class/Tag") 1
+                    (string/includes? query "?tag")
+                    {:id 72 :uuid tag-uuid :ident ":plugin.class._test_plugin/topic"
+                     :title "Topic" :tags [{:id 1 :ident :logseq.class/Tag}]}
+                    :else nil))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/remove-tag
+                   api #js {"target_uuid" target-uuid "tag_uuid" tag-uuid})
+                  (fn [_]
+                    (is false "removeTag must reject a DB API error")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "tag removal denied"))
+                     (is (some #(= "logseq.DB.removeBlockTag" (first %)) @calls))
+                     (is (= 1 (count (filter #(and (= "logseq.DB.datascriptQuery" (first %))
+                                                   (string/includes? (first (second %)) "block/uuid #uuid"))
+                                              @calls))))
+                     (done)))))))
+
 (deftest create-block-verifies-parent-page-and-content
   (let [page-uuid "00000000-0000-4000-8000-000000000091"
         block-uuid "00000000-0000-4000-8000-000000000092"
@@ -2277,6 +2836,50 @@
                      (is false (str "createBlock failed: " (.-message error)))
                      (done)))))))
 
+(deftest create-block-dry-run-does-not-call-mutation-api
+  (let [page-uuid "00000000-0000-4000-8000-000000000091"
+        calls (atom [])
+        page {:id 91 :uuid page-uuid :name "fixture" :title "Fixture"}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (when (= method "logseq.DB.datascriptQuery") page))]
+    (async done
+      (-> (p/then (mcp-compat/create-block
+                   api #js {"parent_uuid" page-uuid "title" "Fixture block" "dry_run" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (nil? (:response result)))
+                    (is (= ["logseq.DB.datascriptQuery"] (mapv first @calls)))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "createBlock dry run failed: " (.-message error)))
+                     (done)))))))
+
+(deftest create-block-surfaces-db-api-errors
+  (let [page-uuid "00000000-0000-4000-8000-000000000091"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.datascriptQuery"
+                (if (string/includes? (first args) "block/uuid #uuid")
+                  {:id 91 :uuid page-uuid :name "fixture" :title "Fixture"}
+                  [])
+                "logseq.DB.insertBlock" #js {"error" "insert denied"}
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/create-block
+                   api #js {"parent_uuid" page-uuid "title" "New block"})
+                  (fn [_]
+                    (is false "createBlock must not accept an API error as a write")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "insert denied"))
+                     (is (= ["logseq.DB.datascriptQuery" "logseq.DB.datascriptQuery"
+                             "logseq.DB.insertBlock"]
+                            (mapv first @calls)))
+                     (done)))))))
+
 (deftest update-block-verifies-the-original-uuid-and-content
   (let [block-uuid "00000000-0000-4000-8000-000000000094"
         title (atom "Before")
@@ -2300,6 +2903,49 @@
                     (done)))
           (p/catch (fn [error]
                      (is false (str "updateBlock failed: " (.-message error)))
+                     (done)))))))
+
+(deftest update-block-dry-run-does-not-call-mutation-api
+  (let [block-uuid "00000000-0000-4000-8000-000000000094"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (when (= method "logseq.DB.datascriptQuery")
+                {:id 94 :uuid block-uuid :title "Before"
+                 :parent {:id 91} :page {:id 90}}))]
+    (async done
+      (-> (p/then (mcp-compat/update-block
+                   api #js {"block_uuid" block-uuid "title" "After" "dry_run" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (nil? (:response result)))
+                    (is (= ["logseq.DB.datascriptQuery"] (mapv first @calls)))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "updateBlock dry run failed: " (.-message error)))
+                     (done)))))))
+
+(deftest update-block-surfaces-db-api-errors
+  (let [block-uuid "00000000-0000-4000-8000-000000000094"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.datascriptQuery"
+                {:id 94 :uuid block-uuid :title "Before"
+                 :parent {:id 91} :page {:id 90}}
+                "logseq.DB.updateBlock" #js {"error" "write denied"}
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/update-block
+                   api #js {"block_uuid" block-uuid "title" "After"})
+                  (fn [_]
+                    (is false "updateBlock must not accept an API error as a write")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "write denied"))
+                     (is (= ["logseq.DB.datascriptQuery" "logseq.DB.updateBlock"]
+                            (mapv first @calls)))
                      (done)))))))
 
 (deftest move-block-verifies-child-placement-and-page
@@ -2337,6 +2983,38 @@
                       (done))))
           (p/catch (fn [error]
                      (is false (str "moveBlock failed: " (.-message error)))
+                     (done)))))))
+
+(deftest move-block-api-error-remains-unverified-at-original-parent
+  (let [block-uuid "00000000-0000-4000-8000-000000000095"
+        page-uuid "00000000-0000-4000-8000-000000000096"
+        calls (atom [])
+        source {:id 95 :uuid block-uuid :title "Source" :order "A"
+                :parent {:id 94} :page {:id 94}}
+        target {:id 96 :uuid page-uuid :name "target" :title "Target"}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.moveBlock" #js {"error" "move denied"}
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?entity")
+                    (if (= (str (reader/read-string (second args))) page-uuid) target source)
+                    (string/includes? query "pull ?child") []
+                    :else []))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/move-block
+                   api #js {"block_uuid" block-uuid "target_uuid" page-uuid "verbose" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= "move denied" (get-in result [:response :error])))
+                    (is (string/includes? (:diagnostic result) "original parent"))
+                    (is (some #(= "logseq.DB.moveBlock" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "moveBlock API error should remain an unverified result: " (.-message error)))
                      (done)))))))
 
 (deftest move-block-appends-after-the-current-last-child

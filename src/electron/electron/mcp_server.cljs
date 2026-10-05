@@ -86,7 +86,8 @@
       (-> res (.code 400) (.send "Invalid or missing session ID")))))
 
 (defn mcp-error-response [msg]
-  #js {:content
+  #js {:isError true
+       :content
        #js [#js {:type "text"
                  :text msg}]})
 
@@ -98,7 +99,8 @@
 ;; API tool fns
 ;; ============
 (defn- unexpected-api-error [error]
-  #js {:content
+  #js {:isError true
+       :content
        #js [#js {:type "text"
                  :text (str "Unexpected API error: " (.-message error))}]})
 
@@ -118,6 +120,10 @@
           (mcp-error-response (str "API Error: " error))
           (mcp-success-response body)))
       (p/catch unexpected-api-error)))
+
+(defn call-data-tool
+  [api-fn data-fn args]
+  (api-data-tool api-fn data-fn args))
 
 (def ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
@@ -461,6 +467,6 @@
       (.registerTool mcp-server
                      (name k)
                      (:config v)
-                     (partial api-data-tool api-fn
+                     (partial call-data-tool api-fn
                               (:fn v))))
     mcp-server))

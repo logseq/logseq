@@ -204,18 +204,23 @@ page); the earlier page count of 62 was a miscount. Orphan-tag/property results
 were cross-checked through their holder tools. The UUID-titled tag, duplicate-
 title pages, recycled outline, and Oct 4 blocks were left untouched.
 
-Claude then ran `capabilities` three times with `probe_writes: false`; results
-were stable on Logseq 2.0.1. Twenty-one read routes were available. Six read
-routes remained `unknown` because invalid probe arguments returned not-found or
-null, but each passed its independent live read. Twenty-three write routes were
-skipped, and `createPage` was not probed. `listAssets` returned an empty array
-but remains an explicitly unverified discovery probe, not a complete asset
-inventory.
+Claude's latest `capabilities` retry passed on Logseq 2.0.1 after graph/version
+metadata moved to DB-namespaced dispatch. It reported 21 read routes available.
+Six reads remained `unknown` because invalid probe arguments returned not-found
+or null, but each passed its independent live read. Twenty-three write-dependent
+tools were skipped, zero write methods were probed, and `createPage` was not
+probed. `listAssets` returned an empty array but remains an explicitly
+unverified discovery probe, not a complete asset inventory.
 
 The initial read-only run skipped `capabilities` because its probes could invoke
 mutation routes. The safe default now probes read methods and reports
 write-dependent methods as `unknown/not-probed`; local tests cover the default
-and explicit opt-in modes. The same-graph safe-mode capability check is complete.
+and explicit opt-in modes. The prior same-graph safe-mode check passed before
+the following namespace adjustment.
+The graph/version metadata checks now use `logseq.DB.getAppInfo` and
+`logseq.DB.checkCurrentIsDbGraph`, which dispatch to the existing exports. This
+namespace adjustment passes local capability tests, and Claude's same-graph
+safe-mode retry confirms the DB routes without probing writes.
 
 Focused local checks pass, including compilation, resolver normalization, and
 the `getBlockUUID` MCP adapter test. The full `electron.mcp-compat-test`
@@ -306,11 +311,61 @@ Other reads have not been validated by the getBlock tests; they remain pending
 their own evidence. Writes, caching, batching, and compatibility removal remain
 outside this candidate.
 
-### Stage 3: native writes
+### Stage 3: API-routed write validation
 
-Not started. Use existing Logseq editor/worker mutation machinery, preserve
-ordering invariants and acknowledgement gates, and retain verification until a
-stronger guarantee is documented and tested.
+The MCP write adapters already call graph operations through `logseq.DB.*`
+functions. Stage 3 audits and validates that route; it does not replace API
+calls with direct editor, worker, or DataScript mutations. Existing APIs remain
+the canonical mutation boundary and may delegate internally to Logseq's
+editor/property handlers and graph worker.
+
+Checkpoint: the static route audit maps all 23 graph-mutating tools to
+`logseq.DB.*` functions. Focused local tests have been run for the routes and
+safeguards recorded in the write section of `mcp-native-tool-map.md`; stale
+title-holder and tag-user test mocks found during the audit were corrected.
+The registered data-tool wrapper now marks returned API errors and thrown IPC
+exceptions with `isError: true`; a focused test exercises the actual
+`createProperty` and `updateBlock` adapters through that wrapper. Additional
+`createBlock` and `updateBlock` tests confirm API errors stop before read-back.
+`deletePage`'s API-error test confirms a refused recycle remains unverified and
+leaves the page live; `deleteTag` rejects an API error before cleanup queries.
+`deleteProperty` rejects an API error before sweeping orphan value blocks;
+`createTag`, `addTag`, and `removeTag` reject before their post-write read-backs.
+`addProperty` and `removeProperty` reject API errors before post-write read-back.
+`moveBlock` reports an API error as unverified when the source retains its
+original parent; `removeBlock` returns the still-present subtree as recovery
+inventory when deletion fails.
+`moveBlocks` reports partial progress and the unattempted remainder on API
+failure; `splitBlock` preserves the original content and skips truncation if a
+tail move returns an API error. `migratePage` remains unverified and keeps the
+selected block at source when its move API fails.
+`createPage` rejects an API error before UUID read-back.
+`renamePage` rejects an API error before its post-rename read-back.
+`retitleOverDuplicate` preserves its partial-rename undo guidance when the
+second rename API call fails.
+`createPageofBlocks` returns an unverified result with the batch API error and
+unexpected-inventory diagnostic.
+`importPage` likewise reports an unverified inventory and leaves the target
+unchanged when batch insertion fails.
+`clearPage` returns unverified and keeps page content when a block-removal API
+call fails.
+`repairLinks` leaves failed placeholders unchanged and reports them as
+unverified when a block rewrite API call errors.
+Focused local API-error tests now cover all 23 graph-mutating routes, with the
+route-specific outcome recorded in the tool map. These use mocked or
+in-memory API behavior and do not validate live writes. No live writes or
+write-capability probes were performed. One combined multi-var async run
+misattributed a rename collision rejection to two dry-run tests; those tests
+pass individually. Do not count that combined run as passing validation.
+
+For each write tool, record its API function(s), verify DB namespace dispatch,
+and test validation, dry-run and acknowledgement gates, ordering or partial
+failure behavior, API errors, and read-back verification. Add or expose a DB
+API only when no suitable existing function supports the MCP contract; reuse
+existing implementations rather than duplicating mutation logic. Live write
+checks require an explicitly approved disposable graph and remain separate
+from local validation. Stage 3 is not complete until the write-tool audit and
+focused local checks are recorded.
 
 ### Stage 4: optimization
 

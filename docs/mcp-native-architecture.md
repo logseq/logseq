@@ -57,9 +57,12 @@ MCP domain operations
     |
     v
 Logseq compatibility adapter
-    |                         \\
-    |                          +-- future native DB read layer
-    +-- existing Logseq API    +-- future graph-worker mutation layer
+    |
+    v
+`logseq.DB.*` API functions
+    |
+    +-- existing DB APIs and query layer
+    +-- editor/page/property handlers
     |
     v
 Graph/database worker and editor invariants
@@ -68,7 +71,9 @@ Graph/database worker and editor invariants
 The transport remains `electron.mcp-server` and the adapter is the migration
 seam. Domain handlers own validation, response shaping, acknowledgements,
 read-back verification, and error distinctions. Adapter functions own how a
-page, block, tag, or property is resolved or changed.
+page, block, tag, or property is resolved or changed, using `logseq.DB.*` API
+functions. Those APIs remain the mutation boundary; MCP does not call editor
+handlers, graph-worker transactions, or DataScript mutations directly.
 
 ## Ownership boundaries
 

@@ -955,6 +955,8 @@ export interface IEditorProxy extends Record<string, any> {
  * Datascript related APIs
  */
 export interface IDBProxy {
+  getAppInfo: () => Promise<{ version: string; supportDb: boolean }>
+  checkCurrentIsDbGraph: () => Promise<boolean>
   /**
    * Run a DSL query. https://docs.logseq.com/#/page/queries
    */

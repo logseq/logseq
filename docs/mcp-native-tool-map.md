@@ -1,11 +1,10 @@
 # Native MCP Tool Map
 
-This is the Stage 0 map from the Python reference server to the current Logseq
-architecture. `compat` means the first native implementation should call the
-existing Logseq API through an adapter. Candidates remain off the default
-production route until their differential and live validation gates pass. The governing rule in
-`plan.md` requires all MCP Logseq calls to use `logseq.DB.*`; DB-owned aliases
-may temporarily delegate to Editor/OG implementations internally.
+This map separates Python reference behavior, current Logseq API routes, and
+validation status. All MCP graph operations must call `logseq.DB.*` API
+functions; those APIs may delegate internally to Editor/OG implementations.
+Stage 3 audits and validates write routes rather than replacing them with
+direct editor, worker, or DataScript mutations.
 
 All Stage 2 rows require a defined raw/expanded output contract, current DB
 schema and canonical entity-classification coverage, namespace-aware dispatch,
@@ -16,9 +15,9 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 
 ## Meta and reads
 
-| Tool | Inputs / key contract | Current reference route | First native route | Later candidate |
+| Tool | Inputs / key contract | Python reference behavior | Current Logseq API route | Status / next step |
 |---|---|---|---|---|
-| `capabilities` | `include_diagnostics?`, `probe_writes?` | capability probes | read-only by default; write-dependent methods are `unknown/not-probed`; explicit mutation probes require `probe_writes: true` | PASS: three stable same-graph read-only runs on 2.0.1; 21 read routes available, 6 invalid-argument read probes unknown but independently live-passed, 23 write routes skipped; `createPage` remains unprobed |
+| `capabilities` | `include_diagnostics?`, `probe_writes?` | capability probes | existing metadata exports are routed through `logseq.DB.getAppInfo` and `logseq.DB.checkCurrentIsDbGraph`; read-only by default | latest same-graph safe-mode run passed on 2.0.1 after DB namespace routing; 21 reads available, 6 invalid-argument reads unknown but independently live-passed, 23 write-dependent tools skipped, 0 write methods probed; `createPage` remains unprobed |
 | `getPage` | page name | full page with child blocks | existing `get_page_data` export via `logseq.DB.getPageData`; no duplicate getter | production route switched; local route/capability checks pass; same-graph DB-route recheck passed with the recorded UUID/title and four blocks |
 | `getPageUUID` | title | `getPage`, query | existing `DB.datascriptQuery` compatibility lookup | use existing APIs behind DB aliases; duplicate `getPagesByTitle` implementation removed; same-graph live read passed for both recorded fixture titles |
 | `isTitleAvailable` | title | exact-title holders across entity kinds, including recycled markers | dedicated `logseq.DB.getTitleHolders`; MCP classifies page/tag/property/block and preserves `held_by` | production route switched; local tests pass; same-graph live held/available checks passed |
@@ -39,7 +38,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 
 ## Lists
 
-| Tool | Inputs / key contract | Current reference route | First native route | Later candidate |
+| Tool | Inputs / key contract | Python reference behavior | Current Logseq API route | Validation status |
 |---|---|---|---|---|
 | `listPages` | `expand?` | existing DB list API | same exported `list_pages` API via `logseq.DB.listPages`; options and payload unchanged | production route switched; same-graph reads passed; 68 pages before and after |
 | `listJournals` | `with_counts?`, `limit?` | journal-day candidates, descending sort, limit; optional count indexes | `logseq.DB.getJournalCandidates` supplies the same candidate fields; MCP retains sort/limit/count behavior | production route switched for candidates; local tests pass; same-graph Oct 3-5 reads and zero counts passed |
@@ -58,31 +57,31 @@ Every row below means: validate identifiers, snapshot affected state where
 needed, perform the existing API operation, read back, compare, and preserve
 the full/terse response behavior. Batch writes remain non-atomic.
 
-| Tool | Inputs / key contract | API operation | First native adapter | Later candidate |
+| Tool | Inputs / key contract | API operation | Current Logseq API route | Local validation evidence | Remaining gates |
 |---|---|---|---|---|
-| `importPage` | target, markdown/list, replace, dry-run | batch insert + queries | compatibility adapter implemented; parse-first validation, escaped references, verified batches and inventory delta | native importer |
-| `repairLinks` | optional page, creation acknowledgements/caps | update blocks + page/tag creation | compatibility adapter implemented; exact live targets, independent creation gates and reference-relation read-back | native write layer |
-| `createPage` | title, dry-run, verbose | `createPage` | compatibility adapter implemented; title preflight and UUID read-back | native mutation |
-| `renamePage` | page UUID, title, verbose | `renamePage` | compatibility adapter implemented; preflight and UUID read-back | native mutation |
-| `retitleOverDuplicate` | source UUID, title, suffix | two renames | compatibility adapter implemented; empty/non-alias holder guards, recycled-holder support and partial-application undo details | native mutation |
-| `deletePage` | UUID, reference/alias acknowledgements | recycle via `deletePage` | compatibility adapter implemented; separate alias/reference guards and exact UUID recycling verification | native mutation |
-| `clearPage` | page UUID, verbose | remove top-level blocks | compatibility adapter implemented; preserves metadata and property-value subtrees, refuses nested pages | native mutation |
-| `createBlock` | parent UUID, title, dry-run, verbose | `insertBlock` | compatibility adapter implemented; verifies parent, page and content | native mutation |
-| `createPageofBlocks` | page UUID, outline, dry-run, verbose | batch insert per parent | compatibility adapter implemented; complete prevalidation and per-level parent/page/content/order checks | native mutation |
-| `updateBlock` | block UUID, title, dry-run, verbose | `updateBlock` | compatibility adapter implemented; content and UUID read-back | native mutation |
-| `splitBlock` | UUID, exactly one offset/delimiter | create parts then update original | compatibility adapter implemented; validates all parts and verifies tail placement before truncation | native mutation |
-| `moveBlock` | UUIDs, target, placement, verbose | `moveBlock` | compatibility adapter implemented; verifies parent, page, descendants and append order | native mutation |
-| `moveBlocks` | UUID list, target, placement, rollback flag | repeated move + order verification | compatibility adapter implemented; sequential verified moves, nested-selection guards, 50-block cap and best-effort rollback | native mutation |
-| `migratePage` | source/target, substring, placement, dry-run | selected `moveBlocks` | compatibility adapter implemented; literal top-level selection, dry-run previews and source read-back | native mutation |
-| `removeBlock` | block UUID, verbose | `removeBlock` | compatibility adapter implemented; inventories bounded subtree and verifies every UUID is absent | native mutation |
-| `creatTag` | title, options, verbose | `createTag` | tag adapter | native mutation |
-| `deleteTag` | UUID, detach/reparent acknowledgements | `deletePage` + reference checks | tag adapter | native mutation |
-| `addTag` | target UUID, tag UUID, verbose | `addBlockTag` | tag adapter | native mutation |
-| `removeTag` | target UUID, tag UUID, verbose | `removeBlockTag` | compatibility adapter implemented; relation and page identity verified | native mutation |
-| `createProperty` | title, schema, options, verbose | `upsertProperty` | property adapter | native mutation |
-| `deleteProperty` | ident, value-loss acknowledgement | `removeProperty` + value cleanup | property adapter | native mutation |
-| `addProperty` | target UUID, ident, value, options, verbose | `upsertBlockProperty` | property adapter | native mutation |
-| `removeProperty` | target UUID, ident, verbose | `removeBlockProperty` | property adapter | native mutation |
+| `importPage` | target, markdown/list, replace, dry-run | batch insert + queries | `logseq.DB.createPage` + `insertBatchBlock` (and `removeBlock` for replace); verbatim inventory/read-back, dry-run-no-call, and API-error-unverified tests pass | live-write evidence not separately validated; keep API routes |
+| `repairLinks` | optional page, creation acknowledgements/caps | update blocks + page/tag creation | `logseq.DB.updateBlock` + `createPage`/`createTag`; relation read-back, ambiguity, idempotency, explicit-creation, dry-run/cap, global-scan, and API-error-unverified tests pass | live-write evidence not separately validated; keep API routes |
+| `createPage` | title, dry-run, verbose | `createPage` | `logseq.DB.getTitleHolders` + `logseq.DB.createPage`; collision refusal, UUID read-back, dry-run, and API-error tests pass | live-write evidence not separately validated; keep API route |
+| `renamePage` | page UUID, title, verbose | `renamePage` | `logseq.DB.renamePage`; same-UUID read-back, collision-no-write, and API-error-before-readback tests pass | recycled-page and live-write evidence not separately validated; keep API route |
+| `retitleOverDuplicate` | source UUID, title, suffix | two renames | two `logseq.DB.renamePage` calls; recycled-holder identity, partial-rename recovery, and API-error undo-guidance tests pass | other holder guards and live-write evidence not separately validated; keep API route |
+| `deletePage` | UUID, reference/alias acknowledgements | recycle via `deletePage` | `logseq.DB.deletePage`; alias/reference no-write gates, same-UUID recycling, and API-error-stays-live tests pass | live-write evidence not separately validated; keep API route |
+| `clearPage` | page UUID, verbose | remove top-level blocks | DB queries + `logseq.DB.removeBlock`; metadata/property-subtree preservation, nested-page refusal, and API-error-keeps-content tests pass | live-write evidence not separately validated; keep API route |
+| `createBlock` | parent UUID, title, dry-run, verbose | `insertBlock` | `logseq.DB.insertBlock`; parent/page/content, dry-run-no-write, and API-error tests pass | live-write evidence not separately validated; keep API route |
+| `createPageofBlocks` | page UUID, outline, dry-run, verbose | batch insert per parent | `logseq.DB.insertBatchBlock`; indentation prevalidation, nested parent/page verification, dry-run-no-insert, and API-error-unverified tests pass | live-write evidence not separately validated; keep API route |
+| `updateBlock` | block UUID, title, dry-run, verbose | `updateBlock` | `logseq.DB.updateBlock`; success/read-back, dry-run-no-write, and API-error tests pass | live-write evidence not separately validated; keep API route |
+| `splitBlock` | UUID, exactly one offset/delimiter | create parts then update original | `logseq.DB.insertBlock` + `moveBlock` + `updateBlock`; delimiter/offset, verify-before-truncate, and API-error-preserves-original tests pass | live-write evidence not separately validated; keep API routes |
+| `moveBlock` | UUIDs, target, placement, verbose | `moveBlock` | `logseq.DB.moveBlock`; child/last-child placement, page ownership, descendant refusal, and API-error-unverified tests pass | before/after edge and live-write evidence not separately validated; keep API route |
+| `moveBlocks` | UUID list, target, placement, rollback flag | repeated move + order verification | repeated `logseq.DB.moveBlock`; preflight, supplied order, and API-error partial-progress tests pass | rollback and live-write evidence not separately validated; keep API route |
+| `migratePage` | source/target, substring, placement, dry-run | selected `moveBlocks` | `logseq.DB.moveBlock` via `moveBlocks`; literal top-level dry-run, source-remainder, and API-error-stays-at-source tests pass | live-write evidence not separately validated; keep API route |
+| `removeBlock` | block UUID, verbose | `removeBlock` | `logseq.DB.removeBlock`; incomplete-inventory refusal, subtree absence, and API-error recovery-inventory tests pass | live-write evidence not separately validated; keep API route |
+| `creatTag` | title, options, verbose | `createTag` | `logseq.DB.createTag`; generated identity, title-collision-no-write, and API-error-before-readback tests pass | live-write evidence not separately validated; keep API route |
+| `deleteTag` | UUID, detach/reparent acknowledgements | `deletePage` + reference checks | `logseq.DB.deletePage`; detach/child acknowledgements, deletion/reference cleanup, and API-error-before-cleanup tests pass | live-write evidence not separately validated; keep API route |
+| `addTag` | target UUID, tag UUID, verbose | `addBlockTag` | `logseq.DB.addBlockTag`; invalid-input, relation, page-identity, and API-error-before-readback tests pass | live-write evidence not separately validated; keep API route |
+| `removeTag` | target UUID, tag UUID, verbose | `removeBlockTag` | `logseq.DB.removeBlockTag`; invalid-input, relation, other-tag, page-identity, and API-error-before-readback tests pass | live-write evidence not separately validated; keep API route |
+| `createProperty` | title, schema, options, verbose | `upsertProperty` | `logseq.DB.upsertProperty`; assigned ident/type read-back, invalid-title, and returned-error envelope tests pass | live-write evidence not separately validated; keep API route |
+| `deleteProperty` | ident, value-loss acknowledgement | `removeProperty` + value cleanup | `logseq.DB.removeProperty` + `removeBlock`; acknowledgement, cleanup, invalid-ident, and API-error-before-cleanup tests pass | live-write evidence not separately validated; keep API route |
+| `addProperty` | target UUID, ident, value, options, verbose | `upsertBlockProperty` | `logseq.DB.upsertBlockProperty`; false/literal values, materialization, duplicate-many, and API-error-before-readback tests pass | live-write evidence not separately validated; keep API route |
+| `removeProperty` | target UUID, ident, verbose | `removeBlockProperty` | `logseq.DB.removeBlockProperty`; target-only removal, no-op detection, invalid-ident, and API-error-before-readback tests pass | live-write evidence not separately validated; keep API route |
 
 ## Explicit compatibility notes
 
