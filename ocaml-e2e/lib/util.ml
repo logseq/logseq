@@ -229,16 +229,22 @@ let get_text_of loc = Pw.text_of_l loc
 let get_text env selector =
   Pw.text_of_l (Playwright.locator_first (Pw.q env selector))
 
-(* Reads prefer the focused textarea (the live editor) and then the first
-   *visible* one — a detached/stale textarea can sit at nth=0 and shadow the
-   real editor's value. *)
+(* Reads prefer the textarea matching the app's editing block
+   (edit-block-<uuid>) — the live editor — then the focused one, then the
+   last visible; a stale textarea can hold focus or sit at nth=0 and
+   shadow the real editor's value. *)
 let edit_content_js =
-  "(() => { const ae = document.activeElement; \
+  "(() => { \
+   const st = logseq.api.get_state_from_store('editor/block'); \
+   const u = st && st.uuid; \
+   if (u) { const t = document.getElementById('edit-block-' + u); \
+   if (t) return t.value; } \
+   const ae = document.activeElement; \
    if (ae && ae.matches && ae.matches('.editor-wrapper textarea')) \
    return ae.value; \
    const ts = [...document.querySelectorAll('.editor-wrapper textarea')] \
-   .filter(t => t.offsetParent !== null || t === document.activeElement); \
-   return ts.length ? ts[0].value : null; })()"
+   .filter(t => t.offsetParent !== null); \
+   return ts.length ? ts[ts.length - 1].value : null; })()"
 
 let get_edit_content env =
   let* v = Pw.eval_js env edit_content_js in

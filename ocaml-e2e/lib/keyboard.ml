@@ -16,15 +16,27 @@ let press_all env ?delay keys = Pw.press_all env ?delay keys
     the press was meant to perform (observed: ArrowUp moved editing to
     the parent, press_in_editor refocused the child's textarea and the
     zoom chord then focused the child). *)
+(* The live editor = the textarea whose id matches the app's editing
+   block (edit-block-<uuid>). Stale editors stay mounted under remount
+   and can hold DOM focus, so ':focus'/'nth' targeting can hit a dead
+   textarea and swallow the keypress entirely. *)
+let live_editor_js =
+  "(() => { \
+   const st = logseq.api.get_state_from_store('editor/block'); \
+   const u = st && st.uuid; \
+   if (u && document.getElementById('edit-block-' + u)) \
+   return 'live:' + u; \
+   const ae = document.activeElement; \
+   if (ae && ae.closest && ae.closest('.editor-wrapper')) return 'focus'; \
+   return 'fallback'; })()"
+
 let press_in_editor env ?delay key =
-  let* (in_editor : bool) =
-    Pw.eval_js env
-      "(() => !!document.activeElement?.closest?.('.editor-wrapper'))()"
-  in
-  if in_editor then Pw.press env ?delay key
+  let* (target : string) = Pw.eval_js env live_editor_js in
+  if String.length target > 5 && String.sub target 0 5 = "live:" then
+    let id = String.sub target 5 (String.length target - 5) in
+    Playwright.locator_press ?delay (Pw.q env ("#edit-block-" ^ id)) key
+  else if target = "focus" then Pw.press env ?delay key
   else
-    (* last *visible* textarea: a stale editor can sit at nth=0 and absorb
-       the press without touching the app's editing state *)
     Playwright.locator_press ?delay
       (Pw.q env ".editor-wrapper textarea:visible >> nth=-1")
       key

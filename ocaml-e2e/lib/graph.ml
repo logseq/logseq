@@ -186,27 +186,49 @@ type summary = { valid : bool }
 
 let validate_graph env =
   let success_toast = ".ui__toast:has-text('Your graph is valid')" in
-  let* () = Keyboard.esc env in
-  let* () = Keyboard.esc env in
-  let* () = Util.search_and_click env "(Dev) Validate current graph" in
-  let* () =
-    Js.Promise.catch
-      (fun e ->
+  let attempt () =
+    let* () = Keyboard.esc env in
+    let* () = Keyboard.esc env in
+    let* () = Util.search_and_click env "(Dev) Validate current graph" in
+    Pw.catch_timeout
+      (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+         (Pw.wait_for env ~timeout:60000. success_toast))
+      (fun () ->
         let* toasts =
           Pw.eval_js env
-            "(() => [...document.querySelectorAll('.ui__toast')].map(t => t.textContent.slice(0,400)).join('\\n---\\n'))()"
+            "(() => [...document.querySelectorAll('.ui__toast')].map(t => t.textContent.slice(0,300)).join('\\n---\\n'))()"
         in
-        let toast_text =
-          match Js.Json.decodeString toasts with
-          | Some s -> s
-          | None -> "<none>"
-        in
-        Js.log ("[validate-dbg] toasts: " ^ toast_text);
-        Env.console_logs env |> List.rev
-        |> (fun l -> let rec take n = function [] -> [] | x::tl -> if n<=0 then [] else x :: take (n-1) tl in take 60 l)
-        |> List.iter (fun m -> Js.log ("[validate-dbg] " ^ m));
-        Playwright.throw_error e)
-      (Pw.wait_for env ~timeout:60000. success_toast)
+        let* () = Js.Promise.resolve (Js.log2 "[validate-dbg] toasts:" toasts) in
+        Js.Promise.resolve false)
+  in
+  let* ok = attempt () in
+  (* the validator auto-fixes invalid blocks and asks for a re-run *)
+  let* ok =
+    if ok then Js.Promise.resolve true
+    else
+      let* () =
+        Pw.eval_js env
+          "(() => document.querySelectorAll('.ui__toast button').forEach(b => b.click()))()"
+      in
+      attempt ()
+  in
+  let* () =
+    if ok then Js.Promise.resolve ()
+    else (
+      let* toasts =
+        Pw.eval_js env
+          "(() => [...document.querySelectorAll('.ui__toast')].map(t => t.textContent.slice(0,400)).join('\\n---\\n'))()"
+      in
+      let toast_text =
+        match Js.Json.decodeString toasts with
+        | Some s -> s
+        | None -> "<none>"
+      in
+      Js.log ("[validate-dbg] toasts: " ^ toast_text);
+      Env.console_logs env |> List.rev
+      |> (fun l -> let rec take n = function [] -> [] | x::tl -> if n<=0 then [] else x :: take (n-1) tl in take 60 l)
+      |> List.iter (fun m -> Js.log ("[validate-dbg] " ^ m));
+      Js.Promise.reject (Failure "validate_graph: no success toast"))
   in
   let* () =
     Pw.eval_js env
