@@ -106,9 +106,27 @@ let open_view_submenu env label =
     | "Sort groups order" -> 3
     | _ -> failwith ("open_view_submenu: unknown " ^ label)
   in
-  let* () = Keyboard.press env "Home" in
+  (* click the item by label — keyboard nav (Home+ArrowDown xN) loses
+     presses under load and lands on a sibling submenu *)
+  let label_item =
+    Pw.q env
+      (Printf.sprintf "[role='menuitem']:text-is('%s')" label)
+  in
+  let* opened_by_click =
+    Js.Promise.catch
+      (fun _ -> Js.Promise.resolve false)
+      (let* () = Pw.click_l ~timeout:4000. label_item in
+       Js.Promise.resolve true)
+  in
   let* () =
-    Keyboard.press_all env (List.init item_index (fun _ -> "ArrowDown"))
+    if opened_by_click then Js.Promise.resolve ()
+    else begin
+      let* () = Keyboard.press env "Home" in
+      let* () =
+        Keyboard.press_all env (List.init item_index (fun _ -> "ArrowDown"))
+      in
+      Js.Promise.resolve ()
+    end
   in
   (* the submenu opens async and the ArrowRight can land mid-remount;
      verify a second menu appeared before returning, retrying once *)
