@@ -1533,12 +1533,14 @@ div[data-keep-selection].menu-links-wrapper {
   overflow: auto;
 }
 
-.ui__dialog-content[label="app-settings"] {
+.ui__dialog-content[label="app-settings"],
+.ui__dialog-content.ls-dialog-settings {
   max-width: 64rem;
   overflow: hidden;
 }
 
-.ui__dialog-content[label="plugins-dashboard"] {
+.ui__dialog-content[label="plugins-dashboard"],
+.ui__dialog-content.ls-dialog-plugins {
   width: 90vw;
   max-width: 1246px;
   max-height: calc(100vh - 50px);
@@ -1553,7 +1555,9 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* cljs :graph/new-db-graph dialog-open! {:style {:max-width "500px"}} */
-.ui__dialog-content[label="new-db-graph"] {
+.ui__dialog-content[label="new-db-graph"],
+.ui__dialog-content.ls-dialog-new-graph,
+.ui__dialog-content.ls-dialog-add-graph {
   max-width: 500px;
 }
 
@@ -1566,12 +1570,14 @@ div[data-keep-selection].menu-links-wrapper {
   top: 50%;
 }
 
-.ui__dialog-content[label="app-settings"] {
+.ui__dialog-content[label="app-settings"],
+.ui__dialog-content.ls-dialog-settings {
   width: min(1024px, calc(100vw - 2rem));
   max-width: calc(100vw - 2rem);
 }
 
-.ui__dialog-content[label="app-settings"] .settings-modal {
+.ui__dialog-content[label="app-settings"] .settings-modal,
+.ui__dialog-content.ls-dialog-settings .settings-modal {
   margin: -1.5rem;
   border-radius: 0.75rem;
 }
@@ -1621,7 +1627,8 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* cljs login.css: .ui__dialog-content[label=user-login] centers a
    ~440px authenticator column */
-.ui__dialog-content[label="user-login"] {
+.ui__dialog-content[label="user-login"],
+.ui__dialog-content.ls-dialog-login {
   display: flex;
   align-items: center;
   width: auto;
@@ -1629,7 +1636,8 @@ div[data-keep-selection].menu-links-wrapper {
   padding: 0 1.5rem 1.5rem;
 }
 
-.ui__dialog-content[label="user-login"] .ui__dialog-main-content {
+.ui__dialog-content[label="user-login"] .ui__dialog-main-content,
+.ui__dialog-content.ls-dialog-login .ui__dialog-main-content {
   padding: 0;
   width: 70vw;
   max-width: 500px;
@@ -1637,12 +1645,14 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 @media (min-width: 640px) {
-  .ui__dialog-content[label="user-login"] .ui__dialog-main-content {
+  .ui__dialog-content[label="user-login"] .ui__dialog-main-content,
+  .ui__dialog-content.ls-dialog-login .ui__dialog-main-content {
     width: 440px;
   }
 }
 
-.ui__dialog-content[label="user-login"] .ui__dialog-close {
+.ui__dialog-content[label="user-login"] .ui__dialog-close,
+.ui__dialog-content.ls-dialog-login .ui__dialog-close {
   z-index: 10;
   top: 4px;
 }
@@ -3605,6 +3615,24 @@ select.form-select {
   opacity: 0.8;
 }
 
+/* component-kind twins of the login footer utilities:
+   span.opacity-50 + a.opacity-60.underline.text-sm and p.pt-4.text-center */
+.cp__user-login .ls-auth-muted {
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
+
+.cp__user-login .ls-auth-link {
+  font-size: 0.875rem;
+  opacity: 0.8;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cp__user-login .ls-auth-link:hover {
+  opacity: 1;
+}
+
 /* cljs card-header (p-6 + pb-7) + card-title (text-2xl) */
 .cp__user-login .ls-auth-title {
   font-size: 1.5rem;
@@ -3628,6 +3656,12 @@ select.form-select {
    red-800/90 + red-200 text dark; the Alert base classes
    (rounded-lg border p-4) land via tailwind */
 .cp__user-login .ui__alert {
+  position: relative;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
   background: oklch(80.8% 0.114 19.571);
 }
 

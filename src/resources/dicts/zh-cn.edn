@@ -622,6 +622,7 @@
  :encryption/reset-password "重置密码"
  :encryption/set-new-password "设置新密码"
  :encryption/set-password-title "为远程图谱设置密码"
+ :encryption/toggle-password-visibility "显示或隐藏密码"
  :encryption/updating-password "正在更新密码..."
  :encryption/wrong-password "密码错误"
 

@@ -10,10 +10,13 @@
 open Promise_ext
 open Lui_elements
 
-let dom = Logseq_dom.dom
+let dyn = Logseq_dom.dyn
 let t = I18n.t
 
-let icon name = Icons.icon name
+let text_of ev =
+  match ev with
+  | Lui_protocol.TextChanged (_, s) -> s
+  | _ -> ""
 
 (* cljs marketplace search: fuzzy title match + description substring;
    substring on title/name/description covers the e2e queries *)
@@ -29,92 +32,82 @@ let category_ok cat pkg =
   | _ -> not (Plugin_host.jbool pkg "theme")
 
 let search_input ~key st =
-  dom ~key ~style_class:"search-ctls"
-    [ dom ~key:(key ^ "-ic") ~tag:"small" ~style_class:"ls-search-ico"
-        [ icon "search" ]
-    ; dom ~key:(key ^ "-in") ~tag:"input"
+  box ~key ~style_class:"search-ctls"
+    [ box ~key:(key ^ "-ic") ~style_class:"ls-search-ico"
+        [ icon ~name:`search ~size:`sm [] ]
+    ; input ~key:(key ^ "-in")
         ~style_class:"form-input is-small"
-        ~attrs:
-          [ ("placeholder", t "plugin/search-plugin")
-          ; ("type", "text")
-          ; ("autocomplete", "off")
-          ]
-        ~events:"input"
-        ~on_dom_event:(fun n p ->
-          if n = "input" then
-            Runtime.signal_set st
-              (Platform.payload_str p "value"))
+        ~placeholder:(t "plugin/search-plugin")
+        ~text_signal:(Signal.value st)
+        ~on_input:(fun ev -> Runtime.signal_set st (text_of ev))
         []
     ]
 
-(* cljs plugins.cljs category-tabs: "Plugins (n)" / "Themes (n)" *)
-let category_tabs ~key ~nums cat cat_st =
-  let btn id label ic n =
-    dom ~key:(key ^ "-" ^ id) ~tag:"button"
-      ~style_class:
-        ("ui__button ls-tab-btn"
-         ^ if cat = id then " active" else "")
-      ~events:"click"
-      ~on_dom_event:(fun n _ ->
-        if n = "click" then Runtime.signal_set cat_st id)
-      [ dom ~tag:"span" ~style_class:"ls-row"
-          [ icon ic
-          ; dom ~tag:"span" ~text:(label ^ " (" ^ string_of_int n ^ ")") [] ]
-        ]
+(* cljs plugins.cljs category-tabs: "Plugins (n)" / "Themes (n)" —
+   the .active class rides a class_signal on the category state *)
+let category_tab ~key cat_st id caption (ic : icon) n =
+  let cls c =
+    "ui__button ls-tab-btn" ^ if c = id then " active" else ""
   in
-  let (np, nt) = nums in
-  dom ~key:(key ^ "-cats")
-    ~style_class:"secondary-tabs categories flex"
-    [ btn "plugins" (t "nav/plugins") "puzzle" np
-    ; btn "themes" (t "nav/themes") "palette" nt
+  Ui_parts.class_signal (Signal.value cat_st) cls
+    (button ~key:(key ^ "-" ^ id)
+       ~style_class:(cls (Signal.get_state cat_st))
+       ~icon:ic
+       ~text:(Printf.sprintf "%s (%d)" caption n)
+       ~on_press:(fun _ -> Runtime.signal_set cat_st id)
+       [])
+
+let category_tabs ~key ~nums cat_st =
+  let np, nt = nums in
+  row ~key:(key ^ "-cats")
+    ~style_class:"secondary-tabs categories"
+    [ category_tab ~key cat_st "plugins" (t "nav/plugins")
+        (`app "puzzle") np
+    ; category_tab ~key cat_st "themes" (t "nav/themes")
+        (`app "palette") nt
     ]
 
 external open_url_ : string -> unit = "open" [@@mel.scope "window"]
 
 (* cljs plugins.cljs panel-control-tabs .r: search + filter + more +
-   contribute link *)
-let control_tabs ~key ~search_st ~cat ~cat_st ~nums =
-  let ghost_btn id cls ic =
-    dom ~key:(key ^ "-" ^ id) ~tag:"button"
-      ~style_class:
-        ("ui__button ls-icon-btn-md " ^ cls)
-      [ icon ic ]
+   contribute link. The filter/more buttons are inert stubs upstream
+   (no handler) — kept as icon buttons for parity. *)
+let control_tabs ~key ~search_st ~cat_st ~nums =
+  let ghost_btn id cls (ic : icon) caption =
+    button ~key:(key ^ "-" ^ id) ~variant:`ghost ~size:`icon
+      ~style_class:("ui__button ls-icon-btn-md " ^ cls)
+      ~icon:ic ~label:caption []
   in
-  dom ~key:(key ^ "-ctls")
-    ~style_class:"control-tabs"
-    [ dom ~key:(key ^ "-l") ~style_class:"l"
-        [ category_tabs ~key ~nums cat cat_st ]
-    ; dom ~key:(key ^ "-r") ~style_class:"r"
+  row ~key:(key ^ "-ctls") ~style_class:"control-tabs"
+    ~main:`space_between ~cross:`center
+    [ box ~key:(key ^ "-l") ~style_class:"l"
+        [ category_tabs ~key ~nums cat_st ]
+    ; row ~key:(key ^ "-r") ~style_class:"r" ~cross:`center ~gap:8
         [ search_input ~key:(key ^ "-search") search_st
-        ; ghost_btn "filter" "sort-or-filter-by" "filter"
-        ; ghost_btn "more" "more-do" "dots-vertical"
-        ; dom ~key:(key ^ "-contrib") ~tag:"a"
-            ~style_class:"contribute"
-            ~attrs:
-              [ ("href", "https://github.com/logseq/marketplace")
-              ; ("target", "_blank")
-              ]
-            ~text:(t "plugin/contribute") []
+        ; ghost_btn "filter" "sort-or-filter-by" (`app "filter")
+            (t "cmdk.action/filter")
+        ; ghost_btn "more" "more-do" (`app "dots-vertical")
+            (t "header/more")
+        ; text ~key:(key ^ "-contrib") ~style_class:"contribute"
+            ~value:(t "plugin/contribute")
+            ~on_press:(fun _ ->
+              open_url_ "https://github.com/logseq/marketplace")
+            []
         ]
     ]
 
-let empty_item =
-  fun key ->
-    dom ~key
-      ~style_class:
-        "ls-pl-empty"
-      [ Icons.icon ~size:40. "list-search"
-      ; dom ~tag:"span" ~style_class:"ls-pl-empty-text"
-          ~text:(t "plugin/empty") []
-      ]
+let empty_item key =
+  column ~key ~style_class:"ls-pl-empty" ~cross:`center
+    [ icon ~name:(`app "list-search") ~width:40 ~height:40 []
+    ; text ~key:(key ^ "-t") ~style_class:"ls-pl-empty-text"
+        ~value:(t "plugin/empty") []
+    ]
 
 let list_wrap ~key children =
-  dom ~key ~style_class:"cp__plugins-item-lists"
-    [ dom ~key:(key ^ "-in")
-        ~style_class:"cp__plugins-item-lists-inner" children
-    ; if children = [] then empty_item (key ^ "-empty")
-      else dom ~key:(key ^ "-nonempty") []
-    ]
+  column ~key ~style_class:"cp__plugins-item-lists"
+    (box ~key:(key ^ "-in")
+       ~style_class:"cp__plugins-item-lists-inner" children
+     :: (if children = [] then [ empty_item (key ^ "-empty") ] else []))
 
 (* ---------- marketplace card ---------- *)
 
@@ -129,49 +122,38 @@ let market_card pkg =
   in
   (* cljs get-open-plugin-readme-handler: icon .l and h3 .l both open
      the readme dialog *)
-  let open_readme n _ =
-    if n = "click" then Plugin_readme.open_readme pkg
-  in
-  dom ~key:("mkt-" ^ id) ~style_class:cls
-    [ dom ~key:"l" ~style_class:"l link-block"
-        ~events:"click" ~on_dom_event:open_readme
-        [ dom ~key:"ic" ~style_class:"plugin-icon" [ icon "puzzle" ] ]
-    ; dom ~key:"r" ~style_class:"r"
-        [ dom ~key:"h" ~tag:"h3"
-            ~style_class:"head"
-            ~attrs:[ ("title", title) ]
-            [ dom ~tag:"span"
-                ~style_class:"l link-block" ~text:title
-                ~events:"click" ~on_dom_event:open_readme []
-            ]
-        ; dom ~key:"desc" ~style_class:"desc"
-            [ dom ~tag:"p" ~text:(jstr pkg "description") [] ]
-        ; dom ~key:"flag" ~style_class:"flag"
-            [ dom ~tag:"p"
-                ~style_class:"ls-pl-meta"
-                [ dom ~tag:"small" ~text:(jstr pkg "author") []
-                ; dom ~tag:"small" ~text:("ID: " ^ id) []
-                ]
-            ]
-        ; dom ~key:"ctl" ~style_class:"ctl"
-            [ dom ~key:"ctl-l" ~tag:"ul"
-                ~style_class:"l" []
-            ; dom ~key:"ctl-r" ~style_class:"r"
-                [ dom ~key:"btn" ~tag:"a"
+  let open_readme _ = Plugin_readme.open_readme pkg in
+  row ~key:("mkt-" ^ id) ~style_class:cls ~gap:12
+    [ Ui_parts.pressable ~on_press:open_readme
+        (box ~key:"l" ~style_class:"l link-block"
+           [ box ~key:"ic" ~style_class:"plugin-icon"
+               [ icon ~name:(`app "puzzle") [] ] ])
+    ; column ~key:"r" ~style_class:"r" ~grow:1.
+        [ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
+            [ text ~key:"t" ~style_class:"l link-block" ~value:title
+                ~on_press:open_readme [] ]
+        ; paragraph ~key:"desc" ~style_class:"desc"
+            ~value:(jstr pkg "description") []
+        ; box ~key:"flag" ~style_class:"flag"
+            [ row ~style_class:"ls-pl-meta"
+                ~main:`space_between
+                [ text ~key:"a" ~value:(jstr pkg "author") []
+                ; text ~key:"i" ~value:("ID: " ^ id) [] ] ]
+        ; row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
+            ~cross:`center
+            [ box ~key:"ctl-l" ~style_class:"l" []
+            ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center
+                [ button ~key:"btn"
                     ~style_class:
                       ("btn" ^ if installed_ then " disabled" else "")
-                    ~attrs:
-                      (* cljs CSS gives a.btn.disabled pointer-events:none;
-                         keep it clickable (handler no-ops when installed) so
-                         e2e click-install-button can target it *)
-                      (if installed_ then
-                         [ ("style", "pointer-events:auto") ]
-                       else [])
-                    ~events:"click"
-                    ~on_dom_event:(fun n _ ->
-                      if n = "click" && not installed_ then
-                        install_marketplace pkg)
-                    ~text:(if installed_ then t "plugin/installed" else t "plugin/install")
+                    (* cljs CSS gives a.btn.disabled pointer-events:none;
+                       keep it clickable (handler no-ops when installed) so
+                       e2e click-install-button can target it *)
+                    ~text:
+                      (if installed_ then t "plugin/installed"
+                       else t "plugin/install")
+                    ~on_press:(fun _ ->
+                      if not installed_ then install_marketplace pkg)
                     []
                 ]
             ]
@@ -193,27 +175,18 @@ let card_name plj web_pkg pid =
   in
   List.find (fun s -> s <> "") candidates
 
-let switch_btn ~checked ~on_click =
-  dom ~tag:"button" ~key:"sw"
-    ~style_class:
-      "ui__switch ls-switch-lg"
-    ~attrs:
-      [ ("role", "switch")
-      ; ("type", "button")
-      ; ("aria-checked", string_of_bool checked)
-      ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
-    [ dom ~tag:"span" ~key:"knob"
-        ~style_class:
-          "ui__switch-thumb ls-thumb-lg"
-        []
-    ]
+let toggle_of_switch ev =
+  match ev with
+  | Lui_protocol.ToggleChanged (_, b) -> b
+  | _ -> false
 
-let menu_li key label act =
-  dom ~tag:"li" ~key ~text:label ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then act ())
+let switch_btn ~checked ~on_toggle =
+  switch_ ~key:"sw" ~style_class:"ls-switch-lg" ~checked
+    ~on_toggle:(fun ev -> on_toggle (toggle_of_switch ev))
     []
+
+let menu_li ~key label act =
+  list_item ~key ~text:label ~on_press:(fun _ -> act ()) []
 
 (* cljs card-ctls-of-installed .updates-actions — btn shows "Update
    new-version" when a check recorded one, else "Check update"; click
@@ -224,24 +197,20 @@ let updates_btn ~pid ~plj ~web_pkg =
     let r = Plugin_host.jstr web_pkg "repo" in
     if r <> "" then r else Plugin_host.jstr plj "repo"
   in
-  match Plugin_host.update_version pid with
-  | Some v ->
-      dom ~key:"upd" ~style_class:"updates-actions"
-        [ dom ~tag:"a" ~style_class:"btn" ~events:"click"
-            ~on_dom_event:(fun n _ ->
-              if n = "click" then
-                Plugin_host.check_or_update pid repo false)
-            [ dom ~tag:"span"
-                ~text:(t "plugin/update" ^ " \240\159\145\137 " ^ v) [] ]
-        ]
-  | None ->
-      dom ~key:"upd" ~style_class:"updates-actions"
-        [ dom ~tag:"a" ~style_class:"btn" ~events:"click"
-            ~on_dom_event:(fun n _ ->
-              if n = "click" then
-                Plugin_host.check_or_update pid repo true)
-            ~text:(t "plugin/check-update") []
-        ]
+  box ~key:"upd" ~style_class:"updates-actions"
+    (match Plugin_host.update_version pid with
+     | Some v ->
+         [ button ~key:"b" ~style_class:"btn"
+             ~text:(t "plugin/update" ^ " \240\159\145\137 " ^ v)
+             ~on_press:(fun _ ->
+               Plugin_host.check_or_update pid repo false)
+             [] ]
+     | None ->
+         [ button ~key:"b" ~style_class:"btn"
+             ~text:(t "plugin/check-update")
+             ~on_press:(fun _ ->
+               Plugin_host.check_or_update pid repo true)
+             [] ])
 
 let installed_card (pl : Js.Json.t) =
   let open Plugin_host in
@@ -255,50 +224,43 @@ let installed_card (pl : Js.Json.t) =
     if v = "" then jstr plj "version" else v
   in
   let disabled = jbool pl "disabled" in
-  let open_readme n _ =
-    if n = "click" then Plugin_readme.open_readme plj
-  in
-  dom ~key:("inst-" ^ pid) ~style_class:"cp__plugins-item-card installed"
-    [ dom ~key:"l" ~style_class:"l link-block"
-        ~events:"click" ~on_dom_event:open_readme
-        [ dom ~key:"ic" ~style_class:"plugin-icon" [ icon "puzzle" ] ]
-    ; dom ~key:"r" ~style_class:"r"
-        [ dom ~key:"h" ~tag:"h3"
-            ~style_class:"head"
-            ~attrs:[ ("title", name) ]
-            [ dom ~tag:"span"
-                ~style_class:"l link-block" ~text:name
-                ~events:"click" ~on_dom_event:open_readme []
-            ; dom ~tag:"sup" ~key:"v"
-                ~style_class:"ls-pl-status"
-                ~text:version []
-            ]
-        ; dom ~key:"desc" ~style_class:"desc"
-            [ dom ~tag:"p" ~text:desc [] ]
-        ; dom ~key:"flag" ~style_class:"flag"
-            [ dom ~tag:"p"
-                ~style_class:"ls-pl-meta"
-                [ dom ~tag:"small" ~text:(jstr web_pkg "author") []
-                ; dom ~tag:"small" ~text:("ID: " ^ pid) []
-                ]
-            ]
-        ; dom ~key:"ctl" ~style_class:"ctl"
-            [ dom ~key:"ctl-l" ~style_class:"l"
-                [ dom ~key:"de" ~style_class:"de"
-                    [ dom ~tag:"strong" [ icon "settings" ]
-                    ; dom ~tag:"ul" ~style_class:"menu-list"
-                        [ menu_li "open-settings"
+  let open_readme _ = Plugin_readme.open_readme plj in
+  row ~key:("inst-" ^ pid)
+    ~style_class:"cp__plugins-item-card installed" ~gap:12
+    [ Ui_parts.pressable ~on_press:open_readme
+        (box ~key:"l" ~style_class:"l link-block"
+           [ box ~key:"ic" ~style_class:"plugin-icon"
+               [ icon ~name:(`app "puzzle") [] ] ])
+    ; column ~key:"r" ~style_class:"r" ~grow:1.
+        [ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
+            [ text ~key:"t" ~style_class:"l link-block" ~value:name
+                ~on_press:open_readme []
+            ; text ~key:"v" ~style_class:"ls-pl-status" ~value:version
+                [] ]
+        ; paragraph ~key:"desc" ~style_class:"desc" ~value:desc []
+        ; box ~key:"flag" ~style_class:"flag"
+            [ row ~style_class:"ls-pl-meta" ~main:`space_between
+                [ text ~key:"a" ~value:(jstr web_pkg "author") []
+                ; text ~key:"i" ~value:("ID: " ^ pid) [] ] ]
+        ; row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
+            ~cross:`center
+            [ box ~key:"ctl-l" ~style_class:"l"
+                [ box ~key:"de" ~style_class:"de"
+                    [ icon ~key:"g" ~name:`settings []
+                    ; list ~key:"m" ~style:`plain
+                        ~style_class:"menu-list"
+                        [ menu_li ~key:"open-settings"
                             (t "plugin/open-settings") (fun () ->
                               open_settings_pid := Some pid;
                               Dialogs_state.open_ "plugin-settings")
                         (* web has no plugin-logs view or report modal
                            (cljs open-plugin-logs!/open-report-modal!) —
                            li kept for menu parity *)
-                        ; dom ~tag:"li"
+                        ; list_item ~key:"logs"
                             ~text:(t "plugin/open-logs") []
-                        ; dom ~tag:"li"
+                        ; list_item ~key:"report"
                             ~text:(t "plugin/report-security") []
-                        ; menu_li "uninstall" (t "plugin/uninstall")
+                        ; menu_li ~key:"uninstall" (t "plugin/uninstall")
                             (fun () ->
                               (* cljs plugins.cljs: content-only
                                  confirm — [:b (t :plugin/delete-alert)] *)
@@ -312,10 +274,11 @@ let installed_card (pl : Js.Json.t) =
                         ]
                     ]
                 ]
-            ; dom ~key:"ctl-r" ~style_class:"r"
+            ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center
                 [ updates_btn ~pid ~plj ~web_pkg
-                ; switch_btn ~checked:(not disabled) ~on_click:(fun () ->
-                      set_plugin_disabled pid (not disabled))
+                ; switch_btn ~checked:(not disabled)
+                    ~on_toggle:(fun on ->
+                      set_plugin_disabled pid (not on))
                 ]
             ]
         ]
@@ -359,8 +322,8 @@ let installed_panel ~key ~search ~cat ~search_st ~cat_st =
   in
   let n_themes = List.length (List.filter Fun.id all) in
   let n_plugins = List.length all - n_themes in
-  dom ~key ~style_class:"cp__plugins-installed"
-    [ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat ~cat_st
+  column ~key ~style_class:"cp__plugins-installed" ~gap:8
+    [ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st
         ~nums:(n_plugins, n_themes)
     ; list_wrap ~key:(key ^ "-list") (List.map installed_card plugins)
     ]
@@ -369,17 +332,17 @@ let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~loading =
   let filtered =
     List.filter (fun p -> category_ok cat p && matches search p) pkgs
   in
-  dom ~key ~style_class:"cp__plugins-marketplace"
-    [ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat ~cat_st
-        ~nums:(0, 0)
-    ; if loading && pkgs = [] then
-        dom ~key:"pl-loading" ~tag:"p"
-          ~style_class:"ls-pl-loading" [ icon "loader-2" ]
-      else
-        dom ~key:(key ^ "-cnt") ~style_class:"cp__plugins-marketplace-cnt"
+  column ~key ~style_class:"cp__plugins-marketplace" ~gap:8
+    ([ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st ~nums:(0, 0) ]
+    @
+    if loading && pkgs = [] then
+      [ box ~key:"pl-loading" ~style_class:"ls-pl-loading"
+          [ icon ~name:(`app "loader-2") [] ] ]
+    else
+      [ column ~key:(key ^ "-cnt")
+          ~style_class:"cp__plugins-marketplace-cnt"
           [ list_wrap ~key:(key ^ "-list")
-              (List.map market_card filtered) ]
-    ]
+              (List.map market_card filtered) ] ])
 
 (* ---------- page ---------- *)
 
@@ -405,35 +368,33 @@ let body (_ms : Model.t Signal.signal) : t =
     Signal.set loading false;
     Runtime.flush ();
     Js.Promise.resolve Js.Json.null);
-  let tab_btn id label ic active =
-    dom ~key:("tab-" ^ id) ~tag:"button"
-      ~style_class:
-        ("ls-tab-btn"
-         ^ if active then " active" else "")
-      ~events:"click"
-      ~on_dom_event:(fun n _ ->
-        if n = "click" then Runtime.signal_set tab id)
-      [ icon ic; dom ~tag:"span" ~text:(t label) [] ]
+  let tab_btn id label (ic : icon) =
+    let cls tb =
+      "ls-tab-btn" ^ if tb = id then " active" else ""
+    in
+    Ui_parts.class_signal (Signal.value tab) cls
+      (button ~key:("tab-" ^ id)
+         ~style_class:(cls (Signal.get_state tab))
+         ~icon:ic ~text:(t label)
+         ~on_press:(fun _ -> Runtime.signal_set tab id)
+         [])
   in
   let pair a b = (a, b) in
   let node =
     dyn ~equal:Stdlib.( = )
       (fun (tab_now, _dirty) ->
-        dom ~key:"plugins-page"
+        column ~key:"plugins-page"
           ~style_class:"cp__plugins-page web-platform"
-          ~attrs:[ ("tabindex", "-1") ]
-          [ dom ~key:"pl-h" ~tag:"h1" ~text:(t "nav/plugins") []
-          ; dom ~key:"pl-tabs"
-              ~style_class:"tabs"
-              [ dom ~key:"pl-tabs-in"
-                  ~style_class:"tabs-inner"
-                  [ tab_btn "installed" "plugin/installed" "cube"
-                      (tab_now = "installed")
-                  ; tab_btn "marketplace" "plugin/marketplace" "apps"
-                      (tab_now = "marketplace")
+          [ heading ~key:"pl-h" ~level:1 ~value:(t "nav/plugins") []
+          ; box ~key:"pl-tabs" ~style_class:"tabs"
+              [ row ~key:"pl-tabs-in" ~style_class:"tabs-inner"
+                  ~cross:`center
+                  [ tab_btn "installed" "plugin/installed" (`app "cube")
+                  ; tab_btn "marketplace" "plugin/marketplace"
+                      (`app "apps")
                   ]
               ]
-          ; dom ~key:"pl-panels" ~style_class:"panels"
+          ; box ~key:"pl-panels" ~style_class:"panels"
               [ (if tab_now = "marketplace" then
                    dyn ~equal:Stdlib.( = )
                      (fun ((search, cat), (pkg_now, load_now)) ->
@@ -478,24 +439,30 @@ let json_pretty : Js.Json.t -> string =
 let set_json_exn s =
   try Some (Js.Json.parseExn s) with _ -> None
 
+(* cljs desc-item h2: code[key] + caret + strong[title] — heading is a
+   leaf kind so this becomes a row of key text + caret + title *)
 let desc_h2 key title =
-  dom ~tag:"h2" ~key:("h-" ^ key)
-    [ dom ~tag:"code" ~key:"k" ~text:key []
-    ; icon "caret-right"
-    ; dom ~tag:"strong" ~key:"t" ~text:title []
+  row ~key:("h-" ^ key) ~cross:`center ~gap:8
+    [ text ~key:"k" ~style_class:"ls-pl-key" ~value:key []
+    ; icon ~key:"c" ~name:(`app "caret-right") ~size:`sm []
+    ; heading ~key:"t" ~level:2 ~style_class:"ls-pl-h" ~value:title []
     ]
 
 (* cljs html-content — sanitized markdown rendered raw (DOMPurify) *)
-let html_desc key desc =
+let html_desc key desc : t list =
   if desc = "" then []
   else
-    [ dom ~key:("hd-" ^ key)
+    [ box ~key:("hd-" ^ key)
         ~style_class:"html-content ls-pl-html"
-        ~html:(Markdown.markdown_to_html desc) [] ]
+        (Render_html.els_of_string (Markdown.markdown_to_html desc)) ]
 
 let set_v pid key v =
   Plugin_host.plugin_set_setting pid key v;
   Plugin_host.bump ()
+
+(* text inputs write without bumping — the field is its own source of
+   truth while focused and a dirty re-emit would fight the caret *)
+let set_v_quiet pid key v = Plugin_host.plugin_set_setting pid key v
 
 let json_text_of j =
   match Js.Json.decodeString j with
@@ -519,38 +486,41 @@ let item_input pid key s cur =
         | Some n -> Printf.sprintf "%g" n
         | None -> "")
   in
-  let on_change p =
-    let raw = Platform.payload_str p "value" in
-    set_v pid key
+  let on_change raw =
+    set_v_quiet pid key
       (if input_as = "number" then
          match float_of_string_opt raw with
          | Some n -> Js.Json.number n
          | None -> jstr_ raw
        else jstr_ raw)
   in
-  dom ~key:("i-" ^ key) ~style_class:"desc-item as-input"
-    ~attrs:[ ("data-key", key) ]
+  let field =
+    match input_as with
+    | "textarea" ->
+        textarea ~key:"in" ~style_class:"form-input" ~text:v
+          ~on_input:(fun ev -> on_change (text_of ev))
+          []
+    | "color" | "range" ->
+        (* TODO(component): input type=color/range have no component
+           kind — keeping the DOM input until LUI grows slider/color
+           props on `input` *)
+        Logseq_dom.dom ~key:"in" ~tag:"input"
+          ~attrs:[ ("type", input_as); ("value", v) ]
+          ~events:"change"
+          ~on_dom_event:(fun n p ->
+            if n = "change" then
+              on_change (Platform.payload_str p "value"))
+          []
+    | _ ->
+        input ~key:"in" ~style_class:"form-input" ~text:v
+          ~on_input:(fun ev -> on_change (text_of ev))
+          []
+  in
+  row ~key:("i-" ^ key) ~style_class:"desc-item as-input"
+    ~cross:`center
     [ desc_h2 key title
-    ; dom ~key:"fc" ~tag:"label" ~style_class:"form-control"
-        ( html_desc key desc
-        @ [ (if input_as = "textarea" then
-               dom ~key:"in" ~tag:"textarea"
-                 ~attrs:[ ("type", input_as); ("value", v) ]
-                 ~events:"change"
-                 ~on_dom_event:(fun n p ->
-                   if n = "change" then on_change p)
-                 []
-             else
-               dom ~key:"in" ~tag:"input"
-                 ~style_class:
-                   (if input_as = "color" || input_as = "range" then ""
-                    else "form-input")
-                 ~attrs:[ ("type", input_as); ("value", v) ]
-                 ~events:"change"
-                 ~on_dom_event:(fun n p ->
-                   if n = "change" then on_change p)
-                 []) ]
-        )
+    ; box ~key:"fc" ~style_class:"form-control" ~cross:`center
+        (html_desc key desc @ [ field ])
     ]
 
 let item_toggle pid key s cur =
@@ -561,22 +531,18 @@ let item_toggle pid key s cur =
     | Some b -> b
     | None -> Plugin_host.jbool s "default"
   in
-  dom ~key:("t-" ^ key) ~style_class:"desc-item as-toggle"
-    ~attrs:[ ("data-key", key) ]
+  row ~key:("t-" ^ key) ~style_class:"desc-item as-toggle"
+    ~cross:`center
     [ desc_h2 key title
-    ; dom ~key:"fc" ~tag:"label" ~style_class:"form-control"
-        ( [ dom ~key:"cb" ~tag:"input"
-              ~attrs:
-                ([ ("type", "checkbox") ]
-                @ if checked then [ ("checked", "checked") ] else [])
-              ~events:"change"
-              ~on_dom_event:(fun n p ->
-                if n = "change" then
-                  set_v pid key
-                    (Js.Json.boolean
-                       (Platform.payload_bool p "checked")))
-              [] ]
-        @ html_desc key desc )
+    ; row ~key:"fc" ~style_class:"form-control" ~cross:`center ~gap:6
+        (checkbox ~key:"cb" ~checked
+           ~on_toggle:(fun ev ->
+             match ev with
+             | Lui_protocol.ToggleChanged (_, on) ->
+                 set_v pid key (Js.Json.boolean on)
+             | _ -> ())
+           []
+         :: html_desc key desc)
     ]
 
 let item_enum pid key s cur' =
@@ -590,103 +556,72 @@ let item_enum pid key s cur' =
     | None -> []
   in
   let cur = json_text_of cur' in
-  let picker = Plugin_host.jstr s "enumPicker" in
-  dom ~key:("e-" ^ key) ~style_class:"desc-item as-enum"
-    ~attrs:[ ("data-key", key) ]
+  row ~key:("e-" ^ key) ~style_class:"desc-item as-enum" ~cross:`center
     [ desc_h2 key title
-    ; dom ~key:"fc" ~style_class:"form-control"
-        [ dom ~key:"w"
-            ~tag:(if picker = "radio" || picker = "checkbox" then "div"
-                  else "label")
-            ~style_class:"wrap"
+    ; box ~key:"fc" ~style_class:"form-control"
+        [ box ~key:"w" ~style_class:"wrap"
             ( html_desc key desc
-            @ [ dom ~key:"s" ~tag:"select" ~text:cur
-                  ~attrs:[ ("data-key", key) ]
-                  ~events:"change"
-                  ~on_dom_event:(fun n p ->
-                    if n = "change" then
-                      set_v pid key
-                        (jstr_
-                           (Platform.payload_str p "value")))
+            @ [ select ~key:"s" ~text:cur
                   (List.map
                      (fun c ->
-                       dom ~key:c ~tag:"option"
-                         ~attrs:
-                           ([ ("value", c) ]
-                           @ if c = cur then [ ("selected", "selected") ]
-                             else [])
-                         ~text:c [])
+                       menu_item ~key:c ~text:c ~selected:(c = cur)
+                         ~on_press:(fun _ -> set_v pid key (jstr_ c))
+                         [])
                      choices) ]
             )
         ]
     ]
 
 let item_object key s =
-  dom ~key:("o-" ^ key) ~style_class:"desc-item as-object"
-    ~attrs:[ ("data-key", key) ]
+  row ~key:("o-" ^ key) ~style_class:"desc-item as-object" ~cross:`center
     [ desc_h2 key (Plugin_host.jstr s "title")
-    ; dom ~key:"fc" ~style_class:"form-control"
+    ; box ~key:"fc" ~style_class:"form-control"
         (html_desc key (Plugin_host.jstr s "description"))
     ]
 
 let item_button pid key s =
   let action = Plugin_host.jstr s "buttonAction" in
-  dom ~key:("b-" ^ key) ~style_class:"desc-item as-button"
-    ~attrs:[ ("data-key", key) ]
+  row ~key:("b-" ^ key) ~style_class:"desc-item as-button" ~cross:`center
     [ desc_h2 key (Plugin_host.jstr s "title")
-    ; dom ~key:"fc" ~style_class:"form-control"
+    ; box ~key:"fc" ~style_class:"form-control"
         ( html_desc key (Plugin_host.jstr s "description")
-        @ [ dom ~key:"btn" ~tag:"button"
-              ~style_class:"ui__button is-small"
-              ~attrs:[ ("type", "button") ]
+        @ [ button ~key:"btn" ~style_class:"ui__button is-small"
               ~text:(Plugin_host.jstr s "buttonText")
-              ~events:"click"
-              ~on_dom_event:(fun n _ ->
-                if n = "click" then
-                  Plugin_host.call_button_action pid action key)
+              ~on_press:(fun _ ->
+                Plugin_host.call_button_action pid action key)
               [] ]
         )
     ]
 
 (* code mode: cljs lazy-editor renders CodeMirror — a plain textarea
    plus reset/save keeps the same settings round-trip on web *)
-let code_mode_wrap pid code_mode =
+let code_mode_wrap owner pid code_mode =
   let content = json_pretty (Plugin_host.plugin_settings_json pid) in
-  dom ~key:"cmw" ~style_class:"code-mode-wrap"
-    [ dom ~key:"ta" ~tag:"textarea"
-        ~style_class:"form-input ls-mono"
-        ~attrs:[ ("rows", "12"); ("data-lang", "json") ]
-        ~text:content []
-    ; dom ~key:"btns" ~style_class:"ls-form-actions"
-        [ dom ~key:"reset" ~tag:"button"
+  let code_txt = Signal.state owner content in
+  column ~key:"cmw" ~style_class:"code-mode-wrap" ~gap:4
+    [ textarea ~key:"ta" ~style_class:"form-input ls-mono"
+        ~text_signal:(Signal.value code_txt)
+        ~on_input:(fun ev -> Signal.set code_txt (text_of ev))
+        []
+    ; row ~key:"btns" ~style_class:"ls-form-actions" ~main:`end_
+        [ button ~key:"reset" ~variant:`ghost ~size:`sm
             ~style_class:"ui__button is-small variant-ghost"
-            ~attrs:[ ("type", "button") ] ~text:(t "ui/reset")
-            ~events:"click"
-            ~on_dom_event:(fun n _ ->
-              if n = "click" then Plugin_host.bump ())
+            ~text:(t "ui/reset")
+            ~on_press:(fun _ -> Plugin_host.bump ())
             []
-        ; dom ~key:"save" ~tag:"button"
-            ~style_class:"ui__button is-small"
-            ~attrs:[ ("type", "button") ] ~text:(t "ui/save")
-            ~events:"click"
-            ~on_dom_event:(fun n _ ->
-              if n = "click" then (
-                match
-                  Web_dom.query_selector
-                    ".cp__plugins-settings-inner .code-mode-wrap textarea"
-                with
-                | Some el -> (
-                    match set_json_exn (Web_dom.el_value el) with
-                    | Some j ->
-                        Plugin_host.replace_plugin_settings pid j;
-                        Runtime.signal_set code_mode false
-                    | None ->
-                        Web_dom.dispatch_custom "ls:toast"
-                          (Plugin_host.jobj
-                             [ ("msg", jstr_ "Invalid JSON")
-                             ; ("cls", jstr_ "error")
-                             ]))
-                | None -> ()))
+        ; button ~key:"save" ~style_class:"ui__button is-small"
+            ~text:(t "ui/save")
+            ~on_press:(fun _ ->
+              match set_json_exn (Signal.get_state code_txt) with
+              | Some j ->
+                  Plugin_host.replace_plugin_settings pid j;
+                  Runtime.signal_set code_mode false
+              | None ->
+                  Web_dom.dispatch_custom "ls:toast"
+                    (Plugin_host.jobj
+                       [ ("msg", jstr_ "Invalid JSON")
+                       ; ("cls", jstr_ "error")
+                       ]))
             []
         ]
     ]
@@ -709,13 +644,13 @@ let settings_item pid s =
   | "enum" -> item_enum pid key s val_or_default
   | "object" -> item_object key s
   | "heading" ->
-      dom ~key:("h-" ^ key) ~style_class:"heading-item"
-        ~attrs:[ ("data-key", key) ]
-        [ dom ~tag:"h2" ~key:"t" ~text:(Plugin_host.jstr s "title") [] ]
+      box ~key:("h-" ^ key) ~style_class:"heading-item"
+        [ heading ~key:"t" ~level:2
+            ~value:(Plugin_host.jstr s "title") [] ]
   | "button" -> item_button pid key s
   | _ ->
-      dom ~key:("nh-" ^ key) ~tag:"p" ~style_class:"text-red-500"
-        ~text:(I18n.tf "plugin/setting-not-handled" [ key ]) []
+      paragraph ~key:("nh-" ^ key) ~style_class:"ls-pl-warn"
+        ~value:(I18n.tf "plugin/setting-not-handled" [ key ]) []
 
 let settings_body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
@@ -727,52 +662,41 @@ let settings_body (_ms : Model.t Signal.signal) : t =
     dyn ~equal:Stdlib.( = )
       (fun (_d, code) ->
         match !(Plugin_host.open_settings_pid) with
-        | None -> dom ~key:"ps-empty" []
+        | None -> spacer ~key:"ps-empty" []
         | Some pid ->
             let schema = Plugin_host.plugin_settings_schema pid in
             let body =
               if schema = [] then
-                [ dom ~tag:"h2" ~key:"none"
+                [ heading ~key:"none" ~level:2
                     ~style_class:"warning ls-pl-warn"
-                    ~text:(t "plugin/no-settings-schema") [] ]
+                    ~value:(t "plugin/no-settings-schema") [] ]
               else
-                [ dom ~tag:"h2" ~key:"id"
-                    ~style_class:"ls-pl-id"
-                    ~text:("ID: " ^ pid) []
-                ; dom ~key:"in"
-                    ~style_class:"cp__plugins-settings-inner"
-                    ~attrs:
-                      [ ("data-mode", if code then "code" else "") ]
-                    ( dom ~key:"ef" ~tag:"span"
-                        ~style_class:"edit-file"
-                        [ dom ~tag:"a"
-                            ~style_class:"ls-pl-link"
-                            ~events:"click"
-                            ~on_dom_event:(fun n _ ->
-                              if n = "click" then
-                                Runtime.signal_set code_mode (not code))
-                            ~text:
+                [ heading ~key:"id" ~level:2 ~style_class:"ls-pl-id"
+                    ~value:("ID: " ^ pid) []
+                ; column ~key:"in"
+                    ~style_class:"cp__plugins-settings-inner" ~gap:8
+                    ( box ~key:"ef" ~style_class:"edit-file"
+                        [ text ~key:"a" ~style_class:"ls-pl-link"
+                            ~on_press:(fun _ ->
+                              Runtime.signal_set code_mode (not code))
+                            ~value:
                               (if code then
                                  t "plugin.settings/exit-code-mode"
                                else t "plugin.settings/edit-settings-json")
                             [] ]
                     ::
                     if code then
-                      [ code_mode_wrap pid code_mode ]
+                      [ code_mode_wrap owner pid code_mode ]
                     else
                       List.map (settings_item pid) schema )
                 ]
             in
-            dom ~key:"ps"
+            column ~key:"ps"
               ~style_class:"cp__plugins-settings cp__settings-main"
-              [ dom ~key:"si"
+              [ box ~key:"si"
                   ~style_class:"cp__settings-inner no-aside"
-                  [ dom ~tag:"article" ~key:"art"
-                      [ dom ~key:"pw" ~style_class:"panel-wrap"
-                          ~attrs:[ ("data-id", pid) ]
-                          body
-                      ]
-                  ]
+                  [ column ~key:"pw" ~style_class:"panel-wrap" ~gap:16
+                      body ]
               ])
       (Signal.map2 pair
          (Plugin_host.dirty_value owner)

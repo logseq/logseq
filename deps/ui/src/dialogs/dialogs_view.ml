@@ -1,10 +1,9 @@
 (* Generic dialog host mounted in .cp__overlays. Renders the
    Dialogs_state stack: each dialog is
    .ui__dialog-overlay > .ui__dialog-content (per-name body) with a
-   .ui__dialog-close button; plus a confirm layer (div[role=alertdialog]
-   with Confirm/Cancel) and a text-prompt layer (.container >
-   h3#modal-headline + input.form-input + Submit) used by import.
-   Overlay/Escape close the topmost layer only. *)
+   .ui__dialog-close button; plus a confirm layer (alert dialog with
+   Confirm/Cancel) and a text-prompt layer (headline + input + Submit)
+   used by import. Overlay/Escape close the topmost layer only. *)
 
 open Lui_elements
 
@@ -36,13 +35,11 @@ let is_overlay_click payload =
        [ "ui__dialog-overlay"; "ui__dialog-content" ]
 
 let close_btn =
-  dom ~key:"dlg-close" ~tag:"button"
-    ~style_class:"ui__dialog-close"
-    ~attrs:[ ("type", "button") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then Dialogs_state.close_top ())
-    [ Icons.raw ~cls:"ls-icon-sm" "x" ]
+  button ~key:"dlg-close" ~variant:`ghost ~size:`icon
+    ~style_class:"ui__dialog-close" ~icon:`x
+    ~label:I18n.close
+    ~on_press:(fun _ -> Dialogs_state.close_top ())
+    []
 
 let body_of name (ms : Model.t Signal.signal) : t =
   match name with
@@ -63,71 +60,49 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "quick-add" -> Quick_add_view.body ms
   | _ -> box ~key:("empty-" ^ name) []
 
-(* cljs shui/dialog-open! :label opts — drives .ui__dialog-content[label=…]
-   CSS (app-settings -> max-w-5xl/overflow hidden; plugins-dashboard ->
-   90vw/1246px) *)
-let label_of = function
-  | "settings" -> Some "app-settings"
-  | "plugins" -> Some "plugins-dashboard"
-  | "plugin-readme" -> Some "plugin-readme"
-  | "login" -> Some "user-login"
-  | "new-graph" | "add-graph" -> Some "new-db-graph"
-  | _ -> None
-(* cljs dialog-open! :title — h2.ui__dialog-title text (hidden when none) *)
+(* cljs shui/dialog-open! :label opts became the ls-dialog-<name> class on
+   the content element — lui-overlay.css carries class-selector twins of
+   its .ui__dialog-content[label=…] rules (settings -> app-settings,
+   plugins -> plugins-dashboard, login -> user-login,
+   new-graph/add-graph -> new-db-graph) *)
 let title_of = function
+  (* cljs dialog-open! :title — h2.ui__dialog-title (omitted when none) *)
   | "new-graph" | "add-graph" -> I18n.create_new_graph
   | _ -> ""
 let dialog_view name (ms : Model.t Signal.signal) : t =
-  let is_settings = name = "settings" in
-  let z = Dialogs_state.z_index name in
+  (* TODO(component): the scrim stays a minimal dom wrapper — backdrop
+     dismissal needs the click target's class (deepest hit), and a
+     component Press only reports the pressed node's id. *)
   dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
-    ~attrs:
-      (("style", Printf.sprintf "z-index:%d" z)
-       :: (if is_settings then [ ("data-align", "top") ] else []))
     ~on_dom_event:(fun n p ->
       if n = "click" && is_overlay_click p then Dialogs_state.close_top ())
-    [ dom ~key:("dlg-c-" ^ name)
+    [ column ~key:("dlg-c-" ^ name)
         ~style_class:(content_cls ^ " ls-dialog-" ^ name)
-        ~attrs:
-          ([ ("data-state", "open")
-           ; ( "style"
-             , Printf.sprintf "z-index:%d%s" z
-                 (match name with
-                  (* cljs dialog-open! {:style {:max-width "500px"}} *)
-                  | "new-graph" | "add-graph" -> ";max-width:500px"
-                  | _ -> "") )
-           ]
-          @
-          match label_of name with
-          | Some l -> [ ("label", l); ("role", "dialog") ]
-          | None -> [ ("role", "dialog") ])
-        (* cljs shui dialog/core: h2.ui__dialog-title (hidden when the
-           dialog has no title) then .ui__dialog-main-content > body *)
+        (* cljs shui dialog/core: h2.ui__dialog-title (only when the
+           dialog has a title) then .ui__dialog-main-content > body *)
         [ (let title = title_of name in
-           dom ~key:("dlg-t-" ^ name) ~tag:"h2"
-             ~style_class:
-               ("ui__dialog-title" ^ if title = "" then " hidden" else "")
-             ~text:title
-             [])
-        ; dom ~key:("dlg-m-" ^ name) ~style_class:"ui__dialog-main-content"
+           if title = "" then spacer ~key:("dlg-t-" ^ name) []
+           else
+             heading ~key:("dlg-t-" ^ name) ~level:2
+               ~style_class:"ui__dialog-title" ~value:title [])
+        ; box ~key:("dlg-m-" ^ name)
+            ~style_class:"ui__dialog-main-content"
             [ body_of name ms ]
         ; close_btn ]
     ]
 
 let btn key label extra act =
-  dom ~key ~tag:"button"
+  button ~key
     ~style_class:(btn_style ^ " " ^ extra)
-    ~attrs:[ ("type", "button") ]
-    ~text:label ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then act ())
+    ~text:label
+    ~on_press:(fun _ -> act ())
     []
 
 let confirm_view (c : Dialogs_state.confirm) =
-  let z = Dialogs_state.z_index "confirm" in
+  (* TODO(component): same targetClass limitation as dialog_view —
+     the scrim keeps a minimal dom wrapper. *)
   dom ~key:"cfrm-ov"
-    ~style_class:"ui__alert-dialog-overlay"
-    ~attrs:[ ("style", Printf.sprintf "z-index:%d" z) ]
-    ~events:"click"
+    ~style_class:"ui__alert-dialog-overlay" ~events:"click"
     ~on_dom_event:(fun n payload ->
       if
         n = "click"
@@ -141,89 +116,73 @@ let confirm_view (c : Dialogs_state.confirm) =
            in
            go 0
       then Dialogs_state.close_confirm ())
-    [ dom ~key:"cfrm"
-        ~attrs:
-          [ ("role", "alertdialog")
-          ; ("style", Printf.sprintf "z-index:%d" z) ]
+    [ column ~key:"cfrm"
         ~style_class:"ui__alert-dialog-content"
-        [ (* cljs dialog/alert-inner: a confirm! with plain content
-             renders ui__alert-dialog-main-content only — no header *)
-          (if c.title = "" then
-             dom ~key:"cfrm-m"
-               ~style_class:"ui__alert-dialog-main-content"
-               [ dom ~key:"cfrm-mc" ~tag:"p"
-                   ~style_class:"font-medium mb-6" ~text:c.desc [] ]
+        (* cljs dialog/alert-inner: a confirm! with plain content
+           renders ui__alert-dialog-main-content only — no header *)
+        ( (if c.title = "" then
+             [ column ~key:"cfrm-m"
+                 ~style_class:"ui__alert-dialog-main-content"
+                 [ paragraph ~key:"cfrm-mc" ~value:c.desc [] ] ]
            else
-             dom ~key:"cfrm-h"
-               ~style_class:"ui__alert-dialog-header"
-               [ dom ~key:"cfrm-t" ~tag:"h2"
-                   ~style_class:"ui__alert-dialog-title" ~text:c.title []
-               ; if c.desc = "" then Logseq_dom.dom ~key:"cfrm-dx" []
+             [ column ~key:"cfrm-h"
+                 ~style_class:"ui__alert-dialog-header"
+                 ( [ heading ~key:"cfrm-t" ~level:2
+                       ~style_class:"ui__alert-dialog-title"
+                       ~value:c.title [] ]
+                 @
+                 if c.desc = "" then []
                  else
-                   dom ~key:"cfrm-d" ~tag:"div"
-                     ~style_class:"ui__alert-dialog-description"
-                     ~text:c.desc []
-               ])
-        ; dom ~key:"cfrm-f"
-            ~style_class:"ui__alert-dialog-footer"
-            [ btn "cfrm-cancel" I18n.cancel "ls-btn-outline"
-                Dialogs_state.close_confirm
-            ; btn "cfrm-ok" I18n.confirm "ls-btn-primary"
-                Dialogs_state.confirm
-            ]
-        ]
+                   [ paragraph ~key:"cfrm-d"
+                       ~style_class:"ui__alert-dialog-description"
+                       ~value:c.desc [] ] ) ] )
+        @ [ row ~key:"cfrm-f" ~style_class:"ui__alert-dialog-footer"
+              [ btn "cfrm-cancel" I18n.cancel "ls-btn-outline"
+                  Dialogs_state.close_confirm
+              ; btn "cfrm-ok" I18n.confirm "ls-btn-primary"
+                  Dialogs_state.confirm
+              ]
+          ] )
     ]
 
-let prompt_view (p : Dialogs_state.prompt) =
+let prompt_view (p : Dialogs_state.prompt) : t =
+ fun ctx parent ->
+  let value = Signal.state ctx.Lui_ui.ui_scheduler "" in
   let submit () =
-    match Web_dom.query_selector ".ui__dialog-content .form-input" with
-    | Some el -> Dialogs_state.submit_prompt (Web_dom.el_value el)
-    | None -> ()
+    Dialogs_state.submit_prompt (Signal.get_state value)
   in
-  let input_events name payload =
-    match name with
-    | "keydown" -> (
-        match
-          Platform.payload_str payload "key"
-        with
-        | "Enter" -> submit ()
-        | _ -> ())
-    | _ -> ()
-  in
-  let z = Dialogs_state.z_index "prompt" in
-  dom ~key:"prmt-ov" ~style_class:overlay_cls
-    ~attrs:[ ("style", Printf.sprintf "z-index:%d" z) ]
-    [ dom ~key:"prmt-c" ~style_class:content_cls
-        ~attrs:
-          [ ("data-state", "open")
-          ; ( "style"
-            , Printf.sprintf "z-index:%d;transform: translate(-50%%, -50%%)"
-                z )
+  let node =
+    box ~key:"prmt-ov" ~style_class:overlay_cls
+      [ column ~key:"prmt-c" ~style_class:content_cls
+          [ column ~key:"prmt-box" ~style_class:"ls-prompt-box"
+              ( (if p.desc = "" then
+                   [ heading ~key:"prmt-h" ~level:3
+                       ~style_class:"ls-prompt-headline" ~value:p.title []
+                   ]
+                 else
+                   (* cljs pdf-password-input: title + desc headline *)
+                   [ text ~key:"prmt-t" ~value:p.title []
+                   ; heading ~key:"prmt-h" ~level:3
+                       ~style_class:"ls-prompt-headline" ~value:p.desc []
+                   ])
+              @ [ input ~key:"prmt-in"
+                    ~style_class:"form-input ls-prompt-input"
+                    ~autofocus:true ~submit_on_enter:true
+                    ~on_input:(fun ev ->
+                      match ev with
+                      | Lui_protocol.TextChanged (_, s) ->
+                          Signal.set value s
+                      | _ -> ())
+                    ~on_submit:(fun _ -> submit ())
+                    []
+                ; btn "prmt-ok" I18n.submit "ls-btn-primary"
+                    (fun () -> submit ())
+                ] )
+          ; close_btn
           ]
-        [ dom ~key:"prmt-box" ~style_class:"ls-prompt-box"
-            ((if p.desc = "" then
-                [ dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
-                    ~style_class:"ls-prompt-headline" ~text:p.title [] ]
-              else
-                (* cljs pdf-password-input: title line + desc headline *)
-                [ dom ~key:"prmt-t" ~style_class:"text-lg mb-4"
-                    ~text:p.title []
-                ; dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
-                    ~style_class:"ls-prompt-headline"
-                    ~text:p.desc [] ])
-            @
-            [ dom ~key:"prmt-in" ~tag:"input"
-                ~style_class:"form-input ls-prompt-input"
-                ~attrs:
-                  [ ("type", "text"); ("autocomplete", "off")
-                  ; ("autofocus", "true") ]
-                ~events:"keydown"
-                ~on_dom_event:input_events []
-            ; btn "prmt-ok" I18n.submit "ls-btn-primary" (fun () -> submit ())
-            ])
-        ; close_btn
-        ]
-    ]
+      ]
+  in
+  node ctx parent
 
 let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
@@ -269,17 +228,17 @@ let render (ms : Model.t Signal.signal) : t =
     ; dyn ~equal:( == ) (fun c ->
           match c with
           | Some c -> confirm_view c
-          | None -> Logseq_dom.nothing)
+          | None -> spacer ~key:"cfrm-none" [])
         confirm_sig
     ; dyn ~equal:( == ) (fun p ->
           match p with
           | Some p -> prompt_view p
-          | None -> Logseq_dom.nothing)
+          | None -> spacer ~key:"prmt-none" [])
         prompt_sig
     ; dyn ~equal:( == ) (fun r ->
           match r with
           | Some r -> Ui_requests.view r
-          | None -> Logseq_dom.nothing)
+          | None -> spacer ~key:"ureq-none" [])
         ureq_sig
     ]
     ctx parent

@@ -164,9 +164,6 @@ let open_readme (item : Js.Json.t) =
        | Some html ->
            pending := Some { url; repo = ""; repository; html };
            Dialogs_state.open_ "plugin-readme";
-           (match Web_dom.query_selector "#ls-plugin-readme-content" with
-            | Some el -> Web_dom.el_set_inner_html el html
-            | None -> ());
            Js.Promise.resolve ()
        | None ->
            Toast.warning I18n.plugin_readme_empty;
@@ -178,11 +175,16 @@ let body (_ms : Model.t Signal.signal) : t =
   (match !pending with
    | Some t when t.repo <> "" ->
        (* cljs remote-readme-display *)
+       (* TODO(component): no iframe/embed kind — remote readmes need a
+          webview host; keeping minimal dom until one exists *)
        dom ~key:"readme-frame" ~tag:"iframe"
          ~style_class:"lsp-frame-readme"
          ~attrs:[ ("src", "./marketplace.html?repo=" ^ t.repo) ]
          []
    | Some t ->
+       (* TODO(component): data-capture-click anchor delegation (readme
+          links open externally via the payload's href) is a dom-adapter
+          hook with no component prop — minimal dom wrapper stays *)
        dom ~key:"rd" ~style_class:"cp__plugins-details"
          ~attrs:[ ("data-capture-click", "") ]
          ~events:"click"
@@ -190,25 +192,19 @@ let body (_ms : Model.t Signal.signal) : t =
            if name = "click" then
           let href = Platform.payload_str payload "href" in
           if String.trim href <> "" then Web_dom.win_open href)
-         [ (if t.repository = "" then Logseq_dom.nothing
+         [ (if t.repository = "" then spacer ~key:"rd-none" []
             else
-              dom ~key:"rd-repo"
+              (* cljs <strong><a target=_blank>: the capture-click
+                 handler above opens the link externally, so a plain
+                 link kind keeps the same open-in-new-window behavior *)
+              box ~key:"rd-repo"
                 ~style_class:"ls-readme-repo"
-                [ dom ~key:"rd-repo-s" ~tag:"strong"
-                    [ dom ~key:"rd-repo-a" ~tag:"a"
-                        ~style_class:"ls-readme-repo-link"
-                        ~attrs:
-                          [ ("href", t.repository); ("target", "_blank") ]
-                        [ dom ~key:"rd-repo-i" ~tag:"span"
-                            ~style_class:"ls-readme-repo-icon"
-                            [ Icons.icon ~size:25. "brand-github" ]
-                        ; dom ~key:"rd-repo-t" ~tag:"span"
-                            ~text:t.repository [] ]
-                    ]
-                ])
-         ; dom ~key:"rd-body"
+                [ link ~key:"rd-repo-a" ~url:t.repository
+                    ~style_class:"ls-readme-repo-link" ~gap:4
+                    ~icon:(`app "brand-github")
+                    ~text:t.repository [] ])
+         ; box ~key:"rd-body"
              ~style_class:"ls-readme-body ls-block"
-             ~attrs:[ ("id", "ls-plugin-readme-content") ]
-             [] ]
-   | None -> Logseq_dom.nothing)
+             (Render_html.els_of_string t.html) ]
+   | None -> spacer ~key:"rd-empty" [])
     ctx parent

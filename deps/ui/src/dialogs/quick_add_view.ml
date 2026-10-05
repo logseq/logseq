@@ -4,7 +4,6 @@
 
 open Lui_elements
 
-let dom = Logseq_dom.dom
 module U = I18n
 
 let body (_ms : Model.t Signal.signal) : t =
@@ -16,30 +15,33 @@ let body (_ms : Model.t Signal.signal) : t =
       (Quick_add_state.signal ())
   in
   let node =
-    dom ~key:"qa-root"
+    column ~key:"qa-root"
       ~style_class:"ls-quick-add"
-      [ dom ~key:"qa-head"
+      ~gap:16
+      [ row ~key:"qa-head"
           ~style_class:"ls-qa-head"
-          [ dom ~key:"qa-t" ~style_class:"ls-qa-title"
-              ~text:(U.t "editor.quick-add/title") [] ]
-      ; dom ~key:"qa-c" ~style_class:"ls-qa-content"
-          ~attrs:[ ("data-cid", "quick-add") ]
+          ~main:`space_between ~cross:`center ~gap:16
+          [ text ~key:"qa-t" ~style_class:"ls-qa-title"
+              ~value:(U.t "editor.quick-add/title") [] ]
+      ; box ~key:"qa-c" ~style_class:"ls-qa-content"
+          (* cljs .page-blocks-inner[data-cid] marks the editable
+             container region — carried as the a11y id until the
+             imperative [data-cid] lookup migrates *)
+          ~accessibility_identifier:"quick-add"
           [ dyn ~equal:(fun a b -> a == b)
               (fun blocks ->
-                dom ~key:"qa-list"
+                column ~key:"qa-list"
                   ~style_class:"page-blocks-inner"
                   (List.map (Tree.block_row ~scope:"quick-add") blocks))
               blocks_sig ]
-      ; dom ~key:"qa-btns" ~style_class:"ls-qa-btns"
-          [ dom ~key:"qa-add" ~tag:"button"
+      ; row ~key:"qa-btns" ~style_class:"ls-qa-btns"
+          ~main:`end_
+          [ button ~key:"qa-add" ~variant:`primary
               ~style_class:"ui__button ls-btn-primary"
-              ~attrs:[ ("type", "button") ]
-              ~events:"click"
-              ~on_dom_event:(fun n _ ->
-                if n = "click" then
-                  Editor_actions.quick_add_blocks_to_today ())
-              [ dom ~key:"qa-add-t"
-                  ~text:(U.t "editor.quick-add/add-to-today") [] ] ]
+              ~text:(U.t "editor.quick-add/add-to-today")
+              ~on_press:(fun _ ->
+                Editor_actions.quick_add_blocks_to_today ())
+              [] ]
       ]
   in
   node ctx parent
