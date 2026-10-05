@@ -26,8 +26,6 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ~key_of ~render (data : 'a array) : t =
   ignore scroll_parent_id;
   ignore overscan;
-  ignore estimate_size;
-  ignore initial_rows;
   ignore pin_key;
   ignore pin_sig;
   fun ctx parent ->
@@ -81,13 +79,60 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       Printf.sprintf "%s|%d" (key_of it)
         (Option.value (Hashtbl.find_opt versions (key_of it)) ~default:0)
     in
+    (* [initial_rows >= 0]: rows past that index mount behind a one-way
+       `near` latch — cljs page-root-virtual-list parity where offscreen
+       rows don't exist in the DOM at all. The placeholder is a childless
+       `.ls-virt-row[data-lazy-mount]` the flat spine reads as a spacer;
+       its onAppear dom-event flips `near` and the real row mounts in
+       place. Row data stays in the keyed source, so splices keep
+       identity either way. *)
+    let near_states : (string, bool Signal.state) Hashtbl.t =
+      Hashtbl.create 8
+    in
+    let near_of (k : string) : bool Signal.state =
+      match Hashtbl.find_opt near_states k with
+      | Some s -> s
+      | None ->
+          let s = Signal.state sched false in
+          Hashtbl.replace near_states k s;
+          s
+    in
+    let row_mount (i : int) (it : 'a) : t =
+      let k = key_of it in
+      let idx_attrs = ("data-index", string_of_int i) in
+      if initial_rows < 0 || i < initial_rows then
+        D.dom ~style_class:"ls-virt-row" ~attrs:[ idx_attrs ] [ render it ]
+      else
+        let near = near_of k in
+        let ns = near.Signal.state_signal in
+        D.dom ~style_class:"ls-virt-row"
+          ~attrs_signal_v:
+            (D.attrs_signal ns (fun n ->
+               idx_attrs
+               :: ("data-lazy-mount", k)
+               :: (if n then []
+                   else
+                     [ ( "style"
+                       , Printf.sprintf "min-height:%.0fpx"
+                           (estimate_size i) )
+                     ])))
+          ~events:"lazy-mount"
+          ~on_dom_event:(fun _name _payload -> Signal.set near true)
+          [ D.if_ ~test:ns (render it) ]
+    in
     D.dom ~style_class:list_class ~events:"virt-end"
       ~attrs_signal_v:attrs_sig
       ~on_dom_event:(fun _name _payload -> on_end ())
       [ D.keyed
-          ~source:(Signal.map Array.to_list source_sig)
-          ~key:key_of_versioned ~cmp:String.compare
-          ~mount:(fun item_sig -> render (Signal.get item_sig)) ]
+          ~source:
+            (Signal.map
+               (fun (arr : 'a array) ->
+                 List.mapi (fun i it -> (i, it)) (Array.to_list arr))
+               source_sig)
+          ~key:(fun (_, it) -> key_of_versioned it) ~cmp:String.compare
+          ~mount:(fun pair_sig ->
+            let i, it = Signal.get pair_sig in
+            row_mount i it) ]
       ctx parent
 
 (* Signal-driven row stream: same [ls-virt-list] shell but children are
@@ -95,16 +140,64 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
    on this backend every row is a real child anyway, so diffing per row
    is what keeps outliner ops cheap on huge pages (a single-block edit
    must not re-emit the whole stream). *)
-let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ()) ~estimate_size:_
+let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
+    ?(initial_rows = -1) ~estimate_size
     (source : 'a list Signal.signal) : t =
  fun ctx parent ->
+  let sched = ctx.Lui_ui.ui_scheduler in
   let count_sig = Signal.map List.length source in
   let attrs_sig =
     Logseq_dom.attrs_signal count_sig (fun n ->
         [ ("data-virt-count", string_of_int n) ])
   in
+  (* same lazy latch as [list]: rows past [initial_rows] start as a
+     childless `.ls-virt-row[data-lazy-mount]` spacer and mount their
+     real content when the spine reports them near the viewport *)
+  let near_states : (string, bool Signal.state) Hashtbl.t =
+    Hashtbl.create 8
+  in
+  let near_of (k : string) : bool Signal.state =
+    match Hashtbl.find_opt near_states k with
+    | Some s -> s
+    | None ->
+        let s = Signal.state sched false in
+        Hashtbl.replace near_states k s;
+        s
+  in
+  let row_mount (i : int) (item_sig : 'a Signal.signal) : t =
+    let k = key (Signal.get item_sig) in
+    let idx_attrs = ("data-index", string_of_int i) in
+    if initial_rows < 0 || i < initial_rows then
+      D.dom ~style_class:"ls-virt-row" ~attrs:[ idx_attrs ]
+        [ mount item_sig ]
+    else
+      let near = near_of k in
+      let ns = near.Signal.state_signal in
+      D.dom ~style_class:"ls-virt-row"
+        ~attrs_signal_v:
+          (D.attrs_signal ns (fun n ->
+             idx_attrs
+             :: ("data-lazy-mount", k)
+             :: (if n then []
+                 else
+                   [ ( "style"
+                     , Printf.sprintf "min-height:%.0fpx" (estimate_size i)
+                     )
+                   ])))
+        ~events:"lazy-mount"
+        ~on_dom_event:(fun _name _payload -> Signal.set near true)
+        [ D.if_ ~test:ns (mount item_sig) ]
+  in
   (D.dom ~style_class:"ls-virt-list" ~events:"virt-end"
      ~attrs_signal_v:attrs_sig
      ~on_dom_event:(fun _name _payload -> on_end ())
-     [ D.keyed ~source ~key ~cmp ~mount ])
+     [ D.keyed
+         ~source:
+           (Signal.map
+              (fun (l : 'a list) -> List.mapi (fun i it -> (i, it)) l)
+              source)
+         ~key:(fun (_, it) -> key it) ~cmp
+         ~mount:(fun pair_sig ->
+           let i, _ = Signal.get pair_sig in
+           row_mount i (Signal.map snd pair_sig)) ])
     ctx parent

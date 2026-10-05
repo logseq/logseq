@@ -2837,11 +2837,25 @@ private struct LogseqFlatSpineResolved {
           }
         }
       } else {
-        if cls.contains("ls-virt-list"), out.virtListID == nil {
-          out.virtListID = id
-        }
-        for c in context.childIDs(of: id).reversed() {
-          stack.append((c, depth, borders))
+        let a = attrs(context, of: id)
+        // .ls-virt-row[data-lazy-mount] row placeholders (and any other
+        // lazy boundary node): childless until the lazy-mount event lands —
+        // same spacer treatment as a lazy .block-children.
+        if a["data-lazy-mount"] != nil,
+          context.childIDs(of: id).isEmpty
+        {
+          out.entries.append(
+            LogseqFlatSpineEntry(
+              nodeID: id, key: "lazy-\(id)", depth: depth,
+              borderIDs: borders, kind: .spacer,
+              spacerHeight: minHeight(a)))
+        } else {
+          if cls.contains("ls-virt-list"), out.virtListID == nil {
+            out.virtListID = id
+          }
+          for c in context.childIDs(of: id).reversed() {
+            stack.append((c, depth, borders))
+          }
         }
       }
     }

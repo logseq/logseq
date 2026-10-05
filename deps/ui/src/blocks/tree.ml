@@ -699,6 +699,7 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
            else []))
     (if virtualize && List.length kids >= 64 then
        [ Virt_list.list ~key_of:block_key ~estimate_size:(fun _ -> 32.)
+           ~initial_rows:48
            ~render:(block_row ~scope ~editable ~depth:(depth + 1) ~library
                       ~virtualize)
            (Array.of_list kids) ]
