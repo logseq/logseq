@@ -141,8 +141,11 @@ The user reports the live tools are working. Live verification is performed by
 Claude Desktop separately from this local suite; retain its report and ledger
 as evidence. Passing this gate does not automatically complete the broader
 Stage 1 matrix or advance the migration plan.
-`capabilities` reports inconclusive probes as `unknown`; write probes use
-invalid arguments, and `upsertNodes` is neither probed nor reported.
+`capabilities` reports inconclusive probes as `unknown`. By default it probes
+read methods only and marks write-dependent methods `unknown` with
+`basis: "not-probed"`; `probe_writes: true` explicitly opts into mutation
+probes on a disposable graph. `createPage` remains unprobed, and `upsertNodes`
+is neither probed nor reported.
 Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.
@@ -182,11 +185,40 @@ query-based getBlock implementation, and comparison switch have been removed.
 The old comparison-launch instructions are superseded; the tool now has one
 registered implementation and does not inspect `LOGSEQ_MCP_COMPARE_GETBLOCK`.
 
-Local checks passed 107 MCP tests / 472 assertions after the cleanup. Current
-live smoke testing remains pending; the historical raw-prototype results below
-do not validate this integration. No new graph writes or desktop restart were
-performed during this cleanup. Other Stage 2 reads retain their existing
-implementations; do not advance to another tool before the getBlock smoke test.
+The existing `getPageBlockUUIDs` route initially failed live dispatch because
+`getPageBlockUUIDs` was normalized to `get_page_block_uui_ds`, while the exported
+method is `get_page_block_uuids`. The MCP server's method normalizer now preserves
+the `UUIDs` acronym, with a focused regression test. No additional DB getter or
+export was introduced.
+
+`getPage` now calls the existing `get_page_data` export through
+`logseq.DB.getPageData`, preserving its page-name argument and result/error
+envelope without duplicating the CLI implementation. Local route, capability,
+and SDK checks pass; the same-graph live read used the prior CLI route, so a
+read-only recheck through the DB alias is still required.
+
+On 2026-10-05 Claude completed a same-graph read-only sweep: 28 read tools were
+exercised, with 27 PASS, 0 FAIL, and `capabilities` BLOCKED because its
+diagnostics probe write routes. The corrected `getBlockUUID` retry returned nine
+descendants. The graph remained unchanged (68 pages, 21 tags, one recycled page)
+and no writes were made. The earlier page count of 62 was a miscount. `listAssets`
+returned an empty array but remains an explicitly unverified discovery probe,
+not a complete asset inventory. Orphan-tag/property results were cross-checked
+through their holder tools. The UUID-titled tag, duplicate-title pages, recycled
+outline, and Oct 4 blocks were left untouched.
+
+The initial read-only run skipped `capabilities` because its probes could invoke
+mutation routes. A safe default has since been implemented: read methods are
+probed, while write-dependent methods are reported as `unknown/not-probed`.
+Local tests cover the default and explicit opt-in modes; rerun the safe mode on
+the same graph to close the remaining capability check.
+
+Focused local checks pass, including compilation, resolver normalization, and
+the `getBlockUUID` MCP adapter test. The full `electron.mcp-compat-test`
+namespace stalled in a test-only run; do not report the full namespace as
+passing. Earlier collapsed and property-bearing `getBlock` cases remain
+unverified unless separately reported; historical raw-prototype results below
+do not validate the current integration.
 
 #### Historical Raw-Prototype Evidence: 2026-10-03
 

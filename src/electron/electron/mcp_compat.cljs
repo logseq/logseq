@@ -6,7 +6,7 @@
 
 (defn get-page
   [call-api-fn args]
-  (call-api-fn "logseq.cli.getPageData" [(aget args "pageName")]))
+  (call-api-fn "logseq.DB.getPageData" [(aget args "pageName")]))
 
 (def ^:private page-title-query
   "[:find [(pull ?page [:block/uuid :block/title :block/name]) ...]
@@ -2420,7 +2420,7 @@
 (def ^:private capability-tool-routes
   {:listPages ["logseq.DB.listPages"]
   :listJournals ["logseq.DB.getJournalCandidates" "logseq.DB.datascriptQuery"]
-   :getPage ["logseq.cli.getPageData"]
+  :getPage ["logseq.DB.getPageData"]
    :searchBlocks ["logseq.DB.search"]
    :listTags ["logseq.DB.listTags"]
    :listProperties ["logseq.DB.listProperties"]
@@ -2491,6 +2491,7 @@
   "logseq.DB.getOrphanProperties" []
   "logseq.DB.getPropertyUsers" [":logseq.property/status"]
   "logseq.DB.getAssetAttributeNames" []
+  "logseq.DB.getPageData" ["__mcp_capability_probe__"]
   "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
@@ -2515,6 +2516,14 @@
    "logseq.DB.removeProperty" ["__mcp_capability_probe__"]
    "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
   "logseq.DB.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
+
+(def ^:private capability-write-methods
+  #{"logseq.DB.upsertProperty" "logseq.DB.createTag" "logseq.DB.createPage"
+    "logseq.DB.insertBlock" "logseq.DB.insertBatchBlock" "logseq.DB.renamePage"
+    "logseq.DB.updateBlock" "logseq.DB.moveBlock" "logseq.DB.removeBlock"
+    "logseq.DB.deletePage" "logseq.DB.addBlockTag" "logseq.DB.removeBlockTag"
+    "logseq.DB.upsertBlockProperty" "logseq.DB.removeBlockProperty"
+    "logseq.DB.removeProperty"})
 
 (def ^:private capability-absent-markers
   ["no method found" "unknown method" "not supported" "not implemented"
@@ -2550,12 +2559,21 @@
       {:method method :state "available" :basis "probed" :detail "returned a result"})))
 
 (defn- probe-capability-method
-  [api-fn method]
-  (if (= method "logseq.DB.createPage")
+  [api-fn method probe-writes?]
+  (cond
+    (= method "logseq.DB.createPage")
     (p/resolved {:method method
                  :state "unknown"
                  :basis "not-probed"
                  :detail "Skipped because probing createPage could create a graph page."})
+
+    (and (contains? capability-write-methods method) (not probe-writes?))
+    (p/resolved {:method method
+                 :state "unknown"
+                 :basis "not-probed"
+                 :detail "Skipped in read-only mode because this route may modify the graph. Set probe_writes=true only with explicit approval on a disposable graph."})
+
+    :else
     (-> (p/let [result (api-fn method (get capability-probe-args method))
                 error-message (when (and result (object? result))
                                 (or (aget result "error") (get result "error")))]
@@ -2577,7 +2595,8 @@
 
 (defn capabilities
   [api-fn args]
-  (p/let [info-result (api-fn "logseq.App.getAppInfo" [])
+  (let [probe-writes? (true? (aget args "probe_writes"))]
+   (p/let [info-result (api-fn "logseq.App.getAppInfo" [])
           graph-result (api-fn "logseq.App.checkCurrentIsDbGraph" [])
           info (js->clj info-result :keywordize-keys true)]
     (cond
@@ -2589,7 +2608,7 @@
 
       :else
     (p/let [probe-methods (->> capability-tool-routes vals (apply concat) distinct sort)
-            findings (p/all (map #(probe-capability-method api-fn %) probe-methods))
+      findings (p/all (map #(probe-capability-method api-fn % probe-writes?) probe-methods))
             findings-by-method (into {} (map (juxt :method identity) findings))
                  tools (into (sorted-map)
                    (map (fn [[tool _routes]]
@@ -2605,7 +2624,9 @@
                           :version_matches (= version "2.0.1")
                           :checked_at (/ (.now js/Date) 1000)}
                   :tools tools
-                  :what_available_means "The route exists and responds. Probes send deliberately invalid arguments, so `available` establishes reachability, not that the route accepts a real payload."}
+                  :what_available_means (str "The route exists and responds. Probes send deliberately invalid arguments, so `available` establishes reachability, not that the route accepts a real payload."
+                                             (when-not probe-writes?
+                                               " Mutation routes are skipped by default and reported as unknown/not-probed."))}
             body (cond-> body
                    (seq unavailable) (assoc :unavailable unavailable)
                    (seq unknown) (assoc :unknown unknown
@@ -2619,4 +2640,4 @@
                                                              [(name tool) routes]))
                                                       capability-tool-routes)
                                         :method_findings (vec (sort-by :method findings))}))]
-      body))))
+      body)))))

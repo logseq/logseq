@@ -4,11 +4,26 @@
             ["@modelcontextprotocol/sdk/server/streamableHttp.js" :refer [StreamableHTTPServerTransport]]
             ["@modelcontextprotocol/sdk/types.js" :refer [isInitializeRequest]]
             ["zod/v3" :as z] ;; zod 4 doesn't work w/ mcp - https://github.com/modelcontextprotocol/typescript-sdk/issues/925
+            [camel-snake-kebab.core :as csk]
+            [clojure.string :as string]
             [electron.mcp-compat :as mcp-compat]
             [promesa.core :as p]))
 
 ;; Server util fns
 ;; ===============
+(defn type-proxy-api? [method]
+  (when (string? method)
+    (string/starts-with? method "logseq.")))
+
+(defn resolve-real-api-method [method]
+  (when-not (string/blank? method)
+    (if (type-proxy-api? method)
+      (let [parts (string/split (string/trim method) ".")
+            namespace (some-> (second parts) string/lower-case)
+            function (string/replace (last parts) "UUIDs" "Uuids")]
+        (csk/->snake_case (str namespace "@" function)))
+      (string/trim method))))
+
 ;; "Stores transports by session ID"
 (defonce ^:private transports
   (atom {}))
@@ -143,8 +158,9 @@
         :capabilities
         {:fn mcp-compat/capabilities
          :config #js {:title "Capabilities"
-                  :description "Report which registered MCP tools are available on the current DB graph, with optional probe diagnostics."
-                  :inputSchema #js {:include_diagnostics (-> (z/boolean) .optional)}}}
+                  :description "Report route availability. Mutation methods are not probed unless probe_writes is explicitly enabled on a disposable graph."
+                  :inputSchema #js {:include_diagnostics (-> (z/boolean) .optional)
+                                    :probe_writes (-> (z/boolean) .optional)}}}
   :createPage
   {:fn mcp-compat/create-page
    :config #js {:title "Create Page"

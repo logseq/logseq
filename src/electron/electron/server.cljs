@@ -4,7 +4,6 @@
             ["fastify" :as Fastify]
             ["fs-extra" :as fs-extra]
             ["path" :as node-path]
-            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.configs :as cfgs]
@@ -67,18 +66,11 @@
   #(remove-watch *state ::ws))
 
 (defn type-proxy-api? [s]
-  (when (string? s)
-    (string/starts-with? s "logseq.")))
+  (desktop-mcp-server/type-proxy-api? s))
 
 (defn resolve-real-api-method
   [s]
-  (when-not (string/blank? s)
-    (if (type-proxy-api? s)
-      (let [s' (string/split (string/trim s) ".")
-            ns (some-> (second s') str (string/lower-case))
-            method (some-> (last s') str)]
-        (csk/->snake_case (str ns "@" method)))
-      (string/trim s))))
+  (desktop-mcp-server/resolve-real-api-method s))
 
 (defn- validate-auth-token
   [token]

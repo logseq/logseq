@@ -19,6 +19,12 @@
     (swap! calls conj [method args])
     result))
 
+(deftest db-api-method-resolution-preserves-uuid-acronym-export
+  (is (= "db@get_page_block_uuids"
+    (mcp-server/resolve-real-api-method "logseq.DB.getPageBlockUUIDs")))
+  (is (= "db@get_title_inventory"
+    (mcp-server/resolve-real-api-method "logseq.DB.getTitleInventory"))))
+
 (defn- fixture-block-tree
   [conn block-uuid max-depth max-nodes]
   (let [db @conn
@@ -1136,7 +1142,7 @@
     (is (= :ok (mcp-compat/list-tags api #js {"expand" false})))
     (is (= :ok (mcp-compat/list-properties api #js {"expand" true})))
     (is (= :ok (mcp-compat/search-blocks api #js {"searchTerm" "needle"})))
-    (is (= ["logseq.cli.getPageData" ["Inbox"]]
+    (is (= ["logseq.DB.getPageData" ["Inbox"]]
            (first @calls)))
     (is (= "logseq.DB.listPages" (first (second @calls))))
     (is (= true (aget (first (second (second @calls))) "expand")))
@@ -1166,6 +1172,7 @@
                     (is (some #(= "logseq.DB.getTag" (first %)) @calls))
                     (is (some #(= "logseq.DB.getBlock" (first %)) @calls))
                     (is (some #(= "logseq.DB.listPages" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getPageData" (first %)) @calls))
                     (is (some #(= "logseq.DB.listTags" (first %)) @calls))
                     (is (some #(= "logseq.DB.listProperties" (first %)) @calls))
                     (is (some #(= "logseq.DB.inspectPage" (first %)) @calls))
@@ -1187,15 +1194,53 @@
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
-                      (is (some #(and (= "logseq.DB.upsertProperty" (first %))
-                                (= "__mcp_capability_probe__/invalid"
-                                  (first (second %))))
-                            @calls))
+                    (is (not-any? #(contains? #{"logseq.DB.upsertProperty"
+                                                "logseq.DB.createPage"
+                                                "logseq.DB.createTag"
+                                                "logseq.DB.renamePage"
+                                                "logseq.DB.updateBlock"
+                                                "logseq.DB.moveBlock"
+                                                "logseq.DB.removeBlock"
+                                                "logseq.DB.deletePage"
+                                                "logseq.DB.addBlockTag"
+                                                "logseq.DB.removeBlockTag"
+                                                "logseq.DB.upsertBlockProperty"
+                                                "logseq.DB.removeBlockProperty"
+                                                "logseq.DB.removeProperty"
+                                                "logseq.DB.insertBlock"
+                                                "logseq.DB.insertBatchBlock"}
+                                              (first %))
+                                @calls))
+                    (is (some #(and (= "logseq.DB.upsertProperty" (:method %))
+                                    (= "not-probed" (:basis %)))
+                              (get-in result [:diagnostics :method_findings])))
                     (is (= 2 (count (filter #(string/starts-with? (first %) "logseq.App.") @calls))))
                     (done)))
           (p/catch (fn [error]
                      (is false (str error))
                     (done)))))))
+
+(deftest capabilities-probes-write-routes-only-with-explicit-opt-in
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.App.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                "logseq.App.checkCurrentIsDbGraph" true
+                "logseq.DB.upsertProperty" #js {"error" "invalid probe title"}
+                #js []))]
+    (async done
+        (-> (mcp-compat/capabilities api #js {"probe_writes" true "include_diagnostics" true})
+          (p/then (fn [result]
+                    (is (some #(= "logseq.DB.upsertProperty" (first %)) @calls))
+                    (is (not-any? #(= "logseq.DB.createPage" (first %)) @calls))
+              (is (some #(and (= "logseq.DB.createPage" (:method %))
+                      (= "not-probed" (:basis %)))
+                    (get-in result [:diagnostics :method_findings])))
+                    (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (js/queueMicrotask done)))))))
 
 (deftest capabilities-refuses-non-db-graphs
   (let [api (fn [method _args]
