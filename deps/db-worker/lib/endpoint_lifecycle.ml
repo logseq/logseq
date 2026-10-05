@@ -316,6 +316,14 @@ let open_states : (string, open_state) Hashtbl.t = Hashtbl.create 7
 let initialize_db ~ensure_open args =
   match args with
   | Wire.String repo :: opts_rest ->
+      let open_t0 = Date_time_util.time_ms () in
+      let open_phase name =
+        Worker_log.info "open-db-phase"
+          [ "p", name
+          ; "ms"
+          , Int64.to_string
+              (Int64.sub (Date_time_util.time_ms ()) open_t0) ]
+      in
       let opts = match opts_rest with t :: _ -> t | [] -> Wire.Nil in
       let creating_remote_graph = opt_bool "creating-remote-graph?" false opts in
            if opt_bool "close-other-db?" true opts then
@@ -361,6 +369,7 @@ let initialize_db ~ensure_open args =
               enable-sqlite-wal-mode! pragmas run inside open_search_db
               before its tables are created. *)
            ignore (Endpoint_search.get_search_db repo);
+           open_phase "sqlite+search-db";
            let finish () : Wire.t Db_worker_effect.t =
              Graph_store.create_kvs_table db;
              let storage = Graph_store.storage db in
@@ -368,6 +377,7 @@ let initialize_db ~ensure_open args =
              let conn =
                Common_sqlite.get_storage_conn storage (Db_schema.schema ())
              in
+             open_phase "restore-conn";
              (* cljs <create-or-open-db!: the datascript conn is registered
                 before the initial transact so sync bookkeeping (local-tx
                 seed, handle-local-tx!) can see it. *)
@@ -376,6 +386,7 @@ let initialize_db ~ensure_open args =
                 get-storage-conn, before datoms/initial-data *)
              Worker_db_fix.check_and_fix_schema conn;
              Worker_db_fix.heal_instant_values conn;
+             open_phase "schema-fix";
              (* cljs bootstrap-transact! on the :datoms/:debug-transit-raw
                 open-opts (CLI/node import path). *)
              let datoms =
@@ -411,6 +422,7 @@ let initialize_db ~ensure_open args =
                        | Some e -> Ldb.value e "kv/value" = Some (Datascript.String "db")
                        | None -> false)
              in
+             open_phase "initial-check";
              let initial_tx_report =
                if not
                    (initial_data_exists || Option.is_some datoms
@@ -451,6 +463,7 @@ let initialize_db ~ensure_open args =
                 gated: a sync-download open hands an empty conn to the
                 importer, and the recycle-gc upsert would allocate eid 1
                 before the imported datoms arrive. *)
+             open_phase "initial-tx";
              (if not sync_download then begin
                 (match Db_migrate.migrate conn with
                  | Some result ->
@@ -460,6 +473,7 @@ let initialize_db ~ensure_open args =
                        initial_data_exists);
                 Endpoint_transaction.maybe_run_recycle_gc conn
               end);
+             open_phase "migrate+gc";
              (* cljs (when initial-tx-report (db-sync/handle-local-tx! repo
                 initial-tx-report)). *)
              (match initial_tx_report with
@@ -468,6 +482,7 @@ let initialize_db ~ensure_open args =
              (* cljs (db-sync/reconcile-local-checksum! repo conn) *)
              Sync_client.reconcile_local_checksum repo conn;
              Db_listener.listen_db_changes repo conn;
+             open_phase "open-done";
              match Worker_state.datascript_conn repo with
              | Some conn ->
                  Db_worker_effect.pure

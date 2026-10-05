@@ -3957,6 +3957,7 @@ let () =
     ; "db-worker", Test_db_worker_native.cases
     ; "platform", Test_platform_native.cases
     ; "search-benchmark", Test_search_benchmark_native.cases
+    ; "cold-start", Test_cold_start_native.cases
     ; "shared-service", Test_shared_service_native.cases
     ; "node-sync", Test_node_sync_native.cases
     ; "pipeline", Test_pipeline_native.cases
