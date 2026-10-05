@@ -93,14 +93,16 @@ let open_filter_picker ~anchor value_uuid =
 (* .cp__query-builder > .cp__query-builder-filter > button.add-filter —
    cljs renders the "Filter" label whenever loc=[0] (the root add-filter),
    regardless of the query title *)
-(* the label is the button's own text prop: the web adapter sets
-   textContent (a real Text node) before the icon child mounts, which is
-   what Playwright's button:text('filter') needs — it only matches when
-   the button is the smallest element containing the text *)
 let block_el uuid (_b : Model.block) : Lui_elements.t =
-  dom ~key:("qwrap-" ^ uuid) ~style_class:"cp__query-builder"
-    [ dom ~key:("qfilter-" ^ uuid) ~style_class:"cp__query-builder-filter"
-        [ dom ~key:("qb-" ^ uuid) ~tag:"button" ~id:("qb-" ^ uuid)
+  Lui_elements.box ~key:("qwrap-" ^ uuid) ~style_class:"cp__query-builder"
+    [ Lui_elements.box ~key:("qfilter-" ^ uuid)
+        ~style_class:"cp__query-builder-filter"
+        [ (* TODO(component): the button kind renders ~text inside its
+             .lui-button-label span — Playwright's button:text('filter')
+             locator only matches when the button itself is the smallest
+             element containing the text, i.e. a direct text node. Keep
+             dom ~text until the e2e contract or the adapter changes. *)
+          dom ~key:("qb-" ^ uuid) ~tag:"button" ~id:("qb-" ^ uuid)
             ~style_class:
               "jtrigger !px-1 h-6 add-filter text-muted-foreground"
             ~attrs:[ ("type", "button") ]
@@ -111,8 +113,8 @@ let block_el uuid (_b : Model.block) : Lui_elements.t =
                 | Some btn -> open_filter_picker ~anchor:btn uuid
                 | None -> ())
             ~text:(I18n.t "query.builder/filter")
-            [ dom ~key:("qi-" ^ uuid) ~tag:"span"
-                ~style_class:"ui__icon ti ti-plus" []
+            [ Lui_elements.icon ~key:("qi-" ^ uuid) ~name:`plus
+                ~style_class:"ui__icon" []
             ]
         ]
     ]

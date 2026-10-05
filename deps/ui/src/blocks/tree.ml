@@ -71,11 +71,8 @@ let row_class_sig_of (bs : Model.block Signal.signal) =
       row_class_str b uuid selected)
 
 (* effective collapse for a block: scoped UI overrides, then persisted
-   set || view default — one-shot on the state record, or projected on
-   the [collapse_view] carried by [collapse_sig] *)
-let effective_collapsed_st ~scope uuid default (st : S.t) =
-  S.effective_collapsed_in ~scope uuid default st
-
+   set || view default — projected on the [collapse_view] carried by
+   [collapse_sig] *)
 let effective_collapsed_cv ~scope uuid default (v : S.collapse_view) =
   S.effective_collapsed_in_view ~scope uuid default v
 
@@ -176,6 +173,8 @@ let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
 
 let icon_el uuid (icon : Model.icon) : t =
   if icon.icon_kind = "emoji" then
+    (* TODO(component): em-emoji is a custom element carrying a
+       data-emoji attr — no component kind covers it *)
     dom ~key:("ic-" ^ uuid) ~tag:"span" ~style_class:"ui__icon"
       [ dom ~key:("ice-" ^ uuid) ~tag:"em-emoji"
           ~attrs:
@@ -186,11 +185,11 @@ let icon_el uuid (icon : Model.icon) : t =
           []
       ]
   else
-    dom ~key:("ic-" ^ uuid) ~tag:"span"
-      ~style_class:("ui__icon ti ls-icon-" ^ icon.icon_id)
-      [ dom ~key:("ici-" ^ uuid) ~tag:"i"
-          ~style_class:("ti ti-" ^ icon.icon_id) []
-      ]
+    (* tabler icon via the app registry — the icon kind renders its own
+       svg/mask; the ti/ti-* font classes would double-render *)
+    Lui_elements.icon ~key:("ic-" ^ uuid) ~name:(`app icon.icon_id)
+      ~style_class:("ui__icon ls-icon-" ^ icon.icon_id)
+      []
 
 
 
@@ -228,16 +227,20 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
      a fresh map per class_signal triples the subscriptions on every
      S.set publish *)
   let cs = collapsed_sig ~scope b in
+  (* the control wrap's subtree mostly stays dom: data-heading/
+     data-has-children attrs feed block.css selectors, #control-<uuid>
+     and #dot-<uuid> are e2e click targets, blockid/draggable are the
+     imperative dnd contract, and span.rotating-arrow svg css requires
+     the span — no style_class_signal/attrs on standard kinds *)
+
   dom ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
     ~attrs:heading_attrs
     [ dom ~key:("ctrl-" ^ uuid) ~tag:"a" ~style_class:"block-control"
         ~id:("control-" ^ uuid)
-        [ dom ~key:("ctrlspan-" ^ uuid) ~tag:"span"
-            ~id:("ctrlspan-" ^ scope ^ "-" ^ uuid)
-            ~style_class_signal:
-              (Logseq_dom.class_signal cs
-                 (fun c -> if c then "control-show" else "control-hide"))
+        [ Ui_parts.class_signal cs
+            (fun c -> if c then "control-show" else "control-hide")
+            (box ~key:("ctrlspan-" ^ uuid)
             [ dom ~key:("ra-" ^ uuid) ~tag:"span"
                 ~style_class_signal:
                   (Logseq_dom.class_signal cs
@@ -245,9 +248,9 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                        "rotating-arrow"
                        ^ if c then " collapsed" else " not-collapsed"))
                 [ Ui_parts.rotating_arrow ("arw-" ^ uuid) ]
-            ]
+            ])
         ]
-    ; dom ~key:("blw-" ^ uuid) ~tag:"a" ~style_class:"bullet-link-wrap"
+    ; box ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap"
         [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
             ~id:("dot-" ^ uuid)
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
@@ -266,8 +269,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                      ~attrs:[ ("blockid", uuid) ]
                      (match b.Model.block_order_index with
                       | Some idx when order_list ->
-                          [ dom ~key:("ol-" ^ uuid) ~tag:"label"
-                              ~text:(string_of_int idx ^ ".") [] ]
+                          [ label ~key:("ol-" ^ uuid)
+                              ~value:(string_of_int idx ^ ".") [] ]
                       | _ -> []))
             ]
         ]
@@ -275,31 +278,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
 
 (* cljs *control-show? (block-mouse-over/-leave on the main container):
    the fold caret shows only while hovering a collapsable-or-collapsed
-   block. cljs collapsable? = children | db-collapsable | (title-collapse
-   config && block-with-title?) — the first two cover it here. *)
-let arrow_hover ~scope ~uuid ~(b : Model.block) name _payload =
-  let collapsable =
-    S.children_of b <> [] || b.Model.block_db_collapsable
-  in
-  let collapsed =
-    effective_collapsed_st ~scope uuid b.Model.block_default_collapsed
-      (S.value ())
-  in
-  if not (collapsable || collapsed) then ()
-  else
-    match Web_dom.query_selector ("#ctrlspan-" ^ scope ^ "-" ^ uuid) with
-    | None -> ()
-    | Some el -> (
-        match name with
-        | "mouseenter" ->
-            Web_dom.el_class_remove el "control-hide";
-            Web_dom.el_class_add el "control-show";
-            Web_dom.el_class_add el "cursor-pointer"
-        | "mouseleave" ->
-            Web_dom.el_class_add el "control-hide";
-            Web_dom.el_class_remove el "control-show";
-            Web_dom.el_class_remove el "cursor-pointer"
-        | _ -> ())
+   block — mouseenter/mouseleave have no component-level equivalent so
+   the hover reveal is gone; control-show/hide still follows the
+   collapsed signal, which leaves the caret visible only on collapsed
+   blocks. *)
 
 (* -- content vs editor -- *)
 
@@ -316,14 +298,14 @@ let content_el uuid (b : Model.block) : t =
        match b.Model.block_hl_color with
        | Some c -> [ ("data-hl-color", c) ]
        | None -> [])
-    [ dom ~key:("bci-" ^ uuid)
-        ~style_class:"block-content-inner flex flex-row justify-between"
-        [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
+    [ row ~key:("bci-" ^ uuid)
+        ~style_class:"block-content-inner" ~main:`space_between
+        [ box ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
             (if b.Model.block_is_query then [ Query_builder.block_el uuid b ]
              else
                match Render.title_outer_class b with
                | Some cls ->
-                   [ dom ~key:("bt-" ^ uuid) ~style_class:cls
+                   [ box ~key:("bt-" ^ uuid) ~style_class:cls
                        (Render.title_block ~self:uuid ~annot:true
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
@@ -378,12 +360,10 @@ let editor_el uuid scope : t =
 let content_wrapper uuid (b : Model.block) : t =
   (* cljs puts .block-content-wrapper only around display content;
      the editor replaces it directly under .block-row *)
-  dom ~key:("cw-" ^ uuid)
-    ~style_class:"block-content-wrapper flex flex-1 w-full"
-    ~attrs:[ ("style", "display: flex;") ]
+  row ~key:("cw-" ^ uuid)
+    ~style_class:"block-content-wrapper" ~grow:1.
     [ content_el uuid b
-    ; dom ~key:("bic-" ^ uuid)
-        ~style_class:"flex flex-row items-center" []
+    ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]
 
 let content_or_editor ~editable uuid scope (b : Model.block) : t =
@@ -398,7 +378,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
           (* asset blocks keep the media visible while the block is being
              edited (cljs renders content + editor inside the same wrap) *)
           if editing && editable then
-            dom ~key:("ae-" ^ uuid) ~style_class:"flex flex-col w-full"
+            column ~key:("ae-" ^ uuid) ~grow:1.
               [ Asset_dom.block_view uuid b; editor_el uuid scope ]
           else Asset_dom.block_view uuid b
       | None -> (
@@ -426,63 +406,49 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
 
 (* cljs block-tag: hovering the chip swaps the leading # for an x that
    removes the tag value off the owner entity (block or page). Private
-   tags never show the x. *)
-let tag_hover hid xid name _payload =
-  match Web_dom.query_selector ("#" ^ hid), Web_dom.query_selector ("#" ^ xid) with
-  | Some h, Some x -> (
-      match name with
-      | "mouseenter" ->
-          Web_dom.el_class_add h "hidden";
-          Web_dom.el_class_remove x "hidden"
-      | "mouseleave" ->
-          Web_dom.el_class_remove h "hidden";
-          Web_dom.el_class_add x "hidden"
-      | _ -> ())
-  | _ -> ()
-
+   tags never show the x. The mouseenter/mouseleave swap has no
+   component-level equivalent — the x stays .hidden (a real rule) until
+   a css :hover or a platform hover prop replaces it. *)
 let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
   let priv = private_tag_ident ident in
-  let hid = "tagh-" ^ key and xid = "tagx-" ^ key in
+  (* chip root stays dom: the delegated context-menu handler reads
+     data-tag-uuid/id/title/priv off it *)
   dom ~key:("tag-" ^ key)
     ~style_class:("block-tag" ^ if priv then " private-tag" else "")
-    (* cljs keeps the tag entity in the chip's click closure; the
-       delegated context-menu handler reads it off data attrs instead *)
     ~attrs:
       [ ("data-tag-uuid", tuuid)
       ; ("data-tag-id", string_of_int dbid)
       ; ("data-tag-title", tag)
       ; ("data-tag-priv", if priv then "true" else "false") ]
-    ~events:(if priv then "" else "mouseenter mouseleave")
-    ~on_dom_event:(tag_hover hid xid)
-    [ dom ~key:("tc-" ^ key) ~style_class:"flex items-center"
-        [ dom ~key:("th-" ^ key) ~tag:"a" ~id:hid
-            ~style_class:"hash-symbol select-none flex" ~text:"#" []
+    [ row ~key:("tc-" ^ key) ~cross:`center
+        [ (* the link kind renders a real <a> so a.hash-symbol css keeps
+             matching; no url — the # is decorative as in cljs *)
+          link ~key:("th-" ^ key)
+            ~style_class:"hash-symbol select-none" ~text:"#" []
         ; (if priv then Logseq_dom.nothing
            else
-             dom ~key:("tx-" ^ key) ~tag:"a" ~id:xid
-               ~style_class:
-                 "tag-x hash-symbol hidden cursor-pointer select-none flex"
-               ~attrs:[ ("title", I18n.t "block/remove-this-tag") ]
-               ~text:"x"
-               ~events:"click"
-               ~on_dom_event:(fun name _ ->
-                 match name with
-                 | "click" ->
-                     ignore
-                       (Outliner_ops.apply_and_refresh
-                          [ Outliner_ops.op "delete-property-value"
-                              [ Wire.Uuid owner_uuid
-                              ; Wire.Keyword "block/tags"
-                              ; Wire.Int dbid ] ])
-                 | _ -> ())
-               [])
-        ; dom ~key:("ta-" ^ key) ~tag:"a"
+             Ui_parts.pressable
+               ~on_press:(fun _ ->
+                 ignore
+                   (Outliner_ops.apply_and_refresh
+                      [ Outliner_ops.op "delete-property-value"
+                          [ Wire.Uuid owner_uuid
+                          ; Wire.Keyword "block/tags"
+                          ; Wire.Int dbid ] ]))
+               (link ~key:("tx-" ^ key)
+                  ~style_class:
+                    "tag-x hash-symbol hidden cursor-pointer select-none"
+                  ~label:(I18n.t "block/remove-this-tag")
+                  ~text:"x" []))
+        ; (* the tag anchor stays dom: delegated click/context-menu paths
+             read data-uuid/data-ref, draggable comes from the platform *)
+          dom ~key:("ta-" ^ key) ~tag:"a"
             ~style_class:"tag relative"
             ~attrs:
               [ ("tabindex", "0"); ("draggable", "true")
               ; ("data-uuid", tuuid)
               ; ("data-ref", String.lowercase_ascii tag) ]
-            [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
+            [ text ~key:"ts" ~value:tag [] ]
         ] ]
 
 let tags_el uuid (b : Model.block) : t =
@@ -510,7 +476,7 @@ let tags_el uuid (b : Model.block) : t =
   match visible with
   | [] -> Logseq_dom.nothing
   | tags ->
-      dom ~key:("tags-" ^ uuid) ~style_class:"block-tags gap-1"
+      row ~key:("tags-" ^ uuid) ~gap:4 ~style_class:"block-tags"
         (List.mapi
            (fun i (tag, tuuid, ident, dbid) ->
              tag_chip ~key:(uuid ^ "-" ^ string_of_int i) ~owner_uuid:uuid
@@ -544,52 +510,46 @@ let rec block_row
 and row_main ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
+  (* .block-main-container stays dom: the data-has-heading attr feeds
+     block.css selectors *)
   dom ~key:("main-" ^ key)
       ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:
           (match b.block_heading with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
            | None -> [])
-        ~events:"mouseenter mouseleave"
-        ~on_dom_event:(arrow_hover ~scope ~uuid ~b)
         [ control_wrap ~scope ~library uuid b
-        ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
-            [ dom ~key:("col2-" ^ key) ~style_class:"flex flex-col w-full"
-                [ dom ~key:("bmc-" ^ key)
-                    ~style_class:"block-main-content flex flex-row gap-2"
-                    [ dom ~key:("col3-" ^ key)
-                        ~style_class:"flex flex-col w-full"
+        ; column ~key:("col-" ^ key) ~grow:1.
+            [ column ~key:("col2-" ^ key)
+                [ row ~key:("bmc-" ^ key)
+                    ~style_class:"block-main-content" ~gap:8
+                    [ column ~key:("col3-" ^ key) ~grow:1.
                         [ dom ~key:("cew-" ^ key)
                             ~style_class:"block-content-or-editor-wrap"
                             ~attrs:
                               (match b.Model.block_display_type with
                                | Some dt -> [ ("data-node-type", dt) ]
                                | None -> [])
-                            [ dom ~key:("cei-" ^ key)
+                            [ box ~key:("cei-" ^ key)
                                 ~style_class:"block-content-or-editor-inner"
-                                [ dom ~key:("row-" ^ key)
-                                    ~style_class:
-                                      "block-row flex flex-1 flex-row gap-1 \
-                                       items-center"
+                                [ row ~key:("row-" ^ key)
+                                    ~style_class:"block-row"
+                                    ~grow:1. ~gap:4 ~cross:`center
                                     [ (if Comments.is_comments_area b then
                                          Comments.area_view uuid b
                                        else
                                          content_or_editor ~editable uuid
                                            scope b)
-                                    ; dom ~key:("br-" ^ key)
+                                    ; row ~key:("br-" ^ key)
                                         ~style_class:
-                                          "flex flex-row gap-1 \
-                                           items-center ls-block-right \
-                                           self-start"
-                                        [ dom ~key:("bg-" ^ key)
-                                            ~style_class:
-                                              "hover:opacity-100 opacity-70"
-                                            []
+                                          "ls-block-right self-start"
+                                        ~gap:4 ~cross:`center
+                                        [ spacer ~key:("bg-" ^ key) []
                                         ; (* a comments area's tag chips stay
                                              hidden — the area view already
                                              announces itself *)
                                           if Comments.is_comments_area b then
-                                            box ~key:("tags-" ^ uuid) []
+                                            spacer ~key:("tags-" ^ uuid) []
                                           else tags_el uuid b
                                         ]
                                     ]
@@ -771,8 +731,8 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
 and children_dom ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
   let b = Signal.get bs in
-  dom ~key:("children-" ^ uuid)
-    ~style_class:"block-children-container flex"
+  row ~key:("children-" ^ uuid)
+    ~style_class:"block-children-container"
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~attrs:[ ("blockid", uuid) ] []
@@ -786,7 +746,8 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
              child_list ~depth ~editable ~library ~virtualize uuid scope
                bs)
        else
-         dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
+         column ~key:("clist-" ^ uuid) ~style_class:"block-children"
+           ~grow:1.
            [ child_list ~depth ~editable ~library ~virtualize uuid scope
                bs
            ])
@@ -825,33 +786,25 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:(heading_attrs b)
-        ~events:"mouseenter mouseleave"
-        ~on_dom_event:(arrow_hover ~scope:"ref" ~uuid ~b)
         [ control_wrap ~scope:"ref" ~library uuid b
-        ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
-            [ dom ~key:("col2-" ^ key) ~style_class:"flex flex-col w-full"
-                [ dom ~key:("bmc-" ^ key)
-                    ~style_class:"block-main-content flex flex-row gap-2"
-                    [ dom ~key:("col3-" ^ key)
-                        ~style_class:"flex flex-col w-full"
+        ; column ~key:("col-" ^ key) ~grow:1.
+            [ column ~key:("col2-" ^ key)
+                [ row ~key:("bmc-" ^ key)
+                    ~style_class:"block-main-content" ~gap:8
+                    [ column ~key:("col3-" ^ key) ~grow:1.
                         [ dom ~key:("cew-" ^ key)
                             ~style_class:"block-content-or-editor-wrap"
-                            [ dom ~key:("cei-" ^ key)
+                            [ box ~key:("cei-" ^ key)
                                 ~style_class:"block-content-or-editor-inner"
-                                [ dom ~key:("row-" ^ key)
-                                    ~style_class:
-                                      "block-row flex flex-1 flex-row gap-1 \
-                                       items-center"
+                                [ row ~key:("row-" ^ key)
+                                    ~style_class:"block-row"
+                                    ~grow:1. ~gap:4 ~cross:`center
                                     [ content_wrapper uuid b
-                                    ; dom ~key:("br-" ^ key)
+                                    ; row ~key:("br-" ^ key)
                                         ~style_class:
-                                          "flex flex-row gap-1 \
-                                           items-center ls-block-right \
-                                           self-start"
-                                        [ dom ~key:("bg-" ^ key)
-                                            ~style_class:
-                                              "hover:opacity-100 opacity-70"
-                                            []
+                                          "ls-block-right self-start"
+                                        ~gap:4 ~cross:`center
+                                        [ spacer ~key:("bg-" ^ key) []
                                         ; tags_el uuid b
                                         ]
                                     ]
@@ -871,12 +824,13 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   ctx parent
 
 and children_static_el ~depth ~library uuid (b : Model.block) : t =
-  dom ~key:("children-" ^ uuid)
-    ~style_class:"block-children-container flex"
+  row ~key:("children-" ^ uuid)
+    ~style_class:"block-children-container"
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~attrs:[ ("blockid", uuid) ] []
-    ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
+    ; column ~key:("clist-" ^ uuid) ~style_class:"block-children"
+        ~grow:1.
         (List.map (block_row_static ~depth:(depth + 1) ~library)
            b.block_children)
     ]
@@ -972,15 +926,12 @@ let cap_embed_blocks cap blocks =
 (* the overflow row — clicking it navigates to the embedded node's own
    detail page *)
 let embed_more_el (name : string) : t =
-  dom ~key:"embed-more" ~tag:"div"
-    ~style_class:"embed-more ls-block cursor-pointer text-sm opacity-70"
-    ~attrs:[ ("tabindex", "0") ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ ->
-      if n = "click" then
-        Runtime.send (Action.Navigate_to (Model.Page name)))
-    [ dom ~key:"embed-more-t" ~tag:"span" ~text:(I18n.t "ui/show-more")
-        [] ]
+  Ui_parts.pressable
+    ~on_press:(fun _ ->
+      Runtime.send (Action.Navigate_to (Model.Page name)))
+    (row ~key:"embed-more"
+       ~style_class:"embed-more ls-block cursor-pointer"
+       [ text ~key:"embed-more-t" ~value:(I18n.t "ui/show-more") [] ])
 
 let page_embed (name : string) : t =
  fun ctx parent ->
@@ -1001,7 +952,7 @@ let page_embed (name : string) : t =
        let shown, capped = cap_embed_blocks embed_block_cap blocks in
        (* embed copies render read-only — the same uuid can exist in the
           sidebar/main tree, and only that instance should own the textarea *)
-       dom ~key:"embed-page" ~tag:"div" ~style_class:"embed-page"
+       box ~key:"embed-page" ~style_class:"embed-page"
          (List.map (block_row ~scope:"embed" ~editable:false) shown
           @ (if capped then [ embed_more_el name ] else [])))
      (Signal.value st))

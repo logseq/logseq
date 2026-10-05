@@ -5,19 +5,18 @@ open Lui_elements
 open Logseq_dom
 
 let t_ = I18n.t
-let icon name = Icons.icon name
 
 let opt_row st i label =
-  dom ~key:("opt-" ^ string_of_int i) ~attrs:[ ("role", "option") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then Cards_state.select_deck st i)
-    [ text ~key:"l" ~value:label [] ]
+  menu_item ~key:("opt-" ^ string_of_int i) ~text:label
+    ~on_press:(fun _ -> Cards_state.select_deck st i)
+    []
 
+(* the deck picker is a select trigger + anchored dropdown_menu —
+   mounted = presented on every host; on_dismiss covers outside-tap *)
 let opts_box st =
-  dyn ~equal:(fun (a : Cards_state.deck list * bool) b -> a = b)
-    (fun (decks, opts_open) ->
-      if not opts_open then dom ~key:"opts-closed" []
+  dyn ~equal:(fun (a : bool * Cards_state.deck list) b -> a = b)
+    (fun (opts_open, decks) ->
+      if not opts_open then spacer ~key:"opts-closed" []
       else
         let options =
           opt_row st (-1) (t_ "flashcard/all-cards")
@@ -25,57 +24,49 @@ let opts_box st =
                (fun i d -> opt_row st i d.Cards_state.deck_label)
                decks
         in
-        dom ~key:"opts" ~attrs:[ ("role", "listbox") ]
-          ~style_class:
-            "absolute z-50 top-full left-0 w-full rounded-md border \
-             bg-popover text-popover-foreground shadow-md"
+        dropdown_menu ~key:"opts" ~anchor:`below ~anchor_alignment:`start
+          ~on_dismiss:(fun _ -> Cards_state.toggle_opts st)
           options)
-    (Signal.map2 (fun a b -> (a, b)) (Signal.value st.Cards_state.decks)
-       (Signal.value st.Cards_state.opts_open))
+    (Signal.map2 (fun a b -> (a, b))
+       (Signal.value st.Cards_state.opts_open)
+       (Signal.value st.Cards_state.decks))
+
+let selected_label sel decks =
+  if sel < 0 then t_ "flashcard/all-cards"
+  else
+    match List.nth_opt decks sel with
+    | Some d -> d.Cards_state.deck_label
+    | None -> t_ "flashcard/all-cards"
 
 let selector_row st =
-  dom ~key:"sel-row" ~style_class:"ls-row ls-gap"
-    [ dom ~key:"combo"
-        ~attrs:[ ("role", "combobox") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Cards_state.toggle_opts st)
-        ~style_class:"ls-cards-select"
-        [ (* cljs shui/select-trigger: current deck label + chevron *)
-          dom ~key:"val" ~style_class:"ls-cards-select-value"
-            [ dyn ~equal:(fun (a : int * Cards_state.deck list) b -> a = b)
-                (fun (sel, decks) ->
-                  let label =
-                    if sel < 0 then t_ "flashcard/all-cards"
-                    else
-                      match List.nth_opt decks sel with
-                      | Some d -> d.Cards_state.deck_label
-                      | None -> t_ "flashcard/all-cards"
-                  in
-                  dom ~key:"lbl" ~tag:"span"
-                    [ text ~key:"t" ~value:label [] ])
-                (Signal.map2
-                   (fun a b -> (a, b))
-                   (Signal.value st.Cards_state.sel)
-                   (Signal.value st.Cards_state.decks))
-            ; icon "chevron-down" ]
+  row ~key:"sel-row" ~style_class:"ls-row ls-gap" ~cross:`center
+    [ box ~key:"combo" ~style_class:"ls-cards-select"
+        [ (* cljs shui/select-trigger: current deck label + chevron —
+             select renders role=combobox on web, a native picker on
+             Apple/GPUI *)
+          select ~key:"selv" ~style_class:"ls-cards-select-value"
+            ~text:(reactive selected_label
+                     (Signal.value st.Cards_state.sel)
+                     (Signal.value st.Cards_state.decks))
+            ~on_press:(fun _ -> Cards_state.toggle_opts st)
+            [ icon ~key:"chev" ~name:`chevron_down
+                ~style_class:"ls-icon-sm" [] ]
         ; opts_box st ]
-    ; dom ~key:"add" ~tag:"button" ~id:"ls-cards-add"
-        ~attrs:[ ("title", t_ "flashcard/add-cards-query-tooltip") ]
-        ~style_class:"ls-icon-btn"
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Cards_state.add_cards_block st)
-        [ icon "plus" ]
-    ; dyn ~equal:(fun (a : int * string list) b -> a = b)
-        (fun (pos, cards) ->
-          let n = List.length cards in
-          let cur = if n = 0 then 0 else min (pos + 1) n in
-          dom ~key:"prog" ~tag:"span"
-            ~style_class:"ls-desc ls-nowrap"
-            [ text ~key:"t" ~value:(Printf.sprintf "%d/%d" cur n) [] ])
-        (Signal.map2 (fun a b -> (a, b)) (Signal.value st.Cards_state.pos)
-           (Signal.value st.Cards_state.cards))
+    ; button ~key:"add" ~accessibility_identifier:"ls-cards-add"
+        ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
+        ~label:(t_ "flashcard/add-cards-query-tooltip")
+        ~icon:`plus
+        ~on_press:(fun _ -> Cards_state.add_cards_block st)
+        []
+    ; text ~key:"prog" ~style_class:"ls-desc ls-nowrap"
+        ~value:(reactive
+                  (fun (pos : int) (cards : string list) ->
+                    let n = List.length cards in
+                    let cur = if n = 0 then 0 else min (pos + 1) n in
+                    Printf.sprintf "%d/%d" cur n)
+                  (Signal.value st.Cards_state.pos)
+                  (Signal.value st.Cards_state.cards))
+        []
     ]
 
 (* fsrs.cljs has-cloze? *)
@@ -109,19 +100,14 @@ let rate st rating =
 
 let rating_btn st rating label =
   let id = "card-" ^ rating in
-  dom ~key:id ~tag:"button" ~id
-    ~style_class:
-      (id
-       ^ " !px-2 !py-1 bg-primary/5 hover:bg-primary/10 border-primary \
-          opacity-90 hover:opacity-100")
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then rate st rating)
-    [ text ~key:"t" ~value:label [] ]
+  button ~key:id ~accessibility_identifier:id ~style_class:id
+    ~text:label
+    ~on_press:(fun _ -> rate st rating)
+    []
 
 let rating_buttons st =
-  dom ~key:"ratings" ~style_class:"ls-center"
-    [ dom ~key:"row"
-        ~style_class:"ls-ratings"
+  box ~key:"ratings" ~style_class:"ls-center"
+    [ row ~key:"row" ~style_class:"ls-ratings"
         [ rating_btn st "again" (t_ "flashcard.rating/again")
         ; rating_btn st "hard" (t_ "flashcard.rating/hard")
         ; rating_btn st "good" (t_ "flashcard.rating/good")
@@ -132,25 +118,20 @@ let rating_buttons st =
 let card_view st _pos phase title =
   let cloze = has_cloze title in
   let np = next_phase cloze phase in
-  dom ~key:"card-cur"
+  column ~key:"card-cur"
     ~style_class:"ls-card content"
-    [ dom ~key:"scroll"
-        ~style_class:
-          "ls-card-scroll"
+    [ scroll ~key:"scroll" ~orientation:`vertical ~grow:1.
+        ~style_class:"ls-card-scroll"
         [ text ~key:"t" ~value:title [] ]
-    ; dom ~key:"actions" ~style_class:"ls-card-actions"
+    ; box ~key:"actions" ~style_class:"ls-card-actions"
         [ (if np = "show-cloze" || np = "show-answer" then
-             dom ~key:"answers" ~tag:"button" ~id:"card-answers"
+             button ~key:"answers" ~accessibility_identifier:"card-answers"
                ~style_class:"ls-btn-pad"
-               ~events:"click"
-               ~on_dom_event:(fun n _ ->
-                 if n = "click" then advance_phase st cloze)
-               [ text ~key:"t"
-                   ~value:
-                     (if np = "show-answer" then t_ "flashcard.review/show-answers"
+               ~text:(if np = "show-answer" then t_ "flashcard.review/show-answers"
                       else if np = "show-cloze" then t_ "flashcard.review/show-clozes"
                       else t_ "flashcard.review/hide-answers")
-                 [] ]
+               ~on_press:(fun _ -> advance_phase st cloze)
+               []
            else rating_buttons st)
         ]
     ]
@@ -163,16 +144,14 @@ let cards_body st =
       | None ->
           (* cljs: (empty? all-block-ids) -> "Time to create a card!" + the
              "#Card"/cloze hint, not the review-finished message *)
-          dom ~key:"empty" ~style_class:"ls-card content ls-ml"
-            [ dom ~key:"h" ~tag:"h2" ~style_class:"font-medium"
-                [ text ~key:"t" ~value:(t_ "flashcard.empty/title") [] ]
-            ; dom ~key:"d" ~tag:"div"
-                [ dom ~key:"p" ~tag:"p"
-                    [ text ~key:"t"
-                        ~value:(I18n.t1 "flashcard.empty/desc" "#Card")
-                        [] ] ] ]
+          column ~key:"empty" ~style_class:"ls-card content ls-ml"
+            [ heading ~key:"h" ~level:2
+                ~value:(t_ "flashcard.empty/title") []
+            ; paragraph ~key:"d"
+                ~value:(I18n.t1 "flashcard.empty/desc" "#Card")
+                [] ]
       | Some title ->
-          dom ~key:"cards" ~style_class:"ls-cards-col"
+          column ~key:"cards" ~style_class:"ls-cards-col" ~grow:1.
             [ card_view st pos phase title ])
     (Signal.map2
        (fun (a, b) c -> (a, b, c))
@@ -182,17 +161,6 @@ let cards_body st =
           (Signal.value st.Cards_state.pos))
        (Signal.value st.Cards_state.phase))
 
-(* overlay-click dismissal matches dialogs_view: the payload carries the
-   click target's class list *)
-let is_overlay_click payload =
-  let tc = Platform.payload_str payload "targetClass" in
-  let needle = "ui__dialog-overlay" in
-  let ln = String.length needle and lt = String.length tc in
-  let rec go i =
-    i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
-  in
-  go 0
-
 (* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label
    :flashcards__cp} — scrim and dialog content are SIBLINGS here, like
    cmdk: the native backend hoists each fillsOverlay element into the
@@ -201,19 +169,21 @@ let is_overlay_click payload =
 let modal st =
   (* The scrim mounts while the opening gesture is still in flight: its
      mouseup lands on the overlay and would instantly re-close the modal.
-     Ignore overlay clicks for a short grace window after mount. *)
+     Ignore overlay presses for a short grace window after mount. The
+     scrim has no children, so every press on it is an overlay press —
+     no payload target-class check needed. *)
   let opened_at = Platform.date_now_ms () in
   Logseq_dom.fragment
-    [ dom ~key:"cards-ov"
-        ~style_class:
-          "ui__dialog-overlay fixed inset-0 z-50 bg-background/90"
-        ~events:"click"
-        ~on_dom_event:(fun n p ->
-          if n = "click" && is_overlay_click p
-             && Platform.date_now_ms () -. opened_at > 400.
-          then Cards_state.close st)
-        []
-    ; dom ~key:"cards-ct"
+    [ Ui_parts.pressable
+        ~on_press:(fun _ ->
+          if Platform.date_now_ms () -. opened_at > 400. then
+            Cards_state.close st)
+        (box ~key:"cards-ov" ~style_class:"ui__dialog-overlay" [])
+    ; (* TODO(component): the dialog content needs a `label` attr (css
+         [label="flashcards__cp"] selectors), data-state and an inline
+         translate(-50%,-50%) style — no typed props cover these, so the
+         container stays dom until a dialog/popup kind carries them *)
+      dom ~key:"cards-ct"
         ~style_class:
           "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid \
            w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg \
@@ -222,17 +192,17 @@ let modal st =
           [ ("data-state", "open"); ("role", "dialog")
           ; ("label", "flashcards__cp")
           ; ("style", "transform: translate(-50%, -50%)") ]
-        [ dom ~key:"cards-main" ~style_class:"ui__dialog-main-content"
-            [ dom ~key:"cards-modal" ~id:"cards-modal"
-                ~style_class:"ls-cards-stack"
+        [ box ~key:"cards-main" ~style_class:"ui__dialog-main-content"
+            [ column ~key:"cards-modal"
+                ~accessibility_identifier:"cards-modal"
+                ~style_class:"ls-cards-stack" ~grow:1.
                 [ selector_row st; cards_body st ] ]
-        ; dom ~key:"cards-close" ~tag:"button"
+        ; button ~key:"cards-close" ~variant:`ghost ~size:`icon
             ~style_class:"ui__dialog-close"
-            ~attrs:[ ("type", "button") ]
-            ~events:"click"
-            ~on_dom_event:(fun name _ ->
-              if name = "click" then Cards_state.close st)
-            [ Icons.raw ~cls:"ls-icon-sm" "x" ] ]    ]
+            ~label:(t_ "ui/close")
+            ~icon:`x
+            ~on_press:(fun _ -> Cards_state.close st)
+            [] ] ]
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in
