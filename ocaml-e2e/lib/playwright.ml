@@ -389,10 +389,6 @@ external wait_for_function :
 
 external expect : locator -> assertion = "expect"
 [@@mel.module "@playwright/test"]
-
-external expect_configure : 'opts Js.t -> unit = "expect.configure"
-[@@mel.module "@playwright/test"]
-
 external expect_is_visible_opts :
   (assertion[@mel.this]) -> 'opts Js.t -> unit Js.Promise.t = "toBeVisible"
 [@@mel.send]
@@ -405,9 +401,14 @@ external expect_is_hidden : (assertion[@mel.this]) -> unit Js.Promise.t
   = "toBeHidden"
 [@@mel.send]
 
-external expect_has_count :
-  (assertion[@mel.this]) -> int -> unit Js.Promise.t = "toHaveCount"
+external expect_has_count_opts :
+  (assertion[@mel.this]) -> int -> 'opts Js.t -> unit Js.Promise.t
+  = "toHaveCount"
 [@@mel.send]
+
+let expect_has_count ?timeout assertion n =
+  expect_has_count_opts assertion n
+    [%mel.obj { timeout = Js.Undefined.fromOption timeout }]
 
 external expect_to_have_text :
   (assertion[@mel.this]) -> 'expected -> 'opts Js.t -> unit Js.Promise.t

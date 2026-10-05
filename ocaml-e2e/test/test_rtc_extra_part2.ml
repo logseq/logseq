@@ -192,7 +192,7 @@ let render_report env p =
            if (seen.has(u)) continue; seen.add(u); exp.push(u); dfs(u); } }; \
          dfs('ROOT'); \
          const dom = [...document.querySelectorAll('.ls-page-blocks \
-         [blockid]')].map(el => el.getAttribute('blockid')); \
+         .ls-block[blockid]')].map(el => el.getAttribute('blockid')); \
          let idx = -1; const n = Math.max(dom.length, exp.length); \
          for (let i = 0; i < n; i++) if (dom[i] !== exp[i]) { idx = i; break; } \
          const w = (arr, i) => arr.slice(Math.max(0, i-2), i+5).map(u => \
@@ -212,6 +212,20 @@ let render_report_str json =
       in
       Printf.sprintf "nDom=%s nExp=%s idx=%s dom=%s exp=%s" (s "nDom")
         (s "nExp") (s "idx") (s "dom") (s "exp")
+
+let dom_uuids env p =
+  Env.with_page env p (fun () ->
+      let* j =
+        Pw.eval_js env
+          "JSON.stringify([...document.querySelectorAll('.ls-page-blocks \
+           .ls-block[blockid]')].map(el => el.getAttribute('blockid')))"
+      in
+      Js.Promise.resolve
+        (match Js.Json.decodeArray j with
+         | Some a ->
+             Array.to_list a
+             |> List.filter_map Js.Json.decodeString
+         | None -> []))
 
 let assert_two_pages_synced env p1 p2 =
   let* tx1, blocks1 = page_sync_state env p1 in
@@ -262,14 +276,19 @@ let assert_two_pages_synced env p1 p2 =
          in
          let d = first_diff blocks1 blocks2 in
          let w xs = "[" ^ String.concat "; " (window d xs) ^ "]" in
+         let* u1 = dom_uuids env p1 in
+         let* u2 = dom_uuids env p2 in
+         let du = first_diff u1 u2 in
+         let wu xs = "[" ^ String.concat "; " (window du xs) ^ "]" in
          let _ =
            Js.log
              (Printf.sprintf
-                "order-map-diff: %s\nrender-p1: %s\nrender-p2: %s\nblocks-diff: i=%d n1=%d n2=%d p1=%s p2=%s"
+                "order-map-diff: %s\nrender-p1: %s\nrender-p2: %s\nblocks-diff: i=%d n1=%d n2=%d p1=%s p2=%s\nuuids-diff: i=%d n1=%d n2=%d p1=%s p2=%s"
                 (order_map_diff m1 m2) (render_report_str r1)
                 (render_report_str r2) d
                 (List.length blocks1) (List.length blocks2) (w blocks1)
-                (w blocks2))
+                (w blocks2) du (List.length u1) (List.length u2) (wu u1)
+                (wu u2))
          in
          Fest.deep_equal blocks1 blocks2 Fest.expect;
          Js.Promise.resolve ())

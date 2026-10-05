@@ -19,7 +19,6 @@ let open_app env ~port =
 let setup_page_env ~env ~port =
   let page = Env.page env in
   Playwright.set_default_timeout page 30000.;
-  Playwright.expect_configure [%mel.obj { timeout = 15000. }];
   let context = Playwright.page_context page in
   let* () = Settings.install_init_script context in
   let* () =
