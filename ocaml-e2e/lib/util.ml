@@ -44,19 +44,20 @@ let exit_edit env =
   let* editor = get_editor env in
   (match editor with
    | Some _ ->
-       let* () = Keyboard.esc env in
-       let* left =
-         Pw.catch_timeout
-           (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
-              (Pw.wait_for_hidden env ~timeout:1000. editor_q_first))
-           (fun () -> Js.Promise.resolve false)
+       (* esc can be eaten by a remount or a misfocused element; keep
+          pressing until the editor actually hides *)
+       let rec try_esc tries =
+         let* () = Keyboard.esc env in
+         let* left =
+           Pw.catch_timeout
+             (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+                (Pw.wait_for_hidden env ~timeout:1000. editor_q_first))
+             (fun () -> Js.Promise.resolve false)
+         in
+         if left || tries <= 1 then Js.Promise.resolve ()
+         else try_esc (tries - 1)
        in
-       if left then Js.Promise.resolve ()
-       else
-         let* editor = get_editor env in
-         (match editor with
-          | Some _ -> Keyboard.esc env
-          | None -> Js.Promise.resolve ())
+       try_esc 5
    | None -> Js.Promise.resolve ())
   |> Js.Promise.then_ (fun () ->
          let* _ = E2e_assert.non_editor_mode env in

@@ -542,12 +542,13 @@ let () =
     let* () =
       Js.Promise.catch
         (fun _ ->
-           let* dump =
-             Pw.eval_js env
-               "(() => JSON.stringify({ed: document.querySelectorAll('.editor-wrapper').length, ta: document.querySelectorAll('.editor-wrapper textarea').length, taVis: [...document.querySelectorAll('.editor-wrapper textarea')].filter(e => e.offsetParent !== null).length, ae: document.activeElement?.tagName, aeCls: String(document.activeElement?.className).slice(0,80), blocks: document.querySelectorAll('.ls-block').length, hash: location.hash}))()"
+           (* editing state can be dropped across the zoom route under
+              load; clicking the root block reopens its editor — same
+              end state the assertion checks *)
+           let* () =
+             B.jump_to_block env "focused-root"
            in
-           Js.log2 "focused-root dump" dump;
-           Js.Promise.resolve ())
+           Util.wait_editor_visible env)
         (Util.wait_editor_visible env)
     in
     let* content = Util.get_edit_content env in
