@@ -243,13 +243,34 @@ let wait_for_content_tree env expected =
   loop 40
 
 let undo_and_wait_for_content_tree env expected =
-  let* () = B.undo env in
-  let* () = Util.wait_timeout env 1000. in
+  (* the chord rides *:focus which load can swallow, and an early undo
+     can pop a stale nav entry leaving the tree untouched — press again
+     while the tree still equals what we started from *)
+  let* before = visible_outline_content_tree env in
+  let rec press_until_changed tries =
+    let* () = B.undo env in
+    let* () = Util.wait_timeout env 800. in
+    let* now = visible_outline_content_tree env in
+    if not (trees_equal now before) then Js.Promise.resolve ()
+    else if tries <= 1 then Js.Promise.resolve ()
+    else press_until_changed (tries - 1)
+  in
+  let* () = press_until_changed 3 in
+  let* () = Util.wait_timeout env 200. in
   wait_for_content_tree env expected
 
 let redo_and_wait_for_content_tree env expected =
-  let* () = B.redo env in
-  let* () = Util.wait_timeout env 1000. in
+  let* before = visible_outline_content_tree env in
+  let rec press_until_changed tries =
+    let* () = B.redo env in
+    let* () = Util.wait_timeout env 800. in
+    let* now = visible_outline_content_tree env in
+    if not (trees_equal now before) then Js.Promise.resolve ()
+    else if tries <= 1 then Js.Promise.resolve ()
+    else press_until_changed (tries - 1)
+  in
+  let* () = press_until_changed 3 in
+  let* () = Util.wait_timeout env 200. in
   wait_for_content_tree env expected
 
 let click_block_by_uuid env uuid =

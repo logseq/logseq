@@ -246,6 +246,9 @@ let jump_to_block env block_text =
   let sub_sel =
     Printf.sprintf ".ls-block .block-content:has-text('%s')" block_text
   in
+  let row_sel =
+    Printf.sprintf ".ls-block:has-text('%s')" block_text
+  in
   let rec poll () =
     let* loc = Pw.find_one_by_text env ".ls-block .block-content" block_text in
     match loc with
@@ -254,11 +257,20 @@ let jump_to_block env block_text =
         let* n = Pw.count env sub_sel in
         if n > 0 then
           Pw.click_l (Playwright.locator_first (Pw.q env sub_sel))
-        else if Js.Date.now () > deadline then
-          Js.Promise.reject (Failure ("no block with text " ^ block_text))
         else
-          let* () = Util.wait_timeout env 150. in
-          poll ()
+          let* rows = Pw.count env row_sel in
+          if rows > 0 then
+            (* row shell mounted but .block-content subtree still absent
+               under load — click the row, which enters the block too.
+               nth=-1: a parent .ls-block also has-text of its nested
+               children; the deepest match is DOM-last. *)
+            Pw.click_l (Pw.q env (row_sel ^ " >> nth=-1"))
+          else if Js.Date.now () > deadline then
+            Js.Promise.reject
+              (Failure ("no block with text " ^ block_text))
+          else
+            let* () = Util.wait_timeout env 150. in
+            poll ()
   in
   poll ()
 
