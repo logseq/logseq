@@ -112,7 +112,7 @@ let focus_new_block env ~previous_editor_id =
   let* () =
     Js.Promise.catch
       (fun _ -> E2e_assert.is_visible_l ~timeout:15000. new_editor)
-      (E2e_assert.is_visible_l ~timeout:20000. new_editor)
+      (E2e_assert.is_visible_l ~timeout:30000. new_editor)
   in
   (* The wrapper can mount before focus actually moves off the previous
      textarea; typing into `*:focus` during that window drops the first

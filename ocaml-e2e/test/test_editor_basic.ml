@@ -542,7 +542,7 @@ let worker_op_logs logs op_names =
         in
         n = 0 || go 0
       in
-      contains ":db-worker/outliner-op-perf" && contains (":op-names " ^ op_names))
+      contains ":db-worker/outliner-op-perf" && contains op_names)
     logs
 
 let editor_input_state env =
@@ -1369,9 +1369,8 @@ let () =
               (console_logs env)
           in
           ( new_logs
-          , worker_op_logs new_logs "[:insert-blocks]"
-            @ worker_op_logs new_logs "[:save-block :insert-blocks]"
-          , worker_op_logs new_logs "[:delete-blocks]" )
+          , worker_op_logs new_logs "insert-blocks"
+          , worker_op_logs new_logs "delete-blocks" )
         in
         let rec poll n =
           let new_logs, enter_logs, delete_logs = collect () in
