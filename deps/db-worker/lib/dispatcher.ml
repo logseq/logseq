@@ -84,9 +84,24 @@ let invoke_transit name transit_args =
      machinery captures it as a rejection. A handler's failure
      arriving as a rejected effect (settled or pending) is cljs's
      p/catch path: it resolves to error transit. *)
+  let log_exn exn =
+    (* the transit error's :message is the only thing callers log — keep
+       the full payload worker-side so console dumps carry the failing
+       endpoint and its ex-data *)
+    match exn with
+    | Exn_info (msg, kvs) ->
+        Worker_log.error "api/error"
+          [ "endpoint", name
+          ; "message", msg
+          ; "data", Transit_codec.to_string (Wire.Map kvs) ]
+    | exn ->
+        Worker_log.error "api/error"
+          [ "endpoint", name; "message", exn_message exn ]
+  in
   match (try `Task (invoke_raw name args) with exn -> `Raise exn) with
-  | `Raise exn -> raise exn
+  | `Raise exn -> log_exn exn; raise exn
   | `Task task ->
       Db_worker_effect.catch task (fun exn ->
+          log_exn exn;
           Db_worker_effect.pure (encode_error name exn))
       >>= fun result -> Db_worker_effect.pure (Transit_codec.to_string result)
