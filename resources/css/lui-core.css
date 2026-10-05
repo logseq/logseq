@@ -2091,6 +2091,79 @@ a.page-title {
   background: var(--ls-secondary-background-color);
 }
 
+/* shared-OCaml rich-text editor — rendered by edit_view.ml; text runs
+   stay selectable-free, the overlay paints selection and caret, and the
+   .ed-input sink collects key/IME input invisibly */
+
+.block-editor {
+  position: relative;
+  user-select: none;
+}
+
+.ed-line {
+  display: block;
+  white-space: pre-wrap;
+  min-height: 1.5em;
+}
+
+.ed-r {
+  white-space: pre-wrap;
+}
+
+.ed-delim {
+  color: var(--ls-secondary-text-color);
+}
+
+.ed-hidden {
+  /* reveal-on-caret delimiters collapse to zero width until shown */
+  display: none;
+}
+
+.ed-pill {
+  display: inline-block;
+  background: var(--ls-tertiary-background-color);
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  cursor: pointer;
+}
+
+.ed-raw {
+  background: var(--ls-tertiary-background-color);
+}
+
+.ed-pad {
+  /* zero-width caret landing target at line end */
+  display: inline-block;
+}
+
+.ed-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ed-pos {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.ed-sel {
+  background: var(--ls-block-highlight-color);
+  border-radius: 0.125rem;
+}
+
+.ed-caret {
+  background: var(--ls-caret-color, var(--ls-primary-text-color));
+  animation: ed-caret-blink 1s step-end infinite;
+}
+
+@keyframes ed-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 /* fenced code block (CodeMirror) */
 
 .ls-code-editor-wrap {

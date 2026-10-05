@@ -1,9 +1,11 @@
 (* Shared editing model for a block's rich-text source — pure functions,
    no platform code. The buffer is the exact db-stored string; all
-   offsets are BYTE offsets into it (the conduit translates to/from
-   UTF-16 for web at the boundary). Semantics mirror Out's
-   core/src/editor_view.ml, adapted to the db-version run layer in
-   {!Edit_runs}.
+   offsets are UNITS of the stored string — UTF-8 bytes under [Bytes]
+   (native OCaml, test corpora), UTF-16 code units under [U16] (web,
+   where db strings are already proper JS strings and DOM Range offsets
+   count code units, so the conduit translates nothing). Semantics
+   mirror Out's core/src/editor_view.ml, adapted to the db-version run
+   layer in {!Edit_runs}.
 
    UTF-8 stepping level: every caret/selection/insert/delete operation
    clamps and steps on codepoint boundaries, and next/prev treat the
@@ -18,35 +20,60 @@ module E = Edit_runs
 
 (* --- UTF-8 codepoint / cluster boundaries --------------------------------- *)
 
-let is_cont_byte b = Char.code b land 0xC0 = 0x80
+(* Unit mode ([units]) selects what one OCaml char position means:
+   [Bytes] — UTF-8 encoded text (native OCaml, test corpora);
+   [U16] — proper JS strings (web: Melange strings are UTF-16, so one
+   "char" is one code unit and astral codepoints span two). *)
+type units = Bytes | U16
 
-(* byte length of the UTF-8 sequence starting at i; malformed leading
-   bytes decode as length 1 so stepping never loops *)
-let cp_len s i =
+(* does the unit at i continue a codepoint that started before it —
+   UTF-8 continuation byte, or UTF-16 low surrogate *)
+let is_cont u s i =
   let b = Char.code s.[i] in
-  if b < 0x80 || b < 0xC2 then 1
-  else if b < 0xE0 then 2
-  else if b < 0xF0 then 3
-  else if b < 0xF8 then 4
-  else 1
+  match u with
+  | Bytes -> b land 0xC0 = 0x80
+  | U16 -> b >= 0xDC00 && b <= 0xDFFF
 
-let decode_cp s i =
+(* unit length of the codepoint starting at i; malformed leading units
+   decode as length 1 so stepping never loops *)
+let cp_len u s i =
+  let b = Char.code s.[i] in
+  match u with
+  | Bytes ->
+    if b < 0x80 || b < 0xC2 then 1
+    else if b < 0xE0 then 2
+    else if b < 0xF0 then 3
+    else if b < 0xF8 then 4
+    else 1
+  | U16 ->
+    if b >= 0xD800 && b <= 0xDBFF && i + 1 < String.length s then 2
+    else 1
+
+let decode_cp u s i =
   let n = String.length s in
-  let cont k = if i + k < n then Char.code s.[i + k] land 0x3F else 0 in
   let b = Char.code s.[i] in
-  if b < 0x80 || b < 0xC2 then b
-  else if b < 0xE0 then (b land 0x1F) lsl 6 lor cont 1
-  else if b < 0xF0 then
-    (b land 0x0F) lsl 12 lor (cont 1 lsl 6) lor cont 2
-  else if b < 0xF8 then
-    (b land 0x07) lsl 18 lor (cont 1 lsl 12) lor (cont 2 lsl 6)
-    lor cont 3
-  else b
+  match u with
+  | Bytes ->
+    let cont k =
+      if i + k < n then Char.code s.[i + k] land 0x3F else 0
+    in
+    if b < 0x80 || b < 0xC2 then b
+    else if b < 0xE0 then (b land 0x1F) lsl 6 lor cont 1
+    else if b < 0xF0 then
+      (b land 0x0F) lsl 12 lor (cont 1 lsl 6) lor cont 2
+    else if b < 0xF8 then
+      (b land 0x07) lsl 18 lor (cont 1 lsl 12) lor (cont 2 lsl 6)
+      lor cont 3
+    else b
+  | U16 ->
+    if b >= 0xD800 && b <= 0xDBFF && i + 1 < n then
+      0x10000 + ((b - 0xD800) lsl 10) + (Char.code s.[i + 1] - 0xDC00)
+    else b
 
-(* start offset of the codepoint whose last byte is at/left of c - 1 *)
-let prev_cp s c =
+(* start offset of the codepoint whose last unit is at/left of c - 1 *)
+let prev_cp u s c =
   let i = ref (c - 1) in
-  while !i > 0 && is_cont_byte s.[!i] do
+  while !i > 0 && is_cont u s !i do
     decr i
   done;
   !i
@@ -70,34 +97,35 @@ let is_ri cp = cp >= 0x1F1E6 && cp <= 0x1F1FF (* regional indicators *)
    ZWJ simplification: UAX #29 GB11 joins only Extended_Pictographic
    pairs across a ZWJ; here a ZWJ glues any two surrounding codepoints,
    which over-merges only on hand-typed stray ZWJs. *)
-let next_off s off =
+let next_off u s off =
   let n = String.length s in
   if off >= n then n
   else
-    let i = ref (off + cp_len s off) in
-    if is_ri (decode_cp s off) then (
+    let i = ref (off + cp_len u s off) in
+    if is_ri (decode_cp u s off) then (
       (* flags come in pairs: absorb at most one more RI *)
-      if !i < n && is_ri (decode_cp s !i) then i := !i + cp_len s !i)
+      if !i < n && is_ri (decode_cp u s !i) then
+        i := !i + cp_len u s !i)
     else (
       let more = ref true in
       while !more && !i < n do
-        let cp = decode_cp s !i in
-        if is_extender cp then i := !i + cp_len s !i
-        else if cp = zwj && !i + cp_len s !i < n then (
+        let cp = decode_cp u s !i in
+        if is_extender cp then i := !i + cp_len u s !i
+        else if cp = zwj && !i + cp_len u s !i < n then (
           (* ZWJ joins the following codepoint into this cluster *)
-          i := !i + cp_len s !i;
-          if !i < n then i := !i + cp_len s !i)
+          i := !i + cp_len u s !i;
+          if !i < n then i := !i + cp_len u s !i)
         else more := false
       done);
     !i
 
 (* count consecutive regional-indicator codepoints ending exactly at c *)
-let count_ri_before s c =
+let count_ri_before u s c =
   let rec go p k =
     if p <= 0 then k
     else
-      let q = prev_cp s p in
-      if is_ri (decode_cp s q) then go q (k + 1)
+      let q = prev_cp u s p in
+      if is_ri (decode_cp u s q) then go q (k + 1)
       else k
   in
   go c 0
@@ -106,35 +134,36 @@ let count_ri_before s c =
    cluster-internal iff the codepoint STARTING at c is an extender or a
    ZWJ, or the codepoint ENDING at c is a ZWJ or an RI completing an
    odd-count RI run (flags pair left-to-right). *)
-let prev_off s off =
+let prev_off u s off =
   if off <= 0 then 0
   else
     let rec back c =
       if c <= 0 then 0
       else
-        let cp_c = decode_cp s c in
-        if is_extender cp_c || cp_c = zwj then back (prev_cp s c)
+        let cp_c = decode_cp u s c in
+        if is_extender cp_c || cp_c = zwj then back (prev_cp u s c)
         else
-          let p = prev_cp s c in
-          let cp_p = decode_cp s p in
+          let p = prev_cp u s c in
+          let cp_p = decode_cp u s p in
           if cp_p = zwj then back p
-          else if is_ri cp_p && count_ri_before s c land 1 = 1 then back p
+          else if is_ri cp_p && count_ri_before u s c land 1 = 1 then
+            back p
           else c
     in
-    back (prev_cp s off)
+    back (prev_cp u s off)
 
 (* clamp to [0, len] and snap back to a codepoint boundary *)
-let clamp_caret s off =
+let clamp_caret u s off =
   let n = String.length s in
   let off = max 0 (min n off) in
-  if off < n && is_cont_byte s.[off] then prev_cp s off else off
+  if off < n && is_cont u s off then prev_cp u s off else off
 
 (* --- word boundaries -------------------------------------------------------- *)
 
 type cp_class = Space | Word | Punct
 
-let cp_class s i =
-  let cp = decode_cp s i in
+let cp_class u s i =
+  let cp = decode_cp u s i in
   if cp >= 0x80 then Word (* non-ASCII counts as word, same as Out *)
   else
     match Char.chr cp with
@@ -142,37 +171,37 @@ let cp_class s i =
     | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> Word
     | _ -> Punct
 
-let word_right s off =
+let word_right u s off =
   let n = String.length s in
   let rec skip_spaces i =
-    if i < n && cp_class s i = Space then skip_spaces (i + cp_len s i)
+    if i < n && cp_class u s i = Space then skip_spaces (i + cp_len u s i)
     else i
   in
   let i = skip_spaces off in
   if i >= n then n
   else
-    let cls = cp_class s i in
+    let cls = cp_class u s i in
     let rec go j =
-      if j < n && cp_class s j = cls then go (j + cp_len s j) else j
+      if j < n && cp_class u s j = cls then go (j + cp_len u s j) else j
     in
     go i
 
-let word_left s off =
+let word_left u s off =
   let rec skip_spaces i =
     if i <= 0 then 0
     else
-      let p = prev_cp s i in
-      if cp_class s p = Space then skip_spaces p else i
+      let p = prev_cp u s i in
+      if cp_class u s p = Space then skip_spaces p else i
   in
   let i = skip_spaces off in
   if i <= 0 then 0
   else
-    let cls = cp_class s (prev_cp s i) in
+    let cls = cp_class u s (prev_cp u s i) in
     let rec go j =
       if j <= 0 then 0
       else
-        let p = prev_cp s j in
-        if cp_class s p = cls then go p else j
+        let p = prev_cp u s j in
+        if cp_class u s p = cls then go p else j
     in
     go i
 
@@ -182,7 +211,8 @@ type t =
   { source : string           (* the db-stored block text *)
   ; version : int             (* bumped on every buffer change *)
   ; runs : E.run list         (* display runs over [source] *)
-  ; caret : int               (* focus end; byte offset, codepoint-aligned *)
+  ; units : units             (* what offsets count — see above *)
+  ; caret : int               (* focus end; unit offset, codepoint-aligned *)
   ; anchor : int option       (* selection anchor; None = collapsed *)
   ; composition : (int * int) option
       (* IME marked range. Contract: composing text is NOT in [source];
@@ -190,7 +220,7 @@ type t =
          view can underline it. Cleared on commit/cancel and on any
          buffer mutation. *)
   ; lines : (int * int) list
-      (* visual line byte ranges [start, stop). Populated from '\n'
+      (* visual line unit ranges [start, stop). Populated from '\n'
          breaks by default; the host overwrites via [set_lines] with
          wrapped-line ranges measured on the rendered run nodes. *)
   }
@@ -207,7 +237,8 @@ let lines_of_source s =
   go 0 []
 
 let rebuild m source ~caret ~anchor =
-  { source
+  { m with
+    source
   ; version = m.version + 1
   ; runs = E.runs source
   ; caret
@@ -216,10 +247,11 @@ let rebuild m source ~caret ~anchor =
   ; lines = lines_of_source source
   }
 
-let create source =
+let create ?(units = Bytes) source =
   { source
   ; version = 0
   ; runs = E.runs source
+  ; units
   ; caret = 0
   ; anchor = None
   ; composition = None
@@ -228,8 +260,8 @@ let create source =
 
 (* external update (db broadcast / undo): re-split, keep caret clamped *)
 let set_source m source =
-  let caret = clamp_caret source m.caret in
-  let anchor = Option.map (clamp_caret source) m.anchor in
+  let caret = clamp_caret m.units source m.caret in
+  let anchor = Option.map (clamp_caret m.units source) m.anchor in
   rebuild m source ~caret ~anchor
 
 let selection_range m =
@@ -241,7 +273,7 @@ let selection_range m =
 let has_selection m = Option.is_some (selection_range m)
 
 (* --- line geometry -----------------------------------------------------------
-   Line membership is byte-range arithmetic over [lines]; the host owns
+   Line membership is unit-range arithmetic over [lines]; the host owns
    actual line breaking and feeds wrapped ranges back via [set_lines]. *)
 
 let set_lines m lines = { m with lines }
@@ -300,10 +332,13 @@ let shape m =
 
 (* --- mutations ---------------------------------------------------------------- *)
 
-(* replace source[lo, hi) with [text]; caret lands at end of insert *)
+(* replace source[lo, hi) with [text]; caret lands at end of insert.
+   [text] must share [source]'s unit representation — the conduit hands
+   over host text already in the model's units. *)
 let splice m lo hi text =
   let n = String.length m.source in
-  let lo = clamp_caret m.source lo and hi = clamp_caret m.source hi in
+  let lo = clamp_caret m.units m.source lo
+  and hi = clamp_caret m.units m.source hi in
   let lo, hi = min lo hi, max lo hi in
   let source =
     String.sub m.source 0 lo ^ text ^ String.sub m.source hi (n - hi)
@@ -338,7 +373,8 @@ let delete_backward m =
       else
         match atomic_ending_at m m.caret with
         | Some r -> splice m r.start_off r.end_off ""
-        | None -> splice m (prev_off m.source m.caret) m.caret "")
+        | None ->
+          splice m (prev_off m.units m.source m.caret) m.caret "")
 
 let delete_forward m =
   match selection_range m with
@@ -349,7 +385,8 @@ let delete_forward m =
       else
         match atomic_starting_at m m.caret with
         | Some r -> splice m r.start_off r.end_off ""
-        | None -> splice m m.caret (next_off m.source m.caret) "")
+        | None ->
+          splice m m.caret (next_off m.units m.source m.caret) "")
 
 let delete_word_backward m =
   match selection_range m with
@@ -359,7 +396,8 @@ let delete_word_backward m =
       else
         match atomic_ending_at m m.caret with
         | Some r -> splice m r.start_off r.end_off ""
-        | None -> splice m (word_left m.source m.caret) m.caret "")
+        | None ->
+          splice m (word_left m.units m.source m.caret) m.caret "")
 
 let delete_word_forward m =
   match selection_range m with
@@ -370,7 +408,8 @@ let delete_word_forward m =
       else
         match atomic_starting_at m m.caret with
         | Some r -> splice m r.start_off r.end_off ""
-        | None -> splice m m.caret (word_right m.source m.caret) "")
+        | None ->
+          splice m m.caret (word_right m.units m.source m.caret) "")
 
 (* --- caret movement ----------------------------------------------------------- *)
 
@@ -386,13 +425,13 @@ let move_target m d ~extend =
          steps the focus like native editors *)
       match selection_range m with
       | Some (lo, _) when not extend -> lo
-      | _ -> prev_off m.source m.caret)
+      | _ -> prev_off m.units m.source m.caret)
   | Right -> (
       match selection_range m with
       | Some (_, hi) when not extend -> hi
-      | _ -> next_off m.source m.caret)
-  | Word_left -> word_left m.source m.caret
-  | Word_right -> word_right m.source m.caret
+      | _ -> next_off m.units m.source m.caret)
+  | Word_left -> word_left m.units m.source m.caret
+  | Word_right -> word_right m.units m.source m.caret
   | Home -> fst (line_bounds m)
   | End -> snd (line_bounds m)
   | Doc_start -> 0
@@ -401,7 +440,9 @@ let move_target m d ~extend =
                           caret-rect/offset-at — see set_lines *)
 
 let move m d ~extend =
-  let caret = clamp_caret m.source (move_target m d ~extend) in
+  let caret =
+    clamp_caret m.units m.source (move_target m d ~extend)
+  in
   let anchor =
     if extend then Some (Option.value m.anchor ~default:m.caret)
     else None
@@ -410,8 +451,8 @@ let move m d ~extend =
 
 let select m ~anchor ~focus =
   { m with
-    anchor = Some (clamp_caret m.source anchor)
-  ; caret = clamp_caret m.source focus
+    anchor = Some (clamp_caret m.units m.source anchor)
+  ; caret = clamp_caret m.units m.source focus
   }
 
 let select_all m =
@@ -428,7 +469,7 @@ let composing m = Option.is_some m.composition
 let composition_range m = m.composition
 
 let composition_begin m off =
-  let off = clamp_caret m.source off in
+  let off = clamp_caret m.units m.source off in
   { m with composition = Some (off, off); caret = off; anchor = None }
 
 let composition_update m ~len =

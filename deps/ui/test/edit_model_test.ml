@@ -22,8 +22,8 @@ let check_runs name s =
   check (name ^ " boundaries")
     (List.for_all
        (fun (r : R.run) ->
-         M.clamp_caret s r.start_off = r.start_off
-         && M.clamp_caret s r.end_off = r.end_off)
+         M.clamp_caret M.Bytes s r.start_off = r.start_off
+         && M.clamp_caret M.Bytes s r.end_off = r.end_off)
        rs)
 
 let test_byte_exact () =
@@ -126,33 +126,33 @@ let test_reveal () =
 let test_utf8 () =
   let s = "中文字" in (* 9 bytes, 3 codepoints *)
   eqi "cjk len" 9 (String.length s);
-  eqi "next cp" 3 (M.next_off s 0);
-  eqi "next cp 2" 6 (M.next_off s 3);
-  eqi "prev cp" 6 (M.prev_off s 9);
-  eqi "clamp mid" 0 (M.clamp_caret s 1);
-  eqi "clamp mid 2" 3 (M.clamp_caret s 5);
-  eqi "clamp hi" 9 (M.clamp_caret s 99);
+  eqi "next cp" 3 (M.next_off M.Bytes s 0);
+  eqi "next cp 2" 6 (M.next_off M.Bytes s 3);
+  eqi "prev cp" 6 (M.prev_off M.Bytes s 9);
+  eqi "clamp mid" 0 (M.clamp_caret M.Bytes s 1);
+  eqi "clamp mid 2" 3 (M.clamp_caret M.Bytes s 5);
+  eqi "clamp hi" 9 (M.clamp_caret M.Bytes s 99);
   (* emoji surrogate pair (4 bytes) *)
   let s2 = "a😀b" in
-  eqi "emoji next" 5 (M.next_off s2 1);
-  eqi "emoji prev" 1 (M.prev_off s2 5);
-  eqi "emoji clamp" 1 (M.clamp_caret s2 3);
+  eqi "emoji next" 5 (M.next_off M.Bytes s2 1);
+  eqi "emoji prev" 1 (M.prev_off M.Bytes s2 5);
+  eqi "emoji clamp" 1 (M.clamp_caret M.Bytes s2 3);
   (* combining mark cluster: e + U+0301 = "é" (3 bytes) *)
   let s3 = "e\xcc\x81x" in
-  eqi "combining next" 3 (M.next_off s3 0);
-  eqi "combining prev" 0 (M.prev_off s3 3);
+  eqi "combining next" 3 (M.next_off M.Bytes s3 0);
+  eqi "combining prev" 0 (M.prev_off M.Bytes s3 3);
   (* ZWJ family emoji *)
   let s4 = "👩‍💻x" in
-  eqi "zwj next" 11 (M.next_off s4 0);
-  eqi "zwj prev" 0 (M.prev_off s4 11);
-  eqi "zwj step to x" 12 (M.next_off s4 11);
+  eqi "zwj next" 11 (M.next_off M.Bytes s4 0);
+  eqi "zwj prev" 0 (M.prev_off M.Bytes s4 11);
+  eqi "zwj step to x" 12 (M.next_off M.Bytes s4 11);
   (* flag: two regional indicators pair up *)
   let s5 = "🇫🇷x" in
-  eqi "flag next" 8 (M.next_off s5 0);
-  eqi "flag prev" 0 (M.prev_off s5 8);
+  eqi "flag next" 8 (M.next_off M.Bytes s5 0);
+  eqi "flag prev" 0 (M.prev_off M.Bytes s5 8);
   (* three RIs: first pair clusters, third lone *)
   let s6 = "🇫🇷🇺🇸x" in
-  eqi "ri3 prev lands at third" 8 (M.prev_off s6 12)
+  eqi "ri3 prev lands at third" 8 (M.prev_off M.Bytes s6 12)
 
 let test_caret_moves () =
   let m = M.create "中a文" in (* bytes: 中=0-3, a=3-4, 文=4-7 *)

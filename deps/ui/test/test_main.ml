@@ -3984,6 +3984,7 @@ let test_scan_gate () =
 
 let () =
   Edit_model_test.run ();
+  Edit_view_test.run ();
   test_move ();
   test_update ();
   test_decode ();

@@ -1,7 +1,7 @@
 (melange.emit
  (target ui_test)
  (modules test_main test_check drive stub_dom fake_worker test_drive
-         test_lui_apply edit_model_test)
+         test_lui_apply edit_model_test edit_view_test)
  (module_systems commonjs)
  (libraries logseq_ui logseq_subs melange.js)
  (preprocess
