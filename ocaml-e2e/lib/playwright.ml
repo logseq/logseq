@@ -19,6 +19,16 @@ external error_name : Js.Promise.error -> string option = "name" [@@mel.get]
 external error_message : Js.Promise.error -> string option = "message"
 [@@mel.get]
 
+(* an OCaml exception rejected through a promise surfaces as a
+   MelangeError whose .message loses the payload — the exception id is
+   in MEL_EXN_ID and the first arg in the compiled `_1` field *)
+external error_mel_id : Js.Promise.error -> string option = "MEL_EXN_ID"
+[@@mel.get]
+
+external error_arg1 : Js.Promise.error -> string option = "_1" [@@mel.get]
+
+external error_arg1_json : Js.Promise.error -> Js.Json.t = "_1" [@@mel.get]
+
 let is_timeout_error e = error_name e = Some "TimeoutError"
 
 exception Promise_error of string
@@ -26,6 +36,14 @@ exception Promise_error of string
 let throw_error e =
   let msg =
     match (error_name e, error_message e) with
+    | Some "MelangeError", m -> (
+        match Js.Json.classify (error_arg1_json e) with
+        | Js.Json.JSONString s -> (
+            match error_mel_id e with
+            | Some id -> id ^ ": " ^ s
+            | None -> s)
+        | Js.Json.JSONObject _ -> Js.Json.stringify (error_arg1_json e)
+        | _ -> Option.value ~default:"MelangeError" m)
     | Some n, Some m -> n ^ ": " ^ m
     | Some n, None -> n
     | None, Some m -> m
