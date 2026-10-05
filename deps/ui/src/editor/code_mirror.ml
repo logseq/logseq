@@ -343,7 +343,7 @@ let wrapper_pointerdown _uuid ev =
 
 (* -- mount -- *)
 
-let make_options ~uuid ~lang ~mode =
+let make_options ~uuid ~lang ~mode ~read_only =
   let extra_keys =
     Js.Dict.fromList
       [ ("Esc", fun _ -> on_escape uuid)
@@ -364,6 +364,7 @@ let make_options ~uuid ~lang ~mode =
   in
   (* extraKeys values are cm callbacks, not json — set via js_set *)
   Web_dom.js_set (Js.Json.object_ opts) "extraKeys" extra_keys;
+  if read_only then Js.Dict.set opts "readOnly" (Js.Json.boolean true);
   if lang = "calc" then
     (* cljs: calc editors expand to the whole buffer *)
     Js.Dict.set opts "viewportMargin" (Js.Json.number Float.infinity);
@@ -381,13 +382,16 @@ let uuid_of_el el =
   | Some block -> D.el_get_attr block "blockid"
   | None -> None
 
-let mount uuid textarea =
+let mount ?(read_only = false) uuid textarea =
   let lang =
     normalize_lang
       (Option.value (D.el_get_attr textarea "data-lang") ~default:"")
   in
   let mode = cm_mode lang in
-  let c = from_textarea (cm ()) textarea (make_options ~uuid ~lang ~mode) in
+  let c =
+    from_textarea (cm ()) textarea
+      (make_options ~uuid ~lang ~mode ~read_only)
+  in
   Hashtbl.replace instances uuid c;
   on_event c "change" (fun c -> on_change uuid c);
   on_event c "blur" (fun _ -> on_cm_blur uuid);
@@ -417,7 +421,7 @@ let mount uuid textarea =
    deduped by uuid so a second scan pass can't mount twice *)
 let pending_mounts : (string, unit) Hashtbl.t = Hashtbl.create 4
 
-let mount_async uuid el =
+let mount_async ?(read_only = false) uuid el =
   if instance uuid = None && not (Hashtbl.mem pending_mounts uuid) then begin
     Hashtbl.replace pending_mounts uuid ();
     ignore
@@ -425,9 +429,21 @@ let mount_async uuid el =
        |> Js.Promise.then_ (fun () ->
               Hashtbl.remove pending_mounts uuid;
               if instance uuid = None && D.el_is_connected el then
-                mount uuid el;
+                mount ~read_only uuid el;
               Js.Promise.resolve ()))
   end
+
+(* the logseq-codemirror adapter drops a block-role instance eagerly on
+   node removal instead of waiting for the next prune pass *)
+let unmount uuid =
+  Hashtbl.remove pending_mounts uuid;
+  Hashtbl.remove instances uuid
+
+(* live read-only toggle for the extension's read-only prop *)
+let set_read_only uuid flag =
+  match instance uuid with
+  | Some c -> set_option c "readOnly" (Js.Json.boolean flag)
+  | None -> ()
 
 (* cljs sync-editor-code!: a title written by another path (undo, db
    refresh, /code conversion) is pushed into an unfocused editor *)

@@ -44,6 +44,7 @@ let main root =
   install_error_reporting ();
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_codemirror.register registry;
   let renderer =
     Lui_web.create_with_extensions root (Icons.app_icons ()) registry
       Dom_adapter.adapters

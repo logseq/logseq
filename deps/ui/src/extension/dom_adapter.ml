@@ -358,3 +358,4 @@ let adapters : web_extension_adapter String_map.t =
     (fun acc tag ->
       String_map.add (Logseq_dom.identifier tag) (adapter_of_tag tag) acc)
     String_map.empty Logseq_dom.tags
+  |> String_map.add Logseq_codemirror.identifier Cm_adapter.adapter
