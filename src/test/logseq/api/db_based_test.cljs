@@ -293,6 +293,46 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest list-recycled-api-includes-deleted-page-and-block-entities
+  (test-helper/load-test-files
+   [{:page {:block/title "Recycled API Page"}
+     :blocks [{:block/title "Recycled API Block"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [page (test-helper/find-page-by-title "Recycled API Page")
+                  block (test-helper/find-block-by-content "Recycled API Block")]
+              (p/let [_ (conn/transact! (state/get-current-repo)
+                                        [{:db/id (:db/id page) :logseq.property/deleted-at 1}
+                                         {:db/id (:db/id block) :logseq.property/deleted-at 2}])
+                      result (db-based-api/list-recycled)
+                      recycled (api-test/js->clj-kw result)
+                      titles (set (map :title recycled))]
+                  (is (every? titles #{"Recycled API Page" "Recycled API Block"}))
+                  (is (= 2 (count (filter (fn [entity]
+                                            (some #(= "deleted-at" (name %)) (keys entity)))
+                                          recycled))))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest get-status-rows-api-returns-entity-and-status
+  (test-helper/load-test-files
+   [{:page {:block/title "Status API Page"}
+     :blocks [{:build.test/title "TODO Status API Block"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [result (db-based-api/get-status-rows)
+                    rows (api-test/js->clj-kw result)
+                row (some #(when (= "Status API Block" (get-in % [0 :title])) %) rows)]
+              (is (some? row))
+              (is (= "Status API Block" (get-in row [0 :title])))
+              (is (= ":logseq.property/status.todo" (get-in row [1 :ident]))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest get-page-block-uuids-api-returns-flat-page-descendants
   (test-helper/load-test-files
    [{:page {:block/title "UUID API Page"}

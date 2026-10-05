@@ -1177,6 +1177,8 @@
                     (is (some #(= "logseq.DB.search" (first %)) @calls))
                     (is (some #(= "logseq.DB.getTitleHolders" (first %)) @calls))
                     (is (some #(= "logseq.DB.getJournalCandidates" (first %)) @calls))
+                    (is (some #(= "logseq.DB.listRecycled" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getStatusRows" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1402,6 +1404,35 @@
                     (is (= [["logseq.DB.getTitleHolders" [title]]] @calls))
                     (is (false? (:available result)))
                     (is (= "page" (get-in result [:held_by 0 :kind])))
+                    (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (js/queueMicrotask done)))))))
+
+(deftest list-recycled-uses-db-api
+  (let [calls (atom [])
+        api (recording-api calls #js [#js {"uuid" "recycled-page" "title" "Old"}])]
+    (async done
+      (-> (mcp-compat/list-recycled api #js {})
+          (p/then (fn [result]
+                    (is (= [["logseq.DB.listRecycled" []]] @calls))
+                    (is (= "recycled-page" (:uuid (first result))))
+                    (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (js/queueMicrotask done)))))))
+
+(deftest list-status-uses-db-status-rows-api
+  (let [calls (atom [])
+        rows #js [#js [#js {"uuid" "block-1" "title" "Task"}
+                      #js {"ident" ":logseq.property/status.todo" "title" "TODO"}]]
+        api (recording-api calls rows)]
+    (async done
+      (-> (mcp-compat/list-status api #js {})
+          (p/then (fn [result]
+                    (is (= [["logseq.DB.getStatusRows" []]] @calls))
+                    (is (= "Task" (get-in result [0 0 :title])))
+                    (is (= ":logseq.property/status.todo" (get-in result [0 1 :ident])))
                     (js/queueMicrotask done)))
           (p/catch (fn [error]
                      (is false (str error))

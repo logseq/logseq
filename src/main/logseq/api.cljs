@@ -218,6 +218,7 @@
 (def ^:export get_title_inventory db-based-api/get-title-inventory)
 (def ^:export get_journal_candidates db-based-api/get-journal-candidates)
 (def ^:export list_recycled db-based-api/list-recycled)
+(def ^:export get_status_rows db-based-api/get-status-rows)
 (def ^:export inspect_page db-based-api/inspect-page)
 (def ^:export get_page_stats db-based-api/get-page-stats)
 (def ^:export get_page_block_uuids db-based-api/get-page-block-uuids)

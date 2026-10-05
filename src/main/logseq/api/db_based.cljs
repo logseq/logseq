@@ -453,6 +453,16 @@
                         :where [?entity :logseq.property/deleted-at _]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json entities false)))))
 
+(defn get-status-rows []
+  (let [repo (state/get-current-repo)]
+    (p/let [rows (db-async/<q
+                  repo
+                  {:transact-db? false}
+                  '[:find (pull ?entity [:block/uuid :block/title :block/name :block/page])
+                         (pull ?value [:db/ident :block/title])
+                    :where [?entity :logseq.property/status ?value]])]
+      (bean/->js (sdk-utils/normalize-keyword-for-json rows false)))))
+
 (def ^:private inspect-page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 

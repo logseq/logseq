@@ -48,8 +48,8 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `listOrphanTags` | none | missing reverse tag query | query adapter | DB read |
 | `listOrphanProperties` | none | one query per property ident | query adapter | DB read |
 | `listAssets` | none | discovery query; unverified | query adapter, preserve status | DB read after asset model verified |
-| `listStatus` | none | status-value query | query adapter | DB read |
-| `listRecycled` | none | deleted-at query | query adapter | DB read |
+| `listStatus` | none | entity/status-value pairs | dedicated `logseq.DB.getStatusRows` returns the query rows; MCP tool name and tuple shape stay unchanged | production route switched; local DB, MCP, capability, and SDK type tests pass; live validation pending |
+| `listRecycled` | none | all entities with `:logseq.property/deleted-at` | dedicated `logseq.DB.listRecycled` preserves deleted page and block records | API implemented; local DB, MCP, and capability tests pending in this revision; live validation pending |
 
 ## Writes and verification
 

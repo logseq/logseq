@@ -986,6 +986,7 @@ export interface IDBProxy {
   }>>
   getJournalCandidates: () => Promise<Array<Record<string, any>>>
   listRecycled: () => Promise<Array<Record<string, any>>>
+  getStatusRows: () => Promise<Array<[Record<string, any>, Record<string, any>]>>
   inspectPage: (
     pageUuid: BlockUUID,
     detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'
