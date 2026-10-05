@@ -1054,8 +1054,30 @@ let apply_history_action repo (tx_id : string) (undo : bool)
                      ; Wire.keyword "reason", reason
                      ; Wire.keyword "action", action_wire ])))
 
-let fix_tx (conn : conn) (tx_report : tx_report) (tx_meta : tx_meta) : unit =
-  Db_sync_order.fix_duplicate_orders conn tx_report.tx_data tx_meta
+(* The fix must be computed on the shared confirmed state — the server
+   conn — not the display conn: pending ops differ per client, so sibling
+   sets computed on display state would produce different fixes and the
+   clients' orders would diverge permanently. Lookup-ref keys resolve to
+   display eids on transact. *)
+let fix_tx repo (display_conn : conn) ~(jump_tx_data : datom list)
+    (tx_meta : tx_meta) : unit =
+  (* jump datoms carry server-conn eids (remote apply ran on server_conn),
+     replayed datoms carry display eids — only the jump portion is valid
+     input for a server-db evaluation *)
+  let fixes =
+    match Sync_state.server_conn repo with
+    | Some server_conn ->
+        Db_sync_order.dup_order_fix_ops (Conn.db server_conn) jump_tx_data
+    | None -> []
+  in
+  if fixes <> [] then
+    let _report =
+      Datascript.transact_conn display_conn fixes
+        ~tx_meta:
+          (List.filter (fun (k, _) -> k <> "op") tx_meta
+           @ [ ("op", Keyword "fix-duplicate-order") ])
+    in
+    ()
 
 let sync_fix_tx_meta () : tx_meta =
   [ "outliner-op", Keyword "fix"
@@ -1440,17 +1462,6 @@ let replay_pending_txs repo (conn : conn)
   let pending = pending_txs repo () in
   if pending = [] then 0
   else begin
-    Worker_log.info "db-sync/replay-pending"
-      [ "repo", repo
-      ; "count", string_of_int (List.length pending)
-      ; "ops"
-      , String.concat ","
-          (List.map
-             (fun (t : Sync_client_op.local_tx_entry) ->
-                Printf.sprintf "%s:%s"
-                  (Option.value t.outliner_op ~default:"?")
-                  (String.sub t.tx_id 0 8))
-             pending) ];
     let failed = ref 0 in
     (* nested replay (a failed entry's mark_failed rebuilds and replays
        again) must not clear the flag for the outer pass — a leaked
@@ -1573,7 +1584,7 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
           ; tx_meta = [ "rtc-tx?", Bool true ] }
         in
         Db_listener.commit_synthesized_report repo display_conn report;
-        fix_tx display_conn report (sync_fix_tx_meta ())
+        fix_tx repo display_conn ~jump_tx_data (sync_fix_tx_meta ())
       end
   | _ -> ()
 
@@ -1962,44 +1973,6 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
       | None -> []
     in
     let unconfirmed = Sync_client_op.get_unconfirmed_tx_data repo in
-    Worker_log.warn "db-sync/unapply-rows"
-      ([ "repo", repo; "count", string_of_int (List.length unconfirmed) ]
-       @ List.concat_map
-           (fun (e : Sync_client_op.unconfirmed_tx_row) ->
-              let items = stored_items e.un_reversed_tx_data in
-              let ops =
-                items
-                |> List.filter_map (fun i ->
-                       match i with
-                       | Wire.Array (op :: _) | Wire.List (op :: _) -> (
-                           match op with
-                           | Wire.Keyword s | Wire.String s -> Some s
-                           | _ -> None)
-                       | _ -> None)
-                |> List.sort_uniq compare
-                |> String.concat ","
-              in
-              let retract_idents =
-                items
-                |> List.filter_map (fun i ->
-                       match i with
-                       | Wire.Array
-                           [ op; _e; a; v ]
-                       | Wire.List [ op; _e; a; v ]
-                         when op = Wire.keyword "db/retract"
-                              && a = Wire.keyword "db/ident" -> (
-                           match v with
-                           | Wire.Keyword s | Wire.String s -> Some s
-                           | _ -> None)
-                       | _ -> None)
-                |> String.concat ","
-              in
-              [ "tx-id", e.un_tx_id
-              ; "failed", string_of_bool e.un_failed
-              ; "items", string_of_int (List.length items)
-              ; "ops", ops
-              ; "retract-idents", retract_idents ])
-           unconfirmed);
     unconfirmed
     |> List.rev
     |> List.iter (fun (e : Sync_client_op.unconfirmed_tx_row) ->
