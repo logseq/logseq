@@ -563,7 +563,7 @@ let () =
              Js.Promise.catch
                (fun _ ->
                   Pw.click env
-                    "[data-testid='page title'] .block-title-wrap, .ls-page-title .block-content")
+                    "[data-testid='page title'] .block-title-wrap, [data-testid='page title'] .block-content, .ls-page-title .block-title-wrap, .ls-page-title .block-content")
                (B.jump_to_block env "focused-root")
            in
            Util.wait_editor_visible env)
