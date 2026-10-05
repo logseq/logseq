@@ -63,7 +63,7 @@ let () =
           let* () =
             Pw.click env "div[data-testid='page title'] .block-title-wrap"
           in
-          let* () = Keyboard.enter env in
+          let* () = Keyboard.enter_in_editor env in
           let* _ = E2e_assert.is_hidden env Util.editor_q in
           let* name = Ls_page.get_page_name env in
           Fest.equal name page_name Fest.expect;

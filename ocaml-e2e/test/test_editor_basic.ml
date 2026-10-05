@@ -1179,9 +1179,9 @@ let () =
     t "consecutive-enter-keeps-text-and-cursor-on-the-new-block"
       (fun env ->
         let* () = B.new_block env "rapid enter start" in
-        let* () = K.enter env in
+        let* () = Keyboard.enter_in_editor env in
         let* () = Util.type_in_editor env "rapid enter alpha" in
-        let* () = K.enter env in
+        let* () = Keyboard.enter_in_editor env in
         let* () = Util.type_in_editor env "rapid enter beta" in
         let* () = Util.wait_timeout env 800. in
         let* st = editor_input_state env in
@@ -1213,7 +1213,7 @@ let () =
     t "enter-delete-keeps-text-and-cursor-on-the-previous-block"
       (fun env ->
         let* () = B.new_block env "rapid delete start" in
-        let* () = K.enter env in
+        let* () = Keyboard.enter_in_editor env in
         let* () = K.backspace env in
         let* () = Util.press_seq env " tail" in
         let* () = Util.wait_timeout env 800. in
@@ -1739,7 +1739,7 @@ let () =
     t "empty-enter-and-soft-line-break-test" (fun env ->
         let* () = B.new_block env "" in
         let* before = Util.page_blocks_count env in
-        let* () = K.enter env in
+        let* () = Keyboard.enter_in_editor env in
         let* after = Util.page_blocks_count env in
         Fest.deep_equal after (before + 1) Fest.expect;
         let* _ = Assert.have_count env Util.editor_q 1 in
@@ -1777,7 +1777,7 @@ let () =
           | Some l -> Pw.bounding_xy_l l
           | None -> Js.Promise.reject (Failure "no editor")
         in
-        let* () = K.enter env in
+        let* () = Keyboard.enter_in_editor env in
         let* ed' = Util.get_editor env in
         let* ax, _ =
           match ed' with
@@ -2547,7 +2547,7 @@ let () =
         let* () =
           iter_seq (fun _ -> K.arrow_right env) (List.init 5 (fun i -> i))
         in
-        let* () = K.enter env in
+        let* () = Keyboard.enter_in_editor env in
         let* () = Util.press_seq env "middle-" in
         let* _ = Assert.have_count env Util.editor_q 1 in
         let* c = Util.edit_content env in
