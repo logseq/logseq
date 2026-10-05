@@ -491,6 +491,15 @@ import SwiftUI
       padding = EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
     case "cp__cmdk-search-input":
       if fontSize == nil { fontSize = 15 }
+    // cmdk result list — web css: flex:1, overflow-y:auto, max-height
+    // 65dvh, padding-bottom 3.5rem. Scrollable is also what makes the
+    // node register a ScrollViewProxy for the scroll-row-into-view op.
+    case "cp__cmdk-scroller":
+      isScrollable = true; grow = true; fullWidth = true
+      padding = EdgeInsets(top: 0, leading: 0, bottom: 56, trailing: 0)
+      if let vh = NSApp.mainWindow?.contentView?.bounds.height {
+        maxHeight = vh * 0.65
+      }
     // group header row: title + count + flexible spacer + show-more link
     case "cp__cmdk-group-header":
       isRow = true; centerCross = true; stackSpacing = 6

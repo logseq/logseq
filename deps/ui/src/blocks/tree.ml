@@ -344,7 +344,6 @@ let editor_el uuid scope : t =
             ~text:buffer ~text_signal:buffer_sig []
         ; Ui_parts.mock_text ~key:("mt-" ^ uuid)
         ]
-    ; Asset_dom.upload_input ("up-" ^ uuid)
     ])
     ctx parent
 

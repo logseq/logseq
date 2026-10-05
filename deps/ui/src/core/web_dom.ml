@@ -1182,6 +1182,25 @@ external file_buffer :
   Js.Json.t -> Js.Typed_array.ArrayBuffer.t Js.Promise.t = "arrayBuffer"
   [@@mel.send]
 
+(* The file picker is imperative: a transient <input type=file> clicked
+   once and removed on change/cancel — no persistent input node sits in
+   the rendered tree. *)
+let open_file_picker ?accept ?(multiple : bool = false)
+    ?(directory : bool = false) (on_files : Js.Json.t array -> unit)
+    : unit =
+  let input = create_element "input" in
+  el_set_attr input "type" "file";
+  Option.iter (el_set_attr input "accept") accept;
+  if multiple then el_set_attr input "multiple" "";
+  if directory then el_set_attr input "webkitdirectory" "";
+  el_set_attr input "style" "display:none";
+  el_append_child document_body input;
+  el_on input "change" (fun _ ->
+      on_files (el_files input);
+      el_remove input);
+  el_on input "cancel" (fun _ -> el_remove input);
+  el_click input
+
 external make_blob :
   Js.Typed_array.Uint8Array.t array -> Js.Json.t -> Webapi.Blob.t =
   "Blob" [@@mel.new]

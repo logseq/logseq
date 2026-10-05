@@ -116,8 +116,61 @@ let download_text ~(filename : string) ~(mime : string)
 
 let download_binary ~(filename : string) ~(mime : string)
     (data : string) : unit =
+  (* the dom-op payload is a JSON body — binary goes base64 so it
+     survives the envelope; the host decodes it in saveFile *)
   Host.dom_op "download-binary"
-    (Printf.sprintf "%s\n%s\n%s" filename mime (b64_encode data))
+    (Js.Json.stringify
+       (Js.Json.JObject
+          [ ("name", Js.Json.JString filename)
+          ; ("mime", Js.Json.JString mime)
+          ; ("data-b64", Js.Json.JString (b64_encode data)) ]))
+
+(* The file picker is imperative: "open-file-picker" makes the host run
+   NSOpenPanel; the reply lands as a "files-picked" platform event
+   carrying {request, files: [{name,size,path}]} (file snapshot shape,
+   same as drag-drop payloads). *)
+let pick_pending : (int, Js.Json.t array -> unit) Hashtbl.t =
+  Hashtbl.create 4
+
+let pick_req = ref 0
+let pick_listener = ref false
+
+let install_pick_listener () =
+  if not !pick_listener then begin
+    pick_listener := true;
+    Platform.add_event_listener "files-picked" (fun j ->
+        match Dom_ext.num_prop "request" j with
+        | Some n -> (
+            let id = int_of_float n in
+            match Hashtbl.find_opt pick_pending id with
+            | Some cb ->
+                Hashtbl.remove pick_pending id;
+                let files =
+                  match Dom_ext.prop "files" j with
+                  | Js.Json.JArray a -> a
+                  | _ -> [||]
+                in
+                cb files
+            | None -> ())
+        | None -> ())
+  end
+
+let open_file_picker ?accept ?(multiple : bool = false)
+    ?(directory : bool = false) (on_files : Js.Json.t array -> unit)
+    : unit =
+  install_pick_listener ();
+  incr pick_req;
+  Hashtbl.replace pick_pending !pick_req on_files;
+  Host.dom_op "open-file-picker"
+    (Js.Json.stringify
+       (Js.Json.JObject
+          ([ ("request", Js.Json.JNumber (float_of_int !pick_req))
+           ; ("multiple", Js.Json.JBoolean multiple)
+           ; ("directory", Js.Json.JBoolean directory) ]
+          @
+          match accept with
+          | Some a -> [ ("accept", Js.Json.JString a) ]
+          | None -> [])))
 
 let confirm (_ : string) : bool = false
 

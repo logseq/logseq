@@ -386,6 +386,7 @@ let initialize platform_code host_code (_payload : string) : string =
   Properties_view.install ();
   Editor_commands.install ();
   Menu_bar.install ();
+  Asset_dom.install ();
   Router.init ();
   Rtc_flows.init ();
   perf_mark "init.installs" t1;
@@ -551,6 +552,8 @@ let platform_event payload =
             | None -> ())
         | _ -> ())
       else if name = "node-rect" then Dom_ext.note_node_rect json
+      else if name = "node-natural-size" then
+        Dom_ext.note_node_natural_size json
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 

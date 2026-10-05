@@ -111,6 +111,10 @@ let el_on_once el name f =
    go through the host picker), so the list is always empty *)
 let el_files (_el : el) : Js.Json.t array = [||]
 
+let open_file_picker = Browser_ui.open_file_picker
+let el_nat_width = Dom_ext.el_nat_width
+let el_nat_height = Dom_ext.el_nat_height
+
 (* ---------- geometry ---------- *)
 
 let rect_left = Dom_ext.rect_left

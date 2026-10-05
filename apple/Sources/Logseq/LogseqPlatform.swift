@@ -3,6 +3,7 @@ import Foundation
 import LUIAppleBackend
 import OSLog
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// One live native view backing an OCaml-side DOM element. Views register
 /// themselves by their DOM `id` attr so imperative dom-ops (focus, set-value,
@@ -767,6 +768,72 @@ final class NSReferenceBox {
       {
         proxy.scrollTo(rowID, anchor: .center)
       }
+    case "open-file-picker":
+      // OCaml's Web_dom.open_file_picker — run NSOpenPanel; the reply
+      // lands as a "files-picked" event carrying {request, files:
+      // [{name,size,path}]} (same file-snapshot shape as "file-drop").
+      let request = (dict["request"] as? NSNumber)?.intValue ?? 0
+      let panel = NSOpenPanel()
+      panel.canChooseFiles = true
+      panel.canChooseDirectories = (dict["directory"] as? Bool) ?? false
+      panel.allowsMultipleSelection = (dict["multiple"] as? Bool) ?? false
+      if let accept = dict["accept"] as? String {
+        let types = acceptContentTypes(accept)
+        if !types.isEmpty { panel.allowedContentTypes = types }
+      }
+      panel.begin { response in
+        let files: [[String: Any]]
+        if response == .OK {
+          files = panel.urls.map { url in
+            let size =
+              (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+              ?? 0
+            return [
+              "name": url.lastPathComponent,
+              "size": size,
+              "path": url.path,
+            ]
+          }
+        } else {
+          files = []
+        }
+        if let data = try? JSONSerialization.data(
+          withJSONObject: ["request": request, "files": files]),
+          let json = String(data: data, encoding: .utf8)
+        {
+          runtime?.sendPlatformEvent(name: "files-picked", json: json)
+        }
+      }
+    case "natural-size":
+      // <img> intrinsic size — same reply convention as "measure-node":
+      // OCaml polls the pushed "node-natural-size" event on its next
+      // attempt.
+      if let ref = dict["ref"] as? [String: Any],
+        let nodeID = (ref["node-id"] as? NSNumber)?.intValue
+      {
+        var body: [String: Any] = ["nodeId": nodeID]
+        if let context = LogseqElementRegistry.shared.context(
+          forNode: nodeID),
+          case .string(let attrsJson) =
+            context.childProperty(node: nodeID, "attrs"),
+          let attrsData = attrsJson.data(using: .utf8),
+          let attrs = try? JSONSerialization.jsonObject(with: attrsData)
+            as? [String: Any],
+          let src = attrs["src"] as? String,
+          let url = URL(string: src),
+          url.scheme == "file" || url.scheme == nil,
+          let image = NSImage(contentsOfFile: url.path)
+        {
+          body["width"] = Double(image.size.width)
+          body["height"] = Double(image.size.height)
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: body),
+          let json = String(data: data, encoding: .utf8)
+        {
+          runtime?.sendPlatformEvent(
+            name: "node-natural-size", json: json)
+        }
+      }
     case "measure-node":
       // Document-tree element snapshots carry no rect; OCaml's popup
       // flip/clamp measurements ask for the frame on demand and read the
@@ -833,17 +900,48 @@ final class NSReferenceBox {
     }
   }
 
+  /// "accept" uses <input accept> syntax — comma-separated ".ext",
+  /// full media types, or "kind/*" wildcards — map onto UTTypes for
+  /// NSOpenPanel's allowedContentTypes.
+  private func acceptContentTypes(_ accept: String) -> [UTType] {
+    var types: [UTType] = []
+    for part in accept.split(separator: ",") {
+      let t = part.trimmingCharacters(in: .whitespaces)
+      if t.hasPrefix(".") {
+        if let ut = UTType(filenameExtension: String(t.dropFirst())) {
+          types.append(ut)
+        }
+      } else if t.hasSuffix("/*") {
+        switch t {
+        case "image/*": types.append(.image)
+        case "audio/*": types.append(.audio)
+        case "video/*": types.append(.audiovisualContent)
+        case "text/*": types.append(.text)
+        default: break
+        }
+      } else if let ut = UTType(mimeType: t) {
+        types.append(ut)
+      }
+    }
+    return types
+  }
+
   private func saveFile(name: String, dict: [String: Any]) {
     let filename = (dict["filename"] as? String)
       ?? (dict["name"] as? String) ?? "export"
-    guard let dataText = dict["text"] as? String ?? dict["data"] as? String else {
-      return
-    }
+    // "download-binary" sends base64 (binary survives the JSON dom-op
+    // envelope); "download-text"/"save-file" send UTF-8 text.
     let panel = NSSavePanel()
     panel.nameFieldStringValue = filename
     panel.begin { response in
       guard response == .OK, let url = panel.url else { return }
-      try? dataText.write(to: url, atomically: true, encoding: .utf8)
+      if let b64 = dict["data-b64"] as? String,
+        let data = Data(base64Encoded: b64)
+      {
+        try? data.write(to: url)
+      } else if let text = dict["text"] as? String ?? dict["data"] as? String {
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+      }
     }
   }
 }

@@ -795,23 +795,6 @@ let overlays (ms : Model.t Signal.signal) =
         ms
     ]
 
-(* cljs container.cljs emits hidden <a> anchors used by export flows.
-   TODO(component): export code finds these by getElementById, sets href
-   and click()s them — a real hidden <a> is required; keep the dom until
-   the export path moves to a typed download mechanism *)
-let export_anchors : t =
-  Logseq_dom.fragment
-    (List.map
-       (fun id ->
-         Logseq_dom.dom ~key:("a-" ^ id) ~tag:"a" ~id
-           ~style_class:"hidden" [])
-       [ "download"; "download-as-edn-v2"; "download-as-json-v2"
-       ; "download-as-transit-debug"; "download-as-sqlite-db"
-       ; "download-as-db-edn"; "download-as-roam-json"
-       ; "download-as-html"; "download-as-zip"; "export-as-markdown"
-       ; "export-as-opml"
-       ; "convert-markdown-to-unordered-list-or-heading" ])
-
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup *)
 (* cljs container.cljs help-button: inline tabler help-small svg *)
@@ -933,7 +916,6 @@ let shell (ms : Model.t Signal.signal) : t =
             []
         ]
     ; overlays ms
-    ; export_anchors
     ; help_area ms
     ; reactive
             ~equal:(fun (a : Model.t) (b : Model.t) ->

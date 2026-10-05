@@ -860,7 +860,7 @@ let open_palette ?(move = false) st =
    | Some repo -> load_recents st repo
    | None -> ());
   let rec focus_input tries =
-    match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+    match Dom_ext.doc_query_selector "#cmdk-input" with
     | Some el ->
         Dom_ext.focus el;
         if q <> "" then (
@@ -895,7 +895,7 @@ let open_in_page () =
   | Some st ->
       if not (get st).open_ then open_palette st;
       set_in st (fun v -> { v with filter = Some G_current_page; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+      (match Dom_ext.doc_query_selector "#cmdk-input" with
        | Some el -> Dom_ext.set_value el ""
        | None -> ());
       refresh st
@@ -913,7 +913,7 @@ let clear_or_close st =
   else if v.filter <> None && not v.move_mode then (clear_filter st; true)
   else if v.input <> "" then (
     set_in st (fun v -> { v with input = "" });
-    (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+    (match Dom_ext.doc_query_selector "#cmdk-input" with
      | Some el -> Dom_ext.set_value el ""
      | None -> ());
     refresh st;
@@ -935,7 +935,7 @@ let move_hl st dir =
       else ((v.hl + dir) mod n + n) mod n
     in
     set_in st (fun v -> { v with hl = i; mouse = false });
-    (match Dom_ext.doc_query_selector ".cp__cmdk .cp__cmdk-scroller" with
+    (match Dom_ext.doc_query_selector "#cmdk-scroller" with
      | Some scroller -> (
          match
            Dom_ext.query_selector scroller
@@ -1260,7 +1260,7 @@ let rec run_item st it =
    | Set_filter gid ->
        set_in st (fun v ->
            { v with filter = Some gid; input = "" });
-       (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+       (match Dom_ext.doc_query_selector "#cmdk-input" with
         | Some el -> Dom_ext.set_value el ""
         | None -> ());
        refresh st
@@ -1330,7 +1330,7 @@ and run_command st repo (cid : string) =
          the palette to the nodes group — no recents/filters *)
       set_in st (fun v ->
           { v with move_mode = true; filter = Some G_nodes; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+      (match Dom_ext.doc_query_selector "#cmdk-input" with
        | Some el -> Dom_ext.set_value el ""; Dom_ext.focus el
        | None -> ());
       refresh st
@@ -1338,7 +1338,7 @@ and run_command st repo (cid : string) =
   | "go/search-in-page" ->
       set_in st (fun v ->
           { v with filter = Some G_current_page; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+      (match Dom_ext.doc_query_selector "#cmdk-input" with
        | Some el -> Dom_ext.set_value el ""
        | None -> ());
       refresh st

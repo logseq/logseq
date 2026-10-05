@@ -172,7 +172,6 @@ let title_editor (page : Model.page) : t =
         []
         ; Ui_parts.mock_text ~key:"pt-mt"
         ]
-    ; Asset_dom.upload_input ("pt-up-" ^ uuid)
     ]
 
 
