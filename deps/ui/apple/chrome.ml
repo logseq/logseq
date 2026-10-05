@@ -140,20 +140,52 @@ let right_toggle_btn ms =
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
 
+(* rtc status as a toolbar item: a ghost cloud button — Apple toolbars
+   carry status items as their own spaced items, not fused capsules.
+   Dimmed while sync is off, accent while queueing (the .cp__rtc-sync
+   CSS states don't map onto native). *)
+let rtc_item (ms : Model.t Signal.signal) : t =
+  button ~key:"rtc-tb" ~icon:(`app "cloud") ~variant:`ghost
+    ~label:"Sync Status" ~accessibility_identifier:"rtc-sync"
+    ~disabled_signal:
+      (Signal.map
+         (fun (m : Model.t) ->
+           match m.Model.rtc with
+           | Some r when Platform.online () && r.rtc_lock -> false
+           | _ -> true)
+         ms)
+    ~foreground_signal:
+      (Signal.map
+         (fun (m : Model.t) ->
+           match m.Model.rtc with
+           | Some r when
+               Platform.online () && r.rtc_lock
+               && (r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
+                  || r.rtc_pending_server > 0) ->
+               "accent"
+           | _ -> "secondary")
+         ms)
+    []
+
 (* Out's navigation group: system sidebar toggle (NavigationSplitView
-   supplies it), ‹ › nav, home, › + title. The trailing controls each
-   hoist as their own toolbar element — separate items, not one fused
-   capsule. *)
+   supplies it), ‹ › nav, home, › + title. The trailing controls ride
+   one hoisted toolbar separated by flexible spacers — independent
+   items spread across the bar (Safari/Notes-style), not a packed
+   cluster at the right edge. *)
 let topbar (ms : Model.t Signal.signal) : t list =
   [ toolbar ~key:"tb-leading" ~placement:"navigation"
       ~label:"Window Toolbar"
       [ back_btn ms; forward_btn ms; home_btn ms; crumb_title ms ]
-  ; toolbar ~key:"tb-search" ~placement:"primary-action"
-      ~label:"Search" [ search_btn ]
-  ; toolbar ~key:"tb-dots" ~placement:"primary-action"
-      ~label:"Page Menu" [ dots_btn ]
-  ; toolbar ~key:"tb-right" ~placement:"primary-action"
-      ~label:"Toggle Right Sidebar" [ right_toggle_btn ms ]
+  ; toolbar ~key:"tb-trailing" ~placement:"primary-action"
+      ~label:"Toolbar Actions"
+      [ spacer ~key:"tb-s0" []
+      ; rtc_item ms
+      ; spacer ~key:"tb-s1" []
+      ; search_btn
+      ; spacer ~key:"tb-s2" []
+      ; dots_btn
+      ; spacer ~key:"tb-s3" []
+      ; right_toggle_btn ms ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx

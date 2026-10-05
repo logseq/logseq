@@ -465,7 +465,7 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     backend = try LUIAppleBackend(
       // `app:` icon names referenced from OCaml semantic elements (the
       // built-in icon table has no house glyph for the Home button).
-      appIcons: ["home": .systemName("house")],
+      appIcons: ["home": .systemName("house"), "cloud": .systemName("cloud")],
       extensionRegistry: extensionRegistry
     )
     backend.onEvent = { [weak self] event in self?.handle(event) }
