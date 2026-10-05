@@ -23,8 +23,10 @@ let press_in_editor env ?delay key =
   in
   if in_editor then Pw.press env ?delay key
   else
+    (* last *visible* textarea: a stale editor can sit at nth=0 and absorb
+       the press without touching the app's editing state *)
     Playwright.locator_press ?delay
-      (Pw.q env ".editor-wrapper textarea >> nth=0")
+      (Pw.q env ".editor-wrapper textarea:visible >> nth=-1")
       key
 let enter env = Pw.press env "Enter"
 let enter_in_editor env = press_in_editor env "Enter"
