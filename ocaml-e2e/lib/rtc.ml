@@ -123,9 +123,9 @@ let with_wait_tx_updated env body =
               (Option.value ~default:0 new_m.local_tx)
               (Option.value ~default:0 new_m.remote_tx)))
     else
-      let* () = Util.wait_timeout env 500. in
+      let* () = Util.wait_timeout env 200. in
       let* () = wait_idle env in
-      let* () = Util.wait_timeout env 1000. in
+      let* () = Util.wait_timeout env 300. in
       let* new_m = get_rtc_tx env in
       let new_local = Option.value ~default:0 new_m.local_tx in
       let new_remote = Option.value ~default:0 new_m.remote_tx in
@@ -142,7 +142,7 @@ let wait_tx_update_to env new_tx =
         (Failure
            (Printf.sprintf "wait-tx-update-to %d, last local-tx %d" new_tx last))
     else
-      let* () = Util.wait_timeout env 1000. in
+      let* () = Util.wait_timeout env 300. in
       let* () = wait_idle env in
       let* m = get_rtc_tx env in
       let local = Option.value ~default:0 m.local_tx in
