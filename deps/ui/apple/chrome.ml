@@ -36,16 +36,25 @@ let skip_to_main =
    is gone; rtc/plugin toolbar items keep hidden DOM mounts below so
    their emitters stay live. *)
 
-let tb_btn ~key ?(acc = "") ~icon ~label on_press =
-  button ~key ~icon ~label
+(* Hoisted toolbar items read as native circular buttons (macOS 26
+   liquid-glass circles, like Notes/Safari) — the LUI surface draws a
+   glassEffect capsule for background "glass" with a pill corner
+   radius, and the toolbar anchor hides the item's shared background
+   for nodes that own a capsule. A square 30pt frame keeps the capsule
+   a circle. *)
+let tb_circle ~key ?(acc = "") ~icon ~label ?disabled_signal
+    ?foreground_signal on_press =
+  button ~key ~icon ~label ~variant:`ghost
+    ~background:"glass" ~corner_radius:999 ~width:30 ~height:30
     ~accessibility_identifier:(if acc = "" then key else acc)
+    ?disabled_signal ?foreground_signal
     ~on_press:(fun _ -> on_press ()) []
 
 (* the DOM header's search button opened via the cmdk DOM-click
    handler; the semantic button calls the palette opener directly
    (Action.Toggle_search is a no-op reducer on native) *)
 let search_btn =
-  tb_btn ~key:"search-btn" ~acc:"search-button" ~icon:`search
+  tb_circle ~key:"search-btn" ~acc:"search-button" ~icon:`search
     ~label:"Search" (fun () -> Cmdk_state.open_latest ())
 
 (* cljs anchors the dropdown to the trigger's right edge. The dots sits
@@ -57,7 +66,8 @@ let search_btn =
    to the same trigger. *)
 let dots_btn =
   button ~key:"dots-btn" ~icon:`ellipsis ~label:"Page Menu"
-    ~accessibility_identifier:"toolbar-dots-btn"
+    ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
+    ~height:30 ~accessibility_identifier:"toolbar-dots-btn"
     ~on_press:(fun _ ->
       let pos =
         Some (Dom_ext.window_inner_width () -. 48., 48.)
@@ -73,7 +83,8 @@ let dots_btn =
    functional — disabled at the stack edges. *)
 let back_btn ms =
   button ~key:"nav-back" ~icon:`chevron_left ~label:"Go Back"
-    ~accessibility_identifier:"nav-back"
+    ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
+    ~height:30 ~accessibility_identifier:"nav-back"
     ~disabled_signal:
       (Signal.map
          (fun (_ : Model.t) -> not (Platform.can_history_back ()))
@@ -82,7 +93,8 @@ let back_btn ms =
 
 let forward_btn ms =
   button ~key:"nav-fwd" ~icon:`chevron_right ~label:"Go Forward"
-    ~accessibility_identifier:"nav-fwd"
+    ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
+    ~height:30 ~accessibility_identifier:"nav-fwd"
     ~disabled_signal:
       (Signal.map
          (fun (_ : Model.t) -> not (Platform.can_history_forward ()))
@@ -94,7 +106,8 @@ let forward_btn ms =
    stays and the press no-ops there *)
 let home_btn ms =
   button ~key:"home-btn" ~icon:(`app "home") ~label:"Home"
-    ~accessibility_identifier:"home-btn"
+    ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
+    ~height:30 ~accessibility_identifier:"home-btn"
     ~on_press:(fun _ ->
       match (Signal.get ms).Model.route with
       | Model.Home -> ()
@@ -135,7 +148,7 @@ let crumb_title ms =
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_btn ms =
-  tb_btn ~key:"rs-toggle" ~icon:`panel_right ~label:"Toggle Right Sidebar"
+  tb_circle ~key:"rs-toggle" ~icon:`panel_right ~label:"Toggle Right Sidebar"
     (fun () ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
@@ -145,8 +158,8 @@ let right_toggle_btn ms =
    Dimmed while sync is off, accent while queueing (the .cp__rtc-sync
    CSS states don't map onto native). *)
 let rtc_item (ms : Model.t Signal.signal) : t =
-  button ~key:"rtc-tb" ~icon:(`app "cloud") ~variant:`ghost
-    ~label:"Sync Status" ~accessibility_identifier:"rtc-sync"
+  tb_circle ~key:"rtc-tb" ~icon:(`app "cloud")
+    ~label:"Sync Status" ~acc:"rtc-sync"
     ~disabled_signal:
       (Signal.map
          (fun (m : Model.t) ->
@@ -165,7 +178,7 @@ let rtc_item (ms : Model.t Signal.signal) : t =
                "accent"
            | _ -> "secondary")
          ms)
-    []
+    (fun () -> ())
 
 (* Out's navigation group: system sidebar toggle (NavigationSplitView
    supplies it), ‹ › nav, home, › + title. The trailing controls ride

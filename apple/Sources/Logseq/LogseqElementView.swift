@@ -2837,7 +2837,7 @@ private struct LogseqFlatBlockRow: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      HStack(alignment: .firstTextBaseline, spacing: 2) {
+      HStack(alignment: .top, spacing: 2) {
         bulletZone
         if editorNodeID > 0 {
           // Editing row: the real textarea. Its identity stays the
