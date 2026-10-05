@@ -7,32 +7,18 @@
 open Promise_ext
 open Lui_elements
 
-let dom = Logseq_dom.dom
-let dyn = Logseq_dom.dyn
 let if_ = Logseq_dom.if_
 module T = I18n
 
-let checkbox_cls checked =
-  "ui__checkbox peer h-4 w-4 shrink-0 cursor-pointer rounded-sm border \
-   border-primary focus-visible:outline-none"
-  ^ if checked then " data-checked" else ""
+let toggle st =
+  Signal.set st (not (Signal.get_state st));
+  Runtime.flush ()
 
-let checkbox ~key ~id ~checked ~on_click =
-  dom ~key ~tag:"button" ~id
-    ~style_class_signal:(Logseq_dom.reactive_class checkbox_cls checked)
-    ~attrs_signal_v:(Logseq_dom.reactive_attrs
-         (fun c ->
-           [ ("role", "checkbox")
-           ; ("type", "button")
-           ; ("aria-checked", string_of_bool c)
-           ; ("data-state", if c then "checked" else "unchecked")
-           ])
-         checked)
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
-    [ if_ ~test:checked
-        (dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check ls-icon-sm"
-           []) ]
+(* shui/checkbox — the kind draws its own check indicator *)
+let checkbox ~key ~id ~checked ~on_toggle =
+  checkbox ~key ~accessibility_identifier:id
+    ~style_class:"ui__checkbox" ~checked_signal:checked
+    ~on_toggle:(fun _ -> on_toggle ()) []
 
 let name_input () =
   match Web_dom.query_selector ".new-graph input" with
@@ -71,9 +57,7 @@ let submit cloud e2ee creating =
       Graphs_ops.remember_open repo;
       Dialogs_state.close_named "new-graph";
       ignore (Graphs_ops.navigate_journal repo);
-      Js.Promise.resolve () (* cljs: db-sync-ensure-user-rsa-keys runs before
-               create-remote-graph so the private key is available (the
-               worker may ui-request an e2ee password here) *)))
+      Js.Promise.resolve ()))
 
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
@@ -82,70 +66,46 @@ let body (_ms : Model.t Signal.signal) : t =
   let e2ee = Signal.state ctx.ui_scheduler true in
   let creating = Signal.state ctx.ui_scheduler false in
   let node =
-    dom ~key:"new-graph" ~style_class:"new-graph"
-      [ dom ~key:"ng-in" ~tag:"input"
-          ~style_class:"ui__input"
-          ~attrs:
-            [ ("placeholder", T.graph_name_placeholder)
-            ; ("autocomplete", "off")
-            ; ("type", "text")
-            (* cljs shui/input is h-10; .ui__input defaults to the 29px
-               compact variant *)
-            ; ("style", "height:2.5rem")
-            ]
-          ~events:"keydown"
-          ~on_dom_event:(fun n p ->
-            match n with
-            | "keydown" -> (
-                match
-                  Platform.payload_str p
-                    "key"
-                with
-                | "Enter" -> submit cloud e2ee creating
-                | _ -> ())
-            | _ -> ())
+    column ~key:"new-graph" ~style_class:"new-graph"
+      [ (* cljs shui/input is h-10; .ui__input defaults to the 29px
+           compact variant *)
+        input ~key:"ng-in" ~style_class:"ui__input" ~height:40
+          ~placeholder:T.graph_name_placeholder ~submit_on_enter:true
+          ~on_submit:(fun _ -> submit cloud e2ee creating)
           []
       ; (* cljs new-db-graph-inner: the sync row shows when
            user-handler/rtc-group? (dev build, custom sync server, or a
            cognito rtc group). ?rtc-test=true keeps it reachable in e2e
            without auth *)
-        if Platform.rtc_test_mode () || Rtc_flows.rtc_group () then
-          dom ~key:"ng-rtc" ~style_class:"ls-ng-rtc"
-            [ dom ~key:"ng-rtc-row"
-                ~style_class:"ls-ng-row"
-                [ checkbox ~key:"rtc" ~id:"rtc-sync"
-                    ~checked:(Signal.value cloud)
-                    ~on_click:(fun () ->
-                      Signal.set cloud (not (Signal.get_state cloud));
-                      Runtime.flush ())
-                ; dom ~key:"rtc-lbl" ~tag:"label"
-                    ~style_class:"ls-ng-label"
-                    ~attrs:[ ("for", "rtc-sync") ]
-                    ~text:T.use_sync_label []
-                ; if_ ~test:(Signal.value cloud)
-                    (dom ~key:"ng-e2ee-row"
-                       ~style_class:"ls-ng-row ls-ng-sub"
-                       [ checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
-                           ~checked:(Signal.value e2ee)
-                           ~on_click:(fun () ->
-                             Signal.set e2ee
-                               (not (Signal.get_state e2ee));
-                             Runtime.flush ())
-                       ; dom ~key:"e2ee-lbl" ~tag:"label"
-                           ~style_class:"ls-ng-label"
-                           ~attrs:[ ("for", "rtc-graph-e2ee") ]
-                           ~text:T.encrypt_data_label []
-                       ])
-                ]
-            ]
-        else box ~key:"ng-no-rtc" ~style_class:"hidden" []
-      ; dom ~key:"ng-submit" ~tag:"button" ~text:T.submit ~events:"click"
-          ~style_class:"ui__button ls-btn-primary"
-          ~attrs_signal_v:(Logseq_dom.reactive_attrs
-               (fun c -> if c then [ ("disabled", "true") ] else [])
-               (Signal.value creating))
-          ~on_dom_event:(fun n _ ->
-            if n = "click" then submit cloud e2ee creating)
+        (if Platform.rtc_test_mode () || Rtc_flows.rtc_group () then
+           column ~key:"ng-rtc" ~style_class:"ls-ng-rtc"
+             [ row ~key:"ng-rtc-row" ~style_class:"ls-ng-row"
+                 [ checkbox ~key:"rtc" ~id:"rtc-sync"
+                     ~checked:(Signal.value cloud)
+                     ~on_toggle:(fun () -> toggle cloud)
+                 ; Ui_parts.pressable
+                     ~on_press:(fun _ -> toggle cloud)
+                     (label ~key:"rtc-lbl" ~style_class:"ls-ng-label"
+                        ~value:T.use_sync_label [])
+                 ; if_ ~test:(Signal.value cloud)
+                     (row ~key:"ng-e2ee-row"
+                        ~style_class:"ls-ng-row ls-ng-sub"
+                        [ checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
+                            ~checked:(Signal.value e2ee)
+                            ~on_toggle:(fun () -> toggle e2ee)
+                        ; Ui_parts.pressable
+                            ~on_press:(fun _ -> toggle e2ee)
+                            (label ~key:"e2ee-lbl"
+                               ~style_class:"ls-ng-label"
+                               ~value:T.encrypt_data_label [])
+                        ])
+                 ]
+             ]
+         else box ~key:"ng-no-rtc" ~style_class:"hidden" [])
+      ; button ~key:"ng-submit" ~style_class:"ui__button ls-btn-primary"
+          ~text:T.submit
+          ~disabled_signal:(Signal.value creating)
+          ~on_press:(fun _ -> submit cloud e2ee creating)
           []
       ]
   in

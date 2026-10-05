@@ -5,7 +5,6 @@
 open Promise_ext
 open Lui_elements
 
-let dom = Logseq_dom.dom
 module T = I18n
 let repo () =
   match (Runtime.model ()).Model.repo with
@@ -106,17 +105,17 @@ let export_transit () =
     ~mime:"application/transit+json" text;
   Js.Promise.resolve ()
 
-let link ~key label desc on_click =
-  dom ~key
-    (dom ~key:(key ^ "-a") ~tag:"a" ~style_class:"ls-strong"
-       ~text:label ~events:"click"
-       ~attrs:[ ("href", "#"); ("onclick", "return false") ]
-       ~on_dom_event:(fun n _ -> if n = "click" then ignore (on_click ()))
+(* cljs [:a {:href "#" :on-click prevent-default}] — an action label,
+   not a navigation link, so it maps to pressable text, not `link` *)
+let link ~key label_ desc on_click =
+  column ~key
+    (text ~key:(key ^ "-a") ~style_class:"ls-strong" ~value:label_
+       ~on_press:(fun _ -> ignore (on_click ()))
        []
      :: (if desc = "" then []
          else
-           [ dom ~key:(key ^ "-d") ~tag:"p"
-               ~style_class:"ls-desc" ~text:desc [] ]))
+           [ paragraph ~key:(key ^ "-d") ~style_class:"ls-desc"
+               ~value:desc [] ]))
 
 (* cljs components/export.cljs auto-backup — File System Access folder
    picker, folder name persisted under :logseq.kv/graph-backup-folder,
@@ -258,69 +257,70 @@ let load_folder ctx =
   with _ -> ()
 
 let auto_backup ctx =
-  dom ~key:"ab" ~style_class:"flex flex-col gap-4"
-    [ dom ~key:"ab-h" ~style_class:"font-medium opacity-50"
-        ~text:(T.t "export.backup/schedule") []
+  column ~key:"ab" ~gap:16
+    [ text ~key:"ab-h" ~style_class:"font-medium opacity-50"
+        ~value:(T.t "export.backup/schedule") []
     ; (if not (Web_dom.picker_supported ()) then
-         dom ~key:"ab-na"
-           [ dom ~key:"ab-na-s" ~tag:"span"
-               ~text:(T.t "export.backup/unsupported-desc") [] ]
+         box ~key:"ab-na"
+           [ text ~key:"ab-na-s"
+               ~value:(T.t "export.backup/unsupported-desc") [] ]
        else
-         Logseq_dom.dyn ~equal:( == )
-           (fun folder ->
-             match folder with
-             | Some name ->
-                 dom ~key:"ab-in" ~style_class:"flex flex-col gap-4"
-                   [ dom ~key:"ab-row"
-                       ~style_class:"flex flex-row items-center gap-1 text-sm"
-                       [ dom ~key:"ab-l" ~style_class:"opacity-50"
-                           ~text:(T.t "export.backup/folder") []
-                       ; dom ~key:"ab-n" ~text:name []
-                       ; dom ~key:"ab-x" ~tag:"button"
-                           ~style_class:"ui__button as-ghost h-8 rounded !px-1 !py-1"
-                           ~attrs:[ ("title", T.t "export.backup/cancel") ]
-                           ~events:"click"
-                           ~on_dom_event:(fun n _ ->
-                             if n = "click" then clear_folder ctx)
-                           [ Icons.raw ~cls:"ls-icon-sm" "x" ] ]
-                   ; dom ~key:"ab-note"
-                       ~style_class:"opacity-50 text-sm"
-                       ~text:(T.t "export.backup/hourly-note") []
-                   ; dom ~key:"ab-go" ~tag:"button"
-                       ~style_class:"ui__button ls-btn-primary"
-                       ~text:(T.t "export.backup/backup-now")
-                       ~events:"click"
-                       ~on_dom_event:(fun n _ ->
-                         if n = "click" then (
-                           ignore
-                             (backup_now ()
-                              |> Js.Promise.then_ (fun r ->
-                                     backup_notify r;
-                                     Js.Promise.resolve ()));
-                           auto_backup_interval ()))
-                       [] ]
-             | None ->
-                 dom ~key:"ab-in" ~style_class:"flex flex-col gap-4"
-                   [ dom ~key:"ab-set" ~tag:"button"
-                       ~style_class:"ui__button ls-btn-primary"
-                       ~text:(T.t "export.backup/set-folder-first")
-                       ~events:"click"
-                       ~on_dom_event:(fun n _ ->
-                         if n = "click" then choose_folder ctx)
-                       []
-                   ; dom ~key:"ab-note"
-                       ~style_class:"opacity-50 text-sm"
-                       ~text:(T.t "export.backup/hourly-note") [] ])
-           (folder_st ctx).Signal.state_signal)
+         let folder_sig = (folder_st ctx).Signal.state_signal in
+         Logseq_dom.fragment
+           [ Logseq_dom.if_
+               ~test:(Signal.map (fun f -> f <> None) folder_sig)
+               (column ~key:"ab-in" ~gap:16
+                  [ row ~key:"ab-row" ~gap:4 ~cross:`center
+                      ~style_class:"text-sm"
+                      [ text ~key:"ab-l" ~style_class:"opacity-50"
+                          ~value:(T.t "export.backup/folder") []
+                      ; text ~key:"ab-n"
+                          ~value:(reactive (function
+                            | Some name -> name | None -> "")
+                            folder_sig)
+                          []
+                      ; button ~key:"ab-x" ~size:`icon ~icon:`x
+                          ~style_class:"ui__button as-ghost"
+                          ~label:(T.t "export.backup/cancel")
+                          ~on_press:(fun _ -> clear_folder ctx)
+                          [] ]
+                  ; text ~key:"ab-note" ~style_class:"opacity-50 text-sm"
+                      ~value:(T.t "export.backup/hourly-note") []
+                  ; button ~key:"ab-go"
+                      ~style_class:"ui__button ls-btn-primary"
+                      ~text:(T.t "export.backup/backup-now")
+                      ~on_press:(fun _ ->
+                        ignore
+                          (backup_now ()
+                           |> Js.Promise.then_ (fun r ->
+                                  backup_notify r;
+                                  Js.Promise.resolve ()));
+                        auto_backup_interval ())
+                      [] ])
+           ; Logseq_dom.if_
+               ~test:(Signal.map (fun f -> f = None) folder_sig)
+               (column ~key:"ab-in" ~gap:16
+                  [ button ~key:"ab-set"
+                      ~style_class:"ui__button ls-btn-primary"
+                      ~text:(T.t "export.backup/set-folder-first")
+                      ~on_press:(fun _ -> choose_folder ctx)
+                      []
+                  ; text ~key:"ab-note"
+                      ~style_class:"opacity-50 text-sm"
+                      ~value:(T.t "export.backup/hourly-note") [] ])
+           ])
     ]
 
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   load_folder ctx;
-  dom ~key:"export" ~style_class:"export"
-    [ dom ~key:"ex-h" ~tag:"h1" ~style_class:"title ls-mb"
+  column ~key:"export" ~style_class:"export"
+    [ (* TODO(component): .export h1.title.ls-mb keys on the h1 tag —
+         heading renders a div[role=heading], keep dom until the rule
+         moves to a class selector *)
+      Logseq_dom.dom ~key:"ex-h" ~tag:"h1" ~style_class:"title ls-mb"
         ~text:T.export_title []
-    ; dom ~key:"ex-list" ~style_class:"ls-ex-list"
+    ; column ~key:"ex-list" ~style_class:"ls-ex-list"
         ([ link ~key:"ex-db" T.export_sqlite_db T.export_sqlite_desc
              export_binary
          ; link ~key:"ex-zip" T.export_sqlite_zip T.export_zip_desc
@@ -333,8 +333,8 @@ let body (_ms : Model.t Signal.signal) : t =
         @
         (* cljs web only shows the auto-backup section (hr + schedule) on
            the web platform, which this build always is *)
-        [ dom ~key:"ab-wrap"
-            [ dom ~key:"ex-hr" ~tag:"hr" []
+        [ column ~key:"ab-wrap"
+            [ divider ~key:"ex-hr" ~orientation:`horizontal []
             ; auto_backup ctx
             ]
         ])
