@@ -49,6 +49,9 @@ let wait_focused_day env ?eq ?ne () =
     let ok =
       (match eq with None -> true | Some l -> label = l)
       && (match ne with None -> true | Some l -> label <> l)
+      (* the focus ring's background paints a frame after the focused
+         attribute lands — include it so the wait covers the paint *)
+      && opaque_color (Api.get_string j "bg")
     in
     if focused && ok then Js.Promise.resolve j
     else if n <= 0 then
