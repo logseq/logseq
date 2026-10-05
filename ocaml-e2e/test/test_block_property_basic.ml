@@ -501,7 +501,7 @@ let () =
           in
           let* () = K.press env "ControlOrMeta+a" in
           let* () = Util.press_seq env ~delay:20. invalid_value in
-          let* () = Keyboard.enter_in_editor env in
+          let* () = K.enter env in
           let* v2 = block_value env uuid property_name in
           Fest.deep_equal
             (Js.Json.decodeString v2 <> Some invalid_value)
