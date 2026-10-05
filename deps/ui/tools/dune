@@ -1,3 +1,8 @@
 (executable
  (name dict_gen)
  (modes native))
+
+(executable
+ (name emoji_gen)
+ (modes native)
+ (libraries yojson))

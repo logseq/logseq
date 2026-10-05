@@ -1,3 +1,25 @@
+; Generate apple/dicts_gen.ml from the shared cljs dicts — same shape as
+; the src/ rule; the dicts dir lives outside this dune-project
+; (../../src/resources/dicts), so it can't be a tracked dep — run
+; `dune build --force` to pick up dict edits.
+(rule
+ (target dicts_gen.ml)
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../tools/dict_gen.exe} \"$DUNE_SOURCEROOT/../../src/resources/dicts\" %{target}")))
+
+; Same for the emoji table — regenerates from resources/js/emoji-data.js
+; (outside the project) so emoji-mart upgrades can't leave a stale copy.
+(rule
+ (target emoji_mart_data.ml)
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../tools/emoji_gen.exe} \"$DUNE_SOURCEROOT/../../resources/js/emoji-data.js\" %{target}")))
+
 (rule
  (copy ../subs/action.ml action.ml))
 (rule

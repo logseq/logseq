@@ -1,3 +1,5 @@
 _build/
 node_modules/
 dist/
+apple/dicts_gen.ml
+apple/emoji_mart_data.ml
