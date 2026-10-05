@@ -1,5 +1,6 @@
 (** Named keyboard shortcuts, mirroring clj-e2e's [keyboard.clj]. *)
 
+open Fest.Promise
 
 let press env ?delay key = Pw.press env ?delay key
 let press_all env ?delay keys = Pw.press_all env ?delay keys
@@ -24,8 +25,15 @@ let shift_tab env = Pw.press env "Shift+Tab"
 let shift_enter env = Pw.press env "Shift+Enter"
 let shift_arrow_up env = Pw.press env "Shift+ArrowUp"
 let shift_arrow_down env = Pw.press env "Shift+ArrowDown"
-let arrow_up env = Pw.press env "ArrowUp"
-let arrow_down env = Pw.press env "ArrowDown"
+(* cursor/block navigation while editing — deliver to the editor
+   element when one is mounted; *:focus=<body> silently drops the key *)
+let arrow_in_editor_or_focus env key =
+  let* editors = Pw.qs env ".editor-wrapper textarea" in
+  if Array.length editors > 0 then press_in_editor env key
+  else Pw.press env key
+
+let arrow_up env = arrow_in_editor_or_focus env "ArrowUp"
+let arrow_down env = arrow_in_editor_or_focus env "ArrowDown"
 let arrow_left env = Pw.press env "ArrowLeft"
 let arrow_right env = Pw.press env "ArrowRight"
 
