@@ -52,10 +52,18 @@ let select_view env view =
 
 let assert_query_count env n =
   (* live queries recompute on the worker; give the count a window *)
-  E2e_assert.is_visible_l ~timeout:20000.
-    (Ls_locator.filter env
-       ~has_text:(Printf.sprintf "Live query (%d)" n)
-       ".custom-query-results")
+  Js.Promise.catch
+    (fun e ->
+       let* dump =
+         Pw.eval_js env
+           "(() => { const el = document.querySelector('.custom-query-results'); return el ? el.textContent.slice(0,200) : 'no-results' })()"
+       in
+       let* () = Js.Promise.resolve (Js.log2 "query-results-dump" dump) in
+       Playwright.throw_error e)
+    (E2e_assert.is_visible_l ~timeout:20000.
+       (Ls_locator.filter env
+          ~has_text:(Printf.sprintf "Live query (%d)" n)
+          ".custom-query-results"))
 
 let row_with env text =
   Ls_locator.filter env ~has_text:text
