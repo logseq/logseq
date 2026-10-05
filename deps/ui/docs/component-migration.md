@@ -1,22 +1,23 @@
-# deps/ui 视图组件化迁移规范
+# deps/ui component-kind migration spec
 
-目标：视图代码全部改用 `Lui_elements` 组件 kind + 类型化 props，
-`dom`/`logseq-<tag>` DOM 扩展层整体删除。web 靠 `style_class` 保持
-像素级 parity；Apple/GPUI 忽略 class，按 kind + typed props 渲染
-原生组件。extension 只保留平台特有件（editor surface、split/dock、
-gpui-table、pdf/media）。
+Goal: all view code uses `Lui_elements` component kinds + typed props.
+The `dom`/`logseq-<tag>` DOM extension layer is deleted wholesale. Web
+keeps pixel-level parity via `style_class`; Apple/GPUI ignore classes
+and render native components from kind + typed props. Extensions only
+survive for genuinely platform-specific pieces (editor surface,
+split/dock, gpui-table, pdf/media).
 
-## tag → kind 映射
+## tag → kind mapping
 
-| `~tag` (dom) | LUI kind | 说明 |
+| `~tag` (dom) | LUI kind | Notes |
 |---|---|---|
-| `div` + `flex` | `row` | 横向 |
-| `div` + `flex flex-col` | `column` | 纵向 |
-| `div` + `flex-wrap` | `row`/`column` + `~columns` | 换行用 columns |
+| `div` + `flex` | `row` | horizontal |
+| `div` + `flex flex-col` | `column` | vertical |
+| `div` + `flex-wrap` | `row`/`column` + `~columns` | wrapping via columns |
 | `div` + `grid` | `grid`/`columns` | |
-| `div` 纯容器 | `box` | 无语义容器 |
+| `div` plain container | `box` | no semantic container |
 | `div` + overflow-*-scroll | `scroll` | `~orientation` |
-| `div` 绝对定位/层叠 | `stack`/`overlay`/`edge_inset` | |
+| `div` absolute/stacked | `stack`/`overlay`/`edge_inset` | |
 | `span`/`raw-text`/`strong`/`sup`/`small`/`code`/`p`/`pre` | `text`/`paragraph`/`heading` | `~value`/`~text` |
 | `button` | `button` | `~text`/`~variant`/`~disabled`/`~on_press` |
 | `a` | `link` | `~url`/`~text` |
@@ -25,178 +26,203 @@ gpui-table、pdf/media）。
 | `input[type=radio]` | `radio`/`radio_group` | |
 | `textarea` | `textarea` | |
 | `select`/`option` | `select` + `menu_item` | |
-| `i`(ti-*)/`svg`(tabler) | `icon` | `~name:(`app "…")` + app_icons 注册 |
+| `i`(ti-*)/`svg`(tabler) | `icon` | `~name:(`app "…")` + app_icons registration |
 | `kbd` | `kbd` | |
 | `img` | `image`/`file_image` | `~image`/`~source` |
 | `ul`/`li` | `list`/`list_item` | |
 | `hr`/`divider` | `divider` | `~orientation` |
 
-## 类 → typed props
+## class → typed props
 
-布局/结构走 typed props 唯一通道；`~style_class` 只留 app 语义类
-（ui__toast、cp__* 这类 stylesheet 真有规则的）。utility 类
-（flex/gap-2/p-3/w-full/text-sm…）迁移时删除不保留 —— web 后端
-会把 typed props 应用成真实样式（gap/padding/width/flex/align
-都落在 DOM style 上），native 同样靠它们排版：
+Layout/structure goes through typed props as the sole channel;
+`~style_class` keeps only app semantic classes (ui__toast, cp__* —
+classes that have real rules in the stylesheet). Utility classes
+(flex/gap-2/p-3/w-full/text-sm…) are deleted during migration, not
+preserved — the web backend applies typed props as real styles
+(gap/padding/width/flex/align land on the DOM style), and native
+layouts from the same props:
 
-| class 前缀 | typed prop |
+| class prefix | typed prop |
 |---|---|
 | `gap-N` `gap-x-N` `gap-y-N` | `~gap` |
 | `p-N px-N py-N` | `~padding`/`~padding_horizontal`/`~padding_vertical` |
-| `w-full h-full flex-1` | cross 轴默认 stretch 不写；主轴占满 `~grow:1.` |
-| `w-N h-N min-w-*/max-w-*` | `~width`/`~height`/`~min_width`/`~max_width` 等（int pt） |
-| `items-*` | `~cross`（`items-center`→`` `center ``） |
-| `justify-*` | `~main`（`justify-between`→`` `space_between ``） |
-| 纯装饰类（颜色/圆角/字号…） | 删 —— native 用 theme 默认；web 如需保留外观，进 stylesheet 语义类 |
+| `w-full h-full flex-1` | cross axis stretches by default — write nothing; main axis fill is `~grow:1.` |
+| `w-N h-N min-w-*/max-w-*` | `~width`/`~height`/`~min_width`/`~max_width` etc. (int pt) |
+| `items-*` | `~cross` (`items-center`→`` `center ``) |
+| `justify-*` | `~main` (`justify-between`→`` `space_between ``) |
+| pure decoration (color/radius/font-size…) | delete — native uses theme defaults; if web must keep the look it goes into a semantic stylesheet class |
 
-值取整数 pt。拿不准的先不翻，只留 style_class。
+Values are integer pt. When unsure, skip the translation and keep the
+style_class only.
 
-## reactive 约定
+## Reactive conventions
 
-**禁止直接调用 `dyn` / `Logseq_dom.dyn`** —— `dyn` 只是 `lui_ppx`
-的展开目标，不是用户 API。全部反应式写法只有四种：
+**Direct calls to `dyn` / `Logseq_dom.dyn` are forbidden** — `dyn` is
+only the `lui_ppx` expansion target, not user API. The full reactive
+vocabulary is four forms:
 
-| 场景 | 写法 |
+| Scenario | Form |
 |---|---|
-| 值/文本/class/prop 变 | `~p:(reactive f s)`（prop 位置） |
-| model → 整段子树重发 | `[ reactive f s ]`（children 位置，含 `~equal:eq` 可选） |
-| signal 驱动的挂载/卸载 | `if_ ~test_signal:s child` |
-| signal 驱动的列表 | `keyed ~source_signal:s ~key ~cmp ~mount` |
+| value/text/class/prop change | `~p:(reactive f s)` (prop position) |
+| model → whole-subtree re-emit | `[ reactive f s ]` (children position, optional `~equal:eq`) |
+| signal-driven mount/unmount | `if_ ~test_signal:s child` |
+| signal-driven list | `keyed ~source_signal:s ~key ~cmp ~mount` |
 
-默认比较器是 `(=)`，只有自定义比较粒度时才写 `~equal:eq`。
-`own`（derived-signal scope 托管）已下沉进 `Lui_elements.dyn/if_/keyed`
-内部，ppx 展开自动继承，call site 不用管。
+The default comparator is `(=)`; write `~equal:eq` only for a custom
+comparison granularity. `own` (derived-signal scope ownership) has been
+lowered into `Lui_elements.dyn/if_/keyed` itself, so ppx expansion
+inherits it automatically — call sites need not care.
 
-## 事件映射
+## Event mapping
 
-| dom 写法 | LUI 写法 |
+| dom form | LUI form |
 |---|---|
 | `~events:"click" ~on_dom_event:(fun n _ -> if n="click" then f ())` | `~on_press:(fun _ -> f ())` |
-| `~events:"contextmenu"` | `context_menu` kind 或删（平台行为） |
+| `~events:"contextmenu"` | `context_menu` kind or delete (platform behavior) |
 | `~events:"change input"` on input | `~on_input`/`~on_toggle` |
-| `~events:"keydown submit"` | `~on_submit`；raw keydown 无等价物 |
-| mouseover/mouseout/pointer* | 删除（DOM 特有，无跨平台等价物） |
-| 容器上的 click | `Ui.pressable ~on_press …`（见下） |
+| `~events:"keydown submit"` | `~on_submit`; raw keydown has no equivalent |
+| mouseover/mouseout/pointer* | delete (DOM-specific, no cross-platform equivalent) |
+| click on containers | `Ui.pressable ~on_press …` (see below) |
 
-容器 kind（row/column/box/scroll/stack）没有 `~on_press` 参数 —
-用 `Ui_parts.pressable` combinator 包一层：
+Container kinds (row/column/box/scroll/stack) have no `~on_press`
+parameter — wrap with the `Ui_parts.pressable` combinator:
 
 ```ocaml
 Ui_parts.pressable ~on_press:(fun _ -> f ()) (row ~key ~style_class:cls children)
 ```
 
-## 其余约定
+## Other conventions
 
-- `~key` 原样保留；`~id`/`data-ref`/`#ref` → `~accessibility_identifier`
-- "render nothing" → `spacer ~key:"…" []`（anchor 节点）；条件挂载用 `if_ ~test_signal`
-- **结构分支优先普通 OCaml `if`/`List.map`** —— `reactive`/`if_`/`keyed`
-  只在分支条件/列表成员挂在 signal 上（需要随 signal 重发结构）时用；
-  条件静态或只需初始化时求值的直接写普通 `if`/条件拼 list，更直白
-- **children `reactive`/`if_` 里再包反应式子树几乎是错的** —— 内层
-  变化的如果只是属性（icon/text/value），降级成 `~prop:(reactive ...)`；
-  只有子树形状真的变才嵌套。例：眼睛按钮不随 `visible` 重建，`~icon:(reactive
-  (fun vis -> if vis then `app "eye-off" else `eye) visible)` 就够
-- `fragment` 用法不变（Logseq_dom 的 own/信号托管
-  暂时保留 —— 其内部实现会随 dom() 删除一起改造，call site 不用管）
-- `~text` → `text ~value:"…"`；`~html` → children 元素
-- `aria-label` → `~label`（button 等 kind 的 a11y 名称参数）
-- icon 的 `~icon`/button 内嵌图标：`button ~icon:`x` ~icon_placement:`leading`
+- `~key` stays as-is; `~id`/`data-ref`/`#ref` → `~accessibility_identifier`
+- "render nothing" → `spacer ~key:"…" []` (anchor node); conditional
+  mounting uses `if_ ~test_signal`
+- **Prefer plain OCaml `if`/`List.map` for structure** — use
+  `reactive`/`if_`/`keyed` only when the branch condition or list
+  membership hangs off a signal (needs to re-emit structure on publish);
+  static conditions or mount-time evaluation are just plain `if` /
+  conditionally built lists — clearer.
+- **A reactive subtree inside children `reactive`/`if_` is almost
+  always wrong** — when the inner change is just a property
+  (icon/text/value), demote it to `~prop:(reactive ...)`; nest only
+  when the subtree shape itself genuinely changes. Example: the eye
+  button must not rebuild on `visible`; `~icon:(reactive
+  (fun vis -> if vis then `app "eye-off" else `eye) visible)` suffices
+- `fragment` usage unchanged (Logseq_dom's own/signal ownership is
+  kept for now — its internals will be reworked when dom() is deleted;
+  call sites need not care)
+- `~text` → `text ~value:"…"`; `~html` → children elements
+- `aria-label` → `~label` (the a11y name parameter on button etc.)
+- `~icon` / embedded button icons: `button ~icon:`x` ~icon_placement:`leading`
 
-## attrs 映射 / 删除
+## attrs mapping / deletion
 
-| attr | 去向 |
+| attr | Disposition |
 |---|---|
 | `aria-label` `aria-*` | `~accessibility_label` / `~accessibility_identifier` |
-| `id` `data-testid` `data-ref` `#ref` | `~accessibility_identifier`（或 `~key`） |
-| `placeholder` `value` `checked` `href` `target` `src` `type` `autofocus` `name` `for` `autocomplete` `title` | 对应 kind 的 typed props |
-| `tabindex` `role` | kind 语义自带 → 删 |
-| `style` inline CSS | 删 —— 翻成 typed props 或进 stylesheet 类 |
-| `data-*` app 标记 | `~accessibility_identifier` 或删 |
-| `~html` | 删 —— 改成元素 children（逐个改写） |
-| `draggable` | dnd 由 `swipe_actions`/平台机制接管 → 删 |
+| `id` `data-testid` `data-ref` `#ref` | `~accessibility_identifier` (or `~key`) |
+| `placeholder` `value` `checked` `href` `target` `src` `type` `autofocus` `name` `for` `autocomplete` `title` | corresponding typed props on the kind |
+| `tabindex` `role` | carried by kind semantics → delete |
+| `style` inline CSS | delete — translate to typed props or a stylesheet class |
+| `data-*` app markers | `~accessibility_identifier` or delete |
+| `~html` | delete — rewrite as children elements |
+| `draggable` | dnd is handled by `swipe_actions`/platform mechanisms → delete |
 
 ## icons
 
 `Icons.raw`/`Icons.font`/`dom ~tag:"i"`/`dom ~tag:"svg"` →
-`icon ~name:<icon>`，name 规则：
+`icon ~name:<icon>`; name rules:
 
-- 名字在 `Lui_elements.icon` 内置集合（x/check/search/settings/
-  chevron-*…45 个）→ `~name:`x` 直接用内置
-- 其余 tabler 名 → `~name:(`app "<tabler-name>")`：`app:` 前缀走
-  app 图标注册表 —— web 端 `Lui_web.create_with_extensions` 的
-  app_icons map（`Icons.app_icons ()` 由 icon_tabler_data 生成
-  svg data URI）；GPUI 端 Rust host include 同一份
-  tabler-children.json；Swift 端 tabler ttf/svg 资源
-- `ti ti-*` 字体类**删掉**：icon kind 自带 svg/mask 渲染，字体
-  glyph 会被 mask 双重渲染。sizing/extra class（ls-icon-sm 等）
-  保留在 `~style_class`
+- names in the `Lui_elements.icon` builtin set (x/check/search/
+  settings/chevron-*… 45 of them) → `~name:`x` used directly
+- other tabler names → `~name:(`app "<tabler-name>")`: the `app:`
+  prefix goes through the app icon registry — on web the `app_icons`
+  map fed to `Lui_web.create_with_extensions` (`Icons.app_icons ()`
+  generates svg data URIs from icon_tabler_data); on GPUI the Rust
+  host includes the same tabler-children.json; on Swift the tabler
+  ttf/svg assets
+- **`ti ti-*` font classes are deleted**: the icon kind renders
+  svg/mask itself, and a font glyph would be double-rendered through
+  the mask. Sizing/extra classes (ls-icon-sm etc.) stay in
+  `~style_class`
 
-内联 svg path（非 tabler 的自定义 path，如 rotating_arrow）→
-`~name:(`app "…")` 并把 path 注册进 app_icons；svg/path 子节点删除。
+Inline svg paths (custom non-tabler paths like rotating_arrow) →
+`~name:(`app "…")` with the path registered into app_icons; the
+svg/path child nodes are deleted.
 
-## 禁止项
+## Forbidden
 
-- `~attrs` JSON 逃逸舱 —— 全部翻成 typed props 或删
-- `~html` innerHTML —— 改成 children
-- `~events` DOM 事件字符串 —— 用 kind 事件 props / `register_press`
-- `~id` DOM id —— `~accessibility_identifier`
-- `mock-text`/`block-editor` 这类**被 imperative 代码当查询句柄的 class**
-  —— 其查找逻辑随 editor surface extension 一并处理，视图层先迁、
-  imperative 引用逐个改 `accessibility_identifier`/node id
+- `~attrs` JSON escape hatch — translate everything to typed props or delete
+- `~html` innerHTML — rewrite as children
+- `~events` DOM event strings — use kind event props / `register_press`
+- `~id` DOM id — `~accessibility_identifier`
+- `mock-text`/`block-editor` and other **classes consumed as query
+  handles by imperative code** — their lookup logic is handled together
+  with the editor surface extension; migrate the view layer first and
+  switch imperative references to `accessibility_identifier`/node ids
+  one by one
 
-## editor surface（平台特有 → extension）
+## editor surface (platform-specific → extension)
 
-`editor_wrapper`/`editor_inner`/`mock_text` 三元组 + 内部 textarea
-是编辑器表面（可编辑区 + caret mirror 供 popup 定位）。它是平台
-特有件 —— 收拢成单个 `logseq-editor` extension 节点，各 host 在
-extension 内部实现自己的可编辑 surface：
+The `editor_wrapper`/`editor_inner`/`mock_text` triple plus the inner
+textarea is the editor surface (editable region + caret mirror for
+popup positioning). It is platform-specific — collapse it into a
+single `logseq-editor` extension node, and each host implements its
+own editable surface inside the extension:
 
-- web：extension 内部仍挂 DOM 结构（textarea + caret mirror），
-  imperative_dom 从 class/id 查询改为 extension 节点 id 直接索引
-- GPUI：真实编辑控件（gpui-component InputState editor 或自绘
-  block editor surface）
-- SwiftUI：原生 TextEditor/UITextView 桥
+- web: the extension still mounts the DOM structure internally
+  (textarea + caret mirror); imperative_dom switches from class/id
+  queries to direct indexing by extension node id
+- GPUI: a real editing control (gpui-component InputState editor or a
+  custom block editor surface)
+- SwiftUI: native TextEditor/UITextView bridge
 
-`#ref`/`data-ref`/`.editor-inner`/`.mock-text`/`.block-editor` 这些
-imperative 查询句柄随 extension 一并收编 —— 视图层不再有 DOM 句柄，
-imperative 侧按 node id + `#ref` 快照定位（与 dom-op 通道同一套）。
+`#ref`/`data-ref`/`.editor-inner`/`.mock-text`/`.block-editor` — the
+imperative query handles — are folded into the extension: the view
+layer no longer carries DOM handles, and the imperative side locates
+by node id + `#ref` snapshot (same channel as dom-op).
 
-### 收编清单（imperative 侧）
+### Absorption checklist (imperative side)
 
-`web_dom.ml`/`dom_ext.ml`/`editor_dom.ml` 里按 class/id 查询的入口，
-收编后改为 extension 节点 id 直接寻址：
+Entry points in `web_dom.ml`/`dom_ext.ml`/`editor_dom.ml` that query
+by class/id become direct addressing by extension node id:
 
-- `mock_text_el`/`build_mock_text`（caret mirror：每个 grapheme 一个
-  span，`mock-text_<i>` id，`\n` → "0"+`<br>`）——web extension 内部
-  继续维护这个 mirror DOM；`caret_popup_pos` 的量法不变，只是入口
-  从 `.editor-inner .mock-text` 查询变成 editor 节点 id 直达
+- `mock_text_el`/`build_mock_text` (caret mirror: one span per
+  grapheme, `mock-text_<i>` ids, `\n` → "0"+`<br>`) — the web
+  extension keeps maintaining this mirror DOM internally; the
+  `caret_popup_pos` measuring is unchanged, only the entry point
+  changes from a `.editor-inner .mock-text` query to direct access by
+  editor node id
 - `focus`/`set-selection-range`/`set-value`/`set-text-content` —
-  dom-op ref 从 `{#ref: id}` class/id 查询改为 `{node-id: n}` 直达
-  editor extension 节点；各 host 把 op 分发给自己的编辑 surface
-- `scroll-into-view`/`scroll-row-into-view` — 已由 dom-op 通道覆盖
-  （GPUI 端 scroll_tracked + ScrollHandle 已实现）
-- `.editor-inner`/`.block-editor`/`editor-wrapper` 三个 class — 从
-  视图层消失；web extension 在内部 DOM 上保留同名 class 以喂
-  `lui-editor.css`，native 不再消费
+  the dom-op ref changes from `{#ref: id}` class/id queries to
+  `{node-id: n}` direct access on the editor extension node; each
+  host dispatches the op to its own editing surface
+- `scroll-into-view`/`scroll-row-into-view` — already covered by the
+  dom-op channel (GPUI scroll_tracked + ScrollHandle implemented)
+- `.editor-inner`/`.block-editor`/`editor-wrapper` classes — gone
+  from the view layer; the web extension keeps the same class names
+  on its internal DOM to feed `lui-editor.css`, native never consumes
+  them
 
-### web extension 渲染形状
+### web extension render shape
 
 ```
-logseq-editor (extension node, ~ref 定位)
+logseq-editor (extension node, ~ref addressing)
 └── <div class="editor-wrapper flex flex-1 w-full" id=...>
     └── <div class="editor-inner flex flex-1 block-editor">
         ├── children… (block content surface)
         └── <div class="mock-text" style="…hidden abs…"></div>
 ```
 
-DOM 结构与今天完全一致 —— imperative DOM 查询改的是"怎么找到
-editor"，不是"找到之后做什么"，CSS/mirror/caret 逻辑零改动。
-native 端（GPUI/SwiftUI）从同一 extension 节点读值：
-`focus`/selection ops → 原生编辑控件；measure → node_bounds。
+The DOM structure is identical to today — imperative DOM lookup
+changes how the editor is *found*, not what happens after; CSS,
+mirror, and caret logic are untouched. The native side (GPUI/SwiftUI)
+reads from the same extension node: `focus`/selection ops → the
+native editing control; measure → node_bounds.
 
-## 验收
+## Acceptance
 
-每个迁移包（一目录）：
-1. `dune build` 零警告
-2. `dom`/`Logseq_dom` 引用清零（`rg "dom ~"` 无剩余）
-3. web 端视觉抽查（style_class 保留，CSS 不变则 parity 自动成立）
+Per migration package (one directory):
+1. `dune build` with zero warnings
+2. zero `dom`/`Logseq_dom` references (`rg "dom ~"` returns nothing)
+3. web visual spot-check (style_class preserved; unchanged CSS means
+   parity holds automatically)
