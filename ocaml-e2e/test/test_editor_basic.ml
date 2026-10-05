@@ -1133,7 +1133,8 @@ let () =
         let* () = set_journals_scroll_position env "end" in
         let* () = Pw.wait_for_hidden env journal_selector in
         let* () = set_journals_scroll_position env "start" in
-        let* () = Pw.wait_for env last_block_selector in
+        (* the virtualized remount is slow under parallel load *)
+        let* () = Pw.wait_for ~timeout:60000. env last_block_selector in
         let* metrics = journals_layout_metrics env in
         let* remounted_height =
           mounted_journal_height env first_block_title

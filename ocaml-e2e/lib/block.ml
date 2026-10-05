@@ -178,10 +178,28 @@ let assert_blocks_visible env blocks =
   go blocks
 
 let jump_to_block env block_text =
-  let* loc = Pw.find_one_by_text env ".ls-block .block-content" block_text in
-  match loc with
-  | Some l -> Pw.click_l l
-  | None -> Js.Promise.reject (Failure ("no block with text " ^ block_text))
+  (* poll: the block list can remount between the query and the click;
+     fall back to substring match — .block-content can carry extra
+     whitespace/text in focused views *)
+  let deadline = Js.Date.now () +. 8000. in
+  let sub_sel =
+    Printf.sprintf ".ls-block .block-content:has-text('%s')" block_text
+  in
+  let rec poll () =
+    let* loc = Pw.find_one_by_text env ".ls-block .block-content" block_text in
+    match loc with
+    | Some l -> Pw.click_l l
+    | None ->
+        let* n = Pw.count env sub_sel in
+        if n > 0 then
+          Pw.click_l (Playwright.locator_first (Pw.q env sub_sel))
+        else if Js.Date.now () > deadline then
+          Js.Promise.reject (Failure ("no block with text " ^ block_text))
+        else
+          let* () = Util.wait_timeout env 150. in
+          poll ()
+  in
+  poll ()
 
 let wait_editor_text env text =
   let* () = E2e_assert.have_count env Util.editor_q 1 in

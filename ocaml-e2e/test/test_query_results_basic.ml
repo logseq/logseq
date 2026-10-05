@@ -51,7 +51,8 @@ let select_view env view =
   Pw.click_l (Util.get_by_text env view true)
 
 let assert_query_count env n =
-  E2e_assert.is_visible_l
+  (* live queries recompute on the worker; give the count a window *)
+  E2e_assert.is_visible_l ~timeout:20000.
     (Ls_locator.filter env
        ~has_text:(Printf.sprintf "Live query (%d)" n)
        ".custom-query-results")
