@@ -1,0 +1,21 @@
+[package]
+name = "logseq-gpui"
+version = "0.1.0"
+edition = "2021"
+description = "Logseq deps/ui GPUI host — embeds the OCaml LUI app in a gpui-kit window"
+publish = false
+
+[dependencies]
+# Sibling checkout convention (same as apple/Package.swift's ../lui path dep):
+# the logseq and lui repos live side by side. Override at build time with
+# LUI_GPUI_CRATE_DIR / LUI_CORE_CRATE_DIR via build.rs path substitution if
+# your layout differs.
+lui-gpui = { path = "../../../../../lui/platform/gpui/crates/lui-gpui" }
+lui-core = { path = "../../../../../lui/platform/gpui/crates/lui-core" }
+gpui-kit = "0.7"
+serde_json = "1"
+anyhow = "1"
+libc = "0.2"
+
+[build-dependencies]
+serde_json = "1"

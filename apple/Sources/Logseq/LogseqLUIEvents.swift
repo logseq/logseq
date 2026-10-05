@@ -33,7 +33,8 @@ private func luiOCamlVisibleRange(_ node: Int64, _ first: Int64, _ last: Int64) 
 private func luiOCamlPicked(_ node: Int64, _ payload: UnsafePointer<CChar>?) -> Int32
 @_silgen_name("lui_ocaml_extension_event")
 private func luiOCamlExtensionEvent(
-  _ node: Int64, _ name: UnsafePointer<CChar>?, _ values: UnsafePointer<CChar>?
+  _ node: Int64, _ identifier: UnsafePointer<CChar>?, _ name: UnsafePointer<CChar>?,
+  _ values: UnsafePointer<CChar>?
 ) -> Int32
 
 enum LogseqLUIEvents {
@@ -60,10 +61,14 @@ enum LogseqLUIEvents {
       return luiOCamlVisibleRange(Int64(node), Int64(first), Int64(last))
     case .picked(let node, let payload):
       return payload.withCString { luiOCamlPicked(Int64(node), $0) }
-    case .extension(let node, _, let name, let values):
+    case .extension(let node, let identifier, let name, let values):
       guard let payload = encodeExtensionValues(values) else { return 0 }
-      return name.withCString { eventName in
-        payload.withCString { luiOCamlExtensionEvent(Int64(node), eventName, $0) }
+      return identifier.withCString { identifierString in
+        name.withCString { eventName in
+          payload.withCString {
+            luiOCamlExtensionEvent(Int64(node), identifierString, eventName, $0)
+          }
+        }
       }
     }
   }

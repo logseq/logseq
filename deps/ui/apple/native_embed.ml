@@ -298,6 +298,7 @@ let initialize platform_code host_code (_payload : string) : string =
     | 1 -> Lui_protocol.WebHost
     | 2 -> Lui_protocol.SwiftUIHost
     | 3 -> Lui_protocol.FlutterHost
+    | 6 -> Lui_protocol.GPUIHost
     | _ -> Lui_protocol.GenericHost
   in
   let backend =

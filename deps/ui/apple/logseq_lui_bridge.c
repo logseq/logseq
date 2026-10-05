@@ -263,8 +263,13 @@ static int dispatch_three_strings(const char *name, int64_t node,
 }
 
 LUI_EXPORT int32_t lui_ocaml_extension_event(int64_t node,
+                                             const char *identifier,
                                              const char *name,
                                              const char *values) {
+  /* LUI's typed ABI takes the identifier; the OCaml side resolves it from
+     the node itself (lui_runtime.extension_identifier), so it is accepted
+     for ABI parity and ignored. */
+  (void)identifier;
   return dispatch_three_strings("lui_ocaml_extension_event", node, name,
                                 values);
 }
@@ -316,7 +321,11 @@ LUI_EXPORT int64_t lui_ocaml_root_node(void) {
   const value *root = caml_named_value("lui_ocaml_root_node");
   if (root != NULL) {
     value result = caml_callback_exn(*root, Val_unit);
-    if (!Is_exception_result(result)) node = Int64_val(result);
+    /* The OCaml side returns a plain tagged int — Long_val, not
+       Int64_val (which would dereference the immediate as a custom
+       block pointer and segfault). */
+    if (!Is_exception_result(result) && Is_long(result))
+      node = Long_val(result);
   }
   caml_enter_blocking_section();
   return node;

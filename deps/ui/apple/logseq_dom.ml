@@ -1,6 +1,6 @@
 (* ported from deps/ui/src/extension/logseq_dom.ml — adds the
-   MacOS/SwiftUIHost profile so logseq-* extensions register on the
-   native backend *)
+   MacOS/SwiftUIHost and MacOS/GPUIHost profiles so logseq-*
+   extensions register on the native backends *)
 (* logseq-<tag> extension family — raw DOM elements for attributes and DOM
    events the LUI schema does not cover (blockid, data-*, pointer/keyboard).
 
@@ -24,6 +24,9 @@ let web_profile =
 let apple_profile =
   { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = SwiftUIHost }
 
+let gpui_profile =
+  { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GPUIHost }
+
 (* tags the UI emits; each becomes a "logseq-<tag>" extension component *)
 let tags =
   [ "div"; "span"; "a"; "button"; "textarea"; "input"; "img"; "main"
@@ -43,7 +46,7 @@ let child_identifiers = List.map identifier tags
 
 let schema_of tag =
   Lui_extension.component (identifier tag)
-    [ web_profile; apple_profile ]
+    [ web_profile; apple_profile; gpui_profile ]
     true (* standard_children *)
     child_identifiers (* logseq-* elements nest freely *)
     [ Lui_extension.property "attrs" Lui_extension.StringScalar false None
