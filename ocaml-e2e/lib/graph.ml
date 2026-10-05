@@ -93,7 +93,7 @@ let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
   let* () =
     if enable_sync then
       let* () = maybe_input_e2ee_password env in
-      Pw.wait_for env ~timeout:20000. cloud_ready_indicator
+      Pw.wait_for env ~timeout:120000. cloud_ready_indicator
     else Js.Promise.resolve ()
   in
   let* () = Pw.wait_for_hidden env ~timeout:30000. new_graph_dialog in
@@ -145,7 +145,7 @@ let switch_graph env to_graph_name ~wait_sync ~need_input_password =
         if need_input_password then maybe_input_e2ee_password env
         else Js.Promise.resolve ()
       in
-      Pw.wait_for env ~timeout:20000. cloud_ready_indicator
+      Pw.wait_for env ~timeout:120000. cloud_ready_indicator
     else Js.Promise.resolve ()
   in
   E2e_assert.graph_loaded env

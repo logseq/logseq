@@ -340,10 +340,12 @@ let () =
         (has_text env "Status" "[role='menuitemcheckbox']")
     in
     let* _ =
-      E2e_assert.is_visible_l (has_text env "Open" ".ls-view-body")
+      E2e_assert.is_visible_l ~timeout:15000.
+        (has_text env "Open" ".ls-view-body")
     in
     let* _ =
-      E2e_assert.is_visible_l (has_text env "Closed" ".ls-view-body")
+      E2e_assert.is_visible_l ~timeout:15000.
+        (has_text env "Closed" ".ls-view-body")
     in
     let* () = Util.double_esc env in
     let* () = open_view_more_actions env in

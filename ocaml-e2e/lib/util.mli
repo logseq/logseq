@@ -30,6 +30,7 @@ val wait_edit_content : Env.t -> string -> bool Js.Promise.t
 val bounding_xy_l : Playwright.locator -> (float * float) Js.Promise.t
 val repeat_keyboard : Env.t -> int -> string -> unit Js.Promise.t
 val get_page_blocks_contents : Env.t -> string array Js.Promise.t
+val wait_page_blocks_contents : Env.t -> string list -> string array Js.Promise.t
 val settled_page_blocks_contents : Env.t -> string array Js.Promise.t
 val login_test_account :
   ?username:string -> ?password:string -> Env.t -> 'a Js.Promise.t

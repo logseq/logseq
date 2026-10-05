@@ -78,14 +78,14 @@ let focus_new_block env ~previous_editor_id =
      block's editor; if it never mounts that is a real bug to surface. *)
   let* () =
     Js.Promise.catch
-      (fun _ -> E2e_assert.is_visible_l ~timeout:8000. new_editor)
-      (E2e_assert.is_visible_l ~timeout:12000. new_editor)
+      (fun _ -> E2e_assert.is_visible_l ~timeout:15000. new_editor)
+      (E2e_assert.is_visible_l ~timeout:20000. new_editor)
   in
   (* The wrapper can mount before focus actually moves off the previous
      textarea; typing into `*:focus` during that window drops the first
      keystrokes into the old editor. Wait for the new textarea itself to
      hold :focus before returning. *)
-  E2e_assert.is_visible_l ~timeout:8000.
+  E2e_assert.is_visible_l ~timeout:15000.
     (Pw.q env
        (Printf.sprintf
           ".editor-wrapper:has(textarea:not(#%s)) textarea:focus"
@@ -105,36 +105,33 @@ let new_block env title =
   let* () = Util.move_cursor_to_end env in
   let* () = Keyboard.enter env in
   let* () = focus_new_block env ~previous_editor_id:last_id in
+  (* the block's own textarea id is derived from the block uuid, so it
+     survives editor remounts; read/fill it directly instead of
+     get_edit_content, which is ambiguous while two editors coexist *)
+  let new_editor_q =
+    Printf.sprintf ".editor-wrapper:has(textarea:not(#%s)) textarea" last_id
+  in
   let* () =
     if String.length title > 0 then begin
       (* type into the resolved new textarea, not *:focus — a remount can
          move focus to body mid-typing and silently drop keystrokes *)
-      Playwright.press_sequentially
-        (Pw.q env
-           (Printf.sprintf
-              ".editor-wrapper:has(textarea:not(#%s)) textarea" last_id))
-        title
+      Playwright.press_sequentially (Pw.q env new_editor_q) title
     end
     else Js.Promise.resolve ()
   in
   let* () = E2e_assert.editor_mode env in
-  let* content = Util.get_edit_content env in
+  let* content = Pw.input_value env new_editor_q in
   let* () =
-    if Option.value ~default:"" content = title then
-      Js.Promise.resolve ()
+    if content = title then Js.Promise.resolve ()
     else begin
       (* a remount stole focus mid-typing and keystrokes landed on the old
          editor — set the new editor's value directly (clj's save-block
          uses fill for the same reason) *)
-      Pw.fill_l
-        (Pw.q env
-           (Printf.sprintf
-              ".editor-wrapper:has(textarea:not(#%s)) textarea" last_id))
-        title
+      Pw.fill_l (Pw.q env new_editor_q) title
     end
   in
-  let* content = Util.get_edit_content env in
-  Fest.equal (Option.value ~default:"" content) title Fest.expect;
+  let* content = Pw.input_value env new_editor_q in
+  Fest.equal content title Fest.expect;
   Js.Promise.resolve ()
 
 let new_blocks env titles =

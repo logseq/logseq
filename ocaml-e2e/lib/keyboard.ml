@@ -3,6 +3,17 @@
 
 let press env ?delay key = Pw.press env ?delay key
 let press_all env ?delay keys = Pw.press_all env ?delay keys
+
+(** Chord/key press delivered to the live editor element — unlike
+    [page.keyboard.press] this focuses the located element first, so a
+    remount/focus shift between the modifier keydown and the main key
+    can't silently drop the modifier (observed under parallel load as
+    e.g. "Control+Backspace" deleting only one char). *)
+let press_in_editor env ?delay key =
+  (* Util.editor_q_first — inlined here because Util depends on Keyboard *)
+  Playwright.locator_press ?delay
+    (Pw.q env ".editor-wrapper textarea >> nth=0")
+    key
 let enter env = Pw.press env "Enter"
 let esc env = Pw.press env "Escape"
 let backspace env = Pw.press env "Backspace"

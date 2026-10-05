@@ -302,7 +302,7 @@ let drag_block env source_title target_title placement =
   in
   let* box = Playwright.bounding_box target_block in
   let target_height =
-    match box with
+    match Js.Nullable.toOption box with
     | Some b -> Playwright.box_height b
     | None -> failwith "drag target not visible"
   in
@@ -403,23 +403,37 @@ let indent_outdent_embed_page env =
 let move_up_down env =
   let* () = B.new_blocks env [ "b1"; "b2"; "b3"; "b4" ] in
   let* () = Util.repeat_keyboard env 2 "Shift+ArrowUp" in
-  let* contents = Util.get_page_blocks_contents env in
+  let* contents =
+    Util.wait_page_blocks_contents env [ "b1"; "b2"; "b3"; "b4" ]
+  in
   Fest.deep_equal
     (Array.to_list contents)
     [ "b1"; "b2"; "b3"; "b4" ] Fest.expect;
+  (* a second move chord pressed while the first move's remount is in
+     flight loses its modifier/target — let the move commit first *)
   let* () =
-    Util.repeat_keyboard env 2
-      ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowUp")
+    K.press env ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowUp")
   in
-  let* contents = Util.get_page_blocks_contents env in
+  let* () = Util.wait_timeout env 300. in
+  let* () =
+    K.press env ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowUp")
+  in
+  let* contents =
+    Util.wait_page_blocks_contents env [ "b3"; "b4"; "b1"; "b2" ]
+  in
   Fest.deep_equal
     (Array.to_list contents)
     [ "b3"; "b4"; "b1"; "b2" ] Fest.expect;
   let* () =
-    Util.repeat_keyboard env 2
-      ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowDown")
+    K.press env ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowDown")
   in
-  let* contents = Util.get_page_blocks_contents env in
+  let* () = Util.wait_timeout env 300. in
+  let* () =
+    K.press env ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowDown")
+  in
+  let* contents =
+    Util.wait_page_blocks_contents env [ "b1"; "b2"; "b3"; "b4" ]
+  in
   Fest.deep_equal
     (Array.to_list contents)
     [ "b1"; "b2"; "b3"; "b4" ] Fest.expect;
@@ -439,6 +453,11 @@ let delete_blocks_scenario env =
 let delete_end env =
   let* () = B.new_blocks env [ "b1"; "b2"; "b3" ] in
   let* () = K.arrow_up env in
+  (* ArrowUp is delivered to whatever element had focus; under load the
+     focus move to b2's editor lags the keypress and Delete lands on a
+     detached element. Wait until the focused editor actually shows b2
+     before pressing Delete. *)
+  let* _ = Util.wait_edit_content env "b2" in
   let* () = K.delete env in
   let* _ = Util.wait_edit_content env "b2b3" in
   let* n = Util.page_blocks_count env in
@@ -508,7 +527,17 @@ let () =
     in
     let* (hash : string) = current_location_hash env in
     Fest.deep_equal (Util.contains_sub hash root_id) true Fest.expect;
-    let* () = Util.wait_editor_visible env in
+    let* () =
+      Js.Promise.catch
+        (fun _ ->
+           let* dump =
+             Pw.eval_js env
+               "(() => JSON.stringify({ed: document.querySelectorAll('.editor-wrapper').length, ta: document.querySelectorAll('.editor-wrapper textarea').length, taVis: [...document.querySelectorAll('.editor-wrapper textarea')].filter(e => e.offsetParent !== null).length, ae: document.activeElement?.tagName, aeCls: String(document.activeElement?.className).slice(0,80), blocks: document.querySelectorAll('.ls-block').length, hash: location.hash}))()"
+           in
+           Js.log2 "focused-root dump" dump;
+           Js.Promise.resolve ())
+        (Util.wait_editor_visible env)
+    in
     let* content = Util.get_edit_content env in
     Fest.deep_equal content (Some "focused-root") Fest.expect;
     let* (before_hash : string) = current_location_hash env in

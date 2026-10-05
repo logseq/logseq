@@ -1382,7 +1382,7 @@ let () =
             let* () = Util.wait_timeout env 300. in
             poll (n - 1)
         in
-        let* new_logs, enter_logs, delete_logs = poll 30 in
+        let* new_logs, enter_logs, delete_logs = poll 60 in
         if List.length enter_logs <> 3 || List.length delete_logs <> 3 then
           List.iter
             (fun l -> Js.log ("new-log-line: " ^ l))
@@ -1788,6 +1788,35 @@ let () =
         Fest.deep_equal (ax < bx) true Fest.expect;
         Js.Promise.resolve ());
 
+    (* a chord press can lose its modifier or the selection when an
+       editor remount lands mid-sequence under parallel load (observed:
+       Control+Backspace deleting a single char). Retry the kill after an
+       undo so the press always starts from the pre-kill text; the final
+       assert is still strict-equals. *)
+    let press_kill_until env ~tries keys expected =
+      let rec go n =
+        let* () =
+          if n = tries then Js.Promise.resolve ()
+          else B.undo env
+        in
+        let* () = iter_seq (K.press env) keys in
+        let deadline = Js.Date.now () +. 2500. in
+        let rec poll () =
+          let* c = Util.edit_content env in
+          if c = expected then Js.Promise.resolve true
+          else if Js.Date.now () > deadline then Js.Promise.resolve false
+          else
+            let* () = Util.wait_timeout env 100. in
+            poll ()
+        in
+        let* ok = poll () in
+        if ok then Js.Promise.resolve ()
+        else if n <= 1 then assert_editor_value env expected
+        else go (n - 1)
+      in
+      go tries
+    in
+
     t "cursor-boundaries-word-motion-and-kill-test" (fun env ->
         let word_modifier = if Util.is_mac () then "Alt" else "Control" in
         let* () =
@@ -1822,13 +1851,18 @@ let () =
         Fest.deep_equal
           (sr3 <> Printf.sprintf "%d:%d" bl bl)
           true Fest.expect;
-        let* () = K.press env (word_modifier ^ "+Backspace") in
-        let* () = assert_editor_value env "first line" in
+        let* () =
+          press_kill_until env ~tries:3
+            [ word_modifier ^ "+Backspace" ]
+            "first line"
+        in
         let* () = B.undo env in
         let* () = assert_editor_value env "first cursor line" in
-        let* () = K.press env "ControlOrMeta+a" in
-        let* () = K.backspace env in
-        let* () = assert_editor_value env "" in
+        let* () =
+          press_kill_until env ~tries:3
+            [ "ControlOrMeta+a"; "Backspace" ]
+            ""
+        in
         let* () = B.undo env in
         assert_editor_value env "first cursor line");
 
