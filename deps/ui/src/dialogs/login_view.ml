@@ -9,7 +9,7 @@
 open Promise_ext
 open Lui_elements
 
-let dom = Logseq_dom.dom
+let dyn = Logseq_dom.dyn
 module T = I18n
 
 (* Cognito constants live in Rtc_ops (they're sync config the worker
@@ -18,10 +18,31 @@ let cognito_url = Rtc_ops.cognito_url
 let client_id = Rtc_ops.client_id
 let oauth_token_url = Rtc_ops.oauth_token_url
 
-let field_value name =
-  match Web_dom.query_selector (".cp__user-login input[name=" ^ name ^ "]") with
-  | Some el -> Web_dom.el_value el
-  | None -> ""
+let text_of ev =
+  match ev with
+  | Lui_protocol.TextChanged (_, s) -> s
+  | _ -> ""
+
+(* Form field values ride Signal.state now (previously read back from
+   the DOM via input[name=…] selectors at submit time). One record per
+   mounted body; a field's state survives tab switches so re-mounted
+   inputs restore through ~text_signal. *)
+type fields =
+  { email : string Signal.state
+  ; username : string Signal.state
+  ; password : string Signal.state
+  ; confirm_password : string Signal.state
+  ; code : string Signal.state
+  }
+
+let fields_of ctx : fields =
+  let st () = Signal.state ctx.Lui_ui.ui_scheduler "" in
+  { email = st ()
+  ; username = st ()
+  ; password = st ()
+  ; confirm_password = st ()
+  ; code = st ()
+  }
 
 let json_str s = Js.Json.string s
 
@@ -216,8 +237,9 @@ let cognito_call ctx target payload f_ok =
          Js.Promise.resolve ())
   |> ignore
 
-let submit ctx =
-  let user = field_value "email" and pass = field_value "password" in
+let submit ctx fields =
+  let user = Signal.get_state fields.email
+  and pass = Signal.get_state fields.password in
   if user = "" || pass = "" then ()
   else
     let init =
@@ -248,11 +270,11 @@ let submit ctx =
 
 let json_obj xs = Js.Json.object_ (Js.Dict.fromList xs)
 
-let signup_submit ctx =
-  let email = field_value "email"
-  and user = field_value "username"
-  and pass = field_value "password"
-  and confirm = field_value "confirm-password" in
+let signup_submit ctx fields =
+  let email = Signal.get_state fields.email
+  and user = Signal.get_state fields.username
+  and pass = Signal.get_state fields.password
+  and confirm = Signal.get_state fields.confirm_password in
   if user = "" || pass = "" || email = "" then ()
   else if not (validate_password ctx pass) then ()
   else if pass <> confirm then
@@ -286,8 +308,8 @@ let signup_submit ctx =
           (if confirmed then Login else Confirm_code (user, "CONFIRM_SIGN_UP"));
         Js.Promise.resolve ())
 
-let forgot_submit ctx =
-  let user = field_value "email" in
+let forgot_submit ctx fields =
+  let user = Signal.get_state fields.email in
   if user = "" then ()
   else
     let payload =
@@ -300,10 +322,10 @@ let forgot_submit ctx =
         set_tab ctx (Reset_confirm user);
         Js.Promise.resolve ())
 
-let reset_submit ctx user =
-  let code = field_value "code"
-  and pass = field_value "password"
-  and confirm = field_value "confirm-password" in
+let reset_submit ctx fields user =
+  let code = Signal.get_state fields.code
+  and pass = Signal.get_state fields.password
+  and confirm = Signal.get_state fields.confirm_password in
   if code = "" || pass = "" then ()
   else if not (validate_password ctx pass) then ()
   else if pass <> confirm then
@@ -321,8 +343,8 @@ let reset_submit ctx user =
         set_tab ctx Login;
         Js.Promise.resolve ())
 
-let confirm_submit ctx user _next_step =
-  let code = field_value "code" in
+let confirm_submit ctx fields user _next_step =
+  let code = Signal.get_state fields.code in
   if code = "" then ()
   else
     let payload =
@@ -343,189 +365,160 @@ let sign_out ctx =
 (* cljs user.cljs username — the id-token's cognito:username claim *)
 let session_username = Rtc_flows.username
 
-let input_row ~key ~id ~name ~type_ ~label ~autocomplete ?(autofocus = false) () =
-  dom ~key ~style_class:"relative w-full flex flex-col gap-3 pb-1"
-    [ dom ~key:"l" ~tag:"label" ~style_class:"text-sm font-medium"
-        ~attrs:[ ("for", id) ] ~text:label []
-    ; dom ~key:"i" ~tag:"input" ~style_class:"ui__input"
-        ~attrs:
-          ([ ("id", id); ("name", name); ("type", type_)
-           ; ("autocomplete", autocomplete); ("required", "") ]
-          @ if autofocus then [ ("autofocus", "") ] else [])
+(* cljs login.css input rows: label + shui input stacked in a
+   relative w-full flex flex-col gap-3 pb-1 wrapper. The <form>'s
+   submit event is gone — Enter submits through each field's
+   on_submit instead; name/autocomplete attrs have no component
+   equivalent (fields are read from signal state, not the DOM). *)
+let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
+  column ~key ~gap:12
+    [ label ~key:"l" ~value:caption []
+    ; (if secure then secure_field else input)
+        ~key:"i" ~style_class:"ui__input"
+        ~autofocus ~submit_on_enter:true
+        ~text_signal:(Signal.value value)
+        ~on_input:(fun ev -> Signal.set value (text_of ev))
+        ~on_submit:(fun _ -> on_submit ())
         []
     ]
 
 let submit_btn ~key label on_submit =
-  dom ~key ~tag:"button" ~text:label
-    ~style_class:"ui__button ls-btn-primary w-full"
-    ~attrs:[ ("type", "submit") ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_submit ())
+  button ~key ~variant:`primary ~text:label
+    ~style_class:"ui__button ls-btn-primary"
+    ~on_press:(fun _ -> on_submit ())
+    []
+
+(* cljs "Back to login"/"Sign up"/"Forgot password" are <a> action
+   links — component-wise they're pressable text (the ls-auth-link
+   class keeps the underline/muted styling the cljs utility classes
+   carried) *)
+let action_link ~key ctx text_ tab =
+  text ~key ~style_class:"ls-auth-link" ~value:text_
+    ~on_press:(fun _ -> set_tab ctx tab)
     []
 
 let back_link ctx =
-  dom ~key:"back" ~tag:"p" ~style_class:"pt-1 text-center"
-    [ dom ~key:"a" ~tag:"a"
-        ~style_class:"text-sm opacity-60 hover:opacity-80 underline"
-        ~text:(I18n.t "account/back-to-login")
-        ~events:"click"
-        ~on_dom_event:(fun n _ -> if n = "click" then set_tab ctx Login)
-        [] ]
+  box ~key:"back"
+    [ action_link ~key:"a" ctx (I18n.t "account/back-to-login") Login ]
 
-let form ~key on_submit children =
-  dom ~key ~tag:"form"
-    ~style_class:"relative flex flex-col justify-center items-center gap-4 w-full"
-    ~attrs:
-      [ ("onsubmit", "return false"); ("novalidate", "")
-      ; ("autocomplete", "off") ]
-    ~events:"submit"
-    ~on_dom_event:(fun n _ -> if n = "submit" then on_submit ())
-    children
-
-let login_panel ctx =
-  form ~key:"f-login"
-    (fun () -> submit ctx)
-    [ input_row ~key:"r-email" ~id:"email" ~name:"email" ~type_:"text"
-        ~label:(I18n.t "account/email") ~autocomplete:"username"
-        ~autofocus:true ()
-    ; input_row ~key:"r-pw" ~id:"password" ~name:"password"
-        ~type_:"password" ~label:(I18n.t "account/password")
-        ~autocomplete:"current-password" ()
-    ; dom ~key:"lg-sub" ~style_class:"w-full"
-        [ submit_btn ~key:"lg-btn" (I18n.t "account/sign-in")
-            (fun () -> submit ctx)
-        ; dom ~key:"lg-foot" ~tag:"p" ~style_class:"pt-4 text-center"
-            [ dom ~key:"f1" ~tag:"span" ~style_class:"text-sm"
-                [ dom ~key:"f1a" ~tag:"span" ~style_class:"opacity-50"
-                    ~text:(I18n.t "account/dont-have-account-question" ^ " ")
-                    []
-                ; dom ~key:"f1b" ~tag:"a"
-                    ~style_class:"underline opacity-60 hover:opacity-80"
-                    ~text:(I18n.t "account/sign-up")
-                    ~events:"click"
-                    ~on_dom_event:(fun n _ ->
-                      if n = "click" then set_tab ctx Signup)
-                    []
-                ; dom ~key:"f1c" ~tag:"br" []
-                ; dom ~key:"f1d" ~tag:"span" ~style_class:"opacity-50"
-                    ~text:(I18n.t "account/or" ^ " ") [] ]
-            ; dom ~key:"f2" ~tag:"a"
-                ~style_class:"text-sm opacity-60 hover:opacity-80 underline"
-                ~text:(I18n.t "encryption/forgot-password-question")
-                ~events:"click"
-                ~on_dom_event:(fun n _ ->
-                  if n = "click" then set_tab ctx Reset_pw)
-                [] ]
+let login_panel ctx fields =
+  let on_submit () = submit ctx fields in
+  column ~key:"f-login" ~gap:16 ~cross:`center
+    [ input_row ~key:"r-email" ~caption:(I18n.t "account/email")
+        ~autofocus:true ~secure:false ~value:fields.email ~on_submit
+    ; input_row ~key:"r-pw" ~caption:(I18n.t "account/password")
+        ~secure:true ~value:fields.password ~on_submit
+    ; submit_btn ~key:"lg-btn" (I18n.t "account/sign-in") on_submit
+    ; column ~key:"lg-foot" ~cross:`center ~gap:4
+        [ row ~key:"f1" ~gap:4
+            [ text ~key:"f1a" ~style_class:"ls-auth-muted"
+                ~value:(I18n.t "account/dont-have-account-question" ^ " ")
+                []
+            ; action_link ~key:"f1b" ctx (I18n.t "account/sign-up")
+                Signup ]
+        ; row ~key:"f2" ~gap:4
+            [ text ~key:"f1d" ~style_class:"ls-auth-muted"
+                ~value:(I18n.t "account/or" ^ " ") []
+            ; action_link ~key:"f2a" ctx
+                (I18n.t "encryption/forgot-password-question") Reset_pw ]
         ]
     ]
 
-let signup_panel ctx =
-  form ~key:"f-signup" (fun () -> signup_submit ctx)
-    [ input_row ~key:"r-email" ~id:"email" ~name:"email" ~type_:"email"
-        ~label:(I18n.t "account/email") ~autocomplete:"email"
-        ~autofocus:true ()
-    ; input_row ~key:"r-user" ~id:"username" ~name:"username"
-        ~type_:"text" ~label:(I18n.t "account/username")
-        ~autocomplete:"username" ()
-    ; input_row ~key:"r-pw" ~id:"password" ~name:"password"
-        ~type_:"password" ~label:(I18n.t "account/password")
-        ~autocomplete:"new-password" ()
-    ; input_row ~key:"r-pw2" ~id:"confirm-password" ~name:"confirm-password"
-        ~type_:"password" ~label:(I18n.t "account/confirm-password")
-        ~autocomplete:"new-password" ()
-    ; dom ~key:"su-sub" ~style_class:"w-full"
-        [ submit_btn ~key:"su-btn" (I18n.t "account/create-account")
-            (fun () -> signup_submit ctx) ]
+let signup_panel ctx fields =
+  let on_submit () = signup_submit ctx fields in
+  column ~key:"f-signup" ~gap:16 ~cross:`center
+    [ input_row ~key:"r-email" ~caption:(I18n.t "account/email")
+        ~autofocus:true ~secure:false ~value:fields.email ~on_submit
+    ; input_row ~key:"r-user" ~caption:(I18n.t "account/username")
+        ~secure:false ~value:fields.username ~on_submit
+    ; input_row ~key:"r-pw" ~caption:(I18n.t "account/password")
+        ~secure:true ~value:fields.password ~on_submit
+    ; input_row ~key:"r-pw2" ~caption:(I18n.t "account/confirm-password")
+        ~secure:true ~value:fields.confirm_password ~on_submit
+    ; submit_btn ~key:"su-btn" (I18n.t "account/create-account") on_submit
     ; back_link ctx
     ]
 
-let reset_panel ctx =
-  form ~key:"f-reset" (fun () -> forgot_submit ctx)
-    [ input_row ~key:"r-email" ~id:"email" ~name:"email" ~type_:"email"
-        ~label:(I18n.t "account/enter-email") ~autocomplete:"email"
-        ~autofocus:true ()
-    ; dom ~key:"rs-sub" ~style_class:"w-full"
-        [ submit_btn ~key:"rs-btn" (I18n.t "account/send-code")
-            (fun () -> forgot_submit ctx) ]
+let reset_panel ctx fields =
+  let on_submit () = forgot_submit ctx fields in
+  column ~key:"f-reset" ~gap:16 ~cross:`center
+    [ input_row ~key:"r-email" ~caption:(I18n.t "account/enter-email")
+        ~autofocus:true ~secure:false ~value:fields.email ~on_submit
+    ; submit_btn ~key:"rs-btn" (I18n.t "account/send-code") on_submit
     ; back_link ctx
     ]
 
-let reset_confirm_panel ctx user =
-  form ~key:"f-rset2" (fun () -> reset_submit ctx user)
-    [ input_row ~key:"r-code" ~id:"code" ~name:"code" ~type_:"text"
-        ~label:(I18n.t "account/enter-code") ~autocomplete:"off"
-        ~autofocus:true ()
-    ; input_row ~key:"r-pw" ~id:"password" ~name:"password"
-        ~type_:"password" ~label:(I18n.t "account/password")
-        ~autocomplete:"new-password" ()
-    ; input_row ~key:"r-pw2" ~id:"confirm-password" ~name:"confirm-password"
-        ~type_:"password" ~label:(I18n.t "account/confirm-password")
-        ~autocomplete:"new-password" ()
-    ; dom ~key:"rc-sub" ~style_class:"w-full"
-        [ submit_btn ~key:"rc-btn" (I18n.t "account/reset-password")
-            (fun () -> reset_submit ctx user) ]
+let reset_confirm_panel ctx fields user =
+  let on_submit () = reset_submit ctx fields user in
+  column ~key:"f-rset2" ~gap:16 ~cross:`center
+    [ input_row ~key:"r-code" ~caption:(I18n.t "account/enter-code")
+        ~autofocus:true ~secure:false ~value:fields.code ~on_submit
+    ; input_row ~key:"r-pw" ~caption:(I18n.t "account/password")
+        ~secure:true ~value:fields.password ~on_submit
+    ; input_row ~key:"r-pw2" ~caption:(I18n.t "account/confirm-password")
+        ~secure:true ~value:fields.confirm_password ~on_submit
+    ; submit_btn ~key:"rc-btn" (I18n.t "account/reset-password") on_submit
     ; back_link ctx
     ]
 
-let confirm_panel ctx user next_step =
-  form ~key:"f-confirm" (fun () -> confirm_submit ctx user next_step)
-    [ dom ~key:"cc-hint" ~tag:"p" ~style_class:"pb-2 opacity-60"
-        ~text:(I18n.t "account/code-on-the-way-tip") []
-    ; input_row ~key:"r-code" ~id:"code" ~name:"code" ~type_:"text"
-        ~label:(I18n.t "account/enter-code") ~autocomplete:"off"
-        ~autofocus:true ()
-    ; dom ~key:"cc-sub" ~style_class:"w-full"
-        [ submit_btn ~key:"cc-btn" (I18n.t "account/confirm")
-            (fun () -> confirm_submit ctx user next_step) ]
+let confirm_panel ctx fields user next_step =
+  let on_submit () = confirm_submit ctx fields user next_step in
+  column ~key:"f-confirm" ~gap:16 ~cross:`center
+    [ paragraph ~key:"cc-hint" ~style_class:"ls-auth-muted"
+        ~value:(I18n.t "account/code-on-the-way-tip") []
+    ; input_row ~key:"r-code" ~caption:(I18n.t "account/enter-code")
+        ~autofocus:true ~secure:false ~value:fields.code ~on_submit
+    ; submit_btn ~key:"cc-btn" (I18n.t "account/confirm") on_submit
     ; back_link ctx
     ]
 
-let panel ctx (a : auth_ui) : t =
+let panel ctx fields (a : auth_ui) : t =
   let title, inner =
     match a.session_user with
     | Some u ->
         ( I18n.t "ui/login"
-        , [ dom ~key:"lg-in" ~style_class:"w-full text-center"
-              [ dom ~key:"p" ~tag:"p" ~style_class:"mb-4"
-                  ~text:(I18n.t1 "account/already-logged-in-as" u) []
-              ; dom ~key:"so" ~tag:"button"
+        , [ column ~key:"lg-in" ~cross:`center ~gap:16
+              [ paragraph ~key:"p"
+                  ~value:(I18n.t1 "account/already-logged-in-as" u) []
+              ; button ~key:"so" ~variant:`outline
                   ~text:(I18n.t "account/sign-out")
-                  ~style_class:"ui__button ls-btn w-full"
-                  ~events:"click"
-                  ~on_dom_event:(fun n _ ->
-                    if n = "click" then sign_out ctx)
+                  ~style_class:"ui__button ls-btn"
+                  ~on_press:(fun _ -> sign_out ctx)
                   [] ] ] )
     | None -> (
         match a.tab with
-        | Login -> (I18n.t "ui/login", [ login_panel ctx ])
-        | Signup -> (I18n.t "account/sign-up", [ signup_panel ctx ])
-        | Reset_pw -> (I18n.t "account/reset-password", [ reset_panel ctx ])
+        | Login -> (I18n.t "ui/login", [ login_panel ctx fields ])
+        | Signup -> (I18n.t "account/sign-up", [ signup_panel ctx fields ])
+        | Reset_pw ->
+            (I18n.t "account/reset-password", [ reset_panel ctx fields ])
         | Reset_confirm user ->
-            (I18n.t "account/reset-password", [ reset_confirm_panel ctx user ])
+            ( I18n.t "account/reset-password"
+            , [ reset_confirm_panel ctx fields user ] )
         | Confirm_code (user, next_step) ->
-            (I18n.t "account/confirm", [ confirm_panel ctx user next_step ]))
+            ( I18n.t "account/confirm"
+            , [ confirm_panel ctx fields user next_step ] ))
   in
   Logseq_dom.fragment
-    (dom ~key:"lg-t" ~tag:"h2" ~style_class:"ui__dialog-title ls-auth-title"
-       ~text:title []
+    (heading ~key:"lg-t" ~level:2
+       ~style_class:"ui__dialog-title ls-auth-title" ~value:title []
      :: (if a.err = "" then []
          else
-           (* cljs shui/alert {:variant :destructive :class "mb-4"} +
-              alert-description *)
-           [ dom ~key:"err" ~tag:"div"
-               ~style_class:
-                 "ui__alert relative w-full rounded-lg border p-4 mb-4"
-               ~attrs:[ ("variant", "destructive") ]
-               [ dom ~key:"err-d" ~tag:"div"
-                   ~style_class:
-                     "ui__alert-description text-sm [&_p]:leading-relaxed"
-                   ~text:a.err [] ] ])
-     @ inner)
+           (* cljs shui/alert {:variant :destructive} + alert-description —
+              destructive styling comes from the .cp__user-login .ui__alert
+              rules *)
+           [ column ~key:"err" ~style_class:"ui__alert"
+               [ paragraph ~key:"err-d"
+                   ~style_class:"ui__alert-description"
+                   ~value:a.err [] ] ])
+    @ inner)
 
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   Signal.update (auth_st ctx) (fun _ ->
       { tab = Login; err = ""; session_user = session_username () });
-  Logseq_dom.dyn ~equal:( == )
-    (fun a -> dom ~key:"login" ~style_class:"cp__user-login" [ panel ctx a ])
-    (auth_st ctx).Signal.state_signal ctx parent
+  let fields = fields_of ctx in
+  (dyn ~equal:( == ) (fun a ->
+       box ~key:"login" ~style_class:"cp__user-login"
+         [ panel ctx fields a ])
+     (auth_st ctx).Signal.state_signal)
+    ctx parent

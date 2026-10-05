@@ -622,6 +622,7 @@
  :encryption/reset-password "Reset password"
  :encryption/set-new-password "Set new password"
  :encryption/set-password-title "Set password for remote graphs"
+ :encryption/toggle-password-visibility "Show or hide password"
  :encryption/updating-password "Updating password ..."
  :encryption/wrong-password "Wrong password"
 
