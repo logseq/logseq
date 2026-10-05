@@ -246,7 +246,7 @@ let search_and_click env search_text =
           Js.Promise.resolve (Js.log2 "[search-dbg]" dump)
         in
         Playwright.throw_error e)
-      (repeat_until_visible env 12 result (fun () -> search env search_text))
+      (repeat_until_visible env 20 result (fun () -> search env search_text))
   in
   Pw.click_l result
 

@@ -239,7 +239,7 @@ let new_block env title =
     end
     else Js.Promise.resolve ()
   in
-  let* () = E2e_assert.editor_mode env in
+  let* () = E2e_assert.editor_mode ~uuid:new_uuid env in
   let* content = Pw.input_value env new_editor_q in
   let* () =
     if content = title then Js.Promise.resolve ()

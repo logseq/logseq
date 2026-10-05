@@ -42,7 +42,7 @@ let in_normal_mode env =
 
 let graph_loaded env = is_visible env "[data-testid='page title']"
 
-let editor_mode env =
+let editor_mode ?uuid env =
   (* counting ALL .editor-wrapper textareas flakes under remount churn:
      transient 0 while every editor remounts, transient 2 while a
      stale-but-mounted editor coexists (dup ids). The app's editing
@@ -64,8 +64,20 @@ let editor_mode env =
       | None -> Js.Promise.resolve false
     in
     if ok then Js.Promise.resolve ()
-    else if Js.Date.now () > deadline then
-      have_count ~timeout:15000. env ".editor-wrapper textarea" 1
+    else if Js.Date.now () > deadline then (
+      match uuid with
+      | Some uuid ->
+          (* a remote-tx remount can wipe the editing state entirely —
+             reopen the block's editor through the API and wait for its
+             textarea instead of counting textareas that never come *)
+          let* _ =
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve Js.null)
+              (Api.ls_api_call env "editor.editBlock" [| Api.str uuid |])
+          in
+          is_visible_l ~timeout:15000.
+            (Pw.q env (Printf.sprintf "#edit-block-%s:visible" uuid))
+      | None -> have_count ~timeout:15000. env ".editor-wrapper textarea" 1)
     else
       let* () = Pw.wait_timeout env 150. in
       go ()

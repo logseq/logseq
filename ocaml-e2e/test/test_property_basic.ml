@@ -21,11 +21,33 @@ let add_new_properties env title_prefix =
         let property_name =
           "p-" ^ title_prefix ^ "-" ^ property_type
         in
-        let* () =
-          Pw.click_l
-            (Util.get_by_text env (title_prefix ^ "-" ^ property_type) true)
+        let block_title = title_prefix ^ "-" ^ property_type in
+        (* Click the block + Ctrl+e, then verify editing landed on THAT
+           block. A missed click (e.g. RTC remount) leaves focus in the
+           previous property's value editor and the command keystrokes
+           bleed into its title. *)
+        let rec open_editor attempt =
+          let* () =
+            Pw.click_l (Util.get_by_text env block_title true)
+          in
+          let* () = Keyboard.press env "Control+e" in
+          let deadline = Js.Date.now () +. 8000. in
+          let rec poll () =
+            let* content = Util.get_edit_content env in
+            if content = Some block_title then Js.Promise.resolve true
+            else if Js.Date.now () > deadline then Js.Promise.resolve false
+            else
+              let* () = Util.wait_timeout env 200. in
+              poll ()
+          in
+          let* ok = poll () in
+          if ok then Js.Promise.resolve ()
+          else if attempt >= 2 then
+            let* _ = Util.wait_edit_content env block_title in
+            Js.Promise.resolve ()
+          else open_editor (attempt + 1)
         in
-        let* () = Keyboard.press env "Control+e" in
+        let* () = open_editor 0 in
         let* () = Util.input_command env "Add property" in
         let* () = Pw.click env "input[placeholder]" in
         let* () = Util.input env property_name in
