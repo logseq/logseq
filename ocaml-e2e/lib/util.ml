@@ -190,10 +190,12 @@ let edit_content env =
   | Some e -> Pw.input_value_l e
   | None -> Js.Promise.reject (Failure "edit_content: no editor open")
 
-(** waits until the editing textarea's content equals [expected] *)
+(** waits until the editing textarea's content equals [expected].
+    Polls get_edit_content directly: the editor unmounts and remounts
+    under load, so a one-shot wait_editor_visible gate fails while a
+    poll rides through the remount window. *)
 let wait_edit_content env expected =
-  let* () = wait_editor_visible env in
-  let deadline = Js.Date.now () +. 10000. in
+  let deadline = Js.Date.now () +. 30000. in
   let rec loop () =
     let* content = get_edit_content env in
     if content = Some expected then Js.Promise.resolve true

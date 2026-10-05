@@ -628,7 +628,7 @@ let () =
                (fun e ->
                   let* (dump : string) =
                     Pw.eval_js env
-                      "(() => JSON.stringify({url: location.hash, blocks: [...document.querySelectorAll('.ls-block')].map(e => (e.getAttribute('blockid')||'?') + '|' + (e.textContent||'').replace(/\\s+/g,' ').slice(0,60)).slice(0,12)}))()"
+                      "(() => JSON.stringify({url: location.hash, editors: document.querySelectorAll('.editor-wrapper textarea').length, contents: document.querySelectorAll('.block-content').length, blocks: [...document.querySelectorAll('.ls-block')].map(e => (e.getAttribute('blockid')||'?') + '|' + (e.querySelector('.block-content') ? 'has-content' : 'no-content') + '|' + (e.textContent||'').replace(/\\s+/g,' ').slice(0,60)).slice(0,12)}))()"
                   in
                   let* page_name =
                     Js.Promise.catch
@@ -649,7 +649,12 @@ let () =
                          (Js.Json.stringify tree))
                   in
                   Playwright.throw_error e)
-               (B.jump_to_block env "focused-root")
+               (Js.Promise.then_
+                  (fun () -> Util.wait_editor_visible env)
+                  (* editor.editBlock goes straight to editing — no
+                     dependence on which DOM node accepts the click *)
+                  (Api.ls_api_call env "editor.editBlock"
+                     [| Api.str root_id |]))
            in
            let* () = zoom_until_root 3 in
            Util.wait_editor_visible env)
