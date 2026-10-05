@@ -55,10 +55,17 @@ let ready : (Env.t * Env.t * string) Js.Promise.t Lazy.t =
            in
            Js.Promise.resolve ())
      in
+     (* browsers may already be closed when this hook runs (after-hooks are
+        FIFO and the shared pages' close is registered first): removing the
+        remote graph is best-effort teardown *)
      Fixtures.after (fun () ->
-         Env.with_page env2 (Env.page env2) (fun () ->
-             let* _ = Graph.remove_remote_graph env2 graph_name in
-             Js.Promise.resolve ()));
+         Js.Promise.catch
+           (fun e ->
+             ignore e;
+             Js.Promise.resolve ())
+           (Env.with_page env2 (Env.page env2) (fun () ->
+                let* _ = Graph.remove_remote_graph env2 graph_name in
+                Js.Promise.resolve ())));
      Js.Promise.resolve (env1, env2, graph_name))
 
 let new_rtc_page env p1 p2 = Fixtures.new_logseq_page_in_rtc env p1 p2 ()
