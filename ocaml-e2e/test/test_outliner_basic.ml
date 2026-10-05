@@ -571,7 +571,7 @@ let () =
                (fun e ->
                   let* dump =
                     Pw.eval_js env
-                      "(() => JSON.stringify({url: location.hash, crumbs: [...document.querySelectorAll('.breadcrumb a')].map(a => a.textContent), blocks: document.querySelectorAll('.ls-block').length, main: (document.querySelector('main')?.innerText || '').slice(0,300)}))()"
+                      "(() => JSON.stringify({url: location.hash, crumbs: [...document.querySelectorAll('.breadcrumb a')].map(a => a.textContent), blocks: [...document.querySelectorAll('.ls-block .block-title-wrap, .ls-block .block-content')].map(e => e.textContent).slice(0,10), main: (document.querySelector('main')?.innerText || '').slice(0,300)}))()"
                   in
                   let* () = Js.Promise.resolve (Js.log2 "focused-dom" dump) in
                   Playwright.throw_error e)
