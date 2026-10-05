@@ -896,15 +896,31 @@ let get_page_blocks_tree args =
                         :block/parent) *)
                      match Ldb.value page "block/uuid" with
                      | Some (Uuid u) ->
+                         let perf = Sys.getenv_opt "LOGSEQ_PERF" <> None in
+                         let t0 = Unix.gettimeofday () in
+                         let entities = Ldb.get_block_and_children db u in
+                         let t1 = Unix.gettimeofday () in
                          let blocks =
-                           Ldb.get_block_and_children db u
+                           entities
                            |> List.map (fun (e : entity) -> Entity_id e.id)
                            |> Datascript.pull_many_string db "[*]"
                            |> List.filter_map (fun x -> x)
                          in
-                         Wire.Array
-                           (Outliner_tree.page_blocks_vec_tree db blocks
-                              page)
+                         let t2 = Unix.gettimeofday () in
+                         let tree =
+                           Outliner_tree.page_blocks_vec_tree db blocks page
+                         in
+                         let t3 = Unix.gettimeofday () in
+                         if perf then
+                           Printf.eprintf
+                             "[perf] get-page-blocks-tree entities=%d \
+                              fetch=%.0fms pull=%.0fms tree=%.0fms\n\
+                              %!"
+                             (List.length blocks)
+                             ((t1 -. t0) *. 1000.)
+                             ((t2 -. t1) *. 1000.)
+                             ((t3 -. t2) *. 1000.);
+                         Wire.Array tree
                      | _ ->
                          let blocks = Ldb.get_page_blocks db page.id in
                          let extras =
