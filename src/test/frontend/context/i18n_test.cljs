@@ -1,7 +1,29 @@
 (ns frontend.context.i18n-test
   (:require [cljs.test :refer [deftest is testing use-fixtures]]
             [frontend.context.i18n :as i18n]
-            [frontend.state :as state]))
+            [frontend.dicts :as dicts]
+            [frontend.state :as state]
+            [tongue.core :as tongue]))
+
+(deftest lazy-translate-gives-the-full-translators-answers-test
+  ;; the translators compile a language on first use; every key of every
+  ;; shipped language, and a key no language has, must translate as the
+  ;; translators built over all languages at load did, with and without the
+  ;; English fallback
+  (let [full (tongue/build-translate i18n/dicts)
+        full-strict (tongue/build-translate dicts/dicts)
+        strict @#'i18n/translate-strict
+        langs (conj (keys dicts/dicts) :zh :pt :xx)
+        ks (conj (set (mapcat keys (vals dicts/dicts))) :no.such/key)
+        ;; a template fn without its args throws in both: compare what is thrown
+        call (fn [f lang k] (try (f lang k) (catch :default e [:threw (ex-message e)])))
+        diffs (for [lang langs
+                    k ks
+                    :let [a (call full lang k) b (call i18n/translate lang k)
+                          c (call full-strict lang k) d (call strict lang k)]
+                    :when (or (not= (str a) (str b)) (not= (str c) (str d)))]
+                [lang k])]
+    (is (empty? (take 5 diffs)) (str (count diffs) " keys translate differently"))))
 
 (defn- set-language!
   [language]

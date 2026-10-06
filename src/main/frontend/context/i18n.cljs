@@ -11,8 +11,35 @@
 
 (def dicts (merge dicts/dicts {:tongue/fallback :en}))
 
+(defn- locale-and-parents
+  "`locale` and the tags tongue falls back through for it: :zh-CN -> :zh-CN :zh."
+  [locale]
+  (let [parts (string/split (name locale) #"-")]
+    (map #(keyword (string/join "-" (take % parts))) (range (count parts) 0 -1))))
+
+(defn- lazy-translate
+  "A tongue translate fn over `all-dicts` that compiles a language's dict the
+  first time it is asked for: compiling every shipped language at load cost
+  about 400 ms of every app open. Each locale gets a translator built from
+  its own dicts, its parent tags and the fallback, the only dicts tongue
+  reads for it, so every answer is the one the full translator gives."
+  [all-dicts]
+  (let [fallback (:tongue/fallback all-dicts)
+        cache (atom {})
+        translator (fn [locale]
+                     (or (get @cache locale)
+                         (let [langs (cond-> (set (locale-and-parents locale))
+                                       fallback (conj fallback))
+                               f (tongue/build-translate
+                                  (merge (select-keys all-dicts langs)
+                                         (select-keys all-dicts [:tongue/fallback])))]
+                           (swap! cache assoc locale f)
+                           f)))]
+    (fn [locale & args]
+      (apply (translator locale) locale args))))
+
 (def translate
-  (tongue/build-translate dicts))
+  (lazy-translate dicts))
 
 (defn preferred-locale
   []
@@ -44,7 +71,7 @@
 (def ^:private translate-strict
   "tongue translator built against the raw locale dicts without any fallback.
   Returns a '{Missing key ...}' string for keys absent in the requested locale."
-  (tongue/build-translate dicts/dicts))
+  (lazy-translate dicts/dicts))
 
 (defn t-locale
   "Translate using the user's current locale without English fallback for
