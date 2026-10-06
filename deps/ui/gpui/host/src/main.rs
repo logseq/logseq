@@ -147,6 +147,7 @@ unsafe extern "C" fn platform_request_cb(data: *const c_char, length: c_int) {
 fn handle_platform_request(
     envelope: &str,
     shared: &Shared,
+    window: &mut gpui_kit::gpui::Window,
     cx: &mut gpui_kit::gpui::App,
 ) {
     let Some((name, payload)) = envelope.split_once('\n') else {
@@ -159,10 +160,12 @@ fn handle_platform_request(
                 // The logseq-editor conduit claims its ops first
                 // (caret-rect/offset-at/line-ranges/scroll-height/
                 // set-input-focus); everything else goes to the generic
-                // dom-op handler.
-                let replies = editor::handle_dom_op(op, body, shared, cx)
+                // dom-op handler. The live window is passed down: during
+                // this frame callback `cx.windows()` handles cannot be
+                // re-entered, so ops needing a Window must use this one.
+                let replies = editor::handle_dom_op(op, body, shared, window, cx)
                     .unwrap_or_else(|| {
-                        lui_gpui::domops::handle_dom_op(shared, op, body, cx)
+                        lui_gpui::domops::handle_dom_op(shared, op, body, window, cx)
                     });
                 for (name, json) in replies {
                     let envelope = format!("{name}\n{json}");
@@ -190,7 +193,7 @@ fn handle_platform_request(
 /// this stays light even while OCaml is mid-flush.
 fn pump_tick(shared: &Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui_kit::gpui::App) {
     drain_patches(shared, cx);
-    drain_requests(shared, cx);
+    drain_requests(shared, window, cx);
     lui_gpui::dom::fire_viewport_events(shared, window, cx);
 }
 
@@ -204,7 +207,11 @@ fn tick_frame(shared: Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui
     });
 }
 
-fn drain_requests(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
+fn drain_requests(
+    shared: &Shared,
+    window: &mut gpui_kit::gpui::Window,
+    cx: &mut gpui_kit::gpui::App,
+) {
     // debug: LOGSEQ_GPUI_DUMP_TREE=<ms> dumps the store tree once after t
     static DUMPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if !DUMPED.load(std::sync::atomic::Ordering::Relaxed) {
@@ -212,7 +219,7 @@ fn drain_requests(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
             if boot_ms() >= ms.parse::<f64>().unwrap_or(0.0) {
                 DUMPED.store(true, std::sync::atomic::Ordering::Relaxed);
                 eprintln!("logseq-gpui: dumping tree t={:.1}ms", boot_ms());
-                lui_gpui::domops::handle_dom_op(shared, "dump-frames", "", cx);
+                lui_gpui::domops::handle_dom_op(shared, "dump-frames", "{}", window, cx);
             }
         }
     }
@@ -221,7 +228,7 @@ fn drain_requests(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
         .map(|mut queue| std::mem::take(&mut *queue))
         .unwrap_or_default();
     for envelope in requests {
-        handle_platform_request(&envelope, shared, cx);
+        handle_platform_request(&envelope, shared, window, cx);
     }
 }
 

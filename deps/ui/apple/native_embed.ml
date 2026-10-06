@@ -63,6 +63,19 @@ let ext_prop_string props name =
 let attrs_parse_cache : (int, string * Js.Json.t) Hashtbl.t =
   Hashtbl.create 1024
 
+(* Standard props (accessibility identifier, style class, data attrs,
+   text) live in runtime_properties — extension nodes mirror them into
+   runtime_extension_properties, but plain elements only have the
+   standard table. Without this fallback a selector like #cmdk-input can
+   never match a standard input node. *)
+let std_prop_string (rt : Lui_runtime.application) node prop =
+  match Hashtbl.find_opt rt.Lui_runtime.runtime_properties node with
+  | Some map -> (
+      match Lui_protocol.Property_map.find_opt prop map with
+      | Some (Lui_protocol.StringValue s) -> Some s
+      | _ -> None)
+  | None -> None
+
 let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
   let props =
     match
@@ -71,6 +84,11 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
     | Some p -> p
     | None -> Lui_protocol.String_map.empty
   in
+  let prop_string name prop =
+    match ext_prop_string props name with
+    | Some s -> Some s
+    | None -> std_prop_string rt node prop
+  in
   let tag =
     match Hashtbl.find_opt rt.Lui_runtime.runtime_extension_nodes node with
     | Some ident ->
@@ -78,9 +96,15 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
         then
           String.sub ident 7 (String.length ident - 7)
         else ident
-    | None -> "div"
+    | None -> (
+        match Hashtbl.find_opt rt.Lui_runtime.mounted_nodes node with
+        | Some kind -> Lui_wire_schema.node_kind_name kind
+        | None -> "div")
   in
   let attrs =
+    (* two encodings share this slot: extension "attrs" is a JSON object
+       ({name: value}); the standard DataAttrs prop is the \x1e/\x1f
+       record list data_attrs_encode produces — decode each by source *)
     match ext_prop_string props "attrs" with
     | Some json -> (
         match Hashtbl.find_opt attrs_parse_cache node with
@@ -91,11 +115,19 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
             in
             Hashtbl.replace attrs_parse_cache node (json, parsed);
             parsed)
-    | None -> Js.Json.JObject []
+    | None -> (
+        match std_prop_string rt node Lui_protocol.DataAttrs with
+        | Some raw ->
+            Js.Json.JObject
+              (List.map
+                 (fun (k, v) -> (k, Js.Json.JString v))
+                 (Lui_protocol.data_attrs_decode raw))
+        | None -> Js.Json.JObject [])
   in
   let acc_id =
     Option.value
-      (ext_prop_string props "accessibility-identifier")
+      (prop_string "accessibility-identifier"
+         Lui_protocol.AccessibilityIdentifier)
       ~default:""
   in
   let dom_id =
@@ -111,7 +143,9 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
     [ ("tag", Js.Json.JString tag)
     ; ( "class"
       , Js.Json.JString
-          (Option.value (ext_prop_string props "style-class") ~default:"")
+          (Option.value
+             (prop_string "style-class" Lui_protocol.StyleClass)
+             ~default:"")
       )
     ; ("id", Js.Json.JString dom_id)
     ; ( "#ref"
@@ -123,7 +157,9 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
     ; ("attrs", attrs)
     ; ( "text"
       , Js.Json.JString
-          (Option.value (ext_prop_string props "text") ~default:"") )
+          (Option.value
+             (prop_string "text" Lui_protocol.TextValue)
+             ~default:"") )
     ]
 
 (* Snapshot caches — collecting the doc walks every extension node and

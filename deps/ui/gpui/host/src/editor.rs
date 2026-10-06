@@ -742,20 +742,24 @@ fn focus_editor(node_id: i64, window: &mut Window, cx: &mut App) {
 
 /// `set-input-focus {block-id, focused}` — focus/blur the block's
 /// hidden input surface.
-fn set_input_focus(shared: &Shared, block_id: &str, focused: bool, cx: &mut App) {
+fn set_input_focus(
+    shared: &Shared,
+    block_id: &str,
+    focused: bool,
+    window: &mut Window,
+    cx: &mut App,
+) {
     PENDING_FOCUS.with(|p| p.borrow_mut().insert(block_id.to_owned(), focused));
     let node_id = {
         let shared = shared.borrow();
         find_editor_node(&shared.store, block_id)
     };
     let Some(node_id) = node_id else { return };
-    let _ = with_window(cx, |window, cx| {
-        if focused {
-            focus_editor(node_id, window, cx);
-        } else {
-            window.blur(cx);
-        }
-    });
+    if focused {
+        focus_editor(node_id, window, cx);
+    } else {
+        window.blur(cx);
+    }
 }
 
 /// The `logseq-editor` surface: an invisible focus-tracked element that
@@ -801,11 +805,17 @@ fn editor_surface(
         if let Some(want) =
             PENDING_FOCUS.with(|p| p.borrow_mut().remove(block_id))
         {
-            if want {
-                focus.focus(window, cx);
-            } else {
-                window.blur(cx);
-            }
+            // focus() called mid-render is dropped when the frame's own
+            // focus bookkeeping runs — land it on the next frame so the
+            // on_focus subscription below can emit the conduit event.
+            let focus = focus.clone();
+            window.on_next_frame(move |window, cx| {
+                if want {
+                    focus.focus(window, cx);
+                } else {
+                    window.blur(cx);
+                }
+            });
         }
     }
 
@@ -828,6 +838,21 @@ fn editor_surface(
                 "repeat": event.is_held,
             });
             emit(&key_shared, node_id, c"key", json.to_string(), cx);
+            // Text-bearing keys must stay unhandled so Cocoa still
+            // reaches insertText — the buffer receives them as `insert`
+            // events via the registered input handler. Everything else
+            // (commands, navigation, modifiers) belongs to the editing
+            // model now — without consuming it the key keeps bubbling to
+            // the window root, which re-dispatches it as a document
+            // keydown and global chords (e.g. router navigation) fire
+            // while the user is typing.
+            let text_key = keystroke.key_char.is_some()
+                && !mods.control
+                && !mods.platform
+                && !mods.function;
+            if !text_key {
+                cx.stop_propagation();
+            }
         })
         .child(canvas(
             |_, _, _| {},
@@ -863,21 +888,16 @@ pub fn register(shared: &Shared) {
 // dom-ops (called from handle_platform_request's "dom-op" arm)
 // ---------------------------------------------------------------------------
 
-fn with_window<R>(
-    cx: &mut App,
-    f: impl FnOnce(&mut Window, &mut App) -> R,
-) -> Option<R> {
-    let handle = cx.windows().first().copied()?;
-    handle.update(cx, |_, window, cx| f(window, cx)).ok()
-}
-
 /// Handle a `logseq-editor` dom-op. `Some` = consumed (empty vec = the
 /// op produced no replies); `None` = not an editor op — fall through to
-/// `lui_gpui::domops`.
+/// `lui_gpui::domops`. `window` is the live frame window — dom-ops run
+/// inside `on_next_frame`, where `cx.windows()` handles no longer update
+/// (the window sits on gpui's update stack).
 pub fn handle_dom_op(
     op: &str,
     body: &str,
     shared: &Shared,
+    window: &mut Window,
     cx: &mut App,
 ) -> Option<Vec<(String, Value)>> {
     match op {
@@ -902,8 +922,7 @@ pub fn handle_dom_op(
     let replies = match op {
         "caret-rect" => {
             let off = parsed.get("offset").and_then(Value::as_i64).unwrap_or(0);
-            with_window(cx, |window, _cx| caret_rect(shared, &block_id, off, window))
-                .flatten()
+            caret_rect(shared, &block_id, off, window)
                 .map(|(x, y, h)| {
                     vec![(
                         "caret-rect".to_string(),
@@ -921,8 +940,7 @@ pub fn handle_dom_op(
         "offset-at" => {
             let x = parsed.get("x").and_then(Value::as_i64).unwrap_or(0);
             let y = parsed.get("y").and_then(Value::as_i64).unwrap_or(0);
-            with_window(cx, |window, _cx| offset_at(shared, &block_id, x, y, window))
-                .flatten()
+            offset_at(shared, &block_id, x, y, window)
                 .map(|offset| {
                     vec![(
                         "offset-at".to_string(),
@@ -959,7 +977,7 @@ pub fn handle_dom_op(
                 .get("focused")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            set_input_focus(shared, &block_id, focused, cx);
+            set_input_focus(shared, &block_id, focused, window, cx);
             Vec::new()
         }
         _ => Vec::new(),
