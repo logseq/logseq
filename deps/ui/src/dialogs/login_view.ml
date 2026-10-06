@@ -372,7 +372,7 @@ let session_username = Rtc_flows.username
 let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
   column ~key ~gap:12
     [ label ~key:"l" ~value:caption []
-    ; (if secure then secure_field else input)
+    ; (if secure then secure_field else input ~kind:`text)
         ~key:"i" ~style_class:"ui__input"
         ~autofocus ~submit_on_enter:true
         ~text_signal:(Signal.value value)
