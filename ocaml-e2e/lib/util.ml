@@ -134,10 +134,27 @@ let exit_edit env =
           alone is unreliable: a stale detached textarea can sit first *)
        let* still =
          Pw.count env ".editor-wrapper textarea:visible" in
-       if still > 0 then
-         let* _ = Api.ls_api_call env "editor.exitEditingMode" [| Api.bool false |] in
-         Js.Promise.resolve ()
-       else Js.Promise.resolve ()
+       let* () =
+         if still > 0 then
+           let* _ =
+             Api.ls_api_call env "editor.exitEditingMode"
+               [| Api.bool false |]
+           in
+           Js.Promise.resolve ()
+         else Js.Promise.resolve ()
+       in
+       (* a remount can leave :editor/block state set with no editor DOM —
+          the read view then never renders (.extensions__code etc).
+          Clear a lingering editing state as well. *)
+       let* editing = Pw.eval_js env editing_uuid_js in
+       (match Js.Nullable.toOption editing with
+        | Some _ ->
+            let* _ =
+              Api.ls_api_call env "editor.exitEditingMode"
+                [| Api.bool false |]
+            in
+            Js.Promise.resolve ()
+        | None -> Js.Promise.resolve ())
    | None -> Js.Promise.resolve ())
   |> Js.Promise.then_ (fun () ->
          let* _ = E2e_assert.non_editor_mode env in
