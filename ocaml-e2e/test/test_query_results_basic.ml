@@ -384,32 +384,47 @@ let () =
            ".cp__query-builder .query-clause")
     in
     let* () = Pw.click_l (Util.get_by_text env "Delete" true) in
-    let* () =
-      Pw.click_l (Util.query_last env "button:text('filter')")
+    (* the add-clause flow clicks through dropdowns that re-render under
+       load — a stale menu-link click silently commits nothing, so retry
+       the whole add until a clause actually mounts *)
+    let rec add_clause tries =
+      (* a half-open dropdown or re-rendered menu makes any step throw —
+         treat the whole attempt as failed and retry from the top *)
+      let* () = Keyboard.esc env in
+      let* () = Util.wait_timeout env 150. in
+      let* () =
+        Js.Promise.catch
+          (fun _ -> Js.Promise.resolve ())
+          (let* () =
+             Pw.click_l (Util.query_last env "button:text('filter')")
+           in
+           let* () = Util.input env "page reference" in
+           let* () =
+             Pw.click env "a.menu-link:has-text('page reference')"
+           in
+           Pw.click_l
+             (Ls_locator.filter env ~has_text:empty_reference
+                ".cp__select-results a.menu-link"))
+      in
+      let* added =
+        Pw.catch_timeout
+          (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+             (Pw.wait_for env ~timeout:10000.
+                ".cp__query-builder .query-clause"))
+          (fun () -> Js.Promise.resolve false)
+      in
+      if added then Js.Promise.resolve ()
+      else if tries <= 1 then begin
+        let* dump =
+          Pw.eval_js env
+            "(() => JSON.stringify({selectResults: document.querySelector('.cp__select-results')?.textContent.replace(/\\s+/g,' ').slice(0,200) || 'none', menuLinks: [...document.querySelectorAll('a.menu-link')].map(a => a.textContent.slice(0,40)).slice(0,10), popovers: document.querySelectorAll('.ui__popover-content, .ui__dropdown-menu-content').length}))()"
+        in
+        let* () = Js.Promise.resolve (Js.log2 "clause-add-miss" dump) in
+        E2e_assert.is_visible env ".cp__query-builder .query-clause"
+      end
+      else add_clause (tries - 1)
     in
-    let* () = Util.input env "page reference" in
-    let* () =
-      Pw.click env "a.menu-link:has-text('page reference')"
-    in
-    let* () =
-      Pw.click_l
-        (Ls_locator.filter env ~has_text:empty_reference
-           ".cp__select-results a.menu-link")
-    in
-    let* () =
-      (* a stale popover can swallow the add clicks — verify the clause
-         actually committed before asserting the result count *)
-      Pw.catch_timeout
-        (Js.Promise.then_ (fun () -> Js.Promise.resolve ())
-           (Pw.wait_for env ~timeout:10000.
-              ".cp__query-builder .query-clause"))
-        (fun () ->
-          let* dump =
-            Pw.eval_js env
-              "(() => JSON.stringify({selectResults: document.querySelector('.cp__select-results')?.textContent.replace(/\\s+/g,' ').slice(0,200) || 'none', menuLinks: [...document.querySelectorAll('a.menu-link')].map(a => a.textContent.slice(0,40)).slice(0,10), popovers: document.querySelectorAll('.ui__popover-content, .ui__dropdown-menu-content').length}))()"
-          in
-          Js.Promise.resolve (Js.log2 "clause-add-miss" dump))
-    in
+    let* () = add_clause 3 in
     let* _ = assert_query_count env 0 in
     let* () =
       E2e_assert.have_count env ".custom-query-results .ls-table-row" 0
