@@ -1127,7 +1127,19 @@ let () =
             last_block_title
         in
         (* the first virtualized mount is slow under parallel load too *)
-        let* () = Pw.wait_for ~timeout:120000. env last_block_selector in
+        let* () =
+          Pw.catch_timeout
+            (Pw.wait_for ~timeout:180000. env last_block_selector)
+            (fun () ->
+              let* dump =
+                Pw.eval_js env
+                  "(() => JSON.stringify({scrollTop: document.querySelector('#main-content-container')?.scrollTop, scrollH: document.querySelector('#main-content-container')?.scrollHeight, items: [...document.querySelectorAll('#journals .journal-item')].map(i => ({blocks: i.querySelectorAll('.ls-block').length, txt: i.textContent.slice(0,80)})), virtuoso: document.querySelectorAll('#journals [data-virtuoso-scroller]').length}))()"
+              in
+              let* () =
+                Js.Promise.resolve (Js.log2 "[journal-mount-dbg]" dump)
+              in
+              Pw.wait_for ~timeout:1000. env last_block_selector)
+        in
         let* initial_height =
           mounted_journal_height env first_block_title
         in
