@@ -4,6 +4,15 @@ open Fest.Promise
 
 type rtc_tx = { local_tx : int option; remote_tx : int option }
 
+let contains_sub hay needle =
+  let hl = String.length hay and nl = String.length needle in
+  let rec go i =
+    if i + nl > hl then false
+    else if String.sub hay i nl = needle then true
+    else go (i + 1)
+  in
+  nl = 0 || go 0
+
 let int_after ~label text =
   (* finds [":label <int-or-nil>"] in the EDN-ish payload *)
   let key = ":" ^ label in
@@ -104,11 +113,31 @@ let wait_idle env =
           Js.log2 "wait-idle pending" snap
         end;
         if now > deadline then
+          (* surface the worker-side failure that froze the sync loop —
+             db-sync error lines carry the exception that blocked apply *)
+          let err_lines =
+            Env.console_logs env
+            |> List.filter (fun l ->
+                   contains_sub l "db-sync/" || contains_sub l "Error"
+                   || contains_sub l "error" || contains_sub l "apply-remote"
+                   || contains_sub l "Invalid")
+            |> (fun l -> if List.length l > 15 then
+                    List.filteri (fun i _ -> i >= List.length l - 15) l
+                  else l)
+            |> String.concat "\n  "
+          in
+          let err_lines =
+            if String.length err_lines > 3000
+            then String.sub err_lines 0 3000 ^ "..."
+            else err_lines
+          in
           Js.Promise.reject
             (Failure
-               (Printf.sprintf "wait-idle: rtc/state not idle, state=%s"
+               (Printf.sprintf
+                  "wait-idle: rtc/state not idle, state=%s\n  logs: %s"
                   (Option.value ~default:"null"
-                     (Js.Json.decodeString snap))))
+                     (Js.Json.decodeString snap))
+                  err_lines))
         else
           let* () = Util.wait_timeout env 500. in
           poll ()
