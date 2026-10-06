@@ -2622,18 +2622,31 @@ let () =
           ^ " .ls-block:not(.block-add-button) .block-title-wrap"
         in
         let* () = Pw.wait_for env journal_selector in
-        let* texts = Pw.all_text env block_selector in
-        let last3 =
+        (* poll — virtuoso recycles row elements and a snapshot can catch
+           a row still showing a recycled title *)
+        let read_last3 () =
+          let* texts = Pw.all_text env block_selector in
           let l = Array.to_list texts in
           let n = List.length l in
-          List.filteri (fun i _ -> i >= n - 3) l
+          Js.Promise.resolve
+            (List.filteri (fun i _ -> i >= n - 3) l)
         in
+        let want =
+          [ "journal e2e first"; "journal e2e second"
+          ; "journal e2e third" ]
+        in
+        let deadline = Js.Date.now () +. 30000. in
+        let rec poll () =
+          let* last3 = read_last3 () in
+          if last3 = want || Js.Date.now () > deadline then
+            Js.Promise.resolve last3
+          else
+            let* () = Pw.wait_timeout env 400. in
+            poll ()
+        in
+        let* last3 = poll () in
         let* () =
-          if
-            last3
-            <> [ "journal e2e first"; "journal e2e second"
-               ; "journal e2e third" ]
-          then begin
+          if last3 <> want then begin
           (* where did 'first' land — dump every title+uuid the journal
              item mounted plus any stray match elsewhere on the page *)
           let* dump =

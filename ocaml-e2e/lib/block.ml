@@ -6,6 +6,36 @@ open Fest.Promise
     0-width editor does not open the last page block, so skip blocks nested
     under [.property-block-container]. *)
 let last_page_block_content env =
+  (* virtualized lists mount only the visible window — on journals the
+     tail may not be mounted at all, and "last block" resolves to the
+     journal page-title row. Scroll the scroller to the bottom and wait
+     until the mounted tail stops changing. *)
+  let scroll_bottom =
+    "(() => { const s = \
+     document.querySelector('[data-virtuoso-scroller]') || \
+     document.querySelector('#main-content-container'); if (s) { \
+     s.scrollTop = s.scrollHeight; return 'scroller'; } \
+     window.scrollTo(0, document.body.scrollHeight); return 'window'; \
+     })()"
+  in
+  let tail_sig =
+    "(() => { const els = document.querySelectorAll('.ls-page-blocks \
+     .page-blocks-inner .ls-block[blockid]'); const last = els.length ? \
+     els[els.length-1].getAttribute('blockid') : ''; return els.length + \
+     '|' + last; })()"
+  in
+  let rec settle prev tries =
+    if tries <= 0 then Js.Promise.resolve ()
+    else
+      let* _ = Pw.eval_js env scroll_bottom in
+      let* () = Pw.wait_timeout env 350. in
+      let* sg = Pw.eval_js env tail_sig in
+      let s =
+        match Js.Json.decodeString sg with Some s -> s | None -> ""
+      in
+      if s = prev then Js.Promise.resolve () else settle s (tries - 1)
+  in
+  let* () = settle "" 12 in
   (* locator.evaluate treats a string as an expression, so pick the index
      in-page and take .nth on the locator. *)
   let sel = ".ls-page-blocks .page-blocks-inner .ls-block .block-content" in
