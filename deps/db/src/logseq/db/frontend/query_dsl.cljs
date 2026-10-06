@@ -8,6 +8,45 @@
 
 (def ^:private tag-placeholder "~~~tag-placeholder~~~")
 
+(defn- quote-balanced-page-refs
+  "Replaces each top-level [[...]] outside a string by (f [match title]), and
+  keeps strings as they are. A [[ inside a ref opens a nested pair, so a
+  title like `Project[[Gremlin Garden]]` is kept whole rather than cut at the
+  first ]] (db-test #1374)."
+  [s f]
+  (let [n (count s)
+        out (js/Array.)]
+    (loop [i 0]
+      (if (>= i n)
+        (.join out "")
+        (let [c (.charAt s i)]
+          (cond
+            ;; a string: copy through its closing quote, escapes included
+            (= c "\"")
+            (let [end (loop [j (inc i)]
+                        (cond (>= j n) n
+                              (= "\\" (.charAt s j)) (recur (+ j 2))
+                              (= "\"" (.charAt s j)) (inc j)
+                              :else (recur (inc j))))]
+              (.push out (subs s i (min end n)))
+              (recur end))
+
+            (= "[[" (subs s i (+ i 2)))
+            (let [end (loop [j (+ i 2) depth 1]
+                        (cond (>= j n) nil
+                              (= "[[" (subs s j (+ j 2))) (recur (+ j 2) (inc depth))
+                              (= "]]" (subs s j (+ j 2))) (if (= depth 1)
+                                                              (+ j 2)
+                                                              (recur (+ j 2) (dec depth)))
+                              :else (recur (inc j) depth)))]
+              (if end
+                (do (.push out (f [(subs s i end) (subs s (+ i 2) (- end 2))]))
+                    (recur end))
+                (do (.push out c) (recur (inc i)))))
+
+            :else
+            (do (.push out c) (recur (inc i)))))))))
+
 (defn pre-transform
   [s]
   (if (common-util/wrapped-by-quotes? s)
@@ -24,7 +63,7 @@
                 (str "\"" page-ref/left-brackets page-name' page-ref/right-brackets "\""))
               match))]
       (some-> s
-              (string/replace #"\"(?:\\.|[^\"\\])*\"|\[\[(.*?)\]\]" quoted-page-ref)
+              (quote-balanced-page-refs quoted-page-ref)
               (string/replace #"\(between ([^\)]+)\)"
                               (fn [[_ x]]
                                 (->> (string/split x #" ")
