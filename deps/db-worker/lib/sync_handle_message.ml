@@ -293,6 +293,9 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
 
 let handle_hello repo (client : Sync_state.client) local_tx remote_tx
     remote_checksum =
+  (* a hello means a fresh handshake — any pull issued on the previous
+     socket can no longer be answered, so release the request_pull dedup *)
+  clear_pending_pull client;
   let remote_tx_n =
     match wire_to_int remote_tx with
     | Some n -> n

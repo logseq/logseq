@@ -1497,8 +1497,8 @@ let replay_pending_txs repo (conn : conn)
             with e -> (
               match e with
               | Dispatcher.Exn_info ("invalid rebase op", _)
-                  when references_pending_uuid (Conn.db conn) ~pending
-                         local_tx ->
+                  when references_pending_uuid (Conn.db conn)
+                         ~pending:(pending_txs repo ()) local_tx ->
                   Worker_log.info "db-sync/replay-deferred"
                     [ "repo", repo
                     ; "tx-id", local_tx.tx_id
@@ -1569,21 +1569,26 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
           (fun r -> replay_reports := r :: !replay_reports)
       in
       (try
-         let failed =
-           replay_pending_txs repo display_conn (Some db_before)
+         (* ops committed before a failing op stay applied — rebind to
+            the server base once more and replay the surviving queue
+            (failed entries are out of pending now) so no residue leaks
+            into the projection. Loop: an entry deferred on a dep that is
+            marked failed later in the same pass stays pending — each
+            pass fails >=1 entry, so iterate until a pass is clean. *)
+         let rec drain_failures () =
+           let failed =
+             replay_pending_txs repo display_conn (Some db_before)
+           in
+           if failed > 0 then begin
+             Conn.update_db display_conn (fun _ ->
+                 display_db_rebind_floor
+                   (display_db_from_server (Conn.db server_conn))
+                   ~floor:db_before.max_tx);
+             replay_reports := [];
+             drain_failures ()
+           end
          in
-         if failed > 0 then begin
-           (* ops committed before a failing op stay applied — rebind to
-              the server base once more and replay the surviving queue
-              (failed entries are out of pending now) so no residue
-              leaks into the projection *)
-           Conn.update_db display_conn (fun _ ->
-               display_db_rebind_floor
-                 (display_db_from_server (Conn.db server_conn))
-                 ~floor:db_before.max_tx);
-           replay_reports := [];
-           ignore (replay_pending_txs repo display_conn (Some db_before))
-         end
+         drain_failures ()
        with e ->
          Datascript.unlisten display_conn lid;
          raise e);
@@ -2082,14 +2087,17 @@ let split_off_server_if_remote ?(unapply_pending = true) repo : unit =
               targets so ancestor fallback can run; on a fresh restart
               under the new model it simply lacks them and those ops
               mark failed *)
-           let failed = replay_pending_txs repo display (Some db) in
-           if failed > 0 then begin
-             Conn.update_db display (fun _ ->
-                 display_db_rebind_floor
-                   (display_db_from_server (Conn.db conn))
-                   ~floor:db.max_tx);
-             ignore (replay_pending_txs repo display None)
-           end
+           let rec drain_failures (before : db option) =
+             let failed = replay_pending_txs repo display before in
+             if failed > 0 then begin
+               Conn.update_db display (fun _ ->
+                   display_db_rebind_floor
+                     (display_db_from_server (Conn.db conn))
+                     ~floor:db.max_tx);
+               drain_failures None
+             end
+           in
+           drain_failures (Some db)
          with exn ->
            (* a throw mid-split must not leave server_conn registered
               with no display conn — a retry would early-return into
