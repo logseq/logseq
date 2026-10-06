@@ -303,6 +303,25 @@
      (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) [(get-block 4) (get-block 5)] false))
     (is (= [3 4 5 6 9] (get-children 2)))))
 
+(deftest test-outdent-selection-over-2-levels
+  (testing "outdenting a deep block with a block 1 level up moves only the deep one out (db-test #1319)"
+    ;; 100 [101 [102 [103]] 104 105 106]: a=101, a1=102... as in the issue:
+    ;; a (a1; a2 (a2x)), b, c, d
+    (doseq [logical? [false true]]
+      (transact-tree! [[200 [[201 [[202] [203 [[204]]]]]
+                             [205]
+                             [206]
+                             [207]]]])
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/indent-outdent-blocks! (conn/get-db test-db false)
+                                             [(get-block 204) (get-block 205)] false
+                                             {:logical-outdenting? logical?}))
+      ;; a2x goes out 1 level, after a2 under a; b, c, d stay where they are
+      (is (= [202 203 204] (get-children 201)) (str "logical " logical?))
+      (is (= [201 205 206 207] (get-children 200)) (str "logical " logical?))
+      (is (= [] (get-children 205)) (str "logical " logical?)))))
+
 (deftest test-outdent-skips-comments-right-siblings
   (testing "
   [22 [[2 [[3]                  ; outdent 3
