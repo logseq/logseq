@@ -220,8 +220,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
   box ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
     ~data_attrs:heading_attrs
-    [ link ~key:("ctrl-" ^ uuid) ~url:"#" ~target:`self_
-        ~style_class:"block-control"
+    [ link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
         ~accessibility_identifier:("control-" ^ uuid)
         [ Ui_parts.class_signal cs
             (fun c -> if c then "control-show" else "control-hide")
@@ -262,10 +261,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
 
 (* cljs *control-show? (block-mouse-over/-leave on the main container):
    the fold caret shows only while hovering a collapsable-or-collapsed
-   block — mouseenter/mouseleave have no component-level equivalent so
-   the hover reveal is gone; control-show/hide still follows the
-   collapsed signal, which leaves the caret visible only on collapsed
-   blocks. *)
+   block — the hover half lives in lui-core.css as a
+   .block-main-container:hover > .block-control-wrap[data-has-children]
+   reveal; control-show/hide still follows the collapsed signal, which
+   keeps the caret visible on collapsed blocks. *)
 
 (* -- content vs editor -- *)
 
@@ -367,33 +366,29 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
       ; ("data-tag-priv", if priv then "true" else "false") ]
     [ row ~key:("tc-" ^ key) ~cross:`center
         [ (* the link kind renders a real <a> so a.hash-symbol css keeps
-             matching; "#" satisfies the Link url contract — the # is
-             decorative as in cljs *)
-          link ~key:("th-" ^ key) ~url:"#" ~target:`self_
+             matching; no url — the # is decorative as in cljs *)
+          link ~key:("th-" ^ key)
             ~style_class:"hash-symbol select-none" ~text:"#" []
         ; (if priv then Logseq_dom.nothing
            else
-             (* the a.tag-x css is tag-scoped so this must stay an <a>;
-                the link kind admits no Press — own the click via the
-                dom-node event escape instead *)
-             dom ~key:("tx-" ^ key) ~tag:"a"
-               ~style_class:
-                 "tag-x hash-symbol hidden cursor-pointer select-none"
-               ~attrs:[ ("aria-label", I18n.t "block/remove-this-tag") ]
-               ~events:"click"
-               ~on_dom_event:(fun name _ ->
-                 if name = "click" then
-                   ignore
-                     (Outliner_ops.apply_and_refresh
-                        [ Outliner_ops.op "delete-property-value"
-                            [ Wire.Uuid owner_uuid
-                            ; Wire.Keyword "block/tags"
-                            ; Wire.Int dbid ] ]))
-               ~text:"x"
-               [])
+             (* the 'x' press needs a pressable kind — link is not one,
+                so it renders as text; .block-tag:hover reveals it *)
+             Ui_parts.pressable
+               ~on_press:(fun _ ->
+                 ignore
+                   (Outliner_ops.apply_and_refresh
+                      [ Outliner_ops.op "delete-property-value"
+                          [ Wire.Uuid owner_uuid
+                          ; Wire.Keyword "block/tags"
+                          ; Wire.Int dbid ] ]))
+               (text ~key:("tx-" ^ key)
+                  ~style_class:"tag-x cursor-pointer select-none"
+                  ~data_attrs:
+                    [ ("aria-label", I18n.t "block/remove-this-tag") ]
+                  ~value:"x" []))
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
-          link ~key:("ta-" ^ key) ~url:"#" ~target:`self_
+          link ~key:("ta-" ^ key)
             ~style_class:"tag relative"
             ~data_attrs:
               [ ("tabindex", "0"); ("draggable", "true")

@@ -1903,6 +1903,16 @@ a.page-title {
   }
 }
 
+/* cljs block-mouse-over/-leave: hovering the block row reveals the fold
+   caret on collapsable blocks (collapsed ones always show it via
+   .control-show) */
+.block-main-container:hover
+  > .block-control-wrap[data-has-children="true"]
+  > .block-control
+  > .control-hide {
+  display: revert;
+}
+
 .bullet-container {
   display: inline-flex;
   height: 1em;
@@ -2542,11 +2552,23 @@ button[role='checkbox'][data-state='unchecked'] {
     opacity: 1;
   }
 
-  /* the hover-only remove-tag 'x' keeps .hidden until tag_hover swaps
-     it in — the hash-symbol display:flex above must not resurrect it
-     (cljs has no display on .block-tag a.hash-symbol so .hidden wins) */
-  a.hidden {
+  /* the remove-tag 'x' is hover-only: hidden until the tag is hovered
+     (cljs tag_hover swapped it in; it's a text node now, not an <a>,
+     so the a.* rules above no longer cover it) */
+  .tag-x {
     display: none;
+    font-size: 0.875rem;
+    font-weight: 400;
+    align-items: center;
+    opacity: 0.7;
+  }
+
+  &:hover .tag-x {
+    display: flex;
+  }
+
+  .tag-x:hover {
+    opacity: 1;
   }
 
   span {
