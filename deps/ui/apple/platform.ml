@@ -163,7 +163,13 @@ let console_log (_ : 'a) : unit = ()
 let console_error (_ : 'a) : unit = ()
 let date_now_ms () = Unix.gettimeofday () *. 1000.
 let perf_now () = Unix.gettimeofday () *. 1000.
-let perf_mark _ = ()
+
+let perf_log =
+  lazy (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
+
+let perf_mark name =
+  if Lazy.force perf_log then
+    Printf.eprintf "[mark] %s u=%.3f\n%!" name (Unix.gettimeofday ())
 
 let perf_time (name : string) (f : unit -> 'a) : 'a =
   let t0 = perf_now () in

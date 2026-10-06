@@ -12,7 +12,6 @@
 use std::os::raw::{c_char, c_int};
 use std::sync::Mutex;
 use std::time::Instant;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 mod editor;
 mod logseq_ext;
@@ -88,15 +87,38 @@ extern "C" {
     ) -> c_int;
     fn lui_ocaml_pump() -> c_int;
     fn lui_ocaml_platform_event(data: *const c_char, length: c_int) -> c_int;
+    fn lui_ocaml_register_current_thread() -> c_int;
 }
 
 /// Async completions run on OCaml worker systhreads; wakeup is the "go
 /// drain the mailbox" poke. The bridge forbids calling back into OCaml
-/// here, so just flag it — the pump tick on the UI thread does the rest.
-static WAKE: AtomicBool = AtomicBool::new(false);
+/// here, so just flag it — the dedicated pump thread does the rest.
+///
+/// The OCaml mailbox is drained on its own Rust thread, not the UI
+/// thread: the pump calls `lui_ocaml_pump` whose C entry acquires the
+/// OCaml domain lock, so UI frames (first paint, typing bursts) can
+/// never starve OCaml progress. wakeup_cb posts into this channel; a
+/// 16ms timeout keeps the periodic app clock (`Lui_app.flush` emits
+/// boot progress even with an empty mailbox).
+static PUMP_CH: std::sync::OnceLock<(
+    flume::Sender<()>,
+    flume::Receiver<()>,
+)> = std::sync::OnceLock::new();
+
+fn pump_tx() -> &'static flume::Sender<()> {
+    &PUMP_CH.get_or_init(flume::unbounded).0
+}
+
+fn pump_rx() -> &'static flume::Receiver<()> {
+    &PUMP_CH.get_or_init(flume::unbounded).1
+}
+
+fn request_pump() {
+    let _ = pump_tx().send(());
+}
 
 unsafe extern "C" fn wakeup_cb() {
-    WAKE.store(true, Ordering::Release);
+    request_pump();
 }
 
 /// "name\npayload" envelopes queued by OCaml (dom-op, clipboard,
@@ -113,6 +135,8 @@ unsafe extern "C" fn platform_request_cb(data: *const c_char, length: c_int) {
         if let Ok(mut queue) = PENDING_REQUESTS.lock() {
             queue.push(text.to_owned());
         }
+        // requests can arrive from OCaml worker threads — wake the pump
+        request_pump();
     }
 }
 
@@ -161,18 +185,37 @@ fn handle_platform_request(
     }
 }
 
-fn pump_tick(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
-    if WAKE.swap(false, Ordering::Acquire) {
-        // Pump the OCaml mailbox on the UI thread; new patches come back
-        // through patch_sink synchronously.
-        unsafe {
-            lui_ocaml_pump();
-        }
-        if std::env::var("LOGSEQ_PERF").is_ok() {
-            eprintln!("logseq-gpui: pump t={:.1}ms", boot_ms());
+/// UI-side tick: apply queued patches and service platform requests.
+/// The OCaml mailbox itself is pumped on the dedicated pump thread, so
+/// this stays light even while OCaml is mid-flush.
+fn pump_tick(shared: &Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui_kit::gpui::App) {
+    drain_patches(shared, cx);
+    drain_requests(shared, cx);
+    lui_gpui::dom::fire_viewport_events(shared, window, cx);
+}
+
+/// vsync-driven tick scheduled from the window: `cx.spawn` +
+/// `background_executor().timer` futures never resolve in this gpui-kit
+/// version, so the UI tick rides the window's frame callbacks instead.
+fn tick_frame(shared: Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui_kit::gpui::App) {
+    pump_tick(&shared, window, cx);
+    window.on_next_frame(move |window, cx| {
+        tick_frame(shared.clone(), window, cx);
+    });
+}
+
+fn drain_requests(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
+    // debug: LOGSEQ_GPUI_DUMP_TREE=<ms> dumps the store tree once after t
+    static DUMPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !DUMPED.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Ok(ms) = std::env::var("LOGSEQ_GPUI_DUMP_TREE") {
+            if boot_ms() >= ms.parse::<f64>().unwrap_or(0.0) {
+                DUMPED.store(true, std::sync::atomic::Ordering::Relaxed);
+                eprintln!("logseq-gpui: dumping tree t={:.1}ms", boot_ms());
+                lui_gpui::domops::handle_dom_op(shared, "dump-frames", "", cx);
+            }
         }
     }
-    drain_patches(shared, cx);
     let requests = PENDING_REQUESTS
         .lock()
         .map(|mut queue| std::mem::take(&mut *queue))
@@ -234,7 +277,23 @@ fn main() {
         eprintln!("logseq-gpui: OCaml app rejected init");
         std::process::exit(1);
     }
-    eprintln!("logseq-gpui: OCaml init ok, pid {}", std::process::id());
+    eprintln!("logseq-gpui: OCaml init ok t={:.1}ms pid {}", boot_ms(), std::process::id());
+
+    // Dedicated OCaml pump thread: drains the app mailbox so OCaml
+    // progress never waits on UI-frame scheduling. The bridge's
+    // leave/enter-blocking-section entries serialize this thread
+    // against event entry points called on the UI thread.
+    std::thread::spawn(|| {
+        unsafe {
+            lui_ocaml_register_current_thread();
+        }
+        loop {
+            let _ = pump_rx().recv_timeout(std::time::Duration::from_millis(16));
+            unsafe {
+                lui_ocaml_pump();
+            }
+        }
+    });
 
     if let Ok(secs) = std::env::var("LOGSEQ_GPUI_START_DELAY") {
         std::thread::sleep(std::time::Duration::from_secs_f64(
@@ -255,55 +314,40 @@ fn main() {
         // this crate and plug in through the same override hook.
         logseq_ext::register(&shared);
 
-        cx.spawn({
-            let shared = shared.clone();
-            async move |cx| {
-                let options = WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                        point(px(80.), px(80.)),
-                        size(px(1280.), px(840.)),
-                    ))),
-                    ..Default::default()
-                };
-                eprintln!("logseq-gpui: opening window");
-                cx.open_window(options, |window, cx| {
-                    eprintln!("logseq-gpui: window opened");
-                    // bare binary launches come up inactive — without this
-                    // the window can't become macOS key window and keyboard
-                    // input never reaches it
-                    window.activate_window();
-                    drain_patches(&shared, cx);
-                    let root_id = unsafe { bridge::lui_ocaml_root_node() };
-                    if root_id > 0 {
-                        shared.borrow_mut().store.root = Some(root_id);
-                    }
-                    let view = cx.new(|_| LuiRootView::new(shared.clone()));
-                    cx.new(|cx| Root::new(view, window, cx))
-                })
-                .expect("Failed to open window");
-                // bare binary launches come up inactive — without this the
-                // window can't become macOS key window and keyboard input
-                // never reaches it
-                let _ = cx.update(|cx| cx.activate(true));
+        let options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                point(px(80.), px(80.)),
+                size(px(1280.), px(840.)),
+            ))),
+            ..Default::default()
+        };
+        eprintln!("logseq-gpui: opening window t={:.1}ms", boot_ms());
+        cx.open_window(options, |window, cx| {
+            eprintln!("logseq-gpui: window opened t={:.1}ms", boot_ms());
+            // bare binary launches come up inactive — without this
+            // the window can't become macOS key window and keyboard
+            // input never reaches it
+            window.activate_window();
+            drain_patches(&shared, cx);
+            let root_id = unsafe { bridge::lui_ocaml_root_node() };
+            if root_id > 0 {
+                shared.borrow_mut().store.root = Some(root_id);
             }
+            let view = cx.new(|_| LuiRootView::new(shared.clone()));
+            // vsync-driven tick: drain queued patches + platform
+            // requests on the UI thread (cx.spawn + timer never
+            // resolves in this gpui-kit — see tick_frame)
+            window.on_next_frame({
+                let shared = shared.clone();
+                move |window, cx| tick_frame(shared, window, cx)
+            });
+            cx.new(|cx| Root::new(view, window, cx))
         })
-        .detach();
-
-        // Pump OCaml's async mailbox + platform requests on a short tick.
-        // wakeup_cb only flags WAKE; this loop is what actually calls
-        // lui_ocaml_pump (must run on the OCaml-registered UI thread).
-        cx.spawn({
-            let shared = shared.clone();
-            async move |cx| {
-                loop {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_millis(16))
-                        .await;
-                    let _ = cx.update(|cx| pump_tick(&shared, cx));
-                }
-            }
-        })
-        .detach();
+        .expect("Failed to open window");
+        // bare binary launches come up inactive — without this the
+        // window can't become macOS key window and keyboard input
+        // never reaches it; deferred so it lands after app.run settles
+        cx.defer(|cx| cx.activate(true));
     });
 }
 

@@ -16,6 +16,13 @@ let enabled_min ~virtualize ~min count =
 
 let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 
+(* gpui's eager rows sit inside one shared taffy layout, so the Swift
+   spine's 48-row warmup is far above its cold-start budget — a single
+   viewport of eager rows keeps the first frame cheap; the lazy-mount
+   sweep fills in the overscan margin right after paint *)
+let clamp_initial_rows ctx n =
+  if n >= 0 && Lui_ui.host ctx = Lui_protocol.GPUIHost then min n 16 else n
+
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(estimate_size = fun _ -> 32.) ?(initial_rows = -1) ?(list_attrs = [])
     ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
@@ -88,6 +95,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
        source, so splices keep identity either way. The eager set is
        keyed by row id, not index — indexing the source would dirty
        every downstream row signal on any splice. *)
+    let initial_rows = clamp_initial_rows ctx initial_rows in
     let eager : (string, unit) Hashtbl.t = Hashtbl.create 64 in
     if initial_rows >= 0 then
       Array.iteri
@@ -161,6 +169,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
      mount their real content when the spine reports them near the
      viewport. Keyed by row id — index-based gating would dirty every
      downstream signal on a splice. *)
+  let initial_rows = clamp_initial_rows ctx initial_rows in
   let eager : (string, unit) Hashtbl.t = Hashtbl.create 64 in
   if initial_rows >= 0 then
     List.iteri

@@ -1142,8 +1142,10 @@ let journal_item_sig (ms : Model.t Signal.signal)
                         (box ~key:"blw"
                            ~style_class:"blocks-list-wrap"
                            ~data_attrs:[ ("data-level", "0") ]
-                           [ Logseq_dom.keyed ~source:blocks_sig
+                           [ Lazy_children.lazy_rows ~source:blocks_sig
                                ~key:Tree.block_key ~cmp:String.compare
+                               ~estimate_height:(fun b ->
+                                 32. +. Tree.estimate_children_height b)
                                ~mount:(Tree.block_row_sig ~scope:"main")
                            ])
                     ]

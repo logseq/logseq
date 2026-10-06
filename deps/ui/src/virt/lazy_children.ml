@@ -98,3 +98,9 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
             ~min_height:(int_of_float (Float.round min_height)) [])
      ; D.if_ ~test:near_sig (render ()) ])
     ctx parent
+
+(* Web journal rows stay eager — the page-level virtualizer owns the
+   windowing and nested per-row IO gates would fight its measurements.
+   Only the native twin gates rows (gpui first-frame cost). *)
+let lazy_rows ~key ~cmp ~mount ~estimate_height:_ ~source : t =
+  D.keyed ~source ~key ~cmp ~mount

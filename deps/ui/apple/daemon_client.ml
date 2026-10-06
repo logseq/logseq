@@ -542,10 +542,12 @@ let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
       | [ Wire.String "db-worker-runtime"; Wire.String repo; _ ] ->
           boot_mark ("ipc db-worker-runtime " ^ repo);
           let base = ensure_attached repo in
-          ensure_login_daemon repo;
           Host.enqueue (fun () ->
               resolve
-                (Wire.Map [ (Wire.kw "base-url", Wire.String base) ]))
+                (Wire.Map [ (Wire.kw "base-url", Wire.String base) ]));
+          (* launchctl calls take ~300ms — keep them off the ipc
+             resolution path *)
+          ensure_login_daemon repo
       | [ Wire.String "releaseDbWorkerRuntime"; Wire.String repo ] ->
           (* detach only — the daemon keeps the repo open so a later
              attach (or the next app launch) is instant *)
