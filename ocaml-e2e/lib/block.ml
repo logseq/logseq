@@ -664,10 +664,38 @@ let toggle_property env property_title property_value =
 let select_blocks env n =
   (* element-targeted while editing: *:focus can be <body> after a
      remount and the shift-chord is then silently dropped *)
+  let selected_count () =
+    Pw.eval_js env
+      "(async () => ((await window.logseq.api.get_selected_blocks()) || []).length)()"
+  in
+  let wait_count deadline () =
+    let rec poll () =
+      let* (c : float) = selected_count () in
+      if c >= float_of_int n || Js.Date.now () > deadline
+      then Js.Promise.resolve (int_of_float c)
+      else
+        let* () = Util.wait_timeout env 150. in
+        poll ()
+    in
+    poll ()
+  in
   let* editor = Util.get_editor env in
   let* () =
     match editor with
     | Some _ -> Util.repeat_keyboard_in_editor env n "Shift+ArrowUp"
     | None -> Util.repeat_keyboard env n "Shift+ArrowUp"
   in
-  Util.wait_timeout env 200.
+  (* dropped chords leave the selection short or empty; extend or retry
+     once — the presses commit asynchronously under load *)
+  let* c = wait_count (Js.Date.now () +. 4000.) () in
+  let* () =
+    if c >= n then Js.Promise.resolve ()
+    else
+      let missing = if c > 0 then n - c else n in
+      let* () =
+        Util.repeat_keyboard_in_editor env missing "Shift+ArrowUp"
+      in
+      let* _ = wait_count (Js.Date.now () +. 3000.) () in
+      Js.Promise.resolve ()
+  in
+  Util.wait_timeout env 100.
