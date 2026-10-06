@@ -326,6 +326,32 @@ let new_block env title =
      remounts the view — re-open and retry instead of waiting 30s on a
      textarea that never comes back. *)
   let rec enter_new_block n =
+    (* snapshot the mounted blockids BEFORE pressing — a remount that
+       reopens editing on a pre-existing block moves editor/block to a
+       uuid that was already rendered; a real insert always mints a
+       uuid that was nowhere in the DOM *)
+    let* prev_ids_json =
+      Pw.eval_js env
+        "(() => JSON.stringify([...document.querySelectorAll('.ls-block[blockid]')].map(b => b.getAttribute('blockid'))))()"
+    in
+    let prev_ids =
+      match Js.Json.decodeString prev_ids_json with
+      | Some s ->
+          (match
+             Js.Json.decodeArray
+               (try Js.Json.parseExn s with _ -> Js.Json.array [||])
+           with
+           | Some a ->
+               Array.to_list
+                 (Array.map
+                    (fun v ->
+                       match Js.Json.decodeString v with
+                       | Some s -> s
+                       | None -> "")
+                    a)
+           | None -> [])
+      | None -> []
+    in
     (* short timeout on the press: if the editor vanished mid-remount the
        locator would otherwise burn the full 30s before we can re-open *)
     let* pressed =
@@ -340,14 +366,56 @@ let new_block env title =
        confirm it moved: a delivered-but-dropped Enter (remote remount
        ate the keydown) looks exactly like a swallowed one. Re-press
        only while the state is still on the old block, so a late insert
-       can never mint a duplicate block. *)
+       can never mint a duplicate block. Editing can also move onto a
+       *pre-existing* block when a remount reopens an old editor —
+       typing+deleting there silently consumes a real block, so require
+       a uuid that was not in the DOM before the press. *)
     let* moved =
       if pressed then
         let deadline = Js.Date.now () +. 6000. in
         let rec moved_loop () =
           let* u = Util.editing_uuid env in
           match u with
-          | Some u when u <> last_uuid -> Js.Promise.resolve true
+          | Some u when u <> last_uuid && not (List.mem u prev_ids) ->
+              (* the uuid was not in the DOM before the press → a genuine
+                 insert; also confirm it lands after the previous block in
+                 DOM order once both are mounted *)
+              let* positioned =
+                Js.Promise.catch
+                  (fun _ -> Js.Promise.resolve false)
+                  (Js.Promise.then_
+                     (fun j ->
+                        Js.Promise.resolve
+                          (match Js.Json.decodeObject j with
+                           | Some o ->
+                               (match
+                                  ( Js.Dict.get o "pi"
+                                    |> Option.map Js.Json.decodeNumber
+                                  , Js.Dict.get o "ni"
+                                    |> Option.map Js.Json.decodeNumber )
+                               with
+                                | Some (Some pi), Some (Some ni) -> ni > pi
+                                | _ -> false)
+                           | None -> false))
+                     (Pw.eval_js env
+                        (Printf.sprintf
+                           "(() => { const blocks = \
+                            [...document.querySelectorAll('.ls-block[blockid]')]; \
+                            const ids = blocks.map(b => \
+                            b.getAttribute('blockid')); const pi = \
+                            ids.indexOf('%s'); const ni = \
+                            ids.indexOf('%s'); return \
+                            JSON.stringify({pi, ni}); })()"
+                           last_uuid u)))
+              in
+              if positioned then Js.Promise.resolve true
+              else if Js.Date.now () > deadline then
+                Js.Promise.resolve true
+                (* position unverifiable (row not mounted yet) — the
+                   fresh-uuid check already proves the insert *)
+              else
+                let* () = Util.wait_timeout env 150. in
+                moved_loop ()
           | _ ->
               if Js.Date.now () > deadline then Js.Promise.resolve false
               else
