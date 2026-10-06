@@ -15,6 +15,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -81,7 +82,26 @@
 (def ^:private page-for-create-selector
   '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
     {:block/tags [:db/id :db/ident :block/uuid :block/title]}
+    :logseq.property/built-in?
     {:block/parent ...}])
+
+(defn- reusable-for-create?
+  "Whether creating a page with a title can open the page the name lookup
+  found instead. The lookup returns the oldest page of that name of any kind
+  anywhere, but only an ordinary page outside a namespace (or a journal) is
+  the page being asked for, as the worker's create decides: with \"Foo/Bar\"
+  or a tag \"Foo\", creating the page \"Bar\" or \"foo\" opened them instead of
+  creating it (db-test #1345)."
+  [page]
+  (let [tag-idents (set (keep :db/ident (:block/tags page)))
+        parent (:block/parent page)]
+    (or (contains? tag-idents :logseq.class/Journal)
+        (and (contains? tag-idents :logseq.class/Page)
+             (not (contains? tag-idents :logseq.class/Tag))
+             (not (contains? tag-idents :logseq.class/Property))
+             (or (nil? parent)
+                 (and (:logseq.property/built-in? parent)
+                      (= common-config/library-page-name (:block/title parent))))))))
 
 (defn- <page-for-create
   [page-id-or-title]
@@ -138,7 +158,9 @@
            ;; With explicit tags, the worker finds an existing page by title and tags
            (p/let [existing-page (when-not (or class? (seq (:tags options)))
                                    (<page-for-create title'))]
-             (if (and existing-page (not (ldb/recycled? existing-page)))
+             (if (and existing-page
+                      (not (ldb/recycled? existing-page))
+                      (reusable-for-create? existing-page))
                (do
                  (when redirect?
                    (route-handler/redirect-to-page! (:block/uuid existing-page))
