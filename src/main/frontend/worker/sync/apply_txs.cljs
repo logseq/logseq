@@ -1941,24 +1941,18 @@
 
 (defn- enqueue-local-tx-aux
   [repo {:keys [tx-data db-after db-before] :as tx-report}]
-  (let [normalized (normalize-tx-data db-after db-before tx-data)
-        local-graph? (worker-undo-redo/local-graph? db-after)
-        reversed-datoms (when-not local-graph?
-                          (reverse-tx-data db-before db-after tx-data))]
-    ;; (prn :debug :reversed-datoms reversed-datoms)
-    ;; (prn :debug :enqueue-local-tx :tx-data)
-    ;; (cljs.pprint/pprint tx-data)
-    ;; (prn :debug :enqueue-local-tx :normalized)
-    ;; (cljs.pprint/pprint normalized)
-
-    (when (seq normalized)
-      (if local-graph?
-        (record-local-graph-undo! repo tx-report)
-        (do
-          (persist-local-tx! repo tx-report normalized reversed-datoms)
-          (when-let [client @worker-state/*db-sync-client]
-            (when (= repo (:repo client))
-              (enqueue-flush-pending! repo client))))))))
+  (if (worker-undo-redo/local-graph? repo db-after)
+    ;; no upload data is built for a graph that does not sync; a transaction
+    ;; of attributes sync ignores gets no undo entry, as on a synced graph
+    (when (seq (remove-ignored-attrs tx-data))
+      (record-local-graph-undo! repo tx-report))
+    (let [normalized (normalize-tx-data db-after db-before tx-data)]
+      (when (seq normalized)
+        (persist-local-tx! repo tx-report normalized
+                           (reverse-tx-data db-before db-after tx-data))
+        (when-let [client @worker-state/*db-sync-client]
+          (when (= repo (:repo client))
+            (enqueue-flush-pending! repo client)))))))
 
 (defn- persistable-local-tx-meta?
   [tx-meta]
@@ -1981,8 +1975,8 @@
 (defn- graph-becomes-remote?
   [db-before db-after]
   (and db-before db-after
-       (worker-undo-redo/local-graph? db-before)
-       (not (worker-undo-redo/local-graph? db-after))))
+       (not (worker-undo-redo/graph-remote-flag? db-before))
+       (worker-undo-redo/graph-remote-flag? db-after)))
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta db-before db-after] :as tx-report}]
