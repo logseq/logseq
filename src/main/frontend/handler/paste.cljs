@@ -48,32 +48,34 @@
 (defn- document-text->outline
   [text]
   (let [encoded (utf8/encode text)
-        ast (vec (mldoc/->edn text :markdown))]
-    (apply str
-           (map-indexed
-            (fn [index [[kind _] {:keys [start_pos end_pos]}]]
-              (let [part (utf8/substring encoded start_pos end_pos)
-                    [previous-kind previous-data] (when (pos? index) (first (nth ast (dec index))))
-                    start-paragraph? (or (not= previous-kind "Heading")
-                                         (:size previous-data)
-                                         (string/starts-with? part "\n"))]
-                (if (= kind "Paragraph")
-                  (->> (string/split part paragraph-break-pattern)
-                       (map-indexed (fn [paragraph-index paragraph]
-                                      (if (or start-paragraph? (pos? paragraph-index))
-                                        (string/replace-first paragraph #"^([\r\n\t ]*)(\S)" "$1- $2")
-                                        paragraph)))
-                       (string/join "\n\n"))
-                  part)))
-            ast))))
+        ast (filterv (comp some? second) (mldoc/->edn text :markdown))]
+    (str (apply str
+                (map-indexed
+                 (fn [index [[kind _] {:keys [start_pos end_pos]}]]
+                   (let [part (utf8/substring encoded start_pos end_pos)
+                         previous-end (if (pos? index) (:end_pos (second (nth ast (dec index)))) 0)
+                         [previous-kind previous-data] (when (pos? index) (first (nth ast (dec index))))
+                         start-paragraph? (or (not= previous-kind "Heading")
+                                              (:size previous-data)
+                                              (string/starts-with? part "\n"))]
+                     (str (utf8/substring encoded previous-end start_pos)
+                          (if (= kind "Paragraph")
+                            (->> (string/split part paragraph-break-pattern)
+                                 (map-indexed (fn [paragraph-index paragraph]
+                                                (if (or start-paragraph? (pos? paragraph-index))
+                                                  (string/replace-first paragraph #"^([\r\n\t ]*)(\S)" "$1- $2")
+                                                  paragraph)))
+                                 (string/join "\n\n"))
+                            part))))
+                 ast))
+         (utf8/substring encoded (if (seq ast) (:end_pos (second (peek ast))) 0)))))
 
 (defn- paste-text-parseable
   [format text]
   (when-let [editing-block (state/get-edit-block)]
     (let [repo (state/get-current-repo)
-          date-formatter (state/get-date-formatter)]
-      (when (state/get-input)
-        (commands/delete-selection! (state/get-edit-input-id)))
+          date-formatter (state/get-date-formatter)
+          input-id (state/get-edit-input-id)]
       (p/let [page-info (db-async/<get-block-page-info repo (or (:db/id editing-block)
                                                                 (:block/uuid editing-block)))
               blocks (block/extract-blocks
@@ -96,9 +98,12 @@
                                                               (db-content/title-ref->id-ref title' refs)))))))
                              blocks))]
         (when-not (and (= repo (state/get-current-repo))
+                       (= input-id (state/get-edit-input-id))
                        (= (:block/uuid editing-block)
                           (:block/uuid (state/get-edit-block))))
           (throw (ex-info "Paste target changed while parsing clipboard text" {})))
+        (when (state/get-input)
+          (commands/delete-selection! input-id))
         (editor-handler/paste-blocks blocks' {:keep-uuid? true
                                               :outliner-real-op :paste-text})))))
 
@@ -192,7 +197,8 @@
 (defn- markdown-blocks?
   [text]
   (boolean (or (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+|\d+[.)])\s+" text)
-               (util/safe-re-find #"(?m)^\s*```[^\r\n]*\r?$" text)
+               (util/safe-re-find #"(?m)^\s*(?:`{3,}|~{3,})[^\r\n]*\r?$" text)
+               (util/safe-re-find #"(?m)^[\t ]*\|?(?:[\t ]*:?-+:?[\t ]*\|)+[\t ]*:?-*:?[\t ]*$" text)
                (util/safe-re-find #"(?m)^\s*\$\$\s*\r?$" text))))
 
 (defn- get-revert-cut-txs

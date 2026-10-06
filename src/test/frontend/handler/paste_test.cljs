@@ -53,7 +53,7 @@
             (is (= (:block/parent parent) (:block/parent sibling)))
             (is (= (:block/uuid parent) (second (:block/parent child))))))))))
 
-(deftest-async outline-paste-deletes-selected-text-before-parsing
+(deftest-async outline-paste-deletes-selected-text-after-parsing
   (let [deleted (atom false)]
     (p/with-redefs
      [state/get-current-repo (constantly "test")
@@ -61,9 +61,44 @@
       state/get-input (constantly #js {})
       state/get-edit-input-id (constantly "editor")
       commands/delete-selection! (fn [id] (is (= "editor" id)) (reset! deleted true))
-      db-async/<get-block-page-info (fn [& _] (is @deleted) (p/resolved {:db/id 1 :block/name "target"}))
-      editor-handler/paste-blocks (fn [_ _] (p/resolved nil))]
+      db-async/<get-block-page-info (fn [& _] (is (false? @deleted)) (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [_ _] (is @deleted) (p/resolved nil))]
       (#'paste-handler/paste-text-parseable :markdown "- First\n- Second"))))
+
+(deftest-async failed-outline-paste-preserves-selection
+  (let [deleted (atom false)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:db/id 10})
+      state/get-input (constantly #js {})
+      commands/delete-selection! (fn [_] (reset! deleted true))
+      db-async/<get-block-page-info (fn [& _] (p/rejected (ex-info "Lookup failed" {})))
+      editor-handler/paste-blocks (fn [_ _] (is false "Failed paste should not insert"))]
+      (-> (#'paste-handler/paste-text-parseable :markdown "- First\n- Second")
+          (p/then (fn [_] (is false "Lookup failure should propagate")))
+          (p/catch (fn [error]
+                     (is (= "Lookup failed" (ex-message error)))
+                     (is (false? @deleted))))))))
+
+(deftest-async outline-paste-does-not-target-another-container-for-the-same-node
+  (let [input-id (atom "table-editor")
+        deleted (atom false)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:block/uuid (random-uuid)})
+      state/get-edit-input-id (fn [] @input-id)
+      state/get-input (constantly #js {})
+      commands/delete-selection! (fn [_] (reset! deleted true))
+      db-async/<get-block-page-info
+      (fn [& _]
+        (reset! input-id "sidebar-editor")
+        (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [_ _] (is false "Changed input should cancel the paste"))]
+      (-> (#'paste-handler/paste-text-parseable :markdown "- First\n- Second")
+          (p/then (fn [_] (is false "Changed input should cancel the paste")))
+          (p/catch (fn [error]
+                     (is (= "Paste target changed while parsing clipboard text" (ex-message error)))
+                     (is (false? @deleted))))))))
 
 (deftest-async outline-paste-does-not-target-another-editor
   (let [target (atom {:block/uuid (random-uuid)})
@@ -138,6 +173,26 @@
   (is (= "| A | B |\n|---|---|\n| 1 | 2 |\n\n- After"
          (#'paste-handler/document-text->outline
           "| A | B |\n|---|---|\n| 1 | 2 |\n\nAfter"))))
+
+(deftest structured-paste-preserves-metadata-source-once
+  (are [text] (= text (#'paste-handler/document-text->outline text))
+    "#+title: Título\n- First\n- Second\n"
+    "---\ntitle: Título\n---\n- First\n- Second\n"
+    "#+title: Título\n"))
+
+(deftest-async external-paste-preserves-standalone-tables-and-tilde-fences
+  (let [captured (atom nil)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:db/id 10})
+      state/get-input (constantly nil)
+      editor-format/get-selection-and-format (constantly {})
+      db-async/<get-block-page-info (fn [& _] (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [blocks _] (reset! captured blocks) (p/resolved nil))]
+      (p/doseq [[text expected] [["| A | B |\n|---|---|\n| 1 | 2 |" ["| A | B |\n|---|---|\n| 1 | 2 |"]]
+                                ["~~~txt\nFirst\nSecond\n~~~" ["~~~txt\nFirst\nSecond\n~~~"]]]]
+        (p/let [_ (#'paste-handler/paste-copied-text nil text nil)]
+          (is (= expected (mapv :block/title @captured))))))))
 
 (deftest selection-within-link-test
   (are [x y] (= (#'paste-handler/selection-within-link? x) y)
