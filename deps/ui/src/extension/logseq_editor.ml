@@ -40,7 +40,7 @@
 open Lui_protocol
 module W = Webapi.Dom
 
-let identifier = "logseq-editor"
+let identifier = Editor_sink.identifier
 
 let web_profile =
   { Lui_protocol.profile_os = WebOS; Lui_protocol.profile_host = WebHost }
@@ -603,7 +603,11 @@ let set_property el name v =
   | "block-id", StringValue s ->
       if st.block_id <> "" then Hashtbl.remove by_block st.block_id;
       st.block_id <- s;
-      Hashtbl.replace by_block s el
+      Hashtbl.replace by_block s el;
+      (* mirrored as a DOM attr so document-level dispatch
+         (editor_keys) can resolve a target's block without reaching
+         into this module's state *)
+      set_attr el "data-block-id" s
   | "caret", IntValue n ->
       st.caret_off <- n;
       reanchor el
@@ -615,7 +619,8 @@ let remove_property el name =
   match name with
   | "block-id" ->
       if st.block_id <> "" then Hashtbl.remove by_block st.block_id;
-      st.block_id <- ""
+      st.block_id <- "";
+      set_attr el "data-block-id" ""
   | _ -> ()
 
 let cleanup el =
@@ -665,3 +670,62 @@ let conduit block_id : Edit_input.conduit option =
         ; line_ranges = (fun () -> line_ranges_el el)
         ; set_input_focus = (fun b -> if b then focus el else blur el)
         }
+
+(* --- imperative accessors for the editing layer -------------------------
+   The editor machinery (pending focus, popup anchors, document key
+   dispatch) resolves blocks through by_block — the hidden input is the
+   focus target; the .block-editor container anchors popup placement. *)
+
+external el_json : W.Element.t -> Js.Json.t = "%identity"
+
+let input_el block_id = Hashtbl.find_opt by_block block_id
+
+let focus_input block_id =
+  match input_el block_id with
+  | Some el -> focus el
+  | None -> ()
+
+let is_focused block_id =
+  match (input_el block_id, Web_dom.active_element ()) with
+  | Some el, Some ae -> ae == el_json el
+  | _ -> false
+
+
+(* caret anchor for popups, in viewport coords — mirrors the old
+   caret_popup_pos contract: (x, y bottom of the caret line, y top) *)
+let popup_pos block_id : (float * float * float) option =
+  match input_el block_id with
+  | None -> None
+  | Some el ->
+      let st = state_of el in
+      Option.map
+        (fun r -> (r.fx -. 20., r.fy +. r.fh, r.fy))
+        (caret_rect_el el st.caret_off)
+
+(* bounding rect of the block-editor container — popup clamp anchor.
+   Returns (left, top, right, bottom) viewport px *)
+let container_rect block_id : (float * float * float * float) option =
+  match input_el block_id with
+  | Some el -> (
+      match container_of el with
+      | Some c ->
+          let r = el_rect c in
+          Some
+            ( rect_left r
+            , rect_top r
+            , rect_right r
+            , rect_top r +. rect_height r )
+      | None -> None)
+  | None -> None
+
+(* install this surface's implementation for shared editor code; module
+   load order guarantees it is set before any mounted editor produces
+   events (Editor_sink defaults make early calls no-ops anyway) *)
+let () =
+  Editor_sink.register
+    { Editor_sink.conduit
+    ; focus_input
+    ; is_focused
+    ; popup_pos
+    ; container_rect
+    }

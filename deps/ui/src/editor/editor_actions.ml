@@ -12,10 +12,9 @@ let ( let* ) p f = Js.Promise.then_ f p
 
 let live_buffer uuid =
   (* code-fence blocks edit inside a mounted CodeMirror — its doc, not
-     the hidden textarea, holds the live value. For plain textareas
-     e.buffer is authoritative: every write path (on_input, splices,
-     undo) goes through sync_buffer, and the DOM copy is stale while
-     the textarea is remounting *)
+     the block model, holds the live value. For the logseq-editor
+     surface e.buffer is authoritative: it always mirrors
+     e.model.source *)
   match !(S.code_buffer_of) uuid with
   | Some v -> v
   | None -> (
@@ -23,21 +22,53 @@ let live_buffer uuid =
       | Some e when e.uuid = uuid -> e.buffer
       | _ -> "")
 
-let sync_buffer uuid v =
-  S.set_silent (fun st ->
+(* -- edit model ---------------------------------------------------------- *)
+
+let edit_model uuid =
+  match S.editing () with
+  | Some e when e.uuid = uuid -> Some e.S.model
+  | _ -> None
+
+(* republish the editing record with a new model — the view repaints off
+   editing_sig. Guards uuid so ops that swapped the editing block
+   mid-event aren't clobbered by a stale publish *)
+let update_model uuid f =
+  S.set (fun st ->
       match st.S.editing with
-      | Some e when e.uuid = uuid ->
-          { st with S.editing = Some { e with S.buffer = v } }
-      | _ -> st);
-  (* cljs renders the buffer as the textarea's text child; keep
-     textContent tracking .value (buffer writes are silent, so the
-     text_signal in tree.ml never fires on keystrokes) *)
-  match D.textarea_of uuid with
-  | Some el -> D.el_set_text_content el v
-  | None -> ()
+      | Some e when e.S.uuid = uuid ->
+          { st with S.editing = Some (S.with_model e (f e.S.model)) }
+      | _ -> st)
+
+let caret_of uuid =
+  match edit_model uuid with
+  | Some m -> m.Edit_model.caret
+  | None -> 0
+
+(* ordered selection span — collapsed caret gives (c, c) *)
+let sel_span_of (m : Edit_model.t) =
+  match m.anchor with
+  | Some a -> (min a m.caret, max a m.caret)
+  | None -> (m.caret, m.caret)
+
+let sel_span uuid =
+  match edit_model uuid with
+  | Some m -> sel_span_of m
+  | None -> (0, 0)
+
+let set_caret uuid pos =
+  update_model uuid (fun m -> Edit_model.select m ~anchor:pos ~focus:pos)
+
+(* splice [lo, hi) -> text; caret lands after the inserted text *)
+let splice_range uuid lo hi text =
+  update_model uuid (fun m -> Edit_model.splice m lo hi text)
+
+(* replace the buffer without touching caret/selection beyond clamping —
+   external resyncs (undo/redo, remote tx) go through set_source *)
+let sync_buffer uuid v =
+  update_model uuid (fun m -> Edit_model.set_source m v)
 
 (* focus recovery runs one pass per Runtime.flush (wired in main.ml):
-   the textarea a pending arm waits for mounts through a DOM patch, and
+   the .ed-input a pending arm waits for mounts through a DOM patch, and
    every patch path ends in a flush — so a pass after each flush is the
    only retry the flow needs. Queued keys replay one per pass: a
    replayed nav/structural op re-enters edit mode asynchronously
@@ -80,62 +111,43 @@ let rec apply_focus () =
         S.pending_focus := None;
         focus_attempts := 0;
         last_focus_emitted := None;
-        drain_pending_focus_actions ())      else
-      match D.textarea_of uuid with
-      | Some el -> (
-          D.autosize_textarea el;
-          (* emit the focus op once per target: the host applies it when
-             the element materializes, so re-emitting just floods the
-             main-thread queue — each op costs a render invalidation *)
-          let key = D.el_dom_id el in
-          if key <> !last_focus_emitted then begin
-            D.el_focus el;
-            last_focus_emitted := key
-          end;
-          (* a pending apply+refresh can still replace this node after
-             landing — only consume the pending state once the element
-             really holds focus; otherwise keep retrying so the remounted
-             editor gets it *)
-          match D.active_element () with
-          | Some ae when ae == el ->
-              S.pending_focus := None;
-              focus_attempts := 0;
-              last_focus_emitted := None;              (* a landing that ran late (remount during a remote-tx
-                 refresh) must not stomp the caret: if the user typed
-                 since this focus was requested, the stored caret is
-                 stale — keep where the DOM put it *)
-              if !S.last_edit_input_ms <= armed_ms then (
-                let len = String.length (D.el_value el) in
-                let c = max 0 (min caret len) in
-                D.el_set_selection_range el c c);
-              drain_pending_focus_actions ()
-          | ae ->
-              prerr_endline
-                ("PERF focus-retry t="
-                 ^ string_of_float (Platform.date_now_ms () /. 1000.)
-                 ^ " uuid=" ^ uuid ^ " ae="
-                 ^ (match ae with
-                    | Some _ -> "some(other)"
-                    | None -> "none"));
-              flush stderr;
-              retry_focus ())
-      | None ->
-          (* emit the focus op by dom id even before the textarea mounts —
-             the host queues it per ref and applies on registration, so
-             responder lands at attach rather than the next poll tick *)
-          let key = "edit-block-" ^ uuid in
-          if Some key <> !last_focus_emitted then begin
-            D.focus_dom_id key;
-            last_focus_emitted := Some key
-          end;
-          retry_focus ())
+        drain_pending_focus_actions ())
+      else
+        (* emit the focus op once per target: calling focus() on the
+           conduit input is cheap but re-emitting every retry still
+           floods the event loop on a row that can't mount *)
+        if Some uuid <> !last_focus_emitted then begin
+          Editor_sink.focus_input uuid;
+          last_focus_emitted := Some uuid
+        end;
+        if Editor_sink.is_focused uuid then (
+          (* a pending apply+refresh can still replace the sink after
+             landing — only consume the pending state once the input
+             really holds focus; otherwise keep retrying so the
+             remounted editor gets it *)
+          S.pending_focus := None;
+          focus_attempts := 0;
+          last_focus_emitted := None;
+          (* a landing that ran late (remount during a remote-tx
+             refresh) must not stomp the caret: if the user typed
+             since this focus was requested, the stored caret is
+             stale — keep where the model put it *)
+          if !S.last_edit_input_ms <= armed_ms then set_caret uuid caret;
+          drain_pending_focus_actions ())
+        else (
+          prerr_endline
+            ("PERF focus-retry t="
+             ^ string_of_float (Platform.date_now_ms () /. 1000.)
+             ^ " uuid=" ^ uuid);
+          flush stderr;
+          retry_focus ()))
 
 and retry_focus () =
   incr focus_attempts;
   if !focus_attempts < 50 then begin
     (* the editing row can sit outside the virtual window — a scroll
        jump (Home/End, a remount, an insert below the viewport edge)
-       unmounts it and focus retries would spin forever on a textarea
+       unmounts it and focus retries would spin forever on a sink
        that can't render. Pulling its item key back into the rendered
        range remounts the row so focus can land *)
     if !focus_attempts = 1 || !focus_attempts mod 10 = 5 then
@@ -162,12 +174,12 @@ let request_focus uuid caret =
   (* pending_focus_actions intentionally kept: keys queued during the
      remount window belong to the next focus landing as well *)
   focus_attempts := 0;
-  (* usually the textarea already exists — land right away; otherwise
+  (* usually the input already exists — land right away; otherwise
      the arm rides the next flush pass *)
   D.set_timeout apply_focus 0
 
 (* set pending focus, then run [p]; re-apply focus after it resolves so
-   a remounted textarea still ends up focused *)
+   a remounted input still ends up focused *)
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   focus_attempts := 0;
@@ -259,7 +271,8 @@ let enter_edit ?scope uuid caret =
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             S.set (fun st ->
                 { st with
-                  S.editing = Some { uuid; buffer; scope; base = buffer }
+                  S.editing =
+                    Some (S.mk_editing ~uuid ~buffer ~scope ~base:buffer ())
                 ; selected = S.String_set.empty
                 ; anchor = None
                 ; action_bar = false
@@ -443,11 +456,8 @@ let split_at_cursor uuid =
           t_last := now)
       in
       mark "entry";
-      let buf, pos =
-        match D.textarea_of uuid with
-        | Some el -> (D.el_value el, D.el_selection_start el)
-        | None -> (e.buffer, String.length e.buffer)
-      in
+      let buf = e.S.buffer
+      and pos = fst (sel_span_of e.S.model) in
       let parent_ordered =
         match S.find_parent uuid with
         | Some (Some p, _) -> p.Model.block_order_list <> None
@@ -495,14 +505,16 @@ let split_at_cursor uuid =
            saved title so the row doesn't flash the pre-split text *)
         S.override_title uuid (Ops.normalized_title uuid before);
         mark "title";
-        (* S.set (not silent): the old textarea must unmount before the
+        (* S.set (not silent): the old sink must unmount before the
            next keypress, or keystrokes keep landing in the stale editor *)
         (if Lazy.force perf_keys then
            Printf.eprintf "PERF editing-set src=split uuid=%s\n%!" new_uuid);
         S.set (fun st ->
             { st with
               S.editing =
-                Some { uuid = new_uuid; buffer = after; scope = e.scope; base = after } });
+                Some
+                  (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope
+                     ~base:after ()) });
         mark "editing";
         with_focus_after new_uuid 0 p;
         mark "focus-arm"
@@ -536,14 +548,16 @@ let insert_sibling_after uuid =
       (* the exit-edit repaint lands before the worker delta — pin the
          saved title so the row doesn't flash the stale title *)
       S.override_title uuid (Ops.normalized_title uuid buf);
-      (* S.set (not silent): the old textarea must unmount before the
+      (* S.set (not silent): the old sink must unmount before the
          next keypress, or keystrokes keep landing in the stale editor *)
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-set src=sibling uuid=%s\n%!" new_uuid);
       S.set (fun st ->
           { st with
             S.editing =
-              Some { uuid = new_uuid; buffer = ""; scope = e.scope; base = "" }
+              Some
+                (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope:e.scope
+                   ~base:"" ())
           });
       with_focus_after new_uuid 0 p  | _ -> ()
 
@@ -599,7 +613,11 @@ let merge_prev uuid =
               ]
             in
             S.set (fun st ->
-                { st with S.editing = Some { e with S.buffer = buf } });
+                { st with
+                  S.editing =
+                    Some
+                      (S.with_model e (Edit_model.set_source e.S.model buf))
+                });
             with_focus_after uuid 0
               (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
           else (
@@ -623,12 +641,8 @@ let merge_prev uuid =
                   { st with
                     S.editing =
                       Some
-                        { uuid = prev_uuid
-                        ; buffer = pbuf ^ buf
-                        ; scope = e.scope
-                        ; base = pbuf ^ buf
-                        }
-                  });
+                        (S.mk_editing ~uuid:prev_uuid ~buffer:(pbuf ^ buf)
+                           ~scope:e.scope ~base:(pbuf ^ buf) ()) });
               with_focus_after prev_uuid
                 (String.length pbuf)
                 (Ops.apply_and_refresh
@@ -688,12 +702,8 @@ let merge_next uuid =
                   { st with
                     S.editing =
                       Some
-                        { uuid = next_uuid
-                        ; buffer = nbuf
-                        ; scope = e.scope
-                        ; base = nbuf
-                        }
-                  });
+                        (S.mk_editing ~uuid:next_uuid ~buffer:nbuf
+                           ~scope:e.scope ~base:nbuf ()) });
               with_focus_after next_uuid 0
                 (Ops.apply_and_refresh
                    ~opts:(Ops.op_opts "delete-blocks") ops);
@@ -712,10 +722,10 @@ let merge_next uuid =
                   { st with
                     S.editing =
                       Some
-                        { e with
-                          S.buffer = buf ^ nbuf
-                        ; base = buf ^ nbuf
-                        }
+                        { (S.with_model e
+                             (Edit_model.create ~units:Edit_model.U16
+                                (buf ^ nbuf)))
+                          with S.base = buf ^ nbuf }
                   });
               with_focus_after uuid (String.length buf)
                 (Ops.apply_parsed_and_refresh
@@ -990,9 +1000,8 @@ let delete_selection () =
                      { st with
                        S.editing =
                          Some
-                           { uuid = pu; buffer; scope = "main"
-                           ; base = buffer
-                           }
+                           (S.mk_editing ~uuid:pu ~buffer ~scope:"main"
+                              ~base:buffer ~caret:(String.length buffer) ())
                      ; selected = S.String_set.empty
                      ; anchor = None
                      ; action_bar = false
@@ -1339,22 +1348,16 @@ let paste_lines lines =
         (Ops.apply_and_refresh
            [ Ops.insert_blocks blocks last ~sibling:true ])
 
-(* splice external clipboard text into the live textarea at the cursor,
-   keeping buffer, textContent (innerText/`:has-text`) and the debounced
-   save in sync like on_input does *)
-let splice_clipboard_text uuid el text =
-  let start = D.el_selection_start el in
-  let fin = max start (D.el_selection_end el) in
-  let v = D.el_value el in
-  let before = String.sub v 0 start in
-  let after = String.sub v fin (String.length v - fin) in
-  let v' = before ^ text ^ after in
-  D.el_set_value el v';
-  D.el_set_text_content el v';
-  D.el_set_selection_range el (start + String.length text)
-    (start + String.length text);
-  sync_buffer uuid v';
-  Ops.schedule_save uuid v'
+(* splice external clipboard text into the live model at the selection,
+   repainting the surface and scheduling the debounced save like a
+   typed edit *)
+let splice_clipboard_text uuid text =
+  match edit_model uuid with
+  | Some m ->
+      let lo, hi = sel_span_of m in
+      update_model uuid (fun _ -> Edit_model.splice m lo hi text);
+      Ops.schedule_save uuid (live_buffer uuid)
+  | None -> ()
 
 (* in-editor paste: when the event text matches what our copy/cut wrote,
    paste the stored trees (cljs internal paste); otherwise the external
@@ -1374,6 +1377,9 @@ let paste_into_editor ev =
       match S.find e.uuid with
       | Some b ->
           D.ev_prevent_default ev;
+          (* keep the conduit's own paste listener from splicing the
+             text a second time *)
+          D.ev_stop_immediate ev;
           let replace_empty =
             String.trim b.Model.block_title = ""
             && String.trim e.S.buffer = ""
@@ -1382,7 +1388,7 @@ let paste_into_editor ev =
             (let* resp = paste_trees trees e.uuid ~replace_empty in
             (* replace-empty swaps the editing block's entity
                       in place (same uuid, new title) — resync the live
-                      textarea buffer first, else edit_last_inserted's
+                      model buffer first, else edit_last_inserted's
                       save_if_dirty reads the stale "" and commits it
                       over the pasted title *)
             let* () =
@@ -1392,33 +1398,31 @@ let paste_into_editor ev =
             edit_last_inserted resp;
             Js.Promise.resolve ())
       | None -> ())
-  | Some e, _ -> (
+  | Some e, _ ->
       (* external paste while editing (no stored trees, or the event
          text differs from what our copy wrote) *)
-      match D.textarea_of e.uuid with
-      | Some el ->
-          let text = paste_source_text ~text:clip_text ~html:clip_html in
-          if String.trim text <> "" then (
-            D.ev_prevent_default ev;
-            let text =
-              if markdown_blocks text then text
-              else if has_paragraph_break text then
-                segmented_markdown text
-              else text
-            in
-            if markdown_blocks text then
-              let replace_empty =
-                String.trim e.S.buffer = ""
-                &&
-                match S.find e.uuid with
-                | Some b -> String.trim b.Model.block_title = ""
-                | None -> false
-              in
-              ignore
-                (paste_markdown_blocks e.uuid text ~replace_empty
-                   ~sibling:true)
-            else splice_clipboard_text e.uuid el text)
-      | None -> ())
+      let text = paste_source_text ~text:clip_text ~html:clip_html in
+      if String.trim text <> "" then (
+        D.ev_prevent_default ev;
+        D.ev_stop_immediate ev;
+        let text =
+          if markdown_blocks text then text
+          else if has_paragraph_break text then
+            segmented_markdown text
+          else text
+        in
+        if markdown_blocks text then
+          let replace_empty =
+            String.trim e.S.buffer = ""
+            &&
+            match S.find e.uuid with
+            | Some b -> String.trim b.Model.block_title = ""
+            | None -> false
+          in
+          ignore
+            (paste_markdown_blocks e.uuid text ~replace_empty
+               ~sibling:true)
+        else splice_clipboard_text e.uuid text)
   | None, _ -> ()
 
 (* text or html → the extracted-block paste path when the clipboard is
@@ -1636,24 +1640,41 @@ let toggle_open_blocks () =
 let undo () = ignore (Ops.undo ())
 let redo () = ignore (Ops.redo ())
 
-(* wrap textarea selection with a markdown marker pair *)
+(* the Edit_input route for the open editor — structural intents go to
+   the outliner ops; focused/menu have no surface effect yet *)
+let route_of uuid : Edit_input.route =
+  { Edit_input.split_block = (fun () -> split_at_cursor uuid)
+  ; merge_prev = (fun () -> merge_prev uuid)
+  ; indent = (fun () -> indent_or_outdent ~indent:true)
+  ; outdent = (fun () -> indent_or_outdent ~indent:false)
+  ; cancel = (fun () -> exit_edit ~select:true)
+  ; focused = (fun _ -> ())
+  ; menu = (fun _ -> ())
+  }
+
+let conduit_of uuid =
+  Option.value (Editor_sink.conduit uuid) ~default:Edit_input.no_conduit
+
+(* fold freshly measured visual lines back into the model (line_bounds,
+   first/last_line feed keys and Del_line deletes); empty measurement
+   keeps the '\n' table *)
+let refresh_lines m (conduit : Edit_input.conduit) =
+  match conduit.line_ranges () with
+  | [] -> m
+  | rs -> Edit_model.set_lines m rs
+
+(* wrap the model selection with a markdown marker pair *)
 let wrap_selection uuid marker =
-  match D.textarea_of uuid with
-  | Some el ->
-      let v = D.el_value el in
-      let s = min (D.el_selection_start el) (D.el_selection_end el) in
-      let e = max (D.el_selection_start el) (D.el_selection_end el) in
-      let n = String.length v in
-      let s = min s n and e = min e n in
-      let nv =
-        String.sub v 0 s ^ marker ^ String.sub v s (e - s) ^ marker
-        ^ String.sub v e (n - e)
-      in
-      D.el_set_value el nv;
-      D.el_set_text_content el nv;
-      D.el_set_selection_range el (s + String.length marker)
-        (e + String.length marker);
-      sync_buffer uuid nv
+  match edit_model uuid with
+  | Some m ->
+      let s, e = sel_span_of m in
+      let ml = String.length marker in
+      update_model uuid (fun _ ->
+          let inner = String.sub m.Edit_model.source s (e - s) in
+          let m' =
+            Edit_model.splice m s e (marker ^ inner ^ marker)
+          in
+          Edit_model.select m' ~anchor:(s + ml) ~focus:(e + ml))
   | None -> ()
 
 (* arrow up/down inside editor -> move edit focus to neighbor block *)
@@ -1675,11 +1696,11 @@ let focus_page_title () =
   | false, Some _ -> (
       Runtime.send Action.Title_edit_start;
       Runtime.flush ();
-      match D.query_selector ".ls-page-title textarea" with
-      | Some ta ->
-          D.el_focus ta;
-          let len = String.length (D.el_value ta) in
-          D.el_set_selection_range ta len len
+      match (Runtime.model ()).Model.route_page with
+      | Some p -> (
+          match p.Model.page_uuid with
+          | Some u -> Editor_sink.focus_input u
+          | None -> ())
       | None -> ())
 
 let arrow_nav uuid up =
@@ -1697,12 +1718,7 @@ let arrow_nav uuid up =
       match b.Model.block_uuid with
       | Some nu ->
           save_if_dirty uuid;
-          let caret =
-            match D.textarea_of uuid with
-            | Some el -> D.el_selection_start el
-            | None -> 0
-          in
-          enter_edit nu caret
+          enter_edit nu (caret_of uuid)
       | None -> ())
   | None -> if up then (exit_edit ~select:false; focus_page_title ())
 
@@ -1743,7 +1759,8 @@ let append_block ?for_page ?(scope = "main") () =
           let stage st =
             { st with
               S.editing =
-                Some { uuid = new_uuid; buffer = ""; scope; base = "" }
+                Some
+                  (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope ~base:"" ())
             }
           in
           (* empty page: editor state is created at the first block_row
@@ -1788,11 +1805,10 @@ let quick_add_open_dialog puuid blocks =
                 { st with
                   S.editing =
                     Some
-                      { uuid = u
-                      ; buffer = String.trim last.Model.block_title
-                      ; scope = "quick-add"
-                      ; base = String.trim last.Model.block_title
-                      }
+                      (S.mk_editing ~uuid:u
+                         ~buffer:(String.trim last.Model.block_title)
+                         ~scope:"quick-add"
+                         ~base:(String.trim last.Model.block_title) ())
                 });
             S.pending_focus := Some (u, caret, !S.last_edit_input_ms))
       | None -> ())

@@ -83,23 +83,17 @@ let clear_slash_text () =
   match S.editing () with
   | None -> ()
   | Some e -> (
-      match B.query_selector ("#edit-block-" ^ e.S.uuid) with
-      | None -> ()
-      | Some ta ->
-          let v = Web_dom.el_value ta in
-          let pos = min (Web_dom.el_selection_start ta) (String.length v) in
-          (match String.rindex_opt (String.sub v 0 pos) '/' with
-           | None -> ()
-           | Some i ->
-               let nv =
-                 String.sub v 0 i
-                 ^ String.sub v pos (String.length v - pos)
-               in
-               Web_dom.el_set_value ta nv;
-               Web_dom.el_set_selection_range ta i i;
-               S.set_silent (fun st ->
-                   { st with
-                     S.editing = Some { e with S.buffer = nv } })))
+      let m = e.S.model in
+      let v = m.Edit_model.source in
+      match Edit_model.selection_range m with
+      | Some (pos, _) -> (
+          match String.rindex_opt (String.sub v 0 pos) '/' with
+          | None -> ()
+          | Some i ->
+              Editor_actions.update_model e.S.uuid (fun m ->
+                  let m' = Edit_model.splice m i pos "" in
+                  Edit_model.select m' ~anchor:i ~focus:i))
+      | None -> ())
 
 let find_by_checksum checksum k =
   (let* w =

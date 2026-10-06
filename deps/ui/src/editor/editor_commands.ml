@@ -1,6 +1,6 @@
 (* Slash/context command consumer. popups_state dispatches
    `ls:editor-command` CustomEvents with {command, from, to} (the slash
-   trigger range inside the editing textarea) or {command, block, value}
+   trigger range inside the editing model) or {command, block, value}
    (context-menu rows on unedited blocks). Side effects beyond a text
    splice live here: property writes (heading/status/priority/
    display-type/order-list), the inline calendar (#date-time-picker,
@@ -34,24 +34,22 @@ let detail_int ev name =
 
 (* ---------- buffer splice ---------- *)
 
-(* splice [text] into the editing textarea over [from, to); returns the
+(* splice [text] into the editing model over [from, to); returns the
    new buffer and the caret position after the inserted text *)
 let replace_range uuid from to_ text =
-  match D.textarea_of uuid with
-  | Some el ->
-      let v = D.el_value el in
-      let n = String.length v in
+  match A.edit_model uuid with
+  | Some m ->
+      let n = String.length m.Edit_model.source in
       let f = max 0 (min from n) in
       let t = max f (min to_ n) in
-      let nv =
-        String.sub v 0 f ^ text ^ String.sub v t (n - t)
-      in
       let caret = f + String.length text in
-      D.el_set_value el nv;
-      D.el_set_text_content el nv;
-      D.el_set_selection_range el caret caret;
-      A.sync_buffer uuid nv;
-      (nv, caret)
+      let m' =
+        Edit_model.select
+          (Edit_model.splice m f t text)
+          ~anchor:caret ~focus:caret
+      in
+      A.update_model uuid (fun _ -> m');
+      (m'.Edit_model.source, caret)
   | None -> (A.live_buffer uuid, 0)
 
 let clear_range uuid from to_ = snd (replace_range uuid from to_ "")
@@ -67,9 +65,9 @@ let prop_batch ~caret uuid ops =
      Ops.apply_and_refresh_deferred (sop :: ops))
 
 (* same, but drop edit mode first (cljs :editor/exit — code blocks leave
-   the textarea while the view re-renders the code surface), then focus
+   edit mode while the view re-renders the code surface), then focus
    the mounted CodeMirror via the pending-focus machinery (code_focus
-   short-circuits the textarea path) *)
+   short-circuits the hidden-input path) *)
 let exit_to_props uuid ops =
   let buf = A.live_buffer uuid in
   S.set (fun st -> { st with S.editing = None });
@@ -145,12 +143,9 @@ let close_popup ?focus_caret p =
   active := None;
   Runtime.editor_popup_root := None;
   match focus_caret with
-  | Some c -> (
-      match D.textarea_of p.uuid with
-      | Some el ->
-          D.el_focus el;
-          D.el_set_selection_range el c c
-      | None -> ())
+  | Some c ->
+      Editor_sink.focus_input p.uuid;
+      A.set_caret p.uuid c
   | None -> ()
 
 (* cljs Enter handler: "date picker" closes the popup and inserts
@@ -160,11 +155,7 @@ let close_popup ?focus_caret p =
    the popup is open and the commit replaces the last "/" through the
    caret with the output ([[journal]] for date-picker, [l](u) for link) *)
 let insert_at_trigger p text =
-  let to_ =
-    match D.textarea_of p.uuid with
-    | Some el -> D.el_selection_start el
-    | None -> p.from
-  in
+  let to_ = fst (A.sel_span p.uuid) in
   replace_range p.uuid p.from to_ text
 
 let commit_cal p =
@@ -180,7 +171,7 @@ let commit_cal p =
       let op =
         Ops.set_block_property p.uuid ident (W.Float (Js.Date.getTime d))
       in
-      (match D.textarea_of p.uuid with
+      (match A.edit_model p.uuid with
        | Some _ -> prop_batch ~caret:p.from p.uuid [ op ]
        | None ->
            (* selected (non-editing) block via `p d` — no buffer to save
@@ -354,9 +345,8 @@ let nlp_commit p input =
    opened on a selected (non-editing) block — the `p d` chord — anchors
    under the block row instead *)
 let cal_pos_style ?top uuid =
-  match D.textarea_of uuid with
-  | Some el ->
-      let x, y, _ = Web_dom.caret_popup_pos (el) in
+  match Editor_sink.popup_pos uuid with
+  | Some (x, y, _) ->
       Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
         x (Option.value top ~default:y)
   | None -> (
@@ -369,12 +359,20 @@ let cal_pos_style ?top uuid =
             (Option.value top ~default:(D.rect_bottom r +. 4.))
       | None -> "position:fixed;top:96px;left:240px;z-index:900")
 
+(* (left, top, right, bottom) viewport rect the picker anchors against —
+   the editing container while mounted, else the block row *)
 let cal_anchor_rect uuid =
-  match D.textarea_of uuid with
-  | Some el -> Some (D.el_bounding_rect el)
+  match Editor_sink.container_rect uuid with
+  | Some r -> Some r
   | None -> (
       match D.query_selector (".ls-block[blockid='" ^ uuid ^ "']") with
-      | Some blk -> Some (D.el_bounding_rect blk)
+      | Some blk ->
+          let r = D.el_bounding_rect blk in
+          Some
+            ( D.rect_left r
+            , D.rect_top r
+            , D.rect_right r
+            , D.rect_bottom r )
       | None -> None)
 
 (* base-ui avoidCollisions: once mounted, flip the picker above the
@@ -382,14 +380,14 @@ let cal_anchor_rect uuid =
    above; otherwise clamp its top inside the viewport *)
 let cal_clamp_in_view uuid root =
   match cal_anchor_rect uuid with
-  | Some tr ->
+  | Some (_, tr_top, _, tr_bottom) ->
       let h = D.rect_height (D.el_bounding_rect root) in
       let vh = D.win_inner_height in
-      let below = vh -. D.rect_bottom tr -. 4. in
-      let above = D.rect_top tr -. 4. in
+      let below = vh -. tr_bottom -. 4. in
+      let above = tr_top -. 4. in
       if h > below then (
         let top =
-          if above > below then D.rect_top tr -. 4. -. h
+          if above > below then tr_top -. 4. -. h
           else Float.max 4.0 (vh -. 4. -. h)
         in
         D.el_set_attr root "style" (cal_pos_style ~top uuid))
@@ -400,7 +398,7 @@ let cal_clamp_in_view uuid root =
    split as commit_cal: the editing path saves the live buffer first so
    typed-but-unsaved text survives the refresh *)
 let apply_props p ops =
-  match D.textarea_of p.uuid with
+  match A.edit_model p.uuid with
   | Some _ -> prop_batch ~caret:p.from p.uuid ops
   | None -> ignore (Ops.apply_and_refresh ops)
 

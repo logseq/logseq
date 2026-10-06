@@ -1,6 +1,7 @@
 (* Shared parity-DOM fragments used by more than one area:
-   the cljs editor box (.editor-wrapper > .editor-inner.block-editor >
-   textarea + .mock-text caret mirror) and the collapse arrow svg. *)
+   the editor box shell (.editor-wrapper > .editor-inner.block-editor),
+   the mock-text style string (property default-value textarea), and
+   the collapse arrow svg. *)
 
 open Lui_elements
 
@@ -24,8 +25,9 @@ let class_signal source f (elem : t) : t =
     (Signal.map f source);
   node
 
-(* cljs mock-textarea style: hidden caret mirror for popup placement,
-   consumed on the imperative side by dom_ext.mock_text_el/build_mock_text *)
+(* cljs mock-textarea style — kept for the property default-value
+   textarea in properties_menu (the block editor's caret mirror is
+   gone: logseq-editor measures via Range.getClientRects) *)
 let mock_text_style =
   "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0"
 
@@ -41,20 +43,12 @@ let ghost_btn_cls ?(extra = "") () =
    active:opacity-80 as-ghost"
   ^ if extra = "" then "" else " " ^ extra
 
-(* TODO(component): editor surface — mock_text/editor_inner/editor_wrapper
-   collapse into a `logseq-editor` extension node per the migration spec;
-   imperative code queries .mock-text/.editor-inner/.block-editor, so the
-   dom fragments stay until that extension lands. *)
-let mock_text ~key : t =
-  dom ~key ~style_class:"mock-text"
-    ~attrs:[ ("style", mock_text_style) ]
-    []
-
-(* TODO(component): editor surface — see mock_text *)
+(* the comment box reuses the cljs .editor-inner shell classes *)
 let editor_inner ~key children : t =
   dom ~key ~style_class:"editor-inner flex flex-1 block-editor" children
 
-(* TODO(component): editor surface — see mock_text *)
+(* cljs editor wrapper — flex container around the logseq-editor
+   surface (Edit_view's .block-editor column + hidden .ed-input) *)
 let editor_wrapper ~key ~id children : t =
   dom ~key ~style_class:"editor-wrapper flex flex-1 w-full" ~id children
 

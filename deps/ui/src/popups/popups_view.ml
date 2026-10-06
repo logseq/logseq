@@ -837,19 +837,6 @@ let pv_dyn (st : S.t) : t =
         st.S.vs.Signal.state_signal))
     context parent
 
-let handle_input st (ev : Web_dom.ev) =
-  match Web_dom.ev_target ev with
-  | Some el -> (
-      match Web_dom.el_closest el ".editor-wrapper textarea" with
-      | Some ta ->
-          (* the page-title editor is not an outliner block editor: cljs
-             never opens /, [[, (( or # autocompletes there *)
-          if Web_dom.el_closest el "#page-title" = None then
-            S.on_editor_input st ta ev
-      | None -> ())
-  | None -> ()
-;;
-
 let handle_keydown st (ev : Web_dom.ev) =
   if S.ac_keydown st ev then (
     Web_dom.ev_prevent_default ev;
@@ -1097,7 +1084,6 @@ let handle_mousedown _st (ev : Web_dom.ev) =
   | _ -> ()
 
 let install_listeners st =
-  Web_dom.add_document_listener "input" (handle_input st) true;
   Web_dom.add_document_listener "keydown" (handle_keydown st) true;
   Web_dom.add_document_listener "contextmenu" (handle_contextmenu st) true;
   Web_dom.add_document_listener "click" (handle_click st) true;

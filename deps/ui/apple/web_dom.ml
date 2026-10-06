@@ -180,6 +180,8 @@ let ev_ctrl = Editor_dom.ev_ctrl
 let ev_alt = Editor_dom.ev_alt
 let ev_shift = Editor_dom.ev_shift
 let ev_composing = Editor_dom.ev_composing
+
+let ev_repeat = Editor_dom.ev_repeat
 let ev_detail = Editor_dom.ev_detail
 let ev_client_x = Dom_ext.client_x
 let ev_client_y = Dom_ext.client_y

@@ -1,6 +1,6 @@
 (* Editor/outliner UI state, owned by the editor area. One LUI signal holds
    the whole ui record: which block is being edited (and its live buffer so a
-   remount can restore the textarea verbatim), the block-selection set with
+   remount can restore the buffer verbatim), the block-selection set with
    its anchor, and the collapsed set mirrored from :block/collapsed? (the
    shared Model.block drops that flag, so we read it from the raw wire
    ourselves in Outliner_ops.refresh). *)
@@ -9,12 +9,27 @@ module String_set = Stdlib.Set.Make (String)
 
 (* [scope] is the container the edit started in ("main" or
    "sidebar") — the same block can render in both trees, so only the
-   initiating scope mounts the textarea (cljs keys the editor by
+   initiating scope mounts the editor (cljs keys the editor by
    container-local edit-input-id) *)
 (* base: the committed title the editor opened with — resync only
    overwrites a still-pristine buffer when the stored title changed
-   externally; a divergent buffer is typed-not-yet-saved text *)
-type editing = { uuid : string; buffer : string; scope : string; base : string }
+   externally; a divergent buffer is typed-not-yet-saved text.
+   model: the Edit_model the logseq-editor surface renders —
+   [buffer] always mirrors [model.source]; offsets are utf-16 units
+   (Melange strings are utf-16, DOM offsets are code units) *)
+type editing =
+  { uuid : string; buffer : string; scope : string; base : string
+  ; model : Edit_model.t }
+
+let mk_editing ?(caret = 0) ~uuid ~buffer ~scope ~base () =
+  let model =
+    Edit_model.select (Edit_model.create ~units:Edit_model.U16 buffer)
+      ~anchor:caret ~focus:caret
+  in
+  { uuid; buffer; scope; base; model }
+
+(* republish with a new model — keeps buffer mirroring model.source *)
+let with_model e model = { e with buffer = model.Edit_model.source; model }
 
 
 type t =
@@ -52,15 +67,16 @@ include State_cell.Make (struct
 end)
 
 (* focus request consumed after the next DOM flush — ops remount the page
-   subtree, so the textarea must be re-focused once it exists again *)
+   subtree, so the logseq-editor input must be re-focused once it exists
+   again *)
 let pending_focus : (string * int * float) option ref = ref None
 
-(* editing keys that arrive while a structure op's textarea is still
+(* editing keys that arrive while a structure op's editor is still
    remounting (keydown landed on <body>): queued here and replayed by
    focus_pending once the refreshed model and DOM exist *)
 let pending_focus_actions : (unit -> unit) list ref = ref []
 
-(* wall-clock of the last editing-textarea key/input event; worker_events
+(* wall-clock of the last editing key/input event; worker_events
    defers a sync reload only while the editor is being actively typed in,
    so an idle-but-editing page does not starve remote updates *)
 let last_edit_input_ms : float ref = ref 0.0
@@ -82,7 +98,7 @@ let close_block_editor : (unit -> unit) ref = ref (fun () -> ())
 let close_property_editor : (unit -> unit) ref = ref (fun () -> ())
 
 (* Virt_list binds this to its item-key scroller — editor_actions pulls
-   the editing row back into the virtual window when its textarea can't
+   the editing row back into the virtual window when its editor can't
    mount (the row scrolled out or an insert landed below the edge) *)
 let scroll_key_into_view : (string -> unit) ref = ref (fun _ -> ())
 

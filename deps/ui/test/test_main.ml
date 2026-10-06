@@ -2470,7 +2470,7 @@ let mk_ac kind =
   { Popups_state.kind; x = 0.; y = 0.; cy = 0.; flip = None; flipx = None
     ; query = ""
   ; tpos = 0; tlen = 0
-  ; items = []; chosen = 0; editor = Js.Json.null; auuid = "" }
+  ; items = []; chosen = 0; auuid = "" }
 
 let test_popups_state () =
   (* fuzzy_score: subsequence match, first*1000 + span *)

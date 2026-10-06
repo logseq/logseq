@@ -268,7 +268,7 @@ let overlay (frame : frame Signal.signal) : t =
 
 let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
  fun context parent ->
-  let node = Lui_ui.extension context Logseq_editor.identifier in
+  let node = Lui_ui.extension context Editor_sink.identifier in
   Lui_ui.key context node ("ed-sink-" ^ block_id);
   Lui_ui.extension_property context node "block-id" (StringValue block_id);
   Lui_ui.extension_property_signal context node "runs" runs_s;
@@ -278,7 +278,7 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
     (fun ev ->
       match ev with
       | ExtensionEvent (_, ident, name, fields)
-        when ident = Logseq_editor.identifier -> (
+        when ident = Editor_sink.identifier -> (
           match Edit_input.decode name fields with
           | Some e -> on_input e
           | None -> ())

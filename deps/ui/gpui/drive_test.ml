@@ -294,9 +294,9 @@ let test_block_edit () =
   Editor_state.set (fun st ->
       { st with
         Editor_state.editing =
-          Some
-            { Editor_state.uuid = "b1"; buffer = "editing b1"; scope = "main"
-            ; base = "editing b1" }
+          (Some
+             (Editor_state.mk_editing ~uuid:"b1" ~buffer:"editing b1"
+                ~scope:"main" ~base:"editing b1" ()))
       });
   has "prop:accessibility-identifier=\"edit-block-b1\"";
   (match find_block "b1" with

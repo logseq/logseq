@@ -11,7 +11,7 @@
          .block-content-or-editor-inner
            .block-row
              .block-content-wrapper
-               .block-content#block-content-<uuid>  |  .editor-wrapper textarea
+               .block-content#block-content-<uuid>  |  .editor-wrapper .block-editor
      .block-children-container
        .block-children-left-border
        .block-children > .ls-block*
@@ -307,45 +307,7 @@ let content_el uuid (b : Model.block) : t =
                      b)        ]
     ]
 
-let editor_el uuid scope : t =
- fun ctx parent ->
-  let buffer =
-    match S.editing () with
-    | Some e when e.uuid = uuid && e.scope = scope -> e.buffer
-    | _ -> ""
-  in
-  (* textarea text must track the buffer: e2e asserts
-     .editor-wrapper textarea :has-text, which reads textContent *)
-  let buffer_sig =
-    (* cutoff: typed text only lives in the DOM (live_buffer reads .value on
-       commit); without dedup every unrelated S.set publish would re-emit
-       the stale buffer and overwrite in-progress typing *)
-    Signal.cutoff ( = )
-      (Signal.map
-         (fun e ->
-           match e with
-           | Some e when e.S.uuid = uuid && e.S.scope = scope ->
-               Lui_protocol.StringValue e.S.buffer
-           | _ -> Lui_protocol.StringValue "")
-         (S.editing_sig ()))
-  in
-    (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
-    ~id:("editor-edit-block-" ^ uuid)
-    [ Ui_parts.editor_inner ~key:("ei-" ^ uuid)
-        [ dom ~key:("ta-" ^ uuid) ~tag:"textarea"
-            ~id:("edit-block-" ^ uuid)
-            ~style_class:"normal-block uniline-block"
-            ~attrs:
-              [ ("data-testid", "block editor")
-              ; (* focus must land at mount: press-seq resolves *:focus
-                   before the 40ms pending-focus retry runs *)
-                ("autofocus", "")
-              ]
-            ~text:buffer ~text_signal:buffer_sig []
-        ; Ui_parts.mock_text ~key:("mt-" ^ uuid)
-        ]
-    ])
-    ctx parent
+let editor_el uuid scope : t = Editor_surface.mount uuid scope
 
 let content_wrapper uuid (b : Model.block) : t =
   (* cljs puts .block-content-wrapper only around display content;
@@ -755,7 +717,7 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
 (* Read-only row for linked-reference lists: same shell as row_el but the
    content never swaps to editor_el — a block shown in .references can
    simultaneously be under edit in its own page, and a second
-   #edit-block-<uuid> textarea breaks locators. The rfs- reload key also
+   logseq-editor sink for it breaks locators. The rfs- reload key also
    keeps the row from claiming the live row's DOM node on reconciliation —
    both are keyed ls-…/rfs-… on the same uuid but are distinct logical
    nodes. *)
@@ -941,7 +903,7 @@ let page_embed (name : string) : t =
      (fun blocks ->
        let shown, capped = cap_embed_blocks embed_block_cap blocks in
        (* embed copies render read-only — the same uuid can exist in the
-          sidebar/main tree, and only that instance should own the textarea *)
+          sidebar/main tree, and only that instance should own the editor *)
        box ~key:"embed-page" ~style_class:"embed-page"
          (List.map (block_row ~scope:"embed" ~editable:false) shown
           @ (if capped then [ embed_more_el name ] else [])))

@@ -32,7 +32,6 @@ type mutation_observer
 type mutation_record
 type observe_opts
 type el_set
-type segmenter
 
 (* ---------- generic JS plumbing ---------- *)
 
@@ -490,13 +489,6 @@ let el_prop_string el name =
   | Some s -> s
   | None -> ""
 
-(* hidden bookkeeping fields stamped on elements *)
-external el_set_mock_value : el -> string -> unit = "__mockValue"
-  [@@mel.set]
-
-external el_get_mock_value : el -> string option = "__mockValue"
-  [@@mel.get] [@@mel.return nullable]
-
 (* the adapter reads this back to keep the Text node in sync — see
    dom_adapter.raw_text_node_get *)
 external el_set_swap_text : el -> el -> unit = "__lsText" [@@mel.set]
@@ -575,46 +567,6 @@ external obs_disconnect : mutation_observer -> unit = "disconnect"
 external el_set_new : unit -> el_set = "Set" [@@mel.new]
 external el_set_has : el_set -> el -> bool = "has" [@@mel.send]
 external el_set_add : el_set -> el -> el_set = "add" [@@mel.send]
-
-(* ---------- grapheme segmentation (Intl.Segmenter) ---------- *)
-
-external intl_obj : Js.Json.t = "Intl"
-
-external make_segmenter : string -> Js.Json.t -> segmenter = "Segmenter"
-  [@@mel.scope "Intl"] [@@mel.new]
-
-external seg_iter : segmenter -> string -> Js.Json.t = "segment"
-  [@@mel.send]
-
-external seg_text : Js.Json.t -> string = "segment" [@@mel.get]
-
-let segmenter : segmenter option =
-  match Js.Json.decodeObject intl_obj with
-  | Some d -> (
-    match Js.Dict.get d "Segmenter" with
-    | Some _ ->
-        let o = Js.Dict.empty () in
-        Js.Dict.set o "granularity" (Js.Json.string "grapheme");
-        (try Some (make_segmenter "und" (Js.Json.object_ o))
-         with _ -> None)
-    | None -> None)
-  | None -> None
-;;
-
-(* cljs util/split-grapheme-clusters *)
-let split_graphemes s : string array =
-  match segmenter with
-  | Some seg ->
-      let it = seg_iter seg s in
-      Array.map seg_text (json_array_from it)
-  | None -> Array.init (String.length s) (fun i -> String.make 1 s.[i])
-;;
-
-(* count grapheme clusters in s[..from-index) — cljs get-graphemes-pos *)
-let graphemes_pos s from_index =
-  if from_index <= 0 then 0
-  else Array.length (split_graphemes (String.sub s 0 from_index))
-;;
 
 (* ---------- traversal helpers ---------- *)
 
@@ -776,18 +728,10 @@ let ensure_raw_text_observer () =
     raw_text_observer_installed := true;
     register_doc_scan ~sync:true dom_fixups)
 
-(* ---------- textarea / caret / selection ---------- *)
-
-(* cljs mock-textarea autosize: collapse then grow to the content height *)
-let autosize_textarea el =
-  el_set_style_height el "auto";
-  el_set_style_height el
-    (string_of_int (int_of_float (el_scroll_height el)) ^ "px")
+(* ---------- caret / selection ---------- *)
 
 let closest_sel sel target =
   match target with Some el -> el_closest el sel | None -> None
-
-let textarea_of uuid = get_element_by_id ("edit-block-" ^ uuid)
 
 let is_editable_target target =
   match target with
@@ -804,59 +748,6 @@ let el_focus el =
      let n = String.length (el_value el) in
      el_set_selection_range el n n
    with _ -> ())
-
-(* ---------- mock-text mirror (cljs util/cursor.cljs) ----------
-   a hidden .mock-text inside .editor-inner holds one span per grapheme;
-   caret pos is read from the span at the grapheme index *)
-
-(* cljs cursor.cljs build-mock-text!: one span per grapheme ("\n" -> "0"
-   + <br>), ids mock-text_<i>, rebuilt only when the value changed *)
-let build_mock_text input el =
-  let v = el_value input ^ "0" in
-  let cached = Option.value (el_get_mock_value el) ~default:"" in
-  if cached <> v then (
-    el_set_text_content el "";
-    Array.iteri
-      (fun i g ->
-        let s = create_element "span" in
-        el_set_id s ("mock-text_" ^ string_of_int i);
-        if g = "\n" then (
-          el_set_text_content s "0";
-          el_append_child s (create_element "br"))
-        else el_set_text_content s g;
-        el_append_child el s)
-      (split_graphemes v);
-    el_set_mock_value el v)
-;;
-
-(* the .mock-text mirror sibling of `input` inside .editor-inner *)
-let mock_text_el input =
-  match el_closest input ".editor-inner" with
-  | Some inner -> el_query inner ".mock-text"
-  | None -> None
-;;
-
-(* cljs cursor.cljs get-caret-pos -> editor.cljs popup pos:
-   left = mirror-span offsetLeft + input.left - 20
-   top  = mirror-span offsetTop  + input.top  + (lineHeight - 4 | 20)
-   also returns the caret line top so flip-above math can anchor on it *)
-let caret_popup_pos el =
-  let r = el_bounding_rect el in
-  let lh =
-    let f = parse_float (computed_style_str el "lineHeight") in
-    if Float.is_nan f then 20.0 else f -. 4.0
-  in
-  let l, t =
-    match mock_text_el el with
-    | Some m ->
-        build_mock_text el m;
-        let gpos = graphemes_pos (el_value el) (el_selection_start el) in
-        (match nl_item (el_children m) gpos with
-         | Some s -> (el_offset_left s, el_offset_top s)
-         | None -> (0., 0.))
-    | None -> (0., 0.)
-  in
-  (l +. rect_left r -. 20., t +. rect_top r +. lh, t +. rect_top r)
 
 (* cljs ui.cljs auto-complete-keep-visible-scroll-top: scroll exactly
    enough to keep the row inside the viewport (no padding); when the row
