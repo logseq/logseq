@@ -2342,12 +2342,17 @@
                        (update :block-level inc))]
          [lazy-block-children config' block child-uuids collapsed? render-children])])))
 
+(defn- library-visible-uuids
+  "The Library's rows: nil while the children or their blocks load, as
+   `use-children` reads, not an empty list."
+  [child-uuids blocks]
+  (when (and (some? child-uuids) (some? blocks))
+    (entity/library-outline-child-uuids blocks)))
+
 (hsx/defc library-child-uuids
   [child-uuids then]
   (let [blocks (db-hooks/use-blocks (vec child-uuids))]
-    (then (if (nil? blocks)
-            []
-            (entity/library-outline-child-uuids blocks)))))
+    (then (library-visible-uuids child-uuids blocks))))
 
 (defn with-library-child-uuids
   "Library shows nested pages only; other pages keep every child."
@@ -5399,6 +5404,17 @@
         (cond->> block-uuids
           limit (take limit)))])))
 
+(defn- first-paint-step
+  "What a page's first-paint session does once the list has `block-uuids`:
+   nil while they load (`use-children` reads nil until its slot is ready),
+   so it waits; an empty page's rows are known too, and its session ends
+   after the first frame as any other's, removing its input listeners."
+  [block-uuids virtualized?]
+  (cond
+    (nil? block-uuids) :wait
+    virtualized? :close
+    :else :schedule))
+
 (hsx/defc page-root-virtual-list
   [config block-uuids]
   (let [{:keys [virtualized? virtual-opts *virtualized-ref *block-uuids-ref]}
@@ -5411,7 +5427,7 @@
                               :rtc-test? (util/rtc-test-without-virtualization?)})
                         (first-paint-session))
                      [])
-        rows? (boolean (seq block-uuids))]
+        loaded? (some? block-uuids)]
     (hooks/use-layout-effect!
      (fn []
        (when first-paint
@@ -5420,11 +5436,12 @@
      [])
     (hooks/use-layout-effect!
      (fn []
-       (when (and first-paint rows?)
-         (if virtualized?
-           (close-first-paint-session! first-paint)
-           (schedule-first-paint! first-paint))))
-     [rows? virtualized?])
+       (when first-paint
+         (case (first-paint-step block-uuids virtualized?)
+           :close (close-first-paint-session! first-paint)
+           :schedule (schedule-first-paint! first-paint)
+           :wait nil)))
+     [loaded? virtualized?])
     (hooks/use-effect!
      (fn []
        (when (and virtualized?
