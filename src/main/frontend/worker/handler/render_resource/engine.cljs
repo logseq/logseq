@@ -1,7 +1,6 @@
 (ns frontend.worker.handler.render-resource.engine
   "Renderer resource registry, batching, and thread API."
-  (:require [datascript.core :as d]
-            [frontend.common.thread-api :refer [def-thread-api]]
+  (:require [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.render-resource.basic :as basic]
             [frontend.worker.handler.render-resource.common :as common]
@@ -25,12 +24,12 @@
 
 (defn- deleted-owner-uuid
   "The owner a resource key names, its second element as the renderer's delta
-  handling reads it (`frontend.db.subs/apply-delta-store`), when no entity
-  carries that uuid any more."
-  [db resource-key]
+  handling reads it (`frontend.db.subs/apply-delta-store`), when `error` is
+  the renderer finding no entity for that owner."
+  [resource-key error]
   (let [owner (second resource-key)]
     (when (and (uuid? owner)
-               (nil? (d/entity db [:block/uuid owner])))
+               (= owner (common/missing-entity-error-uuid error)))
       owner)))
 
 (defn- render-resource
@@ -39,12 +38,14 @@
   sent while the snapshot batch waited behind a slower one. Failing then
   would reject the whole batch and crash the page, as `missing-view-data`
   notes for views, so a resource whose owner is gone renders as nil until
-  the delete's delta marks its slot missing."
+  the delete's delta marks its slot missing. Only that failure is caught;
+  any other error of the renderer, such as an invalid argument, fails the
+  request as it does for a live owner."
   [render db resource-key runtime]
   (try
     (render db resource-key runtime)
     (catch :default error
-      (if-let [owner (deleted-owner-uuid db resource-key)]
+      (if-let [owner (deleted-owner-uuid resource-key error)]
         [#{[:entity owner]} nil]
         (throw error)))))
 

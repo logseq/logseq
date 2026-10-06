@@ -45,7 +45,17 @@
   [db label value]
   (require-uuid! label value)
   (or (d/entity db [:block/uuid value])
-      (fail! "Missing renderer resource entity" {label value})))
+      (fail! "Missing renderer resource entity" {:type ::missing-entity
+                                                 :uuid value
+                                                 label value})))
+
+(defn missing-entity-error-uuid
+  "The uuid `entity-by-uuid!` found no entity for, when `error` is that
+  failure."
+  [error]
+  (let [data (ex-data error)]
+    (when (= ::missing-entity (:type data))
+      (:uuid data))))
 
 (defn entity-uuid!
   [db eid]

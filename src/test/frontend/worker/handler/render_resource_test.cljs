@@ -5,6 +5,7 @@
             [frontend.db.subs-loader :as subs-loader]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
+            [frontend.worker.handler.render-resource.common :as render-common]
             [frontend.worker.handler.render-resource.engine :as render-engine]
             [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.search :as search-handler]
@@ -1422,7 +1423,26 @@
                     @conn
                     {:blocks [] :children []
                      :resources [[:block-display-properties resource-block {:page-title? true}]]}
-                    {}))))))
+                    {}))))
+    (testing "a bad request fails as well when its block is gone: only the missing block is caught"
+      (is (thrown? js/Error
+                   (render-engine/render-snapshots
+                    @conn
+                    {:blocks [] :children []
+                     :resources [[:block-display-properties deleted {:page-title? true}]]}
+                    {}))))
+    (testing "a failure about another entity than the key's owner is not taken for a deleted owner"
+      (with-redefs [render-engine/resource-renderers
+                    (assoc render-engine/resource-renderers :block-comment-summary
+                           {:shape 2
+                            :render (fn [db _resource-key _runtime]
+                                      (render-common/entity-by-uuid! db :other (random-uuid)))})]
+        (is (thrown? js/Error
+                     (render-engine/render-snapshots
+                      @conn
+                      {:blocks [] :children []
+                       :resources [[:block-comment-summary deleted]]}
+                      {})))))))
 
 (deftest block-display-properties-resource-includes-configured-class-properties-test
   (when-let [api (render-resource-api)]
