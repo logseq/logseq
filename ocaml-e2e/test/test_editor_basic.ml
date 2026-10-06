@@ -2616,10 +2616,30 @@ let () =
           let n = List.length l in
           List.filteri (fun i _ -> i >= n - 3) l
         in
-        Fest.deep_equal last3
-          [ "journal e2e first"; "journal e2e second"
-          ; "journal e2e third" ]
-          Fest.expect;
+        let* () =
+          if
+            last3
+            <> [ "journal e2e first"; "journal e2e second"
+               ; "journal e2e third" ]
+          then begin
+          (* where did 'first' land — dump every title+uuid the journal
+             item mounted plus any stray match elsewhere on the page *)
+          let* dump =
+            Pw.eval_js env
+              "(() => { const titles = [...document.querySelectorAll('#journals .ls-block[blockid] .block-title-wrap')].map(el => el.textContent.trim() + '|' + el.closest('.ls-block').getAttribute('blockid').slice(0,8)); const first = [...document.querySelectorAll('.ls-block[blockid] .block-title-wrap')].filter(el => el.textContent.trim() === 'journal e2e first').map(el => el.closest('.ls-block').getAttribute('blockid')); return JSON.stringify({mounted: titles, firstUuids: first}); })()"
+          in
+          Js.log2 "[journals-dbg]"
+            (match Js.Json.decodeString dump with
+             | Some s -> s
+             | None -> "?");
+          Fest.deep_equal last3
+            [ "journal e2e first"; "journal e2e second"
+            ; "journal e2e third" ]
+            Fest.expect;
+          Js.Promise.resolve ()
+        end
+          else Js.Promise.resolve ()
+        in
         Js.Promise.resolve ());
 
     t "worker-missing-read-is-recoverable-test" (fun env ->

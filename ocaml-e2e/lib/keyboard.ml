@@ -37,12 +37,28 @@ let live_editor_js =
    return 'fallback'; })()"
 
 let press_in_editor env ?delay ?timeout key =
-  let* (target : string) = Pw.eval_js env live_editor_js in
-  if target = "live" || target = "mark" then
-    Playwright.locator_press ?delay ?timeout (Pw.q env "[data-e2e-live='1']")
-      key
-  else if target = "focus" then Pw.press env ?delay key
-  else Pw.press env ?delay key
+  (* the marked textarea can detach between the mark and playwright's
+     actionability wait (remount) — press with a bounded timeout and
+     re-mark each retry so a remounted editor gets picked up fresh *)
+  let rec attempt n =
+    let* (target : string) = Pw.eval_js env live_editor_js in
+    if target = "live" || target = "mark" then
+      let t = match timeout with Some t -> t | None -> 8000. in
+      Pw.catch_timeout
+        (Playwright.locator_press ?delay ~timeout:t
+           (Pw.q env "[data-e2e-live='1']")
+           key)
+        (fun () ->
+           if n > 1 then attempt (n - 1)
+           else
+             Js.Promise.reject
+               (Failure
+                  (Printf.sprintf
+                     "press_in_editor %s: live editor kept detaching" key)))
+    else if target = "focus" then Pw.press env ?delay key
+    else Pw.press env ?delay key
+  in
+  attempt 3
 let enter env = Pw.press env "Enter"
 let enter_in_editor env = press_in_editor env "Enter"
 let esc env = Pw.press env "Escape"
