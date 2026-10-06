@@ -2571,20 +2571,10 @@
                                                           (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-page-names-to-uuids import-state)
+        all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         existing-page-uuid (fn [m]
                              (lookup-imported-page-uuid @conn all-existing-page-uuids
                                                         (or (::original-name m) (:block/name m))))
-        all-pages (map (fn [page]
-                         (let [page (modify-page-tx page all-existing-page-uuids)]
-                           ;; Extract may reuse a property uuid for a same-title tag/page.
-                           ;; Give the new page its own uuid so class conversion cannot merge
-                           ;; onto the property entity.
-                           (if (and (:block/uuid page)
-                                    (not (existing-page-uuid page))
-                                    (property-entity-uuid? @conn (:block/uuid page)))
-                             (assoc page :block/uuid (common-uuid/gen-uuid))
-                             page)))
-                       all-pages*)
         db-existing-page-uuids (->> all-pages
                                     (keep (fn [page]
                                             (when-let [page-uuid (existing-page-uuid page)]
