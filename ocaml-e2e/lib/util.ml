@@ -330,8 +330,7 @@ let wait_search_index_ready env =
 let probe_search_index env text =
   let js =
     Printf.sprintf
-      "(async () => { try { const r = await logseq.api.search(%s, {'built-in?': true, limit: 10}); const rows = (r && r.blocks) || []; const titles = rows.slice(0, 10).map(b => String(b['block/title'] || b.title || '')); const hit = rows.some(b => String(b['block/title'] || b.title || '') === %s); const bs = logseq.api.get_state_from_store('search/index-build'); return JSON.stringify({probe: hit ? 'hit' : 'miss', titles, build: bs}); } catch (e) { return JSON.stringify({probe: 'err:' + String(e), titles: []}); } })()"
-      (Js.Json.stringify (Js.Json.string text))
+      "(async () => { try { const q = %s; const strip = (s) => String(s || '').replace(/\\$pfts_2lqh>\\$|\\$<pfts_2lqh\\$/g, ''); const orig = (b) => String(b['original-title'] || b['block.temp/original-title'] || b['block/title'] || b.title || b['fullTitle'] || ''); const rowsOf = (r) => { const x = r && r.blocks; const a = x && (x.items || x); return Array.isArray(a) ? a : []; }; let plainN = -1, plainErr = ''; try { const plain = await logseq.api.search(q, {'built-in?': true, limit: 10}); plainN = rowsOf(plain).length; } catch (e) { plainErr = String(e); } const r = await logseq.api.search(q, {'built-in?': true, 'dev?': false, 'enable-snippet?': true, 'include-breadcrumb?': true, 'include-matched-count?': true, limit: 10, 'search-limit': 100}); const rows = rowsOf(r); const titles = rows.slice(0, 10).map(orig); const hit = rows.some(b => strip(orig(b)) === q || strip(String(b['block/title'] || b.title || '')) === q); const bs = logseq.api.get_state_from_store('search/index-build'); return JSON.stringify({probe: hit ? 'hit' : 'miss', titles, plainN, plainErr, build: bs}); } catch (e) { return JSON.stringify({probe: 'err:' + String(e), titles: []}); } })()"
       (Js.Json.stringify (Js.Json.string text))
   in
   let* raw = Pw.eval_js env js in
@@ -363,6 +362,7 @@ let search_and_click env search_text =
       (Pw.q env
          (Printf.sprintf "[data-testid='%s']:visible" search_text))
   in
+  let round = ref 0 in
   let* () =
     (* index queries lag under -j8; each retry re-fills the search box *)
     Js.Promise.catch
@@ -395,15 +395,27 @@ let search_and_click env search_text =
          query yet (fresh-graph build still truncating/refilling), just
          wait — re-filling would only wipe the box without producing a row *)
       (repeat_until_visible ~expect_timeout:15000. env 24 result (fun () ->
+           incr round;
            let* probe = probe_search_index env search_text in
            if String.length probe >= 4 && String.sub probe 0 4 = "miss" then
              let* () = Js.Promise.resolve (Js.log3 "[search-probe]" probe search_text) in
              let* () = wait_search_index_ready env in
              wait_timeout env 1500.
-           else
+           else begin
              let* () = Js.Promise.resolve (Js.log3 "[search-probe]" probe search_text) in
              let* () = wait_search_index_ready env in
-             search env search_text))
+             (* the index answers but cmdk still shows nothing — its
+                load-results pipeline can stay :loading forever when an
+                awaited worker call starved under -j8; a close/reopen
+                rebuilds ::results/::input and re-fires every group *)
+             if !round mod 6 = 0 then begin
+               let* () = Keyboard.esc env in
+               let* () = wait_timeout env 400. in
+               let* (_ : bool) = cmdk_open env in
+               search env search_text
+             end
+             else search env search_text
+           end))
   in
   Pw.click_l result
 
