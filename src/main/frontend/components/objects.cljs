@@ -6,6 +6,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -88,7 +89,7 @@
                                   [:div.font-medium (t :asset/add-assets)]
                                   (filepicker/picker
                                    {:on-change (fn [_e files]
-                                                 (p/let [_ (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
+                                                 (p/let [_ (editor-assets/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
                                                    (shui/dialog-close!)))})]))
                               (p/let [block (add-new-class-object! class properties)]
                                 (when (:db/id block)
@@ -109,7 +110,7 @@
                                                                             :target (.-target e)}]))})]))
 
 (hsx/defc class-objects
-  [class config]
+  [class config on-first-table-paint!]
   (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
         ;; Subscribe to the class block reactively so that adding/removing a
@@ -131,7 +132,11 @@
            [(:db/id class) class-properties first-paint-done?])]
     [:div.ml-1
      (class-objects-inner config class properties
-                          {:on-first-table-paint! #(set-first-paint-done! true)})]))
+                          {:on-first-table-paint!
+                           (fn []
+                             (set-first-paint-done! true)
+                             (when on-first-table-paint!
+                               (on-first-table-paint!)))})]))
 
 (defn- <property-object-default-value
   [property]

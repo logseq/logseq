@@ -13,9 +13,11 @@
             [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.extensions.fsrs :as fsrs]
+            [frontend.fs :as fs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -30,6 +32,7 @@
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -223,7 +226,7 @@
          (shui/dropdown-menu-item
           {:key "Open in sidebar"
            :on-click (fn [_e]
-                       (editor-handler/open-block-in-sidebar! block-id))}
+                       (editor-format/open-block-in-sidebar! block-id))}
           (t :sidebar.right/open)
           (ui/dropdown-shortcut "shift+click"))
 
@@ -296,11 +299,13 @@
            (shui/dropdown-menu-item
             {:key "Copy block URL"
              :on-click (fn [_e]
-                         (let [tap-f (fn [block-id]
-                                       (url-util/get-logseq-web-block-url config/app-website
-                                                                         (graph-handler/current-graph-id)
-                                                                         block-id))]
-                           (editor-handler/copy-block-ref! block-id tap-f)))}
+                         (if-let [url (url-util/entity-url-for-copy config/app-website
+                                                                    (graph-handler/current-graph-id)
+                                                                    (state/get-current-repo)
+                                                                    (str block-id)
+                                                                    :block)]
+                           (editor-handler/copy-block-ref! block-id (fn [_] url))
+                           (notification/show! (t :block/copy-url-unavailable-warning) :warning)))}
             (t :block/copy-url)))
 
          (when (and (util/electron?) (ldb/asset? block))
@@ -308,9 +313,28 @@
             {:key "Show asset in folder"
              :on-click (fn [_e]
                          (let [assets-dir (config/get-current-repo-assets-root)
-                               ext (name (:logseq.property.asset/type block))
-                               file-path (path/path-join assets-dir (str (:block/uuid block) "." ext))]
-                           (ipc/ipc "openFileInFolder" file-path)))}
+                               repo-dir (config/get-repo-dir (state/get-current-repo))
+                               ext (:logseq.property.asset/type block)
+                               ext-url (:logseq.property.asset/external-url block)
+                               file-path (cond
+                                           ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
+                                           (and (not (string/blank? ext-url))
+                                                (common-config/local-relative-asset? ext-url))
+                                           (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
+
+                                           ;; External file outside the graph:
+                                           ;; absolute path or file:///assets:// URL
+                                           (and (not (string/blank? ext-url))
+                                                (path/absolute? ext-url))
+                                           (path/file-url-or-path->path ext-url)
+
+                                           :else
+                                           (path/path-join assets-dir (str (:block/uuid block) (when ext (str "." (name ext))))))]
+                           (-> (fs/file-exists? file-path)
+                               (p/then (fn [exists?]
+                                         (if exists?
+                                           (ipc/ipc "openFileInFolder" file-path)
+                                           (notification/show! (t :asset/missing-file file-path) :warning)))))))}
             (t :asset/show-file-in-folder)))
 
          (shui/dropdown-menu-item
@@ -470,7 +494,7 @@
       (let [on-click (fn [e]
                        (when-not (util/link? (gobj/get e "target"))
                          (util/stop e)
-                         (editor-handler/reset-cursor-range! (gdom/getElement (str id)))
+                         (editor-format/reset-cursor-range! (gdom/getElement (str id)))
                          (state/set-edit-content! id content)
                          (when on-click
                            (on-click e))))]

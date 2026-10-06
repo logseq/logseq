@@ -352,6 +352,28 @@
            (set (map :block/title (dsl-query "(property status \"Doing\")"))))
         "Blocks or tagged with or descended from a tag that don't have closed default-value property value")))
 
+(deftest cards-query-includes-classes-extending-card
+  (load-test-files
+   {:classes {:Milestone {:build/class-extends [:logseq.class/Card]}
+              :Project {:build/class-extends [:Milestone]}}
+    :pages-and-blocks
+    [{:page {:block/title "page1"}
+      :blocks [{:block/title "direct card"
+                :build/tags [:logseq.class/Card]}
+               {:block/title "milestone card"
+                :build/tags [:Milestone]}
+               {:block/title "project card"
+                :build/tags [:Project]}
+               {:block/title "plain"}]}]})
+  (let [db (conn/get-db test-helper/test-db)
+        titles (set (map (comp :block/title first)
+                         (query-dsl/execute-query
+                          "(page page1)" db
+                          {:cards? true
+                           :block-attrs db-block-attrs})))]
+    (is (= #{"direct card" "milestone card" "project card"} titles)
+        "cards? includes blocks tagged with Card and any class extending it")))
+
 (deftest block-property-query-performance
   (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
                    (map-indexed (fn [idx {:keys [tags]}]
@@ -474,6 +496,26 @@
          (map testable-content
               (dsl-query "(and (task doing) (or [[A]] [[B]]))")))))
 
+(deftest task-queries-with-multi-word-and-custom-statuses
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "review task"
+               :build/properties {:logseq.property/status :logseq.property/status.in-review}}
+              {:block/title "waiting task"
+               :build/properties {:logseq.property/status [:build/page {:block/title "QA Ready"}]}}]}])
+
+  (testing "multi-word statuses match case-insensitively"
+    (is (= ["review task"]
+           (map testable-content (dsl-query "(task \"In Review\")"))))
+    (is (= ["review task"]
+           (map testable-content (dsl-query "(task \"in review\")")))))
+
+  (testing "custom status values match case-insensitively"
+    (is (= ["waiting task"]
+           (map testable-content (dsl-query "(task \"QA Ready\")"))))
+    (is (= ["waiting task"]
+           (map testable-content (dsl-query "(task \"qa ready\")"))))))
+
 ;; Ensure some filters work when no data with relevant properties exist
 (deftest queries-with-no-data
   (load-test-files {:pages-and-blocks []})
@@ -522,6 +564,16 @@
          (set (map :block/title
                    (dsl-query "(priority high medium low)"))))
       "Three arg queries and args that have no match"))
+
+(deftest priority-queries-with-multi-word-and-custom-values
+  (load-test-files
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "urgent b"
+               :build/properties {:logseq.property/priority [:build/page {:block/title "Very High"}]}}]}])
+  (is (= ["urgent b"]
+         (map :block/title (dsl-query "(priority \"Very High\")"))))
+  (is (= ["urgent b"]
+         (map :block/title (dsl-query "(priority \"very high\")")))))
 
 (deftest nested-boolean-queries
   (load-test-files

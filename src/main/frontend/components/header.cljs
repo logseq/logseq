@@ -7,7 +7,7 @@
             [dommy.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.avatar :as avatar]
-            [frontend.components.block :as component-block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.email :as email-component]
             [frontend.components.export :as export]
@@ -483,14 +483,17 @@
   (let [page (db-hooks/use-block page-uuid)
         breadcrumb-data (db-hooks/use-resource [:block-breadcrumb page-uuid 16])
         page-with-breadcrumb (when (and page breadcrumb-data)
-                               (assoc page :block.temp/breadcrumb
-                                      (breadcrumb-model/resource-ancestors breadcrumb-data)))]
+                               (assoc page
+                                      :block.temp/breadcrumb
+                                      (breadcrumb-model/resource-ancestors breadcrumb-data)
+                                      :block.temp/breadcrumb-ref-titles
+                                      (:ref-titles breadcrumb-data)))]
     (when (and page-with-breadcrumb
                (entity/page? page-with-breadcrumb)
                (:block/parent page-with-breadcrumb))
       [:div.ls-block-breadcrumb
        [:div.text-sm
-        (component-block/breadcrumb {}
+        (block-breadcrumb/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page-with-breadcrumb)
                                     {:header? true

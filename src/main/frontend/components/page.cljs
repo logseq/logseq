@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.class :as class-component]
             [frontend.components.db-based.page :as db-page]
@@ -139,6 +140,7 @@
   [page option document-mode?]
   (merge {:id (str (:block/uuid page))
           :db/id (:db/id page)
+          :current-page-title (:block/title page)
           :block? (not (entity/page? page))
           :editor-box editor/box
           :document/mode? document-mode?
@@ -367,7 +369,7 @@
        (plugins/hook-ui-items :pagebar)])))
 
 (hsx/defc tabs
-  [page opts]
+  [page opts on-first-table-paint!]
   (let [class? (entity/class? page)
         property? (entity/property? page)
         both? (and class? property?)
@@ -402,7 +404,7 @@
       (when class?
         (shui/tabs-content
          {:value "tag"}
-         (objects/class-objects page opts)))
+         (objects/class-objects page opts on-first-table-paint!)))
       (when property?
         (shui/tabs-content
          {:value "property"}
@@ -436,24 +438,27 @@
 
 (def ^:private class-page-below-fold-delay-ms 800)
 
-(hsx/defc after-first-paint
-  [content]
-  (let [[ready? set-ready!] (hooks/use-state false)]
+(defn- use-below-fold-ready
+  "A class page shows its body once the objects table reports its first
+  window. That window's view-data has answered by then, so the body's
+  snapshot requests queue behind it. The timer only caps the wait for a
+  table that never reports. The release callback keeps its identity, so
+  the memoized tabs do not re-render when the body is released."
+  [defer?]
+  (let [[released? set-released!] (hooks/use-state false)
+        ready? (or (not defer?) released?)
+        release! (hooks/use-callback #(set-released! true) [])]
     (hooks/use-effect!
      (fn []
-       (let [timeout-id (js/setTimeout
-                         #(set-ready! true)
-                         class-page-below-fold-delay-ms)]
-         #(js/clearTimeout timeout-id)))
-     [])
-    (when ready?
-      content)))
+       (when-not ready?
+         (let [timeout-id (js/setTimeout release! class-page-below-fold-delay-ms)]
+           #(js/clearTimeout timeout-id))))
+     [ready?])
+    [ready? release!]))
 
 (defn- maybe-after-first-paint
-  [defer? content]
-  (if (and defer? content)
-    (after-first-paint content)
-    content))
+  [ready? content]
+  (when ready? content))
 
 (defn- page-inner-key
   "React key for the page inner wrap, which owns the child block tree."
@@ -489,7 +494,8 @@
         page-display-title (when (entity/page? page)
                              (route-handler/built-in-page-title (:block/title page)))
         show-tabs? (and (or class-page? (entity/property? page)) (not tag-dialog?))
-        defer-body? (defer-class-page-below-fold? page option)]
+        [body-ready? on-first-table-paint!] (use-below-fold-ready
+                                             (defer-class-page-below-fold? page option))]
     (if page
       (when (or title block?)
         (if recycled?
@@ -527,11 +533,11 @@
                (when (and (entity/page? page)
                           (not (ldb/library? page)))
                  (maybe-after-first-paint
-                  defer-body?
+                  body-ready?
                   (property-component/bidirectional-properties-area page config)))])
 
             (when (and block? (not sidebar?))
-              (block/breadcrumb {} repo (:block/uuid page) {:block page}))
+              (block-breadcrumb/breadcrumb {} repo (:block/uuid page) {:block page}))
 
             (when (ldb/library? page)
               (library/add-pages page))
@@ -542,10 +548,11 @@
 
             (when show-tabs?
               (tabs page {:current-page? option
-                          :sidebar? sidebar?}))
+                          :sidebar? sidebar?}
+                    on-first-table-paint!))
 
             (maybe-after-first-paint
-             defer-body?
+             body-ready?
              (when (not tag-dialog?)
                (if recycle-page?
                  (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
@@ -561,7 +568,7 @@
                                :container-id container-id})))])))]
 
            (maybe-after-first-paint
-            defer-body?
+            body-ready?
             (when-not (or preview? recycle-page?)
               [:div.flex.flex-col.gap-8
                {:class (when-not (util/mobile?) "ml-1")}
@@ -676,7 +683,9 @@
        :page (cond-> page
                breadcrumb-key
                (assoc :block.temp/breadcrumb
-                      (breadcrumb-model/resource-ancestors breadcrumb-data)))})))
+                      (breadcrumb-model/resource-ancestors breadcrumb-data)
+                      :block.temp/breadcrumb-ref-titles
+                      (:ref-titles breadcrumb-data)))})))
 
 (hsx/defc page-aux
   [option {:keys [status page]}]
@@ -765,7 +774,7 @@
        [:h3#modal-headline.text-lg.leading-6.font-medium
         (t :page.delete/batch-confirm-title)]]]
 
-     [:ol.p-2.pt-4
+     [:ol.p-2.pt-4.max-h-80.overflow-y-auto
       (for [page-item pages]
         [:li
          [:a {:href (rfe/href :page {:name (:block/uuid page-item)})}

@@ -89,6 +89,27 @@
       (is (= [(select-keys original [:block/uuid])]
              (block-handler/get-top-level-blocks [block]))))))
 
+(deftest copy-summaries-exclude-covered-descendants
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "outline"}
+                  :blocks [{:block/title "ancestor"
+                            :build/children [{:block/title "middle"
+                                              :build/children [{:block/title "leaf"}]}]}]}])
+          db @conn
+          ancestor-id (:block/uuid (db-test/find-block-by-content db "ancestor"))
+          leaf-id (:block/uuid (db-test/find-block-by-content db "leaf"))]
+      (p/with-redefs [db-async/<q (fn [_graph _opts query & inputs]
+                                  (p/resolved (apply d/q query db inputs)))
+                     state/get-edit-block (constantly nil)
+                     state/get-input (constantly nil)
+                     state/get-selection-blocks (constantly [])]
+        (-> (p/let [summaries (db-async/<get-block-summaries "graph" [leaf-id ancestor-id])]
+              (is (= [ancestor-id]
+                     (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))))
+            (p/catch #(is false (str %)))
+            (p/finally done))))))
+
 (deftest edit-block-loads-target-through-worker-test
   (async done
     (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
@@ -127,6 +148,7 @@
              (fn []
                (is (= [[:get-block "test" block-id {:children? false}]
                        [:event [:editor/save-code-editor]]
+                       [:event [:editor/save-current-block]]
                        [:clear-edit {:clear-editing-block? false}]
                        [:clear-selection]
                        [:set-editing

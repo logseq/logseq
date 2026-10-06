@@ -195,17 +195,34 @@
     nil))
 
 (defn with-breadcrumb-ref-titles
+  "Hydrates :block/refs titles from a breadcrumb ref-titles payload.
+   Ref-titles also covers [[uuid]] targets that appear inside titles but not
+   in :block/refs (e.g. nested in a page-ref name); those are appended as
+   shallow refs so uuid refs can be resolved for display."
   [entity ref-titles]
-  (if-let [refs (:block/refs entity)]
-    (assoc entity
-           :block/refs
-           (mapv (fn [ref]
-                   (if-let [ref-uuid (:block/uuid ref)]
-                     (if (contains? ref-titles ref-uuid)
-                       (assoc ref :block/title (get ref-titles ref-uuid))
-                       ref)
-                     ref))
-                 refs))
+  (if (seq ref-titles)
+    (let [refs (:block/refs entity)
+          known (into #{} (keep :block/uuid) refs)
+          title-refs (into []
+                           (comp
+                            (filter (fn [[ref-uuid title]]
+                                      (and (uuid? ref-uuid)
+                                           (string? title)
+                                           (not (contains? known ref-uuid)))))
+                            (map (fn [[ref-uuid title]]
+                                   {:block/uuid ref-uuid
+                                    :block/title title})))
+                           ref-titles)]
+      (assoc entity
+             :block/refs
+             (into (mapv (fn [ref]
+                           (if-let [ref-uuid (:block/uuid ref)]
+                             (if (contains? ref-titles ref-uuid)
+                               (assoc ref :block/title (get ref-titles ref-uuid))
+                               ref)
+                             ref))
+                         (or refs []))
+                   title-refs)))
     entity))
 
 (defn resource-ancestors
@@ -243,10 +260,13 @@
           title-line (when-not page?
                        (breadcrumb-label-line raw-title block-type))
           text (if page?
-                 (or (:block/title entity) (:block/name entity))
+                 (or (resolve-uuid-refs entity (:block/title entity))
+                     (:block/name entity))
                  (normalize-typed-breadcrumb-text entity raw-title block-type))
           full-text (if page?
-                      (or (:block/title entity) (:block/name entity) "")
+                      (or (resolve-uuid-refs entity (:block/title entity))
+                          (:block/name entity)
+                          "")
                       (or text ""))
           icon (:logseq.property/icon entity)]
       {:db/id (:db/id entity)

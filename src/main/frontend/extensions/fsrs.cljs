@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.block :as component-block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
@@ -47,32 +48,68 @@
       (update :last-repeat inst-ms->instant)
       (update :due inst-ms->instant)))
 
+(defn- tag-ident
+  [tag]
+  (cond
+    (keyword? tag) tag
+    (map? tag) (:db/ident tag)
+    :else nil))
+
+(defn- tag-extends
+  [tag]
+  (when (map? tag)
+    (let [extends (:logseq.property.class/extends tag)]
+      (cond
+        (sequential? extends) extends
+        (some? extends) [extends]
+        :else nil))))
+
+(defn- tag-or-extends-card?
+  "True when `tag` is Card or any ancestor in :logseq.property.class/extends is Card.
+  Matches worker `get-structured-children` of :logseq.class/Card."
+  [tag]
+  (loop [tags (list tag)
+         seen #{}]
+    (when-let [current (first tags)]
+      (let [ident (tag-ident current)]
+        (cond
+          (= :logseq.class/Card ident) true
+          (contains? seen ident) (recur (rest tags) seen)
+          :else (recur (concat (rest tags) (tag-extends current))
+                       (cond-> seen ident (conj ident))))))))
+
 (defn- card-block?
   [block]
-  (some #(= :logseq.class/Card (:db/ident %)) (:block/tags block)))
+  (boolean (some tag-or-extends-card? (:block/tags block))))
 
-(defn- get-card-map
-  "Return nil if block is not #Card.
+(defn- block->card-map
+  "fsrs card-map for a block already known to be a card.
   Return default card-map if `:logseq.property.fsrs/state` or `:logseq.property.fsrs/due` is nil"
   [block-entity]
+  (let [fsrs-state (:logseq.property.fsrs/state block-entity)
+        fsrs-due (:logseq.property.fsrs/due block-entity)
+        return-default-card-map? (not (and fsrs-state fsrs-due))]
+    (if return-default-card-map?
+      (if-let [block-created-at (some-> (:block/created-at block-entity) (js/Date.) tick/instant)]
+        (assoc (fsrs.core/new-card!)
+               :last-repeat block-created-at
+               :due block-created-at)
+        (fsrs.core/new-card!))
+      (property-fsrs-state->fsrs-card-map (assoc fsrs-state :due fsrs-due)))))
+
+(defn- get-card-map
+  "Return nil if block is not #Card and does not have a tag that extends Card."
+  [block-entity]
   (when (card-block? block-entity)
-    (let [fsrs-state (:logseq.property.fsrs/state block-entity)
-          fsrs-due (:logseq.property.fsrs/due block-entity)
-          return-default-card-map? (not (and fsrs-state fsrs-due))]
-      (if return-default-card-map?
-        (if-let [block-created-at (some-> (:block/created-at block-entity) (js/Date.) tick/instant)]
-          (assoc (fsrs.core/new-card!)
-                 :last-repeat block-created-at
-                 :due block-created-at)
-          (fsrs.core/new-card!))
-        (property-fsrs-state->fsrs-card-map (assoc fsrs-state :due fsrs-due))))))
+    (block->card-map block-entity)))
 
 (defn- repeat-card!
   [repo block-id rating]
   (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
     (p/let [block-entity (state/<invoke-db-worker :thread-api/pull
                                                   repo
-                                                  '[* {:block/tags [:db/ident]}]
+                                                  '[* {:block/tags [:db/ident
+                                                                    {:logseq.property.class/extends ...}]}]
                                                   eid)]
     (when-let [card-map (get-card-map block-entity)]
       (let [next-card-map (fsrs.core/repeat-card! card-map rating)
@@ -86,9 +123,23 @@
          {:logseq.property.fsrs/state prop-fsrs-state
           :logseq.property.fsrs/due prop-fsrs-due}))))))
 
+(declare update-due-cards-count!)
+
+(defn- rate-card!
+  "Persist a rating and refresh the sidebar due-cards counter."
+  [repo block-id rating]
+  (p/do!
+   (repeat-card! repo block-id rating)
+   (update-due-cards-count!)))
+
 (defn- <get-due-card-block-ids
   [repo cards-id]
   (state/<invoke-db-worker :thread-api/get-fsrs-due-card-block-ids repo cards-id))
+
+(defn- <get-card-block-ids
+  "Block uuids of all cards in the scope of `cards-id`, whether due or not."
+  [repo cards-id]
+  (state/<invoke-db-worker :thread-api/get-fsrs-card-block-ids repo cards-id))
 
 (defn- global-cards-id?
   [cards-id]
@@ -192,14 +243,15 @@
      (mapv
       (fn [rating]
         (let [card-map (get-card-map block)
-              due (:due (fsrs.core/repeat-card! card-map rating))]
+              due (when card-map
+                    (:due (fsrs.core/repeat-card! card-map rating)))]
           (btn-with-shortcut {:btn-text (rating-label rating)
                               :shortcut (rating->shortcut rating)
                               :due due
                               :show-due? (not (:mobile? opts))
                               :mobile? (:mobile? opts)
                               :id (str "card-" (name rating))
-                              :on-click #(do (repeat-card! repo block-id rating)
+                              :on-click #(do (rate-card! repo block-id rating)
                                              (swap! *card-index inc)
                                              (reset! *phase :init))})))
       ratings)
@@ -238,7 +290,7 @@
               {:class (when (:mobile? opts) "ls-mobile-card")}
               [:div.ls-card-scroll.flex-1.min-h-0.overflow-y-auto.overflow-x-hidden
                [:div.mb-4.ml-2.opacity-70.text-sm
-                (component-block/breadcrumb {} repo (:block/uuid block) {:block block})]
+                (block-breadcrumb/breadcrumb {} repo (:block/uuid block) {:block block})]
                (let [option (case phase
                               :init
                               {:hide-children? true}
@@ -282,18 +334,26 @@
                         :block/title (t :flashcard/all-cards)}])
         *block-ids (hooks/use-memo #(atom nil) [])
         [block-ids] (hooks/use-atom *block-ids)
+        *all-block-ids (hooks/use-memo #(atom nil) [])
+        [all-block-ids] (hooks/use-atom *all-block-ids)
         *loading? (hooks/use-memo #(atom nil) [])
         [loading?] (hooks/use-atom *loading?)
         *card-index (hooks/use-memo #(atom 0) [])
         [card-index] (hooks/use-atom *card-index)
         *phase (hooks/use-memo #(atom :init) [])
+        practice-again! (fn []
+                          (reset! *card-index 0)
+                          (reset! *phase :init)
+                          (reset! *block-ids all-block-ids))
         progress-label (str (min (inc card-index) (count block-ids)) "/" (count block-ids))
         select-card! (fn [v]
                        (reset! *cards-id v)
                        (let [cards-id' (when-not (global-cards-id? v) v)]
-                         (p/let [result (<get-due-card-block-ids repo cards-id')]
+                         (p/let [result (<get-due-card-block-ids repo cards-id')
+                                 all-result (<get-card-block-ids repo cards-id')]
                            (reset! *card-index 0)
                            (reset! *phase :init)
+                           (reset! *all-block-ids all-result)
                            (reset! *block-ids result))))]
     (shortcut/use-shortcut-handler! :shortcut.handler/cards
                                     {:cards-id initial-cards-id
@@ -302,7 +362,9 @@
      (fn []
        (reset! *loading? true)
        (p/let [cards-class (state/<invoke-db-worker :thread-api/pull repo [:db/id] :logseq.class/Cards)
-               result (<get-due-card-block-ids repo initial-cards-id)]
+               result (<get-due-card-block-ids repo initial-cards-id)
+               all-result (<get-card-block-ids repo initial-cards-id)]
+         (reset! *all-block-ids all-result)
          (reset! *block-ids result)
          (reset! *loading? false)
          (when-let [cards-class-id (:db/id cards-class)]
@@ -374,14 +436,38 @@
             [card-view repo block-id *card-index *phase opts]]
 
            (empty? block-ids)
-           [:div.ls-card.content.ml-2
-            [:h2.font-medium (t :flashcard.empty/title)]
+           (if (empty? all-block-ids)
+             [:div.ls-card.content.ml-2
+              [:h2.font-medium (t :flashcard.empty/title)]
 
-            [:div
-             [:p (t :flashcard.empty/desc "#Card")]]]
+              [:div
+               [:p (t :flashcard.empty/desc "#Card")]]]
+             [:div.ls-card.content.ml-2
+              [:h2.font-medium (t :flashcard.empty/no-due-title)]
+
+              [:div
+               [:p (t :flashcard.empty/no-due-desc)]]
+
+              [:div.mt-4
+               (shui/button
+                {:variant :outline
+                 :size :sm
+                 :id "card-practice-again"
+                 :on-click (fn [_e] (practice-again!))}
+                (t :flashcard.review/practice-again))]])
 
            :else
-           [:p (t :flashcard.review/finished)]))])))
+           [:div.ls-card.content.ml-2
+            [:p (t :flashcard.review/finished)]
+
+            (when (seq all-block-ids)
+              [:div.mt-4
+               (shui/button
+                {:variant :outline
+                 :size :sm
+                 :id "card-practice-again"
+                 :on-click (fn [_e] (practice-again!))}
+                (t :flashcard.review/practice-again))])]))])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (defn- update-due-cards-count!
@@ -542,13 +628,14 @@
   :XXX-state-cards, cards' state is XXX"
     []
     (p/let [repo (state/get-current-repo)
+            ;; Retention stats only cover cards that have been scheduled at
+            ;; least once, which is exactly the blocks carrying fsrs state.
             all-card-blocks
             (db-async/<q repo {:transact-db? false}
-                         '[:find [(pull ?b [* {:block/tags [:db/ident]}]) ...]
+                         '[:find [(pull ?b [*]) ...]
                            :where
-                           [?b :block/tags :logseq.class/Card]
-                           [?b :block/uuid]])
-            all-cards (map get-card-map all-card-blocks)
+                           [?b :logseq.property.fsrs/state]])
+            all-cards (map block->card-map all-card-blocks)
             [today-stat
              recent-7-days-stat
              recent-30-days-stat]

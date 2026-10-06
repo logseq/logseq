@@ -7,7 +7,7 @@
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.common :as common-handler]
             [frontend.handler.db-based.sync :as rtc-handler]
-            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.quick-add :as editor-quick-add]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.extensions.fsrs :as fsrs]
@@ -243,10 +243,10 @@
   (hooks/use-effect!
    (fn []
      (p/do!
-      (editor-handler/quick-add-ensure-new-block-exists!)
+      (editor-quick-add/quick-add-ensure-new-block-exists!)
       (when (mobile-util/native-ios?)
         ;; FIXME: android doesn't open keyboard automatically
-        (editor-handler/quick-add-open-last-block!))))
+        (editor-quick-add/quick-add-open-last-block!))))
    [])
   (quick-add/quick-add))
 

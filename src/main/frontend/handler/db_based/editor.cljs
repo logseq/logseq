@@ -2,10 +2,12 @@
   "DB-based graph implementation"
   (:require [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
@@ -14,6 +16,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.op]
@@ -98,6 +101,22 @@
          (map #(select-keys % [:db/id :block/uuid :block/title :block/name :db/ident :block/tags]))
          (util/distinct-by-last-wins :block/uuid))))
 
+(defn- warn-missing-uuid-refs!
+  "Warn once per [:block/uuid id] ref that doesn't resolve to an entity."
+  [refs]
+  (when-let [uuids (seq (into #{}
+                              (keep (fn [ref]
+                                      (when (and (vector? ref)
+                                                 (= :block/uuid (first ref))
+                                                 (uuid? (second ref)))
+                                        (second ref))))
+                              refs))]
+    (when-let [repo (state/get-current-repo)]
+      (p/let [results (db-async/<get-blocks repo uuids)]
+        (doseq [{:keys [block]} results]
+          (when (nil? block)
+            (notification/show! (t :block/ref-not-exist) :warning)))))))
+
 (defn wrap-parse-block
   [{:block/keys [title level] :as block}]
   (let [block (if (nil? title)
@@ -133,6 +152,7 @@
                                          hashtag-link-refs)
                                  (remove nil?)
                                  (util/distinct-by-last-wins ref-dedupe-key))))))
+        _ (warn-missing-uuid-refs! (:block/refs block))
         title' (db-content/title-ref->id-ref (or (get block :block/title) title) (:block/refs block))
         result (-> block
                    (merge (if level {:block/level level} {}))
@@ -148,21 +168,25 @@
                       true)]
 
     (when file-valid?
-      (p/do!
-       (state/<invoke-db-worker :thread-api/transact
-                                (state/get-current-repo)
-                                [{:file/path path
-                                  :file/content content
-                                  :file/created-at (js/Date.)
-                                  :file/last-modified-at (js/Date.)}]
-                                nil
-                                nil)
-      ;; Post save
-       (cond (= path "logseq/config.edn")
-             (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
-               (state/pub-event! [:shortcut/refresh]))
-             (= path "logseq/custom.css")
-             (ui-handler/add-style-if-exists!))))))
+      (p/let [repo (state/get-current-repo)
+              file-entity (state/<invoke-db-worker :thread-api/pull repo [:db/id] [:file/path path])]
+        (p/do!
+         (state/<invoke-db-worker :thread-api/transact
+                                  repo
+                                  [(cond-> {:file/path path
+                                            :file/content content
+                                            :file/created-at (js/Date.)
+                                            :file/last-modified-at (js/Date.)}
+                                     (nil? file-entity)
+                                     (assoc :block/uuid (common-uuid/gen-uuid :builtin-block-uuid path)))]
+                                  nil
+                                  nil)
+        ;; Post save
+         (cond (= path "logseq/config.edn")
+               (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
+                 (state/pub-event! [:shortcut/refresh]))
+               (= path "logseq/custom.css")
+               (ui-handler/add-style-if-exists!)))))))
 
 (defn batch-set-heading!
   [block-ids heading]

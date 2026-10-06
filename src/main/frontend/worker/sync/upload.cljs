@@ -367,8 +367,9 @@
                             (sync-crypt/<ensure-graph-aes-key repo graph-id))
                   _ (when (and graph-e2ee? (nil? aes-key))
                       (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
-            (let [snapshot-checksum (sync-checksum/recompute-checksum @source-conn)]
-              (client-op/update-local-checksum repo snapshot-checksum)
+            (let [db @source-conn
+                  snapshot-checksum (sync-checksum/recompute-checksum db)]
+              (client-op/update-local-checksum repo snapshot-checksum (:max-tx db))
               (p/let [_ (update-progress {:sub-type :upload-progress
                                           :message (if graph-e2ee? "Encrypting..." "Preparing...")})
                       {:keys [db] :as temp} (<prepare-upload-temp-sqlite!

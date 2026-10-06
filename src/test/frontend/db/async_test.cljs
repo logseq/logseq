@@ -456,7 +456,7 @@
              :block/uuid block-b
              :block/title "b"
              :block/parent {:db/id parent-b}}]
-           (#'db-async/order-block-summaries [block-a block-b] rows)))))
+           (#'db-async/order-block-summaries [block-a block-b] rows {})))))
 
 (deftest get-block-summaries-keeps-pages-without-parent-test
   (let [page-a (random-uuid)
@@ -470,7 +470,8 @@
            (#'db-async/order-block-summaries
             [page-a page-b]
             [[2 page-b "Apr 15th, 2027" :none]
-             [1 page-a "Sep 15th, 2026" :none]])))))
+             [1 page-a "Sep 15th, 2026" :none]]
+            {})))))
 
 (deftest get-block-summaries-query-includes-pages-without-parent-test
   (async done
@@ -560,11 +561,16 @@
                            db-model/sort-by-order-recursive
                            (fn [& _]
                              ::renderer-sort)]
-             (-> (p/let [result (db-async/<get-date-scheduled-or-deadlines "2026-07-07")]
+             (-> (p/let [result (db-async/<get-date-scheduled-or-deadlines "2026-07-07")
+                         [_ start _end] (first @worker-calls)]
                    (is (= grouped-result result))
-                   (is (= repo (ffirst @worker-calls)))
-                   (is (every? number? (rest (first @worker-calls))))
-                   )
+                   (is (= [repo
+                           (date/journal-day->local-ms 20260707)
+                           (date/journal-day->local-ms 20260710)]
+                          (first @worker-calls)))
+                   (when-not (zero? (.getTimezoneOffset (js/Date. 2026 6 7)))
+                     (is (not= (date/journal-day->utc-ms 20260707) start)
+                         "Worker range must use local midnight, not UTC midnight")))
                  (p/catch
                   (fn [error]
                     (is false (str error))))

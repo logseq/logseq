@@ -13,6 +13,8 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.quick-add :as editor-quick-add]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.user :as user-handler]
             [frontend.modules.outliner.op :as frontend-outliner-op]
@@ -209,6 +211,7 @@
                                                    :tail-len 0
                                                    :container-id nil
                                                    :save-code-editor? false
+                                                   :save-current-block? false
                                                    :skip-load? true}}
                                            (some-> (last @edit-calls)
                                                    (update :block :block/title)))
@@ -381,6 +384,7 @@
                           :tail-len 0
                           :container-id nil
                           :save-code-editor? false
+                          :save-current-block? false
                           :skip-load? true}]
                         @edit-call)
                      "Deletion should restore focus from the renderer callback")))))
@@ -664,17 +668,18 @@
         (is (not= (:db/id comments-area') (:db/id (:block/parent target')))
             "The target block must not become a child of the comments area")))))
 
-(deftest-async db-based-save-assets-appends-to-today-page-without-editor
-  (let [today-page {:block/uuid (random-uuid)
-                    :block/title "today"}
+(deftest-async db-based-save-assets-appends-to-asset-page-without-editor
+  (let [asset-page {:block/uuid (random-uuid)
+                    :block/title "Asset"}
         inserted (atom nil)]
     (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
                                                             (p/resolved ["/repo" "assets"]))
                         assets-handler/get-file-checksum (constantly "checksum")
                         db-async/<get-asset-with-checksum (fn [& _] (p/resolved nil))
-                        db-async/<get-today-journal-title (fn [& _] (p/resolved "today"))
-                        db-async/<get-journal-page-by-day (fn [& _] (p/resolved today-page))
-                        state/<invoke-db-worker (fn [& _] (p/resolved nil))
+                        state/<invoke-db-worker (fn [api & _]
+                                                  (p/resolved
+                                                   (when (= api :thread-api/pull)
+                                                     asset-page)))
                         state/get-edit-block (constantly nil)
                         state/get-edit-content (constantly "")
                         frontend-outliner-op/insert-blocks! (fn [blocks target opts]
@@ -687,11 +692,11 @@
                                                 (mapv (fn [block-id]
                                                         {:block/uuid block-id})
                                                       block-ids)))]
-          (editor/db-based-save-assets! "repo" [{:src "image.png"
+          (editor-assets/db-based-save-assets! "repo" [{:src "image.png"
                                                  :title "image"}]))
         (p/then
          (fn [_]
-           (is (= today-page (:target @inserted)))
+           (is (= asset-page (:target @inserted)))
            (is (= {:keep-uuid? true
                    :bottom? true
                    :sibling? false
@@ -723,7 +728,7 @@
                                                 (mapv (fn [block-id]
                                                         {:block/uuid block-id})
                                                       block-ids)))]
-          (editor/db-based-save-assets! "repo"
+          (editor-assets/db-based-save-assets! "repo"
                                         [{:src "image.png"
                                           :title "image"}]
                                         :last-edit-block last-edit-block))
@@ -765,7 +770,7 @@
                                                 (mapv (fn [block-id]
                                                         {:block/uuid block-id})
                                                       block-ids)))]
-          (editor/db-based-save-assets! "repo"
+          (editor-assets/db-based-save-assets! "repo"
                                         [{:src "image.png"
                                           :title "image"}]
                                         :target-block target-block
@@ -848,7 +853,7 @@
                     (fn [content opts]
                       (swap! inserts conj [content opts])
                       (p/resolved nil))]
-      (p/let [_ (editor/quick-add-ensure-new-block-exists!)]
+      (p/let [_ (editor-quick-add/quick-add-ensure-new-block-exists!)]
         (is (= [["" {:page quick-add-page-id
                       :container-id :unknown-container
                       :replace-empty-target? false}]]

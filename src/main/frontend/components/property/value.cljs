@@ -15,6 +15,7 @@
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
@@ -104,6 +105,53 @@
   (or (= value :logseq.property/empty-placeholder)
       (and (map? value)
            (= (:db/ident value) :logseq.property/empty-placeholder))))
+
+(defn- property-value-collection?
+  "Entity maps are colls, so cardinality-many checks must exclude them."
+  [value]
+  (or (set? value)
+      (and (sequential? value)
+           (not (string? value)))))
+
+(defn- property-value-empty-for-render?
+  [value]
+  (or (nil? value)
+      (empty-placeholder-value? value)
+      (and (property-value-collection? value)
+           (or (empty? value)
+               (every? empty-placeholder-value? value)))))
+
+(defn- property-value-blocks
+  "Blocks that can be mounted in the property value editor.
+
+  After Backspace on an empty many-valued url/default slot the row can still
+  contain empty-placeholder, nil, or a snapshot without :block/uuid.
+  blocks-container throws Invalid block row for those (db-test#1340)."
+  [value-block]
+  (let [items (cond
+                (property-value-collection? value-block)
+                value-block
+
+                (or (map? value-block) (uuid? value-block))
+                [value-block]
+
+                :else
+                [])]
+    (vec
+     (keep (fn [item]
+             (cond
+               (empty-placeholder-value? item)
+               nil
+
+               (uuid? item)
+               item
+
+               (and (map? item) (uuid? (:block/uuid item)))
+               item
+
+               :else
+               nil))
+           items))))
 
 (defn- unset-default-value?
   "Show the Set default value trigger only when no value entity exists.
@@ -1271,6 +1319,7 @@
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
   result]
   (let [[*input set-input!] (hooks/use-state nil)
+        [*selected-choices set-*selected-choices!] (hooks/use-state nil)
         {:keys [all-classes class-options extends-class-options structured-children-by-class-id
                 extends-by-class-id]} (:class-data opts)
         classes (:logseq.property/classes property)
@@ -1416,6 +1465,7 @@
                 opts
                 {:multiple-choices? multiple-choices?
                  :tap-*input-val set-input!
+                 :tap-*selected-choices set-*selected-choices!
                  :items options
                  :selected-choices selected-choices
                  :dropdown? dropdown?
@@ -1457,7 +1507,11 @@
                                    (when (fn? add-new-choice!)
                                      (add-new-choice!
                                       {:value (select-keys entity [:db/id :block/uuid])
-                                       :label (:block/title entity)})))
+                                       :label (:block/title entity)}))
+                                   ;; A new option selects the raw input string, so swap it for the
+                                   ;; created entity's id to keep the checkbox and toggles consistent
+                                   (when (and selected? *selected-choices (not (integer? chosen)))
+                                     (swap! *selected-choices (fn [choices] (-> (set choices) (disj chosen) (conj id))))))
                                   (when-not add-tag-property?
                                     (log/error :msg "No :db/id found or created for chosen" :chosen chosen)))))})
 
@@ -1556,7 +1610,9 @@
                                                               (string/lower-case v)))
                                        (conj page-class))))))
                      :add-new-choice! (fn [new-choice]
-                                        (set-initial-choices! (add-initial-node-choice (current-initial-choices) new-choice))))
+                                        (let [choices' (add-initial-node-choice (current-initial-choices) new-choice)]
+                                          (set-initial-choices! choices')
+                                          (set-result! choices'))))
         extends-property? (= (:db/ident property) :logseq.property.class/extends)]
 
     (hooks/use-effect!
@@ -1653,9 +1709,7 @@
                                                             :refresh-result-f refresh-result-f})))
                selected-choices' (get block (:db/ident property))
                selected-choices (when-not (= type :checkbox)
-                                  (if (every? #(and (map? %) (:db/id %)) selected-choices')
-                                    (map :db/id selected-choices')
-                                    [selected-choices']))]
+                                  (property-value->ids selected-choices'))]
          (select-aux block property
                      {:multiple-choices? multiple-choices?
                       :items items
@@ -1686,9 +1740,17 @@
         multiple-values? (db-property/many? property)
         block-container (state/get-component :block/container)
         blocks-container (state/get-component :block/blocks-container)
-        value-block (if (and (coll? value-block) (every? entity-map? value-block))
-                      (set (remove #(= (:db/ident %) :logseq.property/empty-placeholder) value-block))
-                      value-block)
+        value-blocks (property-value-blocks value-block)
+        value-block (cond
+                      (empty? value-blocks)
+                      nil
+
+                      (or multiple-values?
+                          (property-value-collection? value-block))
+                      (set value-blocks)
+
+                      :else
+                      (first value-blocks))
         default-value (:logseq.property/default-value property)
         default-value? (and
                         (:db/id default-value)
@@ -1729,7 +1791,11 @@
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
           :style {:min-height 20 :margin-left 3}
-          :on-click #(<create-new-block! block property "")}
+          :on-click #(<create-new-block! block property "")
+          :on-key-down (fn [e]
+                         (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                           (util/stop e)
+                           (delete-block-property! block property opts)))}
          (when (:class-schema? opts)
            (t :property/add-description))]))))
 
@@ -1904,8 +1970,9 @@
            [:<> (page-cp opts value)]))
 
        (contains? #{:node :class :property :page :asset} type)
-       (when-let [reference (state/get-component :block/reference)]
-         (when value (reference {:table-view? table-view?} (:block/uuid value))))
+       (when-let [block-uuid (and value (:block/uuid value))]
+         (when-let [reference (state/get-component :block/reference)]
+           (reference {:table-view? table-view?} block-uuid)))
 
        (and (map? value) (some? (db-property/property-value-content value)))
        (let [content (str (db-property/property-value-content value))]
@@ -2374,7 +2441,7 @@
                         (let [files (array-seq files)]
                           (when (seq files)
                             (set-saving! true)
-                            (-> (editor-handler/db-based-save-assets! repo files)
+                            (-> (editor-assets/db-based-save-assets! repo files)
                                 (p/then
                                  (fn [saved-assets]
                                    (let [saved-assets (vec (remove nil? saved-assets))]
@@ -2632,17 +2699,25 @@
 (hsx/defc multiple-values
   [block property opts]
   (let [value (get block (:db/ident property))
-           value' (if (coll? value) value
-                      (when (some? value) #{value}))]
-       (multiple-values-inner block property value' opts)))
+        value' (cond
+                 (property-value-collection? value)
+                 value
+
+                 (some? value)
+                 #{value}
+
+                 :else
+                 nil)]
+    (multiple-values-inner block property value' opts)))
 
 (defn- resolved-property-value-for-render
   [block property multiple-values?]
-  (let [v (get block (:db/ident property))
+  (let [property-ident (:db/ident property)
+        v (get block property-ident)
         block-loaded? (some? (:block/uuid block))]
     (or
      (cond
-       (and multiple-values? (or (set? v) (coll? v) (nil? v)))
+       (and multiple-values? (or (property-value-collection? v) (nil? v)))
        v
        multiple-values?
        #{v}
@@ -2650,7 +2725,11 @@
        (first v)
        :else
        v)
-     (when block-loaded?
+     (when (and block-loaded?
+                ;; Defaults of class-declared properties only apply to class
+                ;; members; defaults of other properties apply everywhere.
+                (or (contains? (:block.temp/class-property-idents block) property-ident)
+                    (not (:block.temp/class-declared? property))))
        (:logseq.property/default-value property)))))
 
 (hsx/defc ^:large-vars/cleanup-todo property-value
@@ -2692,7 +2771,7 @@
                                     (:db/id block)
                                     (:db/ident property)))}
                       (t :ui/fix))]
-        (let [empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
+        (let [empty-value? (property-value-empty-for-render? v)
               closed-values? (seq (:property/closed-values property))
               value-cp [:div.property-value-inner
                         {:data-type type

@@ -5,6 +5,7 @@
    [clojure.string :as string]
    [datascript.conn :as dc]
    [datascript.core :as d]
+   [datascript.storage :as ds-storage]
    [frontend.common.crypt :as crypt]
    [frontend.test.noise :as test-noise]
    [frontend.worker.db-listener :as db-listener]
@@ -26,10 +27,12 @@
    [frontend.worker.sync.presence :as sync-presence]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.transport :as sync-transport]
+   [frontend.worker.sync.upload :as sync-upload]
    [frontend.worker.sync.util :as sync-util]
    [frontend.worker.undo-redo :as undo-redo]
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
+   [logseq.common.util.date-time :as date-time-util]
    [logseq.common.util.page-ref :as page-ref]
    [logseq.db :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
@@ -37,11 +40,14 @@
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
    [logseq.db.common.delete-blocks :as delete-blocks]
+   [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.frontend.validate :as db-validate]
+   [logseq.db.sqlite.export :as sqlite-export]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.db.test.helper :as db-test]
+   [logseq.graph-parser.block :as gp-block]
    [logseq.outliner.core :as outliner-core]
    [logseq.outliner.op :as outliner-op]
    [logseq.outliner.page :as outliner-page]
@@ -317,6 +323,13 @@
      :child2 child2
      :child3 child3}))
 
+(defn- mark-graph-remote!
+  "Marks the graph of a setup map as one that syncs, as upload and download
+  do, and returns the map. The stored checksum is kept only on such a graph."
+  [{:keys [conn] :as setup}]
+  (d/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)])
+  setup)
+
 (defn- setup-two-parents
   []
   (let [conn (db-test/create-conn-with-blocks
@@ -450,6 +463,321 @@
   (outliner-op/apply-ops! conn
                           (mapv #(normalize-op-block-ids @conn %) ops)
                           opts))
+
+(defn- upload-pending-and-assert-converged!
+  [conn server-conn]
+  (let [{:keys [tx-entries drop-tx-ids]}
+        (sync-apply/prepare-upload-tx-entries conn (sync-apply/pending-txs test-repo))]
+    (doseq [{:keys [tx-data outliner-op]} tx-entries]
+      ;; Validate raw lookups before the server's stale-rebase handling can drop them.
+      (d/with @server-conn tx-data)
+      (#'sync-handler/apply-tx-entry!
+       server-conn {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}))
+    (is (= (sync-checksum/recompute-checksum @conn)
+           (sync-checksum/recompute-checksum @server-conn)))
+    (sync-apply/mark-pending-txs-false! test-repo (into drop-tx-ids (map :tx-id tx-entries)))
+    (is (empty? (sync-apply/pending-txs test-repo)))))
+
+(defn- mentions-tempid?
+  [tempids item]
+  (cond
+    (map? item) (contains? tempids (:db/id item))
+    (vector? item) (boolean (some #(and (string? %) (contains? tempids %)) item))
+    :else false))
+
+(deftest outliner-upload-chunks-preserve-entities-and-acknowledgment-test
+  (doseq [delete? [false true]]
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          _ (when delete? (outliner-page/delete! conn (:block/uuid parent)))
+          server-conn (d/conn-from-db @conn)
+          new-block-uuids (vec (repeatedly 6 random-uuid))
+          ;; The inserted blocks are created under string tempids equal to
+          ;; their uuids, and their datoms refer to one another through them.
+          new-block-tempids (set (map str new-block-uuids))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      (if delete?
+                        [[:recycle-delete-permanently [(:block/uuid parent)]]]
+                        [[:insert-blocks [(mapv (fn [n block-uuid]
+                                                  {:block/uuid block-uuid
+                                                   :block/title (str "Chunk block " n)})
+                                                (range 6)
+                                                new-block-uuids)
+                                          (:db/id parent) {:sibling? false :keep-uuid? true}]]])
+                      local-tx-meta)
+          (with-redefs [sync-apply/max-upload-request-datoms (if delete? 2 15)]
+            ;; tempid-requests counts the requests that carry any datom of the
+            ;; inserted blocks. How many requests the whole upload takes is
+            ;; not asserted: the insert also replaces the page's
+            ;; :block/updated-at, whose datoms carry no tempid, and their
+            ;; position in the tx varies between runs; when they fall outside
+            ;; the tempid group they travel in a request of their own.
+            (loop [requests 0
+                   tempid-requests 0]
+              (let [pending (sync-apply/pending-txs test-repo)
+                    {:keys [tx-entries]} (sync-apply/prepare-upload-tx-entries test-repo conn pending)]
+                (if (seq tx-entries)
+                  (do
+                    (is (< requests 20) "Chunk progress must be bounded")
+                    (when (< requests 20)
+                      (is (= tx-entries (:tx-entries (sync-apply/prepare-upload-tx-entries test-repo conn pending)))
+                          "Before acknowledgment a retry must contain the same chunk")
+                      (doseq [{:keys [tx-data outliner-op]} tx-entries]
+                        (d/with @server-conn tx-data)
+                        (let [entry {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}]
+                          (#'sync-handler/apply-tx-entry! server-conn entry)
+                          ;; A lost response resends the chunk before advancing the cursor.
+                          (#'sync-handler/apply-tx-entry! server-conn entry)))
+                      (#'sync-apply/commit-large-upload-progress! test-repo tx-entries)
+                      (sync-apply/mark-pending-txs-false! test-repo (keep :tx-id tx-entries))
+                      (recur (inc requests)
+                             (cond-> tempid-requests
+                               (some #(mentions-tempid? new-block-tempids %)
+                                     (mapcat :tx-data tx-entries))
+                               inc))))
+                  (do
+                    (if delete?
+                      (is (> requests 1) "Permanent deletion must span requests")
+                      (is (= 1 tempid-requests) "Interleaved tempid dependencies must stay in one atomic request"))
+                    (is (empty? (sync-apply/pending-txs test-repo)))
+                    (is (= (sync-checksum/recompute-checksum @conn)
+                           (sync-checksum/recompute-checksum @server-conn)))))))))))))
+
+(deftest additional-outliner-operations-upload-test
+  (doseq [op [:restore-recycled :recycle-delete-permanently :collapse-expand-blocks :batch-import-edn]
+          rebase? [false true]]
+    (testing (str op ", rebase=" rebase?)
+      (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+            [_ recycled-uuid] (outliner-page/create! conn "Recycled upload page" {})
+            _ (outliner-page/delete! conn recycled-uuid)
+            source-conn (db-test/create-conn-with-blocks
+                         [{:page {:block/title "Imported upload page"}
+                           :blocks [{:block/title "Imported child"}]}])
+            export-map (sqlite-export/build-export @source-conn
+                                                   {:export-type :page
+                                                    :page-id (:db/id (ldb/get-page @source-conn "Imported upload page"))})
+            args (case op
+                   (:restore-recycled :recycle-delete-permanently) [recycled-uuid]
+                   :collapse-expand-blocks [[{:block/uuid (:block/uuid child1) :block/collapsed? true}] {}]
+                   :batch-import-edn [export-map {}])
+            server-conn (d/conn-from-db @conn)]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (let [result (apply-ops! conn [[op args]] local-tx-meta)]
+              (is (nil? (:error result))))
+            (when rebase?
+              (let [remote-tx (:tx-data (ldb/transact! server-conn
+                                                     [[:db/add (:db/id child2) :block/title "Remote edit"]]))]
+                (sync-apply/apply-remote-tx! test-repo nil remote-tx)))
+            (case op
+              :restore-recycled (is (not (ldb/recycled? (d/entity @conn [:block/uuid recycled-uuid]))))
+              :recycle-delete-permanently (is (nil? (d/entity @conn [:block/uuid recycled-uuid])))
+              :collapse-expand-blocks (is (true? (:block/collapsed? (d/entity @conn (:db/id child1)))))
+              :batch-import-edn (is (some? (ldb/get-page @conn "Imported upload page"))))
+            (upload-pending-and-assert-converged! conn server-conn)))))))
+
+(deftest rebase-save-new-page-reference-and-insert-sibling-test
+  (doseq [persisted-bad-history? [false true]
+          recycle? [false true]
+          move-reference-to-library? [false true]]
+    (testing (str "reference plus Enter, persisted bad history=" persisted-bad-history?
+                  ", recycle=" recycle? ", move reference to Library=" move-reference-to-library?)
+      (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+            [_ recycled-uuid] (outliner-page/create! conn "TickTick" {})
+            remote-conn (d/conn-from-db @conn)
+            parsed-ref (gp-block/page-name->map "New Contact" @conn true
+                                                date-time-util/default-journal-title-formatter)
+            page-uuid (:block/uuid parsed-ref)]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (apply-ops! conn
+                        [[:save-block [{:block/uuid (:block/uuid child1)
+                                        :block/title (str "Call [[" page-uuid "]]")
+                                        :block/refs [parsed-ref]} {}]]
+                         [:insert-blocks [[{:block/title "" :block/uuid (random-uuid)}]
+                                          (:db/id child1) {:sibling? true}]]]
+                        (assoc local-tx-meta :outliner-op :insert-blocks))
+            (let [inserted (ldb/get-right-sibling (d/entity @conn (:db/id child1)))
+                  inserted-uuid (:block/uuid inserted)
+                  pending (first (sync-apply/pending-txs test-repo))
+                  tx-id (:tx-id pending)]
+              (is (not= page-uuid inserted-uuid))
+              (when-not persisted-bad-history?
+                (is (= inserted-uuid
+                       (get-in pending [:forward-outliner-ops 1 1 0 0 :block/uuid]))))
+              (when persisted-bad-history?
+                ;; The affected client stored the created reference UUID as the
+                ;; inserted sibling UUID, while its durable datoms stayed correct.
+                (client-op/upsert-local-tx-entry!
+                 test-repo
+                 (assoc pending
+                        :normalized-tx-data (:tx pending)
+                        :reversed-tx-data (:reversed-tx pending)
+                        :forward-outliner-ops
+                        (-> (:forward-outliner-ops pending)
+                            (assoc-in [1 1 0 0 :block/uuid] page-uuid)
+                            (assoc-in [1 1 0 0 :block/parent] [:block/uuid nil])))))
+              (when recycle?
+                (apply-ops! conn [[:delete-page [recycled-uuid {}]]] local-tx-meta))
+              (when move-reference-to-library?
+                (apply-ops! conn
+                            [[:move-blocks [[page-uuid]
+                                             (:block/uuid (ldb/get-built-in-page @conn common-config/library-page-name))
+                                             {:sibling? false}]]]
+                            local-tx-meta))
+              (dotimes [attempt 2]
+                (let [title (str "Remote edit " attempt)
+                      remote-tx (:tx-data (ldb/transact! remote-conn
+                                                        [[:db/add (:db/id child2) :block/title title]]))]
+                  (is (= :applied
+                         (try
+                           (sync-apply/apply-remote-tx! test-repo nil remote-tx)
+                           :applied
+                           (catch :default error (ex-message error)))))
+                  (is (= title (:block/title (d/entity @conn (:db/id child2)))))
+                  (is (= "New Contact" (:block/title (d/entity @conn [:block/uuid page-uuid]))))
+                  (is (= (when move-reference-to-library?
+                           (:db/id (ldb/get-built-in-page @conn common-config/library-page-name)))
+                         (:db/id (:block/parent (d/entity @conn [:block/uuid page-uuid])))))
+                  (is (= inserted-uuid
+                         (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child1)))))))
+                (is (= inserted-uuid
+                       (get-in (client-op/get-local-tx-entry test-repo tx-id)
+                               [:forward-outliner-ops 1 1 0 0 :block/uuid]))))
+              (is (some #{tx-id} (map :tx-id (sync-apply/pending-txs test-repo))))
+              (when recycle?
+                (is (ldb/recycled? (d/entity @conn [:block/uuid recycled-uuid]))))
+              (upload-pending-and-assert-converged! conn remote-conn))))))))
+
+(deftest rebase-insert-page-in-library-with-reference-test
+  (doseq [with-reference? [false true]]
+    (testing (str "Library page insertion, with reference=" with-reference?)
+      (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+            server-conn (d/conn-from-db @conn)
+            library (ldb/get-built-in-page @conn common-config/library-page-name)
+            parsed-ref (gp-block/page-name->map "Referenced Page" @conn true
+                                                date-time-util/default-journal-title-formatter)
+            title (if with-reference?
+                    (str "Page with [[" (:block/uuid parsed-ref) "]]")
+                    "Library Page")
+            page (cond-> (gp-block/page-name->map title @conn true
+                                                 date-time-util/default-journal-title-formatter)
+                   with-reference? (assoc :block/refs [parsed-ref]))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (apply-ops! conn [[:insert-blocks [[page] (:db/id library)
+                                              {:sibling? false :keep-uuid? true}]]]
+                        local-tx-meta)
+            (let [page-uuid (:block/uuid page)
+                  page-before (d/entity @conn [:block/uuid page-uuid])
+                  pending (first (sync-apply/pending-txs test-repo))]
+              (is (= page-uuid (get-in pending [:forward-outliner-ops 0 1 0 0 :block/uuid])))
+              (ldb/transact! server-conn [[:db/add (:db/id child1) :block/title "Remote edit"]])
+              (sync-apply/apply-remote-tx! test-repo nil
+                                         [[:db/add (:db/id child1) :block/title "Remote edit"]])
+              (let [inserted (d/entity @conn [:block/uuid page-uuid])]
+                (is (ldb/page? inserted))
+                (is (= (:block/title page-before) (:block/title inserted)))
+                (is (= (:block/uuid library) (:block/uuid (:block/parent inserted))))
+                (is (= "Remote edit" (:block/title (d/entity @conn (:db/id child1)))))
+                (when with-reference?
+                  (is (= (set (map :block/uuid (:block/refs page-before)))
+                         (set (map :block/uuid (:block/refs inserted)))))
+                  (is (contains? (set (map :block/uuid (:block/refs inserted))) (:block/uuid parsed-ref)))
+                  (is (= "Referenced Page"
+                         (:block/title (d/entity @conn [:block/uuid (:block/uuid parsed-ref)]))))))
+              (upload-pending-and-assert-converged! conn server-conn))))))))
+
+(deftest rebase-multiple-insertions-preserves-identities-test
+  (doseq [keep-uuid? [false true]
+          replace-empty-target? [false true]]
+    (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)
+          _ (when replace-empty-target?
+              (ldb/transact! conn [[:db/add (:db/id child1) :block/title ""]]))
+          server-conn (d/conn-from-db @conn)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      [[:insert-blocks [[{:block/uuid (random-uuid) :block/title "First insertion"}]
+                                       (:db/id child1) {:sibling? true :keep-uuid? keep-uuid?
+                                                        :replace-empty-target? replace-empty-target?}]]
+                       [:insert-blocks [[{:block/uuid (random-uuid) :block/title "Second insertion"}]
+                                       (:db/id child2) {:sibling? true :keep-uuid? keep-uuid?}]]]
+                      local-tx-meta)
+          (let [first-uuid (if replace-empty-target?
+                             (:block/uuid child1)
+                             (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child1)))))
+                second-uuid (:block/uuid (ldb/get-right-sibling (d/entity @conn (:db/id child2))))]
+            (apply-ops! conn [[:save-block [{:block/uuid second-uuid :block/title "Second edited"} {}]]]
+                        local-tx-meta)
+            (let [remote-tx (:tx-data (ldb/transact! server-conn
+                                                   [[:db/add (:db/id child3) :block/title "Remote edit"]]))]
+              (is (= :applied (try (sync-apply/apply-remote-tx! test-repo nil remote-tx)
+                                  :applied (catch :default e (ex-message e))))))
+            (is (= "First insertion" (:block/title (d/entity @conn [:block/uuid first-uuid]))))
+            (is (= "Second edited" (:block/title (d/entity @conn [:block/uuid second-uuid]))))
+            (doseq [{:keys [tx-data outliner-op]} (:tx-entries (sync-apply/prepare-upload-tx-entries
+                                                             conn (sync-apply/pending-txs test-repo)))]
+              (is (true? (#'sync-handler/apply-tx-entry!
+                          server-conn {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}))))
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (sync-checksum/recompute-checksum @server-conn)))))))))
+
+(deftest compound-save-empty-target-then-insert-preserves-identities-test
+  (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+        _ (ldb/transact! conn [[:db/add (:db/id child1) :block/title ""]])
+        server-conn (d/conn-from-db @conn)
+        first-uuid (random-uuid)
+        second-uuid (random-uuid)]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (apply-ops! conn
+                    [[:save-block [{:block/uuid (:block/uuid child1) :block/title "Typed"} {}]]
+                     [:insert-blocks [[{:block/uuid first-uuid :block/title "First"}
+                                       {:block/uuid second-uuid :block/title "Second"}]
+                                      (:db/id child1) {:sibling? true :keep-uuid? true
+                                                       :replace-empty-target? false}]]]
+                    local-tx-meta)
+        (let [tx (:tx-data (ldb/transact! server-conn [[:db/add (:db/id child2) :block/title "Remote"]]))]
+          (sync-apply/apply-remote-tx! test-repo nil tx))
+        (doseq [[id title] [[(:block/uuid child1) "Typed"] [first-uuid "First"] [second-uuid "Second"]]]
+          (is (= title (:block/title (d/entity @conn [:block/uuid id])))))
+        (upload-pending-and-assert-converged! conn server-conn)))))
+
+(deftest rebase-nested-insert-then-delete-preserves-tree-test
+  (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+        server-conn (d/conn-from-db @conn)
+        root-uuid (random-uuid)
+        child-uuid (random-uuid)
+        grandchild-uuid (random-uuid)]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (apply-ops! conn
+                    [[:insert-blocks [[{:block/uuid root-uuid :block/title "Inserted root"}
+                                      {:block/uuid child-uuid :block/title "Inserted child"
+                                       :block/parent [:block/uuid root-uuid]}
+                                      {:block/uuid grandchild-uuid :block/title "Inserted grandchild"
+                                       :block/parent [:block/uuid child-uuid]}]
+                                     (:db/id child1) {:sibling? true :keep-uuid? true}]]]
+                    local-tx-meta)
+        (is (= child-uuid (:block/uuid (:block/parent (d/entity @conn [:block/uuid grandchild-uuid])))))
+        (apply-ops! conn [[:delete-blocks [[child-uuid] {}]]
+                         [:recycle-delete-permanently [child-uuid]]] local-tx-meta)
+        (is (nil? (d/entity @conn [:block/uuid grandchild-uuid])))
+        (let [remote-tx (:tx-data (ldb/transact! server-conn
+                                               [[:db/add (:db/id child2) :block/title "Remote edit"]]))]
+          (is (= :applied (try (sync-apply/apply-remote-tx! test-repo nil remote-tx)
+                              :applied (catch :default e (ex-message e))))))
+        (is (= "Inserted root" (:block/title (d/entity @conn [:block/uuid root-uuid]))))
+        (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+        (is (nil? (d/entity @conn [:block/uuid grandchild-uuid])))
+        (doseq [{:keys [tx-data outliner-op]} (:tx-entries (sync-apply/prepare-upload-tx-entries
+                                                         conn (sync-apply/pending-txs test-repo)))]
+          (is (true? (#'sync-handler/apply-tx-entry!
+                      server-conn {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}))))
+        (is (= (sync-checksum/recompute-checksum @conn)
+               (sync-checksum/recompute-checksum @server-conn)))))))
 
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done
@@ -981,6 +1309,53 @@
                                   (is nil (str error)))))))
                (p/finally done)))))
 
+(deftest large-upload-chunks-keep-value-replacement-in-one-request-test
+  ;; The server validates each request as a whole transaction. A retract of a
+  ;; required attribute's old value that arrives without the add of its new
+  ;; value leaves the entity invalid, and the server rejects the request.
+  (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+        server-conn (d/conn-from-db @conn)
+        page (:block/page parent)
+        page-ref [:block/uuid (:block/uuid page)]
+        child-ref [:block/uuid (:block/uuid child1)]
+        old-updated-at (:block/updated-at page)
+        new-updated-at (inc old-updated-at)
+        ;; The page's timestamp replacement straddles an unrelated datom, so a
+        ;; 1-datom cap would put its retract and its add in different requests.
+        tx-data [[:db/retract page-ref :block/updated-at old-updated-at]
+                 [:db/add child-ref :block/title "child 1 renamed"]
+                 [:db/add page-ref :block/updated-at new-updated-at]]]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (seed-client-op-txs! test-repo
+                             [{:db-sync/tx-id (random-uuid)
+                               :db-sync/pending? true
+                               :db-sync/created-at 1
+                               :db-sync/outliner-op :save-block
+                               :db-sync/normalized-tx-data tx-data}])
+        (with-redefs [sync-apply/max-upload-request-datoms 1]
+          (loop [requests 0]
+            (let [pending (sync-apply/pending-txs test-repo)
+                  {:keys [tx-entries]} (sync-apply/prepare-upload-tx-entries test-repo conn pending)]
+              (if (and (seq tx-entries) (< requests 10))
+                (do
+                  (doseq [{:keys [tx-data outliner-op]} tx-entries]
+                    (try
+                      (#'sync-handler/apply-tx-entry! server-conn
+                                                      {:tx (sqlite-util/write-transit-str tx-data)
+                                                       :outliner-op outliner-op})
+                      (catch :default e
+                        (is false (str "The server rejects request " requests ": " (ex-message e))))))
+                  (#'sync-apply/commit-large-upload-progress! test-repo tx-entries)
+                  (sync-apply/mark-pending-txs-false! test-repo (keep :tx-id tx-entries))
+                  (recur (inc requests)))
+                (do
+                  (is (empty? (sync-apply/pending-txs test-repo)))
+                  (is (= new-updated-at
+                         (:block/updated-at (d/entity @server-conn (:db/id page)))))
+                  (is (= "child 1 renamed"
+                         (:block/title (d/entity @server-conn (:db/id child1))))))))))))))
+
 (deftest flush-pending-keeps-oversized-tempid-group-in-one-request-test
   (async done
          (let [{:keys [conn client-ops-conn]} (setup-parent-child)
@@ -1441,7 +1816,7 @@
 (deftest pull-ok-does-not-anchor-remote-checksum-before-verify-test
   (testing "pull/ok compares the incrementally updated local checksum instead of anchoring the remote checksum"
     (async done
-           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+           (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))
                  parent-id (:db/id parent)
                  remote-tx-data [[:db/add parent-id :block/title "remote-checksum-anchor"]]
                  local-checksum-after-remote (-> (d/with @conn remote-tx-data)
@@ -1464,7 +1839,7 @@
              (with-datascript-conns conn client-ops-conn
                (fn []
                  (reset! db-sync/*repo->latest-remote-tx {})
-                 (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+                 (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
                  (d/listen! conn ::pull-ok-checksum
                             (fn [tx-report]
                               (when (and (seq (:tx-data tx-report))
@@ -1602,11 +1977,11 @@
 
 (deftest tx-reject-db-transact-failed-keeps-checksum-aligned-test
   (testing "a rejected local rollback should update the stored checksum incrementally"
-    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+    (let [{:keys [conn client-ops-conn child1]} (mark-graph-remote! (setup-parent-child))
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (outliner-core/delete-blocks! conn [child1] {})
           (let [tx-id (:tx-id (first (#'sync-apply/pending-txs test-repo)))
@@ -1656,7 +2031,7 @@
           parent-uuid (:block/uuid parent)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (outliner-core/delete-blocks! conn [parent] {})
           (let [tx-id (:tx-id (first (#'sync-apply/pending-txs test-repo)))
@@ -1692,11 +2067,11 @@
 
 (deftest tx-reject-db-transact-failed-rebase-keeps-checksum-aligned-test
   (testing "rollback plus rebase of later pending txs should keep the stored checksum aligned"
-    (let [{:keys [conn client-ops-conn parent-a a-child-1 b-child-1]} (setup-two-parents)
+    (let [{:keys [conn client-ops-conn parent-a a-child-1 b-child-1]} (mark-graph-remote! (setup-two-parents))
           deleted-uuid (:block/uuid a-child-1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (outliner-core/delete-blocks! conn [a-child-1] {})
           (outliner-core/move-blocks! conn [b-child-1] parent-a {:sibling? false})
@@ -2371,7 +2746,7 @@
 
 (deftest local-checksum-matches-recompute-after-post-pipeline-update-test
   (testing "stored checksum matches recompute when updated from post-pipeline tx report"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (let [page-id (:db/id (:block/page parent))
@@ -2393,22 +2768,220 @@
 
 (deftest local-checksum-listener-updates-in-release-mode-test
   (testing "db-worker-node release keeps the stored checksum aligned incrementally"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (with-redefs [worker-util/dev-or-test? false]
             (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
             (d/transact! conn [[:db/add (:db/id parent) :block/title "Release checksum block"]])
             (is (= (sync-checksum/recompute-checksum @conn)
                    (client-op/get-local-checksum test-repo)))))))))
 
-(deftest local-checksum-ignores-aborted-batch-transact-test
-  (testing "an aborted batch transaction must not advance the stored checksum"
+(deftest local-checksum-heals-when-covered-commit-lags-test
+  (testing "a checksum write lost to process death is recomputed on reopen"
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo
+                                           (sync-checksum/recompute-checksum @conn)
+                                           (:max-tx @conn))
+          ;; Commit lands without its checksum write, as when the process dies
+          ;; between the graph store and the post-commit checksum update
+          (d/transact! conn [[:db/add (:db/id parent) :block/title "lost checksum write"]])
+          (is (not= (sync-checksum/recompute-checksum @conn)
+                    (client-op/get-local-checksum test-repo)))
+          (db-sync/reconcile-local-checksum! test-repo conn)
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo))))))))
+
+(deftest local-checksum-untouched-when-covered-commit-current-test
+  (testing "an up-to-date checksum is not recomputed on reopen"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo "stale" (:max-tx @conn))
+          (db-sync/reconcile-local-checksum! test-repo conn)
+          (is (= "stale" (client-op/get-local-checksum test-repo))))))))
+
+(defrecord ^:private InMemoryStorage [*disk]
+  ds-storage/IStorage
+  (-store [_ addr+data-seq _delete-addrs]
+    (doseq [[addr data] addr+data-seq]
+      (vswap! *disk assoc addr data)))
+  (-restore [_ addr]
+    (get @*disk addr)))
+
+(deftest reopened-graph-keeps-max-tx-of-pipeline-transaction-test
+  (testing "a transaction the worker pipeline extends spans several tx ids in 1
+           stored tail entry; the graph reopened from storage keeps its :max-tx,
+           so the stored checksum still covers it and the reopen does not recompute"
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))
+          storage (->InMemoryStorage (volatile! {}))
+          ;; new index nodes: storing the test graph's own db would give
+          ;; addresses to nodes other tests' graphs share
+          _ (d/conn-from-datoms (d/datoms @conn :eavt) (:schema @conn) {:storage storage})
+          stored-conn (d/restore-conn storage)
+          pipeline-before @ldb/*transact-pipeline-fn]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (ldb/transact! stored-conn [[:db/add (:db/id parent) :block/title "edited"]]
+                       {:outliner-op :save-block})
+        (let [max-tx (:max-tx @stored-conn)
+              tail-txs (set (map :tx (last (:tx-tail @(:atom stored-conn)))))
+              reopened (common-sqlite/get-storage-conn storage db-schema/schema)
+              datoms-with-tx #(set (map (juxt :e :a :v :tx) (d/datoms % :eavt)))]
+          (is (< 1 (count tail-txs)) "the pipeline added a d/with of its own")
+          (is (= max-tx (apply max tail-txs)))
+          (is (= (datoms-with-tx @stored-conn) (datoms-with-tx @reopened))
+              "the replayed tail datoms keep their own tx ids")
+          (is (= max-tx (:max-tx @reopened)))
+          (is (every? #(<= (:tx %) (:max-tx @reopened)) (d/datoms @reopened :eavt))
+              "the next tx id the reopened graph hands out is on no datom yet")
+          (is (= "edited" (:block/title (d/entity @reopened (:db/id parent)))))
+          (with-datascript-conns reopened client-ops-conn
+            (fn []
+              (client-op/update-local-checksum test-repo "stale" max-tx)
+              (db-sync/reconcile-local-checksum! test-repo reopened)
+              (is (= "stale" (client-op/get-local-checksum test-repo))))))
+        (finally
+          (reset! ldb/*transact-pipeline-fn pipeline-before))))))
+
+(defn- count-checksum-writes
+  "Runs f with client-op/update-local-checksum counted; returns the count."
+  [f]
+  (let [writes (atom 0)
+        update-local-checksum client-op/update-local-checksum]
+    (with-redefs [client-op/update-local-checksum
+                  (fn [& args]
+                    (swap! writes inc)
+                    (apply update-local-checksum args))]
+      (f))
+    @writes))
+
+(deftest local-graph-edit-writes-no-checksum-test
+  (testing "an edit on a graph that does not sync stores no checksum"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          (is (= 0 (count-checksum-writes
+                    #(d/transact! conn [[:db/add (:db/id parent) :block/title "local edit"]]))))
+          (is (nil? (client-op/get-local-checksum test-repo)))
+          (is (nil? (client-op/get-local-checksum-covered-tx test-repo))))))))
+
+(deftest remote-graph-edit-writes-checksum-test
+  (testing "an edit on a graph that syncs keeps the stored checksum current"
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          (is (= 1 (count-checksum-writes
+                    #(d/transact! conn [[:db/add (:db/id parent) :block/title "remote edit"]]))))
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo)))
+          (is (= (:max-tx @conn)
+                 (client-op/get-local-checksum-covered-tx test-repo))))))))
+
+(deftest local-graph-open-does-not-recompute-checksum-test
+  (testing "opening a graph that does not sync never recomputes its checksum, even when the stored one lags"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          recomputes (atom 0)
+          recompute-checksum sync-checksum/recompute-checksum]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          ;; stored by an app version that kept the checksum on every graph
+          (client-op/update-local-checksum test-repo (recompute-checksum @conn) (:max-tx @conn))
+          (d/transact! conn [[:db/add (:db/id parent) :block/title "edit after the last checksum write"]])
+          (let [stored (client-op/get-local-checksum test-repo)
+                covered-tx (client-op/get-local-checksum-covered-tx test-repo)]
+            (is (not= covered-tx (:max-tx @conn)))
+            (with-redefs [sync-checksum/recompute-checksum
+                          (fn [db]
+                            (swap! recomputes inc)
+                            (recompute-checksum db))]
+              (db-sync/reconcile-local-checksum! test-repo conn))
+            (is (= 0 @recomputes))
+            (is (= stored (client-op/get-local-checksum test-repo)))
+            (is (= covered-tx (client-op/get-local-checksum-covered-tx test-repo)))))))))
+
+(deftest graph-becoming-remote-starts-from-full-checksum-test
+  (testing "the transaction that makes a graph remote stores a full recompute, not an update of a stale checksum"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)]
+      ;; The E2EE flag is already set, so the transaction below does not flip
+      ;; it; a flip recomputes the checksum on its own (update-checksum).
+      (d/transact! conn [(ldb/kv :logseq.kv/graph-rtc-e2ee? false)])
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          ;; stored by an app version that kept the checksum on every graph,
+          ;; then edits that did not update it
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
+          (d/transact! conn [[:db/add (:db/id parent) :block/title "edit while local"]])
+          (d/transact! conn [[:db/add (:db/id child1) :block/title "another edit while local"]])
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          ;; the shape of upload's set-graph-sync-metadata! transaction
+          (ldb/transact! conn [(ldb/kv :logseq.kv/graph-uuid (random-uuid))
+                               (ldb/kv :logseq.kv/graph-remote? true)
+                               (ldb/kv :logseq.kv/graph-rtc-e2ee? false)]
+                         {:outliner-op :set-kvs})
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo)))
+          (is (= (:max-tx @conn)
+                 (client-op/get-local-checksum-covered-tx test-repo))))))))
+
+(deftest upload-after-local-edits-stores-and-sends-full-checksum-test
+  (async done
+         (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+               graph-id (str (random-uuid))
+               urls (atom [])]
+           (-> (with-datascript-conns
+                 conn
+                 client-ops-conn
+                 (fn []
+                   ;; stored by an app version that kept the checksum on every graph
+                   (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
+                   (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+                   (d/transact! conn [[:db/add (:db/id parent) :block/title "local edit before upload"]])
+                   (-> (p/with-redefs [sync-upload/http-base-url (constantly "https://sync.example.test")
+                                       sync-crypt/graph-e2ee? (constantly false)
+                                       sync-upload/list-remote-graphs! (fn [] (p/resolved []))
+                                       sync-crypt/<preflight-upload-e2ee! (fn [_repo _graph-e2ee?] (p/resolved nil))
+                                       sync-util/require-auth-token! (fn [_context] nil)
+                                       sync-util/fetch-json (fn [url _request _opts]
+                                                              (swap! urls conj url)
+                                                              (p/resolved
+                                                               (if (string/ends-with? url "/graphs")
+                                                                 {:graph-id graph-id :graph-e2ee? false}
+                                                                 {:ok true :count 1})))
+                                       sync-upload/<prepare-upload-temp-sqlite! (fn [& _] (p/resolved {:db :temp-db}))
+                                       sync-upload/count-kvs-rows (constantly 1)
+                                       sync-upload/fetch-kvs-rows (fn [_db last-addr _limit]
+                                                                    (if (neg? last-addr)
+                                                                      #js [#js [1 "content" nil]]
+                                                                      #js []))
+                                       sync-upload/<snapshot-upload-body (fn [rows] (p/resolved {:body rows :encoding nil}))
+                                       sync-temp-sqlite/cleanup-temp-sqlite! (fn [_temp] nil)
+                                       worker-util/post-message (fn [& _] nil)]
+                         (sync-upload/upload-graph! test-repo))
+                       (p/then (fn [_]
+                                 (let [recomputed (sync-checksum/recompute-checksum @conn)
+                                       finished-url (some #(when (string/includes? % "finished=true") %) @urls)]
+                                   (is (true? (:kv/value (d/entity @conn :logseq.kv/graph-remote?))))
+                                   (is (= recomputed (client-op/get-local-checksum test-repo)))
+                                   (is (= (:max-tx @conn) (client-op/get-local-checksum-covered-tx test-repo)))
+                                   (is (string/includes? (str finished-url)
+                                                         (str "checksum=" (js/encodeURIComponent recomputed)))))))
+                       (p/catch (fn [error]
+                                  (is nil (str error)))))))
+               (p/finally done)))))
+
+(deftest local-checksum-ignores-aborted-batch-transact-test
+  (testing "an aborted batch transaction must not advance the stored checksum"
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (let [checksum-before (client-op/get-local-checksum test-repo)
                 title-before (:block/title parent)]
@@ -2437,10 +3010,10 @@
 
 (deftest local-checksum-updates-for-final-batch-report-with-batch-flag-test
   (testing "a committed final batch tx report must update checksum even if the conn batch flag is still set"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (try
             (swap! conn assoc :batch-tx? true)
@@ -2457,10 +3030,10 @@
 
 (deftest local-checksum-updates-non-batch-report-with-stale-batch-flag-test
   (testing "a non-batch tx report must not be skipped because conn batch state is stale"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (try
             (swap! conn assoc :batch-tx? true)
@@ -2476,10 +3049,10 @@
 
 (deftest local-checksum-updates-ldb-non-batch-report-with-stale-batch-flag-test
   (testing "ldb/transact! must not tag non-batch reports from stale conn batch state"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (try
             (swap! conn assoc :batch-tx? true)
@@ -2544,7 +3117,7 @@
                                   "stale child update"]]}]]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (with-silenced-console-error
             (fn []
               (is (= :ok
@@ -4116,6 +4689,7 @@
                 {:pages-and-blocks
                  [{:page {:block/title "page1"}
                    :blocks [{:block/title "task"
+                             :build/tags [:logseq.class/Task]
                              :build/properties {:status "Todo"}}]}]})
           client-ops-conn (new-client-ops-db)]
       (with-datascript-conns conn client-ops-conn
@@ -5091,7 +5665,7 @@
                 tx-ids (mapv :tx-id pending-before)
                 local-checksum (sync-checksum/recompute-checksum @conn)]
             (is (seq pending-before))
-            (client-op/update-local-checksum test-repo local-checksum)
+            (client-op/update-local-checksum test-repo local-checksum (:max-tx @conn))
             (reset! (:inflight client) tx-ids)
             (with-redefs [sync-log-state/rtc-log (fn [type payload]
                                                    (reset! *captured {:type type
@@ -5169,7 +5743,7 @@
           (reset! db-sync/*repo->latest-remote-tx {test-repo 5})
           (reset! db-sync/*repo->latest-remote-checksum {test-repo actual-checksum})
           (client-op/update-local-tx test-repo 5)
-          (client-op/update-local-checksum test-repo actual-checksum)
+          (client-op/update-local-checksum test-repo actual-checksum (:max-tx @conn))
           (try
             (with-redefs [sync-log-state/rtc-log (fn [type payload]
                                                    (reset! *captured {:type type
@@ -5199,7 +5773,7 @@
                                                    :checksum remote-checksum}))]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo stale-checksum)
+          (client-op/update-local-checksum test-repo stale-checksum (:max-tx @conn))
           (is (= :ok
                  (try
                    (sync-handle-message/handle-message! test-repo client raw-message)
@@ -5209,11 +5783,11 @@
 
 (deftest local-checksum-stays-in-sync-after-undo-redo-sequence-test
   (testing "insert/delete/indent/outdent with undo-all/redo-all keeps cached checksum aligned"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))
           inserted-uuid (random-uuid)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
           (d/listen! conn ::checksum-sync
                      (fn [tx-report]
                        (when-not (:batch-tx? @conn)
@@ -6840,7 +7414,7 @@
 (deftest apply-remote-txs-rechecks-local-txs-when-local-edit-races-without-local-batch-test
   (testing "remote apply without initial local changes must not batch a racing local tx into the remote checksum"
     (async done
-      (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+      (let [{:keys [conn client-ops-conn parent child1]} (mark-graph-remote! (setup-parent-child))
             child1-uuid (:block/uuid child1)
             local-child-uuid (random-uuid)
             original-batch-transact! ldb/batch-transact!
@@ -6860,7 +7434,7 @@
         (-> (with-datascript-conns
               conn client-ops-conn
               (fn []
-                (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+                (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
                 (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
                 (js/Promise.resolve
                  (p/with-redefs [ldb/batch-transact!
@@ -7642,6 +8216,147 @@
      :local-empty-uuid local-empty-uuid
      :seed-conn seed-conn
      :client-ops-conn client-ops-conn}))
+
+(deftest compound-template-and-insert-upload-test
+  (doseq [keep-uuid? [false true]
+          template-first? [false true]
+          explicit-sibling? [false true]]
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          server-conn (d/conn-from-db @seed-conn)
+          seed (db-test/find-block-by-content @conn "seed")
+          template-op [:apply-template [template-root-uuid empty-target-uuid
+                                        (if explicit-sibling? {:sibling? true} {})]]
+          insert-op [:insert-blocks [[{:block/uuid (random-uuid) :block/title "Compound followup"}]
+                                    (:block/uuid seed) {:sibling? true :keep-uuid? keep-uuid?}]]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn (if template-first? [template-op insert-op] [insert-op template-op]) local-tx-meta)
+          (let [followup-uuid (:block/uuid (db-test/find-block-by-content @conn "Compound followup"))
+                tx (:tx-data (ldb/transact! server-conn [[:db/add (:db/id seed) :block/title "Remote seed"]]))]
+            (sync-apply/apply-remote-tx! test-repo nil tx)
+            (is (= "Compound followup" (:block/title (d/entity @conn [:block/uuid followup-uuid]))))
+            (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "3"]] @conn))))
+            (upload-pending-and-assert-converged! conn server-conn)))))))
+
+(deftest rebase-template-after-target-permanently-deleted-test
+  (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+        (setup-rebase-apply-template-repro-state)
+        conn (d/conn-from-db @seed-conn)
+        server-conn (d/conn-from-db @seed-conn)
+        seed (db-test/find-block-by-content @conn "seed")]
+    (with-datascript-conns conn client-ops-conn
+      (fn []
+        (apply-template-to-empty-target! conn template-root-uuid empty-target-uuid)
+        (apply-ops! conn [[:delete-blocks [[empty-target-uuid] {}]]
+                         [:recycle-delete-permanently [empty-target-uuid]]] local-tx-meta)
+        (let [tx (:tx-data (ldb/transact! server-conn [[:db/add (:db/id seed) :block/title "Remote seed"]]))]
+          (sync-apply/apply-remote-tx! test-repo nil tx))
+        (is (nil? (d/entity @conn [:block/uuid empty-target-uuid])))
+        (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "2"]] @conn))))
+        (upload-pending-and-assert-converged! conn server-conn)))))
+
+(deftest template-uploads-after-rebase-and-undo-redo-test
+  (doseq [rebase? [false true]
+          undo-redo? [false true]]
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          server-conn (d/conn-from-db @seed-conn)
+          seed (db-test/find-block-by-content @conn "seed")]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (with-redefs [undo-redo/*apply-history-action! (atom sync-apply/apply-history-action!)]
+              (apply-template-to-empty-target! conn template-root-uuid empty-target-uuid)
+              (let [inserted (select-offline-inserted-three conn template-root-uuid)
+                    inserted-uuid (:block/uuid inserted)]
+                (is (uuid? inserted-uuid))
+                (when undo-redo?
+                  (undo-redo/undo test-repo)
+                  (undo-redo/redo test-repo))
+                (when rebase?
+                  (let [tx (:tx-data (ldb/transact! server-conn
+                                                  [[:db/add (:db/id seed) :block/title "Remote seed"]]))]
+                    (sync-apply/apply-remote-tx! test-repo nil tx)))
+                (is (= "3" (:block/title (d/entity @conn [:block/uuid inserted-uuid]))))
+                (upload-pending-and-assert-converged! conn server-conn))))))))
+
+(defn- setup-template-text-property-state
+  [explicit-value-block? with-reference? nonempty-target?]
+  (let [{:keys [seed-conn template-3-uuid empty-target-uuid] :as state}
+        (setup-rebase-apply-template-repro-state)
+        property-id :user.property/template-notes
+        page-uuid (:block/uuid (db-test/find-page-by-title @seed-conn "page 1"))
+        text (str "Template notes" (when with-reference? (str "\n" (page-ref/->page-ref page-uuid))))]
+    (outliner-property/upsert-property! seed-conn property-id
+                                        {:logseq.property/type :default :db/cardinality :db.cardinality/one}
+                                        {:property-name "template-notes"})
+    (if explicit-value-block?
+      (outliner-property/create-property-text-block! seed-conn [:block/uuid template-3-uuid]
+                                                     property-id text {})
+      (outliner-property/set-block-property! seed-conn [:block/uuid template-3-uuid] property-id text))
+    (when nonempty-target?
+      (ldb/transact! seed-conn [[:db/add [:block/uuid empty-target-uuid] :block/title "Existing target"]]))
+    (assoc state :property-text text :reference-uuid (when with-reference? page-uuid))))
+
+(defn- assert-template-text-property
+  [db inserted-uuid value-uuid source-uuid text reference-uuid]
+  (let [copied (d/entity db [:block/uuid inserted-uuid])
+        value (:user.property/template-notes copied)
+        original (:user.property/template-notes (d/entity db [:block/uuid source-uuid]))]
+    (is (= "3" (:block/title copied)))
+    (is (= (str "Edited " text) (:v (first (d/datoms db :eavt (:db/id value) :block/title)))))
+    (is (= text (:v (first (d/datoms db :eavt (:db/id original) :block/title)))))
+    (is (= value-uuid (:block/uuid value)))
+    (is (= inserted-uuid (:block/uuid (:block/parent value))))
+    (is (= source-uuid (:block/uuid (:block/parent original))))
+    (when reference-uuid
+      (is (contains? (set (map :block/uuid (:block/refs value))) reference-uuid)))))
+
+(deftest template-text-property-uploads-after-rebase-and-undo-redo-test
+  (doseq [explicit-value-block? [false true]
+          with-reference? [false true]
+          nonempty-target? [false true]
+          rebase? [false true]
+          undo-redo? [false true]
+          edit-before-rebase? [false true]]
+    (testing (pr-str {:explicit-value-block? explicit-value-block? :with-reference? with-reference?
+                     :nonempty-target? nonempty-target? :rebase? rebase?
+                     :undo-redo? undo-redo? :edit-before-rebase? edit-before-rebase?})
+      (let [{:keys [template-root-uuid template-3-uuid empty-target-uuid seed-conn client-ops-conn
+                    property-text reference-uuid]}
+            (setup-template-text-property-state explicit-value-block? with-reference? nonempty-target?)
+            conn (d/conn-from-db @seed-conn)
+            server-conn (d/conn-from-db @seed-conn)
+            seed (db-test/find-block-by-content @conn "seed")
+            source-value (:user.property/template-notes (d/entity @conn [:block/uuid template-3-uuid]))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (with-redefs [undo-redo/*apply-history-action! (atom sync-apply/apply-history-action!)]
+              (apply-template-with-opts! conn template-root-uuid empty-target-uuid {:sibling? true})
+              (let [inserted (select-offline-inserted-three conn template-root-uuid)
+                    inserted-uuid (:block/uuid inserted)
+                    value-uuid (:block/uuid (:user.property/template-notes inserted))
+                    edit! #(apply-ops! conn [[:save-block [(cond-> {:block/uuid value-uuid
+                                                                   :block/title (str "Edited " property-text)}
+                                                            reference-uuid (assoc :block/refs [{:block/uuid reference-uuid}])) {}]]]
+                                      local-tx-meta)]
+                (is (uuid? value-uuid))
+                (is (not= (:block/uuid source-value) value-uuid))
+                (when undo-redo?
+                  (undo-redo/undo test-repo)
+                  (undo-redo/redo test-repo))
+                (when edit-before-rebase? (edit!))
+                (when rebase?
+                  (doseq [title ["Remote seed" "Remote seed again"]]
+                    (let [tx (:tx-data (ldb/transact! server-conn [[:db/add (:db/id seed) :block/title title]]))]
+                      (sync-apply/apply-remote-tx! test-repo nil tx))))
+                (when-not edit-before-rebase? (edit!))
+                (upload-pending-and-assert-converged! conn server-conn)
+                (doseq [db [@conn @server-conn]]
+                  (assert-template-text-property db inserted-uuid value-uuid template-3-uuid
+                                                 property-text reference-uuid))))))))))
 
 (deftest rebase-apply-template-preserves-followup-insert-target-uuid-test
   (testing "rebase should replay apply-template with stable UUIDs so follow-up insert-blocks is not dropped"

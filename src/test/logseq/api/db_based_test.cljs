@@ -739,16 +739,23 @@
 
 (deftest add-property-value-choices
   (async done
+    (test-helper/load-test-files
+     [{:page {:block/title "Status Choices"}
+       :blocks [{:block/title "todo"}
+                {:block/title "doing"}]}])
     (-> (api-test/with-plugin-api
           (fn []
             (p/let [property (db-based-api/upsert-property "status" #js {:type "default" :cardinality "many"} nil)
-                    property-id (or (aget property "id") (:id (api-test/js->clj-kw property)))]
+                    property-uuid (aget property "uuid")
+                    choice-uuids (mapv #(-> (test-helper/find-block-by-content %) :block/uuid)
+                                      ["todo" "doing"])]
               (p/with-redefs [db-property-handler/add-existing-values-to-closed-values!
                               (fn [id values]
                                 (p/resolved {:property-id id :values values}))]
-                (p/let [result (db-based-api/add-property-value-choices property-id #js ["todo" "doing"])]
-                  (is (= property-id (:property-id result)))
-                  (is (= ["todo" "doing"] (:values result))))))))
+                (p/let [result (db-based-api/add-property-value-choices
+                               property-uuid (clj->js (mapv str choice-uuids)))]
+                  (is (= :plugin.property._test_plugin/status (:property-id result)))
+                  (is (= choice-uuids (:values result))))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))

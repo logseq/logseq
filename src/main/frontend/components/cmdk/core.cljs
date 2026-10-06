@@ -1,7 +1,7 @@
 (ns frontend.components.cmdk.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.components.block :as block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.cmdk.scroll :as scroll]
             [frontend.components.cmdk.state :as cmdk-state]
@@ -15,6 +15,7 @@
             [frontend.handler.db-based.recent :as db-recent-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -352,7 +353,7 @@
                        (highlight-content-query title input)
                        title)]
               :header (when (:block/parent entity)
-                        (block/breadcrumb {:disable-preview? true
+                        (block-breadcrumb/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page)
                                           {:disabled? true
                                            :variant :search-result
@@ -370,7 +371,7 @@
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text input)
-     :header (block/breadcrumb {:disable-preview? true
+     :header (block-breadcrumb/breadcrumb {:disable-preview? true
                                 :search? true} repo id
                                {:disabled? true
                                 :variant :search-result
@@ -434,12 +435,16 @@
                :dev? config/dev?})]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [current-page-uuid (<page-uuid repo current-page)
-            blocks (search/block-search repo @!input opts)
+            search-result (search/block-search repo @!input opts)
+            {:keys [blocks matched-count]} (block-search-result->items search-result)
             blocks (remove nil? blocks)
             items (map (fn [block]
                          (block-item repo block current-page-uuid @!input))
                        blocks)]
-      (swap! !results update group merge {:status :success :items items}))))
+      (swap! !results update group merge {:status :success
+                                          :items items
+                                          :matched-count matched-count
+                                          :has-more? (> matched-count (count items))}))))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
@@ -515,7 +520,7 @@
                              {:icon "node"
                               :icon-theme :gray
                               :text (highlight-content-query (:block/title block) @!input)
-                              :header (block/breadcrumb {:search? true} repo id
+                              :header (block-breadcrumb/breadcrumb {:search? true} repo id
                                                         {:disabled? true
                                                          :variant :search-result
                                                          :block block})
@@ -643,14 +648,14 @@
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
     (p/let [page-uuid (<page-uuid (state/get-current-repo) page-name)]
       (when page-uuid
-        (editor-handler/open-block-in-sidebar! page-uuid))
+        (editor-format/open-block-in-sidebar! page-uuid))
       (shui/dialog-close! :ls-dialog-cmdk))))
 
 (defmethod handle-action :open-block-right [_ state _event]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
     (p/let [repo (state/get-current-repo)
             _ (db-async/<get-block repo block-uuid :children? false)]
-      (editor-handler/open-block-in-sidebar! block-uuid)
+      (editor-format/open-block-in-sidebar! block-uuid)
       (shui/dialog-close! :ls-dialog-cmdk))))
 
 (defn- open-file
@@ -1426,6 +1431,8 @@
          (reset! (::highlighted-item state) nil)
          (reset! (::focus-source state) :keyboard)
          (reset! (::results state) default-results)
+         ;; Results were just wiped, so any memoized refresh key is stale.
+         (reset! (::last-refresh-key state) nil)
          (when-let [input-ref @(::input-ref state)]
            (set! (.-value input-ref) input))
          (refresh-results! state)))

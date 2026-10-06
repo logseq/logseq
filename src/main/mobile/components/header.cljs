@@ -7,7 +7,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
-            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.quick-add :as editor-quick-add]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -195,7 +195,7 @@
                       "calendar" (open-journal-calendar!)
                       "capture" (do
                                   (state/clear-edit!)
-                                  (editor-handler/quick-add-blocks!))
+                                  (editor-quick-add/quick-add-blocks!))
                       "audio-record" (state/pub-event! [:mobile/start-audio-record])
                       "add-graph" (open-new-db-graph!)
                       "home-setting" (open-home-settings-actions!)

@@ -253,11 +253,12 @@
                           :property-ident (:db/ident property)})))))))
 
 (defn upsert-block-property
-  [this block key' value {:keys [schema reset-property-values]}]
+  [this block key' value {:keys [schema reset-property-values entity-id?]}]
   (let [opts {:plugin this
               :schema (when schema
                         {key schema})
-              :reset-property-values reset-property-values}]
+              :reset-property-values reset-property-values
+              :entity-id? entity-id?}]
     (api-block/db-based-save-block-properties! block {key' value} opts)))
 
 (defn get-all-tags
@@ -1078,10 +1079,21 @@
     (db-property-handler/remove-block-property! (:block/uuid block)
                                                 :logseq.property/icon)))
 
+(defn- block-identity->uuid
+  [block-identity]
+  (let [block-uuid (if (map? block-identity)
+                     (:uuid block-identity)
+                     block-identity)]
+    (sdk-utils/uuid-or-throw-error block-uuid)))
+
 (defn add-property-value-choices [property-id ^js choices]
   (when-let [values (and property-id (bean/->clj choices))]
-    (db-property-handler/add-existing-values-to-closed-values!
-     property-id values)))
+    (p/let [property (<get-block (block-identity->uuid (bean/->clj property-id)))]
+      (when-not (entity/property? property)
+        (throw (ex-info "Not a valid property" {:property property-id})))
+      (db-property-handler/add-existing-values-to-closed-values!
+       (:db/ident property)
+       (mapv block-identity->uuid values)))))
 
 (defn set-property-node-tags [property-id ^js tag-ids]
   (let [tag-ids (and property-id (seq (bean/->clj tag-ids)))]

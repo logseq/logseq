@@ -248,8 +248,26 @@
                     (remove #{:block.temp/positioned-properties
                               :block.temp/order-list-index
                               :block.temp/refs-count
-                              :block.temp/has-children?}
+                              :block.temp/has-children?
+                              :block.temp/class-property-idents}
                             (keys block)))))))
+
+(deftest canonical-block-marks-class-provided-property-idents-test
+  (when-let [canonical-block (canonical-block-api)]
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page"}
+                  :blocks [{:block/title "task only"
+                            :build/tags [:logseq.class/Task]}
+                           {:block/title "plain"}]}])
+          db @conn
+          task-row (canonical-block db (db-test/find-block-by-content db "task only"))
+          plain-row (canonical-block db (db-test/find-block-by-content db "plain"))]
+      (is (contains? (:block.temp/class-property-idents task-row)
+                     :logseq.property/status)
+          "A Task member row advertises the class-provided status property")
+      (is (not (contains? (:block.temp/class-property-idents plain-row)
+                          :logseq.property/status))
+          "An untagged row does not advertise the class-provided status"))))
 
 (deftest canonical-block-numbers-ref-typed-list-siblings-test
   (when-let [canonical-block (canonical-block-api)]
@@ -865,6 +883,65 @@
       (is (= 0 (:parent-tx-id (direct-children-membership @conn page-uuid))))
       (is (thrown? js/Error
                    (direct-children-membership @conn (random-uuid)))))))
+
+(deftest direct-children-membership-allows-missing-child-order-test
+  (when-let [direct-children-membership
+             (direct-children-membership-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          ordered-uuid (random-uuid)
+          orderless-uuid (random-uuid)]
+      ;; :block/order is {:optional true} for pages in normal-page, so a
+      ;; parented page may legitimately carry none. It must not fail the
+      ;; whole membership read for its siblings.
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 11
+                     :block/title "Parent"
+                     :block/name "parent"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid ordered-uuid
+                     :block/tx-id 11
+                     :block/title "Ordered child"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a0"}
+                    {:db/id -2
+                     :block/uuid orderless-uuid
+                     :block/tx-id 11
+                     :block/title "Child page without order"
+                     :block/name "child page without order"
+                     :block/tags :logseq.class/Page
+                     :block/parent -1}])
+      (let [response (direct-children-membership @conn page-uuid)]
+        (is (= 2 (count (:items response)))
+            "the order-less child does not remove its siblings")
+        (is (= [[orderless-uuid nil] [ordered-uuid "a0"]]
+               (:items response))
+            "a nil order sorts first, matching ldb/sort-by-order")))))
+
+(deftest direct-children-membership-rejects-non-string-child-order-test
+  (when-let [direct-children-membership
+             (direct-children-membership-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)]
+      ;; Absent is legal; a non-string value is still a real defect.
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 11
+                     :block/title "Parent"
+                     :block/name "parent"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid (random-uuid)
+                     :block/tx-id 11
+                     :block/title "Child"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order 42}])
+      (is (thrown? js/Error
+                   (direct-children-membership @conn page-uuid))))))
 
 (deftest canonical-block-snapshots-are-transit-safe-pure-results-test
   (let [canonical-blocks (canonical-blocks-api)

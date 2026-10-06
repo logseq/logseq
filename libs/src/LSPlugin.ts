@@ -922,6 +922,8 @@ export interface IEditorProxy extends Record<string, any> {
     value: any,
     options?: Partial<{
       reset: boolean
+      /** Treat numeric property values as entity IDs. Defaults to false (literal numbers). */
+      entityId: boolean
     }>
   ) => Promise<void>
 

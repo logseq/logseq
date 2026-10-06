@@ -131,12 +131,9 @@
 (defn- ->dsl*
   [f]
   (cond
-    (and (vector? f) (= :priority (keyword (first f))))
-    (vec (cons (symbol :priority) (map symbol (rest f))))
-
-    ;; Stringify task property values to support multi-word values like "In Review"
-    (and (vector? f) (= :task (keyword (first f))))
-    (vec (cons (symbol :task) (map str (rest f))))
+    ;; Stringify task and priority values to support multi-word values like "In Review"
+    (and (vector? f) (contains? #{:task :priority} (keyword (first f))))
+    (vec (cons (symbol (first f)) (map str (rest f))))
 
     (and (vector? f) (= :page-ref (keyword (first f))))
     (->page-ref (second f))

@@ -1,7 +1,7 @@
 {
   "name": "Logseq",
   "productName": "Logseq",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "packageManager": "pnpm@10.33.0",
   "main": "electron.js",
   "author": "Logseq",
@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "electron": "42.3.0",
-    "electron-builder": "26.8.2",
+    "electron-builder": "26.17.0",
     "electron-devtools-installer": "4.0.0"
   },
   "optionalDependencies": {

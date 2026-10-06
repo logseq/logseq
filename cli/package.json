@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@logseq/graph-lifecycle": "file:../deps/graph-lifecycle",
+    "mldoc": "1.5.9",
     "transit-js": "0.8.874"
   }
 }

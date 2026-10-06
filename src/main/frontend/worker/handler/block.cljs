@@ -196,7 +196,7 @@
                (let [{value-type :db/valueType
                       cardinality :db/cardinality} (render-attr-schema db a)
                      value (if (= :db.type/ref value-type)
-                             (block-breadcrumb/shallow-ref-identity db v)
+                             (block-breadcrumb/shallow-ref-identity db v a)
                              v)]
                  (if (= :db.cardinality/many cardinality)
                    (update result a (fnil conj []) value)
@@ -210,6 +210,8 @@
                      (block-refs-count db entity-id)
                      :block.temp/has-children?
                      (block-has-children? db entity-id)
+                     :block.temp/class-property-idents
+                     (property-handler/block-class-property-idents db {:db/id entity-id})
                      :block.temp/positioned-properties
                      (block-positioned-properties-map db {:db/id entity-id}))
         (and (:logseq.property/view-for block)
@@ -303,7 +305,11 @@
           (fail-render-read! "Invalid direct-child UUID"
                              {:parent-uuid parent-uuid
                               :block-uuid child-uuid}))
-        (when-not (string? order)
+        ;; :block/order is {:optional true} for pages in normal-page, so a
+        ;; parented page may legitimately have none. Sort those first,
+        ;; matching ldb/sort-by-order, rather than failing the whole
+        ;; membership read.
+        (when-not (or (nil? order) (string? order))
           (fail-render-read! "Invalid direct-child order"
                              {:parent-uuid parent-uuid
                               :block-uuid child-uuid

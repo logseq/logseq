@@ -14,6 +14,7 @@
             [frontend.db.async :as db-async]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -117,7 +118,7 @@
           file-base64-str (some-> file (.-data))
           file (some-> file-base64-str (utils/base64ToUint8Array)
                        (vector) (clj->js) (js/File. basename #js {}))
-          result (editor-handler/db-based-save-assets!
+          result (editor-assets/db-based-save-assets!
                   (state/get-current-repo) [file] {})]
     (first result)))
 
@@ -179,7 +180,7 @@
               file-base64-str (some-> file (.-data))
               file (some-> file-base64-str (utils/base64ToUint8Array)
                            (vector) (clj->js) (js/File. basename #js {}))
-              result (editor-handler/db-based-save-assets!
+              result (editor-assets/db-based-save-assets!
                       (state/get-current-repo) [file] {})]
         result)
       (p/catch (fn [error]

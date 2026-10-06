@@ -18,6 +18,8 @@
             [frontend.db.async :as db-async]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.footer :as footer]
@@ -71,7 +73,7 @@
             {:drop (fn [_e files]
                      (when-let [id (state/get-edit-input-id)]
                        (let [format (get (state/get-edit-block) :block/format :markdown)]
-                         (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? true))))})
+                         (editor-assets/upload-asset! id files format editor-handler/*asset-uploading? true))))})
            (common-handler/listen-to-scroll! element)
            (when margin-less-pages? ;; makes sure full screen pages displaying without scrollbar
              (set! (.. element -scrollTop) 0)))
@@ -348,7 +350,13 @@
            (fn [^js e]
              (let [target (gobj/get e "target")
                    block-el (.closest target ".bullet-container[blockid]")
-                   block-id (some-> block-el (.getAttribute "blockid"))
+                   ;; A row rendered through :block/link carries the linked block's
+                   ;; uuid as `blockid` and the linking block's own uuid as
+                   ;; `originalblockid`. Block-level context menu actions must act on
+                   ;; the linking block, otherwise they operate on the embed target.
+                   ls-block-el (some-> target (.closest ".ls-block"))
+                   block-id (or (some-> ls-block-el (.getAttribute "originalblockid"))
+                                (some-> block-el (.getAttribute "blockid")))
                    {:keys [block block-ref]} (state/get-state :block-ref/context)
                    {:keys [page page-entity]} (state/get-state :page-title/context)
                    show!
@@ -526,7 +534,7 @@
       :system-theme? system-theme?
       :preferred-language preferred-language
       :on-click (fn [e]
-                  (editor-handler/unhighlight-blocks!)
+                  (editor-format/unhighlight-blocks!)
                   (util/fix-open-external-with-shift! e))}
 
      [:main.theme-container-inner#app-container-wrapper

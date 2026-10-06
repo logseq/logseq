@@ -316,6 +316,51 @@
         (is (= 1 (/ (- (tc/to-long result) (tc/to-long now)) (* 1000 60)))))
       (is (< @unit-calls 20)))))
 
+(deftest double-plus-month-end-keeps-its-day-test
+  (testing "`++` monthly repeat from a 31st lands on the next 31st, not a drifted day"
+    ;; Reproduces https://github.com/logseq/db-test/issues/1354: the bulk
+    ;; `t/plus` clamps the day (Jan 31 + 5 months = Jun 30) and stepping on
+    ;; from the clamped date drifts (Jun 30 + 1 month = Jul 30, not Jul 31).
+    (let [now (t/date-time 2026 7 1)
+          scheduled (t/date-time 2026 1 31)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/date-time 2026 7 31))
+               (get-next-time scheduled month-unit 1 double-plus)))))
+    (let [now (t/date-time 2028 3 1)
+          scheduled (t/date-time 2026 10 31 9 30)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/date-time 2028 3 31 9 30))
+               (get-next-time scheduled month-unit 1 double-plus)))))))
+
+(deftest repeated-task-monthly-deadline-from-31st-test
+  (testing "monthly `++` deadline set on the 31st reschedules to the 31st"
+    (let [now (t/date-time 2026 7 1 9 0)
+          deadline (tc/to-long (t/date-time 2026 1 31))
+          expected-next-deadline (tc/to-long (t/date-time 2026 7 31))
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Regression Sandbox"}
+                   :blocks [{:block/title "Monthly recurring item"
+                             :build/properties
+                             {:logseq.property.repeat/repeated? true
+                              :logseq.property.repeat/recur-frequency 1
+                              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.month
+                              :logseq.property/deadline deadline
+                              :logseq.property/status :logseq.property/status.todo}}]}]})
+          block (db-test/find-block-by-content @conn "Monthly recurring item")
+          _ (d/transact! conn [[:db/add (:db/id block)
+                                :logseq.property.repeat/repeat-type
+                                :logseq.property.repeat/repeat-type.double-plus]])
+          report (d/transact! conn [[:db/add (:db/id block)
+                                     :logseq.property/status
+                                     :logseq.property/status.done]])]
+      (with-redefs [t/now (fn [] now)]
+        (let [commands-tx (doall (commands/run-commands report))]
+          (is (= expected-next-deadline
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)))
+          (is (= :logseq.property/status.todo
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
+
 (deftest repeated-task-with-deadline-and-missing-temporal-property-test
   (testing "falls back to the existing deadline instead of missing scheduled"
     (let [now (t/date-time 2030 1 10 8 30)
@@ -344,6 +389,52 @@
                  (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)))
           (is (= :logseq.property/status.todo
                  (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
+
+(defn- reschedule-date-property
+  "Completes a weekly repeating task whose temporal property is the user :date
+  property `due`, set to journal day 20260910, and returns the commands' tx."
+  [repeat-type now pages]
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:due {:logseq.property/type :date}}
+               :pages-and-blocks
+               (into
+                (mapv (fn [day] {:page {:build/journal day}}) pages)
+                [{:page {:block/title "Inbox"}
+                  :blocks [{:block/title "weekly task"
+                            :build/properties
+                            {:logseq.property.repeat/repeated? true
+                             :logseq.property.repeat/recur-frequency 1
+                             :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week
+                             :due [:build/page {:build/journal 20260910}]
+                             :logseq.property/status :logseq.property/status.todo}}]}])})
+        block (db-test/find-block-by-content @conn "weekly task")
+        _ (d/transact! conn [[:db/add (:db/id block) :logseq.property.repeat/repeat-type repeat-type]
+                             [:db/add (:db/id block) :logseq.property.repeat/temporal-property :user.property/due]])
+        report (d/transact! conn [[:db/add (:db/id block)
+                                   :logseq.property/status
+                                   :logseq.property/status.done]])]
+    (with-redefs [t/now (fn [] now)]
+      {:db @conn
+       :block block
+       :tx (doall (commands/run-commands report))})))
+
+(deftest repeated-date-property-keeps-its-weekday-test
+  (testing "A weekly repeat of a :date property lands 7 days later in any time zone"
+    ;; The day was carried as UTC midnight and read back in the local zone, so
+    ;; west of UTC it came back 6 days later. Run with TZ west and east of UTC.
+    (let [now (t/local-date-time 2026 9 10 12 0 0)
+          {:keys [db block tx]} (reschedule-date-property double-plus now [20260910 20260917])
+          [_ page-uuid] (tx-add-value tx (:db/id block) :user.property/due)]
+      (is (= 20260917 (:block/journal-day (d/entity db [:block/uuid page-uuid]))))))
+  (testing "`.+` on a :date property counts from today's date"
+    (let [now (t/local-date-time 2026 9 12 21 0 0)
+          {:keys [db block tx]} (reschedule-date-property dotted-plus now [20260910 20260919])
+          [_ page-uuid] (tx-add-value tx (:db/id block) :user.property/due)]
+      (is (= 20260919 (:block/journal-day (d/entity db [:block/uuid page-uuid]))))))
+  (testing "A missing journal page is created for the right day"
+    (let [now (t/local-date-time 2026 9 10 12 0 0)
+          {:keys [tx]} (reschedule-date-property double-plus now [20260910])]
+      (is (some #(= 20260917 (:block/journal-day %)) (filter map? tx))))))
 
 (deftest resolve-recur-frequency-test
   (let [resolve (fn [db entity] (#'commands/resolve-recur-frequency db entity))]

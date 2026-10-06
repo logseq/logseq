@@ -97,6 +97,11 @@
     (is (= "fooz" (:block/title (d/entity @conn [:block/uuid page-uuid])))
         "Page created correctly")
 
+    (let [[_ foo-uuid] (outliner-page/create! conn "Foo" {})
+          [_ foo-lc-uuid] (outliner-page/create! conn "foo" {})]
+      (is (= foo-uuid foo-lc-uuid)
+          "Creating a case variant of an existing page opens the existing page"))
+
     (is (thrown-with-msg?
          js/Error
          #"can't include \"/"
@@ -232,7 +237,11 @@
       (is (some? b1'))
       (is (= (:block/uuid recycle-page) (:block/uuid (:block/parent d1'))))
       (is (integer? (:logseq.property/deleted-at d1')))
-      (is (nil? (:block/raw-title b1')))
+      (is (= (str "b1 " (page-ref/->page-ref (:block/uuid d1)))
+             (:v (first (d/datoms @conn :eavt (:db/id b1') :block/title))))
+          "Recycling preserves the child's original title and internal page reference")
+      (is (empty? (d/datoms @conn :eavt (:db/id b1') :block/raw-title))
+          "Raw title is a derived lookup, not a stored attribute")
       (is (contains? (set (map :db/id (:block/refs b1')))
                      (:db/id d1)))
       (is (= (:block/uuid d1') (:block/uuid (:block/page b1')))))))
@@ -335,3 +344,27 @@
         "Journal title is not split into a month namespace page")
     (is (nil? (ldb/get-page @conn "18"))
         "Journal title is not split into a day namespace page")))
+
+(deftest rename-page-rejects-case-variant-of-existing-page
+  (let [conn (db-test/create-conn)
+        [_ foo-uuid] (outliner-page/create! conn "Foo" {})
+        [_ bar-uuid] (outliner-page/create! conn "Bar" {})
+        foo (d/entity @conn [:block/uuid foo-uuid])
+        bar (d/entity @conn [:block/uuid bar-uuid])]
+    (try
+      (outliner-validate/validate-block-title @conn "foo" bar)
+      (is false "expected a duplicate-name notification")
+      (catch :default e
+        (is (re-find #"Duplicate page" (ex-message e))
+            "Renaming Bar to foo is refused because Foo already exists")
+        (is (= :page.validation/duplicate-name (get-in (ex-data e) [:payload :i18n-key])))
+        (is (= "Another page named \"foo\" already exists."
+               (get-in (ex-data e) [:payload :message])))))
+    (is (= "Bar" (:block/title bar))
+        "Bar keeps its original title after the refused rename")
+    (is (= "Foo" (:block/title foo))
+        "Foo is unchanged")
+    (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/name "foo"]] @conn)))
+        "The graph still has one page named foo")
+    (is (nil? (outliner-validate/validate-block-title @conn "FOO" foo))
+        "A page can be renamed to a case variant of its own title")))

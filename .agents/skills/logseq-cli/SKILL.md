@@ -14,7 +14,7 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Run `logseq --help` to see top-level commands and global flags.
 - Run `logseq <command> --help` to see command-specific options.
 - Use `--graph` to target a specific graph.
-- Omit `--output` for human output. Set `--output json` or `--output edn` only when machine-readable output is required.
+- Omit `--output` for human output. Use `--output json` or `--output edn` for structured command results. `skill show` prints raw Markdown in every output mode.
 
 ## Command groups (from `logseq --help`)
 
@@ -27,7 +27,7 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - `graph list|create|switch|remove|validate|info|export|import|backup list|backup create|backup restore|backup remove`
 - `server list|cleanup|start|stop|restart`
 - `doctor`
-- `sync status|start|stop|upload|download|remote-graphs|ensure-keys|grant-access|config set|get|unset`
+- `sync status|start|stop|upload|download|asset download|remote-graphs|ensure-keys|grant-access|config set|get|unset`
 - Authentication: `login|logout`
 - Utilities: `agent bridge`, `completion`, `debug`, `example`, `skill`
 
@@ -43,10 +43,7 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 
 ## Command option policy
 
-- Do not memorize or hardcode command options in this skill.
-- Before running any command, always check live options with:
-- `logseq <command> --help`
-- `logseq <command> <subcommand> --help`
+- Check the full command path with `logseq <command-path> --help` before using its options; for example, `logseq upsert block --help`.
 
 ## Task command preference
 
@@ -59,11 +56,7 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 ## Examples policy
 
 - Do not maintain long static command examples in this skill.
-- Use `logseq example` as the source of truth for runnable examples.
-- Before proposing runnable commands, always inspect live examples with:
-  - `logseq example`
-  - `logseq example <command-or-prefix...>`
-  - `logseq example <command-or-prefix...> --help`
+- Use `logseq example <command-path>` for starting points, then check the command's help and input format before using an example.
 - Prefer exact selectors when possible (for example, `logseq example upsert page`).
 - Use prefix selectors when grouped examples are needed (for example, `logseq example upsert`).
 - Replace placeholder ids/uuids in retrieved examples with real entities from the target graph.
@@ -77,6 +70,9 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Preserve the source structure as sibling and child blocks. Each logical bullet, row, or subsection should usually become its own block.
 - Reserve `--content` for true single-block writes or targeted updates to one existing block.
 - If the user asks to write notes, lists, outlines, imported data, or any content that already has structure, do not flatten it into one long `--content` string.
+- Create multiple sibling or child blocks with `upsert block --blocks <markdown>` or `--blocks-file <path>`. Use Markdown list indentation for the hierarchy; for example, `--blocks $'- Parent\n  - Child\n- Sibling'` in Bash or Zsh.
+- Specify `--target-page`, `--target-id`, or `--target-uuid` when the destination matters. Create mode defaults to the current journal if no target is given. `--pos sibling` requires a block target.
+- `--blocks` and `--blocks-file` are create-mode inputs. With `--id` or `--uuid`, `upsert block` updates one existing block and rejects those options. Use `--dry-run` in create mode to inspect planned operations without writing.
 
 ## Tag association semantics
 
@@ -86,7 +82,7 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Tag values may be tag title/name strings, db/id, UUID, or `:db/ident` values.
 - String tag values may include a leading `#`, but they should still be passed inside `--update-tags`.
 - If the user asks to tag a block or page, prefer explicit tag association.
-- Tags must already exist and be public. If needed, create the tag first with `upsert tag --name "<TagName>"`.
+- Tags must already exist. If needed, create the tag first with `upsert tag --name "<TagName>"`. Do not assume a tag's public property controls whether it can be associated; tag resolution does not check that property.
 
 ## Anti-patterns and correct usage
 
@@ -108,18 +104,15 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Anti-pattern: pass tag updates as a comma-separated string, for example `--update-tags "AI-GENERATED,CLI"`.
 - Correct usage: pass an EDN vector, for example `--update-tags '["AI-GENERATED" "CLI"]'`.
 
-### Missing or private tags
+### Missing tags
 
 - Anti-pattern: retry the same tag association command after a tag association failure without checking tag state.
-- Correct usage: verify the tag exists and is public; create it first when needed with `upsert tag --name "<TagName>"`.
+- Correct usage: verify the tag exists; create it first when needed with `upsert tag --name "<TagName>"`.
 
 ## Tips
 
 - `query list` returns both built-ins and `custom-queries` from `cli.edn`.
 - `agent bridge` starts/reuses db-worker-node, listens to db-worker-node events, scans routable tasks on startup and each event, starts one in-process master Codex session, and dispatches matched task/comment requests to that session.
-- `show --id` accepts either one db/id or an EDN vector of ids.
-- `remove block --id` also accepts one db/id or an EDN vector.
+- `show --id` and `remove block --id` accept one positive db/id or a bracketed list such as `'[123,456]'`. Their id parser splits integers on commas or whitespace; it does not parse EDN.
 - `upsert block` enters update mode when `--id` or `--uuid` is provided.
-- Always verify command flags with `logseq --help` and `logseq <...> --help` before execution.
 - If `logseq` reports that it doesn’t have read/write permission for `root-dir`, then check filesystem permissions or set `LOGSEQ_CLI_ROOT_DIR`.
-- In sandboxed environments, `graph create` may print a process-scan warning to stderr; if command status is `ok`, the graph is still created.

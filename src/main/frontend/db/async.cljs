@@ -1,31 +1,85 @@
 (ns frontend.db.async
   "Async queries"
-  (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
-            [frontend.date :as date]
+  (:require [frontend.date :as date]
             [frontend.db.async.util :as db-async-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
-(def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
-
 (def <q db-async-util/<q)
 
+(defn- parent-chains
+  [id->parent-id parent-ids]
+  ;; Build each ancestor once and share its map across overlapping chains.
+  (reduce
+   (fn [chains parent-id]
+     (let [path (loop [pid parent-id
+                       path []
+                       seen #{}]
+                  (if (or (not (integer? pid))
+                          (contains? chains pid)
+                          (contains? seen pid))
+                    path
+                    (recur (get id->parent-id pid)
+                           (conj path pid)
+                           (conj seen pid))))]
+       (reduce (fn [result pid]
+                 (let [parent (get result (get id->parent-id pid))]
+                   (assoc result pid
+                          (cond-> {:db/id pid}
+                            parent (assoc :block/parent parent)))))
+               chains
+               (rseq path))))
+   {}
+   parent-ids))
+
+(defn- row-parent-index
+  [rows]
+  (into {}
+        (keep (fn [[db-id _ _ parent-id]]
+                (when (integer? parent-id)
+                  [db-id parent-id])))
+        rows))
+
 (defn- order-block-summaries
-  [ids rows]
-  (let [blocks-by-uuid (into {}
+  [ids rows id->parent-id]
+  (let [chains (parent-chains id->parent-id (map #(nth % 3) rows))
+        blocks-by-uuid (into {}
                              (map (fn [[db-id block-uuid title parent-id]]
                                     [block-uuid
                                      (cond-> {:db/id db-id
                                               :block/uuid block-uuid
                                               :block/title title}
                                        (integer? parent-id)
-                                       (assoc :block/parent {:db/id parent-id}))]))
+                                       (assoc :block/parent (get chains parent-id)))]))
                              rows)]
     (vec (keep blocks-by-uuid ids))))
+
+(defn- <parent-index
+  [graph eids]
+  (letfn [(step [pending index]
+            (if (empty? pending)
+              (p/resolved index)
+              (p/let [rows (<q graph
+                               {}
+                               '[:find ?e ?parent
+                                 :in $ [?e ...]
+                                 :where [(get-else $ ?e :block/parent :none) ?parent]]
+                               (vec pending))
+                      index' (into index
+                                   (keep (fn [[eid parent-id]]
+                                           (when (integer? parent-id)
+                                             [eid parent-id])))
+                                   rows)
+                      next-ids (->> rows
+                                    (keep (fn [[_ parent-id]]
+                                            (when (and (integer? parent-id)
+                                                       (not (contains? index' parent-id)))
+                                              parent-id)))
+                                    set)]
+                (step next-ids index'))))]
+    (step (set (filter integer? eids)) {})))
 
 (defn <get-block-summaries
   [graph ids]
@@ -38,8 +92,13 @@
                        [?e :block/uuid ?uuid]
                        [?e :block/title ?title]
                        [(get-else $ ?e :block/parent :none) ?parent]]
-                     ids)]
-      (order-block-summaries ids rows))))
+                     ids)
+            seed-index (row-parent-index rows)
+            missing-parents (remove seed-index (vals seed-index))
+            extra-index (if (seq missing-parents)
+                          (<parent-index graph missing-parents)
+                          {})]
+      (order-block-summaries ids rows (merge seed-index extra-index)))))
 
 (defn <invoke-db-worker
   [api & args]
@@ -401,15 +460,9 @@
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
-    (let [future-days (state/get-scheduled-future-days)
-          current-day (tf/parse yyyyMMdd-formatter (str date))
-          future-date (t/plus current-day (t/days future-days))
-          future-day (some->> future-date
-                              (tf/unparse yyyyMMdd-formatter)
-                              (parse-long))
-          start-time (date/journal-day->utc-ms date)
-          future-time (tc/to-long future-date)]
-      (when-let [repo (and future-day (state/get-current-repo))]
+    (when-let [repo (state/get-current-repo)]
+      (when-let [[start-time future-time]
+                 (date/journal-day-local-range-ms date (state/get-scheduled-future-days))]
         (<get-date-scheduled-or-deadlines-from-worker repo start-time future-time)))))
 
 (defn <get-tag-objects

@@ -86,6 +86,8 @@
       (when save-code-editor?
         (state/pub-event! [:editor/save-code-editor]))
       (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
+        (when (:save-current-block? opts true)
+          (state/pub-event! [:editor/save-current-block]))
         (state/clear-edit! {:clear-editing-block? false}))
       (let [content (or custom-content (:block/title block) "")
             content-length (count content)
@@ -158,6 +160,7 @@
   [blocks]
   {:pre [(seq blocks)]}
   (let [level-blocks (outliner-core/blocks-with-level blocks)
+        selected-ids (set (keep :db/id blocks))
         editing-block-id (:block/uuid (state/get-edit-block))
         input (state/get-input)
         editing-original-block (when input
@@ -165,6 +168,8 @@
         selected-original-blocks (selected-original-blocks-by-id
                                   (state/get-selection-blocks))]
     (->> (filter (fn [b] (= 1 (:block/level b))) level-blocks)
+         (remove #(ldb/some-parent % (fn [parent]
+                                       (contains? selected-ids (:db/id parent)))))
          (map (fn [b]
                 (let [block-id (:block/uuid b)
                       original (or (:original-block b)

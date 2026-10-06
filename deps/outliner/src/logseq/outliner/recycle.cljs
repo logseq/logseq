@@ -189,13 +189,15 @@
         original-page (resolve-entity db (:logseq.property.recycle/original-page root))
         parent-valid? (and original-parent
                            (not (recycled? original-parent))
-                           (d/entity db (:db/id original-parent)))]
+                           (d/entity db (:db/id original-parent)))
+        parent-pending? (and original-parent (not parent-valid?))]
     (cond
       (ldb/page? root)
       {:parent (when parent-valid? original-parent)
        :page root
        :order (or (:logseq.property.recycle/original-order root)
-                  (when parent-valid? (restore-order original-parent)))}
+                  (when parent-valid? (restore-order original-parent)))
+       :parent-pending? parent-pending?}
 
       parent-valid?
       {:parent original-parent
@@ -213,20 +215,55 @@
       :else
       nil)))
 
+(defn- awaiting-original-parent?
+  [db child]
+  (let [parent (:block/parent child)
+        recycle (recycle-page db)]
+    (or (nil? parent)
+        (recycled? parent)
+        (and recycle (= (:db/id parent) (:db/id recycle))))))
+
+(defn- relink-waiting-children-tx
+  "Re-attach live children that still record this page as their recycle original parent."
+  [db parent]
+  (let [children (->> (:logseq.property.recycle/_original-parent parent)
+                      (remove recycled?)
+                      (remove #(= (:db/id %) (:db/id parent))))]
+    (when (seq children)
+      (first
+       (reduce
+        (fn [[txs last-order] child]
+          (let [awaiting? (awaiting-original-parent? db child)
+                order (when awaiting?
+                        (or (:logseq.property.recycle/original-order child)
+                            (db-order/gen-key last-order nil)))
+                clear [[:db/retract (:db/id child) :logseq.property.recycle/original-parent]
+                       [:db/retract (:db/id child) :logseq.property.recycle/original-page]
+                       [:db/retract (:db/id child) :logseq.property.recycle/original-order]]
+                attach (when awaiting?
+                         [{:db/id (:db/id child)
+                           :block/parent (:db/id parent)
+                           :block/order order}])]
+            [(into txs (concat attach clear))
+             (or order last-order)]))
+        [[] (some-> parent :block/_parent ldb/sort-by-order last :block/order)]
+        children)))))
+
 (defn ^:api restore-tx-data
   [db root]
-  (when-let [{:keys [parent page order]} (restore-target db root)]
+  (when-let [{:keys [parent page order parent-pending?]} (restore-target db root)]
     (let [subtree (when-not (ldb/page? root)
                     (block-subtree db root))
           clear-structure [[:db/retract (:db/id root) :block/parent]
                            [:db/retract (:db/id root) :block/order]
                            (when-not (ldb/page? root)
                              [:db/retract (:db/id root) :block/page])]
-          clear-meta [[:db/retract (:db/id root) :logseq.property/deleted-at]
-                      [:db/retract (:db/id root) :logseq.property/deleted-by-ref]
-                      [:db/retract (:db/id root) :logseq.property.recycle/original-parent]
-                      [:db/retract (:db/id root) :logseq.property.recycle/original-page]
-                      [:db/retract (:db/id root) :logseq.property.recycle/original-order]]
+          clear-meta (cond-> [[:db/retract (:db/id root) :logseq.property/deleted-at]
+                              [:db/retract (:db/id root) :logseq.property/deleted-by-ref]
+                              [:db/retract (:db/id root) :logseq.property.recycle/original-page]]
+                       (not parent-pending?)
+                       (into [[:db/retract (:db/id root) :logseq.property.recycle/original-parent]
+                              [:db/retract (:db/id root) :logseq.property.recycle/original-order]]))
           root-tx (cond-> {:db/id (:db/id root)}
                     parent
                     (assoc :block/parent (:db/id parent))
@@ -238,8 +275,10 @@
                             (map (fn [node]
                                    {:db/id (:db/id node)
                                     :block/page (:db/id page)})
-                                 subtree))]
-      (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta)))))
+                                 subtree))
+          relink-tx (when (ldb/page? root)
+                      (relink-waiting-children-tx db root))]
+      (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta) relink-tx))))
 
 (defn ^:api restore!
   [conn root-uuid]

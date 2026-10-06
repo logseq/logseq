@@ -15,6 +15,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
@@ -24,9 +25,11 @@
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.graph-parser.exporter.finalize :as gp-exporter-finalize]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [promesa.core :as p]))
 
@@ -2238,7 +2241,7 @@ abc
         tx-id (inc (:max-tx @conn))
         reports (atom [])]
     (d/listen! conn ::finalize-test #(swap! reports conj %))
-    (gp-exporter/finalize-imported-graph! conn)
+    (gp-exporter-finalize/finalize-imported-graph! conn)
     (is (= tx-id (:block/tx-id (d/entity @conn block-id))))
     (is (= #{(:db/id (d/entity @conn [:block/uuid target-uuid]))}
            (set (map :db/id (:block/refs (d/entity @conn block-id))))))
@@ -2248,7 +2251,7 @@ abc
     (is (= 42 (:block/tx-id (d/entity @conn [:block/uuid skipped-uuid]))))
     (is (empty? (:block/refs (d/entity @conn [:block/uuid reaction-uuid]))))
     (is (= 1 (count @reports)))
-    (gp-exporter/finalize-imported-graph! conn)
+    (gp-exporter-finalize/finalize-imported-graph! conn)
     (is (= 1 (count @reports)) "Repeated finalization is a no-op")))
 
 (deftest-async import-file-graph-rebuilds-refs-without-per-file-listener
@@ -2565,6 +2568,38 @@ abc
              (string? content-order)
              (pos? (compare page-order content-order)))
         "The imported page is ordered after existing parent content")))
+
+(deftest repaired-page-orders-advance-namespace-page-allocator
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Country"}
+                 :blocks [{:block/title "Overview"}]}]})
+        country (db-test/find-page-by-title @conn "Country")
+        overview (db-test/find-block-by-content @conn "Overview")
+        initial-max (db-order/get-max-order @conn)
+        now (.now js/Date)]
+    (with-redefs [db-order/*max-key (atom initial-max)]
+      (d/transact! conn
+                   [{:db/id (:db/id overview) :block/order initial-max}
+                    {:block/uuid (random-uuid)
+                     :block/title "Australia"
+                     :block/name "australia"
+                     :block/tags :logseq.class/Page
+                     :block/parent (:db/id country)
+                     :block/created-at now
+                     :block/updated-at now}])
+      (let [report (gp-exporter-finalize/ensure-imported-page-parent-orders! conn)
+            australia (db-test/find-page-by-title @conn "Australia")
+            repaired-order (:block/order australia)]
+        (is (= repaired-order @db-order/*max-key))
+        (is (= @conn (:db-after report)))
+        (outliner-page/create! conn "Country/New" {:split-namespace? true})
+        (let [new-page (db-test/find-page-by-title @conn "New")]
+          (is (pos? (compare (:block/order new-page) repaired-order)))
+          (is (= (:db/id australia) (:db/id (ldb/get-left-sibling new-page)))))
+        (let [allocator-max @db-order/*max-key]
+          (is (nil? (gp-exporter-finalize/ensure-imported-page-parent-orders! conn)))
+          (is (= allocator-max @db-order/*max-key)))))))
 
 (deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
   (let [old-journal-uuid (random-uuid)

@@ -274,8 +274,10 @@
   Notes:
   - `batch-tx-fn` is called as `(batch-tx-fn temp-conn *batch-tx-data)`.
   - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
+  - `transform-tx-meta` runs after the batch body to finalize operation metadata.
   - Do not rely on returned tx-report shape for undo/redo behavior."
-  [conn tx-meta batch-tx-fn & {:keys [listen-db before-commit]}]
+  [conn tx-meta batch-tx-fn & {:keys [listen-db before-commit transform-tx-meta]
+                             :or {transform-tx-meta identity}}]
   (let [temp-conn (temp-conn-from-db @conn)
         *batch-tx-data (volatile! [])
         *complete? (volatile! false)]
@@ -296,7 +298,7 @@
       (let [tx-data @*batch-tx-data]
         (when (and @*complete? (seq tx-data))
           ;; transact tx-data to `conn` and validate db
-          (transact! conn tx-data tx-meta)))
+          (transact! conn tx-data (transform-tx-meta tx-meta))))
       (finally
         (d/unlisten! temp-conn ::temp-conn-batch-tx)
         (reset! temp-conn nil)
@@ -360,6 +362,7 @@
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def recycled? entity-util/recycled?)
+(def some-parent entity-util/some-parent)
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)

@@ -104,6 +104,19 @@
              {}
              schema))
 
+(defn- inverse-upsert-property-schema
+  "Restore the previous schema, except :db/cardinality when that would revert
+   :many to :one while values exist."
+  [db-before db-after property]
+  (let [schema (sanitize-upsert-property-schema
+                db-before
+                (db-property/get-property-schema (into {} property)))]
+    (if (and (contains? #{:one :db.cardinality/one} (:db/cardinality schema))
+             (some? (d/entity db-after (:db/ident property)))
+             (seq (d/datoms db-after :avet (:db/ident property))))
+      (dissoc schema :db/cardinality)
+      schema)))
+
 (defn- sanitize-block-refs
   [refs]
   (->> refs
@@ -437,44 +450,128 @@
                       (assoc (into {} block) :db/id (:db/id block)))
                     (rest template-blocks))))))))
 
+(defn- inserted-block-uuids-from-tx-data
+  [tx-data]
+  (let [entity-id (fn [item]
+                    (cond
+                      (some? (:a item)) (:e item)
+                      (vector? item) (second item)
+                      :else (or (:db/id item) [:block/uuid (:block/uuid item)])))
+        parent-ids (into #{}
+                         (comp (filter (fn [item]
+                                         (or (:block/parent item)
+                                             (and (= :block/parent (:a item))
+                                                  (true? (:added item)))
+                                             (and (vector? item)
+                                                  (= :db/add (first item))
+                                                  (= :block/parent (nth item 2 nil))))))
+                               (map entity-id))
+                         tx-data)]
+    ;; Saving a reference and inserting a sibling creates both a page and a
+    ;; block. Only the inserted tree has parent writes in that transaction.
+    ;; Use durable datoms: later edits can move or delete either entity.
+    (created-block-uuids-from-tx-data
+     (filter #(contains? parent-ids (entity-id %)) tx-data))))
+
+(defn- replaces-empty-target?
+  [db tx-data source-uuids target-ref opts]
+  (and (or (:replace-empty-target? opts)
+           (and (:sibling? opts) (> (count source-uuids) 1)))
+       (or (= (first source-uuids) (:block/uuid (d/entity db target-ref)))
+           (some (fn [item]
+                   (let [[e a v added?]
+                         (if (vector? item)
+                           [(second item) (nth item 2 nil) (nth item 3 nil)
+                            (= :db/add (first item))]
+                           [(:e item) (:a item) (:v item) (:added item)])]
+                     (and (= :block/title a) (false? added?)
+                          (string? v) (string/blank? v)
+                          (= target-ref (stable-entity-ref db e)))))
+                 tx-data))))
+
 (defn- canonicalize-insert-blocks-op
-  [db tx-data args]
-  (let [[blocks target-id opts] args
-        created-uuids (created-block-uuids-from-tx-data tx-data)
-        source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
-        source-uuids (mapv :block/uuid source-blocks)
+  ([db tx-data args]
+   (canonicalize-insert-blocks-op db tx-data args (inserted-block-uuids-from-tx-data tx-data)))
+  ([db tx-data args available-uuids]
+   (let [[blocks target-id opts] args
+         source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
+         source-uuids (mapv :block/uuid source-blocks)
+         target-ref (stable-entity-ref db target-id)
+         target (d/entity db target-ref)
+         available-set (set available-uuids)
+         replaced-target? (and (not (every? available-set source-uuids))
+                                (replaces-empty-target? db tx-data source-uuids target-ref opts))
+         new-source-uuids (if replaced-target? (subvec source-uuids 1) source-uuids)
+         created-uuids (if (every? available-set new-source-uuids)
+                         new-source-uuids
+                         (vec (take (count new-source-uuids) available-uuids)))
+         block-with-new-id (fn [block block-uuid]
+                             (assoc block
+                                    :block/uuid block-uuid
+                                    :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
+                                                    [:block/uuid (:block/uuid parent)])))
+         blocks* (if (or replaced-target? (seq created-uuids))
+                   (if (or replaced-target?
+                           (and (:replace-empty-target? opts)
+                                (= (inc (count created-uuids)) (count source-blocks))))
+                     (let [[fst-block & rst-blocks] source-blocks
+                           created-rst-uuids created-uuids]
+                       (into [(assoc fst-block :block/uuid (:block/uuid target))]
+                             (if (seq created-rst-uuids)
+                               (map block-with-new-id rst-blocks created-rst-uuids)
+                               rst-blocks)))
+                     (mapv block-with-new-id source-blocks created-uuids))
+                   source-blocks)
+         uuid-remap (->> (map vector source-uuids (map :block/uuid blocks*))
+                         (keep (fn [[old-uuid new-uuid]]
+                                 (when (and (uuid? old-uuid)
+                                            (uuid? new-uuid)
+                                            (not= old-uuid new-uuid))
+                                   [old-uuid new-uuid])))
+                         (into {}))
+         blocks* (if (seq uuid-remap)
+                   (mapv #(remap-block-lookup-values-by-uuid-map % uuid-remap) blocks*)
+                   blocks*)]
+     [blocks*
+      target-ref
+      (assoc (dissoc (or opts {}) :outliner-op)
+             :keep-uuid? true)])))
+
+(defn- canonicalize-template-op
+  [db tx-data args available-uuids]
+  (let [[template-id target-id opts] args
+        template-ref (stable-entity-ref db template-id)
         target-ref (stable-entity-ref db target-id)
-        target (d/entity db target-id)
-        block-with-new-id (fn [block block-uuid]
-                            (assoc block
-                                   :block/uuid block-uuid
-                                   :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
-                                                   [:block/uuid (:block/uuid parent)])))
-        blocks* (if (seq created-uuids)
-                  (if (and (:replace-empty-target? opts)
-                           (= (inc (count created-uuids)) (count source-blocks)))
-                    (let [[fst-block & rst-blocks] source-blocks
-                          created-rst-uuids created-uuids]
-                      (into [(assoc fst-block :block/uuid (:block/uuid target))]
-                            (if (seq created-rst-uuids)
-                              (map block-with-new-id rst-blocks created-rst-uuids)
-                              rst-blocks)))
-                    (mapv block-with-new-id source-blocks created-uuids))
-                  source-blocks)
-        uuid-remap (->> (map vector source-uuids (map :block/uuid blocks*))
-                        (keep (fn [[old-uuid new-uuid]]
-                                (when (and (uuid? old-uuid)
-                                           (uuid? new-uuid)
-                                           (not= old-uuid new-uuid))
-                                  [old-uuid new-uuid])))
-                        (into {}))
-        blocks* (if (seq uuid-remap)
-                  (mapv #(remap-block-lookup-values-by-uuid-map % uuid-remap) blocks*)
-                  blocks*)]
-    [blocks*
-     target-ref
-     (assoc (dissoc (or opts {}) :outliner-op)
-            :keep-uuid? true)]))
+        template-blocks (or (some-> (:template-blocks opts) seq vec)
+                            (template-children-blocks-for-history db template-ref))
+        opts-base (dissoc opts :template-id :outliner-op)
+        opts' (if (seq template-blocks)
+                (let [[blocks* _target-ref insert-opts]
+                      (canonicalize-insert-blocks-op db tx-data [template-blocks target-id opts-base] available-uuids)]
+                  (assoc insert-opts :template-blocks blocks*))
+                (dissoc opts-base :template-blocks))]
+    (when-not (and template-ref target-ref)
+      (throw (ex-info "Invalid apply-template args"
+                      {:args args})))
+    [:apply-template [template-ref target-ref opts']]))
+
+(defn ^:api canonicalize-insert-ops
+  [db tx-data ops]
+  (:ops
+   (reduce (fn [{:keys [available] :as result} [op args :as entry]]
+             (if (contains? #{:insert-blocks :apply-template} op)
+               (let [[_ args' :as entry']
+                     (if (= :insert-blocks op)
+                       [op (canonicalize-insert-blocks-op db tx-data args available)]
+                       (canonicalize-template-op db tx-data args available))
+                     blocks (if (= :insert-blocks op) (first args') (get-in args' [2 :template-blocks]))
+                     inserted-uuids (set (map :block/uuid blocks))]
+                 (-> result
+                     (update :ops conj entry')
+                     (assoc :available (filterv #(not (contains? inserted-uuids %)) available))))
+               (update result :ops conj entry)))
+           {:ops [] :available (inserted-block-uuids-from-tx-data tx-data)}
+           ops)))
 
 (defn- canonical-move-op-for-block
   [db block-id opts]
@@ -515,21 +612,7 @@
      (canonicalize-insert-blocks-op db tx-data args)]
 
     :apply-template
-    (let [[template-id target-id opts] args
-          template-ref (stable-entity-ref db template-id)
-          target-ref (stable-entity-ref db target-id)
-          template-blocks (or (some-> (:template-blocks opts) seq vec)
-                              (template-children-blocks-for-history db template-ref))
-          opts-base (dissoc opts :template-id :outliner-op)
-          opts' (if (seq template-blocks)
-                  (let [[blocks* _target-ref insert-opts]
-                        (canonicalize-insert-blocks-op db tx-data [template-blocks target-id opts-base])]
-                    (assoc insert-opts :template-blocks blocks*))
-                  (dissoc opts-base :template-blocks))]
-      (when-not (and template-ref target-ref)
-        (throw (ex-info "Invalid apply-template args"
-                        {:args args})))
-      [:apply-template [template-ref target-ref opts']])
+    (canonicalize-template-op db tx-data args (inserted-block-uuids-from-tx-data tx-data))
 
     :move-blocks-up-down
     (let [[ids up?] args]
@@ -653,6 +736,7 @@
                  {:block/uuid block-uuid}))))
 
 (defn- selected-block-roots
+  "The selected blocks that are not descendants of another selected block."
   [db-before ids]
   (let [resolved-entities (mapv #(block-entity db-before %) ids)
         unresolved-id? (some nil? resolved-entities)
@@ -664,12 +748,7 @@
                          (remove nil? resolved-entities))
         selected-ids (set (map :db/id entities))
         has-selected-ancestor? (fn [ent]
-                                 (loop [parent (:block/parent ent)]
-                                   (if-let [parent-id (some-> parent :db/id)]
-                                     (if (contains? selected-ids parent-id)
-                                       true
-                                       (recur (:block/parent parent)))
-                                     false)))]
+                                 (ldb/some-parent ent #(contains? selected-ids (:db/id %))))]
     {:roots (->> entities
                  (remove has-selected-ancestor?)
                  vec)
@@ -722,6 +801,58 @@
         created-from-property
         (assoc :created-from-property created-from-property)))))
 
+(defn- split-block-refs
+  "Splits the ref values of the insert payload `block` into those pointing at a
+  block in `uuids` and the rest: [block without them, map of them]."
+  [db-before uuids block]
+  (let [in-uuids? (fn [v]
+                    (and (vector? v)
+                         (= :block/uuid (first v))
+                         (contains? uuids (second v))))]
+    (reduce-kv
+     (fn [[block' refs :as acc] k v]
+       (if (worker-ref-attr? db-before k)
+         (if (set? v)
+           (let [{in true out false} (group-by in-uuids? v)]
+             (if (seq in)
+               [(if (seq out) (assoc block' k (set out)) (dissoc block' k))
+                (assoc refs k (set in))]
+               acc))
+           (if (in-uuids? v)
+             [(dissoc block' k) (assoc refs k v)]
+             acc))
+         acc))
+     [block {}]
+     block)))
+
+(defn- defer-refs-to-later-plans
+  "Each restore plan is inserted by its own op, so a block that refers to a
+  block of a later plan (a node property value, a used template) fails to
+  insert: the later block doesn't exist yet. Takes those refs out of the
+  plans and returns [plans, :save-block ops that set them after all inserts]."
+  [db-before plans]
+  (let [plan-uuids (mapv #(set (keep :block/uuid (:blocks %))) plans)]
+    (reduce
+     (fn [[plans' save-ops] [i plan]]
+       (let [later-uuids (into #{} cat (subvec plan-uuids (inc i)))
+             splits (mapv #(split-block-refs db-before later-uuids %) (:blocks plan))]
+         [(conj plans' (assoc plan :blocks (mapv first splits)))
+          (into save-ops
+                (keep (fn [[block refs]]
+                        (when (seq refs)
+                          [:save-block [(assoc refs :block/uuid (:block/uuid block)) {}]])))
+                splits)]))
+     [[] []]
+     (map-indexed vector plans))))
+
+(defn- restore-plans->ops
+  "An insert op per restore plan, then the :save-block ops that set the refs
+  between plans."
+  [db-before plans]
+  (let [[plans' save-ops] (defer-refs-to-later-plans db-before plans)]
+    (-> (mapv #(to-insert-op db-before %) plans')
+        (into save-ops))))
+
 (defn- build-inverse-delete-blocks
   [db-before ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
@@ -729,9 +860,7 @@
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
-      (->> plans
-           (mapv #(to-insert-op db-before %))
-           seq))))
+      (seq (restore-plans->ops db-before plans)))))
 
 (defn- move-root->restore-op
   [db-before root]
@@ -747,14 +876,64 @@
           created-from-property
           (assoc :created-from-property created-from-property))]])))
 
+(defn- document-order-path
+  "The id of the page, then the :block/order of each block from the page down
+  to `block`."
+  [block]
+  (loop [block block
+         path ()]
+    (if-let [parent (:block/parent block)]
+      (recur parent (conj path (:block/order block)))
+      (conj path (:db/id block)))))
+
+(defn- compare-document-order
+  "Compares 2 document-order-path values: blocks sort as they appear on their
+  pages, a parent before its children."
+  [path-1 path-2]
+  (loop [path-1 (seq path-1)
+         path-2 (seq path-2)]
+    (cond
+      (and (nil? path-1) (nil? path-2)) 0
+      (nil? path-1) -1
+      (nil? path-2) 1
+      :else (let [c (compare (first path-1) (first path-2))]
+              (if (zero? c)
+                (recur (next path-1) (next path-2))
+                c)))))
+
 (defn- build-inverse-move-blocks
   [db-before ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
+        ;; Restore in page order: a block's restore target, its left sibling
+        ;; or parent, may be another moved block, which must be back first.
+        roots (sort-by document-order-path compare-document-order roots)
         restore-ops (mapv #(move-root->restore-op db-before %) roots)]
     (when (and (not incomplete?)
                (seq roots)
                (every? some? restore-ops))
       (seq restore-ops))))
+
+(defn- opposite-move-restores?
+  "Whether moving `ids` the other way undoes moving them up (`up?`) or down:
+  the top-level blocks among `ids` are adjacent siblings in order, and a
+  sibling on the side they move to keeps them under their parent. A move
+  past the first or last child takes the blocks into another parent, and
+  the opposite move need not bring them back: moving a, b up in `P(Q(a, b))`
+  gives `P(a, b, Q)`, and moving them down again gives `P(Q, a, b)`."
+  [db ids up?]
+  (let [blocks (mapv #(block-entity db %) ids)
+        selected-ids (set (keep :db/id blocks))
+        has-selected-ancestor? (fn [ent]
+                                 (ldb/some-parent ent #(contains? selected-ids (:db/id %))))
+        top-level-blocks (remove has-selected-ancestor? blocks)]
+    (and (every? some? blocks)
+         (seq top-level-blocks)
+         (every? (fn [[left right]]
+                   (= (:db/id left) (:db/id (ldb/get-left-sibling right))))
+                 (partition 2 1 top-level-blocks))
+         (some? (if up?
+                  (ldb/get-left-sibling (first top-level-blocks))
+                  (ldb/get-right-sibling (last top-level-blocks)))))))
 
 (defn- page-top-level-blocks
   [page]
@@ -769,7 +948,7 @@
   (build-inverse-save-block db-before (into {} ent) nil))
 
 (defn- build-inverse-delete-page
-  [db-before page-uuid]
+  [db-before db-after page-uuid]
   (when-let [page (d/entity db-before [:block/uuid page-uuid])]
     (let [class-or-property? (or (ldb/class? page)
                                  (ldb/property? page))
@@ -791,25 +970,25 @@
                                 (assoc :class-ident-namespace class-ident-namespace))]])
                           [:upsert-property
                            [(:db/ident page)
-                            (db-property/get-property-schema (into {} page))
+                            (inverse-upsert-property-schema db-before db-after page)
                             {:property-name (:block/title page)}]])
               restore-root-ops (when (every? some? root-plans)
-                                 (mapv #(to-insert-op db-before %) root-plans))]
+                                 (restore-plans->ops db-before root-plans))]
+          ;; Put the page's blocks back before its attributes: a property
+          ;; value of the page can be one of those blocks.
           (cond-> []
             create-op
             (conj create-op)
-            page-save-op
-            (conj page-save-op)
             (seq restore-root-ops)
             (into restore-root-ops)
+            page-save-op
+            (conj page-save-op)
             :always
             seq))
 
         today-page?
         (when (every? some? root-plans)
-          (->> root-plans
-               (mapv #(to-insert-op db-before %))
-               seq))
+          (seq (restore-plans->ops db-before root-plans)))
 
         :else
         ;; Soft-deleted pages are moved to Recycle with recycle metadata.
@@ -889,9 +1068,16 @@
 
                           :move-blocks-up-down
                           (let [[ids up?] args]
-                            [:move-blocks-up-down
-                             [(stable-id-coll db-before ids)
-                              (not up?)]])
+                            ;; Moving blocks that aren't adjacent siblings
+                            ;; gathers them next to each other, and moving
+                            ;; blocks past their parent's first or last child
+                            ;; changes their parent, so moving them back the
+                            ;; other way can't always restore them.
+                            (if (opposite-move-restores? db-before ids up?)
+                              [:move-blocks-up-down
+                               [(stable-id-coll db-before ids)
+                                (not up?)]]
+                              (build-inverse-move-blocks db-before ids)))
 
                           :delete-blocks
                           (let [[ids _opts] args]
@@ -904,7 +1090,7 @@
 
                           :delete-page
                           (let [[page-uuid _opts] args]
-                            (build-inverse-delete-page db-before page-uuid))
+                            (build-inverse-delete-page db-before db-after page-uuid))
 
                           :upsert-property
                           (let [[property-id _schema _opts] args]
@@ -912,9 +1098,7 @@
                               (if-let [property (d/entity db-before property-id)]
                                 [:upsert-property
                                  [property-id
-                                  (sanitize-upsert-property-schema
-                                   db-before
-                                   (db-property/get-property-schema (into {} property)))
+                                  (inverse-upsert-property-schema db-before db-after property)
                                   {:property-name (:block/title property)}]]
                                 [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]])))
 
@@ -1093,9 +1277,11 @@
       nil
 
       (seq ops')
-      (->> ops'
+      (->> (canonicalize-insert-ops db tx-data ops')
            (mapv (fn [op]
-                   (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
+                   (let [canonicalized-op (if (contains? #{:insert-blocks :apply-template} (first op))
+                                            op
+                                            (canonicalize-semantic-outliner-op db tx-data op))]
                      (if (and (sequential? canonicalized-op)
                               (sequential? (first canonicalized-op))
                               (keyword? (ffirst canonicalized-op)))

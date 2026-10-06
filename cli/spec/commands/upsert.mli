@@ -8,8 +8,9 @@ type block_opts = {
   target_page : string option;
   pos : Block.position option;
   content : string option;
-  blocks_edn : string option;
+  blocks_markdown : string option;
   blocks_file : Cli_primitive.path option;
+  dry_run : bool;
   update_tags_edn : string option;
   update_properties_edn : string option;
   remove_tags_edn : string option;
@@ -98,7 +99,9 @@ type block_create = {
   tags : Selector.tag Rrbvec.t;
   properties : Property.assignment Rrbvec.t;
   blocks : Block.t Rrbvec.t;
+  markdown_blocks : bool;
   update_plan : Property.update_plan;
+  dry_run : bool;
 }
 
 type block_update = {

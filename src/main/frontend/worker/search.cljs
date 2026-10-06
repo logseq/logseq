@@ -18,29 +18,35 @@
 (def ^:private min-vector-search-score 0.5)
 (def ^:private vector-upsert-batch-size 1024)
 
+(defn- blocks-fts-triggers
+  "Triggers that keep `fts-table` in step with the blocks table. An FTS row has
+  the rowid of its blocks row, so a delete or an update finds it by rowid:
+  FTS5 cannot index the id column, and a lookup by id reads every FTS row."
+  [trigger-prefix fts-table]
+  [;; delete
+   (str "CREATE TRIGGER IF NOT EXISTS " trigger-prefix "_ad AFTER DELETE ON blocks
+         BEGIN
+             DELETE FROM " fts-table " WHERE rowid = old.rowid;
+         END;")
+   ;; insert
+   (str "CREATE TRIGGER IF NOT EXISTS " trigger-prefix "_ai AFTER INSERT ON blocks
+         BEGIN
+             INSERT INTO " fts-table " (rowid, id, title, page)
+             VALUES (new.rowid, new.id, new.title, new.page);
+         END;")
+   ;; update
+   (str "CREATE TRIGGER IF NOT EXISTS " trigger-prefix "_au AFTER UPDATE ON blocks
+         BEGIN
+             DELETE FROM " fts-table " WHERE rowid = old.rowid;
+             INSERT INTO " fts-table " (rowid, id, title, page)
+             VALUES (new.rowid, new.id, new.title, new.page);
+         END;")])
+
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
-  (let [triggers [;; delete
-                  "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
-                  BEGIN
-                      DELETE from blocks_fts where id = old.id;
-                  END;"
-                  ;; insert
-                  "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
-                  BEGIN
-                      INSERT INTO blocks_fts (id, title, page)
-                      VALUES (new.id, new.title, new.page);
-                  END;"
-                  ;; update
-                  "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
-                  BEGIN
-                      DELETE from blocks_fts where id = old.id;
-                      INSERT INTO blocks_fts (id, title, page)
-                      VALUES (new.id, new.title, new.page);
-                  END;"]]
-    (doseq [trigger triggers]
-      (.exec db trigger))))
+  (doseq [trigger (blocks-fts-triggers "blocks" "blocks_fts")]
+    (.exec db trigger)))
 
 (defn- create-blocks-table!
   [db]
@@ -51,10 +57,10 @@
                         page TEXT)"))
 
 (defn- create-blocks-fts-table!
-  [db]
+  [db table]
   ;; The trigram tokenizer extends FTS5 to support substring matching in general, instead of the usual token matching. When using the trigram tokenizer, a query or phrase token may match any sequence of characters within a row, not just a complete token.
   ;; Check https://www.sqlite.org/fts5.html#the_experimental_trigram_tokenizer.
-  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"))
+  (.exec db (str "CREATE VIRTUAL TABLE IF NOT EXISTS " table " USING fts5(id, title, page, tokenize=\"trigram\")")))
 
 (defn- create-blocks-title-index!
   [db]
@@ -65,7 +71,7 @@
   [db]
   (try
     (create-blocks-table! db)
-    (create-blocks-fts-table! db)
+    (create-blocks-fts-table! db "blocks_fts")
     (create-blocks-title-index! db)
     (add-blocks-fts-triggers! db)
     (catch :default e
@@ -83,10 +89,65 @@
   (.exec db "
 DROP TABLE IF EXISTS blocks;
 DROP TABLE IF EXISTS blocks_fts;
+DROP TABLE IF EXISTS blocks_fts_next;
 DROP TRIGGER IF EXISTS blocks_ad;
 DROP TRIGGER IF EXISTS blocks_ai;
 DROP TRIGGER IF EXISTS blocks_au;
 "))
+
+(def ^:private drop-next-fts-triggers-sql "
+DROP TRIGGER IF EXISTS blocks_fts_next_ad;
+DROP TRIGGER IF EXISTS blocks_fts_next_ai;
+DROP TRIGGER IF EXISTS blocks_fts_next_au;
+")
+
+(defn start-fts-rowid-migration!
+  "Starts moving an index whose blocks_fts rows have rowids unrelated to their
+  blocks rows (search index version 4 and older) to rowid keys: creates
+  blocks_fts_next with rowid triggers of its own. blocks_fts and its triggers
+  keep serving queries until `finish-fts-rowid-migration!`. A move cut short
+  (graph closed, app quit) starts over."
+  [db]
+  (.transaction db
+                (fn [tx]
+                  (.exec tx (str drop-next-fts-triggers-sql
+                                 "DROP TABLE IF EXISTS blocks_fts_next;"))
+                  (create-blocks-fts-table! tx "blocks_fts_next")
+                  (doseq [trigger (blocks-fts-triggers "blocks_fts_next" "blocks_fts_next")]
+                    (.exec tx trigger)))))
+
+(defn copy-fts-rowid-batch!
+  "Copies into blocks_fts_next the blocks rows after rowid `after`, at most
+  `limit` of them, that it lacks (its triggers add the rows written since the
+  start). Returns the last rowid of the batch, nil when no row is left."
+  [db after limit]
+  (let [last-rowid (-> (.exec db #js {:sql "SELECT max(rowid) FROM (SELECT rowid FROM blocks WHERE rowid > ? ORDER BY rowid LIMIT ?)"
+                                      :bind #js [after limit]
+                                      :rowMode "array"})
+                       (aget 0)
+                       (aget 0))]
+    (when (some? last-rowid)
+      (.exec db #js {:sql "INSERT INTO blocks_fts_next (rowid, id, title, page)
+                           SELECT rowid, id, title, page FROM blocks
+                           WHERE rowid > ? AND rowid <= ?
+                             AND NOT EXISTS (SELECT 1 FROM blocks_fts_next f WHERE f.rowid = blocks.rowid)"
+                     :bind #js [after last-rowid]})
+      last-rowid)))
+
+(defn finish-fts-rowid-migration!
+  "Replaces blocks_fts and its triggers with blocks_fts_next and rowid
+  triggers, and sets the index version, in 1 transaction."
+  [db version]
+  (.transaction db
+                (fn [tx]
+                  (.exec tx (str drop-next-fts-triggers-sql "
+DROP TRIGGER IF EXISTS blocks_ad;
+DROP TRIGGER IF EXISTS blocks_ai;
+DROP TRIGGER IF EXISTS blocks_au;
+DROP TABLE blocks_fts;
+ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
+                  (add-blocks-fts-triggers! tx)
+                  (.exec tx (str "PRAGMA user_version = " version)))))
 
 (defn- clj-list->sql
   "Turn clojure list into SQL list
@@ -838,7 +899,7 @@ DROP TRIGGER IF EXISTS blocks_au;
        (code-block? code-class block))))
 
 (defn- search-result->block-result
-  [conn q code-class option {:keys [id page title snippet] :as result}]
+  [conn q code-class option {:keys [id page snippet] :as result}]
   (let [block-id (uuid id)]
     (when-let [block (or (get result search-result-block-key)
                          (d/entity @conn [:block/uuid block-id]))]
@@ -847,9 +908,12 @@ DROP TRIGGER IF EXISTS blocks_au;
                                    (select-keys [:block/uuid :block/title]))
               alias-match (matched-alias q block)
               page-or-object-result? (page-or-object? block)
-              result-title (if page-or-object-result?
-                             (block-result-title block)
-                             (or title (:block/title block)))
+              ;; pulled maps lack :block/refs, so ref titles resolve via entity
+              result-title (block-result-title
+                            (if (and (map? block)
+                                     (db-content/title-has-id-ref? (:block/title block)))
+                              (d/entity @conn [:block/uuid (:block/uuid block)])
+                              block))
               display-title (if (:enable-snippet? option)
                               (ensure-highlighted-snippet snippet result-title q)
                               (if page-or-object-result?
@@ -871,7 +935,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                             block
                             {:title display-title
                              :alias (:block/title alias)
-                             :truncate? false})]
+                             :truncate? false})
+              breadcrumb-ancestors (when (:include-breadcrumb? option)
+                                   (block-breadcrumb/block-breadcrumb @conn block))]
           (cond-> {:db/id (:db/id block)
                    :block/uuid (:block/uuid block)
                    :block/title display-title
@@ -879,8 +945,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                    :block.temp/unique-title unique-title
                    :page? (ldb/page? block)}
             (:include-breadcrumb? option)
-            (assoc :block.temp/breadcrumb
-                   (block-breadcrumb/block-breadcrumb @conn block))
+            (assoc :block.temp/breadcrumb breadcrumb-ancestors
+                   :block.temp/breadcrumb-ref-titles
+                   (block-breadcrumb/breadcrumb-ref-titles @conn (into [block] breadcrumb-ancestors)))
 
             block-page
             (assoc :block/page block-page)
