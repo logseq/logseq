@@ -1465,36 +1465,39 @@
                 (transact-move-blocks! conn blocks target-block sibling? opts outliner-op top-level-blocks)
                 nil))))))))
 
+(defn- page-order-top-level-blocks
+  "The selection's top-level blocks in page order, whatever order they were
+  clicked in (Ctrl+click c, then b: the selection reads c, b): a move up or
+  down takes its target from the first block (up) or the last (down)."
+  [db blocks]
+  (let [top-level-blocks (filter-top-level-blocks db blocks)]
+    (cond
+      (<= (count top-level-blocks) 1)
+      top-level-blocks
+
+      ;; blocks of 1 page, none a property value: page order (the sort
+      ;; leaves out blocks it cannot place, so only blocks it can place go in)
+      (and (every? #(:block/page %) top-level-blocks)
+           (apply = (map #(:db/id (:block/page %)) top-level-blocks))
+           (not-any? #(or (:logseq.property/created-from-property %)
+                          (:block/closed-value-property %))
+                     top-level-blocks))
+      (ldb/sort-page-random-blocks db top-level-blocks)
+
+      ;; siblings, e.g. nested pages (no :block/page) or a nested page and
+      ;; a block beside it
+      (apply = (map #(:db/id (:block/parent %)) top-level-blocks))
+      (sort-by :block/order top-level-blocks)
+
+      :else
+      top-level-blocks)))
+
 (defn- move-blocks-up-down
   "Move blocks up/down."
   [conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
-        top-level-blocks (filter-top-level-blocks db blocks)
-        ;; the target comes from the selection's first block (up) or last
-        ;; (down): in page order, whatever order the blocks were clicked in
-        ;; (Ctrl+click c, then b: the selection reads c, b)
-        top-level-blocks (cond
-                           (<= (count top-level-blocks) 1)
-                           top-level-blocks
-
-                           ;; blocks of 1 page, none a property value: page
-                           ;; order (the sort leaves out blocks it cannot
-                           ;; place, so only blocks it can place go in)
-                           (and (every? #(:block/page %) top-level-blocks)
-                                (apply = (map #(:db/id (:block/page %)) top-level-blocks))
-                                (not-any? #(or (:logseq.property/created-from-property %)
-                                               (:block/closed-value-property %))
-                                          top-level-blocks))
-                           (ldb/sort-page-random-blocks db top-level-blocks)
-
-                           ;; siblings, e.g. nested pages (no :block/page)
-                           ;; or a nested page and a block beside it
-                           (apply = (map #(:db/id (:block/parent %)) top-level-blocks))
-                           (sort-by :block/order top-level-blocks)
-
-                           :else
-                           top-level-blocks)
+        top-level-blocks (page-order-top-level-blocks db blocks)
         opts {:outliner-op :move-blocks-up-down}]
     (if up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
