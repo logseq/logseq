@@ -121,12 +121,16 @@ external set_default_timeout : page -> float -> unit = "setDefaultTimeout"
    (frame._channel.waitForTimeout), so hundreds of concurrent sleeps pile
    up as pending protocol messages and a stalled transport freezes every
    poll loop in the suite. A plain node timer needs no browser. *)
+external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
+[@@mel.scope "globalThis"]
+
+external new_promise : ((unit -> unit [@u]) -> unit [@u]) -> unit Js.Promise.t
+  = "Promise" [@@mel.new]
+
 let wait_for_timeout _page ms =
-  Js.Promise.make (fun ~resolve ~reject:_ ->
-      let _ =
-        Js.Global.setTimeout (fun () -> resolve () [@bs]) (int_of_float ms)
-      in
-      ())
+  new_promise
+    (fun [@u] resolve ->
+       set_timeout (fun () -> resolve () [@u]) (int_of_float ms))
 
 external locator :
   page -> string -> 'opts Js.t -> locator = "locator" [@@mel.send]
