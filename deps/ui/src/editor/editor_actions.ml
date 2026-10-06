@@ -1648,7 +1648,9 @@ let route_of uuid : Edit_input.route =
   ; indent = (fun () -> indent_or_outdent ~indent:true)
   ; outdent = (fun () -> indent_or_outdent ~indent:false)
   ; cancel = (fun () -> exit_edit ~select:true)
-  ; focused = (fun _ -> ())
+  ; focused =
+      (fun b ->
+        S.focused_block := (if b then Some uuid else None))
   ; menu = (fun _ -> ())
   }
 

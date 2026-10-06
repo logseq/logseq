@@ -235,3 +235,22 @@ let conduit block_id : Edit_input.conduit option =
 let scroll_height block_id : int option =
   request block_id "scroll-height" [];
   Hashtbl.find_opt scroll_heights block_id
+
+(* the shared editor machinery resolves Editor_sink — no-ops until a
+   surface registers an impl. The conduit above answers the host
+   measurement ops; focus goes through set-input-focus and is_focused
+   reads the conduit "focus"/"blur" events that route.focused folds
+   into Editor_state.focused_block — the web profile's
+   document.activeElement tracker has no native equivalent. *)
+let () =
+  Editor_sink.register
+    { Editor_sink.conduit
+    ; focus_input =
+        (fun block_id ->
+          request block_id "set-input-focus"
+            [ ("focused", Js.Json.JBoolean true) ])
+    ; is_focused =
+        (fun block_id -> !Editor_state.focused_block = Some block_id)
+    ; popup_pos = (fun _ -> None)
+    ; container_rect = (fun _ -> None)
+    }

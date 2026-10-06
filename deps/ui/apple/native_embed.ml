@@ -326,7 +326,7 @@ let initialize platform_code host_code (_payload : string) : string =
   Logseq_editor.register registry;
   let app =
     Lui_app.create_with_extensions backend registry Model.initial
-      Update.update View.view
+      Update.apply View.view
   in
   current_app := Some app;
   Imperative_dom.install app;
@@ -341,6 +341,17 @@ let initialize platform_code host_code (_payload : string) : string =
       | Some app ->
           Hashtbl.find_opt
             (Lui_app.runtime app).Lui_runtime.runtime_parents id
+      | None -> None);
+  (* host dom-events carry only nodeId; inject "target" like the Swift
+     host's snapshot attachment so document listeners (ev_target/
+     el_closest) work. Imperative nodes keep their registry snapshot *)
+  Platform.event_target_of :=
+    (fun id ->
+      match !current_app with
+      | Some app -> (
+          match Hashtbl.find_opt Imperative_dom.lui_index id with
+          | Some sid -> Imperative_dom.snapshot_of_id sid
+          | None -> Some (ext_snapshot (Lui_app.runtime app) id))
       | None -> None);
   (match Sys.getenv_opt "LOGSEQ_DUMP" with
    | Some _ ->
@@ -425,6 +436,7 @@ let dispatch_lui (event : Lui_protocol.event) : string =
       out)
 
 let appear node = dispatch_lui (Lui_protocol.Appear node)
+
 let press node = dispatch_lui (Lui_protocol.Press node)
 let long_press node = dispatch_lui (Lui_protocol.LongPress node)
 

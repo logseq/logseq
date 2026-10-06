@@ -11,6 +11,7 @@
 
 use std::os::raw::{c_char, c_int};
 use std::sync::Mutex;
+use std::time::Instant;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod editor;
@@ -21,6 +22,12 @@ use gpui_kit::gpui::{point, px, size, Bounds, WindowBounds, WindowOptions};
 use gpui_kit::*;
 use lui_core::bridge;
 use lui_gpui::{apply_batch_json, LuiRootView, LuiShared, Shared};
+
+static BOOT_T0: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+fn boot_ms() -> f64 {
+    BOOT_T0.get_or_init(Instant::now).elapsed().as_secs_f64() * 1000.0
+}
 
 /// The logseq bridge's patch callback emits `[batch, batch, …]` — the
 /// accumulated queue joined as one JSON array (native_embed's
@@ -41,14 +48,25 @@ fn drain_patches(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
             _ => vec![json],
         };
         for batch in batches {
-            eprintln!(
-                "logseq-gpui: apply batch {} bytes",
-                batch.len()
-            );
+            if std::env::var("LOGSEQ_PERF").is_ok() {
+                eprintln!(
+                    "logseq-gpui: apply batch {} bytes t={:.1}ms",
+                    batch.len(),
+                    boot_ms()
+                );
+            }
+            let t = Instant::now();
             if let Err(error) = apply_batch_json(shared, &batch, cx) {
                 let message = error.to_string();
                 eprintln!("logseq-gpui: rejected batch: {message}");
                 shared.borrow_mut().last_errors.push(message);
+            }
+            if std::env::var("LOGSEQ_PERF").is_ok() {
+                eprintln!(
+                    "logseq-gpui: applied batch t={:.1}ms (+{:.1})",
+                    boot_ms(),
+                    t.elapsed().as_secs_f64() * 1000.0
+                );
             }
         }
     }
@@ -147,11 +165,12 @@ fn pump_tick(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
     if WAKE.swap(false, Ordering::Acquire) {
         // Pump the OCaml mailbox on the UI thread; new patches come back
         // through patch_sink synchronously.
-        eprintln!("logseq-gpui: pump start");
         unsafe {
             lui_ocaml_pump();
         }
-        eprintln!("logseq-gpui: pump done");
+        if std::env::var("LOGSEQ_PERF").is_ok() {
+            eprintln!("logseq-gpui: pump t={:.1}ms", boot_ms());
+        }
     }
     drain_patches(shared, cx);
     let requests = PENDING_REQUESTS
@@ -184,6 +203,7 @@ unsafe extern "C" fn crash_handler(_sig: libc::c_int) {
 }
 
 fn main() {
+    boot_ms();
     unsafe {
         libc::signal(libc::SIGSEGV, crash_handler as libc::sighandler_t);
         libc::signal(libc::SIGBUS, crash_handler as libc::sighandler_t);
@@ -248,6 +268,10 @@ fn main() {
                 eprintln!("logseq-gpui: opening window");
                 cx.open_window(options, |window, cx| {
                     eprintln!("logseq-gpui: window opened");
+                    // bare binary launches come up inactive — without this
+                    // the window can't become macOS key window and keyboard
+                    // input never reaches it
+                    window.activate_window();
                     drain_patches(&shared, cx);
                     let root_id = unsafe { bridge::lui_ocaml_root_node() };
                     if root_id > 0 {
@@ -257,6 +281,10 @@ fn main() {
                     cx.new(|cx| Root::new(view, window, cx))
                 })
                 .expect("Failed to open window");
+                // bare binary launches come up inactive — without this the
+                // window can't become macOS key window and keyboard input
+                // never reaches it
+                let _ = cx.update(|cx| cx.activate(true));
             }
         })
         .detach();

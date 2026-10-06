@@ -880,7 +880,15 @@ let modal_shell st =
 
 let render (_ms : Model.t Signal.signal) : t =
  fun context parent ->
-  let st = S.make context.Lui_ui.ui_scheduler in
+  (* the palette is a singleton: re-running render (parent re-renders
+     after model/route publishes) must not swap in a fresh state — the
+     mounted view keeps binding the first st's signals while event
+     dispatch goes through latest_t to the newest, orphaned one *)
+  let st =
+    match !S.latest_t with
+    | Some st -> st
+    | None -> S.make context.Lui_ui.ui_scheduler
+  in
   (* empty-conditional slots render as <raw-text> placeholders; the
      observer swap must be armed before cmdk mounts on a fresh page *)
   Editor_dom.ensure_raw_text_observer ();

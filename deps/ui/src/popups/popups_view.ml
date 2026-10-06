@@ -915,7 +915,10 @@ let handle_contextmenu st (ev : Web_dom.ev) =
           | None -> ())
       | None -> (
           (* cljs: right-click inside a selection shows the selection menu;
-             a single selected block gets its own block menu *)
+             a single selected block gets its own block menu. On hosts with
+             no native context menu (gpui), any right-click inside a block
+             row that isn't on an editable target opens the block menu —
+             .bullet-container's hit area is too small to be the only entry *)
           match Web_dom.el_closest el ".ls-block[blockid]" with
           | Some blk -> (
               match
@@ -930,6 +933,15 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                   S.open_cm st ~x:(Web_dom.ev_client_x ev)
                     ~y:(Web_dom.ev_client_y ev) ~block_id:first
                     ~multi:(List.length sel >= 2)
+              | Some id, _
+                when not (Web_dom.is_editable_target (Some el)) ->
+                  Web_dom.ev_prevent_default ev;
+                  Web_dom.ev_stop_propagation ev;
+                  if not (Editor_state.is_selected id) then
+                    Editor_actions.select_single id;
+                  close_cm_picker ();
+                  S.open_cm st ~x:(Web_dom.ev_client_x ev)
+                    ~y:(Web_dom.ev_client_y ev) ~block_id:id ~multi:false
               | _ -> ())
           | None -> ()))
 ;;

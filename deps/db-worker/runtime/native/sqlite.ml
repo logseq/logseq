@@ -4,7 +4,19 @@ type db =
   ; filename : string
   ; mutable tx_depth : int
   ; mutable savepoint_seq : int
+  ; mu : Mutex.t
   }
+
+(* conn-level mutex: worker invokes serialize on the global invoke mutex,
+   but detached background work (search index builds, WAL checkpoint
+   timers) can reach a conn from its own thread — each exec/query
+   serializes here. It guards statements only: whole-transaction
+   atomicity still belongs to the caller's serialization, because [f] in
+   transaction calls exec/query back on the same conn and the mutex is
+   non-recursive. *)
+let with_lock t f =
+  Mutex.lock t.mu;
+  Fun.protect ~finally:(fun () -> Mutex.unlock t.mu) f
 
 type bind =
   | Null
@@ -38,7 +50,8 @@ let check rc context =
 
 let open_db ~path =
   let handle = Sqlite3.db_open path in
-  { handle; filename = path; tx_depth = 0; savepoint_seq = 0 }
+  { handle; filename = path; tx_depth = 0; savepoint_seq = 0
+  ; mu = Mutex.create () }
 
 let prepare_pool ~name:_ = Db_worker_effect.pure ()
 
@@ -77,6 +90,7 @@ let close t =
   List.iter (Hashtbl.remove pool_conns) !empty_names
 
 let exec t ~sql ~bind =
+  with_lock t (fun () ->
   if Array.length bind = 0 then begin
     check (Sqlite3.exec t.handle sql) sql
   end else begin
@@ -94,9 +108,10 @@ let exec t ~sql ~bind =
        ignore (Sqlite3.finalize stmt);
        raise exn);
     ignore (Sqlite3.finalize stmt)
-  end
+  end)
 
 let query t ~sql ~bind =
+  with_lock t (fun () ->
   let stmt = Sqlite3.prepare t.handle sql in
   let rows = ref [] in
   (try
@@ -116,10 +131,12 @@ let query t ~sql ~bind =
      ignore (Sqlite3.finalize stmt);
      raise exn);
   ignore (Sqlite3.finalize stmt);
-  List.rev !rows
+  List.rev !rows)
 
 (* cljs platform/node.cljs with-transaction: BEGIN at depth 0,
-   SAVEPOINT __logseq_tx_N when nested. *)
+   SAVEPOINT __logseq_tx_N when nested. Whole-transaction atomicity still
+   relies on the caller (invoke_mu on the worker); [f] calls the locked
+   exec/query, which serialize per statement. *)
 let transaction t f =
   let outermost = t.tx_depth = 0 in
   let savepoint =
