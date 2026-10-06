@@ -27,8 +27,34 @@ let add_new_properties env title_prefix =
            previous property's value editor and the command keystrokes
            bleed into its title. *)
         let rec open_editor attempt =
+          (* the target row can sit outside the virtuoso window and never
+             mount — scroll the page scroller to the bottom before
+             clicking so the tail rows are present *)
+          let* _ =
+            Pw.eval_js env
+              "(() => { const s = \
+               document.querySelector('[data-virtuoso-scroller]') || \
+               document.querySelector('#main-content-container'); if (s) \
+               { s.scrollTop = s.scrollHeight; return 'scroller'; } \
+               window.scrollTo(0, document.body.scrollHeight); return \
+               'window'; })()"
+          in
           let* () =
-            Pw.click_l (Util.get_by_text env block_title true)
+            Pw.catch_timeout
+              (Pw.click_l ~timeout:15000.
+                 (Util.get_by_text env block_title true))
+              (fun () ->
+                 let* _ =
+                   Pw.eval_js env
+                     "(() => { const s = \
+                      document.querySelector('[data-virtuoso-scroller]') \
+                      || \
+                      document.querySelector('#main-content-container'); \
+                      if (s) { s.scrollTop = s.scrollHeight; return \
+                      'scroller'; } window.scrollTo(0, \
+                      document.body.scrollHeight); return 'window'; })()"
+                 in
+                 Pw.click_l (Util.get_by_text env block_title true))
           in
           let* () = Keyboard.press env "Control+e" in
           let deadline = Js.Date.now () +. 8000. in
