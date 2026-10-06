@@ -4,6 +4,17 @@ open Fest.Promise
 
 let wait_timeout env ms = Pw.wait_timeout env ms
 
+(** [String.contains] is not enough for substrings; melange lacks [Str]. *)
+let contains_sub haystack needle =
+  let n = String.length needle and h = String.length haystack in
+  if n = 0 then true
+  else
+    let rec go i =
+      i + n <= h
+      && (String.sub haystack i n = needle || go (i + 1))
+    in
+    go 0
+
 let editor_q = ".editor-wrapper textarea"
 
 (* the same edited block can render a second editor instance inside the
@@ -270,8 +281,22 @@ let search_and_click env search_text =
           Pw.eval_js env
             "(() => JSON.stringify({input: document.querySelector('.cp__cmdk-search-input')?.value, items: [...document.querySelectorAll('[data-testid]')].filter(el => el.offsetParent !== null).slice(0, 30).map(el => el.dataset.testid + ' :: ' + el.textContent.replace(/\\s+/g, ' ').slice(0, 60)), results: [...document.querySelectorAll('.search-results > div, .cp__cmdk [role=option]')].slice(0, 30).map(el => el.textContent.replace(/\\s+/g, ' ').slice(0, 80))}))()"
         in
+        (* worker-side search errors are only visible on the page console —
+           surface them like wait_idle does for db-sync lines *)
+        let worker_lines =
+          Env.console_logs env
+          |> List.filter (fun l ->
+                 contains_sub l "search/" || contains_sub l "search-"
+                 || contains_sub l "Error" || contains_sub l "Invalid")
+          |> (fun l ->
+               if List.length l > 15 then
+                 List.filteri (fun i _ -> i >= List.length l - 15) l
+               else l)
+          |> String.concat " || "
+        in
         let* () =
-          Js.Promise.resolve (Js.log2 "[search-dbg]" dump)
+          Js.Promise.resolve
+            (Js.log3 "[search-dbg]" dump worker_lines)
         in
         Playwright.throw_error e)
       (* each round re-fills the box, which wipes pending results — under
@@ -523,17 +548,6 @@ let set_tag ?(hidden = false) env tag =
 let query_last env q = Playwright.locator_last (Pw.q env q)
 
 let get_by_text env text exact = Pw.get_by_text env ~exact text
-
-(** [String.contains] is not enough for substrings; melange lacks [Str]. *)
-let contains_sub haystack needle =
-  let n = String.length needle and h = String.length haystack in
-  if n = 0 then true
-  else
-    let rec go i =
-      i + n <= h
-      && (String.sub haystack i n = needle || go (i + 1))
-    in
-    go 0
 
 external crypto_random_uuid : unit -> string = "randomUUID"
   [@@mel.scope "crypto"]
