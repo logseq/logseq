@@ -219,12 +219,42 @@
   [class-name]
   (string/replace class-name "/" "___"))
 
+(defn- user-property-ident?
+  [db-ident]
+  (and (qualified-keyword? db-ident)
+       (db-malli-schema/user-property? db-ident)))
+
+(defn- property-entity-uuid?
+  "True when uuid already belongs to a property. Property and class may share a title."
+  [db block-uuid]
+  (boolean
+   (when block-uuid
+     (when-let [e (d/entity db [:block/uuid block-uuid])]
+       (or (ldb/property? e)
+           (some-> (:db/ident e) user-property-ident?))))))
+
+(defn- find-class-ident
+  "Existing class ident for class-name. Ignores a property ident that may share
+   the same unqualified name when the property page was imported first."
+  [all-idents class-name]
+  (let [ident (keyword class-name)
+        existing (get all-idents ident)
+        lc (string/lower-case class-name)]
+    (or (when (and existing (not (user-property-ident? existing)))
+          existing)
+        (some (fn [[_k v]]
+                (when (and (qualified-keyword? v)
+                           (db-malli-schema/class? v)
+                           (= lc (string/lower-case (name v))))
+                  v))
+              all-idents))))
+
 (defn- find-or-create-class
   ([db class-name all-idents]
    (find-or-create-class db class-name all-idents {}))
   ([db class-name all-idents class-block]
    (let [ident (keyword class-name)]
-     (if-let [db-ident (get @all-idents ident)]
+     (if-let [db-ident (find-class-ident @all-idents class-name)]
        {:db/ident db-ident}
        (let [m
              (if (:block/namespace class-block)
@@ -237,22 +267,28 @@
                (db-class/build-new-class db
                                          (assoc {:block/title class-name
                                                  :block/name (common-util/page-name-sanity-lc class-name)}
-                                                :block/tags (:block/tags class-block))))]
-         (swap! all-idents assoc ident (:db/ident m))
+                                                :block/tags (:block/tags class-block))))
+             ident-key (if (user-property-ident? (get @all-idents ident))
+                         ;; Keep the property mapping; class-name lookup still finds this via find-class-ident
+                         (keyword (str (build-class-ident-name class-name) "#class"))
+                         ident)]
+         (swap! all-idents assoc ident-key (:db/ident m))
          (with-meta m {:new-class? true}))))))
 
-(defn- find-or-gen-class-uuid [page-names-to-uuids page-name db-ident & {:keys [temp-new-class?]}]
-  (or (if temp-new-class?
-        ;; First lookup by possible parent b/c page-names-to-uuids erroneously has the child name
-        ;; and full name. To not guess at the parent name we would need to save all properties-from-classes
-        (or (some #(when (string/ends-with? (key %) (str ns-util/parent-char page-name))
-                     (val %))
-                  @page-names-to-uuids)
-            (get @page-names-to-uuids page-name))
-        (get @page-names-to-uuids page-name))
+(defn- find-or-gen-class-uuid [db page-names-to-uuids page-name db-ident & {:keys [temp-new-class?]}]
+  (let [existing (if temp-new-class?
+                   ;; First lookup by possible parent b/c page-names-to-uuids erroneously has the child name
+                   ;; and full name. To not guess at the parent name we would need to save all properties-from-classes
+                   (or (some #(when (string/ends-with? (key %) (str ns-util/parent-char page-name))
+                                (val %))
+                             @page-names-to-uuids)
+                       (get @page-names-to-uuids page-name))
+                   (get @page-names-to-uuids page-name))]
+    (if (and existing (not (property-entity-uuid? db existing)))
+      existing
       (let [new-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)]
         (swap! page-names-to-uuids assoc page-name new-uuid)
-        new-uuid)))
+        new-uuid))))
 
 (defn- convert-tag? [tag-name {:keys [convert-all-tags? tag-classes]}]
   (and (or convert-all-tags?
@@ -292,7 +328,7 @@
     (let [class-m (find-or-create-class db new-class all-idents)
           class-m' (merge class-m
                           {:block/uuid
-                           (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m) {:temp-new-class? true})})]
+                           (find-or-gen-class-uuid db page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m) {:temp-new-class? true})})]
       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
       [:block/uuid (:block/uuid class-m')])
@@ -307,12 +343,13 @@
           :else
           ;; Creates or updates page within same tx
           (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)
+                property-uuid? (property-entity-uuid? db (:block/uuid tag-block))
                 class-m' (-> (merge tag-block class-m
-                                    (if internal-tag-conflict?
+                                    (cond
+                                      internal-tag-conflict?
                                       {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))}
-                                      (when-not (:block/uuid tag-block)
-                                        (let [id (find-or-gen-class-uuid page-names-to-uuids (:block/name tag-block) (:db/ident class-m))]
-                                          {:block/uuid id}))))
+                                      (or property-uuid? (not (:block/uuid tag-block)))
+                                      {:block/uuid (find-or-gen-class-uuid db page-names-to-uuids (:block/name tag-block) (:db/ident class-m))}))
                              ;; override with imported timestamps
                              (dissoc :block/created-at :block/updated-at)
                              (merge (add-missing-timestamps
@@ -1160,7 +1197,7 @@
                                     (let [new-class (first parent-classes-from-properties)
                                           class-m (find-or-create-class db new-class (:all-idents import-state))
                                           class-m' (merge class-m
-                                                          {:block/uuid (find-or-gen-class-uuid page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))})]
+                                                          {:block/uuid (find-or-gen-class-uuid db page-names-to-uuids (common-util/page-name-sanity-lc new-class) (:db/ident class-m))})]
                                       (when (> (count parent-classes-from-properties) 1)
                                         (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
                                       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
@@ -2534,10 +2571,20 @@
                                                           (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-page-names-to-uuids import-state)
-        all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         existing-page-uuid (fn [m]
                              (lookup-imported-page-uuid @conn all-existing-page-uuids
                                                         (or (::original-name m) (:block/name m))))
+        all-pages (map (fn [page]
+                         (let [page (modify-page-tx page all-existing-page-uuids)]
+                           ;; Extract may reuse a property uuid for a same-title tag/page.
+                           ;; Give the new page its own uuid so class conversion cannot merge
+                           ;; onto the property entity.
+                           (if (and (:block/uuid page)
+                                    (not (existing-page-uuid page))
+                                    (property-entity-uuid? @conn (:block/uuid page)))
+                             (assoc page :block/uuid (common-uuid/gen-uuid))
+                             page)))
+                       all-pages*)
         db-existing-page-uuids (->> all-pages
                                     (keep (fn [page]
                                             (when-let [page-uuid (existing-page-uuid page)]

@@ -315,11 +315,18 @@
 (def *export-to-db-graph? (atom false))
 
 (defn- get-page
-  "Similar to get-page but only for file graphs"
+  "Similar to get-page but only for file graphs.
+   File-to-db export skips properties so a later tag cannot reuse a property
+   uuid when property and class share a title."
   [db page-name]
   (when (and db (string? page-name))
-    (d/entity db
-              (first (sort (map :e (entity-util/get-pages-by-name db page-name)))))))
+    (->> (entity-util/get-pages-by-name db page-name)
+         (keep (fn [datom]
+                 (let [e (d/entity db (:e datom))]
+                   (when-not (and @*export-to-db-graph? (entity-util/property? e))
+                     e))))
+         (sort-by :db/id)
+         first)))
 
 (defn- page-name-string->map
   [original-page-name db date-formatter

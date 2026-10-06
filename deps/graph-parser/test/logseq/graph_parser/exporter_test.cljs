@@ -2627,6 +2627,51 @@ abc
       (is (= (:db/id journal) (get-in ref-block [:block/page :db/id]))
           "Structured block page reference still points to the same journal entity"))))
 
+(defn- assert-rolle-property-and-class-are-distinct
+  [conn]
+  (let [klass (d/entity @conn :user.class/Rolle)
+        prop (d/entity @conn :user.property/rolle)
+        alice (or (db-test/find-page-by-title @conn "A_Alice")
+                  (db-test/find-page-by-title @conn "Alice"))
+        tagged-page-id (ffirst (d/q '[:find ?p
+                                      :where
+                                      [?p :block/tags :user.class/Rolle]
+                                      [?p :block/name]]
+                                    @conn))]
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Created graph has no validation errors")
+    (is (and (some? klass) (ldb/class? klass) (not (ldb/property? klass)))
+        "Rolle tag is a class, not a property")
+    (is (and (some? prop) (ldb/property? prop) (not (ldb/class? prop)))
+        "rolle is a property, not a class")
+    (is (not= (:block/uuid klass) (:block/uuid prop))
+        "Class and property are distinct entities")
+    (is (some? tagged-page-id)
+        "A page tagged Rolle references the class")
+    (is (some? (:user.property/rolle alice))
+        "Alice's rolle value is on the property")))
+
+(deftest-async import-property-and-class-same-title-property-first
+  ;; https://github.com/logseq/db-test/issues/1402
+  ;; Property page is created first; later tags:: [[Rolle]] must not reuse it.
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/A_Alice.md" "rolle:: Admin\n\n- Alice has a rolle property\n"
+                "pages/B_Admin.md" "tags:: [[Rolle]]\n\n- Admin is tagged Rolle\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})]
+    (assert-rolle-property-and-class-are-distinct conn)))
+
+(deftest-async import-property-and-class-same-title-class-first
+  ;; Inverse file order of import-property-and-class-same-title-property-first.
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/Admin.md" "tags:: [[Rolle]]\n\n- Admin is tagged Rolle\n"
+                "pages/Alice.md" "rolle:: Admin\n\n- Alice has a rolle property\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})]
+    (assert-rolle-property-and-class-are-distinct conn)))
+
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
