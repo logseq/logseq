@@ -109,7 +109,7 @@ let view (r : Dialogs_state.ui_request) : t =
     else (I18n.e2ee_enter_password_title, "")
   in
   box ~key:"e2ee-ov"
-    ~style_class:"e2ee-password-modal-overlay ui__dialog-overlay"
+    ~style_class:"ui__dialog-overlay"
     [ column ~key:"e2ee-c"
         ~style_class:
           ("e2ee-password-modal-content ui__dialog-content"

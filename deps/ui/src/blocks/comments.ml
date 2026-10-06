@@ -122,16 +122,16 @@ let title_cell uuid (b : Model.block) : t =
 
 let comment_row uuid (b : Model.block) : t =
   box ~key:("crw-" ^ uuid) ~style_class:"ls-comment-row"
-    [ box ~key:("crm-" ^ uuid) ~style_class:"ls-comment-main"
-        [ box ~key:("crmeta-" ^ uuid) ~style_class:"ls-comment-meta" []
-        ; box ~key:("crb-" ^ uuid) ~style_class:"ls-comment-body"
+    [ box ~key:("crm-" ^ uuid) 
+        [ box ~key:("crmeta-" ^ uuid)  []
+        ; box ~key:("crb-" ^ uuid) 
             (Render.title (S.title_for uuid b.Model.block_title))
         ]
     ; box ~key:("cra-" ^ uuid) ~style_class:"ls-comment-actions"
         [ (* data-comment-uuid dropped — direct on_press covers the
              action; the delegated editor_keys lookup now no-ops *)
           button ~key:("crd-" ^ uuid)
-            ~style_class:"ls-comment-action ls-comment-delete"
+            ~style_class:"ls-comment-delete"
             ~variant:`ghost ~size:`icon
             ~label:(U.t "ui/delete")
             ~icon:`trash
@@ -145,14 +145,14 @@ let comment_row uuid (b : Model.block) : t =
    and the textarea kind renders a real <textarea> *)
 let add_box uuid : t =
   box ~key:("caa-" ^ uuid) ~style_class:"ls-comment-add"
-    [ box ~key:("cab-" ^ uuid) ~style_class:"ls-comment-box"
-        [ box ~key:("cae-" ^ uuid) ~style_class:"ls-comment-box-editor"
+    [ box ~key:("cab-" ^ uuid) 
+        [ box ~key:("cae-" ^ uuid) 
             [ (* rows=1 dropped — no rows prop on the textarea kind *)
               textarea ~key:("cat-" ^ uuid)
                 ~placeholder:(U.t "block.comments/placeholder")
                 []
             ]
-        ; box ~key:("cax-" ^ uuid) ~style_class:"ls-comment-box-actions"
+        ; box ~key:("cax-" ^ uuid) 
             [ (* data-area-uuid dropped — direct on_press covers the
                  action; the delegated editor_keys lookup now no-ops *)
               button ~key:("cas-" ^ uuid)
@@ -169,10 +169,9 @@ let add_box uuid : t =
 (* cljs comments-area-view (expanded branch) *)
 let area_view uuid (b : Model.block) : t =
   box ~key:("cav-" ^ uuid) ~style_class:"ls-comments-area"
-    [ box ~key:("cah-" ^ uuid) ~style_class:"ls-comments-header"
+    [ box ~key:("cah-" ^ uuid) 
         [ title_cell uuid b
         ; text ~key:("cac-" ^ uuid)
-            ~style_class:"ls-comments-count"
             ~value:(string_of_int (List.length b.Model.block_children))
             []
         ]

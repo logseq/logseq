@@ -201,7 +201,7 @@ let accent_row ~modal =
         ~desc:
           (if modal then []
            else
-             [ row ~key:"acc-sp" ~style_class:"ls-kbd-side"
+             [ row ~key:"acc-sp" 
                  [ C.kbd_seq ~key:"acc-k" ~binding:"c c" [ "c"; "c" ] ]
              ])
         ()
@@ -210,7 +210,7 @@ let accent_row ~modal =
     ]
 
 let general_pane ~modal ctx =
-  column ~key:"pane-general" ~style_class:"panel-wrap is-general"
+  column ~key:"pane-general" ~style_class:"panel-wrap"
     ~gap:16 ~padding:4
     [ version_row ()
     ; language_row ctx
@@ -281,8 +281,7 @@ let date_format_row ctx =
   (* cljs date-format-row carries a duplicated hiccup class shorthand;
      reproduced verbatim for DOM parity *)
   row ~key:"dfmt" ~gap:24
-    ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-:div it sm:grid \
-                  sm:grid-cols-3 sm:gap-4 sm:items-center"
+    ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
     [ C.label_el ~key:"dfmt-l" ~for_:"custom_date_format"
         ~text:T.custom_date_format []
     ; column ~key:"dfmt-r" ~style_class:"ls-it-value"
@@ -302,7 +301,7 @@ let date_format_row ctx =
     ]
 
 let editor_pane ctx =
-  column ~key:"pane-editor" ~style_class:"panel-wrap is-editor"
+  column ~key:"pane-editor" ~style_class:"panel-wrap"
     ~gap:16 ~padding:4
     [ date_format_row ctx
     ; brackets_row ~key:"brackets"
@@ -341,9 +340,9 @@ let keymap_pill ~key ~title ~count ~active =
     ~style_class:
       (if active then "shortcut-filter-pill--active shortcut-filter-pill"
        else "shortcut-filter-pill")
-    [ text ~key:(key ^ "t") ~style_class:"shortcut-filter-pill-title"
+    [ text ~key:(key ^ "t") 
         ~value:title []
-    ; text ~key:(key ^ "c") ~style_class:"shortcut-filter-pill-count"
+    ; text ~key:(key ^ "c") 
         ~value:(Platform.utf8 "\xc2\xb7 " ^ count) []
     ]
 
@@ -448,14 +447,14 @@ let keymap_row ~key (r : Keymap_data.row) =
   let open Keymap_data in
   (* the title tooltip attr was DOM-only — dropped *)
   list_item ~key ~style_class:"shortcut-row"
-    [ box ~key:(key ^ "l") ~style_class:"label-wrap"
+    [ box ~key:(key ^ "l") 
         [ text ~key:(key ^ "lx") ~style_class:"ls-kbd-label"
             ~value:(I18n.t (command_key_of r.title)) []
         ]
-    ; row ~key:(key ^ "a") ~style_class:"action-wrap" ~cross:`center
+    ; row ~key:(key ^ "a")  ~cross:`center
         (if r.unset then
            [ text ~key:(key ^ "u")
-               ~style_class:"shortcut-status-label" ~value:T.keymap_unset
+                ~value:T.keymap_unset
                []
            ]
          else
@@ -499,7 +498,7 @@ let storage_url key default =
   | None -> default
 
 let advanced_pane () =
-  column ~key:"pane-advanced" ~style_class:"panel-wrap is-advanced"
+  column ~key:"pane-advanced" ~style_class:"panel-wrap"
     ~gap:16 ~padding:4
     [ C.toggle_row ~key:"usage" ~for_:"usage-diagnostics"
         ~label:T.usage_diagnostics
@@ -578,7 +577,7 @@ let switch_action_row ~key ~for_ ~label ~on ~on_toggle () =
     ()
 
 let features_pane ctx =
-  column ~key:"pane-features" ~style_class:"panel-wrap is-features ls-mb"
+  column ~key:"pane-features" ~style_class:"panel-wrap ls-mb"
     ~gap:16 ~padding:4
     [ home_page_row ctx
     ; C.action_row ~key:"plugs" ~for_:"plugin_system"
@@ -633,7 +632,6 @@ let pane_of ~modal ctx tab =
 
 let article ~modal ctx =
   column ~key:"settings-article"
-    ~style_class:"cp__settings-article"
     [ row ~key:"art-h" ~style_class:"cp__settings-header"
         [ heading ~key:"art-ht" ~level:1
             ~style_class:"cp__settings-category-title"
@@ -650,7 +648,6 @@ let inner ~modal : t =
   S.activate ();
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
-      ~style_class:"cp__settings-main"
       [ row ~key:"settings-inner" ~style_class:"cp__settings-inner"
           [ column ~key:"settings-aside"
               ~style_class:"settings-aside"

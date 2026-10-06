@@ -485,7 +485,7 @@ let done_label_of (r : repeat) =
 
 let rec render_repeat p (r : repeat) =
   let mark =
-    D.h ~tag:"span" ~cls:"ls-repeat-checkmark"
+    D.h ~tag:"span" 
       ~text:(if r.repeated then "✓" else "")
       ()
   in
@@ -934,7 +934,7 @@ let open_cal kind uuid from =
       ~children:
         [ D.h ~cls:"ls-property-date-picker"
             ~children:
-              [ D.h ~cls:"ls-nlp-calendar"
+              [ D.h 
                   ~children:
                     ([ D.h ~cls:"ui__calendar"
                         ~children:
@@ -1038,14 +1038,14 @@ let open_cal kind uuid from =
 
 let open_link_form image uuid from =
   let url_inp =
-    D.h ~tag:"input" ~cls:"ls-link-url"
+    D.h ~tag:"input" 
       ~attrs:
         [ ("type", "text")
         ; ("placeholder", I18n.t "editor/link-url-placeholder") ]
       ()
   in
   let label_inp =
-    D.h ~tag:"input" ~cls:"ls-link-text"
+    D.h ~tag:"input" 
       ~attrs:[ ("type", "text"); ("placeholder", I18n.t "editor/link-label-placeholder") ] ()
   in
   let root =

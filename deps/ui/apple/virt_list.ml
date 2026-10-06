@@ -116,14 +116,14 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     let row_mount (it : 'a) : t =
       let k = key_of it in
       if initial_rows < 0 || Hashtbl.mem eager k then
-        box ~style_class:"ls-virt-row" [ render it ]
+        box  [ render it ]
       else
         let near = near_of k in
         let ns = near.Signal.state_signal in
         (* TODO(component): the lazy-mount dom-event is the Swift spine
            contract — the attr could ride ~data_attrs but no component
            kind carries a custom event channel *)
-        D.dom ~style_class:"ls-virt-row"
+        D.dom 
           ~attrs_signal_v:
             (D.attrs_signal ns (fun n ->
                ("data-lazy-mount", k)
@@ -190,13 +190,13 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
   let row_mount (item_sig : 'a Signal.signal) : t =
     let k = key (Signal.get item_sig) in
     if initial_rows < 0 || Hashtbl.mem eager k then
-      box ~style_class:"ls-virt-row" [ mount item_sig ]
+      box  [ mount item_sig ]
     else
       let near = near_of k in
       let ns = near.Signal.state_signal in
       (* TODO(component): same lazy-mount dom-event Swift spine contract as
          [list] — stays a logseq-div *)
-      D.dom ~style_class:"ls-virt-row"
+      D.dom 
         ~attrs_signal_v:
           (D.attrs_signal ns (fun n ->
              ("data-lazy-mount", k)
@@ -212,7 +212,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
   in
   (* TODO(component): same data-virt-count + virt-end dom-event Swift spine
      contract as [list] — stays a logseq-div *)
-  (D.dom ~style_class:"ls-virt-list" ~events:"virt-end"
+  (D.dom  ~events:"virt-end"
      ~attrs_signal_v:attrs_sig
      ~on_dom_event:(fun _name _payload -> on_end ())
      [ D.keyed ~source:source ~key ~cmp ~mount:row_mount ])

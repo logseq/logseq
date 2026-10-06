@@ -70,7 +70,6 @@ let area_display (b : Model.block) context : Lui_elements.t =
                   [ D.el ~key:"hl-ab" ~tag:"span"
                       ~style_class:"asset-action-bar"
                       [ Lui_elements.button ~key:"hl-ref"
-                          ~style_class:"asset-action-btn"
                           ~label:"ref-block"
                           ~data_attrs:[ ("tabindex", "-1") ]
                           ~icon:(`app "file-symlink")
@@ -101,7 +100,7 @@ let prefix_el (b : Model.block) : Lui_elements.t =
     | None -> "P?"
   in
   (* pointerdown reads the event target's class via pointer_detail *)
-  (Lui_elements.text ~key:"pf" ~style_class:"prefix-link"
+  (Lui_elements.text ~key:"pf" 
      ~on_pointer_down:(fun ev ->
        match ev with
        | Lui_protocol.PointerDown (_, d) ->
@@ -112,9 +111,9 @@ let prefix_el (b : Model.block) : Lui_elements.t =
            in
            if not (area && blank) then Pdf_assets.open_block_ref b
        | _ -> ())
-     ([ Lui_elements.text ~key:"pfp" ~style_class:"hl-page"
+     ([ Lui_elements.text ~key:"pfp" 
           [ Lui_elements.text ~key:"pfs" ~as_:`Strong
-              ~style_class:"forbid-edit" ~value:page [] ]
+               ~value:page [] ]
       ]
       @
       if area && b.Model.block_hl_image <> None then

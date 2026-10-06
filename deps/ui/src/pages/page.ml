@@ -280,10 +280,9 @@ let title_content (page : Model.page) : t =
       [ ("blockid", uuid); ("containerid", uuid); ("data-type", "default")
       ; ("style", "width: 100%") ]
     [ row ~key:"pt-bci" ~main:`space_between
-        ~style_class:"block-content-inner"
         [ box ~key:"pt-bh" ~style_class:"block-head-wrap"
             [ box ~key:"pt-w"
-                [ Render.wrap ~cls:"block-title-wrap ls-title-text"
+                [ Render.wrap ~cls:"block-title-wrap"
                     ~self:uuid page.page_title ]
             ]
         ]
@@ -359,8 +358,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             ~style_class_signal:
               (Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
                    if S.String_set.mem uuid selected then
-                     "selected ls-block swipe-item"
-                   else "ls-block swipe-item"))            ~id:("ls-block-" ^ uuid)
+                     "selected ls-block"
+                   else "ls-block"))            ~id:("ls-block-" ^ uuid)
             ~attrs:
               [ ("blockid", uuid); ("containerid", uuid)
               ; ("data-block-title", page.page_title)
@@ -375,9 +374,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                  live on .is-page-title-row (+ .ls-pt-no-icon) in
                  lui-core.css *)
               row ~key:"pt-row"
-                ~style_class:
-                  ("block-main-container flex flex-row gap-1 \
-                    is-page-title-row"
+                ~gap:4 ~style_class:
+                  ("block-main-container is-page-title-row"
                    ^ if icon_el = None then " ls-pt-no-icon" else "")
                 ~on_pointer_enter:(fun _ ->
                   if collapsable_title () then (
@@ -421,7 +419,6 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
         ; column ~key:"pt-col1"
             [ column ~key:"pt-col2"
                         [ row ~key:"pt-bmc" ~gap:8
-                            ~style_class:"block-main-content"
                             ((match icon_el with
                               | None -> []
                               | Some ic ->
@@ -429,33 +426,27 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       ~style_class:"ls-page-icon"
                                       [ button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
-                                          ~style_class:
-                                            "ui__button as-ghost"
+                                          ~style_class:"ui__button as-ghost"
                                           ~on_press:(fun _ ->
                                             page_icon_picker page
                                               ".ls-page-title .ls-page-icon")
                                           [ row ~key:"pt-cw" ~cross:`center
-                                              ~style_class:
-                                                "ls-icon-color-wrap"
+                                              ~style_class:"ls-icon-color-wrap"
                                               [ ic ]
                                           ]
                                       ]
                                   ])
                             @ [ column ~key:"pt-col3"
                                 [ box ~key:"pt-wrap"
-                                    ~style_class:
-                                      "ls-page-title-container \
-                                       block-content-or-editor-wrap"
+                                    ~style_class:"ls-page-title-container block-content-or-editor-wrap"
                                     [ box ~key:"pt-inner2"
-                                        ~style_class:
-                                          "block-content-or-editor-inner"
+                                        ~style_class:"block-content-or-editor-inner"
                                         [ row ~key:"pt-row2" ~grow:1.
                                             ~gap:4 ~cross:`center
                                             ~style_class:"block-row"
                                             ([ column ~key:"pt-cw" ~gap:8
                                                  ~grow:1.
-                                                 ~style_class:
-                                                   "block-content-wrapper"
+                                                 ~style_class:"block-content-wrapper"
                                                  ((if m.editing_title then
                                                     []
                                                   else
@@ -499,8 +490,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
      fire on action-button clicks too. Needs a pointer_detail
      extension (target identity + interactive flag) *)
   dom ~key:"page-title"
-    ~style_class:"ls-page-title flex flex-1 w-full content items-start title \
-                  title"
+    ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
     ~attrs:[ ("data-testid", "page title") ]
     ~events:"click contextmenu"
     ~on_dom_event:(fun name payload ->
@@ -546,8 +536,7 @@ let add_button_el ?puuid ~(has_children : 'a -> bool Signal.signal) : t =
   (dom ~key:"bab"
      ~style_class_signal:
        (Logseq_dom.class_signal hc (fun has ->
-            "ls-block block-add-button flex-1 flex-col rounded-sm \
-             cursor-text transition-opacity ease-in duration-100 !py-0 "
+            "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
             ^ (if has then "opacity-0" else "opacity-50")))
      ~attrs:
        (("tabindex", "0")
@@ -611,7 +600,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
       [ (* TODO(component): containerid is outside the data-* attribute
            vocabulary — stays a dom attr until the block-container
            contract moves *)
-        dom ~key:"blc" ~style_class:"blocks-container flex-1"
+        dom ~key:"blc" ~style_class:"flex-1"
           ~attrs:
             (match puuid with
              | Some u -> [ ("containerid", u) ]
@@ -654,10 +643,9 @@ let refs_grouped (refs : Model.block list) : (string * Model.block list) list =
 let fold_arrow ?on_click ?(collapsed = false) key : t =
   let arrow =
     box ~key ~width:14 ~height:16
-      ~style_class:
-        "ls-foldable-title-control block-control"
+      ~style_class:"ls-foldable-title-control block-control"
       [ box ~key:"ch"
-          ~style_class:(if collapsed then "control-show" else "control-hide")
+          ~style_class:(if collapsed then "" else "control-hide")
           [ box ~key:"ra"
               ~style_class:
                 (if collapsed then "rotating-arrow collapsed"
@@ -734,10 +722,9 @@ let refs_view_head key ?on_search title count : t =
    the control renders at every level (section and group titles). *)
 let foldable_title ?on_click ?(control = true) ?(collapsed = false) key
     inner : t =
-  box ~key:(key ^ "-ft") ~style_class:"ls-foldable-title content"
-    [ row ~key:"ftr" ~grow:1. ~style_class:"foldable-title"
+  box ~key:(key ^ "-ft") ~style_class:"content"
+    [ row ~key:"ftr" ~grow:1. 
         [ row ~key:"fth" ~cross:`center ~gap:4
-            ~style_class:"ls-foldable-header"
             ((if control then [ fold_arrow ?on_click ~collapsed (key ^ "-fa") ]
               else [])
              @ [ inner ])
@@ -746,7 +733,7 @@ let foldable_title ?on_click ?(control = true) ?(collapsed = false) key
 
 let foldable_content key inner : t =
   box ~key:(key ^ "-fc") ~style_class:"ls-foldable-content"
-    [ box ~key:"fci" ~style_class:"ls-foldable-content-inner" [ inner ] ]
+    [ box ~key:"fci"  [ inner ] ]
 
 (* cljs .breadcrumb.block-parents.breadcrumb--inline — one segment per
    ancestor title (farthest-first), "/" separators between *)
@@ -767,7 +754,7 @@ let group_breadcrumb key (titles : string list) : t =
           ])
       titles
   in
-  row ~key ~style_class:"breadcrumb block-parents breadcrumb--inline"
+  row ~key ~style_class:"breadcrumb block-parents"
     (List.concat segs)
 
 (* one linked-ref group: source page-ref foldable title + its blocks.
@@ -867,7 +854,6 @@ let references_row (b : Model.block) : t =
   | Some pname ->
       column
         ~key:("ref-row-" ^ Option.value b.block_uuid ~default:"")
-        ~style_class:"references-item"
         [ (* a.page-ref[data-ref] is read by sidebar_state *)
           link ~key:"pn" ~style_class:"page-ref"
             ~data_attrs:[ ("data-ref", pname) ] ~text:pname []
@@ -880,12 +866,12 @@ let references_row (b : Model.block) : t =
 (* cljs renders a Page column naming the source page; shared by the
    linked-refs (.references) and unlinked-refs bodies *)
 let ref_item (b : Model.block) : t =
-  column ~style_class:"references-item"
+  column 
     [ (match b.Model.block_page_name with
        | None -> box []
        | Some name ->
            (* a.references-item-page[data-ref] is read by sidebar_state *)
-           link ~style_class:"references-item-page"
+           link 
              ~data_attrs:[ ("data-ref", name) ]
              ~text:name [])
     ; Tree.block_row b
@@ -931,7 +917,7 @@ let journal_references_view (p : Model.page) : t =
   | [] -> Logseq_dom.nothing
   | refs ->
       column ~key:("jrefs-" ^ key)
-        ~style_class:"references references-wrap"
+        ~style_class:"references"
         [ box ~key:"jrfc" ~style_class:"ls-foldable-content"
             [ column ~key:"jrb" ~style_class:"ls-view-body"
                 (List.map references_row refs)
@@ -959,11 +945,10 @@ let unlinked_row (b : Model.block) : t =
     | None, Some id -> "id-" ^ string_of_int id
     | None, None -> b.block_title
   in
-  column ~key:("ur-" ^ key) ~style_class:"unlinked-row"
+  column ~key:("ur-" ^ key) 
     [ (match b.block_page_name with
        | Some name ->
            link ~key:("urp-" ^ key)
-             ~style_class:"unlinked-page-name"
              ~url:("#/page/" ^ name)
              ~text:name []
        | None -> Logseq_dom.nothing)
@@ -1030,7 +1015,7 @@ let unlinked_references_view (m : Model.t) : t =
                          (List.length refs)
                      else unlinked_head_collapsed "urefs")
                 ; box ~key:"urefs-content" ~style_class:"ls-foldable-content"
-                    [ box ~key:"ufci" ~style_class:"ls-foldable-content-inner"
+                    [ box ~key:"ufci" 
                         [ (if m.unlinked_search then unlinked_search_input ()
                           else Logseq_dom.nothing)
                         ; column ~key:"urefs-body" ~gap:8
@@ -1114,8 +1099,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
     (column ~key:("ji-" ^ key)
     [ (* data-page-tags is the page-wrap plugin contract *)
       box ~key:("jiw-" ^ key)
-        ~style_class:
-          "flex-1 page relative cp__page-inner-wrap is-journals"
+        ~style_class:"flex-1 page relative cp__page-inner-wrap"
         ~data_attrs:(page_wrap_attrs p0)
         [ column ~key:("jip-" ^ key) ~gap:32
             ~style_class:"relative page-inner"
@@ -1192,8 +1176,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
                 [ Logseq_dom.if_
                     ~test:(Signal.map (fun js -> js = []) journals_sig)
                     (box ~key:"jp" ~padding:24
-                       ~style_class:
-                         "journal-item-placeholder animate-pulse" [])
+                       ~style_class:"journal-item-placeholder animate-pulse" [])
                 ; Logseq_dom.keyed ~source:journals_sig
                     ~key:(fun (p : Model.page) ->
                       Option.value p.Model.page_uuid
@@ -1213,7 +1196,7 @@ let not_found_view name : t =
 
 (* cljs library/add-pages: secondary button opens a page-picker popup *)
 let library_add_pages_button : t =
-  box ~key:"lib-add" ~padding_horizontal:4 ~style_class:"ls-add-pages"
+  box ~key:"lib-add" ~padding_horizontal:4 
     [ button ~key:"lib-add-btn" ~variant:`secondary ~icon:`plus
         ~text:(I18n.t "library/add-existing-pages")
         ~style_class:"ui__button"
@@ -1323,7 +1306,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
         [ (* TODO(component): containerid is outside the data-*
              attribute vocabulary — stays a dom attr until the
              block-container contract moves *)
-          dom ~key:"blc" ~style_class:"blocks-container flex-1"
+          dom ~key:"blc" ~style_class:"flex-1"
             ~attrs:
               (match puuid with
                | Some u -> [ ("containerid", u) ]

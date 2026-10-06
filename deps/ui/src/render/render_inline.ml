@@ -312,7 +312,7 @@ let image_el ~src ~alt =
      prop exists on image *)
   box ~style_class:"asset-container image normalize"
     [ image ~url:src ~alt ~loading:`lazy_ ~referrer_policy:`no_referrer
-        ~style_class:"rounded-sm relative fade-in fade-in-faster" [] ]
+        ~corner_radius:2 ~style_class:"relative" [] ]
 
 (* inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/<sub>/<sup>/
    <strong>/<kbd> styling comes from element-selector CSS

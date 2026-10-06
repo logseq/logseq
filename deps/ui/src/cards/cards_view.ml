@@ -182,10 +182,7 @@ let modal st =
          lui-overlay.css; the base .ui__dialog-content rule already
          centers via left/top + translate *)
       column ~key:"cards-ct"
-        ~style_class:
-          "ui__dialog-content ls-dialog-flashcards grid w-full \
-           max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg \
-           bg-background p-6 shadow-lg ui__dialog-zoom-in"
+        ~max_width:672 ~gap:16 ~padding:24 ~style_class:"ui__dialog-content ls-dialog-flashcards grid w-full lg:max-w-3xl border sm:rounded-lg bg-background shadow-lg ui__dialog-zoom-in"
         ~data_attrs:
           [ ("data-state", "open"); ("role", "dialog") ]
         [ box ~key:"cards-main" ~style_class:"ui__dialog-main-content"

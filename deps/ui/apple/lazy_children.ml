@@ -78,7 +78,7 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
           Hashtbl.replace near_states uuid s;
           s
     in
-    (D.dom ~style_class:"ls-lazy-rows" ~events:"lazy-mount"
+    (D.dom  ~events:"lazy-mount"
        ~on_dom_event:(fun name payload ->
          if name = "lazy-mount" then
            List.iter
@@ -90,7 +90,7 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
              let uuid = key b in
              let near = near_of uuid in
              let near_sig = near.Signal.state_signal in
-             D.dom ~style_class:"ls-virt-row"
+             D.dom 
                ~attrs_signal_v:
                  (D.attrs_signal near_sig (fun n ->
                     ("data-lazy-mount", uuid)

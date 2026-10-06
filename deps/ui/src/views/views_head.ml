@@ -344,9 +344,7 @@ let filter_value_phase inst ~anchor (c : V.column) =
        end);
       let pop =
         E.h
-          ~cls:
-            "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md \
-             border bg-popover p-1 text-popover-foreground shadow-md" ()
+          ~cls:"ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md" ()
       in
       E.el_append_child pop content;
       E.el_append_child P.document_body pop;
@@ -664,7 +662,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
                             ops))))
         []
     ; box ~style_class:"ls-vf-chip-val"
-        [ box ~style_class:"ls-view-filter-value"
+        [ box 
             [ box ~style_class:"ls-view-filter-value-item"
                 [ text ~value:(filter_value_label inst f) [] ] ] ]
     ; button ~variant:`ghost ~size:`icon ~icon:`x

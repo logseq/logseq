@@ -156,7 +156,7 @@ let initials name =
 let avatar_of (usig : Model.rtc_user Signal.signal) : t =
   let u = Signal.get usig in
   Lui_elements.avatar ~key:u.ru_uuid ~width:20 ~height:20
-    ~style_class:"ui__avatar" ~background:(uuid_color u.ru_uuid)
+     ~background:(uuid_color u.ru_uuid)
     ~text:(reactive (fun u -> initials u.Model.ru_name) usig)
     ~label:(Option.value u.ru_email ~default:"") []
 
@@ -188,7 +188,7 @@ let open_member_menu ~uuid ~member_id ~render anchor =
     (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx"
        (Web_dom.rect_right r) (Web_dom.rect_top r));
   Web_dom.el_append_child menu
-    (menu_item ~cls:"remove-member-menu-item"
+    (menu_item ~cls:""
        (T.t "collaboration/remove-access") (fun () ->
          ignore
            (let* ok = remove_member ~uuid ~member_id in
@@ -293,15 +293,15 @@ let body (_ms : Model.t Signal.signal) : t =
     | None -> ()
   in
   let root =
-    column ~key:"collab" ~style_class:"p-2 -mb-8"
+    column ~key:"collab" ~padding:8 ~style_class:"-mb-8"
       [ heading ~key:"collab-h" ~level:1
           ~style_class:"text-3xl -mt-2 -ml-2"
           ~value:(T.t "collaboration/members") []
       ; column ~key:"collab-w"
-          ~style_class:"panel-wrap is-collaboration mb-8"
+          ~style_class:"panel-wrap mb-8"
           [ column ~key:"collab-m" ~gap:8 ~style_class:"mt-4"
               [ column ~key:"collab-users" ~gap:4
-                  ~style_class:"users ls-collab-users" []
+                  ~style_class:"ls-collab-users" []
               ; column ~key:"collab-form" ~gap:16 ~style_class:"mt-4"
                   [ box ~key:"collab-inv" ~style_class:"ls-collab-invite"
                       [ input ~key:"collab-in" ~style_class:"ui__input"
@@ -346,7 +346,6 @@ let widget (ms : Model.t Signal.signal) : t =
         (box ~key:"collab-off" ~style_class:"hidden" [])
     ; if_ ~test:vis_sig
         (row ~key:"collab" ~gap:4 ~cross:`center
-           ~style_class:"rtc-collaborators"
            [ button ~key:"collab-btn" ~size:`icon
                ~style_class:"ui__button as-ghost"
                ~icon:(`app "user-plus")

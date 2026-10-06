@@ -522,7 +522,7 @@ let asset_img uuid (b : Model.block) file : t =
     ~accessibility_identifier:("asset-img-" ^ uuid)
     ~url:src ~alt:b.Model.block_title ~loading:`lazy_
     ~referrer_policy:`no_referrer ~width:w ?height:h
-    ~style_class:"rounded-sm relative fade-in fade-in-faster"
+    ~style_class:"rounded-sm relative"
     ~on_load:(fun _ -> measure_on_load uuid b)
     []
 
@@ -574,7 +574,7 @@ let resize_handle uuid side : t =
     []
 
 let image_block uuid (b : Model.block) : t =
-  box ~key:("ri-" ^ uuid) ~style_class:"ls-resize-inner"
+  box ~key:("ri-" ^ uuid) 
     [ (* ls-resize-image is an imperative query handle (start_drag) *)
       box ~key:("rim-" ^ uuid) ~corner_radius:6
         ~style_class:"ls-resize-image"
@@ -625,7 +625,7 @@ let pdf_block uuid (b : Model.block) : t =
        Pdf_assets.open_pdf_file ~original_path:href
          ~href:(if url = "" then href else url) ~b)
      (text ~key:("pdf-" ^ uuid) ~value:b.Model.block_title
-        ~style_class:"asset-ref is-pdf" []))
+         []))
     context parent
 
 (* whole asset branch — .asset-block-wrap replaces .block-content inside

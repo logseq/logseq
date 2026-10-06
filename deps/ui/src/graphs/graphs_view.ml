@@ -95,7 +95,7 @@ let open_menu repo anchor =
     && (Runtime.model ()).Model.repo = Some repo
   then
     Web_dom.el_append_child menu
-      (menu_item ~cls:"use-logseq-sync-menu-item"
+      (menu_item ~cls:""
          (I18n.t "graph/use-sync-beta") ~disabled:false
          (fun () -> Graphs_ops.ask_upload repo));
   (match Web_dom.query_selector "body" with
@@ -178,7 +178,7 @@ let remote_menu ~rerender name uuid ~role anchor =
      caller doesn't manage *)
   if role <> "manager" then
     Web_dom.el_append_child menu
-      (menu_item ~cls:"leave-shared-graph-menu-item"
+      (menu_item ~cls:""
          (I18n.t "graph/leave-action") ~disabled:false (fun () ->
            Dialogs_state.ask
              ~title:""

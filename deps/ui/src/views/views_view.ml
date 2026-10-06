@@ -212,7 +212,7 @@ let query_content inst (s : V.vstate) : t =
 
 let query_view_el inst : t =
   D.fragment
-    [ box ~style_class:"views-query-inner"
+    [ box 
         [ reactive ~equal:body_eq
             (fun s ->
               column

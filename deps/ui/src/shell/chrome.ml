@@ -262,7 +262,7 @@ let open_rtc_details () =
             "position:fixed;left:%.0fpx;top:%.0fpx;width:240px"
             left (Wd.rect_bottom rect +. 4.0))
    | None -> ());
-  let info = el_ ~cls:"rtc-info flex flex-col gap-1 p-2 text-gray-11" () in
+  let info = el_ ~cls:"flex flex-col gap-1 p-2 text-gray-11" () in
   Wd.el_append_child info
     (el_ ~cls:"font-medium mb-2"
        ~text:(I18n.t (if Platform.online () then "sync/online" else "sync/offline"))
@@ -372,7 +372,7 @@ let open_rtc_details () =
   Wd.el_on dbg_link "click" (fun _ ->
       dbg_on := not !dbg_on;
       if !dbg_on then (
-        let d = el_ ~cls:"rtc-info-debug" () in
+        let d = el_ () in
         let pre = Wd.create_element "pre" in
         Wd.el_set_class pre "select-text";
         Wd.el_set_text_content pre (rtc_debug_text r);
@@ -450,7 +450,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
         in
         (* e2e reads [data-testid="rtc-tx"]; ~accessibility_identifier
            keeps the #rtc-tx id as well *)
-        box ~key:"rtc" ~style_class:"cp__rtc-sync"
+        box ~key:"rtc" 
           [ box ~key:"rtc-tx" ~style_class:"hidden"
               ~accessibility_identifier:"rtc-tx"
               ~data_attrs:[ ("data-testid", "rtc-tx") ]
@@ -515,7 +515,7 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
         (* the title attr has no typed-prop equivalent — ~label covers
            the a11y name and feeds the tooltip layer *)
         button ~key:"lgs" ~variant:`ghost ~size:`icon
-          ~style_class:(ghost_btn_cls ~tail:"local-graph-sync-btn" ())
+          ~style_class:(ghost_btn_cls ())
           ~label:(I18n.t "graph/use-sync-beta") ~icon:(`app "cloud")
           ~on_press:(fun _ ->
             match (Runtime.model ()).Model.repo with
@@ -543,7 +543,7 @@ let index_progress (ms : Model.t Signal.signal) : t =
         (* the progress kind emits the fill via --lui-progress-position;
            the __bar class keeps the chip's track sizing on web *)
         row ~key:"sip" ~cross:`center ~style_class:"search-index-progress"
-          [ box ~key:"sip-l" ~style_class:"icon-loading"
+          [ box ~key:"sip-l" 
               [ box ~key:"sip-i" ~style_class:"icon" [ loader_svg ] ]
           ; text ~key:"sip-t"
               ~style_class:"search-index-progress__text"
@@ -562,7 +562,7 @@ let index_progress (ms : Model.t Signal.signal) : t =
 (* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
-    ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu" ())
+    ~cls:(ghost_btn_cls ())
     ~icon:"menu-2" ~tip:(I18n.t "header/toggle-left-sidebar")
     ~keys:"T L"
     ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar) ()
@@ -600,12 +600,12 @@ let header (ms : Model.t Signal.signal) =
   (* resolved: cljs's inline fontSize:50 on .cp__header is dropped —
      no typed-prop equivalent and the icon kind sizes itself *)
   row ~key:"head" ~accessibility_identifier:"head"
-    ~style_class:"cp__header drag-region"
+    ~style_class:"cp__header"
     ~main:`space_between ~cross:`center
-    [ row ~key:"head-inner" ~cross:`center ~style_class:"l drag-region"
+    [ row ~key:"head-inner" ~cross:`center ~style_class:"l"
         [ left_menu_button; search_button ]
     ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
-        ~gap:8 ~style_class:"r drag-region overflow-x-hidden"
+        ~gap:8 ~style_class:"r overflow-x-hidden"
         [ row ~key:"head-crumb" ~grow:1.
             [ reactive
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
@@ -711,7 +711,7 @@ let main_content (ms : Model.t Signal.signal) =
       "cp__sidebar-main-layout"
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
-       ~grow:1. ~style_class:"cp__sidebar-main-layout"
+       ~grow:1. 
        [ left_sidebar ms
        ; (* data-is-margin-less-pages was always emitted "false" and its
             CSS only matches 'true' — dead attr, dropped *)
@@ -806,7 +806,7 @@ let overlays (ms : Model.t Signal.signal) =
 (* cljs container.cljs help-button: inline tabler help-small svg *)
 let help_svg : t =
   icon ~key:"help-svg" ~name:(`app "help-small") ~point_size:24
-    ~style_class:"icon icon-tabler icon-tabler-help-small scale-125" []
+    ~style_class:"icon scale-125" []
 
 external open_url : string -> unit = "open" [@@mel.scope "window"]
 
@@ -905,7 +905,7 @@ let shell (ms : Model.t Signal.signal) : t =
   (* the ls-left-sidebar-open/ls-right-sidebar-open classes had no CSS
      rules — dead, dropped; the class is now static *)
   box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-    ~style_class:"theme-container-inner ls-hl-colored"
+    ~style_class:"theme-container-inner"
     [ skip_to_main
     ; row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
         [ Ui_parts.class_signal ms

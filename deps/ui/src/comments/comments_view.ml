@@ -92,7 +92,6 @@ let reactions_el uuid (rs : (string * int) list) : t =
         (List.map
            (fun (emoji_id, count) ->
              button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id)
-               ~style_class:"ls-reaction"
                ~on_press:(fun _ -> toggle_reaction uuid emoji_id)
                [ Logseq_emoji.el
                    ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id)
@@ -116,7 +115,6 @@ let open_reaction_picker uuid (btn_id : string) =
 let comment_actions st (cuuid : string) : t =
   let btn key icn title action =
     button ~key
-      ~style_class:"ls-comment-action"
       ~label:title
       ~accessibility_identifier:key
       ~variant:`ghost ~size:`icon ~icon:icn
@@ -141,7 +139,7 @@ let comment_body st (c : Model.block) : t =
       (* Escape-cancel has no component equivalent — only Enter saves;
          clicking the edit action of another row exits the editor *)
       let latest = ref c.Model.block_title in
-      box ~key:("cbx-" ^ cuuid) ~style_class:"ls-comment-box-editor"
+      box ~key:("cbx-" ^ cuuid) 
         [ textarea ~key:("cbte-" ^ cuuid)
             ~label:(I.t "block.comments/placeholder")
             ~text:c.Model.block_title
@@ -157,15 +155,15 @@ let comment_body st (c : Model.block) : t =
             []
         ]
   | _ ->
-      box ~key:("cb-" ^ cuuid) ~style_class:"ls-comment-body"
+      box ~key:("cb-" ^ cuuid) 
         (Render.title c.Model.block_title @ [ reactions_el cuuid c.block_reactions ])
 
 let comment_row st (c : Model.block) : t =
   let cuuid = Option.value c.Model.block_uuid ~default:"" in
   box ~key:("row-" ^ cuuid) ~style_class:"ls-comment-row"
     ~accessibility_identifier:("comment-" ^ cuuid)
-    [ box ~key:("cm-" ^ cuuid) ~style_class:"ls-comment-main"
-        [ box ~key:("cmx-" ^ cuuid) ~style_class:"ls-comment-meta" []
+    [ box ~key:("cm-" ^ cuuid) 
+        [ box ~key:("cmx-" ^ cuuid)  []
         ; comment_body st c
         ]
     ; comment_actions st cuuid
@@ -205,10 +203,9 @@ let add_box st (area_uuid : string) : t =
       ]
   in
   box ~key:("cadd-" ^ area_uuid) ~style_class:"ls-comment-add"
-    [ box ~key:("cbox-" ^ area_uuid) ~style_class:"ls-comment-box"
+    [ box ~key:("cbox-" ^ area_uuid) 
         ( inner
         @ [ box ~key:("cbact-" ^ area_uuid)
-              ~style_class:"ls-comment-box-actions"
               [ button ~key:("cbsub-" ^ area_uuid)
                   ~style_class:"ls-comment-submit"
                   ~label:(I.t "ui/submit")
@@ -223,7 +220,7 @@ let add_box st (area_uuid : string) : t =
 (* -- area ----------------------------------------------------------- *)
 
 let header st (area_uuid : string) (count : int) (targets : int) : t =
-  row ~key:("ch-" ^ area_uuid) ~style_class:"ls-comments-header"
+  row ~key:("ch-" ^ area_uuid) 
     ( [ reactive
           (fun editing ->
             (* cljs comments-area-title-view: the label swaps for the
@@ -245,13 +242,11 @@ let header st (area_uuid : string) (count : int) (targets : int) : t =
                     ~value:(I.t "block.comments/label") [] ])
           (Comments.editing_sig area_uuid)
       ; text ~key:("cc-" ^ area_uuid)
-          ~style_class:"ls-comments-count"
           ~value:(string_of_int count) []
       ]
     @
     if targets > 1 then
       [ button ~key:("ct-" ^ area_uuid)
-          ~style_class:"ls-comments-targets-toggle"
           ~variant:`ghost
           ~on_press:(fun _ ->
             let v = Signal.get_state st in
@@ -282,7 +277,7 @@ let area_el (b : Model.block) : t =
                && b.Model.block_comment_targets > 1
             then
               box ~key:("cts-" ^ area_uuid)
-                ~style_class:"ls-comments-targets" []
+                 []
             else box ~key:("cts0-" ^ area_uuid) [])
          ; (match comments with
             | [] -> box ~key:("cl0-" ^ area_uuid) []

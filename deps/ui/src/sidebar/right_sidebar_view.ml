@@ -96,7 +96,7 @@ let item_menu st (it : Sidebar_state.item) =
     ~at:(fst !Sidebar_state.im_xy, snd !Sidebar_state.im_xy)
     ~role:`menu ~min_width:160
     ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-    ~style_class:"ui__dropdown-menu-content ui__dropdown-menu"
+    ~style_class:"ui__dropdown-menu-content"
     (menu_item st (t "ui/close")
        (fun () -> Sidebar_state.remove_item st it.key)
      :: (if multi then
@@ -275,8 +275,7 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                    Properties_area.sidebar_area re-emits the sbprops-<id>
                    host itself *)
                 box ~key:("parea-" ^ it.key)
-                  ~style_class:
-                    "ls-page-properties ls-properties-area"
+                  ~style_class:"ls-page-properties ls-properties-area"
                   ~accessibility_identifier:("sbprops-" ^ uuid)
                   [ Properties_area.sidebar_area ~uuid
                       ~db_id:p.Model.page_db_id
@@ -286,7 +285,6 @@ let sidebar_props_row st (it : Sidebar_state.item) =
           in
           box ~key:("props-" ^ it.key)
             [ column ~gap:8
-                ~style_class:"ls-sidebar-page-properties"
                 (button ~variant:`ghost ~size:`sm
                    ~style_class:"ui__button text-muted-foreground"
                    ~text:
@@ -327,11 +325,6 @@ let object_tabs_host (it : Sidebar_state.item) =
 
 let item_body st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
-  let is_node =
-    match it.Sidebar_state.page with
-    | Some p -> p.Model.page_is_tag || p.Model.page_is_property
-    | None -> false
-  in
   (* cljs right_sidebar page items render the full page-inner body:
      .cp__page-inner-wrap > .page-inner > (props + tabs + blocks + refs).
      The cljs data-page-tags / data-sb-inner marker attrs have no readers
@@ -347,9 +340,7 @@ let item_body st idx (it : Sidebar_state.item) =
        | "search" | "shortcut-settings" -> None
        | _ -> Some 8)
     [ column ~key:("wrap-" ^ it.key) ~grow:1.
-        ~style_class:
-          ("page relative cp__page-inner-wrap"
-          ^ if is_node then " is-node-page" else "")
+        ~style_class:"page relative cp__page-inner-wrap"
         [ column ~key:("inner-" ^ it.key) ~gap:16
             ~style_class:"relative page-inner"
             ([ sidebar_props_row st it

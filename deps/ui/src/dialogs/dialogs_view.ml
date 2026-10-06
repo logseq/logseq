@@ -113,7 +113,6 @@ let confirm_view (c : Dialogs_state.confirm) =
            renders ui__alert-dialog-main-content only — no header *)
         ( (if c.title = "" then
              [ column ~key:"cfrm-m"
-                 ~style_class:"ui__alert-dialog-main-content"
                  [ paragraph ~key:"cfrm-mc" ~value:c.desc [] ] ]
            else
              [ column ~key:"cfrm-h"
@@ -145,7 +144,7 @@ let prompt_view (p : Dialogs_state.prompt) : t =
   let node =
     box ~key:"prmt-ov" ~style_class:overlay_cls
       [ column ~key:"prmt-c" ~style_class:content_cls
-          [ column ~key:"prmt-box" ~style_class:"ls-prompt-box"
+          [ column ~key:"prmt-box" 
               ( (if p.desc = "" then
                    [ heading ~key:"prmt-h" ~level:3
                        ~style_class:"ls-prompt-headline" ~value:p.title []

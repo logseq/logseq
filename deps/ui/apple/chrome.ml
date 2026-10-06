@@ -119,7 +119,7 @@ let home_btn ms =
    navigation group. A toolbar child must be a concrete element (a dyn
    hoists zero-size), so the text rides a reactive text signal. *)
 let crumb_title ms =
-  text ~key:"tb-crumb" ~style_class:"ls-tb-crumb"
+  text ~key:"tb-crumb" 
     ~value:
       (reactive
          (fun (m : Model.t) ->
@@ -231,7 +231,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
             ^ (if idle then " idle" else "")
             ^ (if queuing then " queuing" else "")
           in
-          box ~key:"rtc" ~style_class:"cp__rtc-sync"
+          box ~key:"rtc" 
             [ box ~key:"rtc-tx" ~style_class:"hidden"
                 ~accessibility_identifier:"rtc-tx"
                 ~data_attrs:[ ("data-testid", "rtc-tx") ]
@@ -304,8 +304,7 @@ let main_content (ms : Model.t Signal.signal) =
          carried by data_attrs_signal *)
       box ~key:"main-content"
         ~accessibility_identifier:"main-content-container"
-        ~style_class:
-          "scrollbar-spacing w-full flex justify-center flex-row outline-none relative"
+        ~main:`center ~style_class:"scrollbar-spacing w-full flex flex-row outline-none relative"
         ~data_attrs_signal:
           (Signal.map (fun (_ : Model.t) ->
                [ ("data-is-margin-less-pages", "false") ]) ms)

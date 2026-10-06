@@ -695,7 +695,7 @@ and refresh_go_btn (t : t) (f : finder) (iw : D.el) : unit =
   f.f_go <- None;
   if f.f_entered0 then (
     let b =
-      ghost_btn ~extra:"icon-enter" ~icon:"arrow-back"
+      ghost_btn ~extra:"" ~icon:"arrow-back"
         ~title:(I18n.t "pdf/enter-to-search")
         ~onclick:(fun () ->
           do_find t f ~type_:"again" ~prev:false;
