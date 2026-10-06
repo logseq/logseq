@@ -365,6 +365,7 @@ and close_stale_ws_loop (client : Sync_state.client)
 and stop_client (client : Sync_state.client) : unit =
   clear_stale_ws_loop_timer client;
   ignore (Sync_apply.clear_upload_response_timeout client);
+  client.pending_pull_since := None;
   clear_reconnect_timer client.reconnect;
   (* cljs detach-ws-handlers! — invalidate this ws's handlers so the close
      event (which still fires, no detach on the OCaml ws surface) can't
@@ -444,6 +445,11 @@ and connect repo (client : Sync_state.client) (url : string)
                  ; "reason", reason ];
                clear_stale_ws_loop_timer updated;
                clear_inflight updated;
+               (* a pull issued on the dead socket can never be answered —
+                  keeping pending_pull_since set permanently suppresses
+                  every later request_pull (since <= pending is deduped),
+                  freezing local_tx advancement after the reconnect *)
+               updated.pending_pull_since := None;
                update_online_users updated [];
                set_ws_state updated "closed";
                schedule_reconnect repo updated url "close")
