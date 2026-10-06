@@ -351,7 +351,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
        .ls-block-right(.block-tags). Tags render while editing too. *)
     [ (* flex-1: cljs .ls-block was the flex child directly; the wrapper
          must fill .ls-page-title's row axis or the title collapses *)
-      box ~key:"pt-inner" ~style_class:"relative flex-1"
+      box ~key:"pt-inner" ~grow:1. ~style_class:"relative flex-1"
         [ (* TODO(component): .ls-block title row keeps the imperative
              block attr contract (blockid/containerid/data-… attrs) and
              a dynamic selected class — migrates with the block
