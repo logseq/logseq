@@ -1135,17 +1135,17 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
     | None -> false
   in
   let display_only = ref SSet.empty in
-  let rewrite_pos w =
-    let uuid_of_ref_pos w =
-      match block_uuid_lookup_ref_value w with
-      | Some s -> Some (Datascript.Util.uuid_canonicalize s)
-      | None -> (
-          match w with
-          | Wire.String s when Sync_state.uuid_string s ->
-              Some (Datascript.Util.uuid_canonicalize s)
-          | Wire.Uuid s -> Some (Datascript.Util.uuid_canonicalize s)
-          | _ -> None)
-    in
+  let uuid_of_ref_pos w =
+    match block_uuid_lookup_ref_value w with
+    | Some s -> Some (Datascript.Util.uuid_canonicalize s)
+    | None -> (
+        match w with
+        | Wire.String s when Sync_state.uuid_string s ->
+            Some (Datascript.Util.uuid_canonicalize s)
+        | Wire.Uuid s -> Some (Datascript.Util.uuid_canonicalize s)
+        | _ -> None)
+  in
+  let rec rewrite_pos w =
     match uuid_of_ref_pos w with
     | Some u -> (
         if on_srv u then w
@@ -1158,6 +1158,25 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
                 Wire.String u
               end
               else w)
+    | None -> (
+        (* coll values under a ref attr are colls OF refs — cardinality-
+           many attrs like block/tags arrive as nested lookup-refs that
+           the flat rewrite misses; descend one level per shape *)
+        match w with
+        | Wire.Array xs -> Wire.Array (List.map rewrite_pos xs)
+        | Wire.List xs -> Wire.List (List.map rewrite_pos xs)
+        | Wire.Set xs -> Wire.Set (List.map rewrite_pos xs)
+        | Wire.Map kvs ->
+            Wire.Map (List.map (fun (k, v) -> rewrite_pos k, rewrite_pos v) kvs)
+        | Wire.Tagged (t, v) -> Wire.Tagged (t, rewrite_pos v)
+        | _ -> w)
+  in
+  (* entity position is always a scalar ref — never a coll — so the
+     deep walk would only misfire on non-uuid lookups like
+     [:block/name "uuid-shaped-string"] *)
+  let rewrite_e_pos w =
+    match uuid_of_ref_pos w with
+    | Some _ -> rewrite_pos w
     | None -> w
   in
   let tx_data =
@@ -1167,7 +1186,7 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
          | Wire.Array (op :: e :: a :: v :: rest)
          | Wire.List (op :: e :: a :: v :: rest)
            when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract" ->
-             let e' = rewrite_pos e in
+             let e' = rewrite_e_pos e in
              let v' =
                match a with
                | Wire.Keyword attr when ref_attr db attr -> rewrite_pos v
@@ -1180,7 +1199,7 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
              (* same missing-ref handling for entity retracts — a remote
                 retract of an entity this conn never received is a no-op,
                 but the bare lookup-ref would crash the transact *)
-             Wire.Array [ op; rewrite_pos e ]
+             Wire.Array [ op; rewrite_e_pos e ]
          | _ -> item)
       tx_data
   in
@@ -1574,12 +1593,18 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
             (failed entries are out of pending now) so no residue leaks
             into the projection. Loop: an entry deferred on a dep that is
             marked failed later in the same pass stays pending — each
-            pass fails >=1 entry, so iterate until a pass is clean. *)
+            pass fails >=1 entry, so iterate until a pass is clean.
+            Progress bound: a pass that fails entries without shrinking
+            the pending set (e.g. a tx-id mark_failed_txs filters out)
+            can never terminate — stop instead of spinning at 100%. *)
          let rec drain_failures () =
+           let pending_before = List.length (pending_txs repo ()) in
            let failed =
              replay_pending_txs repo display_conn (Some db_before)
            in
-           if failed > 0 then begin
+           if failed > 0
+              && List.length (pending_txs repo ()) < pending_before
+           then begin
              Conn.update_db display_conn (fun _ ->
                  display_db_rebind_floor
                    (display_db_from_server (Conn.db server_conn))
@@ -2087,9 +2112,15 @@ let split_off_server_if_remote ?(unapply_pending = true) repo : unit =
               targets so ancestor fallback can run; on a fresh restart
               under the new model it simply lacks them and those ops
               mark failed *)
+           (* progress bound as in rebuild_display: a pass that fails
+              entries without shrinking the pending set can never
+              terminate (e.g. a tx-id mark_failed_txs filters out) *)
            let rec drain_failures (before : db option) =
+             let pending_before = List.length (pending_txs repo ()) in
              let failed = replay_pending_txs repo display before in
-             if failed > 0 then begin
+             if failed > 0
+                && List.length (pending_txs repo ()) < pending_before
+             then begin
                Conn.update_db display (fun _ ->
                    display_db_rebind_floor
                      (display_db_from_server (Conn.db conn))
