@@ -176,6 +176,52 @@ LUI_EXPORT int32_t lui_ocaml_double_press(int64_t node) {
   return dispatch_long("lui_ocaml_double_press", node);
 }
 
+/* Pointer-detail exports — mirrors upstream lui's
+   platform/native/lui_ocaml_bridge.c LUI_POINTER_DETAIL_EXPORT block.
+   Required by lui-gpui (press_detail / context_menu_press are called from
+   kinds.rs); pointer_down/up/enter/leave round out the ABI. */
+static int dispatch_pointer_detail(const char *name, int64_t node,
+                                   double x, double y, int32_t modifiers,
+                                   int32_t button,
+                                   const char *target_class) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value(name);
+  if (dispatch != NULL) {
+    value argv[6];
+    argv[0] = Val_long(node);
+    argv[1] = caml_copy_double(x);
+    argv[2] = caml_copy_double(y);
+    argv[3] = Val_long(modifiers);
+    argv[4] = Val_long(button);
+    argv[5] = caml_copy_string(target_class != NULL ? target_class : "");
+    result = emit_patch(name, caml_callbackN_exn(*dispatch, 6, argv));
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
+#define LUI_POINTER_DETAIL_EXPORT(c_name)                                 \
+  LUI_EXPORT int32_t c_name(int64_t node, double x, double y,             \
+                            int32_t modifiers, int32_t button,            \
+                            const char *target_class) {                   \
+    return dispatch_pointer_detail(#c_name, node, x, y, modifiers,        \
+                                   button, target_class);                 \
+  }
+
+LUI_POINTER_DETAIL_EXPORT(lui_ocaml_press_detail)
+LUI_POINTER_DETAIL_EXPORT(lui_ocaml_pointer_down)
+LUI_POINTER_DETAIL_EXPORT(lui_ocaml_pointer_up)
+LUI_POINTER_DETAIL_EXPORT(lui_ocaml_context_menu_press)
+
+LUI_EXPORT int32_t lui_ocaml_pointer_enter(int64_t node) {
+  return dispatch_long("lui_ocaml_pointer_enter", node);
+}
+
+LUI_EXPORT int32_t lui_ocaml_pointer_leave(int64_t node) {
+  return dispatch_long("lui_ocaml_pointer_leave", node);
+}
+
 LUI_EXPORT int32_t lui_ocaml_toggle_changed(int64_t node, int32_t checked) {
   int result = 0;
   caml_leave_blocking_section();
