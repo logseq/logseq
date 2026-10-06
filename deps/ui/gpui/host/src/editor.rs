@@ -442,6 +442,11 @@ thread_local! {
     /// outlive dropped nodes; bounded by mounted editors.
     static INPUT_STATES: RefCell<HashMap<i64, Entity<EditorInputState>>> =
         RefCell::new(HashMap::new());
+    /// block-id -> desired focus state: `set-input-focus` can race ahead
+    /// of the surface mount (the request is emitted once on the OCaml
+    /// side), so it's drained when the input entity is created.
+    static PENDING_FOCUS: RefCell<HashMap<String, bool>> =
+        RefCell::new(HashMap::new());
 }
 
 fn input_state(
@@ -738,6 +743,7 @@ fn focus_editor(node_id: i64, window: &mut Window, cx: &mut App) {
 /// `set-input-focus {block-id, focused}` — focus/blur the block's
 /// hidden input surface.
 fn set_input_focus(shared: &Shared, block_id: &str, focused: bool, cx: &mut App) {
+    PENDING_FOCUS.with(|p| p.borrow_mut().insert(block_id.to_owned(), focused));
     let node_id = {
         let shared = shared.borrow();
         find_editor_node(&shared.store, block_id)
@@ -766,7 +772,8 @@ fn editor_surface(
     let state = input_state(node_id, &shared, cx);
     let focus = state.read(cx).focus.clone();
 
-    // Focus/blur subscriptions, once per input entity.
+    // Focus/blur subscriptions, once per input entity. Installed before
+    // draining a pending focus so the landing emits the conduit event.
     let needs_subs = state.read(cx).subs.is_empty();
     if needs_subs {
         state.update(cx, |this, cx| {
@@ -782,6 +789,24 @@ fn editor_surface(
                 },
             ));
         });
+    }
+
+    // a set-input-focus that raced the mount lands here once the input
+    // entity exists
+    if let Some(block_id) = node
+        .extension_props
+        .get("block-id")
+        .and_then(WireValue::as_str)
+    {
+        if let Some(want) =
+            PENDING_FOCUS.with(|p| p.borrow_mut().remove(block_id))
+        {
+            if want {
+                focus.focus(window, cx);
+            } else {
+                window.blur(cx);
+            }
+        }
     }
 
     let key_shared = shared.clone();

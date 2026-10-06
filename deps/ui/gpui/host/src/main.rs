@@ -248,6 +248,10 @@ fn main() {
                 eprintln!("logseq-gpui: opening window");
                 cx.open_window(options, |window, cx| {
                     eprintln!("logseq-gpui: window opened");
+                    // bare binary launches come up inactive — without this
+                    // the window can't become macOS key window and keyboard
+                    // input never reaches it
+                    window.activate_window();
                     drain_patches(&shared, cx);
                     let root_id = unsafe { bridge::lui_ocaml_root_node() };
                     if root_id > 0 {
@@ -257,6 +261,10 @@ fn main() {
                     cx.new(|cx| Root::new(view, window, cx))
                 })
                 .expect("Failed to open window");
+                // bare binary launches come up inactive — without this the
+                // window can't become macOS key window and keyboard input
+                // never reaches it
+                let _ = cx.update(|cx| cx.activate(true));
             }
         })
         .detach();
