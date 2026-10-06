@@ -416,7 +416,7 @@ let value_edit_view d prop : t =
       }
     in
     (row ~gap:0 ~grow:1.0
-       [ text_field ~autofocus:true ?submit_on_enter:Sel.submit_on_enter_opt
+       [ text_field ~autofocus:true
            ~text:(Signal.get_state buffer)
            ~on_input:(fun ev ->
              match ev with

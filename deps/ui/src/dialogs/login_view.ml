@@ -374,7 +374,7 @@ let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
     [ label ~key:"l" ~value:caption []
     ; (if secure then secure_field else input ~kind:`text)
         ~key:"i" ~style_class:"ui__input"
-        ~autofocus ~submit_on_enter:true
+        ~autofocus
         ~text_signal:(Signal.value value)
         ~on_input:(fun ev -> Signal.set value (text_of ev))
         ~on_submit:(fun _ -> on_submit ())

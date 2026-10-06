@@ -70,7 +70,7 @@ let body (_ms : Model.t Signal.signal) : t =
       [ (* cljs shui/input is h-10; .ui__input defaults to the 29px
            compact variant *)
         input ~key:"ng-in" ~style_class:"ui__input" ~height:40
-          ~placeholder:T.graph_name_placeholder ~submit_on_enter:true
+          ~placeholder:T.graph_name_placeholder
           ~on_submit:(fun _ -> submit cloud e2ee creating)
           []
       ; (* cljs new-db-graph-inner: the sync row shows when

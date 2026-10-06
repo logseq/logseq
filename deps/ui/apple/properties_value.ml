@@ -492,7 +492,7 @@ let scalar_edit_cell ctx row : t =
          (value_button ~text:initial ~on_press:(fun _ ->
               open_editor ~steal:true ()))
      ; if_ ~test:(Signal.value editing)
-         (text_field ~autofocus:true ?submit_on_enter:Sel.submit_on_enter_opt
+         (text_field ~autofocus:true
             ~text:(edit_buffer ctx row)
             ~on_input:(fun ev ->
               match ev with
@@ -544,7 +544,7 @@ let date_view ctx row : t =
          (dropdown_menu ~anchor:`below ~anchor_alignment:`start
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
-            [ text_field ~autofocus:true ?submit_on_enter:Sel.submit_on_enter_opt
+            [ text_field ~autofocus:true
                 ~text:(Signal.get_state buffer)
                 ~on_input:(fun ev ->
                   match ev with

@@ -847,7 +847,7 @@ let default_value_pane_view m ~close : t =
          (menu_item ~text:(I18n.t "property/set-default-value")
             ~on_press:(fun _ -> Runtime.signal_set editing true) [])
      ; if_ ~test:(Signal.value editing)
-         (text_field ~autofocus:true ?submit_on_enter:Properties_select.submit_on_enter_opt
+         (text_field ~autofocus:true
             ~text:""
             ~on_input:(fun ev ->
               match ev with

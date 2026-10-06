@@ -224,7 +224,6 @@ let toggle_pw ctx =
     else
       secure_field ~key ~style_class:"ui__input" ~placeholder
         ~text_signal:value_sig ~on_input
-        ~submit_on_enter:true
         ~on_submit:(fun _ -> submit ctx)
         []
   in
