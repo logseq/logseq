@@ -200,6 +200,16 @@
                                   :logseq.property/default-value [:block/uuid (:block/uuid default-value-block)]}]]
       [1 default-value-tx-data])))
 
+(defn- temporal-value
+  "The block's value of a Deadline / Scheduled / date property, or nil when it
+  has none. The date picker's trash button keeps the property and sets it to
+  :logseq.property/empty-placeholder, which counts as no value."
+  [entity property-ident]
+  (let [v (get entity property-ident)]
+    (when-not (= :logseq.property/empty-placeholder
+                 (if (keyword? v) v (:db/ident v)))
+      v)))
+
 (defn- compute-reschedule-property-tx
   [db entity property-ident]
   (let [[frequency default-value-tx-data] (resolve-recur-frequency db entity)
@@ -209,7 +219,7 @@
         property (d/entity db property-ident)
         date? (= :date (:logseq.property/type property))
         current-value (cond->
-                       (get entity property-ident)
+                       (temporal-value entity property-ident)
                         date?
                         (#(date-time-util/journal-day->ms (:block/journal-day %))))
         ;; A :date value is a day, carried here as its UTC midnight. It is
@@ -243,7 +253,7 @@
 
 (defn- existing-repeat-temporal-property-idents
   [entity]
-  (filterv #(some? (get entity %)) repeat-temporal-property-idents))
+  (filterv #(some? (temporal-value entity %)) repeat-temporal-property-idents))
 
 (defn- reschedule-property-idents
   [entity]
@@ -251,11 +261,11 @@
     (if explicit-property-ident
       (let [other-property-idents (case explicit-property-ident
                                    :logseq.property/scheduled
-                                   (when (:logseq.property/deadline entity)
+                                   (when (temporal-value entity :logseq.property/deadline)
                                      [:logseq.property/deadline])
 
                                    :logseq.property/deadline
-                                   (when (:logseq.property/scheduled entity)
+                                   (when (temporal-value entity :logseq.property/scheduled)
                                      [:logseq.property/scheduled])
 
                                    nil)]

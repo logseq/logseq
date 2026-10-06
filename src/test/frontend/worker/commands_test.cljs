@@ -390,6 +390,61 @@
           (is (= :logseq.property/status.todo
                  (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
 
+(defn- complete-with-cleared
+  "Completes an hourly repeating task with Deadline and Scheduled at 9:00,
+  whose repeat is on `repeat-on` and whose `cleared` date was cleared with the
+  date picker's trash button; returns the commands' tx."
+  [repeat-on cleared]
+  (let [now (t/date-time 2030 1 10 8 30)
+        nine (tc/to-long (t/date-time 2030 1 10 9 0))
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Regression Sandbox"}
+                 :blocks [{:block/title "cleared date task"
+                           :build/properties
+                           {:logseq.property.repeat/repeated? true
+                            :logseq.property.repeat/recur-frequency 1
+                            :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.hour
+                            :logseq.property/deadline nine
+                            :logseq.property/scheduled nine
+                            :logseq.property/status :logseq.property/status.todo}}]}]})
+        block (db-test/find-block-by-content @conn "cleared date task")
+        ;; what clear-date-property-value! transacts for the trash button
+        _ (d/transact! conn [[:db/add (:db/id block) cleared :logseq.property/empty-placeholder]
+                             [:db/add (:db/id block) :logseq.property.repeat/temporal-property repeat-on]
+                             [:db/add (:db/id block)
+                              :logseq.property.repeat/repeat-type
+                              :logseq.property.repeat/repeat-type.double-plus]])
+        report (d/transact! conn [[:db/add (:db/id block)
+                                   :logseq.property/status
+                                   :logseq.property/status.done]])]
+    (with-redefs [t/now (fn [] now)]
+      {:block block
+       :tx (doall (commands/run-commands report))})))
+
+(deftest repeated-task-with-a-cleared-date-test
+  ;; db-test #1353: a date cleared with the trash button holds
+  ;; :logseq.property/empty-placeholder, and the repeat threw on it
+  (let [ten (tc/to-long (t/date-time 2030 1 10 10 0))]
+    (testing "Deadline repeats, Scheduled cleared: Deadline moves, Scheduled stays cleared"
+      (let [{:keys [block tx]} (complete-with-cleared :logseq.property/deadline :logseq.property/scheduled)]
+        (is (= ten (tx-add-value tx (:db/id block) :logseq.property/deadline)))
+        (is (nil? (tx-add-value tx (:db/id block) :logseq.property/scheduled)))
+        (is (= :logseq.property/status.todo
+               (tx-add-value tx (:db/id block) :logseq.property/status)))))
+    (testing "Scheduled repeats, Deadline cleared"
+      (let [{:keys [block tx]} (complete-with-cleared :logseq.property/scheduled :logseq.property/deadline)]
+        (is (= ten (tx-add-value tx (:db/id block) :logseq.property/scheduled)))
+        (is (nil? (tx-add-value tx (:db/id block) :logseq.property/deadline)))
+        (is (= :logseq.property/status.todo
+               (tx-add-value tx (:db/id block) :logseq.property/status)))))
+    (testing "the repeating date itself cleared: the other date moves, the task is Todo again"
+      (let [{:keys [block tx]} (complete-with-cleared :logseq.property/deadline :logseq.property/deadline)]
+        (is (nil? (tx-add-value tx (:db/id block) :logseq.property/deadline)))
+        (is (= ten (tx-add-value tx (:db/id block) :logseq.property/scheduled)))
+        (is (= :logseq.property/status.todo
+               (tx-add-value tx (:db/id block) :logseq.property/status)))))))
+
 (defn- reschedule-date-property
   "Completes a weekly repeating task whose temporal property is the user :date
   property `due`, set to journal day 20260910, and returns the commands' tx."
