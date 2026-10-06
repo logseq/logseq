@@ -91,8 +91,23 @@ let pad_frag hi =
   ; shown = false
   }
 
+(* materialized bytes of the current source — Melange [String.sub]
+   copies the whole string per call (O(len s)); a cached [Bytes.t] makes
+   every slice extraction O(slice) instead *)
+let src_bytes_memo : (string * Bytes.t) option ref = ref None
+
+let src_bytes s =
+  match !src_bytes_memo with
+  | Some (s0, b) when s0 == s -> b
+  | _ ->
+      let b = Bytes.of_string s in
+      src_bytes_memo := Some (s, b);
+      b
+
+let sub_of sb a n = Bytes.unsafe_to_string (Bytes.sub sb a n)
+
 (* clip one run to the line range; kind resolves against reveal state *)
-let frag_of_run m (r : Edit_runs.run) lo hi idx : frag option =
+let frag_of_run m sb (r : Edit_runs.run) lo hi idx : frag option =
   let a = max r.start_off lo and b = min r.end_off hi in
   if a >= b then None
   else
@@ -109,18 +124,10 @@ let frag_of_run m (r : Edit_runs.run) lo hi idx : frag option =
       ; end_off = b
       ; kind
       ; cls = r.cls
-      ; text = String.sub m.Edit_model.source a (b - a)
+      ; text = sub_of sb a (b - a)
       ; display = r.display
       ; shown = Edit_model.delim_shown m r
       }
-
-let line_frags m (lo, hi) : frag list =
-  let fs =
-    List.filter_map
-      (fun (idx, r) -> frag_of_run m r lo hi idx)
-      (List.mapi (fun i r -> (i, r)) m.Edit_model.runs)
-  in
-  fs @ [ pad_frag hi ]
 
 type line =
   { lidx : int
@@ -129,23 +136,202 @@ type line =
   ; frags : frag list
   }
 
+(* first index into the run list whose run can overlap [lo], plus the
+   remaining run tail — runs are contiguous and offset-ordered, so the
+   cursor is monotone across ascending lines *)
+let rec runs_at_offset idx rs lo =
+  match rs with
+  | (r : Edit_runs.run) :: tl when r.end_off <= lo ->
+      runs_at_offset (idx + 1) tl lo
+  | _ -> (idx, rs)
+
+(* frags for one line: iteration starts at run index [idx0] and stops at
+   the first run at/past [hi], so per-line work is O(overlapping runs),
+   not O(all runs); frag [idx] is the run's global index — the keyed
+   identity *)
+let line_frags m sb idx0 rs lo hi : frag list =
+  let rec go idx rs acc =
+    match rs with
+    | (r : Edit_runs.run) :: tl when r.start_off < hi -> (
+        match frag_of_run m sb r lo hi idx with
+        | Some f -> go (idx + 1) tl (f :: acc)
+        | None -> go (idx + 1) tl acc)
+    | _ -> List.rev (pad_frag hi :: acc)
+  in
+  go idx0 rs []
+
+let line_at m sb lidx (lo, hi) : line =
+  let idx, rs = runs_at_offset 0 m.Edit_model.runs lo in
+  { lidx; lo; hi; frags = line_frags m sb idx rs lo hi }
+
+(* full single-pass recompute: the run cursor advances monotonically
+   with the line cursor — O(runs + lines) *)
 let lines_of (m : Edit_model.t) : line list =
+  let sb = src_bytes m.Edit_model.source in
+  let rec go lidx lines_left idx rs acc =
+    match lines_left with
+    | [] -> List.rev acc
+    | (lo, hi) :: rest ->
+        let idx, rs = runs_at_offset idx rs lo in
+        let l =
+          { lidx; lo; hi; frags = line_frags m sb idx rs lo hi }
+        in
+        go (lidx + 1) rest idx rs (l :: acc)
+  in
+  go 0 m.Edit_model.lines 0 m.Edit_model.runs []
+
+(* --- incremental line table --------------------------------------------------
+   [lines_step] keeps the previous emit and recomputes only the lines
+   whose inputs changed, so a caret move or a single-line edit does not
+   rebuild the buffer's frag tree.
+
+   - caret/selection/composition updates share [runs]/[lines] with the
+     previous model — only a reveal-state flip can dirty a line
+   - a [splice] that keeps the run structure ([shape] equal) and the
+     line count localizes to the lines overlapping the dirty span;
+     lines below it hold the same bytes shifted by the splice delta, so
+     their frags are shifted copies rather than recomputes
+   - anything else (line-count change, delimiter re-pairing, host
+     [set_lines], external [set_source]) falls back to [lines_of] *)
+
+type line_cache =
+  { mutable lc_model : Edit_model.t option
+  ; mutable lc_lines : line list
+  }
+
+let line_cache () = { lc_model = None; lc_lines = [] }
+
+(* indices of lines whose range overlaps [a, b) — a run contributes
+   frags to every line it spans *)
+let lines_overlapping (lines : (int * int) list) a b : int list =
+  let rec go i acc = function
+    | [] -> List.rev acc
+    | (lo, hi) :: tl ->
+        go (i + 1) (if a <= hi && b > lo then i :: acc else acc) tl
+  in
+  go 0 [] lines
+
+(* lines holding a run whose rendered reveal state flipped between the
+   two models. Only Delim and Atomic runs consume reveal state — a Plain
+   run's [reveal] is its own span and must not dirty on caret moves
+   through it. The run lists pair positionally — callers guarantee
+   [shape] equality (non-mutating updates share the list outright), so
+   paired kinds always match. *)
+let reveal_dirty pm m : int list =
+  let rec go acc ors nrs =
+    match ors, nrs with
+    | (ro : Edit_runs.run) :: otl, (rn : Edit_runs.run) :: ntl ->
+        let acc =
+          if
+            (ro.kind = Edit_runs.Delim
+             && Edit_model.delim_shown pm ro
+                <> Edit_model.delim_shown m rn)
+            || (ro.kind = Edit_runs.Atomic
+                && Edit_model.atomic_expanded pm ro
+                   <> Edit_model.atomic_expanded m rn)
+          then
+            lines_overlapping m.Edit_model.lines rn.start_off rn.end_off
+            @ acc
+          else acc
+        in
+        go acc otl ntl
+    | _ -> acc
+  in
+  List.sort_uniq Int.compare (go [] pm.Edit_model.runs m.Edit_model.runs)
+
+(* same bytes, [delta] further right — offset-shifted copy *)
+let shift_line (l : line) delta : line =
+  { l with
+    lo = l.lo + delta
+  ; hi = l.hi + delta
+  ; frags =
+      List.map
+        (fun (f : frag) ->
+          { f with start_off = f.start_off + delta
+                 ; end_off = f.end_off + delta })
+        l.frags
+  }
+
+let apply_dirty m prev_lines dirty : line list =
+  let sb = src_bytes m.Edit_model.source in
   List.mapi
-    (fun lidx (lo, hi) -> { lidx; lo; hi; frags = line_frags m (lo, hi) })
-    m.lines
+    (fun i (l : line) ->
+      if List.mem i dirty then line_at m sb i (List.nth m.Edit_model.lines i)
+      else l)
+    prev_lines
+
+(* splice tier — needs the recorded dirty span, an unchanged split
+   ([shape]) and a stable line count; each surviving line is verified
+   against the expected prefix/shifted range so a host-side [set_lines]
+   interleave degrades to per-line recompute, never wrong output *)
+let step_splice pm m prev_lines : line list =
+  match m.Edit_model.dirty with
+  | Some (pos, old_len, new_len)
+    when List.length pm.Edit_model.lines = List.length m.Edit_model.lines
+         && Edit_model.shape pm = Edit_model.shape m ->
+      let sb = src_bytes m.Edit_model.source in
+      let delta = new_len - old_len in
+      let dend = pos + max old_len new_len in
+      let new_arr = Array.of_list m.Edit_model.lines
+      and old_arr = Array.of_list pm.Edit_model.lines in
+      let dirty = Array.make (Array.length new_arr) false in
+      Array.iteri
+        (fun i (nlo, nhi) ->
+          if nlo < dend && nhi >= pos then dirty.(i) <- true)
+        new_arr;
+      List.iter (fun i -> dirty.(i) <- true) (reveal_dirty pm m);
+      List.mapi
+        (fun i (l : line) ->
+          let nlo, nhi = new_arr.(i) in
+          let olo, ohi = old_arr.(i) in
+          if dirty.(i) then line_at m sb i (nlo, nhi)
+          else if (nlo, nhi) = (olo, ohi) then l
+          else if nlo = olo + delta && nhi = ohi + delta
+          then shift_line l delta
+          else line_at m sb i (nlo, nhi))
+        prev_lines
+  | _ -> lines_of m
+
+let lines_step cache (m : Edit_model.t) : line list =
+  let ls =
+    match cache.lc_model with
+    | None -> lines_of m
+    | Some pm ->
+        if pm.Edit_model.runs == m.Edit_model.runs
+           && pm.Edit_model.lines == m.Edit_model.lines
+        then
+          match reveal_dirty pm m with
+          | [] -> cache.lc_lines
+          | dirty -> apply_dirty m cache.lc_lines dirty
+        else step_splice pm m cache.lc_lines
+  in
+  cache.lc_model <- Some m;
+  cache.lc_lines <- ls;
+  ls
+
+(* decimal write without Printf — the prop is re-serialized per emit *)
+let rec add_uint b n =
+  if n >= 10 then add_uint b (n / 10);
+  Buffer.add_char b (Char.unsafe_chr (48 + (n mod 10)))
+
+let add_int b n =
+  if n < 0 then (Buffer.add_char b '-'; add_uint b (-n))
+  else add_uint b n
 
 (* "a,b,k;…" over every emitted .ed-r element in document order —
    measurement zips it against querySelectorAll(".ed-r") *)
 let runs_prop_of (ls : line list) : string =
-  let b = Buffer.create 64 in
+  let b = Buffer.create 256 in
   List.iter
     (fun l ->
       List.iter
         (fun f ->
           if Buffer.length b > 0 then Buffer.add_char b ';';
-          Buffer.add_string b
-            (Printf.sprintf "%d,%d,%s" f.start_off f.end_off
-               (frag_tag f.kind)))
+          add_int b f.start_off;
+          Buffer.add_char b ',';
+          add_int b f.end_off;
+          Buffer.add_char b ',';
+          Buffer.add_string b (frag_tag f.kind))
         l.frags)
     ls;
   Buffer.contents b
@@ -292,7 +478,14 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
 
 let view ~model ~frame ~block_id ~on_input : t =
  fun context parent ->
-  let lines_s = own context (Signal.map lines_of model) in
+  let cache = line_cache () in
+  (* [lines_step] returns the previous list untouched when nothing a
+     line depends on changed; the cutoff then keeps the whole line
+     subtree idle on caret/IME flushes *)
+  let mapped =
+    own context (Signal.map (fun m -> lines_step cache m) model)
+  in
+  let lines_s = own context (Signal.cutoff ( == ) mapped) in
   let runs_s =
     own context
       (Signal.map (fun ls -> StringValue (runs_prop_of ls)) lines_s)

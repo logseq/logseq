@@ -1,7 +1,9 @@
 # Editor keystroke latency smoke — O(local) verification
 
-Status: measurement report (no fixes). Branch `devin/editor-perf`,
-2026-10-06. Contract under test (`docs/editor-surface-extension.md`):
+Status: measurement report; fixes landed on `devin/editor-perf-opt`
+(see "Optimizations landed" below for before/after). Branch
+`devin/editor-perf`, 2026-10-06. Contract under test
+(`docs/editor-surface-extension.md`):
 *"typing must stay O(local run diff), never re-segment the page"* and
 *"shape signature skip-rebuild per keystroke"*.
 
@@ -178,6 +180,63 @@ build + CDP typing harness exceeds the 30-minute budget, and the
 Melange-runtime numbers already isolate the model/emit costs a
 browser frame would only obscure. `apply` is a replay proxy, not a
 DOM-cost measurement.
+
+## Optimizations landed (`devin/editor-perf-opt`, after-numbers)
+
+- **Allocation-free scans (fix 1/2).** `Str_util.index_from`,
+  `contains`, `starts_at`/`starts_with`, `starts_with_ci`,
+  `ends_with`, `replace_all` and `Render_inline.find_sub` now
+  byte-compare via `String.unsafe_get` — zero allocation per probe on
+  both native and Melange. `Edit_runs` slices runs out of one
+  `Bytes.of_string` copy, and `Edit_model.splice` builds the new
+  source with a single `Bytes.blit_string` pass.
+- **Incremental line table (fix 3/5).** `Edit_view` keeps the
+  previous emit and runs `lines_step` instead of a fresh `lines_of`:
+  caret/selection/composition updates share `runs`/`lines` and only
+  recompute lines whose Delim/Atomic reveal state flipped (none in
+  the common case); a splice with an unchanged `shape` and line
+  count recomputes only the dirty span and offset-shifts lines below
+  it; anything else falls back to the full pass — now a single-pass
+  O(lines + runs) zip either way. `Signal.cutoff (==)` on the line
+  signal keeps the whole subtree (keyed diff + `runs` prop
+  re-serialization) idle when nothing a line depends on changed.
+- **Cheap runs-prop serializer (part of fix 6).** `runs_prop_of`
+  dropped `Printf` for a hand-rolled decimal writer.
+
+Same harness, same corpus (500 lines / 26,226 B):
+
+| metric | before (p50) | after (p50) |
+|---|---|---|
+| `M.lines_of_source` | 1932ms | 0.043ms |
+| `M.create` (runs + lines) | 2286ms | 13.2ms |
+| `Edit_runs.runs` | 325ms | 12.1ms |
+| `Edit_view.lines_of` | 99ms | 0.14ms |
+| `Edit_view.runs_prop_of` | 101ms | 0.47ms |
+| caret_move emit | 97.3ms | 0.014ms (1 op, 30B) |
+| ime_comp_update emit | ~97ms | 0.011ms (1 op, 38B) |
+| insert_plain model+send / emit | 2138ms / 118ms | 13.3ms / 12.0ms |
+| backspace_at_delim model / emit | 2970ms / ~120ms | 9.6ms / 18.2ms |
+| paste_200_lines model / emit | 3978ms / ~355ms | 36.5ms / 82.4ms |
+
+Patch shape unchanged where it was already narrow: insert still
+emits 3 ops / 2 nodes; `insert_near_end` still touches zero line
+rows; the `backspace_at_delim` 2929-op cascade remains (a real
+re-pairing — see fix 4 note below).
+
+Still open (follow-ups):
+
+- **`runs` prop wire format (fix 6).** Real splices still re-send
+  the full ~22KB entry string — it only stopped re-sending on
+  caret/IME flushes thanks to the cutoff. Narrowing it needs a
+  splice-op protocol the `logseq-editor` extension parses
+  (`st.runs` is index-addressed today): send `(first_idx, del_count,
+  "a,b,k;…")` and splice the array host-side. Deliberately skipped
+  here as a two-sided wire change.
+- **Windowed re-segmentation (fix 4).** `rebuild` still re-runs
+  `Edit_runs.runs` over the whole source per splice — now ~12ms at
+  500 lines instead of 325ms. What remains is the run-list
+  re-pairing cascade (`backspace_at_delim`), which is semantic, not
+  incidental.
 
 ## Caveats
 

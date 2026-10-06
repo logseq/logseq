@@ -33,45 +33,50 @@ type run =
 
 let join_cls a b = if a = "" then b else if b = "" then a else a ^ " " ^ b
 
-let plain s a b cls : run =
+(* [sub] on the materialized bytes: Melange [String.sub] copies the
+   whole source per call (O(len s)), while [Bytes.sub] copies only the
+   slice — all run text extraction goes through it *)
+let sub_of sb a n = Bytes.unsafe_to_string (Bytes.sub sb a n)
+
+let plain sb a b cls : run =
   { start_off = a; end_off = b; kind = Plain
-  ; text = String.sub s a (b - a); reveal = (a, b); display = ""; cls }
+  ; text = sub_of sb a (b - a); reveal = (a, b); display = ""; cls }
 
-let mk kind s a b ~reveal ~display ~cls : run =
+let mk kind sb a b ~reveal ~display ~cls : run =
   { start_off = a; end_off = b; kind
-  ; text = String.sub s a (b - a); reveal; display; cls }
+  ; text = sub_of sb a (b - a); reveal; display; cls }
 
-(* Fold the tokens of [s[lo, hi)] into runs appended to [acc].
+(* Fold the tokens of [sb[lo, hi)] into runs appended to [acc].
    Gaps between tokens are plain text. [Rs_wrapped] emits a Delim pair
    whose reveal range is the whole construct, and recurses into the
    inner range when the construct re-parses (emphasis); code-style
    constructs (re_parse = false) keep their inner bytes as one literal
    Plain run. *)
-let rec seg (acc : run list) s lo hi ~cls : run list =
-  let toks = Render_inline.match_tokens (String.sub s lo (hi - lo)) in
+let rec seg (acc : run list) sb lo hi ~cls : run list =
+  let toks = Render_inline.match_tokens (sub_of sb lo (hi - lo)) in
   let acc = ref acc and cur = ref lo in
   List.iter
     (fun (t : Render_inline.span_tok) ->
       let a = lo + t.tok_start and b = lo + t.tok_stop in
-      if !cur < a then acc := plain s !cur a cls :: !acc;
+      if !cur < a then acc := plain sb !cur a cls :: !acc;
       (match t.tok_spec with
        | Render_inline.Rs_plain ->
-           acc := plain s a b cls :: !acc
+           acc := plain sb a b cls :: !acc
        | Rs_atomic (display, c) ->
            acc :=
-             mk Atomic s a b ~reveal:(a + 1, b) ~display
+             mk Atomic sb a b ~reveal:(a + 1, b) ~display
                ~cls:(join_cls cls c) :: !acc
        | Rs_wrapped (o, c, re_parse, c2) ->
            let cls' = join_cls cls c2 in
-           acc := mk Delim s a (a + o) ~reveal:(a, b) ~display:"" ~cls:cls' :: !acc;
+           acc := mk Delim sb a (a + o) ~reveal:(a, b) ~display:"" ~cls:cls' :: !acc;
            let inner_lo = a + o and inner_hi = b - c in
            if inner_hi > inner_lo then
-             if re_parse then acc := seg !acc s inner_lo inner_hi ~cls:cls'
-             else acc := plain s inner_lo inner_hi cls' :: !acc;
-           acc := mk Delim s (b - c) b ~reveal:(a, b) ~display:"" ~cls:cls' :: !acc);
+             if re_parse then acc := seg !acc sb inner_lo inner_hi ~cls:cls'
+             else acc := plain sb inner_lo inner_hi cls' :: !acc;
+           acc := mk Delim sb (b - c) b ~reveal:(a, b) ~display:"" ~cls:cls' :: !acc);
       cur := b)
     toks;
-  if !cur < hi then acc := plain s !cur hi cls :: !acc;
+  if !cur < hi then acc := plain sb !cur hi cls :: !acc;
   !acc
 
 (* Merge adjacent Plain runs that share a class (e.g. a matched literal
@@ -95,7 +100,10 @@ let merge_plains (rs : run list) : run list =
       List.rev (last :: acc)
 
 let runs s : run list =
-  merge_plains (List.rev (seg [] s 0 (String.length s) ~cls:""))
+  (* one O(n) conversion up front; every slice/extraction below is
+     O(slice) on both runtimes *)
+  let sb = Bytes.of_string s in
+  merge_plains (List.rev (seg [] sb 0 (String.length s) ~cls:""))
 
 (* Debug/test helper: concatenate the source slices back — must equal
    the original string. *)

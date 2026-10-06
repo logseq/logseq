@@ -7,13 +7,27 @@ open Lui_elements
 module D = Render_dom
 module U = I18n
 
-(* positional substring index, -1 when absent *)
+(* positional substring index, -1 when absent — byte-compare, no
+   allocation: Melange [String.sub] materializes the whole string per
+   call, which made this scan O(n^2) on the web surface *)
 let find_sub s i pat =
   let n = String.length s and m = String.length pat in
-  let rec go j =
-    if j + m > n then -1 else if String.sub s j m = pat then j else go (j + 1)
-  in
-  go i
+  if m = 0 then (if i >= 0 && i <= n then i else -1)
+  else if i < 0 then -1
+  else
+    let c0 = String.unsafe_get pat 0 in
+    let rec match_rest j k =
+      k = m
+      || (String.unsafe_get s (j + k) = String.unsafe_get pat k
+          && match_rest j (k + 1))
+    in
+    let rec go j =
+      if j + m > n then -1
+      else if String.unsafe_get s j <> c0 then go (j + 1)
+      else if match_rest j 1 then j
+      else go (j + 1)
+    in
+    go i
 
 let bracket s = text ~style_class:"bracket" ~value:s []
 
