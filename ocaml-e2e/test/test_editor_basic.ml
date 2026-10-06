@@ -1387,7 +1387,10 @@ let () =
         in
         let* () = Util.wait_timeout env 800. in
         (* worker perf logs travel over the console-message pipe and can lag
-           under suite load; poll the counts (still asserts exactly 3). *)
+           under suite load; poll the counts (still asserts exactly 3).
+           -j8 has delayed a trailing op line past 30s, so give the worker
+           a 60s window to flush its queue — a late line can only raise a
+           count, never fake it. *)
         let collect () =
           let new_logs =
             List.filter
@@ -1408,7 +1411,7 @@ let () =
             let* () = Util.wait_timeout env 300. in
             poll (n - 1)
         in
-        let* new_logs, enter_logs, delete_logs = poll 100 in
+        let* new_logs, enter_logs, delete_logs = poll 200 in
         if List.length enter_logs <> 3 || List.length delete_logs <> 3 then
           List.iter
             (fun l -> Js.log ("new-log-line: " ^ l))
