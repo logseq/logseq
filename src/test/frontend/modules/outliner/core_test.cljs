@@ -424,6 +424,24 @@
      (outliner-core/move-blocks-up-down! (conn/get-db test-db false) [(get-block 9)] true))
     (is (= [3 9 6] (get-children 2)))))
 
+(deftest test-move-blocks-up-down-across-pages
+  (testing "a selection over 2 pages does not move a block into the other page (db-test #1318)"
+    ;; page 1: a(41) b(42) c(43); page 50: e(51) f(52)
+    (transact-tree! [[41] [42] [43]])
+    (d/transact! (conn/get-db test-db false)
+                 (concat [{:db/id 50 :block/uuid 50 :block/name "other page"}]
+                         (gp-block/with-parent-and-order 50
+                           (map #(assoc % :block/page 50 :block/title "x")
+                                (build-node-tree [[51] [52]]))))
+                 {:outliner-op :insert-blocks})
+    (doseq [up? [true false]]
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
+                                           [(get-block 41) (get-block 51)] up?))
+      (is (= [41 42 43] (get-children 1)))
+      (is (= [51 52] (get-children 50))))))
+
 (deftest test-insert-blocks
   (testing "
   add [18 [19 20] 21] after 6

@@ -1471,8 +1471,16 @@
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
-        opts {:outliner-op :move-blocks-up-down}]
-    (if up?
+        opts {:outliner-op :move-blocks-up-down}
+        pages (set (map #(:db/id (:block/page (d/entity db (:db/id %)))) top-level-blocks))]
+    (cond
+      ;; a move up or down stays in 1 page: its target comes from 1 end of
+      ;; the selection, so a selection over 2 pages would carry the blocks
+      ;; of 1 page into the other
+      (> (count pages) 1)
+      nil
+
+      up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
             first-block-parent (:block/parent first-block)
             first-block-left-sibling (ldb/get-left-sibling first-block)
@@ -1489,6 +1497,7 @@
           (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
                                                                     :up? up?}))))
 
+      :else
       (let [last-top-block (last top-level-blocks)
             last-top-block-right (ldb/get-right-sibling last-top-block)
             right (or
