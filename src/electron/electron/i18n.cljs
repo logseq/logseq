@@ -6,11 +6,13 @@
   as the renderer without shipping non-serializable translation values over
   IPC."
   (:require [frontend.dicts :as dicts]
-            [lambdaisland.glogi :as log]
-            [tongue.core :as tongue]))
+            [frontend.lazy-translate :as lazy-translate]
+            [lambdaisland.glogi :as log]))
 
 (def ^:private translate
-  (tongue/build-translate (assoc dicts/dicts :tongue/fallback :en)))
+  ;; each language is compiled on first use (all of them took about 280 ms
+  ;; of every main process start)
+  (lazy-translate/build-translate (assoc dicts/dicts :tongue/fallback :en)))
 
 (defonce ^:private *locale (atom :en))
 (defonce ^:private *on-locale-change (atom nil))
