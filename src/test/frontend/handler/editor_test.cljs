@@ -3419,6 +3419,22 @@
     (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2] before before))
         "a row not drawn yet: no partial selection")))
 
+(deftest moved-row-is-taken-in-the-view-it-moved-in-test
+  ;; the scroll after a move goes to the row in the view the block was moved
+  ;; in, not to a copy of it drawn first (an embed, the sidebar)
+  (let [container-of {"sidebar-row" 9 "page-row" 3}]
+    (with-redefs [util/get-blocks-by-id (fn [_id] ["sidebar-row" "page-row"])
+                  util/rec-get-node (fn [node _class] node)
+                  editor/get-node-container-id (fn [node] (container-of node))]
+      (is (= "page-row" (#'editor/moved-row "b" 3)))
+      (is (= "sidebar-row" (#'editor/moved-row "b" nil)) "no known view: the first row"))))
+
+(deftest move-scroll-context-is-the-graph-and-route-test
+  ;; a scroll after a move runs only when these are unchanged
+  (with-redefs [state/get-current-repo (constantly "graph-a")
+                state/get-route-match (constantly {:path "/page/a"})]
+    (is (= ["graph-a" {:path "/page/a"}] (#'editor/move-scroll-context)))))
+
 (deftest select-parent-target-uses-page-ness-not-nested-parent-test
   (let [child-uuid #uuid "11111111-1111-1111-1111-111111111111"
         grandchild-uuid #uuid "22222222-2222-2222-2222-222222222222"
