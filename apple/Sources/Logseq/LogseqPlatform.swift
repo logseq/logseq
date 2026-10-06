@@ -201,6 +201,12 @@ final class NSReferenceBox {
   private var mouseDownMonitor: Any?
   private var mouseUpMonitor: Any?
   private var lastMouseHitNode: Int?
+  /// Pointer-detail state for standard (non-extension) nodes: the
+  /// pointer-enabled ancestor targeted by the current press/hover. Web
+  /// semantics: listeners live on the `pointer-enabled` ancestor, the
+  /// event target is the deepest hit node.
+  private var pointerDownTarget: Int?
+  private var pointerHoverTarget: Int?
   private var windowSizeTimer: Timer?
   private let logger = Logger(subsystem: "com.logseq.native", category: "platform")
 
@@ -295,14 +301,26 @@ final class NSReferenceBox {
     // The event is consumed (no default menu) except over text inputs,
     // where the NSTextView edit menu still applies.
     contextMenuMonitor = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) {
-      event in
+      [weak self] event in
       guard let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
-      guard let hit = LogseqFrameStore.hitTest(point) else { return event }
-      if hit.tag == "textarea" || hit.tag == "input" { return event }
-      LogseqPlatform.emitContextMenu(nodeID: hit.nodeID, point: point)
-      return nil
+      if let hit = LogseqFrameStore.hitTest(point) {
+        if hit.tag == "textarea" || hit.tag == "input" { return event }
+        LogseqPlatform.emitContextMenu(nodeID: hit.nodeID, point: point)
+        return nil
+      }
+      // Standard-node context menus: web attaches a `contextmenu` listener
+      // on the pointer-enabled ancestor and bubbles the deepest hit up.
+      if let self, let standard = self.standardPointerHit(at: point) {
+        try? self.runtime?.backend.performContextMenuPress(
+          node: standard.target, x: Double(point.x), y: Double(point.y),
+          modifiers: LogseqPlatform.pointerMask(
+            event.modifierFlags, rightButton: true),
+          button: 2, targetClass: standard.targetClass)
+        return nil
+      }
+      return event
     }
     // DOM mousemove at node granularity — the OCaml listeners only need
     // which element the pointer is over (context-menu submenu hovers,
@@ -314,6 +332,19 @@ final class NSReferenceBox {
         let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
+      // Standard-node pointer enter/leave: emit on transitions of the
+      // pointer-enabled ancestor, matching web's pointerenter/leave.
+      let standard = standardPointerHit(at: point)
+      let newHover = standard?.target
+      if newHover != pointerHoverTarget {
+        if let old = pointerHoverTarget {
+          try? runtime?.backend.performPointerLeave(node: old)
+        }
+        if let new = newHover {
+          try? runtime?.backend.performPointerEnter(node: new)
+        }
+        pointerHoverTarget = newHover
+      }
       guard let hit = LogseqFrameStore.hitTest(point, prefer: lastMouseHitNode),
         let context = LogseqElementRegistry.shared.contextOwning(nodeID: hit.nodeID)
       else { return event }
@@ -327,17 +358,30 @@ final class NSReferenceBox {
     // contextmenu does. The event is never consumed — SwiftUI still
     // delivers the click itself.
     mouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) {
-      event in
-      guard let window = event.window, let contentView = window.contentView
+      [weak self] event in
+      guard let self,
+        let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
       let hit = LogseqFrameStore.hitTest(point)
-      guard let hit,
+      if let hit,
         let context = LogseqElementRegistry.shared.contextOwning(nodeID: hit.nodeID)
-      else { return event }
-      LogseqPlatform.emitMouseDown(
-        context: context, nodeID: hit.nodeID, point: point,
-        flags: event.modifierFlags)
+      {
+        LogseqPlatform.emitMouseDown(
+          context: context, nodeID: hit.nodeID, point: point,
+          flags: event.modifierFlags)
+      }
+      // Standard-node pointerdown: the deepest hit bubbles to its nearest
+      // pointer-enabled ancestor (web attach_pointer_events semantics).
+      if let standard = standardPointerHit(at: point) {
+        pointerDownTarget = standard.target
+        try? runtime?.backend.performPointerDown(
+          node: standard.target, x: Double(point.x), y: Double(point.y),
+          modifiers: LogseqPlatform.pointerMask(event.modifierFlags),
+          button: 0, targetClass: standard.targetClass)
+      } else {
+        pointerDownTarget = nil
+      }
       return event
     }
     // DOM click: SwiftUI taps only emit from views carrying their own
@@ -348,21 +392,36 @@ final class NSReferenceBox {
     // emit lands first and wins OCaml's click coalescing. The event is
     // never consumed.
     mouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) {
-      event in
-      guard let window = event.window, let contentView = window.contentView
+      [weak self] event in
+      guard let self,
+        let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
       let hit = LogseqFrameStore.hitTest(point)
-      guard let hit,
+      if let hit,
         let context = LogseqElementRegistry.shared.contextOwning(nodeID: hit.nodeID)
-      else {
-        return event
+      {
+        let flags = event.modifierFlags
+        runOnMainDeferred {
+          LogseqPlatform.emitClick(
+            context: context, nodeID: hit.nodeID, point: point, flags: flags)
+        }
       }
-      let flags = event.modifierFlags
-      runOnMainDeferred {
-        LogseqPlatform.emitClick(
-          context: context, nodeID: hit.nodeID, point: point, flags: flags)
+      // Standard-node pointerup + click (pressDetail), gated to the target
+      // that saw the matching pointerdown.
+      if let standard = standardPointerHit(at: point) {
+        try? runtime?.backend.performPointerUp(
+          node: standard.target, x: Double(point.x), y: Double(point.y),
+          modifiers: LogseqPlatform.pointerMask(event.modifierFlags),
+          button: 0, targetClass: standard.targetClass)
+        if standard.target == pointerDownTarget {
+          try? runtime?.backend.performPressDetail(
+            node: standard.target, x: Double(point.x), y: Double(point.y),
+            modifiers: LogseqPlatform.pointerMask(event.modifierFlags),
+            button: 0, targetClass: standard.targetClass)
+        }
       }
+      pointerDownTarget = nil
       return event
     }
   }
@@ -402,6 +461,42 @@ final class NSReferenceBox {
     return contentView.isFlipped
       ? CGPoint(x: p.x, y: p.y)
       : CGPoint(x: p.x, y: contentView.bounds.height - p.y)
+  }
+
+  /// Pointer modifier mask matching gpui's `pointer_modifier_mask`:
+  /// ctrl=1, shift=2, platform(cmd)=4, right-button=8.
+  private static func pointerMask(
+    _ flags: NSEvent.ModifierFlags, rightButton: Bool = false
+  ) -> Int {
+    (flags.contains(.control) ? 1 : 0)
+      | (flags.contains(.shift) ? 2 : 0)
+      | (flags.contains(.command) ? 4 : 0)
+      | (rightButton ? 8 : 0)
+  }
+
+  /// Deepest standard-node hit at `point` retargeted to its nearest
+  /// `pointer-enabled` ancestor, plus the hit's style class for
+  /// `target_class` (web: listeners sit on the ancestor, `event.target`
+  /// is the deepest node). nil when the deepest node isn't standard
+  /// (extension regions route through the dom-event path instead) or no
+  /// ancestor opted into pointer events.
+  private func standardPointerHit(at point: CGPoint)
+    -> (node: Int, target: Int, targetClass: String)?
+  {
+    guard let cand = LogseqFrameStore.entries
+      .filter({
+        $0.value.rect.contains(point) && $0.value.rect.width > 0
+          && $0.value.rect.height > 0
+      })
+      .min(by: {
+        $0.value.rect.width * $0.value.rect.height
+          < $1.value.rect.width * $1.value.rect.height
+      })
+    else { return nil }
+    guard let backend = runtime?.backend,
+      let target = backend.pointerEventTarget(of: cand.key)
+    else { return nil }
+    return (cand.key, target, backend.styleClass(of: cand.key) ?? "")
   }
 
   private static func emitContextMenu(nodeID: Int, point: CGPoint) {

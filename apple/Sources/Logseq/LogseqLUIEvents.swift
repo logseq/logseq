@@ -36,6 +36,30 @@ private func luiOCamlExtensionEvent(
   _ node: Int64, _ identifier: UnsafePointer<CChar>?, _ name: UnsafePointer<CChar>?,
   _ values: UnsafePointer<CChar>?
 ) -> Int32
+@_silgen_name("lui_ocaml_press_detail")
+private func luiOCamlPressDetail(
+  _ node: Int64, _ x: Double, _ y: Double, _ modifiers: Int32, _ button: Int32,
+  _ targetClass: UnsafePointer<CChar>?
+) -> Int32
+@_silgen_name("lui_ocaml_pointer_down")
+private func luiOCamlPointerDown(
+  _ node: Int64, _ x: Double, _ y: Double, _ modifiers: Int32, _ button: Int32,
+  _ targetClass: UnsafePointer<CChar>?
+) -> Int32
+@_silgen_name("lui_ocaml_pointer_up")
+private func luiOCamlPointerUp(
+  _ node: Int64, _ x: Double, _ y: Double, _ modifiers: Int32, _ button: Int32,
+  _ targetClass: UnsafePointer<CChar>?
+) -> Int32
+@_silgen_name("lui_ocaml_context_menu_press")
+private func luiOCamlContextMenuPress(
+  _ node: Int64, _ x: Double, _ y: Double, _ modifiers: Int32, _ button: Int32,
+  _ targetClass: UnsafePointer<CChar>?
+) -> Int32
+@_silgen_name("lui_ocaml_pointer_enter")
+private func luiOCamlPointerEnter(_ node: Int64) -> Int32
+@_silgen_name("lui_ocaml_pointer_leave")
+private func luiOCamlPointerLeave(_ node: Int64) -> Int32
 
 enum LogseqLUIEvents {
   /// Stateless C adapter — safe to call from the OCaml worker thread; the
@@ -70,13 +94,32 @@ enum LogseqLUIEvents {
           }
         }
       }
-    // Pointer-detail events are emitted by lui's pointer-enabled standard
-    // views; logseq routes pointer input through its own dom-event layer
-    // (LogseqPlatform hit-testing + element gestures), so these have no
-    // OCaml entry point and are intentionally unhandled.
-    case .pressDetail, .pointerDown, .pointerUp, .pointerEnter,
-         .pointerLeave, .contextMenuPress:
-      return 0
+    case .pressDetail(let node, let x, let y, let modifiers, let button,
+                      let targetClass):
+      return targetClass.withCString {
+        luiOCamlPressDetail(
+          Int64(node), x, y, Int32(modifiers), Int32(button), $0)
+      }
+    case .pointerDown(let node, let x, let y, let modifiers, let button,
+                      let targetClass):
+      return targetClass.withCString {
+        luiOCamlPointerDown(
+          Int64(node), x, y, Int32(modifiers), Int32(button), $0)
+      }
+    case .pointerUp(let node, let x, let y, let modifiers, let button,
+                    let targetClass):
+      return targetClass.withCString {
+        luiOCamlPointerUp(
+          Int64(node), x, y, Int32(modifiers), Int32(button), $0)
+      }
+    case .contextMenuPress(let node, let x, let y, let modifiers, let button,
+                           let targetClass):
+      return targetClass.withCString {
+        luiOCamlContextMenuPress(
+          Int64(node), x, y, Int32(modifiers), Int32(button), $0)
+      }
+    case .pointerEnter(let node): return luiOCamlPointerEnter(Int64(node))
+    case .pointerLeave(let node): return luiOCamlPointerLeave(Int64(node))
     }
   }
 

@@ -1,5 +1,6 @@
 import CoreText
 import Foundation
+import LUIAppleBackend
 import SwiftUI
 
 /// Renders `ti ti-<name>` / `tie tie-<name>` font-icon elements natively via
@@ -70,6 +71,31 @@ enum LogseqTablerIcons {
   static func paths(for name: String) -> [[String: String]]? {
     table[name]
   }
+}
+
+/// `app:` icon sources handed to `LUIAppleBackend` at startup: every tabler
+/// codepoint as a bundled-font glyph (matching what the web renders through
+/// the tabler fonts), plus SF symbols for the handful of `app:` names with
+/// no tabler counterpart (OCaml `custom_icons`: inline SVGs).
+enum LogseqAppIcons {
+  static let sources: [String: LUIAppleIconSource] = {
+    _ = LogseqTablerIcons.fontsRegistered
+    var sources: [String: LUIAppleIconSource] = [
+      "logseq-logo": .systemName("circle.grid.3x3.fill"),
+      "rotating-arrow": .systemName("arrow.clockwise"),
+      "youtube-timestamp-icon": .systemName("clock"),
+      "tabler-letter-p": .systemName("textformat"),
+      "tabler-plus": .systemName("plus"),
+    ]
+    for (name, scalar) in LogseqTablerIcons.codepoints {
+      sources[name] = .fontGlyph(family: "tabler-icons", scalar: scalar)
+    }
+    for (name, scalar) in LogseqTablerIcons.extCodepoints {
+      sources[name] = .fontGlyph(
+        family: "tabler-icons-extension", scalar: scalar)
+    }
+    return sources
+  }()
 }
 
 struct LogseqTablerIcon: View {

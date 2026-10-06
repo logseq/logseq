@@ -463,9 +463,10 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     installTickTimer()
     platform = LogseqPlatform()
     backend = try LUIAppleBackend(
-      // `app:` icon names referenced from OCaml semantic elements (the
-      // built-in icon table has no house glyph for the Home button).
-      appIcons: ["home": .systemName("house"), "cloud": .systemName("cloud")],
+      // `app:` icon names referenced from OCaml semantic elements — resolved
+      // to bundled tabler font glyphs, with SF symbols for names that have
+      // no tabler glyph.
+      appIcons: LogseqAppIcons.sources,
       extensionRegistry: extensionRegistry
     )
     backend.onEvent = { [weak self] event in self?.handle(event) }

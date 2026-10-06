@@ -2111,7 +2111,7 @@ struct LogseqFrameEntry: Equatable {
   /// lazily from its extension identifier — the backend frame channel
   /// reports every node kind, not just elements.
   private static func tag(of nodeID: Int) -> String? {
-    guard let context = LogseqElementRegistry.shared.context(forNode: nodeID),
+    guard let context = LogseqElementRegistry.shared.contextOwning(nodeID: nodeID),
       let ident = context.extensionIdentifier(of: nodeID),
       ident.hasPrefix("logseq-")
     else { return nil }
