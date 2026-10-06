@@ -80,6 +80,62 @@ let type_in_editor env ?(delay = 0.) text =
   in
   attempt 3
 
+(** Live-editor value readback — the textarea whose id matches the app's
+    editing block, null when the editor is unmounted mid-remount. *)
+let live_editor_value_js =
+  "(() => { const st = logseq.api.get_state_from_store('editor/block'); \
+   const u = st && st.uuid; if (!u) return null; \
+   const ts = [...document.querySelectorAll('#edit-block-' + CSS.escape(u))] \
+   .filter(t => t.offsetParent !== null); \
+   if (!ts.length) return null; \
+   return ts[ts.length - 1].value; })()"
+
+let live_editor_value env =
+  Pw.eval_js env live_editor_value_js
+  |> Js.Promise.then_ (fun v ->
+         Js.Promise.resolve (Js.Nullable.toOption v))
+
+(** [press_in_editor_expect env key expected] presses [key] into the live
+    editor until its value reads back as [expected]. A remount between the
+    locator's actionability wait and the keydown can still swallow the
+    press (observed: rapid-retype's Backspace dropped, leaving "aa" behind
+    a literal "a" retype). When the value is wrong and more presses can no
+    longer converge it, clear the editor first so the next press starts
+    from a known state. *)
+let press_in_editor_expect env key expected =
+  let rec readback deadline =
+    let* v = live_editor_value env in
+    match v with
+    | Some s when s = expected -> Js.Promise.resolve true
+    | _ ->
+        if Js.Date.now () > deadline then Js.Promise.resolve false
+        else
+          let* () = Pw.wait_timeout env 120. in
+          readback deadline
+  in
+  let rec attempt n =
+    let* () = press_in_editor env key in
+    let* ok = readback (Js.Date.now () +. 1500.) in
+    if ok then Js.Promise.resolve ()
+    else if n <= 0 then
+      let* v = live_editor_value env in
+      Js.Promise.reject
+        (Failure
+           (Printf.sprintf
+              "press_in_editor_expect %s: value stayed %S, wanted %S" key
+              (Option.value ~default:"<none>" v)
+              expected))
+    else begin
+      (* clear to a known state before re-pressing — e.g. a printable key
+         retrying on a doubled value would only diverge further *)
+      let* () = press_in_editor env "ControlOrMeta+a" in
+      let* () = press_in_editor env "Backspace" in
+      let* _ = readback (Js.Date.now () +. 1500.) in
+      attempt (n - 1)
+    end
+  in
+  attempt 4
+
 let enter env = Pw.press env "Enter"
 let enter_in_editor env = press_in_editor env "Enter"
 let esc env = Pw.press env "Escape"

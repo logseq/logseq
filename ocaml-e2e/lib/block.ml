@@ -349,15 +349,19 @@ let new_block env title =
   let neighbors_js =
     (* the Enter insert always lands adjacent to the edited block: its
        right sibling, or its first child when the block keeps visible
-       children. Diffing those two neighbors before/after is airtight
-       proof of the insert — independent of page names, virtualized
-       rows, and embedded blocks. *)
+       children — and editing always moves INTO that fresh block. So the
+       airtight confirmation is: a neighbor uuid equals the live editing
+       uuid and differs from the edited block. A remount can shuffle
+       siblings/children without any insert, but only a real insert moves
+       editing into the new neighbor. *)
     Printf.sprintf
       "(async () => { const r = await \
        logseq.api.get_next_sibling_block('%s'); const b = await \
        logseq.api.get_block('%s', {includeChildren: true}); const ch = b \
        && b.children || []; const fc = ch.length ? (ch[0].uuid || ch[0]) \
-       : null; return JSON.stringify({r: r && r.uuid, c: fc}); })()"
+       : null; const st = \
+       logseq.api.get_state_from_store('editor/block'); return \
+       JSON.stringify({r: r && r.uuid, c: fc, e: st && st.uuid}); })()"
       last_uuid last_uuid
   in
   let decode_nb j =
@@ -373,14 +377,14 @@ let new_block env title =
                | Some v -> Js.Json.decodeString v
                | None -> None
              in
-             f "r", f "c"
-         | None -> None, None)
-    | None -> None, None
+             f "r", f "c", f "e"
+         | None -> None, None, None)
+    | None -> None, None, None
   in
   let rec enter_new_block n =
-    let* prev_r, prev_c =
+    let* prev_r, prev_c, _ =
       Js.Promise.catch
-        (fun _ -> Js.Promise.resolve (None, None))
+        (fun _ -> Js.Promise.resolve (None, None, None))
         (Js.Promise.then_
            (fun j -> Js.Promise.resolve (decode_nb j))
            (Pw.eval_js env neighbors_js))
@@ -395,32 +399,29 @@ let new_block env title =
          in
          Js.Promise.resolve true)
     in
-    (* confirm the insert: last_uuid's right-sibling or first-child uuid
-       changed to a value it did not have before the press. A remount
-       that reopens editing on a pre-existing block changes neither —
-       those uuids were already neighbors — so an old editor can never
-       fake a fresh insert and a late insert can never trigger a
-       duplicate re-press. *)
+    (* confirm the insert: editing moved into a NEW neighbor of
+       last_uuid — not just any neighbor drift (remounts can change
+       those uuids without inserting anything). *)
     let* confirmed =
       if pressed then
         let deadline = Js.Date.now () +. 6000. in
         let rec moved_loop () =
-          let* r, c =
+          let* r, c, e =
             Js.Promise.catch
-              (fun _ -> Js.Promise.resolve (None, None))
+              (fun _ -> Js.Promise.resolve (None, None, None))
               (Js.Promise.then_
                  (fun j -> Js.Promise.resolve (decode_nb j))
                  (Pw.eval_js env neighbors_js))
           in
-          if
-            (r <> None && r <> prev_r)
-            || (c <> None && c <> prev_c)
-          then
-            Js.Promise.resolve (match r with Some _ -> r | None -> c)
-          else if Js.Date.now () > deadline then Js.Promise.resolve None
-          else
-            let* () = Util.wait_timeout env 150. in
-            moved_loop ()
+          match e with
+          | Some e
+            when e <> last_uuid && (r = Some e || c = Some e) ->
+              Js.Promise.resolve (Some e)
+          | _ ->
+              if Js.Date.now () > deadline then Js.Promise.resolve None
+              else
+                let* () = Util.wait_timeout env 150. in
+                moved_loop ()
         in
         moved_loop ()
       else Js.Promise.resolve None
