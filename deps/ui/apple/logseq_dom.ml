@@ -35,6 +35,7 @@ let tags =
   ; "video"; "audio"; "iframe"; "small"; "kbd"; "table"; "thead"; "tbody"
   ; "tr"; "td"; "th"; "br"; "hr"; "canvas"; "article"
   ; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"; "i"
+  ; "del"; "ins"; "sub"; "blockquote"
     (* SVG (tabler icons render circle/rect/line/polyline/polygon/g/…
        alongside svg/path) *)
   ; "svg"; "path"; "circle"; "rect"; "line"; "polyline"; "polygon"; "g"
