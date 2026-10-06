@@ -306,8 +306,17 @@ fn main() {
     eprintln!("logseq-gpui: app() done t={:.1}ms", boot_ms());
     app.run(move |cx| {
         eprintln!("logseq-gpui: run entry t={:.1}ms", boot_ms());
-        gpui_kit::init(cx);
-        eprintln!("logseq-gpui: kit init done t={:.1}ms", boot_ms());
+        // Frame-1 theme installed ahead of gpui_kit::init so Root::new
+        // and cx.theme() consumers can render the first draw without
+        // waiting on component init (~60ms, mostly the theme font
+        // probe's installed-font enumeration). ThemeColor::light() is
+        // the same JSON-baked palette Theme::change applies; init is
+        // deferred to run right after open_window's synchronous first
+        // draw, keeping everything on the UI thread.
+        cx.set_global(gpui_kit::component::theme::Theme::from(
+            &*gpui_kit::component::theme::ThemeColor::light(),
+        ));
+        eprintln!("logseq-gpui: theme preset t={:.1}ms", boot_ms());
         let shared = LuiShared::new();
         // The logseq-editor surface (input routing + text measurement)
         // is app-scoped: registered here so `logseq-editor` extension
@@ -348,10 +357,19 @@ fn main() {
             cx.new(|cx| Root::new(view, window, cx))
         })
         .expect("Failed to open window");
+        eprintln!("logseq-gpui: open_window returned t={:.1}ms", boot_ms());
         // bare binary launches come up inactive — without this the
         // window can't become macOS key window and keyboard input
         // never reaches it; deferred so it lands after app.run settles
         cx.defer(|cx| cx.activate(true));
+        // Component init (theme registry, widget setup, the ~40ms
+        // font-probe enumeration) is deferred past open_window's
+        // synchronous first draw so it no longer gates first paint;
+        // it still runs on the UI thread before the next frame.
+        cx.defer(|cx| {
+            gpui_kit::init(cx);
+            eprintln!("logseq-gpui: kit init done t={:.1}ms", boot_ms());
+        });
     });
 }
 
