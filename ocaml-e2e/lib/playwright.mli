@@ -51,9 +51,8 @@ external go_forward : page -> 'a Js.Promise.t = "goForward" [@@mel.send]
 val goto : ?wait_until:string -> page -> string -> 'a Js.Promise.t
 external set_default_timeout : page -> float -> unit = "setDefaultTimeout"
 [@@mel.send]
-external wait_for_timeout : page -> float -> unit Js.Promise.t
-  = "waitForTimeout"
-[@@mel.send]
+(* Local node timer, not page.waitForTimeout — see playwright.ml. *)
+val wait_for_timeout : page -> float -> unit Js.Promise.t
 val locator :
   ?has:'a ->
   ?has_not:'b ->
