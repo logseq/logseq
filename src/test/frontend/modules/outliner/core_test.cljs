@@ -901,6 +901,69 @@
             (let [total (get-blocks-count)]
               (is (= total (count @*random-blocks))))))))))
 
+(defn- parent-id
+  [id]
+  (:block/uuid (:block/parent (get-block id))))
+
+(defn- page-order
+  "Every block under page 1 in page order (depth first)."
+  []
+  (letfn [(walk [id] (mapcat (fn [c] (cons c (walk c))) (get-children id)))]
+    (vec (walk 1))))
+
+(defn- consecutive-run
+  "The blocks if they form 1 run of siblings, in page order; else nil."
+  [ids]
+  (let [parents (set (map parent-id ids))]
+    (when (= 1 (count parents))
+      (let [sibs (get-children (first parents))
+            idx (sort (map #(.indexOf (clj->js sibs) %) ids))]
+        (when (= idx (range (first idx) (inc (last idx))))
+          (mapv #(nth sibs %) idx))))))
+
+(deftest ^:long random-move-up-down-keeps-blocks-and-order
+  (testing "a move up or down of a run of siblings, selected in any order,
+  keeps every block, keeps the run together and in order, moves it past
+  exactly its neighbour when it has one, and at most 1 level otherwise"
+    (dotimes [_round 8]
+      (transact-random-tree!)
+      (dotimes [_i 20]
+        (let [all (page-order)]
+          (when (> (count all) 1)
+            (let [start (rand-nth all)
+                  pid (parent-id start)
+                  sibs (get-children pid)
+                  i (.indexOf (clj->js sibs) start)
+                  n (inc (rand-int (min 3 (- (count sibs) i))))
+                  run (subvec sibs i (+ i n))
+                  ;; click order: the run in any order
+                  clicked (shuffle run)
+                  up? (gen/generate gen/boolean)
+                  before (page-order)
+                  neighbour (if up?
+                              (when (pos? i) (nth sibs (dec i)))
+                              (when (< (+ i n) (count sibs)) (nth sibs (+ i n))))]
+              (outliner-tx/transact!
+               (transact-opts)
+               (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
+                                                   (mapv get-block clicked) up?))
+              (let [after (page-order)
+                    where (str "run " run " clicked " clicked (if up? " up" " down"))]
+                (when neighbour
+                  (let [want (vec (concat (subvec sibs 0 (if up? (dec i) i))
+                                          (if up? (concat run [neighbour]) (concat [neighbour] run))
+                                          (subvec sibs (if up? (+ i n) (inc (+ i n))))))]
+                    (is (= want (get-children pid))
+                        (str "did not move past its neighbour " neighbour ": " where))))
+                (is (= (sort before) (sort after)) (str "blocks lost or duplicated: " where))
+                (is (= run (consecutive-run run)) (str "run split or reordered: " where))
+                (let [new-pid (parent-id (first run))]
+                  (is (or (= new-pid pid)
+                          (= new-pid (parent-id pid))
+                          (= pid (parent-id new-pid))
+                          (= (parent-id new-pid) (parent-id pid)))
+                      (str "moved more than 1 level: " where " from parent " pid " to " new-pid)))))))))))
+
 (deftest ^:long random-indent-outdent
   (testing "Random indent and outdent"
     (transact-random-tree!)
