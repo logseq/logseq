@@ -6,11 +6,13 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.components.all-pages :as all-pages]
+            [frontend.components.objects :as objects]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -651,6 +653,91 @@
            "Brazil (1985)")
           "List view first paint should show the preview title instead of waiting for the full block container.")
       (is (empty? @calls)))))
+
+(deftest new-record-inherits-exact-filters
+  (let [value-uuid (random-uuid)
+        table {:columns [{:id :user.property/status
+                          :property {:db/cardinality :db.cardinality/one}}
+                         {:id :block/tags
+                          :property {:db/cardinality :db.cardinality/many}}]
+               :state {:filters {:or? false
+                                 :filters [[:user.property/reviewed :is true]
+                                           [:user.property/archived :is false]
+                                           [:user.property/status :is #{value-uuid}]
+                                           [:block/tags :is #{value-uuid}]]}}}]
+    (is (= {:user.property/reviewed true
+            :user.property/archived false
+            :user.property/status [:block/uuid value-uuid]
+            :block/tags #{[:block/uuid value-uuid]}}
+           (#'views/new-record-properties table)))))
+
+(deftest new-record-does-not-invent-filter-values
+  (let [filters [[:block/created-at :is #{1}]
+                 [:block/page :is #{(random-uuid)}]
+                 [:user.property/status :is #{"Todo" "Doing"}]
+                 [:user.property/status :is-not #{"Done"}]
+                 [:user.property/score :number-gt 5]
+                 [:user.property/name :text-contains "word"]
+                 [:user.property/empty :is :empty]
+                 [:user.property/unset :is #{}]]]
+    (is (= {} (#'views/new-record-properties {:state {:filters {:filters filters}}})))
+    (is (= {} (#'views/new-record-properties {})))))
+
+(deftest new-record-or-filter-selects-one-branch
+  (is (= {:user.property/reviewed true}
+         (#'views/new-record-properties
+          {:state {:filters {:or? true
+                             :filters [[:user.property/reviewed :is true]
+                                       [:user.property/archived :is false]]}}}))))
+
+(deftest new-record-preserves-group-properties
+  (let [captured (atom nil)
+        table {:state {:filters {:filters [[:user.property/reviewed :is true]]}}}]
+    (#'views/<add-new-view-record!
+     (fn [view table opts] (reset! captured [view table opts]))
+     :view table {:properties {:user.property/category 42}})
+    (is (= [:view table {:properties {:user.property/reviewed true
+                                     :user.property/category 42}}]
+           @captured))))
+
+(deftest new-record-combines-many-property-and-filters
+  (let [a (random-uuid)
+        b (random-uuid)
+        table {:columns [{:id :block/tags
+                          :property {:db/cardinality :db.cardinality/many}}]
+               :state {:filters {:filters [[:block/tags :is #{a}]
+                                           [:block/tags :is #{b}]]}}}]
+    (is (= {:block/tags #{[:block/uuid a] [:block/uuid b]}}
+           (#'views/new-record-properties table)))
+    (#'views/<add-new-view-record!
+     (fn [_ _ opts]
+       (is (= #{[:block/uuid a] [:block/uuid b] 42}
+              (get-in opts [:properties :block/tags]))))
+     :view table {:properties {:block/tags 42}})))
+
+(deftest new-record-group-does-not-invalidate-selected-or-branch
+  (let [table {:state {:filters {:or? true
+                                :filters [[:user.property/category :is #{"A"}]
+                                          [:user.property/reviewed :is true]]}}}]
+    (#'views/<add-new-view-record!
+     (fn [_ _ opts]
+       (is (= {:user.property/category "B" :user.property/reviewed true}
+              (:properties opts))))
+     :view table {:properties {:user.property/category "B"}})))
+
+(deftest class-record-keeps-owner-and-filter-tags
+  (async done
+         (let [owner {:db/id 7 :block/uuid (random-uuid)}
+               extra [:block/uuid (random-uuid)]]
+           (finish-async!
+            done
+            (p/with-redefs
+             [editor-handler/api-insert-new-block!
+              (fn [_ opts]
+                (is (= #{7 extra} (get-in opts [:properties :block/tags])))
+                (p/resolved {:db/id 99}))
+              editor-handler/edit-block! (constantly nil)]
+              (#'objects/add-new-class-object! owner {:block/tags #{extra}}))))))
 
 (deftest filter-value-renders-referenced-uuid-content-test
   (let [value-uuid (random-uuid)
