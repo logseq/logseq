@@ -107,6 +107,10 @@ const opt = {
   shards: {}, // file -> N
   shardAuto: 45, // seconds; 0 = off
   timings: "auto", // "auto" = newest .parallel-logs/*/timings.json
+  // Pinned shard composition: when this file exists the run uses it
+  // verbatim instead of re-binning by timings (which drifts every run).
+  plan: path.join(HERE, "shard-plan.json"),
+  regenPlan: false,
 };
 const filters = [];
 for (let i = 0; i < args.length; i++) {
@@ -123,6 +127,11 @@ for (let i = 0; i < args.length; i++) {
     opt.shards[f.endsWith(".js") ? f : `${f}.js`] = +n;
   } else if (a === "--shard-auto") opt.shardAuto = +take();
   else if (a === "--timings") opt.timings = take();
+  else if (a === "--plan") {
+    const p = take();
+    opt.plan = p === "none" ? null : p;
+  }
+  else if (a === "--regen-plan") opt.regenPlan = true;
   else if (a === "--no-rtc") opt.noRtc = true;
   else if (a === "--include-slow") opt.includeSlow = true;
   else if (a === "--list") opt.listOnly = true;
@@ -403,12 +412,58 @@ async function runFile(t) {
 const statusOf = (r) =>
   r.result.code === 0 ? "PASS" : r.result.code === "timeout" ? "TIMEOUT" : "FAIL";
 
+const taskAllowed = (t) =>
+  !(opt.noRtc && t.rtc) &&
+  (!filters.length || filters.some((f) => t.file.includes(f))) &&
+  !opt.excludes.some((f) => t.file.includes(f));
+
+function loadPlan(file) {
+  const tasks = [];
+  for (const s of JSON.parse(fs.readFileSync(file, "utf8")).tasks ?? []) {
+    const p = path.join(TEST_DIR, s.file);
+    if (!fs.existsSync(p)) continue; // file renamed/removed — drop entry
+    tasks.push({
+      file: s.file,
+      path: p,
+      rtc: s.file.startsWith("test_rtc_"),
+      size: fs.statSync(p).size,
+      slow: !!s.slow,
+      shard: s.shard,
+      shardNames: s.shardNames,
+      namePattern: s.namePattern,
+      estSecs: s.estSecs ?? null,
+    });
+  }
+  return tasks.filter(taskAllowed);
+}
+
+function savePlan(file, tasks) {
+  const data = {
+    tasks: tasks.map((t) => ({
+      file: t.file,
+      shard: t.shard,
+      shardNames: t.shardNames,
+      namePattern: t.namePattern,
+      slow: !!t.slow,
+      estSecs: t.estSecs ?? null,
+    })),
+  };
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
 async function main() {
   if (!fs.existsSync(TEST_DIR)) {
     console.error(`test dir missing: ${TEST_DIR}\nrun \`dune build\` in ocaml-e2e first`);
     process.exit(2);
   }
-  const allTasks = discover();
+  let allTasks;
+  if (opt.plan && !opt.regenPlan && fs.existsSync(opt.plan)) {
+    allTasks = loadPlan(opt.plan);
+    console.log(`parallel-runner: pinned shard plan ${opt.plan}`);
+  } else {
+    allTasks = discover();
+    if (opt.plan) savePlan(opt.plan, allTasks);
+  }
   const skipped = opt.includeSlow ? [] : allTasks.filter((t) => t.slow);
   const tasks = allTasks.filter((t) => !t.slow || opt.includeSlow);
   if (!tasks.length) {
