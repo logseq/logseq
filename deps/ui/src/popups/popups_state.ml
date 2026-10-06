@@ -100,7 +100,6 @@ type ac =
   ; tlen : int
   ; items : ac_item list
   ; chosen : int
-  ; editor : Web_dom.el
   ; auuid : string (* editing uuid the popup was opened on — a remount
      swaps editing_uuid before the position check can run *)
   }
@@ -872,7 +871,7 @@ let class_titles_of rows =
       @ List.map (fun a -> (a, None)) aliases)
     rows
 
-let load_tag_titles t _editor =
+let load_tag_titles t =
   let editing_block =
     match Editor_state.editing_uuid () with
     | Some _ -> true
@@ -971,15 +970,17 @@ let load_templates t =
 
 (* ---- open / update ---- *)
 
-let open_ac t kind editor =
-  let x, y, cy = Web_dom.caret_popup_pos editor in
+let open_ac t kind =
+  let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
+  let x, y, cy =
+    Option.value (Editor_sink.popup_pos auuid) ~default:(0., 0., 0.)
+  in
   let tlen = trigger_len_of_kind kind in
-  let tpos = Web_dom.el_selection_start editor - tlen in
+  let tpos = fst (Editor_actions.sel_span auuid) - tlen in
   let ac =
     { kind; x; y; cy; flip = None; flipx = None; query = ""
     ; tpos; tlen
-    ; items = []; chosen = 0; editor
-    ; auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" }
+    ; items = []; chosen = 0; auuid }
   in
   (* base-ui avoidCollisions: the popup mounts below the caret, then
      flips above when it overflows the viewport and there is more room
@@ -1047,20 +1048,21 @@ let open_ac t kind editor =
      inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
    | Page_ref ->
-       let v = Web_dom.el_value editor in
-       let n = S.length v in
-       let pos = ac.tpos + tlen in
-       if not (pos + 1 < n && S.sub v pos 2 = "]]") then (
-         let v' = S.sub v 0 pos ^ "]]" ^ S.sub v pos (n - pos) in
-         Web_dom.el_set_value editor v';
-         (match Editor_state.editing_uuid () with
-          | Some uuid -> Editor_actions.sync_buffer uuid v'
-          | None -> ());
-         Web_dom.el_set_selection_range editor pos pos)
+       (match Editor_actions.edit_model auuid with
+        | Some m ->
+            let v = m.Edit_model.source in
+            let n = S.length v in
+            let pos = ac.tpos + tlen in
+            if not (pos + 1 < n && S.sub v pos 2 = "]]") then
+              Editor_actions.update_model auuid (fun _ ->
+                  Edit_model.select
+                    (Edit_model.splice m pos pos "]]")
+                    ~anchor:pos ~focus:pos)
+        | None -> ())
    | _ -> ());
   (match kind with
    | Page_ref | Page_embed | Embed_ref -> load_titles t
-   | Tag_search -> load_tag_titles t editor
+   | Tag_search -> load_tag_titles t
    | Template_search -> load_templates t   | Block_ref -> ()
    | Slash -> ());
   set_cm t None;
@@ -1081,128 +1083,120 @@ let query_closed ac q =
   | Slash | Tag_search | Template_search | Embed_ref -> S.contains q '\n'
 ;;
 
-(* cljs autopair overtype: typing a closing char that already sits under
-   the caret (the ghost pair we inserted) skips over it instead of
-   inserting a duplicate *)
-let overtype_skip el =
-  let pos = Web_dom.el_selection_start el in
-  let v = Web_dom.el_value el in
-  if
-    pos >= 1 && pos < S.length v
-    && Web_dom.el_selection_end el = pos
-    && S.get v pos = S.get v (pos - 1)
-    && (S.get v pos = ']' || S.get v pos = ')')
-  then (
-    Web_dom.el_set_value el
-      (S.sub v 0 (pos - 1) ^ S.sub v pos (S.length v - pos));
-    Web_dom.el_set_selection_range el pos pos);;
-
-(* after an `input` event in a .editor-wrapper textarea *)
-let on_editor_input t el ev =
-  overtype_skip el;
-  let pos = Web_dom.el_selection_start el in  match (get t).ac with
-  | Some ac ->
-      let v = Web_dom.el_value el in
-      let trig_missing =
-        ac.tpos + ac.tlen > S.length v
-        || S.sub v ac.tpos ac.tlen <> trigger_text_of_kind ac.kind
-      in
-      if pos < ac.tpos + ac.tlen then close_ac t
-      else
-        (* cljs handle-last-input runs the /, [[, (( and # openers
-           regardless of an open popup, so a trigger char typed while an
-           ac is open replaces it (e.g. / inside a #tag query starts the
-           slash menu); # followed by another # clears instead *)
-        let c =
-          if pos >= 1 && pos <= S.length v then Some (S.get v (pos - 1))
-          else None
-        in
-        let two ch = pos >= 2 && S.get v (pos - 2) = ch in
-        let bounded =
-          pos < 2 || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
-        in
-        let switched =
-          match c with
-          | Some '/' when bounded ->
-              close_ac t;
-              open_ac t Slash el;
-              true
-          | Some '[' when two '[' ->
-              close_ac t;
-              open_ac t Page_ref el;
-              true
-          | Some '(' when two '(' ->
-              close_ac t;
-              open_ac t Block_ref el;
-              true
-          | Some '#' when bounded || two '#' ->
-              if bounded && not (two '#') then open_ac t Tag_search el
-              else close_ac t;
-              true
-          | _ -> false
-        in
-        if switched then ()
-        else if trig_missing then
-          (* cljs ac state isn't tied to the trigger still being in the
-             buffer: a whole-buffer replacement (e2e `fill`, inputType
-             insertText/insertReplacementText) wipes the trigger but the
-             popup stays open with the buffer as its query. Only a real
-             keystroke that removed the trigger (delete inputTypes)
-             closes it. *)
-          let it = Web_dom.ev_input_type ev in
-          if S.length it >= 6 && S.sub it 0 6 = "delete" then close_ac t
+(* after a buffer change in the open block editor — the model carries
+   the new text/caret; [deleted] marks Delete events (the cljs
+   delete-inputType branch that closes a wiped trigger) *)
+let on_buffer_change t ~deleted uuid =
+  match Editor_actions.edit_model uuid with
+  | None -> ()
+  | Some m ->
+      let v = m.Edit_model.source in
+      let pos = fst (Editor_actions.sel_span_of m) in
+      match (get t).ac with
+      | Some ac ->
+          let trig_missing =
+            ac.tpos + ac.tlen > S.length v
+            || S.sub v ac.tpos ac.tlen <> trigger_text_of_kind ac.kind
+          in
+          if pos < ac.tpos + ac.tlen then close_ac t
           else
-            ac_update t { ac with tpos = 0; tlen = 0 }
-              (S.sub v 0 pos)
-        else
-          let qend = pos - ac.tpos - ac.tlen in
-          if qend > S.length v then close_ac t
-          else
-            let q = S.sub v (ac.tpos + ac.tlen) qend in
-            (* "# " clears hashtag search (a space right after the
-               trigger), and "#+" is an org directive, not a tag *)
-            if query_closed ac q
-               || (ac.kind = Tag_search && (q = " " || q = "+"))
-            then close_ac t
-            else ac_update t ac q
-  | None ->
-      let v = Web_dom.el_value el in
-      if pos < 1 || pos > S.length v then ()
-      else
-        let c = S.get v (pos - 1) in
-        let two = pos >= 2 && S.get v (pos - 1) = S.get v (pos - 2) in
-        (* cljs opens "/" / "#" menus when any line already starts with the
-           trigger, or when the char starts a new word (preceded by space or
-           tab); "#" also opens right after "]]" *)
-        let line_starts_with ch =
-          (S.length v > 0 && S.get v 0 = ch)
-          ||
-            let rec scan i =
-              if i + 1 >= S.length v then false
-              else if S.get v i = '\n' && S.get v (i + 1) = ch then true
-              else scan (i + 1)
+            (* cljs handle-last-input runs the /, [[, (( and # openers
+               regardless of an open popup, so a trigger char typed
+               while an ac is open replaces it (e.g. / inside a #tag
+               query starts the slash menu); # followed by another #
+               clears instead *)
+            let c =
+              if pos >= 1 && pos <= S.length v then Some (S.get v (pos - 1))
+              else None
             in
-            scan 0
-        in
-        let word_before =
-          pos >= 2
-          &&
-            let p = S.get v (pos - 2) in
-            p = ' ' || p = '\t'
-        in
-        let ref_before =
-          pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']'
-        in
-        if c = '/' && (line_starts_with '/' || word_before) then
-          open_ac t Slash el
-        else if c = '[' && two then open_ac t Page_ref el
-        else if c = '(' && two then open_ac t Block_ref el
-        else if
-          c = '#' && (line_starts_with '#' || word_before || ref_before)
-          && not (pos < S.length v && S.get v pos = '+')
-        then open_ac t Tag_search el
-        else ()
-;;
+            let two ch = pos >= 2 && S.get v (pos - 2) = ch in
+            let bounded =
+              pos < 2 || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
+            in
+            let switched =
+              match c with
+              | Some '/' when bounded ->
+                  close_ac t;
+                  open_ac t Slash;
+                  true
+              | Some '[' when two '[' ->
+                  close_ac t;
+                  open_ac t Page_ref;
+                  true
+              | Some '(' when two '(' ->
+                  close_ac t;
+                  open_ac t Block_ref;
+                  true
+              | Some '#' when bounded || two '#' ->
+                  if bounded && not (two '#') then open_ac t Tag_search
+                  else close_ac t;
+                  true
+              | _ -> false
+            in
+            if switched then ()
+            else if trig_missing then
+              (* cljs ac state isn't tied to the trigger still being in
+                 the buffer: a whole-buffer replacement wipes the
+                 trigger but the popup stays open with the buffer as
+                 its query. Only a real delete removes it *)
+              if deleted then close_ac t
+              else
+                ac_update t { ac with tpos = 0; tlen = 0 }
+                  (S.sub v 0 pos)
+            else
+              let qend = pos - ac.tpos - ac.tlen in
+              if qend > S.length v then close_ac t
+              else
+                let q = S.sub v (ac.tpos + ac.tlen) qend in
+                (* "# " clears hashtag search (a space right after the
+                   trigger), and "#+" is an org directive, not a tag *)
+                if query_closed ac q
+                   || (ac.kind = Tag_search && (q = " " || q = "+"))
+                then close_ac t
+                else ac_update t ac q
+      | None ->
+          if pos < 1 || pos > S.length v then ()
+          else
+            let c = S.get v (pos - 1) in
+            let two = pos >= 2 && S.get v (pos - 1) = S.get v (pos - 2) in
+            (* cljs opens "/" / "#" menus when any line already starts
+               with the trigger, or when the char starts a new word
+               (preceded by space or tab); "#" also opens right after
+               "]]" *)
+            let line_starts_with ch =
+              (S.length v > 0 && S.get v 0 = ch)
+              ||
+                let rec scan i =
+                  if i + 1 >= S.length v then false
+                  else if S.get v i = '\n' && S.get v (i + 1) = ch then true
+                  else scan (i + 1)
+                in
+                scan 0
+            in
+            let word_before =
+              pos >= 2
+              &&
+                let p = S.get v (pos - 2) in
+                p = ' ' || p = '\t'
+            in
+            let ref_before =
+              pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']'
+            in
+            if c = '/' && (line_starts_with '/' || word_before) then
+              open_ac t Slash
+            else if c = '[' && two then open_ac t Page_ref
+            else if c = '(' && two then open_ac t Block_ref
+            else if
+              c = '#' && (line_starts_with '#' || word_before || ref_before)
+              && not (pos < S.length v && S.get v pos = '+')
+            then open_ac t Tag_search
+            else ()
+
+(* the event funnel in editor_keys calls through the live layer *)
+let on_model_input ~deleted uuid =
+  match !active with
+  | Some t -> on_buffer_change t ~deleted uuid
+  | None -> ()
 
 (* ---- events ---- *)
 
@@ -1212,54 +1206,41 @@ let detail_obj pairs =
   Js.Json.object_ o
 ;;
 
-(* replace [tpos, caret) with text and sync the editing buffer —
-   equivalent to cljs's ls:editor-insert handler *)
+(* replace [tpos, caret) with text in the editing model — equivalent
+   to cljs's ls:editor-insert handler *)
 let insert_text (ac : ac) text back =
-  let el = ac.editor in
-  let v = Web_dom.el_value el in
-  let n = S.length v in
-  let tpos = max 0 (min ac.tpos n) in
-  let pos = max tpos (min (Web_dom.el_selection_start el) n) in
-  (* consume the autopaired ]] sitting right after the caret *)
-  let pos =
-    if (ac.kind = Page_ref || ac.kind = Embed_ref)
-       && pos + 1 < n && S.sub v pos 2 = "]]"
-    then pos + 2
-    else pos
-  in
-  let v' = S.sub v 0 tpos ^ text ^ S.sub v pos (n - pos) in
-  Web_dom.el_set_value el v';
-  (match Editor_state.editing_uuid () with
-   | Some uuid -> Editor_actions.sync_buffer uuid v'
-   | None -> ());
-  let caret = tpos + S.length text - back in
-  Web_dom.el_set_selection_range el caret caret;
-  Web_dom.el_focus el
+  match Editor_actions.edit_model ac.auuid with
+  | Some m ->
+      let v = m.Edit_model.source in
+      let n = S.length v in
+      let tpos = max 0 (min ac.tpos n) in
+      let pos = max tpos (min (fst (Editor_actions.sel_span_of m)) n) in
+      (* consume the autopaired ]] sitting right after the caret *)
+      let pos =
+        if (ac.kind = Page_ref || ac.kind = Embed_ref)
+           && pos + 1 < n && S.sub v pos 2 = "]]"
+        then pos + 2
+        else pos
+      in
+      let caret = tpos + S.length text - back in
+      Editor_actions.update_model ac.auuid (fun _ ->
+          Edit_model.select
+            (Edit_model.splice m tpos pos text)
+            ~anchor:caret ~focus:caret);
+      Editor_sink.focus_input ac.auuid
+  | None -> ()
 
-let emit ?(exit = false) editor tpos text =
-  match Web_dom.el_closest editor ".ls-page-title" with
-  | Some _ ->
-      (* the page-title editor isn't a block editor — splice the buffer
-         directly instead of dispatching ls:editor-insert *)
-      let v = Web_dom.el_value editor in
-      let n = String.length v in
-      let f = Int.max 0 (Int.min tpos n) in
-      let t_ = Int.max f (Int.min (Web_dom.el_selection_start editor) n) in
-      let nv = String.sub v 0 f ^ text ^ String.sub v t_ (n - t_) in
-      let caret = f + String.length text in
-      Web_dom.el_set_value editor nv;
-      Web_dom.el_set_text_content editor nv;
-      Web_dom.el_set_selection_range editor caret caret;
-      Web_dom.el_focus editor
-  | None ->
-      Web_dom.dispatch_custom "ls:editor-insert"
-        (detail_obj
-           [ "text", Js.Json.string text
-           ; "from", Js.Json.number (float_of_int tpos)
-           ; "to", Js.Json.number (float_of_int (Web_dom.el_selection_start editor))
-           ; "exit", Js.Json.boolean exit ]);
-      (* cljs refocuses the editor input after a chosen item *)
-      Web_dom.el_focus editor
+let emit ?(exit = false) auuid tpos text =
+  Web_dom.dispatch_custom "ls:editor-insert"
+    (detail_obj
+       [ "text", Js.Json.string text
+       ; "from", Js.Json.number (float_of_int tpos)
+       ; "to"
+         , Js.Json.number
+             (float_of_int (fst (Editor_actions.sel_span auuid)))
+       ; "exit", Js.Json.boolean exit ]);
+  (* cljs refocuses the editor input after a chosen item *)
+  Editor_sink.focus_input auuid
 ;;
 
 let emit_cmd ?pos command extra =
@@ -1274,28 +1255,28 @@ let emit_cmd ?pos command extra =
         @ extra))
 ;;
 
-(* erase the typed trigger range [tpos, caret) from the editor and hand
-   focus back to the textarea — a clicked menu-link steals focus to its
-   anchor, and Switch keeps no literal text (cljs [:editor/input ""]) *)
+(* erase the typed trigger range [tpos, caret) from the editor and
+   hand focus back to the input — a clicked menu-link steals focus to
+   its anchor, and Switch keeps no literal text (cljs [:editor/input ""]) *)
 let erase_trigger_text (ac : ac) =
-  let el = ac.editor in
-  let v = Web_dom.el_value el in
-  let n = S.length v in
-  let tpos = max 0 (min ac.tpos n) in
-  let pos = max tpos (min (Web_dom.el_selection_start el) n) in
-  let pos =
-    if (ac.kind = Page_ref || ac.kind = Embed_ref)
-       && pos + 1 < n && S.sub v pos 2 = "]]"
-    then pos + 2
-    else pos
-  in
-  let v' = S.sub v 0 tpos ^ S.sub v pos (n - pos) in
-  Web_dom.el_set_value el v';
-  (match Editor_state.editing_uuid () with
-   | Some uuid -> Editor_actions.sync_buffer uuid v'
-   | None -> ());
-  Web_dom.el_set_selection_range el tpos tpos;
-  Web_dom.el_focus el
+  match Editor_actions.edit_model ac.auuid with
+  | Some m ->
+      let v = m.Edit_model.source in
+      let n = S.length v in
+      let tpos = max 0 (min ac.tpos n) in
+      let pos = max tpos (min (fst (Editor_actions.sel_span_of m)) n) in
+      let pos =
+        if (ac.kind = Page_ref || ac.kind = Embed_ref)
+           && pos + 1 < n && S.sub v pos 2 = "]]"
+        then pos + 2
+        else pos
+      in
+      Editor_actions.update_model ac.auuid (fun _ ->
+          Edit_model.select
+            (Edit_model.splice m tpos pos "")
+            ~anchor:tpos ~focus:tpos);
+      Editor_sink.focus_input ac.auuid
+  | None -> ()
 ;;
 (* cljs auto-complete/meta-complete on a tag item inserts the tag
    inline: "#last-part" (page-ref-wrapped when the last namespace part
@@ -1307,8 +1288,13 @@ let inline_tag_text ac title =
     | Some i -> S.sub title (i + 1) (S.length title - i - 1)
     | None -> title
   in
-  let v = Web_dom.el_value ac.editor in
-  let pos = Web_dom.el_selection_start ac.editor in
+  let v, pos =
+    match Editor_actions.edit_model ac.auuid with
+    | Some m ->
+        ( m.Edit_model.source
+        , fst (Editor_actions.sel_span_of m) )
+    | None -> ("", 0)
+  in
   if pos >= 2 && pos <= S.length v && S.sub v (pos - 2) 2 = "[["
   then "#" ^ last_part
   else if
@@ -1321,49 +1307,35 @@ let inline_tag_text ac title =
    block/tags (existing class or a new "New tag" class). The "New tag"
    row always takes the class path even when a plain page exists. *)
 let apply_tag t ac ~create ~inline title =
-  (* the page-title textarea isn't registered as a block editor —
-     resolve it to the current page entity instead *)
-  let buuid_opt, title_edit =
-    match Editor_state.editing_uuid () with
-    | Some u -> (Some u, false)
-    | None -> (
-        match Web_dom.el_closest ac.editor ".ls-page-title" with
-        | Some _ -> (
-            match (Runtime.model ()).Model.route_page with
-            | Some p -> (p.Model.page_uuid, true)
-            | None -> (None, false))
-        | None -> (None, false))
-  in
-  match buuid_opt with
+  match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
       let repo_v = repo () in
       let save_and_tag dbid =
         (* emit already stripped "#q" from the buffer; persist the new
-           buffer and the tag in one batch. For the page-title editor the
-           stripped title is committed by the title's own rename path —
-           save-block rejects page entities, so only the tag is sent. *)
+           buffer and the tag in one batch *)
         let rest =
           [ Outliner_ops.set_block_property buuid "block/tags" (Wire.Int dbid) ]
         in
         ignore
-          (if title_edit then Outliner_ops.apply_and_refresh rest
-           else
-             Outliner_ops.apply_parsed_and_refresh ~rest
-               [ (buuid, Web_dom.el_value ac.editor) ])
+          (Outliner_ops.apply_parsed_and_refresh ~rest
+             [ (buuid, Editor_actions.live_buffer buuid) ])
       in
       (* cljs tag-in-page-auto-complete?: "#" typed inside a [[ pair
          still erases the query but skips the tag/class attach — the
          page-ref autocomplete owns that context *)
       let tag_in_ref () =
-        let v = Web_dom.el_value ac.editor in
-        let pos = Web_dom.el_selection_start ac.editor in
-        pos + 2 <= S.length v && S.sub v pos 2 = "]]"
+        match Editor_actions.edit_model buuid with
+        | Some m ->
+            let v = m.Edit_model.source in
+            let pos = fst (Editor_actions.sel_span_of m) in
+            pos + 2 <= S.length v && S.sub v pos 2 = "]]"
+        | None -> false
       in
       let insert () =
         (* cljs: class items erase "#q" on enter but insert "#wrapped"
            on mod+enter (inline-tag?; the Page class is exempt) *)
-        emit ac.editor ac.tpos
+        emit ac.auuid ac.tpos
           (if inline && title <> "Page" then inline_tag_text ac title
            else "")
       in
@@ -1424,11 +1396,11 @@ let apply_tag t ac ~create ~inline title =
               create_and_tag ();
               Js.Promise.resolve ())
 
-let apply_template t ac uuid =
+let apply_template t _ac uuid =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
-      let buf = Web_dom.el_value ac.editor in
+      let buf = Editor_actions.live_buffer buuid in
       close_ac t;
       ignore
         (let* sop = Outliner_ops.save_block_parsed buuid buf in
@@ -1445,9 +1417,9 @@ let run_query t ac ~advanced =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
-      emit ac.editor ac.tpos "";
+      emit ac.auuid ac.tpos "";
       close_ac t;
-      let title = Web_dom.el_value ac.editor in
+      let title = Editor_actions.live_buffer buuid in
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
@@ -1528,7 +1500,7 @@ let apply_item t ac ~meta it =
       close_ac t;
       Editor_embed.insert title
   | Emit (text, back) -> insert_text ac text back; close_ac t
-  | Emit_exit text -> emit ~exit:true ac.editor ac.tpos text; close_ac t
+  | Emit_exit text -> emit ~exit:true ac.auuid ac.tpos text; close_ac t
   | Editor_cmd c ->
       (match c with
        | "date-picker" ->
@@ -1538,16 +1510,16 @@ let apply_item t ac ~meta it =
        | "link" | "image-link" ->
            (* cljs [:editor/input "/link"] — the buffer holds the literal
               command text while the form is open *)
-           emit ac.editor ac.tpos ("/" ^ c)
+           emit ac.auuid ac.tpos ("/" ^ c)
        | _ ->
            (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
-           emit ac.editor ac.tpos "");
+           emit ac.auuid ac.tpos "");
       emit_cmd ~pos:ac.tpos c [];
       close_ac t  | Plugin_slash (pid, tag) ->
       (* cljs handle-steps — strip the "/tag" trigger like an Emit ""
          insert, then run each step (editor/input inserts text;
          editor/hook fires the plugin's event) *)
-      emit ac.editor ac.tpos "";
+      emit ac.auuid ac.tpos "";
       close_ac t;
       Plugin_host.exec_slash_command
         ~insert:(fun text -> insert_text ac text 0)
@@ -1604,8 +1576,8 @@ let apply_index t i =
 let ac_on_enter t ac =
   match ac.kind with
   | Page_ref | Page_embed | Embed_ref | Block_ref ->
-      let pos = Web_dom.el_selection_start ac.editor in
-      Web_dom.el_set_selection_range ac.editor (pos + 2) (pos + 2);
+      let pos = fst (Editor_actions.sel_span ac.auuid) in
+      Editor_actions.set_caret ac.auuid (pos + 2);
       close_ac t
   | Template_search -> close_ac t
   | Slash | Tag_search -> ()
@@ -1614,20 +1586,20 @@ let ac_on_enter t ac =
 (* true if the keydown was consumed by the open popup *)
 (* cljs closes the mention/search popup on keyup once the caret is no
    longer wrapped by its trigger pair (close-autocomplete-if-outside).
-   Our editor `]`/`)` autopair-overtype preventDefaults the keystroke and
-   skips the caret past the ghost bracket, so no input event reaches
-   on_editor_input — check the same close condition on leftover keys:
-   caret moved before the trigger, or the buffer shows a completed
-   closer in the query. Read the event's live target rather than
-   ac.editor — a reload can remount the textarea, leaving ac.editor
-   detached where selectionStart reads 0 and the position check
-   mis-closes an ac that is still valid *)
-let ac_position_closed ac el =
-  let pos = Web_dom.el_selection_start el in
-  let v = Web_dom.el_value el in
-  let qend = pos - ac.tpos - ac.tlen in
-  qend < 0 || qend > S.length v
-  || query_closed ac (S.sub v (ac.tpos + ac.tlen) qend)
+   Our editor `]`/`)` autopair-overtype skips the caret past the ghost
+   bracket without a buffer change, so no event reaches
+   on_buffer_change — check the same close condition on leftover keys:
+   the model caret moved before the trigger, or the buffer shows a
+   completed closer in the query *)
+let ac_position_closed ac =
+  match Editor_actions.edit_model ac.auuid with
+  | None -> true
+  | Some m ->
+      let pos = fst (Editor_actions.sel_span_of m) in
+      let v = m.Edit_model.source in
+      let qend = pos - ac.tpos - ac.tlen in
+      qend < 0 || qend > S.length v
+      || query_closed ac (S.sub v (ac.tpos + ac.tlen) qend)
 ;;
 
 (* true if the keydown was consumed by the open popup *)
@@ -1635,7 +1607,7 @@ let ac_keydown t ev =
   match (get t).ac with
   | None -> false
   | Some ac ->
-      (* the ac outlives its textarea on remount — Enter/Tab reach
+      (* the ac outlives its editor sink on remount — Enter/Tab reach
          apply_chosen before the position check could close it, eating
          the key forever; once the editing session it opened on is gone
          the popup is dead, so close it and let the key through *)
@@ -1661,11 +1633,9 @@ let ac_keydown t ev =
              | Some it -> apply_item t ac ~meta:(Web_dom.ev_meta ev) it
              | None -> ac_on_enter t ac);
             true)
-        | "Escape" -> close_ac t; true        | _ ->
-            (let el =
-               Option.value (Web_dom.ev_target ev) ~default:ac.editor
-             in
-             if ac_position_closed ac el then close_ac t);
+        | "Escape" -> close_ac t; true
+        | _ ->
+            (if ac_position_closed ac then close_ac t);
             false)
 ;;
 

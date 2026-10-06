@@ -55,6 +55,8 @@
 (rule
  (copy ../src/blocks/add_button.ml add_button.ml))
 (rule
+ (copy ../src/blocks/comments_ops.ml comments_ops.ml))
+(rule
  (copy ../src/blocks/query_builder.ml query_builder.ml))
 (rule
  (copy ../src/blocks/selection_bar.ml selection_bar.ml))
@@ -103,6 +105,14 @@
 (rule
  (copy ../src/editor/block_selection.ml block_selection.ml))
 (rule
+ (copy ../src/editor/edit_input.ml edit_input.ml))
+(rule
+ (copy ../src/editor/edit_model.ml edit_model.ml))
+(rule
+ (copy ../src/editor/edit_runs.ml edit_runs.ml))
+(rule
+ (copy ../src/editor/edit_view.ml edit_view.ml))
+(rule
  (copy ../src/editor/editor_actions.ml editor_actions.ml))
 (rule
  (copy ../src/editor/editor_commands.ml editor_commands.ml))
@@ -111,7 +121,11 @@
 (rule
  (copy ../src/editor/editor_keys.ml editor_keys.ml))
 (rule
+ (copy ../src/editor/editor_sink.ml editor_sink.ml))
+(rule
  (copy ../src/editor/editor_state.ml editor_state.ml))
+(rule
+ (copy ../src/editor/editor_surface.ml editor_surface.ml))
 (rule
  (copy ../src/editor/outliner_ops.ml outliner_ops.ml))
 (rule

@@ -1,0 +1,53 @@
+(* ---------------------------------------------------------------------------
+   Editor surface hooks, keyed by block id.
+
+   Shared editor code (editor_actions / editor_keys / editor_commands /
+   popups_state / page) needs three things from the mounted editor
+   surface: the Edit_input conduit, focus control, and popup/measurement
+   positions. Each of those is platform-specific — on web they come from
+   the `logseq-editor` extension (src/extension/logseq_editor.ml); other
+   surfaces register their own implementation of the same shape.
+
+   Keeping the indirection here — instead of letting shared code import
+   the web conduit directly — also keeps the module graph acyclic:
+   logseq_editor -> dom_adapter -> cm_adapter -> code_mirror ->
+   editor_actions would close a loop if editor_actions pointed back.
+
+   Defaults are no-ops so a surface that has not registered an
+   implementation yet (e.g. a platform still on its legacy editor) fails
+   soft rather than crashing shared code.
+   --------------------------------------------------------------------------- *)
+
+(* the extension identifier every platform's editor conduit answers to;
+   edit_view mounts it via `Lui_ui.extension` *)
+let identifier = "logseq-editor"
+
+type impl =
+  { conduit : string -> Edit_input.conduit option
+  ; focus_input : string -> unit
+  ; is_focused : string -> bool
+  ; popup_pos : string -> (float * float * float) option
+  ; container_rect : string -> (float * float * float * float) option
+  }
+
+let no_impl =
+  { conduit = (fun _ -> None)
+  ; focus_input = (fun _ -> ())
+  ; is_focused = (fun _ -> false)
+  ; popup_pos = (fun _ -> None)
+  ; container_rect = (fun _ -> None)
+  }
+
+let current = ref no_impl
+
+let register impl = current := impl
+
+let conduit block_id = (!current).conduit block_id
+
+let focus_input block_id = (!current).focus_input block_id
+
+let is_focused block_id = (!current).is_focused block_id
+
+let popup_pos block_id = (!current).popup_pos block_id
+
+let container_rect block_id = (!current).container_rect block_id

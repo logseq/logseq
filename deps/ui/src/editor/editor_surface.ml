@@ -1,0 +1,41 @@
+(* ---------------------------------------------------------------------------
+   Shared edit surface mount — the one place that assembles the
+   logseq-editor node for a block-title editing session.
+
+   Block rows (tree.ml), the comments-area title (comments.ml) and any
+   future title edit all mount the same pieces:
+
+     .editor-wrapper#editor-edit-block-<uuid>
+       Edit_view.view            (lines + overlay + extension sink)
+       Asset_dom.upload_input    (file-drop target for the open editor)
+
+   The mounted Edit_model signal is derived from Editor_state.editing —
+   the model only paints when the open editing session's uuid/scope match
+   this mount, otherwise an empty model renders a harmless empty line.
+   --------------------------------------------------------------------------- *)
+
+open Lui_elements
+
+module S = Editor_state
+
+let mount uuid scope : t =
+ fun ctx parent ->
+  (* per-mount measurement state — the conduit writes caret/selection
+     rects back through apply_input after each event *)
+  let frame = Signal.state ctx.Lui_ui.ui_scheduler Edit_input.empty_frame in
+  let model_sig =
+    Signal.map
+      (fun e ->
+        match e with
+        | Some e when e.S.uuid = uuid && e.S.scope = scope -> e.S.model
+        | _ -> Edit_model.create ~units:Edit_model.U16 "")
+      (S.editing_sig ())
+  in
+    (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
+    ~id:("editor-edit-block-" ^ uuid)
+    [ Edit_view.view ~model:model_sig
+        ~frame:frame.Signal.state_signal ~block_id:uuid
+        ~on_input:(Editor_keys.apply_input ~frame uuid)
+    ; Asset_dom.upload_input ("up-" ^ uuid)
+    ])
+    ctx parent

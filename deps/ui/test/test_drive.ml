@@ -28,6 +28,7 @@ let mount () =
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
   Logseq_codemirror.register registry;
+  Logseq_editor.register registry;
   let view ctx ms send =
     ms_ref := Some ms;
     View.view ctx ms send
@@ -216,21 +217,28 @@ let test_block_tree () =
   has "text:\"Parent block\"";
   has "text:\"Child block\""
 
-(* editing state swaps content for the editor textarea *)
+(* editing state swaps content for the logseq-editor surface *)
 let test_block_edit () =
   Editor_state.set (fun st ->
       { st with
         Editor_state.editing =
           Some
-            { Editor_state.uuid = "b1"; buffer = "editing b1"; scope = "main"
-            ; base = "editing b1" }
+            (Editor_state.mk_editing ~uuid:"b1" ~buffer:"editing b1"
+               ~scope:"main" ~base:"editing b1" ())
       });
-  has "prop:accessibility-identifier=\"edit-block-b1\"";
+  flush ();
   (match find_block "b1" with
    | Some b1 ->
        check "editor inside row b1"
          (subtree_contains b1 (fun n ->
-              attr_val n "data-testid" = Some "block editor"))
+              n.M.kind = "extension:logseq-editor"
+              && M.string_prop n "block-id" = Some "b1"))
+   | None -> check "row b1" false);
+  (* the run text mounts through .ed-r fragments *)
+  (match find_block "b1" with
+   | Some b1 ->
+       check "run text mounted"
+         (subtree_contains b1 (fun n -> has_tok n "ed-r"))
    | None -> check "row b1" false);
   Editor_state.set (fun st -> { st with Editor_state.editing = None });
   (match find_block "b1" with

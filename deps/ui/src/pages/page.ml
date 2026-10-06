@@ -123,8 +123,27 @@ let page_icon_picker (page : Model.page) (anchor : string) =
         ~on_chosen:(fun c -> set_page_icon page c)
 
 let title_editor (page : Model.page) : t =
-  let commit ?(select = false) value =
-    let value = String.trim value in
+ fun ctx parent ->
+  let uuid = Option.value page.page_uuid ~default:"" in
+  (* the title's own model — block editing state lives in
+     Editor_state.editing, the title editor keeps a per-mount model on
+     the same Edit_model/Edit_input stack *)
+  let model_st =
+    Signal.state ctx.Lui_ui.ui_scheduler
+      (let m =
+         Edit_model.create ~units:Edit_model.U16 page.Model.page_title
+       in
+       let n = String.length page.Model.page_title in
+       Edit_model.select m ~anchor:n ~focus:n)
+  in
+  let frame =
+    Signal.state ctx.Lui_ui.ui_scheduler Edit_input.empty_frame
+  in
+  let commit ?(select = false) () =
+    let value =
+      String.trim
+        (Signal.get model_st.Signal.state_signal).Edit_model.source
+    in
     (match page.page_uuid with
      | Some u ->
          ignore
@@ -143,37 +162,45 @@ let title_editor (page : Model.page) : t =
          Runtime.send Action.Title_edit_done;
          Runtime.flush ())
   in
-  (* cljs: the page-title editor is the regular editor box —
-     .editor-wrapper > .editor-inner.block-editor > textarea +
-     mock-text mirror (popup caret positioning) *)
-  let uuid = Option.value page.page_uuid ~default:"" in
-  Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
-    [ Ui_parts.editor_inner ~key:"pt-ei"
-        [ (* TODO(component): editor textarea — keydown/blur payloads
-             and imperative id are editor-surface, migrate with
-             logseq-editor *)
-          dom ~key:"pt-ta" ~tag:"textarea"
-            ~id:("edit-block-" ^ uuid)
-            ~attrs:[ ("autofocus", "true") ]
-            ~text:page.page_title ~events:"keydown blur"
-        ~on_dom_event:(fun name payload ->
-          match name with
-          | "blur" -> commit (Platform.payload_str payload "value")
-          | "keydown" -> (
-              match Platform.payload_str payload "key" with
-              | "Enter" | "Escape" ->
-                  (* cljs: exiting the title editor selects the title
-                     block, same as leaving any block edit — only once
-                     the rename actually commits *)
-                  commit ~select:true
-                    (Platform.payload_str payload "value")
-              | _ -> ())
-          | _ -> ())
-        []
-        ; Ui_parts.mock_text ~key:"pt-mt"
-        ]
-    ; Asset_dom.upload_input ("pt-up-" ^ uuid)
-    ]
+  (* Enter/Escape both exit selecting the title block (cljs parity);
+     blur exits without the selection *)
+  let route =
+    { Edit_input.split_block = (fun () -> commit ~select:true ())
+    ; merge_prev = (fun () -> ())
+    ; indent = (fun () -> ())
+    ; outdent = (fun () -> ())
+    ; cancel = (fun () -> commit ~select:true ())
+    ; focused = (fun _ -> ())
+    ; menu = (fun _ -> ()) }
+  in
+  let on_input ev =
+    let m = Signal.get model_st.Signal.state_signal in
+    match ev with
+    | Edit_input.Blur -> commit ()
+    | _ ->
+        let conduit =
+          Option.value (Editor_sink.conduit uuid)
+            ~default:Edit_input.no_conduit
+        in
+        let m' = Edit_input.handle ~route ~conduit m ev in
+        if m' != m then Signal.update model_st (fun _ -> m');
+        (* conduit reads live rects — measure after the model publish
+           flushed the run text *)
+        let m2 =
+          match conduit.Edit_input.line_ranges () with
+          | [] -> m'
+          | rs -> Edit_model.set_lines m' rs
+        in
+        if m2 != m' then Signal.update model_st (fun _ -> m2);
+        Signal.update frame (fun _ -> Edit_input.measure conduit m2)
+  in
+  (Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
+     [ Edit_view.view
+         ~model:model_st.Signal.state_signal
+         ~frame:frame.Signal.state_signal ~block_id:uuid ~on_input
+     ; Asset_dom.upload_input ("pt-up-" ^ uuid)
+     ])
+    ctx parent
 
 
 (* cljs title-tag chip: .block-tag > .flex.items-center > a.hash-symbol +
@@ -238,16 +265,9 @@ let title_content (page : Model.page) : t =
                 if S.ready () then Editor_actions.clear_selection ();
                 Runtime.send Action.Title_edit_start;
                 Runtime.flush ();
-                (* autofocus doesn't re-fire on remount — focus explicitly
-                   so Enter/Escape reach the textarea *)
-                match
-                  Web_dom.query_selector ".ls-page-title textarea"
-                with
-                | Some el ->
-                    Web_dom.el_focus el;
-                    let n = String.length (Web_dom.el_value el) in
-                    Web_dom.el_set_selection_range el n n
-                | None -> ())) )
+                (* land the key input on the freshly mounted sink —
+                   the model already carries caret=end *)
+                Editor_sink.focus_input uuid)) )
   in
   (* TODO(component): the click payload (shiftKey/interactive) and the
      imperative block attrs (blockid/containerid/data-type) have no
@@ -511,14 +531,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             if S.ready () then Editor_actions.clear_selection ();
             Runtime.send Action.Title_edit_start;
             Runtime.flush ();
-            (* autofocus doesn't re-fire on remount — focus explicitly so
-               Enter/Escape reach the textarea *)
-            match Web_dom.query_selector ".ls-page-title textarea" with
-            | Some el ->
-                Web_dom.el_focus el;
-                let n = String.length (Web_dom.el_value el) in
-                Web_dom.el_set_selection_range el n n
-            | None -> ())
+            (* land the key input on the freshly mounted sink *)
+            Editor_sink.focus_input uuid)
       | _ -> open_menu page name payload)
     body
     ) ctx parent

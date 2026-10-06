@@ -905,6 +905,8 @@ let el_selection_end (el : el) : int =
 
 let ev_composing (_ : ev) : bool = false
 
+let ev_repeat (_ : ev) : bool = false
+
 let ev_meta (e : ev) : bool =
   Option.value (Dom_ext.bool_prop "metaKey" e) ~default:false
 

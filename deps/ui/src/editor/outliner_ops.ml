@@ -799,7 +799,7 @@ let fetch_unlinked_exists ~stale:(is_stale : unit -> bool)
 (* Refresh calls pile up during rapid editing (each op's
    apply_and_refresh plus remote sync-db-changes). Every refresh that
    lands runs a full reconcile, and a reparented row is dropped+recreated
-   — the e2e bounding-xy on the editor textarea races exactly that node
+   — the e2e bounding-xy on the editor row races exactly that node
    replacement. A stale refresh carries strictly older data than the
    in-flight one, so only the newest applies. *)
 let refresh_gen = ref 0
@@ -826,7 +826,7 @@ let refresh_page () : unit Js.Promise.t =
       in
       (let* blocks = blocks_p in
       (* a newer refresh superseded this fetch — a stale apply
-                would tear the open editor (recreated textarea reads) *)
+                would tear the open editor (stale model resyncs) *)
       if !refresh_gen <> gen then Js.Promise.resolve ()
       else
         let page = { page with Model.page_blocks = blocks } in
@@ -1398,9 +1398,9 @@ let apply_and_refresh_result ?opts ops =
 
 
 (* undo/redo writes datoms straight into the db — resync the open
-   editor's buffer so a stale textarea does not mask the restored title.
+   editor's model so a stale buffer does not mask the restored title.
    Returns the promise so callers that move editing afterwards (paste)
-   sequence after the textarea write *)
+   sequence after the model write *)
 let resync_open_editor ?(force = false) () : unit Js.Promise.t =
   match S.editing () with
   | None -> Js.Promise.resolve ()
@@ -1415,20 +1415,18 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
                     force it — the user asked for the revert even when an
                     unsaved edit is in flight *)
           if (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
-          then begin
-            S.set_silent (fun st ->
+          then
+            S.set (fun st ->
                 match st.S.editing with
                 | Some e' when e'.uuid = e.uuid ->
                     { st with
                    S.editing =
                      Some
-                       { e' with S.buffer = title; base = title }
+                       { (S.with_model e'
+                            (Edit_model.set_source e'.S.model title))
+                         with S.base = title }
                     }
                 | _ -> st);
-            match Web_dom.textarea_of e.uuid with
-            | Some el -> Web_dom.el_set_value el title
-            | None -> ()
-          end;
           Js.Promise.resolve ()
       | None ->
           S.set (fun st -> { st with S.editing = None });
