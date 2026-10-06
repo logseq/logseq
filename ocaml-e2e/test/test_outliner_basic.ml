@@ -1241,7 +1241,21 @@ let () =
     (* let the drag's tx reach the undo stack before undoing — an early
        undo pops the previous op and the tree never returns to initial *)
     let* () = Util.wait_timeout env 500. in
-    let* () = undo_and_wait_for_content_tree env initial in
+    (* retried drags can stack several reorder ops — a single undo then
+       restores a mid-retry order, not the initial one. Keep undoing
+       until the initial tree is back. *)
+    let rec undo_until_initial n =
+      let* now = visible_outline_content_tree env in
+      if trees_equal now initial then Js.Promise.resolve ()
+      else if n <= 0 then
+        Fest.deep_equal (trees_equal now initial) true Fest.expect
+        |> Js.Promise.resolve
+      else
+        let* () = B.undo env in
+        let* () = Util.wait_timeout env 800. in
+        undo_until_initial (n - 1)
+    in
+    let* () = undo_until_initial 6 in
     Fixtures.validate_graph env)
 
 let () =
