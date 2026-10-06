@@ -370,7 +370,8 @@
                          :kind (title-holder-kind entity)
                          :title (or (:title entity) (:block/title entity))
                          :recycled (boolean (or (:deleted-at entity)
-                                                (:logseq.property/deleted-at entity)))})
+                                                (:logseq.property/deleted-at entity)
+                                                (get entity (keyword ":logseq.property/deleted-at"))))})
                       entities)]
     {:title title
      :available (empty? holders)
@@ -936,6 +937,22 @@
               (merge {:verified true :diagnostic nil :previous_count 1}
                      (entity-write-digest current)))))))))
 
+(defn- move-descendants
+  [api-fn block-uuid]
+  (p/let [result (api-fn "logseq.DB.datascriptQuery"
+                        ["[:find (pull ?entity [:block/uuid {:block/page [:db/id]} {:block/_parent ...}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"
+                         (uuid-query-input block-uuid)])
+          root (js->clj result :keywordize-keys true)]
+    (when-let [error (:error root)] (throw (js/Error. (str error))))
+    (when-not (= block-uuid (or (:uuid root) (:block/uuid root)))
+      (throw (js/Error. "Cannot inventory the block's structural descendants")))
+    (letfn [(descendants [node]
+              (mapcat (fn [child] (cons (dissoc child :_parent :block/_parent) (descendants child)))
+                      (or (:_parent node) (:block/_parent node))))]
+      (let [nodes (vec (take 1001 (descendants root)))]
+        (when (> (count nodes) 1000) (throw (js/Error. "Move subtree exceeds the 1000-descendant limit")))
+        nodes))))
+
 (defn move-block
   [api-fn args]
   (let [block-uuid (aget args "block_uuid")
@@ -963,10 +980,8 @@
         (when (and (contains? #{"before" "after"} placement)
                    (or (:name target) (:block/name target)))
           (throw (js/Error. "A page has no siblings; use child or last-child")))
-        (let [descendants-query "[:find ?uuid :in $ ?root-uuid :where [?root :block/uuid ?root-uuid] [?descendant :block/parent+ ?root] [?descendant :block/uuid ?uuid]]"]
-          (p/let [descendants-result (api-fn "logseq.DB.datascriptQuery" [descendants-query (uuid-query-input block-uuid)])
-                  descendants (js->clj descendants-result :keywordize-keys true)]
-            (when (contains? (set (map first descendants)) target-uuid)
+        (p/let [descendants (move-descendants api-fn block-uuid)]
+            (when (contains? (set (map #(or (:uuid %) (:block/uuid %)) descendants)) target-uuid)
               (throw (js/Error. "The target is inside the block's own subtree")))
             (let [target-id (or (:id target) (:db/id target))
                   expected-parent (if (contains? #{"child" "last-child"} placement)
@@ -1001,16 +1016,12 @@
                                   (api-fn "logseq.DB.moveBlock" [block-uuid anchor-uuid options]))
                           current-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input block-uuid)])
                           current (js->clj current-result :keywordize-keys true)
-                          descendants-after-result
-                          (api-fn "logseq.DB.datascriptQuery"
-                                  ["[:find [(pull ?descendant [:db/id :block/uuid {:block/page [:db/id]}]) ...] :in $ ?root-uuid :where [?root :block/uuid ?root-uuid] [?descendant :block/parent+ ?root]]"
-                                   (uuid-query-input block-uuid)])
-                          descendants-after (js->clj descendants-after-result :keywordize-keys true)
+                            descendants-after (move-descendants api-fn block-uuid)
                           stranded? (some #(not= expected-page
                                                  (entity-ref-id (or (:page %) (:block/page %))))
                                           descendants-after)
                             descendant-uuids-after (set (map #(or (:uuid %) (:block/uuid %)) descendants-after))
-                            missing-descendants? (some #(not (contains? descendant-uuids-after (first %))) descendants)
+                            missing-descendants? (some #(not (contains? descendant-uuids-after (or (:uuid %) (:block/uuid %)))) descendants)
                             after-result (api-fn "logseq.DB.datascriptQuery" [children-query expected-parent])
                           after-children (sort-by #(str (or (:order %) (:block/order %)))
                                                   (js->clj after-result :keywordize-keys true))
@@ -1059,7 +1070,7 @@
 
                       :else
                       (merge {:response response :verified true :diagnostic nil :previous_count 1}
-                         (entity-write-digest current))))))))))))
+                         (entity-write-digest current)))))))))))
 
 (defn remove-block
   [api-fn args]
@@ -1172,10 +1183,8 @@
             (preflight [remaining sources]
               (if-let [uuid (first remaining)]
                 (p/let [entity (read-entity uuid)
-                        descendants-result (api-fn "logseq.DB.datascriptQuery"
-                                                   ["[:find ?child-uuid :in $ ?root-uuid :where [?root :block/uuid ?root-uuid] [?child :block/parent+ ?root] [?child :block/uuid ?child-uuid]]"
-                                                    (uuid-query-input uuid)])
-                        descendants (set (map first (js->clj descendants-result)))]
+                        descendant-entities (move-descendants api-fn uuid)
+                        descendants (set (map #(or (:uuid %) (:block/uuid %)) descendant-entities))]
                   (when-not entity (throw (js/Error. (str "Missing block " uuid))))
                   (when (or (:name entity) (:block/name entity))
                     (throw (js/Error. "A selected UUID identifies a page")))
@@ -1326,7 +1335,9 @@
               base {:source_uuid source-uuid :target_uuid target-uuid :planned planned}]
         (cond
           (empty? selected)
-          (assoc base :verified true :moved [] :remaining (count children) :diagnostic "Nothing matched the selection.")
+             (assoc base :verified (not dry-run?) :moved [] :remaining (count children)
+               :diagnostic (if dry-run? "Dry run: nothing matched the selection; nothing moved."
+                     "Nothing matched the selection."))
 
           dry-run?
           (assoc base :verified false :moved [] :remaining (count children)
@@ -2501,14 +2512,20 @@
                              (create-targets (if create? (:missing tags) []) "tag" (:resolved tags) [] []))
                   failures (into (:failures new-links) (:failures new-tags))
                   outcome (if (seq failures) {:blocks_updated 0 :unverified failures}
-                              (rewrite blocks (:resolved new-links) (:resolved new-tags) 0 []))]
+                              (rewrite blocks (:resolved new-links) (:resolved new-tags) 0 []))
+                  unresolved? (some seq [(remove #(contains? (:resolved new-links) %) (:missing links))
+                                        (remove #(contains? (:resolved new-tags) %) (:missing tags))
+                                        (:ambiguous links) (:ambiguous tags)])]
             (merge base outcome {:verified (empty? (:unverified outcome))
                                  :resolved (vec (sort (keys (:resolved new-links))))
                                  :tags_resolved (vec (sort (keys (:resolved new-tags))))
                                  :missing (vec (remove #(contains? (:resolved new-links) %) (:missing links)))
                                  :tags_missing (vec (remove #(contains? (:resolved new-tags) %) (:missing tags)))
                                  :created_pages (:created new-links) :created_tags (:created new-tags)
-                                 :diagnostic "Unresolved or ambiguous placeholders remain unchanged. Inspect unverified writes before retrying."})))))))
+                                 :diagnostic (cond
+                                               (seq (:unverified outcome)) "Inspect unverified writes before retrying."
+                                               unresolved? "Unresolved or ambiguous placeholders remain unchanged."
+                                               :else nil)})))))))
 
 (def ^:private capability-tool-routes
   {:listPages ["logseq.DB.listPages"]

@@ -77,7 +77,8 @@
                 "logseq.DB.datascriptQuery"
                 (clj->js (sdk-utils/normalize-keyword-for-json
                            (apply d/q (reader/read-string (first args)) @conn
-                                  (map #(if (and (string? %) (string/starts-with? % "#uuid"))
+                                  (map #(if (and (string? %) (or (string/starts-with? % "#uuid")
+                                                               (string/starts-with? % "[[")))
                                           (reader/read-string %) %) (rest args))) false))
                               "logseq.DB.getBlock"
                               (clj->js (sdk-utils/normalize-keyword-for-json
@@ -1139,6 +1140,8 @@
                   second-result (mcp-compat/repair-links api #js {"page_uuid" page-uuid})]
             (is (true? (:verified first-result)))
             (is (true? (:verified second-result)))
+            (is (nil? (:diagnostic first-result)))
+            (is (nil? (:diagnostic second-result)))
             (is (= 0 (:blocks_updated second-result)))
             (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls))
             (js/queueMicrotask done))
@@ -1201,6 +1204,73 @@
                  #js {"block_uuids" #js [uuid] "target_uuid" uuid}]]
       (is (try (mcp-compat/move-blocks api args) false (catch :default _ true))))
     (is (empty? @calls))))
+
+(deftest title-availability-preserves-sdk-recycled-marker
+  (let [uuid "00000000-0000-4000-8000-000000000150"
+        result (mcp-compat/title-availability-result
+                "Recycled"
+                [{:uuid uuid :name "recycled" :title "Recycled"
+                  (keyword ":logseq.property/deleted-at") 1}])]
+    (is (false? (:available result)))
+    (is (true? (get-in result [:held_by 0 :recycled])))
+    (is (= uuid (get-in result [:held_by 0 :uuid])))))
+
+(deftest migrate-page-empty-dry-run-remains-unverified
+  (let [{:keys [page-uuid conn api calls]} (page-fixture)
+        target-uuid "00000000-0000-4000-8000-000000000162"]
+    (d/transact! conn [{:db/id 162 :block/uuid (uuid target-uuid) :block/name "target" :block/title "Target"}])
+    (async done
+      (-> (p/let [preview (mcp-compat/migrate-page api #js {:source_uuid page-uuid :target_uuid target-uuid
+                                                         :contains "no-match" :dry_run true})
+                  empty-run (mcp-compat/migrate-page api #js {:source_uuid page-uuid :target_uuid target-uuid
+                                                           :contains "no-match"})]
+            (is (false? (:verified preview)))
+            (is (empty? (:planned preview)))
+            (is (true? (:verified empty-run)))
+            (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls)))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest move-guards-use-structural-parents-not-parent-plus
+  (let [parent-uuid "00000000-0000-4000-8000-000000000151"
+        child-uuid "00000000-0000-4000-8000-000000000152"
+        target-uuid "00000000-0000-4000-8000-000000000154"
+        conn (d/create-conn {:block/uuid {:db/unique :db.unique/identity}
+                             :block/parent {:db/valueType :db.type/ref}
+                             :block/page {:db/valueType :db.type/ref}})
+        writes (atom [])
+        api (fn [method args]
+              (.then (js/Promise.resolve nil)
+                     (fn [_]
+                       (if (= method "logseq.DB.datascriptQuery")
+                         (clj->js (sdk-utils/normalize-keyword-for-json
+                                   (apply d/q (reader/read-string (first args)) @conn
+                                          (map #(if (string? %) (reader/read-string %) %) (rest args))) false))
+                         (do (swap! writes conj [method args])
+                             (throw (js/Error. "Guard allowed a mutation")))))))]
+    (d/transact! conn [{:db/id 150 :block/uuid (uuid "00000000-0000-4000-8000-000000000150")
+                       :block/name "source" :block/title "Source"}
+                      {:db/id 151 :block/uuid (uuid parent-uuid) :block/title "Parent"
+                       :block/parent 150 :block/page 150 :block/order "a0"}
+                      {:db/id 152 :block/uuid (uuid child-uuid) :block/title "Child"
+                       :block/parent 151 :block/page 150 :block/order "a0"}
+                      {:db/id 154 :block/uuid (uuid target-uuid) :block/name "target" :block/title "Target"}])
+    (async done
+      (-> (p/do!
+            (p/doseq [selection [[parent-uuid child-uuid] [child-uuid parent-uuid]]]
+              (p/let [result (mcp-server/call-data-tool api mcp-compat/move-blocks
+                                                      #js {:block_uuids (clj->js selection)
+                                                           :target_uuid target-uuid :placement "last-child"})]
+                (is (true? (aget result "isError")))
+                (is (string/includes? (aget (aget (aget result "content") 0) "text") "nested blocks"))))
+            (p/let [result (mcp-server/call-data-tool api mcp-compat/move-block
+                                                    #js {:block_uuid parent-uuid :target_uuid child-uuid})]
+              (is (true? (aget result "isError")))
+              (is (string/includes? (aget (aget (aget result "content") 0) "text") "own subtree")))
+            (is (empty? @writes))
+            (is (= 151 (:db/id (:block/parent (d/entity @conn 152))))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
 
 (defn- split-fixture
   [move-succeeds?]
@@ -3370,8 +3440,8 @@
         api (fn [method args]
               (swap! calls conj [method args])
               (if (and (= method "logseq.DB.datascriptQuery")
-                       (string/includes? (first args) "?descendant :block/parent+"))
-                [[target-uuid]]
+                        (string/includes? (first args) "{:block/_parent ...}"))
+                      {:uuid block-uuid :_parent [{:uuid target-uuid :page {:id 90}}]}
                 (let [uuid (str (reader/read-string (second args)))]
                   (entity uuid (if (= uuid block-uuid) 100 101)))))]
     (async done

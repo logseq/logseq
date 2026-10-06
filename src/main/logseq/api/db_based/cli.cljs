@@ -1,6 +1,7 @@
 (ns logseq.api.db-based.cli
   "API fns for CLI"
   (:require [clojure.string :as string]
+            [clojure.walk :as walk]
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -36,7 +37,7 @@
   [page-title]
   (p/let [resp (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title)]
     (if resp
-      (clj->js resp)
+      (clj->js (walk/postwalk (fn [value] (if (uuid? value) (str value) value)) resp))
       #js {:error (str "Page " (pr-str page-title) " not found")})))
 
 (defn upsert-nodes

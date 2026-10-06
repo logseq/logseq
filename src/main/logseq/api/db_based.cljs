@@ -478,7 +478,7 @@
        (mapv (fn [entity]
                (let [tag-ids (set (map :db/id (:block/tags entity)))]
                  {:id (:db/id entity)
-                  :uuid (:block/uuid entity)
+                  :uuid (str (:block/uuid entity))
                   :title (:block/title entity)
                   :kind (if (contains? tag-ids tag-class) "tag" "page")
                   :recycled (some? (:logseq.property/deleted-at entity))}))
@@ -637,7 +637,7 @@
 
 (def ^:private inspect-page-structural-properties
   #{"parent" "page" "order" "title" "name" "uuid" "ident"
-    "content" "full-title" "raw-title" "refs" "path-refs"
+    "content" "full-title" "raw-title" "refs" "path-refs" "link"
     "tx-id" "created-at" "updated-at" "format" "collapsed?"
     "journal-day" "journal?" "left"})
 

@@ -518,6 +518,58 @@ are complete for the 23 graph-mutating tools. Remaining untested live variants
 and non-reproduced anomalies are listed in the tool map and plan; production
 switching remains a separate explicit decision.
 
+### Claude Desktop full run: 20261006-1104-k7q3
+
+The user supplied a PARTIAL end-to-end report on 2026-10-06: all 53 tools
+were called, 61 cases recorded, and cleanup completed without modifying
+pre-existing data. Live page/tag sets returned to 51/18; twelve run-created
+pages remain recycled because MCP cannot purge them. This is user-reported
+evidence, not an independently repeated run or packaged-build certification.
+
+| Case | Finding | Local correction / remaining gate |
+|---|---|---|
+| K-05, K-04 | Batch parent/child overlap was accepted; descendant-target move relied on an engine no-op | Recursive reverse-parent pulls now use actual block/parent edges for both guards and descendant verification. No-mutation regression passes without parent+ schema; exact pull accepted in a live read-only check. Fresh live guard retests required. |
+| C-06, C-13 | Before placement inserted at the start of the parent, not next to a non-first target; after was skipped live | Existing move API now inserts before via the previous sibling, using top insertion only for the first target. Local before/after, first-sibling and cross-parent tests pass. Fresh live before/after retests required. |
+| B-05 | Nested getPage and duplicate-title UUIDs serialized as ClojureScript objects | Page serialization converts UUIDs recursively; title inventory emits strings. Standard getBlock child lookup pairs are retained intentionally. |
+| F-04 | Embed link was counted as both a ref and a property-value backlink | Structural link is excluded from property-value groups; one-embed total regression passes. Separate actual relations can still contribute overlapping holders. |
+| G-02 | Empty migration preview was verified=true | Empty and nonempty dry runs now return verified=false; a real empty no-op can remain verified=true. |
+| K-10 | Recycled title holder was labelled live | Holder classification now handles the SDK's colon-prefixed deleted-at key. |
+| H-02 | Successful/idempotent repair always warned about unresolved placeholders | Diagnostic is conditional on actual unresolved names or unverified writes. |
+| E-02 | property_values did not count values set on Host | This field counts inbound property-value references to the page. Tool description clarified; own value blocks may contribute to content_blocks. |
+| B-02 | Empty seed blocks varied between pages | Not established as corruption. Continue comparing observed baseline/deltas rather than assuming a seed count. |
+| J-02 | Reported uploads were not visible as Asset-class members | Populated/external/recycled asset cases remain BLOCKED. Confirm the files are registered Asset blocks in the same connected graph via the UI before rerunning. No upload repair or live asset writes were performed. |
+
+Local corrections do not turn the original failing cases into live PASS results.
+An intermediate recursive-rule query was rejected by native input resolution;
+it was replaced, not counted as a passing check. The final reverse-parent pull
+was independently accepted on a retained report page with zero graph writes.
+Keep the original report and cleanup ledger. Rerun K-05/K-04 and C-06/C-13
+on fresh approved fixtures; preserve the recycled pages and do not reuse their
+held titles. Other untested variants listed in the report remain uncovered.
+
+### Stable desktop testing
+
+The recovery-screen investigation captured `TypeError: Failed to fetch` in the
+renderer `:app` React boundary, originating in `frontend.persist-db.remote`.
+Hot reload repeatedly stopped graph workers; logs also contain Windows socket
+error 10055, so the original fetch failure is not attributed solely to reloads.
+A fresh launch additionally exposed mixed artifacts: Electron expected
+`44c5d3a827-dirty` while the Node worker reported `44c5d3a827`. Rebuilding app,
+browser worker, Node worker, and Electron together resolved that mismatch.
+
+The smoke runner now defaults to stable mode: stop old watching, compile all
+four runtimes together, build webpack, start the HTTP server without source
+watchers, verify the served bundle, then launch the compiled desktop. `-Watch`
+explicitly opts into development hot reload; do not use it during live tests.
+`-BuildOnly` rebuilds without launching. Graceful-close refusal aborts before
+forcing app termination. No graph reindexing or cleanup is part of recovery.
+
+This prevents the known watcher/build-mismatch mechanism, not every network or
+worker failure. Never edit or partially rebuild runtime artifacts during a
+stable test session. Pause mutations and reconcile state after any interruption.
+The clean test graph's built-in pages, two empty journals, and twelve recycled
+run pages match the cleanup report; an empty-looking UI after cleanup is expected.
+
 ### Stage 4: optimization
 
 Not started. No caching, batching, retry redesign, schema change, or broad

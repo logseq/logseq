@@ -299,17 +299,14 @@
   (fn [src-block-uuid target-block-uuid ^js opts]
     (p/let [src-block (<get-block src-block-uuid {:children? false})
             target-block (<get-block target-block-uuid {:children? false})]
-      (let [{:keys [before children]} (bean/->clj opts)
-            move-to      (cond
-                           (boolean before)
-                           :top
-
-                           (boolean children)
-                           :nested
-
-                           :else
-                           nil)]
-        (editor-dnd-handler/move-blocks nil [src-block] target-block nil move-to)))))
+      (let [{:keys [before children]} (bean/->clj opts)]
+        (if before
+          (p/let [previous (db-async/<get-block-sibling (state/get-current-repo) (:db/id target-block) :left)]
+            (when-not (= (:block/uuid previous) (:block/uuid src-block))
+              (editor-dnd-handler/move-blocks nil [src-block] (or previous target-block) nil
+                                             (when-not previous :top))))
+          (editor-dnd-handler/move-blocks nil [src-block] target-block nil
+                                         (when children :nested)))))))
 
 (def get_block
   (fn [id ^js opts]

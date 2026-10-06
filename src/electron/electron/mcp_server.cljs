@@ -293,7 +293,7 @@
   :pageStats
   {:fn mcp-compat/page-stats
    :config #js {:title "Page Stats"
-            :description "Return fixed-size counts for page blocks, nested pages, orphans, inbound references, property values, and alias relations."
+            :description "Return fixed-size counts for page blocks, nested pages, orphans, inbound references and alias relations. property_values counts inbound property-value references to this page, not properties set on the page. Text property-value blocks may contribute to content_blocks."
             :inputSchema #js {:page_uuid (z/string)}}}
   :inspectPage
   {:fn mcp-compat/inspect-page
