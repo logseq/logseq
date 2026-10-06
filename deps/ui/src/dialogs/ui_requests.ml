@@ -74,7 +74,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
         let ctor = if vis then text_field else secure_field in
         ctor ~key:(key ^ "-i")
           ~style_class:"form-input"
-          ~placeholder ~autofocus ~submit_on_enter:true
+          ~placeholder ~autofocus
           ~text_signal:(Signal.value value)
           ~on_input:(fun ev -> Signal.set value (text_of ev))
           ~on_submit:(fun _ -> on_enter ())

@@ -161,7 +161,7 @@ let prompt_view (p : Dialogs_state.prompt) : t =
                    ])
               @ [ input ~key:"prmt-in"
                     ~style_class:"form-input ls-prompt-input"
-                    ~autofocus:true ~submit_on_enter:true
+                    ~autofocus:true
                     ~on_input:(fun ev ->
                       match ev with
                       | Lui_protocol.TextChanged (_, s) ->

@@ -25,12 +25,6 @@ let item ?(tip = "") ?(icon = "") ?(strong = false) title on_choose =
   ; it_strong = strong; on_choose
   }
 
-(* submit-on-enter isn't in the apple backend's text-field prop schema
-   (native fields submit on Return regardless); web/melange needs the
-   explicit prop for Enter-to-submit *)
-let submit_on_enter_opt =
-  if Sys.backend_type = Sys.Native then None else Some true
-
 let matches needle item =
   let n = String.lowercase_ascii (String.trim needle) in
   if n = "" then true
@@ -328,7 +322,7 @@ let view ~placeholder ?new_option ?(on_enter_text = None)
       (Signal.value st)
   in
   (column ~gap:2
-     [ text_field ~placeholder ~autofocus:true ?submit_on_enter:submit_on_enter_opt
+     [ text_field ~placeholder ~autofocus:true
          ~on_input:(fun ev ->
            match ev with
            | Lui_protocol.TextChanged (_, q) ->

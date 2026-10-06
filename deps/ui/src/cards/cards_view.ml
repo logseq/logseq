@@ -173,7 +173,9 @@ let cards_body st =
    :flashcards__cp} — scrim and dialog content are SIBLINGS here, like
    cmdk: the native backend hoists each fillsOverlay element into the
    window overlay layer, and a nested content would render inside its
-   parent's overlay copy instead of being its own layer. *)
+   parent's overlay copy instead of being its own layer. The shared
+   parent is a plain box — fragment can't be returned from a reactive
+   branch (it has no parent to mount into). *)
 let modal st =
   (* The scrim mounts while the opening gesture is still in flight: its
      mouseup lands on the overlay and would instantly re-close the modal.
@@ -181,7 +183,7 @@ let modal st =
      scrim has no children, so every press on it is an overlay press —
      no payload target-class check needed. *)
   let opened_at = Platform.date_now_ms () in
-  Logseq_dom.fragment
+  box ~key:"cards-shell"
     [ Ui_parts.pressable
         ~on_press:(fun _ ->
           if Platform.date_now_ms () -. opened_at > 400. then

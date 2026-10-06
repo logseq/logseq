@@ -306,7 +306,6 @@ let body (_ms : Model.t Signal.signal) : t =
                   [ box ~key:"collab-inv" ~style_class:"ls-collab-invite"
                       [ input ~key:"collab-in" ~style_class:"ui__input"
                           ~placeholder:(T.t "collaboration/email-address")
-                          ~submit_on_enter:true
                           ~on_submit:(fun _ -> submit ())
                           [] ]
                   ; button ~key:"collab-invite-btn"
