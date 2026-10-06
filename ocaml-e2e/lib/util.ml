@@ -393,9 +393,14 @@ let wait_page_blocks_contents env expected =
     giving in-flight renders (e.g. an emptied editing row tearing down after
     paste) time to settle — the clj suite's JVM latency covered this gap. *)
 let settled_page_blocks_contents env =
+  (* remote churn can keep rewriting the page longer than the suite's
+     shard budget — bound the settle wait and return the last observed
+     contents so the caller's own comparison decides. *)
+  let deadline = Js.Date.now () +. 90000. in
   let rec go prev idle =
     let* contents = get_page_blocks_contents env in
     if contents = prev && idle >= 3 then Js.Promise.resolve contents
+    else if Js.Date.now () > deadline then Js.Promise.resolve contents
     else
       let* () = wait_timeout env 150. in
       go contents (if contents = prev then idle + 1 else 0)
