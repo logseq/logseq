@@ -53,6 +53,8 @@ not-yet-verified minor items.
 | 21 | `Show more ⌘↓` filter expander | `m-filters-expanded.png` | `l-filters-expanded.png` | ✅ | Expands 6th filter (`Search only themes`) on click. **Shared quirk**: the printed `⌘↓` keypress does NOT expand it on either app — click required |
 | 22 | Themes filter | `m-filter-themes.png` | `l-filter-themes.png` | ✅ | Both list 1 theme: `Logseq Default theme — light #logseq-classic-theme` |
 | 23 | Files filter | `m-filter-chip-files.png`-adjacent | (empty) | ✅ | Chip applies; result list empty on both (no files in graph) |
+| 28 | Codes filter | `m-filter-codes.png` | `l-filter-codes.png` | ✅ | `Search only: Code` chip → `Code 1` → `const needlecode = 42; #Code` (code block rendered with `#Code` tag); unfiltered query also surfaces it under `Nodes` — identical |
+| 29 | Slash menu (block types) | — | — | ✅ | `/` in a block shows identical BASIC/FORMAT/Heading menu (`Code block` etc.) on both; LUI code block renders the same line-gutter editor |
 | 24 | No-results state | `m-no-results.png` | `l-no-results.png` | ✅ | `zzqq` → `Create page` + `Filters 6` only; later `No matched result` text also identical when filter chip narrows to nothing |
 | 25 | Dark theme | `m-create-page-dark.png` | `l-create-page-dark.png` | ✅ | Same dark palette styling (both apps flipped to dark via the same action stream during seeding — see quirks) |
 | 26 | `Search only nodes` filter | `m-filter-nodes.png` | `l-filter-nodes.png` | ✅ | Chip `Search only: Nodes` → `Nodes 2` (block results are nodes); footer tip flips to `Press Esc to clear search filter` on both |
@@ -110,5 +112,5 @@ including inside block text and description lines.
 ## Not covered
 
 - RTC/networked graphs, plugin-provided commands, `@`-mentions/`#`-tag picker
-  inside the palette, `Search only codes` with real code blocks (none seeded),
+  inside the palette, `Search only files` with real files (none seeded),
   palette pagination beyond the first `Nodes 5` cap, screen-reader behavior.
