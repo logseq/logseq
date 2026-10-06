@@ -2038,10 +2038,13 @@ let () =
         Fest.deep_equal name "autocomplete existing page" Fest.expect;
         let* () = Page.goto_page env "autocomplete host" in
         let* () = B.new_block env "" in
-        let* () = Util.press_seq env "#autocomplete-new-tag" in
+        (* element-targeted typing + Enter — under -j8 the popover's chosen
+           item is computed from the editor text; a swallowed char or a
+           *:focus Enter lost to a remount leaves no .block-tag at all *)
+        let* () = Keyboard.type_in_editor env "#autocomplete-new-tag" in
         let* _ = Assert.is_visible env ".ui__popover-content" in
-        let* () = K.enter env in
-        Assert.is_visible_l
+        let* () = Keyboard.press_in_editor env "Enter" in
+        Assert.is_visible_l ~timeout:15000.
           (Loc.filter env ".block-tag" ~has_text:"autocomplete-new-tag"));
 
     t "slash-menu-filter-scroll-and-cleanup-test" (fun env ->
