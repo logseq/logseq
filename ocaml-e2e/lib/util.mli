@@ -14,7 +14,7 @@ val double_esc : Env.t -> unit Js.Promise.t
 val cmdk_search_settle_ms : float
 val fill_cmdk_search : Env.t -> string -> unit Js.Promise.t
 val cmdk_open : Env.t -> bool Js.Promise.t
-val search : Env.t -> string -> unit Js.Promise.t
+val search : ?tries:int -> Env.t -> string -> unit Js.Promise.t
 val repeat_until_visible :
   ?expect_timeout:float ->
   'a ->

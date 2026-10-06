@@ -213,7 +213,7 @@ let wait_overlays_closed env =
   in
   loop 10
 
-let search env text =
+let rec search ?(tries = 3) env text =
   let* already = Pw.visible env ".cp__cmdk-search-input" in
   let* () =
     if already then Js.Promise.resolve ()
@@ -228,7 +228,15 @@ let search env text =
         let* () = Pw.click env "#search-button" in
         Pw.wait_for env ".cp__cmdk-search-input"
   in
-  let* () = fill_cmdk_search env text in
+  let* () =
+    (* the cmdk can remount between open and fill — the input detaches and
+       fill waits forever. Reopen and retry; the last timeout propagates. *)
+    Pw.catch_timeout (fill_cmdk_search env text) (fun () ->
+        if tries <= 1 then fill_cmdk_search env text
+        else
+          let* () = Keyboard.esc env in
+          search ~tries:(tries - 1) env text)
+  in
   wait_timeout env cmdk_search_settle_ms
 
 let rec repeat_until_visible ?(expect_timeout = 5000.) env n target_loc
