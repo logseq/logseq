@@ -1,19 +1,22 @@
 # Apple (SwiftUI) host — interactive audit
 
-Date: 2026-10-06. Two rounds:
+Date: 2026-10-06. Three rounds:
 
 - **Round 1**: `devin/component-migration` @ `75a961c149`, lui pinned `e812049`.
 - **Round 2**: same branch @ `dba7bbbf60`, lui @ `63383d4` (origin/main —
   includes merged `5b3c79e LUICodeEditor`).
+- **Round 3 — fix pass**: same branch + `635a287582`, lui `devin/apple-wire-schema`
+  @ `14846db`. All fixes below are committed.
 
 Host: macOS, `apple/` Swift package + `Logseq.app`, graph `logseq_db_Demo`
 served by the native db-worker daemon (`http://127.0.0.1:56994`). Driven via
 real AppKit window (clicks, keys, resize, right-click, screenshots, AX tree,
 `sample`, daemon `/v1/invoke`, stderr `EMIT-*`/`LENIENT-*` probes).
 
-This is an audit report — no product fixes are committed. Local workarounds
-used to get far enough to observe anything are listed at the end and stay
-uncommitted.
+Rounds 1–2 are an audit report (local workarounds listed at the end stayed
+uncommitted); round 3 is a fix pass — every fix named there is committed
+on the two branches above. Debug probes (`EMIT-*`, `PHIT`, `EV`,
+`LENIENT-*`) were stripped before the round-3 commit.
 
 ## Round-2 delta (new main)
 
@@ -81,20 +84,82 @@ Still open (confirmed on new main):
   `"click"` listeners (`Platform.add_document_listener`) never see it,
   which is why `LOGSEQ_DUMP` never produced `/tmp/tree.json` on any click.
 
+## Round 3 — fix pass
+
+All fixes committed: logseq worktree `0e7d660c79` + `635a287582`
+(`devin/apple-interactive-audit`), lui `8dab601` + `14846db`
+(`devin/apple-wire-schema`). Verified end-to-end under **strict**
+validation (no `LUI_LENIENT_VALIDATE`) on the Demo graph.
+
+**Fixed**
+
+- All five P0 build findings: duplicate `LogseqCodeMirrorView` stub
+  removed, `macos/gpui` added to the extension fingerprint profile,
+  missing `self.` added, `LogseqMeasureCache` clamps non-finite
+  measurements. The host compiles at the real lui pin and boots
+  zero-rejection under strict validation.
+- **Wire-schema desync resolved.** The apple validator now matches the
+  semantics OCaml emits (and gpui accepts): leaf hosts (`button`,
+  `menu-item`, etc.) accept content children, url-less `link`s are legal,
+  icon-only buttons don't require an accessible-name property, and
+  `main`/`cross`/`padding*` admit the full OCaml kind matrix
+  (`lui_protocol.ml` `common_property_supported`). `icon-only … requires
+  label` and `unsupported property value` batches no longer drop.
+  Result: 9+ patch generations applied with zero `invalidBatch`; the
+  generation counter stays in sync for the whole session.
+- **Icons render.** `fontGlyph` icon source + `LogseqAppIcons.sources`
+  map tabler codepoints to the bundled `tabler-icons.ttf` — no more tofu.
+- **Interaction works.** Root cause of dead input was a three-layer gate
+  mismatch: `Ui_parts.pressable` wraps rows/boxes, but `press-enabled`
+  was only admitted on a few kinds (`property_supported`), `press` events
+  rejected on row/box (`event_supported`), and the wire validator +
+  `performPress` enforced the same narrow list. All three layers now
+  admit `Row`/`Box`. Separately, the `pointer-detail` event path
+  (`on_press_detail` / `pointer-enabled` — real coords + `target_class`,
+  web-bubbling semantics: deepest hit → nearest pointer-enabled ancestor)
+  is now implemented end-to-end: `performPointerDown/Up/PressDetail/
+  ContextMenuPress` in the backend, NSEvent monitors in the host emit
+  them on standard nodes, `pointerEnter`/`Leave` on hit transitions, and
+  `LogseqLUIEvents` bridges all six event names to the OCaml C exports.
+  Extension-node hits resolve via `contextOwning` so `dom-event`s reach
+  the right context.
+- **Verified in the window** (strict mode):
+  sidebar `Pages` click → `press` accepted → full nav handler runs →
+  Pages table mounts with column headers + `Oct 5th, 2026` row
+  (`07-pages-view-after-nav.png`);
+  page-row click → breadcrumb nav to `Oct 5th, 2026`;
+  page `···` menu mounts all 11 items natively (`08-page-menu-strict.png`,
+  previously impossible outside lenient).
+
+**Still open**
+
+- **Journal page body renders empty** — nodes mount but blocks don't
+  display. Separate from the interaction layer; needs its own pass.
+- **Editor conduit** (`logseq-editor` → `EmptyView()`) untouched — ASCII/
+  CJK/IME testing still blocked.
+- **cmdk** — Cmd+K still mounts nothing.
+- **Right-click** on standard rows shows no menu (table rows aren't
+  pointer-enabled hosts; the context-menu tree may need an emit path).
+- **Layout storm** (main-thread `sizeThatFits` recursion) still present —
+  deprioritized this round.
+- LUI opam pin in `install-opam-deps.sh` still points at `e812049`; the
+  apple backend work needs a pin bump once lui commits land on main.
+
 ## Checklist coverage
 
 | Item | Result |
 | --- | --- |
-| Initial render (sidebar/page/cmdk) | Partial — shell + partial sidebar mount; content area almost empty; icons all tofu |
-| Editor: mount, ASCII+CJK, caret, IME | **Blocked** — `logseq-editor` conduit is an `EmptyView()` stub; no reachable editable block (nav dead, journal empty) |
+| Initial render (sidebar/page/cmdk) | Partial — shell + full sidebar mount; page header + table render on nav; icons fixed; journal body still empty |
+| Editor: mount, ASCII+CJK, caret, IME | **Blocked** — `logseq-editor` conduit is an `EmptyView()` stub |
 | cmdk open/query/scroller | **Dead** — Cmd+K produces nothing |
-| Context menus/popovers | Toolbar `···` dropdown mounts natively (6 items) and hover tooltip works — **only** with validation disabled; right-click produces nothing |
-| LaTeX block, PDF block | **Blocked** — cannot reach a page with blocks |
-| Resize, scroll long page | Resize relayouts fine (and reveals sidebar content that never mounted initially); nothing to scroll — blocks scroll area has height 0 |
+| Context menus/popovers | Page `···` menu mounts 11 items natively under strict validation; right-click still produces nothing |
+| Sidebar navigation | **Works** — Pages/Journals/row clicks navigate and render |
+| LaTeX block, PDF block | **Blocked** — journal body renders empty, no blocks reachable |
+| Resize, scroll long page | Resize relayouts fine; nothing scrollable yet |
 
-## Findings (severity ranked)
+## Findings (severity ranked — round-1/2 status; see Round 3 for fixes)
 
-### P0 — does not build at the pinned dependency set
+### P0 — does not build at the pinned dependency set (fixed in round 3)
 
 1. **lui pin drift**: deps/ui pins lui `e812049`, but
    `apple/Sources/Logseq/LogseqCodeMirror.swift` uses `LUICodeEditor`, which
@@ -115,7 +180,7 @@ Still open (confirmed on new main):
    `+Inf` width with `Int64()` → `Double value cannot be converted to
    Int64` crash. Local guard: clamp non-finite measurements.
 
-### P0 — wire-schema validation rejects OCaml trees → permanent desync
+### P0 — wire-schema validation rejects OCaml trees → permanent desync (fixed in round 3)
 
 `LUIWireProtocol.swift` validates children per `insertChild` and re-validates
 node properties at end of batch; a single rejection throws `invalidBatch`,
@@ -155,7 +220,7 @@ I/O and the request never returns. The daemon is healthy throughout
 (`/v1/invoke` answers fine from curl). Evidence:
 `audit-shots/apple/ocaml-hang.sample.txt`; screenshot `04-menu-open-beachball.png`.
 
-### P1 — input plumbing is dead in practice
+### P1 — input plumbing is dead in practice (fixed in round 3)
 
 - Sidebar row clicks (`Journals`, `Pages`, `Flashcards`, `Favorites`,
   `Recent`) produce no navigation and no visible change, even though a
@@ -184,7 +249,7 @@ I/O and the request never returns. The daemon is healthy throughout
   including page/block titles (e.g. "Property view context"), so the blank
   page is a render/navigation problem, not data.
 
-### P2 — icons are all tofu
+### P2 — icons are all tofu (fixed in round 3)
 
 Every icon renders as a boxed `⌧` — the icon font generated by
 `gen-icon-resources.mjs` is not loaded into the app (or not referenced by
@@ -219,37 +284,40 @@ the `icon` element path). Visible throughout sidebar and toolbar.
 | Surface | State |
 | --- | --- |
 | `logseq-editor` conduit (`LogseqEditorView`) | `EmptyView()` — editor never mounts |
-| `LogseqCodeMirrorView` (code/source editor) | Compiles only with unpinned lui `devin/apple-ext` cherry-pick |
-| `.contextMenu` kind | `EmptyView()` in SwiftUI root — right-click path relies on the mouse monitor but no menu tree ever mounts |
+| `LogseqCodeMirrorView` (code/source editor) | Needs lui ≥ `5b3c79e` on the Swift package path (in main, pin not bumped) |
+| `.contextMenu` kind | `EmptyView()` in SwiftUI root — right-click emits `contextMenuPress` but no menu tree ever mounts |
 | cmdk palette | No host surface reachable via Cmd+K |
-| Icon font pipeline | Generated but not loaded — all icons tofu |
+| ~~Icon font pipeline~~ | **Fixed** — `fontGlyph` source + `LogseqAppIcons.sources` map to bundled `tabler-icons.ttf` |
 | Empty-page empty-state | `blocks_inner` emits zero nodes for `blocks = []` |
 
-## Local workarounds applied (NOT committed)
+## Local workarounds applied during rounds 1–2 (superseded by committed round-3 fixes)
 
 Round 1: `lui` worktree `lui-apple-ext` (e812049 + cherry-pick f42566a) —
 superseded in round 2 by a real `~/repos/lui` checkout at `63383d4`.
 
-In `~/repos/lui` (63383d4, uncommitted): `LUI_LENIENT_VALIDATE` env gates
-around `validateChild` and `validateNodeProperties` in
-`LUIWireProtocol.swift` + `LENIENT-SKIP`/`LENIENT-NODE` stderr prints —
-lenient keeps patch generation in sync and lets invalid children mount,
-which is how every menu/screenshot here was obtained.
+`LUI_LENIENT_VALIDATE` env gates around `validateChild` and
+`validateNodeProperties` in `LUIWireProtocol.swift` +
+`LENIENT-SKIP`/`LENIENT-NODE` stderr prints — lenient keeps patch
+generation in sync and lets invalid children mount, which is how every
+round-1/2 menu/screenshot was obtained. The gate was kept (opt-in env
+only); the probe prints were removed. With the validator fixes, strict
+mode now passes the same surfaces lenient used to rescue.
 
-In the logseq worktree `apple/` (uncommitted): removed duplicate
-`LogseqCodeMirrorView` stub; added `macos/gpui` to the extension
-`profiles` fingerprint; added missing `self.` in `LogseqPlatform.swift`;
-finite-guard in `LogseqMeasureCache.sizes`; `EMIT-OK/FAIL` probe in
-`LogseqNativeSidebar.emitClick`; assorted `PERF`/`LOGSEQ_DEBUG_VIEWS`
-probes.
+In the logseq worktree `apple/`: the round-1 workaround list (dedupe
+stub, `macos/gpui` profile, `self.`, finite-guard) is now the committed
+`0e7d660c79`; all `EMIT-*`/`PHIT`/`EV` probes were stripped.
+
+NOTE — the local opam pin was repointed for development:
+`opam pin add lui /Users/devin/repos/lui --kind=path` so worktree edits
+compile; restore a git pin once `devin/apple-wire-schema` lands.
 
 ## Reproduce
 
 ```sh
-# opam lui must be >= 5b3c79e (main) for LUICodeEditor:
-opam pin add -y lui git+https://github.com/logseq/lui.git#63383d4 --switch=5.5.0
+# lui >= 5b3c79e for LUICodeEditor; >= 14846db (devin/apple-wire-schema)
+# for the validator + interaction fixes:
+opam pin add -y lui git+https://github.com/logseq/lui.git#14846db --switch=5.5.0
 cd deps/ui && OPAMSWITCH=5.5.0 opam exec -- dune build @all
 LOGSEQ_LUI_PACKAGE_PATH=<lui>/platform/apple sh apple/build.sh
-launchctl setenv LUI_LENIENT_VALIDATE 1   # else first rejection desyncs the run
-open _build/apple/macos/Logseq.app
+open _build/apple/macos/Logseq.app   # strict validation now passes
 ```
