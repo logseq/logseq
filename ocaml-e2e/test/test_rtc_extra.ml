@@ -89,8 +89,17 @@ let status_icon_names =
 let priorities = [ "No priority"; "Low"; "Medium"; "High"; "Urgent" ]
 
 let validate_task_blocks env page1 page2 =
+  (* .ls-icon-* counts only cover the virtualized mounted window — anchor
+     both clients to the top block first so they compare the same rows *)
+  let anchor_top env =
+    Pw.eval_js env
+      "(() => { const b = document.querySelector('.ls-page-blocks .ls-block'); \
+       if (b) b.scrollIntoView({block:'start'}); return null; })()"
+  in
   let* icon_counts =
     Env.with_page env page2 (fun () ->
+        let* () = anchor_top env in
+        let* () = Util.wait_timeout env 800. in
         let rec collect = function
           | [] -> Js.Promise.resolve []
           | (_, icon) :: rest ->
@@ -103,13 +112,33 @@ let validate_task_blocks env page1 page2 =
         collect status_icon_names)
   in
   Env.with_page env page1 (fun () ->
-      let rec check = function
-        | [] -> Js.Promise.resolve ()
-        | (icon, n) :: rest ->
-            let* () = Assert.have_count env (".ls-icon-" ^ icon) n in
-            check rest
+      let rec attempt round =
+        let* () = anchor_top env in
+        let* () = Util.wait_timeout env 800. in
+        let* counts1 =
+          let rec collect = function
+            | [] -> Js.Promise.resolve []
+            | (_, icon) :: rest ->
+                let* n =
+                  Playwright.count (Pw.q env (".ls-icon-" ^ icon))
+                in
+                let* rest' = collect rest in
+                Js.Promise.resolve ((icon, n) :: rest')
+          in
+          collect status_icon_names
+        in
+        if counts1 = icon_counts then Js.Promise.resolve ()
+        else if round <= 0 then
+          let rec check = function
+            | [] -> Js.Promise.resolve ()
+            | (icon, n) :: rest ->
+                let* () = Assert.have_count env (".ls-icon-" ^ icon) n in
+                check rest
+          in
+          check icon_counts
+        else attempt (round - 1)
       in
-      check icon_counts)
+      attempt 4)
 
 let rec iter_seq f = function
   | [] -> Js.Promise.resolve ()
