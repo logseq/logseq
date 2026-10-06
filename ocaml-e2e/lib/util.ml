@@ -330,11 +330,29 @@ let wait_search_index_ready env =
 let probe_search_index env text =
   let js =
     Printf.sprintf
-      "(async () => { try { const r = await logseq.api.search(%s, {'built-in?': true, limit: 10}); const rows = (r && r.blocks) || []; return rows.some(b => String(b['block/title'] || b.title || '') === %s) ? 'hit' : 'miss'; } catch (e) { return 'err:' + String(e); } })()"
+      "(async () => { try { const r = await logseq.api.search(%s, {'built-in?': true, limit: 10}); const rows = (r && r.blocks) || []; const titles = rows.slice(0, 10).map(b => String(b['block/title'] || b.title || '')); const hit = rows.some(b => String(b['block/title'] || b.title || '') === %s); return JSON.stringify({probe: hit ? 'hit' : 'miss', titles}); } catch (e) { return JSON.stringify({probe: 'err:' + String(e), titles: []}); } })()"
       (Js.Json.stringify (Js.Json.string text))
       (Js.Json.stringify (Js.Json.string text))
   in
-  Pw.eval_js env js
+  let* raw = Pw.eval_js env js in
+  Js.Promise.resolve
+    (match Js.Json.decodeString raw with
+     | Some s -> (
+         match
+           (try Some (Js.Json.parseExn s) with _ -> None)
+         with
+         | Some o -> (
+             match Js.Json.decodeObject o with
+             | Some d -> (
+                 match Js.Dict.get d "probe" with
+                 | Some v ->
+                     (match Js.Json.decodeString v with
+                      | Some s -> s ^ " " ^ Js.Json.stringify o
+                      | None -> "err:bad-probe")
+                 | None -> "err:bad-probe")
+             | None -> "err:bad-probe")
+         | None -> "err:not-json")
+     | None -> "err:not-string")
 
 let search_and_click env search_text =
   let* () = search env search_text in
@@ -378,13 +396,14 @@ let search_and_click env search_text =
          wait — re-filling would only wipe the box without producing a row *)
       (repeat_until_visible ~expect_timeout:15000. env 24 result (fun () ->
            let* probe = probe_search_index env search_text in
-           match probe with
-           | "miss" ->
-               let* () = wait_search_index_ready env in
-               wait_timeout env 1500.
-           | _ ->
-               let* () = wait_search_index_ready env in
-               search env search_text))
+           if String.length probe >= 4 && String.sub probe 0 4 = "miss" then
+             let* () = Js.Promise.resolve (Js.log3 "[search-probe]" probe search_text) in
+             let* () = wait_search_index_ready env in
+             wait_timeout env 1500.
+           else
+             let* () = Js.Promise.resolve (Js.log3 "[search-probe]" probe search_text) in
+             let* () = wait_search_index_ready env in
+             search env search_text))
   in
   Pw.click_l result
 
