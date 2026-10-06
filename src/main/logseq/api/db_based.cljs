@@ -89,6 +89,53 @@
     (p/let [block (<get-block (:block/uuid new-block))]
       (sdk-utils/result->js block))))
 
+(defn create-embed
+  [parent-uuid target-uuid]
+  (when-not (common-util/uuid-string? parent-uuid)
+    (throw (js/Error. "parent_uuid must be a UUID")))
+  (when-not (common-util/uuid-string? target-uuid)
+    (throw (js/Error. "target_uuid must be a UUID")))
+  (let [repo (state/get-current-repo)]
+    (when-not repo
+      (throw (js/Error. "No graph is open")))
+    (p/let [parent (db-async/<get-block repo parent-uuid {:children? false})
+            target (db-async/<get-block repo target-uuid {:children? false})]
+      (when-not parent
+        (throw (js/Error. (str "No entity exists with exact UUID " parent-uuid))))
+      (when-not target
+        (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
+      (when (ldb/recycled? parent)
+        (throw (js/Error. "Cannot create an embed under a recycled parent")))
+      (when (ldb/recycled? target)
+        (throw (js/Error. "Cannot embed a recycled target")))
+      (when (or (entity/property? parent)
+                (not (or (entity/page? parent) (:block/page parent))))
+        (throw (js/Error. "parent_uuid must identify a page or block")))
+      (when (or (entity/property? target)
+                (not (or (entity/page? target) (:block/page target))))
+        (throw (js/Error. "target_uuid must identify a page or block")))
+      (let [parent-id (:db/id parent)
+        target-id (:db/id target)
+        parent-page (:block/page parent)
+        parent-page-id (if (map? parent-page) (:db/id parent-page) parent-page)]
+        (when (= parent-id target-id)
+          (throw (js/Error. "An embed cannot target its own parent")))
+        (p/let [ancestors (db-async/<get-block-parents repo parent-id 1000)]
+          (when (>= (count ancestors) 1000)
+            (throw (js/Error. "Parent ancestry exceeds the embed cycle-check limit")))
+          (when (or (= target-id parent-page-id)
+                    (some #(= target-id (:db/id %)) ancestors))
+            (throw (js/Error. "Cannot embed an ancestor of the parent; this would create a render cycle")))
+          (p/let [embed (editor-handler/api-insert-new-block!
+                         ""
+                         {:block-uuid parent-uuid
+                          :sibling? false
+                          :edit-block? false
+                          :other-attrs {:block/link target-id}})]
+            (when-not (:block/uuid embed)
+              (throw (js/Error. "Embed insertion did not return a block UUID")))
+            (sdk-utils/result->js embed)))))))
+
 
 (defn update-block
   [this block content opts]

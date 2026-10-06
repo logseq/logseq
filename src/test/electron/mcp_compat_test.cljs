@@ -1449,6 +1449,7 @@
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
                     (is (not-any? #(contains? #{"logseq.DB.upsertProperty"
+                                                "logseq.DB.createEmbed"
                                                 "logseq.DB.createPage"
                                                 "logseq.DB.createTag"
                                                 "logseq.DB.renamePage"
@@ -2858,6 +2859,68 @@
                                                    (string/includes? (first (second %)) "block/uuid #uuid"))
                                               @calls))))
                      (done)))))))
+
+(deftest create-embed-verifies-link-reference-and-placement
+  (let [parent-uuid "00000000-0000-4000-8000-000000000091"
+        target-uuid "00000000-0000-4000-8000-000000000093"
+        embed-uuid "00000000-0000-4000-8000-000000000092"
+        calls (atom [])
+        entities {parent-uuid {:db/id 91 :block/uuid parent-uuid :block/name "parent"}
+                  target-uuid {:db/id 93 :block/uuid target-uuid :block/name "target"}
+                  embed-uuid {:db/id 92 :block/uuid embed-uuid :block/title ""
+                              :block/parent {:db/id 91} :block/page {:db/id 91}
+                              :block/link {:db/id 93} :block/refs [{:db/id 93}]}}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.createEmbed" #js {:uuid embed-uuid}
+                "logseq.DB.datascriptQuery" (get entities (str (cljs.reader/read-string (second args))))
+                nil))]
+    (async done
+      (-> (p/let [result (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid})
+                  dry-run (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid :dry_run true})]
+            (is (true? (:verified result)))
+            (is (= 93 (get-in result [:verified_entities 0 :block/link :db/id])))
+            (is (false? (:verified dry-run)))
+            (is (nil? (:response dry-run)))
+            (is (= [["logseq.DB.createEmbed" [parent-uuid target-uuid]]]
+                   (filter #(= "logseq.DB.createEmbed" (first %)) @calls))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest create-embed-rejects-api-errors-and-unverified-links
+  (let [parent-uuid "00000000-0000-4000-8000-000000000091"
+        target-uuid "00000000-0000-4000-8000-000000000093"
+        embed-uuid "00000000-0000-4000-8000-000000000092"
+        writes (atom 0)
+        api-error? (atom true)
+        api (fn [method args]
+              (case method
+                "logseq.DB.createEmbed"
+                (do (swap! writes inc)
+                    (if @api-error? #js {:error "embed denied"} #js {:uuid embed-uuid}))
+                "logseq.DB.datascriptQuery"
+                (let [entity-uuid (str (cljs.reader/read-string (second args)))]
+                  (cond
+                    (= parent-uuid entity-uuid) {:id 91 :uuid parent-uuid :name "parent"}
+                    (= target-uuid entity-uuid) {:id 93 :uuid target-uuid :page {:id 94}}
+                    :else {:id 92 :uuid embed-uuid :parent {:id 91} :page {:id 91}
+                           :link {:id 94} :refs [{:id 94}]}))
+                nil))]
+    (async done
+      (-> (p/let [_ (-> (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid})
+                       (p/then (fn [_] (is false "API errors must reject")))
+                       (p/catch (fn [error] (is (= "embed denied" (.-message error))))))
+                  _ (reset! api-error? false)
+                  result (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid})
+                  _ (-> (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid parent-uuid})
+                        (p/then (fn [_] (is false "Self embeds must reject")))
+                        (p/catch (fn [error] (is (string/includes? (.-message error) "render cycle")))))]
+            (is (false? (:verified result)))
+            (is (string? (:diagnostic result)))
+            (is (= 2 @writes)))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
 
 (deftest create-block-verifies-parent-page-and-content
   (let [page-uuid "00000000-0000-4000-8000-000000000091"

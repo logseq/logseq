@@ -119,8 +119,17 @@ sibling placement before truncating the original. `moveBlocks` preflights the
 selection, stops on failed verification, and reports best-effort rollback;
 it currently composes `moveBlock`, using more reads than the optimized reference.
 `migratePage` previews literal top-level selection and reads the source after moving.
-There are 51 unique registered tools: all 50 Python reference names plus the
-retained native `getPage` API route (five API-backed and 46 compatibility data tools).
+There are 52 unique registered tools: all 50 Python reference names plus the
+retained native `getPage` API route and `createEmbed` (five API-backed and 47 compatibility data tools).
+`createEmbed(parent_uuid, target_uuid)` routes through `logseq.DB.createEmbed`
+and the normal editor/outliner insertion path. It supports page and block targets,
+rejects self/ancestor targets, and verifies the persisted UUID, link, derived
+reference, parent, and owning page. `dry_run` performs only identifier and ancestry
+reads; the write API remains responsible for graph/type/recycled validation.
+Default capability checks skip the embed write route. Local API and MCP tests
+pass; live embed creation is still pending explicit authorization on a disposable graph.
+Live checklist: create page and block embeds, read their links/refs and placement,
+confirm backlinks, refuse self/ancestor targets, then remove only the created embeds.
 The six remaining handlers are implemented: guarded recycling, metadata-preserving
 clearing, duplicate-title parking, validated outlines, escaped imports, and exact
 reference repair with independently acknowledged and capped page/tag creation.

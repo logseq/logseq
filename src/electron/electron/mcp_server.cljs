@@ -189,6 +189,14 @@
                         :title (z/string)
                         :dry_run (-> (z/boolean) .optional)
                         :verbose (-> (z/boolean) .optional)}}}
+  :createEmbed
+  {:fn mcp-compat/create-embed
+   :config #js {:title "Create Embed"
+            :description "Create an embed of a page or block under a parent UUID and verify its link, backlink reference, and placement. Parent and ancestor targets are refused."
+            :inputSchema #js {:parent_uuid (z/string)
+                        :target_uuid (z/string)
+                        :dry_run (-> (z/boolean) .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
   :updateBlock
   {:fn mcp-compat/update-block
    :config #js {:title "Update Block"

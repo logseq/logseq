@@ -47,6 +47,61 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest create-embed-inserts-linked-block-and-derived-reference
+  (test-helper/load-test-files
+   [{:page {:block/title "Embed Parent Page"}
+     :blocks [{:block/title "Embed Parent Block"}]}
+    {:page {:block/title "Embed Target Page"}
+     :blocks [{:block/title "Embed Target Block"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [parent (test-helper/find-block-by-content "Embed Parent Block")
+                    parent-page (test-helper/find-page-by-title "Embed Parent Page")
+                    target (test-helper/find-page-by-title "Embed Target Page")
+                    target-block (test-helper/find-block-by-content "Embed Target Block")
+                    block-result (db-based-api/create-embed (str (:block/uuid parent))
+                                                           (str (:block/uuid target-block)))
+                    block-embed (api-test/js->clj-kw block-result)
+                    result (db-based-api/create-embed (str (:block/uuid parent))
+                                                     (str (:block/uuid target)))
+                    embed (api-test/js->clj-kw result)
+                    link (or (:block/link embed) (:link embed))
+                    link-id (if (map? link) (or (:db/id link) (:id link)) link)
+                    refs (or (:block/refs embed) (:refs embed))
+                    ref-ids (set (keep #(if (map? %) (or (:db/id %) (:id %)) %) refs))]
+                (is (= (:db/id target-block)
+                   (or (get-in block-embed [:link :id])
+                     (get-in block-embed [:block/link :db/id]))))
+                (is (string? (or (:uuid embed) (:block/uuid embed))))
+              (is (= "" (or (:title embed) (:block/title embed))))
+              (is (= (:db/id target) link-id))
+              (is (contains? ref-ids (:db/id target)))
+              (is (= (:db/id parent) (or (get-in embed [:parent :id])
+                                         (get-in embed [:block/parent :db/id]))))
+              (is (= (:db/id parent-page) (or (get-in embed [:page :id])
+                                              (get-in embed [:block/page :db/id])))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest create-embed-refuses-parent-ancestor-cycle
+  (test-helper/load-test-files
+   [{:page {:block/title "Embed Cycle Page"}
+     :blocks [{:block/title "Embed Cycle Parent"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [parent (test-helper/find-block-by-content "Embed Cycle Parent")
+                  page (test-helper/find-page-by-title "Embed Cycle Page")]
+              (p/then (db-based-api/create-embed (str (:block/uuid parent))
+                                                 (str (:block/uuid page)))
+                      (fn [_]
+                        (is false "Embedding an ancestor must be rejected"))))))
+        (p/catch (fn [error]
+                   (is (string/includes? (.-message error) "render cycle"))))
+        (p/finally done))))
+
 (deftest get-orphan-tags-excludes-tags-with-direct-holders
   (async done
     (test-helper/load-test-files

@@ -710,6 +710,57 @@
 
       :else nil)))
 
+(defn create-embed
+  [api-fn args]
+  (let [parent-uuid (validated-uuid (aget args "parent_uuid"))
+        target-uuid (validated-uuid (aget args "target_uuid"))
+        dry-run? (true? (aget args "dry_run"))
+        verbose? (not (false? (aget args "verbose")))
+        entity-query "[:find (pull ?entity [:db/id :block/uuid :block/name :block/title {:block/parent [:db/id]} {:block/parent+ [:db/id]} {:block/page [:db/id]} {:block/link [:db/id]} {:block/refs [:db/id]}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"]
+    (p/let [parent-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input parent-uuid)])
+            target-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input target-uuid)])
+            parent (js->clj parent-result :keywordize-keys true)
+            target (js->clj target-result :keywordize-keys true)]
+      (when-not parent
+        (throw (js/Error. (str "No entity exists with exact UUID " parent-uuid))))
+      (when-not target
+        (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
+      (let [parent-id (entity-ref-id parent)
+            target-id (entity-ref-id target)
+            page-id (if (or (:name parent) (:block/name parent))
+                      parent-id
+                      (entity-ref-id (or (:page parent) (:block/page parent))))
+            ancestors (or (:parent+ parent) (:block/parent+ parent))]
+        (when (or (= parent-id target-id) (= page-id target-id)
+                  (some #(= target-id (entity-ref-id %)) ancestors))
+          (throw (js/Error. "Cannot embed the parent or its ancestor; this would create a render cycle")))
+        (if dry-run?
+          {:validation {:parent parent :target target}
+           :response nil :verified_entities [] :verified false
+           :recovered_after_timeout false
+           :diagnostic "Dry run: nothing was written. The UUIDs resolve and no parent ancestry cycle was found."}
+          (p/let [response (api-fn "logseq.DB.createEmbed" [parent-uuid target-uuid])
+                  response-map (js->clj response :keywordize-keys true)]
+            (when-let [error (:error response-map)]
+              (throw (js/Error. (str error))))
+            (let [embed-uuid (or (:uuid response-map) (:block/uuid response-map))]
+              (when-not embed-uuid
+                (throw (js/Error. "Embed insertion did not return a block UUID")))
+              (p/let [stored-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input embed-uuid)])
+                      stored (js->clj stored-result :keywordize-keys true)
+                      verified? (and (= embed-uuid (or (:uuid stored) (:block/uuid stored)))
+                                     (= parent-id (entity-ref-id (or (:parent stored) (:block/parent stored))))
+                                     (= page-id (entity-ref-id (or (:page stored) (:block/page stored))))
+                                     (= target-id (entity-ref-id (or (:link stored) (:block/link stored))))
+                                     (some #(= target-id (entity-ref-id %)) (or (:refs stored) (:block/refs stored))))]
+                {:validation nil
+                 :response response-map
+                 :verified_entities (if verbose? (if stored [stored] [])
+                                        (if stored [(entity-write-digest stored)] []))
+                 :recovered_after_timeout false
+                 :verified (boolean verified?)
+                 :diagnostic (when-not verified? "The embed UUID, link, reference, parent, or owning page was not observed as requested")}))))))))
+
 (defn create-block
   [api-fn args]
   (let [parent-uuid (aget args "parent_uuid")
@@ -2435,6 +2486,7 @@
    :createPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage"]
    :renamePage ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
    :createBlock ["logseq.DB.insertBlock" "logseq.DB.datascriptQuery"]
+  :createEmbed ["logseq.DB.createEmbed" "logseq.DB.datascriptQuery"]
    :updateBlock ["logseq.DB.updateBlock" "logseq.DB.datascriptQuery"]
    :moveBlock ["logseq.DB.moveBlock" "logseq.DB.datascriptQuery"]
    :removeBlock ["logseq.DB.removeBlock" "logseq.DB.datascriptQuery"]
@@ -2501,6 +2553,7 @@
    "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
    "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
    "logseq.DB.insertBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__" #js {:sibling false}]
+  "logseq.DB.createEmbed" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.insertBatchBlock" ["__mcp_capability_probe__" #js [] #js {}]
    "logseq.DB.renamePage" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.updateBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
@@ -2518,7 +2571,7 @@
 
 (def ^:private capability-write-methods
   #{"logseq.DB.upsertProperty" "logseq.DB.createTag" "logseq.DB.createPage"
-    "logseq.DB.insertBlock" "logseq.DB.insertBatchBlock" "logseq.DB.renamePage"
+    "logseq.DB.insertBlock" "logseq.DB.createEmbed" "logseq.DB.insertBatchBlock" "logseq.DB.renamePage"
     "logseq.DB.updateBlock" "logseq.DB.moveBlock" "logseq.DB.removeBlock"
     "logseq.DB.deletePage" "logseq.DB.addBlockTag" "logseq.DB.removeBlockTag"
     "logseq.DB.upsertBlockProperty" "logseq.DB.removeBlockProperty"
