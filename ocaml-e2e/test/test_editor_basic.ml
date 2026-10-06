@@ -1241,7 +1241,9 @@ let () =
         let* () = B.new_block env "rapid delete start" in
         let* () = Keyboard.enter_in_editor env in
         let* () = K.backspace env in
-        let* () = Util.press_seq env " tail" in
+        (* element-targeted typing — the post-Backspace refocus can lag, and
+           *:focus delivery drops the leading space into a dying textarea *)
+        let* () = Keyboard.type_in_editor env " tail" in
         let* () = Util.wait_timeout env 800. in
         let* st = editor_input_state env in
         let value =
