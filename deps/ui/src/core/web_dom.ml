@@ -1128,6 +1128,34 @@ let binary_to_u8 s =
     s;
   u8
 
+(* raw-DEFLATE inflate via DecompressionStream("deflate-raw") — zip
+   method-8 payloads pipe through as Blob -> stream -> Response *)
+
+type js_stream
+
+external decompression_stream : string -> js_stream = "DecompressionStream"
+  [@@mel.new]
+
+external pipe_through : Js.Json.t -> js_stream -> js_stream = "pipeThrough"
+  [@@mel.send]
+
+external blob_stream : Webapi.Blob.t -> Js.Json.t = "stream" [@@mel.send]
+
+external response_of_stream : js_stream -> Js.Json.t = "Response" [@@mel.new]
+
+external resp_array_buffer :
+  Js.Json.t -> Js.Typed_array.ArrayBuffer.t Js.Promise.t = "arrayBuffer"
+  [@@mel.send]
+
+let inflate_raw (data : string) : string Js.Promise.t =
+  let blob = make_blob [| binary_to_u8 data |] (json_props []) in
+  Js.Promise.then_
+    (fun buf -> Js.Promise.resolve (u8_of_buffer buf))
+    (resp_array_buffer
+       (response_of_stream
+          (pipe_through (blob_stream blob)
+             (decompression_stream "deflate-raw"))))
+
 let download_blob ~filename ~mime payload_u8 =
   let blob =
     make_blob [| payload_u8 |]

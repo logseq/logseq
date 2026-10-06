@@ -70,6 +70,10 @@ let el_closest = Editor_dom.el_closest
 let closest_sel = Editor_dom.closest_sel
 let el_query = Editor_dom.el_query
 let el_query_all = Editor_dom.el_query_all
+let el_query_all_arr (root : el) (sel : string) : el array =
+  match el_query_all root sel with
+  | Js.Json.JArray arr -> arr
+  | _ -> [||]
 let el_id = Editor_dom.el_id
 let el_dom_id = Editor_dom.el_dom_id
 let el_tag = Editor_dom.el_tag
@@ -232,6 +236,12 @@ let file_name = Browser_ui.file_name
 let file_size = Browser_ui.file_size
 let u8_of_buffer = Browser_ui.u8_of_buffer
 let binary_to_u8 = Browser_ui.binary_to_u8
+
+(* no DecompressionStream on the native host — sqlite-zip imports
+   surface the rejection as an import toast *)
+let inflate_raw (_data : string) : string Js.Promise.t =
+  Js.Promise.reject (Failure "inflate_raw: not implemented on native")
+
 let download_text = Browser_ui.download_text
 let download_binary = Browser_ui.download_binary
 

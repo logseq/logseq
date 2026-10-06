@@ -571,12 +571,17 @@ let on_mousedown el ev =
 (* --- adapter + conduit --------------------------------------------------------- *)
 
 let create _id document emit =
-  let el = create_element document "input" in
-  set_attr el "type" "text";
+  (* e2e contract: the block editor's input element is a
+     textarea#edit-block-<uuid>[data-testid='block editor'] inside
+     .editor-wrapper (`.editor-wrapper textarea` is the e2e editor
+     handle). Enter/beforeinput are all preventDefault'd so a
+     multi-line-capable element behaves like the old <input>. *)
+  let el = create_element document "textarea" in
   set_attr el "autocapitalize" "off";
   set_attr el "autocomplete" "off";
   set_attr el "autocorrect" "off";
   set_attr el "spellcheck" "false";
+  set_attr el "data-testid" "block editor";
   set_attr el "style" base_style;
   set_class_name el "ed-input";
   Dom_adapter.emit_set el emit;
@@ -606,8 +611,9 @@ let set_property el name v =
       Hashtbl.replace by_block s el;
       (* mirrored as a DOM attr so document-level dispatch
          (editor_keys) can resolve a target's block without reaching
-         into this module's state *)
-      set_attr el "data-block-id" s
+         into this module's state; the id is the e2e block-editor hook *)
+      set_attr el "data-block-id" s;
+      set_attr el "id" ("edit-block-" ^ s)
   | "caret", IntValue n ->
       st.caret_off <- n;
       reanchor el

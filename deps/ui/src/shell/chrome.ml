@@ -630,7 +630,7 @@ let header (ms : Model.t Signal.signal) =
                   | Some p when p.Model.page_parents <> [] ->
                       let item key ~href ~text =
                         link ~key ~style_class:"breadcrumb-item"
-                          ~url:href ~text []
+                          ~url:href ~target:`self_ ~text []
                       in
                       box ~key:"head-bc" ~style_class:"breadcrumb"
                         (List.mapi

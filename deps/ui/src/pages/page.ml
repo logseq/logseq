@@ -31,7 +31,7 @@ let zoom_breadcrumbs (page : Model.page) : t list =
              (fun (p : Model.block) ->
                link ~style_class:"breadcrumb-item"
                  ~url:("#/block/" ^ Option.value p.block_uuid ~default:"")
-                 ~text:p.block_title [])
+                 ~target:`self_ ~text:p.block_title [])
              parents)
       ]
 
@@ -54,7 +54,7 @@ let breadcrumbs title : t list =
               link ~key:("bc-" ^ here)
                 ~style_class:"breadcrumb-item"
                 ~url:("#/page/" ^ here)
-                ~text:part []
+                ~target:`self_ ~text:part []
             in
             let sep = text ~key:("bcsep-" ^ here) ~value:" / " [] in
             crumbs (sep :: item :: acc) here rest
@@ -965,7 +965,7 @@ let unlinked_row (b : Model.block) : t =
            link ~key:("urp-" ^ key)
              ~style_class:"unlinked-page-name"
              ~url:("#/page/" ^ name)
-             ~text:name []
+             ~target:`self_ ~text:name []
        | None -> Logseq_dom.nothing)
     ; Tree.block_row ~scope:"unlinked" b
     ]

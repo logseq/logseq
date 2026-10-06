@@ -90,6 +90,110 @@ let import_file_graph repo files =
       Js.Promise.resolve true
   | [] -> Js.Promise.resolve false
 
+(* cljs import.cljs zip helpers: entry names lowercase with "+" as "/";
+   the db is the shortest path ending in "db.sqlite", assets are any
+   file under an assets/ dir *)
+let zip_norm name =
+  String.lowercase_ascii (Str_util.replace_all name ~pat:"+" ~rep:"/")
+
+let sqlite_zip_entry (es : Zip.zip_entry list) =
+  let cands =
+    List.filter
+      (fun e -> Str_util.ends_with (zip_norm e.Zip.e_name) "db.sqlite")
+      es
+  in
+  match
+    List.sort
+      (fun a b -> compare (String.length a.Zip.e_name) (String.length b.Zip.e_name))
+      cands
+  with
+  | e :: _ -> Some e
+  | [] -> None
+
+let asset_zip_entry (e : Zip.zip_entry) =
+  let n = zip_norm e.Zip.e_name in
+  Str_util.starts_with n "assets/" || Str_util.contains n "/assets/"
+
+(* cljs asset-file-name: basename under the assets/ dir *)
+let asset_zip_file_name name =
+  let n = Str_util.replace_all name ~pat:"+" ~rep:"/" in
+  let rel =
+    match Str_util.index_of (String.lowercase_ascii n) "/assets/" with
+    | Some i -> String.sub n (i + 8) (String.length n - (i + 8))
+    | None ->
+        (if Str_util.starts_with n "assets/"
+         then String.sub n 7 (String.length n - 7)
+         else n)
+  in
+  Filename.basename rel
+
+(* STORE passes through; DEFLATE inflates via DecompressionStream *)
+let zip_entry_data buf (e : Zip.zip_entry) : string Js.Promise.t =
+  let raw = Zip.raw_data buf e in
+  if e.Zip.e_method = 0 then Js.Promise.resolve raw
+  else if e.Zip.e_method = 8 then Web_dom.inflate_raw raw
+  else
+    Js.Promise.reject
+      (Failure ("unsupported zip method " ^ string_of_int e.Zip.e_method))
+
+let rec copy_zip_assets repo buf assets copied failed =
+  match assets with
+  | [] -> Js.Promise.resolve (copied, List.rev failed)
+  | e :: rest -> (
+      let name = asset_zip_file_name e.Zip.e_name in
+      if name = "" then copy_zip_assets repo buf rest copied failed
+      else
+        let* data =
+          zip_entry_data buf e
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve "")
+        in
+        if data = "" then
+          copy_zip_assets repo buf rest copied (name :: failed)
+        else
+          let* () =
+            Asset_store.write_asset ~repo ~name ~u8:(Web_dom.binary_to_u8 data)
+          in
+          copy_zip_assets repo buf rest (copied + 1) failed)
+
+(* cljs <import-from-sqlite-zip!: unzip, import the db.sqlite entry via
+   import-db-binary, then copy every assets/ file into the repo *)
+let import_sqlite_zip repo file =
+  let* buf = file |> Web_dom.file_buffer in
+  let buf = Web_dom.u8_of_buffer buf in
+  let es = Zip.entries buf in
+  match sqlite_zip_entry es with
+  | None ->
+      Toast.warning T.import_zip_missing_db;
+      Js.Promise.resolve false
+  | Some entry -> (
+      let* sqlite = zip_entry_data buf entry in
+      let* _ =
+        Runtime.invoke2 "thread-api/import-db-binary" (Wire.String repo)
+          (Wire.Binary sqlite)
+      in
+      let assets = List.filter asset_zip_entry es in
+      let* copied, failed = copy_zip_assets repo buf assets 0 [] in
+      if copied > 0 then Toast.success (T.import_assets_imported copied);
+      if failed <> [] then
+        Toast.warning (T.import_assets_skipped (List.length failed));
+      let total = List.length assets in
+      if total > 0 && total <> copied + List.length failed then
+        Toast.warning (T.import_assets_partial copied total);
+      Js.Promise.resolve true)
+
+(* cljs <import-from-debug-transit!: create the graph with the raw
+   transit payload as an open opt — the worker bootstrap-transacts the
+   decoded datoms instead of seed data *)
+let import_debug_transit repo file =
+  let* raw = file |> Web_dom.file_text in
+  let* _ =
+    Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
+      (Wire.Map
+         [ (Wire.kw "import-type", Wire.Keyword "debug-transit")
+         ; (Wire.kw "debug-transit-raw", Wire.String raw) ])
+  in
+  Js.Promise.resolve true
+
 let run_files kind files =
   match (kind, files) with
   | "import-sqlite-db", f :: _ ->
@@ -99,9 +203,12 @@ let run_files kind files =
   | "import-file-graph", _ :: _ ->
       ask_name_and_run "file graph" (fun repo ->
           import_file_graph repo files)
-  | "import-sqlite-zip", _ :: _ | "import-debug-transit", _ :: _ ->
-      (* zip/transit unpacking isn't wired to a worker endpoint yet *)
-      Toast.warning (T.import_unsupported kind)
+  | "import-sqlite-zip", f :: _ ->
+      ask_name_and_run "SQLite DB + assets" (fun repo ->
+          import_sqlite_zip repo f)
+  | "import-debug-transit", f :: _ ->
+      ask_name_and_run "debug transit" (fun repo ->
+          import_debug_transit repo f)
   | _ -> ()
 
 let on_change id () =

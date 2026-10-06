@@ -354,8 +354,11 @@ let select_cell inst ~row_uuid ~blk : t =
     | None -> row_uuid
   in
   row ~cross:`center
-    [ row ~cross:`center ~main:`center ~width:32 ~height:32
+    [ (* cljs label.jtrigger[data-table-row-select] — e2e clicks it
+         through row.locator("[data-table-row-select]") *)
+      row ~cross:`center ~main:`center ~width:32 ~height:32
         ~style_class:"jtrigger"
+        ~data_attrs:[ ("data-table-row-select", "true") ]
         [ checkbox_el inst ~jtrigger:true ~id:(dbid ^ "-checkbox")
             ~aria_label:I.select_row
             ~shown:(fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
@@ -373,16 +376,13 @@ let open_row_sidebar row_uuid =
     (Js.Json.object_
        (Js.Dict.fromList [ ("uuid", Js.Json.string row_uuid) ]))
 
-let goto_page name =
-  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ name))
-
 let title_cell inst ~row_uuid ~blk (c : V.column) : t =
   let title = Wr.prop_text (cell_value blk c) in
   match inst.V.kind, W.get blk "block/name" with
   | V.KAllPages, Some (W.String name) ->
-      (* cljs page-title-cell: div.flex.h-full.min-w-0.items-center >
-         a.page-ref.truncate; href prefers block/uuid — the component
-         version is a pressable text; `title` (tooltip) has no prop *)
+      (* cljs page-title-cell: a.page-ref.truncate — a real anchor so
+         the delegated a.page-ref click/hover/context-menu readers pick
+         it up; href prefers block/uuid via data-uuid *)
       let page_name =
         if row_uuid <> "" then row_uuid
         else if name <> "" then name
@@ -390,8 +390,13 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
       in
       inner_cell
         [ row ~cross:`center ~grow:1.
-            [ text ~style_class:"page-ref" ~value:title
-                ~on_press:(fun _ -> goto_page page_name) [] ]
+            [ link ~style_class:"page-ref truncate" ~text:title
+                ~data_attrs:
+                  ([ ("data-ref", String.lowercase_ascii page_name)
+                   ; ("tabindex", "0"); ("draggable", "true") ]
+                   @ if row_uuid <> "" then [ ("data-uuid", row_uuid) ]
+                     else [])
+                [] ]
         ]
   | _ ->
       (* cljs table-block-title: flex row of text + hover "Open" ghost
@@ -420,8 +425,12 @@ let prop_cell ~blk (c : V.column) : t =
       let t_ = Option.value (Wr.ref_title v) ~default:"" in
       let href = Option.value (Wr.ref_uuid v) ~default:t_ in
       inner_cell
-        [ text ~style_class:"page-ref" ~value:t_
-            ~on_press:(fun _ -> goto_page href) [] ]
+        [ link ~style_class:"relative page-ref" ~text:t_
+            ~data_attrs:
+              [ ("data-uuid", href); ("tabindex", "0")
+              ; ("draggable", "true")
+              ; ("data-ref", String.lowercase_ascii t_) ]
+            [] ]
   | W.Array xs when c.V.c_many ->
       (* cljs pv: .property-value-inner > .multi-values > select-items;
          the implicit Page class is hidden *)
@@ -439,20 +448,37 @@ let prop_cell ~blk (c : V.column) : t =
              (fun i x ->
             let t_ = Wr.prop_text x in
             if c.V.c_id = "block/tags" then
-              (* cljs select-item -> page-cp {:tag?} ->
-                 a.relative.tag[data-ref][data-uuid][draggable] > span —
-                 the data-*/draggable/tabindex markers are DOM-only and
-                 dropped; the tag carries no href so it stays inert *)
-              [ box ~style_class:"select-item"
-                  [ text ~style_class:"relative tag" ~value:("#" ^ t_) [] ]
-              ]
+              (* cljs select-item -> page-cp {:tag?}:
+                 .block-tag[data-tag-uuid] chip wrapping
+                 a.relative.tag[data-ref][data-uuid][draggable] — the
+                 delegated context menu reads the chip attrs, click
+                 readers the anchor's *)
+              [ (let tuuid =
+                   Option.value (Wr.ref_uuid x) ~default:""
+                 in
+                 box ~style_class:"select-item block-tag"
+                   ~data_attrs:
+                     ([ ("data-tag-title", t_) ]
+                      @ if tuuid <> "" then [ ("data-tag-uuid", tuuid) ]
+                        else [])
+                   [ link ~style_class:"relative tag" ~text:("#" ^ t_)
+                       ~data_attrs:
+                         ([ ("tabindex", "0"); ("draggable", "true")
+                          ; ("data-ref", String.lowercase_ascii t_) ]
+                          @ if tuuid <> ""
+                            then [ ("data-uuid", tuuid) ]
+                            else [])
+                       [] ]) ]
             else
               (if i > 0 then [ text ~value:"," [] ] else [])
               @ [ box
-                    [ text ~style_class:"page-ref" ~value:t_
-                        ~on_press:(fun _ ->
-                          goto_page
-                            (Option.value (Wr.ref_uuid x) ~default:t_))
+                    [ link ~style_class:"relative page-ref" ~text:t_
+                        ~data_attrs:
+                          ([ ("tabindex", "0"); ("draggable", "true")
+                           ; ("data-ref", String.lowercase_ascii t_) ]
+                           @ (match Wr.ref_uuid x with
+                              | Some u -> [ ("data-uuid", u) ]
+                              | None -> []))
                         [] ] ])
              items)
       in
@@ -773,19 +799,69 @@ let flat_items (s : V.vstate) = List.map (row_item_of s) (all_row_uuids s)
 let keyed_row_key (u, blk) =
   u ^ "|" ^ string_of_int (Hashtbl.hash blk)
 
-(* TODO(component): the imperative side still reads `blockid` /
-   data-id off .ls-block rows (dnd/block_dnd, editor/block_selection);
-   component kinds can't emit them — the uuid lands on
-   ~accessibility_identifier (ls-block-<uuid>) until those readers
-   switch to it *)
+(* cljs row keydown (views.cljs): only while the row is selected —
+   Enter opens the row in the sidebar and clears the selection,
+   ArrowLeft/Right move the .selected cell marker to the first/last
+   non-checkbox cell, Escape clears the selection. Rides the dom-event
+   channel since kinds expose no key events; the stop(e) half is
+   adapter-side and not portable. *)
+let table_row_keydown inst ~row_uuid name payload =
+  if name = "keydown" && V.Sset.mem row_uuid (V.get inst).V.selected then
+    match Platform.payload_str payload "key" with
+    | "Enter" ->
+        open_row_sidebar row_uuid;
+        V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+    | "ArrowLeft" | "ArrowRight" as arrow ->
+        (match E.get_element_by_id ("ls-block-" ^ row_uuid) with
+         | Some row_dom -> (
+             let cells =
+               E.el_query_all_arr row_dom ".ls-table-cell"
+               |> Array.to_list
+               |> List.filter (fun cell ->
+                      E.el_query cell ".ui__checkbox" = None)
+             in
+             let pick =
+               if arrow = "ArrowLeft" then List.nth_opt cells 0
+               else
+                 match List.rev cells with
+                 | c :: _ -> Some c
+                 | [] -> None
+             in
+             V.update inst
+               (fun s -> { s with V.selected = V.Sset.empty });
+             if arrow = "ArrowRight" then
+               E.el_class_remove row_dom "selected";
+             match pick with
+             | Some cell ->
+                 E.el_class_add cell "selected";
+                 E.el_focus cell
+             | None -> ())
+         | None -> ())
+    | "Escape" ->
+        V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+    | _ -> ()
+
+(* cljs table-row: .ls-table-row.ls-block[blockid][data-id][tabindex=0]
+   — the imperative side still reads `blockid`/data-id off .ls-block
+   rows (dnd/block_dnd, editor/block_selection, popups context menu +
+   block picker). `blockid` sits outside the ~data_attrs whitelist, so
+   the row is a dom div carrying the raw attrs (same channel the
+   outline rows use). *)
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   let cell_wrap c = box ~height:33 [ cell_el inst ~row_uuid ~blk c ] in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  row ~cross:`stretch
-    ~style_class:"ls-table-row ls-block"
-    ~accessibility_identifier:("ls-block-" ^ row_uuid)
+  dom ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
+    ~id:("ls-block-" ^ row_uuid)
+    ~style_class_signal:
+      (Logseq_dom.class_signal (sig_of inst) (fun (s : V.vstate) ->
+           "ls-table-row ls-block"
+           ^ if V.Sset.mem row_uuid s.V.selected then " selected" else ""))
+    ~attrs:
+      [ ("blockid", row_uuid); ("data-id", row_uuid); ("tabindex", "0") ]
+    ~events:"keydown"
+    ~on_dom_event:(table_row_keydown inst ~row_uuid)
     [ (* cljs: .sticky-columns holds pinned cells, sibling .flex.flex-row
          holds the unpinned ones — each cell wrapped in .h-full *)
       row ~style_class:"sticky-columns"
@@ -935,12 +1011,12 @@ let grouped_table inst ~rows : t =
 
 (* ---------- list + gallery ---------- *)
 
-(* TODO(component): blockid attrs dropped like row_el —
-   .ls-block[blockid] readers in dnd/block_dnd must move to the
-   ls-block-<uuid> accessibility_identifier *)
+(* same .ls-block[blockid] contract as row_el: the context-menu, block
+   picker and dnd readers resolve list rows by blockid/data-id *)
 let list_row_el ~row_uuid ~title : t =
-  box ~style_class:"ls-block"
-    ~accessibility_identifier:("ls-block-" ^ row_uuid)
+  dom ~key:("ls-lr-" ^ row_uuid) ~tag:"div"
+    ~id:("ls-block-" ^ row_uuid) ~style_class:"ls-block"
+    ~attrs:[ ("blockid", row_uuid); ("data-id", row_uuid) ]
     [ row ~gap:4 ~style_class:"block-main-container"
         [ box ~style_class:"block-content"
             ~accessibility_identifier:("block-content-" ^ row_uuid)

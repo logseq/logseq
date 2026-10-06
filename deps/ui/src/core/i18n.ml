@@ -779,6 +779,12 @@ let import_failed = t "import/import-error"
 let import_invalid_edn = t "import/invalid-edn-file"
 let import_unsupported kind = tf "import/unsupported-error" [ kind ]
 let import_sqlite_title = t "import/sqlite-label"
+let import_zip_missing_db = t "import/zip-missing-db-sqlite"
+let import_zip_error msg = tf "import/zip-import-error" [ msg ]
+let import_assets_imported n = tf "import/assets-imported" [ string_of_int n ]
+let import_assets_skipped n = tf "import/assets-skipped" [ string_of_int n ]
+let import_assets_partial copied total =
+  tf "import/assets-import-partial" [ string_of_int copied; string_of_int total ]
 let export_title = t "export/title"
 let export_sqlite_db = t "export/sqlite-db"
 let export_sqlite_zip = t "export/zip"
