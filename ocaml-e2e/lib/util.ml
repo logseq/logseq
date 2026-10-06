@@ -214,7 +214,8 @@ let search env text =
   let* () = fill_cmdk_search env text in
   wait_timeout env cmdk_search_settle_ms
 
-let rec repeat_until_visible env n target_loc repeat_fn =
+let rec repeat_until_visible ?(expect_timeout = 5000.) env n target_loc
+    repeat_fn =
   let* visible = Pw.visible_l target_loc in
   if visible then Js.Promise.resolve ()
   else
@@ -222,8 +223,10 @@ let rec repeat_until_visible env n target_loc repeat_fn =
     Js.Promise.catch
       (fun e ->
         if n <= 0 then Playwright.throw_error e
-        else repeat_until_visible env (n - 1) target_loc repeat_fn)
-      (E2e_assert.is_visible_l target_loc)
+        else
+          repeat_until_visible ~expect_timeout env (n - 1) target_loc
+            repeat_fn)
+      (E2e_assert.is_visible_l ~timeout:expect_timeout target_loc)
 
 let search_and_click env search_text =
   let* () = search env search_text in
@@ -246,7 +249,11 @@ let search_and_click env search_text =
           Js.Promise.resolve (Js.log2 "[search-dbg]" dump)
         in
         Playwright.throw_error e)
-      (repeat_until_visible env 20 result (fun () -> search env search_text))
+      (* each round re-fills the box, which wipes pending results — under
+         -j8 the worker's search can take >5s, so give every issued query
+         room to render before re-firing *)
+      (repeat_until_visible ~expect_timeout:15000. env 12 result (fun () ->
+           search env search_text))
   in
   Pw.click_l result
 
