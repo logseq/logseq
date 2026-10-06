@@ -305,6 +305,26 @@
    first
    (d/entity db)))
 
+(defn- top-level-page-by-name
+  "The oldest page named `title` that is not inside a namespace: no parent
+  other than the Library, and for a tag no parent tag other than Root Tag.
+  The first part of a namespace path names such a page; taking the oldest
+  page of that name anywhere made \"Foo/Baz\" go under Bar/Foo's Foo
+  (db-test #1348)."
+  [db title]
+  (let [library-id (:db/id (ldb/get-built-in-page db common-config/library-page-name))
+        top-level? (fn [page]
+                     (and (let [parent-id (:db/id (:block/parent page))]
+                            (or (nil? parent-id) (= parent-id library-id)))
+                          (every? #(= :logseq.class/Root (:db/ident %))
+                                  (:logseq.property.class/extends page))))]
+    (->> (entity-util/get-pages-by-name db title)
+         (map :e)
+         sort
+         (map #(d/entity db %))
+         (filter top-level?)
+         first)))
+
 (defn- page-with-parent-and-order
   "Apply to namespace pages"
   [db page & {:keys [parent]}]
@@ -330,7 +350,7 @@
                     (fn [idx part]
                       (let [last-part? (= idx (dec (count parts)))
                             page (if (zero? idx)
-                                   (ldb/get-page db part)
+                                   (top-level-page-by-name db part)
                                    (get-page-by-parent-name db (nth parts (dec idx)) part create-class?))
                             result (or page
                                        (gp-block/page-name->map part db true date-formatter

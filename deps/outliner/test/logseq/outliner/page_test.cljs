@@ -91,6 +91,33 @@
            (outliner-page/create! conn "property1/class" {:split-namespace? true :class? true}))
           "Class can't have a property parent"))))
 
+(deftest create-namespace-root-is-a-top-level-page
+  ;; db-test #1348: the first part of a path took the oldest page of that name
+  ;; anywhere, so "Foo/Baz" after "Bar/Foo" went under Bar's Foo
+  (testing "pages"
+    (let [conn (db-test/create-conn)
+          _ (outliner-page/create! conn "Bar/Foo" {:split-namespace? true})
+          [_ baz-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true})
+          baz (d/entity @conn [:block/uuid baz-uuid])
+          library (ldb/get-built-in-page @conn common-config/library-page-name)]
+      (is (= "Foo" (:block/title (:block/parent baz))))
+      (is (= (:db/id library) (:db/id (:block/parent (:block/parent baz))))
+          "Baz's Foo is a new top-level namespace page, not Bar's Foo")
+      (is (= #{"Bar" "Foo"} (set (map :block/title (:block/_parent library)))))))
+  (testing "a top-level page of that name is still the root"
+    (let [conn (db-test/create-conn)
+          [_ foo-uuid] (outliner-page/create! conn "Foo" {})
+          _ (outliner-page/create! conn "Bar/Foo" {:split-namespace? true})
+          [_ baz-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true})]
+      (is (= foo-uuid (:block/uuid (:block/parent (d/entity @conn [:block/uuid baz-uuid])))))))
+  (testing "tags"
+    (let [conn (db-test/create-conn)
+          _ (outliner-page/create! conn "foo/bar" {:split-namespace? true :class? true})
+          [_ new-foo-uuid] (outliner-page/create! conn "Bar/Foo" {:split-namespace? true :class? true})
+          new-foo (d/entity @conn [:block/uuid new-foo-uuid])]
+      (is (= ["Bar"] (map :block/title (:logseq.property.class/extends new-foo)))
+          "Foo extends the new top-level tag Bar, not foo's bar"))))
+
 (deftest create-page
   (let [conn (db-test/create-conn)
         [_ page-uuid] (outliner-page/create! conn "fooz" {})]
