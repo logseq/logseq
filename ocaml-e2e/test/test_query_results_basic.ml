@@ -420,7 +420,8 @@ let () =
             "(() => JSON.stringify({selectResults: document.querySelector('.cp__select-results')?.textContent.replace(/\\s+/g,' ').slice(0,200) || 'none', menuLinks: [...document.querySelectorAll('a.menu-link')].map(a => a.textContent.slice(0,40)).slice(0,10), popovers: document.querySelectorAll('.ui__popover-content, .ui__dropdown-menu-content').length}))()"
         in
         let* () = Js.Promise.resolve (Js.log2 "clause-add-miss" dump) in
-        E2e_assert.is_visible env ".cp__query-builder .query-clause"
+        let* _ = E2e_assert.is_visible env ".cp__query-builder .query-clause" in
+        Js.Promise.resolve ()
       end
       else add_clause (tries - 1)
     in

@@ -108,7 +108,27 @@ let get_by_role env ?name role = Playwright.get_by_role ?name (page env) role
 
 (* {2 JS evaluation} *)
 
-let eval_js env js = Playwright.evaluate (page env) js
+(** Playwright [evaluate] has no timeout: when the evaluated expression
+    returns a promise resolved by the worker (comlink remoteInvoke), a
+    worker busy applying a remote backlog leaves the call pending forever
+    — the suite then hangs at 0% CPU with no error. Race every evaluation
+    against a deadline so a wedged call fails instead of hanging the
+    whole suite. *)
+let eval_timeout_ms = 90000.
+
+let with_eval_timeout env label p =
+  Js.Promise.race
+    [| p
+     ; (let* () = Playwright.wait_for_timeout (page env) eval_timeout_ms in
+        Js.Promise.reject
+          (Failure (Printf.sprintf "eval timeout after %.0fs: %s"
+                      (eval_timeout_ms /. 1000.) label)))
+     |]
+
+let eval_js env js =
+  with_eval_timeout env
+    (String.sub js 0 (min 80 (String.length js)))
+    (Playwright.evaluate (page env) js)
 
 external json_stringify : 'a -> string = "stringify" [@@mel.scope "JSON"]
 
@@ -119,7 +139,9 @@ let eval_js_arg env js arg =
   let call =
     Printf.sprintf "(%s)(%s)" js (json_stringify arg)
   in
-  Playwright.evaluate (page env) call
+  with_eval_timeout env
+    (String.sub call 0 (min 80 (String.length call)))
+    (Playwright.evaluate (page env) call)
 
 (** [eval_on_element env selector js]: [js] is an element function body like
     [wally]'s [eval-js] on a locator — e.g. ["element => element.id"]. Locator
