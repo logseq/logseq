@@ -1001,12 +1001,22 @@ let attr_resolves (d : db) (a : Wire.t) : bool =
 
 let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
     (db : db) (tx_data : Wire.t list) : Wire.t list =
-  let created = fst (pending_tx_uuid_delta tx_data) in
   let entity_exists =
     match uuid_exists with
     | Some f -> f
     | None -> (fun uuid_str -> Outliner_op.entity_of_uuid db uuid_str <> None)
   in
+  (* when a parent add is dropped (missing target, no fallback) its
+     paired `db/retract e "block/parent"` must go too — otherwise the
+     entity loses its pre-tx parent and validate-tx-report rejects the
+     parentless block, failing the whole entry *)
+  let parent_edge_dropped : (string, unit) Hashtbl.t = Hashtbl.create 4 in
+  (* the pass reruns to a fixpoint: created-uuids count only what the
+     surviving items create, so a ref kept by a creator that a later
+     filter drops turns missing on the next pass. Drops are monotonic
+     (items never re-enter), so the set always converges *)
+  let rec pass (items : Wire.t list) : Wire.t list =
+  let created = fst (pending_tx_uuid_delta items) in
   let missing uuid_str =
     (not (SSet.mem uuid_str created)) && not (entity_exists uuid_str)
   in
@@ -1022,6 +1032,48 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
     | _ -> None
   in
   let is_missing_ref w = missing_uuid_of w <> None in
+  (* deep counterpart of is_missing_ref: a [:block/uuid u] nested inside a
+     coll value (cardinality-many ref attrs carry colls of lookup-refs),
+     a cas/fn slot past position 3, or a map-form value escapes the flat
+     pos-3 inspection and would crash the server-side transact *)
+  let rec missing_refs_deep (w : Wire.t) : string list =
+    match missing_uuid_of w with
+    | Some u -> [ u ]
+    | None -> (
+        match w with
+        | Wire.Array xs | Wire.List xs | Wire.Set xs ->
+            List.concat_map missing_refs_deep xs
+        | Wire.Map kvs ->
+            List.concat_map
+              (fun (k, v) -> missing_refs_deep k @ missing_refs_deep v)
+              kvs
+        | Wire.Tagged (_, v) -> missing_refs_deep v
+        | _ -> [])
+  in
+  (* drop only the missing elements of a coll value rather than the whole
+     item — a cardinality-many ref attr keeps its resolvable refs. None =
+     the value itself (or what is left of it) is unresolvable *)
+  let rec filter_missing_deep (w : Wire.t) : Wire.t option =
+    match missing_uuid_of w with
+    | Some _ -> None
+    | None -> (
+        match w with
+        | Wire.Array xs -> (
+            match List.filter_map filter_missing_deep xs with
+            | [] -> None
+            | ys -> Some (Wire.Array ys))
+        | Wire.List xs -> (
+            match List.filter_map filter_missing_deep xs with
+            | [] -> None
+            | ys -> Some (Wire.List ys))
+        | Wire.Set xs -> (
+            match List.filter_map filter_missing_deep xs with
+            | [] -> None
+            | ys -> Some (Wire.Set ys))
+        | Wire.Map _ | Wire.Tagged _ ->
+            if missing_refs_deep w = [] then Some w else None
+        | _ -> Some w)
+  in
   (* e-position key -> page ref: a block/parent ref whose target was
      remotely deleted falls back to the page root — the same endpoint
      the semantic replay's ancestor fallback converges on. The page ref
@@ -1039,12 +1091,7 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
            if not (Hashtbl.mem page_ref_of k) then
              Hashtbl.replace page_ref_of k v
        | _ -> ())
-    tx_data;
-  (* when a parent add is dropped (missing target, no fallback) its
-     paired `db/retract e "block/parent"` must go too — otherwise the
-     entity loses its pre-tx parent and validate-tx-report rejects the
-     parentless block, failing the whole entry *)
-  let parent_edge_dropped : (string, unit) Hashtbl.t = Hashtbl.create 4 in
+    items;
   let rewrite_v_at3 (item : Wire.t) (pv : Wire.t) : Wire.t option =
     match item with
     | Wire.Array l ->
@@ -1070,63 +1117,133 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
     List.filter_map
       (fun item ->
          match item with
-         | Wire.Array l | Wire.List l when List.length l >= 4 -> (
-             let op = List.nth l 0 and e = List.nth l 1
-             and a = List.nth l 2 and v = List.nth l 3 in
-             match missing_uuid_of e with
-             | Some u ->
-                 failwith ("pending tx references missing block " ^ u)
-             | None ->
-                 (* property-pair drop: a user/logseq property attr that
-                    resolves nowhere on the new base was remotely deleted —
-                    keep everything else (schema attrs like block/name have
-                    no ident entity to resolve against). *)
-                 let dead_property_attr =
-                   match a with
-                   | Wire.Keyword a' | Wire.String a' ->
-                       Db_property.property a' && not (attr_live a)
-                   | _ -> false
-                 in
-                 if dead_property_attr then None
-                 else (
-                   match a with
-                   | Wire.Keyword "block/parent" when is_missing_ref v -> (
-                       match op with
-                       | Wire.Keyword "db/retract" ->
-                           (* retracting an unresolvable parent value is a
-                              no-op — drop it *)
-                           None
-                       | _ -> (
-                           match
-                             Hashtbl.find_opt page_ref_of
-                               (Transit_codec.to_string e)
-                           with
-                           | Some pv -> rewrite_v_at3 item pv
-                           | None -> (
-                               match db_page_ref e with
+         | Wire.Array l | Wire.List l when List.length l >= 2 -> (
+             (* e-position inspection must cover short ops too —
+                [:db/retractEntity [:block/uuid u]] is a no-op on the
+                server when u is absent (retract resolution is
+                non-strict), but a tempid or bare-uuid e cannot resolve
+                there at all and would crash the transact *)
+             let op = List.nth l 0 and e = List.nth l 1 in
+             let is_retract_op =
+               match op with
+               | Wire.Keyword "db/retract" | Wire.Keyword "db/retractEntity"
+               | Wire.Keyword "db.fn/retractEntity"
+               | Wire.String "db/retract" | Wire.String "db/retractEntity"
+               | Wire.String "db.fn/retractEntity" -> true
+               | _ -> false
+             in
+             if is_retract_op then
+               (match e with
+                | Wire.String _ | Wire.Uuid _ -> None
+                | _ -> Some item)
+             else
+               match missing_uuid_of e with
+               | Some u ->
+                   failwith ("pending tx references missing block " ^ u)
+               | None ->
+                 if List.length l < 4 then Some item
+                 else
+                   let op = List.nth l 0 and a = List.nth l 2
+                   and v = List.nth l 3 in
+                   (* property-pair drop: a user/logseq property attr that
+                      resolves nowhere on the new base was remotely deleted —
+                      keep everything else (schema attrs like block/name have
+                      no ident entity to resolve against). *)
+                   let dead_property_attr =
+                     match a with
+                     | Wire.Keyword a' | Wire.String a' ->
+                         Db_property.property a' && not (attr_live a)
+                     | _ -> false
+                   in
+                   if dead_property_attr then None
+                   else
+                     (* cas/fn slots past position 3 escape pos-3-only
+                        inspection the same way nested value refs do *)
+                     let extras_missing =
+                       List.length l > 4
+                       && List.exists
+                            (fun x -> missing_refs_deep x <> [])
+                            (List.filteri (fun i _ -> i >= 4) l)
+                     in
+                     if extras_missing then None
+                     else (
+                       match a with
+                       | Wire.Keyword "block/parent"
+                         when missing_refs_deep v <> [] -> (
+                           match op with
+                           | Wire.Keyword "db/retract" ->
+                               (* retracting an unresolvable parent value
+                                  is a no-op — drop it *)
+                               None
+                           | _ -> (
+                               match
+                                 Hashtbl.find_opt page_ref_of
+                                   (Transit_codec.to_string e)
+                               with
                                | Some pv -> rewrite_v_at3 item pv
-                               | None ->
-                                   Hashtbl.replace parent_edge_dropped
-                                     (Transit_codec.to_string e) ();
-                                   None)))
-                   | Wire.Keyword a'
-                     when ref_attr db a' && is_missing_ref v -> None
-                   | _ -> Some item))
+                               | None -> (
+                                   match db_page_ref e with
+                                   | Some pv -> rewrite_v_at3 item pv
+                                   | None ->
+                                       Hashtbl.replace parent_edge_dropped
+                                         (Transit_codec.to_string e) ();
+                                       None)))
+                       | Wire.Keyword a' when ref_attr db a' -> (
+                           if missing_refs_deep v = [] then Some item
+                           else
+                             match filter_missing_deep v with
+                             | Some v' -> rewrite_v_at3 item v'
+                             | None -> None)
+                       | _ -> Some item))
+         | Wire.Map kvs ->
+             (* map-form entries: a db/id lookup-ref the server cannot
+                resolve is the e-position of the entry — drop it whole *)
+             let id_missing =
+               List.exists
+                 (fun (k, v) ->
+                    match k with
+                    | Wire.Keyword "db/id" | Wire.String "db/id" ->
+                        missing_uuid_of v <> None
+                    | _ -> false)
+                 kvs
+             in
+             (* drop only the ref-attr pairs whose value resolves nowhere —
+                the entity's own block/uuid pair is not a ref attr and
+                survives *)
+             let kept =
+               List.filter
+                 (fun (k, v) ->
+                    match k with
+                    | Wire.Keyword a' | Wire.String a' ->
+                        (not (ref_attr db a')) || missing_refs_deep v = []
+                    | _ -> true)
+                 kvs
+             in
+             if id_missing then None
+             else if kept = kvs then Some item
+             else if kept = [] then None
+             else Some (Wire.Map kept)
          | _ -> Some item)
-      tx_data
+      items
   in
-  if Hashtbl.length parent_edge_dropped = 0 then rewritten
-  else
-    List.filter
-      (fun item ->
-         match item with
-         | Wire.Array (op :: e :: a :: _) | Wire.List (op :: e :: a :: _)
-           when op = Wire.keyword "db/retract"
-                && a = Wire.keyword "block/parent"
-                && Hashtbl.mem parent_edge_dropped (Transit_codec.to_string e) ->
-             false
-         | _ -> true)
-      rewritten
+  let rewritten =
+    if Hashtbl.length parent_edge_dropped = 0 then rewritten
+    else
+      List.filter
+        (fun item ->
+           match item with
+           | Wire.Array (op :: e :: a :: _) | Wire.List (op :: e :: a :: _)
+             when op = Wire.keyword "db/retract"
+                  && a = Wire.keyword "block/parent"
+                  && Hashtbl.mem parent_edge_dropped (Transit_codec.to_string e) ->
+               false
+           | _ -> true)
+        rewritten
+  in
+  if List.length rewritten = List.length items then rewritten
+  else pass rewritten
+  in
+  pass tx_data
 
 let entity_of_wire_ref (db : db) (v : Wire.t) : entity option =
   match v with
