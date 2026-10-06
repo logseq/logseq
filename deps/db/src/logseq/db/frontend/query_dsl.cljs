@@ -15,7 +15,12 @@
     (let [quoted-page-ref
           (fn [[match page-name]]
             (if (some? page-name)
-              (let [page-name' (string/replace page-name "#" tag-placeholder)]
+              ;; The ref becomes an EDN string: a \ or " in the title (a tag
+              ;; renamed to `Project"`) must be escaped, or the string ends early
+              (let [page-name' (-> page-name
+                                   (string/replace "\\" "\\\\")
+                                   (string/replace "\"" "\\\"")
+                                   (string/replace "#" tag-placeholder))]
                 (str "\"" page-ref/left-brackets page-name' page-ref/right-brackets "\""))
               match))]
       (some-> s
@@ -33,7 +38,8 @@
                                               value)))
                                      (string/join " ")
                                      (common-util/format "(between %s)"))))
-              (string/replace #"\"[^\"]+\""
+              ;; a string, escapes included, like the page-ref match above
+              (string/replace #"\"(?:\\.|[^\"\\])+\""
                               #(string/replace % "#" tag-placeholder))
               (string/replace " #" " #tag ")
               (string/replace #"^#" "#tag ")
