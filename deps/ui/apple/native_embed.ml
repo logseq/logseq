@@ -434,6 +434,34 @@ let submit node = dispatch_lui (Lui_protocol.Submit node)
 let dismiss node = dispatch_lui (Lui_protocol.Dismiss node)
 let double_press node = dispatch_lui (Lui_protocol.DoublePress node)
 
+let pointer_detail x y modifiers button target_class :
+    Lui_protocol.pointer_detail =
+  { x; y; modifiers; button; target_class }
+
+let press_detail node x y modifiers button target_class =
+  dispatch_lui
+    (Lui_protocol.PressDetail
+       (node, pointer_detail x y modifiers button target_class))
+
+let pointer_down node x y modifiers button target_class =
+  dispatch_lui
+    (Lui_protocol.PointerDown
+       (node, pointer_detail x y modifiers button target_class))
+
+let pointer_up node x y modifiers button target_class =
+  dispatch_lui
+    (Lui_protocol.PointerUp
+       (node, pointer_detail x y modifiers button target_class))
+
+let pointer_enter node = dispatch_lui (Lui_protocol.PointerEnter node)
+
+let pointer_leave node = dispatch_lui (Lui_protocol.PointerLeave node)
+
+let context_menu_press node x y modifiers button target_class =
+  dispatch_lui
+    (Lui_protocol.ContextMenuPress
+       (node, pointer_detail x y modifiers button target_class))
+
 let toggle_changed node checked =
   dispatch_lui (Lui_protocol.ToggleChanged (node, checked))
 
@@ -587,6 +615,12 @@ let () =
   Callback.register "lui_ocaml_submit" submit;
   Callback.register "lui_ocaml_dismiss" dismiss;
   Callback.register "lui_ocaml_double_press" double_press;
+  Callback.register "lui_ocaml_press_detail" press_detail;
+  Callback.register "lui_ocaml_pointer_down" pointer_down;
+  Callback.register "lui_ocaml_pointer_up" pointer_up;
+  Callback.register "lui_ocaml_pointer_enter" pointer_enter;
+  Callback.register "lui_ocaml_pointer_leave" pointer_leave;
+  Callback.register "lui_ocaml_context_menu_press" context_menu_press;
   Callback.register "lui_ocaml_toggle_changed" toggle_changed;
   Callback.register "lui_ocaml_radio_changed" radio_changed;
   Callback.register "lui_ocaml_slider_changed" slider_changed;
