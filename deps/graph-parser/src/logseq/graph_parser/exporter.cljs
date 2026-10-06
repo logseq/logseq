@@ -2331,7 +2331,7 @@
 (defn- <build-block-tx
   [db block* pre-blocks per-file-state walked-ast-blocks options]
   (<complete-block-tx-with-assets db block* pre-blocks per-file-state walked-ast-blocks options
-                                  (build-block-tx-core db block* pre-blocks per-file-state walked-ast-blocks options))))
+                                  (build-block-tx-core db block* pre-blocks per-file-state walked-ast-blocks options)))
 
 (defn- update-page-alias
   [m page-names-to-uuids]
