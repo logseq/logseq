@@ -75,8 +75,8 @@ let save_block env text =
   (* target the live editing block's textarea — a stale sibling can hold
      nth=0/nth=-1 and silently absorb the fill; have_count=1 also flakes
      when a dying copy coexists during a remount *)
-  let* u = Util.wait_editing_uuid env in
-  let* editor_q =
+  let resolve_editor () =
+    let* u = Util.wait_editing_uuid env in
     match u with
     | Some uuid ->
         Js.Promise.resolve
@@ -104,7 +104,25 @@ let save_block env text =
             in
             Js.Promise.resolve Util.editor_q_first)
   in
-  let* () = Pw.click env editor_q in
+  (* the resolved textarea can die between the mount check and the click —
+     re-resolve from live editing state and retry instead of failing on a
+     stale selector *)
+  let rec click_fill tries =
+    let* editor_q = resolve_editor () in
+    if tries <= 1 then
+      let* () = Pw.click env editor_q in
+      Js.Promise.resolve editor_q
+    else
+      let* clicked =
+        Js.Promise.catch
+          (fun _ -> Js.Promise.resolve false)
+          (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+             (Pw.click env editor_q))
+      in
+      if clicked then Js.Promise.resolve editor_q
+      else click_fill (tries - 1)
+  in
+  let* editor_q = click_fill 3 in
   let* () = Pw.fill env editor_q text in
   (* a remount mid-fill can drop the text into the dying editor —
      verify the value and refill (bounded) *)
