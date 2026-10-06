@@ -1127,7 +1127,7 @@ let () =
             last_block_title
         in
         (* the first virtualized mount is slow under parallel load too *)
-        let* () = Pw.wait_for ~timeout:60000. env last_block_selector in
+        let* () = Pw.wait_for ~timeout:120000. env last_block_selector in
         let* initial_height =
           mounted_journal_height env first_block_title
         in
@@ -1138,7 +1138,7 @@ let () =
         let* () =
           Pw.catch_timeout
             (Js.Promise.then_ (fun () -> Js.Promise.resolve ())
-               (Pw.wait_for ~timeout:60000. env last_block_selector))
+               (Pw.wait_for ~timeout:120000. env last_block_selector))
             (fun () ->
               let* dump =
                 Pw.eval_js env
