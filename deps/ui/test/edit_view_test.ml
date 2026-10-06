@@ -54,7 +54,10 @@ let mount_editor ?(units = M.Bytes) source =
     | In ev -> { m with ed = E.handle ~route ~conduit:!conduit m.ed ev }
   in
   let registry = Lui_extension.registry () in
+  Logseq_dom.register registry;
   Logseq_editor.register registry;
+  Logseq_codemirror.register registry;
+  Logseq_virt.register registry;
   let view _ctx ms send =
     let ed_s = Signal.map (fun m -> m.ed) ms in
     let frame_s = Signal.map (fun m -> m.frame) ms in

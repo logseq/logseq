@@ -71,6 +71,8 @@
 (rule
  (copy ../apple/logseq_katex.ml logseq_katex.ml))
 (rule
+ (copy ../apple/logseq_virt.ml logseq_virt.ml))
+(rule
  (copy ../apple/menu_bar.ml menu_bar.ml))
 (rule
  (copy ../apple/native_embed.ml native_embed.ml))
