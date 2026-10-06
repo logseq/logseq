@@ -315,9 +315,23 @@
     (escape-editing)
     (p/resolved [nil nil nil])))
 
+(defonce ^:private *pending-new-block-done
+  ;; Resolves when the pending Enter (insert-new-block!) has moved the editor
+  ;; to the new block, or failed
+  (atom nil))
+
 (defn- start-pending-new-block!
   []
+  (let [resolve! (atom nil)
+        done (p/create (fn [resolve _reject] (reset! resolve! resolve)))]
+    (reset! *pending-new-block-done {:promise done :resolve! @resolve!}))
   (state/set-state! :editor/pending-new-block {:typed-text ""}))
+
+(defn <pending-new-block
+  "Settles when the pending Enter, if any, has moved the editor to the new
+  block."
+  []
+  (or (:promise @*pending-new-block-done) (p/resolved nil)))
 
 (defn- pending-new-block
   []
@@ -351,7 +365,10 @@
 
 (defn- clear-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block nil))
+  (state/set-state! :editor/pending-new-block nil)
+  (when-let [{:keys [resolve!]} @*pending-new-block-done]
+    (reset! *pending-new-block-done nil)
+    (resolve! nil)))
 
 (declare get-new-container-id)
 (declare delete-block-aux!)
@@ -963,7 +980,32 @@
       :else
       (delete-block-aux! block edit-block-f))))
 
+(defonce ^:private *pending-block-delete
+  ;; The running delete-block-inner! (Backspace at the start of a block,
+  ;; Delete at its end), until it has moved the editor to the joined block.
+  ;; Until then the edit state names the deleted block.
+  (atom nil))
+
+(defn <pending-block-delete
+  "Settles when the running Backspace or Delete join, if any, has moved the
+  editor."
+  []
+  (or @*pending-block-delete (p/resolved nil)))
+
+(declare delete-block-inner-aux!)
+
 (defn delete-block-inner!
+  [repo editor-state]
+  (let [p (delete-block-inner-aux! repo editor-state)
+        ;; settles when the join is done or failed, never rejects
+        settled (-> (p/resolved p) (p/catch (constantly nil)))]
+    (reset! *pending-block-delete settled)
+    (p/then settled (fn [_]
+                      (when (identical? @*pending-block-delete settled)
+                        (reset! *pending-block-delete nil))))
+    p))
+
+(defn- delete-block-inner-aux!
   [repo {:keys [block block-id value config block-container current-block next-block delete-concat?]}]
   (when (and block-id
              (not (comments-model/protected-comment-block? (or current-block block)))
@@ -1816,6 +1858,11 @@
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
+    ;; An Enter, Backspace join or Delete join still running names the
+    ;; block it split or deleted as the edited one; the move waits for it
+    ;; and moves the block the editor lands in
+    (p/let [_ (<pending-block-delete)
+            _ (<pending-new-block)]
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
@@ -1847,7 +1894,7 @@
                       loaded-blocks (unwrap-block-results results)
                       blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
                 (when (seq blocks)
-                  (move-nodes blocks))))))))))
+                  (move-nodes blocks)))))))))))
 
 (defn get-selected-ordered-blocks
   []
