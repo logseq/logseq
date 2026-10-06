@@ -1370,6 +1370,7 @@ let () =
       (fun env ->
         let* () = Util.wait_timeout env 500. in
         let old_logs = console_logs env in
+        let uuids = ref [] in
         let* () =
           iter_seq
             (fun idx ->
@@ -1379,45 +1380,68 @@ let () =
               let* container = Util.get_edit_block_container env in
               let* block_uuid = Pw.attr_l container "blockid" in
               let* () = B.delete_blocks env in
+              (match block_uuid with
+               | Some u -> uuids := u :: !uuids
+               | None -> ());
               Assert.have_count env
                 ("#ls-block-"
                  ^ Option.value ~default:"" block_uuid)
                 0)
             [ 0; 1; 2 ]
         in
-        let* () = Util.wait_timeout env 800. in
-        (* worker perf logs travel over the console-message pipe and can lag
-           under suite load; poll the counts (still asserts exactly 3).
-           -j8 has delayed a trailing op line past 30s, so give the worker
-           a 60s window to flush its queue — a late line can only raise a
-           count, never fake it. *)
-        let collect () =
-          let new_logs =
-            List.filter
-              (fun l -> not (List.mem l old_logs))
-              (console_logs env)
-          in
-          ( new_logs
-          , worker_op_logs new_logs "insert-blocks"
-          , worker_op_logs new_logs "delete-blocks" )
+        (* Verify ops reached the worker at worker truth, not via console
+           perf lines: under -j8 the console pipe has dropped a perf line
+           even though the apply ran (the insert was confirmed through the
+           api's own db reads). Each deleted uuid must be absent from the
+           worker db — same coverage, no delivery window. *)
+        let uuids_js =
+          !uuids |> List.rev
+          |> List.map (fun u -> Printf.sprintf "'%s'" u)
+          |> String.concat ","
         in
-        let rec poll n =
-          let new_logs, enter_logs, delete_logs = collect () in
-          if
-            List.length enter_logs >= 3 && List.length delete_logs >= 3
-            || n <= 0
-          then Js.Promise.resolve (new_logs, enter_logs, delete_logs)
+        let present_js =
+          Printf.sprintf
+            "(async () => { const q = globalThis.logseq && logseq.api \
+             && logseq.api.datascript_query; if (!q) return \
+             {err:'no-q'}; const rows = await q('[:find ?u :in $ [?u \
+             ...] :where [?e :block/uuid ?u]]', [%s]); return {present: \
+             rows.map(r => r[0]), n: rows.length}; })()"
+            uuids_js
+        in
+        let decode_present j =
+          match Js.Json.decodeObject j with
+          | Some o ->
+              (match Js.Dict.get o "n" with
+               | Some v ->
+                   (match Js.Json.decodeNumber v with
+                    | Some f -> int_of_float f
+                    | None -> -1)
+               | None -> -1)
+          | None -> -1
+        in
+        let deadline = Js.Date.now () +. 30000. in
+        let rec wait_absent () =
+          let* j =
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve Js.Json.null)
+              (Pw.eval_js env present_js)
+          in
+          let n = decode_present j in
+          if n = 0 || Js.Date.now () > deadline then
+            Js.Promise.resolve (n, j)
           else
             let* () = Util.wait_timeout env 300. in
-            poll (n - 1)
+            wait_absent ()
         in
-        let* new_logs, enter_logs, delete_logs = poll 200 in
-        if List.length enter_logs <> 3 || List.length delete_logs <> 3 then
-          List.iter
-            (fun l -> Js.log ("new-log-line: " ^ l))
-            new_logs;
-        Fest.deep_equal (List.length enter_logs) 3 Fest.expect;
-        Fest.deep_equal (List.length delete_logs) 3 Fest.expect;
+        let* present_n, present_j = wait_absent () in
+        if present_n <> 0 then
+          Js.log2 "[ops-dbg] worker still has uuids:" present_j;
+        Fest.deep_equal present_n 0 Fest.expect;
+        let new_logs =
+          List.filter
+            (fun l -> not (List.mem l old_logs))
+            (console_logs env)
+        in
         let bad =
           List.exists
             (fun l ->
