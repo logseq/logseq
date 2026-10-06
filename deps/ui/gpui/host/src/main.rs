@@ -14,6 +14,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod editor;
+mod logseq_ext;
 
 use gpui_kit::component::Root;
 use gpui_kit::gpui::{point, px, size, Bounds, WindowBounds, WindowOptions};
@@ -229,6 +230,10 @@ fn main() {
         // is app-scoped: registered here so `logseq-editor` extension
         // nodes bypass the generic DOM-ish renderer.
         editor::register(&shared);
+        // logseq-codemirror / logseq-katex / logseq-pdf native hosts
+        // (+ the logseq-div/logseq-span latex-slot intercept) live in
+        // this crate and plug in through the same override hook.
+        logseq_ext::register(&shared);
 
         cx.spawn({
             let shared = shared.clone();
@@ -243,6 +248,10 @@ fn main() {
                 eprintln!("logseq-gpui: opening window");
                 cx.open_window(options, |window, cx| {
                     eprintln!("logseq-gpui: window opened");
+                    // bare binary launches come up inactive — without this
+                    // the window can't become macOS key window and keyboard
+                    // input never reaches it
+                    window.activate_window();
                     drain_patches(&shared, cx);
                     let root_id = unsafe { bridge::lui_ocaml_root_node() };
                     if root_id > 0 {
@@ -252,6 +261,10 @@ fn main() {
                     cx.new(|cx| Root::new(view, window, cx))
                 })
                 .expect("Failed to open window");
+                // bare binary launches come up inactive — without this the
+                // window can't become macOS key window and keyboard input
+                // never reaches it
+                let _ = cx.update(|cx| cx.activate(true));
             }
         })
         .detach();

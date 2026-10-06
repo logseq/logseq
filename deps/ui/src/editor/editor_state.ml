@@ -71,6 +71,11 @@ end)
    again *)
 let pending_focus : (string * int * float) option ref = ref None
 
+(* block uuid whose input last reported the conduit's "focus" event —
+   native `Editor_sink.is_focused` reads this (the DOM-level
+   document.activeElement tracker only exists on the web profile) *)
+let focused_block : string option ref = ref None
+
 (* editing keys that arrive while a structure op's editor is still
    remounting (keydown landed on <body>): queued here and replayed by
    focus_pending once the refreshed model and DOM exist *)

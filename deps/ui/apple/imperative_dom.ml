@@ -89,20 +89,35 @@ let id_of (el : el) : int option =
          Vdom's {"#new": vid} shells don't — the two registries mint from
          the same int space, so without this check a vdom shell would
          decode as (or collide with) an imperative id *)
-      match
-        ( List.assoc_opt "#new" kvs
-        , List.mem_assoc "#ref" kvs || List.mem_assoc "ref-id" kvs )
-      with
-      | Some v, true -> Option.map int_of_float (decodeNumber v)
-      | _ -> (
-          (* snapshot payload of a materialized imperative extension node —
-             resolve it back through the lui-node index *)
-          match List.assoc_opt "node-id" kvs with
-          | Some v -> (
-              match decodeNumber v with
-              | Some nid -> Hashtbl.find_opt lui_index (int_of_float nid)
-              | None -> None)
-          | None -> None))
+      let imperative =
+        match
+          ( List.assoc_opt "#new" kvs
+          , List.mem_assoc "#ref" kvs || List.mem_assoc "ref-id" kvs )
+        with
+        | Some v, true -> (
+            match decodeNumber v with
+            | Some f ->
+                let id = int_of_float f in
+                (* host-emitted target snapshots carry "#new"/"#ref" as
+                   element handles (lui node id + dom id), not imperative
+                   ids — only a registered imperative element counts,
+                   otherwise the snapshot's own ancestor chain is the
+                   authoritative walk for closest() *)
+                if Hashtbl.mem nodes id then Some id else None
+            | None -> None)
+        | _ -> None
+      in
+      (match imperative with
+       | Some _ -> imperative
+       | None -> (
+           (* snapshot payload of a materialized imperative extension node —
+              resolve it back through the lui-node index *)
+           match List.assoc_opt "node-id" kvs with
+           | Some v -> (
+               match decodeNumber v with
+               | Some nid -> Hashtbl.find_opt lui_index (int_of_float nid)
+               | None -> None)
+           | None -> None)))
   | _ -> None
 
 (* ---------- attr helpers ---------- *)
