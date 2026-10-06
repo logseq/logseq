@@ -167,8 +167,17 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
       (StringValue (attrs_json attrs));
   if html <> "" then
     Lui_ui.extension_property context node "html" (StringValue html);
-  if events <> "" then
-    Lui_ui.extension_property context node "events" (StringValue events);
+  (* delegated document click handlers (block edit, page-ref, bullet
+     zoom) need every dom element to emit "click" dom-events — gpui
+     only emits for names the element opted into, so opt in here. The
+     apple host's leftMouseUp monitor emits click for every hit already;
+     emit_event's 60ms coalescing window drops the duplicate. *)
+  let events =
+    if List.mem "click" (String.split_on_char ' ' events) then events
+    else if events = "" then "click"
+    else "click " ^ events
+  in
+  Lui_ui.extension_property context node "events" (StringValue events);
   if style_class <> "" then
     Lui_ui.extension_property context node "style-class"
       (StringValue style_class);

@@ -326,7 +326,7 @@ let initialize platform_code host_code (_payload : string) : string =
   Logseq_editor.register registry;
   let app =
     Lui_app.create_with_extensions backend registry Model.initial
-      Update.update View.view
+      Update.apply View.view
   in
   current_app := Some app;
   Imperative_dom.install app;
@@ -425,6 +425,7 @@ let dispatch_lui (event : Lui_protocol.event) : string =
       out)
 
 let appear node = dispatch_lui (Lui_protocol.Appear node)
+
 let press node = dispatch_lui (Lui_protocol.Press node)
 let long_press node = dispatch_lui (Lui_protocol.LongPress node)
 
