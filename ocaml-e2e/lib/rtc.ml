@@ -116,50 +116,52 @@ let wait_idle env =
   poll ()
 
 (** exec [body], then wait for the rtc-tx to advance past the previous max
-    with local-tx = remote-tx. Returns the new tx numbers. *)
+    with local-tx = remote-tx. Returns the new tx numbers. The tx goal is
+    checked before the idle settle — when the target is already applied,
+    waiting on a full idle first only burns wall-clock (each wait_idle can
+    sit 120s on a busy remote backlog). *)
 let with_wait_tx_updated env body =
   let* m = get_rtc_tx env in
   let local = Option.value ~default:0 m.local_tx in
   let remote = Option.value ~default:0 m.remote_tx in
   let tx = max local remote in
   let* () = body () in
-  let rec loop i =
-    if i <= 0 then
-      let* new_m = get_rtc_tx env in
+  let deadline = Js.Date.now () +. 240000. in
+  let rec loop () =
+    let* new_m = get_rtc_tx env in
+    let new_local = Option.value ~default:0 new_m.local_tx in
+    let new_remote = Option.value ~default:0 new_m.remote_tx in
+    if new_local = new_remote && new_local > tx then
+      Js.Promise.resolve new_m
+    else if Js.Date.now () > deadline then
       Js.Promise.reject
         (Failure
            (Printf.sprintf "wait-tx-updated failed old=%d/%d new=%d/%d" local
-              remote
-              (Option.value ~default:0 new_m.local_tx)
-              (Option.value ~default:0 new_m.remote_tx)))
+              remote new_local new_remote))
     else
-      let* () = Util.wait_timeout env 200. in
       let* () = wait_idle env in
       let* () = Util.wait_timeout env 300. in
-      let* new_m = get_rtc_tx env in
-      let new_local = Option.value ~default:0 new_m.local_tx in
-      let new_remote = Option.value ~default:0 new_m.remote_tx in
-      if new_local = new_remote && new_local > tx then
-        Js.Promise.resolve new_m
-      else loop (i - 1)
+      loop ()
   in
-  loop 15
+  loop ()
 
 let wait_tx_update_to env new_tx =
-  let rec loop i last =
-    if i <= 0 then
+  let deadline = Js.Date.now () +. 240000. in
+  let rec loop () =
+    let* m = get_rtc_tx env in
+    let local = Option.value ~default:0 m.local_tx in
+    if local >= new_tx then Js.Promise.resolve local
+    else if Js.Date.now () > deadline then
       Js.Promise.reject
         (Failure
-           (Printf.sprintf "wait-tx-update-to %d, last local-tx %d" new_tx last))
+           (Printf.sprintf "wait-tx-update-to %d, last local-tx %d" new_tx
+              local))
     else
-      let* () = Util.wait_timeout env 300. in
       let* () = wait_idle env in
-      let* m = get_rtc_tx env in
-      let local = Option.value ~default:0 m.local_tx in
-      if local >= new_tx then Js.Promise.resolve local
-      else loop (i - 1) local
+      let* () = Util.wait_timeout env 300. in
+      loop ()
   in
-  loop 15 0
+  loop ()
 
 let rtc_start env = Util.search_and_click env "(Dev) RTC Start"
 let rtc_stop env = Util.search_and_click env "(Dev) RTC Stop"
