@@ -226,6 +226,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
     ~data_attrs:heading_attrs
     [ link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
+        ~url:"#" ~target:`self_
         ~accessibility_identifier:("control-" ^ uuid)
         [ Ui_parts.class_signal cs
             (fun c -> if c then "control-show" else "control-hide")
@@ -377,8 +378,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
       ; ("data-tag-priv", if priv then "true" else "false") ]
     [ row ~key:("tc-" ^ key) ~cross:`center
         [ (* the link kind renders a real <a> so a.hash-symbol css keeps
-             matching; no url — the # is decorative as in cljs *)
+             matching; href="#" is the cljs decorative-anchor convention *)
           link ~key:("th-" ^ key)
+            ~url:"#" ~target:`self_
             ~style_class:"hash-symbol select-none" ~text:"#" []
         ; (if priv then Logseq_dom.nothing
            else
@@ -400,6 +402,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
           link ~key:("ta-" ^ key)
+            ~url:"#" ~target:`self_
             ~style_class:"tag relative"
             ~data_attrs:
               [ ("tabindex", "0"); ("draggable", "true")

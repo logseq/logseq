@@ -47,9 +47,13 @@ external js_set_str : Js.Json.t -> string -> string -> unit = ""
 external js_call :
   Js.Json.t -> Js.Json.t -> Js.Json.t -> Js.Json.t = "call" [@@mel.send]
 
-(* o.m(a, b) with heterogenous arg types (e.g. name string + callback) *)
-external js_call2 : Js.Json.t -> string -> 'a -> 'b -> Js.Json.t = "call"
-  [@@mel.send] [@@mel.scope "Reflect"]
+(* fn.call(receiver, a, b) — same send/call shape as js_call, one arity up *)
+external js_fun_call2 :
+  Js.Json.t -> Js.Json.t -> 'a -> 'b -> Js.Json.t = "call"
+  [@@mel.send]
+
+(* o[name](a, b) with heterogenous arg types (e.g. name string + callback) *)
+let js_call2 o name a b = js_fun_call2 (js_get o name) o a b
 
 let js_undefined : Js.Json.t = [%mel.raw "undefined"]
 
