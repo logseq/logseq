@@ -295,6 +295,9 @@ let () =
             [ ("focused", Js.Json.JBoolean true) ])
     ; is_focused =
         (fun block_id -> !Editor_state.focused_block = Some block_id)
+    ; (* the native host queues set-input-focus for a sink that mounts
+         late — an emit never lands in the void *)
+      can_focus = (fun _ -> true)
     ; popup_pos
     ; container_rect
     }

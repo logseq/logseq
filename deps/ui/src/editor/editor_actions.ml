@@ -115,8 +115,12 @@ let rec apply_focus () =
       else
         (* emit the focus op once per target: calling focus() on the
            conduit input is cheap but re-emitting every retry still
-           floods the event loop on a row that can't mount *)
-        if Some uuid <> !last_focus_emitted then begin
+           floods the event loop on a row that can't mount. The emit
+           waits until the sink can focus — on web the input mounts a
+           patch or two after pending_focus arms, and an emit fired
+           into the void would never be repeated *)
+        if Some uuid <> !last_focus_emitted && Editor_sink.can_focus uuid
+        then begin
           Editor_sink.focus_input uuid;
           last_focus_emitted := Some uuid
         end;
