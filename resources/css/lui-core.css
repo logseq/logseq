@@ -2075,6 +2075,17 @@ a.page-title {
 
 /* ============================= Editor ==================================== */
 
+/* hidden caret mirror inside .editor-inner; the imperative side fills it
+   with one span per grapheme to measure popup placement */
+.mock-text {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  visibility: hidden;
+  top: 0;
+  left: 0;
+}
+
 .editor-inner {
   position: relative;
   display: flex;
