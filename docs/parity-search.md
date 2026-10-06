@@ -4,11 +4,13 @@ Comparison of the Logseq master web app (cljs, shadow-cljs dev on :3001) against
 LUI-rewrite web app (`deps/ui` @ `devin/component-migration`, static bundle on :3002).
 
 - **Master:** `22a29b30de` on :3001 (graph "Demo").
-- **LUI:** `3faedfd308` on :3002 (`index.html?rtc-test=true`, graph "Demo").
-- LUI required one local-only workaround to boot the worker bundle:
-  `Unix.gettimeofday` → `Time.monotonic_now`/`Time.diff_monotonic_ms` in
-  `deps/db-worker/lib/{endpoint_read,db_worker_node}.ml` (same fix as upstream
-  commit `fc8f8d7281` on `devin/fix-web-boot`, applied uncommitted).
+- **LUI:** `a3dc4ff1f8` on :3002 (`index.html?rtc-test=true`, graph "Demo"),
+  lui pinned `@315cc9f`. All earlier boot workarounds are upstream now — the
+  audit ran with **zero local patches** (`Time.*` in db-worker, js_call2 typed
+  external, ""-fingerprint + Link-url validator via lui #143, vendored
+  lui-full.css, page-title ~grow). Build needs `OPAMSWITCH=5.5.0` exported for
+  every `pnpm *:build` step (they shell out to `opam exec` under the ambient
+  switch otherwise).
 - Seed (identical on both): pages `Parity Test Page` (blocks: *keyboard navigation
   audit block*, *screenshot comparison workflow*, *fuzzy matching quality test*),
   `Meeting Notes` (*agenda screenshot review*, *action items keyboard shortcuts*),
@@ -55,6 +57,7 @@ not-yet-verified minor items.
 | 23 | Files filter | `m-filter-chip-files.png`-adjacent | (empty) | ✅ | Chip applies; result list empty on both (no files in graph) |
 | 28 | Codes filter | `m-filter-codes.png` | `l-filter-codes.png` | ✅ | `Search only: Code` chip → `Code 1` → `const needlecode = 42; #Code` (code block rendered with `#Code` tag); unfiltered query also surfaces it under `Nodes` — identical |
 | 29 | Slash menu (block types) | — | — | ✅ | `/` in a block shows identical BASIC/FORMAT/Heading menu (`Code block` etc.) on both; LUI code block renders the same line-gutter editor |
+| 30 | Console health | `m-console-clean.png` | `l-console-key-warning.png` | ⚠️ | Both: normal worker/db logs + benign OPFS warnings. **LUI only**: one red React error — `Each child in a list should have a unique "key" prop` in render method `root`; master has none. Cosmetic, low severity |
 | 24 | No-results state | `m-no-results.png` | `l-no-results.png` | ✅ | `zzqq` → `Create page` + `Filters 6` only; later `No matched result` text also identical when filter chip narrows to nothing |
 | 25 | Dark theme | `m-create-page-dark.png` | `l-create-page-dark.png` | ✅ | Same dark palette styling (both apps flipped to dark via the same action stream during seeding — see quirks) |
 | 26 | `Search only nodes` filter | `m-filter-nodes.png` | `l-filter-nodes.png` | ✅ | Chip `Search only: Nodes` → `Nodes 2` (block results are nodes); footer tip flips to `Press Esc to clear search filter` on both |
@@ -81,14 +84,26 @@ matched node description, `cmd:` = command row.
 Matched substrings are highlighted identically (bold + accent underline) on both,
 including inside block text and description lines.
 
+## Re-verification (LUI @ `a3dc4ff1f8`)
+
+After rebasing onto `a3dc4ff1f8` (base now carries all previous boot fixes) the
+slice was spot-rechecked: palette open, `meet`/`prty` result sets, Esc cascade,
+sidebar `⌘↵` search, codes filter — all unchanged and still identical to master.
+The screenshots above were taken on the earlier `3faedfd308` build; behavior did
+not move between the two.
+
 ## Real differences
 
-1. **Copy ref `⌘C` permission prompt (LUI only).** LUI's palette issues a real
+1. **React `key` prop error (LUI only).** LUI's console logs one red error at
+   render: `Each child in a list should have a unique "key" prop` (render method
+   `root`). Master's console shows none (only benign OPFS/SharedArrayBuffer
+   warnings, same as LUI's). Severity: low — console noise, no visible breakage.
+2. **Copy ref `⌘C` permission prompt (LUI only).** LUI's palette issues a real
    `navigator.clipboard` write → Chrome shows the clipboard permission prompt on
    first use. Master never prompted and the OS clipboard stayed empty either way.
    Net user-visible difference: an extra permission dialog on LUI; neither app
    actually landed a ref on the OS clipboard in this harness.
-2. **`⌥↵` flake (master).** On the first probe, master's `⌥↵` closed the palette
+3. **`⌥↵` flake (master).** On the first probe, master's `⌥↵` closed the palette
    and left the page title selected without navigating; on retry it navigated to
    the page like `↵`. LUI navigated both times. Footer still advertises "Open in
    sidebar ⌥↵" on both, and neither actually opened the node in the sidebar.
