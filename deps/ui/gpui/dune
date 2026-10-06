@@ -67,6 +67,8 @@
 (rule
  (copy ../apple/logseq_codemirror.ml logseq_codemirror.ml))
 (rule
+ (copy ../apple/logseq_editor.ml logseq_editor.ml))
+(rule
  (copy ../apple/logseq_emoji.ml logseq_emoji.ml))
 (rule
  (copy ../apple/logseq_katex.ml logseq_katex.ml))
@@ -251,6 +253,14 @@
  (copy ../src/editor/block_parse.ml block_parse.ml))
 (rule
  (copy ../src/editor/block_selection.ml block_selection.ml))
+(rule
+ (copy ../src/editor/edit_input.ml edit_input.ml))
+(rule
+ (copy ../src/editor/edit_model.ml edit_model.ml))
+(rule
+ (copy ../src/editor/edit_runs.ml edit_runs.ml))
+(rule
+ (copy ../src/editor/edit_view.ml edit_view.ml))
 (rule
  (copy ../src/editor/editor_actions.ml editor_actions.ml))
 (rule

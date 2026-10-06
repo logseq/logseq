@@ -103,6 +103,14 @@
 (rule
  (copy ../src/editor/block_selection.ml block_selection.ml))
 (rule
+ (copy ../src/editor/edit_input.ml edit_input.ml))
+(rule
+ (copy ../src/editor/edit_model.ml edit_model.ml))
+(rule
+ (copy ../src/editor/edit_runs.ml edit_runs.ml))
+(rule
+ (copy ../src/editor/edit_view.ml edit_view.ml))
+(rule
  (copy ../src/editor/editor_actions.ml editor_actions.ml))
 (rule
  (copy ../src/editor/editor_commands.ml editor_commands.ml))
