@@ -98,6 +98,7 @@ const opt = {
   rtcConcurrency: 4,
   slowMo: process.env.E2E_SLOW_MO ?? "30",
   timeoutSec: 1200,
+  slowTimeoutSec: 1800, // rtc slow shards legitimately run 500-1200s under -j8
   excludes: [],
   noRtc: false,
   includeSlow: false,
@@ -115,6 +116,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === "--rtc-concurrency") opt.rtcConcurrency = +take();
   else if (a === "--slow-mo") opt.slowMo = take();
   else if (a === "--timeout") opt.timeoutSec = +take();
+  else if (a === "--slow-timeout") opt.slowTimeoutSec = +take();
   else if (a === "--exclude") opt.excludes.push(take());
   else if (a === "--shard") {
     const [f, n] = take().split("=");
@@ -370,14 +372,15 @@ async function runFile(t) {
     };
     child.stdout.on("data", onData);
     child.stderr.on("data", onData);
+    const timeoutSec = t.slow ? opt.slowTimeoutSec : opt.timeoutSec;
     const killer =
-      opt.timeoutSec > 0
+      timeoutSec > 0
         ? setTimeout(() => {
             try {
               process.kill(-child.pid, "SIGKILL");
             } catch {}
             resolve({ code: "timeout" });
-          }, opt.timeoutSec * 1000)
+          }, timeoutSec * 1000)
         : null;
     child.on("close", (code) => {
       clearTimeout(killer);
