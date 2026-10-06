@@ -78,7 +78,7 @@ let stress_max_seed_depth = 4
 
 let severe_sync_log_patterns =
   [ "db-sync/checksum-mismatch"; "db-sync/tx-rejected"
-  ; "db-sync/apply-remote-txs-failed" ]
+  ; "db-sync/apply-remote-txs-failed"; "db-sync/remote-tx-apply-failed" ]
 
 let rec iter_seq f = function
   | [] -> Js.Promise.resolve ()
