@@ -38,8 +38,41 @@ let rec open_last_block ?(in_retry = false) env =
         (* gate on the app's editing state, not DOM textareas — a stale
            editor stays mounted and would skip the click forever *)
         let* editing = Util.editing_uuid env in
-        if editing <> None then Js.Promise.resolve ()
-        else if Js.Date.now () > deadline then
+        let* live_editor =
+          match editing with
+          | Some uuid ->
+              (* the state can outlive its textarea: a remote-tx remount
+                 kills the editor DOM but leaves editor/block pointing at
+                 the old uuid — treat that as dead, not open *)
+              Js.Promise.catch
+                (fun _ -> Js.Promise.resolve false)
+                (Js.Promise.then_
+                   (fun j ->
+                      Js.Promise.resolve
+                        (Js.Json.decodeBoolean j = Some true))
+                   (Pw.eval_js env
+                      (Printf.sprintf
+                         "(() => { const t = \
+                          document.querySelector('#edit-block-%s'); return \
+                          !!(t && t.offsetParent !== null); })()"
+                         uuid)))
+          | None -> Js.Promise.resolve false
+        in
+        match editing with
+        | Some _ when live_editor -> Js.Promise.resolve ()
+        | Some _ ->
+            (* dead editing state — clear it so the click below actually
+               opens a fresh editor *)
+            let* _ =
+              Js.Promise.catch
+                (fun _ -> Js.Promise.resolve Js.null)
+                (Api.ls_api_call env "editor.exitEditingMode"
+                   [| Api.bool false |])
+            in
+            let* () = Pw.wait_timeout env 200. in
+            click_last ()
+        | None ->
+        if Js.Date.now () > deadline then
           Js.Promise.reject
             (Failure "open_last_block: no editor opened within 60s")
         else
@@ -217,7 +250,36 @@ let new_block env title =
   let rec ensure_editing n =
     let* u = Util.editing_uuid env in
     match u with
-    | Some uuid -> Js.Promise.resolve uuid
+    | Some uuid ->
+        (* the state can outlive its textarea under remote-tx remounts —
+           only accept it when the matching editor is actually mounted *)
+        let* live =
+          Js.Promise.catch
+            (fun _ -> Js.Promise.resolve false)
+            (Js.Promise.then_
+               (fun j ->
+                  Js.Promise.resolve (Js.Json.decodeBoolean j = Some true))
+               (Pw.eval_js env
+                  (Printf.sprintf
+                     "(() => { const t = \
+                      document.querySelector('#edit-block-%s'); return !!(t \
+                      && t.offsetParent !== null); })()"
+                     uuid)))
+        in
+        if live then Js.Promise.resolve uuid
+        else begin
+          let* _ =
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve Js.null)
+              (Api.ls_api_call env "editor.exitEditingMode"
+                 [| Api.bool false |])
+          in
+          if n <= 0 then
+            Js.Promise.reject (Failure "editor did not open")
+          else
+            let* () = open_last_block ~in_retry:true env in
+            ensure_editing (n - 1)
+        end
     | None ->
         if n <= 0 then Js.Promise.reject (Failure "editor did not open")
         else
