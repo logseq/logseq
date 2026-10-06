@@ -3287,6 +3287,33 @@
           (is (= "local edit" (title)))
           (is (= 0 (client-op-tx-row-count client-ops-conn))))))))
 
+(deftest local-graph-edit-builds-no-upload-data-test
+  (testing "an edit on a graph that does not sync builds no normalized or reversed upload data"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          built (atom 0)
+          normalize db-normalize/normalize-tx-data]
+      (with-local-graph-conns conn client-ops-conn
+        (fn []
+          (with-redefs [db-normalize/normalize-tx-data (fn [& args] (swap! built inc) (apply normalize args))]
+            (save-title! conn (:block/uuid child1) "local edit"))
+          (is (= 0 @built))
+          (is (= 1 (count (:undo-ops (undo-redo/get-debug-state test-repo))))))))))
+
+(deftest graph-with-a-remote-id-writes-sync-records-test
+  (testing "a graph sync attached to a remote graph by name, or downloaded by an app version that did not set the remote flag, has the remote id and no flag; its edits are pending rows the client uploads"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)]
+      (with-local-graph-conns conn client-ops-conn
+        (fn []
+          (client-op/update-graph-uuid test-repo (str (random-uuid)))
+          (is (nil? (ldb/get-key-value @conn :logseq.kv/graph-remote?)))
+          (save-title! conn child-uuid "edit after attaching")
+          (let [[row :as pending] (#'sync-apply/pending-txs test-repo)]
+            (is (= 1 (count pending)))
+            (is (= 1 (client-op/get-pending-local-tx-count test-repo)))
+            (is (= :save-block (ffirst (:forward-outliner-ops row))))
+            (is (nil? (:tx-datoms (latest-undo-data))))))))))
+
 (deftest remote-graph-edit-writes-sync-record-test
   (testing "an edit on a graph that syncs writes its client-op row, and undo takes the entry's ops from it"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)

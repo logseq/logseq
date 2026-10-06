@@ -274,13 +274,21 @@
       (clear-history! repo)
       (empty-stack-result undo?))))
 
-(defn local-graph?
-  "True unless the graph syncs. Upload and download set
-  `:logseq.kv/graph-remote?`; nothing unsets it. Such a graph keeps no
-  client-op rows of its local transactions: its undo entries carry
-  `:tx-datoms` and read no row."
+(defn graph-remote-flag?
+  "Upload and download set `:logseq.kv/graph-remote?`; nothing unsets it."
   [db]
-  (not (true? (:kv/value (d/entity db :logseq.kv/graph-remote?)))))
+  (true? (:kv/value (d/entity db :logseq.kv/graph-remote?))))
+
+(defn local-graph?
+  "True unless the graph syncs. A graph syncs once it has the remote flag or
+  its client-op store has a remote graph id: a sync connection sets the id
+  (`start!`, also when it matches the graph to a remote one by name), and a
+  graph downloaded by an app version that did not set the flag has only the
+  id. A local graph keeps no client-op rows of its local transactions: its
+  undo entries carry `:tx-datoms` and read no row."
+  [repo db]
+  (not (or (graph-remote-flag? db)
+           (some? (client-op/get-graph-uuid repo)))))
 
 (defn- recorded-datoms
   "DataScript's record of a transaction: its tx report's datoms as
@@ -375,7 +383,7 @@
                            (second %))
                         op)]
     (if (and (seq (:tx-datoms data))
-             (local-graph? @conn))
+             (local-graph? repo @conn))
       (replay-recorded-datoms! repo conn undo? op data)
       (let [tx-id (:db-sync/tx-id data)
             tx-meta' (merge (undo-redo-action-meta data undo?)
@@ -431,7 +439,7 @@
   (when (nil? @*apply-history-action!)
     (reset! *apply-history-action! apply-history-action!))
   (let [{:keys [outliner-op local-tx?]} tx-meta
-        local-graph?' (local-graph? db-after)
+        local-graph?' (local-graph? repo db-after)
         {:db-sync/keys [forward-outliner-ops inverse-outliner-ops]}
         (when-not local-graph?'
           (pending-history-action-ops repo tx-id))]
