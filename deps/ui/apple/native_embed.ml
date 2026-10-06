@@ -368,6 +368,7 @@ let initialize platform_code host_code (_payload : string) : string =
       let changed = Lui_app.send app action in
       flush_app ();
       changed);
+  Runtime.read_model := (fun () -> Lui_app.model app);
   Runtime.app_flush := flush_app;
   (* OCaml-internal async completions (HTTP, timers, daemon spawn) hop
      through Host onto this thread via the host wakeup *)
