@@ -1472,7 +1472,16 @@
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
         opts {:outliner-op :move-blocks-up-down}
-        pages (set (map #(:db/id (:block/page (d/entity db (:db/id %)))) top-level-blocks))]
+        pages (set (map #(:db/id (:block/page (d/entity db (:db/id %)))) top-level-blocks))
+        ;; where a block lands as a child or sibling of `target`
+        target-page-id (fn [target sibling?]
+                         (let [target (d/entity db (:db/id target))]
+                           (if (and (not sibling?)
+                                    (or (ldb/page? target) (:block/name target)))
+                             (:db/id target)
+                             (:db/id (:block/page target)))))
+        same-page? (fn [target sibling?]
+                     (contains? pages (target-page-id target sibling?)))]
     (cond
       ;; a move up or down stays in 1 page: its target comes from 1 end of
       ;; the selection, so a selection over 2 pages would carry the blocks
@@ -1492,6 +1501,8 @@
         (when (and left-left
                    (not= (:db/id (:block/page first-block-parent))
                          (:db/id left-left))
+                   ;; never into another page, e.g. a nested page's sibling
+                   (same-page? left-left sibling?)
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
           (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
@@ -1507,6 +1518,7 @@
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
         (when (and right
+                   (same-page? right sibling?)
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
           (move-blocks conn blocks right (merge opts {:sibling? sibling?
