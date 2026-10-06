@@ -1207,8 +1207,14 @@
       ;; 2 blocks' :block/order values say which comes first only when they
       ;; have the same parent; a last child and its parent's next sibling
       ;; count as consecutive, and theirs are unrelated: page order instead
+      ;; the sort leaves out blocks with no page-order path (property
+      ;; values): keep every block, or a property value selected with its
+      ;; parent's next sibling would drop out of the move or delete
       (and (not non-consecutive?) b (not same-parent?) (de/entity? a)
-           (= (:db/id (:block/page a)) (:db/id (:block/page b))))
+           (= (:db/id (:block/page a)) (:db/id (:block/page b)))
+           (not-any? #(or (:logseq.property/created-from-property %)
+                          (:block/closed-value-property %))
+                     top-level-blocks))
       (ldb/sort-page-random-blocks (.-db a) top-level-blocks)
 
       reversed? (reverse top-level-blocks)
