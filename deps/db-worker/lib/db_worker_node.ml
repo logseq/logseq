@@ -856,14 +856,14 @@ type daemon_opts =
   ; opt_on_stopped : exn option -> unit
   }
 
-let daemon_t0 = Unix.gettimeofday ()
+let daemon_t0 = Time.monotonic_now ()
 
 let daemon_phase name =
   Worker_log.info "daemon-phase"
     [ "p", name
     ; "ms"
     , Printf.sprintf "%.1f"
-        ((Unix.gettimeofday () -. daemon_t0) *. 1000.) ]
+        (Time.diff_monotonic_ms daemon_t0 (Time.monotonic_now ())) ]
 
 let start_daemon (opts : daemon_opts) : daemon E.t =
   let host = "127.0.0.1" in
