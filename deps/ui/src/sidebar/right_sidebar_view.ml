@@ -90,16 +90,12 @@ let item_menu st (it : Sidebar_state.item) =
     it.Sidebar_state.kind = "page" || it.Sidebar_state.kind = "contents"
   in
   let sep key = divider ~key ~style_class:"menu-separator" [] in
-  (* TODO(component): fixed-position overlay at the stored pointer coords
-     + role="menu" — same gap as the left-sidebar menu shells; children
-     are Menu_item.el rows (core-owned) already *)
-  dom ~key:("imenu-" ^ it.key) ~tag:"div"
-    ~attrs:
-      [ ("role", "menu")
-      ; ( "style"
-        , Printf.sprintf
-            "position:fixed;left:%.0fpx;top:%.0fpx;z-index:1501;min-width:160px"
-            (fst !Sidebar_state.im_xy) (snd !Sidebar_state.im_xy) ) ]
+  (* popover ~at the stored pointer coords — same placement the inline
+     fixed style carried; children are Menu_item.el rows (core-owned) *)
+  popover ~key:("imenu-" ^ it.key)
+    ~at:(fst !Sidebar_state.im_xy, snd !Sidebar_state.im_xy)
+    ~role:`menu ~min_width:160
+    ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
     ~style_class:"ui__dropdown-menu-content ui__dropdown-menu"
     (menu_item st (t "ui/close")
        (fun () -> Sidebar_state.remove_item st it.key)

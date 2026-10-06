@@ -213,11 +213,13 @@ let ac_open () =
 
 (* THE "is the pointer over popup UI" check — hit-tests mounted roots
    rather than enumerating selector lists: every popup mounts either
-   inside the .cp__overlays chrome container (ac/cm/pv, cmdk, dialogs,
-   toasts, page menu) or registers a body-level root it owns
+   inside the .cp__overlays chrome container (cmdk, dialogs, toasts) or
+   the renderer's body-level .lui-popup-portal (popover kind: ac/cm/pv,
+   context menus, page menu) or registers a body-level root it owns
    (Properties_state overlays, Editor_commands inline popups) *)
 let inside el =
   Web_dom.el_closest el ".cp__overlays" <> None
+  || Web_dom.el_closest el ".lui-popup-portal" <> None
   || Properties_state.overlay_contains el
   ||
   (match !Runtime.editor_popup_root with

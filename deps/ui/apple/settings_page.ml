@@ -714,10 +714,10 @@ let appearance_body (x, y) : t =
             Runtime.send (Action.Appearance_set None))
           (box ~key:"appearance-backdrop"
              ~style_class:"ls-popup-backdrop" [])
-        (* TODO(component): the popup wrap is position:fixed at pointer
-           coordinates — no kind exposes absolute placement, so the
-           minimal dom shell stays until a positioned-container kind
-           lands *)
+        (* TODO(component): the popover kind covers this on web, but the
+           Apple popover backend renders children inline (no
+           positioning) — the dom shell stays until LUIApple implements
+           popover placement *)
       ; Logseq_dom.dom ~key:"appearance-wrap" ~tag:"div"
           ~style_class:"ui__dropdown-menu-content appearance-popup"
           ~attrs:
