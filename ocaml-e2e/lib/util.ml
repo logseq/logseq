@@ -143,17 +143,22 @@ let exit_edit env =
        (* a swallowed esc (modal/overlay stole focus) leaves the editor
           mounted forever — force the app state out via the API. nth=0
           alone is unreliable: a stale detached textarea can sit first *)
-       let* still =
-         Pw.count env ".editor-wrapper textarea:visible" in
-       let* () =
-         if still > 0 then
+       let force_exit_deadline = Js.Date.now () +. 30000. in
+       let rec force_exit () =
+         let* still =
+           Pw.count env ".editor-wrapper textarea:visible" in
+         if still = 0 then Js.Promise.resolve ()
+         else
            let* _ =
              Api.ls_api_call env "editor.exitEditingMode"
                [| Api.bool false |]
            in
-           Js.Promise.resolve ()
-         else Js.Promise.resolve ()
+           let* () = wait_timeout env 300. in
+           if Js.Date.now () > force_exit_deadline then
+             Js.Promise.resolve ()
+           else force_exit ()
        in
+       let* () = force_exit () in
        (* a remount can leave :editor/block state set with no editor DOM —
           the read view then never renders (.extensions__code etc).
           Clear a lingering editing state as well. *)

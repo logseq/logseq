@@ -372,51 +372,47 @@ let new_block env title =
        a uuid that was not in the DOM before the press. *)
     let* moved =
       if pressed then
+        (* detect the insert in the DOM itself — the editor/block state
+           atom can lag a remount and a false negative re-press mints a
+           duplicate empty block. A fresh uuid appearing after the
+           previous row IS the insert. *)
+        let prev_set =
+          "["
+          ^ String.concat ","
+              (List.map (fun s -> "\"" ^ s ^ "\"") prev_ids)
+          ^ "]"
+        in
+        let detect_js =
+          Printf.sprintf
+            "(() => { const blocks = \
+             [...document.querySelectorAll('.ls-block[blockid]')]; const \
+             ids = blocks.map(b => b.getAttribute('blockid')); const pi \
+             = ids.indexOf('%s'); if (pi < 0) return null; const prev = \
+             new Set(%s); const nx = ids.slice(pi + 1).find(id => \
+             !prev.has(id)); return nx || null; })()"
+            last_uuid prev_set
+        in
         let deadline = Js.Date.now () +. 6000. in
         let rec moved_loop () =
           let* u = Util.editing_uuid env in
-          match u with
-          | Some u when u <> last_uuid && not (List.mem u prev_ids) ->
-              (* the uuid was not in the DOM before the press → a genuine
-                 insert; also confirm it lands after the previous block in
-                 DOM order once both are mounted *)
-              let* positioned =
+          let* fresh =
+            match u with
+            | Some u when u <> last_uuid && not (List.mem u prev_ids) ->
+                Js.Promise.resolve (Some u)
+            | _ ->
                 Js.Promise.catch
-                  (fun _ -> Js.Promise.resolve false)
+                  (fun _ -> Js.Promise.resolve None)
                   (Js.Promise.then_
                      (fun j ->
                         Js.Promise.resolve
-                          (match Js.Json.decodeObject j with
-                           | Some o ->
-                               (match
-                                  ( Js.Dict.get o "pi"
-                                    |> Option.map Js.Json.decodeNumber
-                                  , Js.Dict.get o "ni"
-                                    |> Option.map Js.Json.decodeNumber )
-                               with
-                                | Some (Some pi), Some (Some ni) -> ni > pi
-                                | _ -> false)
-                           | None -> false))
-                     (Pw.eval_js env
-                        (Printf.sprintf
-                           "(() => { const blocks = \
-                            [...document.querySelectorAll('.ls-block[blockid]')]; \
-                            const ids = blocks.map(b => \
-                            b.getAttribute('blockid')); const pi = \
-                            ids.indexOf('%s'); const ni = \
-                            ids.indexOf('%s'); return \
-                            JSON.stringify({pi, ni}); })()"
-                           last_uuid u)))
-              in
-              if positioned then Js.Promise.resolve true
-              else if Js.Date.now () > deadline then
-                Js.Promise.resolve true
-                (* position unverifiable (row not mounted yet) — the
-                   fresh-uuid check already proves the insert *)
-              else
-                let* () = Util.wait_timeout env 150. in
-                moved_loop ()
-          | _ ->
+                          (match Js.Nullable.toOption j with
+                           | Some j -> Js.Json.decodeString j
+                           | None -> None))
+                     (Pw.eval_js env detect_js))
+          in
+          match fresh with
+          | Some _ -> Js.Promise.resolve true
+          | None ->
               if Js.Date.now () > deadline then Js.Promise.resolve false
               else
                 let* () = Util.wait_timeout env 150. in
