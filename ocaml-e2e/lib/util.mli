@@ -16,6 +16,7 @@ val fill_cmdk_search : Env.t -> string -> unit Js.Promise.t
 val cmdk_open : Env.t -> bool Js.Promise.t
 val search : Env.t -> string -> unit Js.Promise.t
 val repeat_until_visible :
+  ?expect_timeout:float ->
   'a ->
   int ->
   Playwright.locator -> (unit -> unit Js.Promise.t) -> unit Js.Promise.t
