@@ -29,7 +29,6 @@ let mount () =
   Logseq_dom.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
-  Logseq_editor.register registry;
   Logseq_virt.register registry;
   let view ctx ms send =
     ms_ref := Some ms;
