@@ -212,7 +212,7 @@ fn drain_requests(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
             if boot_ms() >= ms.parse::<f64>().unwrap_or(0.0) {
                 DUMPED.store(true, std::sync::atomic::Ordering::Relaxed);
                 eprintln!("logseq-gpui: dumping tree t={:.1}ms", boot_ms());
-                lui_gpui::domops::handle_dom_op(shared, "dump-frames", "", cx);
+                lui_gpui::domops::handle_dom_op(shared, "dump-frames", "{}", cx);
             }
         }
     }

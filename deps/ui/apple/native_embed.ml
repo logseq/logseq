@@ -94,9 +94,21 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
     | None -> Js.Json.JObject []
   in
   let acc_id =
-    Option.value
-      (ext_prop_string props "accessibility-identifier")
-      ~default:""
+    match ext_prop_string props "accessibility-identifier" with
+    | Some ident -> ident
+    | None -> (
+        (* Standard-kind elements (e.g. `input`) carry AccessibilityIdentifier
+           as a standard prop, not an extension prop — selector and
+           `focus`-ref lookups depend on it landing in `id`. *)
+        match Hashtbl.find_opt rt.Lui_runtime.runtime_properties node with
+        | Some pmap -> (
+            match
+              Lui_protocol.Property_map.find_opt
+                Lui_protocol.AccessibilityIdentifier pmap
+            with
+            | Some (Lui_protocol.StringValue ident) -> ident
+            | _ -> "")
+        | None -> "")
   in
   let dom_id =
     match attrs with

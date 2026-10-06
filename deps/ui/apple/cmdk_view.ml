@@ -877,20 +877,14 @@ let install_listeners () =
 (* modal shell mirrors shui dialog markup: overlay + centered
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
 let modal_shell st =
-  box ~key:"cmdk-shell"
-    [ box ~key:"dismiss" ~style_class:"cp__cmdk-dismiss" []
-    ; box ~key:"ov" ~style_class:"ui__dialog-overlay" []
-    ; box ~key:"content" ~style_class:"ui__dialog-content ls-dialog-cmdk"
-        [ heading ~level:2 ~key:"title"
-            ~style_class:"ui__dialog-title hidden" []
-        ; box ~key:"main" ~style_class:"ui__dialog-main-content"
-            [ (* .cp__cmdk__modal bounds outside-click dismissal
-                 (closest) — the class anchor is unchanged *)
-              column ~key:"modal"
-                ~style_class:"cp__cmdk__modal"
-                [ palette st ]
-            ]
-        ]
+  (* LUI dialog primitive: native hosts render it as a deferred
+     window-layer overlay (backdrop + centered card); box markup never
+     leaves the document flow there, so the palette mounted off-screen *)
+  dialog ~key:"cmdk-dialog" ~style_class:"ui__dialog-content ls-dialog-cmdk"
+    ~width:896 ~on_dismiss:(fun _ -> S.close st)
+    [ (* .cp__cmdk__modal bounds outside-click dismissal (closest) — the
+         class anchor is unchanged *)
+      column ~key:"modal" ~style_class:"cp__cmdk__modal w-full" [ palette st ]
     ]
 
 let render (_ms : Model.t Signal.signal) : t =
