@@ -105,6 +105,13 @@ let () =
       ignore
         ((let* () = I18n.init () in
           (try main root
-           with error ->
-             W.Element.setTextContent root (Printexc.to_string error));
+           with
+           | Js.Exn.Error e ->
+               W.Element.setTextContent root
+                 (Option.value (Js.Exn.message e) ~default:"?" ^ "\n"
+                 ^ Option.value (Js.Exn.stack e) ~default:"")
+           | error ->
+               W.Element.setTextContent root
+                 (Printexc.to_string error ^ "\n"
+                 ^ Printexc.get_backtrace ()));
           Js.Promise.resolve ()))
