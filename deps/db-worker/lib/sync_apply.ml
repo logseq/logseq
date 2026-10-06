@@ -477,10 +477,14 @@ let block_uuid_lookup_ref_value (v : Wire.t) : string option =
   | _ -> None
 
 let tx_item_ref_block_uuids (item : Wire.t) : string list =
+  (* cljs inspects (second item) and (nth item 3 nil) on ANY vector —
+     short ops like [:db/retractEntity [:block/uuid u]] carry the ref at
+     position 1 and must not slip past the missing-ref detectors *)
   match item with
-  | Wire.Array l | Wire.List l when List.length l >= 4 ->
+  | Wire.Array l | Wire.List l when List.length l >= 2 ->
       List.filter_map block_uuid_lookup_ref_value
-        [ List.nth l 1; List.nth l 3 ]
+        (List.nth l 1
+         :: (if List.length l >= 4 then [ List.nth l 3 ] else []))
   | _ -> []
 
 let tx_data_has_block_uuid_ref (tx_data : Wire.t list) : bool =

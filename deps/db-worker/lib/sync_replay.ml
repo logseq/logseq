@@ -1174,6 +1174,13 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
                | _ -> v
              in
              Wire.Array (op :: e' :: a :: v' :: rest)
+         | Wire.Array [ op; e ] | Wire.List [ op; e ]
+           when op = Wire.keyword "db/retractEntity"
+                || op = Wire.keyword "db.fn/retractEntity" ->
+             (* same missing-ref handling for entity retracts — a remote
+                retract of an entity this conn never received is a no-op,
+                but the bare lookup-ref would crash the transact *)
+             Wire.Array [ op; rewrite_pos e ]
          | _ -> item)
       tx_data
   in
