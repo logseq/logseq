@@ -323,6 +323,7 @@ let initialize platform_code host_code (_payload : string) : string =
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
   Logseq_codemirror.register registry;
+  Logseq_editor.register registry;
   let app =
     Lui_app.create_with_extensions backend registry Model.initial
       Update.update View.view
@@ -554,6 +555,10 @@ let platform_event payload =
       else if name = "node-rect" then Dom_ext.note_node_rect json
       else if name = "node-natural-size" then
         Dom_ext.note_node_natural_size json
+      else if
+        name = "caret-rect" || name = "offset-at"
+        || name = "line-ranges" || name = "scroll-height"
+      then Logseq_editor.note_measurement name json
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 

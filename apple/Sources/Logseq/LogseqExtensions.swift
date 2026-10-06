@@ -164,6 +164,113 @@ enum LogseqExtensionFingerprint {
     }
   }
 
+  /// Schema mirror of deps/ui/apple/logseq_editor.ml — the OCaml apple
+  /// schema registers all three profiles. The extension carries no
+  /// visual content: it is the text-input/IME/measurement conduit for
+  /// one block editor (docs/editor-surface-extension.md).
+  private static let editorProfiles = ["web/web", "macos/swiftui", "macos/gpui"]
+
+  private static let editorPropertySchemas: [LogseqExtensionFingerprint.Property] = [
+    .init(name: "block-id", kind: "string", required: true, defaultValue: nil),
+    .init(name: "caret", kind: "int", required: false, defaultValue: nil),
+    .init(name: "composition", kind: "string", required: false, defaultValue: nil),
+    .init(name: "runs", kind: "string", required: false, defaultValue: nil),
+  ]
+
+  private static let editorEventSchemas: [LogseqExtensionFingerprint.Event] = [
+    .init(
+      name: "key",
+      fields: [
+        (name: "key", kind: "string", required: true),
+        (name: "shift", kind: "bool", required: false),
+        (name: "alt", kind: "bool", required: false),
+        (name: "meta", kind: "bool", required: false),
+        (name: "ctrl", kind: "bool", required: false),
+        (name: "repeat", kind: "bool", required: false),
+      ]),
+    .init(
+      name: "insert",
+      fields: [(name: "text", kind: "string", required: true)]),
+    .init(
+      name: "delete",
+      fields: [(name: "kind", kind: "string", required: true)]),
+    .init(
+      name: "composition",
+      fields: [
+        (name: "state", kind: "string", required: true),
+        (name: "text", kind: "string", required: false),
+        (name: "range", kind: "string", required: false),
+      ]),
+    .init(name: "focus", fields: []),
+    .init(name: "blur", fields: []),
+    .init(
+      name: "pointer",
+      fields: [
+        (name: "offset", kind: "int", required: true),
+        (name: "extend", kind: "bool", required: false),
+      ]),
+  ]
+
+  private static let editorPropertyDecls: [LUIExtensionProperty] = [
+    .init(name: "block-id", kind: .string, isRequired: true),
+    .init(name: "caret", kind: .int),
+    .init(name: "composition", kind: .string),
+    .init(name: "runs", kind: .string),
+  ]
+
+  private static let editorEventDecls: [LUIExtensionEvent] = [
+    .init(
+      name: "key",
+      fields: [
+        .init(name: "key", kind: .string, isRequired: true),
+        .init(name: "shift", kind: .bool, isRequired: false),
+        .init(name: "alt", kind: .bool, isRequired: false),
+        .init(name: "meta", kind: .bool, isRequired: false),
+        .init(name: "ctrl", kind: .bool, isRequired: false),
+        .init(name: "repeat", kind: .bool, isRequired: false),
+      ]),
+    .init(
+      name: "insert",
+      fields: [.init(name: "text", kind: .string, isRequired: true)]),
+    .init(
+      name: "delete",
+      fields: [.init(name: "kind", kind: .string, isRequired: true)]),
+    .init(
+      name: "composition",
+      fields: [
+        .init(name: "state", kind: .string, isRequired: true),
+        .init(name: "text", kind: .string, isRequired: false),
+        .init(name: "range", kind: .string, isRequired: false),
+      ]),
+    .init(name: "focus", fields: []),
+    .init(name: "blur", fields: []),
+    .init(
+      name: "pointer",
+      fields: [
+        .init(name: "offset", kind: .int, isRequired: true),
+        .init(name: "extend", kind: .bool, isRequired: false),
+      ]),
+  ]
+
+  private static func editorExtension() -> LUIAppleExtension {
+    LUIAppleExtension(
+      identifier: "logseq-editor",
+      fingerprint: LogseqExtensionFingerprint.make(
+        identifier: "logseq-editor",
+        profiles: editorProfiles,
+        standardChildren: false,
+        children: [],
+        properties: editorPropertySchemas,
+        events: editorEventSchemas),
+      acceptsStandardChildren: false,
+      childIdentifiers: [],
+      properties: editorPropertyDecls,
+      events: editorEventDecls
+    ) { context in
+      AnyView(LogseqEditorView(context: context))
+    }
+  }
+
   private static func elementExtension(tag: String) -> LUIAppleExtension {
     let identifier = "logseq-" + tag
     return LUIAppleExtension(
@@ -189,6 +296,7 @@ enum LogseqExtensionFingerprint {
   ) throws -> LUIAppleExtensionRegistry {
     let registry = LUIAppleExtensionRegistry()
     try registry.register(codemirrorExtension())
+    try registry.register(editorExtension())
     for tag in tags {
       if let view {
         let identifier = "logseq-" + tag
@@ -234,5 +342,25 @@ struct LogseqCodeMirrorView: View {
       .font(.system(.body, design: .monospaced))
       .frame(maxWidth: .infinity, alignment: .leading)
       .textSelection(.enabled)
+  }
+}
+
+/// Protocol stub for the logseq-editor extension: the sink node carries
+/// no visual content — it binds one block editor's text-input/IME and
+/// measurement conduit (deps/ui/apple/logseq_editor.ml documents the
+/// contract). The schema is registered so the backend admits the node.
+///
+/// TODO(logseq-editor): replace this placeholder with the real conduit —
+/// a hidden UIKeyInput (iOS) / NSTextInputClient (macOS) responder that
+/// emits key/insert/delete/composition/focus/blur/pointer events via
+/// `context.emit`, and TextKit-backed handling of the `caret-rect`,
+/// `offset-at`, `line-ranges`, `scroll-height`, and `set-input-focus`
+/// dom-ops, replying through the platform-event channel under the same
+/// name (offsets in UTF-8 byte units — the host translates from UTF-16).
+struct LogseqEditorView: View {
+  let context: LUIAppleExtensionViewContext
+
+  var body: some View {
+    EmptyView()
   }
 }
