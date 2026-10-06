@@ -233,11 +233,14 @@ fn element(
     }
     element = match image {
         Ok(image) => element.child(img(ImageSource::Render(image))),
-        Err(_) => element
-            .px_1()
-            .text_color(cx.theme().muted_foreground)
-            .italic()
-            .child(SharedString::from(tex.to_string())),
+        Err(e) => {
+            eprintln!("logseq-gpui: katex render failed: {e}");
+            element
+                .px_1()
+                .text_color(cx.theme().muted_foreground)
+                .italic()
+                .child(SharedString::from(tex.to_string()))
+        }
     };
     style::all(element, node).into_any_element()
 }
@@ -377,14 +380,29 @@ impl Parser {
         }
     }
 
-    /// `{..}` group contents without delimiters.
+    /// `{..}` group contents without delimiters, read RAW — used for
+    /// env names (`\begin{pmatrix}`) and quoted text (`\text{..}`)
+    /// where math identifier splitting must not apply.
     fn group(&mut self) -> String {
         let mut inner = String::new();
         while matches!(self.peek(), Some(' ')) {
             self.pos += 1;
         }
         if self.eat("{") {
-            self.body(&mut inner, '}');
+            let mut depth = 1;
+            while let Some(c) = self.next() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                inner.push(c);
+            }
         }
         inner
     }
@@ -455,6 +473,26 @@ impl Parser {
     }
 
     fn command(&mut self, out: &mut String) {
+        // A command emitted right after an identifier (`x\alpha`, `x\int`)
+        // would merge into one typst identifier (`xalpha`) — insert a space
+        // at the boundary when both sides are alphanumeric.
+        let boundary = out.len();
+        self.command_inner(out);
+        if out.len() > boundary
+            && out[..boundary]
+                .chars()
+                .last()
+                .is_some_and(|c| c.is_ascii_alphanumeric())
+            && out[boundary..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphanumeric())
+        {
+            out.insert(boundary, ' ');
+        }
+    }
+
+    fn command_inner(&mut self, out: &mut String) {
         let name = self.command_name();
         match name.as_str() {
             // -- two-argument fractions and binomials ---------------------
@@ -755,6 +793,13 @@ impl Parser {
                 }
                 '~' => {
                     self.pos += 1;
+                    if out
+                        .chars()
+                        .last()
+                        .is_some_and(|c| c.is_ascii_alphanumeric())
+                    {
+                        out.push(' ');
+                    }
                     out.push_str("space.med ");
                 }
                 '%' => {
@@ -775,6 +820,23 @@ impl Parser {
                 }
                 _ => {
                     self.pos += 1;
+                    // LaTeX math reads `mc`/`x2` as products m·c / x·2;
+                    // typst math reads them as one identifier ("unknown
+                    // variable: mc"). Split letter-after-alnum and
+                    // digit-after-letter, but keep digit runs (`10`,
+                    // `3.14`) joined. Quoted text (`\text{..}` etc.)
+                    // bypasses `body` via `group()`, so words inside
+                    // quotes stay joined.
+                    let split = c.is_ascii_alphanumeric()
+                        && match (out.chars().last(), c.is_ascii_digit()) {
+                            (Some(p), _) if !p.is_ascii_alphanumeric() => false,
+                            (Some(p), true) => p.is_ascii_alphabetic(),
+                            (Some(_), false) => true,
+                            (None, _) => false,
+                        };
+                    if split {
+                        out.push(' ');
+                    }
                     out.push(c);
                 }
             }
@@ -972,6 +1034,23 @@ mod tests {
     }
 
     #[test]
+    fn identifier_splitting() {
+        // typst reads `mc`/`x2`/`xalpha` as one identifier; LaTeX reads
+        // products. Split so each letter stays a variable, but keep
+        // digit runs and quoted text joined.
+        assert_eq!(latex_to_typst("mc^2"), "m c^2");
+        assert_eq!(latex_to_typst("x2"), "x 2");
+        assert_eq!(latex_to_typst("10x + 3.14"), "10 x + 3.14");
+        assert_eq!(latex_to_typst("x\\alpha"), "x alpha");
+        assert_eq!(latex_to_typst("x\\,dx"), "x space.hair d x");
+        assert_eq!(
+            latex_to_typst("E = mc^2 + \\int_0^1 x\\,dx"),
+            "E = m c^2 + integral_0^1 x space.hair d x"
+        );
+        assert_eq!(latex_to_typst("\\text{abc}"), "\"abc\"");
+    }
+
+    #[test]
     fn fractions_and_roots() {
         assert_eq!(latex_to_typst("\\frac{a+b}{c}"), "frac(a+b, c)");
         assert_eq!(latex_to_typst("\\dfrac12"), "frac(1, 2)");
@@ -1015,7 +1094,7 @@ mod tests {
     #[test]
     fn symbols() {
         assert_eq!(latex_to_typst("\\sum_{i=0}^n i"), "sum_(i=0)^n i");
-        assert_eq!(latex_to_typst("\\int_0^1 x dx"), "integral_0^1 x dx");
+        assert_eq!(latex_to_typst("\\int_0^1 x dx"), "integral_0^1 x d x");
         assert_eq!(latex_to_typst("\\alpha \\leq \\beta"), "alpha <= beta");
         assert_eq!(latex_to_typst("a \\cdot b"), "a dot.op b");
         assert_eq!(latex_to_typst("\\to \\infty"), "arrow.r infinity");

@@ -342,6 +342,17 @@ let initialize platform_code host_code (_payload : string) : string =
           Hashtbl.find_opt
             (Lui_app.runtime app).Lui_runtime.runtime_parents id
       | None -> None);
+  (* host dom-events carry only nodeId; inject "target" like the Swift
+     host's snapshot attachment so document listeners (ev_target/
+     el_closest) work. Imperative nodes keep their registry snapshot *)
+  Platform.event_target_of :=
+    (fun id ->
+      match !current_app with
+      | Some app -> (
+          match Hashtbl.find_opt Imperative_dom.lui_index id with
+          | Some sid -> Imperative_dom.snapshot_of_id sid
+          | None -> Some (ext_snapshot (Lui_app.runtime app) id))
+      | None -> None);
   (match Sys.getenv_opt "LOGSEQ_DUMP" with
    | Some _ ->
        Platform.add_document_listener "click" (fun payload ->

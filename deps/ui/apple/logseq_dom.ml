@@ -167,15 +167,21 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
       (StringValue (attrs_json attrs));
   if html <> "" then
     Lui_ui.extension_property context node "html" (StringValue html);
-  (* delegated document click handlers (block edit, page-ref, bullet
-     zoom) need every dom element to emit "click" dom-events — gpui
-     only emits for names the element opted into, so opt in here. The
-     apple host's leftMouseUp monitor emits click for every hit already;
-     emit_event's 60ms coalescing window drops the duplicate. *)
+  (* delegated document click/contextmenu handlers (block edit, page-ref,
+     bullet zoom, block context menu) need every dom element to emit
+     those dom-events — gpui only emits for names the element opted
+     into, so opt in here. The apple host's mouse monitors emit click
+     for every hit already; emit_event's 60ms coalescing window drops
+     the duplicate. On web these bubble to document listeners; on
+     gpui emit_event fans out to window_listeners the same way. *)
   let events =
-    if List.mem "click" (String.split_on_char ' ' events) then events
-    else if events = "" then "click"
-    else "click " ^ events
+    let toks = List.filter (( <> ) "") (String.split_on_char ' ' events) in
+    let toks =
+      (if List.mem "click" toks then [] else [ "click" ])
+      @ (if List.mem "contextmenu" toks then [] else [ "contextmenu" ])
+      @ toks
+    in
+    String.concat " " toks
   in
   Lui_ui.extension_property context node "events" (StringValue events);
   if style_class <> "" then

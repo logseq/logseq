@@ -227,6 +227,11 @@ let request_stop () = propagation_stopped := true
 
 let dom_parent_of : (int -> int option) ref = ref (fun _ -> None)
 
+(* runtime-node-id -> element snapshot for the event's "target" prop,
+   installed by the embed layer; host payloads only carry nodeId, and
+   document listeners resolve ev_target/closest through this *)
+let event_target_of : (int -> Js.Json.t option) ref = ref (fun _ -> None)
+
 let event_listed events name =
   List.exists
     (fun e -> e = name)
@@ -257,6 +262,14 @@ let emit_event name payload =
            match Js.Json.decodeNumber v with
            | None -> ()
            | Some n ->
+               let payload =
+                 if List.mem_assoc "target" kvs then payload
+                 else
+                   match !event_target_of (int_of_float n) with
+                   | Some target ->
+                       Js.Json.JObject (kvs @ [ ("target", target) ])
+                   | None -> payload
+               in
                let payload_str = Js.Json.stringify payload in
                let rec bubble id depth =
                  if depth < 64 && not !propagation_stopped then begin
@@ -286,6 +299,26 @@ let emit_event name payload =
   if not !propagation_stopped then
   match Hashtbl.find_opt window_listeners name with
   | Some fns ->
+      (* document listeners see the enriched payload: "target" injected
+         above when the host only sent a nodeId *)
+      let payload =
+        match payload with
+        | Js.Json.JObject kvs -> (
+            if List.mem_assoc "target" kvs then payload
+            else
+              match List.assoc_opt "nodeId" kvs with
+              | Some v -> (
+                  match Js.Json.decodeNumber v with
+                  | Some n -> (
+                      match !event_target_of (int_of_float n) with
+                      | Some target ->
+                          Js.Json.JObject
+                            (kvs @ [ ("target", target) ])
+                      | None -> payload)
+                  | None -> payload)
+              | None -> payload)
+        | _ -> payload
+      in
       List.iter
         (fun f ->
           try f payload
