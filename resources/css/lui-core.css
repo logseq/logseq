@@ -263,6 +263,10 @@ blockquote {
 .cp__content-wrap {
   margin-left: auto;
   margin-right: auto;
+  /* cljs block-parent made width:auto fill the row; as a flex item of
+     .cp__sidebar-main-content, auto margins suppress cross-axis stretch —
+     an explicit 100% restores the fill (capped by the column's max-width) */
+  width: 100%;
   padding-bottom: 6rem;
   margin-bottom: 120px;
 }
