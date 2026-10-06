@@ -1,10 +1,8 @@
-(* Shared parity-DOM fragments used by more than one area:
+(* Shared parity fragments used by more than one area:
    the cljs editor box (.editor-wrapper > .editor-inner.block-editor >
    textarea + .mock-text caret mirror) and the collapse arrow svg. *)
 
 open Lui_elements
-
-let dom = Logseq_dom.dom
 
 (* Pressable container: container kinds take no ~on_press, so wrap the
    element and register Press on the mounted node. *)
@@ -25,7 +23,10 @@ let class_signal source f (elem : t) : t =
   node
 
 (* cljs mock-textarea style: hidden caret mirror for popup placement,
-   consumed on the imperative side by dom_ext.mock_text_el/build_mock_text *)
+   consumed on the imperative side by dom_ext.mock_text_el/build_mock_text.
+   The element's look comes from the .mock-text rule in
+   resources/css/lui-core.css; this string stays for imperative clones
+   (properties_menu) that set the same style inline. *)
 let mock_text_style =
   "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0"
 
@@ -41,22 +42,17 @@ let ghost_btn_cls ?(extra = "") () =
    active:opacity-80 as-ghost"
   ^ if extra = "" then "" else " " ^ extra
 
-(* TODO(component): editor surface — mock_text/editor_inner/editor_wrapper
-   collapse into a `logseq-editor` extension node per the migration spec;
-   imperative code queries .mock-text/.editor-inner/.block-editor, so the
-   dom fragments stay until that extension lands. *)
-let mock_text ~key : t =
-  dom ~key ~style_class:"mock-text"
-    ~attrs:[ ("style", mock_text_style) ]
-    []
+(* The imperative side queries .mock-text/.editor-inner/.block-editor by
+   class, so the semantic classes stay on style_class; flex/grow layout
+   moves to the kind's typed props. *)
+let mock_text ~key : t = box ~key ~style_class:"mock-text" []
 
-(* TODO(component): editor surface — see mock_text *)
 let editor_inner ~key children : t =
-  dom ~key ~style_class:"editor-inner flex flex-1 block-editor" children
+  row ~key ~style_class:"editor-inner block-editor" ~grow:1. children
 
-(* TODO(component): editor surface — see mock_text *)
 let editor_wrapper ~key ~id children : t =
-  dom ~key ~style_class:"editor-wrapper flex flex-1 w-full" ~id children
+  row ~key ~style_class:"editor-wrapper" ~grow:1.
+    ~accessibility_identifier:id children
 
 (* cljs arrow svg inside .control-hide/.rotating-arrow — the custom
    FontAwesome caret path is registered as app: icon "rotating-arrow"
