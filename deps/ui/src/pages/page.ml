@@ -786,7 +786,8 @@ let ref_group ?(data_attrs = []) ?(style = "") ?(parents = [])
             (box ~key:"grp"
                [ (* a.page-ref[data-ref][draggable] is read by
                     sidebar_state/right-sidebar *)
-                 link ~key:"grl" ~style_class:"page-ref relative"
+                 link ~key:"grl" ~url:"#" ~target:`self_
+                   ~style_class:"page-ref relative"
                    ~data_attrs:
                      [ ("tabindex", "0"); ("draggable", "true")
                      ; ("data-ref", String.lowercase_ascii name) ]
@@ -869,7 +870,7 @@ let references_row (b : Model.block) : t =
         ~key:("ref-row-" ^ Option.value b.block_uuid ~default:"")
         ~style_class:"references-item"
         [ (* a.page-ref[data-ref] is read by sidebar_state *)
-          link ~key:"pn" ~style_class:"page-ref"
+          link ~key:"pn" ~url:"#" ~target:`self_ ~style_class:"page-ref"
             ~data_attrs:[ ("data-ref", pname) ] ~text:pname []
         ; Tree.block_row_static b
         ]
@@ -885,7 +886,8 @@ let ref_item (b : Model.block) : t =
        | None -> box []
        | Some name ->
            (* a.references-item-page[data-ref] is read by sidebar_state *)
-           link ~style_class:"references-item-page"
+           link ~url:"#" ~target:`self_
+             ~style_class:"references-item-page"
              ~data_attrs:[ ("data-ref", name) ]
              ~text:name [])
     ; Tree.block_row b

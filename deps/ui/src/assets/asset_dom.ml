@@ -588,7 +588,7 @@ let file_block uuid (b : Model.block) : t =
   let file = uuid ^ "." ^ ext in
   (* cljs <a download title> — download/title have no props *)
   box ~key:("af-" ^ uuid)
-    [ link ~key:("afl-" ^ uuid) ~url:"#" ~text:file [] ]
+    [ link ~key:("afl-" ^ uuid) ~url:"#" ~target:`self_ ~text:file [] ]
 
 (* cljs asset-link pdf branch — a.asset-ref.is-pdf; data-url resolves to
    the blob object URL async (attrs signal so the patch lands in place) *)
