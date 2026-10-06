@@ -269,6 +269,60 @@ let rec repeat_until_visible ?(expect_timeout = 5000.) env n target_loc
             repeat_fn)
       (E2e_assert.is_visible_l ~timeout:expect_timeout target_loc)
 
+(** On a fresh graph the worker search-index build truncates the table and
+    refills it in chunks; under -j8 that window stretches past any retry
+    budget, so a query that already missed once waits for the build state
+    the worker reports before re-firing. Ready = a build reported
+    completed, or no build running after the schedule grace window. *)
+let wait_search_index_ready env =
+  let deadline = Js.Date.now () +. 180000. in
+  let grace_deadline = Js.Date.now () +. 8000. in
+  let rec loop () =
+    let* st =
+      Pw.eval_js env
+        "(() => { const s = logseq.api.get_state_from_store('search/index-build'); return JSON.stringify({running: !!(s && (s['running?'] || s.running)), status: (s && s.status) || null}); })()"
+    in
+    let running, status =
+      match Js.Json.decodeString st with
+      | Some s ->
+          (match
+             try Js.Json.decodeObject (Js.Json.parseExn s) with _ -> None
+           with
+           | Some o ->
+               let bool_of k =
+                 match Js.Dict.get o k with
+                 | Some v ->
+                     (match Js.Json.decodeBoolean v with
+                      | Some b -> b
+                      | None -> false)
+                 | None -> false
+               in
+               let str_of k =
+                 match Js.Dict.get o k with
+                 | Some v ->
+                     (match Js.Json.decodeString v with
+                      | Some s -> s
+                      | None -> "")
+                 | None -> ""
+               in
+               bool_of "running", str_of "status"
+           | None -> false, "")
+      | None -> false, ""
+    in
+    let ready =
+      status = "completed" || status = ":completed" || status = "failed"
+      || status = ":failed"
+      || ((not running) && status = "" && Js.Date.now () > grace_deadline)
+    in
+    if ready then Js.Promise.resolve ()
+    else if Js.Date.now () > deadline then
+      Js.Promise.resolve (Js.log2 "[search-idx-dbg] build never reported done; state=" st)
+    else
+      let* () = wait_timeout env 500. in
+      loop ()
+  in
+  loop ()
+
 let search_and_click env search_text =
   let* () = search env search_text in
   (* stale cmdk nodes stay mounted inside aria-hidden regions — restrict to
@@ -308,6 +362,7 @@ let search_and_click env search_text =
          -j8 the worker's search can take >5s, so give every issued query
          room to render before re-firing *)
       (repeat_until_visible ~expect_timeout:15000. env 12 result (fun () ->
+           let* () = wait_search_index_ready env in
            search env search_text))
   in
   Pw.click_l result
