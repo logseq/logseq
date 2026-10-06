@@ -1472,14 +1472,20 @@
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
         opts {:outliner-op :move-blocks-up-down}
-        pages (set (map #(:db/id (:block/page (d/entity db (:db/id %)))) top-level-blocks))
-        ;; where a block lands as a child or sibling of `target`
+        ;; the page a node is drawn on: a block's page, or for a nested page
+        ;; (no :block/page) the page it is nested in
+        node-page-id (fn [node]
+                       (let [node (d/entity db (:db/id node))]
+                         (or (:db/id (:block/page node))
+                             (:db/id (:block/parent node)))))
+        pages (set (map node-page-id top-level-blocks))
+        ;; where a node lands as a child or sibling of `target`
         target-page-id (fn [target sibling?]
                          (let [target (d/entity db (:db/id target))]
                            (if (and (not sibling?)
                                     (or (ldb/page? target) (:block/name target)))
                              (:db/id target)
-                             (:db/id (:block/page target)))))
+                             (node-page-id target))))
         same-page? (fn [target sibling?]
                      (contains? pages (target-page-id target sibling?)))]
     (cond
