@@ -261,10 +261,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
 
 (* cljs *control-show? (block-mouse-over/-leave on the main container):
    the fold caret shows only while hovering a collapsable-or-collapsed
-   block — mouseenter/mouseleave have no component-level equivalent so
-   the hover reveal is gone; control-show/hide still follows the
-   collapsed signal, which leaves the caret visible only on collapsed
-   blocks. *)
+   block — the hover half lives in lui-core.css as a
+   .block-main-container:hover > .block-control-wrap[data-has-children]
+   reveal; control-show/hide still follows the collapsed signal, which
+   keeps the caret visible on collapsed blocks. *)
 
 (* -- content vs editor -- *)
 
@@ -371,6 +371,8 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             ~style_class:"hash-symbol select-none" ~text:"#" []
         ; (if priv then Logseq_dom.nothing
            else
+             (* the 'x' press needs a pressable kind — link is not one,
+                so it renders as text; .block-tag:hover reveals it *)
              Ui_parts.pressable
                ~on_press:(fun _ ->
                  ignore
@@ -379,11 +381,11 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                           [ Wire.Uuid owner_uuid
                           ; Wire.Keyword "block/tags"
                           ; Wire.Int dbid ] ]))
-               (link ~key:("tx-" ^ key)
-                  ~style_class:
-                    "tag-x hash-symbol hidden cursor-pointer select-none"
-                  ~label:(I18n.t "block/remove-this-tag")
-                  ~text:"x" []))
+               (text ~key:("tx-" ^ key)
+                  ~style_class:"tag-x cursor-pointer select-none"
+                  ~data_attrs:
+                    [ ("aria-label", I18n.t "block/remove-this-tag") ]
+                  ~value:"x" []))
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
           link ~key:("ta-" ^ key)

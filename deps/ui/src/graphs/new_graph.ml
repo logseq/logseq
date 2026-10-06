@@ -85,7 +85,7 @@ let body (_ms : Model.t Signal.signal) : t =
                      ~on_toggle:(fun () -> toggle cloud)
                  ; Ui_parts.pressable
                      ~on_press:(fun _ -> toggle cloud)
-                     (label ~key:"rtc-lbl" ~style_class:"ls-ng-label"
+                     (text ~key:"rtc-lbl" ~style_class:"ls-ng-label"
                         ~value:T.use_sync_label [])
                  ; if_ ~test:(Signal.value cloud)
                      (row ~key:"ng-e2ee-row"
@@ -95,7 +95,7 @@ let body (_ms : Model.t Signal.signal) : t =
                             ~on_toggle:(fun () -> toggle e2ee)
                         ; Ui_parts.pressable
                             ~on_press:(fun _ -> toggle e2ee)
-                            (label ~key:"e2ee-lbl"
+                            (text ~key:"e2ee-lbl"
                                ~style_class:"ls-ng-label"
                                ~value:T.encrypt_data_label [])
                         ])

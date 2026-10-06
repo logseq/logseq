@@ -541,6 +541,9 @@ let asset_container uuid (b : Model.block) : t =
     (box ~key:("ac-" ^ uuid) ~style_class:"asset-container"
        [ reactive (fun r ->
              if r then
+               (* the press lives on a box wrapper — image is not a
+                  pressable kind, and .lui-box is display:contents so the
+                  wrapper adds no layout box *)
                Ui_parts.pressable
                  ~on_press:(fun _ ->
                    match
@@ -549,7 +552,7 @@ let asset_container uuid (b : Model.block) : t =
                    with
                    | Some img -> open_lightbox img
                    | None -> ())
-                 (asset_img uuid b file)
+                 (box ~key:("acimgw-" ^ uuid) [ asset_img uuid b file ])
              else asset_placeholder)
            ready.Signal.state_signal
        ; action_bar uuid b ])
