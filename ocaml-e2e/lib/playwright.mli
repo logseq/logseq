@@ -139,6 +139,21 @@ external locator_all : locator -> locator array Js.Promise.t = "all"
 [@@mel.send]
 val hover : ?timeout:'a -> locator -> unit Js.Promise.t
 val set_input_files : ?timeout:'a -> locator -> 'b -> unit Js.Promise.t
+type mouse
+
+external page_mouse : page -> mouse = "mouse" [@@mel.get]
+
+external mouse_move : mouse -> float -> float -> unit Js.Promise.t = "move"
+[@@mel.send]
+
+external mouse_move_opts :
+  mouse -> float -> float -> 'opts Js.t -> unit Js.Promise.t = "move"
+[@@mel.send]
+
+external mouse_down : mouse -> unit Js.Promise.t = "down" [@@mel.send]
+
+external mouse_up : mouse -> unit Js.Promise.t = "up" [@@mel.send]
+
 external locator_drag_to :
   locator -> locator -> 'opts Js.t -> unit Js.Promise.t = "dragTo" [@@mel.send]
 val drag_to :

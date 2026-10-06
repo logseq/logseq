@@ -368,13 +368,40 @@ let drag_block env source_title target_title placement =
     | "inside" -> target_height -. 2.
     | _ -> target_height -. 2.
   in
-  let* () =
-    Pw.drag_to
-      ~target_x ~target_y ~steps:12
-      (Playwright.locator_first (Pw.sub source_block ".bullet-container"))
-      target_block
+  (* manual mouse path with a dwell before mouseup — locator.dragTo can
+     finish faster than the app registers the drop indicator under load *)
+  let bullet =
+    Playwright.locator_first (Pw.sub source_block ".bullet-container")
   in
-  Util.wait_timeout env 250.
+  let* () = Playwright.hover bullet in
+  let* sbox = Playwright.bounding_box bullet in
+  (match Js.Nullable.toOption sbox with
+   | None -> failwith "drag source not visible"
+   | Some sb ->
+       let sx = Playwright.box_x sb +. (Playwright.box_width sb /. 2.) in
+       let sy = Playwright.box_y sb +. (Playwright.box_height sb /. 2.) in
+       let tx =
+         (match Js.Nullable.toOption box with
+          | Some b -> Playwright.box_x b
+          | None -> 0.)
+         +. target_x
+       in
+       let ty =
+         (match Js.Nullable.toOption box with
+          | Some b -> Playwright.box_y b
+          | None -> 0.)
+         +. target_y
+       in
+       let m = Playwright.page_mouse (Pw.page env) in
+       let* () = Playwright.mouse_move m sx sy in
+       let* () = Playwright.mouse_down m in
+       let* () =
+         Playwright.mouse_move_opts m tx ty [%mel.obj { steps = 12 }]
+       in
+       (* dwell on the drop zone so the indicator commits *)
+       let* () = Util.wait_timeout env 450. in
+       let* () = Playwright.mouse_up m in
+       Util.wait_timeout env 250.)
 
 let block_visible env uuid =
   let* n = Pw.count env ("#ls-block-" ^ uuid) in
