@@ -59,7 +59,7 @@ let category_tab ~key cat_st id caption (ic : icon) n =
 let category_tabs ~key ~nums cat_st =
   let np, nt = nums in
   row ~key:(key ^ "-cats")
-    ~style_class:"secondary-tabs categories"
+    ~style_class:"secondary-tabs"
     [ category_tab ~key cat_st "plugins" (t "nav/plugins")
         (`app "puzzle") np
     ; category_tab ~key cat_st "themes" (t "nav/themes")
@@ -87,7 +87,7 @@ let control_tabs ~key ~search_st ~cat_st ~nums =
             (t "cmdk.action/filter")
         ; ghost_btn "more" "more-do" (`app "dots-vertical")
             (t "header/more")
-        ; text ~key:(key ^ "-contrib") ~style_class:"contribute"
+        ; text ~key:(key ^ "-contrib") 
             ~value:(t "plugin/contribute")
             ~on_press:(fun _ ->
               open_url_ "https://github.com/logseq/marketplace")
@@ -133,7 +133,7 @@ let market_card pkg =
                 ~on_press:open_readme [] ]
         ; paragraph ~key:"desc" ~style_class:"desc"
             ~value:(jstr pkg "description") []
-        ; box ~key:"flag" ~style_class:"flag"
+        ; box ~key:"flag" 
             [ row ~style_class:"ls-pl-meta"
                 ~main:`space_between
                 [ text ~key:"a" ~value:(jstr pkg "author") []
@@ -196,7 +196,7 @@ let updates_btn ~pid ~plj ~web_pkg =
     let r = Plugin_host.jstr web_pkg "repo" in
     if r <> "" then r else Plugin_host.jstr plj "repo"
   in
-  box ~key:"upd" ~style_class:"updates-actions"
+  box ~key:"upd" 
     (match Plugin_host.update_version pid with
      | Some v ->
          [ button ~key:"b" ~style_class:"btn"
@@ -225,7 +225,7 @@ let installed_card (pl : Js.Json.t) =
   let disabled = jbool pl "disabled" in
   let open_readme _ = Plugin_readme.open_readme plj in
   row ~key:("inst-" ^ pid)
-    ~style_class:"cp__plugins-item-card installed" ~gap:12
+    ~style_class:"cp__plugins-item-card" ~gap:12
     [ Ui_parts.pressable ~on_press:open_readme
         (box ~key:"l" ~style_class:"l link-block"
            [ box ~key:"ic" ~style_class:"plugin-icon"
@@ -237,14 +237,14 @@ let installed_card (pl : Js.Json.t) =
             ; text ~key:"v" ~style_class:"ls-pl-status" ~value:version
                 [] ]
         ; paragraph ~key:"desc" ~style_class:"desc" ~value:desc []
-        ; box ~key:"flag" ~style_class:"flag"
+        ; box ~key:"flag" 
             [ row ~style_class:"ls-pl-meta" ~main:`space_between
                 [ text ~key:"a" ~value:(jstr web_pkg "author") []
                 ; text ~key:"i" ~value:("ID: " ^ pid) [] ] ]
         ; row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
             ~cross:`center
             [ box ~key:"ctl-l" ~style_class:"l"
-                [ box ~key:"de" ~style_class:"de"
+                [ box ~key:"de" 
                     [ icon ~key:"g" ~name:`settings []
                     ; list ~key:"m" ~style:`plain
                         ~style_class:"menu-list"
@@ -331,7 +331,7 @@ let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~loading =
   let filtered =
     List.filter (fun p -> category_ok cat p && matches search p) pkgs
   in
-  column ~key ~style_class:"cp__plugins-marketplace" ~gap:8
+  column ~key  ~gap:8
     ([ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st ~nums:(0, 0) ]
     @
     if loading && pkgs = [] then
@@ -405,7 +405,7 @@ let body (_ms : Model.t Signal.signal) : t =
                       (`app "apps")
                   ]
               ]
-          ; box ~key:"pl-panels" ~style_class:"panels"
+          ; box ~key:"pl-panels" 
               [ (if tab_now = "marketplace" then
                    reactive
                      (fun ((search, cat), (pkg_now, load_now)) ->
@@ -447,9 +447,9 @@ let set_json_exn s =
    leaf kind so this becomes a row of key text + caret + title *)
 let desc_h2 key title =
   row ~key:("h-" ^ key) ~cross:`center ~gap:8
-    [ text ~key:"k" ~style_class:"ls-pl-key" ~value:key []
+    [ text ~key:"k"  ~value:key []
     ; icon ~key:"c" ~name:(`app "caret-right") ~size:`sm []
-    ; heading ~key:"t" ~level:2 ~style_class:"ls-pl-h" ~value:title []
+    ; heading ~key:"t" ~level:2  ~value:title []
     ]
 
 (* cljs html-content — sanitized markdown rendered raw (DOMPurify) *)
@@ -523,7 +523,7 @@ let item_input pid key s cur =
           ~on_input:(fun ev -> on_change (text_of ev))
           []
   in
-  row ~key:("i-" ^ key) ~style_class:"desc-item as-input"
+  row ~key:("i-" ^ key) ~style_class:"desc-item"
     ~cross:`center
     [ desc_h2 key title
     ; box ~key:"fc" ~style_class:"form-control" ~cross:`center
@@ -538,7 +538,7 @@ let item_toggle pid key s cur =
     | Some b -> b
     | None -> Plugin_host.jbool s "default"
   in
-  row ~key:("t-" ^ key) ~style_class:"desc-item as-toggle"
+  row ~key:("t-" ^ key) ~style_class:"desc-item"
     ~cross:`center
     [ desc_h2 key title
     ; row ~key:"fc" ~style_class:"form-control" ~cross:`center ~gap:6
@@ -563,7 +563,7 @@ let item_enum pid key s cur' =
     | None -> []
   in
   let cur = json_text_of cur' in
-  row ~key:("e-" ^ key) ~style_class:"desc-item as-enum" ~cross:`center
+  row ~key:("e-" ^ key) ~style_class:"desc-item" ~cross:`center
     [ desc_h2 key title
     ; box ~key:"fc" ~style_class:"form-control"
         [ box ~key:"w" ~style_class:"wrap"
@@ -580,7 +580,7 @@ let item_enum pid key s cur' =
     ]
 
 let item_object key s =
-  row ~key:("o-" ^ key) ~style_class:"desc-item as-object" ~cross:`center
+  row ~key:("o-" ^ key) ~style_class:"desc-item" ~cross:`center
     [ desc_h2 key (Plugin_host.jstr s "title")
     ; box ~key:"fc" ~style_class:"form-control"
         (html_desc key (Plugin_host.jstr s "description"))
@@ -588,7 +588,7 @@ let item_object key s =
 
 let item_button pid key s =
   let action = Plugin_host.jstr s "buttonAction" in
-  row ~key:("b-" ^ key) ~style_class:"desc-item as-button" ~cross:`center
+  row ~key:("b-" ^ key) ~style_class:"desc-item" ~cross:`center
     [ desc_h2 key (Plugin_host.jstr s "title")
     ; box ~key:"fc" ~style_class:"form-control"
         ( html_desc key (Plugin_host.jstr s "description")
@@ -612,7 +612,7 @@ let code_mode_wrap owner pid code_mode =
         []
     ; row ~key:"btns" ~style_class:"ls-form-actions" ~main:`end_
         [ button ~key:"reset" ~variant:`ghost ~size:`sm
-            ~style_class:"ui__button is-small variant-ghost"
+            ~style_class:"ui__button is-small"
             ~text:(t "ui/reset")
             ~on_press:(fun _ -> Plugin_host.bump ())
             []
@@ -651,7 +651,7 @@ let settings_item pid s =
   | "enum" -> item_enum pid key s val_or_default
   | "object" -> item_object key s
   | "heading" ->
-      box ~key:("h-" ^ key) ~style_class:"heading-item"
+      box ~key:("h-" ^ key) 
         [ heading ~key:"t" ~level:2
             ~value:(Plugin_host.jstr s "title") [] ]
   | "button" -> item_button pid key s
@@ -682,7 +682,7 @@ let settings_body (_ms : Model.t Signal.signal) : t =
                     ~value:("ID: " ^ pid) []
                 ; column ~key:"in"
                     ~style_class:"cp__plugins-settings-inner" ~gap:8
-                    ( box ~key:"ef" ~style_class:"edit-file"
+                    ( box ~key:"ef" 
                         [ text ~key:"a" ~style_class:"ls-pl-link"
                             ~on_press:(fun _ ->
                               Runtime.signal_set code_mode (not code))
@@ -699,7 +699,6 @@ let settings_body (_ms : Model.t Signal.signal) : t =
                 ]
             in
             column ~key:"ps"
-              ~style_class:"cp__plugins-settings cp__settings-main"
               [ box ~key:"si"
                   ~style_class:"cp__settings-inner no-aside"
                   [ column ~key:"pw" ~style_class:"panel-wrap" ~gap:16

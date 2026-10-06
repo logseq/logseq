@@ -232,7 +232,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
      kind equivalent *)
   dom ~key:("asset-" ^ uuid) ~tag:"div"
     ~style_class:
-      ("asset-container" ^ if is_pdf then " ls-pdf-asset" else "")
+      "asset-container"
     ~attrs:
       [ ("data-asset-uuid", uuid); ("data-asset-type", ext) ]
     ~events:(if is_pdf then "click" else "")
@@ -241,7 +241,6 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
         Pdf_assets.open_pdf_file ~uuid ~ext ~b)
     [ (if is_pdf then
          Lui_elements.text ~key:("asset-link-" ^ uuid)
-           ~style_class:"ls-pdf-asset-link"
            ~value:(uuid ^ "." ^ ext) []
        else Lui_elements.spacer ~key:("asset-empty-" ^ uuid) []) ]
 

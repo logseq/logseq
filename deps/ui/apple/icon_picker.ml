@@ -226,8 +226,7 @@ let pane_section ?(virtual_list = false) ?(searching = false) label
     D.mk
       ~cls:
         ("pane-section"
-        ^ (if virtual_list then " has-virtual-list" else "")
-        ^ if searching then " searching-result" else "")
+        ^ if searching then "" else "")
       "div"
   in
   let hd = D.mk ~cls:"hd" "div" in
@@ -238,7 +237,7 @@ let pane_section ?(virtual_list = false) ?(searching = false) label
   D.el_append_child hd strong;
   D.el_append_child sec hd;
   if virtual_list then (
-    let wrap = D.mk ~cls:"virtuoso-item-list" "div" in
+    let wrap = D.mk  "div" in
     List.iter
       (fun row ->
         let r = D.mk ~cls:"its icons-row" "div" in
@@ -500,7 +499,7 @@ let view (p : picker) : E.el =
     true;
   D.el_append_child hd si;
   D.el_append_child root hd;
-  let bd = D.mk ~cls:("bd bd-scroll " ^ tab_name p.tab) "div" in
+  let bd = D.mk ~cls:("bd " ^ tab_name p.tab) "div" in
   let pane = D.mk ~cls:"content-pane" "div" in
   D.el_append_child bd pane;
   D.el_append_child root bd;
@@ -590,8 +589,7 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
      property-value-inner > picker *)
   let dlg = D.mk ~cls:"ls-property-dialog" "div" in
   let lpi =
-    D.mk ~cls:"ls-property-input flex flex-1 flex-row items-center \
-               flex-wrap gap-1" "div"
+    D.mk ~cls:"ls-property-input flex flex-1 flex-row items-center flex-wrap gap-1" "div"
   in
   let lpa =
     D.mk ~cls:"ls-property-add ls-pa-row"
@@ -611,15 +609,7 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
   in
   let pop =
     open_popup
-      ~cls:
-        "ui__popover-content ls-icon-picker rounded-md border bg-popover \
-         text-popover-foreground shadow-md outline-none outline-none \
-         animate-in fade-in-0 zoom-in-95 \
-         data-[side=bottom]:slide-in-from-top-2 \
-         data-[side=left]:slide-in-from-right-2 \
-         data-[side=right]:slide-in-from-left-2 \
-         data-[side=top]:slide-in-from-bottom-2 focus:outline-none \
-         focus-visible:outline-none z-50"
+      ~cls:"ui__popover-content ls-icon-picker rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 focus:outline-none focus-visible:outline-none z-50"
       anchor dlg
   in
   (match p.input with

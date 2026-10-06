@@ -189,7 +189,7 @@ let code_block_actions ~self lang =
      Code_mirror — the class stays *)
   row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
     [ button ~key:"sl" ~variant:`ghost ~size:`sm
-        ~style_class:"select-language ls-code-action"
+        ~style_class:"select-language"
         ~text:
           (if lang <> "" then lang
            else I18n.t "editor/code-language-placeholder")
@@ -197,7 +197,6 @@ let code_block_actions ~self lang =
         ~on_press:(fun _ -> Code_mirror.open_lang_picker self)
         []
     ; button ~key:"cp" ~variant:`ghost ~size:`sm
-        ~style_class:"ls-code-action"
         ~icon:`copy ~icon_placement:`leading
         ~text:(I18n.t "ui/copy")
         ~on_press:(fun _ -> Code_mirror.copy_button self)
@@ -299,7 +298,7 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
           styling, pre whitespace); the result text itself rides a
           signal prop *)
        text ~key:"rsc" ~as_:`Code ~value:(I18n.t "view/results") []
-     ; box ~style_class:"results mt-1"
+     ; box ~style_class:"mt-1"
          [ text ~key:"rsp" ~as_:`Pre ~style_class:"code"
              ~value_signal:(Signal.value st)
              [] ] ])
@@ -311,7 +310,7 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
    below-row .custom-query-results view *)
 let query_setting_el ~block_uuid =
   button ~key:"qs" ~variant:`ghost ~size:`icon
-    ~style_class:"ls-query-setting ls-small-icon"
+    ~style_class:"ls-query-setting"
     ~label:(I18n.t "block/set-query")
     ~icon:`settings
     ~on_press:(fun _ -> Views_view.toggle_query_editor ~block_uuid)
@@ -339,7 +338,7 @@ let is_cards_block (b : Model.block) =
    (a sibling inside .ls-block) — mounted declaratively as a KQuery view
    (.views-query-inner + raw-source .CodeMirror when the editor is open) *)
 let query_below_el uuid =
-  box ~key:("cq-" ^ uuid) ~style_class:"custom-query"
+  box ~key:("cq-" ^ uuid) 
     [ box ~style_class:"bd"
         [ box ~style_class:"custom-query-results"
             [ Views_view.view

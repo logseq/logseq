@@ -156,13 +156,11 @@ and node () : t =
                  hide vs clear-selection and [data-keep-selection]
                  surfaces (its cm menu) must not dismiss it *)
               popover ~key:"sbar" ~at:(l, t -. 48.)
-                ~style_class:"ui__toolbar selection-action-bar"
+                ~style_class:"selection-action-bar"
                 ~data_attrs:[ ("data-keep-selection", "true") ]
                 [ row ~key:"sbg"
                     ~cross:`center
-                    ~style_class:
-                      "ui__toolbar-group selection-action-group \
-                       inline-flex pointer-events-auto"
+                    ~style_class:"selection-action-group inline-flex pointer-events-auto"
                     [ action_btn "sab-tags" ~title:(I18n.t "property/set-tags")
                         ~icon:(`app "hash")
                         (fun () -> open_prop_dlg ~remove:false)

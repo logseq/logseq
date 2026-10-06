@@ -185,7 +185,7 @@ let body (_ms : Model.t Signal.signal) : t =
        (* TODO(component): data-capture-click anchor delegation (readme
           links open externally via the payload's href) is a dom-adapter
           hook with no component prop — minimal dom wrapper stays *)
-       dom ~key:"rd" ~style_class:"cp__plugins-details"
+       dom ~key:"rd" 
          ~attrs:[ ("data-capture-click", "") ]
          ~events:"click"
          ~on_dom_event:(fun name payload ->

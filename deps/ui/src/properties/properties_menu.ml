@@ -68,13 +68,11 @@ let menu_root_class =
 
 let alertdialog ~title ~desc ~confirm_label on_confirm =
   let overlay =
-    mk ~cls:
-      "ui__alert-dialog-overlay" "div"
+    mk ~cls:"ui__alert-dialog-overlay" "div"
   in
   let dlg =
     mk "div"
-      ~cls:
-        "ui__alert-dialog-content"
+      ~cls:"ui__alert-dialog-content"
       ~attrs:
         [ ("role", "alertdialog")
         ; ("style", "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%)") ]
@@ -87,19 +85,16 @@ let alertdialog ~title ~desc ~confirm_label on_confirm =
        "ui__alert-dialog-description" desc
        dlg);
   let footer =
-    mk ~cls:
-      "ui__alert-dialog-footer" "div"
+    mk ~cls:"ui__alert-dialog-footer" "div"
   in
   let cancel_btn =
     mk "button"
-      ~cls:
-        "ui__button ls-btn-outline"
+      ~cls:"ui__button ls-btn-outline"
   in
   el_set_text_content cancel_btn (I18n.t "ui/cancel");
   let confirm_btn =
     mk "button"
-      ~cls:
-        "ui__button ls-btn-primary"
+      ~cls:"ui__button ls-btn-primary"
   in
   el_set_text_content confirm_btn confirm_label;
   el_append_child footer cancel_btn;
@@ -219,9 +214,7 @@ let position_pane m =
 (* "More settings" per-choice dropdown *)
 let choice_settings m choice =
   let root =
-    mk ~cls:
-      "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
-       bg-popover p-1 text-popover-foreground shadow-md" "div"
+    mk ~cls:"ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md" "div"
   in
   let cid = D.entity_id_of choice in
   let scoped_ids =

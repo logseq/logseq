@@ -46,7 +46,7 @@ let grid ~on_pick =
   let lead = first_weekday ~year ~month0 in
   for _ = 1 to lead do
     (* leading padding keeps the weekday columns aligned *)
-    el_append_child wrap (mk ~cls:"ui__calendar-pad" "div" ~attrs:[])
+    el_append_child wrap (mk  "div" ~attrs:[])
   done;
   let n = days_in_month ~year ~month0 in
   for i = 1 to n do

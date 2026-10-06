@@ -156,7 +156,6 @@ let user_item () : Lui_elements.t =
     [ column ~key:"u-span" ~style_class:"relative"
         [ text ~key:"u-name" ~value:username []
         ; row ~key:"u-mail" ~cross:`center
-            ~style_class:"ls-email-address"
             [ text ~key:"u-addr-t"
                 ~value_signal:
                   (Signal.map

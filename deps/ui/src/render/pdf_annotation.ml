@@ -126,7 +126,7 @@ let open_hl_lightbox ?clicked_id () =
 (* cljs asset-action-bar button inside .hl-area — ~label: carries the
    tip (aria-label feeds the app tooltip like the cljs title attr did) *)
 let area_btn ~key ~title ~icon ~onclick : t =
-  button ~key ~style_class:"asset-action-btn"
+  button ~key 
     ~label:title
     ~data_attrs:[ ("tabindex", "-1") ]
     ~icon:(`app icon)
@@ -192,7 +192,7 @@ let prefix_el (b : Model.block) : t =
   in
   (* pointerdown reads the event target's class via pointer_detail
      (deepest hit element's class list) *)
-  (text ~key:"pf" ~style_class:"prefix-link"
+  (text ~key:"pf" 
      ~on_pointer_down:(fun ev ->
        match ev with
        | Lui_protocol.PointerDown (_, d) ->
@@ -203,8 +203,8 @@ let prefix_el (b : Model.block) : t =
            in
            if not (area && blank) then Pdf_assets.open_block_ref b
        | _ -> ())
-     ([ text ~key:"pfp" ~style_class:"hl-page"
-          [ text ~key:"pfs" ~as_:`Strong ~style_class:"forbid-edit"
+     ([ text ~key:"pfp" 
+          [ text ~key:"pfs" ~as_:`Strong 
               ~value:page [] ]
       ]
       @

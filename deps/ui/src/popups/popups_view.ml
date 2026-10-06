@@ -136,8 +136,7 @@ let ac_node_label_el (v : S.view) (it : S.ac_item) : t =
       | Some bc when bc <> "" ->
           [ box ~key:"bc" ~style_class:"ls-ac-bc"
               [ text ~key:"b"
-                  ~style_class:
-                    "breadcrumb block-parents breadcrumb--search-result"
+                  ~style_class:"breadcrumb block-parents breadcrumb--search-result"
                   ~value:bc [] ] ]
       | _ -> [])
     @ [ row ~key:"row" ~style_class:"ls-ac-node-row"
@@ -156,7 +155,6 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
     | None -> it.S.ai_label
   in
   box ~key:"lbl"
-    ~style_class:(if it.S.ai_help then "has-help" else "")
     ((match it.S.ai_icon with
       | Some ic ->
           [ text ~key:"ic" ~style_class:"ls-ac-ic"
@@ -432,8 +430,7 @@ let ac_popover (st : S.t) : t =
                         inside a span *)
                      text ~key:"scw"
                        [ box ~key:"sc"
-                           ~style_class:
-                             "shui-shortcut-combo shui-shortcut-glow"
+                           ~style_class:"shui-shortcut-combo shui-shortcut-glow"
                            [ kbd ~key:"k0" ~style_class:"shui-shortcut-key"
                                ~value:(Platform.utf8 "\xe2\x8c\x98") []
                            ; text ~key:"sep1"

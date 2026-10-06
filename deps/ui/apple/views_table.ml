@@ -750,7 +750,7 @@ let action_bar inst : t =
        (D.own ctx
           (Signal.map
              (fun s -> not (V.Sset.is_empty s.V.selected)) isig))
-    (box ~style_class:"table-action-bar absolute top-0 left-8"
+    (box ~style_class:"table-action-bar absolute top-0"
        [ row ~gap:4 ~cross:`center ~background:"secondary"
            ~style_class:"ls-table-actions"
            [ text ~style_class:"selection-count" ~padding_horizontal:8
@@ -990,7 +990,7 @@ let table_el inst (s : V.vstate) : t =
   let cols = visible_columns s in
   box ~style_class:"ls-table"
     [ scroll ~orientation:`horizontal
-        ~style_class:"ls-table-rows content force-visible-scrollbar"
+        ~style_class:"ls-table-rows content"
         [ box ~style_class:"relative"
             [ table_header inst cols
             ; (* cljs Virtuoso mounts the rows under
@@ -1011,7 +1011,7 @@ let grouped_table inst ~rows : t =
   let cols = visible_columns s in
   box ~style_class:"ls-table"
     [ scroll ~orientation:`horizontal
-        ~style_class:"ls-table-rows content force-visible-scrollbar"
+        ~style_class:"ls-table-rows content"
         [ box ~style_class:"relative"
             [ table_header inst cols
             ; box ~accessibility_identifier:"virtuoso-item-list"
@@ -1098,7 +1098,6 @@ let foldable inst ~key ~title ~(body : t) : t =
     [ row ~style_class:"ls-foldable-title content"
         [ row ~grow:1. ~style_class:"foldable-title"
             [ row ~cross:`center ~gap:4
-                ~style_class:"ls-foldable-header"
                 [ Ui_parts.pressable
                     ~on_press:(fun _ ->
                       V.update inst (fun s ->
@@ -1108,9 +1107,7 @@ let foldable inst ~key ~title ~(body : t) : t =
                                then V.Sset.remove key s.V.collapsed_groups
                                else V.Sset.add key s.V.collapsed_groups)
                           }))
-                    (box ~style_class:
-                       "ls-foldable-title-control block-control \
-                        control-show cursor-pointer"
+                    (box ~style_class:"ls-foldable-title-control block-control cursor-pointer"
                        ~width:14 ~height:16
                        [ Ui_parts.class_signal collapsed_sig
                            (fun c ->

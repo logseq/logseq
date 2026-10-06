@@ -35,7 +35,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let menu_open = Signal.state sched false in
-  (column ~gap:0 ~style_class:"property-key-inner jtrigger-view"
+  (column ~gap:0 ~style_class:"property-key-inner"
      [ box ~key:"pk-b" ~style_class:"bullet-container"
          [ box ~style_class:"bullet" [] ]
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
@@ -89,13 +89,10 @@ let toggle_row : t =
       (if !S.show_hidden then "property/collapse-hidden-properties"
        else "property/show-hidden-properties")
   in
-  row ~gap:0 ~style_class:"property-pair property-panel-row \
-                          hidden-properties-toggle-row"
+  row ~gap:0 ~style_class:"property-pair property-panel-row hidden-properties-toggle-row"
     [ column ~min_width:80 ~max_width:200 ~style_class:"property-key-panel"
         [ button ~variant:`ghost ~size:`sm ~text_alignment:`start
-            ~style_class:
-              "property-key-inner jtrigger-view \
-               hidden-properties-toggle-key"
+            ~style_class:"property-key-inner hidden-properties-toggle-key"
             ~label ~text:label
             ~on_press:(fun _ ->
               S.toggle_hidden ();
@@ -162,7 +159,7 @@ let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
 let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
   column ~gap:0
     ~style_class:"bottom-property-pill bottom-property-pill-focusable"
-    [ Lui_elements.row ~gap:4 ~cross:`center ~style_class:"flex flex-row items-center"
+    [ Lui_elements.row ~gap:4 ~cross:`center 
         [ key_cell ctx ~owner_is_tag ~owner_title row
         ; text ~value:":"
             ~style_class:"select-none" []
@@ -174,17 +171,11 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
 
 let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
   row ~gap:4 ~grow:1.0
-    ~style_class:
-      "positioned-properties block-below flex flex-col gap-1 text-sm \
-       overflow-x-hidden w-full min-w-0"
+    ~min_width:0 ~style_class:"positioned-properties flex-col text-sm overflow-x-hidden w-full"
     [ row ~gap:8 ~cross:`center ~grow:1.0
-        ~style_class:
-          "bottom-properties-row flex flex-row gap-2 items-center \
-           w-full min-w-0"
+        ~min_width:0 ~style_class:"bottom-properties-row w-full"
         [ row ~gap:8 ~cross:`center ~grow:1.0
-            ~style_class:
-              "bottom-properties-pills-strip flex flex-row gap-2 \
-               items-center min-w-0 flex-1 basis-0"
+            ~min_width:0 ~style_class:"bottom-properties-pills-strip basis-0"
             (List.map
                (pill_view ctx ~owner_is_tag ~owner_title)
                below_rows)
@@ -267,8 +258,7 @@ let block_area ~uuid : t =
                 else
                   [ column ~key:("parea-" ^ uuid)
                       ~accessibility_identifier:uuid
-                      ~style_class:
-                        "ls-properties-area ls-block-properties"
+                      ~style_class:"ls-properties-area"
                       [ panel_view ctx ~owner_is_tag:false
                           ~owner_title:""
                           ~can_toggle:
@@ -419,10 +409,10 @@ let class_schema_row prop =
   | None -> None
 
 let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
-  column ~gap:4 ~style_class:"flex flex-col gap-1 mt-2"
+  column ~gap:4 ~style_class:"mt-2"
     [ column ~gap:2 ~style_class:"property-key text-sm"
         [ row ~gap:4 ~cross:`center
-            ~style_class:"property-key-inner jtrigger-view"
+            ~style_class:"property-key-inner"
             [ icon ~name:(`app "tabler-letter-p") ~point_size:14 []
             ; text
                 ~value:(I18n.t "property.built-in/class-properties")
@@ -431,7 +421,7 @@ let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
         ; text ~value:(I18n.t "class/tag-properties-desc")
             ~style_class:"text-muted-foreground ml-5" []
         ]
-    ; column ~gap:4 ~style_class:"gap-1 flex flex-col"
+    ; column ~gap:4 
         (List.map (panel_row ctx ~owner_is_tag:true ~owner_title)
            class_rows
         @ [ column ~style_class:"ml-5"
@@ -563,11 +553,9 @@ let bidi_area (p : Model.page) : t =
                      | None -> []
                    in
                    column ~gap:2
-                     ~style_class:"ls-bidirectional-group"
                      [ row ~gap:0 ~style_class:"property-key-panel"
                          [ text ~value:title
-                             ~style_class:
-                               "property-k flex select-none w-full" []
+                             ~style_class:"property-k flex select-none w-full" []
                          ]
                      ; row ~gap:4 ~cross:`center
                          ~style_class:"ls-block property-value-container"

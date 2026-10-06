@@ -40,7 +40,7 @@ let icon_ ?key ?(cls = "") ?(size = 16) name =
    with Sidebar_state's document handler) *)
 let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
   popover ~key ~at ~role:`menu ?min_width ~on_dismiss:dismiss
-    ~style_class:("ui__dropdown-menu-content ui__dropdown-menu" ^ extra_cls)
+    ~style_class:("ui__dropdown-menu-content" ^ extra_cls)
     children
 
 (* combo shortcut inside a menu item (ui/dropdown-shortcut):
@@ -109,7 +109,7 @@ let plugins_menu st =
         Sidebar_state.close_menu st;
         f ())
       (row ~key:("pm-x-" ^ key) ~cross:`center ~gap:4
-         ~style_class:"ui__dropdown-menu-item extra-item"
+         ~style_class:"ui__dropdown-menu-item"
          ~data_attrs:[ ("role", "menuitem") ]
          [ icon_ icn; text ~value:label [] ])
   in
@@ -124,7 +124,6 @@ let plugins_menu st =
          ~style_class:"ui__dropdown-menu-item"
          ~data_attrs:[ ("role", "menuitem") ]
          [ row ~key:("wrap-" ^ pkey) ~cross:`center
-             ~style_class:"item-wrap"
              [ (* plugin UI injects into this slot by element id
                   (Plugin_host.inject_toolbar_ui → get_element_by_id) *)
                box ~key:("slot-" ^ pkey)
@@ -133,13 +132,12 @@ let plugins_menu st =
              ; text ~key:("lbl-" ^ pkey) ~value:key
                  ~padding_horizontal:2 []
              ; row ~key:("pin-" ^ pkey) ~cross:`center
-                 ~style_class:("pin" ^ if pinned_ then " pinned" else "")
                  [ icon_ (if pinned_ then "pinned" else "pin") ]
              ]
          ])
   in
   box ~key:"plugins-menu"
-    [ menu_box ~key:"menu-box" ~extra_cls:" toolbar-plugins-manager-content"
+    [ menu_box ~key:"menu-box" ~extra_cls:"toolbar-plugins-manager-content"
         ~min_width:200 ~dismiss:(fun _ -> Sidebar_state.close_menu st)
         (* cljs anchors right:16px; ~at is left-edge so place it at
            viewport-right - 16 - min-width (the positioner clamps wider
@@ -193,8 +191,7 @@ let lp_menu st =
          menu_box *)
       popover ~key:"lp-menu" ~at:(x, y) ~role:`menu
         ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-        ~style_class:
-          "ui__dropdown-menu-content ui__dropdown-menu w-60" items
+        ~style_class:"ui__dropdown-menu-content w-60" items
 ;;
 
 let menu_host st =
@@ -249,7 +246,7 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click () =
         (row ~cross:`center ~corner_radius:6
            ~style_class:("item group" ^ act)
            ([ icon_ icon_name
-            ; text ~style_class:"flex-1" ~value:title [] ]
+            ; text  ~grow:1. ~value:title [] ]
            @ tail)) ]
 
 let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
@@ -392,20 +389,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
            its class hooks (sidebar-page-actions, ls-icon-dots) still
            reach the row's target_class check *)
         ; button ~variant:`ghost ~size:`icon
-            ~style_class:
-              (* cljs shui/button :size :sm :variant :ghost + the
-                 sidebar-page-actions tail classes *)
-              "active:opacity-80 as-ghost cursor-pointer \
-               disabled:pointer-events-none disabled:opacity-50 \
-               focus-visible:outline-none focus-visible:ring-2 \
-               focus-visible:ring-ring focus-visible:ring-offset-2 \
-               font-medium gap-1 h-7 hover:bg-secondary/70 \
-               hover:text-secondary-foreground inline-flex items-center \
-               justify-center py-1 ring-offset-background rounded \
-               rounded-md select-none sidebar-page-actions absolute \
-               !bg-transparent right-0 top-0 px-1.5 scale-75 \
-               opacity-40 hover:opacity-80 active:opacity-100 text-sm \
-               transition-colors ui__button whitespace-nowrap"
+            ~height:28 ~padding_vertical:4 ~corner_radius:4 ~padding_horizontal:6 ~style_class:"active:opacity-80 as-ghost cursor-pointer disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 gap-1 hover:bg-secondary/70 hover:text-secondary-foreground select-none sidebar-page-actions absolute !bg-transparent top-0 scale-75 opacity-40 hover:opacity-80 active:opacity-100 text-sm ui__button"
             (* cljs [:i.relative {:style {:top "4px"}}] — the top offset
                rides a stylesheet rule now *)
             [ Icons.icon ~size:18. ~cls:"relative" "dots" ]
@@ -517,7 +501,7 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
         else r
     | None -> t "graph.switch/select-prompt"
   in
-  box ~key:"gsel" ~style_class:"sidebar-graphs"
+  box ~key:"gsel" 
     [ row ~key:"gsel-box" ~cross:`center ~main:`space_between
         ~style_class:"cp__graphs-selector"
         [ Ui_parts.pressable

@@ -28,8 +28,6 @@ let scroller_class = "cp__cmdk-scroller"
 
 (* [data-cmdk-item] is the semantic hook; the visuals live in
    lui-overlay.css. cursor comes from data-hoverable, not a class *)
-let row_base_class = ""
-
 (* -- shui shortcut port (deps/shui/src/logseq/shui/shortcut.cljs) ---- *)
 
 let gph = Platform.utf8
@@ -367,8 +365,6 @@ let wrapper_attrs it =
   ; ("data-item-key", it.S.ikey)
   ]
 
-let row_class (_it : S.item) = row_base_class
-
 let row_data_attrs (it : S.item) =
   let hoverable = it.S.imouse in
   let highlighted = it.S.ihl in
@@ -403,7 +399,6 @@ let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
   box ~key:"item-wrap"
     ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
     [ box ~key:"item"
-        ~style_class:row_base_class
         ~data_attrs:(reactive (fun it -> row_data_attrs it) item_sig)
         [ reactive ~equal:(fun (a : S.item) b -> a = b) (fun (it : S.item) -> item_header it it.S.iq) item_sig
         ; row ~key:"main" ~style_class:"cmdk-item-main"

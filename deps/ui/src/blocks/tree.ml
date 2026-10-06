@@ -288,7 +288,7 @@ let content_el uuid (b : Model.block) : t =
        | Some c -> [ ("data-hl-color", c) ]
        | None -> [])
     [ row ~key:("bci-" ^ uuid)
-        ~style_class:"block-content-inner" ~main:`space_between
+         ~main:`space_between
         [ box ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
             (if b.Model.block_is_query then [ Query_builder.block_el uuid b ]
              else
@@ -369,7 +369,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
   (* the delegated context-menu handler reads data-tag-uuid/id/title/
      priv off the chip root — they ride ~data_attrs *)
   box ~key:("tag-" ^ key)
-    ~style_class:("block-tag" ^ if priv then " private-tag" else "")
+    ~style_class:"block-tag"
     ~data_attrs:
       [ ("data-tag-uuid", tuuid)
       ; ("data-tag-id", string_of_int dbid)
@@ -478,7 +478,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
         ; column ~key:("col-" ^ key) ~grow:1.
             [ column ~key:("col2-" ^ key)
                 [ row ~key:("bmc-" ^ key)
-                    ~style_class:"block-main-content" ~gap:8
+                     ~gap:8
                     [ column ~key:("col3-" ^ key) ~grow:1.
                         [ box ~key:("cew-" ^ key)
                             ~style_class:"block-content-or-editor-wrap"
@@ -497,8 +497,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                          content_or_editor ~editable uuid
                                            scope b)
                                     ; row ~key:("br-" ^ key)
-                                        ~style_class:
-                                          "ls-block-right self-start"
+                                        ~style_class:"ls-block-right self-start"
                                         ~gap:4 ~cross:`center
                                         [ spacer ~key:("bg-" ^ key) []
                                         ; (* a comments area's tag chips stay
@@ -770,7 +769,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
         ; column ~key:("col-" ^ key) ~grow:1.
             [ column ~key:("col2-" ^ key)
                 [ row ~key:("bmc-" ^ key)
-                    ~style_class:"block-main-content" ~gap:8
+                     ~gap:8
                     [ column ~key:("col3-" ^ key) ~grow:1.
                         [ dom ~key:("cew-" ^ key)
                             ~style_class:"block-content-or-editor-wrap"
@@ -781,8 +780,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                     ~grow:1. ~gap:4 ~cross:`center
                                     [ content_wrapper uuid b
                                     ; row ~key:("br-" ^ key)
-                                        ~style_class:
-                                          "ls-block-right self-start"
+                                        ~style_class:"ls-block-right self-start"
                                         ~gap:4 ~cross:`center
                                         [ spacer ~key:("bg-" ^ key) []
                                         ; tags_el uuid b
@@ -910,7 +908,7 @@ let embed_more_el (name : string) : t =
     ~on_press:(fun _ ->
       Runtime.send (Action.Navigate_to (Model.Page name)))
     (row ~key:"embed-more"
-       ~style_class:"embed-more ls-block cursor-pointer"
+       ~style_class:"ls-block cursor-pointer"
        [ text ~key:"embed-more-t" ~value:(I18n.t "ui/show-more") [] ])
 
 let page_embed (name : string) : t =
