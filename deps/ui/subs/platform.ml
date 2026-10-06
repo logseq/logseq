@@ -80,6 +80,10 @@ external console_error : 'a -> unit = "error" [@@mel.scope "console"]
 
 external date_now_ms : unit -> float = "now" [@@mel.scope "Date"]
 
+(* editor model unit system: U16 — Melange strings and DOM offsets
+   both count UTF-16 code units *)
+let edit_units = `U16
+
 external make_date : float -> Js.Json.t = "Date" [@@mel.new]
 
 external date_to_string : Js.Json.t -> string = "toLocaleString"

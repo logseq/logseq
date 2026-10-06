@@ -549,7 +549,9 @@ let asset_container uuid (b : Model.block) : t =
                    with
                    | Some img -> open_lightbox img
                    | None -> ())
-                 (asset_img uuid b file)
+                 (* the image kind admits no Press — wrap it in a box
+                    (descendant selectors keep matching) *)
+                 (box ~key:("acw-" ^ uuid) [ asset_img uuid b file ])
              else asset_placeholder)
            ready.Signal.state_signal
        ; action_bar uuid b ])
@@ -588,7 +590,7 @@ let file_block uuid (b : Model.block) : t =
   let file = uuid ^ "." ^ ext in
   (* cljs <a download title> — download/title have no props *)
   box ~key:("af-" ^ uuid)
-    [ link ~key:("afl-" ^ uuid) ~url:"#" ~text:file [] ]
+    [ link ~key:("afl-" ^ uuid) ~url:"#" ~target:`self_ ~text:file [] ]
 
 (* cljs asset-link pdf branch — a.asset-ref.is-pdf; data-url resolves to
    the blob object URL async (attrs signal so the patch lands in place) *)

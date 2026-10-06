@@ -59,11 +59,12 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
   match uuid_sig with
   | None ->
       (* cljs anchors carry the label as a bare text child *)
-      link ~style_class:cls ~data_attrs:base ~text:txt []
+      link ~url:"#" ~target:`self_ ~style_class:cls ~data_attrs:base
+        ~text:txt []
   | Some u_sig ->
       (* cljs sets :data-uuid on the anchor once the page entity resolves;
          attrs apply is replace-semantic so emit the whole set *)
-      link ~style_class:cls ~text:txt
+      link ~url:"#" ~target:`self_ ~style_class:cls ~text:txt
         ~data_attrs:
           (reactive
              (fun u ->
@@ -296,7 +297,7 @@ let block_ref_anchor uuid : t =
  fun context parent ->
   let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
   let title_sig = Signal.map fst (Signal.value st) in
-  link ~style_class:"relative page-ref"
+  link ~url:"#" ~target:`self_ ~style_class:"relative page-ref"
     ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
     ~text_signal:title_sig
     [] context parent
@@ -356,7 +357,7 @@ let seconds_display seconds =
 let timestamp_el seconds : t =
  fun context parent ->
   Render_libs.ensure ();
-  link ~style_class:"youtube-timestamp"
+  link ~url:"#" ~target:`self_ ~style_class:"youtube-timestamp"
     [ text ~key:"yti" ~style_class:"youtube-timestamp-icon"
         [ icon ~name:(`app "youtube-timestamp-icon") [] ]
     ; text ~key:"ytl" ~style_class:"youtube-timestamp-label"
@@ -676,7 +677,8 @@ and resolved_ref ~refs ~self uuid : t =
         text ~style_class:"page-reference"
           ~data_attrs:[ ("data-ref", uuid) ] []
       else if title = uuid then
-        link ~style_class:"relative page-ref broken"
+        link ~url:"#" ~target:`self_
+          ~style_class:"relative page-ref broken"
           ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
                       ; ("draggable", "true") ]
           ~text:("[[" ^ uuid ^ "]]") []
@@ -685,7 +687,8 @@ and resolved_ref ~refs ~self uuid : t =
           ~data_attrs:[ ("data-ref", String.lowercase_ascii title) ]
           [ bracket "[["
           ; preview_link
-              (link ~style_class:"relative page-ref"
+              (link ~url:"#" ~target:`self_
+                 ~style_class:"relative page-ref"
                  ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
                              ; ("draggable", "true")
                              ; ("data-ref", String.lowercase_ascii title) ]
@@ -701,7 +704,7 @@ and resolved_tag_ref ~refs ~self uuid : t =
   ignore (refs, self);
   let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
   let title_sig = Signal.value st in
-  link ~style_class:"relative tag"
+  link ~url:"#" ~target:`self_ ~style_class:"relative tag"
     ~data_attrs:
       (reactive
          (fun (n, _) ->

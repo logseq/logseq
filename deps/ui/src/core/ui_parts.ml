@@ -5,11 +5,32 @@
 
 open Lui_elements
 
+(* Wrap adapters dereference the node kind: on dom/extension nodes
+   Lui_ui.node_kind raises "unknown node" mid-render — surface a
+   caller-pointing message instead. dom nodes must bind ~events/~attrs
+   on the node itself. *)
+let standard_kind context node =
+  try Lui_ui.node_kind context node
+  with Invalid_argument _ ->
+    invalid_arg
+      "Ui_parts adapters wrap standard-kind elements only — \
+       dom/extension nodes must use their own ~events/~attrs props"
+
 (* Pressable container: container kinds take no ~on_press, so wrap the
-   element and register Press on the mounted node. *)
+   element and register Press on the mounted node. Kinds that admit no
+   PressEnabled make enable a silent no-op and the click dead — fail
+   fast so an inert wrap site can never ship. *)
 let pressable ~on_press (elem : t) : t =
  fun context parent ->
   let node = elem context parent in
+  let kind = standard_kind context node in
+  if not (Lui_protocol.property_supported kind Lui_protocol.PressEnabled)
+  then
+    invalid_arg
+      (Printf.sprintf
+         "Ui_parts.pressable: kind %s admits no Press — route the press \
+          through a supported kind or a dom ~events node"
+         (Lui_wire_schema.node_kind_name kind));
   enable context node Lui_protocol.PressEnabled;
   register_press context node on_press;
   node
@@ -19,6 +40,7 @@ let pressable ~on_press (elem : t) : t =
 let class_signal source f (elem : t) : t =
  fun context parent ->
   let node = elem context parent in
+  ignore (standard_kind context node);
   Lui_ui.string_property_signal context node Lui_protocol.StyleClass
     (Signal.map f source);
   node

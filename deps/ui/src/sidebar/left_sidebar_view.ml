@@ -363,7 +363,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                  | "" -> Option.value p.Model.page_uuid ~default:""
                  | title -> title)
       | _ -> ())
-    [ link ~style_class:"link-item group"
+    [ link ~url:"#" ~target:`self_ ~style_class:"link-item group"
         ~data_attrs:
           [ ("data-lp-ref", lp_ref)
           ; ("data-lp-recent", if recent then "1" else "0") ]

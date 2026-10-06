@@ -220,7 +220,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
   box ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
     ~data_attrs:heading_attrs
-    [ link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
+    [ link ~key:("ctrl-" ^ uuid) ~url:"#" ~target:`self_
+        ~style_class:"block-control"
         ~accessibility_identifier:("control-" ^ uuid)
         [ Ui_parts.class_signal cs
             (fun c -> if c then "control-show" else "control-hide")
@@ -366,27 +367,33 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
       ; ("data-tag-priv", if priv then "true" else "false") ]
     [ row ~key:("tc-" ^ key) ~cross:`center
         [ (* the link kind renders a real <a> so a.hash-symbol css keeps
-             matching; no url — the # is decorative as in cljs *)
-          link ~key:("th-" ^ key)
+             matching; "#" satisfies the Link url contract — the # is
+             decorative as in cljs *)
+          link ~key:("th-" ^ key) ~url:"#" ~target:`self_
             ~style_class:"hash-symbol select-none" ~text:"#" []
         ; (if priv then Logseq_dom.nothing
            else
-             Ui_parts.pressable
-               ~on_press:(fun _ ->
-                 ignore
-                   (Outliner_ops.apply_and_refresh
-                      [ Outliner_ops.op "delete-property-value"
-                          [ Wire.Uuid owner_uuid
-                          ; Wire.Keyword "block/tags"
-                          ; Wire.Int dbid ] ]))
-               (link ~key:("tx-" ^ key)
-                  ~style_class:
-                    "tag-x hash-symbol hidden cursor-pointer select-none"
-                  ~label:(I18n.t "block/remove-this-tag")
-                  ~text:"x" []))
+             (* the a.tag-x css is tag-scoped so this must stay an <a>;
+                the link kind admits no Press — own the click via the
+                dom-node event escape instead *)
+             dom ~key:("tx-" ^ key) ~tag:"a"
+               ~style_class:
+                 "tag-x hash-symbol hidden cursor-pointer select-none"
+               ~attrs:[ ("aria-label", I18n.t "block/remove-this-tag") ]
+               ~events:"click"
+               ~on_dom_event:(fun name _ ->
+                 if name = "click" then
+                   ignore
+                     (Outliner_ops.apply_and_refresh
+                        [ Outliner_ops.op "delete-property-value"
+                            [ Wire.Uuid owner_uuid
+                            ; Wire.Keyword "block/tags"
+                            ; Wire.Int dbid ] ]))
+               ~text:"x"
+               [])
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
-          link ~key:("ta-" ^ key)
+          link ~key:("ta-" ^ key) ~url:"#" ~target:`self_
             ~style_class:"tag relative"
             ~data_attrs:
               [ ("tabindex", "0"); ("draggable", "true")

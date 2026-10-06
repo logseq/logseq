@@ -236,6 +236,50 @@ let scroll_height block_id : int option =
   request block_id "scroll-height" [];
   Hashtbl.find_opt scroll_heights block_id
 
+(* caret anchor for popups — same (x-20, line bottom, line top)
+   contract as the web twin. The live caret goes through the
+   caret-rect measurement op (first calls answer after the host
+   replies); before that, the element snapshot's caretRect/bounding
+   rect anchors the popup at the input's corner instead of (0,0). *)
+let popup_pos block_id : (float * float * float) option =
+  let live =
+    match Editor_state.editing () with
+    | Some e when e.Editor_state.uuid = block_id ->
+        let off = e.Editor_state.model.Edit_model.caret in
+        request block_id "caret-rect" [ ("offset", jnum_v off) ];
+        Option.map
+          (fun r ->
+            ( Float.of_int r.cx -. 20.
+            , Float.of_int (r.cy + r.ch)
+            , Float.of_int r.cy ))
+          (Hashtbl.find_opt caret_rects (block_id, off))
+    | _ -> None
+  in
+  match live with
+  | Some _ -> live
+  | None -> (
+      match Editor_dom.textarea_of block_id with
+      | Some el -> Some (Dom_ext.caret_popup_pos el)
+      | None -> None)
+
+(* bounding rect of the .block-editor container — popup clamp anchor.
+   Same (left, top, right, bottom) contract as the web twin; the
+   measure-node reply lands in Dom_ext.rect_store, so early calls can
+   still answer zeros until the host replies *)
+let container_rect block_id : (float * float * float * float) option =
+  match Editor_dom.textarea_of block_id with
+  | Some el -> (
+      match Editor_dom.el_closest el ".block-editor" with
+      | Some c ->
+          let r = Dom_ext.bounding_rect c in
+          Some
+            ( Dom_ext.rect_left r
+            , Dom_ext.rect_top r
+            , Dom_ext.rect_right r
+            , Dom_ext.rect_bottom r )
+      | None -> None)
+  | None -> None
+
 (* the shared editor machinery resolves Editor_sink — no-ops until a
    surface registers an impl. The conduit above answers the host
    measurement ops; focus goes through set-input-focus and is_focused
@@ -251,6 +295,6 @@ let () =
             [ ("focused", Js.Json.JBoolean true) ])
     ; is_focused =
         (fun block_id -> !Editor_state.focused_block = Some block_id)
-    ; popup_pos = (fun _ -> None)
-    ; container_rect = (fun _ -> None)
+    ; popup_pos
+    ; container_rect
     }

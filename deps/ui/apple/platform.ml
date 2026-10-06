@@ -162,6 +162,11 @@ let body_rm_class c =
 let console_log (_ : 'a) : unit = ()
 let console_error (_ : 'a) : unit = ()
 let date_now_ms () = Unix.gettimeofday () *. 1000.
+
+(* editor model unit system: Bytes — native OCaml strings are UTF-8
+   bytes; the host translates its UTF-16 layout offsets at the
+   logseq_editor boundary *)
+let edit_units = `Bytes
 let perf_now () = Unix.gettimeofday () *. 1000.
 
 let perf_log =
