@@ -48,8 +48,9 @@ external js_call :
   Js.Json.t -> Js.Json.t -> Js.Json.t -> Js.Json.t = "call" [@@mel.send]
 
 (* o.m(a, b) with heterogenous arg types (e.g. name string + callback) *)
-external js_call2 : Js.Json.t -> string -> 'a -> 'b -> Js.Json.t = "call"
-  [@@mel.send] [@@mel.scope "Reflect"]
+let js_call2 : Js.Json.t -> string -> 'a -> 'b -> Js.Json.t =
+  [%mel.raw
+    "function (o, m, a, b) { return Reflect.apply(o[m], o, [a, b]); }"]
 
 let js_undefined : Js.Json.t = [%mel.raw "undefined"]
 
