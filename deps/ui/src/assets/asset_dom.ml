@@ -549,7 +549,9 @@ let asset_container uuid (b : Model.block) : t =
                    with
                    | Some img -> open_lightbox img
                    | None -> ())
-                 (asset_img uuid b file)
+                 (* the image kind admits no Press — wrap it in a box
+                    (descendant selectors keep matching) *)
+                 (box ~key:("acw-" ^ uuid) [ asset_img uuid b file ])
              else asset_placeholder)
            ready.Signal.state_signal
        ; action_bar uuid b ])

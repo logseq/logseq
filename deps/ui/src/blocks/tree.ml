@@ -373,19 +373,24 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             ~style_class:"hash-symbol select-none" ~text:"#" []
         ; (if priv then Logseq_dom.nothing
            else
-             Ui_parts.pressable
-               ~on_press:(fun _ ->
-                 ignore
-                   (Outliner_ops.apply_and_refresh
-                      [ Outliner_ops.op "delete-property-value"
-                          [ Wire.Uuid owner_uuid
-                          ; Wire.Keyword "block/tags"
-                          ; Wire.Int dbid ] ]))
-               (link ~key:("tx-" ^ key)
-                  ~style_class:
-                    "tag-x hash-symbol hidden cursor-pointer select-none"
-                  ~label:(I18n.t "block/remove-this-tag")
-                  ~text:"x" []))
+             (* the a.tag-x css is tag-scoped so this must stay an <a>;
+                the link kind admits no Press — own the click via the
+                dom-node event escape instead *)
+             dom ~key:("tx-" ^ key) ~tag:"a"
+               ~style_class:
+                 "tag-x hash-symbol hidden cursor-pointer select-none"
+               ~attrs:[ ("aria-label", I18n.t "block/remove-this-tag") ]
+               ~events:"click"
+               ~on_dom_event:(fun name _ ->
+                 if name = "click" then
+                   ignore
+                     (Outliner_ops.apply_and_refresh
+                        [ Outliner_ops.op "delete-property-value"
+                            [ Wire.Uuid owner_uuid
+                            ; Wire.Keyword "block/tags"
+                            ; Wire.Int dbid ] ]))
+               ~text:"x"
+               [])
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
           link ~key:("ta-" ^ key) ~url:"#" ~target:`self_
