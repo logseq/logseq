@@ -220,7 +220,7 @@ let save_block env text =
   in
   wait_value (Js.Date.now () +. 15000.)
 
-let focus_new_block env ~previous_editor_id =
+let focus_new_block env ~previous_editor_id ?expected () =
   let prev_uuid =
     if String.length previous_editor_id > 11
        && String.sub previous_editor_id 0 11 = "edit-block-"
@@ -234,11 +234,16 @@ let focus_new_block env ~previous_editor_id =
      Never re-Enter and never re-click: the insert op is already applied
      in the worker, and re-driving the UI here can mint a duplicate empty
      block or open the previous block's editor. *)
+  let accept uuid =
+    match expected with
+    | Some e -> uuid = e
+    | None -> uuid <> prev_uuid
+  in
   let deadline = Js.Date.now () +. 45000. in
   let rec wait_moved () =
     let* u = Util.editing_uuid env in
     match u with
-    | Some uuid when uuid <> prev_uuid -> Js.Promise.resolve (Some uuid)
+    | Some uuid when accept uuid -> Js.Promise.resolve (Some uuid)
     | _ ->
         if Js.Date.now () > deadline then Js.Promise.resolve None
         else
@@ -246,12 +251,16 @@ let focus_new_block env ~previous_editor_id =
           wait_moved ()
   in
   let* new_uuid = wait_moved () in
-  match new_uuid with
-  | None ->
+  match new_uuid, expected with
+  | None, None ->
       failwith
         ("editing state never moved off " ^ previous_editor_id
        ^ " — Enter's insert op was swallowed")
-  | Some uuid ->
+  | Some uuid, _ | None, Some uuid ->
+      (* when the insert is already confirmed but editing state never
+         landed on it (remount reopened an old block), open the confirmed
+         uuid's editor directly instead of failing *)
+      let uuid = Option.value ~default:uuid new_uuid in
       (* the app may not have mounted/focused the new block's textarea
          (remote remount can swallow it); force-open via the API when the
          state already moved *)
@@ -265,11 +274,23 @@ let focus_new_block env ~previous_editor_id =
       let* () =
         if mounted then Js.Promise.resolve ()
         else
-          let* _ =
-            Api.ls_api_call env "editor.editBlock" [| Api.str uuid |]
+          (* a remote-tx remount can drop the freshly opened editor before
+             it ever mounts — retry the API open once *)
+          let rec open_editor attempt =
+            let* _ =
+              Api.ls_api_call env "editor.editBlock" [| Api.str uuid |]
+            in
+            Js.Promise.catch
+              (fun _ ->
+                 if attempt > 0 then open_editor (attempt - 1)
+                 else
+                   Js.Promise.reject
+                     (Failure
+                        ("editBlock never mounted #edit-block-" ^ uuid)))
+              (E2e_assert.is_visible_l ~timeout:15000.
+                 (Pw.q env ("#edit-block-" ^ uuid ^ ":focus")))
           in
-          E2e_assert.is_visible_l ~timeout:15000.
-            (Pw.q env ("#edit-block-" ^ uuid ^ ":focus"))
+          open_editor 2
       in
       Js.Promise.resolve uuid
 
@@ -325,32 +346,48 @@ let new_block env title =
      vanish between open_last_block and the press when a remote tx
      remounts the view — re-open and retry instead of waiting 30s on a
      textarea that never comes back. *)
+  let decode_ids j =
+    match Js.Json.decodeString j with
+    | Some s ->
+        (match
+           Js.Json.decodeArray
+             (try Js.Json.parseExn s with _ -> Js.Json.array [||])
+         with
+         | Some a ->
+             Array.to_list
+               (Array.map
+                  (fun v ->
+                     Option.value ~default:"" (Js.Json.decodeString v))
+                  a)
+         | None -> [])
+    | None -> []
+  in
   let rec enter_new_block n =
-    (* snapshot the mounted blockids BEFORE pressing — a remount that
-       reopens editing on a pre-existing block moves editor/block to a
-       uuid that was already rendered; a real insert always mints a
-       uuid that was nowhere in the DOM *)
-    let* prev_ids_json =
-      Pw.eval_js env
-        "(() => JSON.stringify([...document.querySelectorAll('.ls-block[blockid]')].map(b => b.getAttribute('blockid'))))()"
+    (* snapshot every block uuid in the page tree BEFORE pressing — the
+       tree covers virtualized rows the DOM never mounts, so a remount
+       that reopens editing on an off-screen block can no longer fake a
+       "fresh" uuid (a DOM-only snapshot would call that uuid new).
+       Falls back to mounted DOM ids when the api call itself fails. *)
+    let* prev_ids =
+      Js.Promise.catch
+        (fun _ -> Js.Promise.resolve [])
+        (Js.Promise.then_
+           (fun j -> Js.Promise.resolve (decode_ids j))
+           (Pw.eval_js env
+              "(async () => { const p = await \
+               logseq.api.get_current_page(); if (!p) return '[]'; const t \
+               = await logseq.api.get_page_blocks_tree(p.uuid || p.name); \
+               const ids = []; (function w(ns){(ns||[]).forEach(n => { if \
+               (n && n.uuid) { ids.push(n.uuid); w(n.children); } \
+               });})(t); return JSON.stringify(ids); })()"))
     in
-    let prev_ids =
-      match Js.Json.decodeString prev_ids_json with
-      | Some s ->
-          (match
-             Js.Json.decodeArray
-               (try Js.Json.parseExn s with _ -> Js.Json.array [||])
-           with
-           | Some a ->
-               Array.to_list
-                 (Array.map
-                    (fun v ->
-                       match Js.Json.decodeString v with
-                       | Some s -> s
-                       | None -> "")
-                    a)
-           | None -> [])
-      | None -> []
+    let* prev_ids =
+      if prev_ids <> [] then Js.Promise.resolve prev_ids
+      else
+        Js.Promise.then_
+          (fun j -> Js.Promise.resolve (decode_ids j))
+          (Pw.eval_js env
+             "(() => JSON.stringify([...document.querySelectorAll('.ls-block[blockid]')].map(b => b.getAttribute('blockid'))))()")
     in
     (* short timeout on the press: if the editor vanished mid-remount the
        locator would otherwise burn the full 30s before we can re-open *)
@@ -363,19 +400,15 @@ let new_block env title =
          Js.Promise.resolve true)
     in
     (* the insert op moves the app's editing state to the new block —
-       confirm it moved: a delivered-but-dropped Enter (remote remount
-       ate the keydown) looks exactly like a swallowed one. Re-press
-       only while the state is still on the old block, so a late insert
-       can never mint a duplicate block. Editing can also move onto a
-       *pre-existing* block when a remount reopens an old editor —
-       typing+deleting there silently consumes a real block, so require
-       a uuid that was not in the DOM before the press. *)
-    let* moved =
+       confirm via the page tree (complete, unlike the mounted DOM): a
+       fresh uuid positioned after last_uuid IS the insert; editing
+       landing on a fresh-after-last_uuid uuid confirms it too. Editing
+       moving to a pre-existing block does NOT count — a remount can
+       reopen an old editor, and accepting it would make us type+delete
+       into a real block. Re-press only while unconfirmed, so a late
+       insert can never mint a duplicate. *)
+    let* confirmed =
       if pressed then
-        (* detect the insert in the DOM itself — the editor/block state
-           atom can lag a remount and a false negative re-press mints a
-           duplicate empty block. A fresh uuid appearing after the
-           previous row IS the insert. *)
         let prev_set =
           "["
           ^ String.concat ","
@@ -384,55 +417,85 @@ let new_block env title =
         in
         let detect_js =
           Printf.sprintf
-            "(() => { const blocks = \
-             [...document.querySelectorAll('.ls-block[blockid]')]; const \
-             ids = blocks.map(b => b.getAttribute('blockid')); const pi \
-             = ids.indexOf('%s'); if (pi < 0) return null; const prev = \
-             new Set(%s); const nx = ids.slice(pi + 1).find(id => \
-             !prev.has(id)); return nx || null; })()"
-            last_uuid prev_set
+            "(async () => { const st = \
+             logseq.api.get_state_from_store('editor/block'); const e = \
+             st && st.uuid ? st.uuid : null; const p = await \
+             logseq.api.get_current_page(); const t = p ? await \
+             logseq.api.get_page_blocks_tree(p.uuid || p.name) : []; \
+             const ids = []; (function w(ns){(ns||[]).forEach(n => { if \
+             (n && n.uuid) { ids.push(n.uuid); w(n.children); } \
+             });})(t); const prev = new Set(%s); const i = \
+             ids.indexOf('%s'); if (i < 0) return null; if (e && e !== \
+             '%s' && ids.indexOf(e) > i && !prev.has(e)) return e; return \
+             ids.slice(i + 1).find(id => !prev.has(id)) || null; })()"
+            prev_set last_uuid last_uuid
         in
         let deadline = Js.Date.now () +. 6000. in
         let rec moved_loop () =
-          let* u = Util.editing_uuid env in
           let* fresh =
-            match u with
-            | Some u when u <> last_uuid && not (List.mem u prev_ids) ->
-                Js.Promise.resolve (Some u)
-            | _ ->
-                Js.Promise.catch
-                  (fun _ -> Js.Promise.resolve None)
-                  (Js.Promise.then_
-                     (fun j ->
-                        Js.Promise.resolve
-                          (match Js.Nullable.toOption j with
-                           | Some j -> Js.Json.decodeString j
-                           | None -> None))
-                     (Pw.eval_js env detect_js))
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve None)
+              (Js.Promise.then_
+                 (fun j ->
+                    Js.Promise.resolve
+                      (match Js.Nullable.toOption j with
+                       | Some j -> Js.Json.decodeString j
+                       | None -> None))
+                 (Pw.eval_js env detect_js))
           in
           match fresh with
-          | Some _ -> Js.Promise.resolve true
+          | Some _ -> Js.Promise.resolve fresh
           | None ->
-              if Js.Date.now () > deadline then Js.Promise.resolve false
+              if Js.Date.now () > deadline then Js.Promise.resolve None
               else
                 let* () = Util.wait_timeout env 150. in
                 moved_loop ()
         in
         moved_loop ()
-      else Js.Promise.resolve false
+      else Js.Promise.resolve None
     in
-    if moved then Js.Promise.resolve ()
-    else if n <= 1 then Js.Promise.resolve ()
-    else
-      let* () =
-        Js.Promise.catch
-          (fun _ -> Js.Promise.resolve ())
-          (open_last_block ~in_retry:true env)
-      in
-      enter_new_block (n - 1)
+    match confirmed with
+    | Some _ -> Js.Promise.resolve confirmed
+    | None ->
+        if n <= 1 then begin
+          let* dbg =
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve Js.null)
+              (Js.Promise.then_
+                 (fun j -> Js.Promise.resolve j)
+                 (Pw.eval_js env
+                    (Printf.sprintf
+                       "(async () => { const st = \
+                        logseq.api.get_state_from_store('editor/block'); \
+                        const p = await logseq.api.get_current_page(); \
+                        let t = []; try { t = p ? await \
+                        logseq.api.get_page_blocks_tree(p.uuid || p.name) \
+                        : [] } catch(e) {} const ids = []; (function \
+                        w(ns){(ns||[]).forEach(n => { if (n && n.uuid) { \
+                        ids.push(n.uuid); w(n.children); } });})(t); \
+                        return JSON.stringify({e: st && st.uuid, page: p \
+                        && p.name, i: ids.indexOf('%s'), n: ids.length, \
+                        dom: document.querySelectorAll('.ls-block[blockid]').length, \
+                        ta: document.querySelectorAll('.editor-wrapper \
+                        textarea').length}); })()"
+                       last_uuid)))
+          in
+          Js.log2 "[enter-dbg]" dbg;
+          Js.Promise.reject
+            (Failure "Enter press never confirmed a fresh block insert")
+        end
+        else
+          let* () =
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve ())
+              (open_last_block ~in_retry:true env)
+          in
+          enter_new_block (n - 1)
   in
-  let* () = enter_new_block 3 in
-  let* new_uuid = focus_new_block env ~previous_editor_id:last_id in
+  let* confirmed = enter_new_block 3 in
+  let* new_uuid =
+    focus_new_block env ~previous_editor_id:last_id ?expected:confirmed ()
+  in
   (* the block's own textarea id is derived from the block uuid, so it
      survives editor remounts; read/fill it directly instead of
      get_edit_content, which is ambiguous while two editors coexist *)
