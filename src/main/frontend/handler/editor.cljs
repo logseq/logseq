@@ -1811,11 +1811,17 @@
        (not (comments-model/protected-comment-block? block))
        (not (focused-root-block? block root-block))))
 
+(defonce ^:private *pending-move-reselect
+  ;; Resolves when the last move of selected blocks has selected their new
+  ;; rows; a move pressed before that would read the old selection
+  (atom nil))
+
 (defn move-up-down
   [up?]
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
+    (p/let [_ (or @*pending-move-reselect (p/resolved nil))]
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
@@ -1848,16 +1854,25 @@
                       loaded-blocks (unwrap-block-results results)
                       blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
                 (when (seq blocks)
-                  (p/do!
-                   (move-nodes blocks)
-                   ;; a moved block is drawn as a new row; the selection held
-                   ;; the old rows, no longer in the page. Select the new
-                   ;; rows on the next frame
-                   (js/requestAnimationFrame
-                    (fn []
-                      (let [nodes (keep #(some-> % str util/get-first-block-by-id) ids)]
-                        (when (= (count nodes) (count ids))
-                          (state/set-selection-blocks! nodes direction)))))))))))))))
+                  (let [done (p/deferred)]
+                    (reset! *pending-move-reselect done)
+                    (-> (p/do!
+                         (move-nodes blocks)
+                         ;; a moved block is drawn as a new row; the selection
+                         ;; held the old rows, no longer in the page. Select
+                         ;; the new rows once they are drawn (the move's delta
+                         ;; is flushed when move-nodes settles); the next move
+                         ;; waits for this
+                         ;; in the order the selection is kept (`ids` is read
+                         ;; through the direction, reversed for :up)
+                         (let [nodes (keep #(some-> % str util/get-first-block-by-id) ids)
+                               nodes (if (= direction :up) (reverse nodes) nodes)]
+                           (when (= (count nodes) (count ids))
+                             (state/set-selection-blocks! nodes direction))))
+                        (p/finally (fn []
+                                     (p/resolve! done nil)
+                                     (when (identical? @*pending-move-reselect done)
+                                       (reset! *pending-move-reselect nil))))))))))))))))
 
 (defn get-selected-ordered-blocks
   []
