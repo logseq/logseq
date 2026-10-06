@@ -1299,8 +1299,11 @@ let schedule_save uuid title =
         pending_save := None;
         ignore
           (let* _ = apply_parsed ~rest:[] [ (uuid, title) ] in
-          (* committed — advance base so the undo resync gate sees
-                    the buffer as clean and can restore reverted titles *)
+          (* committed — display override mirrors what commit does so
+             resync_open_editor compares against the committed title
+             while the store catches up, and base advances so the undo
+             resync gate sees the buffer as clean *)
+          S.override_title uuid (normalized_title uuid title);
           S.set_silent (fun st ->
               match st.S.editing with
               | Some e when e.S.uuid = uuid && e.S.buffer = title ->
@@ -1407,7 +1410,11 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
   | Some e -> (
       match S.find e.uuid with
       | Some b ->
-          let title = String.trim b.Model.block_title in
+          (* compare against the displayed title: committed edits carry a
+             display override while the store catches up, and reading the
+             raw block_title here would clobber text the worker already
+             persisted *)
+          let title = String.trim (S.title_for e.uuid b.Model.block_title) in
           let* title = title_for_edit title in
           (* remote refresh must not clobber typed text: only
                     overwrite when the buffer is still the value the editor
