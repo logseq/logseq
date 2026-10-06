@@ -301,9 +301,13 @@ fn main() {
         ));
     }
 
+    eprintln!("logseq-gpui: app() start t={:.1}ms", boot_ms());
     let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);
+    eprintln!("logseq-gpui: app() done t={:.1}ms", boot_ms());
     app.run(move |cx| {
+        eprintln!("logseq-gpui: run entry t={:.1}ms", boot_ms());
         gpui_kit::init(cx);
+        eprintln!("logseq-gpui: kit init done t={:.1}ms", boot_ms());
         let shared = LuiShared::new();
         // The logseq-editor surface (input routing + text measurement)
         // is app-scoped: registered here so `logseq-editor` extension
