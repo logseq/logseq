@@ -65,6 +65,29 @@
     (testing "a list not in the DOM is skipped"
       (is (= [] (lists-to-grow [#js {:wrap #js {:current nil} :limit 1 :count 3}] 700))))))
 
+(deftest first-paint-step-test
+  (let [step #'block/first-paint-step]
+    (testing "the session waits while the page's rows load"
+      (is (= :wait (step nil false)))
+      (is (= :wait (step nil true))))
+    (testing "an empty page's session ends after its first frame, as a page with rows does: its input listeners go"
+      (is (= :schedule (step [] false)))
+      (is (= :schedule (step [(random-uuid)] false))))
+    (testing "a virtualized list ends the session at once"
+      (is (= :close (step [] true)))
+      (is (= :close (step [(random-uuid)] true))))))
+
+(deftest library-rows-load-before-the-session-is-scheduled-test
+  (let [visible #'block/library-visible-uuids
+        page-uuid (random-uuid)
+        page {:block/uuid page-uuid :block/tags [{:db/ident :logseq.class/Page}]}]
+    (testing "the Library list reads nil while its children or their blocks load, not an empty list"
+      (is (nil? (visible nil nil)))
+      (is (nil? (visible [page-uuid] nil))))
+    (testing "loaded, it lists the nested pages, an empty list when there are none"
+      (is (= [page-uuid] (visible [page-uuid] [page])))
+      (is (= [] (visible [] []))))))
+
 (deftest close-first-paint-session-test
   (let [^js session (#'block/first-paint-session)
         calls (atom [])
