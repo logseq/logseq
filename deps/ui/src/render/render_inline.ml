@@ -272,11 +272,8 @@ let name_uuid_state context name =
   sync := false;
   st
 
-(* TODO(component): target=_blank has no `link` prop — the kind would
-   navigate the app tab away *)
 let external_link href label_els =
-  D.el ~tag:"a" ~style_class:"external-link"
-    ~attrs:[ ("href", href); ("target", "_blank") ] label_els
+  link ~url:href ~target:`blank ~style_class:"external-link" label_els
 
 (* ((uuid)) (deprecated form) / #[[uuid]] -> resolved block title via
    thread-api/pull — lazy: the anchor mounts empty and fills when the
@@ -295,18 +292,13 @@ let block_ref uuid =
     ~data_attrs:[ ("data-ref", uuid) ]
     [ block_ref_anchor uuid ]
 
-(* TODO(component): <img src=url> — the `image` kind takes an opaque
-   int handle, no src/URL prop *)
+(* cljs asset-container / image-or-fallback *)
 let image_el ~src ~alt =
-  (* cljs asset-container / image-or-fallback *)
-  D.el ~tag:"span" ~style_class:"asset-container image normalize"
-    [ D.el ~tag:"img"
-        ~style_class:"rounded-sm relative fade-in fade-in-faster"
-        ~attrs:
-          [ ("src", src); ("loading", "lazy")
-          ; ("referrerPolicy", "no-referrer"); ("title", alt); ("alt", alt) ]
-        []
-    ]
+  (* title tooltip is dropped — alt covers the same text; no tooltip
+     prop exists on image *)
+  box ~style_class:"asset-container image normalize"
+    [ image ~url:src ~alt ~loading:`lazy_ ~referrer_policy:`no_referrer
+        ~style_class:"rounded-sm relative fade-in fade-in-faster" [] ]
 
 (* inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/<sub>/<sup>/
    <strong>/<kbd> styling comes from element-selector CSS
@@ -499,7 +491,7 @@ let youtube_iframe id start =
     "https://www.youtube.com/embed/" ^ id ^ "?enablejsapi=1"
     ^ (match start with Some s -> "&start=" ^ s | None -> "")
   in
-  D.el ~tag:"div" ~style_class:"embed-block"
+  box ~style_class:"embed-block"
     [ D.el ~tag:"iframe"
         ~attrs:
           [ ("id", "youtube-player-" ^ id)
@@ -514,8 +506,9 @@ let youtube_iframe id start =
 
 let embed_iframe src =
   (* iframes are plugin-loaded in cljs; emit the shell + src so the
-     container is present (e2e waits on iframe inside .embed-block). *)
-  D.el ~tag:"div" ~style_class:"embed-block"
+     container is present (e2e waits on iframe inside .embed-block).
+     TODO(component): iframe needs an embed/iframe extension *)
+  box ~style_class:"embed-block"
     [ D.el ~tag:"iframe" ~attrs:[ ("src", src) ] [] ]
 
 
@@ -589,9 +582,9 @@ and try_match ~refs ~self s i : (t * int * run_spec) option =
   | '<' -> try_lt ~refs ~self s i
   | ':' -> try_emoji s i
   | 'h' -> try_url s i
-  (* TODO(component): <br> has no kind; a raw newline inside a text
-     run collapses in inline flow *)
-  | '\n' -> Some (D.el ~tag:"br" [], 1, Rs_plain)
+  (* a raw newline inside a text run collapses in inline flow — the
+     br kind keeps the line break *)
+  | '\n' -> Some (br [], 1, Rs_plain)
   | _ -> None
 
 (* [[page]] / [label](url) *)
@@ -922,11 +915,10 @@ and try_lt ~refs ~self s i =
       match try_html_tag ~refs ~self s i with
       | Some hit -> Some hit
       | None ->
-          (* TODO(component): <br> has no component kind *)
           if Str_util.starts_at s i "<br>" then
-            Some (D.el ~tag:"br" [], 4, Rs_atomic ("br", "ed-br"))
+            Some (br [], 4, Rs_atomic ("br", "ed-br"))
           else if Str_util.starts_at s i "<br/>" then
-            Some (D.el ~tag:"br" [], 5, Rs_atomic ("br", "ed-br"))
+            Some (br [], 5, Rs_atomic ("br", "ed-br"))
           else None)
 
 (* <2026-09-27 Sun ...> — date starting with a digit *)

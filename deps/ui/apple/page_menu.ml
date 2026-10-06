@@ -164,9 +164,10 @@ let view (x, y, with_app_items) (p : Model.page option) =
         (Float.max 8. (Float.min (x -. 140.) (inner_width () -. 288.)))
         y (y +. 8.)
   in
-  (* TODO(component): fixed-position anchored menu — the inline
-     style carries the anchor coordinates and no positioned-container
-     kind exists yet *)
+  (* TODO(component): the popover kind now covers point positioning on
+     web, but the Apple popover backend renders children inline (no
+     positioning) — the dom shell stays until LUIApple implements
+     popover placement *)
   dom ~key:"page-menu" ~tag:"div"
     (* toolbar dots menu is w-64 (cljs header.cljs); the page
        right-click keeps the context-menu look *)

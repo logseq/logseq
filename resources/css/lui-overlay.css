@@ -4,16 +4,71 @@
    toasts, the date picker, property panes, settings and plugin dialogs,
    and the icon picker.
 
-   Layering model (cljs parity): LUI positions the popup content node
-   itself with position:fixed + z-index instead of a base-ui positioner
-   wrapper. The rules below therefore put the scroll clamp
-   (max-height: var(--available-height)) and the type metrics on the
-   content node, matching popup-normal-style in shui/components.cljs. */
+   Layering model (cljs parity): a LUI `popover` node emits
+   .lui-popup-positioner > .lui-popover inside the renderer-owned
+   .lui-popup-portal (a body-level sibling of the app root). ~at:(x,y)
+   writes inline left/top on the positioner; with no position props the
+   positioner spans the viewport (cover mode). The rules below put the
+   scroll clamp (max-height: var(--available-height)) and the type
+   metrics on the content node, matching popup-normal-style in
+   shui/components.cljs. */
 
 /* ---- shared -------------------------------------------------------- */
 
 .hidden {
   display: none;
+}
+
+/* LUI popover kind shell — the portal is a non-interactive fixed layer;
+   the positioner gets inline left/top (or data-cover); the inner
+   .lui-popover re-enables pointer events and carries the node's
+   style_class. --lui-popup-available-height is re-exported as
+   --available-height so the shared popup rules keep one variable name. */
+.lui-popup-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.lui-popup-positioner {
+  position: absolute;
+  width: max-content;
+  pointer-events: none;
+  z-index: calc(100 + var(--lui-layer-index, 0));
+  --available-height: var(--lui-popup-available-height, none);
+}
+
+.lui-popover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: var(--lui-popup-available-height, calc(100vh - 1rem));
+  max-width: var(--lui-popup-available-width, calc(100vw - 1rem));
+  overflow: auto;
+  pointer-events: auto;
+  transition-property: opacity, transform;
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.lui-popover[data-starting-style],
+.lui-popover[data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.lui-popup-positioner[data-cover] {
+  inset: 0;
+  width: auto;
+}
+
+.lui-popup-positioner[data-cover] > .lui-popover {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
 }
 
 /* cljs icon-component/get-node-icon-cp wrapper */
@@ -524,6 +579,11 @@ div[data-keep-selection].menu-links-wrapper {
 .ls-preview-popup .tippy-wrapper.as-page {
   margin-left: -1.25rem;
   padding-left: 1.75rem;
+  /* the 600px width the tippy wrapper had inline (width is a typed prop);
+     the rest of its inline style moves here */
+  text-align: left;
+  font-weight: 500;
+  padding-bottom: 64px;
 }
 
 .ls-preview-popup .ls-page-blocks {
@@ -534,6 +594,11 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ls-context-menu-content {
   width: 280px;
+}
+
+/* block-tag popup is w-60 (240px) in cljs (was an inline width) */
+.ls-context-menu-content.ls-tag-menu {
+  width: 240px;
 }
 
 .ls-context-menu-content [role="separator"] {
@@ -611,6 +676,9 @@ div[data-keep-selection].menu-links-wrapper {
   width: 90dvw;
   max-width: 56rem;
   overflow: hidden;
+  /* inline style attr in the old dom() — pins the nested-dialog
+     scale factor used by the dialog-content transform rules */
+  --nested-dialogs: 0;
 }
 
 .cp__cmdk-dismiss {
@@ -1478,11 +1546,13 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* cljs ui.css: flashcards dialog sizing */
-.ui__dialog-content[label="flashcards__cp"] {
+.ui__dialog-content[label="flashcards__cp"],
+.ui__dialog-content.ls-dialog-flashcards {
   padding: 1.5rem 1.25rem 1rem;
 }
 
-.ui__dialog-content[label="flashcards__cp"] .ui__dialog-main-content {
+.ui__dialog-content[label="flashcards__cp"] .ui__dialog-main-content,
+.ui__dialog-content.ls-dialog-flashcards .ui__dialog-main-content {
   max-height: 85vh;
   min-height: 65vh;
   overflow: auto;
@@ -1490,10 +1560,32 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 @media (min-width: 820px) {
-  .ui__dialog-content[label="flashcards__cp"] {
+  .ui__dialog-content[label="flashcards__cp"],
+  .ui__dialog-content.ls-dialog-flashcards {
     min-width: 800px;
     max-width: min(85%, 980px);
   }
+}
+
+/* dnd-kit a11y live regions (views_table dnd_described/dnd_live) —
+   inline style attrs from the old dom() nodes */
+.ls-dnd-a11y {
+  display: none;
+}
+
+.ls-dnd-live {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0px, 0px, 0px, 0px);
+  clip-path: inset(100%);
+  white-space: nowrap;
 }
 
 .ui__dialog-content[data-base-ui-inert],
@@ -5462,6 +5554,9 @@ select.form-select {
    first selected block (ui__toolbar.selection-action-bar >
    .selection-action-group > .selection-action-button) */
 .selection-action-bar {
+  /* the bar itself stays pointer-transparent (it overlays drag targets);
+     .selection-action-group re-enables hit-testing on the buttons */
+  pointer-events: none;
   background: hsl(var(--popover));
   border-radius: 6px;
   box-shadow:

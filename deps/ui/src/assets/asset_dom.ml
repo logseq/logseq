@@ -283,9 +283,7 @@ let open_lightbox clicked =
   if n > 0 then begin
     let rec find i =
       if i >= n then 0
-      else if
-        B.el_get_attr imgs.(i) "id" = B.el_get_attr clicked "id"
-      then i
+      else if imgs.(i) == clicked then i
       else find (i + 1)
     in
     let idx = find 0 in
@@ -332,8 +330,10 @@ let start_drag ~side ~uuid ~start_x =
             in
             let w = start_w +. dx in
             if w > 60. || dx > 0. then
-              B.el_set_attr img "width"
-                (string_of_int (int_of_float w))
+              (* the kind's pixels img carries style width:100% — a live
+                 drag preview has to override the style, not the attr *)
+              B.el_style_set_property img "width"
+                (string_of_int (int_of_float w) ^ "px")
           and on_up _ev =
             B.remove_window_listener "pointermove" on_move;
             B.remove_window_listener "pointerup" on_up;
@@ -408,22 +408,16 @@ let action_bar uuid b : t =
           | None -> ())
         [] ]
 
-let img_attrs uuid (b : Model.block) =
+let img_dims (b : Model.block) =
   (* cljs img-metadata: resize-metadata width, else 250 *)
   let w =
     match b.Model.block_asset_resize with
     | Some r -> r
     | None -> 250
   in
-  let base =
-    [ ("id", "asset-img-" ^ uuid); ("loading", "lazy")
-    ; ("referrerPolicy", "no-referrer"); ("title", b.Model.block_title)
-    ; ("width", string_of_int w) ]
-  in
   match b.Model.block_asset_width, b.Model.block_asset_height with
-  | Some aw, Some ah when aw > 0 ->
-      base @ [ ("height", string_of_int (w * ah / aw)) ]
-  | _ -> base
+  | Some aw, Some ah when aw > 0 -> (w, Some (w * ah / aw))
+  | _ -> (w, None)
 
 (* asset render readiness — the img only mounts once the asset file exists
    in pfs (cljs asset-cp renders asset-link only when file-ready?). A per-uuid
@@ -498,7 +492,10 @@ let measure_on_load uuid (b : Model.block) =
   match b.Model.block_asset_width, b.Model.block_asset_height with
   | Some _, Some _ -> ()
   | _ -> (
-      match B.query_selector ("#asset-img-" ^ uuid) with
+      (* #asset-img-<uuid> ids the .lui-image wrapper; the pixels img
+         inside carries the natural size *)
+      match B.query_selector ("#asset-img-" ^ uuid ^ " .lui-image-pixels")
+      with
       | Some img when B.el_nat_width img > 0. && B.el_nat_height img > 0. ->
           ignore
             (Outliner_ops.apply
@@ -517,18 +514,16 @@ let asset_img uuid (b : Model.block) file : t =
     | Some u -> u
     | None -> ""
   in
-  (* TODO(component): blob-URL <img> — the `image` kind takes an opaque
-     int handle and no src/URL prop; the load event records
-     asset/width+height and #asset-img-<uuid> is queried by the lightbox
-     and resize paths *)
-  dom ~key:("acimg-" ^ uuid) ~tag:"img"
+  (* title tooltip is dropped — alt covers the same text; no tooltip
+     prop exists on image. #asset-img-<uuid> ids the .lui-image wrapper —
+     the lightbox and measure paths reach the inner .lui-image-pixels *)
+  let w, h = img_dims b in
+  image ~key:("acimg-" ^ uuid)
+    ~accessibility_identifier:("asset-img-" ^ uuid)
+    ~url:src ~alt:b.Model.block_title ~loading:`lazy_
+    ~referrer_policy:`no_referrer ~width:w ?height:h
     ~style_class:"rounded-sm relative fade-in fade-in-faster"
-    ~attrs:
-      ( img_attrs uuid b
-      @ if src = "" then [] else [ ("src", src) ] )
-    ~events:"load"
-    ~on_dom_event:(fun name _ ->
-      if name = "load" then measure_on_load uuid b)
+    ~on_load:(fun _ -> measure_on_load uuid b)
     []
 
 let asset_placeholder : t =
@@ -548,7 +543,10 @@ let asset_container uuid (b : Model.block) : t =
              if r then
                Ui_parts.pressable
                  ~on_press:(fun _ ->
-                   match B.query_selector ("#asset-img-" ^ uuid) with
+                   match
+                     B.query_selector
+                       ("#asset-img-" ^ uuid ^ " .lui-image-pixels")
+                   with
                    | Some img -> open_lightbox img
                    | None -> ())
                  (asset_img uuid b file)
@@ -669,15 +667,7 @@ let file_cell_el (w : W.t) : t =
           Js.Promise.resolve ())
           |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())));
   box ~style_class:"block-content" ~max_height:30
-    [ (* TODO(component): async blob-URL <img> — no URL/src prop on the
-         image kind *)
-      dom ~tag:"img"
-        ~attrs_signal_v:
-          (Logseq_dom.attrs_signal src.Signal.state_signal (fun u ->
-               ("title", file)
-               :: (if u = "" then [] else [ ("src", u) ])))
-        []
-    ]
+    [ image ~url_signal:src.Signal.state_signal ~alt:file [] ]
     ctx parent
 
 (* ---------- command hookup ---------- *)

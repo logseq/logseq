@@ -198,8 +198,13 @@ let export_png (st : S.t Signal.state) =
                Signal.update st (fun s ->
                    { s with png = Some blob; png_url = Some url });
                Runtime.flush ();
-               (* cljs sets img#export-preview .src imperatively *)
-               (match Web_dom.query_selector "#export-preview" with
+               (* cljs sets img#export-preview .src imperatively — the id
+                  now ids the .lui-image wrapper, the pixels img inside
+                  takes the blob URL *)
+               (match
+                  Web_dom.query_selector
+                    "#export-preview .lui-image-pixels"
+                with
                 | Some img -> Web_dom.el_set_attr img "src" url
                 | None -> ())
            | None -> ())

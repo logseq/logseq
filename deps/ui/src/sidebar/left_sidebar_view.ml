@@ -35,14 +35,12 @@ let icon_ ?key ?(cls = "") ?(size = 16) name =
    overlay would intercept every pointer hit beneath it, matching the cljs
    dropdown which has none). *)
 
-(* TODO(component): the dropdown box is a fixed-position overlay placed at
-   pixel coordinates via inline style and carries role="menu" — no kind
-   covers fixed x/y positioning or a custom role, so the smallest possible
-   dom stays for the shell; its children are migrated *)
-let menu_box ~key ~style ~extra_cls children =
-  dom ~key ~tag:"div"
+(* dropdown menus are popover nodes at computed viewport coords; outside
+   press / Escape also closes via ~on_dismiss (close_menu is idempotent
+   with Sidebar_state's document handler) *)
+let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
+  popover ~key ~at ~role:`menu ?min_width ~on_dismiss:dismiss
     ~style_class:("ui__dropdown-menu-content ui__dropdown-menu" ^ extra_cls)
-    ~attrs:[ ("role", "menu"); ("style", style) ]
     children
 
 (* combo shortcut inside a menu item (ui/dropdown-shortcut):
@@ -89,9 +87,8 @@ let nav_edit_menu st =
       []
   in
   box ~key:"nav-edit-menu"
-    [ menu_box ~key:"menu-box" ~extra_cls:""
-        ~style:
-          "position:fixed;top:96px;left:16px;z-index:999;min-width:180px"
+    [ menu_box ~key:"menu-box" ~extra_cls:"" ~at:(16., 96.)
+        ~min_width:180 ~dismiss:(fun _ -> Sidebar_state.close_menu st)
         (List.map mk nav_labels) ]
 
 (* ---------- plugins dropdown (toolbar-plugins-manager) ---------- *)
@@ -135,8 +132,11 @@ let plugins_menu st =
   in
   box ~key:"plugins-menu"
     [ menu_box ~key:"menu-box" ~extra_cls:" toolbar-plugins-manager-content"
-        ~style:
-          "position:fixed;top:64px;right:16px;z-index:999;min-width:200px"
+        ~min_width:200 ~dismiss:(fun _ -> Sidebar_state.close_menu st)
+        (* cljs anchors right:16px; ~at is left-edge so place it at
+           viewport-right - 16 - min-width (the positioner clamps wider
+           content against the right edge the same way right:16 did) *)
+        ~at:(Web_dom.win_inner_width -. 216., 64.)
         (reactive
            (fun _dirty ->
              column ~key:"pm-body"
@@ -180,14 +180,10 @@ let lp_menu st =
               [ "⇧"; "Click" ]
               (fun () -> Sidebar_state.open_ref st target) ]
       in
-      (* TODO(component): pointer-anchored overlay — same fixed-position +
-         role=menu gap as menu_box *)
-      dom ~key:"lp-menu" ~tag:"div"
-        ~attrs:
-          [ ("role", "menu")
-          ; ( "style"
-            , Printf.sprintf
-                "position:fixed;left:%.0fpx;top:%.0fpx;z-index:999" x y ) ]
+      (* pointer-anchored overlay — same popover ~at placement as
+         menu_box *)
+      popover ~key:"lp-menu" ~at:(x, y) ~role:`menu
+        ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
         ~style_class:
           "ui__dropdown-menu-content ui__dropdown-menu w-60" items
 ;;

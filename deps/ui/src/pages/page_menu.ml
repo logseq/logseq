@@ -237,35 +237,29 @@ let global_items () =
           Sidebar_state.open_dialog "login") ]
 
 external inner_width : float = "innerWidth" [@@mel.scope "window"]
+external inner_height : float = "innerHeight" [@@mel.scope "window"]
 
 let view (x, y, with_app_items) (p : Model.page option) =
-  let style =
+  let ax =
     if with_app_items then
-      (* toolbar dots menu: x is the trigger's right edge -> anchor
-         the menu's right edge to it like the cljs dropdown *)
-      Printf.sprintf
-        "position:fixed;right:%.0fpx;top:%.0fpx;--available-height:\
-         calc(100vh - %.0fpx)"
-        (Float.max 8. (inner_width -. x))
-        y (y +. 8.)
+      (* toolbar dots menu is 16rem wide (cljs header.cljs); x is the
+         trigger's right edge -> anchor the menu's right edge to it like
+         the cljs dropdown *)
+      Float.min x (inner_width -. 8.) -. 256.
     else
-      Printf.sprintf
-        "position:fixed;left:%.0fpx;top:%.0fpx;--available-height:\
-         calc(100vh - %.0fpx)"
-        (* cljs anchors a 1px point at the click; the 280px
-           ls-context-menu-content centers on it *)
-        (Float.max 8. (Float.min (x -. 140.) (inner_width -. 288.)))
-        y (y +. 8.)
+      (* cljs anchors a 1px point at the click; the 280px
+         ls-context-menu-content centers on it *)
+      Float.max 8. (Float.min (x -. 140.) (inner_width -. 288.))
   in
-  (* TODO(component): position:fixed coordinates come through a style
-     attr and role=menu has no component prop *)
-  dom ~key:"page-menu" ~tag:"div"
-    (* toolbar dots menu is w-64 (cljs header.cljs); the page
-       right-click keeps the context-menu look *)
+  (* popover ~at is the same point placement the inline left/top carried;
+     --available-height = viewport space below y *)
+  popover ~key:"page-menu" ~at:(ax, y)
+    ~available_height:(inner_height -. y -. 8.)
+    ~role:`menu
+    ~on_dismiss:(fun _ -> Runtime.send (Action.Page_menu_set None))
     ~style_class:
       (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"
        else "ui__dropdown-menu-content ls-context-menu-content")
-    ~attrs:[ ("style", style); ("role", "menu") ]
     (* cljs header.cljs toolbar-dots-menu = page items + hr + app
        items; a page right-click shows page items only *)
     (match p, with_app_items with

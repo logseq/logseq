@@ -392,20 +392,19 @@ let item_header (it : S.item) q =
 let shortcut_row key it =
   if it.S.isc = "" then spacer ~key:(key ^ "-none") []
   else
-    (* cljs dims the row via inline opacity — no opacity prop *)
     row ~key ~style_class:"shui-shortcut-row"
+      ~opacity:(if it.S.ihl then 1. else 0.9)
       (shui_shortcut it.S.isc)
 
-(* TODO(component): the item wrapper + row carry the delegated-event
-   contract — data-item-key/data-item-index/data-cmdk-item/
-   data-highlighted are read by handle_click/handle_mousemove via
-   closest; kinds are invisible to the imperative overlay *)
+(* data-item-index / data-item-key drive the delegated click +
+   mousemove dispatch; the Dom_ext query layer sees ~data_attrs on
+   kind nodes the same way it saw dom attrs *)
 let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
-  Logseq_dom.dom ~key:"item-wrap"
-    ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun it -> wrapper_attrs it) item_sig)
-    [ Logseq_dom.dom ~key:"item"
-        ~style_class_signal:(Logseq_dom.reactive_class (fun it -> row_class it) item_sig)
-        ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun it -> row_data_attrs it) item_sig)
+  box ~key:"item-wrap"
+    ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
+    [ box ~key:"item"
+        ~style_class:row_base_class
+        ~data_attrs:(reactive (fun it -> row_data_attrs it) item_sig)
         [ reactive ~equal:(fun (a : S.item) b -> a = b) (fun (it : S.item) -> item_header it it.S.iq) item_sig
         ; row ~key:"main" ~style_class:"cmdk-item-main"
             [ box ~key:"icon" ~style_class:"cmdk-item-icon"

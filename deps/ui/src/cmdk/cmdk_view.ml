@@ -378,19 +378,15 @@ let row_data_attrs (it : S.item) =
   @ (if highlighted && not hoverable then [ ("data-kb-highlighted", "true") ]
      else [])
 
-(* TODO(component): the inline opacity style has no typed prop — keep
-   the smallest possible dom wrapper; isc still parses to kbd cells
-   inside a reactive slot remounting only on isc change *)
+(* isc parses to kbd cells inside a reactive slot remounting only on
+   isc change *)
 let shortcut_slot (item_sig : S.item Signal.signal) : t =
   if_
     ~test:(Signal.map (fun (it : S.item) -> it.S.isc <> "") item_sig)
-    (dom ~key:"sc-row" ~style_class:"shui-shortcut-row"
-       ~attrs_signal_v:
-         (Logseq_dom.reactive_attrs
-            (fun it ->
-              [ ( "style"
-                , Printf.sprintf "opacity: %s"
-                    (if it.S.ihl then "1" else "0.9") ) ])
+    (box ~key:"sc-row" ~style_class:"shui-shortcut-row"
+       ~opacity:
+         (reactive
+            (fun (it : S.item) -> if it.S.ihl then 1. else 0.9)
             item_sig)
        [ reactive
            ~equal:(fun (a : S.item) b -> a.S.isc = b.S.isc)
@@ -899,15 +895,10 @@ let modal_shell st =
     ; box ~key:"ov"
         ~style_class:"ui__dialog-overlay"
         []
-    ; (* TODO(component): role=dialog + data-state + --nested-dialogs
-         have no prop equivalents on container kinds *)
-      dom ~key:"content"
+    ; (* --nested-dialogs lives in the .ls-dialog-cmdk CSS rule now *)
+      box ~key:"content"
         ~style_class:"ui__dialog-content ls-dialog-cmdk"
-        ~attrs:
-          [ ("role", "dialog")
-          ; ("data-state", "open")
-          ; ("style", "--nested-dialogs: 0")
-          ]
+        ~data_attrs:[ ("role", "dialog"); ("data-state", "open") ]
         [ heading ~key:"title" ~level:2
             ~style_class:"ui__dialog-title hidden" ~value:"" []
         ; box ~key:"main" ~style_class:"ui__dialog-main-content"

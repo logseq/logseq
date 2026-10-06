@@ -10,10 +10,11 @@ module D = Logseq_dom
 let forced : (string, unit) Hashtbl.t = Hashtbl.create 8
 let force uuid = Hashtbl.replace forced uuid ()
 
-(* TODO(component): the lazy-mount dom-event + data-lazy-mount attr are a
-   Swift-side contract (onAppear triggers the mount); no component kind
-   carries a custom event/attr channel, so the placeholder stays a
-   logseq-div until the spine gets a dedicated extension. *)
+(* TODO(component): the lazy-mount dom-event is a Swift-side contract
+   (onAppear triggers the mount); the attr half could ride ~data_attrs
+   but no component kind carries a custom event channel, so the
+   placeholder stays a logseq-div until the spine gets a dedicated
+   extension. *)
 let lazy_children ~key ~uuid ~min_height ~render : t =
  fun ctx parent ->
   let near =

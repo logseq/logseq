@@ -706,7 +706,6 @@ let appearance_rows ctx =
 let appearance_body (x, y) : t =
  fun ctx parent ->
   S.ensure ctx;
-  let right = Float.max 8. (inner_width -. x) in
   let node =
     box ~key:"appearance-popup"
       [ (* cljs shui popup-show! dismisses on outside click — the
@@ -716,17 +715,14 @@ let appearance_body (x, y) : t =
             Runtime.send (Action.Appearance_set None))
           (box ~key:"appearance-backdrop"
              ~style_class:"ls-popup-backdrop" [])
-        (* TODO(component): the popup wrap is position:fixed at pointer
-           coordinates — no kind exposes absolute placement, so the
-           minimal dom shell stays until a positioned-container kind
-           lands *)
-      ; Logseq_dom.dom ~key:"appearance-wrap" ~tag:"div"
+        (* right-edge anchor: ~at is the left edge, so place it at
+           anchor - min-width (the positioner clamps wider content to the
+           right viewport edge like right:8 did) *)
+      ; popover ~key:"appearance-wrap"
+          ~at:(Float.min x (inner_width -. 8.) -. 192., y)
+          ~on_dismiss:(fun _ ->
+            Runtime.send (Action.Appearance_set None))
           ~style_class:"ui__dropdown-menu-content appearance-popup"
-          ~attrs:
-            [ ( "style"
-              , Printf.sprintf "position:fixed;right:%.0fpx;top:%.0fpx"
-                  right y )
-            ]
           [ column ~key:"appearance_settings"
               ~accessibility_identifier:"appearance_settings"
               ~style_class:"cp__settings-appearance-dialog-inner"

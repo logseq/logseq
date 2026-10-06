@@ -143,20 +143,14 @@ and node () : t = (
           | Some blk ->
               let l, t, _r, _b, _w = Web_dom.bounding_rect_fields blk in
               let below = t -. 2. in
-              (* TODO(component): the bar is positioned by a computed
-                 inline style (fixed left/top off the anchor block's
-                 bounding rect) and carries data-keep-selection for the
-                 document mousedown listener — no typed props cover
-                 either, so the shell stays dom *)
-              dom ~key:"sbar"
-                ~style_class:
-                  "ui__toolbar selection-action-bar flex items-center"
-                ~attrs:
-                  [ ( "style"
-                    , Printf.sprintf
-                        "position:fixed;left:%.0fpx;top:%.0fpx;z-index:998;pointer-events:none"
-                        l (t -. 48.) )
-                  ; ("data-keep-selection", "true") ]
+              (* cljs radix popover anchors the bar 48px above the first
+                 selected block — popover ~at is the same point placement;
+                 no ~on_dismiss: the bar's own mousedown listener decides
+                 hide vs clear-selection and [data-keep-selection]
+                 surfaces (its cm menu) must not dismiss it *)
+              popover ~key:"sbar" ~at:(l, t -. 48.)
+                ~style_class:"ui__toolbar selection-action-bar"
+                ~data_attrs:[ ("data-keep-selection", "true") ]
                 [ row ~key:"sbg"
                     ~cross:`center
                     ~style_class:

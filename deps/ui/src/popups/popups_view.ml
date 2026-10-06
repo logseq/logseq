@@ -3,19 +3,16 @@
    [.ui__ac-group-name] .menu-link-wrap > a#ac-<i>.menu-link[.chosen])
    and content.cljs custom context menus (.ls-context-menu-content).
 
-   Popups are positioned with fixed coordinates and dismissed on outside
-   click / Escape; they sit directly under .cp__overlays (not portaled)
-   since positioning is computed in viewport coords. *)
+   The shells are popover nodes: ~at:(x,y) positions the positioner in
+   viewport coords and the node mounts under the renderer's body-level
+   .lui-popup-portal (hit-tested by Popups_state.inside); they are
+   dismissed on outside click / Escape. *)
 
 open Promise_ext
 open Lui_elements
 
 module S = Popups_state
 module U = I18n
-
-let sv s = Lui_protocol.StringValue s
-
-let attrs_v pairs = sv (Logseq_dom.attrs_json pairs)
 
 (* -- autocomplete item ----------------------------------------------- *)
 
@@ -331,95 +328,103 @@ let popup_anchor_dy = 1.
 (* cljs shui composed-popup bakes popup-transition-class into the
    PopoverContent classes; LUI authors them as rules on
    .ui__popover-content et al. (lui-overlay.css), so the emit side only
-   carries the semantic class. The cljs positioner sets
-   --available-height on a wrapper — LUI positions the popup itself, so
-   the var is bound inline. `flip` = (top, avail) when the popup
+   carries the semantic class. `flip` = (top, avail) when the popup
    measured too tall for the space below and moved above the caret
    (base-ui avoidCollisions; positioner flips data-side to top) *)
-let popover_style ~x ~y ~flip =
-  let top, avail =
-    match flip with
-    | Some (top', avail') -> (top', Printf.sprintf "%.0fpx" avail')
-    | None ->
-        (y +. popup_anchor_dy, Printf.sprintf "calc(100vh - %.0fpx)" (y +. 8.))
-  in
-  Printf.sprintf
-    "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 99999; \
-     --available-height: %s"
-    x top avail
-;;
 
 let ac_popover (st : S.t) : t =
   (* signals are built inside the mount closure: if_ unmounts dispose any
      derived signal bound under that scope, so an eagerly-created map would
      throw "cannot observe a disposed signal" on the next mount *)
  fun context parent ->
+  let vs = st.S.vs.Signal.state_signal in
   (* cljs PopoverContent: ui__popover-content + card + transition
-     classes.
-     TODO(component): the popover shell needs fixed x/y positioning, the
-     --available-height CSS var, the #ui__ac hook (imperative queries)
-     and the base-ui data-* attrs the overlay CSS keys on — none has a
-     typed-prop equivalent, so the smallest possible dom stays *)
-  (Logseq_dom.dom ~key:"ac-pop" ~id:"ui__ac"
-    ~style_class_signal:
-      (Signal.map
+     classes. #ui__ac (imperative queries) sits on the positioner via
+     ~accessibility_identifier; the .ui__popover-content content node is
+     an inner box because the overlay CSS keys
+     [data-editor-popup-ref]/[data-side] on that class, and ~data_attrs
+     land on the positioner *)
+  (popover ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
+     ~at_signal:
+       (Signal.map
+          (fun (v : S.view) ->
+            match v.S.ac with
+            | Some a ->
+                ( Option.value a.S.flipx ~default:a.S.x
+                , (match a.S.flip with
+                   | Some (top', _) -> top'
+                   | None -> a.S.y +. popup_anchor_dy) )
+            | None -> (0., 0.))
+          vs)
+     ~available_height_signal:
+       (Signal.map
+          (fun (v : S.view) ->
+            match v.S.ac with
+            | Some a -> (
+                match a.S.flip with
+                | Some (_, avail') -> avail'
+                | None -> Web_dom.win_inner_height -. a.S.y -. 8.)
+            | None -> 0.)
+          vs)
+     ~on_dismiss:(fun _ -> S.close_ac st)
+     [ Ui_parts.class_signal vs
          (fun (v : S.view) ->
-           sv
-             ("ui__popover-content "
-             ^ (match v.S.ac with
-                | Some a -> S.ac_class_of_kind a.S.kind
-                | None -> "")))
-         st.S.vs.Signal.state_signal)
-    ~attrs_signal_v:
-      (Signal.map
-         (fun (v : S.view) ->
-           match v.S.ac with
-           | Some a ->
-               attrs_v
-                 [ ( "style"
-                   , popover_style
-                       ~x:(Option.value a.S.flipx ~default:a.S.x)
-                       ~y:a.S.y ~flip:a.S.flip )
-                 ; ("data-open", "")
-                 ; ( "data-side"
-                   , (match a.S.flip with Some _ -> "top" | None -> "bottom") )
-                 ; ( "data-align"
-                   , (match a.S.flipx with Some _ -> "end" | None -> "start") )
-                 ; ("tabindex", "-1")
-                 ; ("data-base-ui-focusable", "")
-                 ; ("role", "dialog")
-                 ; ("data-state", "open")
-                 ; ( "data-editor-popup-ref"
-                   , S.popup_ref_of_kind a.S.kind ) ]
-           | None -> attrs_v [])
-         st.S.vs.Signal.state_signal)
-    [ ac_inner st
-    ; (* cljs page-search-aux: mod+enter hint under the tag list *)
-      if_
-        ~test:
-          (Signal.map
-             (fun (v : S.view) ->
-               match v.S.ac with
-               | Some a ->
-                   a.S.kind = S.Tag_search && a.S.query <> ""
-                   && String.lowercase_ascii a.S.query <> "page"
-               | None -> false)
-             st.S.vs.Signal.state_signal)
-        (text ~key:"ac-hint" ~style_class:"ls-tag-search-hint"
-           [ (* shui/shortcut "mod+enter" → combo glow container inside a
-                span *)
-             text ~key:"scw"
-               [ box ~key:"sc"
-                   ~style_class:"shui-shortcut-combo shui-shortcut-glow"
-                   [ kbd ~key:"k0" ~style_class:"shui-shortcut-key"
-                       ~value:(Platform.utf8 "\xe2\x8c\x98") []
-                   ; text ~key:"sep1"
-                       ~style_class:"shui-shortcut-separator" []
-                   ; kbd ~key:"k1" ~style_class:"shui-shortcut-key"
-                       ~value:(Platform.utf8 "\xe2\x8f\x8e") [] ] ]
-           ; text ~key:"ht"
-               ~value:(U.t "editor/display-tag-inline-hint") [] ])
-    ])
+           "ui__popover-content "
+           ^ (match v.S.ac with
+              | Some a -> S.ac_class_of_kind a.S.kind
+              | None -> ""))
+         (box ~key:"ac-c"
+            ~data_attrs_signal:
+              (Signal.map
+                 (fun (v : S.view) ->
+                   match v.S.ac with
+                   | Some a ->
+                       [ ("data-open", "")
+                       ; ( "data-side"
+                         , (match a.S.flip with
+                            | Some _ -> "top"
+                            | None -> "bottom") )
+                       ; ( "data-align"
+                         , (match a.S.flipx with
+                            | Some _ -> "end"
+                            | None -> "start") )
+                       ; ("tabindex", "-1")
+                       ; ("data-base-ui-focusable", "")
+                       ; ("role", "dialog")
+                       ; ("data-state", "open")
+                       ; ( "data-editor-popup-ref"
+                         , S.popup_ref_of_kind a.S.kind ) ]
+                   | None -> [])
+                 vs)
+            [ ac_inner st
+            ; (* cljs page-search-aux: mod+enter hint under the tag list *)
+              if_
+                ~test:
+                  (Signal.map
+                     (fun (v : S.view) ->
+                       match v.S.ac with
+                       | Some a ->
+                           a.S.kind = S.Tag_search && a.S.query <> ""
+                           && String.lowercase_ascii a.S.query <> "page"
+                       | None -> false)
+                     vs)
+                (text ~key:"ac-hint" ~style_class:"ls-tag-search-hint"
+                   [ (* shui/shortcut "mod+enter" → combo glow container
+                        inside a span *)
+                     text ~key:"scw"
+                       [ box ~key:"sc"
+                           ~style_class:
+                             "shui-shortcut-combo shui-shortcut-glow"
+                           [ kbd ~key:"k0" ~style_class:"shui-shortcut-key"
+                               ~value:(Platform.utf8 "\xe2\x8c\x98") []
+                           ; text ~key:"sep1"
+                               ~style_class:"shui-shortcut-separator" []
+                           ; kbd ~key:"k1" ~style_class:"shui-shortcut-key"
+                               ~value:(Platform.utf8 "\xe2\x8f\x8e") [] ] ]
+                   ; text ~key:"ht"
+                       ~value:(U.t "editor/display-tag-inline-hint") [] ])
+            ])
+     ])
     context parent
 ;;
 
@@ -444,6 +449,14 @@ let run_cm_item st l = close_cm_picker (); S.run_cm_item st l
 let run_cm_color st l = close_cm_picker (); S.run_cm_color st l
 let run_cm_heading st l = close_cm_picker (); S.run_cm_heading st l
 ;;
+
+(* base-ui sets data-highlighted on the hovered item (bg-muted) *)
+let cm_hi_el : Web_dom.el option ref = ref None
+
+let close_cm st =
+  cm_hi_el := None;
+  close_cm_picker ();
+  S.close_cm st
 
 let cm_color_row (st : S.t) : t =
   let swatch c =
@@ -575,21 +588,16 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
   | _ -> spacer ~key:"x" []
 ;;
 
-(* dropdown-menu-sub-content for Sub_menu entries — positioned at the
-   trigger's right edge (coords stored on hover in cm.sub_xy) *)
-(* TODO(component): sub-menu shell — fixed positioning + role=menu
-   (imperative CSS/query hooks) have no typed-prop equivalent *)
+(* dropdown-menu-sub-content for Sub_menu entries — popover ~at the
+   trigger's right edge (coords stored on hover in cm.sub_xy); nested
+   popovers layer above their parent popup automatically *)
 let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
     : t =
-  Logseq_dom.dom ~key:"cm-sub"
+  popover ~key:"cm-sub" ~at:(x, y) ~role:`menu
+    ~available_height:(Web_dom.win_inner_height -. y -. 8.)
     ~style_class:"ui__dropdown-menu-sub-content"
-    ~attrs:
-      [ ("role", "menu"); ("tabindex", "-1"); ("data-keep-selection", "")
-      ; ( "style"
-        , Printf.sprintf
-            "position:fixed;left:%.0fpx;top:%.0fpx;z-index:1000;\
-             --available-height:calc(100vh - %.0fpx)"
-            x y (y +. 8.) ) ]
+    ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
+    ~on_dismiss:(fun _ -> close_cm st)
     [ box ~key:"w" (List.map (cm_sub_item_el st) items) ]
 ;;
 
@@ -622,57 +630,62 @@ let cm_popover (st : S.t) : t =
       st.S.vs.Signal.state_signal
   in
   (* cljs as-dropdown? context menu: dropdown-menu-content merged with
-     the content-props class (280px ls-context-menu-content); the items
-     sit in a flat div[data-keep-selection], not a second card *)
-  (* TODO(component): menu shell — fixed positioning, width and
-     role=menu have no typed-prop equivalent; data-keep-selection is the
-     imperative selection-bar hook *)
-  Logseq_dom.dom ~key:"cm"
-    ~style_class:"ui__dropdown-menu-content ls-context-menu-content"
-    ~attrs_signal_v:
-      (Signal.map
-         (fun (v : S.view) ->
-           match v.S.cm with
-           | Some m ->
-               (* block-tag popups use w-60 (240px) content in cljs;
-                  the block context menu is 280px *)
-               let w = if m.S.tag <> None then 240. else 280. in
-               attrs_v
-                 [ ( "style"
-                   , Printf.sprintf
-                       "position: fixed; left: %.0fpx; top: %.0fpx; \
-                        width: %.0fpx; z-index: 999; \
-                        --available-height: calc(100vh - %.0fpx)"
-                       (* cljs anchors a 1px point at the click and the
-                          base-ui dropdown centers the content on it *)
-                       (Float.max 8.
-                          (Float.min (m.S.cx -. (w /. 2.))
-                             (Web_dom.win_inner_width -. (w +. 8.))))
-                       m.S.cy w (m.S.cy +. 8.) )
-
-                 ; ("role", "menu"); ("data-keep-selection", "") ]
-           | None -> attrs_v [])
-         st.S.vs.Signal.state_signal)
-    [ box ~key:"cm-wrap"
-        [ keyed ~source:entries_sig ~key:(fun ((i, _) : int * S.cm_item) -> i)
-            ~cmp:Stdlib.compare
-            ~mount:(fun entry_sig -> cm_item_el st entry_sig) ]
-    ; reactive
-        (fun sub ->
-          match sub with
-          | Some (_, x, y, items) -> cm_sub_el st x y items
-          | None -> Logseq_dom.nothing)
-        (cm_sub_state st)
-    ]
+     the content-props class (280px ls-context-menu-content, 240px
+     ls-tag-menu for block-tag popups); the items sit in a flat
+     div[data-keep-selection], not a second card *)
+  let vs = st.S.vs.Signal.state_signal in
+  (Ui_parts.class_signal vs
+     (fun (v : S.view) ->
+       "ui__dropdown-menu-content ls-context-menu-content"
+       ^
+       (match v.S.cm with
+        | Some m when m.S.tag <> None -> " ls-tag-menu"
+        | _ -> ""))
+     (popover ~key:"cm" ~role:`menu
+        ~at_signal:
+          (Signal.map
+             (fun (v : S.view) ->
+               match v.S.cm with
+               | Some m ->
+                   (* cljs anchors a 1px point at the click and the
+                      base-ui dropdown centers the content on it *)
+                   let w = if m.S.tag <> None then 240. else 280. in
+                   ( Float.max 8.
+                       (Float.min (m.S.cx -. (w /. 2.))
+                          (Web_dom.win_inner_width -. (w +. 8.)))
+                   , m.S.cy )
+               | None -> (0., 0.))
+             vs)
+        ~available_height_signal:
+          (Signal.map
+             (fun (v : S.view) ->
+               match v.S.cm with
+               | Some m -> Web_dom.win_inner_height -. m.S.cy -. 8.
+               | None -> 0.)
+             vs)
+        ~data_attrs:[ ("data-keep-selection", "") ]
+        ~on_dismiss:(fun _ -> close_cm st)
+        [ box ~key:"cm-wrap"
+            [ keyed ~source:entries_sig
+                ~key:(fun ((i, _) : int * S.cm_item) -> i)
+                ~cmp:Stdlib.compare
+                ~mount:(fun entry_sig -> cm_item_el st entry_sig) ]
+        ; (* popover children must be standard kinds — the empty branch's
+             logseq-raw-text placeholder has to sit inside a box *)
+          box ~key:"cm-sub-wrap"
+            [ reactive
+                (fun sub ->
+                  match sub with
+                  | Some (_, x, y, items) -> cm_sub_el st x y items
+                  | None -> Logseq_dom.nothing)
+                (cm_sub_state st) ]
+        ]))
     context parent
 ;;
 
 (* -- delegated listeners --------------------------------------------- *)
 
 let in_popups el = S.inside el;;
-
-(* base-ui sets data-highlighted on the hovered item (bg-muted) *)
-let cm_hi_el : Web_dom.el option ref = ref None
 
 let cm_highlight (el : Web_dom.el) =
   (match !cm_hi_el with
@@ -691,11 +704,6 @@ let cm_highlight (el : Web_dom.el) =
          Web_dom.el_set_attr e "data-highlighted" "";
          Some e
      | _ -> None)
-
-let close_cm st =
-  cm_hi_el := None;
-  close_cm_picker ();
-  S.close_cm st
 
 (* ---- page-ref hover preview ----
    cljs popup-preview-impl: mousemove on .preview-ref-link arms a 1000ms
@@ -776,26 +784,16 @@ let pv_track st el =
                 (Web_dom.set_timeout_id (fun () -> S.close_pv st) 400)
         | _ -> ())
 
-(* TODO(component): preview shell — fixed positioning and the
-   tippy-wrapper font/padding styles have no typed-prop equivalent *)
-let pv_popover (p : S.pv) : t =
-  (* cljs popup-show! content = PopoverContent card classes +
-     ls-preview-popup (page.css: pl-6, .tippy-wrapper paddings) *)
-  Logseq_dom.dom ~key:"pv-pop"
+(* cljs popup-show! content = PopoverContent card classes +
+   ls-preview-popup (page.css: pl-6); the tippy wrapper's remaining
+   inline styles live in lui-overlay.css *)
+let pv_popover (st : S.t) (p : S.pv) : t =
+  popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y)
+    ~available_height:(Web_dom.win_inner_height -. p.S.pv_y -. 8.)
     ~style_class:"ui__popover-content ls-preview-popup"
-    ~attrs:
-      [ ( "style"
-        , Printf.sprintf
-            "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999; \
-             --available-height: calc(100vh - %.0fpx)"
-            p.S.pv_x p.S.pv_y (p.S.pv_y +. 8.0) ) ]
-    [ Logseq_dom.dom ~key:"pvw" ~style_class:"tippy-wrapper as-page"
-        ~attrs:
-          [ ("tabindex", "-1")
-          ; ( "style"
-            , "width: 600px; text-align: left; font-weight: 500; \
-               padding-bottom: 64px" )
-          ]
+    ~on_dismiss:(fun _ -> S.close_pv st)
+    [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
+        ~data_attrs:[ ("tabindex", "-1") ]
         [ box ~key:"pvp" ~style_class:"page"
             [ box ~key:"pvt"
                 ~style_class:"ls-page-title content title"
@@ -832,7 +830,7 @@ let pv_dyn (st : S.t) : t =
      (fun pv ->
        match pv with
        | None -> Logseq_dom.nothing
-       | Some p -> pv_popover p)
+       | Some p -> pv_popover st p)
      (Signal.map (fun (v : S.view) -> v.S.pv)
         st.S.vs.Signal.state_signal))
     context parent

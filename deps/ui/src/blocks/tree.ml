@@ -173,7 +173,7 @@ let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
 
 let icon_el uuid (icon : Model.icon) : t =
   if icon.icon_kind = "emoji" then
-    dom ~key:("ic-" ^ uuid) ~tag:"span" ~style_class:"ui__icon"
+    box ~key:("ic-" ^ uuid) ~style_class:"ui__icon"
       [ Logseq_emoji.el ~key:("ice-" ^ uuid) ~name:icon.icon_id () ]
   else
     (* tabler icon via the app registry — the icon kind renders its own
@@ -205,40 +205,32 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
     , string_of_bool (b.block_children <> []) )
     ::
     (match b.block_heading with
-    | Some lvl ->
-        let size =
-          match lvl with 1 -> 28 | 2 -> 24 | 3 -> 20 | 4 -> 16
-          | 5 -> 13 | 6 -> 12 | _ -> 14
-        in
-        [ ("data-heading", string_of_int lvl)
-        ; ("style", "--ls-block-icon-size:" ^ string_of_int size ^ "px") ]
+    | Some lvl -> [ ("data-heading", string_of_int lvl) ]
     | None -> [])
   in
   (* one derived signal for all collapse-driven classes in this row —
      a fresh map per class_signal triples the subscriptions on every
      S.set publish *)
   let cs = collapsed_sig ~scope b in
-  (* the control wrap's subtree mostly stays dom: data-heading/
-     data-has-children attrs feed block.css selectors, #control-<uuid>
-     and #dot-<uuid> are e2e click targets, blockid/draggable are the
-     imperative dnd contract, and span.rotating-arrow svg css requires
-     the span — no style_class_signal/attrs on standard kinds *)
+  (* #dot-<uuid> + blockid/draggable on the bullet stays dom (e2e
+     target + imperative dnd contract); the rest rides data_attrs and
+     reactive style_class — --ls-block-icon-size lives in the
+     lui-core.css [data-heading] rules *)
 
-  dom ~key:("ctrlw-" ^ uuid)
+  box ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
-    ~attrs:heading_attrs
-    [ dom ~key:("ctrl-" ^ uuid) ~tag:"a" ~style_class:"block-control"
-        ~id:("control-" ^ uuid)
+    ~data_attrs:heading_attrs
+    [ link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
+        ~accessibility_identifier:("control-" ^ uuid)
         [ Ui_parts.class_signal cs
             (fun c -> if c then "control-show" else "control-hide")
             (box ~key:("ctrlspan-" ^ uuid)
-            [ dom ~key:("ra-" ^ uuid) ~tag:"span"
-                ~style_class_signal:
-                  (Logseq_dom.class_signal cs
-                     (fun c ->
-                       "rotating-arrow"
-                       ^ if c then " collapsed" else " not-collapsed"))
-                [ Ui_parts.rotating_arrow ("arw-" ^ uuid) ]
+            [ Ui_parts.class_signal cs
+                (fun c ->
+                  "rotating-arrow"
+                  ^ if c then " collapsed" else " not-collapsed")
+                (box ~key:("ra-" ^ uuid)
+                   [ Ui_parts.rotating_arrow ("arw-" ^ uuid) ])
             ])
         ]
     ; box ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap"
@@ -363,11 +355,11 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
    a css :hover or a platform hover prop replaces it. *)
 let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
   let priv = private_tag_ident ident in
-  (* chip root stays dom: the delegated context-menu handler reads
-     data-tag-uuid/id/title/priv off it *)
-  dom ~key:("tag-" ^ key)
+  (* the delegated context-menu handler reads data-tag-uuid/id/title/
+     priv off the chip root — they ride ~data_attrs *)
+  box ~key:("tag-" ^ key)
     ~style_class:("block-tag" ^ if priv then " private-tag" else "")
-    ~attrs:
+    ~data_attrs:
       [ ("data-tag-uuid", tuuid)
       ; ("data-tag-id", string_of_int dbid)
       ; ("data-tag-title", tag)
@@ -392,11 +384,11 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                     "tag-x hash-symbol hidden cursor-pointer select-none"
                   ~label:(I18n.t "block/remove-this-tag")
                   ~text:"x" []))
-        ; (* the tag anchor stays dom: delegated click/context-menu paths
-             read data-uuid/data-ref, draggable comes from the platform *)
-          dom ~key:("ta-" ^ key) ~tag:"a"
+        ; (* delegated click/context-menu paths read data-uuid/data-ref
+             off the anchor; a.tag css keeps matching the link's <a> *)
+          link ~key:("ta-" ^ key)
             ~style_class:"tag relative"
-            ~attrs:
+            ~data_attrs:
               [ ("tabindex", "0"); ("draggable", "true")
               ; ("data-uuid", tuuid)
               ; ("data-ref", String.lowercase_ascii tag) ]
@@ -462,11 +454,10 @@ let rec block_row
 and row_main ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
-  (* .block-main-container stays dom: the data-has-heading attr feeds
-     block.css selectors *)
-  dom ~key:("main-" ^ key)
+  (* data-has-heading feeds block.css selectors — rides ~data_attrs *)
+  box ~key:("main-" ^ key)
       ~style_class:"block-main-container flex flex-row gap-1"
-        ~attrs:
+        ~data_attrs:
           (match b.block_heading with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
            | None -> [])
@@ -476,9 +467,9 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                 [ row ~key:("bmc-" ^ key)
                     ~style_class:"block-main-content" ~gap:8
                     [ column ~key:("col3-" ^ key) ~grow:1.
-                        [ dom ~key:("cew-" ^ key)
+                        [ box ~key:("cew-" ^ key)
                             ~style_class:"block-content-or-editor-wrap"
-                            ~attrs:
+                            ~data_attrs:
                               (match b.Model.block_display_type with
                                | Some dt -> [ ("data-node-type", dt) ]
                                | None -> [])
@@ -736,9 +727,9 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   dom ~key:("rfs-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed b)
     ~attrs_signal_v:(row_attrs_sig ~scope:"ref" ~depth uuid b)
-    [ dom ~key:("main-" ^ key)
+    [ box ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
-        ~attrs:(heading_attrs b)
+        ~data_attrs:(heading_attrs b)
         [ control_wrap ~scope:"ref" ~library uuid b
         ; column ~key:("col-" ^ key) ~grow:1.
             [ column ~key:("col2-" ^ key)

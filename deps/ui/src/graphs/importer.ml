@@ -117,9 +117,9 @@ let on_change id () =
 
 (* TODO(component): stays dom — .importer .d > label.action-input keys
    on the label tag and the nested <input type=file> click activation
-   has no component equivalent (file_picker cannot expose accept /
-   webkitdirectory / web File objects; strong/small are tag-selected by
-   .action-input CSS) *)
+   has no component equivalent: file_picker's web backend emits a bare
+   `lui-file-picker` element — no Picked event, no web File objects.
+   Needs a web FilePicker backend plus directory-pick support *)
 let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
   dom ~key:id ~tag:"label"
     ~style_class:"action-input"
@@ -128,8 +128,8 @@ let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
             ~point_size:28 [] ]
     ; column ~key:(id ^ "-t")
         ~style_class:"ls-imp-field"
-        [ dom ~key:(id ^ "-s") ~tag:"strong" ~text:label []
-        ; dom ~key:(id ^ "-d") ~tag:"small" ~text:desc [] ]
+        [ text ~key:(id ^ "-s") ~as_:`Strong ~value:label []
+        ; text ~key:(id ^ "-d") ~as_:`Small ~value:desc [] ]
     ; dom ~key:(id ^ "-i") ~tag:"input"
         ~style_class:"ls-hidden-input"
         ~attrs:

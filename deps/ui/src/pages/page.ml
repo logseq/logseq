@@ -268,9 +268,11 @@ let title_content (page : Model.page) : t =
                    the model already carries caret=end *)
                 Editor_sink.focus_input uuid)) )
   in
-  (* TODO(component): the click payload (shiftKey/interactive) and the
-     imperative block attrs (blockid/containerid/data-type) have no
-     component equivalent — keep as dom until the block extension lands *)
+  (* TODO(component): click needs the DOM payload (targetId/
+     interactive closest-walk/shiftKey) and blockid/containerid/
+     data-type are non-data-* attrs — needs a pointer_detail extension
+     (target element identity + interactive hit) and block attrs on the
+     block extension *)
   dom ~key:"pt-content" ~style_class:"block-content inline !cursor-pointer"
     ~id:("block-content-" ^ uuid) ~events:(String.concat " " events)
     ?on_dom_event:on_event
@@ -491,9 +493,11 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
         ]
     ]
   in
-  (* TODO(component): click needs the DOM payload (targetId/shiftKey/
-     interactive), contextmenu needs clientX/Y and the e2e locator
-     [data-testid='page title'] — imperative surface, keep as dom *)
+  (* TODO(component): click needs the DOM payload (targetId/
+     interactive closest-walk/shiftKey) — pointer_detail carries
+     target_class but not the interactive hit, so title-edit would
+     fire on action-button clicks too. Needs a pointer_detail
+     extension (target identity + interactive flag) *)
   dom ~key:"page-title"
     ~style_class:"ls-page-title flex flex-1 w-full content items-start title \
                   title"
@@ -604,8 +608,9 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
   let body =
     if not container then list_wrap
     else
-      [ (* containerid is outside the data-* attribute vocabulary — it
-           stays a dom attr until the block-container contract moves *)
+      [ (* TODO(component): containerid is outside the data-* attribute
+           vocabulary — stays a dom attr until the block-container
+           contract moves *)
         dom ~key:"blc" ~style_class:"blocks-container flex-1"
           ~attrs:
             (match puuid with
@@ -1313,9 +1318,9 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
            :: (match puuid with
                | Some u -> [ ("data-pu", u) ]
                | None -> []))
-        [ (* containerid is outside the data-* attribute vocabulary —
-             it stays a dom attr until the block-container contract
-             moves *)
+        [ (* TODO(component): containerid is outside the data-*
+             attribute vocabulary — stays a dom attr until the
+             block-container contract moves *)
           dom ~key:"blc" ~style_class:"blocks-container flex-1"
             ~attrs:
               (match puuid with
@@ -1339,16 +1344,13 @@ let top_view (m : Model.t) : t =
   | Some page ->
       (match m.route with
        | Model.Block_zoom _ ->
-           (* TODO(component): display:contents has no kind equivalent *)
-           dom ~key:"ptz" ~attrs:[ ("style", "display:contents") ]
+           box ~key:"ptz" ~display:`contents
              (zoom_breadcrumbs page)
        | Model.Library ->
-           (* TODO(component): display:contents has no kind equivalent *)
-           dom ~key:"ptl" ~attrs:[ ("style", "display:contents") ]
+           box ~key:"ptl" ~display:`contents
              [ title_row m page; library_add_pages_button ]
        | _ ->
-           (* TODO(component): display:contents has no kind equivalent *)
-           dom ~key:"ptm" ~attrs:[ ("style", "display:contents") ]
+           box ~key:"ptm" ~display:`contents
              (breadcrumbs page.page_title
               @ [ title_row m page
                 ; (* cljs bidirectional-properties-area: sibling of the
