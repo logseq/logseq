@@ -198,7 +198,6 @@ let title_editor (page : Model.page) : t =
      [ Edit_view.view
          ~model:model_st.Signal.state_signal
          ~frame:frame.Signal.state_signal ~block_id:uuid ~on_input
-     ; Asset_dom.upload_input ("pt-up-" ^ uuid)
      ])
     ctx parent
 

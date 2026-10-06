@@ -7,7 +7,8 @@
 
      .editor-wrapper#editor-edit-block-<uuid>
        Edit_view.view            (lines + overlay + extension sink)
-       Asset_dom.upload_input    (file-drop target for the open editor)
+       (file uploads go through Asset_dom.pick_files — dom-op
+          open-file-picker, no hidden input)
 
    The mounted Edit_model signal is derived from Editor_state.editing —
    the model only paints when the open editing session's uuid/scope match
@@ -36,6 +37,5 @@ let mount uuid scope : t =
     [ Edit_view.view ~model:model_sig
         ~frame:frame.Signal.state_signal ~block_id:uuid
         ~on_input:(Editor_keys.apply_input ~frame uuid)
-    ; Asset_dom.upload_input ("up-" ^ uuid)
     ])
     ctx parent
