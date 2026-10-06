@@ -21,7 +21,6 @@ open Lui_elements
 let dom = Logseq_dom.dom
 let if_ = Logseq_dom.if_
 let keyed = Logseq_dom.keyed
-let fragment = Logseq_dom.fragment
 
 module S = Cmdk_state
 
@@ -390,7 +389,7 @@ let shortcut_slot (item_sig : S.item Signal.signal) : t =
             item_sig)
        [ reactive
            ~equal:(fun (a : S.item) b -> a.S.isc = b.S.isc)
-           (fun it -> fragment (shui_shortcut it.S.isc))
+           (fun it -> box ~key:"sc-cells" (shui_shortcut it.S.isc))
            item_sig
        ])
 
