@@ -1477,7 +1477,7 @@
                     (is (some #(= "logseq.DB.getOrphanTags" (first %)) @calls))
                     (is (some #(= "logseq.DB.getOrphanProperties" (first %)) @calls))
                     (is (some #(= "logseq.DB.getPropertyUsers" (first %)) @calls))
-                    (is (some #(= "logseq.DB.getAssetAttributeNames" (first %)) @calls))
+                    (is (some #(= "logseq.DB.listAssets" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1853,20 +1853,33 @@
                 (is (= [["logseq.DB.getOrphanProperties" []]] @calls))
                 (done))))))
 
-(deftest list-assets-uses-db-api-and-preserves-unverified-probe
+(deftest list-assets-uses-db-api-and-preserves-inventory
   (let [calls (atom [])
-        attributes #js [":logseq.property/asset/url" ":logseq.property/asset/remote-metadata"]
+        assets #js [#js {:uuid "00000000-0000-4000-8000-000000000091"
+                         :title "Photo" :type "png" :size 2048
+                         :checksum "fixture-checksum" :external_url nil :external_file_name nil}]
         api (fn [method args]
               (swap! calls conj [method args])
-              attributes)]
+              assets)]
     (async done
       (p/then (mcp-compat/list-assets api #js {})
               (fn [result]
-                (is (= [":logseq.property/asset/url"
-                        ":logseq.property/asset/remote-metadata"]
+                (is (= [{:uuid "00000000-0000-4000-8000-000000000091"
+                         :title "Photo" :type "png" :size 2048
+                         :checksum "fixture-checksum" :external_url nil :external_file_name nil}]
                        result))
-                (is (= [["logseq.DB.getAssetAttributeNames" []]] @calls))
+                (is (= [["logseq.DB.listAssets" []]] @calls))
                 (done))))))
+
+(deftest list-assets-surfaces-api-errors-as-mcp-errors
+  (async done
+    (-> (p/let [result (mcp-server/call-data-tool
+                       (fn [_ _] (js/Promise.resolve #js {:error "asset inventory denied"}))
+                       mcp-compat/list-assets #js {})]
+          (is (true? (aget result "isError")))
+          (is (string/includes? (aget (aget (aget result "content") 0) "text") "asset inventory denied")))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
 
 (deftest get-tag-uuid-uses-db-api-and-preserves-ambiguous-candidates
   (let [calls (atom [])

@@ -33,7 +33,7 @@ The implementation-level contract is summarized by category here:
 | Block reads | `getBlockUUID`, `getBlock`, `searchBlocks`, `getBlockTree`, `findBacklinks`, `findOrphans` | UUID validation; search is case-sensitive, bounded, and single-attempt. |
 | Tag reads | `getTagUUID`, `getTag`, `getTagUsers` | UUID/title distinction; ambiguous tag titles return candidates. |
 | Property reads | `getPropertyIndent`, `getProperyUsers` | Idents are strict attribute names; values may be literals or references. |
-| Lists | `listPages`, `listJournals`, `listTags`, `listProperties`, `listClosedValues`, `listOrphanTags`, `listOrphanProperties`, `listAssets`, `listStatus`, `listRecycled` | Preserve optional count envelopes, caps, recycled filtering, and unverified asset status. |
+| Lists | `listPages`, `listJournals`, `listTags`, `listProperties`, `listClosedValues`, `listOrphanTags`, `listOrphanProperties`, `listAssets`, `listStatus`, `listRecycled` | Preserve optional count envelopes, caps and recycled filtering; listAssets now inventories registered asset metadata, not filesystem availability. |
 | Page writes | `importPage`, `repairLinks`, `createPage`, `renamePage`, `retitleOverDuplicate`, `deletePage`, `clearPage` | Read-back required; title clashes, aliases, references, and partial imports retain their current semantics. |
 | Block writes | `createBlock`, `createPageofBlocks`, `updateBlock`, `splitBlock`, `moveBlock`, `moveBlocks`, `migratePage`, `removeBlock` | UUID validation; placement/order and partial batch results are observable and verified. |
 | Tag writes | `creatTag`, `deleteTag`, `addTag`, `removeTag` | Namespace/entity validation; detach and child-reparent acknowledgements remain required. |
@@ -87,8 +87,18 @@ that rejects page entities. `getTagUsers` now queries all page and block
 holders for an exact tag UUID. `listOrphanTags` uses the Tag class and reverse
 `:block/_tags` relation to list unused tags. `listOrphanProperties` validates
 each property ident before checking whether it has any values. `listAssets`
-uses `logseq.DB.getAssetAttributeNames` to preserve the reference server's
-unverified attribute-name discovery query; it is not a complete asset inventory.
+now uses `logseq.DB.listAssets` instead of the reference server's attribute-name
+probe. This intentionally changes its output from strings to asset records:
+`uuid`, `title`, `type`, `size` (bytes), `checksum`, `external_url`, and
+`external_file_name`. It inventories non-recycled `:logseq.class/Asset` entities
+in stable UUID order; missing metadata is null. It neither scans the filesystem
+nor verifies/downloads files, and unregistered files are outside its scope.
+Local tests cover local/external assets, recycled exclusion, missing optional
+metadata, empty inventory, false-positive property names, and API errors.
+On 2026-10-06 a direct read-only MCP check confirmed the corrected advertised
+description and 53-tool inventory; `listAssets` returned an empty array on the
+current graph. Nonempty asset metadata was verified in local fixtures only.
+Historical probe validation below refers to the old behavior, not this inventory.
 `listJournals` now uses a bounded query adapter and preserves
 the optional four-query count envelope. `pageStats` now reports bounded page
 counts, nested-page/orphan classification, and alias relations. `inspectPage`

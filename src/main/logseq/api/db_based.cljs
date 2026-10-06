@@ -565,17 +565,31 @@
                           properties))]
       (bean/->js (sdk-utils/normalize-keyword-for-json orphans false)))))
 
-(defn get-asset-attribute-names []
+(defn list-assets []
   (let [repo (state/get-current-repo)]
-    (p/let [attributes (db-async/<q
-                        repo
-                        {:transact-db? false}
-                        '[:find [?attr ...]
-                          :where
-                          [_ ?attr _]
-                          [(str ?attr) ?name]
-                          [(clojure.string/includes? ?name "asset")]])]
-      (bean/->js (mapv str attributes)))))
+    (when-not repo
+      (throw (js/Error. "No graph is open")))
+    (p/let [assets (db-async/<q
+                    repo
+                    {:transact-db? false}
+                    '[:find [(pull ?asset [:block/uuid :block/title
+                                          :logseq.property.asset/type :logseq.property.asset/size
+                                          :logseq.property.asset/checksum :logseq.property.asset/external-url
+                                          :logseq.property.asset/external-file-name]) ...]
+                      :where
+                      [?class :db/ident :logseq.class/Asset]
+                      [?asset :block/tags ?class]
+                      (not [?asset :logseq.property/deleted-at _])])]
+      (bean/->js
+       (mapv (fn [asset]
+               {:uuid (str (:block/uuid asset))
+                :title (:block/title asset)
+                :type (:logseq.property.asset/type asset)
+                :size (:logseq.property.asset/size asset)
+                :checksum (:logseq.property.asset/checksum asset)
+                :external_url (:logseq.property.asset/external-url asset)
+                :external_file_name (:logseq.property.asset/external-file-name asset)})
+             (sort-by #(str (:block/uuid %)) assets))))))
 
 (def ^:private property-users-ident-pattern
   #"(?i):[a-z][\w.-]*/[\w.?!+-]+")

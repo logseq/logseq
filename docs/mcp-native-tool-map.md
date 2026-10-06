@@ -47,7 +47,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `listClosedValues` | none | property/value pairs from `:block/closed-value-property` | dedicated `logseq.DB.getClosedValues` preserves the two-entity row shape | production route switched; local tests pass; same-graph built-in value sets returned |
 | `listOrphanTags` | none | exact Tag entities with no direct reverse tag holders | dedicated `logseq.DB.getOrphanTags` preserves the entity fields and unused-tag semantics | production route switched; local tests pass; same-graph orphan results cross-checked against holders and backlinks |
 | `listOrphanProperties` | none | qualified property idents with no data holders | dedicated `logseq.DB.getOrphanProperties` combines property inventory and used attribute idents; preserves `{ident, title, type}` | production route switched; local tests pass; same-graph results cross-checked against `getProperyUsers` |
-| `listAssets` | none | attribute-name discovery probe; explicitly unverified | `logseq.DB.getAssetAttributeNames` preserves the exact substring query and output strings; not a complete asset inventory | same-graph probe returned `[]`; status remains unverified, not a complete inventory |
+| `listAssets` | none | replaced the reference's attribute-name probe with asset records | `logseq.DB.listAssets` queries entities tagged with `:logseq.class/Asset`, excludes recycled assets, and returns UUID/title/type/size/checksum/external URL/file name in stable UUID order | local API/MCP metadata, filtering, empty-graph and error tests; live empty inventory and updated schema passed on 2026-10-06; populated inventory verified locally only; database inventory, not filesystem existence or unregistered-file discovery |
 | `listStatus` | none | entity/status-value pairs | dedicated `logseq.DB.getStatusRows` returns the query rows; MCP tool name and tuple shape stay unchanged | production route switched; local tests pass; same-graph empty result accepted |
 | `listRecycled` | none | all entities with `:logseq.property/deleted-at` | dedicated `logseq.DB.listRecycled` preserves deleted page and block records | production route switched; local tests pass; one recycled outline page unchanged before/after |
 
@@ -97,7 +97,8 @@ the full/terse response behavior. Batch writes remain non-atomic.
   verified because `:block/order` is not a normal direct write.
 - `deletePage`, `deleteTag`, `deleteProperty`, `clearPage`, and `removeBlock`
   retain acknowledgement and evidence requirements.
-- `listAssets` remains explicitly unverified until Logseq's asset model is
-  established.
+- `listAssets` now returns asset records rather than attribute-name strings.
+  It inventories non-recycled Asset-class entities, not files on disk; remote
+  or missing local files and null metadata must not be interpreted as verified files.
 - The Python reference intentionally exposes `creatTag` and
   `getProperyUsers`; the native contract must retain those names initially.

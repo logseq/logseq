@@ -1003,7 +1003,15 @@ export interface IDBProxy {
     value: any
     value_entity: Record<string, any> | null
   }>>
-  getAssetAttributeNames: () => Promise<Array<string>>
+  listAssets: () => Promise<Array<{
+    uuid: BlockUUID
+    title: string | null
+    type: string | null
+    size: number | null
+    checksum: string | null
+    external_url: string | null
+    external_file_name: string | null
+  }>>
   getPageData: (pageName: string) => Promise<Record<string, any>>
   inspectPage: (
     pageUuid: BlockUUID,

@@ -179,26 +179,58 @@
                    (is false (str error))))
         (p/finally done))))
 
-(deftest get-asset-attribute-names-preserves-discovery-query
+(deftest list-assets-refuses-a-missing-graph
+  (with-redefs [state/get-current-repo (constantly nil)]
+    (is (thrown-with-msg? js/Error #"No graph is open" (db-based-api/list-assets)))))
+
+(deftest list-assets-returns-registered-assets-and-excludes-recycled-and-probe-properties
   (test-helper/load-test-files
-   [{:page {:block/title "Asset Attribute Holder"}
-     :blocks [{:block/title "Asset Attribute Block"}]}])
+   [{:page {:block/title "Asset Inventory Page"}
+     :blocks [{:block/title "Local image"}
+              {:block/title "External PDF"}
+              {:block/title "Recycled asset"}
+              {:block/title "Metadata-only asset"}
+              {:block/title "Asset-looking block"}]}])
   (async done
     (-> (api-test/with-plugin-api
           (fn []
-            (let [block (test-helper/find-block-by-content "Asset Attribute Block")]
-              (p/let [asset-property (db-based-api/upsert-property "asset-probe" #js {:type "string"} nil)
-                      ordinary-property (db-based-api/upsert-property "ordinary-probe" #js {:type "string"} nil)
+            (let [local (test-helper/find-block-by-content "Local image")
+                  external (test-helper/find-block-by-content "External PDF")
+                  recycled (test-helper/find-block-by-content "Recycled asset")
+                  metadata-only (test-helper/find-block-by-content "Metadata-only asset")
+                  ordinary (test-helper/find-block-by-content "Asset-looking block")]
+                    (p/let [empty-result (db-based-api/list-assets)
+                      asset-property (db-based-api/upsert-property "asset-probe" #js {:type "string"} nil)
                       asset-ident (:ident (api-test/js->clj-kw asset-property))
-                      ordinary-ident (:ident (api-test/js->clj-kw ordinary-property))
                       _ (db-property-handler/set-block-property!
-                         (:db/id block) (keyword (subs asset-ident 1)) "asset value")
-                      _ (db-property-handler/set-block-property!
-                         (:db/id block) (keyword (subs ordinary-ident 1)) "ordinary value")
-                      result (db-based-api/get-asset-attribute-names)
-                      attributes (api-test/js->clj-kw result)]
-                (is (some #{asset-ident} attributes))
-                (is (not (some #{ordinary-ident} attributes)))))))
+                         (:db/id ordinary) (keyword (subs asset-ident 1)) "not an asset")
+                      _ (conn/transact! (state/get-current-repo)
+                                        [{:db/id (:db/id local) :block/tags [:logseq.class/Asset]
+                                          :logseq.property.asset/type "png" :logseq.property.asset/size 2048
+                                          :logseq.property.asset/checksum "fixture-checksum"}
+                                         {:db/id (:db/id external) :block/tags [:logseq.class/Asset]
+                                          :logseq.property.asset/type "pdf"
+                                          :logseq.property.asset/size 4096 :logseq.property.asset/checksum "external-checksum"
+                                          :logseq.property.asset/external-url "https://example.com/report.pdf"
+                                          :logseq.property.asset/external-file-name "report.pdf"}
+                                         {:db/id (:db/id recycled) :block/tags [:logseq.class/Asset]
+                                          :logseq.property.asset/type "jpg" :logseq.property/deleted-at 1
+                                          :logseq.property.asset/size 1024 :logseq.property.asset/checksum "recycled-checksum"}
+                                         {:db/id (:db/id metadata-only) :block/tags [:logseq.class/Asset]}])
+                      result (db-based-api/list-assets)
+                      assets (api-test/js->clj-kw result)
+                      by-title (into {} (map (juxt :title identity) assets))]
+                        (is (= [] (api-test/js->clj-kw empty-result)))
+                (is (= #{"Local image" "External PDF" "Metadata-only asset"} (set (keys by-title))))
+                (is (= (str (:block/uuid local)) (get-in by-title ["Local image" :uuid])))
+                (is (= "png" (get-in by-title ["Local image" :type])))
+                (is (= 2048 (get-in by-title ["Local image" :size])))
+                (is (= "fixture-checksum" (get-in by-title ["Local image" :checksum])))
+                (is (nil? (get-in by-title ["Local image" :external_url])))
+                (is (= "https://example.com/report.pdf" (get-in by-title ["External PDF" :external_url])))
+                (is (= "report.pdf" (get-in by-title ["External PDF" :external_file_name])))
+                (is (nil? (get-in by-title ["Metadata-only asset" :type])))
+                (is (= (sort (map :uuid assets)) (map :uuid assets)))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))

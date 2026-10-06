@@ -458,7 +458,7 @@
    :listAssets
    {:fn mcp-compat/list-assets
     :config #js {:title "List Assets"
-                 :description "Discover attributes whose names contain 'asset'. This is an unverified probe, not a complete asset inventory."
+                 :description "List non-recycled graph entities tagged with Logseq's Asset class. Returns UUID, title, file type, size in bytes, checksum, external URL and external file name when stored. Null metadata means unknown. This is a database inventory, not a filesystem scan: files may be remote or missing locally, and unregistered files are not included. No files are opened, downloaded, or modified."
                  :inputSchema #js {}}}})
 
 (defn call-api-tool [tool-fn api-fn args]
