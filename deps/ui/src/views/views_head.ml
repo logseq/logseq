@@ -71,18 +71,25 @@ let view_type_icon v =
 let view_tab_anchor_id inst (v : Wr.view_ent) =
   "view-tab-" ^ string_of_int inst.V.id ^ "-" ^ v.Wr.vu
 
-let view_tab inst (v : Wr.view_ent) : t =
+let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
+ fun ctx parent ->
+  (* icon/title/count ride v_sig — a rename or retype republishes the
+     same keyed item, and a mount-time snapshot froze the tab until the
+     next remount *)
+  let v0 = Signal.get v_sig in
   let isig = sig_of inst in
   let current_sig =
-    Signal.map (fun (s : V.vstate) -> s.V.view_uuid = v.Wr.vu) isig
+    Logseq_dom.own ctx
+      (Signal.map (fun (s : V.vstate) -> s.V.view_uuid = v0.Wr.vu) isig)
   in
   (* data-view-tab-id is a DOM marker with no component prop —
      accessibility_identifier carries the stable anchor *)
   Ui_parts.class_signal current_sig
     (fun cur -> "ls-view-tab" ^ if cur then "" else " ls-dim")
     (button ~variant:`ghost ~size:`sm
-       ~accessibility_identifier:(view_tab_anchor_id inst v)
+       ~accessibility_identifier:(view_tab_anchor_id inst v0)
        ~on_press:(fun _ ->
+         let v = Signal.get v_sig in
          if (V.get inst).V.view_uuid = v.Wr.vu then
            match E.get_element_by_id (view_tab_anchor_id inst v) with
            | Some b ->
@@ -112,34 +119,52 @@ let view_tab inst (v : Wr.view_ent) : t =
            refresh inst
          end)
        [ box ~style_class:"ls-icon-color-wrap"
-           [ icon_el (view_type_icon v) ]
-       ; text ~value:(V.display_title v) []
+           [ icon ~point_size:16
+               ~style_class:("ls-icon-" ^ view_type_icon v0)
+               ~name_signal:
+                 (Logseq_dom.own ctx
+                    (Signal.map
+                       (fun (v : Wr.view_ent) ->
+                         Views_table.icon_of (view_type_icon v))
+                       v_sig))
+               [] ]
+       ; text
+           ~value:(reactive (fun (v : Wr.view_ent) -> V.display_title v) v_sig)
+           []
        ; if_
            ~test:
-             (Signal.map
-                (fun (s : V.vstate) ->
-                  s.V.view_uuid = v.Wr.vu && inst.V.feature <> "query-result"
-                  && count_of s > 0)
-                isig)
+             (Logseq_dom.own ctx
+                (Signal.map
+                   (fun (s : V.vstate) ->
+                     s.V.view_uuid = v0.Wr.vu
+                     && inst.V.feature <> "query-result"
+                     && count_of s > 0)
+                   isig))
            (text ~style_class:"ls-count"
               ~value_signal:
-                (Signal.map
-                   (fun s -> string_of_int (count_of s)) isig)
+                (Logseq_dom.own ctx
+                   (Signal.map
+                      (fun s -> string_of_int (count_of s)) isig))
               []) ])
+    ctx parent
 
 (* .views > tabs + .ls-add-view (a fade target along with .view-actions) *)
 let tabs_el inst ~dim : t =
+ fun ctx parent ->
   row ~style_class:"views"
     [ D.keyed
-        ~source:(Signal.map (fun (s : V.vstate) -> s.V.views) (sig_of inst))
+        ~source:
+          (Logseq_dom.own ctx
+             (Signal.map (fun (s : V.vstate) -> s.V.views) (sig_of inst)))
         ~key:(fun (v : Wr.view_ent) -> v.Wr.vu)
         ~cmp:String.compare
-        ~mount:(fun v_sig -> view_tab inst (Signal.get v_sig))
+        ~mount:(view_tab inst)
     ; Ui_parts.class_signal dim
         (fun d -> "ls-add-view " ^ if d then "ls-dim" else "ls-lit")
         (button ~variant:`ghost ~size:`sm ~icon:`plus
            ~label:I.add_new_view
            ~on_press:(fun _ -> (V.ops ()).V.o_create_view inst) []) ]
+    ctx parent
 
 (* ---------- sorting popup ---------- *)
 
@@ -510,6 +535,7 @@ let more_actions_el inst : t =
 (* ---------- display type ---------- *)
 
 let display_type_el inst : t =
+ fun ctx parent ->
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
   Ui_parts.pressable
     ~on_press:(fun _ ->
@@ -535,13 +561,15 @@ let display_type_el inst : t =
                [ box ~style_class:"select-item"
                    [ box ~style_class:"ls-icon-color-wrap"
                        [ Views_table.icon_dyn
-                           (Signal.map
-                              (fun (s : V.vstate) ->
-                                match s.V.display_type with
-                                | "list" -> "list"
-                                | "gallery" -> "layout-grid"
-                                | _ -> "table")
-                              (sig_of inst)) ] ] ] ] ])
+                           (Logseq_dom.own ctx
+                              (Signal.map
+                                 (fun (s : V.vstate) ->
+                                   match s.V.display_type with
+                                   | "list" -> "list"
+                                   | "gallery" -> "layout-grid"
+                                   | _ -> "table")
+                                 (sig_of inst))) ] ] ] ] ])
+    ctx parent
 
 (* ---------- search ---------- *)
 
@@ -552,7 +580,8 @@ let search_el inst : t =
   let deb = E.debounce 300 in
   let input_id = "vsearch-" ^ string_of_int inst.V.id in
   let open_sig =
-    Signal.map (fun (s : V.vstate) -> s.V.search_open) (sig_of inst)
+    Logseq_dom.own ctx
+      (Signal.map (fun (s : V.vstate) -> s.V.search_open) (sig_of inst))
   in
   (* DOM-only keydown lost its Escape-closes-search path — no component
      event maps it *)
@@ -679,36 +708,43 @@ let filter_chip inst idx (f : V.filter_clause) : t =
           refresh inst)
         [] ]
 
+(* chips come off the live filters signal — if_ ~test:(filters <> [])
+   alone rebuilt only on the empty/nonempty boundary, so add/edit/remove
+   inside a nonempty set never repainted *)
 let filters_row inst : t =
  fun ctx parent ->
-  if_ ~test:(Signal.map (fun s -> s.V.filters <> []) (sig_of inst))
-    (fun ctx parent ->
-      let s = V.get inst in
-      let chips =
-        List.mapi (fun i f -> filter_chip inst i f) s.V.filters
-      in
-      row ~style_class:"filters-row"
-        [ row ~style_class:"ls-vf-chips" chips
-        ; (if List.length s.V.filters > 1 then
-             select ~style_class:"ls-vf-logic"
-               ~text:(if s.V.filters_or then I.match_any else I.match_all)
-               [ menu_item ~text:I.match_all ~selected:(not s.V.filters_or)
-                   ~on_press:(fun _ ->
-                     V.update inst (fun s ->
-                         { s with V.filters_or = false });
-                     V.persist_filters inst;
-                     refresh inst)
-                   []
-               ; menu_item ~text:I.match_any ~selected:s.V.filters_or
-                   ~on_press:(fun _ ->
-                     V.update inst (fun s ->
-                         { s with V.filters_or = true });
-                     V.persist_filters inst;
-                     refresh inst)
-                   [] ]
-           else spacer ~key:"no-logic" [])
-        ]
-        ctx parent)
+  (reactive
+     ~equal:
+       (fun (a : V.vstate) (b : V.vstate) ->
+         a.V.filters == b.V.filters && a.V.filters_or = b.V.filters_or)
+     (fun (s : V.vstate) ->
+       if s.V.filters = [] then Logseq_dom.nothing
+       else
+         let chips =
+           List.mapi (fun i f -> filter_chip inst i f) s.V.filters
+         in
+         row ~style_class:"filters-row"
+           [ row ~style_class:"ls-vf-chips" chips
+           ; (if List.length s.V.filters > 1 then
+                select ~style_class:"ls-vf-logic"
+                  ~text:(if s.V.filters_or then I.match_any else I.match_all)
+                  [ menu_item ~text:I.match_all ~selected:(not s.V.filters_or)
+                      ~on_press:(fun _ ->
+                        V.update inst (fun s ->
+                            { s with V.filters_or = false });
+                        V.persist_filters inst;
+                        refresh inst)
+                      []
+                  ; menu_item ~text:I.match_any ~selected:s.V.filters_or
+                      ~on_press:(fun _ ->
+                        V.update inst (fun s ->
+                            { s with V.filters_or = true });
+                        V.persist_filters inst;
+                        refresh inst)
+                      [] ]
+              else spacer ~key:"no-logic" [])
+           ])
+     (sig_of inst))
     ctx parent
 
 (* ---------- head ---------- *)
@@ -735,9 +771,10 @@ let render_head inst : t =
            | V.KQuery _ ->
                text ~style_class:"ls-query-count"
                  ~value_signal:
-                   (Signal.map
-                      (fun (s : V.vstate) -> I.live_query (count_of s))
-                      (sig_of inst))
+                   (Logseq_dom.own ctx
+                      (Signal.map
+                         (fun (s : V.vstate) -> I.live_query (count_of s))
+                         (sig_of inst)))
                  []
            | _ -> tabs_el inst ~dim) ]
     ; Ui_parts.class_signal dim

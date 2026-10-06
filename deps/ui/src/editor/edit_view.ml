@@ -445,7 +445,10 @@ let overlay (frame : frame Signal.signal) : t =
   (column ~style_class:"ed-overlay"
      [ keyed ~source:sel_s ~key:fst ~cmp:Int.compare ~mount:sel_rect_view
      ; if_
-         ~test:(reactive (fun f -> Option.is_some f.Edit_input.caret) frame)
+         ~test:
+           (own context
+              (Signal.map
+                 (fun f -> Option.is_some f.Edit_input.caret) frame))
          (caret_view frame)
      ])
     context parent

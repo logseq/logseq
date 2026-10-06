@@ -514,22 +514,28 @@ let header_select_cell inst : t =
    arrow for the active sort column — the arrow's presence is
    signal-gated (shape change -> if_), its glyph a reactive prop *)
 let header_button inst (c : V.column) : t =
+ fun ctx parent ->
+  (* sort_sig/arrow derivations ride the mount's scope — the shared
+     vstate signal outlives the button otherwise *)
   let sort_sig =
-    Signal.map
-      (fun (s : V.vstate) ->
-        List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
-      inst.V.st.Signal.state_signal
+    D.own ctx
+      (Signal.map
+         (fun (s : V.vstate) ->
+           List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
+         inst.V.st.Signal.state_signal)
   in
   button ~variant:`ghost ~size:`sm ~text:c.V.c_name ~grow:1.
     ~main:`start ~height:32 ~padding_horizontal:8
-    [ if_ ~test:(Signal.map (fun o -> o <> None) sort_sig)
+    [ if_ ~test:(D.own ctx (Signal.map (fun o -> o <> None) sort_sig))
         (icon_dyn
-           (Signal.map
-              (fun o ->
-                match o with
-                | Some x when x.V.s_asc -> "arrow-up"
-                | _ -> "arrow-down")
-              sort_sig)) ]
+           (D.own ctx
+              (Signal.map
+                 (fun o ->
+                   match o with
+                   | Some x when x.V.s_asc -> "arrow-up"
+                   | _ -> "arrow-down")
+                 sort_sig))) ]
+    ctx parent
 
 let set_column_sort inst (c : V.column) asc =
   V.update inst (fun s ->
@@ -711,8 +717,13 @@ let delete_selected inst () =
   end
 
 let action_bar inst : t =
+ fun ctx parent ->
   let isig = sig_of inst in
-  if_ ~test:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
+  (if_
+     ~test:
+       (D.own ctx
+          (Signal.map
+             (fun s -> not (V.Sset.is_empty s.V.selected)) isig))
     (box ~style_class:"table-action-bar absolute top-0 left-8"
        [ row ~gap:4 ~cross:`center ~background:"secondary"
            ~style_class:"ls-table-actions"
@@ -726,7 +737,8 @@ let action_bar inst : t =
            ; button ~variant:`ghost ~size:`icon ~icon:`trash
                ~on_press:(fun _ -> delete_selected inst ()) []
            ]
-       ])
+       ]))
+    ctx parent
 
 (* ---------- table ---------- *)
 
@@ -808,9 +820,10 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
 let row_stream inst cols uuids : t =
  fun ctx parent ->
   let items_sig =
-    Signal.map
-      (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
-      inst.V.st.Signal.state_signal
+    D.own ctx
+      (Signal.map
+         (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
+         inst.V.st.Signal.state_signal)
   in
   let items = Signal.get items_sig in
   if Virt_list.enabled ~virtualize:true (List.length items) then
@@ -956,6 +969,39 @@ let row_title s u =
 let gallery_card_el ~title : t =
   box ~style_class:"ls-card-item" [ text ~value:title [] ]
 
+(* keyed-row variant: an in-place block edit republishes the item
+   signal under the same key, so the title rides a reactive prop off it
+   instead of freezing the mount-time snapshot *)
+let gallery_card_el_sig inst (item_sig : row_item Signal.signal) : t =
+  box ~style_class:"ls-card-item"
+    [ text
+        ~value:
+          (reactive
+             (fun ((u, blk) : row_item) ->
+               match W.get blk "block/title" with
+               | Some t_ -> Wr.prop_text t_
+               | None -> row_title (V.get inst) u)
+             item_sig)
+        [] ]
+
+(* same freeze fix as gallery_card_el_sig — the row's title follows the
+   republished item signal *)
+let list_row_el_sig inst ~row_uuid (item_sig : row_item Signal.signal) : t =
+  box ~style_class:"ls-block"
+    ~accessibility_identifier:("ls-block-" ^ row_uuid)
+    [ row ~gap:4 ~style_class:"block-main-container"
+        [ box ~style_class:"block-content"
+            ~accessibility_identifier:("block-content-" ^ row_uuid)
+            [ text ~style_class:"block-title-wrap"
+                ~value:
+                  (reactive
+                     (fun ((u, blk) : row_item) ->
+                       match W.get blk "block/title" with
+                       | Some t_ -> Wr.prop_text t_
+                       | None -> row_title (V.get inst) u)
+                     item_sig)
+                [] ] ] ]
+
 (* ---------- foldable groups ---------- *)
 
 (* cljs ui/foldable: .flex.flex-col > (.ls-foldable-title.content +
@@ -965,12 +1011,14 @@ let gallery_card_el ~title : t =
    style_class via Ui_parts.class_signal. caret-right is a custom path
    icon (registered in app_icons). *)
 let foldable inst ~key ~title ~(body : t) : t =
+ fun ctx parent ->
   let collapsed_sig =
-    Signal.map
-      (fun (s : V.vstate) -> V.Sset.mem key s.V.collapsed_groups)
-      inst.V.st.Signal.state_signal
+    D.own ctx
+      (Signal.map
+         (fun (s : V.vstate) -> V.Sset.mem key s.V.collapsed_groups)
+         inst.V.st.Signal.state_signal)
   in
-  column
+  (column
     [ row ~style_class:"ls-foldable-title content"
         [ row ~grow:1. ~style_class:"foldable-title"
             [ row ~cross:`center ~gap:4
@@ -1002,7 +1050,8 @@ let foldable inst ~key ~title ~(body : t) : t =
         (fun c ->
           "ls-foldable-content" ^ if c then " is-collapsed" else "")
         (box ~key:"content"
-           [ box ~style_class:"ls-foldable-content-inner" [ body ] ]) ]
+           [ box ~style_class:"ls-foldable-content-inner" [ body ] ]) ])
+    ctx parent
 
 let group_title s gv =
   match gv with
@@ -1021,9 +1070,10 @@ let group_title s gv =
 let list_stream inst uuids : t =
  fun ctx parent ->
   let items_sig =
-    Signal.map
-      (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
-      inst.V.st.Signal.state_signal
+    D.own ctx
+      (Signal.map
+         (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
+         inst.V.st.Signal.state_signal)
   in
   let items = Signal.get items_sig in
   let title_of s (_, blk) =
@@ -1047,8 +1097,8 @@ let list_stream inst uuids : t =
   else
     keyed ~source:items_sig ~key:keyed_row_key ~cmp:String.compare
       ~mount:(fun item_sig ->
-        let u, blk = Signal.get item_sig in
-        list_row_el ~row_uuid:u ~title:(title_of (V.get inst) (u, blk)))
+        let u, _ = Signal.get item_sig in
+        list_row_el_sig inst ~row_uuid:u item_sig)
       ctx parent
 
 let render_list inst s : t =
@@ -1079,21 +1129,18 @@ let render_list inst s : t =
            gs)
   | _ -> list_stream inst (all_row_uuids s)
 
-let render_gallery inst s : t =
+let render_gallery inst _s : t =
+ fun ctx parent ->
   row ~gap:8 ~padding:8 ~columns:4
     [ keyed
         ~source:
-          (Signal.map
-             (fun (s' : V.vstate) -> flat_items s')
-             inst.V.st.Signal.state_signal)
+          (D.own ctx
+             (Signal.map
+                (fun (s' : V.vstate) -> flat_items s')
+                inst.V.st.Signal.state_signal))
         ~key:keyed_row_key ~cmp:String.compare
-        ~mount:(fun item_sig ->
-          let u, blk = Signal.get item_sig in
-          gallery_card_el
-            ~title:
-              (match W.get blk "block/title" with
-               | Some t_ -> Wr.prop_text t_
-               | None -> row_title s u)) ]
+        ~mount:(fun item_sig -> gallery_card_el_sig inst item_sig) ]
+    ctx parent
 
 let render_table inst s : t =
   match s.V.data with

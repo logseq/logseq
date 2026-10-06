@@ -103,27 +103,34 @@ let rec view () : t =
     if not (S.ready ()) then Logseq_dom.nothing ctx parent
     else node () ctx parent
 
-and node () : t = (
+and node () : t =
+ fun ctx parent -> (
     install_listeners ();
+    (* every map level holds an upstream subscription on the shared state
+       signals — own each so the mount scope releases them *)
     let sel_sig =
-      Signal.map2
-        (fun _sel bar -> (Editor_actions.selected_uuids (), bar))
-        (S.selected_sig ()) (S.action_bar_sig ())
+      Logseq_dom.own ctx
+        (Signal.map2
+           (fun _sel bar -> (Editor_actions.selected_uuids (), bar))
+           (S.selected_sig ()) (S.action_bar_sig ()))
     in
     let source =
       let base =
-        Signal.map (fun (sel, bar) -> (sel, bar, false, false)) sel_sig
+        Logseq_dom.own ctx
+          (Signal.map (fun (sel, bar) -> (sel, bar, false, false)) sel_sig)
       in
       let with_popup =
         match Popups_state.non_cm_popup_signal () with
         | Some ps ->
-            Signal.map2 (fun (sel, bar, _, c) p -> (sel, bar, p, c)) base ps
+            Logseq_dom.own ctx
+              (Signal.map2 (fun (sel, bar, _, c) p -> (sel, bar, p, c)) base ps)
         | None -> base
       in
       let with_cmdk =
         match Cmdk_state.open_signal () with
         | Some cs ->
-            Signal.map2 (fun (sel, bar, p, _) c -> (sel, bar, p, c)) with_popup cs
+            Logseq_dom.own ctx
+              (Signal.map2 (fun (sel, bar, p, _) c -> (sel, bar, p, c)) with_popup cs)
         | None -> with_popup
       in
       with_cmdk
@@ -185,3 +192,4 @@ and node () : t = (
                     ]
                 ]))
       source )
+    ctx parent

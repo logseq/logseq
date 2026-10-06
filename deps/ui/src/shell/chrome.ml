@@ -405,7 +405,8 @@ let toggle_rtc_details () =
   | None -> open_rtc_details ()
 
 let rtc_indicator (ms : Model.t Signal.signal) : t =
-  reactive
+ fun ctx parent ->
+  (reactive
     (fun ((repo : string option), (r : Model.rtc option)) ->
       Rtc_flows.refresh_db_rtc_uuid repo;
       last_rtc := r;
@@ -466,14 +467,17 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
                   []
               ]
           ]))
-    (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)
+    (Logseq_dom.own ctx
+       (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)))
+    ctx parent
 
 (* cljs indicator.cljs downloading-detail / uploading-detail — ghost
    buttons visible while the latest rtc.log download|upload entry's
    sub-type isn't *-completed; gated on logged-in only (header.cljs) *)
 let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
     =
-  reactive
+ fun ctx parent ->
+  (reactive
     (fun (active : bool) ->
       if not (Rtc_flows.logged_in () && active) then
         spacer ~key:"td-off" ~style_class:"hidden" []
@@ -485,10 +489,12 @@ let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
                (if downloading then "sync/downloading"
                 else "sync/uploading"))
           [])
-    (Signal.map
-       (fun (m : Model.t) ->
-         if downloading then m.rtc_downloading else m.rtc_uploading)
-       ms)
+    (Logseq_dom.own ctx
+       (Signal.map
+          (fun (m : Model.t) ->
+            if downloading then m.rtc_downloading else m.rtc_uploading)
+          ms)))
+    ctx parent
 
 (* cljs header.cljs local-graph-sync-button — cloud ghost button that
    uploads the open local graph to the sync server. Visible when the
@@ -497,7 +503,8 @@ let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
    cljs use-db-rtc-uuid (the button can flash on a remote graph until
    the uuid resolves — cljs has the same window) *)
 let local_graph_sync_button (ms : Model.t Signal.signal) : t =
-  reactive
+ fun ctx parent ->
+  (reactive
     (fun ((repo : string option), (repos : string list), (_rtc : Model.rtc option)) ->
       (* m.rtc joins the input so the db-sync-start broadcast after an
          upload re-renders — refresh_db_rtc_uuid then resolves the new
@@ -523,7 +530,9 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
             | None -> ())
           []
       else spacer ~key:"lgs-off" ~style_class:"hidden" [])
-    (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)
+    (Logseq_dom.own ctx
+       (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)))
+    ctx parent
 
 (* cljs components/svg.cljs loader-fn — the ui/loading spinner
    (.lui-spinner default is size-5 = the old w-5 h-5 animate-spin svg) *)

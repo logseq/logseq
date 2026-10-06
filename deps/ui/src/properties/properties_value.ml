@@ -487,7 +487,7 @@ let scalar_edit_cell ctx row : t =
     add_active_edit ctx row;
     close_editor := (fun () -> commit true));
   (column ~gap:0 ~grow:1.0
-     [ if_ ~test:(Signal.map (fun e -> not e) (Signal.value editing))
+     [ if_ ~test:(Logseq_dom.own context (Signal.map (fun e -> not e) (Signal.value editing)))
          (value_button ~text:initial ~on_press:(fun _ ->
               open_editor ~steal:true ()))
      ; if_ ~test:(Signal.value editing)

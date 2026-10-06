@@ -13,7 +13,8 @@ let opt_row st i label =
 (* the deck picker is a select trigger + anchored dropdown_menu —
    mounted = presented on every host; on_dismiss covers outside-tap *)
 let opts_box st =
-  reactive
+ fun ctx parent ->
+  (reactive
     (fun (opts_open, decks) ->
       if not opts_open then spacer ~key:"opts-closed" []
       else
@@ -26,9 +27,11 @@ let opts_box st =
         dropdown_menu ~key:"opts" ~anchor:`below ~anchor_alignment:`start
           ~on_dismiss:(fun _ -> Cards_state.toggle_opts st)
           options)
-    (Signal.map2 (fun a b -> (a, b))
-       (Signal.value st.Cards_state.opts_open)
-       (Signal.value st.Cards_state.decks))
+    (Logseq_dom.own ctx
+       (Signal.map2 (fun a b -> (a, b))
+          (Signal.value st.Cards_state.opts_open)
+          (Signal.value st.Cards_state.decks))))
+    ctx parent
 
 let selected_label sel decks =
   if sel < 0 then t_ "flashcard/all-cards"
@@ -136,7 +139,15 @@ let card_view st _pos phase title =
     ]
 
 let cards_body st =
-  reactive
+ fun ctx parent ->
+  (* each map level owns its upstream subscription on the shared cells *)
+  let cp_sig =
+    Logseq_dom.own ctx
+      (Signal.map2 (fun a b -> (a, b))
+         (Signal.value st.Cards_state.cards)
+         (Signal.value st.Cards_state.pos))
+  in
+  (reactive
     (fun (cards, pos, phase) ->
       match List.nth_opt cards pos with
       | None ->
@@ -151,13 +162,12 @@ let cards_body st =
       | Some title ->
           column ~key:"cards" ~style_class:"ls-cards-col" ~grow:1.
             [ card_view st pos phase title ])
-    (Signal.map2
-       (fun (a, b) c -> (a, b, c))
+    (Logseq_dom.own ctx
        (Signal.map2
-          (fun a b -> (a, b))
-          (Signal.value st.Cards_state.cards)
-          (Signal.value st.Cards_state.pos))
-       (Signal.value st.Cards_state.phase))
+          (fun (a, b) c -> (a, b, c))
+          cp_sig
+          (Signal.value st.Cards_state.phase))))
+    ctx parent
 
 (* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label
    :flashcards__cp} — scrim and dialog content are SIBLINGS here, like

@@ -1080,6 +1080,7 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
    border via .journal-last-item *)
 let journal_item_sig (ms : Model.t Signal.signal)
     (ps : Model.page Signal.signal) : t =
+ fun ctx parent ->
   let p0 = Signal.get ps in
   let key =
     Option.value p0.Model.page_uuid ~default:p0.Model.page_title
@@ -1098,16 +1099,22 @@ let journal_item_sig (ms : Model.t Signal.signal)
     && a.Model.page_db_collapsable = b.Model.page_db_collapsable
     && a.Model.page_uuid = b.Model.page_uuid
   in
+  (* every derivation off ps/ms is owned into the item's scope —
+     otherwise each mounted journal leaves live subscribers on the
+     shared model signal *)
   let blocks_sig =
-    Signal.map (fun (p : Model.page) -> p.Model.page_blocks) ps
+    Logseq_dom.own ctx
+      (Signal.map (fun (p : Model.page) -> p.Model.page_blocks) ps)
   in
-  let nonempty = Signal.map (fun bs -> bs <> []) blocks_sig in
+  let nonempty =
+    Logseq_dom.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
+  in
   let jrefs_eq (a : Model.page) (b : Model.page) =
     a.Model.page_linked_refs == b.Model.page_linked_refs
     && is_today_journal a = is_today_journal b
   in
   Ui_parts.class_signal
-    (Signal.map2 (fun _ _ -> ()) ps ms)
+    (Logseq_dom.own ctx (Signal.map2 (fun _ _ -> ()) ps ms))
     (fun _ ->
       "journal-item content relative"
       ^ if is_last () then " journal-last-item" else "")
@@ -1126,10 +1133,11 @@ let journal_item_sig (ms : Model.t Signal.signal)
                         { (Signal.get ms) with
                           Model.editing_title = editing_title }
                         p)
-                    (Signal.map2
-                       (fun (p : Model.page) (m : Model.t) ->
-                         (p, m.Model.editing_title))
-                       ps ms)
+                    (Logseq_dom.own ctx
+                       (Signal.map2
+                          (fun (p : Model.page) (m : Model.t) ->
+                            (p, m.Model.editing_title))
+                          ps ms))
                 ]
             ; column ~key:"page-blocks" ~style_class:"ls-page-blocks"
                 [ box ~key:"page-blocks-inner"
@@ -1166,8 +1174,8 @@ let journal_item_sig (ms : Model.t Signal.signal)
                 ps
             ]
         ]
-    ]
-    )
+    ])
+    ctx parent
 
 (* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:
    #journals > div > div > div[data-testid=virtuoso-item-list] > div >
@@ -1177,10 +1185,12 @@ let journal_item_sig (ms : Model.t Signal.signal)
    through per-item signals — that's what keeps an outliner op from
    tearing down every mounted block row. *)
 let journals_view_ms (ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
   let journals_sig =
-    Signal.map (fun (m : Model.t) -> m.Model.journals) ms
+    Logseq_dom.own ctx
+      (Signal.map (fun (m : Model.t) -> m.Model.journals) ms)
   in
-  box ~key:"journals" ~accessibility_identifier:"journals"
+  (box ~key:"journals" ~accessibility_identifier:"journals"
     ~style_class:"h-full"
     [ box ~key:"js"
         [ box ~key:"jvp"
@@ -1188,7 +1198,9 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
                 ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
                 [ Logseq_dom.if_
-                    ~test:(Signal.map (fun js -> js = []) journals_sig)
+                    ~test:
+                      (Logseq_dom.own ctx
+                         (Signal.map (fun js -> js = []) journals_sig))
                     (box ~key:"jp" ~padding:24
                        ~style_class:
                          "journal-item-placeholder animate-pulse" [])
@@ -1201,7 +1213,8 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
                 ]
             ]
         ]
-    ]
+    ])
+    ctx parent
 
 let not_found_view name : t =
   column ~key:"not-found" ~style_class:"page"
@@ -1279,8 +1292,11 @@ let blocks_sig_of (ms : Model.t Signal.signal) =
    items whose record actually changed, so a delta splice remounts the
    touched row instead of re-diffing every mounted block *)
 let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
-  let blocks_sig = blocks_sig_of ms in
-  let nonempty = Signal.map (fun bs -> bs <> []) blocks_sig in
+ fun ctx parent ->
+  let blocks_sig = Logseq_dom.own ctx (blocks_sig_of ms) in
+  let nonempty =
+    Logseq_dom.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
+  in
   let keyed_list =
     box ~key:"blw" ~style_class:"blocks-list-wrap"
       ~data_attrs:[ ("data-level", "0") ]
@@ -1310,7 +1326,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     else keyed_list
   in
   (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
-  column ~key:"page-blocks" ~style_class:"ls-page-blocks"
+  (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
     [ box ~key:"page-blocks-inner"
         ~style_class:"page-blocks-inner relative"
         ~data_attrs:
@@ -1329,7 +1345,8 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
             [ Logseq_dom.if_ ~test:nonempty list_el ]
         ; add_button_el ?puuid ~has_children:(fun _ -> nonempty)
         ]
-    ]
+    ])
+    ctx parent
 
 let title_row (m : Model.t) (page : Model.page) : t =
   row ~key:"page-title-row" ~main:`space_between

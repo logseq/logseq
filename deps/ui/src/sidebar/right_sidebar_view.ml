@@ -406,16 +406,19 @@ let inner st =
     ]
 
 let render (ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
   let st = Sidebar_state.ensure ms in
-  Logseq_dom.fragment
-    [ (* aria-value*/orientation attrs on the resizer were inert DOM
-         markup — the separator kind carries the role *)
-      separator ~key:"rs-resizer" ~orientation:`vertical
-        ~style_class:"resizer" []
-    ; if_
-        ~test:
-          (Signal.map
-             (fun (m : Model.t) -> m.Model.right_sidebar_open)
-             ms)
-        (inner st)
-    ]
+  (Logseq_dom.fragment
+     [ (* aria-value*/orientation attrs on the resizer were inert DOM
+          markup — the separator kind carries the role *)
+       separator ~key:"rs-resizer" ~orientation:`vertical
+         ~style_class:"resizer" []
+     ; if_
+         ~test:
+           (Logseq_dom.own ctx
+              (Signal.map
+                 (fun (m : Model.t) -> m.Model.right_sidebar_open)
+                 ms))
+         (inner st)
+     ])
+    ctx parent

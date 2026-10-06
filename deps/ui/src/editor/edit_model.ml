@@ -483,8 +483,15 @@ let select_all m =
 let composing m = Option.is_some m.composition
 let composition_range m = m.composition
 
+(* textarea semantics: a live selection is replaced by the composition,
+   so it is spliced out before the marked range begins — otherwise
+   committing "字" over a "hello" selection yields "hello字" *)
 let composition_begin m off =
-  let off = clamp_caret m.units m.source off in
+  let m, off =
+    match selection_range m with
+    | Some (lo, hi) -> (splice m lo hi "", lo)
+    | None -> (m, clamp_caret m.units m.source off)
+  in
   { m with composition = Some (off, off); caret = off; anchor = None }
 
 let composition_update m ~len =

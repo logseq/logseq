@@ -62,13 +62,15 @@ let row_class_sig uuid blank embed (b : Model.block) =
 
 (* same class signal driven by a per-item block signal — keyed rows get
    fresh block records on republish, so blank/embed/order-list must not
-   be captured at mount *)
+   be captured at mount. Fused into one map2: a map over a map leaks the
+   inner derivation's upstream subscription — the outer's owner can't
+   reach it *)
 let row_class_sig_of (bs : Model.block Signal.signal) =
-  Logseq_dom.class_signal
-    (Signal.map2 (fun a b -> (a, b)) bs (S.selected_sig ()))
-    (fun ((b : Model.block), selected) ->
+  Signal.map2
+    (fun (b : Model.block) selected ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_class_str b uuid selected)
+      Lui_protocol.StringValue (row_class_str b uuid selected))
+    bs (S.selected_sig ())
 
 (* effective collapse for a block: scoped UI overrides, then persisted
    set || view default — projected on the [collapse_view] carried by
@@ -109,11 +111,12 @@ let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
       row_attrs_of ~scope ~depth uuid b v)
 
 let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
-  Logseq_dom.attrs_signal
-    (Signal.map2 (fun a b -> (a, b)) bs (S.collapse_sig ()))
-    (fun ((b : Model.block), v) ->
+  Signal.map2
+    (fun (b : Model.block) (v : S.collapse_view) ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_attrs_of ~scope ~depth uuid b v)
+      Lui_protocol.StringValue
+        (Logseq_dom.attrs_json (row_attrs_of ~scope ~depth uuid b v)))
+    bs (S.collapse_sig ())
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
   Signal.map
@@ -195,6 +198,7 @@ let private_tag_ident (ident : string) : bool =
 (* cljs block-control-icon-size: heading chrome sizes differ, collapsed
    bullets shrink *)
 let control_wrap ~scope ~library uuid (b : Model.block) : t =
+ fun ctx parent ->
   let order_list = b.Model.block_order_list = Some "number" in
   let bullet_cls =
     "bullet-container cursor"
@@ -210,8 +214,9 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
   in
   (* one derived signal for all collapse-driven classes in this row —
      a fresh map per class_signal triples the subscriptions on every
-     S.set publish *)
-  let cs = collapsed_sig ~scope b in
+     S.set publish. Owned into the row's scope so the collapse_sig
+     subscription dies on unmount *)
+  let cs = Logseq_dom.own ctx (collapsed_sig ~scope b) in
   (* #dot-<uuid> + blockid/draggable on the bullet stays dom (e2e
      target + imperative dnd contract); the rest rides data_attrs and
      reactive style_class — --ls-block-icon-size lives in the
@@ -258,6 +263,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             ]
         ]
     ]
+    ctx parent
 
 (* cljs *control-show? (block-mouse-over/-leave on the main container):
    the fold caret shows only while hovering a collapsable-or-collapsed
@@ -311,11 +317,12 @@ let content_wrapper uuid (b : Model.block) : t =
     ]
 
 let content_or_editor ~editable uuid scope (b : Model.block) : t =
+ fun ctx parent ->
   (* cljs unmounts .block-content while editing and removes the editor
      entirely in normal mode — .block-title-wrap must be absent for the
      edited block or e2e counts a stale title *)
 
-  reactive
+  (reactive
     (fun editing ->
       match b.Model.block_asset_type with
       | Some _ ->
@@ -335,13 +342,17 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
           | _ ->
               if editing && editable then editor_el uuid scope
               else content_wrapper uuid b))
-    (Signal.map
-       (fun e ->
-         match e with
-         | Some e -> e.S.uuid = uuid && e.S.scope = scope
+    (* the derivation outlives the mount unless it's owned into the
+       row's scope — editing_sig is shared *)
+    (Logseq_dom.own ctx
+       (Signal.map
+          (fun e ->
+            match e with
+            | Some e -> e.S.uuid = uuid && e.S.scope = scope
 
-         | None -> false)
-       (S.editing_sig ()))
+            | None -> false)
+          (S.editing_sig ()))))
+    ctx parent
 
 (* -- tags chips (components/block.cljs tags-cp): sibling of the content
    wrapper so they stay visible while the block is being edited. Tags that
@@ -545,6 +556,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
    rebuilt only when the row's own block record changes *)
 and row_sig ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
+ fun ctx parent ->
   let b0 = Signal.get bs in
   let key = block_key b0 in
   (* the record isn't the only input to row_main: Render resolves
@@ -570,7 +582,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
             || contains_sub title ("((" ^ u ^ "))"))
       ib
   in
-  dom ~key:("ls-" ^ scope ^ "-" ^ key)
+  (dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig_of bs)
     ~attrs_signal_v:(row_attrs_sig_of ~scope ~depth bs)
     [ reactive
@@ -579,40 +591,51 @@ and row_sig ~depth ~editable ~library ~virtualize scope
           a == b && ga = gb && not (gen_bumped a ia ib))
         (fun ((b : Model.block), _g, _i) ->
           row_main ~editable ~library scope b)
-        (Signal.map2
-           (fun (b : Model.block) (_tick : int) ->
-             let g, i = Render_inline.invalidation () in
-             (b, g, i))
-           bs (S.invalidation_sig ()))
+        (Logseq_dom.own ctx
+           (Signal.map2
+              (fun (b : Model.block) (_tick : int) ->
+                let g, i = Render_inline.invalidation () in
+                (b, g, i))
+              bs (S.invalidation_sig ())))
     ; Properties_area.block_area
         ~uuid:(Option.value b0.Model.block_uuid ~default:"")
-    ; (if Render.is_query_block b0 then
-         Render.query_below_el
-           (Option.value b0.Model.block_uuid ~default:"")
-       else if Render.is_cards_block b0 then
-         Render.query_below_el
-           (Option.value b0.Model.block_uuid ~default:"")
-       else Logseq_dom.nothing)
+    ; (* the query/cards shell keys off the live block record — a block
+         that becomes a query/cards block after mount (title or property
+         edit) republishes bs and mounts the section instead of keeping
+         the mount-time b0 snapshot *)
+      Logseq_dom.if_
+        ~test:
+          (Logseq_dom.own ctx
+             (Signal.map
+                (fun (b : Model.block) ->
+                  Render.is_query_block b || Render.is_cards_block b)
+                bs))
+        (Render.query_below_el
+           (Option.value b0.Model.block_uuid ~default:""))
     ; row_children ~depth ~editable ~library ~virtualize scope bs
-    ]
+    ])
+    ctx parent
 
 and row_children ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
+ fun ctx parent ->
   (* gate only on show/hide: children membership changes go through the
      keyed list inside children_dom — remounting the whole subtree on
      every splice (indent/outdent/collapse-adjacent edits) rebuilt
-     ~110 nodes per op *)
+     ~110 nodes per op. Owned into the row's scope so the map2's
+     subscription on the shared collapse_sig dies with the row *)
   let show_sig =
-    Signal.map2
-      (fun (b : Model.block) (v : S.collapse_view) ->
-        let uuid = Option.value b.block_uuid ~default:"" in
-        not
-          (effective_collapsed_cv ~scope uuid b.block_default_collapsed v
-          || Comments.is_comments_area b
-          || S.children_of b = []))
-      bs (S.collapse_sig ())
+    Logseq_dom.own ctx
+      (Signal.map2
+         (fun (b : Model.block) (v : S.collapse_view) ->
+           let uuid = Option.value b.block_uuid ~default:"" in
+           not
+             (effective_collapsed_cv ~scope uuid b.block_default_collapsed v
+             || Comments.is_comments_area b
+             || S.children_of b = []))
+         bs (S.collapse_sig ()))
   in
-  reactive
+  (reactive
     (fun show ->
       if not show then Logseq_dom.nothing
       else
@@ -620,7 +643,8 @@ and row_children ~depth ~editable ~library ~virtualize scope
         let uuid = Option.value b.block_uuid ~default:"" in
         children_dom ~depth ~editable ~library ~virtualize uuid scope
           bs)
-    show_sig
+    show_sig)
+    ctx parent
 
 and block_row_sig
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
@@ -650,8 +674,9 @@ and estimate_children_height (b : Model.block) : float =
    its own windowed list inside .blocks-list-wrap *)
 and child_list ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
+ fun ctx parent ->
   let kids = S.children_of (Signal.get bs) in
-  box ~key:("blw-" ^ uuid) ~style_class:"blocks-list-wrap"
+  (box ~key:("blw-" ^ uuid) ~style_class:"blocks-list-wrap"
     ~data_attrs:
       (("data-level", string_of_int (depth + 1))
        :: (if List.length kids >= 64 then
@@ -667,10 +692,12 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
        (* keyed like the top-level list: indent/outdent/move splices a
           row in or out and only that row's node moves — siblings keep
           their DOM identity instead of the whole subtree remounting *)
-       [ Logseq_dom.keyed ~source:(Signal.map S.children_of bs)
+       [ Logseq_dom.keyed
+           ~source:(Logseq_dom.own ctx (Signal.map S.children_of bs))
            ~key:block_key ~cmp:String.compare
            ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
-                     ~library ~virtualize) ])
+                     ~library ~virtualize) ]))
+    ctx parent
 
 and children_dom ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
@@ -702,7 +729,14 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
  fun ctx parent ->
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
   if_
-    ~test:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
+    ~test:
+      (Logseq_dom.own ctx
+         (Signal.map
+            (fun v ->
+              not
+                (effective_collapsed_cv ~scope uuid
+                   b.block_default_collapsed v))
+            (S.collapse_sig ())))
     (children_dom ~depth ~editable ~library ~virtualize uuid scope bs)
     ctx parent
 

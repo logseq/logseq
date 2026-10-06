@@ -510,10 +510,12 @@ let group_header (st : S.t) (g : S.group) : t =
       ]
 
 let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
+ fun ctx parent ->
   let items_sig =
-    Signal.map (fun (g : S.group) -> g.S.gitems) group_sig
+    Logseq_dom.own ctx
+      (Signal.map (fun (g : S.group) -> g.S.gitems) group_sig)
   in
-  column ~key:"group" ~style_class:(group_wrapper_class (Signal.get group_sig))
+  (column ~key:"group" ~style_class:(group_wrapper_class (Signal.get group_sig))
     [ reactive ~equal:(fun (a : S.group) (b : S.group) ->
           a.S.gtitle = b.S.gtitle && a.S.gtotal = b.S.gtotal
           && a.S.gexpanded = b.S.gexpanded
@@ -523,14 +525,17 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
             ~cmp:Stdlib.compare
             ~mount:(fun item_sig -> item_row st item_sig)
         ]
-    ]
+    ])
+    ctx parent
 
 (* -- palette body ---------------------------------------------------- *)
 
 let groups_body st : t =
  fun ctx parent ->
   let groups_sig =
-    Signal.map (fun (v : S.view) -> v.S.groups) st.S.vs.Signal.state_signal
+    Logseq_dom.own ctx
+      (Signal.map (fun (v : S.view) -> v.S.groups)
+         st.S.vs.Signal.state_signal)
   in
   (keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
      ~cmp:Stdlib.compare
@@ -552,14 +557,19 @@ let search_only_chip st (gid : S.group_id) =
 let scroller st : t =
  fun ctx parent ->
   let has_items_sig =
-    Signal.map
-      (fun (v : S.view) ->
-        v.S.groups <> []
-        && List.exists (fun (g : S.group) -> g.S.gitems <> []) v.S.groups)
-      st.S.vs.Signal.state_signal
+    Logseq_dom.own ctx
+      (Signal.map
+         (fun (v : S.view) ->
+           v.S.groups <> []
+           && List.exists
+                (fun (g : S.group) -> g.S.gitems <> [])
+                v.S.groups)
+         st.S.vs.Signal.state_signal)
   in
   let input_sig =
-    Signal.map (fun (v : S.view) -> v.S.input) st.S.vs.Signal.state_signal
+    Logseq_dom.own ctx
+      (Signal.map (fun (v : S.view) -> v.S.input)
+         st.S.vs.Signal.state_signal)
   in
   (* .cp__cmdk-scroller is queried by cmdk_state (scroll-into-view) —
      the class anchor is unchanged *)
@@ -568,13 +578,18 @@ let scroller st : t =
     [ reactive ~equal:(fun (a : S.group_id option) b -> a = b) (fun f ->
           match f with
           | None -> spacer ~key:"flt-none" []
-          | Some gid -> search_only_chip st gid) (Signal.map (fun (v : S.view) -> v.S.filter) st.S.vs.Signal.state_signal)
+          | Some gid -> search_only_chip st gid)
+        (Logseq_dom.own ctx
+           (Signal.map (fun (v : S.view) -> v.S.filter)
+              st.S.vs.Signal.state_signal))
     ; groups_body st
     ; reactive ~equal:(fun (a : string * bool) b -> a = b) (fun (q, has) ->
           if not has && q <> "" then
             text ~key:"empty" ~style_class:"cp__cmdk-empty"
               ~value:(I18n.t "search/no-result") []
-          else spacer ~key:"empty-none" []) (Signal.map2 (fun q has -> (q, has)) input_sig has_items_sig)
+          else spacer ~key:"empty-none" [])
+        (Logseq_dom.own ctx
+           (Signal.map2 (fun q has -> (q, has)) input_sig has_items_sig))
     ]
     ctx parent
 
@@ -696,20 +711,26 @@ let action_hints (it : S.item option) =
       row ~key:"actions" ~style_class:"cp__cmdk-hints" btns
 
 let hints st : t =
-  column ~key:"hints" ~style_class:"hints"
+ fun ctx parent ->
+  (column ~key:"hints" ~style_class:"hints"
     [ box ~key:"hints-inner" ~style_class:"cp__cmdk-hints-inner"
         [ row ~key:"hints-row" ~style_class:"cp__cmdk-hints-row"
             [ text ~key:"hint-label" ~style_class:"cp__cmdk-hints-label"
                 ~value:(I18n.t "cmdk.tip/label") []
-            ; reactive ~equal:(fun (a : bool * int) b -> a = b) tip_el (Signal.map
-                   (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
-                   st.S.vs.Signal.state_signal)
+            ; reactive ~equal:(fun (a : bool * int) b -> a = b) tip_el
+                (Logseq_dom.own ctx
+                   (Signal.map
+                      (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
+                      st.S.vs.Signal.state_signal))
             ]
         ]
-    ; reactive ~equal:(fun (a : S.item option) b -> a = b) action_hints (Signal.map
-           (fun (v : S.view) -> S.item_at v v.S.hl)
-           st.S.vs.Signal.state_signal)
-    ]
+    ; reactive ~equal:(fun (a : S.item option) b -> a = b) action_hints
+        (Logseq_dom.own ctx
+           (Signal.map
+              (fun (v : S.view) -> S.item_at v v.S.hl)
+              st.S.vs.Signal.state_signal))
+    ])
+    ctx parent
 
 let palette st : t =
   (* .cp__cmdk is the delegated-event scope for outside-click and
@@ -893,7 +914,9 @@ let render (_ms : Model.t Signal.signal) : t =
   Editor_dom.ensure_raw_text_observer ();
   install_listeners ();
   let open_sig =
-    Signal.map (fun (v : S.view) -> v.S.open_) st.S.vs.Signal.state_signal
+    Logseq_dom.own context
+      (Signal.map (fun (v : S.view) -> v.S.open_)
+         st.S.vs.Signal.state_signal)
   in
   (* The keyed box gives the conditional its own reconcile-stable parent:
      spliced directly under #app-container its dynamic segment goes stale

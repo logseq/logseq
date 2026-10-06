@@ -168,10 +168,14 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
 ;;
 
 let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
+ fun context parent ->
+  (* own the derivation: unowned map2 leaves a live subscriber on the
+     shared view signal after the item unmounts *)
   let pair =
-    Signal.map2
-      (fun (it : S.ac_item) (v : S.view) -> (it, v))
-      item_sig st.S.vs.Signal.state_signal
+    Logseq_dom.own context
+      (Signal.map2
+         (fun (it : S.ac_item) (v : S.view) -> (it, v))
+         item_sig st.S.vs.Signal.state_signal)
   in
   box ~key ~style_class:"menu-link-wrap"
     [ menu_item ~key:"lnk" ~style_class:"menu-link"
@@ -208,6 +212,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
             ]
         ]
     ]
+    context parent
 ;;
 
 let ac_empty_placeholder (v : S.view) : t =
@@ -275,23 +280,25 @@ type ac_unit =
   | AGroup of ac_group
 
 let ac_inner (st : S.t) : t =
+ fun context parent ->
   (* the empty state is a sentinel keyed item *)
   let units_sig =
-    Signal.map
-      (fun (v : S.view) ->
-        match v.S.ac with
-        | Some a -> (
-            match a.S.items with
-            | [] -> [ AItem S.empty_item ]
-            | xs ->
-                List.concat_map
-                  (fun g ->
-                    match g.g_hdr with
-                    | Some _ -> [ AGroup g ]
-                    | None -> List.map (fun it -> AItem it) g.g_items)
-                  (ac_groups xs))
-        | None -> [])
-      st.S.vs.Signal.state_signal
+    Logseq_dom.own context
+      (Signal.map
+         (fun (v : S.view) ->
+           match v.S.ac with
+           | Some a -> (
+               match a.S.items with
+               | [] -> [ AItem S.empty_item ]
+               | xs ->
+                   List.concat_map
+                     (fun g ->
+                       match g.g_hdr with
+                       | Some _ -> [ AGroup g ]
+                       | None -> List.map (fun it -> AItem it) g.g_items)
+                     (ac_groups xs))
+           | None -> [])
+         st.S.vs.Signal.state_signal)
   in
   let unit_key u =
     match u with
@@ -319,6 +326,7 @@ let ac_inner (st : S.t) : t =
                    ~value:(Option.value ~default:"" g.g_hdr)
                    []
                  :: List.map row g.g_items)) ]
+    context parent
 ;;
 
 (* cljs base-ui anchors the popup at a 1x1 rect at the caret point, so
@@ -346,26 +354,28 @@ let ac_popover (st : S.t) : t =
      land on the positioner *)
   (popover ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
      ~at_signal:
-       (Signal.map
-          (fun (v : S.view) ->
-            match v.S.ac with
-            | Some a ->
-                ( Option.value a.S.flipx ~default:a.S.x
-                , (match a.S.flip with
-                   | Some (top', _) -> top'
-                   | None -> a.S.y +. popup_anchor_dy) )
-            | None -> (0., 0.))
-          vs)
+       (Logseq_dom.own context
+          (Signal.map
+             (fun (v : S.view) ->
+               match v.S.ac with
+               | Some a ->
+                   ( Option.value a.S.flipx ~default:a.S.x
+                   , (match a.S.flip with
+                      | Some (top', _) -> top'
+                      | None -> a.S.y +. popup_anchor_dy) )
+               | None -> (0., 0.))
+             vs))
      ~available_height_signal:
-       (Signal.map
-          (fun (v : S.view) ->
-            match v.S.ac with
-            | Some a -> (
-                match a.S.flip with
-                | Some (_, avail') -> avail'
-                | None -> Web_dom.win_inner_height -. a.S.y -. 8.)
-            | None -> 0.)
-          vs)
+       (Logseq_dom.own context
+          (Signal.map
+             (fun (v : S.view) ->
+               match v.S.ac with
+               | Some a -> (
+                   match a.S.flip with
+                   | Some (_, avail') -> avail'
+                   | None -> Web_dom.win_inner_height -. a.S.y -. 8.)
+               | None -> 0.)
+             vs))
      ~on_dismiss:(fun _ -> S.close_ac st)
      [ Ui_parts.class_signal vs
          (fun (v : S.view) ->
@@ -375,39 +385,41 @@ let ac_popover (st : S.t) : t =
               | None -> ""))
          (box ~key:"ac-c"
             ~data_attrs_signal:
-              (Signal.map
-                 (fun (v : S.view) ->
-                   match v.S.ac with
-                   | Some a ->
-                       [ ("data-open", "")
-                       ; ( "data-side"
-                         , (match a.S.flip with
-                            | Some _ -> "top"
-                            | None -> "bottom") )
-                       ; ( "data-align"
-                         , (match a.S.flipx with
-                            | Some _ -> "end"
-                            | None -> "start") )
-                       ; ("tabindex", "-1")
-                       ; ("data-base-ui-focusable", "")
-                       ; ("role", "dialog")
-                       ; ("data-state", "open")
-                       ; ( "data-editor-popup-ref"
-                         , S.popup_ref_of_kind a.S.kind ) ]
-                   | None -> [])
-                 vs)
+              (Logseq_dom.own context
+                 (Signal.map
+                    (fun (v : S.view) ->
+                      match v.S.ac with
+                      | Some a ->
+                          [ ("data-open", "")
+                          ; ( "data-side"
+                            , (match a.S.flip with
+                               | Some _ -> "top"
+                               | None -> "bottom") )
+                          ; ( "data-align"
+                            , (match a.S.flipx with
+                               | Some _ -> "end"
+                               | None -> "start") )
+                          ; ("tabindex", "-1")
+                          ; ("data-base-ui-focusable", "")
+                          ; ("role", "dialog")
+                          ; ("data-state", "open")
+                          ; ( "data-editor-popup-ref"
+                            , S.popup_ref_of_kind a.S.kind ) ]
+                      | None -> [])
+                    vs))
             [ ac_inner st
             ; (* cljs page-search-aux: mod+enter hint under the tag list *)
               if_
                 ~test:
-                  (Signal.map
-                     (fun (v : S.view) ->
-                       match v.S.ac with
-                       | Some a ->
-                           a.S.kind = S.Tag_search && a.S.query <> ""
-                           && String.lowercase_ascii a.S.query <> "page"
-                       | None -> false)
-                     vs)
+                  (Logseq_dom.own context
+                     (Signal.map
+                        (fun (v : S.view) ->
+                          match v.S.ac with
+                          | Some a ->
+                              a.S.kind = S.Tag_search && a.S.query <> ""
+                              && String.lowercase_ascii a.S.query <> "page"
+                          | None -> false)
+                        vs))
                 (text ~key:"ac-hint" ~style_class:"ls-tag-search-hint"
                    [ (* shui/shortcut "mod+enter" → combo glow container
                         inside a span *)
@@ -547,7 +559,8 @@ let cm_item_cls = "ui__dropdown-menu-item"
 ;;
 
 let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
-  let idx = Signal.get (Signal.map fst entry_sig) in
+ fun context parent ->
+  let idx = fst (Signal.get entry_sig) in
   (* keyed mounts run with parent=None, so the entry point must be a real
      node — wrap the dynamic branch in a box *)
   box ~key:"cm-entry"
@@ -573,7 +586,8 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
              :: (match scut with
                  | Some s -> [ cm_shortcut_el s ]
                  | None -> [])))
-        (Signal.map snd entry_sig) ]
+        (Logseq_dom.own context (Signal.map snd entry_sig)) ]
+    context parent
 ;;
 
 let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
@@ -622,12 +636,13 @@ let cm_popover (st : S.t) : t =
   (* see ac_popover: signals must be built per mount *)
  fun context parent ->
   let entries_sig =
-    Signal.map
-      (fun (v : S.view) ->
-        match v.S.cm with
-        | Some m -> List.mapi (fun i e -> (i, e)) m.S.entries
-        | None -> [])
-      st.S.vs.Signal.state_signal
+    Logseq_dom.own context
+      (Signal.map
+         (fun (v : S.view) ->
+           match v.S.cm with
+           | Some m -> List.mapi (fun i e -> (i, e)) m.S.entries
+           | None -> [])
+         st.S.vs.Signal.state_signal)
   in
   (* cljs as-dropdown? context menu: dropdown-menu-content merged with
      the content-props class (280px ls-context-menu-content, 240px
@@ -643,26 +658,28 @@ let cm_popover (st : S.t) : t =
         | _ -> ""))
      (popover ~key:"cm" ~role:`menu
         ~at_signal:
-          (Signal.map
-             (fun (v : S.view) ->
-               match v.S.cm with
-               | Some m ->
-                   (* cljs anchors a 1px point at the click and the
-                      base-ui dropdown centers the content on it *)
-                   let w = if m.S.tag <> None then 240. else 280. in
-                   ( Float.max 8.
-                       (Float.min (m.S.cx -. (w /. 2.))
-                          (Web_dom.win_inner_width -. (w +. 8.)))
-                   , m.S.cy )
-               | None -> (0., 0.))
-             vs)
+          (Logseq_dom.own context
+             (Signal.map
+                (fun (v : S.view) ->
+                  match v.S.cm with
+                  | Some m ->
+                      (* cljs anchors a 1px point at the click and the
+                         base-ui dropdown centers the content on it *)
+                      let w = if m.S.tag <> None then 240. else 280. in
+                      ( Float.max 8.
+                          (Float.min (m.S.cx -. (w /. 2.))
+                             (Web_dom.win_inner_width -. (w +. 8.)))
+                      , m.S.cy )
+                  | None -> (0., 0.))
+                vs))
         ~available_height_signal:
-          (Signal.map
-             (fun (v : S.view) ->
-               match v.S.cm with
-               | Some m -> Web_dom.win_inner_height -. m.S.cy -. 8.
-               | None -> 0.)
-             vs)
+          (Logseq_dom.own context
+             (Signal.map
+                (fun (v : S.view) ->
+                  match v.S.cm with
+                  | Some m -> Web_dom.win_inner_height -. m.S.cy -. 8.
+                  | None -> 0.)
+                vs))
         ~data_attrs:[ ("data-keep-selection", "") ]
         ~on_dismiss:(fun _ -> close_cm st)
         [ box ~key:"cm-wrap"
@@ -678,7 +695,7 @@ let cm_popover (st : S.t) : t =
                   match sub with
                   | Some (_, x, y, items) -> cm_sub_el st x y items
                   | None -> Logseq_dom.nothing)
-                (cm_sub_state st) ]
+                (Logseq_dom.own context (cm_sub_state st)) ]
         ]))
     context parent
 ;;
@@ -831,8 +848,9 @@ let pv_dyn (st : S.t) : t =
        match pv with
        | None -> Logseq_dom.nothing
        | Some p -> pv_popover st p)
-     (Signal.map (fun (v : S.view) -> v.S.pv)
-        st.S.vs.Signal.state_signal))
+     (Logseq_dom.own context
+        (Signal.map (fun (v : S.view) -> v.S.pv)
+           st.S.vs.Signal.state_signal)))
     context parent
 
 let handle_keydown st (ev : Web_dom.ev) =
@@ -1113,12 +1131,14 @@ let render (_ms : Model.t Signal.signal) : t =
   let st = S.make context.Lui_ui.ui_scheduler in
   install_listeners st;
   let ac_open =
-    Signal.map (fun (v : S.view) -> v.S.ac <> None)
-      st.S.vs.Signal.state_signal
+    Logseq_dom.own context
+      (Signal.map (fun (v : S.view) -> v.S.ac <> None)
+         st.S.vs.Signal.state_signal)
   in
   let cm_open =
-    Signal.map (fun (v : S.view) -> v.S.cm <> None)
-      st.S.vs.Signal.state_signal
+    Logseq_dom.own context
+      (Signal.map (fun (v : S.view) -> v.S.cm <> None)
+         st.S.vs.Signal.state_signal)
   in
   let body =
     Logseq_dom.fragment

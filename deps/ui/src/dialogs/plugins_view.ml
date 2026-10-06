@@ -379,6 +379,18 @@ let body (_ms : Model.t Signal.signal) : t =
          [])
   in
   let pair a b = (a, b) in
+  (* every derivation is owned into the mount's scope — unowned map2s
+     would stay subscribed to the shared state signals after the panel
+     unmounts or the tab flips *)
+  let own2 f a b = Logseq_dom.own ctx (Signal.map2 f a b) in
+  let mkt_sig =
+    own2 pair
+      (own2 pair (Signal.value mkt_search) (Signal.value mkt_cat))
+      (own2 pair (Signal.value pkgs) (Signal.value loading))
+  in
+  let inst_sig =
+    own2 pair (Signal.value inst_search) (Signal.value inst_cat)
+  in
   let node =
     reactive
       (fun (tab_now, _dirty) ->
@@ -400,23 +412,16 @@ let body (_ms : Model.t Signal.signal) : t =
                        market_panel ~key:"mkt" ~search ~cat
                          ~search_st:mkt_search ~cat_st:mkt_cat
                          ~pkgs:pkg_now ~loading:load_now)
-                     (Signal.map2 pair
-                        (Signal.map2 pair
-                           (Signal.value mkt_search)
-                           (Signal.value mkt_cat))
-                        (Signal.map2 pair
-                           (Signal.value pkgs) (Signal.value loading)))
+                     mkt_sig
                  else
                    reactive
                      (fun (search, cat) ->
                        installed_panel ~key:"inst" ~search ~cat
                          ~search_st:inst_search ~cat_st:inst_cat)
-                     (Signal.map2 pair
-                        (Signal.value inst_search)
-                        (Signal.value inst_cat)))
+                     inst_sig)
               ]
           ])
-      (Signal.map2 pair
+      (own2 pair
          (Signal.value tab)
          (Plugin_host.dirty_value owner))
   in
