@@ -1280,7 +1280,55 @@ let on_click ev =
                                                   (String.length
                                                      (A.model_title u))
                                             | None -> ())
-                                        | None -> ())))))))))
+                                        | None -> (
+                                            (* web parity: .block-content
+                                               carries style width:100% so
+                                               it spans the row's content
+                                               band — native hosts keep the
+                                               div's intrinsic width and
+                                               clicks in the row's trailing
+                                               space miss it. The same band
+                                               on every host is
+                                               .block-main-container (the
+                                               controls/bullets inside it are
+                                               matched above), so fall back
+                                               to the enclosing .ls-block's
+                                               blockid *)
+                                            match
+                                              D.closest_sel
+                                                ".block-main-container"
+                                                target
+                                            with
+                                            | None -> ()
+                                            | Some _ -> (
+                                                match
+                                                  D.closest_sel ".ls-block"
+                                                    target
+                                                with
+                                                | None -> ()
+                                                | Some el -> (
+                                                    match
+                                                      D.el_get_attr el
+                                                        "blockid"
+                                                    with
+                                                    | Some u ->
+                                                        let scope =
+                                                          match
+                                                            D.closest_sel
+                                                              ".cp__right-sidebar"
+                                                              target
+                                                          with
+                                                          | Some _ ->
+                                                              "sidebar"
+                                                          | None -> "main"
+                                                        in
+                                                        A.enter_edit ~scope
+                                                          u
+                                                          (String.length
+                                                             (A.model_title
+                                                                u))
+                                                    | None ->
+                                                        ()))))))))))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)

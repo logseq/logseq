@@ -696,6 +696,10 @@ let is_focused block_id =
   | Some el, Some ae -> ae == el_json el
   | _ -> false
 
+(* the pending-focus emit must wait for the conduit input to be
+   registered — el.focus() on a detached element silently does nothing *)
+let can_focus block_id = Option.is_some (input_el block_id)
+
 
 (* caret anchor for popups, in viewport coords — mirrors the old
    caret_popup_pos contract: (x, y bottom of the caret line, y top) *)
@@ -732,6 +736,7 @@ let () =
     { Editor_sink.conduit
     ; focus_input
     ; is_focused
+    ; can_focus
     ; popup_pos
     ; container_rect
     }

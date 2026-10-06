@@ -505,7 +505,16 @@ let event_str ev key =
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 
+let uuid_seeded = ref false
+
 let random_uuid () =
+  (* Random starts from a fixed seed without self_init — every run would
+     regenerate the same uuid sequence and collide with persisted block
+     uuids (e.g. the first split-block after boot reusing the uuid the
+     previous boot assigned) *)
+  if not !uuid_seeded then (
+    Random.self_init ();
+    uuid_seeded := true);
   let b = Bytes.create 16 in
   for i = 0 to 15 do
     Bytes.set b i (Char.chr (Random.int 256))

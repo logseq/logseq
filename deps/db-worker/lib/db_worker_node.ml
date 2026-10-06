@@ -862,8 +862,7 @@ let daemon_phase name =
   Worker_log.info "daemon-phase"
     [ "p", name
     ; "ms"
-    , Printf.sprintf "%.1f"
-        (Time.diff_monotonic_ms daemon_t0 (Time.monotonic_now ())) ]
+    , Printf.sprintf "%.1f" (Time.diff_monotonic_ms daemon_t0 (Time.monotonic_now ())) ]
 
 let start_daemon (opts : daemon_opts) : daemon E.t =
   let host = "127.0.0.1" in

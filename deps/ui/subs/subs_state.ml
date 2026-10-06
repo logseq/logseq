@@ -37,6 +37,10 @@ let journals_sig scheduler : Model.page array Signal.state =
 let current_repo : string option ref = ref None
 
 let push_journals_items (js : Model.page list) =
+  (* every Journals_loaded/Journals_spliced publish flows through here —
+     keep the authoritative list in sync: delta splices and optimistic
+     edits read current_journals to find the day page they touch *)
+  current_journals := js;
   match !journals_items with
   | Some s ->
       let arr = Array.of_list js in
@@ -119,6 +123,7 @@ let push_journal_page (p : Model.page) =
   | None -> ()
 
 let clear_journal_items () =
+  current_journals := [];
   Hashtbl.iter
     (fun _ s -> Signal.dispose_signal (Signal.value s))
     journal_items;

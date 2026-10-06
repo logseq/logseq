@@ -26,6 +26,7 @@ type impl =
   { conduit : string -> Edit_input.conduit option
   ; focus_input : string -> unit
   ; is_focused : string -> bool
+  ; can_focus : string -> bool
   ; popup_pos : string -> (float * float * float) option
   ; container_rect : string -> (float * float * float * float) option
   }
@@ -34,6 +35,7 @@ let no_impl =
   { conduit = (fun _ -> None)
   ; focus_input = (fun _ -> ())
   ; is_focused = (fun _ -> false)
+  ; can_focus = (fun _ -> true)
   ; popup_pos = (fun _ -> None)
   ; container_rect = (fun _ -> None)
   }
@@ -47,6 +49,11 @@ let conduit block_id = (!current).conduit block_id
 let focus_input block_id = (!current).focus_input block_id
 
 let is_focused block_id = (!current).is_focused block_id
+
+(* can the sink take focus right now? web reports whether the conduit
+   input element is mounted; native hosts queue set-input-focus for
+   late mounts themselves so they always answer true *)
+let can_focus block_id = (!current).can_focus block_id
 
 let popup_pos block_id = (!current).popup_pos block_id
 
