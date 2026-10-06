@@ -225,6 +225,7 @@
                                db-async/<get-block
                                (fn [_repo id _opts]
                                  (p/resolved (if (= 99 id) created page)))
+                               db-async/<get-all-properties (fn [& _] (p/resolved []))
                                db-property-handler/upsert-property!
                                (fn [property-id schema opts]
                                  (swap! calls conj [:upsert property-id schema opts])
@@ -245,6 +246,41 @@
                           (is false (str error))))
                (p/finally done)))))
 
+(deftest add-property-from-dropdown-uses-the-property-not-a-tag-of-that-name-test
+  ;; db-test #1351: with a tag "Foo" older than the property "Foo", the name
+  ;; lookup of "foo" found the tag and a second property "Foo" was created
+  (async done
+         (let [tag {:db/id 41
+                    :block/title "Foo"
+                    :block/tags [{:db/ident :logseq.class/Tag}]}
+               property {:db/id 50
+                         :db/ident :user.property/Foo
+                         :block/title "Foo"
+                         :block/tags [{:db/ident :logseq.class/Property}]}
+               calls (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               db-async/<get-block
+                               (fn [_repo id _opts]
+                                 (p/resolved (if (= :user.property/Foo id) property tag)))
+                               db-async/<get-all-properties
+                               (fn [& _] (p/resolved [{:db/ident :logseq.property/status :block/title "Status"}
+                                                      {:db/ident :user.property/Foo :block/title "Foo"}]))
+                               db-property-handler/upsert-property!
+                               (fn [& args]
+                                 (swap! calls conj (into [:upsert] args))
+                                 (p/resolved nil))]
+                 (#'property-component/<add-property-from-dropdown
+                  {:block/uuid (random-uuid)}
+                  "foo"
+                  {:logseq.property/type :default}
+                  {}))
+               (p/then (fn [result]
+                         (is (= property result))
+                         (is (= [] @calls) "no property is created")))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
 (deftest add-property-from-dropdown-refuses-namespaced-page-test
   (async done
          (let [page {:db/id 42
@@ -254,6 +290,7 @@
                calls (atom [])]
            (-> (p/with-redefs [state/get-current-repo (constantly "test")
                                db-async/<get-block (fn [& _] (p/resolved page))
+                               db-async/<get-all-properties (fn [& _] (p/resolved []))
                                notification/show!
                                (fn [& args]
                                  (swap! calls conj (into [:notification] args)))
