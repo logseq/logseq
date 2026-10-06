@@ -13,6 +13,8 @@ use std::os::raw::{c_char, c_int};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+mod editor;
+
 use gpui_kit::component::Root;
 use gpui_kit::gpui::{point, px, size, Bounds, WindowBounds, WindowOptions};
 use gpui_kit::*;
@@ -111,9 +113,15 @@ fn handle_platform_request(
     match name {
         "dom-op" => {
             if let Some((op, body)) = payload.split_once('\n') {
-                for (name, json) in
-                    lui_gpui::domops::handle_dom_op(shared, op, body, cx)
-                {
+                // The logseq-editor conduit claims its ops first
+                // (caret-rect/offset-at/line-ranges/scroll-height/
+                // set-input-focus); everything else goes to the generic
+                // dom-op handler.
+                let replies = editor::handle_dom_op(op, body, shared, cx)
+                    .unwrap_or_else(|| {
+                        lui_gpui::domops::handle_dom_op(shared, op, body, cx)
+                    });
+                for (name, json) in replies {
                     let envelope = format!("{name}\n{json}");
                     unsafe {
                         lui_ocaml_platform_event(
@@ -217,6 +225,10 @@ fn main() {
     app.run(move |cx| {
         gpui_kit::init(cx);
         let shared = LuiShared::new();
+        // The logseq-editor surface (input routing + text measurement)
+        // is app-scoped: registered here so `logseq-editor` extension
+        // nodes bypass the generic DOM-ish renderer.
+        editor::register(&shared);
 
         cx.spawn({
             let shared = shared.clone();
