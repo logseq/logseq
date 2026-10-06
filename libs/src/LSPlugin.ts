@@ -976,6 +976,11 @@ export interface IDBProxy {
 
   getBlock: IEditorProxy['getBlock']
   createEmbed: (parentUuid: BlockUUID, targetUuid: BlockUUID) => Promise<BlockEntity | null>
+  listEmbeds: (options?: { page_uuid?: BlockUUID; target_uuid?: BlockUUID; limit?: number }) => Promise<{
+    embeds: Array<Record<string, any>>
+    count: number
+    truncated: boolean
+  }>
   getTag: IEditorProxy['getTag']
   getTagUsers: (tagUuid: BlockUUID) => Promise<Array<BlockEntity | PageEntity>>
   getBacklinks: (targetUuid: BlockUUID) => Promise<Record<string, any>>

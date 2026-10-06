@@ -1,5 +1,6 @@
 (ns electron.mcp-compat
   (:require [clojure.string :as string]
+            [logseq.api.db-based.util :as api-util]
             [promesa.core :as p]))
 
 (declare property-entity-value property-type)
@@ -716,11 +717,13 @@
         target-uuid (validated-uuid (aget args "target_uuid"))
         dry-run? (true? (aget args "dry_run"))
         verbose? (not (false? (aget args "verbose")))
-        entity-query "[:find (pull ?entity [:db/id :block/uuid :block/name :block/title {:block/parent [:db/id]} {:block/parent+ [:db/id]} {:block/page [:db/id]} {:block/link [:db/id]} {:block/refs [:db/id]}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"]
+        entity-query "[:find (pull ?entity [:db/id :block/uuid :block/name :block/title {:block/parent [:db/id {:block/parent ...}]} {:block/page [:db/id]} {:block/link [:db/id]} {:block/refs [:db/id]}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"]
     (p/let [parent-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input parent-uuid)])
             target-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input target-uuid)])
             parent (js->clj parent-result :keywordize-keys true)
             target (js->clj target-result :keywordize-keys true)]
+          (when-let [error (or (:error parent) (:error target))]
+            (throw (js/Error. (str error))))
       (when-not parent
         (throw (js/Error. (str "No entity exists with exact UUID " parent-uuid))))
       (when-not target
@@ -730,7 +733,13 @@
             page-id (if (or (:name parent) (:block/name parent))
                       parent-id
                       (entity-ref-id (or (:page parent) (:block/page parent))))
-            ancestors (or (:parent+ parent) (:block/parent+ parent))]
+            ancestors (take 1000 (take-while some?
+                                           (iterate #(or (:parent %) (:block/parent %))
+                                                    (or (:parent parent) (:block/parent parent)))))]
+        (when-not (and (integer? parent-id) (integer? target-id))
+          (throw (js/Error. "Embed entity lookup did not return valid parent and target IDs")))
+        (when (>= (count ancestors) 1000)
+          (throw (js/Error. "Parent ancestry exceeds the embed cycle-check limit")))
         (when (or (= parent-id target-id) (= page-id target-id)
                   (some #(= target-id (entity-ref-id %)) ancestors))
           (throw (js/Error. "Cannot embed the parent or its ancestor; this would create a render cycle")))
@@ -746,20 +755,25 @@
             (let [embed-uuid (or (:uuid response-map) (:block/uuid response-map))]
               (when-not embed-uuid
                 (throw (js/Error. "Embed insertion did not return a block UUID")))
-              (p/let [stored-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input embed-uuid)])
-                      stored (js->clj stored-result :keywordize-keys true)
-                      verified? (and (= embed-uuid (or (:uuid stored) (:block/uuid stored)))
-                                     (= parent-id (entity-ref-id (or (:parent stored) (:block/parent stored))))
-                                     (= page-id (entity-ref-id (or (:page stored) (:block/page stored))))
-                                     (= target-id (entity-ref-id (or (:link stored) (:block/link stored))))
-                                     (some #(= target-id (entity-ref-id %)) (or (:refs stored) (:block/refs stored))))]
-                {:validation nil
-                 :response response-map
-                 :verified_entities (if verbose? (if stored [stored] [])
-                                        (if stored [(entity-write-digest stored)] []))
-                 :recovered_after_timeout false
-                 :verified (boolean verified?)
-                 :diagnostic (when-not verified? "The embed UUID, link, reference, parent, or owning page was not observed as requested")}))))))))
+              (-> (p/let [stored-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input embed-uuid)])
+                          stored (js->clj stored-result :keywordize-keys true)
+                          verified? (and (= embed-uuid (or (:uuid stored) (:block/uuid stored)))
+                                         (= parent-id (entity-ref-id (or (:parent stored) (:block/parent stored))))
+                                         (= page-id (entity-ref-id (or (:page stored) (:block/page stored))))
+                                         (= target-id (entity-ref-id (or (:link stored) (:block/link stored))))
+                                         (some #(= target-id (entity-ref-id %)) (or (:refs stored) (:block/refs stored))))]
+                    (if-let [error (:error stored)]
+                      (p/rejected (js/Error. (str error)))
+                      {:validation nil
+                       :response response-map
+                       :verified_entities (if verbose? (if stored [stored] [])
+                                              (if stored [(entity-write-digest stored)] []))
+                       :recovered_after_timeout false
+                       :verified (boolean verified?)
+                       :diagnostic (when-not verified? "The embed UUID, link, reference, parent, or owning page was not observed as requested")}))
+                  (p/catch (fn [error]
+                             (p/rejected (js/Error. (str "Embed " embed-uuid " may have been created; verification failed: "
+                                                        (.-message error) ". Inspect listEmbeds before retrying.")))))))))))))
 
 (defn create-block
   [api-fn args]
@@ -1927,6 +1941,18 @@
                 (merge {:verified true :diagnostic nil}
                   (entity-write-digest current))))))))))
 
+(defn list-embeds
+  [api-fn args]
+  (doseq [entity-uuid (remove nil? [(aget args "page_uuid") (aget args "target_uuid")])]
+    (validated-uuid entity-uuid))
+  (let [limit (or (aget args "limit") 100)]
+    (when-not (and (integer? limit) (<= 1 limit 1000))
+      (throw (js/Error. "limit must be an integer between 1 and 1000")))
+    (p/let [response (api-fn "logseq.DB.listEmbeds" [args])]
+      (when-let [error (and response (aget response "error"))]
+        (throw (js/Error. (str error))))
+      (js->clj response :keywordize-keys true))))
+
 (defn get-block
   [api-fn args]
   (let [block-uuid (validated-uuid (aget args "block_uuid"))]
@@ -1939,6 +1965,20 @@
 
         (and block (not= block-uuid (:uuid block)))
         (p/rejected (js/Error. "Application block API returned a different UUID"))
+
+        (:link block)
+        (let [link (:link block)
+            target-id (entity-ref-id link)]
+          (p/let [target-result (api-fn "logseq.DB.datascriptQuery"
+                        ["[:find (pull ?target [:db/id :block/uuid :block/title :block/name]) . :in $ ?target :where [?target :block/uuid _]]"
+                         target-id])
+              target (js->clj target-result :keywordize-keys true)
+              embed (if target
+                  (:embed (api-util/with-embed-info {:link target}))
+                  {:target_uuid nil :target_type "missing" :target_title nil})]
+            (when-let [error (:error target)]
+              (throw (js/Error. (str error))))
+          (block-result block-uuid [(assoc block :embed embed)])))
 
         :else
         (block-result block-uuid (if block [block] []))))))
@@ -2502,7 +2542,8 @@
    :getTag ["logseq.DB.getTag"]
    :getTagUsers ["logseq.DB.getTagUsers"]
    :getPropertyIndent ["logseq.DB.getPropertiesByTitle"]
-   :getBlock ["logseq.DB.getBlock"]
+  :getBlock ["logseq.DB.getBlock" "logseq.DB.datascriptQuery"]
+  :listEmbeds ["logseq.DB.listEmbeds"]
    :getBlockUUID ["logseq.DB.getPageBlockUUIDs"]
    :getBlockTree ["logseq.DB.getBlockTree"]
    :findBacklinks ["logseq.DB.getBacklinks"]
@@ -2527,6 +2568,7 @@
 (def ^:private capability-probe-args
   {"logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
    "logseq.DB.getBlock" ["__mcp_capability_probe__" #js {:includeChildren false :includePage true}]
+  "logseq.DB.listEmbeds" [#js {:limit 1}]
    "logseq.DB.getTag" ["__mcp_capability_probe__"]
    "logseq.DB.getTagUsers" ["00000000-0000-4000-8000-000000000999"]
    "logseq.DB.inspectPage" ["00000000-0000-4000-8000-000000000999" "page"]

@@ -135,7 +135,7 @@
      :getPage
      {:fn mcp-compat/get-page
       :config #js {:title "Get Page"
-          :description "Get a page's content including its blocks."
+          :description "Get a page's content including its structural blocks. Blocks with embed metadata are linked views of another page/block, not empty placeholders. Embedded target content is not expanded."
           :inputSchema #js {:pageName (z/string)}}}
    :searchBlocks
   {:fn mcp-compat/search-blocks
@@ -192,11 +192,18 @@
   :createEmbed
   {:fn mcp-compat/create-embed
    :config #js {:title "Create Embed"
-            :description "Create an embed of a page or block under a parent UUID and verify its link, backlink reference, and placement. Parent and ancestor targets are refused."
-            :inputSchema #js {:parent_uuid (z/string)
-                        :target_uuid (z/string)
-                        :dry_run (-> (z/boolean) .optional)
-                        :verbose (-> (z/boolean) .optional)}}}
+            :description "Create a new linked embed block as a child of an existing page/block. This displays the target, not a copy or text reference. Use exact UUIDs, not titles; resolve them with getPageUUID/getBlockUUID. Self/ancestor targets are refused. verified=false after a write can mean an embed was created but verification failed: inspect listEmbeds before retrying to avoid duplicates. Remove an embed with removeBlock using the embed's UUID, never its target UUID."
+            :inputSchema #js {:parent_uuid (-> (z/string) (.describe "UUID of the existing destination page or block that will contain the new embed."))
+                        :target_uuid (-> (z/string) (.describe "UUID of the existing page or block to display inside the embed."))
+                        :dry_run (-> (z/boolean) .optional (.describe "Default false. True performs identifier/ancestry reads only and writes nothing; it does not perform all write-time graph/type/recycled validation."))
+                        :verbose (-> (z/boolean) .optional (.describe "Default true. Return full verified entity details; false returns a compact identity/placement digest."))}}}
+  :listEmbeds
+  {:fn mcp-compat/list-embeds
+   :config #js {:title "List Embeds"
+            :description "Discover existing linked embed blocks without writing. Returns embeds with their own UUID, parent/page, link and embed target metadata, count of returned rows, and truncated. Empty embed titles do not mean empty content. Both filters are combined when supplied. Targets are not expanded. Remove an embed by its own UUID with removeBlock; the target remains intact."
+            :inputSchema #js {:page_uuid (-> (z/string) .optional (.describe "Restrict to embeds whose owning page has this UUID; not a recursive nested-page scope."))
+                        :target_uuid (-> (z/string) .optional (.describe "Restrict to embeds displaying this exact page/block UUID."))
+                        :limit (-> (z/number) .optional (.describe "Maximum returned embeds, integer 1-1000; default 100. truncated=true means more matches exist."))}}}
   :updateBlock
   {:fn mcp-compat/update-block
    :config #js {:title "Update Block"
@@ -216,7 +223,7 @@
   :removeBlock
   {:fn mcp-compat/remove-block
    :config #js {:title "Remove Block"
-            :description "Delete a block and its subtree after inventorying it, then verify every UUID is absent."
+            :description "Delete a block and its structural subtree after inventorying it, then verify every UUID is absent. For an embed, use the embed block's UUID: its linked target is not deleted."
             :inputSchema #js {:block_uuid (z/string)
                         :verbose (-> (z/boolean) .optional)}}}
   :splitBlock
@@ -377,7 +384,7 @@
    :getBlock
   {:fn mcp-compat/get-block
     :config #js {:title "Get Block"
-                 :description "Read one exact non-page block by UUID."
+                 :description "Read one exact non-page block by UUID. An embed includes embed target UUID/type/title metadata even if its own title is empty. Its linked target is not expanded or copied."
                  :inputSchema #js {:block_uuid (z/string)}}}
    :getTagUsers
    {:fn mcp-compat/get-tag-users
@@ -387,12 +394,12 @@
    :getBlockUUID
    {:fn mcp-compat/get-block-uuids
     :config #js {:title "Get Block UUIDs"
-                 :description "List all descendant block UUIDs on a page."
+                 :description "List structural descendant blocks on a page, including embed target metadata. An empty-title block with embed metadata is content, not an empty placeholder."
                  :inputSchema #js {:page_uuid (z/string)}}}
    :getBlockTree
    {:fn mcp-compat/get-block-tree
     :config #js {:title "Get Block Tree"
-                 :description "Read one block subtree with depth and node bounds."
+                 :description "Read one structural block subtree with depth and node bounds, including embed target metadata. Children are structural children only: embedded target content is not expanded. Empty-title embeds are not empty placeholders."
                  :inputSchema #js {:block_uuid (z/string)
                                    :max_depth (-> (z/number) .optional)
                                    :max_nodes (-> (z/number) .optional)}}}

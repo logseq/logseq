@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [logseq.api.db-based :as db-based-api]
+            [logseq.api.db-based.cli :as cli-api]
             [logseq.api.editor :as api-editor]
             [logseq.api.test-helper :as api-test]
             [logseq.db :as ldb]
@@ -66,6 +67,19 @@
                     result (db-based-api/create-embed (str (:block/uuid parent))
                                                      (str (:block/uuid target)))
                     embed (api-test/js->clj-kw result)
+                    listed (db-based-api/get-page-block-uuids (str (:block/uuid parent-page)))
+                    tree (db-based-api/get-block-tree (str (:block/uuid parent)) 20 100)
+                    stats (db-based-api/get-page-stats (str (:block/uuid parent-page)))
+                    embeds (db-based-api/list-embeds #js {:page_uuid (str (:block/uuid parent-page))})
+                    filtered (db-based-api/list-embeds #js {:target_uuid (str (:block/uuid target)) :limit 1})
+                    limited (db-based-api/list-embeds #js {:page_uuid (str (:block/uuid parent-page)) :limit 1})
+                    combined (db-based-api/list-embeds #js {:page_uuid (str (:block/uuid parent-page))
+                                                          :target_uuid (str (:block/uuid target-block))})
+                    page-data (cli-api/get-page-data "Embed Parent Page")
+                    backlinks (db-based-api/get-backlinks (str (:block/uuid target)))
+                    property-users (db-based-api/get-property-users ":block/title")
+                    _ (api-editor/remove_block (or (:uuid embed) (:block/uuid embed)) #js {})
+                    after-remove (db-based-api/list-embeds #js {:page_uuid (str (:block/uuid parent-page))})
                     link (or (:block/link embed) (:link embed))
                     link-id (if (map? link) (or (:db/id link) (:id link)) link)
                     refs (or (:block/refs embed) (:refs embed))
@@ -73,6 +87,24 @@
                 (is (= (:db/id target-block)
                    (or (get-in block-embed [:link :id])
                      (get-in block-embed [:block/link :db/id]))))
+              (is (= 2 (count (filter :link (api-test/js->clj-kw listed)))))
+              (is (= 2 (count (filter :link (get-in (api-test/js->clj-kw tree) [:block :children])))))
+              (is (= 0 (:empty_blocks (api-test/js->clj-kw stats))))
+              (is (= 3 (:content_blocks (api-test/js->clj-kw stats))))
+              (is (= #{"page" "block"}
+                (set (map #(get-in % [:embed :target_type]) (:embeds (api-test/js->clj-kw embeds))))))
+              (is (= 1 (:count (api-test/js->clj-kw filtered))))
+              (is (true? (:truncated (api-test/js->clj-kw limited))))
+              (is (= 1 (:count (api-test/js->clj-kw combined))))
+              (is (= 2 (count (filter :embed (tree-seq coll? seq (api-test/js->clj-kw page-data))))))
+              (is (= (str (:block/uuid target))
+                (get-in (api-test/js->clj-kw backlinks) [:refs 0 :embed :target_uuid])))
+              (is (= 2 (count (filter #(get-in % [:holder :embed]) (api-test/js->clj-kw property-users)))))
+              (is (= 1 (:count (api-test/js->clj-kw after-remove))))
+              (is (some? (test-helper/find-page-by-title "Embed Target Page")))
+              (is (some? (test-helper/find-block-by-content "Embed Target Block")))
+              (is (= (str (:block/uuid target))
+                (get-in (api-test/js->clj-kw filtered) [:embeds 0 :embed :target_uuid])))
                 (is (string? (or (:uuid embed) (:block/uuid embed))))
               (is (= "" (or (:title embed) (:block/title embed))))
               (is (= (:db/id target) link-id))

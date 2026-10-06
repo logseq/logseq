@@ -268,6 +268,39 @@
                      (is false (str "UUID lookup regression failed: " (.-message error)))
                      (js/queueMicrotask done)))))))
 
+(deftest get-block-identifies-an-empty-title-embed
+  (let [{:keys [page-uuid block-uuid conn api calls]} (page-fixture)]
+    (d/transact! conn [{:db/id 161 :block/title "" :block/link 160}])
+    (async done
+      (-> (p/let [result (mcp-compat/get-block api #js {:block_uuid block-uuid})]
+            (is (true? (:found result)))
+            (is (= "" (get-in result [:block :title])))
+            (is (= page-uuid (get-in result [:block :embed :target_uuid])))
+            (is (= "page" (get-in result [:block :embed :target_type])))
+            (is (= "Fixture" (get-in result [:block :embed :target_title])))
+            (is (= ["logseq.DB.getBlock" "logseq.DB.datascriptQuery"] (mapv first @calls))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest list-embeds-routes-filters-and-validates-inputs
+  (let [calls (atom [])
+        result #js {:embeds #js [] :count 0 :truncated false}
+        args #js {:page_uuid "00000000-0000-4000-8000-000000000160" :limit 1}
+        api (recording-api calls result)]
+    (is (thrown? js/Error (mcp-compat/list-embeds api #js {:target_uuid "not-a-uuid"})))
+    (is (thrown? js/Error (mcp-compat/list-embeds api #js {:limit 0})))
+    (is (empty? @calls))
+    (async done
+      (-> (p/let [response (mcp-compat/list-embeds api args)]
+            (is (= {:embeds [] :count 0 :truncated false} response))
+            (is (= [["logseq.DB.listEmbeds" [args]]] @calls))
+            (is (= mcp-compat/list-embeds (get-in mcp-server/data-tools [:listEmbeds :fn])))
+            (is (= 53 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
+            (is (string/includes? (aget (get-in mcp-server/data-tools [:createEmbed :config]) "description") "before retrying"))
+            (is (string? (aget (aget (aget (get-in mcp-server/data-tools [:createEmbed :config]) "inputSchema") "target_uuid") "description"))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
 (deftest block-enumeration-follows-parents-and-preserves-reference-ordering
   (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)
         child-uuid "00000000-0000-4000-8000-000000000163"
@@ -2860,6 +2893,97 @@
                                               @calls))))
                      (done)))))))
 
+(deftest create-embed-dry-run-allows-distinct-pages
+  (let [{:keys [page-uuid block-uuid conn api calls]} (page-fixture)
+      target-uuid "00000000-0000-4000-8000-000000000162"
+      child-uuid "00000000-0000-4000-8000-000000000163"]
+    (d/transact! conn [{:db/id 162 :block/uuid (uuid target-uuid)
+               :block/name "embed-target" :block/title "Embed Target"}
+              {:db/id 163 :block/uuid (uuid child-uuid) :block/title "Child"
+               :block/parent 161 :block/page 160}])
+    (async done
+      (-> (p/let [result (mcp-compat/create-embed api #js {:parent_uuid page-uuid
+                                                       :target_uuid target-uuid :dry_run true})
+                  block-result (mcp-compat/create-embed api #js {:parent_uuid block-uuid
+                                                               :target_uuid target-uuid :dry_run true})
+                  _ (-> (mcp-compat/create-embed api #js {:parent_uuid block-uuid
+                                                        :target_uuid page-uuid :dry_run true})
+                        (p/then (fn [_] (is false "An owning-page embed must reject")))
+                    (p/catch (fn [error] (is (string/includes? (.-message error) "render cycle")))))
+                  _ (-> (mcp-compat/create-embed api #js {:parent_uuid child-uuid
+                                :target_uuid block-uuid :dry_run true})
+                    (p/then (fn [_] (is false "A structural ancestor embed must reject")))
+                    (p/catch (fn [error] (is (string/includes? (.-message error) "render cycle")))))]
+            (is (= 160 (get-in result [:validation :parent :id])))
+            (is (= 162 (get-in result [:validation :target :id])))
+            (is (nil? (:response result)))
+            (is (false? (:verified result)))
+            (is (false? (:verified block-result)))
+            (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls))
+            (is (not-any? #(string/includes? (first (second %)) "block/parent+") @calls)))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest create-embed-preflight-uses-live-schema-and-preserves-mcp-errors
+  (let [parent-uuid "00000000-0000-4000-8000-000000000091"
+        target-uuid "00000000-0000-4000-8000-000000000093"
+        conn (d/create-conn {:block/uuid {:db/unique :db.unique/identity}
+                             :block/parent {:db/valueType :db.type/ref}
+                             :block/page {:db/valueType :db.type/ref}
+                             :block/link {:db/valueType :db.type/ref}
+                             :block/refs {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+                             :block/parent+ {}})
+        calls (atom [])
+        deny-target? (atom false)
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (.then (js/Promise.resolve nil)
+                     (fn [_]
+                       (when-not (= "logseq.DB.datascriptQuery" method)
+                         (throw (js/Error. "Dry run attempted a mutation")))
+                       (if (and @deny-target? (= target-uuid (str (reader/read-string (second args)))))
+                         #js {:error "target lookup denied"}
+                         (clj->js (sdk-utils/normalize-keyword-for-json
+                                   (d/q (reader/read-string (first args)) @conn
+                                        (reader/read-string (second args))) false))))))
+        args #js {:parent_uuid parent-uuid :target_uuid target-uuid :dry_run true}]
+    (d/transact! conn [{:db/id 91 :block/uuid (uuid parent-uuid) :block/name "host" :block/title "Host"}
+                      {:db/id 93 :block/uuid (uuid target-uuid) :block/name "target" :block/title "Target"}])
+    (is (thrown? js/Error (d/pull @conn '[{:block/parent+ [:db/id]}] 91)))
+    (async done
+      (-> (p/let [result (mcp-server/call-data-tool api mcp-compat/create-embed args)
+                  body (js->clj (js/JSON.parse (aget (aget (aget result "content") 0) "text")) :keywordize-keys true)
+                  _ (reset! deny-target? true)
+                  denied (mcp-server/call-data-tool api mcp-compat/create-embed args)]
+            (is (not (true? (aget result "isError"))))
+            (is (= 91 (get-in body [:validation :parent :id])))
+            (is (= 93 (get-in body [:validation :target :id])))
+            (is (nil? (:response body)))
+            (is (false? (:verified body)))
+            (is (true? (aget denied "isError")))
+            (is (string/includes? (aget (aget (aget denied "content") 0) "text") "target lookup denied"))
+            (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls)))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest create-embed-does-not-misreport-query-errors-as-cycles
+  (async done
+    (-> (p/let [_ (-> (mcp-compat/create-embed
+                       (fn [_ _] #js {:error "entity query denied"})
+                       #js {:parent_uuid "00000000-0000-4000-8000-000000000091"
+                            :target_uuid "00000000-0000-4000-8000-000000000093" :dry_run true})
+                      (p/then (fn [_] (is false "A query error must reject")))
+                      (p/catch (fn [error] (is (= "entity query denied" (.-message error))))))
+                _ (-> (mcp-compat/create-embed
+                       (fn [_ _] #js {:uuid "00000000-0000-4000-8000-000000000091"})
+                       #js {:parent_uuid "00000000-0000-4000-8000-000000000091"
+                            :target_uuid "00000000-0000-4000-8000-000000000093" :dry_run true})
+                      (p/then (fn [_] (is false "Missing IDs must reject")))
+                      (p/catch (fn [error] (is (string/includes? (.-message error) "valid parent and target IDs")))))]
+          nil)
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
+
 (deftest create-embed-verifies-link-reference-and-placement
   (let [parent-uuid "00000000-0000-4000-8000-000000000091"
         target-uuid "00000000-0000-4000-8000-000000000093"
@@ -2919,6 +3043,56 @@
             (is (false? (:verified result)))
             (is (string? (:diagnostic result)))
             (is (= 2 @writes)))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest create-embed-incomplete-readback-never-retries-the-write
+  (let [parent-uuid "00000000-0000-4000-8000-000000000091"
+        target-uuid "00000000-0000-4000-8000-000000000093"
+        embed-uuid "00000000-0000-4000-8000-000000000092"
+        complete {:id 92 :uuid embed-uuid :title "" :parent {:id 91} :page {:id 91}
+                  :link {:id 93} :refs [{:id 93}]}
+        observed (atom nil)
+        writes (atom 0)
+        api (fn [method args]
+              (.then (js/Promise.resolve nil)
+                     (fn [_]
+                       (case method
+                         "logseq.DB.createEmbed" (do (swap! writes inc) #js {:uuid embed-uuid})
+                         "logseq.DB.datascriptQuery"
+                         (let [entity-uuid (str (reader/read-string (second args)))]
+                           (cond
+                             (= entity-uuid parent-uuid) #js {:id 91 :uuid parent-uuid :name "host"}
+                             (= entity-uuid target-uuid) #js {:id 93 :uuid target-uuid :name "target"}
+                             (:transport-error @observed) (js/Promise.reject (js/Error. (:transport-error @observed)))
+                             :else (clj->js @observed)))
+                         (throw (js/Error. (str "Unexpected API method " method)))))))
+        args #js {:parent_uuid parent-uuid :target_uuid target-uuid}]
+    (async done
+      (-> (p/do!
+            (p/doseq [stored [nil
+                             (dissoc complete :link)
+                             (dissoc complete :refs)
+                             (assoc complete :parent {:id 94})
+                             (assoc complete :page {:id 94})]]
+              (reset! observed stored)
+              (let [before @writes]
+                (p/let [result (mcp-compat/create-embed api args)]
+                  (is (false? (:verified result)))
+                  (is (= embed-uuid (get-in result [:response :uuid])))
+                  (is (string? (:diagnostic result)))
+                  (is (= (inc before) @writes)))))
+            (p/doseq [failure [{:error "readback denied"}
+                  {:transport-error "readback transport closed"}]]
+              (reset! observed failure)
+              (p/let [before @writes
+                  result (mcp-server/call-data-tool api mcp-compat/create-embed args)
+                  message (aget (aget (aget result "content") 0) "text")]
+                (is (true? (aget result "isError")))
+                (is (string/includes? message (or (:error failure) (:transport-error failure))))
+                (is (string/includes? message embed-uuid))
+                (is (string/includes? message "Inspect listEmbeds before retrying"))
+                (is (= (inc before) @writes)))))
           (p/catch (fn [error] (is false (str error))))
           (p/finally done)))))
 

@@ -17,6 +17,7 @@
             [frontend.util.entity :as entity]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
+            [logseq.api.db-based.util :as api-util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
@@ -100,41 +101,43 @@
       (throw (js/Error. "No graph is open")))
     (p/let [parent (db-async/<get-block repo parent-uuid {:children? false})
             target (db-async/<get-block repo target-uuid {:children? false})]
-      (when-not parent
-        (throw (js/Error. (str "No entity exists with exact UUID " parent-uuid))))
-      (when-not target
-        (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
-      (when (ldb/recycled? parent)
-        (throw (js/Error. "Cannot create an embed under a recycled parent")))
-      (when (ldb/recycled? target)
-        (throw (js/Error. "Cannot embed a recycled target")))
-      (when (or (entity/property? parent)
-                (not (or (entity/page? parent) (:block/page parent))))
-        (throw (js/Error. "parent_uuid must identify a page or block")))
-      (when (or (entity/property? target)
-                (not (or (entity/page? target) (:block/page target))))
-        (throw (js/Error. "target_uuid must identify a page or block")))
       (let [parent-id (:db/id parent)
-        target-id (:db/id target)
-        parent-page (:block/page parent)
-        parent-page-id (if (map? parent-page) (:db/id parent-page) parent-page)]
-        (when (= parent-id target-id)
-          (throw (js/Error. "An embed cannot target its own parent")))
-        (p/let [ancestors (db-async/<get-block-parents repo parent-id 1000)]
-          (when (>= (count ancestors) 1000)
-            (throw (js/Error. "Parent ancestry exceeds the embed cycle-check limit")))
-          (when (or (= target-id parent-page-id)
-                    (some #(= target-id (:db/id %)) ancestors))
-            (throw (js/Error. "Cannot embed an ancestor of the parent; this would create a render cycle")))
-          (p/let [embed (editor-handler/api-insert-new-block!
-                         ""
-                         {:block-uuid parent-uuid
-                          :sibling? false
-                          :edit-block? false
-                          :other-attrs {:block/link target-id}})]
-            (when-not (:block/uuid embed)
-              (throw (js/Error. "Embed insertion did not return a block UUID")))
-            (sdk-utils/result->js embed)))))))
+            target-id (:db/id target)
+            parent-page (:block/page parent)
+            parent-page-id (if (map? parent-page) (:db/id parent-page) parent-page)
+            error (cond
+                    (nil? parent) (str "No entity exists with exact UUID " parent-uuid)
+                    (nil? target) (str "No entity exists with exact UUID " target-uuid)
+                    (ldb/recycled? parent) "Cannot create an embed under a recycled parent"
+                    (ldb/recycled? target) "Cannot embed a recycled target"
+                    (or (entity/property? parent)
+                        (not (or (entity/page? parent) (:block/page parent))))
+                    "parent_uuid must identify a page or block"
+                    (or (entity/property? target)
+                        (not (or (entity/page? target) (:block/page target))))
+                    "target_uuid must identify a page or block"
+                    (= parent-id target-id) "An embed cannot target its own parent")]
+        (if error
+          (p/rejected (js/Error. error))
+          (p/let [ancestors (db-async/<get-block-parents repo parent-id 1000)]
+            (cond
+              (>= (count ancestors) 1000)
+              (p/rejected (js/Error. "Parent ancestry exceeds the embed cycle-check limit"))
+
+              (or (= target-id parent-page-id)
+                  (some #(= target-id (:db/id %)) ancestors))
+              (p/rejected (js/Error. "Cannot embed an ancestor of the parent; this would create a render cycle"))
+
+              :else
+              (p/let [embed (editor-handler/api-insert-new-block!
+                             ""
+                             {:block-uuid parent-uuid
+                              :sibling? false
+                              :edit-block? false
+                              :other-attrs {:block/link target-id}})]
+                (if (:block/uuid embed)
+                  (sdk-utils/result->js embed)
+                  (p/rejected (js/Error. "Embed insertion did not return a block UUID")))))))))))
 
 
 (defn update-block
@@ -393,12 +396,12 @@
         tag-uuid (sdk-utils/uuid-or-throw-error tag-uuid)]
     (p/let [users (db-async/<q repo {}
                                '[:find [(pull ?holder [:block/uuid :block/title :block/name
-                                                      :block/page]) ...]
+                                                      :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...]
                                  :in $ ?tag-uuid
                                  :where [?tag :block/uuid ?tag-uuid]
                                         [?holder :block/tags ?tag]]
                                tag-uuid)]
-      (sdk-utils/result->js users))))
+      (sdk-utils/result->js (api-util/with-embed-info-tree users)))))
 
     (declare <inspect-page-query inspect-page-structural-property?)
 
@@ -414,13 +417,13 @@
             refs (if target-id
                    (<inspect-page-query
                     repo
-                    "[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...] :in $ ?target :where [?entity :block/refs ?target]]"
+                    "[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...] :in $ ?target :where [?entity :block/refs ?target]]"
                     target-id)
                    [])
             tagged (if target-id
                      (<inspect-page-query
                       repo
-                      "[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...] :in $ ?target :where [?entity :block/tags ?target]]"
+                      "[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...] :in $ ?target :where [?entity :block/tags ?target]]"
                       target-id)
                      [])
             property-class (<inspect-page-query
@@ -429,7 +432,7 @@
             value-rows (if target-id
                          (<inspect-page-query
                           repo
-                          "[:find (pull ?entity [:block/uuid :block/title :block/name :block/page]) (pull ?property [:db/ident :block/title]) :in $ ?target ?class :where [?property :block/tags ?class] [?property :db/ident ?attribute] [?entity ?attribute ?target]]"
+                          "[:find (pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) (pull ?property [:db/ident :block/title]) :in $ ?target ?class :where [?property :block/tags ?class] [?property :db/ident ?attribute] [?entity ?attribute ?target]]"
                           target-id property-class)
                          [])]
       (let [property-values (->> value-rows
@@ -496,19 +499,19 @@
                       repo
                       {:transact-db? false}
                       '[:find [(pull ?entity [:block/uuid :block/name :block/title
-                                              :logseq.property/deleted-at]) ...]
+                                                  :logseq.property/deleted-at {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...]
                         :where [?entity :logseq.property/deleted-at _]])]
-      (bean/->js (sdk-utils/normalize-keyword-for-json entities false)))))
+      (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree entities) false)))))
 
 (defn get-status-rows []
   (let [repo (state/get-current-repo)]
     (p/let [rows (db-async/<q
                   repo
                   {:transact-db? false}
-                  '[:find (pull ?entity [:block/uuid :block/title :block/name :block/page])
+                  '[:find (pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}])
                          (pull ?value [:db/ident :block/title])
                     :where [?entity :logseq.property/status ?value]])]
-      (bean/->js (sdk-utils/normalize-keyword-for-json rows false)))))
+      (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree rows) false)))))
 
 (defn get-closed-values []
   (let [repo (state/get-current-repo)]
@@ -584,7 +587,8 @@
       (throw (js/Error. "Expected an exact namespaced property ident such as :plugin.property.my_plugin/Effort, not a title or a UUID")))
     (let [repo (state/get-current-repo)
           query (str "[:find (pull ?holder [:db/id :block/uuid :block/title "
-                      ":block/name {:block/page [:db/id :block/uuid :block/title]}]) "
+                      ":block/name {:block/page [:db/id :block/uuid :block/title]} "
+                      "{:block/link [:db/id :block/uuid :block/title :block/name]}]) "
                       "?value :where [?holder " ident " ?value]]")]
       (p/let [rows (db-async/<q
                     repo
@@ -612,7 +616,7 @@
                                                       (not (boolean? value)))
                                              (get resolved-by-id value))})
                           rows)]
-        (bean/->js (sdk-utils/normalize-keyword-for-json users false))))))
+        (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree users) false))))))
 
 (def ^:private inspect-page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
@@ -657,10 +661,11 @@
     (-> result
         (sdk-utils/normalize-keyword-for-json false)
         bean/->js
-        (js->clj :keywordize-keys true))))
+        (js->clj :keywordize-keys true)
+        api-util/with-embed-info-tree)))
 
 (defn- <inspect-page-block-uuids [repo page-uuid]
-  (let [tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+  (let [tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/link [:db/id :block/uuid :block/title :block/name]} {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
     (p/let [root (<inspect-page-query repo tree-query page-uuid)]
       (when-not root
         (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
@@ -813,7 +818,7 @@
                          page-id)
                 empty-count (<inspect-page-query
                              repo
-                             "[:find (count ?b) . :in $ ?page :where [?b :block/page ?page] [?b :block/title \"\"]]"
+                             "[:find (count ?b) . :in $ ?page :where [?b :block/page ?page] [?b :block/title \"\"] (not [?b :block/link _])]"
                              page-id)
                 refs (<inspect-page-query
                       repo
@@ -875,12 +880,37 @@
               :aliases alias-uuids
               :diagnostic diagnostic})))))))
 
+(defn list-embeds [options]
+  (let [{:keys [page_uuid target_uuid limit] :or {limit 100}} (js->clj options :keywordize-keys true)
+        repo (state/get-current-repo)]
+    (doseq [entity-uuid (remove nil? [page_uuid target_uuid])]
+      (when-not (util/uuid-string? entity-uuid)
+        (throw (js/Error. "Embed filters must be UUIDs"))))
+    (when-not (and (integer? limit) (<= 1 limit 1000))
+      (throw (js/Error. "limit must be an integer between 1 and 1000")))
+    (when-not repo (throw (js/Error. "No graph is open")))
+    (let [query (str "[:find [(pull ?embed [:db/id :block/uuid :block/title :block/order "
+                     "{:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} "
+                     "{:block/link [:db/id :block/uuid :block/title :block/name]}]) ...] :in $"
+                     (when page_uuid " ?page-uuid") (when target_uuid " ?target-uuid")
+                     " :where [?embed :block/link ?target] [?embed :block/page ?page]"
+                     " (not [?embed :logseq.property/deleted-at _])"
+                     " (not [?page :logseq.property/deleted-at _])"
+                     (when page_uuid " [?page :block/uuid ?page-uuid]")
+                     (when target_uuid " [?target :block/uuid ?target-uuid]") "]")
+          inputs (map sdk-utils/uuid-or-throw-error (remove nil? [page_uuid target_uuid]))]
+      (p/let [rows (apply <inspect-page-query repo query inputs)
+              embeds (sort-by :uuid rows)]
+        (bean/->js {:embeds (vec (take limit embeds))
+                   :count (min limit (count embeds))
+                   :truncated (> (count embeds) limit)})))))
+
 (defn get-page-block-uuids [page-uuid]
   (when-not (util/uuid-string? page-uuid)
     (throw (js/Error. "page_uuid must be a UUID")))
   (let [repo (state/get-current-repo)
         page-uuid* (sdk-utils/uuid-or-throw-error page-uuid)
-        tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+        tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/link [:db/id :block/uuid :block/title :block/name]} {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
     (p/let [root (<inspect-page-query repo tree-query page-uuid*)]
       (when-not root
         (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
@@ -945,7 +975,7 @@
     (throw (js/Error. "max_nodes must be an integer between 1 and 1000")))
   (let [repo (state/get-current-repo)
         block-uuid* (sdk-utils/uuid-or-throw-error block-uuid)
-        tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+        tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/link [:db/id :block/uuid :block/title :block/name]} {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
     (p/let [root (<inspect-page-query repo tree-query block-uuid*)]
       (bean/->js (page-block-tree-result block-uuid root max-depth max-nodes)))))
 

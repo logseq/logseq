@@ -119,17 +119,47 @@ sibling placement before truncating the original. `moveBlocks` preflights the
 selection, stops on failed verification, and reports best-effort rollback;
 it currently composes `moveBlock`, using more reads than the optimized reference.
 `migratePage` previews literal top-level selection and reads the source after moving.
-There are 52 unique registered tools: all 50 Python reference names plus the
-retained native `getPage` API route and `createEmbed` (five API-backed and 47 compatibility data tools).
+There are 53 unique registered tools: all 50 Python reference names plus the
+retained native `getPage` API route, `createEmbed`, and `listEmbeds` (five API-backed and 48 compatibility data tools).
 `createEmbed(parent_uuid, target_uuid)` routes through `logseq.DB.createEmbed`
 and the normal editor/outliner insertion path. It supports page and block targets,
 rejects self/ancestor targets, and verifies the persisted UUID, link, derived
 reference, parent, and owning page. `dry_run` performs only identifier and ancestry
 reads; the write API remains responsible for graph/type/recycled validation.
+Dry-run ancestry uses the structural `:block/parent` relation, not a ref pull of
+`:block/parent+` (which is not a ref attribute in the live graph). Lookup errors
+are surfaced before comparing IDs. A live dry run between the separate embed
+host/target pages passed on 2026-10-06 with zero embeds before and after.
 Default capability checks skip the embed write route. Local API and MCP tests
-pass; live embed creation is still pending explicit authorization on a disposable graph.
-Live checklist: create page and block embeds, read their links/refs and placement,
-confirm backlinks, refuse self/ancestor targets, then remove only the created embeds.
+pass. On 2026-10-06 the user confirmed the embed workflow works in Claude Desktop.
+That is user-reported live verification; the assistant independently performed
+only the read-only dry-run check described above, not live create/remove writes.
+Repeatable regression scope: page/block embeds, links/refs and placement,
+backlinks, self/ancestor refusal, and removal without deleting the targets.
+`listEmbeds` is read-only and accepts optional `page_uuid`, `target_uuid`, and
+`limit` (default 100, maximum 1000). Page scope means the stored owning page,
+not recursive nested-page ancestry; both filters are combined. The result contains
+`embeds`, returned-row `count`, and `truncated`. Recycled embed blocks and embeds
+on recycled pages are excluded. The target is not expanded.
+Block-bearing reads expose an additive `embed` descriptor with `target_uuid`,
+`target_type` (`page` or `block`), and `target_title`, alongside the original link.
+This applies to page/block enumeration, trees, page inspection, backlinks,
+tag/property-user inventories, status rows, and recycled inventories.
+`getBlock` preserves its standard API result and resolves target metadata only
+for linked blocks through `logseq.DB.datascriptQuery`; a missing target is marked
+with `target_type: "missing"`. `getPage` retains structural children, including
+nested embeds. Neither tree reader expands embedded target content.
+`pageStats.empty_blocks` excludes embeds, so embeds count toward `content_blocks`.
+Page-only lists remain page metadata; text search is not an embed inventory.
+Use `listEmbeds` for embed discovery and `getBlock` to inspect a search match.
+To remove an embed, pass its own UUID to `removeBlock`, not the target UUID.
+An unverified creation can still have written a block; inspect before retrying.
+Reliability regressions cover the live non-reference `parent+` schema and the MCP
+error envelope, not just mocked entity maps. Missing read-back entities, links,
+refs, or correct placement remain unverified and never trigger an automatic retry.
+A returned read-back API error or rejected verification request is an MCP error
+with the possible created embed UUID and explicit `listEmbeds` inspection guidance;
+insertion is not repeated. Transport-failure fault injection covers this boundary.
 The six remaining handlers are implemented: guarded recycling, metadata-preserving
 clearing, duplicate-title parking, validated outlines, escaped imports, and exact
 reference repair with independently acknowledged and capped page/tag creation.
