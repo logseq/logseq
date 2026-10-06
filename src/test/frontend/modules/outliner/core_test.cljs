@@ -424,6 +424,98 @@
      (outliner-core/move-blocks-up-down! (conn/get-db test-db false) [(get-block 9)] true))
     (is (= [3 9 6] (get-children 2)))))
 
+(defn- move-up-down!
+  [ids up?]
+  (outliner-tx/transact!
+   (transact-opts)
+   (outliner-core/move-blocks-up-down! (conn/get-db test-db false) (mapv get-block ids) up?)))
+
+(defn- parent-id
+  [id]
+  (:block/uuid (:block/parent (get-block id))))
+
+(deftest test-move-blocks-up-down-twice
+  (testing "up twice: 2 blocks go up 1 place per move"
+    (transact-tree! [[1000 [[1001] [1002] [1003] [1004]]]])
+    (move-up-down! [1003 1004] true)
+    (is (= [1001 1003 1004 1002] (get-children 1000)))
+    (move-up-down! [1003 1004] true)
+    (is (= [1003 1004 1001 1002] (get-children 1000)))))
+
+(deftest test-move-blocks-up-down-twice-down
+  (testing "down twice: 2 blocks go down 1 place per move"
+    (transact-tree! [[2000 [[2001] [2002] [2003] [2004]]]])
+    (move-up-down! [2001 2002] false)
+    (is (= [2003 2001 2002 2004] (get-children 2000)))
+    (move-up-down! [2001 2002] false)
+    (is (= [2003 2004 2001 2002] (get-children 2000)))))
+
+(deftest test-move-blocks-up-down-cases
+  ;; tree:
+  ;; [22 [[2 [[3 [[4] [5]]]
+  ;;          [6 [[7 [[8]]]]]
+  ;;          [9 [[10] [11]]]]]
+  ;;      [12 [[13] [14] [15]]]
+  ;;      [16 [[17]]]]]
+  (testing "down: a block among siblings goes after its right sibling"
+    (transact-tree! tree)
+    (move-up-down! [6] false)
+    (is (= [3 9 6] (get-children 2))))
+  (testing "down: a last child whose parent is a last child stays (no right sibling anywhere)"
+    (transact-tree! tree)
+    (move-up-down! [17] false)
+    (is (= [17] (get-children 16)))
+    (is (= 16 (parent-id 17))))
+  (testing "down: a last child goes into its parent's right sibling, as its first child"
+    (transact-tree! tree)
+    (move-up-down! [5] false)
+    (is (= [4] (get-children 3)))
+    (is (= 6 (parent-id 5)))
+    (is (= [5 7] (get-children 6))))
+  (testing "down: a last child whose parent has no right sibling stays"
+    (transact-tree! tree)
+    (move-up-down! [8] false)
+    (is (= [8] (get-children 7))))
+  (testing "up: a first child goes into the block above its parent, as its last child"
+    (transact-tree! tree)
+    (move-up-down! [13] true)
+    (is (= [14 15] (get-children 12)))
+    (is (= 2 (parent-id 13)))
+    (is (= [3 6 9 13] (get-children 2))))
+  (testing "up: a first child whose parent has no left sibling stays"
+    (transact-tree! tree)
+    (move-up-down! [3] true)
+    (is (= [3 6 9] (get-children 2))))
+  (testing "down: 2 consecutive blocks move together, after the next sibling"
+    (transact-tree! tree)
+    (move-up-down! [3 6] false)
+    (is (= [9 3 6] (get-children 2))))
+  (testing "up: 2 consecutive blocks move together, before the previous sibling"
+    (transact-tree! tree)
+    (move-up-down! [6 9] true)
+    (is (= [6 9 3] (get-children 2))))
+  (testing "up: the page's first block does not move"
+    (transact-tree! tree)
+    (move-up-down! [22] true)
+    (is (= 1 (parent-id 22))))
+  (testing "up: the first child of the page's first block does not leave it"
+    (transact-tree! tree)
+    (move-up-down! [2] true)
+    (is (= 22 (parent-id 2)))
+    (is (= [2 12 16] (get-children 22)))
+    (is (= 1 (parent-id 22))))
+  (testing "down: the page's last block does not move"
+    (transact-tree! tree)
+    (move-up-down! [22] false)
+    (is (= 1 (parent-id 22)))
+    (is (= [2 12 16] (get-children 22))))
+  (testing "a block keeps its children when it moves"
+    (transact-tree! tree)
+    (move-up-down! [6] true)
+    (is (= [6 3 9] (get-children 2)))
+    (is (= [7] (get-children 6)))
+    (is (= [8] (get-children 7)))))
+
 (deftest test-insert-blocks
   (testing "
   add [18 [19 20] 21] after 6
