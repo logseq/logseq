@@ -1986,6 +1986,63 @@
                      (is false "inspectPage lookup rejected")
                      (done)))))))
 
+(deftest move-blocks-all-or-nothing-attempts-best-effort-parent-rollback
+  (let [source-page-uuid "00000000-0000-4000-8000-000000000180"
+        target-page-uuid "00000000-0000-4000-8000-000000000181"
+        first-uuid "00000000-0000-4000-8000-000000000182"
+        second-uuid "00000000-0000-4000-8000-000000000183"
+        calls (atom [])
+        entities (atom {source-page-uuid {:id 90 :uuid source-page-uuid :name "source" :title "Source"}
+                        target-page-uuid {:id 91 :uuid target-page-uuid :name "target" :title "Target"}
+                        first-uuid {:id 92 :uuid first-uuid :title "First" :order "a0"
+                                    :parent {:id 90 :uuid source-page-uuid} :page {:id 90}}
+                        second-uuid {:id 93 :uuid second-uuid :title "Second" :order "a1"
+                                     :parent {:id 90 :uuid source-page-uuid} :page {:id 90}}})
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.moveBlock"
+                (if (= (first args) second-uuid)
+                  #js {"error" "injected second move failure"}
+                  (do
+                    (swap! entities update first-uuid assoc
+                           :parent (if (= (second args) target-page-uuid)
+                                     {:id 91 :uuid target-page-uuid}
+                                     {:id 90 :uuid source-page-uuid})
+                           :page {:id (if (= (second args) target-page-uuid) 91 90)}
+                           :order "z")
+                    nil))
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?child")
+                    (->> (vals @entities)
+                         (filter #(= (second args) (get-in % [:parent :id])))
+                         (mapv #(select-keys % [:uuid :order :id])))
+                    (string/includes? query "pull ?descendant") []
+                    (string/includes? query "?child-uuid") []
+                    (string/includes? query "pull ?entity")
+                    (get @entities (str (reader/read-string (second args))))
+                    :else []))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/move-blocks
+                   api #js {"block_uuids" #js [first-uuid second-uuid]
+                            "target_uuid" target-page-uuid "placement" "last-child"
+                            "all_or_nothing" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= [true false] (mapv :verified (:moved result))))
+                    (is (= [first-uuid] (mapv :uuid (:rolled_back result))))
+                    (is (true? (get-in result [:rolled_back 0 :verified])))
+                    (is (= 90 (get-in @entities [first-uuid :parent :id])))
+                    (is (= 90 (get-in @entities [second-uuid :parent :id])))
+                    (is (string/includes? (:diagnostic result) "original positions cannot"))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "all-or-nothing failure should report rollback: " (.-message error)))
+                     (done)))))))
+
 (deftest rename-page-surfaces-db-api-errors-before-readback
   (let [page-uuid "00000000-0000-4000-8000-000000000085"
         calls (atom [])

@@ -302,6 +302,13 @@ reads per implementation, median latency was 6.73 ms for `DB.getBlock` versus
 local warmed API latency, not full MCP latency or a production performance
 guarantee. Comparison mode still runs both reads.
 
+A separate MCP-level read-only baseline on 2026-10-06 measured the full local
+Streamable HTTP `getBlock` route on the retained marker UUID: five warmups,
+thirty timed calls, 19.60 ms median, 21.61 ms p95, and a 1,201-byte response.
+This is a single-process local sample, not comparable to the API-only benchmark
+above, a Python baseline, or a production SLA. It establishes no optimization
+target by itself; no writes were made.
+
 The Stage 2 acceptance rules in `plan.md` apply to every read candidate:
 verify the current DB model, define raw versus expanded output and value/reference
 semantics, preserve identifiers/order/bounds/false values, test namespace-aware
@@ -336,9 +343,11 @@ leaves the page live; `deleteTag` rejects an API error before cleanup queries.
 original parent; `removeBlock` returns the still-present subtree as recovery
 inventory when deletion fails.
 `moveBlocks` reports partial progress and the unattempted remainder on API
-failure; `splitBlock` preserves the original content and skips truncation if a
-tail move returns an API error. `migratePage` remains unverified and keeps the
-selected block at source when its move API fails.
+failure; its local all-or-nothing test confirms best-effort parentage rollback,
+not original sibling-position restoration. `splitBlock` preserves the original
+content and skips truncation if a tail move returns an API error. `migratePage`
+remains unverified and keeps the selected block at source when its move API
+fails.
 `createPage` rejects an API error before UUID read-back.
 `renamePage` rejects an API error before its post-rename read-back.
 `retitleOverDuplicate` preserves its partial-rename undo guidance when the
@@ -374,16 +383,18 @@ title, then recycled and verified both pages. No pre-existing page was changed.
 A live move flow created four temporary sibling blocks, verified `moveBlock`
 placement after an anchor, then reordered two blocks through `moveBlocks` and
 verified the requested order. All four blocks were removed and their temporary
-page recycled. `before`, `child`, and `last-child` live placement variants and
-`all_or_nothing` rollback remain untested.
+page recycled. Separate live controls verified `moveBlock` before and
+last-child sibling placement and child nesting; an initial before attempt was
+unverified but a later order-capturing run passed. `moveBlocks` all-or-nothing
+rollback remains untested live.
 
 A first live `migratePage` attempt selected one of two source blocks and
 returned unverified because `last-child` placement did not verify. Its pages
 were recycled and both generated UUIDs were confirmed absent. The isolated
-direct last-child controls passed, and two fresh `migratePage` retries then
-passed: the matching block landed at target, the nonmatch remained at source,
-and generated blocks/pages were cleaned up. Record the initial discrepancy as
-transient and monitor; do not count the failed attempt as a pass.
+direct last-child controls and several fresh `migratePage` retries passed: the
+matching block landed at target, the nonmatch remained at source, and generated
+blocks/pages were cleaned up. The discrepancy has not reproduced; retain the
+failed attempt in the record and monitor it rather than counting it as a pass.
 
 A live `splitBlock` flow split one temporary block into three siblings, read
 back titles `one`, `two`, and `three` in the expected UUID order, removed the
@@ -397,6 +408,20 @@ A live `repairLinks` flow rewrote one placeholder in a temporary page to the
 UUID of the confirmed existing fixture page, verified one update with no
 missing targets, removed the temporary block, and recycled the page. No page or
 tag creation was enabled in this repair flow.
+
+A live missing-tag repair used explicit tag-creation acknowledgement, created
+one tag and rewrote the placeholder. The temporary block was removed, the tag
+was deleted after its holder count reached zero, and the page was recycled.
+
+A second `repairLinks` flow used explicit page-creation acknowledgement to
+create a missing target and rewrite the temporary placeholder. The source
+block/page were cleaned up. Recycling the generated target page was refused
+because built-in “Linked references” and “Unlinked references” holders retain
+`:logseq.property/view-for` values for it. The page
+`6ac43d02-a0d5-4b31-8836-68066968b4fd` (`MCP Stage3 Repair Target
+e439c64f069b48148a0d16826a5f515a`) remains active; do not set
+`acknowledge_reference_rewrite` without explicit user approval. The user chose
+to leave this generated page active and preserve both existing references.
 
 A live tag lifecycle created a temporary page and tag, verified the tag UUID,
 attached the tag as the page's sole holder, removed the relation and verified
@@ -412,17 +437,22 @@ title no longer resolved, and recycled the page. A prior attempt used the raw
 entity ID instead of `value_entity.title`; its generated definition was
 confirmed absent during cleanup.
 
+A live `node` reference-property flow used a generated target page's numeric
+entity ID, verified both the stored value and resolved `value_entity` ID/title,
+removed the relation and property definition, and recycled both pages. A
+`page` schema attempt was rejected by Logseq before property creation; both
+generated pages were recycled.
+
 A third flow live-tested `createPageofBlocks`: the corrected newline outline
 created three descendants in two batch calls, and `getBlockUUID` returned all
 three. An earlier single-line outline attempt created one block and was also
 cleaned up. Both outline-test pages (`6ac4340e-d299-40c5-a570-8f97c4edf072` and
 `6ac434a0-ab3d-481e-8b12-9c834785c6f4`) are recycled, and `getBlockUUID`
-confirmed zero descendants for both. `clearPage` returned unverified on its
-first call for the multi-block outline, but the identity-checked cleanup retry
-verified clearing and recycled the page. A separate minimal live `clearPage`
-test removed one generated root, verified page metadata and zero descendants,
-then recycled the page. Treat the multi-block first-call discrepancy as
-inconclusive and investigate before claiming a live pass for that case.
+confirmed zero descendants for both. `clearPage` returned unverified on the
+first multi-block call, but an identity-checked cleanup retry, a minimal live
+clear, and a later fresh multi-block clear passed; the first-call discrepancy
+has not reproduced. Keep the initial result documented and monitor it; no
+current live clearPage mismatch remains.
 
 One combined multi-var async run misattributed a rename collision rejection to
 two dry-run tests; those tests pass individually. Do not count that combined
@@ -434,8 +464,10 @@ failure behavior, API errors, and read-back verification. Add or expose a DB API
 only when no suitable existing function supports the MCP contract; reuse
 existing implementations rather than duplicating mutation logic. Live write
 checks require an explicitly approved disposable graph and remain separate
-from local validation. Stage 3 is not complete until the write-tool audit and
-focused local checks are recorded.
+from local validation. The API-routed write audit and focused local validation
+are complete for the 23 graph-mutating tools. Remaining untested live variants
+and non-reproduced anomalies are listed in the tool map and plan; production
+switching remains a separate explicit decision.
 
 ### Stage 4: optimization
 
