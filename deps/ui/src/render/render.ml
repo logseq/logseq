@@ -61,9 +61,16 @@ let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
     | Some v, None ->
         text ~key:("btw-t-" ^ tag) ~style_class:cls ~value:v []
     | Some v, Some p ->
-        text ~key:("btw-a-" ^ tag) ~style_class:cls [ p; D.txt v ]
+        (* logseq-span, not text: prefix/title children must render on
+           every backend, and text is a leaf on hosts that drop a text
+           node's children (apple) or reject extension children inside
+           it *)
+        D.el ~key:("btw-a-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
+          [ p; D.txt v ]
     | None, _ ->
-        text ~key:("btw-c-" ^ tag) ~style_class:cls
+        (* same: the mixed run may carry logseq-* children (emoji,
+           katex slots) which a standard text node cannot admit *)
+        D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
           ((match prefix with Some p -> [ p ] | None -> [])
            @ Render_inline.parse ~self s)
 
@@ -365,7 +372,8 @@ let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
              .block-content keeps its clickable area (cljs does the same
              via the mldoc linebreak node it emits for empty content) *)
           if s = "" then
-            text ~key:"btw-empty" ~style_class:"block-title-wrap"
+            D.el ~key:"btw-empty" ~tag:"span"
+              ~style_class:"block-title-wrap"
               [ br ~key:"btw-br" [] ]
           else wrap ~self ~wrap_attrs ~prefix s)
 
@@ -428,7 +436,8 @@ let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
             in
             match ordered_prefix s with
             | Some (num, rest) ->
-                [ text ~key:"rc-typed-list" ~style_class:"typed-list"
+                [ D.el ~key:"rc-typed-list" ~tag:"span"
+                    ~style_class:"typed-list"
                     [ label ~value:num [] ]
                 ; content ?heading ~self ~wrap_attrs ~prefix rest ]
                 @ tail

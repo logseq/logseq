@@ -56,6 +56,8 @@ let mount () =
   Platform.set_location_search "?rtc-test=true";
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_editor.register registry;
+  Logseq_codemirror.register registry;
   let view ctx ms send =
     ms_ref := Some ms;
     View.view ctx ms send
@@ -525,6 +527,8 @@ let views_session : (Model.t, Action.t) S.t option ref = ref None
 let test_views_table () =
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_editor.register registry;
+  Logseq_codemirror.register registry;
   let vs =
     S.mount ~registry ~profile:Logseq_dom.gpui_profile
       ~initial:Model.initial ~reducer:Update.update

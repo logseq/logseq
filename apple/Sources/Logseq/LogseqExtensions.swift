@@ -63,6 +63,7 @@ enum LogseqExtensionFingerprint {
     "option", "video", "audio", "iframe", "small", "kbd", "table", "thead",
     "tbody", "tr", "td", "th", "br", "hr", "canvas", "article",
     "aside", "footer", "details", "summary", "u", "mark", "b", "i",
+    "del", "ins", "sub", "blockquote",
     "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g",
     "defs", "use", "ellipse", "tspan", "sup", "em-emoji", "raw-text",
     "pdf",

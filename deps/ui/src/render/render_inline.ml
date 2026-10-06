@@ -31,9 +31,12 @@ let find_sub s i pat =
 
 let bracket s = text ~style_class:"bracket" ~value:s []
 
-(* cljs page-reference wraps the anchor in .preview-ref-link *)
+(* cljs page-reference wraps the anchor in .preview-ref-link —
+   logseq-span hosts, not text: children of a text node never draw on
+   hosts that treat text as a leaf (apple) *)
 let preview_link inner =
-  text [ text ~style_class:"preview-ref-link" [ inner ] ]
+  D.el ~tag:"span"
+    [ D.el ~tag:"span" ~style_class:"preview-ref-link" [ inner ] ]
 
 
 (* ---------- emitters ---------- *)
@@ -303,8 +306,8 @@ let block_ref_anchor uuid : t =
     [] context parent
 
 let block_ref uuid =
-  text ~style_class:"page-reference"
-    ~data_attrs:[ ("data-ref", uuid) ]
+  D.el ~tag:"span" ~style_class:"page-reference"
+    ~attrs:[ ("data-ref", uuid) ]
     [ block_ref_anchor uuid ]
 
 (* cljs asset-container / image-or-fallback *)
@@ -365,26 +368,11 @@ let timestamp_el seconds : t =
         [] ]
     context parent
 
-(* html-tag whitelist -> element_tag for text ~as_ (try_html_tag
-   pre-maps ins->u, s->del) *)
-let emph_element_tag tag =
-  match tag with
-  | "b" -> `B
-  | "i" -> `I
-  | "u" -> `U
-  | "s" -> `S
-  | "del" -> `Del
-  | "mark" -> `Mark
-  | "em" -> `Em
-  | "strong" -> `Strong
-  | "code" -> `Code
-  | "kbd" -> `Kbd
-  | "sub" -> `Sub
-  | "sup" -> `Sup
-  | "small" -> `Small
-  | _ -> invalid_arg ("emph: unsupported tag: " ^ tag)
-
-let emph tag children = text ~as_:(emph_element_tag tag) children
+(* emphasis is a logseq-<tag> host, not text ~as_: its children are the
+   parsed run and may carry logseq-* nodes (emoji/katex/link labels),
+   which a standard text node rejects on apple (and whose children some
+   backends never draw). try_html_tag pre-maps ins->u, s->del *)
+let emph tag children = D.el ~tag children
 
 let emoji_el name = Logseq_emoji.el ~name ()
 
@@ -644,11 +632,10 @@ and page_ref ?(tag = false) ~refs ~self name =
     if tag then
       preview_link (page_link ~tag:true ~uuid_sig name) context parent
     else
-      text ~style_class:"page-reference"
-        ~data_attrs:
-          (reactive
-             (fun u -> [ ("data-ref", if u = "" then name else u) ])
-             uuid_sig)
+      D.el ~tag:"span" ~style_class:"page-reference"
+        ~attrs_signal_v:
+          (Logseq_dom.attrs_signal uuid_sig
+             (fun u -> [ ("data-ref", if u = "" then name else u) ]))
         [ bracket "[["
         ; preview_link (page_link ~tag:false ~uuid_sig name)
         ; bracket "]]" ]
@@ -683,8 +670,8 @@ and resolved_ref ~refs ~self uuid : t =
                       ; ("draggable", "true") ]
           ~text:("[[" ^ uuid ^ "]]") []
       else
-        text ~style_class:"page-reference"
-          ~data_attrs:[ ("data-ref", String.lowercase_ascii title) ]
+        D.el ~tag:"span" ~style_class:"page-reference"
+          ~attrs:[ ("data-ref", String.lowercase_ascii title) ]
           [ bracket "[["
           ; preview_link
               (link ~url:"#" ~target:`self_
