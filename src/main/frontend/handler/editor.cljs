@@ -321,11 +321,14 @@
   (atom nil))
 
 (defn- start-pending-new-block!
+  "Marks an Enter as running; returns its token for settle-pending-new-block!."
   []
   (let [resolve! (atom nil)
-        done (p/create (fn [resolve _reject] (reset! resolve! resolve)))]
-    (reset! *pending-new-block-done {:promise done :resolve! @resolve!}))
-  (state/set-state! :editor/pending-new-block {:typed-text ""}))
+        done (p/create (fn [resolve _reject] (reset! resolve! resolve)))
+        token {:promise done :resolve! @resolve! :callback-started? (atom false)}]
+    (reset! *pending-new-block-done token)
+    (state/set-state! :editor/pending-new-block {:typed-text ""})
+    token))
 
 (defn <pending-new-block
   "Settles when the pending Enter, if any, has moved the editor to the new
@@ -370,6 +373,14 @@
     (reset! *pending-new-block-done nil)
     (resolve! nil)))
 
+(defn- settle-pending-new-block!
+  "Ends the Enter of `token` if it is still the running one. The insertion's
+  transaction can succeed without its editor callback (the route or graph
+  changed meanwhile), which would leave Enter blocked and moves waiting."
+  [token]
+  (when (identical? token @*pending-new-block-done)
+    (clear-pending-new-block!)))
+
 (declare get-new-container-id)
 (declare delete-block-aux!)
 (declare expand-collapsed-indent-target!)
@@ -377,6 +388,7 @@
 (defn- inserted-block-edit-fn
   [source-block block container-id]
   (fn [rows]
+    (some-> @*pending-new-block-done :callback-started? (reset! true))
     (let [block' (or (some #(when (= (:block/uuid block) (:block/uuid %)) %) rows)
                      block)
           source-block' (or (some #(when (= (:block/uuid source-block) (:block/uuid %)) %) rows)
@@ -597,9 +609,8 @@
      (when state
        (if (leaf-property-value-insert-blocked? (:config state) (:block state))
          (escape-editing)
-         (do
-           (start-pending-new-block!)
-           (let [{:keys [block value config]} state
+         (let [pending-token (start-pending-new-block!)
+               {:keys [block value config]} state
                  value (if (string? block-value) block-value value)
                  block-id (:block/uuid block)
                  block-self? (block-self-alone-when-insert? config block-id)
@@ -632,8 +643,14 @@
                          _ (first insert-result)]
                    (clear-when-saved!))
                  (p/catch (fn [error]
-                            (clear-pending-new-block!)
-                            (throw error)))))))))))
+                            (settle-pending-new-block! pending-token)
+                            (throw error)))
+                 (p/finally (fn []
+                              ;; the transaction is done: when its editor
+                              ;; callback did not run (the route or graph
+                              ;; changed), nothing else will end this Enter
+                              (when-not @(:callback-started? pending-token)
+                                (settle-pending-new-block! pending-token)))))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -994,16 +1011,23 @@
 
 (declare delete-block-inner-aux!)
 
-(defn delete-block-inner!
-  [repo editor-state]
-  (let [p (delete-block-inner-aux! repo editor-state)
-        ;; settles when the join is done or failed, never rejects
+(defn- track-block-delete!
+  "Registers the join that `p` (a promise or value) finishes as running, so
+  moves wait for it; returns `p`. A join tracked from its keydown registers
+  again in delete-block-inner!; a move then waits for whichever is newest,
+  and the outer one settles last."
+  [p]
+  (let [;; settles when the join is done or failed, never rejects
         settled (-> (p/resolved p) (p/catch (constantly nil)))]
     (reset! *pending-block-delete settled)
     (p/then settled (fn [_]
                       (when (identical? @*pending-block-delete settled)
                         (reset! *pending-block-delete nil))))
     p))
+
+(defn delete-block-inner!
+  [repo editor-state]
+  (track-block-delete! (delete-block-inner-aux! repo editor-state)))
 
 (defn- delete-block-inner-aux!
   [repo {:keys [block block-id value config block-container current-block next-block delete-concat?]}]
@@ -2886,7 +2910,10 @@
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
 (defn- delete-concat [current-block]
-  (p/let [repo (state/get-current-repo)
+  ;; tracked from the start, the block lookups included (see
+  ;; delete-block-when-zero-pos!)
+  (track-block-delete!
+   (p/let [repo (state/get-current-repo)
           current-block-id (or (some-> (state/get-input)
                                        (util/rec-get-node "ls-block")
                                        (dom/attr "blockid")
@@ -2922,7 +2949,7 @@
                                 :current-block hydrated-current-block
                                 :next-block next-block
                                 :delete-concat? true)]
-        (delete-block-inner! repo editor-state)))))
+        (delete-block-inner! repo editor-state))))))
 
 (defn keydown-delete-handler
   [_e]
@@ -2963,7 +2990,10 @@
                                                         editor-config)
                                    mounted-block)
             custom-query? (:custom-query? editor-config)]
-        (p/let [left-or-parent (<left-sibling-or-parent repo block previous-block)]
+        ;; tracked from here: a move during the sibling lookup would still
+        ;; see the block being joined as the edited block
+        (track-block-delete!
+         (p/let [left-or-parent (<left-sibling-or-parent repo block previous-block)]
           (let [top-block? (= (:db/id left-or-parent) (block-page-id block))
                 single-block? (if e (inside-of-single-block (.-target e)) false)
                 root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
@@ -2978,7 +3008,7 @@
                 (p/do!
                  (save-current-block!)
                  (remove-block-own-order-list-type! block))
-                (delete-block-inner! repo editor-state)))))))))
+                (delete-block-inner! repo editor-state))))))))))
 
 (defn keydown-backspace-handler
   [cut? e]

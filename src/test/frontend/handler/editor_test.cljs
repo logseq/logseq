@@ -1573,6 +1573,60 @@
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
 
+(def ^:private real-get-edit-block
+  ;; taken at load, before any test stubs it
+  state/get-edit-block)
+
+(deftest backspace-join-is-pending-during-its-sibling-lookup-test
+  ;; A move pressed while Backspace looks up the previous block must wait:
+  ;; the edit state still names the block about to be joined
+  (async done
+    (let [block {:db/id 1
+                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title ""
+                 :block/page {:db/id 10}}
+          *resolve-sibling (atom nil)
+          sibling-promise (js/Promise. #(reset! *resolve-sibling %))
+          *move-waited (atom :not-settled)
+          originals [state/get-input cursor/pos util/stop state/get-current-repo
+                     state/get-edit-block db-async/<get-block-sibling
+                     editor/get-state editor/delete-block-inner!
+                     util/get-prev-block-non-collapsed-non-embed]
+          restore! (fn []
+                     (set! state/get-input (nth originals 0))
+                     (set! cursor/pos (nth originals 1))
+                     (set! util/stop (nth originals 2))
+                     (set! state/get-current-repo (nth originals 3))
+                     ;; an earlier async test may not have put it back yet
+                     (set! state/get-edit-block real-get-edit-block)
+                     (set! db-async/<get-block-sibling (nth originals 5))
+                     (set! editor/get-state (nth originals 6))
+                     (set! editor/delete-block-inner! (nth originals 7))
+                     (set! util/get-prev-block-non-collapsed-non-embed (nth originals 8)))]
+      (set! state/get-input (constantly #js {:value ""}))
+      (set! cursor/pos (constantly 0))
+      (set! util/stop (constantly nil))
+      (set! state/get-current-repo (constantly test-helper/test-db))
+      (set! state/get-edit-block (constantly block))
+      (set! db-async/<get-block-sibling (fn [& _] sibling-promise))
+      (set! editor/get-state (constantly {:config {}}))
+      (set! editor/delete-block-inner! (fn [_repo _state] nil))
+      (set! util/get-prev-block-non-collapsed-non-embed (constantly nil))
+      (let [result (#'editor/delete-block-when-zero-pos! nil)]
+        (p/then (editor/<pending-block-delete) (fn [_] (reset! *move-waited :settled)))
+        (-> (p/do!
+             ;; let every ready callback run: the lookup alone holds it back
+             (p/resolved nil)
+             (p/resolved nil)
+             (is (= :not-settled @*move-waited)
+                 "the join counts as running while its lookup is running")
+             (@*resolve-sibling nil)
+             result
+             (p/delay 0)
+             (is (= :settled @*move-waited) "and ends with it"))
+            (p/catch (fn [e] (is false (str e))))
+            (p/finally (fn [] (restore!) (done))))))))
+
 (deftest editor-delete-guards-nil-input-test
   (testing "stale editing state without a textarea is a no-op"
     (let [deleted (atom [])]
@@ -1863,6 +1917,35 @@
           (p/catch (fn [error]
                      (is false (str error))
                      (done)))))))
+
+(deftest enter-ends-when-its-insert-succeeds-without-the-editor-callback-test
+  ;; The insert's transaction skips the editor callback when the route or
+  ;; graph changed meanwhile; the Enter must still end, or Enter stays
+  ;; blocked and moves wait for good
+  (async done
+    (let [block {:db/id 1
+                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title "abc"}
+          prev-block (state/get-edit-block)
+          prev-action (state/get-editor-action)]
+      (-> (p/with-redefs [editor/insert-new-block-aux! (fn [& _] (p/resolved [nil nil nil]))
+                          editor/clear-when-saved! (constantly nil)
+                          util/get-selection-start (constantly 3)
+                          util/get-selection-end (constantly 3)]
+            (p/do!
+             (editor/insert-new-block! {:block block :value "abc" :config {} :node #js {}}
+                                       "abc" nil)
+             (p/delay 0)
+             (is (nil? (state/get-state :editor/pending-new-block))
+                 "the Enter is no longer pending")
+             (p/race [(p/then (editor/<pending-new-block) (constantly :settled))
+                      (p/delay 200 :still-waiting)])))
+          (p/then (fn [r] (is (= :settled r) "a move waiting on it goes ahead")))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally (fn []
+                       (state/set-state! :editor/block prev-block)
+                       (state/set-editor-action! prev-action)
+                       (done)))))))
 
 (deftest insert-new-block-skips-url-property-value-test
   (let [url-block {:db/id 1
