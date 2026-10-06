@@ -352,16 +352,86 @@ call fails.
 `repairLinks` leaves failed placeholders unchanged and reports them as
 unverified when a block rewrite API call errors.
 Focused local API-error tests now cover all 23 graph-mutating routes, with the
-route-specific outcome recorded in the tool map. These use mocked or
-in-memory API behavior and do not validate live writes. No live writes or
-write-capability probes were performed. One combined multi-var async run
-misattributed a rename collision rejection to two dry-run tests; those tests
-pass individually. Do not count that combined run as passing validation.
+route-specific outcome recorded in the tool map. These failures are injected
+through mocked or in-memory API behavior.
+
+One live API-backed flow passed on the user-confirmed disposable DB graph. The
+51-tool inventory matched and the retained fixture identity was confirmed. A
+temporary child block (`6ac43171-02c3-45b4-b2b7-cf7969e881c4`) was created,
+read back, updated on the same UUID, read back again, removed, and confirmed
+missing. No write-capability probes were enabled, and no other graph entities
+were changed.
+
+A second live flow created page `6ac432be-edbe-449f-9b3b-1f9020a9b50c`, read it
+back, renamed it on the same UUID, and recycled it. `listRecycled` confirmed the
+UUID afterward. The recycled page is a retained test artifact, consistent with
+`deletePage` semantics; no write-capability probes were enabled.
+
+A live `retitleOverDuplicate` flow created two temporary empty pages, moved the
+requested title to the source UUID, verified the other UUID under the parked
+title, then recycled and verified both pages. No pre-existing page was changed.
+
+A live move flow created four temporary sibling blocks, verified `moveBlock`
+placement after an anchor, then reordered two blocks through `moveBlocks` and
+verified the requested order. All four blocks were removed and their temporary
+page recycled. `before`, `child`, and `last-child` live placement variants and
+`all_or_nothing` rollback remain untested.
+
+A first live `migratePage` attempt selected one of two source blocks and
+returned unverified because `last-child` placement did not verify. Its pages
+were recycled and both generated UUIDs were confirmed absent. The isolated
+direct last-child controls passed, and two fresh `migratePage` retries then
+passed: the matching block landed at target, the nonmatch remained at source,
+and generated blocks/pages were cleaned up. Record the initial discrepancy as
+transient and monitor; do not count the failed attempt as a pass.
+
+A live `splitBlock` flow split one temporary block into three siblings, read
+back titles `one`, `two`, and `three` in the expected UUID order, removed the
+three generated blocks, and recycled the page.
+
+A live `importPage` flow imported a three-entry parent/child/sibling outline
+into a temporary page, verified all titles and page/parent relationships,
+removed the child before its parent and sibling, and recycled the page.
+
+A live `repairLinks` flow rewrote one placeholder in a temporary page to the
+UUID of the confirmed existing fixture page, verified one update with no
+missing targets, removed the temporary block, and recycled the page. No page or
+tag creation was enabled in this repair flow.
+
+A live tag lifecycle created a temporary page and tag, verified the tag UUID,
+attached the tag as the page's sole holder, removed the relation and verified
+zero holders, deleted the tag and confirmed its title no longer resolved, then
+recycled the temporary page. A prior attempt stopped on an incorrect response
+shape assertion; read-back confirmed its generated tag was also absent with no
+holders.
+
+A live property lifecycle created a unique plugin definition and temporary
+page, set and read back the value (including its resolved `value_entity`),
+removed the value, confirmed zero holders, deleted the definition, confirmed the
+title no longer resolved, and recycled the page. A prior attempt used the raw
+entity ID instead of `value_entity.title`; its generated definition was
+confirmed absent during cleanup.
+
+A third flow live-tested `createPageofBlocks`: the corrected newline outline
+created three descendants in two batch calls, and `getBlockUUID` returned all
+three. An earlier single-line outline attempt created one block and was also
+cleaned up. Both outline-test pages (`6ac4340e-d299-40c5-a570-8f97c4edf072` and
+`6ac434a0-ab3d-481e-8b12-9c834785c6f4`) are recycled, and `getBlockUUID`
+confirmed zero descendants for both. `clearPage` returned unverified on its
+first call for the multi-block outline, but the identity-checked cleanup retry
+verified clearing and recycled the page. A separate minimal live `clearPage`
+test removed one generated root, verified page metadata and zero descendants,
+then recycled the page. Treat the multi-block first-call discrepancy as
+inconclusive and investigate before claiming a live pass for that case.
+
+One combined multi-var async run misattributed a rename collision rejection to
+two dry-run tests; those tests pass individually. Do not count that combined
+run as passing validation.
 
 For each write tool, record its API function(s), verify DB namespace dispatch,
 and test validation, dry-run and acknowledgement gates, ordering or partial
-failure behavior, API errors, and read-back verification. Add or expose a DB
-API only when no suitable existing function supports the MCP contract; reuse
+failure behavior, API errors, and read-back verification. Add or expose a DB API
+only when no suitable existing function supports the MCP contract; reuse
 existing implementations rather than duplicating mutation logic. Live write
 checks require an explicitly approved disposable graph and remain separate
 from local validation. Stage 3 is not complete until the write-tool audit and
