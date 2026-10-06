@@ -1465,6 +1465,28 @@
                 (transact-move-blocks! conn blocks target-block sibling? opts outliner-op top-level-blocks)
                 nil))))))))
 
+(defn- move-pages
+  "The pages `nodes` are drawn on, and a `same-page?` that says whether a
+  move to `target` (as its sibling or child) stays on one of them."
+  [db nodes]
+  (let [;; the page a node is drawn on: a block's page, or for a nested page
+        ;; (no :block/page) the page it is nested in
+        node-page-id (fn [node]
+                       (let [node (d/entity db (:db/id node))]
+                         (or (:db/id (:block/page node))
+                             (:db/id (:block/parent node)))))
+        pages (set (map node-page-id nodes))
+        ;; where a node lands as a child or sibling of `target`
+        target-page-id (fn [target sibling?]
+                         (let [target (d/entity db (:db/id target))]
+                           (if (and (not sibling?)
+                                    (or (ldb/page? target) (:block/name target)))
+                             (:db/id target)
+                             (node-page-id target))))]
+    {:pages pages
+     :same-page? (fn [target sibling?]
+                   (contains? pages (target-page-id target sibling?)))}))
+
 (defn- move-blocks-up-down
   "Move blocks up/down."
   [conn blocks up?]
@@ -1472,22 +1494,7 @@
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
         opts {:outliner-op :move-blocks-up-down}
-        ;; the page a node is drawn on: a block's page, or for a nested page
-        ;; (no :block/page) the page it is nested in
-        node-page-id (fn [node]
-                       (let [node (d/entity db (:db/id node))]
-                         (or (:db/id (:block/page node))
-                             (:db/id (:block/parent node)))))
-        pages (set (map node-page-id top-level-blocks))
-        ;; where a node lands as a child or sibling of `target`
-        target-page-id (fn [target sibling?]
-                         (let [target (d/entity db (:db/id target))]
-                           (if (and (not sibling?)
-                                    (or (ldb/page? target) (:block/name target)))
-                             (:db/id target)
-                             (node-page-id target))))
-        same-page? (fn [target sibling?]
-                     (contains? pages (target-page-id target sibling?)))]
+        {:keys [pages same-page?]} (move-pages db top-level-blocks)]
     (cond
       ;; a move up or down stays in 1 page: its target comes from 1 end of
       ;; the selection, so a selection over 2 pages would carry the blocks
