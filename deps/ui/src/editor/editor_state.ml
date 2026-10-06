@@ -15,15 +15,22 @@ module String_set = Stdlib.Set.Make (String)
    overwrites a still-pristine buffer when the stored title changed
    externally; a divergent buffer is typed-not-yet-saved text.
    model: the Edit_model the logseq-editor surface renders —
-   [buffer] always mirrors [model.source]; offsets are utf-16 units
-   (Melange strings are utf-16, DOM offsets are code units) *)
+   [buffer] always mirrors [model.source]; offsets are platform units
+   (UTF-16 code units under Melange — DOM offsets count code units —
+   UTF-8 bytes on native) *)
+
+let edit_units : Edit_model.units =
+  match Platform.edit_units with
+  | `Bytes -> Edit_model.Bytes
+  | `U16 -> Edit_model.U16
+
 type editing =
   { uuid : string; buffer : string; scope : string; base : string
   ; model : Edit_model.t }
 
 let mk_editing ?(caret = 0) ~uuid ~buffer ~scope ~base () =
   let model =
-    Edit_model.select (Edit_model.create ~units:Edit_model.U16 buffer)
+    Edit_model.select (Edit_model.create ~units:edit_units buffer)
       ~anchor:caret ~focus:caret
   in
   { uuid; buffer; scope; base; model }

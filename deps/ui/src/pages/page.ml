@@ -131,7 +131,7 @@ let title_editor (page : Model.page) : t =
   let model_st =
     Signal.state ctx.Lui_ui.ui_scheduler
       (let m =
-         Edit_model.create ~units:Edit_model.U16 page.Model.page_title
+         Edit_model.create ~units:S.edit_units page.Model.page_title
        in
        let n = String.length page.Model.page_title in
        Edit_model.select m ~anchor:n ~focus:n)

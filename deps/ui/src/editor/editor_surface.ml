@@ -29,7 +29,7 @@ let mount uuid scope : t =
       (fun e ->
         match e with
         | Some e when e.S.uuid = uuid && e.S.scope = scope -> e.S.model
-        | _ -> Edit_model.create ~units:Edit_model.U16 "")
+        | _ -> Edit_model.create ~units:S.edit_units "")
       (S.editing_sig ())
   in
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)

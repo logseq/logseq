@@ -723,7 +723,7 @@ let merge_next uuid =
                     S.editing =
                       Some
                         { (S.with_model e
-                             (Edit_model.create ~units:Edit_model.U16
+                             (Edit_model.create ~units:S.edit_units
                                 (buf ^ nbuf)))
                           with S.base = buf ^ nbuf }
                   });

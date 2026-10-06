@@ -154,6 +154,35 @@ let test_utf8 () =
   let s6 = "🇫🇷🇺🇸x" in
   eqi "ri3 prev lands at third" 8 (M.prev_off M.Bytes s6 12)
 
+(* B1: the create sites run under the backend's unit system — Bytes on
+   native. Multi-byte text edited in Bytes mode must keep caret,
+   insert, and delete on codepoint boundaries (no mid-codepoint caret,
+   no invalid-UTF-8 splice). *)
+let test_units_multibyte () =
+  let m = M.create ~units:M.Bytes "中a😀b文" in
+  (* byte offsets: 中=0-3, a=3-4, 😀=4-8, b=8-9, 文=9-12 *)
+  eqi "mb len" 12 (String.length m.M.source);
+  let r1 = M.apply m (M.Caret_move M.Right) in
+  eqi "right over 中" 3 r1.M.caret;
+  let r2 = M.apply r1 (M.Caret_move M.Right) in
+  eqi "right over a" 4 r2.M.caret;
+  let r3 = M.apply r2 (M.Caret_move M.Right) in
+  eqi "right over emoji" 8 r3.M.caret;
+  (* insert at a boundary: valid utf-8, caret lands on next boundary *)
+  let mi = M.insert_text r3 "字" in
+  eqs "insert at boundary" "中a😀字b文" mi.M.source;
+  eqi "insert caret" 11 mi.caret;
+  (* backspace removes the whole inserted codepoint, not one byte *)
+  let md = M.delete_backward mi in
+  eqs "del restores source" "中a😀b文" md.M.source;
+  eqi "del caret" 8 md.caret;
+  (* a grapheme cluster steps and deletes as one unit *)
+  let mz = { (M.create ~units:M.Bytes "a👩‍💻x") with M.caret = 1 } in
+  let mz' = M.apply mz (M.Caret_move M.Right) in
+  eqi "zwj cluster one step" 12 mz'.caret;
+  let mz'' = M.delete_forward mz in
+  eqs "fwd del drops cluster" "ax" mz''.M.source
+
 let test_caret_moves () =
   let m = M.create "中a文" in (* bytes: 中=0-3, a=3-4, 文=4-7 *)
   let m = { m with M.caret = 7 } in
@@ -308,6 +337,7 @@ let run () =
   test_run_kinds ();
   test_reveal ();
   test_utf8 ();
+  test_units_multibyte ();
   test_caret_moves ();
   test_deletes ();
   test_insert_keymap ();
