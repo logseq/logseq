@@ -650,10 +650,18 @@ let () =
     let seed = env_int "DB_SYNC_E2E_STRESS_SEED" stress_default_seed in
     let p1_rng = rng_make (seed + 101) in
     let p2_rng = rng_make (seed + 202) in
+    let t0 = Js.Date.now () in
+    let phase name =
+      Js.log2 "[phase]"
+        (Printf.sprintf "%s t=+%.0fs" name ((Js.Date.now () -. t0) /. 1000.))
+    in
+    let () = phase "rtc-page" in
     let* titles = seed_long_nested_page env p1 p2 seed in
+    let () = phase "seeded" in
     let known_titles = ref titles in
     let rec round_loop round =
       if round < rounds then (
+        let () = phase (Printf.sprintf "round%d-begin" round) in
         (* Phase 1: random edits on both clients without forced sync *)
         let* p1_steps, p2_steps =
           Js.Promise.all2
@@ -695,11 +703,14 @@ let () =
               Js.Promise.resolve
                 (Option.value ~default:0 tx.Rtc.local_tx))
         in
+        let () = phase (Printf.sprintf "round%d-edits-done" round) in
         let* () =
           sync_by_trigger env p1 p2 (string_of_int round)
             [ p1_edit_tx; p2_edit_tx; p1_undo_tx; p2_undo_tx ]
         in
+        let () = phase (Printf.sprintf "round%d-synced" round) in
         let* () = assert_two_pages_synced env p1 p2 in
+        let () = phase (Printf.sprintf "round%d-asserted" round) in
         assert_no_severe_sync_errors env1 env2;
         round_loop (round + 1))
       else Js.Promise.resolve ()
