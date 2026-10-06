@@ -14,6 +14,8 @@ open Lui_elements
 module S = Popups_state
 module U = I18n
 
+let dom = Logseq_dom.dom
+
 (* -- autocomplete item ----------------------------------------------- *)
 
 (* cljs svg/help-circle used inside the Query item's doc tooltip *)
@@ -178,17 +180,22 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
          item_sig st.S.vs.Signal.state_signal)
   in
   box ~key ~style_class:"menu-link-wrap"
-    [ menu_item ~key:"lnk" ~style_class:"menu-link"
-        ~selected:(reactive
-           (fun (it : S.ac_item) (v : S.view) ->
-             match v.S.ac with
-             | Some ac -> ac.S.chosen = it.S.ai_idx
-             | None -> false)
-           item_sig st.S.vs.Signal.state_signal)
-        ~accessibility_identifier:
-          ("ac-" ^ string_of_int (Signal.get item_sig).S.ai_idx)
-        ~on_press:(fun _ ->
-          S.apply_index st (Signal.get item_sig).S.ai_idx)
+    [ (* cljs/e2e contract: a.menu-link[#ac-<idx>].chosen — a real
+         anchor (menu_item kind emits a non-anchor node); .chosen and
+         the click ride the dom event/style-class channel *)
+      dom ~key:"lnk" ~tag:"a"
+        ~id:("ac-" ^ string_of_int (Signal.get item_sig).S.ai_idx)
+        ~style_class_signal:
+          (Logseq_dom.class_signal pair (fun (it, v) ->
+               "menu-link"
+               ^ (match v.S.ac with
+                   | Some ac when ac.S.chosen = it.S.ai_idx -> " chosen"
+                   | _ -> "")))
+        ~attrs:[ ("tabindex", "0") ]
+        ~events:"click"
+        ~on_dom_event:(fun name _payload ->
+          if name = "click" then
+            S.apply_index st (Signal.get item_sig).S.ai_idx)
         [ text ~key:"flex1"
             [ reactive
                 ~equal:(fun (a : S.ac_item * S.view) (b : S.ac_item * S.view) ->
@@ -572,15 +579,19 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
       | S.Ci_colors -> cm_color_row st
       | S.Ci_headings -> cm_heading_row st
       | S.Ci_sub (label, _sub) ->
-          (* opens on hover — cm_hover finds it by the cm-sub-<i> id *)
+          (* opens on hover — cm_hover finds it by the cm-sub-<i> id;
+             role=menuitem rides data_attrs (the kind's ~role variant
+             list doesn't cover it) *)
           menu_item ~key:"sub"
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
+            ~data_attrs:[ ("role", "menuitem") ]
             [ text ~key:"lbl" ~value:label []
             ; icon ~key:"chev" ~name:`chevron_right
                 ~style_class:"ls-menu-chevron" [] ]
       | S.Ci_item (label, scut, cmd) ->
           menu_item ~key:"item" ~style_class:cm_item_cls
+            ~data_attrs:[ ("role", "menuitem") ]
             ~on_press:(fun _ -> run_cm_item st cmd)
             (text ~key:"lbl" ~value:label []
              :: (match scut with
@@ -594,6 +605,7 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
   match it with
   | S.Ci_item (label, scut, cmd) ->
       menu_item ~key:"sub-item" ~style_class:cm_item_cls
+        ~data_attrs:[ ("role", "menuitem") ]
         ~on_press:(fun _ -> run_cm_item st cmd)
         (text ~key:"lbl" ~value:label []
          :: (match scut with

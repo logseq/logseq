@@ -109,6 +109,10 @@ let confirm_view (c : Dialogs_state.confirm) =
       | _ -> ())
     [ column ~key:"cfrm"
         ~style_class:"ui__alert-dialog-content"
+        (* cljs ui__alert-dialog-content renders
+           div[role='alertdialog'][aria-modal] — e2e confirms via
+           `div[role='alertdialog'] button:text('Confirm')` *)
+        ~data_attrs:[ ("role", "alertdialog"); ("aria-modal", "true") ]
         (* cljs dialog/alert-inner: a confirm! with plain content
            renders ui__alert-dialog-main-content only — no header *)
         ( (if c.title = "" then

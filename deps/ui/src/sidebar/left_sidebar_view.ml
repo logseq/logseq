@@ -68,13 +68,19 @@ let nav_labels =
   ]
 
 let nav_edit_menu st =
-  (* menu_item carries the checkbox state via ~checked_signal. On web the
-     kind emits button[role=option] rather than div[role=menuitemcheckbox]
-     — the e2e `[role='menuitemcheckbox']:text-is(...)` hook is a known
-     parity gap while the custom dom menu shell stays *)
+  (* menu_item carries the checkbox state via ~checked_signal; role /
+     aria-checked ride data_attrs so the e2e
+     `[role='menuitemcheckbox'][aria-checked]` hook sees them *)
   let mk (nav, label) =
     menu_item ~key:("cb-" ^ nav) ~style_class:"ui__dropdown-menu-item"
       ~text:(t label)
+      ~data_attrs:
+        (reactive
+           (fun cur ->
+             [ ("role", "menuitemcheckbox")
+             ; ("aria-checked", if List.mem nav cur then "true" else "false")
+             ])
+           (Signal.value st.Sidebar_state.nav_checked))
       ~checked_signal:
         (Signal.map
            (fun cur -> List.mem nav cur)
@@ -104,6 +110,7 @@ let plugins_menu st =
         f ())
       (row ~key:("pm-x-" ^ key) ~cross:`center ~gap:4
          ~style_class:"ui__dropdown-menu-item extra-item"
+         ~data_attrs:[ ("role", "menuitem") ]
          [ icon_ icn; text ~value:label [] ])
   in
   let pinned = Plugin_host.pinned () in
@@ -115,6 +122,7 @@ let plugins_menu st =
       ~on_press:(fun _ -> Plugin_host.toggle_pinned pkey)
       (row ~key:("pm-i-" ^ pkey) ~cross:`center
          ~style_class:"ui__dropdown-menu-item"
+         ~data_attrs:[ ("role", "menuitem") ]
          [ row ~key:("wrap-" ^ pkey) ~cross:`center
              ~style_class:"item-wrap"
              [ (* plugin UI injects into this slot by element id
@@ -163,6 +171,7 @@ let lp_menu st =
       (row ~key:("lp-" ^ label) ~cross:`center ~corner_radius:2
          ~padding_horizontal:8 ~padding_vertical:6
          ~style_class:"ui__dropdown-menu-item"
+         ~data_attrs:[ ("role", "menuitem") ]
          ([ icon_ ~cls:"pr-1" icon_name; text ~value:label [] ]
          @ (match caps with [] -> [] | _ -> [ menu_sc caps ])))
   in

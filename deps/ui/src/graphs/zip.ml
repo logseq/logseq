@@ -98,3 +98,78 @@ let build (files : (string * string) list) : string =
   u32 body (Int32.of_int cd_offset);
   u16 body 0;
   Buffer.contents body
+
+(* Minimal ZIP reader (STORE + raw-DEFLATE extraction) — enough for the
+   sqlite-zip graph import: central-directory parse + local-header seeks.
+   DEFLATE payloads (method 8) are inflated by the caller via
+   DecompressionStream; the reader itself stays pure OCaml. *)
+
+type zip_entry =
+  { e_name : string
+  ; e_method : int
+  ; e_csize : int
+  ; e_offset : int (* offset of the local file header *)
+  }
+
+let rd_u16 s off =
+  Char.code s.[off] lor (Char.code s.[off + 1] lsl 8)
+
+let rd_u32 s off =
+  Int32.logor
+    (Int32.of_int (rd_u16 s off))
+    (Int32.shift_left (Int32.of_int (rd_u16 s (off + 2))) 16)
+
+let rd_i32 s off = Int32.to_int (rd_u32 s off)
+
+let eocd_off s =
+  let n = String.length s in
+  let rec scan i =
+    if i < 0 then -1
+    else if
+      i + 3 < n && s.[i] = 'P' && s.[i + 1] = 'K'
+      && Char.code s.[i + 2] = 5 && Char.code s.[i + 3] = 6
+    then i
+    else scan (i - 1)
+  in
+  scan (n - 22)
+
+let is_sig s p a b =
+  p + 3 < String.length s
+  && s.[p] = 'P'
+  && s.[p + 1] = 'K'
+  && Char.code s.[p + 2] = a
+  && Char.code s.[p + 3] = b
+
+let entries s : zip_entry list =
+  match eocd_off s with
+  | eo when eo < 0 -> []
+  | eo ->
+      let cd = rd_i32 s (eo + 16) in
+      let n = String.length s in
+      let rec loop p acc =
+        if p + 46 > n || not (is_sig s p 1 2) then List.rev acc
+        else
+          let nlen = rd_u16 s (p + 28) in
+          let e =
+            { e_method = rd_u16 s (p + 10)
+            ; e_csize = rd_i32 s (p + 20)
+            ; e_offset = rd_i32 s (p + 42)
+            ; e_name = String.sub s (p + 46) nlen
+            }
+          in
+          loop
+            (p + 46 + nlen + rd_u16 s (p + 30) + rd_u16 s (p + 32))
+            (e :: acc)
+      in
+      loop cd []
+
+(* compressed payload of an entry — seek its local header and skip the
+   name/extra fields, then take e_csize bytes *)
+let raw_data s (e : zip_entry) =
+  let p = e.e_offset in
+  if is_sig s p 3 4 then
+    let start = p + 30 + rd_u16 s (p + 26) + rd_u16 s (p + 28) in
+    if start + e.e_csize <= String.length s then
+      String.sub s start e.e_csize
+    else ""
+  else ""

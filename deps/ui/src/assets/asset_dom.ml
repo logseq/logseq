@@ -549,9 +549,7 @@ let asset_container uuid (b : Model.block) : t =
                    with
                    | Some img -> open_lightbox img
                    | None -> ())
-                 (* the image kind admits no Press — wrap it in a box
-                    (descendant selectors keep matching) *)
-                 (box ~key:("acw-" ^ uuid) [ asset_img uuid b file ])
+                 (asset_img uuid b file)
              else asset_placeholder)
            ready.Signal.state_signal
        ; action_bar uuid b ])
@@ -584,41 +582,102 @@ let image_block uuid (b : Model.block) : t =
         ; resize_handle uuid `Left
         ; resize_handle uuid `Right ] ]
 
-(* link fallback for non-image assets *)
-let file_block uuid (b : Model.block) : t =
-  let ext = Option.value b.Model.block_asset_type ~default:"" in
-  let file = uuid ^ "." ^ ext in
-  (* cljs <a download title> — download/title have no props *)
-  box ~key:("af-" ^ uuid)
-    [ link ~key:("afl-" ^ uuid) ~url:"#" ~target:`self_ ~text:file [] ]
-
-(* cljs asset-link pdf branch — a.asset-ref.is-pdf; data-url resolves to
-   the blob object URL async (attrs signal so the patch lands in place) *)
-let pdf_url_sigs : (string, string Signal.state) Hashtbl.t =
+(* resolved object URL for assets/<file> — shared by the pdf/media/
+   asset-ref branches (attrs_signal_v so the patch lands in place) *)
+let asset_url_sigs : (string, string Signal.state) Hashtbl.t =
   Hashtbl.create 8
 
-let pdf_url_sig uuid file context =
-  match Hashtbl.find_opt pdf_url_sigs uuid with
+let mime_of_ext ext =
+  match ext with
+  | "mp3" | "mpeg" -> "audio/mpeg"
+  | "ogg" -> "audio/ogg"
+  | "wav" -> "audio/wav"
+  | "m4a" -> "audio/mp4"
+  | "flac" -> "audio/flac"
+  | "aac" -> "audio/aac"
+  | "wma" -> "audio/x-ms-wma"
+  | "mp4" -> "video/mp4"
+  | "webm" -> "video/webm"
+  | "mov" -> "video/quicktime"
+  | "pdf" -> "application/pdf"
+  | _ -> "application/octet-stream"
+
+let asset_url_sig ~mime uuid file context =
+  match Hashtbl.find_opt asset_url_sigs uuid with
   | Some st -> st
   | None ->
       let st = Signal.state context.Lui_ui.ui_scheduler "" in
-      Hashtbl.replace pdf_url_sigs uuid st;
+      Hashtbl.replace asset_url_sigs uuid st;
       ignore
         ((let ( let* ) p f = Js.Promise.then_ f p in
           let* url =
-            Asset_store.object_url ~repo:(repo ()) ~name:file
-              ~mime:"application/pdf"
+            Asset_store.object_url ~repo:(repo ()) ~name:file ~mime
           in
           Runtime.signal_set st url;
           Js.Promise.resolve ())
          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()));
       st
 
+let audio_exts =
+  [ "mp3"; "ogg"; "mpeg"; "wav"; "m4a"; "flac"; "wma"; "aac" ]
+
+let video_exts = [ "mp4"; "webm"; "mov"; "flv"; "avi"; "mkv" ]
+
+(* cljs asset-link non-image branches: <audio>/<video> for media,
+   a.asset-ref[href][download] for everything else — the elements ride
+   the dom channel since controls/src/download/href have no props *)
+let file_block uuid (b : Model.block) : t =
+ fun context parent ->
+  let ext = Option.value b.Model.block_asset_type ~default:"" in
+  let file = uuid ^ "." ^ ext in
+  let url =
+    (asset_url_sig ~mime:(mime_of_ext ext) uuid file context)
+      .Signal.state_signal
+  in
+  let src_attrs base =
+    Logseq_dom.attrs_signal url (fun u ->
+        if u = "" then base else ("src", u) :: base)
+  in
+  let body =
+    if
+      List.mem ext audio_exts
+      || (ext = "webm" && Str_util.starts_with b.Model.block_title "Audio-")
+    then
+      (* cljs audio-cp: <audio controls> — m4a carries a typed
+         <source> child instead of a src attr *)
+      dom ~key:("au-" ^ uuid) ~tag:"audio"
+        ~attrs_signal_v:(src_attrs [ ("controls", "") ])
+        (if ext = "m4a" then
+           [ dom ~key:"src" ~tag:"source"
+               ~attrs_signal_v:
+                 (src_attrs [ ("type", "audio/mp4") ])
+               [] ]
+         else [])
+    else if List.mem ext video_exts then
+      (* cljs asset-video: <video.asset-video controls src> *)
+      dom ~key:("vd-" ^ uuid) ~tag:"video" ~style_class:"asset-video"
+        ~attrs_signal_v:(src_attrs [ ("controls", "") ])
+        []
+    else
+      (* cljs web: a.asset-ref[href=src][download=file-name] *)
+      dom ~key:("afl-" ^ uuid) ~tag:"a" ~style_class:"asset-ref"
+        ~text:file
+        ~attrs_signal_v:
+          (Logseq_dom.attrs_signal url (fun u ->
+               if u = "" then [ ("download", file) ]
+               else [ ("href", u); ("download", file) ]))
+        []
+  in
+  box ~key:("af-" ^ uuid) [ body ] context parent
+
+(* cljs a.asset-ref.is-pdf — data-url resolves to the blob object URL
+   async via the same url signal *)
+
 let pdf_block uuid (b : Model.block) : t =
  fun context parent ->
   let file = uuid ^ ".pdf" in
   let href = "../assets/" ^ file in
-  let st = pdf_url_sig uuid file context in
+  let st = asset_url_sig ~mime:"application/pdf" uuid file context in
   (* cljs a.asset-ref.is-pdf — the click opens the in-app pdf viewer (not
      a navigation), and data-href/data-url have no readers, so this is a
      pressable label, not a link *)
