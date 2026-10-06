@@ -1841,13 +1841,23 @@
                    (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
                      (.focus input)
                      (util/scroll-editor-cursor input)))))))
-          (let [ids (state/get-selection-block-ids)]
+          (let [ids (state/get-selection-block-ids)
+                direction (state/get-selection-direction)]
             (when (seq ids)
               (p/let [results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})
                       loaded-blocks (unwrap-block-results results)
                       blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
                 (when (seq blocks)
-                  (move-nodes blocks))))))))))
+                  (p/do!
+                   (move-nodes blocks)
+                   ;; a moved block is drawn as a new row; the selection held
+                   ;; the old rows, no longer in the page. Select the new
+                   ;; rows on the next frame
+                   (js/requestAnimationFrame
+                    (fn []
+                      (let [nodes (keep #(some-> % str util/get-first-block-by-id) ids)]
+                        (when (= (count nodes) (count ids))
+                          (state/set-selection-blocks! nodes direction)))))))))))))))
 
 (defn get-selected-ordered-blocks
   []
