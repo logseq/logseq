@@ -3404,7 +3404,11 @@
                                             parent (d/entity db (:v d))]
                                         (when (and (nil? (:block/parent parent)) (page-entity? child) (page-entity? parent))
                                           parent))))
-                              (common-util/distinct-by :block/uuid))
+                              (common-util/distinct-by :block/uuid)
+                              ;; Class and property schemas forbid :block/parent (and
+                              ;; class-page also forbids :block/order). Namespace
+                              ;; children stay parented to the class/property.
+                              (remove #(or (ldb/class? %) (ldb/property? %))))
         tx-data (map
                  (fn [parent]
                    {:db/id (:db/id parent)

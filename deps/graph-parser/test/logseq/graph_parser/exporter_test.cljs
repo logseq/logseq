@@ -2548,6 +2548,41 @@ abc
                    (mapv #(-> % :block/parent :db/id) [country continent]))
                 "Top-level hierarchy parents are moved under Library")))))))
 
+(deftest-async import-skips-class-and-property-namespace-roots-when-moving-to-library
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/Immobilie___Haus.md" "- Ein Haus\n"
+                "pages/Wohnung.md" "tags:: [[Immobilie]]\n- Wohnung page tagged Immobilie\n"
+                "pages/Ort___Berlin.md" "- Berlin Ort child\n"
+                "pages/Reise.md" "ort:: Berlin\n- page with ort property\n"
+                "pages/Country___Australia.md" "- Sydney\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+          library (ldb/get-built-in-page @conn common-config/library-page-name)
+          immobilie (db-test/find-page-by-title @conn "Immobilie")
+          haus (db-test/find-page-by-title @conn "Haus")
+          ort (d/entity @conn :user.property/ort)
+          berlin (db-test/find-page-by-title @conn "Berlin")
+          country (db-test/find-page-by-title @conn "Country")]
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Created graph has no validation errors")
+    (is (ldb/class? immobilie)
+        "Namespace root used as a tag is imported as a class")
+    (is (nil? (:block/parent immobilie))
+        "Class namespace roots are not moved under Library")
+    (is (nil? (:block/order immobilie))
+        "Class namespace roots do not get a Library order")
+    (is (ldb/property? ort)
+        "Namespace root used as a property is imported as a property")
+    (is (nil? (:block/parent ort))
+        "Property namespace roots are not moved under Library")
+    (is (= (:db/id immobilie) (:db/id (:block/parent haus)))
+        "Class namespace children keep their class parent")
+    (is (= (:db/id ort) (:db/id (:block/parent berlin)))
+        "Property namespace children keep their property parent")
+    (is (= (:db/id library) (:db/id (:block/parent country)))
+        "Non-class/non-property namespace roots still move under Library")))
+
 (deftest-async import-namespaced-pages-order-after-parent-content-blocks
   (p/let [dir (write-temp-file-graph
                {"logseq/config.edn" "{:file/name-format :triple-lowbar}\n"
