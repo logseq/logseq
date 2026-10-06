@@ -16,6 +16,7 @@
 @import "pdfjs-dist/web/pdf_viewer.css";
 @import "./resources/css/tabler-extension.css";
 @import "./resources/css/codemirror.lsradix.css";
+@import "./resources/css/lui.css";
 @import "./resources/css/lui-core.css";
 @import "./resources/css/lui-overlay.css";
 /* cljs-era sheets (src/main/frontend/**) are no longer imported: replaced by
