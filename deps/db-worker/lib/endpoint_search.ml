@@ -485,19 +485,28 @@ let lt_migrate_fts_to_rowid repo search_db build_id : unit E.t =
 let schedule_fts_rowid_migration repo search_db : unit =
   if Worker_state.search_index_build_id repo = None then
     let build_id = start_search_index_build repo in
-    E.async (fun () ->
-        E.finally
-          (E.catch
-             (lt_migrate_fts_to_rowid repo search_db build_id)
-             (fun exn ->
-                (match exn with
-                 | Stale_index_build _ -> ()
-                 | _ ->
-                     Worker_log.error "search/fts-rowid-migration-failed"
-                       [ ("repo", repo)
-                       ; ("error", Printexc.to_string exn) ]);
-                E.pure ()))
-          (fun () -> E.pure (clear_search_index_build repo build_id)))
+    (* Timers.set_timeout defers the migration off this invoke's thread
+       so it does not hold the global invoke mutex for its duration
+       (native E.async/E.sleep run eagerly; see the build path below) *)
+    ignore
+      (Timers.set_timeout 0 (fun () ->
+           (try
+              E.async (fun () ->
+                  E.finally
+                    (E.catch
+                       (lt_migrate_fts_to_rowid repo search_db build_id)
+                       (fun exn ->
+                          (match exn with
+                           | Stale_index_build _ -> ()
+                           | _ ->
+                               Worker_log.error "search/fts-rowid-migration-failed"
+                                 [ ("repo", repo)
+                                 ; ("error", Printexc.to_string exn) ]);
+                          E.pure ()))
+                    (fun () -> E.pure (clear_search_index_build repo build_id)))
+            with exn ->
+              Worker_log.error "search/fts-rowid-migration-failed"
+                [ ("repo", repo); ("error", Printexc.to_string exn) ])))
 
 (* ---- <build-blocks-index! ---- *)
 
@@ -816,13 +825,26 @@ let search_build_blocks_indice_in_worker args : Wire.t E.t =
                            end))
                 in
                 E.map
-                  (fun _ -> Wire.Keyword "started")
-                  (E.bind
-                     (report_search_index_progress repo
-                        (progress_payload ~build_id ~status:"running"
-                           ~stage:"search-index" ~progress:0 ~processed:0
-                           ~total:0))
-                     run)))
+                  (fun _ ->
+                     (* cljs defers the build to the event loop so this
+                        invoke returns immediately. Native E.sleep does
+                        not defer — schedule it via Timers so the global
+                        invoke mutex is released while the index builds.
+                        The build works on the conn's immutable
+                        datascript snapshot and writes only to the
+                        search db (mutex-serialized per statement). *)
+                     ignore
+                       (Timers.set_timeout 0 (fun () ->
+                            (try E.async run
+                             with exn ->
+                               Worker_log.error "search/index-build-failed"
+                                 [ ("repo", repo)
+                                 ; ("error", Printexc.to_string exn) ])));
+                     Wire.Keyword "started")
+                  (report_search_index_progress repo
+                     (progress_payload ~build_id ~status:"running"
+                        ~stage:"search-index" ~progress:0 ~processed:0
+                        ~total:0))))
   | _ -> invalid_arg "search-build-blocks-indice-in-worker expects (repo)"
 
 let search_build_pages_indice _args : Wire.t E.t = E.pure Wire.nil
