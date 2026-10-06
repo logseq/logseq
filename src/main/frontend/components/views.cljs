@@ -471,8 +471,13 @@
      (editor-handler/save-current-block!)
      (when hide-popup?
        (shui/popup-hide!))
-     (state/exit-editing-and-set-selected-blocks! [cell])
-     (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
+     ;; The popup can hide after the cell unmounted (the table re-rendered
+     ;; or the page changed): then there is no cell to select or focus
+     (if cell
+       (do
+         (state/exit-editing-and-set-selected-blocks! [cell])
+         (set-focus-timeout! (js/setTimeout #(when (.-isConnected cell) (.focus cell)) 100)))
+       (state/clear-edit!)))))
 
 (defn- mobile-btn-class
   "The sole purpose of this function is to avoid false positives in hardcoded UI detection."
