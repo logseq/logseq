@@ -9,9 +9,9 @@ $OutputPath = Join-Path $WorkspaceRoot 'logseq-native.mcpb'
 
 Push-Location $ExtensionRoot
 try {
-  npm install --omit=dev --no-audit --no-fund
+  npm ci --omit=dev --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) {
-    throw "npm install failed with exit code $LASTEXITCODE."
+    throw "npm ci failed with exit code $LASTEXITCODE."
   }
 
   npx --yes @anthropic-ai/mcpb validate manifest.json

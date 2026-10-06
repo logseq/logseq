@@ -35,8 +35,8 @@
         root-id (:db/id (d/entity db [:block/uuid (uuid block-uuid)]))
         root-entity (when root-id (d/pull db '[*] root-id))
         root (when root-entity
-           (js->clj (clj->js (sdk-utils/normalize-keyword-for-json root-entity true))
-               :keywordize-keys true))]
+             (js->clj (clj->js (sdk-utils/normalize-keyword-for-json root-entity true))
+                :keywordize-keys true))]
     (letfn [(descendants [parent-id]
               (mapcat (fn [child-id]
                         (let [child (d/pull db '[*] child-id)
@@ -63,16 +63,16 @@
         calls (atom [])
         counter (atom 200)
         conn (d/create-conn (merge db-schema/schema {:block/uuid {:db/unique :db.unique/identity}
-                            :block/parent {:db/valueType :db.type/ref}
-                            :block/page {:db/valueType :db.type/ref}
-                            :block/tags {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-                            :block/parent+ {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-                            :block/refs {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-                            :block/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-                            :plugin.property/smoke-link {:db/valueType :db.type/ref}
-                            :logseq.property/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}}))
+                                                  :block/parent {:db/valueType :db.type/ref}
+                                                  :block/page {:db/valueType :db.type/ref}
+                                                  :block/tags {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+                                                  :block/parent+ {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+                                                  :block/refs {:db/valueType :db.type/ref :db.cardinality :db.cardinality/many}
+                                                  :block/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+                                                  :plugin.property/smoke-link {:db/valueType :db.type/ref}
+                                                  :logseq.property/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}}))
         api (fn [method args]
-              (swap! calls conj [method args])
+            (swap! calls conj [method args])
             (.then (js/Promise.resolve nil) (fn [_] (case method
                 "logseq.DB.datascriptQuery"
                 (clj->js (sdk-utils/normalize-keyword-for-json
@@ -80,90 +80,90 @@
                                   (map #(if (and (string? %) (or (string/starts-with? % "#uuid")
                                                                (string/starts-with? % "[[")))
                                           (reader/read-string %) %) (rest args))) false))
-                              "logseq.DB.getBlock"
-                              (clj->js (sdk-utils/normalize-keyword-for-json
-                                   (d/pull @conn '[*] [:block/uuid (uuid (first args))]) true))
-                              "logseq.DB.getPageBlockUUIDs"
-                              (let [page-uuid (uuid (first args))
-                                    root-id (d/q '[:find ?root . :in $ ?uuid
-                                                   :where [?root :block/uuid ?uuid]]
-                                                 @conn page-uuid)]
-                                (letfn [(descendants [parent-id]
-                                          (mapcat (fn [child]
-                                                    (cons child (descendants (:db/id child))))
-                                                  (d/q '[:find [(pull ?child [:db/id :block/uuid :block/title :block/name :block/order
-                                                                                 {:block/parent [:db/id :block/uuid]}
-                                                                                 {:block/page [:db/id :block/uuid]}]) ...]
-                                                        :in $ ?parent
-                                                        :where [?child :block/parent ?parent]]
-                                                      @conn parent-id)))]
-                                  (let [blocks (descendants root-id)]
-                                (clj->js
-                                 (sdk-utils/normalize-keyword-for-json
-                                  (mapv #(assoc % :page_uuid (str page-uuid))
-                                    (sort-by #(str (:block/order %)) blocks))
-                                  false)))))
-                              "logseq.DB.getTag"
-                              (when (d/q '[:find ?tag . :in $ ?uuid
-                                           :where [?tag :block/uuid ?uuid] [?tag :block/tags 159]]
-                                         @conn (uuid (first args)))
-                                (clj->js (sdk-utils/normalize-keyword-for-json
-                                          (d/pull @conn '[*] [:block/uuid (uuid (first args))]) true)))
-                              "logseq.DB.getTagUsers"
-                              (let [tag-uuid (uuid (first args))
-                                    users (d/q '[:find [(pull ?holder [:block/uuid :block/title :block/name
-                                                                        :block/page]) ...]
-                                                :in $ ?tag-uuid
-                                                :where [?tag :block/uuid ?tag-uuid] [?holder :block/tags ?tag]]
-                                              @conn tag-uuid)]
-                                (clj->js (sdk-utils/normalize-keyword-for-json users false)))
-                              "logseq.DB.getBlockTree"
-                              (clj->js (fixture-block-tree conn (first args) (second args) (nth args 2)))
-                              "logseq.DB.getBacklinks"
-                              (let [target-uuid (uuid (first args))
-                                    target-id (d/q '[:find ?target . :in $ ?uuid
-                                                    :where [?target :block/uuid ?uuid]]
-                                                  @conn target-uuid)
-                                    refs (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...]
-                                                :in $ ?target
-                                                :where [?entity :block/refs ?target]]
-                                              @conn target-id)
-                                    tagged (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...]
-                                                  :in $ ?target
-                                                  :where [?entity :block/tags ?target]]
-                                                @conn target-id)
-                                    properties (d/q '[:find (pull ?entity [:block/uuid :block/title :block/name :block/page])
-                                                          (pull ?property [:db/ident :block/title])
-                                                      :in $ ?target ?class
-                                                      :where [?property :block/tags ?class]
-                                                             [?property :db/ident ?attribute]
-                                                             [?entity ?attribute ?target]]
-                                                    @conn target-id 157)
-                                    property-values (mapv (fn [[holder property]]
-                                                            {:holder holder :property property})
-                                                          properties)
-                                    total (+ (count refs) (count tagged) (count property-values))]
-                                (clj->js
-                                 (sdk-utils/normalize-keyword-for-json
-                                  {:target_uuid (str target-uuid)
-                                   :total total
-                                   :refs refs
-                                   :tagged tagged
-                                   :property_values property-values
-                                   :diagnostic (if (pos? total)
-                                                 (str (count refs) " reference(s), "
-                                                      (count tagged) " tag holder(s), "
-                                                      (count property-values) " property value(s).")
-                                                 "Nothing refers to this entity.")}
-                                  false)))
-                              "logseq.DB.getTitleHolders"
-                              (let [entities (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :db/ident
-                                                                         :block/tags :logseq.property/deleted-at
-                                                                         {:block/tags [:db/ident]}]) ...]
-                                                   :in $ ?title
-                                                   :where [?entity :block/title ?title]]
-                                                 @conn (first args))]
-                                (clj->js (sdk-utils/normalize-keyword-for-json entities false)))
+                "logseq.DB.getBlock"
+                (clj->js (sdk-utils/normalize-keyword-for-json
+                     (d/pull @conn '[*] [:block/uuid (uuid (first args))]) true))
+                "logseq.DB.getPageBlockUUIDs"
+                (let [page-uuid (uuid (first args))
+                      root-id (d/q '[:find ?root . :in $ ?uuid
+                                     :where [?root :block/uuid ?uuid]]
+                                   @conn page-uuid)]
+                  (letfn [(descendants [parent-id]
+                            (mapcat (fn [child]
+                                      (cons child (descendants (:db/id child))))
+                                    (d/q '[:find [(pull ?child [:db/id :block/uuid :block/title :block/name :block/order
+                                                                   {:block/parent [:db/id :block/uuid]}
+                                                                   {:block/page [:db/id :block/uuid]}]) ...]
+                                          :in $ ?parent
+                                          :where [?child :block/parent ?parent]]
+                                        @conn parent-id)))]
+                    (let [blocks (descendants root-id)]
+                  (clj->js
+                   (sdk-utils/normalize-keyword-for-json
+                    (mapv #(assoc % :page_uuid (str page-uuid))
+                      (sort-by #(str (:block/order %)) blocks))
+                    false)))))
+                "logseq.DB.getTag"
+                (when (d/q '[:find ?tag . :in $ ?uuid
+                             :where [?tag :block/uuid ?uuid] [?tag :block/tags 159]]
+                           @conn (uuid (first args)))
+                  (clj->js (sdk-utils/normalize-keyword-for-json
+                            (d/pull @conn '[*] [:block/uuid (uuid (first args))]) true)))
+                "logseq.DB.getTagUsers"
+                (let [tag-uuid (uuid (first args))
+                      users (d/q '[:find [(pull ?holder [:block/uuid :block/title :block/name
+                                                          :block/page]) ...]
+                                  :in $ ?tag-uuid
+                                  :where [?tag :block/uuid ?tag-uuid] [?holder :block/tags ?tag]]
+                                @conn tag-uuid)]
+                  (clj->js (sdk-utils/normalize-keyword-for-json users false)))
+                "logseq.DB.getBlockTree"
+                (clj->js (fixture-block-tree conn (first args) (second args) (nth args 2)))
+                "logseq.DB.getBacklinks"
+                (let [target-uuid (uuid (first args))
+                      target-id (d/q '[:find ?target . :in $ ?uuid
+                                      :where [?target :block/uuid ?uuid]]
+                                    @conn target-uuid)
+                      refs (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...]
+                                  :in $ ?target
+                                  :where [?entity :block/refs ?target]]
+                                @conn target-id)
+                      tagged (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page]) ...]
+                                    :in $ ?target
+                                    :where [?entity :block/tags ?target]]
+                                  @conn target-id)
+                      properties (d/q '[:find (pull ?entity [:block/uuid :block/title :block/name :block/page])
+                                            (pull ?property [:db/ident :block/title])
+                                        :in $ ?target ?class
+                                        :where [?property :block/tags ?class]
+                                               [?property :db/ident ?attribute]
+                                               [?entity ?attribute ?target]]
+                                      @conn target-id 157)
+                      property-values (mapv (fn [[holder property]]
+                                              {:holder holder :property property})
+                                            properties)
+                      total (+ (count refs) (count tagged) (count property-values))]
+                  (clj->js
+                   (sdk-utils/normalize-keyword-for-json
+                    {:target_uuid (str target-uuid)
+                     :total total
+                     :refs refs
+                     :tagged tagged
+                     :property_values property-values
+                     :diagnostic (if (pos? total)
+                                   (str (count refs) " reference(s), "
+                                        (count tagged) " tag holder(s), "
+                                        (count property-values) " property value(s).")
+                                   "Nothing refers to this entity.")}
+                    false)))
+                "logseq.DB.getTitleHolders"
+                (let [entities (d/q '[:find [(pull ?entity [:block/uuid :block/title :block/name :db/ident
+                                                           :block/tags :logseq.property/deleted-at
+                                                           {:block/tags [:db/ident]}]) ...]
+                                     :in $ ?title
+                                     :where [?entity :block/title ?title]]
+                                   @conn (first args))]
+                  (clj->js (sdk-utils/normalize-keyword-for-json entities false)))
                 "logseq.DB.deletePage"
                 (let [entity (d/entity @conn [:block/uuid (uuid (first args))])]
                   (if (some #(= 159 (:db/id %)) (:block/tags entity))
@@ -176,24 +176,24 @@
                   (d/transact! conn [{:db/id id :block/uuid (uuid uuid-text) :block/title (first args)
                                      :db/ident (keyword "user.class" (str "smoke-" id)) :block/tags [159]}])
                   #js {:uuid uuid-text})
-                  "logseq.DB.upsertProperty"
-                  (let [id (swap! counter inc)
+                "logseq.DB.upsertProperty"
+                (let [id (swap! counter inc)
                       title (string/replace (first args) #"\s+" "")
                       schema (second args)
                       ident (keyword "plugin.property._test_plugin" title)
                       uuid-text (str "00000000-0000-4000-8000-000000000" id)]
-                    (d/transact! conn [{:db/id id :db/ident ident :block/uuid (uuid uuid-text)
+                  (d/transact! conn [{:db/id id :db/ident ident :block/uuid (uuid uuid-text)
                              :block/title title :block/tags [157]
                              :logseq.property/type (keyword (aget schema "type"))
                              :db/cardinality (keyword "db.cardinality" (or (aget schema "cardinality") "one"))}])
-                    #js {:ident (str ident) :uuid uuid-text})
-                      "logseq.DB.getPropertiesByTitle"
-                      (let [properties (d/q '[:find [(pull ?property [:db/ident :block/title :logseq.property/type]) ...]
+                  #js {:ident (str ident) :uuid uuid-text})
+                "logseq.DB.getPropertiesByTitle"
+                (let [properties (d/q '[:find [(pull ?property [:db/ident :block/title :logseq.property/type]) ...]
                                   :in $ ?title
                                   :where [?property :block/title ?title]
                                        [?property :block/tags 157]]
                                   @conn (first args))]
-                        (clj->js (sdk-utils/normalize-keyword-for-json properties false)))
+                  (clj->js (sdk-utils/normalize-keyword-for-json properties false)))
                 "logseq.DB.addBlockTag"
                 (do (d/transact! conn [[:db/add [:block/uuid (uuid (first args))] :block/tags
                                        [:block/uuid (uuid (second args))]]]) nil)
@@ -232,8 +232,8 @@
                   nil)
                 "logseq.DB.removeBlock"
                 (do (d/transact! conn [[:db/retractEntity [:block/uuid (uuid (first args))]]]) nil)
-                    "logseq.DB.insertBatchBlock"
-                    (let [parent (d/entity @conn [:block/uuid (uuid (first args))])
+                "logseq.DB.insertBatchBlock"
+                (let [parent (d/entity @conn [:block/uuid (uuid (first args))])
                       parent-id (:db/id parent)
                       page-id (if (:block/name parent) parent-id (:db/id (:block/page parent)))
                       created (mapv (fn [item]

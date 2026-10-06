@@ -7,7 +7,7 @@ This Desktop Extension connects Claude to the native MCP server in a running Log
 From PowerShell:
 
 ```powershell
-.uild.ps1
+.\build.ps1
 ```
 
 The extension is written to `logseq-native.mcpb` beside the workspace's `plan.md`.

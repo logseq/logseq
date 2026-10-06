@@ -10,6 +10,7 @@ function fail(message) {
 
 const endpoint = process.env.LOGSEQ_MCP_URL;
 const token = process.env.LOGSEQ_MCP_TOKEN;
+let cleanup = async () => {};
 
 if (!endpoint || !token) {
   fail("Logseq MCP URL and API token are required. Configure this extension in Claude Desktop.");
@@ -46,7 +47,21 @@ async function start() {
 
   process.stderr.write("[logseq-native] Connected to Logseq's local MCP endpoint.\n");
 
-  const handle = serveStdio(() => {
+  let handle;
+  let closing = false;
+  const close = async () => {
+    if (closing) return;
+    closing = true;
+    try {
+      await handle?.close();
+    } catch {}
+    try {
+      await logseqClient.close();
+    } catch {}
+  };
+  cleanup = close;
+
+  handle = serveStdio(() => {
     const server = new Server(
       { name: "Logseq Local MCP", version: "0.1.5" },
       { capabilities: { tools: {} } }
@@ -62,25 +77,13 @@ async function start() {
     }
   });
 
-  let closing = false;
-  const close = async () => {
-    if (closing) return;
-    closing = true;
-    try {
-      await handle.close();
-    } catch {}
-    try {
-      await logseqClient.close();
-    } catch {}
-  };
-
   process.once("SIGINT", () => void close());
   process.once("SIGTERM", () => void close());
   process.stdin.once("end", () => void close());
 }
 
-start().catch(error => {
-  cleanup();
+start().catch(async error => {
+  await cleanup();
   process.stderr.write(`[logseq-native] Startup failed: ${error.message}\n`);
   process.exitCode = 1;
 });
