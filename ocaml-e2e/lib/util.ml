@@ -330,7 +330,7 @@ let wait_search_index_ready env =
 let probe_search_index env text =
   let js =
     Printf.sprintf
-      "(async () => { try { const r = await logseq.api.search(%s, {'built-in?': true, limit: 10}); const rows = (r && r.blocks) || []; const titles = rows.slice(0, 10).map(b => String(b['block/title'] || b.title || '')); const hit = rows.some(b => String(b['block/title'] || b.title || '') === %s); return JSON.stringify({probe: hit ? 'hit' : 'miss', titles}); } catch (e) { return JSON.stringify({probe: 'err:' + String(e), titles: []}); } })()"
+      "(async () => { try { const r = await logseq.api.search(%s, {'built-in?': true, limit: 10}); const rows = (r && r.blocks) || []; const titles = rows.slice(0, 10).map(b => String(b['block/title'] || b.title || '')); const hit = rows.some(b => String(b['block/title'] || b.title || '') === %s); const bs = logseq.api.get_state_from_store('search/index-build'); return JSON.stringify({probe: hit ? 'hit' : 'miss', titles, build: bs}); } catch (e) { return JSON.stringify({probe: 'err:' + String(e), titles: []}); } })()"
       (Js.Json.stringify (Js.Json.string text))
       (Js.Json.stringify (Js.Json.string text))
   in
