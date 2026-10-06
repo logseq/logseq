@@ -801,7 +801,7 @@ final class NSReferenceBox {
           withJSONObject: ["request": request, "files": files]),
           let json = String(data: data, encoding: .utf8)
         {
-          runtime?.sendPlatformEvent(name: "files-picked", json: json)
+          self.runtime?.sendPlatformEvent(name: "files-picked", json: json)
         }
       }
     case "natural-size":

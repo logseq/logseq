@@ -73,7 +73,7 @@ enum LogseqExtensionFingerprint {
   /// in sync with `child_identifiers` in apple/logseq_dom.ml (it feeds
   /// the fingerprint's `children:`).
   static let identifiers = tags.map { "logseq-" + $0 } + ["logseq-codemirror"]
-  private static let profiles = ["web/web", "macos/swiftui"]
+  private static let profiles = ["web/web", "macos/swiftui", "macos/gpui"]
 
   private static let propertySchemas: [LogseqExtensionFingerprint.Property] = [
     .init(name: "attrs", kind: "string", required: false, defaultValue: nil),
@@ -320,28 +320,6 @@ enum LogseqExtensionFingerprint {
       }
     }
     return registry
-  }
-}
-
-/// Platform-gated stub for the logseq-codemirror extension: the web
-/// adapter owns the real CodeMirror mount/unmount lifecycle; on
-/// SwiftUI the extension renders its `value` prop read-only until a
-/// native editor surface exists.
-struct LogseqCodeMirrorView: View {
-  let context: LUIAppleExtensionViewContext
-
-  private var value: String {
-    if case .string(let v) = context.property("value") {
-      return v
-    }
-    return ""
-  }
-
-  var body: some View {
-    Text(value)
-      .font(.system(.body, design: .monospaced))
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .textSelection(.enabled)
   }
 }
 

@@ -1465,7 +1465,10 @@ final class LogseqMeasureCache: @unchecked Sendable {
     measure: () -> [CGSize]
   ) -> [CGSize] {
     if stale { LogseqLayoutStats.persistBypass += 1; return measure() }
-    let wk = width.map { UInt64(bitPattern: Int64($0)) } ?? UInt64.max
+    let wk = width.map { w -> UInt64 in
+      guard w.isFinite else { return UInt64.max }
+      return UInt64(bitPattern: Int64(w))
+    } ?? UInt64.max
     if let e = store[nodeID]?[wk], e.keys == keys {
       LogseqLayoutStats.persistHit += 1
       return e.sizes
