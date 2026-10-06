@@ -641,10 +641,27 @@ let indent env = indent_outdent env ~indent:true
 let outdent env = indent_outdent env ~indent:false
 
 let toggle_property env property_title property_value =
-  let* () =
-    Keyboard.press env
-      (if Config.mac then "ControlOrMeta+p" else "Control+Alt+p")
+  (* the chord can land on <body> during a remount — a swallowed press
+     leaves the dialog unopened and the fill would wait the full
+     timeout; re-press until the dialog mounts *)
+  let rec open_dialog attempt =
+    let* () =
+      Keyboard.press env
+        (if Config.mac then "ControlOrMeta+p" else "Control+Alt+p")
+    in
+    let* opened =
+      Pw.catch_timeout
+        (Js.Promise.then_
+           (fun () -> Js.Promise.resolve true)
+           (E2e_assert.is_visible_l ~timeout:8000.
+              (Pw.q env ".ls-property-dialog")))
+        (fun () -> Js.Promise.resolve false)
+    in
+    if opened then Js.Promise.resolve ()
+    else if attempt > 0 then open_dialog (attempt - 1)
+    else Js.Promise.reject (Failure "property dialog did not open")
   in
+  let* () = open_dialog 2 in
   let* () = Pw.fill env ".ls-property-dialog .cp__select-input" property_title in
   let* () =
     Pw.wait_for env
