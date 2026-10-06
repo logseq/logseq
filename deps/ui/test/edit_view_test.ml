@@ -401,9 +401,53 @@ let test_bytes_default () =
   eqs "byte insert" "中xa"
     (M.insert_text { m with M.caret = 3 } "x").M.source
 
+(* incremental line table: [lines_step] must emit exactly what a fresh
+   [lines_of] produces on every transition, and must return the previous
+   list untouched when only caret/selection/composition moved *)
+let test_incremental () =
+  let src = "alpha **b1** line0\nbeta line1 **b2**\ngamma line2 tail" in
+  let m0 = M.create src in
+  let cache = Edit_view.line_cache () in
+  let ls0 = Edit_view.lines_step cache m0 in
+  check "step base == full" (ls0 = Edit_view.lines_of m0);
+  (* caret-only move shares runs/lines -> same list object *)
+  let m1 = { m0 with M.caret = 3 } in
+  let ls1 = Edit_view.lines_step cache m1 in
+  check "caret move reuses lines" (ls1 == ls0);
+  (* plain-char insert inside line 1: line 0 is reused, line 2 is a
+     shifted copy, the whole result equals a full recompute *)
+  let pos = String.index src '\n' + 5 in
+  let m3 = M.splice m1 pos pos "X" in
+  check "splice records dirty span"
+    (m3.M.dirty = Some (pos, 0, 1));
+  check "splice keeps line count"
+    (List.length m1.M.lines = List.length m3.M.lines);
+  check "splice keeps shape" (M.shape m1 = M.shape m3);
+  let ls3 = Edit_view.lines_step cache m3 in
+  check "splice == full" (ls3 = Edit_view.lines_of m3);
+  check "splice keeps untouched line" (List.hd ls3 == List.hd ls1);
+  (* IME composition keeps the line list *)
+  let m4 =
+    M.composition_update (M.composition_begin m3 m3.M.caret) ~len:2
+  in
+  let ls4 = Edit_view.lines_step cache m4 in
+  check "ime reuses lines" (ls4 == ls3);
+  (* caret inside a `**` construct flips its reveal -> result still
+     matches a full recompute *)
+  let m2 = { m0 with M.caret = 8 } in
+  let ls2 = Edit_view.lines_step cache m2 in
+  check "reveal flip == full" (ls2 = Edit_view.lines_of m2);
+  check "reveal flip changed frags" (ls2 <> ls0);
+  (* newline insert changes the line count -> full recompute path,
+     still equal *)
+  let m5 = M.splice m0 pos pos "\nx" in
+  let ls5 = Edit_view.lines_step cache m5 in
+  check "line-count change == full" (ls5 = Edit_view.lines_of m5)
+
 let run () =
   test_emit_structure ();
   test_empty_line_pad ();
+  test_incremental ();
   test_shape_gated ();
   test_overlay ();
   test_sink_events ();

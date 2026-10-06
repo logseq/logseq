@@ -1,16 +1,19 @@
 (* Shared string helpers — substring search, prefix/suffix tests, trim
-   and substitution that used to be hand-rolled per file. *)
+   and substitution that used to be hand-rolled per file.
 
-(* naive O(n*m) substring search; needles here are a few chars so the
-   constant factor beats String.search-style machinery *)
-let contains hay needle =
-  let lh = String.length hay and ln = String.length needle in
-  let rec go i = i + ln <= lh && (String.sub hay i ln = needle || go (i + 1)) in
-  ln = 0 || go 0
+   Every comparison here is a byte-compare loop, never [String.sub]:
+   under Melange [String.sub] materializes the whole string as a
+   char-code array before slicing, so a per-position sub-compare is
+   O(len s) per position — quadratic on buffer-scale scans. *)
 
-let contains_ci hay needle =
-  let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
-  contains h n
+(* byte-wise equality of [pat] against s[i, i+len pat) — no allocation *)
+let starts_at s i pat =
+  let n = String.length pat in
+  i >= 0
+  && i + n <= String.length s
+  &&
+  let rec go k = k = n || (String.unsafe_get s (i + k) = String.unsafe_get pat k && go (k + 1)) in
+  go 0
 
 (* index of needle from position i *)
 let index_from s i sub =
@@ -18,12 +21,27 @@ let index_from s i sub =
   if m = 0 then Some i
   else if i < 0 || i + m > n then None
   else
+    let c0 = String.unsafe_get sub 0 in
+    let rec match_rest j k =
+      k = m
+      || (String.unsafe_get s (j + k) = String.unsafe_get sub k
+          && match_rest j (k + 1))
+    in
     let rec find j =
       if j + m > n then None
-      else if String.sub s j m = sub then Some j
+      else if String.unsafe_get s j <> c0 then find (j + 1)
+      else if match_rest j 1 then Some j
       else find (j + 1)
     in
     find i
+
+(* naive O(n*m) substring search; needles here are a few chars so the
+   constant factor beats String.search-style machinery *)
+let contains hay needle = index_from hay 0 needle <> None
+
+let contains_ci hay needle =
+  let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
+  contains h n
 
 let index_of s sub = index_from s 0 sub
 
@@ -31,24 +49,23 @@ let index_ci hay needle =
   let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
   index_of h n
 
-let starts_with s prefix =
-  let lp = String.length prefix in
-  String.length s >= lp && String.sub s 0 lp = prefix
+let starts_with s prefix = starts_at s 0 prefix
 
 let ends_with s suf =
   let ls = String.length s and lf = String.length suf in
-  ls >= lf && String.sub s (ls - lf) lf = suf
+  ls >= lf && starts_at s (ls - lf) suf
 
 let starts_with_ci s prefix =
   let n = String.length prefix in
   String.length s >= n
-  && String.lowercase_ascii (String.sub s 0 n)
-     = String.lowercase_ascii prefix
-
-(* prefix test at an explicit offset *)
-let starts_at s i pat =
-  let n = String.length pat in
-  i + n <= String.length s && String.sub s i n = pat
+  &&
+  let rec go k =
+    k = n
+    || (Char.lowercase_ascii (String.unsafe_get s k)
+        = Char.lowercase_ascii (String.unsafe_get prefix k)
+        && go (k + 1))
+  in
+  go 0
 
 (* leading whitespace: space, tab, CR *)
 let ltrim s =
@@ -70,7 +87,7 @@ let replace_all s ~pat ~rep =
   else
     let buf = Buffer.create n in
     let rec go i =
-      if i + m <= n && String.sub s i m = pat then (
+      if i + m <= n && starts_at s i pat then (
         Buffer.add_string buf rep;
         go (i + m))
       else if i < n then (

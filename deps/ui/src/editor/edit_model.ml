@@ -223,6 +223,11 @@ type t =
       (* visual line unit ranges [start, stop). Populated from '\n'
          breaks by default; the host overwrites via [set_lines] with
          wrapped-line ranges measured on the rendered run nodes. *)
+  ; dirty : (int * int * int) option
+      (* dirty-span hint for the view's incremental line pass:
+         Some (pos, deleted_len, inserted_len) from the last [splice]
+         (offsets against the new source), None when the buffer changed
+         non-locally (set_source) or only [lines] moved (set_lines). *)
   }
 
 (* default line table: '\n'-separated source lines, '\n' itself belongs
@@ -236,7 +241,7 @@ let lines_of_source s =
   in
   go 0 []
 
-let rebuild m source ~caret ~anchor =
+let rebuild m source ~caret ~anchor ~dirty =
   { m with
     source
   ; version = m.version + 1
@@ -245,6 +250,7 @@ let rebuild m source ~caret ~anchor =
   ; anchor
   ; composition = None
   ; lines = lines_of_source source
+  ; dirty
   }
 
 let create ?(units = Bytes) source =
@@ -256,13 +262,14 @@ let create ?(units = Bytes) source =
   ; anchor = None
   ; composition = None
   ; lines = lines_of_source source
+  ; dirty = None
   }
 
 (* external update (db broadcast / undo): re-split, keep caret clamped *)
 let set_source m source =
   let caret = clamp_caret m.units source m.caret in
   let anchor = Option.map (clamp_caret m.units source) m.anchor in
-  rebuild m source ~caret ~anchor
+  rebuild m source ~caret ~anchor ~dirty:None
 
 let selection_range m =
   match m.anchor with
@@ -276,7 +283,9 @@ let has_selection m = Option.is_some (selection_range m)
    Line membership is unit-range arithmetic over [lines]; the host owns
    actual line breaking and feeds wrapped ranges back via [set_lines]. *)
 
-let set_lines m lines = { m with lines }
+(* wrapped ranges replace the line table wholesale — no dirty span to
+   preserve, the view falls back to a full pass *)
+let set_lines m lines = { m with lines; dirty = None }
 
 (* a caret on a line's end offset belongs to that line — the offset
    sits before the terminating '\n' (or at end of source) *)
@@ -340,10 +349,16 @@ let splice m lo hi text =
   let lo = clamp_caret m.units m.source lo
   and hi = clamp_caret m.units m.source hi in
   let lo, hi = min lo hi, max lo hi in
-  let source =
-    String.sub m.source 0 lo ^ text ^ String.sub m.source hi (n - hi)
-  in
-  rebuild m source ~caret:(lo + String.length text) ~anchor:None
+  (* single O(n) buffer build — String.sub would copy the whole source
+     twice under Melange (bytes_of_string per call) *)
+  let tl = String.length text in
+  let b = Bytes.create (n - (hi - lo) + tl) in
+  Bytes.blit_string m.source 0 b 0 lo;
+  Bytes.blit_string text 0 b lo tl;
+  Bytes.blit_string m.source hi b (lo + tl) (n - hi);
+  let source = Bytes.unsafe_to_string b in
+  rebuild m source ~caret:(lo + tl) ~anchor:None
+    ~dirty:(Some (lo, hi - lo, tl))
 
 let insert_text m text =
   match selection_range m with
