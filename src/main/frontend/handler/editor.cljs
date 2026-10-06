@@ -1844,6 +1844,18 @@
           (some #(when (= container-id (row-container-id %)) %) rows))
         (first rows))))
 
+(defn- move-scroll-context
+  []
+  [(state/get-current-repo) (state/get-route-match)])
+
+(defn- moved-row
+  "The row of block `block-id` in container `container-id`, else its first."
+  [block-id container-id]
+  (let [rows (util/get-blocks-by-id block-id)]
+    (or (when container-id
+          (some #(when (= container-id (row-container-id %)) %) rows))
+        (first rows))))
+
 (defn- reselect-moved-rows?
   "Select the moved rows only when each was found and the selection is still
   the one that was moved: a click or Escape during the move wins."
@@ -1855,18 +1867,26 @@
   [up?]
   (let [repo (state/get-current-repo)
         edit-block-id (:block/uuid (state/get-edit-block))
+        start-context (move-scroll-context)
         move-nodes (fn [blocks]
-                     (let [blocks' (block-handler/get-top-level-blocks blocks)]
+                     (let [blocks' (block-handler/get-top-level-blocks blocks)
+                           block-id (str (:block/uuid (first blocks)))
+                           ;; the view the block is moved in: it can also be
+                           ;; drawn in an embed or the sidebar
+                           container-id (some-> (util/get-first-block-by-id block-id)
+                                                row-container-id)]
                        (p/let [result (ui-outliner-tx/transact!
                                        (merge {:outliner-op :move-blocks}
                                               (block-handler/outliner-tx-meta (first blocks')))
                                        (outliner-op/move-blocks-up-down! blocks' up?))]
                          ;; the moved row is drawn in its new place on the
-                         ;; next frame; scroll that place into view
+                         ;; next frame; scroll that place into view, if the
+                         ;; page and graph are still the ones moved in
                          (js/requestAnimationFrame
                           (fn []
-                            (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                              (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))
+                            (when (= start-context (move-scroll-context))
+                              (when-let [block-node (moved-row block-id container-id)]
+                                (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))))
                          result)))]
     (p/let [root-block (get-focused-root-block)]
       (if edit-block-id
