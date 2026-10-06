@@ -27,35 +27,56 @@ let add_new_properties env title_prefix =
            previous property's value editor and the command keystrokes
            bleed into its title. *)
         let rec open_editor attempt =
-          (* the target row can sit outside the virtuoso window and never
-             mount — scroll the page scroller to the bottom before
-             clicking so the tail rows are present *)
-          let* _ =
-            Pw.eval_js env
-              "(() => { const s = \
-               document.querySelector('[data-virtuoso-scroller]') || \
-               document.querySelector('#main-content-container'); if (s) \
-               { s.scrollTop = s.scrollHeight; return 'scroller'; } \
-               window.scrollTo(0, document.body.scrollHeight); return \
-               'window'; })()"
-          in
-          let* () =
-            Pw.catch_timeout
-              (Pw.click_l ~timeout:15000.
-                 (Util.get_by_text env block_title true))
-              (fun () ->
-                 let* _ =
-                   Pw.eval_js env
-                     "(() => { const s = \
-                      document.querySelector('[data-virtuoso-scroller]') \
-                      || \
-                      document.querySelector('#main-content-container'); \
-                      if (s) { s.scrollTop = s.scrollHeight; return \
-                      'scroller'; } window.scrollTo(0, \
-                      document.body.scrollHeight); return 'window'; })()"
-                 in
-                 Pw.click_l (Util.get_by_text env block_title true))
-          in
+          (* if the block's editor is already open the title lives in a
+             textarea, not a text node — getByText can never match it *)
+          let* current = Util.get_edit_content env in
+          if current = Some block_title then Js.Promise.resolve ()
+          else
+            (* the target row can sit outside the virtuoso window and never
+               mount — scroll the page scroller to the bottom before
+               clicking so the tail rows are present *)
+            let* _ =
+              Pw.eval_js env
+                "(() => { const s = \
+                 document.querySelector('[data-virtuoso-scroller]') || \
+                 document.querySelector('#main-content-container'); if (s) \
+                 { s.scrollTop = s.scrollHeight; return 'scroller'; } \
+                 window.scrollTo(0, document.body.scrollHeight); return \
+                 'window'; })()"
+            in
+            let* () =
+              Pw.catch_timeout
+                (Pw.click_l ~timeout:15000.
+                   (Util.get_by_text env block_title true))
+                (fun () ->
+                   let* _ =
+                     Pw.eval_js env
+                       "(() => { const s = \
+                        document.querySelector('[data-virtuoso-scroller]') \
+                        || \
+                        document.querySelector('#main-content-container'); \
+                        if (s) { s.scrollTop = s.scrollHeight; return \
+                        'scroller'; } window.scrollTo(0, \
+                        document.body.scrollHeight); return 'window'; })()"
+                   in
+                   Pw.catch_timeout
+                     (Pw.click_l ~timeout:20000.
+                        (Util.get_by_text env block_title true))
+                     (fun () ->
+                        let* dump =
+                          Pw.eval_js env
+                            "(() => { const titles = \
+                             [...document.querySelectorAll('.block-title')].map(t => t.textContent.trim()).filter(Boolean).slice(0, 40); \
+                             const ed = \
+                             document.querySelector('.editor-wrapper textarea'); \
+                             return JSON.stringify({titles, editing: ed \
+                             ? ed.value : null}); })()"
+                        in
+                        let* () =
+                          Js.Promise.resolve (Js.log2 "[prop-dbg]" dump)
+                        in
+                        Pw.click_l (Util.get_by_text env block_title true)))
+            in
           let* () = Keyboard.press env "Control+e" in
           let deadline = Js.Date.now () +. 8000. in
           let rec poll () =
