@@ -23,6 +23,7 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.utf8 :as utf8]
             [promesa.core :as p]))
 
 (defn- <ref-with-id
@@ -42,11 +43,37 @@
   [repo date-formatter refs]
   (p/all (mapv #(<ref-with-id repo date-formatter %) refs)))
 
+(def ^:private paragraph-break-pattern #"\r?\n(?:[\t ]*\r?\n)+")
+
+(defn- document-text->outline
+  [text]
+  (let [encoded (utf8/encode text)
+        ast (vec (mldoc/->edn text :markdown))]
+    (apply str
+           (map-indexed
+            (fn [index [[kind _] {:keys [start_pos end_pos]}]]
+              (let [part (utf8/substring encoded start_pos end_pos)
+                    [previous-kind previous-data] (when (pos? index) (first (nth ast (dec index))))
+                    start-paragraph? (or (not= previous-kind "Heading")
+                                         (:size previous-data)
+                                         (string/starts-with? part "\n"))]
+                (if (= kind "Paragraph")
+                  (->> (string/split part paragraph-break-pattern)
+                       (map-indexed (fn [paragraph-index paragraph]
+                                      (if (or start-paragraph? (pos? paragraph-index))
+                                        (string/replace-first paragraph #"^([\r\n\t ]*)(\S)" "$1- $2")
+                                        paragraph)))
+                       (string/join "\n\n"))
+                  part)))
+            ast))))
+
 (defn- paste-text-parseable
   [format text]
   (when-let [editing-block (state/get-edit-block)]
     (let [repo (state/get-current-repo)
           date-formatter (state/get-date-formatter)]
+      (when (state/get-input)
+        (commands/delete-selection! (state/get-edit-input-id)))
       (p/let [page-info (db-async/<get-block-page-info repo (or (:db/id editing-block)
                                                                 (:block/uuid editing-block)))
               blocks (block/extract-blocks
@@ -68,12 +95,16 @@
                                                             (let [title' (db-content/replace-tags-with-id-refs title refs)]
                                                               (db-content/title-ref->id-ref title' refs)))))))
                              blocks))]
+        (when-not (and (= repo (state/get-current-repo))
+                       (= (:block/uuid editing-block)
+                          (:block/uuid (state/get-edit-block))))
+          (throw (ex-info "Paste target changed while parsing clipboard text" {})))
         (editor-handler/paste-blocks blocks' {:keep-uuid? true
                                               :outliner-real-op :paste-text})))))
 
 (defn- paste-segmented-text
   [format text]
-  (let [paragraphs (string/split text #"(?:\r?\n){2,}")
+  (let [paragraphs (string/split text paragraph-break-pattern)
         updated-paragraphs
         (string/join "\n"
                      (mapv (fn [p] (->> (string/trim p)
@@ -83,6 +114,32 @@
                                              (str "- " p))))))
                            paragraphs))]
     (paste-text-parseable format updated-paragraphs)))
+
+(defn- plain-text->outline
+  [text]
+  (->> (string/split-lines text)
+       (remove string/blank?)
+       (map #(string/replace % #"^([\t ]*)(\S)" "$1- $2"))
+       (string/join "\n")))
+
+(defn- numbered-text->outline
+  [text]
+  (let [[_ lines]
+        (reduce (fn [[fence lines] line]
+                  (let [marker (second (re-find #"^[\t ]*(`{3,}|~{3,})" line))
+                        next-fence (cond
+                                     (and marker (nil? fence)) marker
+                                     (and marker fence
+                                          (= (first marker) (first fence))
+                                          (>= (count marker) (count fence))
+                                          (string/blank? (subs (string/triml line) (count marker)))) nil
+                                     :else fence)
+                        outline-line (if (or fence marker)
+                                       line
+                                       (string/replace line #"^([\t ]*)\d+[.)][\t ]+" "$1- "))]
+                    [next-fence (conj lines outline-line)]))
+                [nil []] (string/split-lines text))]
+    (string/join "\n" lines)))
 
 (defn- wrap-macro-url
   [url]
@@ -134,7 +191,7 @@
 
 (defn- markdown-blocks?
   [text]
-  (boolean (or (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)
+  (boolean (or (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+|\d+[.)])\s+" text)
                (util/safe-re-find #"(?m)^\s*```[^\r\n]*\r?$" text)
                (util/safe-re-find #"(?m)^\s*\$\$\s*\r?$" text))))
 
@@ -185,17 +242,23 @@
                                          (log/error :exception e)
                                          nil)))]
                         (if (string/blank? result) nil result))
-            text' (or html-text
+            text' (or (when-not (and (re-find paragraph-break-pattern text)
+                                    html-text
+                                    (not (string/includes? html-text "\n")))
+                        html-text)
                       (when (common-util/url? text)
                         (wrap-macro-url text))
                       text)
             blocks? (markdown-blocks? text')]
         (cond
           blocks?
-          (paste-text-parseable format text')
+          (paste-text-parseable format (document-text->outline (numbered-text->outline text')))
 
-          (util/safe-re-find #"(?:\r?\n){2,}" text')
+          (re-find paragraph-break-pattern text')
           (paste-segmented-text format text')
+
+          (string/includes? text' "\n")
+          (paste-text-parseable format (plain-text->outline text'))
 
           :else
           (replace-text-f text'))))))

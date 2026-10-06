@@ -1,6 +1,7 @@
 (ns frontend.handler.paste-test
   (:require ["/frontend/utils" :as utils]
             [cljs.test :refer [deftest are is testing]]
+            [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.db.async :as db-async]
             [frontend.extensions.html-parser :as html-parser]
@@ -15,6 +16,128 @@
             [frontend.util.cursor :as cursor]
             [logseq.graph-parser.block :as gp-block]
             [promesa.core :as p]))
+
+(deftest plain-text-outline-preserves-indentation
+  (are [text expected] (= expected (#'paste-handler/plain-text->outline text))
+    "Parent\n  Child\nSibling" "- Parent\n  - Child\n- Sibling"
+    "Parent\r\n\tChild\r\nSibling\r\n" "- Parent\n\t- Child\n- Sibling"
+    "First\n \nSecond" "- First\n- Second"))
+
+(deftest ordered-outlines-use-structured-paste
+  (are [text] (#'paste-handler/markdown-blocks? text)
+    "1. Parent\n   1. Child\n2. Sibling"
+    "1) Parent\n   1) Child\n2) Sibling")
+  (is (not (#'paste-handler/markdown-blocks? "1.25 is a decimal"))))
+
+(deftest numbered-outline-preserves-fenced-content
+  (is (= "- Parent\n```\n1. Literal\n```\n- Sibling"
+         (#'paste-handler/numbered-text->outline
+          "1. Parent\n```\n1. Literal\n```\n2. Sibling")))
+  (is (= "~~~\n1) Literal\n~~~"
+         (#'paste-handler/numbered-text->outline "~~~\n1) Literal\n~~~"))))
+
+(deftest-async outline-paste-parses-parent-and-sibling-relationships
+  (let [captured (atom nil)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:db/id 10})
+      state/get-input (constantly nil)
+      db-async/<get-block-page-info (fn [& _] (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [blocks _] (reset! captured blocks) (p/resolved nil))]
+      (p/doseq [text [(#'paste-handler/plain-text->outline "Parent\n  Child\nSibling")
+                     (#'paste-handler/numbered-text->outline "1. Parent\n   1. Child\n2. Sibling")
+                     (#'paste-handler/numbered-text->outline "1) Parent\n   1) Child\n2) Sibling")]]
+        (p/let [_ (#'paste-handler/paste-text-parseable :markdown text)]
+          (is (= ["Parent" "Child" "Sibling"] (mapv :block/title @captured)))
+          (let [[parent child sibling] @captured]
+            (is (= (:block/parent parent) (:block/parent sibling)))
+            (is (= (:block/uuid parent) (second (:block/parent child))))))))))
+
+(deftest-async outline-paste-deletes-selected-text-before-parsing
+  (let [deleted (atom false)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:db/id 10})
+      state/get-input (constantly #js {})
+      state/get-edit-input-id (constantly "editor")
+      commands/delete-selection! (fn [id] (is (= "editor" id)) (reset! deleted true))
+      db-async/<get-block-page-info (fn [& _] (is @deleted) (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [_ _] (p/resolved nil))]
+      (#'paste-handler/paste-text-parseable :markdown "- First\n- Second"))))
+
+(deftest-async outline-paste-does-not-target-another-editor
+  (let [target (atom {:block/uuid (random-uuid)})
+        inserted (atom false)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (fn [] @target)
+      state/get-input (constantly nil)
+      db-async/<get-block-page-info
+      (fn [& _]
+        (reset! target {:block/uuid (random-uuid)})
+        (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [_ _] (reset! inserted true))]
+      (-> (#'paste-handler/paste-text-parseable :markdown "- First\n- Second")
+          (p/then (fn [_] (is false "Changed editor should cancel the paste")))
+          (p/catch (fn [error]
+                     (is (= "Paste target changed while parsing clipboard text" (ex-message error)))
+                     (is (false? @inserted))))))))
+
+(deftest-async external-paste-retains-paragraphs-when-html-flattens-them
+  (let [captured (atom nil)
+        text "Title\nFirst paragraph\n\nSecond paragraph\n\nThird paragraph"]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:db/id 10})
+      state/get-input (constantly nil)
+      editor-format/get-selection-and-format (constantly {})
+      html-parser/convert (constantly "Title First paragraph Second paragraph Third paragraph")
+      db-async/<get-block-page-info (fn [& _] (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [blocks _] (reset! captured blocks) (p/resolved nil))]
+      (p/doseq [clipboard [text (string/replace text "\n\n" "\n \n")]]
+        (p/let [_ (#'paste-handler/paste-copied-text nil clipboard "<span>clipboard HTML</span>")]
+          (is (= ["Title\nFirst paragraph" "Second paragraph" "Third paragraph"]
+                 (mapv :block/title @captured))))))))
+
+(deftest-async external-paste-keeps-structured-html-formatting
+  (let [captured (atom nil)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:db/id 10})
+      state/get-input (constantly nil)
+      editor-format/get-selection-and-format (constantly {})
+      html-parser/convert (constantly "**First paragraph**\n\n[Second paragraph](https://example.com)")
+      db-async/<get-block-page-info (fn [& _] (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [blocks _] (reset! captured blocks) (p/resolved nil))]
+      (p/let [_ (#'paste-handler/paste-copied-text nil "First paragraph\n\nSecond paragraph" "<p>clipboard HTML</p>")]
+        (is (= ["**First paragraph**" "[Second paragraph](https://example.com)"]
+               (mapv :block/title @captured)))))))
+
+(deftest-async structured-paste-splits-paragraphs-after-headings-and-bullets
+  (let [captured (atom nil)]
+    (p/with-redefs
+     [state/get-current-repo (constantly "test")
+      state/get-edit-block (constantly {:db/id 10})
+      state/get-input (constantly nil)
+      db-async/<get-block-page-info (fn [& _] (p/resolved {:db/id 1 :block/name "target"}))
+      editor-handler/paste-blocks (fn [blocks _] (reset! captured blocks) (p/resolved nil))]
+      (p/doseq [text ["## Título\n\nFirst paragraph\n\nSecond paragraph"
+                     "- Título\n\nFirst paragraph\n\nSecond paragraph"]]
+        (p/let [_ (#'paste-handler/paste-text-parseable
+                   :markdown (#'paste-handler/document-text->outline text))]
+          (is (= ["Título" "First paragraph" "Second paragraph"]
+                 (mapv :block/title @captured))))))))
+
+(deftest structured-paste-retains-continuations-code-and-tables
+  (is (= "- Parent\n  continuation\n\n  - Child paragraph\n- Sibling"
+         (#'paste-handler/document-text->outline
+          "- Parent\n  continuation\n\n  Child paragraph\n- Sibling")))
+  (is (= "```txt\nFirst\n\nSecond\n```\n\n- After"
+         (#'paste-handler/document-text->outline
+          "```txt\nFirst\n\nSecond\n```\n\nAfter")))
+  (is (= "| A | B |\n|---|---|\n| 1 | 2 |\n\n- After"
+         (#'paste-handler/document-text->outline
+          "| A | B |\n|---|---|\n| 1 | 2 |\n\nAfter"))))
 
 (deftest selection-within-link-test
   (are [x y] (= (#'paste-handler/selection-within-link? x) y)
