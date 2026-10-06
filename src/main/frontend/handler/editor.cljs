@@ -1811,6 +1811,35 @@
        (not (comments-model/protected-comment-block? block))
        (not (focused-root-block? block root-block))))
 
+(defn- row-container-id
+  [node]
+  (some-> (util/rec-get-node node "blocks-container") get-node-container-id))
+
+(defn- row-container-ids
+  "block id -> the container its selected row is drawn in (a block can also
+  be drawn in an embed or the sidebar)."
+  [rows]
+  (into {} (keep (fn [node]
+                   (when-let [id (dom/attr node "blockid")]
+                     [id (row-container-id node)])))
+        rows))
+
+(defn- row-in-container
+  "Of `rows` (the rows drawn for block `id`), the one in the container the
+  block was selected in, else the first."
+  [id rows container-ids]
+  (let [container-id (get container-ids id)]
+    (or (when container-id
+          (some #(when (= container-id (row-container-id %)) %) rows))
+        (first rows))))
+
+(defn- reselect-moved-rows?
+  "Select the moved rows only when each was found and the selection is still
+  the one that was moved: a click or Escape during the move wins."
+  [ids nodes selected-before selected-now]
+  (and (= (count nodes) (count ids))
+       (identical? selected-before selected-now)))
+
 (defonce ^:private *pending-move-reselect
   ;; Resolves when the last move of selected blocks has selected their new
   ;; rows; a move pressed before that would read the old selection
@@ -1848,7 +1877,10 @@
                      (.focus input)
                      (util/scroll-editor-cursor input)))))))
           (let [ids (state/get-selection-block-ids)
-                direction (state/get-selection-direction)]
+                direction (state/get-selection-direction)
+                selected-before (state/get-unsorted-selection-blocks)
+                container-ids (row-container-ids selected-before)
+                new-row #(row-in-container (str %) (util/get-blocks-by-id (str %)) container-ids)]
             (when (seq ids)
               (p/let [results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})
                       loaded-blocks (unwrap-block-results results)
@@ -1865,9 +1897,12 @@
                          ;; waits for this
                          ;; in the order the selection is kept (`ids` is read
                          ;; through the direction, reversed for :up)
-                         (let [nodes (keep #(some-> % str util/get-first-block-by-id) ids)
+                         (let [nodes (keep new-row ids)
                                nodes (if (= direction :up) (reverse nodes) nodes)]
-                           (when (= (count nodes) (count ids))
+                           ;; only when the selection is still the one moved:
+                           ;; a click or Escape meanwhile wins
+                           (when (reselect-moved-rows? ids nodes selected-before
+                                                       (state/get-unsorted-selection-blocks))
                              (state/set-selection-blocks! nodes direction))))
                         (p/finally (fn []
                                      (p/resolve! done nil)

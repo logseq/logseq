@@ -3394,3 +3394,27 @@
     (is (not (editor/db-collapsable?
               {:block/title "hello"
                :logseq.property/created-from-property {:db/ident :user.property/p1}})))))
+
+(deftest moved-rows-are-found-in-the-view-they-were-selected-in-test
+  ;; a block can be drawn twice (an embed above it, the sidebar): the moved
+  ;; row is the one in the container the block was selected in
+  (let [container-of {"embed-row" 7 "page-row" 3 "old-row" 3}]
+    (with-redefs [util/rec-get-node (fn [node _class] node)
+                  editor/get-node-container-id (fn [node] (container-of node))
+                  dom/attr (fn [node _attr] (when (= node "old-row") "b"))]
+      (let [container-ids (#'editor/row-container-ids ["old-row"])]
+        (is (= {"b" 3} container-ids))
+        (is (= "page-row" (#'editor/row-in-container "b" ["embed-row" "page-row"] container-ids))
+            "not the embed's copy drawn first")
+        (is (= "embed-row" (#'editor/row-in-container "c" ["embed-row" "page-row"] container-ids))
+            "a block with no known container takes its first row")))))
+
+(deftest moved-rows-are-reselected-only-if-the-selection-is-unchanged-test
+  (let [before [:b-row :c-row]]
+    (is (true? (#'editor/reselect-moved-rows? ["b" "c"] [:b2 :c2] before before)))
+    (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2 :c2] before [:d-row]))
+        "a click on d during the move keeps d selected")
+    (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2 :c2] before nil))
+        "Escape during the move keeps nothing selected")
+    (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2] before before))
+        "a row not drawn yet: no partial selection")))
