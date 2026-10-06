@@ -323,6 +323,19 @@ let wait_search_index_ready env =
   in
   loop ()
 
+(* Probes the worker search index itself (the same thread-api/search-blocks
+   path the cmdk uses): 'hit' means the index can answer the query right
+   now, 'miss' means the build is still catching up and re-firing the UI
+   query is pointless, 'err' falls back to the plain re-fire path. *)
+let probe_search_index env text =
+  let js =
+    Printf.sprintf
+      "(async () => { try { const r = await logseq.api.search(%s, {'built-in?': true, limit: 10}); const rows = (r && r.blocks) || []; return rows.some(b => String(b['block/title'] || b.title || '') === %s) ? 'hit' : 'miss'; } catch (e) { return 'err:' + String(e); } })()"
+      (Js.Json.stringify (Js.Json.string text))
+      (Js.Json.stringify (Js.Json.string text))
+  in
+  Pw.eval_js env js
+
 let search_and_click env search_text =
   let* () = search env search_text in
   (* stale cmdk nodes stay mounted inside aria-hidden regions — restrict to
@@ -360,10 +373,18 @@ let search_and_click env search_text =
         Playwright.throw_error e)
       (* each round re-fills the box, which wipes pending results — under
          -j8 the worker's search can take >5s, so give every issued query
-         room to render before re-firing *)
-      (repeat_until_visible ~expect_timeout:15000. env 12 result (fun () ->
-           let* () = wait_search_index_ready env in
-           search env search_text))
+         room to render before re-firing. If the index can't answer the
+         query yet (fresh-graph build still truncating/refilling), just
+         wait — re-filling would only wipe the box without producing a row *)
+      (repeat_until_visible ~expect_timeout:15000. env 24 result (fun () ->
+           let* probe = probe_search_index env search_text in
+           match probe with
+           | "miss" ->
+               let* () = wait_search_index_ready env in
+               wait_timeout env 1500.
+           | _ ->
+               let* () = wait_search_index_ready env in
+               search env search_text))
   in
   Pw.click_l result
 
