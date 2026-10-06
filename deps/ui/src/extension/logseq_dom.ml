@@ -33,7 +33,10 @@ let tags =
   ; "defs"; "use"; "ellipse"; "tspan"; "sup"; "em-emoji"; "raw-text" ]
 let identifier tag = "logseq-" ^ tag
 
-let child_identifiers = List.map identifier tags
+(* dedicated widget extensions nest inside logseq-<tag> parents the
+   same way tags nest in each other *)
+let child_identifiers =
+  List.map identifier tags @ [ Logseq_katex.identifier ]
 
 let schema_of tag =
   Lui_extension.component (identifier tag) [ web_profile ]
@@ -59,7 +62,8 @@ let register registry =
   List.iter
     (fun tag ->
       Lui_extension.register_component registry (schema_of tag))
-    tags
+    tags;
+  Logseq_katex.register registry
 
 let tag_of_identifier name =
   let prefix = "logseq-" in
