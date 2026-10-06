@@ -119,9 +119,10 @@ let fmt_btn ctx key label fmt =
 let copy_save_row ctx =
   if_
     ~test:
-      (Signal.map
-         (fun (st : S.t) -> st.content <> None || st.png <> None)
-         (st_sig ctx))
+      (Logseq_dom.own ctx
+         (Signal.map
+            (fun (st : S.t) -> st.content <> None || st.png <> None)
+            (st_sig ctx)))
     (row ~key:"export-btns" ~gap:8
     [ button ~key:"export-copy" ~variant:`primary ~size:`sm
         ~style_class:"ui__button as-solid"
@@ -206,7 +207,9 @@ let png_preview ctx =
                  (st_sig ctx))
             ~style_class:"my-4" [] ]
     ; if_
-        ~test:(Signal.map (fun (st : S.t) -> st.png = None) (st_sig ctx))
+        ~test:
+          (Logseq_dom.own ctx
+             (Signal.map (fun (st : S.t) -> st.png = None) (st_sig ctx)))
         (icon ~key:"png-loading" ~name:(`app "loader-2") []) ]
 
 (* cljs swaps the whole options block for the transparent-bg checkbox
@@ -223,7 +226,7 @@ let lower_options ctx =
                 ~on:(fun st -> st.S.png_transparent)
                 ~on_toggle:(fun () -> P.set_png_transparent (S.st ctx)) () ]
       | _ -> options_rows ctx)
-    (Signal.map (fun (st : S.t) -> st.fmt) (st_sig ctx))
+    (Logseq_dom.own ctx (Signal.map (fun (st : S.t) -> st.fmt) (st_sig ctx)))
 
 let body (_ms : Model.t Signal.signal) : t =
   fun ctx parent ->
@@ -255,8 +258,9 @@ let body (_ms : Model.t Signal.signal) : t =
                              Option.value ~default:"" st.content)
                            (st_sig ctx))
                       [])
-              (Signal.map
-                 (fun (st : S.t) -> st.fmt) (st_sig ctx))
+              (Logseq_dom.own ctx
+                 (Signal.map
+                    (fun (st : S.t) -> st.fmt) (st_sig ctx)))
           ; lower_options ctx
           ; copy_save_row ctx ] ]
       ctx parent

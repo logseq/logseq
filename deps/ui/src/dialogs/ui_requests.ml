@@ -83,7 +83,10 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
   in
   row ~key ~style_class:"ls-toggle-password-input" ~cross:`center
     [ field
-    ; if_ ~test:(Signal.map (fun v -> v <> "") (Signal.value value))
+    ; if_
+        ~test:
+          (Logseq_dom.own ctx
+             (Signal.map (fun v -> v <> "") (Signal.value value)))
         (button ~key:(key ^ "-eye") ~variant:`ghost
            ~style_class:"ls-eye-btn"
            ~label:I18n.e2ee_show_password

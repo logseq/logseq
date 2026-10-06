@@ -189,16 +189,21 @@ let lp_menu st =
 ;;
 
 let menu_host st =
+ fun ctx parent ->
+  (* nested maps each own their upstream subscription on the shared
+     state cells — own both levels *)
   let menu_sig =
-    Signal.map2
-      (fun menu (checked, favorited) -> (menu, checked, favorited))
-      (Signal.value st.Sidebar_state.open_menu)
+    D.own ctx
       (Signal.map2
-         (fun a b -> (a, b))
-         (Signal.value st.nav_checked)
-         (Signal.value st.favorited))
+         (fun menu (checked, favorited) -> (menu, checked, favorited))
+         (Signal.value st.Sidebar_state.open_menu)
+         (D.own ctx
+            (Signal.map2
+               (fun a b -> (a, b))
+               (Signal.value st.nav_checked)
+               (Signal.value st.favorited))))
   in
-  reactive
+  (reactive
     (fun (menu, _checked, _favorited) ->
       match menu with
       | "nav-edit" -> nav_edit_menu st
@@ -206,7 +211,8 @@ let menu_host st =
       | m when String.length m > 3 && String.sub m 0 3 = "lp-" ->
           lp_menu st
       | _ -> Logseq_dom.nothing)
-    menu_sig
+    menu_sig)
+    ctx parent
 
 (* ---------- navigations ---------- *)
 
@@ -278,14 +284,17 @@ let nav_items ~active_route (checked, tag_titles) =
     checked
 
 let nav_group ms st =
+ fun ctx parent ->
   let navs_sig =
-    Signal.map2
-      (fun route rest -> (route, rest))
-      (Signal.map (fun (m : Model.t) -> m.Model.route) ms)
+    D.own ctx
       (Signal.map2
-         (fun a b -> (a, b))
-         (Signal.value st.Sidebar_state.nav_checked)
-         (Signal.value st.nav_tag_titles))
+         (fun route rest -> (route, rest))
+         (D.own ctx (Signal.map (fun (m : Model.t) -> m.Model.route) ms))
+         (D.own ctx
+            (Signal.map2
+               (fun a b -> (a, b))
+               (Signal.value st.Sidebar_state.nav_checked)
+               (Signal.value st.nav_tag_titles))))
   in
   box ~key:"nav-group"
     ~style_class:"sidebar-content-group is-expand"
@@ -321,6 +330,7 @@ let nav_group ms st =
             ]
         ]
     ]
+    ctx parent
 
 (* ---------- favorites / recents ---------- *)
 

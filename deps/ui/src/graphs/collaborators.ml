@@ -329,41 +329,46 @@ let body (_ms : Model.t Signal.signal) : t =
    dialog; an avatar per online user (visible under the same
    rtc-indicator-visible? gate as the cloud indicator) *)
 let widget (ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
   let model_sig =
-    Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms
+    Logseq_dom.own ctx
+      (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)
   in
   let vis_sig =
-    Signal.map
-      (fun ((repo : string option), (r : Model.rtc option)) ->
-        Rtc_flows.refresh_db_rtc_uuid repo;
-        Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
-        && repo <> None
-        && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
-      model_sig
+    Logseq_dom.own ctx
+      (Signal.map
+         (fun ((repo : string option), (r : Model.rtc option)) ->
+           Rtc_flows.refresh_db_rtc_uuid repo;
+           Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
+           && repo <> None
+           && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
+         model_sig)
   in
-  fragment
-    [ if_ ~test:(Signal.map not vis_sig)
-        (box ~key:"collab-off" ~style_class:"hidden" [])
-    ; if_ ~test:vis_sig
-        (row ~key:"collab" ~gap:4 ~cross:`center
-           ~style_class:"rtc-collaborators"
-           [ button ~key:"collab-btn" ~size:`icon
-               ~style_class:"ui__button as-ghost"
-               ~icon:(`app "user-plus")
-               ~label:"rtc collaborators"
-               ~on_press:(fun _ ->
-                 Dialogs_state.open_ "rtc-collaborators")
-               []
-           ; keyed
-               ~source:
-                 (Signal.map
-                    (fun ((_, r) : string option * Model.rtc option) ->
-                      match r with
-                      | Some r -> r.rtc_online_users
-                      | None -> [])
-                    model_sig)
-               ~key:(fun (u : Model.rtc_user) -> u.ru_uuid)
-               ~cmp:Stdlib.compare
-               ~mount:avatar_of
-           ])
-    ]
+  (fragment
+     [ if_ ~test:(Logseq_dom.own ctx (Signal.map not vis_sig))
+         (box ~key:"collab-off" ~style_class:"hidden" [])
+     ; if_ ~test:vis_sig
+         (row ~key:"collab" ~gap:4 ~cross:`center
+            ~style_class:"rtc-collaborators"
+            [ button ~key:"collab-btn" ~size:`icon
+                ~style_class:"ui__button as-ghost"
+                ~icon:(`app "user-plus")
+                ~label:"rtc collaborators"
+                ~on_press:(fun _ ->
+                  Dialogs_state.open_ "rtc-collaborators")
+                []
+            ; keyed
+                ~source:
+                  (Logseq_dom.own ctx
+                     (Signal.map
+                        (fun ((_, r) : string option * Model.rtc option) ->
+                          match r with
+                          | Some r -> r.rtc_online_users
+                          | None -> [])
+                        model_sig))
+                ~key:(fun (u : Model.rtc_user) -> u.ru_uuid)
+                ~cmp:Stdlib.compare
+                ~mount:avatar_of
+            ])
+     ])
+    ctx parent

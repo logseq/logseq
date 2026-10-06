@@ -850,7 +850,7 @@ let default_value_pane_view m ~close : t =
   let editing = Signal.state sched false in
   let buffer = Signal.state sched "" in
   (column ~gap:0
-     [ if_ ~test:(Signal.map (fun e -> not e) (Signal.value editing))
+     [ if_ ~test:(Logseq_dom.own context (Signal.map (fun e -> not e) (Signal.value editing)))
          (menu_item ~text:(I18n.t "property/set-default-value")
             ~on_press:(fun _ -> Runtime.signal_set editing true) [])
      ; if_ ~test:(Signal.value editing)

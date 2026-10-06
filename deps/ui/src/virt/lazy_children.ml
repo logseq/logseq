@@ -93,7 +93,7 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
     set_timeout (fun () -> attach ctx el_id near) 0;
   (box ~key ~accessibility_identifier:el_id ~style_class:"block-children"
      [ D.if_
-         ~test:(Signal.map (fun n -> not n) near_sig)
+         ~test:(D.own ctx (Signal.map (fun n -> not n) near_sig))
          (spacer ~key:"lazy-ph"
             ~min_height:(int_of_float (Float.round min_height)) [])
      ; D.if_ ~test:near_sig (render ()) ])

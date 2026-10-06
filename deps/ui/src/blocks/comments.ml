@@ -101,7 +101,8 @@ let title_editor_el uuid : t = Editor_surface.mount uuid "main"
 (* cljs comments-area-title-view: the label swaps for the block editor
    while the area's title is being edited *)
 let title_cell uuid (b : Model.block) : t =
-  reactive
+ fun ctx parent ->
+  (reactive
     (fun editing ->
       if editing then
         box ~key:("cte-" ^ uuid) ~style_class:"ls-comments-title-editor"
@@ -118,7 +119,8 @@ let title_cell uuid (b : Model.block) : t =
                block; the standard editor machinery mounts the surface *)
             Editor_actions.enter_edit uuid 0)
           [])
-    (editing_sig uuid)
+    (Logseq_dom.own ctx (editing_sig uuid)))
+    ctx parent
 
 let comment_row uuid (b : Model.block) : t =
   box ~key:("crw-" ^ uuid) ~style_class:"ls-comment-row"

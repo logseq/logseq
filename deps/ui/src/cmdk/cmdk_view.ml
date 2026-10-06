@@ -744,7 +744,8 @@ let action_hints (it : S.item option) =
         btns
 
 let hints st : t =
-  row ~key:"hints" ~style_class:"hints" ~main:`space_between
+ fun ctx parent ->
+  (row ~key:"hints" ~style_class:"hints" ~main:`space_between
     [ box ~key:"hints-inner" ~style_class:"cp__cmdk-hints-inner"
         [ row ~key:"hints-row"
             ~style_class:"cp__cmdk-hints-row" ~cross:`center
@@ -752,9 +753,10 @@ let hints st : t =
                 ~style_class:"cp__cmdk-hints-label"
                 ~value:(I18n.t "cmdk.tip/label") []
             ; reactive tip_el
-                (Signal.map
-                   (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
-                   st.S.vs.Signal.state_signal)
+                (Logseq_dom.own ctx
+                   (Signal.map
+                      (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
+                      st.S.vs.Signal.state_signal))
             ]
         ]
     ; (* the hint bar's shape is the action variant, not the item's
@@ -763,10 +765,12 @@ let hints st : t =
         ~equal:(fun (a : S.item option) b ->
           hint_variant a = hint_variant b)
         action_hints
-        (Signal.map
-           (fun (v : S.view) -> S.item_at v v.S.hl)
-           st.S.vs.Signal.state_signal)
-    ]
+        (Logseq_dom.own ctx
+           (Signal.map
+              (fun (v : S.view) -> S.item_at v v.S.hl)
+              st.S.vs.Signal.state_signal))
+    ])
+    ctx parent
 
 let palette st : t =
   (* data-keep-selection is a closest() contract (container.cljs +

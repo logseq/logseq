@@ -102,7 +102,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ~style_class:list_class ~data_attrs:list_attrs
     [ Logseq_virt.spacer ~key:("vs-" ^ list_id) ~height_s
         [ keyed
-            ~source:(Signal.map (fun s -> s.Logseq_virt.v_rows) vstate_sig)
+            ~source:(D.own ctx (Signal.map (fun s -> s.Logseq_virt.v_rows) vstate_sig))
             ~key:(fun r -> row_version_key versions r)
             ~cmp:String.compare ~mount:row_mount
         ]

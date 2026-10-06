@@ -268,7 +268,9 @@ let auto_backup ctx =
          let folder_sig = (folder_st ctx).Signal.state_signal in
          Logseq_dom.fragment
            [ Logseq_dom.if_
-               ~test:(Signal.map (fun f -> f <> None) folder_sig)
+               ~test:
+                 (Logseq_dom.own ctx
+                    (Signal.map (fun f -> f <> None) folder_sig))
                (column ~key:"ab-in" ~gap:16
                   [ row ~key:"ab-row" ~gap:4 ~cross:`center
                       ~style_class:"text-sm"
@@ -298,7 +300,9 @@ let auto_backup ctx =
                         auto_backup_interval ())
                       [] ])
            ; Logseq_dom.if_
-               ~test:(Signal.map (fun f -> f = None) folder_sig)
+               ~test:
+                 (Logseq_dom.own ctx
+                    (Signal.map (fun f -> f = None) folder_sig))
                (column ~key:"ab-in" ~gap:16
                   [ button ~key:"ab-set"
                       ~style_class:"ui__button ls-btn-primary"
