@@ -29,7 +29,25 @@ external error_arg1 : Js.Promise.error -> string option = "_1" [@@mel.get]
 
 external error_arg1_json : Js.Promise.error -> Js.Json.t = "_1" [@@mel.get]
 
-let is_timeout_error e = error_name e = Some "TimeoutError"
+(* playwright errors re-raised through the env bindings surface as a
+   MelangeError Promise_error whose _1 is the full message — a real
+   TimeoutError's name no longer matches, and expect().toBeVisible()
+   timeouts were never named TimeoutError in the first place. Match the
+   message body instead: both shapes carry "Timeout" *)
+let is_timeout_error e =
+  error_name e = Some "TimeoutError"
+  || (error_name e = Some "MelangeError"
+      &&
+      match Js.Json.classify (error_arg1_json e) with
+      | Js.Json.JSONString s ->
+          let needle = "Timeout" in
+          let n = String.length needle in
+          let rec found i =
+            i + n > String.length s
+            || (String.sub s i n = needle || found (i + 1))
+          in
+          found 0
+      | _ -> false)
 
 exception Promise_error of string
 
