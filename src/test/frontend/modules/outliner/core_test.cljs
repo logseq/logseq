@@ -437,6 +437,28 @@
                                            (mapv get-block ids) up?))
       (is (= expected (get-children 40)) (str ids " " (if up? "up" "down"))))))
 
+(deftest test-move-nested-pages-up-down-click-order
+  (testing "nested pages, and a nested page with a block beside it, in either click order"
+    ;; page 1 holds 41, page 60, page 70, 44 as siblings (pages have no :block/page)
+    (doseq [[ids up? expected] [[[70 60] true [60 70 41 44]]
+                                [[70 60] false [41 44 60 70]]
+                                [[60 41] false [70 41 60 44]]
+                                [[60 41] true [41 60 70 44]]]]
+      (transact-tree! [[41]])
+      (let [conn (conn/get-db test-db false)
+            page-tx (fn [id order] {:db/id id :block/uuid id :block/name (str "nested " id)
+                                    :block/title (str "nested " id)
+                                    :block/parent [:block/uuid 1] :block/order order})
+            order-41 (:block/order (get-block 41))]
+        (d/transact! conn [(page-tx 60 (str order-41 "1")) (page-tx 70 (str order-41 "2"))
+                           {:block/uuid 44 :block/title "x" :block/page [:block/uuid 1]
+                            :block/parent [:block/uuid 1] :block/order (str order-41 "3")}]
+                     {:outliner-op :insert-blocks})
+        (outliner-tx/transact!
+         (transact-opts)
+         (outliner-core/move-blocks-up-down! conn (mapv get-block ids) up?))
+        (is (= expected (get-children 1)) (str ids " " (if up? "up" "down")))))))
+
 (deftest test-insert-blocks
   (testing "
   add [18 [19 20] 21] after 6

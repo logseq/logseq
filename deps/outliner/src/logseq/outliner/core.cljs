@@ -1474,9 +1474,26 @@
         ;; the target comes from the selection's first block (up) or last
         ;; (down): in page order, whatever order the blocks were clicked in
         ;; (Ctrl+click c, then b: the selection reads c, b)
-        top-level-blocks (if (and (> (count top-level-blocks) 1)
-                                  (apply = (map #(:db/id (:block/page %)) top-level-blocks)))
+        top-level-blocks (cond
+                           (<= (count top-level-blocks) 1)
+                           top-level-blocks
+
+                           ;; blocks of 1 page, none a property value: page
+                           ;; order (the sort leaves out blocks it cannot
+                           ;; place, so only blocks it can place go in)
+                           (and (every? #(:block/page %) top-level-blocks)
+                                (apply = (map #(:db/id (:block/page %)) top-level-blocks))
+                                (not-any? #(or (:logseq.property/created-from-property %)
+                                               (:block/closed-value-property %))
+                                          top-level-blocks))
                            (ldb/sort-page-random-blocks db top-level-blocks)
+
+                           ;; siblings, e.g. nested pages (no :block/page)
+                           ;; or a nested page and a block beside it
+                           (apply = (map #(:db/id (:block/parent %)) top-level-blocks))
+                           (sort-by :block/order top-level-blocks)
+
+                           :else
                            top-level-blocks)
         opts {:outliner-op :move-blocks-up-down}]
     (if up?
