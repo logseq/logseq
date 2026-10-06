@@ -1945,9 +1945,20 @@ let test_block_comment_summary_rejects_invalid_uuid_and_thread () =
       expect_thrown "invalid comment summary resource"
         (fun () -> ignore (call_resource_raw db resource_key)))
     [ wkey [ kw "block-comment-summary"; Wire.String "not-a-uuid" ]
-    ; wkey [ kw "block-comment-summary"; wu (next_uuid ()) ]
     ; wkey [ kw "block-comment-summary"; wu (u "resource-block") ]
-    ; wkey [ kw "block-comment-summary"; wu (u "resource-block"); kw "extra" ] ]
+    ; wkey [ kw "block-comment-summary"; wu (u "resource-block"); kw "extra" ] ];
+  (* a valid-format uuid with no entity on the conn degrades to a
+     watched empty slot instead of throwing — the display-conn
+     projection has transient gaps the single-conn model never sees *)
+  let missing_uuid = next_uuid () in
+  let missing_key =
+    wkey [ kw "block-comment-summary"; wu missing_uuid ]
+  in
+  let r = call_resource_raw db missing_key in
+  check "missing uuid degrades to empty value"
+    (wire_eq r.value (Wire.Map []));
+  check "missing uuid watches the entity"
+    (wkey_has r.watch_keys (wkey [ kw "entity"; wu missing_uuid ]))
 
 (* block-task-time-resource-normalizes-statuses-and-uses-an-explicit-clock-test
    — cljs redefs time-ms to 10000; doing@1000 -> done@4000 makes :seconds

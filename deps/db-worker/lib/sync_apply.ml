@@ -476,16 +476,36 @@ let block_uuid_lookup_ref_value (v : Wire.t) : string option =
       uuid_str_of_wire u
   | _ -> None
 
+let rec block_uuid_refs_deep (w : Wire.t) : string list =
+  (* flat pos-1/pos-3 inspection misses refs nested inside value
+     collections (cardinality-many ref attrs carry colls of lookup-refs),
+     cas/fn slots past position 3, and map-form tx entries — walk the
+     whole item so every [:block/uuid u] reaches the detectors *)
+  match block_uuid_lookup_ref_value w with
+  | Some u -> [ u ]
+  | None -> (
+      match w with
+      | Wire.Array xs | Wire.List xs | Wire.Set xs ->
+          List.concat_map block_uuid_refs_deep xs
+      | Wire.Map kvs ->
+          List.concat_map
+            (fun (k, v) -> block_uuid_refs_deep k @ block_uuid_refs_deep v)
+            kvs
+      | Wire.Tagged (_, v) -> block_uuid_refs_deep v
+      | _ -> [])
+
 let tx_item_ref_block_uuids (item : Wire.t) : string list =
   (* cljs inspects (second item) and (nth item 3 nil) on ANY vector —
      short ops like [:db/retractEntity [:block/uuid u]] carry the ref at
-     position 1 and must not slip past the missing-ref detectors *)
+     position 1 and must not slip past the missing-ref detectors; the
+     deep walk additionally covers refs inside coll values *)
   match item with
   | Wire.Array l | Wire.List l when List.length l >= 2 ->
       List.filter_map block_uuid_lookup_ref_value
         (List.nth l 1
          :: (if List.length l >= 4 then [ List.nth l 3 ] else []))
-  | _ -> []
+      @ block_uuid_refs_deep item
+  | _ -> block_uuid_refs_deep item
 
 let tx_data_has_block_uuid_ref (tx_data : Wire.t list) : bool =
   List.exists (fun item -> tx_item_ref_block_uuids item <> []) tx_data
