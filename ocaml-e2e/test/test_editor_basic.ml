@@ -2303,10 +2303,28 @@ let () =
         let* () = K.press_in_editor env "ArrowDown" in
         let* () = K.press_in_editor env "ArrowDown" in
         let* () = B.select_blocks env 2 in
-        let* () = K.tab env in
+        (* selection-mode Tab goes to *:focus; poll the tree and re-press
+           only while the selection is still live — a dropped chord under
+           load otherwise leaves the tree flat *)
         let* indented =
-          Api.ls_api_call env "editor.getPageBlocksTree"
-            [| Api.str page_name |]
+          let deadline = Js.Date.now () +. 10000. in
+          let rec loop () =
+            let* () = K.tab env in
+            let* () = Util.wait_timeout env 300. in
+            let* tree =
+              Api.ls_api_call env "editor.getPageBlocksTree"
+                [| Api.str page_name |]
+            in
+            if len tree = 1 || Js.Date.now () > deadline then
+              Js.Promise.resolve tree
+            else
+              let* (sel : float) =
+                Pw.eval_js env
+                  "(async () => ((await window.logseq.api.get_selected_blocks()) || []).length)()"
+              in
+              if sel >= 1. then loop () else Js.Promise.resolve tree
+          in
+          loop ()
         in
         Fest.deep_equal (len indented) 1 Fest.expect;
         let* () = B.undo env in
