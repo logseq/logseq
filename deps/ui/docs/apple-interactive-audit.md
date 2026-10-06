@@ -145,6 +145,130 @@ validation (no `LUI_LENIENT_VALIDATE`) on the Demo graph.
 - LUI opam pin in `install-opam-deps.sh` still points at `e812049`; the
   apple backend work needs a pin bump once lui commits land on main.
 
+## Round 4 — journal-body root cause + cold-start timing (2026-10-06)
+
+Audited on `devin/component-migration` @ `97903d3902` with the
+squashed-equivalent lui (`devin/apple-wire-v2-local` @ `adc4bb1`, which
+carries the same validator + interaction fixes as
+`devin/apple-wire-schema` `8dab601`/`14846db`). Strict validation, no
+lenient env. The Demo graph was re-seeded via
+`thread-api/apply-outliner-ops` `insert-blocks` (9 blocks: external link,
+CJK, `[[page ref]]`, bare URL, TODO, `$$…$$` latex, fenced code, nested
+children, long paragraph) to exercise the journal body; patch dumps
+captured with `LOGSEQ_DUMP_PATCHES=<file>` (one JSON batch per line —
+replays every violation below).
+
+### Cold-start → full-render timing (the deliverable)
+
+| Marker | t0-relative |
+| --- | --- |
+| Daemon SSE attach + all boot invokes done (journal fetch, search build, pulls, get-page-blocks-tree) | **+38 ms** |
+| gen=1/2 applied to backend model (shell + sidebar) | **~+0.10 s** |
+| first `extview-appear` (SwiftUI mount/layout pass finishes) | **~+4.3 s** |
+| journal body rendered | **never** — gen=3 dropped by validation (below) |
+
+The OCaml + daemon side is fast end-to-end (~38 ms); the entire gap is
+main-thread SwiftUI layout in the first mount pass. A second boot
+interleaved differently — gen=1 at +0.5 s, gens 2–3 delivered at +4.5 s —
+same ~4.5 s wall to content either way. Conclusion: **cold-start to
+first painted content ≈ 4.3–4.5 s today, and "full render" is
+unreachable because the journal batch is dropped.**
+
+### New round-4 findings
+
+- **P0 — journal-body-empty root cause found: `.block-title-wrap` emits a
+  `text` container with extension children → whole batch dropped.** The
+  block-title inline renderer wraps mixed runs in a standard `text` node
+  and puts `logseq-*` extension children inside it:
+  `text(325) → logseq-a(327)` (bare URL external link),
+  `text(393) → logseq-span(395)` (`latex-inline`),
+  `text(429) → logseq-br(431)` (multi-line title).
+  `.text` is not in `acceptsExtensionChildren`
+  (`LUIWireProtocol.swift:1025`), so `backend.apply(decoded:)` throws
+  `invalidBatch("standard node cannot contain extension")` in the
+  post-loop `validateNodeProperties` pass, the snapshot rollback discards
+  the whole generation atomically, and the catch in
+  `LogseqRuntime.apply` swallows it to an NSLog. Any block with an
+  inline link / tag / latex / `<br>` / emphasis kills the page body.
+  Worse: `generation` only advances on success
+  (`LUIAppleBackend.swift:765`), so one dropped gen leaves the backend
+  expecting N while OCaml keeps emitting N+1, N+2, … — **every later
+  batch fails the `expectedGeneration` guard; the session is permanently
+  desynced until relaunch** (this is also why post-violation clicks
+  produce nothing). Fix direction: the `.block-title-wrap` mixed-run
+  container should be a container kind (e.g. `row`) or an inline
+  `logseq-*` host, never `text`; the alternative is admitting ext
+  children under `text` in the three whitelists that must move together
+  (`can_contain_children`, `child_kind_supported`,
+  `standard_container_supported` — OCaml side) plus
+  `acceptsExtensionChildren` (Swift side). Evidence:
+  `audit-shots/apple/r4-journal-gen3-patch.jsonl` + the three violations
+  above; drop is silent apart from `NSLog("LUI patch apply failed: …")`.
+
+- **P0 — layout storm still dominates every burst.** `apply(decoded:)`
+  of the post-press navigation gen took `dur=4334ms` on the main thread;
+  `sample` shows ~100% main-thread CPU inside SwiftUI `sizeThatFits`
+  recursion (`LayoutEngineBox`/`UnaryLayoutEngine`/`_FlexFrameLayout`/
+  `_PaddingLayout`/`StackLayout.placeChildren`). Boot mount pass ≈ 4.2 s;
+  a live resize re-triggers the same storm continuously (see
+  `audit-shots/apple/r4-layout-storm.sample.txt`).
+
+- **P0 — patch delivery stalls behind the busy main thread.** Boot gens
+  2–3 queued `hold=4514–4687ms` while the mount pass ran; `rltick` gaps
+  of 17–26 s observed — the 2 ms `drainTimer` cannot fire while the main
+  thread is inside layout, so `runOnMain`/patch drains pile up behind
+  every storm. Effective per-interaction latency during a burst is
+  seconds, not the 1 ms quiet-window the code intends. (The `hold=` math
+  also conflates two causes: run3 merged gens 1–3 into one 88 ms deliver;
+  run2 split them 4.5 s apart — depends on whether the worker emits
+  before or during the mount pass.)
+
+- **P1 — phantom geometry persists.** OCaml `PERF rects` place rows at
+  negative y (`@-52`, `@-28`) and a ~506-wide content column in a ~1000pt
+  window; AX mounts the full tree at off-window coordinates; the paint
+  shows only two sidebar rows plus stray `〉`/`’` glyphs
+  (`audit-shots/apple/r4-phantom-paint.png`). The last `window-size`
+  event seen was `.defaultSize` 1200×800 — a real resize pushes the new
+  size but the layout still doesn't converge while the storm runs.
+
+- **P1 — right-click: still nothing.** `nsev type=3/4` deliver fine, but
+  no `performContextMenuPress` / `emitContextMenu` reaches OCaml —
+  `LogseqFrameStore.hitTest` misses under the phantom geometry and the
+  sidebar rows are native `List` rows (not pointer-enabled hosts); the
+  `.contextMenu` node kind is still `EmptyView()` anyway
+  (`audit-shots/apple/r4-right-click-no-menu.png`).
+
+- **P1 — cmdk mounts but doesn't paint.** Cmd+K forwards correctly
+  (`nsev kc=40` → OCaml `keydown` → gens 13–14, `n=326 e=19`, applied in
+  8 ms, extension views mounted) — the palette nodes exist in the tree
+  but nothing paints; same storm/geometry cause, not an input problem.
+  AX exposes no cmdk text field.
+
+- **P1 — window vanished mid-session, process kept burning 100% CPU.**
+  After an AX-driven resize during a storm, the window disappeared
+  (`count of windows = 0`) while the app stayed frontmost and kept
+  spinning in `sizeThatFits` — inverse of the round-3 zombie-window note.
+  Inverse variant: window painted but `apply` silently dropped the
+  journal gen (above) — the app looks alive while permanently behind.
+
+- **P1 — early-boot SIGTRAP: not reproduced** in three cold boots this
+  round.
+
+- **P2 — `apply` error handling swallows batch failures.** The only
+  signal for a dropped generation is `NSLog("LUI patch apply failed:
+  invalidBatch(…)")` — no stderr/perf line, no surface badge, no retry;
+  debugging required `log show` or `LOGSEQ_DUMP_PATCHES`. A
+  `PERF apply-fail gen=… reason=…` line would make this class visible.
+
+### Round-4 carry-over status of the checklist
+
+- Journal body: **still empty — root cause identified** (above); needs
+  the emit-side container fix, then latex/PDF blocks become testable.
+- Editor conduit: unchanged — `LogseqEditorView` is `EmptyView()`
+  (`LogseqExtensions.swift:338`); typing/IME still untestable.
+- cmdk / right-click / layout storm / phantom paint: all still open,
+  details above.
+
 ## Checklist coverage
 
 | Item | Result |
