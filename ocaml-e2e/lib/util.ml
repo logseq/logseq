@@ -478,12 +478,21 @@ let get_edit_content env =
 
 (** [edit_content]: the focused editor's value as a plain string — clj's
     [(util/get-edit-content)] = [(.inputValue (util/get-editor))], which fails
-    when no editor is open. *)
+    when no editor is open. Polls briefly through remount windows: the
+    editor unmounts/remounts under load, so a one-shot read hits the gap. *)
 let edit_content env =
-  let* v = get_edit_content env in
-  match v with
-  | Some s -> Js.Promise.resolve s
-  | None -> Js.Promise.reject (Failure "edit_content: no editor open")
+  let deadline = Js.Date.now () +. 8000. in
+  let rec loop () =
+    let* v = get_edit_content env in
+    match v with
+    | Some s -> Js.Promise.resolve s
+    | None when Js.Date.now () > deadline ->
+        Js.Promise.reject (Failure "edit_content: no editor open")
+    | None ->
+        let* () = wait_timeout env 100. in
+        loop ()
+  in
+  loop ()
 
 (** waits until the editing textarea's content equals [expected].
     Polls get_edit_content directly: the editor unmounts and remounts
