@@ -69,18 +69,14 @@ let area_display (b : Model.block) context : Lui_elements.t =
                       ) ]
                   [ D.el ~key:"hl-ab" ~tag:"span"
                       ~style_class:"asset-action-bar"
-                      [ D.el ~key:"hl-ref" ~tag:"button"
+                      [ Lui_elements.button ~key:"hl-ref"
                           ~style_class:"asset-action-btn"
-                          ~attrs:
-                            [ ("title", "ref-block")
-                            ; ("tabindex", "-1") ]
-                          ~events:"pointerdown click"
-                          ~on_dom_event:(fun name _ ->
-                            if name = "click" then
-                              Pdf_assets.goto_asset_block r.asset_uuid)
-                          [ D.el ~key:"hl-ref-i" ~tag:"i"
-                              ~style_class:"ti ti-file-symlink" []
-                          ]
+                          ~label:"ref-block"
+                          ~data_attrs:[ ("tabindex", "-1") ]
+                          ~icon:(`app "file-symlink")
+                          ~on_press:(fun _ ->
+                            Pdf_assets.goto_asset_block r.asset_uuid)
+                          []
                       ]
                   ; D.el ~key:"hl-img" ~tag:"img"
                       ~style_class:"w-full"
@@ -104,21 +100,21 @@ let prefix_el (b : Model.block) : Lui_elements.t =
     | Some p -> "P" ^ string_of_int p
     | None -> "P?"
   in
-  (D.el ~key:"pf" ~tag:"span" ~style_class:"prefix-link"
-     ~events:"pointerdown"
-     ~on_dom_event:(fun name payload ->
-       match name, payload with
-       | "pointerdown", (Some _ as p) ->
+  (* pointerdown reads the event target's class via pointer_detail *)
+  (Lui_elements.text ~key:"pf" ~style_class:"prefix-link"
+     ~on_pointer_down:(fun ev ->
+       match ev with
+       | Lui_protocol.PointerDown (_, d) ->
            let blank =
-             Platform.payload_str p "targetClass"
+             d.Lui_protocol.target_class
              |> String.split_on_char ' '
              |> List.mem "blank"
            in
            if not (area && blank) then Pdf_assets.open_block_ref b
        | _ -> ())
-     ([ D.el ~key:"pfp" ~tag:"span" ~style_class:"hl-page"
-          [ D.el ~key:"pfs" ~tag:"strong" ~style_class:"forbid-edit"
-              ~text:page [] ]
+     ([ Lui_elements.text ~key:"pfp" ~style_class:"hl-page"
+          [ Lui_elements.text ~key:"pfs" ~as_:`Strong
+              ~style_class:"forbid-edit" ~value:page [] ]
       ]
       @
       if area && b.Model.block_hl_image <> None then

@@ -24,14 +24,14 @@ let preview_link inner =
 
 (* ---------- emitters ---------- *)
 
-(* TODO(component): a.page-ref/a.tag carry imperative hooks —
-   data-ref/data-uuid are read by document-delegated clicks
-   (sidebar_state.on_doc_click), hover previews (popups_view
-   a[data-ref]) and cljs-parity selectors (a.tag[data-ref][data-uuid]
-   [draggable] > span); no kind props exist for data-* attrs *)
+(* a.page-ref/a.tag carry imperative hooks — data-ref/data-uuid are
+   read by document-delegated clicks (sidebar_state.on_doc_click),
+   hover previews (popups_view a[data-ref]) and cljs-parity selectors
+   (a.tag[data-ref][data-uuid][draggable] > span; link's
+   .lui-link-content satisfies the child span) *)
 let page_link ~(tag : bool) ?label ?uuid_sig name =
   let name = String.trim name in
-  let text =
+  let txt =
     match label with
     | Some l when String.trim l <> "" -> l
     | _ -> if tag then "#" ^ name else name
@@ -45,13 +45,17 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
   match uuid_sig with
   | None ->
       (* cljs anchors carry the label as a bare text child *)
-      D.el ~tag:"a" ~style_class:cls ~attrs:base [ D.txt text ]
+      link ~style_class:cls ~data_attrs:base ~text:txt []
   | Some u_sig ->
       (* cljs sets :data-uuid on the anchor once the page entity resolves;
          attrs apply is replace-semantic so emit the whole set *)
-      D.el ~tag:"a" ~style_class:cls ~attrs:base
-        ~attrs_signal_v:(Logseq_dom.attrs_signal u_sig (fun u -> if u = "" then base else ("data-uuid", u) :: base))
-        [ D.txt text ]
+      link ~style_class:cls ~text:txt
+        ~data_attrs:
+          (reactive
+             (fun u ->
+               if u = "" then base else ("data-uuid", u) :: base)
+             u_sig)
+        []
 
 (* ---- pull memoization ----
    Every [[name]]/uuid anchor used to fire its own thread-api/pull per
@@ -277,21 +281,18 @@ let external_link href label_els =
 (* ((uuid)) (deprecated form) / #[[uuid]] -> resolved block title via
    thread-api/pull — lazy: the anchor mounts empty and fills when the
    pull returns *)
-(* TODO(component): delegated a.page-ref click + data-ref attr *)
 let block_ref_anchor uuid : t =
  fun context parent ->
   let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
   let title_sig = Signal.map fst (Signal.value st) in
-  D.el ~tag:"a" ~style_class:"relative page-ref"
-    ~attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
-    ~text_signal:(Logseq_dom.reactive_text Fun.id title_sig)
+  link ~style_class:"relative page-ref"
+    ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
+    ~text_signal:title_sig
     [] context parent
 
-(* TODO(component): .page-reference[data-ref] is a delegated-event +
-   hover-preview hook *)
 let block_ref uuid =
-  D.el ~tag:"span" ~style_class:"page-reference"
-    ~attrs:[ ("data-ref", uuid) ]
+  text ~style_class:"page-reference"
+    ~data_attrs:[ ("data-ref", uuid) ]
     [ block_ref_anchor uuid ]
 
 (* TODO(component): <img src=url> — the `image` kind takes an opaque
@@ -307,11 +308,10 @@ let image_el ~src ~alt =
         []
     ]
 
-(* TODO(component): inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/
-   <sub>/<sup>/<strong>/<kbd> styling comes from element-selector CSS
-   (:not(pre) > code, mark {…}) — `text` renders span.lui-text and would
-   lose it all; no kind props exist for inline emphasis *)
-let code_span s = D.el ~tag:"code" [ D.txt s ]
+(* inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/<sub>/<sup>/
+   <strong>/<kbd> styling comes from element-selector CSS
+   (:not(pre) > code, mark {…}) — ~as_ retags the text kind *)
+let code_span s = text ~as_:`Code ~value:s []
 
 (* cljs extensions/latex: the logseq-katex extension slot carries the
    .latex/.latex-inline classes, a generated #ls-katex-* id, and a
@@ -345,30 +345,39 @@ let seconds_display seconds =
   if h = "00" then m ^ ":" ^ s else h ^ ":" ^ m ^ ":" ^ s
 
 (* cljs youtube/timestamp: a.youtube-timestamp with the clock icon +
-   seconds->display label; the click handler lives in Render_libs.
-   TODO(component): delegated click (el_closest a.youtube-timestamp)
-   and .youtube-timestamp-label query *)
+   seconds->display label; the click handler lives in Render_libs
+   (delegated el_closest a.youtube-timestamp) *)
 let timestamp_el seconds : t =
  fun context parent ->
   Render_libs.ensure ();
-  D.el ~tag:"a" ~style_class:"youtube-timestamp"
-    [ D.el ~tag:"span" ~style_class:"youtube-timestamp-icon"
-        [ D.el ~tag:"svg" ~style_class:"h-5 w-5"
-            ~attrs:[ ("fill", "currentColor"); ("viewBox", "0 0 20 20") ]
-            [ D.el ~tag:"path"
-                ~attrs:
-                  [ ("clip-rule", "evenodd"); ("fill-rule", "evenodd")
-                  ; ( "d"
-                    , "M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" )
-                  ]
-                [] ] ]
-    ; D.el ~tag:"span" ~style_class:"youtube-timestamp-label"
-        ~text:(seconds_display seconds)
+  link ~style_class:"youtube-timestamp"
+    [ text ~key:"yti" ~style_class:"youtube-timestamp-icon"
+        [ icon ~name:(`app "youtube-timestamp-icon") [] ]
+    ; text ~key:"ytl" ~style_class:"youtube-timestamp-label"
+        ~value:(seconds_display seconds)
         [] ]
     context parent
 
-(* TODO(component): element-tag semantics (same as code_span) *)
-let emph tag children = D.el ~tag children
+(* html-tag whitelist -> element_tag for text ~as_ (try_html_tag
+   pre-maps ins->u, s->del) *)
+let emph_element_tag tag =
+  match tag with
+  | "b" -> `B
+  | "i" -> `I
+  | "u" -> `U
+  | "s" -> `S
+  | "del" -> `Del
+  | "mark" -> `Mark
+  | "em" -> `Em
+  | "strong" -> `Strong
+  | "code" -> `Code
+  | "kbd" -> `Kbd
+  | "sub" -> `Sub
+  | "sup" -> `Sup
+  | "small" -> `Small
+  | _ -> invalid_arg ("emph: unsupported tag: " ^ tag)
+
+let emph tag children = text ~as_:(emph_element_tag tag) children
 
 let emoji_el name = Logseq_emoji.el ~name ()
 
@@ -627,19 +636,16 @@ and page_ref ?(tag = false) ~refs ~self name =
     if tag then
       preview_link (page_link ~tag:true ~uuid_sig name) context parent
     else
-      (* TODO(component): span.page-reference[data-ref] — ref hook *)
-      D.el ~tag:"span" ~style_class:"page-reference"
-        ~attrs:[ ("data-ref", name) ]
-        ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun u -> [ ("data-ref", if u = "" then name else u) ])
+      text ~style_class:"page-reference"
+        ~data_attrs:
+          (reactive
+             (fun u -> [ ("data-ref", if u = "" then name else u) ])
              uuid_sig)
         [ bracket "[["
         ; preview_link (page_link ~tag:false ~uuid_sig name)
         ; bracket "]]" ]
         context parent
 
-(* TODO(component): a.page-ref.broken / span.page-reference carry
-   data-ref/data-uuid delegation hooks — same imperative reason as
-   page_link *)
 (* [[uuid]] — resolved via thread-api/pull.  cljs drops the
    .page-reference chrome when the uuid does not resolve: the row is just
    a bare a.page-ref.broken holding the literal [[uuid]] text.  Resolved
@@ -656,50 +662,46 @@ and resolved_ref ~refs ~self uuid : t =
   in
   (reactive
     (fun (title, is_page) ->
-      (* TODO(component): data-ref/data-uuid/tabindex/draggable attrs
-         are delegated-event + dnd hooks (a.page-ref) — imperative
-         anchor chrome, minimal dom stays *)
+      (* data-ref/data-uuid/tabindex/draggable are delegated-event +
+         dnd hooks (a.page-ref) *)
       if title = "" then
         (* pull in flight — keep the chrome so the row does not shift *)
-        D.el ~tag:"span" ~style_class:"page-reference"
-          ~attrs:[ ("data-ref", uuid) ] []
+        text ~style_class:"page-reference"
+          ~data_attrs:[ ("data-ref", uuid) ] []
       else if title = uuid then
-        D.el ~tag:"a" ~style_class:"relative page-ref broken"
-          ~attrs:[ ("data-uuid", uuid); ("tabindex", "0")
-                 ; ("draggable", "true") ]
-          [ D.txt ("[[" ^ uuid ^ "]]") ]
+        link ~style_class:"relative page-ref broken"
+          ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
+                      ; ("draggable", "true") ]
+          ~text:("[[" ^ uuid ^ "]]") []
       else
-        D.el ~tag:"span" ~style_class:"page-reference"
-          ~attrs:[ ("data-ref", String.lowercase_ascii title) ]
+        text ~style_class:"page-reference"
+          ~data_attrs:[ ("data-ref", String.lowercase_ascii title) ]
           [ bracket "[["
           ; preview_link
-              (D.el ~tag:"a" ~style_class:"relative page-ref"
-                 ~attrs:[ ("data-uuid", uuid); ("tabindex", "0")
-                        ; ("draggable", "true")
-                        ; ("data-ref", String.lowercase_ascii title) ]
-                 [ (if is_page then D.el ~tag:"span" [ D.txt title ]
-                    else
-                      D.el ~tag:"span"
-                        (parse ~refs:child_refs ~self:uuid title)) ])
+              (link ~style_class:"relative page-ref"
+                 ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
+                             ; ("draggable", "true")
+                             ; ("data-ref", String.lowercase_ascii title) ]
+                 (if is_page then [ text ~value:title [] ]
+                  else parse ~refs:child_refs ~self:uuid title))
           ; bracket "]]" ])
     (Signal.value st))
     context parent
 
-(* TODO(component): a.tag[data-uuid][data-ref] delegation hooks *)
 (* #[[uuid]] — same lazy resolution, rendered as a .tag anchor *)
 and resolved_tag_ref ~refs ~self uuid : t =
  fun context parent ->
   ignore (refs, self);
   let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
-  let title_sig = Signal.map fst (Signal.value st) in
-  D.el ~tag:"a" ~style_class:"relative tag"
-    ~attrs:[ ("data-uuid", uuid); ("tabindex", "0") ]
-    ~attrs_signal_v:(Logseq_dom.reactive_attrs
-         (fun n ->
+  let title_sig = Signal.value st in
+  link ~style_class:"relative tag"
+    ~data_attrs:
+      (reactive
+         (fun (n, _) ->
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ D.el ~tag:"span" ~text_signal:(Logseq_dom.reactive_text (fun n -> "#" ^ n) title_sig) [] ]
+    [ text ~value:(reactive (fun (n, _) -> "#" ^ n) title_sig) [] ]
     context parent
 
 and macro_el ~refs:_refs ~self:_self body =

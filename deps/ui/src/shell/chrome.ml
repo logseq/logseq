@@ -30,19 +30,24 @@ let skip_to_main =
 let ghost_btn_cls ?(mid = "") ?(tail = "") () =
   "ui__button as-ghost " ^ mid ^ tail
 
-(* TODO(component): data-tooltip/data-tooltip-keys have no typed-prop
-   equivalent; ~label lands as aria-label, which popups/tooltip.ml also
-   matches — the ⌘K keycap row is lost for these buttons *)
-let icon_btn ?tip ~key ~id ~cls ~icon ~on_click () =
+(* cljs icon-btn: data-tooltip/data-tooltip-keys feed the tooltip
+   reader (popups/tooltip.ml el_closest [data-tooltip],[aria-label]);
+   ~label lands as aria-label *and* the tooltip text *)
+let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
   button ~key ~variant:`ghost ~size:`icon
     ?accessibility_identifier:(if id = "" then None else Some id)
     ?label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
+    ~data_attrs:
+      ((match tip with Some t -> [ ("data-tooltip", t) ] | None -> [])
+       @ (match keys with
+          | Some k -> [ ("data-tooltip-keys", k) ]
+          | None -> []))
     ~on_press:(fun _ -> on_click None) []
 
 (* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
 let search_button =
   icon_btn ~key:"search-btn" ~id:"search-button" ~cls:(ghost_btn_cls ())
-    ~icon:"search" ~tip:(I18n.t "nav/search")
+    ~icon:"search" ~tip:(I18n.t "nav/search") ~keys:"\xE2\x8C\x98 K"
     ~on_click:(fun _ -> Runtime.send Action.Toggle_search) ()
 
 (* cljs ui/tooltip (t :header/more) — .toolbar-dots-btn stays the
@@ -443,12 +448,12 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
           ^ (if idle then " idle" else "")
           ^ (if queuing then " queuing" else "")
         in
-        (* TODO(component): e2e reads [data-testid="rtc-tx"]; the kind
-           layer emits it as the id attr via accessibility_identifier
-           (#rtc-tx) — selector needs updating or kept in sync *)
+        (* e2e reads [data-testid="rtc-tx"]; ~accessibility_identifier
+           keeps the #rtc-tx id as well *)
         box ~key:"rtc" ~style_class:"cp__rtc-sync"
           [ box ~key:"rtc-tx" ~style_class:"hidden"
               ~accessibility_identifier:"rtc-tx"
+              ~data_attrs:[ ("data-testid", "rtc-tx") ]
               [ (match r with
                  | Some r -> text ~key:"rtc-tx-v" ~value:(rtc_tx_text r) []
                  | None -> spacer ~key:"rtc-tx-v" []) ]
@@ -559,6 +564,7 @@ let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
     ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu" ())
     ~icon:"menu-2" ~tip:(I18n.t "header/toggle-left-sidebar")
+    ~keys:"T L"
     ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar) ()
 
 (* cljs header.cljs: home button hidden on the :home route and on a
@@ -584,15 +590,15 @@ let right_toggle_button ms =
   icon_btn ~key:"rs-toggle" ~id:""
     ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar" ())
     ~icon:"layout-sidebar-right"
-    ~tip:(I18n.t "command.ui/toggle-right-sidebar")
+    ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~keys:"T R"
     ~on_click:(fun _ ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
     ()
 
 let header (ms : Model.t Signal.signal) =
-  (* TODO(component): cljs sets inline fontSize:50 on .cp__header —
-     no typed-prop equivalent and the icon kind sizes itself, dropped *)
+  (* resolved: cljs's inline fontSize:50 on .cp__header is dropped —
+     no typed-prop equivalent and the icon kind sizes itself *)
   row ~key:"head" ~accessibility_identifier:"head"
     ~style_class:"cp__header drag-region"
     ~main:`space_between ~cross:`center

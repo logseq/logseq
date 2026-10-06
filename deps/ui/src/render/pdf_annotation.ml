@@ -119,17 +119,15 @@ let open_hl_lightbox ?clicked_id () =
     Asset_dom.preview_images items
   end
 
-(* cljs asset-action-bar button inside .hl-area *)
-(* TODO(component): pointerdown/click dom events (open-lightbox ref
-   tracking) plus a <i class=ti-*> icon child have no component
-   equivalent *)
+(* cljs asset-action-bar button inside .hl-area — ~label: carries the
+   tip (aria-label feeds the app tooltip like the cljs title attr did) *)
 let area_btn ~key ~title ~icon ~onclick : t =
-  D.el ~key ~tag:"button" ~style_class:"asset-action-btn"
-    ~attrs:[ ("title", title); ("tabindex", "-1") ]
-    ~events:"pointerdown click"
-    ~on_dom_event:(fun name _ -> if name = "click" then onclick ())
-    [ D.el ~key:(key ^ "-i") ~tag:"i" ~style_class:("ti ti-" ^ icon) []
-    ]
+  button ~key ~style_class:"asset-action-btn"
+    ~label:title
+    ~data_attrs:[ ("tabindex", "-1") ]
+    ~icon:(`app icon)
+    ~on_press:(fun _ -> onclick ())
+    []
 
 (* cljs area-display: .hl-area(style?) > .asset-container >
    .asset-action-bar + img.w-full *)
@@ -196,23 +194,22 @@ let prefix_el (b : Model.block) : t =
     | Some p -> "P" ^ string_of_int p
     | None -> "P?"
   in
-  (* TODO(component): delegated pointerdown handler that reads the
-     event target's class — no component event carries the DOM target *)
-  (D.el ~key:"pf" ~tag:"span" ~style_class:"prefix-link"
-     ~events:"pointerdown"
-     ~on_dom_event:(fun name payload ->
-       match name, payload with
-       | "pointerdown", (Some _ as p) ->
+  (* pointerdown reads the event target's class via pointer_detail
+     (deepest hit element's class list) *)
+  (text ~key:"pf" ~style_class:"prefix-link"
+     ~on_pointer_down:(fun ev ->
+       match ev with
+       | Lui_protocol.PointerDown (_, d) ->
            let blank =
-             Platform.payload_str p "targetClass"
+             d.Lui_protocol.target_class
              |> String.split_on_char ' '
              |> List.mem "blank"
            in
            if not (area && blank) then Pdf_assets.open_block_ref b
        | _ -> ())
-     ([ D.el ~key:"pfp" ~tag:"span" ~style_class:"hl-page"
-          [ D.el ~key:"pfs" ~tag:"strong" ~style_class:"forbid-edit"
-              ~text:page [] ]
+     ([ text ~key:"pfp" ~style_class:"hl-page"
+          [ text ~key:"pfs" ~as_:`Strong ~style_class:"forbid-edit"
+              ~value:page [] ]
       ]
       @
       if area && b.Model.block_hl_image <> None then
