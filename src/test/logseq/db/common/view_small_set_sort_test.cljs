@@ -46,6 +46,28 @@
         (str "2 class objects without a row limit scanned " @scanned
              " updated-at datoms of unrelated blocks"))))
 
+(deftest checkbox-sort-orders-unchecked-before-checked-test
+  ;; db-test #1321: an unchecked box (false) is a value, not a missing one
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:done {:logseq.property/type :checkbox}}
+               :classes {:Topic {:block/title "Topic"
+                                 :build/class-properties [:done]}}
+               :pages-and-blocks
+               [{:page {:block/title "Checked" :build/tags [:Topic]
+                        :build/properties {:done true}}}
+                {:page {:block/title "Unchecked" :build/tags [:Topic]
+                        :build/properties {:done false}}}]})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn class-id)
+        titles (fn [asc?]
+                 (mapv #(:block/title (d/entity @conn %))
+                       (:data (db-view/get-view-data @conn view-id
+                                                     {:view-feature-type :class-objects
+                                                      :view-for-id class-id
+                                                      :sorting [{:id :user.property/done :asc? asc?}]}))))]
+    (is (= ["Unchecked" "Checked"] (titles true)))
+    (is (= ["Checked" "Unchecked"] (titles false)))))
+
 (deftest remaining-rows-keep-the-first-window-order-on-ties-test
   ;; An import stamps many pages in the same millisecond. The first window
   ;; (row limit, AVET walk) and the full list (no row limit, sorted eids) must
