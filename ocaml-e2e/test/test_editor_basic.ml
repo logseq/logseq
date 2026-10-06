@@ -2303,13 +2303,32 @@ let () =
         let* () = K.press_in_editor env "ArrowDown" in
         let* () = K.press_in_editor env "ArrowDown" in
         let* () = B.select_blocks env 2 in
-        (* selection-mode Tab goes to *:focus; poll the tree and re-press
-           only while the selection is still live — a dropped chord under
-           load otherwise leaves the tree flat *)
+        (* Tab reaches the selection-mode :editor/indent handler through
+           press_in_editor (element delivery while an editor is mounted,
+           *:focus otherwise). The selection itself can be dropped by a
+           remount — re-select before pressing again so the chord always
+           has a live selection to act on *)
         let* indented =
           let deadline = Js.Date.now () +. 10000. in
+          let sel_count () =
+            Pw.eval_js env
+              "(async () => ((await window.logseq.api.get_selected_blocks()) || []).length)()"
+          in
           let rec loop () =
-            let* () = K.tab env in
+            let* (sel : float) = sel_count () in
+            let* () =
+              if sel >= 1. then Js.Promise.resolve ()
+              else begin
+                let* editing = Util.editing_uuid env in
+                let* () =
+                  match editing with
+                  | Some _ -> Js.Promise.resolve ()
+                  | None -> B.open_last_block env
+                in
+                B.select_blocks env 2
+              end
+            in
+            let* () = K.press_in_editor env "Tab" in
             let* () = Util.wait_timeout env 300. in
             let* tree =
               Api.ls_api_call env "editor.getPageBlocksTree"
@@ -2317,12 +2336,7 @@ let () =
             in
             if len tree = 1 || Js.Date.now () > deadline then
               Js.Promise.resolve tree
-            else
-              let* (sel : float) =
-                Pw.eval_js env
-                  "(async () => ((await window.logseq.api.get_selected_blocks()) || []).length)()"
-              in
-              if sel >= 1. then loop () else Js.Promise.resolve tree
+            else loop ()
           in
           loop ()
         in
