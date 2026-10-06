@@ -730,29 +730,27 @@ let action_bar inst : t =
 
 (* ---------- table ---------- *)
 
-(* TODO(component): dnd-kit a11y nodes — display:none inline style,
-   role=status + aria-live/aria-atomic, and the DndDescribedBy-*/
-   DndLiveRegion-* ids have no component-kind props; kept as minimal
-   dom so screen-reader drag instructions survive *)
+(* dnd-kit a11y nodes — the screen-reader drag instructions. On web
+   the .ls-dnd-a11y/.ls-dnd-live classes carry the old inline styles;
+   on apple both are hidden via LogseqStyles *)
 let dnd_described n : t =
-  dom ~id:("DndDescribedBy-" ^ n) ~attrs:[ ("style", "display: none;") ]
-    ~text:
-      "To pick up a draggable item, press the space bar. While dragging, \
-       use the arrow keys to move the item. Press space again to drop the \
-       item in its new position, or press escape to cancel."
-    []
+  box ~accessibility_identifier:("DndDescribedBy-" ^ n)
+    ~style_class:"ls-dnd-a11y"
+    [ text
+        ~value:
+          "To pick up a draggable item, press the space bar. While \
+           dragging, use the arrow keys to move the item. Press space \
+           again to drop the item in its new position, or press escape \
+           to cancel."
+        [] ]
 
 let dnd_live n : t =
-  dom
-    ~attrs:
+  box ~accessibility_identifier:("DndLiveRegion-" ^ n)
+    ~style_class:"ls-dnd-live"
+    ~data_attrs:
       [ ("role", "status"); ("aria-live", "assertive")
-      ; ("aria-atomic", "true")
-      ; ( "style"
-        , "position: fixed; top: 0px; left: 0px; width: 1px; height: 1px; \
-           margin: -1px; border: 0px; padding: 0px; overflow: hidden; \
-           clip: rect(0px, 0px, 0px, 0px); clip-path: inset(100%); \
-           white-space: nowrap;" ) ]
-    ~id:("DndLiveRegion-" ^ n) []
+      ; ("aria-atomic", "true") ]
+    []
 
 (* class-objects tables show the add-property column; matching rows get
    a trailing empty cell *)

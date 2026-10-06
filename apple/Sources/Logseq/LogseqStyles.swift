@@ -437,6 +437,10 @@ import SwiftUI
     // must not consume layout space.
     case "cp__overlays":
       outOfFlow = true
+    // 404 full-window overlay (web: .cp__not-found fixed inset:0 z-99999)
+    case "cp__not-found":
+      outOfFlow = true; fillsOverlay = true
+      background = LogseqColors.grayPair(light: 1, dark: 2)
     // Floating help button + its popup — CSS positions them
     // position:fixed bottom-right; port the same anchor.
     case "cp__sidebar-help-btn":
@@ -1132,6 +1136,9 @@ import SwiftUI
     // actions bar instead)
     case "ls-code-editor-wrap": fullWidth = true
     case "extensions__code-lang": isHidden = true
+    // web a11y plumbing (dnd-kit described-by/live regions) — nothing
+    // native reads them; keep them out of the tree's layout entirely
+    case "ls-dnd-a11y", "ls-dnd-live": isHidden = true
     case "code-block-actions":
       // Web: absolute top-right action bar over the code editor.
       outOfFlow = true

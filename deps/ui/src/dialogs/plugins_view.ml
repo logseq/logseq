@@ -499,10 +499,13 @@ let item_input pid key s cur =
         textarea ~key:"in" ~style_class:"form-input" ~text:v
           ~on_input:(fun ev -> on_change (text_of ev))
           []
-    | "color" | "range" ->
-        (* TODO(component): input type=color/range have no component
-           kind — keeping the DOM input until LUI grows slider/color
-           props on `input` *)
+    | "color" ->
+        input ~key:"in" ~style_class:"form-input" ~kind:`color ~text:v
+          ~on_input:(fun ev -> on_change (text_of ev))
+          []
+    | "range" ->
+        (* TODO(component): input type=range has no component kind —
+           needs a slider kind or ~kind:`range on `input` *)
         Logseq_dom.dom ~key:"in" ~tag:"input"
           ~attrs:[ ("type", input_as); ("value", v) ]
           ~events:"change"

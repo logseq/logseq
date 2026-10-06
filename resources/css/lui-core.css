@@ -1830,6 +1830,22 @@ a.page-title {
 }
 
 /* Bullet + controls */
+/* heading levels shrink the bullet/icon box — was an inline
+   --ls-block-icon-size style attr computed in tree.ml (applied to both
+   .block-control-wrap and .block-main-container) */
+.block-control-wrap[data-heading="1"],
+.block-main-container[data-heading="1"] { --ls-block-icon-size: 28px; }
+.block-control-wrap[data-heading="2"],
+.block-main-container[data-heading="2"] { --ls-block-icon-size: 24px; }
+.block-control-wrap[data-heading="3"],
+.block-main-container[data-heading="3"] { --ls-block-icon-size: 20px; }
+.block-control-wrap[data-heading="4"],
+.block-main-container[data-heading="4"] { --ls-block-icon-size: 16px; }
+.block-control-wrap[data-heading="5"],
+.block-main-container[data-heading="5"] { --ls-block-icon-size: 13px; }
+.block-control-wrap[data-heading="6"],
+.block-main-container[data-heading="6"] { --ls-block-icon-size: 12px; }
+
 .block-control-wrap {
   height: 24px;
   position: relative;

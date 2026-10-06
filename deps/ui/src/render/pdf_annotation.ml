@@ -93,11 +93,15 @@ let open_hl_lightbox ?clicked_id () =
     let idx =
       match clicked_id, n with
       | Some id, n when n > 1 ->
+          (* #hl-area-img-<uuid> ids the .lui-image wrapper — the
+             sorted imgs are the inner .lui-image-pixels *)
           let rec find i =
             if i >= n then 0
             else if
-              Option.value (Web_dom.el_get_attr sorted.(i) "id")
-                ~default:""
+              (match Web_dom.el_parent sorted.(i) with
+               | Some p ->
+                   Option.value (Web_dom.el_get_attr p "id") ~default:""
+               | None -> "")
               = id
             then i
             else find (i + 1)
@@ -131,30 +135,22 @@ let area_btn ~key ~title ~icon ~onclick : t =
 
 (* cljs area-display: .hl-area(style?) > .asset-container >
    .asset-action-bar + img.w-full *)
-(* TODO(component): inline style width + blob-URL <img> with
-   #hl-area-img-<uuid> queried by the lightbox path — no component
-   equivalent for style attrs / img src *)
 let area_display (b : Model.block) context : t =
   let st = hl_img_sig b context in
   reactive (fun r ->
       match r with
       | None -> Logseq_dom.nothing
       | Some r ->
-          let w_style =
+          (* asset-container is width:auto unless hl-area pins a px
+             width — then it fills *)
+          let container_cls =
             match r.width with
-            | Some w -> "width:" ^ string_of_int w ^ "px"
-            | None -> ""
+            | Some _ -> "asset-container w-full"
+            | None -> "asset-container"
           in
-          D.el ~key:"hl-a" ~tag:"div" ~style_class:"hl-area"
-              ~attrs:
-                (if w_style = "" then [] else [ ("style", w_style) ])
-              [ D.el ~key:"hl-ac" ~tag:"div" ~style_class:"asset-container"
-                  ~attrs:
-                    [ ( "style"
-                      , "width:" ^ if w_style = "" then "auto" else "100%"
-                      ) ]
-                  [ D.el ~key:"hl-ab" ~tag:"span"
-                      ~style_class:"asset-action-bar"
+          box ~key:"hl-a" ~style_class:"hl-area" ?width:r.width
+            [ box ~key:"hl-ac" ~style_class:container_cls
+                  [ box ~key:"hl-ab" ~style_class:"asset-action-bar"
                       [ area_btn ~key:"hl-ref" ~title:(I18n.t "asset/ref-block")
                           ~icon:"file-symlink" ~onclick:(fun () ->
                             Pdf_assets.goto_asset_block r.asset_uuid)
@@ -171,15 +167,15 @@ let area_display (b : Model.block) context : t =
                                     ~default:"")
                               ())
                       ]
-                  ; D.el ~key:"hl-img" ~tag:"img"
-                      ~style_class:"w-full"
-                      ~attrs:
-                        [ ("src", r.src)
-                        ; ( "id"
-                          , "hl-area-img-"
-                            ^ Option.value b.Model.block_uuid
-                                ~default:"" ) ]
-                      []
+                  ; (* #hl-area-img-<uuid> ids the .lui-image wrapper —
+                       the lightbox reaches the pixels img through its
+                       parent *)
+                    image ~key:"hl-img"
+                      ~url:r.src
+                      ~accessibility_identifier:
+                        ("hl-area-img-"
+                        ^ Option.value b.Model.block_uuid ~default:"")
+                      ~style_class:"w-full" []
                   ]
               ])
     st.Signal.state_signal

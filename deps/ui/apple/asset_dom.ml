@@ -200,8 +200,9 @@ let file_cell_el (w : Wire.t) : Lui_elements.t =
   in
   let file = uuid ^ "." ^ ext in
   Lui_elements.box ~style_class:"block-content" ~max_height:30
-    [ (* TODO(component): data-asset-file is the Swift asset-resolution
-         contract — no component attr channel *)
+    [ (* TODO(component): needs the logseq-img extension element
+         itself — the Swift host resolves the asset path off
+         data-asset-file; the image kind has no such resolver hook *)
       dom ~tag:"img"
         ~attrs:[ ("title", file); ("data-asset-file", file) ]
         [] ]
@@ -225,8 +226,10 @@ let file_cell (w : Wire.t) : Views_dom.el =
 let block_view uuid (b : Model.block) : Lui_elements.t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let is_pdf = ext = "pdf" in
-  (* TODO(component): data-asset-* attrs are the native
-     asset-resolution contract — no component attr channel *)
+  (* TODO(component): the logseq-div extension element + its
+     click event carry the native asset-resolution contract — the
+     attrs could ride ~data_attrs but the extension tag itself has no
+     kind equivalent *)
   dom ~key:("asset-" ^ uuid) ~tag:"div"
     ~style_class:
       ("asset-container" ^ if is_pdf then " ls-pdf-asset" else "")

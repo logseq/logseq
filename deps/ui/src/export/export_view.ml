@@ -188,20 +188,23 @@ let options_rows ctx =
    img#export-preview shows it — overlay stacks the spinner on the img *)
 let png_preview ctx =
   overlay ~key:"export-preview-png" ~alignment:`center
-    [ (* TODO(component): blob-url img — export_page.ml queries
-         "#export-preview" and pokes el.src imperatively (object URL +
-         natural-size measure); the image kind takes an image handle,
-         not a URL, so this stays a minimal dom until image gains a
-         source/url prop or the imperative side moves to a node id *)
-      Logseq_dom.dom ~key:"export-preview-img" ~tag:"img"
-        ~style_class:"my-4"
-        ~attrs_signal_v:(Logseq_dom.reactive_attrs
-             (fun (st : S.t) ->
-               [ ("id", "export-preview"); ("alt", I18n.export_preview_alt)
-               ; ( "style"
-                 , if st.png = None then "visibility: hidden" else "" ) ])
+    [ (* the kind's pixels img hides while ~url is empty; export_page.ml
+         still pokes src on the inner .lui-image-pixels through the
+         #export-preview wrapper id, and the outer box fades until a
+         blob lands (opacity:0 keeps layout like visibility:hidden did) *)
+      box ~key:"export-preview-wrap"
+        ~opacity:
+          (reactive
+             (fun (st : S.t) -> if st.png = None then 0. else 1.)
              (st_sig ctx))
-        []
+        [ image ~key:"export-preview-img"
+            ~accessibility_identifier:"export-preview"
+            ~alt:I18n.export_preview_alt
+            ~url:
+              (reactive
+                 (fun (st : S.t) -> Option.value st.png_url ~default:"")
+                 (st_sig ctx))
+            ~style_class:"my-4" [] ]
     ; if_
         ~test:(Signal.map (fun (st : S.t) -> st.png = None) (st_sig ctx))
         (icon ~key:"png-loading" ~name:(`app "loader-2") []) ]

@@ -482,24 +482,21 @@ let help_area (ms : Model.t Signal.signal) : t =
    as a fixed overlay (remounting the whole app tree inside a dyn
    hits a retained-store crash on the swap). *)
 let not_found_page : t =
-  (* TODO(component): position:fixed inset overlay — no
-     positioned-container kind *)
-  Logseq_dom.dom ~key:"nf-full"
-    ~style_class:
-      "flex flex-col items-center justify-center min-h-screen bg-background"
-    ~attrs:
-      [ ( "style"
-        , "position:fixed;inset:0;z-index:99999;background:var(--ls-primary-background-color)" )
-      ]
-    [ heading ~key:"nf-h1" ~value:"404" []
-    ; heading ~key:"nf-h2" ~value:(I18n.t "page/not-found-title") []
-    ; text ~key:"nf-p" ~value:(I18n.t "page/not-found-desc") []
-    ; button ~key:"nf-btn"
-        ~style_class:"ui__button"
-        ~on_press:(fun _ -> Platform.set_location_hash "#/")
-        [ Icons.icon ~size:18. "home"
-        ; text ~key:"nf-txt" ~value:(I18n.t "page/go-back-home") []
-        ]
+  (* .cp__not-found (stylesheet / Swift style entry) carries the
+     fixed-overlay positioning the inline style used to *)
+  column ~key:"nf-full" ~main:`center ~cross:`center
+    ~style_class:"cp__not-found"
+    [ heading ~key:"nf-h1" ~level:1 ~style_class:"text-6xl font-bold"
+        ~value:"404" []
+    ; heading ~key:"nf-h2" ~level:2 ~style_class:"text-2xl font-semibold"
+        ~value:(I18n.t "page/not-found-title") []
+    ; paragraph ~key:"nf-p"
+        ~value:(I18n.t "page/not-found-desc") []
+    ; button ~key:"nf-btn" ~variant:`outline ~height:40
+        ~padding_horizontal:16 ~padding_vertical:8
+        ~style_class:"ui__button as-outline" ~icon:(`app "home")
+        ~icon_placement:`leading ~text:(I18n.t "page/go-back-home")
+        ~on_press:(fun _ -> Platform.set_location_hash "#/") []
     ]
 
 let shell (ms : Model.t Signal.signal) : t =

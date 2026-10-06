@@ -112,9 +112,9 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       else
         let near = near_of k in
         let ns = near.Signal.state_signal in
-        (* TODO(component): data-lazy-mount attr + lazy-mount dom-event
-           are the Swift spine contract — no component kind carries a
-           custom event/attr channel *)
+        (* TODO(component): the lazy-mount dom-event is the Swift spine
+           contract — the attr could ride ~data_attrs but no component
+           kind carries a custom event channel *)
         D.dom ~style_class:"ls-virt-row"
           ~attrs_signal_v:
             (D.attrs_signal ns (fun n ->
@@ -129,9 +129,9 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
           ~on_dom_event:(fun _name _payload -> Signal.set near true)
           [ D.if_ ~test:ns (render it) ]
     in
-    (* TODO(component): data-virt-count attr selects the lazy column
-       path on the Swift side and the virt-end dom-event drives
-       pagination — no component kind carries that contract *)
+    (* TODO(component): data-virt-count could ride ~data_attrs but the
+       virt-end dom-event driving pagination has no component
+       equivalent *)
     D.dom ~style_class:list_class ~events:"virt-end"
       ~attrs_signal_v:attrs_sig
       ~on_dom_event:(fun _name _payload -> on_end ())
@@ -185,7 +185,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
     else
       let near = near_of k in
       let ns = near.Signal.state_signal in
-      (* TODO(component): same lazy-mount Swift spine contract as
+      (* TODO(component): same lazy-mount dom-event Swift spine contract as
          [list] — stays a logseq-div *)
       D.dom ~style_class:"ls-virt-row"
         ~attrs_signal_v:
@@ -201,7 +201,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
         ~on_dom_event:(fun _name _payload -> Signal.set near true)
         [ D.if_ ~test:ns (mount item_sig) ]
   in
-  (* TODO(component): same data-virt-count + virt-end Swift spine
+  (* TODO(component): same data-virt-count + virt-end dom-event Swift spine
      contract as [list] — stays a logseq-div *)
   (D.dom ~style_class:"ls-virt-list" ~events:"virt-end"
      ~attrs_signal_v:attrs_sig

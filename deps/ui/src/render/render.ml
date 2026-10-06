@@ -45,10 +45,14 @@ let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
           ~data_attrs:wrap_attrs ~value:text []
     | Some text, Some p ->
         (* annotation blocks carry plain hl text — prefix-link sibling +
-           raw text node (cljs puts the title children after .prefix-link) *)
+           raw text node (cljs puts the title children after .prefix-link).
+           TODO(component): hN-with-children needs the heading kind to
+           accept children (heading is a leaf; text ~as_ only covers
+           phrasing tags) *)
         D.el ~key:("btw-a-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
           [ p; D.txt text ]
     | None, _ ->
+        (* TODO(component): same heading-children gap as btw-a *)
         D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
           ((match prefix with Some p -> [ p ] | None -> [])
            @ Render_inline.parse ~self s)
@@ -363,8 +367,7 @@ let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
              via the mldoc linebreak node it emits for empty content) *)
           if s = "" then
             text ~key:"btw-empty" ~style_class:"block-title-wrap"
-              [ (* TODO(component): <br> has no component kind *)
-                D.el ~key:"btw-br" ~tag:"br" [] ]
+              [ br ~key:"btw-br" [] ]
           else wrap ~self ~wrap_attrs ~prefix s)
 
 

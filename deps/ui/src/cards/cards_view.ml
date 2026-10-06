@@ -2,7 +2,6 @@
    Mirrors cljs fsrs.cljs :div#cards-modal markup. *)
 
 open Lui_elements
-open Logseq_dom
 
 let t_ = I18n.t
 
@@ -178,19 +177,17 @@ let modal st =
           if Platform.date_now_ms () -. opened_at > 400. then
             Cards_state.close st)
         (box ~key:"cards-ov" ~style_class:"ui__dialog-overlay" [])
-    ; (* TODO(component): the dialog content needs a `label` attr (css
-         [label="flashcards__cp"] selectors), data-state and an inline
-         translate(-50%,-50%) style — no typed props cover these, so the
-         container stays dom until a dialog/popup kind carries them *)
-      dom ~key:"cards-ct"
+    ; (* label="flashcards__cp" follows the dialogs_view convention:
+         ls-dialog-flashcards class + class-selector twins in
+         lui-overlay.css; the base .ui__dialog-content rule already
+         centers via left/top + translate *)
+      column ~key:"cards-ct"
         ~style_class:
-          "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid \
-           w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg \
+          "ui__dialog-content ls-dialog-flashcards grid w-full \
+           max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg \
            bg-background p-6 shadow-lg ui__dialog-zoom-in"
-        ~attrs:
-          [ ("data-state", "open"); ("role", "dialog")
-          ; ("label", "flashcards__cp")
-          ; ("style", "transform: translate(-50%, -50%)") ]
+        ~data_attrs:
+          [ ("data-state", "open"); ("role", "dialog") ]
         [ box ~key:"cards-main" ~style_class:"ui__dialog-main-content"
             [ column ~key:"cards-modal"
                 ~accessibility_identifier:"cards-modal"
