@@ -1,14 +1,85 @@
 # Apple (SwiftUI) host — interactive audit
 
-Date: 2026-10-06. Branch audited: `devin/component-migration` @ `75a961c149`
-(deps/ui, lui pinned at `e812049`). Host: macOS, `apple/` Swift package +
-`Logseq.app`, graph `logseq_db_Demo` served by the native db-worker daemon
-(`http://127.0.0.1:56994`). Driven via real AppKit window (clicks, keys,
-resize, right-click, screenshots, AX tree, `sample`, daemon `/v1/invoke`).
+Date: 2026-10-06. Two rounds:
+
+- **Round 1**: `devin/component-migration` @ `75a961c149`, lui pinned `e812049`.
+- **Round 2**: same branch @ `dba7bbbf60`, lui @ `63383d4` (origin/main —
+  includes merged `5b3c79e LUICodeEditor`).
+
+Host: macOS, `apple/` Swift package + `Logseq.app`, graph `logseq_db_Demo`
+served by the native db-worker daemon (`http://127.0.0.1:56994`). Driven via
+real AppKit window (clicks, keys, resize, right-click, screenshots, AX tree,
+`sample`, daemon `/v1/invoke`, stderr `EMIT-*`/`LENIENT-*` probes).
 
 This is an audit report — no product fixes are committed. Local workarounds
 used to get far enough to observe anything are listed at the end and stay
 uncommitted.
+
+## Round-2 delta (new main)
+
+Resolved upstream:
+
+- `LUICodeEditor` is now in lui main — apple host compiles against a real
+  checkout (`LOGSEQ_LUI_PACKAGE_PATH=<lui>/platform/apple`), no cherry-pick.
+  Caveat: `deps/ui/scripts/install-opam-deps.sh` **still pins `e812049`**
+  (OCaml side) and `apple/build.sh` defaults to `../lui/platform/apple`;
+  the pin/checkouts must be advanced past `5b3c79e` or the Swift build
+  still fails at `LUICodeEditor`.
+- `tabler-icons.ttf` is now copied into the app bundle resources — but
+  icons still render tofu (font is shipped, never registered/loaded).
+- Under `LUI_LENIENT_VALIDATE`, the page header now mounts on first paint
+  (`Oct 5th, 2026` + `#Journal` tag + `Add …`/`Set …` buttons) and the
+  sidebar renders all rows immediately — better than round 1 where a resize
+  was needed to flush them.
+
+Still open (confirmed on new main):
+
+- All five round-1 build findings still unfixed upstream: `macos/gpui`
+  fingerprint profile missing, duplicate `LogseqCodeMirrorView` stub,
+  `self.` error at `LogseqPlatform.swift` ~L804, `Int64(+Inf)` SIGTRAP in
+  `LogseqMeasureCache`, and the wire-schema emission/schema divergences.
+- **New rejection class observed under strict validation**:
+  `invalidBatch("link requires url")` — fires during boot
+  (`LENIENT-NODE scope=50` in the log). `page_link`
+  (`render_inline.ml` ~L48) and the sidebar `link-item group` rows emit
+  `link` elements with `data-ref`/click delegation and **no `~url`
+  property**; apple requires `url` on every link → batch dropped →
+  toolbar never mounts → permanent generation desync, same as before.
+- Menu mount still emits every round-1 violation: re-opening the page `···`
+  menu logged 7× `menu-item accepts only context-menu metadata`, 2×
+  `interactive leaf accepts only context-menu metadata`, 1× `button
+  requires an accessible name`. The menu only exists under lenient.
+
+### New round-2 findings
+
+- **SwiftUI hit-testing is dead below the AppKit toolbar.** Sidebar `List`
+  selection, row `onTapGesture`, and even arrow-key selection never fire —
+  `emitClick` is never reached (verified with an `EMIT-OK/FAIL` probe that
+  printed nothing across every click/keystroke). All interaction observed
+  so far flows through the `NSEvent` monitors (mouseDown/mouseMoved/
+  keyDown → `LogseqFrameStore.hitTest` → `context.emit`) — SwiftUI
+  gestures inside the hosting views never run. Suspect: a stray full-bleed
+  hit target in the window-level `.overlay` (`LogseqOverlayLayer` +
+  `LogseqImperativeLayer` host imperative/menu nodes at Z above content),
+  or the layout storm below starving input processing.
+- **Main-thread SwiftUI layout storm.** `sample` shows the main thread
+  saturating inside `sizeThatFits` recursion (`PaddingLayout` →
+  `StackLayout` → `FlexFrameLayout` → ~69k samples) — the beachball on the
+  Settings menu click is layout burning, not OCaml. The `logseq-ocaml`
+  runtime thread is healthy (NSRunLoop idle); the only blocked OCaml
+  thread is a spawned worker in `caml_ml_input_scan_line` → `read()` —
+  the Settings `on_press` invoke never returned, so its promise never
+  resolves and the menu/navigation stays frozen.
+  Evidence: `layout-storm.sample.txt`.
+- Page `···` menu mounts 11 items under lenient (Add to Favorites / Delete
+  page / Export page / Publish page / Settings / Plugins / Appearance /
+  Recycle / Export graph / Import / Login) — the full page-actions menu,
+  not just the plugins subset from round 1. Toolbar item frames still
+  ambiguous/zero-size (AppKitToolbarItem warnings); clicks work only
+  intermittently.
+- `emitClick` sends `dom-event` with inner `name:"click"` — document-level
+  `"click"` listeners (`Platform.add_document_listener`) never see it,
+  which is why `LOGSEQ_DUMP` never produced `/tmp/tree.json` on any click.
 
 ## Checklist coverage
 
@@ -156,24 +227,29 @@ the `icon` element path). Visible throughout sidebar and toolbar.
 
 ## Local workarounds applied (NOT committed)
 
-In `lui` worktree (`/Users/devin/repos/lui-apple-ext`, e812049 + cherry-pick
-f42566a): `LUI_LENIENT_VALIDATE` env gates around `validateChild` and
-`validateNodeProperties` plus `REJECT-MENU`/`REJECT-LEAF` stderr prints in
-`LUIWireProtocol.swift` — lenient mode keeps generation in sync and lets
-invalid children mount, which is how the menu screenshots were obtained.
+Round 1: `lui` worktree `lui-apple-ext` (e812049 + cherry-pick f42566a) —
+superseded in round 2 by a real `~/repos/lui` checkout at `63383d4`.
 
-In the logseq worktree `apple/`: removed duplicate `LogseqCodeMirrorView`
-stub; added `macos/gpui` to the extension `profiles` fingerprint; added
-missing `self.` in `LogseqPlatform.swift`; finite-guard in
-`LogseqMeasureCache.sizes`; assorted `PERF`/`LOGSEQ_DEBUG_VIEWS` probes.
+In `~/repos/lui` (63383d4, uncommitted): `LUI_LENIENT_VALIDATE` env gates
+around `validateChild` and `validateNodeProperties` in
+`LUIWireProtocol.swift` + `LENIENT-SKIP`/`LENIENT-NODE` stderr prints —
+lenient keeps patch generation in sync and lets invalid children mount,
+which is how every menu/screenshot here was obtained.
+
+In the logseq worktree `apple/` (uncommitted): removed duplicate
+`LogseqCodeMirrorView` stub; added `macos/gpui` to the extension
+`profiles` fingerprint; added missing `self.` in `LogseqPlatform.swift`;
+finite-guard in `LogseqMeasureCache.sizes`; `EMIT-OK/FAIL` probe in
+`LogseqNativeSidebar.emitClick`; assorted `PERF`/`LOGSEQ_DEBUG_VIEWS`
+probes.
 
 ## Reproduce
 
 ```sh
+# opam lui must be >= 5b3c79e (main) for LUICodeEditor:
+opam pin add -y lui git+https://github.com/logseq/lui.git#63383d4 --switch=5.5.0
 cd deps/ui && OPAMSWITCH=5.5.0 opam exec -- dune build @all
 LOGSEQ_LUI_PACKAGE_PATH=<lui>/platform/apple sh apple/build.sh
-launchctl setenv LUI_LENIENT_VALIDATE 1   # else first menu open bricks the run
+launchctl setenv LUI_LENIENT_VALIDATE 1   # else first rejection desyncs the run
 open _build/apple/macos/Logseq.app
 ```
-
-Unpinned build fails at `LUICodeEditor` (needs lui `f42566a`).
