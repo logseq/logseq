@@ -468,12 +468,33 @@ let input_command env command =
   let* () =
     match content with
     | Some c when c <> "" && not (String.equal (String.sub c (String.length c - 1) 1) " ") ->
-        press_seq env " "
+        Keyboard.type_in_editor env " "
     | _ -> Js.Promise.resolve ()
   in
-  let* () = press_seq env ~delay:20. "/" in
-  let* () = Pw.wait_for env ".ui__popover-content" in
-  let* () = press_seq env ~delay:20. command in
+  (* '/' typed into the live editor — *:focus lands on <body> after a
+     remount and the palette never opens *)
+  let rec open_palette tries =
+    (* '/' only triggers the palette as a keydown — when a remount kills
+       the popover the editor is left ending in "/" and re-typing just
+       appends another; erase a stale one first *)
+    let* c = get_edit_content env in
+    let* () =
+      match c with
+      | Some s
+        when String.length s > 0
+             && String.sub s (String.length s - 1) 1 = "/" ->
+          Keyboard.press_in_editor env "Backspace"
+      | _ -> Js.Promise.resolve ()
+    in
+    let* () = Keyboard.type_in_editor env ~delay:20. "/" in
+    Pw.catch_timeout
+      (Pw.wait_for ~timeout:10000. env ".ui__popover-content")
+      (fun () ->
+         if tries > 1 then open_palette (tries - 1)
+         else Pw.wait_for env ".ui__popover-content")
+  in
+  let* () = open_palette 3 in
+  let* () = Keyboard.type_in_editor env ~delay:20. command in
   let command_item = Pw.q env "a.menu-link.chosen" in
   let* _ = E2e_assert.is_visible_l command_item in
   Pw.click_l command_item

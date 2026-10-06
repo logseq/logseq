@@ -59,6 +59,27 @@ let press_in_editor env ?delay ?timeout key =
     else Pw.press env ?delay key
   in
   attempt 3
+(** text sequencing into the live editor — same targeting as
+    [press_in_editor] but for multi-char input ("/", commands). *)
+let type_in_editor env ?(delay = 0.) text =
+  let rec attempt n =
+    let* (target : string) = Pw.eval_js env live_editor_js in
+    if target = "live" || target = "mark" then
+      Pw.catch_timeout
+        (Playwright.press_sequentially ~delay
+           (Pw.q env "[data-e2e-live='1']")
+           text)
+        (fun () ->
+           if n > 1 then attempt (n - 1)
+           else
+             Js.Promise.reject
+               (Failure
+                  (Printf.sprintf
+                     "type_in_editor %S: live editor kept detaching" text)))
+    else Playwright.press_sequentially ~delay (Pw.q env "*:focus") text
+  in
+  attempt 3
+
 let enter env = Pw.press env "Enter"
 let enter_in_editor env = press_in_editor env "Enter"
 let esc env = Pw.press env "Escape"
