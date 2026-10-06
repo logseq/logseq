@@ -315,9 +315,23 @@
     (escape-editing)
     (p/resolved [nil nil nil])))
 
+(defonce ^:private *pending-new-block-done
+  ;; Resolves when the pending Enter (insert-new-block!) has moved the editor
+  ;; to the new block, or failed
+  (atom nil))
+
 (defn- start-pending-new-block!
   []
+  (let [resolve! (atom nil)
+        done (p/create (fn [resolve _reject] (reset! resolve! resolve)))]
+    (reset! *pending-new-block-done {:promise done :resolve! @resolve!}))
   (state/set-state! :editor/pending-new-block {:typed-text ""}))
+
+(defn <pending-new-block
+  "Settles when the pending Enter, if any, has moved the editor to the new
+  block."
+  []
+  (or (:promise @*pending-new-block-done) (p/resolved nil)))
 
 (defn- pending-new-block
   []
@@ -351,7 +365,10 @@
 
 (defn- clear-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block nil))
+  (state/set-state! :editor/pending-new-block nil)
+  (when-let [{:keys [resolve!]} @*pending-new-block-done]
+    (reset! *pending-new-block-done nil)
+    (resolve! nil)))
 
 (declare get-new-container-id)
 (declare delete-block-aux!)
@@ -1816,6 +1833,9 @@
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
+    ;; An Enter still inserting names the block it split as the edited one;
+    ;; the move waits for the new block and moves it
+    (p/let [_ (<pending-new-block)]
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
@@ -1847,7 +1867,7 @@
                       loaded-blocks (unwrap-block-results results)
                       blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
                 (when (seq blocks)
-                  (move-nodes blocks))))))))))
+                  (move-nodes blocks)))))))))))
 
 (defn get-selected-ordered-blocks
   []
