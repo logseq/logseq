@@ -1561,6 +1561,13 @@
       (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
         (reset! *action-bar-timeout timeout)))))
 
+(defn- still-editing?
+  "Whether the editor open now is `input-id`, the one an exit started from.
+  An exit saves the block first, and the save waits for the worker: a click
+  meanwhile opens another block's editor, which the exit must leave open."
+  [input-id]
+  (or (nil? input-id) (= input-id (state/get-edit-input-id))))
+
 (defn- select-block-up-down
   [direction]
   (cond
@@ -1568,10 +1575,12 @@
     (state/editing?)
     (when-let [element (state/get-editor-block-container)]
       (when element
-        (p/do!
-         (save-current-block!)
-         (util/scroll-to-block element)
-         (state/exit-editing-and-set-selected-blocks! [element]))))
+        (let [input-id (state/get-edit-input-id)]
+          (p/do!
+           (save-current-block!)
+           (when (still-editing? input-id)
+             (util/scroll-to-block element)
+             (state/exit-editing-and-set-selected-blocks! [element]))))))
 
     ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
@@ -4087,15 +4096,11 @@
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  ;; `save-current-block!` resolves after the worker persists the block; during
-  ;; that window the user may have left or re-entered editing, so only proceed
-  ;; while this exact edit session is still the active one. Every new edit
-  ;; session installs a fresh `:editor/block`, so identity catches re-editing
-  ;; the same block too.
-  (let [editing-block (state/get-edit-block)]
+  (let [input-id (state/get-edit-input-id)]
     (p/do!
      (when save-block? (save-current-block!))
-     (when (identical? editing-block (state/get-edit-block))
+     ;; a click during the save opened another editor: it stays open
+     (when (still-editing? input-id)
        (if select?
          (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
            (state/exit-editing-and-set-selected-blocks! [node]))
