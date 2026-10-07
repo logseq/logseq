@@ -36,8 +36,16 @@ fn drain_patches(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
     let dump = std::env::var("LOGSEQ_GPUI_DUMP_PATCHES").is_ok();
     for json in bridge::take_patches() {
         if dump {
-            let _ = std::fs::write("/tmp/gpui-patch.json", &json);
-            eprintln!("logseq-gpui: dumped patch to /tmp/gpui-patch.json");
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/gpui-patches.jsonl")
+            {
+                let _ = f.write_all(json.as_bytes());
+                let _ = f.write_all(b"\n");
+            }
+            eprintln!("logseq-gpui: dumped patch to /tmp/gpui-patches.jsonl");
         }
         let batches: Vec<String> = match serde_json::from_str(&json) {
             Ok(serde_json::Value::Array(items)) => items
@@ -184,6 +192,31 @@ fn handle_platform_request(
             ));
         }
         "open-url" => cx.open_url(payload),
+        "ui-state" => {
+            // {"lang","root-classes","body-classes","data":{"theme":..}}
+            // — the host-facing bit is the app-chosen light/dark mode:
+            // apply it through Theme::change so every window repaints.
+            let dark = serde_json::from_str::<serde_json::Value>(payload)
+                .ok()
+                .and_then(|json| {
+                    json.pointer("/data/theme")
+                        .and_then(serde_json::Value::as_str)
+                        .map(|theme| theme == "dark")
+                        .or_else(|| {
+                            json.get("body-classes")
+                                .and_then(serde_json::Value::as_str)
+                                .map(|classes| classes.contains("dark-theme"))
+                        })
+                });
+            if let Some(dark) = dark {
+                let mode = if dark {
+                    gpui_kit::component::theme::ThemeMode::Dark
+                } else {
+                    gpui_kit::component::theme::ThemeMode::Light
+                };
+                gpui_kit::component::theme::Theme::change(mode, Some(window), cx);
+            }
+        }
         other => eprintln!("logseq-gpui: platform request {other}: {payload}"),
     }
 }
@@ -191,9 +224,56 @@ fn handle_platform_request(
 /// UI-side tick: apply queued patches and service platform requests.
 /// The OCaml mailbox itself is pumped on the dedicated pump thread, so
 /// this stays light even while OCaml is mid-flush.
+/// Host -> OCaml environment pushes (`platform_event` envelopes). The
+/// OCaml side reads window-size for viewport math (`inner_width`/
+/// `inner_height` drive the virtualizer) and appearance for
+/// `prefers_dark` (system-theme resolution) — both default to stale
+/// values (1440x900, light) unless the host pushes them.
+fn push_window_env(window: &gpui_kit::gpui::Window) {
+    use gpui_kit::gpui::WindowAppearance;
+    static LAST: Mutex<(Option<bool>, Option<(f32, f32)>)> = Mutex::new((None, None));
+    let dark = matches!(
+        window.appearance(),
+        WindowAppearance::Dark | WindowAppearance::VibrantDark
+    );
+    let size = window.viewport_size();
+    let wh = (f32::from(size.width), f32::from(size.height));
+    let (push_appearance, push_size) = {
+        let mut last = LAST.lock().unwrap();
+        let appearance = last.0 != Some(dark);
+        let size = last.1 != Some(wh);
+        if appearance {
+            last.0 = Some(dark);
+        }
+        if size {
+            last.1 = Some(wh);
+        }
+        (appearance, size)
+    };
+    for (name, json) in [
+        push_appearance.then(|| ("appearance", format!("{{\"dark\":{dark}}}"))),
+        push_size.then(|| {
+            (
+                "window-size",
+                format!("{{\"width\":{},\"height\":{}}}", wh.0, wh.1),
+            )
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let envelope = format!("{name}\n{json}");
+        unsafe {
+            lui_ocaml_platform_event(envelope.as_ptr().cast::<c_char>(), envelope.len() as c_int)
+        };
+    }
+}
+
 fn pump_tick(shared: &Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui_kit::gpui::App) {
+    push_window_env(window);
     drain_patches(shared, cx);
     drain_requests(shared, window, cx);
+    editor::reconcile_stale_focus(shared, window, cx);
     lui_gpui::dom::fire_viewport_events(shared, window, cx);
 }
 
@@ -342,7 +422,7 @@ fn main() {
             ..Default::default()
         };
         eprintln!("logseq-gpui: opening window t={:.1}ms", boot_ms());
-        cx.open_window(options, |window, cx| {
+        let window_handle = cx.open_window(options, |window, cx| {
             eprintln!("logseq-gpui: window opened t={:.1}ms", boot_ms());
             // bare binary launches come up inactive — without this
             // the window can't become macOS key window and keyboard
@@ -369,6 +449,15 @@ fn main() {
         // window can't become macOS key window and keyboard input
         // never reaches it; deferred so it lands after app.run settles
         cx.defer(|cx| cx.activate(true));
+        // The makeKey at open raced app activation (the process was not
+        // yet active, so the NSWindow never took key status and keys
+        // fall through to the previous app). Re-activate the window once
+        // the app itself is active.
+        cx.defer(move |cx| {
+            let _ = window_handle.update(cx, |_view, window, _cx| {
+                window.activate_window();
+            });
+        });
         // Component init (theme registry, widget setup, the ~40ms
         // font-probe enumeration) is deferred past open_window's
         // synchronous first draw so it no longer gates first paint;

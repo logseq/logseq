@@ -125,157 +125,13 @@ let nav r =
     Web_dom.dispatch_custom "ls:navigate" Js.Json.null);
   true
 
-(* dispatch through the shared command table (cljs :shortcut handler
-   :f functions) so palette and keymap stay on one code path *)
+(* cljs shortcut dispatch for chords already bound in commands_data
+   (⌘⇧F favorite, ⌥⇧C contents, …): run the shared command table entry
+   so palette and keymap stay on one code path *)
 let run_cid cid =
   match Cmdk_state.shortcut_action cid with
   | Some f -> f ()
   | None -> ()
-
-(* journal day nav: g n / g p move relative to the journal page being
-   viewed, falling back to today when the current route isn't a journal *)
-let journal_delta d =
-  let base =
-    match !Runtime.current_page with
-    | Some p -> (
-        match p.Model.page_journal_day with
-        | Some day -> day
-        | None -> Dates.today_journal_day ())
-    | None -> Dates.today_journal_day ()
-  in
-  let dt =
-    Js.Date.make ~year:(float_of_int (base / 10000))
-      ~month:(float_of_int ((base / 100) mod 100 - 1))
-      ~date:(float_of_int (base mod 100)) ()
-  in
-  ignore
-    (nav (Model.Page (Dates.journal_title_of (Dates.add_days dt d))))
-
-(* cljs :separate two-key sequences — prefix held for 1.5 s *)
-let seq_pending : (string * float) option ref = ref None
-let seq_window_ms = 1500.
-
-let seq_second prefix key =
-  match (prefix, key) with
-  | "g", "a" -> nav Model.All_pages
-  | "g", "G" -> nav Model.All_graphs
-  | "g", "g" -> nav Model.Graph_view
-  | "g", "h" -> nav Model.Home
-  | "g", "j" -> nav Model.Journals
-  | "g", "s" ->
-      Settings_state.open_at "keymap";
-      Dialogs_state.open_ "settings";
-      true
-  | "g", "f" -> Sidebar_state.open_cards (); true
-  | "g", "n" -> journal_delta 1; true
-  | "g", "p" -> journal_delta (-1); true
-  | "g", "t" ->
-      nav
-        (Model.Page
-           (Dates.journal_title_of (Dates.add_days (Dates.date_now ()) 1)))
-  | "t", "l" -> Runtime.send Action.Toggle_left_sidebar; true
-  | "t", "r" -> Runtime.send Action.Toggle_right_sidebar; true
-  | "t", "s" -> nav Model.Settings
-  | "t", "t" -> Settings_view.toggle_theme (); true
-  | "t", "w" -> Settings_state.toggle_wide_mode (); true
-  | "t", "o" -> A.toggle_open_blocks (); true
-  | "t", "b" ->
-      Settings_state.config_toggle "ui/show-brackets?" ~default:true;
-      true
-  | "t", "n" ->
-      List.iter (fun u -> Editor_commands.toggle_own_list u 0)
-        (A.selected_uuids ());
-      true
-  | "t", "c" -> Sidebar_state.open_cards (); true
-  | "p", ("d" | "i" | "r" | "s" | "p" | "t" as k) ->
-      (* cljs keymap p <key> routes to the named command — deadline
-         calendar, icon/reaction pickers anchor under the selected
-         block (same dispatch as the context-menu commands) *)
-      (match A.selected_uuids () with
-       | u :: _ ->
-           Popups_state.emit_cmd
-             (match k with
-              | "d" -> "deadline"
-              | "i" -> "set-icon"
-              | "r" -> "add-reaction"
-              | "s" -> "add-property-status"
-              | "p" -> "add-property-priority"
-              | _ -> "set-tags")
-             [ "block", Js.Json.string u ]
-       | [] -> ());
-      true
-  | "p", "a" -> run_cid "editor/toggle-display-hidden-properties"; true
-  | "c", "c" -> run_cid "ui/customize-appearance"; true
-  | "c", "t" -> run_cid "sidebar/close-top"; true
-  | _ -> false
-
-let seq_prefix ev key =
-  match key with
-  | ("g" | "t" | "p" | "c") when not (D.ev_shift ev) ->
-      seq_pending := Some (key, Platform.date_now_ms ());
-      D.ev_prevent_default ev;
-      true
-  | _ -> false
-
-(* returns true when the key was consumed as a sequence prefix or
-   second key; only plain single chars participate *)
-let seq_key ev =
-  let key = D.ev_key ev in
-  if mods ev || D.ev_alt ev || String.length key <> 1 then (
-    seq_pending := None;
-    false)
-  else
-    match !seq_pending with
-    | Some (prefix, t0) ->
-        seq_pending := None;
-        if
-          Platform.date_now_ms () -. t0 <= seq_window_ms
-          && seq_second prefix key
-        then (
-          D.ev_prevent_default ev;
-          true)
-        else seq_prefix ev key
-    | None -> seq_prefix ev key
-
-(* global chords (cljs #global-prevent-default): fire in every mode —
-   editing, selection, popups aside — before the editing/normal split *)
-let global_chord ev =
-  let shift = D.ev_shift ev and alt = D.ev_alt ev in
-  let meta = D.ev_meta ev in
-  match shortcut_key ev with
-  (* mod+k / mod+shift+m belong to the cmdk palette's own document keydown
-     listener (cmdk_view.handle_keydown) — it owns open, close and
-     move-mode, and a second handler on the same chord toggles the
-     palette straight back off *)
-  | "k" when meta && shift ->
-      D.ev_prevent_default ev;
-      Cmdk_state.open_in_page ();
-      true
-  | "p" when meta && shift ->
-      D.ev_prevent_default ev;
-      Cmdk_state.open_latest ();
-      true
-  | "p" when meta ->
-      D.ev_prevent_default ev;
-      (match A.selected_uuids () with
-       | u :: _ -> Properties_dialog.open_for_block u
-       | [] -> Properties_dialog.open_for_current ());
-      true
-  | "[" when meta ->
-      D.ev_prevent_default ev;
-      Platform.history_back ();
-      true
-  | "]" when meta ->
-      D.ev_prevent_default ev;
-      Platform.history_forward ();
-      true
-  | "f" when meta && shift -> run_cid "page/toggle-favorite"; true
-  | "g" when alt && shift && not meta ->
-      nav Model.All_graphs
-  | "c" when alt && shift && not meta ->
-      run_cid "ui/toggle-contents";
-      true
-  | _ -> false
 
 (* editor/follow-link: the link construct around the caret — [[title]],
    ((uuid)), [text](url) or a bare http(s):// token *)
@@ -721,8 +577,7 @@ let on_normal_key ev =
   and alt = D.ev_alt ev
   and meta = D.ev_meta ev in
   let selected () = S.selection_active () in
-  if seq_key ev then ()
-  else  match key with
+  match key with
   | "p" when meta && not shift && selected () ->
       (* cljs :editor/add-property mod+p — the new-property dialog on the
          first selected block *)
@@ -997,7 +852,6 @@ let on_keydown ev =
     if Editor_commands.popup_key ev then
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (D.ev_key ev))
-    else if global_chord ev then ()
     else
       let target = D.ev_target ev in
       (* CodeMirror surfaces (fenced-code editor, query source editor)

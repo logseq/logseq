@@ -1476,7 +1476,7 @@ and run_command st repo (cid : string) =
       close st;
       (match target_uuids () with
        | u :: _ -> Properties_dialog.open_for_block u
-       | [] -> ())
+       | [] -> Properties_dialog.open_for_current ())
   (* cljs :editor/new-property {:property-key _} — the named property's
      dedicated picker, not the generic property sheet *)
   | "editor/add-property-deadline" | "editor/add-property-status"
@@ -1498,6 +1498,18 @@ and run_command st repo (cid : string) =
   | "editor/add-property-icon" -> run_add_property_icon st
   | "editor/add-reaction" -> run_add_reaction st
   | "editor/add-comment" -> run_add_comment repo st
+  | "go/flashcards" ->
+      close st;
+      Sidebar_state.open_cards ()
+  | "editor/toggle-number-list" ->
+      close st;
+      List.iter
+        (fun u -> Editor_commands.toggle_own_list u 0)
+        (Editor_actions.selected_uuids ())
+  | "ui/toggle-brackets" ->
+      close st;
+      ignore (Settings_state.config_toggle "ui/show-brackets?" ~default:true)
+  | "graph/open" -> nav "#/graphs" Model.All_graphs
   | _ -> (
       (match shortcut_action cid with
        | Some f -> f ()
