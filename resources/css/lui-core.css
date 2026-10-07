@@ -1910,10 +1910,12 @@ a.page-title {
 /* cljs block-mouse-over/-leave: hovering the block row reveals the fold
    caret on collapsable blocks (collapsed ones always show it via
    .control-show) */
+/* .lui-link-content wraps link children, so the caret is a descendant
+   rather than a direct child of .block-control */
 .block-main-container:hover
   > .block-control-wrap[data-has-children="true"]
   > .block-control
-  > .control-hide {
+  .control-hide {
   display: revert;
 }
 
