@@ -13,7 +13,8 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 
 const URL_ = 'http://localhost:3013/index.html?rtc-test=true';
-const CTX = '/tmp/pw-lui-perf';
+// /tmp is wiped on restart; keep the seeded profile under $HOME
+const CTX = process.env.HOME + '/pw-lui-perf';
 const RUNS = Number(process.env.RUNS || 5);
 const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] || null;
 const rnd = (v) => (v == null ? null : +v.toFixed(1));

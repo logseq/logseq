@@ -98,4 +98,6 @@ let tag (a : t) : string =
   | Search_index_progress _ -> "search-index-progress"
   | Search_index_hide _ -> "search-index-hide"
   | Rtc_flow_flags _ -> "rtc-flow-flags"
+  | Linked_toggle_search -> "linked-toggle-search"
+  | Linked_set_query _ -> "linked-set-query"
   | Noop -> "noop"
