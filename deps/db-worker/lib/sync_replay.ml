@@ -1070,6 +1070,25 @@ let fix_tx repo (display_conn : conn) ~(jump_tx_data : datom list)
         Db_sync_order.dup_order_fix_ops (Conn.db server_conn) jump_tx_data
     | None -> []
   in
+  (* fixes carry server-conn [:block/uuid u] lookup-refs that resolve
+     against the display db at transact time. A pending replay can have
+     deleted the target on display while it stays alive on the server
+     conn — resolve each ref now and drop ops whose target is gone
+     (the pending delete uploads anyway, so an order fix on a
+     being-deleted entity is moot). cljs emits live-conn eids for the
+     same conn it transacts on and never hits this. *)
+  let display_db = Conn.db display_conn in
+  let fixes =
+    List.filter_map
+      (fun (op : tx_op) ->
+         match op with
+         | Add (Lookup_ref _ as r, a, v) -> (
+             match Datascript.entid_ref display_db r with
+             | Some eid -> Some (Add (Entity_id eid, a, v))
+             | None -> None)
+         | _ -> Some op)
+      fixes
+  in
   if fixes <> [] then
     let _report =
       Datascript.transact_conn display_conn fixes
