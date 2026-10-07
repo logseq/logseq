@@ -55,7 +55,7 @@ Each site is classified by the *primary* missing vocabulary:
 ## attrs — 60 sites
 
 Contract: `data-*`/`aria-*`/`role`/`tabindex`/`draggable`/`id`/class handles
-read by delegated handlers (`*_state.ml` doc listeners, `dom_adapter`,
+read by delegated handlers (`*_state.ml` doc listeners, `web_ext_adapters`,
 `virtualizer`, `virtual_scroll`), CSS (`lui-overlay.css`, `lui-core.css`), or
 e2e locators.
 
@@ -98,7 +98,7 @@ e2e locators.
 | src/shell/chrome.ml:446 | `rtc_indicator` | hidden `box` `accessibility_identifier:"rtc-tx"` — e2e reads `[data-testid="rtc-tx"]` | e2e | `data_attrs` (`data-testid`) or move e2e to the a11y id — decide which contract wins |
 | src/pages/page_menu.ml:153 | `user_item` | `dom` menuitem attrs: `role=menuitem`,`tabindex=-1` | e2e `div[role='menuitem']` | `data_attrs` `role`/`tabindex`, or `menu_item ~role` built in |
 | src/pages/page_menu.ml:319 | `confirm_view` | `dom` attrs: `role=alertdialog` | e2e `div[role='alertdialog']` | `data_attrs`; or `alert_dialog` kind |
-| src/dialogs/plugin_readme.ml:185 | `body` | `dom .cp__plugins-details` attr: `data-capture-click` + click reads `href` payload | `dom_adapter.ml:262` | `data_attrs` + press payload `{href}` (event bucket) |
+| src/dialogs/plugin_readme.ml:185 | `body` | `dom .cp__plugins-details` attr: `data-capture-click` + click reads `href` payload | `web_ext_adapters.ml` (capture-click delegation) | `data_attrs` + press payload `{href}` (event bucket) |
 | src/views/views_table.ml:730 | `dnd_described`/`dnd_live` | `dom` nodes: `style:display:none`/`clip`, `role=status`,`aria-live`,`aria-atomic`, ids `DndDescribedBy-*`/`DndLiveRegion-*` | screen readers (dnd-kit a11y) | `data_attrs` incl. aria + `~hidden`/`~display` prop; or an `a11y_live_region` kind |
 | src/views/views_table.ml:777 | `row_el` | `row .ls-block` — `blockid`/`data-id` readers still exist; uuid already on `accessibility_identifier:"ls-block-<uuid>"` | `block_dnd`, `block_selection` | No new vocab needed — migrate readers to `accessibility_identifier`/`#ls-block-<uuid>` (restructure); `data_attrs` if an interim shim is wanted |
 | src/views/views_table.ml:936 | `list_row_el` | same as :777 | same | same |

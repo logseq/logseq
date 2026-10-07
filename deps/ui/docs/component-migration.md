@@ -57,7 +57,7 @@ style_class only.
 
 ## Reactive conventions
 
-**Direct calls to `dyn` / `Logseq_dom.dyn` are forbidden** — `dyn` is
+**Direct calls to `dyn` / `Lui_elements.dyn` are forbidden** — `dyn` is
 only the `lui_ppx` expansion target, not user API. The full reactive
 vocabulary is four forms:
 
@@ -107,8 +107,8 @@ Ui_parts.pressable ~on_press:(fun _ -> f ()) (row ~key ~style_class:cls children
   when the subtree shape itself genuinely changes. Example: the eye
   button must not rebuild on `visible`; `~icon:(reactive
   (fun vis -> if vis then `app "eye-off" else `eye) visible)` suffices
-- `fragment` usage unchanged (Logseq_dom's own/signal ownership is
-  kept for now — its internals will be reworked when dom() is deleted;
+- `fragment` usage unchanged (Logseq_el's own/signal ownership
+  carries it — the dom() family is deleted;
   call sites need not care)
 - `~text` → `text ~value:"…"`; `~html` → children elements
 - `aria-label` → `~label` (the a11y name parameter on button etc.)
