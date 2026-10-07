@@ -82,8 +82,10 @@ let set_hl_colored v =
        else Web_dom.el_class_remove el "ls-hl-colored"
    | None -> ())
 
+(* cljs state.cljs: `(not= false (storage/get "ls-pdf-auto-open-ctx-menu"))`
+   — unset storage means ON, only a stored false disables *)
 let auto_open_ctx () =
-  storage_bool "ls-pdf-auto-open-ctx-menu" ~default:false
+  storage_bool "ls-pdf-auto-open-ctx-menu" ~default:true
 
 let set_auto_open_ctx v = storage_set "ls-pdf-auto-open-ctx-menu" v
 

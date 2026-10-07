@@ -74,8 +74,11 @@ external vp_scale : Js.Json.t -> float = "scale" [@@mel.get]
 external vp_to_pdf_point : Js.Json.t -> float -> float -> float array
   = "convertToPdfPoint" [@@mel.send]
 
-external doc_destroy : Js.Json.t -> unit Js.Promise.t = "destroy"
-  [@@mel.send]
+(* pdfjs 6: PDFDocumentProxy lost its public .destroy — go through the
+   loading task (cljs pdf_viewer3-era .destroy) *)
+let doc_destroy : Js.Json.t -> unit Js.Promise.t =
+  [%mel.raw
+    "function (d) { return d.loadingTask ? d.loadingTask.destroy() : Promise.resolve() }"]
 
 (* EventBus *)
 external bus_on : Js.Json.t -> string -> (Js.Json.t -> unit) -> unit = "on"

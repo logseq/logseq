@@ -410,11 +410,18 @@ let timestamp_text_el ~literal =
 
 (* ---------- cloze ---------- *)
 
+(* Cards review pre-reveals clozes (cljs {:show-cloze? true} on
+   blocks-container). Consulted only at cloze mount time — Cards_state
+   raises it while a revealed card subtree mounts; page subtrees that
+   mount with it set get the same treatment, matching cljs where the
+   flag is a shared render option. *)
+let cloze_reveal_all = ref false
+
 (* {{cloze answer\\cue}} — click/Enter/Space toggles span.cloze ->
    span.cloze-revealed showing the answer (cljs fsrs.cljs cloze-cp). *)
 let cloze_el answer cue : t =
  fun context parent ->
-  let open_ = Signal.state context.Lui_ui.ui_scheduler false in
+  let open_ = Signal.state context.Lui_ui.ui_scheduler !cloze_reveal_all in
   let sig_ = Signal.value open_ in
   let hidden_text = match cue with Some c -> "(" ^ c ^ ")" | None -> "[...]" in
   (* keydown (Enter/Space) has no component equivalent — click toggles.

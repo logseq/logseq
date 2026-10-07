@@ -333,7 +333,8 @@ let shortcut_hint binding =
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
    inner `a.item` also gets `active` when the route matches *)
-let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click () =
+let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
+    ?(more = Logseq_dom.nothing) () =
   let act = if active then " active" else "" in
   let tail = match shortcut with Some s -> [ shortcut_hint s ] | None -> [] in
   box ~key ~style_class:(class_ ^ act)
@@ -342,7 +343,7 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click () =
            ~style_class:("item group" ^ act)
            ([ icon_ icon_name
             ; text  ~grow:1. ~value:title [] ]
-           @ tail)) ]
+           @ tail @ [ more ])) ]
 
 let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
   nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name ?shortcut
@@ -367,13 +368,32 @@ let nav_items ~active_route (checked, tag_titles) =
   List.filter_map
     (fun nav ->
       match nav with
-      | "flashcards" ->
-          Some
-            (nav_link ~key:"nl-flashcards" ~class_:"flashcards-nav"
-               ~active:false ~title:(t "nav/flashcards") ~icon_name:"cards"
-               ~shortcut:"g f"
-               ~on_click:(fun () -> Sidebar_state.open_cards ())
-               ())
+      | "flashcards" -> (
+          (* cljs: hidden unless :feature/enable-flashcards?, and a
+             due-count pill rides the item *)
+          let on =
+            if Settings_state.ready () then
+              Settings_state.config_bool "feature/enable-flashcards?"
+                ~default:true
+            else true
+          in
+          if not on then None
+          else
+            Some
+              (nav_link ~key:"nl-flashcards" ~class_:"flashcards-nav"
+                 ~active:false ~title:(t "nav/flashcards") ~icon_name:"cards"
+                 ~shortcut:"g f"
+                 ~on_click:(fun () ->
+                   Cards_state.update_due_count ();
+                   Sidebar_state.open_cards ())
+                 ~more:(D.dyn
+                          (fun (n : int) ->
+                            if n > 0 then
+                              text ~style_class:"ml-1 inline-block py-0.5 px-3 text-xs font-medium rounded-full"
+                                ~value:(string_of_int n) []
+                            else Logseq_dom.nothing)
+                          (Cards_state.Due_count.signal ()))
+                 ()))
       | "all-pages" ->
           Some
             (nav_route ~class_:"all-pages-nav"
@@ -392,6 +412,10 @@ let nav_items ~active_route (checked, tag_titles) =
 
 let nav_group ms st =
  fun ctx parent ->
+  (* sidebar badge cell — idle until the nav mounts it *)
+  Cards_state.Due_count.mount ctx 0;
+  if not (Cards_state.Due_count.ready ()) then ()
+  else Cards_state.update_due_count ();
   let navs_sig =
     D.own ctx
       (Signal.map2

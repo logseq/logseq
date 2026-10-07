@@ -182,7 +182,11 @@ let area_highlight (hl : Model.hl) = hl.hl_image <> None
 
 (* ---------- worker access ---------- *)
 
-let entity_of ref_wire = Properties_data.entity ref_wire
+(* thread-api/entity replies Tagged ("datascript/Entity", Map) — unwrap
+   before map_get lookups *)
+let entity_of ref_wire =
+  let* w = Properties_data.entity ref_wire in
+  Js.Promise.resolve (Properties_data.untag w)
 
 let entity_uuid (w : W.t) = W.map_get_uuid w "block/uuid"
 
@@ -235,20 +239,16 @@ let load_hls_data (asset : Model.pdf_asset)
              [ W.Int ref_id ]
          in
          let hls =
-           match rows with
-           | W.Array xs | W.List xs ->
-               List.filter_map
-                 (fun row ->
-                   match row with
-                   | W.Array es | W.List es ->
-                       List.find_map
-                         (fun e ->
-                           Decode.hl_of_wire
-                             (W.get e "logseq.property.pdf/hl-value"))
-                         es
-                   | _ -> None)
-                 xs
-           | _ -> []
+           (* thread-api/q relation results come back as a Set of row
+              vectors — W.elems covers Set/Array/List *)
+           List.filter_map
+             (fun row ->
+               List.find_map
+                 (fun e ->
+                   Decode.hl_of_wire
+                     (W.get e "logseq.property.pdf/hl-value"))
+                 (W.elems row))
+             (W.elems rows)
          in
          Js.Promise.resolve hls)
         |> Js.Promise.catch (fun e ->
@@ -522,19 +522,15 @@ let save_area_png (png : Js.Json.t) : int option Js.Promise.t =
     Asset_store.write_asset ~repo:(repo ()) ~name:(uuid ^ ".png") ~u8
   in
   let size = int_of_float (blob_size png) in
-  (* cljs db-based-save-assets {:pdf-area? true} — insert into today's
-     journal page (creating it when missing) *)
-  let day = Dates.today_journal_day () in
+  (* cljs db-based-save-assets {:pdf-area? true} — target falls through
+     to the Asset class page (pull of :logseq.class/Asset) *)
   let* w =
-    let* w = Properties_data.journal_page_by_day day in
-    match W.map_get_uuid w "block/uuid" with
-    | Some _ -> Js.Promise.resolve w
-    | None ->
-        let* () = !Pdf_state.create_today_journal () in
-        Properties_data.journal_page_by_day day
+    Runtime.invoke3 "thread-api/pull" (W.String (repo ()))
+      (W.String "[:block/uuid]")
+      (W.Keyword "logseq.class/Asset")
   in
   match W.map_get_uuid w "block/uuid" with
-  | Some page_uuid ->
+  | Some page_uuid -> (
       let bm =
         W.Map
           [ W.String "block/uuid", W.Uuid uuid
@@ -554,7 +550,7 @@ let save_area_png (png : Js.Json.t) : int option Js.Promise.t =
               ~sibling:false ]
       in
       let* e = entity_of (Properties_data.uuid_ref uuid) in
-      Js.Promise.resolve (entity_dbid e)
+      Js.Promise.resolve (entity_dbid e))
   | None -> Js.Promise.resolve None
 
 (* cljs persist-hl-area-image$ — crop the page canvas, save the png,

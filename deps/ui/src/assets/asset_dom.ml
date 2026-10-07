@@ -699,7 +699,7 @@ let block_view uuid (b : Model.block) : t =
     | Some "pdf" -> pdf_block uuid b
     | _ -> file_block uuid b
   in
-  column ~key:("abw-" ^ uuid) ~style_class:"asset-block-wrap"
+  column ~key:("abw-" ^ uuid) ~style_class:"asset-block-wrap" ~grow:1.
     [ box ~key:("abcc-" ^ uuid) ~grow:1. [ body ]
     ; Ui_parts.pressable
         ~on_press:(fun _ -> Editor_actions.enter_edit uuid 0)
