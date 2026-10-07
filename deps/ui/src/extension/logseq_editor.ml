@@ -342,7 +342,13 @@ let frag_rect fel u16 =
     if rl_len rl > 0 then
       let r = rl_at rl 0 in
       Some { fx = rect_left r; fy = rect_top r; fh = rect_height r }
-    else None)
+    else
+      (* a zero-width text node (the ZWSP pad — the only frag of an empty
+         block/line) yields no client rects, leaving an empty block with
+         no measurable caret spot at all: fall back to the frag element's
+         own box — its left edge is the caret position *)
+      let r = j_brect fel in
+      Some { fx = rect_left r; fy = rect_top r; fh = rect_height r })
 
 let caret_rect_el el (off : int) : frect option =
   let st = state_of el in

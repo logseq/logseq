@@ -59,15 +59,25 @@ let sel_span uuid =
 (* programmatic caret moves never pass through apply_input, so the
    mounted surface's overlay keeps its stale rect — re-measure it from
    the model just published *)
+(* returns whether the active frame ended up with a caret rect: callers
+   that schedule overlays need to know the measurement actually landed
+   (a missing conduit/model/frame, or a rect that still can't be
+   measured, means the caret stays unpainted) *)
 let refresh_overlay uuid =
   match (!S.active_frame, Editor_sink.conduit uuid, edit_model uuid) with
   | Some fr, Some conduit, Some m ->
-      Signal.update fr (fun _ -> Edit_input.measure conduit m)
-  | _ -> ()
+      Signal.update fr (fun _ -> Edit_input.measure conduit m);
+      let f =
+        match !(fr.Signal.pending) with
+        | Some v -> v
+        | None -> Signal.get_state fr
+      in
+      Option.is_some f.Edit_input.caret
+  | _ -> false
 
 let set_caret uuid pos =
   update_model uuid (fun m -> Edit_model.select m ~anchor:pos ~focus:pos);
-  refresh_overlay uuid
+  ignore (refresh_overlay uuid)
 
 (* splice [lo, hi) -> text; caret lands after the inserted text *)
 let splice_range uuid lo hi text =
@@ -222,13 +232,26 @@ let rec apply_focus () =
              stale — keep where the model put it *)
           if !S.last_edit_input_ms <= armed_ms then
             apply_click_offset uuid caret armed_ms 30;
-          (* the sink's runs prop and first layout can lag the landing
-             by a patch or two, so the immediate measure often yields no
-             caret rect (Enter→new block, arrow-in): re-measure after the
-             DOM settles or the caret bar never paints until the next
-             input event *)
-          D.set_timeout (fun () -> refresh_overlay uuid) 0;
-          D.set_timeout (fun () -> refresh_overlay uuid) 40;
+          (* the sink's runs prop and first layout can lag the landing —
+             a split/merge's remount by far more than a patch or two —
+             and the immediate measure then yields no caret rect, so the
+             caret bar never paints until the next input event: keep
+             re-measuring until the overlay has a caret rect (or this
+             block stops editing). refresh_overlay reports whether a
+             caret rect actually landed — checking the active frame
+             directly would read a STALE frame while the new overlay is
+             still mounting *)
+          let rec retry_measure attempt =
+            D.set_timeout
+              (fun () ->
+                match S.editing () with
+                | Some e when e.S.uuid = uuid ->
+                    if (not (refresh_overlay uuid)) && attempt < 25 then
+                      retry_measure (attempt + 1)
+                | _ -> ())
+              (if attempt = 0 then 0 else 40)
+          in
+          retry_measure 0;
           drain_pending_focus_actions ())
         else if !S.pending_focus = None then ()
         else (
