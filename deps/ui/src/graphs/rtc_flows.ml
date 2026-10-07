@@ -223,7 +223,7 @@ let notify_login () = emit None
    git/current-repo), so push it even though start() does too for
    remote graphs *)
 let notify_repo_switch repo =
-  Rtc_ops.sync_app_state (Some repo);
+  ignore (Rtc_ops.sync_app_state (Some repo));
   emit (Some repo)
 
 (* cljs trigger-rtc-start — manual start callers *)

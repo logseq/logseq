@@ -48,8 +48,8 @@ let list_remote_graphs () =
      the request entirely when logged out and keep the local list *)
   if not (Rtc_flows.logged_in ()) then Js.Promise.resolve !remote_graphs
   else begin
-    Rtc_ops.sync_app_state (Runtime.model ()).Model.repo;
-    (let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in
+    (let* _ = Rtc_ops.sync_app_state (Runtime.model ()).Model.repo in
+     let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in
   let entries =
     match w with
     | Wire.Array xs | Wire.List xs -> xs
@@ -154,8 +154,8 @@ let navigate_journal repo =
    (the local graph itself was still created) *)
 let create_remote name e2ee =
   let* r = Graph.create_graph ~remote:true name in
-  Rtc_ops.sync_app_state (Some r);
-  Rtc_ops.set_sync_config ();
+  let* _ = Rtc_ops.sync_app_state (Some r) in
+  let* _ = Rtc_ops.set_sync_config () in
   let* w =
     Runtime.invoke3 "thread-api/db-sync-create-remote-graph"
       (Wire.String r) (Wire.Bool e2ee) (Wire.Bool true)
@@ -293,8 +293,8 @@ let upload repo =
     if (Runtime.model ()).Model.repo = Some repo then Js.Promise.resolve ()
     else navigate_journal repo
   in
-  Rtc_ops.sync_app_state (Some repo);
-  Rtc_ops.set_sync_config ();
+  let* _ = Rtc_ops.sync_app_state (Some repo) in
+  let* _ = Rtc_ops.set_sync_config () in
   let* w =
     Runtime.invoke1 "thread-api/db-sync-upload-graph" (Wire.String repo)
   in

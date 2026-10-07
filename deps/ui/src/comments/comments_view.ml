@@ -28,6 +28,8 @@ type area_st =
   { box_open : bool
   ; targets_open : bool
   ; editing : string option (* comment uuid under edit *)
+  ; target_titles : (string * string) list (* (uuid, title) — fetched
+                                                lazily on targets-open *)
   }
 
 let draft_key area_uuid = "comments-" ^ area_uuid ^ "-draft"
@@ -75,6 +77,37 @@ let delete_comment cuuid =
             (Wire.Uuid cuuid)
         in
         Ops.refresh_page ())
+
+(* cljs comment-thread-targets-view resolves each :comments/blocks ref
+   through :block/reference — the wire carries only db-ids, so titles
+   come from get-blocks *)
+let fetch_target_titles (ids : int list) =
+  match (Runtime.model ()).Model.repo with
+  | None -> Js.Promise.resolve []
+  | Some repo ->
+      let* w =
+        Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+          (Wire.Array
+             (List.map
+                (fun id ->
+                  Wire.Map
+                    [ (Wire.String "id", Wire.Int id)
+                    ; ( Wire.String "opts"
+                      , Wire.Map [ (Wire.String "children?", Wire.Bool false) ]
+                      )
+                    ])
+                ids))
+      in
+      Js.Promise.resolve
+        (List.filter_map
+           (fun b ->
+             match
+               ( Wire.map_get_uuid b "block/uuid"
+               , Wire.map_get_string b "block/title" )
+             with
+             | Some u, Some t -> Some (u, t)
+             | _ -> None)
+           (Wire.elems w))
 
 let toggle_reaction uuid emoji_id =
   ignore
@@ -219,7 +252,8 @@ let add_box st (area_uuid : string) : t =
 
 (* -- area ----------------------------------------------------------- *)
 
-let header st (area_uuid : string) (count : int) (targets : int) : t =
+let header st (area_uuid : string) (count : int) (target_ids : int list)
+    : t =
   row ~key:("ch-" ^ area_uuid) 
     ( [ reactive
           (fun editing ->
@@ -245,14 +279,21 @@ let header st (area_uuid : string) (count : int) (targets : int) : t =
           ~value:(string_of_int count) []
       ]
     @
-    if targets > 1 then
+    if List.length target_ids > 1 then
       [ button ~key:("ct-" ^ area_uuid)
           ~label:(I.t "block.comments/on-those-blocks")
           ~variant:`ghost
           ~text:(I.t "block.comments/on-those-blocks")
           ~on_press:(fun _ ->
             let v = Runtime.signal_get st in
-            Signal.set st { v with targets_open = not v.targets_open })
+            let opening = not v.targets_open in
+            Signal.set st { v with targets_open = opening };
+            if opening && v.target_titles = [] then
+              ignore
+                (let* ts = fetch_target_titles target_ids in
+                 Signal.set st
+                   { (Runtime.signal_get st) with target_titles = ts };
+                 Js.Promise.resolve ()))
           []
       ]
     else [] )
@@ -261,7 +302,11 @@ let area_el (b : Model.block) : t =
  fun ctx parent ->
   let st =
     Signal.state ctx.Lui_ui.ui_scheduler
-      { box_open = true; targets_open = false; editing = None }
+      { box_open = true
+      ; targets_open = false
+      ; editing = None
+      ; target_titles = []
+      }
   in
   let area_uuid = Option.value b.Model.block_uuid ~default:"" in
   let comments =
@@ -273,12 +318,18 @@ let area_el (b : Model.block) : t =
          ~style_class:"ls-comments-area"
          ~accessibility_identifier:("area-" ^ area_uuid)
          [ header st area_uuid (List.length comments)
-             b.Model.block_comment_targets
+             b.Model.block_comment_target_ids
          ; (if (Runtime.signal_get st).targets_open
                && b.Model.block_comment_targets > 1
             then
               box ~key:("cts-" ^ area_uuid)
-                 []
+                ~style_class:"ls-comments-targets"
+                (List.map
+                   (fun (tuuid, title) ->
+                     box ~key:("ct-" ^ tuuid)
+                       ~style_class:"ls-comments-target"
+                       [ text ~key:("ctt-" ^ tuuid) ~value:title [] ])
+                   (Runtime.signal_get st).target_titles)
             else box ~key:("cts0-" ^ area_uuid) [])
          ; (match comments with
             | [] -> box ~key:("cl0-" ^ area_uuid) []

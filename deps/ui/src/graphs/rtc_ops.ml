@@ -53,7 +53,7 @@ let db_sync_config () =
     ]
 
 let set_sync_config () =
-  ignore (Runtime.invoke1 "thread-api/set-db-sync-config" (db_sync_config ()))
+  Runtime.invoke1 "thread-api/set-db-sync-config" (db_sync_config ())
 
 (* cljs sync-app-state-payload: worker needs git/current-repo plus auth/*
    tokens to open the websocket on our behalf. *)
@@ -65,47 +65,49 @@ let sync_app_state repo =
     | Some r -> [ (Wire.Keyword "git/current-repo", Wire.String r) ]
     | None -> []
   in
-  ignore
-    (Runtime.invoke1 "thread-api/sync-app-state"
-       (Wire.Map
-          (repo_pair
-          @ [ ( Wire.Keyword "auth/id-token"
-            , match Platform.local_storage_get "id-token" with
-              | Some s -> Wire.String s
-              | None -> Wire.Nil )
-          ; ( Wire.Keyword "auth/access-token"
-            , match Platform.local_storage_get "access-token" with
-              | Some s -> Wire.String s
-              | None -> Wire.Nil )
-          ; ( Wire.Keyword "auth/refresh-token"
-            , match Platform.local_storage_get "refresh-token" with
-              | Some s -> Wire.String s
-              | None -> Wire.Nil )
-          ; (Wire.Keyword "auth/oauth-client-id", Wire.String client_id)
-          ; ( Wire.Keyword "auth/oauth-token-url"
-            , Wire.String oauth_token_url )
-            ])))
+  Runtime.invoke1 "thread-api/sync-app-state"
+    (Wire.Map
+       (repo_pair
+       @ [ ( Wire.Keyword "auth/id-token"
+           , match Platform.local_storage_get "id-token" with
+             | Some s -> Wire.String s
+             | None -> Wire.Nil )
+         ; ( Wire.Keyword "auth/access-token"
+           , match Platform.local_storage_get "access-token" with
+             | Some s -> Wire.String s
+             | None -> Wire.Nil )
+         ; ( Wire.Keyword "auth/refresh-token"
+           , match Platform.local_storage_get "refresh-token" with
+             | Some s -> Wire.String s
+             | None -> Wire.Nil )
+         ; (Wire.Keyword "auth/oauth-client-id", Wire.String client_id)
+         ; ( Wire.Keyword "auth/oauth-token-url"
+           , Wire.String oauth_token_url )
+           ]))
 
 (* cljs <rtc-start! => :rtc/sync-auth-state + invoke :thread-api/db-sync-start *)
 let start repo =
   (* db-sync-start fails missing-field on list-remote-graphs without an
      auth token — emit! gates on login too, so do the same here for the
      direct callers that bypass it *)
-  if Platform.local_storage_get "id-token" <> None then begin
-    sync_app_state (Some repo);
-    set_sync_config ();
+  if Platform.local_storage_get "id-token" <> None then
+    (* cljs p/let awaits sync-auth-state + config before db-sync-start:
+       on the daemon transport each invoke is its own POST, so an
+       un-awaited pair can be dispatched to the worker out of order and
+       db-sync-start runs list-remote-graphs before the auth merge *)
     ignore
-    ((let* w =
-        Runtime.invoke1 "thread-api/db-sync-start" (Wire.String repo)
-      in
-      (* worker failures resolve as error transits — toast the known
-         ones (wrong e2ee password, exceed limits) *)
-      Rtc_error.report_outcome "db-sync-start" w;
-      Js.Promise.resolve ())
-     |> Js.Promise.catch (fun e ->
-            Platform.console_error ("db-sync-start failed", e);
-            Js.Promise.resolve ()))
-  end
+      ((let* _ = sync_app_state (Some repo) in
+        let* _ = set_sync_config () in
+        let* w =
+          Runtime.invoke1 "thread-api/db-sync-start" (Wire.String repo)
+        in
+        (* worker failures resolve as error transits — toast the known
+           ones (wrong e2ee password, exceed limits) *)
+        Rtc_error.report_outcome "db-sync-start" w;
+        Js.Promise.resolve ())
+       |> Js.Promise.catch (fun e ->
+              Platform.console_error ("db-sync-start failed", e);
+              Js.Promise.resolve ()))
 
 (* cljs <rtc-stop! => invoke :thread-api/db-sync-stop (no args) *)
 let stop () =
@@ -135,15 +137,15 @@ let ensure_rsa_keys () =
    can abort the download -> switch -> start chain like the cljs
    rejected-promise path did *)
 let download repo uuid e2ee =
-  sync_app_state (Some repo);
-  set_sync_config ();
   (* the header indicator still shows the last broadcast (which may be an
      idle state from a conn being replaced); drop it so "cloud on idle"
      only reappears once the new graph's conn reports *)
   Worker_events.reset_rtc ();
   Runtime.send Action.Rtc_state_clear;
   Runtime.flush ();
-  (let* w =
+  (let* _ = sync_app_state (Some repo) in
+   let* _ = set_sync_config () in
+   let* w =
      Runtime.invoke3 "thread-api/db-sync-download-graph-by-id"
        (Wire.String repo) (Wire.String uuid) (Wire.Bool e2ee)
    in

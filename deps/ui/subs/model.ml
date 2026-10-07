@@ -43,6 +43,7 @@ type block =
   ; block_is_comments_area : bool
   ; block_is_comment : bool
   ; block_comment_targets : int (* live :comments/blocks target count *)
+  ; block_comment_target_ids : int list (* db-ids of :comments/blocks refs *)
   ; block_icon : icon option (* logseq.property/icon on the block *)
   ; block_tag_icons : icon list (* logseq.property/icon of each tag *)
   ; block_children : block list
@@ -311,6 +312,7 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_is_comments_area = false
   ; block_is_comment = false
   ; block_comment_targets = 0
+  ; block_comment_target_ids = []
   ; block_icon = None
   ; block_tag_icons = []
   ; block_children = []

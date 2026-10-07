@@ -36,6 +36,7 @@ let block ?(children = []) uuid title : Model.block =
   ; block_is_comments_area = false
   ; block_is_comment = false
   ; block_comment_targets = 0
+  ; block_comment_target_ids = []
   ; block_link = None
   ; block_embed_children = []
   ; block_is_page = false
