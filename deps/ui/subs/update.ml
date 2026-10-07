@@ -167,6 +167,8 @@ let update (model : t) (action : Action.t) : t =
       Platform.local_storage_set "ls-left-sidebar-open?"
         (if open_ then "true" else "false");
       { model with left_sidebar_open = open_ }
+  | Set_left_sidebar_width w ->
+      { model with left_sidebar_width = w }
   | Toggle_right_sidebar ->
       { model with right_sidebar_open = not model.right_sidebar_open }
   | Toast_push t ->

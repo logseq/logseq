@@ -127,6 +127,75 @@ let sync_right_sidebar_width () =
         (if (!model_ref).Model.right_sidebar_open then width else "0px")
   | None -> ()
 
+(* ---------- resizer ----------
+   twin of src/sidebar/sidebar_state.ml: document mousedown/move/up
+   tracking on .left-sidebar-resizer, clamped to [240,460]px and
+   persisted to "ls-left-sidebar-width". The web twin writes
+   --ls-left-sidebar-width on :root live; native has no stylesheet, so
+   the width lands in Model.left_sidebar_width (chrome.ml binds the
+   dock column's ~width to it) and the same storage key drives both. *)
+
+let left_resizing : Js.Json.t option ref = ref None
+
+let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
+
+let width_of_storage () =
+  match Platform.local_storage_get "ls-left-sidebar-width" with
+  | Some w0 -> (
+      let w0 = String.trim w0 in
+      let n =
+        if String.length w0 > 2
+           && String.sub w0 (String.length w0 - 2) 2 = "px"
+        then String.sub w0 0 (String.length w0 - 2)
+        else w0
+      in
+      match float_of_string_opt n with
+      | Some f -> Some (int_of_float (Float.round f))
+      | None -> None)
+  | None -> None
+
+let set_left_width px =
+  Platform.local_storage_set "ls-left-sidebar-width"
+    (Printf.sprintf "%dpx" px);
+  Runtime.send (Action.Set_left_sidebar_width px)
+
+(* cljs restores the persisted left width on mount *)
+let sync_left_sidebar_width () =
+  match width_of_storage () with
+  | Some w -> Runtime.send (Action.Set_left_sidebar_width w)
+  | None -> ()
+
+let on_resizer_mousedown ev =
+  match click_target ".left-sidebar-resizer" ev with
+  | Some el -> (
+      prevent_default ev;
+      left_resizing := Some el;
+      Editor_dom.el_class_add Editor_dom.document_element
+        "is-resizing-buf";
+      Editor_dom.el_class_add el "is-active";
+      match closest el "#left-sidebar" with
+      | Some sb -> Editor_dom.el_class_add sb "is-resizing"
+      | None -> ())
+  | None -> ()
+
+let on_resizer_mousemove ev =
+  match !left_resizing with
+  | Some _ ->
+      set_left_width (int_of_float (clampf 240. 460. (ev_client_x ev)))
+  | None -> ()
+
+let on_resizer_mouseup _ev =
+  match !left_resizing with
+  | Some el -> (
+      left_resizing := None;
+      Editor_dom.el_class_remove Editor_dom.document_element
+        "is-resizing-buf";
+      Editor_dom.el_class_remove el "is-active";
+      match closest el "#left-sidebar" with
+      | Some sb -> Editor_dom.el_class_remove sb "is-resizing"
+      | None -> ())
+  | None -> ()
+
 (* ---------- storage ---------- *)
 
 let nav_checked_of_storage () =
@@ -850,6 +919,7 @@ let on_model st (m : Model.t) =
                load_recents repo st)
          | _ -> ())
    | _ -> ());
+  sync_left_sidebar_width ();
   sync_right_sidebar_width ()
 
 let close_menu st = Runtime.signal_set st.open_menu ""
@@ -989,6 +1059,9 @@ let init (ms : Model.t Signal.signal) : t =
       Platform.on_document_event "click" (on_doc_click st);
       Platform.on_document_event "contextmenu" (on_doc_contextmenu st);
       Platform.on_document_event "keydown" (on_doc_keydown st);
+      Platform.on_document_event "mousedown" on_resizer_mousedown;
+      Platform.on_document_event "mousemove" on_resizer_mousemove;
+      Platform.on_document_event "mouseup" on_resizer_mouseup;
       st
 
 let ensure ms = init ms
