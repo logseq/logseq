@@ -533,29 +533,58 @@ let segment _ (_ : segmenter) : string array = [||]
    flip measurement) see the fresh value on their next tick. *)
 let rect_store : (int, Js.Json.t) Hashtbl.t = Hashtbl.create 32
 
+(* measured rects keyed by the "#ref"/"ref-id" handle a measure-node
+   request carried — the host resolves those to a node id but echoes the
+   sent ref back, so bare ref-handle elements (live_ids lookups return
+   just {#ref, ref-id}) resolve their rect here *)
+let ref_rect_store : (string, Js.Json.t) Hashtbl.t = Hashtbl.create 32
+
+let ref_key_of (el : element) : string option =
+  match str_prop "#ref" el with
+  | Some _ as k -> k
+  | None -> str_prop "ref-id" el
+
 let note_node_rect (j : Js.Json.t) : unit =
-  match Option.map int_of_float (num_prop "nodeId" j) with
-  | Some id -> (
-      match prop "rect" j with
-      | Js.Json.JObject _ as r -> Hashtbl.replace rect_store id r
-      | _ -> Hashtbl.remove rect_store id)
-  | None -> ()
+  (match Option.map int_of_float (num_prop "nodeId" j) with
+   | Some id -> (
+       match prop "rect" j with
+       | Js.Json.JObject _ as r -> Hashtbl.replace rect_store id r
+       | _ -> Hashtbl.remove rect_store id)
+   | None -> ());
+  match prop "ref" j with
+  | Js.Json.JObject _ as ref_ -> (
+      match ref_key_of ref_ with
+      | Some k -> (
+          match prop "rect" j with
+          | Js.Json.JObject _ as r -> Hashtbl.replace ref_rect_store k r
+          | _ -> Hashtbl.remove ref_rect_store k)
+      | None -> ())
+  | _ -> ()
+
+let request_measure (el : element) : unit =
+  Host.dom_op "measure-node"
+    (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
 
 let bounding_rect (el : element) : rect =
   match prop "rect" el with
   | Js.Json.JObject _ as r -> r
   | _ -> (
-      (match num_prop "node-id" el with
-       | Some _ ->
-           Host.dom_op "measure-node"
-             (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
-       | None -> ());
+      (* fire measure-node for anything the host resolves: a node-id or
+         a "#ref"/"ref-id" identifier handle *)
+      (match num_prop "node-id" el, ref_key_of el with
+       | None, None -> ()
+       | _ -> request_measure el);
       match Option.map int_of_float (num_prop "node-id" el) with
       | Some id -> (
           match Hashtbl.find_opt rect_store id with
           | Some r -> r
           | None -> Js.Json.JObject [])
-      | None -> Js.Json.JObject [])
+      | None -> (
+          match ref_key_of el with
+          | Some k ->
+              Option.value (Hashtbl.find_opt ref_rect_store k)
+                ~default:(Js.Json.JObject [])
+          | None -> Js.Json.JObject []))
 
 (* <img> natural size — same fire-and-poll convention as rects: the
    "natural-size" dom-op makes the host measure the decoded image and

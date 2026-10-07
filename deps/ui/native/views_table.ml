@@ -1230,7 +1230,9 @@ let render_list inst s : t =
 
 let render_gallery inst _s : t =
  fun ctx parent ->
-  row ~gap:8 ~padding:8 ~columns:4
+  (* columns is a Grid-only property — on a row node GridColumns is
+     rejected and the whole mount batch dies *)
+  grid ~gap:8 ~padding:8 ~columns:4
     [ keyed
         ~source:
           (Logseq_el.own ctx

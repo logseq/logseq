@@ -860,7 +860,24 @@ let detach_child (child : el) : unit =
 (* ---------- rects ---------- *)
 
 let set_rect node_id l t r b = Hashtbl.replace rects node_id (l, t, r, b)
-let rect_of_node_id id = Hashtbl.find_opt rects id
+
+let rect_of_node_id id =
+  match Hashtbl.find_opt rects id with
+  | Some _ as r -> r
+  | None -> (
+      (* gpui emits no imperative-rects feed — read the on-demand
+         measure-node store instead, firing a measurement whose reply
+         lands on the next call (fire-and-poll) *)
+      match Hashtbl.find_opt Dom_ext.rect_store id with
+      | Some (JObject _ as j) ->
+          let f k = Dom_ext.num_prop k j in
+          (match f "left", f "top", f "right", f "bottom" with
+           | Some l, Some t, Some r, Some b -> Some (l, t, r, b)
+           | _ -> None)
+      | _ ->
+          Dom_ext.request_measure
+            (JObject [ ("node-id", JNumber (float_of_int id)) ]);
+          None)
 
 let rect_of (id : int) =
   match get id with

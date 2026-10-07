@@ -136,7 +136,14 @@ let make ~sched ~kind ~feature ~owner : inst =
   ; st = Signal.state sched (empty_vstate ())
   }
 
-let get inst : vstate = Signal.get inst.st.Signal.state_signal
+(* pending-aware read — Signal.set stages into [pending] until the next
+   stabilize, so a same-tick reader (e.g. ctx_of for a refresh issued
+   right after set_filters/set_sorting) would otherwise rebuild the view
+   from the pre-update state *)
+let get inst : vstate =
+  match !(inst.st.Signal.pending) with
+  | Some s -> s
+  | None -> Signal.get inst.st.Signal.state_signal
 
 (* publish a new vstate — the only way view state changes *)
 let set inst (s : vstate) = Runtime.signal_set inst.st s
