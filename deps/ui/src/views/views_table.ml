@@ -983,7 +983,15 @@ let row_stream inst cols uuids : t =
          inst.V.st.Signal.state_signal)
   in
   let items = Signal.get items_sig in
-  if Virt_list.enabled ~virtualize:true (List.length items) then
+  (* a windowed fetch that has more rows server-side still needs the
+     virt-end listener even under the 64-row virtualization threshold *)
+  let more_rows =
+    match (V.get inst).V.data with
+    | Wr.VFlat { count; _ } -> List.length items < count
+    | _ -> false
+  in
+  if more_rows || Virt_list.enabled ~virtualize:true (List.length items)
+  then
     Virt_list.list ~key_of:fst
       ~data_sig:(fun dctx ->
         Some
@@ -1242,7 +1250,13 @@ let list_stream inst uuids : t =
     | None -> row_title s ""
   in
   let _ = title_of in
-  if Virt_list.enabled ~virtualize:true (List.length items) then
+  let more_rows =
+    match (V.get inst).V.data with
+    | Wr.VFlat { count; _ } -> List.length items < count
+    | _ -> false
+  in
+  if more_rows || Virt_list.enabled ~virtualize:true (List.length items)
+  then
     Virt_list.list ~key_of:fst
       ~data_sig:(fun dctx ->
         Some
