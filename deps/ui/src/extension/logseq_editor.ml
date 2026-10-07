@@ -103,7 +103,7 @@ let register registry =
   Lui_extension.register_component registry schema
 
 (* --- DOM externals ---------------------------------------------------------------
-   Two typed views like dom_adapter: event-derived values stay
+   Two typed views like web_ext_adapters: event-derived values stay
    [Js.Json.t], elements we created stay [W.Element.t] — no casts. *)
 
 type range_t

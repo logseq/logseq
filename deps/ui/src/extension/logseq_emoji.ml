@@ -1,6 +1,6 @@
 (* logseq-em-emoji — platform emoji glyph resolved from an emoji-mart id.
 
-   Web emits a real <em-emoji> custom element (dom_adapter) that
+   Web emits a real <em-emoji> custom element (web_ext_adapters) that
    emoji-mart upgrades once init() runs; non-web hosts read the resolved
    native char from the data-emoji prop.
 
