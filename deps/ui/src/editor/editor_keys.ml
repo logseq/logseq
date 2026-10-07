@@ -826,9 +826,14 @@ let on_normal_key ev =
           D.ev_prevent_default ev;
           A.toggle_children_collapse ()
       | "," when mods ev && not shift ->
-          (* cljs zoom-out outside edit mode is history.back *)
+          (* the keymap gives mod+, to ui/toggle-settings outside editing
+             (editor/zoom-out's mod+, is block-editing-only) — toggles the
+             settings dialog like the cmdk dispatch *)
           D.ev_prevent_default ev;
-          Platform.history_back ()      | "z" when mods ev ->
+          if Dialogs_state.is_open "settings" then
+            Dialogs_state.close_named "settings"
+          else Dialogs_state.open_ "settings"
+      | "z" when mods ev ->
           D.ev_prevent_default ev;
           if shift then A.redo () else A.undo ()
       | "y" when mods ev ->
