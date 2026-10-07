@@ -1100,7 +1100,7 @@ let on_click ev =
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
                          .view-action-type, .ui-fenced-code-editor, \
-                         .block-editor, .prefix-link"
+                         .block-editor, .prefix-link, [data-pressable]"
                         target
                     with
                     | Some _ -> ()
