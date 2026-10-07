@@ -5130,6 +5130,13 @@ select.form-select {
 /* cljs .ls-table-row is a hard 33px (min/max), not the .ls-block
    padding box used by outline rows */
 .ls-table-row.ls-block {
+  /* cljs .ls-table-row markup is .flex.flex-row — the .sticky-columns
+     pinned band and the unpinned cell row must share one line, not
+     stack as 100%-wide blocks (the opaque sticky band then covers the
+     cells inside the clipped 33px row) */
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   height: 33px;
   min-height: 33px;
   max-height: 33px;
