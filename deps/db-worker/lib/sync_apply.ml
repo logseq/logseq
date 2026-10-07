@@ -1155,7 +1155,19 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                          Db_property.property a' && not (attr_live a)
                      | _ -> false
                    in
-                   if dead_property_attr then None
+                   (* attr position itself can carry a lookup-ref
+                      ([:db/add e [:block/uuid u] v]) — transact resolves
+                      it strictly, so a ref to a remotely deleted entity
+                      must not reach it *)
+                   let missing_attr_ref =
+                     match a with
+                     | Wire.Uuid u -> missing u
+                     | Wire.Array _ | Wire.List _ | Wire.Set _
+                     | Wire.Map _ | Wire.Tagged _ ->
+                         missing_refs_deep a <> []
+                     | _ -> false
+                   in
+                   if dead_property_attr || missing_attr_ref then None
                    else
                      (* cas/fn slots past position 3 escape pos-3-only
                         inspection the same way nested value refs do *)
