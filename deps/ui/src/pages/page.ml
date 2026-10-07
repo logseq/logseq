@@ -35,10 +35,28 @@ let zoom_breadcrumbs (page : Model.page) : t list =
              parents)
       ]
 
-let breadcrumbs title : t list =
-  (* namespaced pages "a/b/c" -> breadcrumb trail; non-namespaced
-     titles render no breadcrumb node at all *)
-  match String.split_on_char '/' title with
+let breadcrumbs (page : Model.page) : t list =
+  (* cljs page-inner breadcrumb = :block/parent namespace chain (links)
+     + the leaf title (text). Pages whose title still carries "/" but
+     have no parent chain (pre-split legacy) fall back to splitting. *)
+  match page.Model.page_parents with
+  | _ :: _ ->
+      let rec trail = function
+        | [] -> []
+        | (p : Model.block) :: rest ->
+            link ~key:("bc-" ^ p.block_title)
+              ~style_class:"breadcrumb-item"
+              ~url:("#/page/" ^ p.block_title)
+              ~target:`self_ ~text:p.block_title []
+            :: text ~key:("bcsep-" ^ p.block_title) ~value:" / " []
+            :: trail rest
+      in
+      [ row ~key:"bc" ~style_class:"breadcrumb"
+          (trail page.page_parents
+           @ [ text ~key:"bc-leaf" ~style_class:"breadcrumb-item"
+                 ~value:page.page_title [] ]) ]
+  | [] ->
+      (match String.split_on_char '/' page.page_title with
   | [] | [ _ ] -> []
   | parts ->
       let rec crumbs acc prefix = function
@@ -59,7 +77,7 @@ let breadcrumbs title : t list =
             let sep = text ~key:("bcsep-" ^ here) ~value:" / " [] in
             crumbs (sep :: item :: acc) here rest
       in
-      [ row ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts) ]
+      [ row ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts) ])
 
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)

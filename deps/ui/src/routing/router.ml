@@ -286,7 +286,7 @@ let stale_page (p : Model.page) () =
   | None -> true
 
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
-let load_page_ref for_route ref_v =
+let rec load_page_ref for_route ref_v =
   incr Runtime.load_gen;
   let gen = !Runtime.load_gen in
   let is_stale () = stale for_route || gen <> !Runtime.load_gen in
@@ -313,6 +313,28 @@ let load_page_ref for_route ref_v =
       let* p' = fetch_blocks p in
       Platform.perf_mark "nav:blocks";
       let* p'' = Outliner_ops.resolve_page_tags (repo ()) p' in
+      (* cljs page-inner renders the :block/parent namespace chain as a
+         breadcrumb above the title — same parents endpoint the
+         block-zoom load uses, keyed by the page uuid *)
+      let* p'' =
+        match p''.Model.page_uuid with
+        | Some u ->
+            (let* parents_w =
+               Runtime.invoke2 "thread-api/get-block-parents"
+                 (Wire.String (repo ()))
+                 (Wire.List
+                    [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
+             in
+             let page_parents =
+               Wire.elems parents_w
+               |> List.filter_map (fun w ->
+                      match w with
+                      | Wire.Map _ -> Some (Decode.block_of_wire w)
+                      | _ -> None)
+             in
+             Js.Promise.resolve { p'' with Model.page_parents })
+        | None -> Js.Promise.resolve p''
+      in
       Platform.perf_mark "nav:tags";
       if not (is_stale ()) then (
         (* a fresh page snapshot is authoritative —
