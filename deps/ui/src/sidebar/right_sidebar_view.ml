@@ -219,6 +219,7 @@ let item_header st idx (it : Sidebar_state.item) =
   row ~key:("hd-" ^ it.key) ~main:`space_between
     ~style_class:"sidebar-item-header color-level"
     [ button ~key:("hdr-" ^ it.key) ~grow:1. ~padding_horizontal:8
+        ~label:it.title
         ~accessibility_identifier:("sidebar-panel-header-" ^ n)
         ~on_press:(fun _ -> Sidebar_state.toggle_collapsed st it.key)
         [ row ~key:("arrow-" ^ it.key) ~cross:`center
