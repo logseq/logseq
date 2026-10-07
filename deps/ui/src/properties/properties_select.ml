@@ -315,7 +315,7 @@ let view ~placeholder ?new_option ?(on_enter_text = None)
                    ?icon:
                      (match it.it_icon with
                       | "" -> None
-                      | n -> Some (`app ("tabler-" ^ n)))
+                      | n -> Some (Icons.name_ref n))
                    ~on_press:(fun _ -> it.on_choose ())
                    [])
               vis))

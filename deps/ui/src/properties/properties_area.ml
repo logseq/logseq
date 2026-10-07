@@ -29,6 +29,37 @@ module W = Wire
 
 (* ---------- row views ---------- *)
 
+(* cljs property-icon: a type/ident glyph beside .property-k; falls
+   back to the bullet dot when nothing applies *)
+let property_icon row =
+  let ident = Option.value (D.row_ident row) ~default:"" in
+  let ident =
+    if Str_util.starts_with ident ":" then String.sub ident 1 (String.length ident - 1)
+    else ident
+  in
+  let name =
+    if ident = "block/tags" then Some "hash"
+    else if Str_util.starts_with ident "plugin." then Some "puzzle"
+    else
+      match D.row_type row with
+      | "number" -> Some "number"
+      | "date" | "datetime" -> Some "calendar"
+      | "checkbox" -> Some "checkbox"
+      | "url" -> Some "link"
+      | "property" -> Some "letter-p"
+      | "page" -> Some "page"
+      | "node" -> Some "point-filled"
+      | "asset" -> Some "letter-a"
+      | _ -> None
+  in
+  match name with
+  | Some n ->
+      box ~key:"pk-i" ~style_class:"property-icon"
+        [ Icons.icon ~size:15. ~cls:"opacity-50" n ]
+  | None ->
+      box ~key:"pk-b" ~style_class:"bullet-container"
+        [ box ~style_class:"bullet" [] ]
+
 (* the key (name + bullet) opens the property menu — the dropdown_menu
    anchors to the enclosing stack *)
 let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
@@ -36,8 +67,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
   let sched = context.Lui_ui.ui_scheduler in
   let menu_open = Signal.state sched false in
   (column ~gap:0 ~style_class:"property-key-inner"
-     [ box ~key:"pk-b" ~style_class:"bullet-container"
-         [ box ~style_class:"bullet" [] ]
+     [ property_icon row
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~style_class:"property-k flex select-none jtrigger w-full"
          ~label:(D.row_title row)
@@ -187,7 +217,7 @@ let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
 let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
   row ~gap:0 ~style_class:"ls-new-property"
     [ button ~variant:`secondary ~size:`sm
-        ~icon:(`app "tabler-plus")
+        ~icon:(`app "plus")
         ~style_class:"jtrigger flex"
         ~label:(I18n.t "property/add-new")
         ~text:(I18n.t "property/add-new")
@@ -444,7 +474,7 @@ let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
     [ column ~gap:2 ~style_class:"property-key text-sm"
         [ row ~gap:4 ~cross:`center
             ~style_class:"property-key-inner"
-            [ icon ~name:(`app "tabler-letter-p") ~point_size:14 []
+            [ icon ~name:(`app "letter-p") ~point_size:14 []
             ; text
                 ~value:(I18n.t "property.built-in/class-properties")
                 ~style_class:"property-k flex select-none w-full" []
