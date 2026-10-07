@@ -295,11 +295,14 @@ let el_get_attr (el : el) (name : string) : string option =
                       Option.bind (List.assoc_opt name attrs)
                         Js.Json.decodeString
                   | _ -> (
-                      (* snapshots carry the DOM class under "class", not
-                         attrs *)
+                      (* snapshots carry the DOM class/id as top-level
+                         "class"/"id" fields, not inside attrs *)
                       match name with
                       | "class" ->
                           Option.bind (List.assoc_opt "class" kvs)
+                            Js.Json.decodeString
+                      | "id" ->
+                          Option.bind (List.assoc_opt "id" kvs)
                             Js.Json.decodeString
                       | _ -> None)))
           | _ -> None)))
