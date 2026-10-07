@@ -185,11 +185,17 @@ let title_editor (page : Model.page) : t =
         let m' = Edit_input.handle ~route ~conduit m ev in
         if m' != m then Signal.update model_st (fun _ -> m');
         (* conduit reads live rects — measure after the model publish
-           flushed the run text *)
+           flushed the run text; stale reads that don't partition the
+           buffer would corrupt the line table (see
+           Editor_actions.measured_partitions) *)
         let m2 =
           match conduit.Edit_input.line_ranges () with
-          | [] -> m'
-          | rs -> Edit_model.set_lines m' rs
+          | rs
+            when Editor_actions.measured_partitions
+                   (String.length m'.Edit_model.source)
+                   rs ->
+              Edit_model.set_lines m' rs
+          | _ -> m'
         in
         if m2 != m' then Signal.update model_st (fun _ -> m2);
         Signal.update frame (fun _ -> Edit_input.measure conduit m2)

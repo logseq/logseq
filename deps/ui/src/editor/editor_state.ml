@@ -78,6 +78,12 @@ end)
    again *)
 let pending_focus : (string * int * float) option ref = ref None
 
+(* (uuid, ms, clientX, clientY) of the latest mousedown that a click
+   will run enter_edit for — the sink mounts after the pointer already
+   landed, so its pointer emit is lost; apply_focus hit-tests these
+   coords once the input can map them *)
+let click_point : (string * float * float * float) option ref = ref None
+
 (* block uuid whose input last reported the conduit's "focus" event —
    native `Editor_sink.is_focused` reads this (the DOM-level
    document.activeElement tracker only exists on the web profile) *)
