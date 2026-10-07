@@ -223,6 +223,12 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_query = ""
       }
   | Unlinked_set_query q -> { model with unlinked_query = q }
+  | Linked_toggle_search ->
+      { model with
+        linked_search = not model.linked_search
+      ; linked_query = ""
+      }
+  | Linked_set_query q -> { model with linked_query = q }
   | Help_toggle -> { model with help_open = not model.help_open }
   | Rtc_state rtc -> { model with rtc = Some rtc }
   | Rtc_state_clear -> { model with rtc = None }

@@ -385,7 +385,8 @@ let item_body st idx (it : Sidebar_state.item) =
              ]
             (* linked references sit inside .page-inner in cljs *)
             @ (if it.kind = "page" then
-                 [ Page.references_view it.linked_refs ]
+                 [ Page.references_view ~search_on:false ~query:""
+                     it.linked_refs ]
                else []))
         ]
     ]
