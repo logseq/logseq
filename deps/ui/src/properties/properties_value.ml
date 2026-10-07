@@ -491,8 +491,11 @@ let scalar_edit_cell ctx row : t =
          (value_button ~text:initial ~on_press:(fun _ ->
               open_editor ~steal:true ()))
      ; if_ ~test:(Signal.value editing)
+         (* ~text evaluates eagerly when the cell mounts, before
+            open_editor registers active_editor — read the local buffer
+            (seeded with the current value) instead of edit_buffer *)
          (text_field ~autofocus:true
-            ~text:(edit_buffer ctx row)
+            ~text:(Signal.get_state buffer)
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, t) ->

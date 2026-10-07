@@ -545,10 +545,12 @@ let open_menu ~anchor ~owner_uuid ~owner_id ~owner_is_tag ~owner_title
 
 (* ---------- declarative menu view ---------- *)
 
-(* The same config menu as a [Lui_elements.t]: a dropdown_menu anchored
-   under the owning row's stack, with form panes swapped in place (name
-   edit, choices list, default value) and type/ui-position as native
-   submenus. [close] releases the caller's open signal. *)
+(* The same config menu as a [Lui_elements.t]: a role=menu popover
+   anchored under the owning row's stack, with form panes swapped in
+   place (name edit, choices list, default value) and type/ui-position
+   as native submenus. A dropdown_menu only accepts MenuItem/MenuTrigger/
+   Divider children, so the pane-swapping column needs a popover.
+   [close] releases the caller's open signal. *)
 
 open Lui_elements
 
@@ -949,7 +951,7 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
           []
       ]
   in
-  (dropdown_menu ~anchor:`below ~anchor_alignment:`start
+  (popover ~anchor:`below ~anchor_alignment:`start ~role:`menu
      ~anchor_offset:4.0 ~min_width:200
      ~on_dismiss:(fun _ -> close ())
      [ reactive
