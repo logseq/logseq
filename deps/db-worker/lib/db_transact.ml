@@ -618,14 +618,61 @@ let datom_form_tx_ops (op : Wire.t) (e : Wire.t) (a : Wire.t) (v : Wire.t)
       let added = op = kw "db/add" in
       let attr = match a with Wire.Keyword s -> s | _ -> "" in
       match e with
-      | Wire.Int _ | Wire.Int64 _ -> None
+      | Wire.Int i ->
+          (* bare eids keep the same pipeline: without this branch the
+             whole item fell through to the string parser, which stored a
+             lookup-ref v (e.g. [:block/uuid u] on block/tags) as a raw
+             vector value instead of resolving it to a ref *)
+          Some
+            [ Call
+                (fun db ->
+                   let v' =
+                     match v with
+                     | Wire.Array _ | Wire.List _ | Wire.Keyword _
+                     | Wire.Uuid _
+                       when tx_ref_attr db attr ->
+                         Ref (entid_strict db v)
+                     | _ -> Ds_wire.value_of_transit v
+                   in
+                   [ Raw_datom
+                       (Datascript.datom ~tx ~added ~e:i ~a:attr ~v:v'
+                          ()) ]) ]
+      | Wire.Int64 i ->
+          Some
+            [ Call
+                (fun db ->
+                   let eid = Int64.to_int i in
+                   let v' =
+                     match v with
+                     | Wire.Array _ | Wire.List _ | Wire.Keyword _
+                     | Wire.Uuid _
+                       when tx_ref_attr db attr ->
+                         Ref (entid_strict db v)
+                     | _ -> Ds_wire.value_of_transit v
+                   in
+                   [ Raw_datom
+                       (Datascript.datom ~tx ~added ~e:eid ~a:attr ~v:v'
+                          ()) ]) ]
       | Wire.String s ->
           Some
-            [ (if added
-               then Add (Temp_id s, attr, Ds_wire.value_of_transit v)
-               else
-                 Retract (Temp_id s, attr, Some (Ds_wire.value_of_transit v)))
-            ]
+            [ Call
+                (fun db ->
+                   (* a string e is a tempid, but v still needs the same
+                      ref resolution the resolved-eid branch performs:
+                      [:db/add <tempid> a [:block/uuid u]] on a ref attr
+                      must resolve the lookup ref, not store the raw
+                      vector as a value *)
+                   let v' =
+                     match v with
+                     | Wire.Array _ | Wire.List _ | Wire.Keyword _
+                     | Wire.Uuid _
+                       when tx_ref_attr db attr ->
+                         Ref (entid_strict db v)
+                     | _ -> Ds_wire.value_of_transit v
+                   in
+                   [ (if added
+                      then Add (Temp_id s, attr, v')
+                      else Retract (Temp_id s, attr, Some v')) ]) ]
       | _ ->
           Some
             [ Call

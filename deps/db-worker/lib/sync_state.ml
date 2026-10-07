@@ -10,12 +10,15 @@ type reconnect_state =
   ; mutable timer : Timers.timer option
   }
 
+module SSet = Set.Make (String)
+
 (* in-flight upload batch tracked for response timeout reporting *)
 type upload_request =
   { tx_ids : string list
   ; outliner_ops : string list
   ; large_upload_progress : Wire.t list
   ; t_before : int option
+  ; tx_datas : (string * Wire.t) list
   ; mutable sent_at : Time.monotonic_ms
   ; mutable timer : Timers.timer option
   }
@@ -275,6 +278,36 @@ let pending_replay : bool ref = ref false
    display projection (server state + pending ops replayed forward). *)
 let server_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
 
+(* uuids a remote delete/fix entry retracted, as of the latest applied
+   remote-tx batch. A verbatim confirm that re-adds one of them would
+   resurrect an entity the server deleted — confirms must skip those
+   items the same way the pull path already does. *)
+let remote_deleted_uuids : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+let remote_deleted repo : SSet.t =
+  match Hashtbl.find_opt remote_deleted_uuids repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let set_remote_deleted repo (uuids : SSet.t) : unit =
+  Hashtbl.replace remote_deleted_uuids repo uuids
+
+(* (subject, attr, value) keys a confirmed write asserted on the server
+   conn — remote-tx applies and own confirms record them. Unapplying a
+   pending row must not retract one of these: re-asserting an identical
+   (e,a,v) is a datascript no-op, so the live datom keeps its
+   unconfirmed stamp even though confirmed state shares it, and a blind
+   reversed retract would strip confirmed state down to a shell. *)
+let remote_asserted_keys : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+let remote_asserted repo : SSet.t =
+  match Hashtbl.find_opt remote_asserted_keys repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let set_remote_asserted repo (keys : SSet.t) : unit =
+  Hashtbl.replace remote_asserted_keys repo keys
+
 let server_conn repo = Hashtbl.find_opt server_conns repo
 let set_server_conn repo conn = Hashtbl.replace server_conns repo conn
 let drop_server_conn repo =
@@ -282,6 +315,7 @@ let drop_server_conn repo =
   | None -> ()
   | Some conn ->
       Hashtbl.remove server_conns repo;
+      Hashtbl.remove remote_deleted_uuids repo;
       Db_tx.release_flags conn
 
 (* Writes of confirmed state (remote txs, acked local txs, sync

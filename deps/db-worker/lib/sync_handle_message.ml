@@ -276,7 +276,12 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
        if success_tx_ids <> None || failed_tx_id <> None then begin
          (* confirm the accepted ids into the server conn first, then
             drop the rejected one from the projection — one rebuild total *)
-         Sync_replay.confirm_pending_txs repo successful_tx_ids;
+         let uploaded =
+           match !(client.upload_request) with
+           | Some r -> r.Sync_state.tx_datas
+           | None -> []
+         in
+         Sync_replay.confirm_pending_txs ~uploaded repo successful_tx_ids;
          let unpended =
            Sync_apply.mark_pending_txs_false ~rebuild:false repo
              successful_tx_ids
@@ -363,6 +368,11 @@ let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx
   (* cljs (require-non-negative remote-tx) — unconditional, :t missing/nil
      fail-fasts *)
   require_non_negative remote_tx (context ~repo ~typ:"tx/batch/ok" ());
+  let uploaded =
+    match !(client.upload_request) with
+    | Some r -> r.Sync_state.tx_datas
+    | None -> []
+  in
   Sync_apply.ack_upload_response repo client;
   let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
   let current_local_tx = Option.value (Sync_client_op.get_local_tx repo) ~default:0 in
@@ -371,7 +381,7 @@ let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx
   Sync_util.clear_last_sync_error client;
   (* confirmed by the server: fold their normalized tx data into the
      server conn, then un-pend so the next projection matches the base *)
-  Sync_replay.confirm_pending_txs repo !(client.inflight);
+  Sync_replay.confirm_pending_txs ~uploaded repo !(client.inflight);
   ignore (Sync_apply.mark_pending_txs_false repo !(client.inflight));
   client.inflight := [];
   broadcast_rtc_state client;
