@@ -205,6 +205,13 @@ let rec apply_focus () =
             (match click_offset uuid with
              | Some off -> set_caret uuid off
              | None -> set_caret uuid caret);
+          (* the sink's runs prop and first layout can lag the landing
+             by a patch or two, so the immediate measure often yields no
+             caret rect (Enter→new block, arrow-in): re-measure after the
+             DOM settles or the caret bar never paints until the next
+             input event *)
+          D.set_timeout (fun () -> refresh_overlay uuid) 0;
+          D.set_timeout (fun () -> refresh_overlay uuid) 40;
           drain_pending_focus_actions ())
         else if !S.pending_focus = None then ()
         else (
