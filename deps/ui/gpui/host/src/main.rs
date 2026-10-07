@@ -484,6 +484,25 @@ fn main() {
         cx.set_global(gpui_kit::component::theme::Theme::from(
             &*gpui_kit::component::theme::ThemeColor::light(),
         ));
+        // Web renders everything in Inter (static/css/web/Inter-*.woff2 →
+        // vendored here as TTF). Register the family before Theme::change
+        // runs so `.font_family("Inter")` resolves to the embedded fonts
+        // instead of falling back to the system UI font.
+        cx.text_system()
+            .add_fonts(vec![
+                include_bytes!("../fonts/Inter-Regular.ttf").into(),
+                include_bytes!("../fonts/Inter-Medium.ttf").into(),
+                include_bytes!("../fonts/Inter-SemiBold.ttf").into(),
+                include_bytes!("../fonts/Inter-Bold.ttf").into(),
+                include_bytes!("../fonts/Inter-Italic.ttf").into(),
+                include_bytes!("../fonts/Inter-MediumItalic.ttf").into(),
+                include_bytes!("../fonts/Inter-SemiBoldItalic.ttf").into(),
+                include_bytes!("../fonts/Inter-BoldItalic.ttf").into(),
+            ])
+            .ok();
+        gpui_kit::component::theme::Theme::update(cx, |theme| {
+            theme.font_family = "Inter".into();
+        });
         eprintln!("logseq-gpui: theme preset t={:.1}ms", boot_ms());
         let shared = LuiShared::new();
         // The logseq-editor surface (input routing + text measurement)
