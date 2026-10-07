@@ -269,6 +269,8 @@ external ev_data_transfer : ev -> clipboard_data option = "dataTransfer"
 
 external ev_prevent_default : ev -> unit = "preventDefault" [@@mel.send]
 
+external ev_default_prevented : ev -> bool = "defaultPrevented" [@@mel.get]
+
 external ev_stop_propagation : ev -> unit = "stopPropagation"
   [@@mel.send]
 

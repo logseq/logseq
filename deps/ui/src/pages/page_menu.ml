@@ -307,21 +307,13 @@ let confirm_view (c : Model.confirm) =
     Runtime.send (Action.Confirm_set None);
     Runtime.flush ()
   in
-  (* backdrop dismiss: only the overlay itself closes — clicks inside
-     the content bubble here but target the dialog.
+  (* cljs dialog-confirm! mounts a Radix AlertDialog — outside presses
+     do NOT dismiss; only Escape and the footer buttons close it.
      ~grow/~main/~cross fill + center inside the native cover layer
      (web places the same scrim with position:fixed) *)
   column ~key:"alertdlg-overlay"
     ~style_class:"ui__alert-dialog-overlay"
     ~grow:1. ~main:`center ~cross:`center
-    ~on_press_detail:(fun ev ->
-      match ev with
-      | Lui_protocol.PressDetail (_, d) ->
-          if
-            I18n.contains d.Lui_protocol.target_class
-              "ui__alert-dialog-overlay"
-          then close ()
-      | _ -> ())
     [ (* e2e requires div[role='alertdialog'] *)
       box ~key:"alertdlg"
         ~data_attrs:[ ("role", "alertdialog") ]

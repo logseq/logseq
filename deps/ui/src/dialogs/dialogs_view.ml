@@ -106,18 +106,10 @@ let btn key label variant act =
     []
 
 let confirm_view (c : Dialogs_state.confirm) =
-  (* same target_class pattern as dialog_view — only the alert overlay
-     itself dismisses *)
+  (* cljs AlertDialog (shui dialog-confirm!): outside presses do NOT
+     dismiss — Escape and the footer buttons are the only way out *)
   column ~key:"cfrm-ov"
     ~style_class:"ui__alert-dialog-overlay"
-    ~on_press_detail:(fun ev ->
-      match ev with
-      | Lui_protocol.PressDetail (_, d) ->
-          if
-            Str_util.contains d.Lui_protocol.target_class
-              "ui__alert-dialog-overlay"
-          then Dialogs_state.close_confirm ()
-      | _ -> ())
     [ column ~key:"cfrm"
         ~style_class:"ui__alert-dialog-content"
         (* cljs ui__alert-dialog-content renders
@@ -159,7 +151,13 @@ let prompt_view (p : Dialogs_state.prompt) : t =
     Dialogs_state.submit_prompt (Signal.get_state value)
   in
   let node =
-    box ~key:"prmt-ov" ~style_class:overlay_cls
+    column ~key:"prmt-ov" ~style_class:overlay_cls
+      ~on_press_detail:(fun ev ->
+        match ev with
+        | Lui_protocol.PressDetail (_, d) ->
+            if is_overlay_class d.Lui_protocol.target_class then
+              Dialogs_state.close_top ()
+        | _ -> ())
       [ column ~key:"prmt-c" ~style_class:content_cls
           [ column ~key:"prmt-box" 
               ( (if p.desc = "" then

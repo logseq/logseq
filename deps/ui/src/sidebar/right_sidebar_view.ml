@@ -281,9 +281,7 @@ let item_header st idx (it : Sidebar_state.item) =
 (* cljs onboarding.cljs help pane: .help.cp__sidebar-help-docs is a
    flat sequence of p.mt-4.mb-1 > b section titles and ul lists of
    li > a rows (circle markers). Links point at external docs; the
-   first li is an action opening the shortcut-settings pane.
-   The cljs Development section (roadmap/bug/feature/changelog) is
-   intentionally dropped — requested by the product owner. *)
+   first li is an action opening the shortcut-settings pane. *)
 let help_pane st =
   let ext_item ~key label url =
     box ~key ~style_class:"ls-hp-item"
@@ -326,6 +324,15 @@ let help_pane st =
         ; ext_item ~key:"li-blog" (t "help/blog") "https://blog.logseq.com"
         ; icon_ext_item ~key:"li-forum" (t "help/forum-community")
             "message-circle" "https://discuss.logseq.com" ]
+    @ section "development" (t "help/development-title")
+        [ ext_item ~key:"li-roadmap" (t "help/roadmap")
+            "https://discuss.logseq.com/t/logseq-product-roadmap/34267"
+        ; ext_item ~key:"li-bug" (t "help/bug")
+            "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"
+        ; ext_item ~key:"li-feature" (t "help/feature")
+            "https://discuss.logseq.com/c/feedback/feature-requests/"
+        ; ext_item ~key:"li-changelog" (t "help/changelog")
+            "https://docs.logseq.com/#/page/changelog" ]
     @ section "about" (t "help/about-title")
         [ ext_item ~key:"li-about" (t "help/about")
             "https://blog.logseq.com/about/" ]

@@ -152,6 +152,63 @@ let detail_field ev key =
 
 let init_done = ref false
 
+(* -- modal focus trap (radix Dialog/AlertDialog): Tab/Shift+Tab cycle
+   inside the topmost dialog content; focus leaving the layer wraps
+   back to its first/last focusable *)
+let focusable_sel =
+  "a[href],button:not([disabled]),input:not([disabled])\
+   ,textarea:not([disabled]),select:not([disabled])\
+   ,[tabindex]:not([tabindex='-1'])"
+
+let top_content () =
+  let els =
+    Web_dom.query_selector_all_arr
+      ".ui__dialog-content,.ui__alert-dialog-content"
+  in
+  if Array.length els = 0 then None
+  else Some els.(Array.length els - 1)
+
+let trap_tab ev =
+  match top_content () with
+  | None -> ()
+  | Some content -> (
+      let fs =
+        Array.to_list (Web_dom.el_query_all_arr content focusable_sel)
+      in
+      match fs with
+      | [] ->
+          Web_dom.ev_prevent_default ev;
+          Web_dom.el_focus content
+      | first :: _ ->
+          let last = List.nth fs (List.length fs - 1) in
+          (match Web_dom.active_element () with
+           | Some a when Web_dom.el_contains content a ->
+               (* inside the dialog: wrap at both ends; the container
+                  itself (tabindex -1) counts as before-first *)
+               if a == content then (
+                 Web_dom.ev_prevent_default ev;
+                 Web_dom.el_focus
+                   (if Web_dom.ev_shift ev then last else first))
+               else if a == last && not (Web_dom.ev_shift ev) then (
+                 Web_dom.ev_prevent_default ev;
+                 Web_dom.el_focus first)
+               else if a == first && Web_dom.ev_shift ev then (
+                 Web_dom.ev_prevent_default ev;
+                 Web_dom.el_focus last)
+           | Some a -> (
+               (* focus outside the dialog but inside a higher layer
+                  (open menu/popup) belongs to that layer's own trap —
+                  only pull focus in when the page body holds it *)
+               match Web_dom.query_selector "body" with
+               | Some body when a == body ->
+                   Web_dom.ev_prevent_default ev;
+                   Web_dom.el_focus
+                     (if Web_dom.ev_shift ev then last else first)
+               | _ -> ())
+           | None ->
+               Web_dom.ev_prevent_default ev;
+               Web_dom.el_focus first))
+
 (* names this host renders — other components own the rest (e.g. "cards") *)
 let known name =
   List.mem name
@@ -169,5 +226,31 @@ let init () =
         | name -> if known name then open_ name);
     Web_dom.on_document_event "ls:close-dialog" (fun _ -> close_top ());
     Web_dom.on_document_event "keydown" (fun ev ->
+        if
+          Platform.event_str ev "key" = "Tab" && ready ()
+          && not (Web_dom.ev_composing ev)
+        then trap_tab ev;
         if Platform.event_str ev "key" = "Escape" && ready () then
-          close_top ()))
+          (* defer past every same-event listener: a popup layer or
+             overlay stacked ABOVE the top dialog consumes the Escape
+             itself (preventDefault) — only close our top layer when the
+             key was left unclaimed. Without the defer this listener
+             fires before the layer listeners (it registered first) and
+             tears down the whole dialog under an open menu *)
+          ignore
+            (Web_dom.set_timeout
+               (fun () ->
+                 if not (Web_dom.ev_default_prevented ev) then
+                   (* the Model.confirm alert (page delete etc.) lives
+                      outside this stack; Confirm_set None is a no-op
+                      when nothing is open, so it is safe to always send *)
+                   if
+                     (value ()).dialogs = []
+                     && (value ()).confirm = None
+                     && (value ()).prompt = None
+                     && (value ()).ui_request = None
+                   then (
+                     Runtime.send (Action.Confirm_set None);
+                     Runtime.flush ())
+                   else close_top ())
+               0)))

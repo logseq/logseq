@@ -6,23 +6,13 @@
  },
  {
   "stem": "18-block-ctx",
-  "diff": 1.63349609375,
-  "pixels": 16727
- },
- {
-  "stem": "34-dark-right-sidebar",
-  "diff": 1.5360351562499999,
-  "pixels": 15729
+  "diff": 1.60556640625,
+  "pixels": 16441
  },
  {
   "stem": "33-dark-block-ctx",
-  "diff": 1.3982421875,
-  "pixels": 14318
- },
- {
-  "stem": "23-sidebar-help",
-  "diff": 1.3817382812499999,
-  "pixels": 14149
+  "diff": 1.3703125,
+  "pixels": 14032
  },
  {
   "stem": "32-dark-settings",
@@ -31,8 +21,8 @@
  },
  {
   "stem": "10-appearance",
-  "diff": 1.30771484375,
-  "pixels": 13391
+  "diff": 1.27978515625,
+  "pixels": 13105
  },
  {
   "stem": "03-settings-advanced",
@@ -46,8 +36,8 @@
  },
  {
   "stem": "19-set-property",
-  "diff": 1.04921875,
-  "pixels": 10744
+  "diff": 1.03876953125,
+  "pixels": 10637
  },
  {
   "stem": "03-settings-editor",
@@ -55,14 +45,14 @@
   "pixels": 10105
  },
  {
-  "stem": "01-dots-menu",
-  "diff": 0.9552734375,
-  "pixels": 9782
+  "stem": "34-dark-right-sidebar",
+  "diff": 0.9486328125000001,
+  "pixels": 9714
  },
  {
-  "stem": "31-dark-dots-menu",
-  "diff": 0.9062499999999999,
-  "pixels": 9280
+  "stem": "01-dots-menu",
+  "diff": 0.92734375,
+  "pixels": 9496
  },
  {
   "stem": "11-export-page",
@@ -70,14 +60,24 @@
   "pixels": 9207
  },
  {
+  "stem": "31-dark-dots-menu",
+  "diff": 0.8783203125,
+  "pixels": 8994
+ },
+ {
+  "stem": "23-sidebar-help",
+  "diff": 0.70703125,
+  "pixels": 7240
+ },
+ {
   "stem": "22-sidebar-contents",
-  "diff": 0.6428710937500001,
-  "pixels": 6583
+  "diff": 0.6149414062499999,
+  "pixels": 6297
  },
  {
   "stem": "21-right-sidebar",
-  "diff": 0.63974609375,
-  "pixels": 6551
+  "diff": 0.61181640625,
+  "pixels": 6265
  },
  {
   "stem": "13-plugins",
@@ -95,39 +95,39 @@
   "pixels": 5336
  },
  {
-  "stem": "16-title-ctx",
-  "diff": 0.51787109375,
-  "pixels": 5303
- },
- {
   "stem": "25-recycle",
-  "diff": 0.5154296875,
-  "pixels": 5278
+  "diff": 0.50341796875,
+  "pixels": 5155
  },
  {
   "stem": "15-parity-page",
-  "diff": 0.48291015625,
-  "pixels": 4945
+  "diff": 0.45498046875,
+  "pixels": 4659
  },
  {
   "stem": "20-help-menu",
-  "diff": 0.48291015625,
-  "pixels": 4945
+  "diff": 0.45498046875,
+  "pixels": 4659
  },
  {
   "stem": "24-sidebar-closed",
-  "diff": 0.48291015625,
-  "pixels": 4945
+  "diff": 0.45498046875,
+  "pixels": 4659
  },
  {
   "stem": "00-home",
-  "diff": 0.48134765625000003,
-  "pixels": 4929
+  "diff": 0.45341796874999996,
+  "pixels": 4643
+ },
+ {
+  "stem": "16-title-ctx",
+  "diff": 0.437890625,
+  "pixels": 4484
  },
  {
   "stem": "30-dark-home",
-  "diff": 0.46220703124999996,
-  "pixels": 4733
+  "diff": 0.43427734375,
+  "pixels": 4447
  },
  {
   "stem": "12-import",

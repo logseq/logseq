@@ -1292,13 +1292,13 @@ html[data-theme='dark'] {
 
 /* cljs onboarding.cljs help pane — .help.cp__sidebar-help-docs holds
    p.mt-4.mb-1 > b titles and ul > li > a rows with circle markers.
-   Measured cljs geometry: pane offset +24px/+8px from
-   .sidebar-panel-content, titles h24 (fs16), ul margin-left 19.2px,
-   li rows h24 fs16. Flex children can't collapse margins, so the
-   first title's mt-4 folds into the pane's own top offset. */
+   Measured cljs geometry: help margin 4px/8px, titles fs16 lh24 with
+   mt-16/mb-4 (the first title's margin collapses through .help), ul
+   margin-left 19.2px, li fs16 lh24 with mt-4 (collapses through the
+   ul, giving a 28px row pitch and a 4px title-to-list gap). */
 .help.cp__sidebar-help-docs {
   display: block;
-  margin: 24px 0 0 8px;
+  margin: 4px 0 0 8px;
 }
 
 .help .ls-hp-title {
@@ -1307,10 +1307,7 @@ html[data-theme='dark'] {
   font-size: 16px;
   line-height: 24px;
   margin: 16px 0 4px;
-}
-
-.help > .ls-hp-title:first-child {
-  margin-top: 0;
+  color: var(--ls-primary-text-color);
 }
 
 .help .ls-hp-list {
@@ -1323,6 +1320,7 @@ html[data-theme='dark'] {
   list-style: circle;
   font-size: 16px;
   line-height: 24px;
+  margin-top: 4px;
 }
 
 /* action item (Keyboard shortcuts) — same accent link color as the
