@@ -112,28 +112,47 @@ end)
 
 let st ctx = get_or_init ctx.Lui_ui.ui_scheduler (defaults ())
 
+(* synchronous mirror of the state cell — Signal.update only queues a
+   publish, so Signal.get_state in the same tick (open_ -> regen, tab
+   rows at mount, set_fmt -> regen) would read the pre-update record *)
+let cur_ref : t option ref = ref None
+
+let cur st =
+  match !cur_ref with Some c -> c | None -> Signal.get_state st
+
+let mutate st f =
+  let next = f (cur st) in
+  cur_ref := Some next;
+  Signal.update st (fun _ -> next)
+
 let open_ ctx =
-  let st = st ctx in
-  let uuid, db_id, block_uuids, has_top_level =
-    match !pending with
-    | Some (Pending_page (u, d, tl)) -> (Some u, d, [], tl)
-    | Some (Pending_blocks us) -> (None, None, us, us <> [])
-    | None -> (None, None, [], false)
-  in
-  pending := None;
-  (match (Signal.get_state st).png_url with
-   | Some old -> Webapi.Url.revokeObjectURL old
-   | None -> ());
-  Signal.update st (fun s ->
-      { s with
-        page_uuid = uuid
-      ; page_db_id = db_id
-      ; block_uuids = block_uuids
-      ; has_top_level
-      ; fmt = Text
-      ; content = None
-      ; copied = false
-      ; png = None
-      ; png_url = None
-      ; png_transparent = false });
-  Runtime.flush ()
+  (* the opener arms `pending` before open_dialog; the dialog body may
+     re-run after that first mount, so a consumed (None) pending must
+     NOT reset the armed target — otherwise the dialog falls back to an
+     empty export (PNG tab + blank preview) *)
+  match !pending with
+  | None -> ()
+  | Some target ->
+      pending := None;
+      let st = st ctx in
+      let uuid, db_id, block_uuids, has_top_level =
+        match target with
+        | Pending_page (u, d, tl) -> (Some u, d, [], tl)
+        | Pending_blocks us -> (None, None, us, us <> [])
+      in
+      (match (cur st).png_url with
+       | Some old -> Webapi.Url.revokeObjectURL old
+       | None -> ());
+      mutate st (fun s ->
+          { s with
+            page_uuid = uuid
+          ; page_db_id = db_id
+          ; block_uuids = block_uuids
+          ; has_top_level
+          ; fmt = Text
+          ; content = None
+          ; copied = false
+          ; png = None
+          ; png_url = None
+          ; png_transparent = false });
+      Runtime.flush ()

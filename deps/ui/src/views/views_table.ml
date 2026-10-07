@@ -231,12 +231,14 @@ let column_of_ident (s : V.vstate) (ident : string) : V.column option =
 let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   let s = V.get inst in
   let props = List.filter_map column_of_property properties in
+  (* cljs (conj properties tags-column) — conj on a list conses, so
+     Tags lands BEFORE the property columns, not after *)
   let with_tags =
     if List.exists (fun c -> c.V.c_id = "block/tags") props then props
     else
-      props
-      @ [ { (builtin_column "block/tags" I.filter_tags "node" ()) with
-            V.c_many = true } ]
+      { (builtin_column "block/tags" I.filter_tags "node" ()) with
+        V.c_many = true }
+      :: props
   in
   match inst.V.kind with
   | V.KAllPages ->
@@ -418,8 +420,11 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
             ~on_press:(fun _ -> open_row_sidebar row_uuid)
             (row ~cross:`center ~grow:1.
                ~style_class:"table-block-title"
-               [ row (Render_inline.parse ~self:row_uuid title)
-               ; row ~cross:`center
+               [ (* inline host, not a lui row: flex items collapse the
+                    trailing space in runs like "Clean Code #Book" —
+                    cljs keeps one inline flow *)
+                 dom ~tag:"span" (Render_inline.parse ~self:row_uuid title)
+               ; row ~cross:`center ~style_class:"ls-title-ghosts"
                    [ ghost "arrow-right" I.open_
                    ; ghost "layout-sidebar-right" I.open_in_sidebar ]
                ]) ]
@@ -889,9 +894,11 @@ let keyed_row_key (u, blk) =
 (* cljs row keydown (views.cljs): only while the row is selected —
    Enter opens the row in the sidebar and clears the selection,
    ArrowLeft/Right move the .selected cell marker to the first/last
-   non-checkbox cell, Escape clears the selection. Rides the dom-event
-   channel since kinds expose no key events; the stop(e) half is
-   adapter-side and not portable. *)
+   non-checkbox cell, Escape clears only the block selection
+   (state/clear-selection!) — the checkbox row-selection driving the
+   bulk action bar is NOT touched, so selected rows stay selected.
+   Rides the dom-event channel since kinds expose no key events; the
+   stop(e) half is adapter-side and not portable. *)
 let table_row_keydown inst ~row_uuid name payload =
   if name = "keydown" && V.Sset.mem row_uuid (V.get inst).V.selected then
     match Platform.payload_str payload "key" with
@@ -925,7 +932,9 @@ let table_row_keydown inst ~row_uuid name payload =
              | None -> ())
          | None -> ())
     | "Escape" ->
-        V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+        (* cljs clears the block selection here, not the checkbox
+           row-selection — nothing to clear on our side *)
+        ()
     | _ -> ()
 
 (* cljs table-row: .ls-table-row.ls-block[blockid][data-id][tabindex=0]
@@ -1107,14 +1116,19 @@ let grouped_table inst ~rows : t =
 
 (* same .ls-block[blockid] contract as row_el: the context-menu, block
    picker and dnd readers resolve list rows by blockid/data-id *)
-let list_row_el ~row_uuid ~title : t =
-  dom ~key:("ls-lr-" ^ row_uuid) ~tag:"div"
-    ~id:("ls-block-" ^ row_uuid) ~style_class:"ls-block"
-    ~attrs:[ ("blockid", row_uuid); ("data-id", row_uuid) ]
-    [ row ~gap:4 ~style_class:"block-main-container"
-        [ box ~style_class:"block-content"
-            ~accessibility_identifier:("block-content-" ^ row_uuid)
-            [ text ~style_class:"block-title-wrap" ~value:title [] ] ] ]
+(* cljs list-view rows are full block-container renders — the same
+   shell as linked-reference rows (bullet/control, title with resolved
+   refs, tag chips, positioned pills + properties panel, children).
+   The row's preview W.t decodes through the standard block decoder;
+   property/pill areas self-resolve live by uuid. *)
+let list_row_el ~row_uuid ~blk : t =
+  let b = Decode.block_of_wire blk in
+  let b =
+    match b.Model.block_uuid with
+    | Some _ -> b
+    | None -> { b with Model.block_uuid = Some row_uuid }
+  in
+  !Render_state.block_row_static b
 
 let row_title s u =
   match Hashtbl.find_opt s.V.blocks u with
@@ -1142,23 +1156,12 @@ let gallery_card_el_sig inst (item_sig : row_item Signal.signal) : t =
              item_sig)
         [] ]
 
-(* same freeze fix as gallery_card_el_sig — the row's title follows the
-   republished item signal *)
+(* the keyed mount decodes the item snapshot — content edits
+   republish under a new keyed_row_key and remount the row *)
 let list_row_el_sig inst ~row_uuid (item_sig : row_item Signal.signal) : t =
-  box ~style_class:"ls-block"
-    ~accessibility_identifier:("ls-block-" ^ row_uuid)
-    [ row ~gap:4 ~style_class:"block-main-container"
-        [ box ~style_class:"block-content"
-            ~accessibility_identifier:("block-content-" ^ row_uuid)
-            [ text ~style_class:"block-title-wrap"
-                ~value:
-                  (reactive
-                     (fun ((u, blk) : row_item) ->
-                       match W.get blk "block/title" with
-                       | Some t_ -> Wr.prop_text t_
-                       | None -> row_title (V.get inst) u)
-                     item_sig)
-                [] ] ] ]
+  let _inst = inst in
+  let _, blk = Signal.get item_sig in
+  list_row_el ~row_uuid ~blk
 
 (* ---------- foldable groups ---------- *)
 
@@ -1179,7 +1182,9 @@ let foldable inst ~key ~title ~(body : t) : t =
   (column
     [ row ~style_class:"ls-foldable-title content"
         [ row ~grow:1. ~style_class:"foldable-title"
-            [ row ~cross:`center ~gap:4
+            [ (* grow so .ls-view-head's justify-content:space-between
+                 has room — cljs .foldable-title > * stretches *)
+              row ~grow:1. ~cross:`center ~gap:4
                 [ Ui_parts.pressable
                     ~on_press:(fun _ ->
                       V.update inst (fun s ->
@@ -1236,6 +1241,7 @@ let list_stream inst uuids : t =
     | Some t_ -> Wr.prop_text t_
     | None -> row_title s ""
   in
+  let _ = title_of in
   if Virt_list.enabled ~virtualize:true (List.length items) then
     Virt_list.list ~key_of:fst
       ~data_sig:(fun dctx ->
@@ -1245,8 +1251,7 @@ let list_stream inst uuids : t =
                Array.of_list (List.map (row_item_of s) uuids))
              inst.V.st.Signal.state_signal
            |> Signal.own_signal dctx.Lui_ui.ui_scope))
-      ~render:(fun (u, blk) ->
-        list_row_el ~row_uuid:u ~title:(title_of (V.get inst) (u, blk)))
+      ~render:(fun (u, blk) -> list_row_el ~row_uuid:u ~blk)
       (Array.of_list items)
       ctx parent
   else
@@ -1267,20 +1272,36 @@ let render_list inst s : t =
                ~body:(list_stream inst g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
-      D.fragment
-        (List.mapi
-           (fun i g ->
-             foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(text ~value:(group_title s g.Wr.glv) [])
-               ~body:
-                 (D.fragment
-                    (List.mapi
-                       (fun j (buuid, rows) ->
-                         foldable inst
-                           ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                           ~title:(text ~value:(row_title s buuid) [])
-                           ~body:(list_stream inst rows))
-                       g.Wr.glparts)))
+      (* cljs list-view partitions: a plain breadcrumb header
+         (.ml-6.text-sm.opacity-70) above each parent group's rows —
+         no foldable caret. The groups wrapper draws master's
+         .border-t.pt-2.gap-2 above the partition list *)
+      box ~style_class:"ls-view-groups"
+        (List.concat_map
+           (fun g ->
+             List.mapi
+               (fun j (buuid, rows) ->
+                 (* cljs partition header = breadcrumb of the first row
+                    block with show-page? false — the parent chain minus
+                    the block itself, i.e. its containing page name *)
+                 let pname =
+                   match rows with
+                   | u :: _ -> (
+                       match Hashtbl.find_opt s.V.blocks u with
+                       | Some blk ->
+                           Option.value
+                             (Decode.block_of_wire blk).Model.block_page_name
+                             ~default:(row_title s buuid)
+                       | None -> row_title s buuid)
+                   | [] -> row_title s buuid
+                 in
+                 box ~key:("part-" ^ string_of_int j)
+                   [ box ~style_class:"ls-view-partition-title"
+                       [ link ~url:("#/page/" ^ Platform.encode_uri_component pname)
+                           ~target:`self_ ~style_class:"page-ref"
+                           ~text:pname [] ]
+                   ; list_stream inst rows ])
+               g.Wr.glparts)
            gs)
   | _ -> list_stream inst (all_row_uuids s)
 

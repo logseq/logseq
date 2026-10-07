@@ -771,7 +771,9 @@ let push_item st it =
      | "block", Some u ->
          Editor_state.expand_root ~scope:"sidebar" u
      | _ -> ());
-    Runtime.signal_set st.items (items @ [ it ])
+    (* cljs sidebar-add-block! conses the entry — newest pane is on
+       TOP of the sidebar item list, not appended at the bottom *)
+    Runtime.signal_set st.items (it :: items)
   end
 
 (* cljs sidebar-add-block! :search — a cmdk-block pane pinned to the

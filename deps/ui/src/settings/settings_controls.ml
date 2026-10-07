@@ -129,7 +129,7 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
     ?binding ~on ~on_toggle () =
   match binding with
   | None ->
-      row ~key ~style_class:"it" ~gap:24
+      row ~key ~style_class:"it"
         [ label_el ~key:(key ^ "-l") ~for_ ~text:label label_extra
         ; row ~key:(key ^ "-c") ~style_class:"ls-it-value"
             [ row ~key:(key ^ "-i") ~style_class:"ls-switch-wrap"
@@ -138,7 +138,7 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
             ]
         ]
   | Some b ->
-      row ~key ~style_class:"it" ~gap:24
+      row ~key ~style_class:"it"
         [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
         ; box ~key:(key ^ "-c")
             [ row ~key:(key ^ "-i") ~gap:16 ~cross:`center
@@ -153,7 +153,7 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
 (* cljs row-with-button-action *)
 let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
     ?(stretch = false) () =
-  row ~key ~style_class:"it ls-it-top" ~gap:24
+  row ~key ~style_class:"it ls-it-top"
     [ column ~key:(key ^ "-lc") ~style_class:"ls-it-label-col"
         ([ label_el ~key:(key ^ "-l") ~for_ ~text:label [] ]
         @
@@ -171,7 +171,7 @@ let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
 
 (* bare .it shell: label | value cell — font/date-format/home rows *)
 let it_row ~key ~for_ ~label ?(value_cls = "ls-it-value") children =
-  row ~key ~style_class:"it" ~gap:24
+  row ~key ~style_class:"it"
     [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
     ; column ~key:(key ^ "-r") ~style_class:value_cls children
     ]

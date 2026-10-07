@@ -23,11 +23,13 @@ let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 
 (* retained-tree item: the menu_item kind renders a role=option button
    with icon/label/check spans; [attrs] is accepted for call-site
-   compatibility but ignored — role/tabindex are carried by the kind *)
+   compatibility but ignored — role/tabindex are carried by the kind.
+   [icon] fills the kind's leading icon slot; only use [before] for
+   content that is not an icon (extra slots shift the label) *)
 let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
-    ?(after = []) ?(data_attrs = []) ~label ~on_click () =
+    ?(after = []) ?(data_attrs = []) ?icon ~label ~on_click () =
   ignore attrs;
-  menu_item ~key ~style_class:cls ~data_attrs ~text:label
+  menu_item ~key ~style_class:cls ~data_attrs ~text:label ?icon
     ~on_press:(fun _ -> on_click ())
     (before @ after)
 

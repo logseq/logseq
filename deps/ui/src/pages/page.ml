@@ -79,6 +79,50 @@ let breadcrumbs (page : Model.page) : t list =
       in
       [ row ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts) ])
 
+(* cljs page-inner block? = (some? (:block/page page)): the route
+   entity is a contained block (e.g. a #Tag object living on another
+   page) — it renders breadcrumb + the block itself as the outline
+   root, without the page title/properties chrome. The object's own
+   block arrives as a page_blocks root whose uuid is the route uuid —
+   no child of a normal page can share the page's own uuid, so a uuid
+   match alone detects the shape (the wire does not carry block/page
+   on page blocks). *)
+let is_block_route (page : Model.page) : bool =
+  match page.page_uuid with
+  | Some pu ->
+      List.exists
+        (fun (b : Model.block) -> b.block_uuid = Some pu)
+        page.page_blocks
+  | None -> false
+
+(* cljs block-breadcrumb/breadcrumb on a block page:
+   .breadcrumb.block-parents.breadcrumb--block-page.my-2 with
+   .breadcrumb__segment > .breadcrumb__label ancestors (root first)
+   joined by "/" separators, each navigating to #/page/<uuid> *)
+let block_page_breadcrumb (page : Model.page) : t list =
+  let rec segs = function
+    | [] -> []
+    | (p : Model.block) :: [] -> [ segment p ]
+    | p :: rest -> segment p :: separator p :: segs rest
+  and separator (p : Model.block) =
+    text ~key:("bcsep-" ^ Option.value p.block_uuid ~default:"")
+      ~style_class:"opacity-50 px-1" ~value:"/" []
+  and segment (p : Model.block) =
+    let uuid = Option.value p.block_uuid ~default:"" in
+    row ~key:("bcseg-" ^ uuid) ~gap:0 ~cross:`center
+      ~style_class:"breadcrumb__segment"
+      [ link ~style_class:"breadcrumb__label"
+          ~url:("#/page/" ^ uuid)
+          ~target:`self_ ~text:p.block_title [] ]
+  in
+  match page.page_parents with
+  | [] -> []
+  | parents ->
+      [ row ~key:"bc" ~gap:0 ~cross:`center
+          ~style_class:
+            "breadcrumb block-parents breadcrumb--block-page my-2"
+          (segs parents) ]
+
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)
 let open_menu (page : Model.page) name payload =
@@ -493,7 +537,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       [ button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
                                           ~label:(I18n.t "context-menu/set-icon")
-                                          ~style_class:"ui__button as-ghost"
+                                          ~style_class:"ui__button as-ghost ls-page-icon-btn"
                                           ~on_press:(fun _ ->
                                             page_icon_picker page
                                               ".ls-page-title .ls-page-icon")
@@ -595,16 +639,21 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
    Editor_actions.append_block via the document-level click listener
    matching closest ".block-add-button". has_children drives the same
    opacity class build_el computes. *)
-let add_button_el ?puuid ~(has_children : 'a -> bool Signal.signal) : t =
+(* cljs page.cljs opacity-class: opacity-0 only when the last block
+   itself has children (or editing) — otherwise opacity-50; the row
+   carries .ls-block-content-indent when the last entity is a block *)
+let add_button_el ?puuid
+    ~(flags : 'a -> (bool * bool) Signal.signal) : t =
  fun context parent ->
-  let hc = has_children context in
+  let fs = flags context in
   (* TODO(component): the doc-level click listener matches closest
      ".block-add-button" and reads parentblockid — imperative contract *)
   (dom ~key:"bab"
      ~style_class_signal:
-       (Logseq_dom.class_signal hc (fun has ->
+       (Logseq_dom.class_signal fs (fun (has, indented) ->
             "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
-            ^ (if has then "opacity-0" else "opacity-50")))
+            ^ (if has then "opacity-0" else "opacity-50")
+            ^ (if indented then " ls-block-content-indent" else "")))
      ~attrs:
        (("tabindex", "0")
         :: (match puuid with
@@ -613,6 +662,7 @@ let add_button_el ?puuid ~(has_children : 'a -> bool Signal.signal) : t =
      ~events:"click"
      [ row ~key:"bab-row"
          [ row ~key:"bab-inner" ~cross:`center ~height:28
+             ~style_class:"bab-inner"
              [ box ~key:"bab-bc" ~style_class:"bullet-container"
                  [ box ~key:"bab-b" ~style_class:"bullet" [] ]
              ] ] ])
@@ -679,8 +729,9 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
         ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
          @ [ add_button_el ?puuid
-               ~has_children:(fun ctx ->
-                 Signal.constant ctx.Lui_ui.ui_scheduler (blocks <> []))
+               ~flags:(fun ctx ->
+                 Signal.constant ctx.Lui_ui.ui_scheduler
+                   (blocks <> [], false))
            ])
     ]
 
@@ -1427,7 +1478,19 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                | Some u -> [ ("containerid", u) ]
                | None -> [])
             [ Logseq_dom.if_ ~test:nonempty list_el ]
-        ; add_button_el ?puuid ~has_children:(fun _ -> nonempty)
+        ; add_button_el ?puuid
+            ~flags:(fun _ ->
+              Logseq_dom.own ctx
+                (Signal.map
+                   (fun (m : Model.t) ->
+                     match m.Model.route_page with
+                     | Some p when is_block_route p -> (
+                         match p.Model.page_blocks with
+                         | b :: _ -> (S.children_of b <> [], true)
+                         | [] -> (false, true))
+                     | Some p -> (p.Model.page_blocks <> [], false)
+                     | None -> (false, false))
+                   ms))
         ]
     ])
     ctx parent
@@ -1451,15 +1514,22 @@ let top_view (m : Model.t) : t =
            box ~key:"ptl" ~display:`contents
              [ title_row m page; library_add_pages_button ]
        | _ ->
-           box ~key:"ptm" ~display:`contents
-             (breadcrumbs page
-              @ [ title_row m page
-                ; (* cljs bidirectional-properties-area: sibling of the
-                     blocks list inside .page-inner *)
-                  Properties_area.bidi_area page ]
-              @
-              if page.page_is_library then [ library_add_pages_button ]
-              else []))
+           if is_block_route page then
+             (* cljs (when (and block? (not sidebar?)) breadcrumb) — a
+                block page skips db-page-title, bidirectional properties
+                and the tag chips entirely *)
+             box ~key:"ptm" ~display:`contents
+               (block_page_breadcrumb page)
+           else
+             box ~key:"ptm" ~display:`contents
+               (breadcrumbs page
+                @ [ title_row m page
+                  ; (* cljs bidirectional-properties-area: sibling of the
+                       blocks list inside .page-inner *)
+                    Properties_area.bidi_area page ]
+                @
+                if page.page_is_library then [ library_add_pages_button ]
+                else []))
 
 let top_key (p : Model.page option) =
   match p with

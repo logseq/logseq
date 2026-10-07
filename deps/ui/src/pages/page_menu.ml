@@ -208,7 +208,7 @@ let global_items () =
             let r = Web_dom.el_bounding_rect el in
             Runtime.send
               (Action.Appearance_set
-                 (Some (Web_dom.rect_right r, Web_dom.rect_bottom r +. 4.)))
+                 (Some (Web_dom.rect_right r, Web_dom.rect_bottom r)))
         | None -> ())
   ; icon_item "recycle" I18n.recycle "trash" (fun () ->
         close ();

@@ -143,9 +143,9 @@ let export_edn (st : S.t) =
    a block export snapshots [blockid='<top-level-id>'] (windowHeight is
    page-only in cljs). *)
 let export_png (st : S.t Signal.state) =
-  Signal.update st (fun s -> { s with png = None });
+  S.mutate st (fun s -> { s with png = None });
   Runtime.flush ();
-  let cur = Signal.get_state st in
+  let cur = S.cur st in
   let selector =
     match cur.S.block_uuids with
     | u :: _ -> "[blockid='" ^ u ^ "']"
@@ -189,13 +189,13 @@ let export_png (st : S.t Signal.state) =
          (fun blob ->
            match Js.Nullable.toOption blob with
            | Some blob ->
-               (match (Signal.get_state st).png_url with
+               (match (S.cur st).png_url with
                 | Some old -> Web_dom.revoke_object_url old
                 | None -> ());
                let url =
                  Web_dom.create_object_url blob
                in
-               Signal.update st (fun s ->
+               S.mutate st (fun s ->
                    { s with png = Some blob; png_url = Some url });
                Runtime.flush ();
                (* cljs sets img#export-preview .src imperatively — the id
@@ -214,15 +214,15 @@ let export_png (st : S.t Signal.state) =
       |> ignore
 
 let set_png_transparent (st : S.t Signal.state) =
-  Signal.update st (fun s ->
+  S.mutate st (fun s ->
       { s with png_transparent = not s.png_transparent });
   Runtime.flush ();
   export_png st
 
 (* cljs reset-export-content! — refetch when tab/options change *)
 let regen (st : S.t Signal.state) =
-  let cur = Signal.get_state st in
-  Signal.update st (fun s -> { s with copied = false });
+  let cur = S.cur st in
+  S.mutate st (fun s -> { s with copied = false });
   match cur.fmt with
   | S.Png -> export_png st
   | _ ->
@@ -234,24 +234,24 @@ let regen (st : S.t Signal.state) =
         | S.Png -> Js.Promise.resolve ""
       in
       (let* content = p in
-      Signal.update st (fun s -> { s with content = Some content });
+      S.mutate st (fun s -> { s with content = Some content });
       Runtime.flush ();
       Js.Promise.resolve ())
       |> Js.Promise.catch (fun _ ->
-             Signal.update st (fun s ->
+             S.mutate st (fun s ->
                  { s with content = Some "<export failed>" });
              Runtime.flush ();
              Js.Promise.resolve ())
       |> ignore
 
 let set_fmt (st : S.t Signal.state) fmt =
-  Signal.update st (fun s -> { s with fmt; copied = false });
+  S.mutate st (fun s -> { s with fmt; copied = false });
   Runtime.flush ();
   regen st
 
 let opt_change (st : S.t Signal.state) f =
-  Signal.update st f;
-  S.persist (Signal.get_state st);
+  S.mutate st f;
+  S.persist (S.cur st);
   Runtime.flush ();
   regen st
 
@@ -260,10 +260,10 @@ external clipboard_write : string -> unit Js.Promise.t
 
 let copied_flash (st : S.t Signal.state) p =
   (let* _ = p in
-  Signal.update st (fun s -> { s with copied = true });
+  S.mutate st (fun s -> { s with copied = true });
   Runtime.flush ();
   Web_dom.later ~ms:2000 (fun () ->
-      Signal.update st (fun s -> { s with copied = false });
+      S.mutate st (fun s -> { s with copied = false });
       Runtime.flush ());
   Js.Promise.resolve ())
   |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
@@ -271,13 +271,13 @@ let copied_flash (st : S.t Signal.state) p =
 
 (* cljs :on-click #(copy-to-clipboard content) — e2e reads the textarea *)
 let copy (st : S.t Signal.state) =
-  match (Signal.get_state st).content with
+  match (S.cur st).content with
   | Some c -> copied_flash st (clipboard_write c)
   | None -> ()
 
 (* cljs ClipboardItem path for the png blob *)
 let copy_png (st : S.t Signal.state) =
-  match (Signal.get_state st).png with
+  match (S.cur st).png with
   | Some b -> copied_flash st (Platform.clipboard_write_blob b)
   | None -> ()
 
@@ -294,7 +294,7 @@ let download_blob ~filename (blob : Webapi.Blob.t) =
 
 (* cljs filename: "logseq_" + (t/now) + ext — txt for text else format *)
 let save_to_file (st : S.t Signal.state) =
-  let cur = Signal.get_state st in
+  let cur = S.cur st in
   match cur.fmt, cur.content, cur.png with
   | S.Png, _, Some blob ->
       download_blob

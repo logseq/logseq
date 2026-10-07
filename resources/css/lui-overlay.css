@@ -297,9 +297,32 @@
   font-weight: 600;
 }
 
+/* the kind's children mount before its built-in slots (slots aren't
+   retained children); restore cljs order: icon slot, label, view
+   children (shortcut / submenu chevron), check slot */
+.lui-menu-item > .lui-menu-item-icon {
+  order: -3;
+}
+
+.lui-menu-item > .lui-menu-item-label {
+  order: -2;
+}
+
+.lui-menu-item > .lui-menu-item-check {
+  order: 1;
+}
+
+/* cljs dropdown-menu-item packs icon + title with gap-1 (4px) */
+.ui__dropdown-menu-item.lui-menu-item,
+.ui__dropdown-menu-sub-trigger.lui-menu-item {
+  gap: 0.25rem;
+}
+
 /* menu item internals — cljs keeps labels on one line (menu sizes to
-   content); LUI's flex shrink would wrap two-word labels */
-.menu-item-label {
+   content); LUI's flex shrink would wrap two-word labels. The kind emits
+   .lui-menu-item-label; .menu-item-label remains for imperative markup */
+.menu-item-label,
+.lui-menu-item-label {
   flex: 1;
   min-width: 0;
   /* cljs menu items never wrap — keeps sub-trigger rows at 32px and
@@ -1449,8 +1472,9 @@ div[data-keep-selection].menu-links-wrapper {
   display: grid;
   place-items: center;
   overflow-y: auto;
-  /* theme --background is a full color (oklch) not an hsl triple —
-     hsl(var(--background)/.9) is invalid; color-mix handles both shapes */
+  /* --lui-c-background is already a full hsl() color (the :root alias
+     above) — mixing it directly keeps the scrim at cljs's
+     bg-background/90 */
   background: color-mix(in oklab, var(--lui-c-background) 90%, transparent);
   animation: lui-fade-in 150ms ease-out;
 }
@@ -1474,15 +1498,20 @@ div[data-keep-selection].menu-links-wrapper {
   display: grid;
   gap: 1rem;
   width: 100%;
-  box-sizing: content-box;
+  box-sizing: border-box;
   max-width: 42rem;
+  /* master: max-h-[80vh] + overflow-y-auto — tall dialog content scrolls
+     inside the dialog instead of growing the dialog past the viewport */
+  max-height: 80vh;
+  overflow-y: auto;
   padding: 1.5rem;
   border: 1px solid var(--lui-c-border);
   border-radius: 0.5rem;
   background: var(--lui-c-background);
   background: var(--ls-primary-background-color, var(--lui-c-background));
-  color: hsl(var(--foreground, var(--ls-primary-text-color, inherit)));
-  color: var(--ls-primary-text-color, var(--lui-c-foreground));
+  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
+     --ls-primary-text-color here would warm every label */
+  color: inherit;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
     0 4px 6px -4px rgb(0 0 0 / 0.1);
   transform: translate(-50%, -50%)
@@ -1510,8 +1539,9 @@ div[data-keep-selection].menu-links-wrapper {
   border-radius: 0.5rem;
   background: var(--lui-c-background);
   background: var(--ls-primary-background-color, var(--lui-c-background));
-  color: hsl(var(--foreground, var(--ls-primary-text-color, inherit)));
-  color: var(--ls-primary-text-color, var(--lui-c-foreground));
+  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
+     --ls-primary-text-color here would warm every label */
+  color: inherit;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
     0 4px 6px -4px rgb(0 0 0 / 0.1);
   transform: translate(-50%, -50%);
@@ -1629,6 +1659,14 @@ div[data-keep-selection].menu-links-wrapper {
   display: none;
 }
 
+/* same for the check slot: cljs menus have no trailing 16px box — the
+   invisible check would push the shortcut/chevron off the right edge */
+.ui__dropdown-menu-content .lui-menu-item-check,
+.ui__context-menu-content .lui-menu-item-check,
+.ui__popover-content .lui-menu-item-check {
+  display: none;
+}
+
 /* cljs items are flex rows with normal (0) gap; spacing between icon and
    label comes from the icon's own margin (gap-1 = 4px) */
 .ui__dropdown-menu-content .lui-menu-item,
@@ -1644,6 +1682,13 @@ div[data-keep-selection].menu-links-wrapper {
   line-height: 1;
   letter-spacing: -0.01em;
   margin: 0;
+}
+
+/* master's untitled dialogs still mount a hidden h2.ui__dialog-title —
+   display:none removes it from the content grid so it contributes no
+   row gap before .ui__dialog-main-content */
+.ui__dialog-content > .ui__dialog-title-empty {
+  display: none;
 }
 
 .ui__dialog-close {
@@ -1747,6 +1792,13 @@ div[data-keep-selection].menu-links-wrapper {
   overflow-y: auto;
 }
 
+/* cljs export dialog gaps: 6px between the preview textarea and the
+   options block (margin-collapsed select my-2), mt-4 before the
+   copy/save row — the export-inner column's uniform gap-3 overshoots
+   both */
+.ls-dialog-export-page .export-opts { margin-top: -6px; }
+.ls-dialog-export-page .export-btns { margin-top: 4px; }
+
 /* cljs shui/dialog-open! on publish-page-dialog uses the default
    .ui__dialog-content sizing (w-full max-w-2xl, lg:max-w-3xl) */
 
@@ -1799,6 +1851,8 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ui__dialog-content[label="app-settings"],
 .ui__dialog-content.ls-dialog-settings {
+  /* cljs sizes the settings dialog border-box: 1024px incl padding */
+  box-sizing: border-box;
   width: min(1024px, calc(100vw - 2rem));
   max-width: calc(100vw - 2rem);
 }
@@ -1865,6 +1919,14 @@ div[data-keep-selection].menu-links-wrapper {
   display: block;
   width: 100%;
   margin: 0.5rem 0 1rem;
+}
+
+/* cljs login.css: login form controls span the card width */
+.ui__dialog-content[label="user-login"] .form-input,
+.ui__dialog-content.ls-dialog-login .form-input,
+.ui__dialog-content[label="user-login"] .ui__button.as-solid,
+.ui__dialog-content.ls-dialog-login .ui__button.as-solid {
+  width: 100%;
 }
 
 /* cljs login.css: .ui__dialog-content[label=user-login] centers a
@@ -2073,8 +2135,9 @@ div[data-keep-selection].menu-links-wrapper {
   border: 1px solid var(--lui-c-border);
   background: var(--lui-c-background);
   background: var(--ls-primary-background-color, var(--lui-c-background));
-  color: hsl(var(--foreground, var(--ls-primary-text-color, inherit)));
-  color: var(--ls-primary-text-color, var(--lui-c-foreground));
+  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
+     --ls-primary-text-color here would warm every label */
+  color: inherit;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
     0 4px 6px -4px rgb(0 0 0 / 0.1);
   cursor: default;
@@ -2844,6 +2907,10 @@ div[data-keep-selection].menu-links-wrapper {
   max-height: 75dvh;
 }
 
+/* the cljs selectors below targeted real <header>/<aside>/<ul>/<li>
+   elements; the LUI tree emits div/button nodes with the same class
+   names, so every selector here uses the class twins */
+.cp__settings-inner > .cp__settings-header,
 .cp__settings-inner > header {
   padding: 0 10px 10px;
   border-bottom: 1px solid
@@ -2855,6 +2922,7 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0;
 }
 
+.cp__settings-inner > .settings-aside,
 .cp__settings-inner aside {
   background: var(--lx-gray-03-alpha,
       var(--ls-secondary-background-color, hsl(var(--muted))));
@@ -2863,30 +2931,16 @@ div[data-keep-selection].menu-links-wrapper {
   flex-shrink: 0;
 }
 
-.cp__settings-inner aside > ul {
-  margin: 0;
-  padding: 0;
-}
-
-.cp__settings-inner aside > ul > li > button {
+.cp__settings-inner .settings-menu > .settings-menu-item {
   width: 100%;
 }
 
-.cp__settings-inner aside > ul > li > button > strong {
+.cp__settings-inner .settings-menu-item {
   font-size: 0.875rem;
   font-weight: 400;
-  padding-left: 0.25rem;
-  opacity: 0.9;
 }
 
-.cp__settings-inner aside > ul > li.active {
-  background: rgb(0 0 0 / 0.1);
-}
-
-.dark .cp__settings-inner aside > ul > li.active {
-  background: rgb(255 255 255 / 0.08);
-}
-
+.cp__settings-inner > .settings-article,
 .cp__settings-inner > article {
   padding: 1rem;
   flex: 1;
@@ -2897,6 +2951,8 @@ div[data-keep-selection].menu-links-wrapper {
   overflow-y: auto;
 }
 
+.cp__settings-inner > .settings-aside > .cp__settings-header,
+.cp__settings-inner > .settings-article > .cp__settings-header,
 .cp__settings-inner > aside > .cp__settings-header,
 .cp__settings-inner > article > .cp__settings-header {
   height: 2.5rem;
@@ -2908,12 +2964,12 @@ div[data-keep-selection].menu-links-wrapper {
   gap: 0.5rem;
 }
 
-.cp__settings-inner aside > .cp__settings-header {
+.cp__settings-inner .settings-aside > .cp__settings-header {
   padding-left: 0.5rem;
   padding-right: 0.5rem;
 }
 
-.cp__settings-inner aside > .cp__settings-header > .ui__icon {
+.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon {
   width: 2rem;
   height: 2rem;
   border-radius: 0.25rem;
@@ -2922,30 +2978,31 @@ div[data-keep-selection].menu-links-wrapper {
   place-items: center;
 }
 
-.cp__settings-inner aside > .cp__settings-header > .ui__icon > svg,
-.cp__settings-inner aside > .cp__settings-header > .ui__icon.lui-icon {
+.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon > svg,
+.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon.lui-icon {
   width: 1.5rem;
   height: 1.5rem;
 }
 
-h1.cp__settings-modal-title {
+.cp__settings-modal-title {
   font-size: 1.5rem;
   font-weight: 600;
   text-transform: lowercase;
 }
 
-h1.cp__settings-category-title {
+.cp__settings-category-title {
   font-size: 1.25rem;
 }
 
-h1.cp__settings-modal-title::first-letter,
-h1.cp__settings-category-title::first-letter {
+.cp__settings-modal-title::first-letter,
+.cp__settings-category-title::first-letter {
   text-transform: uppercase;
 }
 
 /* qualified so it wins over the `.cp__settings-inner aside > ul` reset —
    cljs .settings-menu keeps its mt-4 */
 .cp__settings-inner aside > ul.settings-menu,
+.cp__settings-inner .settings-aside > .settings-menu,
 .settings-menu {
   padding: 0;
   margin: 1rem 0 0;
@@ -2958,11 +3015,49 @@ h1.cp__settings-category-title::first-letter {
   border-radius: 0.25rem;
 }
 
+/* the item is the button itself in the LUI tree (cljs wraps a
+   .settings-menu-link button in li.settings-menu-item): same padding
+   and horizontal layout as the cljs link, no list-item default slots */
+.settings-menu-item.lui-list-item {
+  padding: 0.375rem 0.5rem;
+  min-height: 0;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  text-align: left;
+}
+
+/* list-item's data-selected accent background is unused here — .active
+   carries the highlight, matching cljs li.active */
+.settings-menu-item.lui-list-item[data-selected],
+.settings-menu-item.lui-list-item:hover,
+.settings-menu-item.lui-list-item[data-selected]:hover {
+  background: transparent;
+  color: inherit;
+}
+
+.settings-menu-item.lui-list-item.active,
+.dark .settings-menu-item.lui-list-item.active[data-selected] {
+  background: rgb(0 0 0 / 0.1);
+}
+
+.dark .settings-menu-item.lui-list-item.active,
+.dark .settings-menu-item.lui-list-item.active[data-selected] {
+  background: rgb(255 255 255 / 0.08);
+}
+
 .settings-menu-item:hover {
   background: rgb(0 0 0 / 0.1);
 }
 
+.settings-menu-item.lui-list-item:hover {
+  background: rgb(0 0 0 / 0.1);
+}
+
 .dark .settings-menu-item:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.dark .settings-menu-item.lui-list-item:hover {
   background: rgb(255 255 255 / 0.08);
 }
 
@@ -3001,10 +3096,15 @@ h1.cp__settings-category-title::first-letter {
   max-width: calc(100vw - 20rem);
 }
 
-.panel-wrap .it {
+/* cljs .it rows carry sm:grid sm:grid-cols-3 sm:gap-4 on the element
+   itself — the grid applies in every settings container, including the
+   appearance popup */
+.panel-wrap .it,
+.cp__settings-inner .it,
+#appearance_settings .it {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 /* direct child like cljs .panel-wrap>.it:first-of-type — the accent
@@ -3024,8 +3124,13 @@ h1.cp__settings-category-title::first-letter {
 /* cljs .it is grid-cols-3: the control column spans 2 only when the
    row has two children (label + control); three-child rows (e.g.
    label | switch | shortcut kbd) keep one column each */
+/* the control column's col-span-2 is on the element in cljs markup —
+   it applies in the appearance popup too (only the label/control
+   min-heights are panel-wrap scoped) */
 .panel-wrap .it > *:nth-child(2):last-child,
-.panel-wrap .it .it-control {
+.panel-wrap .it .it-control,
+#appearance_settings .it > *:nth-child(2):last-child,
+#appearance_settings .it .it-control {
   grid-column: span 2;
   display: flex;
   align-items: flex-start;
@@ -3102,6 +3207,7 @@ h1.cp__settings-category-title::first-letter {
 
 .cp__theme-modes-options {
   display: flex;
+  flex-direction: row;
   align-items: center;
   margin: 0;
   padding: 0;
@@ -3155,6 +3261,96 @@ h1.cp__settings-category-title::first-letter {
   font-size: 0.75rem;
   line-height: 1rem;
   font-weight: 500;
+}
+
+/* LUI twin: list > button.lui-list-item > .mode-* box + .lui-text label
+   (cljs ul > li > i + strong). The list-item kind lays out as a row —
+   flip to column so the thumbnail sits above the label like cljs */
+.cp__theme-modes-options > .lui-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  padding-right: 0.5rem;
+  min-height: 0;
+  gap: 0; /* platform list-item gap doubles the label's padding-top */
+  opacity: 0.9;
+  border-radius: 0.25rem;
+  width: auto;
+}
+
+.cp__theme-modes-options > .lui-list-item:hover {
+  opacity: 1;
+}
+
+/* the thumbnail + label carry the visual state — kill the list-item
+   hover/selected chrome (bg-accent would cover the swatch) */
+.cp__theme-modes-options > .lui-list-item:hover,
+.cp__theme-modes-options > .lui-list-item[data-selected] {
+  background: transparent;
+  color: inherit;
+}
+
+.cp__theme-modes-options .mode-light,
+.cp__theme-modes-options .mode-dark,
+.cp__theme-modes-options .mode-system {
+  display: block;
+  width: 92px;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  aspect-ratio: 160 / 110;
+  background: url("../img/light-theme.png") no-repeat center / cover;
+  background-color: var(--lx-gray-04, hsl(var(--muted)));
+}
+
+.cp__theme-modes-options .mode-dark {
+  background-image: url("../img/dark-theme.png");
+}
+
+.cp__theme-modes-options .mode-system {
+  background-image: url("../img/system-theme.png");
+}
+
+.cp__theme-modes-options .mode-active {
+  box-shadow: inset 0 0 0 2px var(--ls-link-text-color, hsl(var(--primary, #0f7b6c)));
+}
+
+.cp__theme-modes-options > .lui-list-item > .lui-text {
+  display: block;
+  padding-right: 0.5rem;
+  padding-top: 0.375rem;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+}
+
+/* context-menu color/heading rows: the button kind's empty icon/label
+   slots would shrink the swatch/heading child to zero width */
+.ls-cm-swatch > .lui-button-icon,
+.ls-cm-swatch > .lui-button-label,
+.ls-cm-heading-btn > .lui-button-icon,
+.ls-cm-heading-btn > .lui-button-label {
+  display: none;
+}
+
+/* cljs common.css .heading-bg: 18px round swatch inside a 30px hit
+   area; .remove is a bordered hollow circle holding a "-" glyph */
+.ls-cm-swatch > .heading-bg {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.ls-cm-swatch > .heading-bg.remove {
+  border: 1px solid var(--lx-gray-07, hsl(var(--border)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
 }
 
 /* shortcuts pane */
@@ -3957,6 +4153,26 @@ select.form-select {
   padding-bottom: 1.75rem;
 }
 
+/* cljs login.css field rows: label text-sm lh-5 + flex-col gap-3 pb-1
+   wrapper — LUI's label sits at lh-14 with no bottom pad */
+.cp__user-login .ls-auth-field .lui-label {
+  line-height: 20px;
+}
+
+.cp__user-login .ls-auth-field {
+  padding-bottom: 4px;
+}
+
+/* cljs footer is one p.pt-4.text-center with two lh-6 lines; LUI
+   splits it into two rows — pt-4 + two 24px rows */
+.cp__user-login .ls-auth-foot {
+  padding-top: 16px;
+}
+
+.cp__user-login .ls-auth-foot > .lui-row {
+  min-height: 24px;
+}
+
 /* cljs shui input is h-10 px-3 py-2 everywhere it appears in dialogs */
 .ui__dialog-content .ui__input {
   height: 2.5rem;
@@ -4282,23 +4498,24 @@ select.form-select {
   transform: translateX(0.875rem);
 }
 
+/* the kind emits <label class="lui-checkbox"> around the 1rem input
+   and a .lui-control-label span — the cljs rule's 1rem box must apply
+   to the input, not the wrapper, or the label text shrinks to zero */
 .ui__checkbox {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
+  gap: 0.375rem;
   cursor: pointer;
-  border-radius: 0.125rem;
-  border: 1px solid hsl(var(--primary));
-  background: transparent;
-  color: hsl(var(--primary-foreground));
-  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1rem;
+}
+
+.ui__checkbox > .lui-checkbox-control {
+  flex-shrink: 0;
 }
 
 .ui__checkbox[data-checked] {
-  background: hsl(var(--primary));
+  background: transparent;
 }
 
 /* buttons used across overlays (cljs ui__button variants) */
@@ -5291,6 +5508,16 @@ select.form-select {
   min-width: 0;
 }
 
+/* cljs .ls-view-body is mt-1 */
+.ls-view-body {
+  margin-top: 4px;
+}
+
+/* cljs page-inner children carry .mt-4 on the blocks section */
+.page-inner > .ls-page-blocks {
+  margin-top: 16px;
+}
+
 /* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
    kept in flow here so the rows list needs no top offset) —
    .sticky-columns and the unpinned cell row are flex items on the same
@@ -5303,6 +5530,10 @@ select.form-select {
   min-width: 100%;
   will-change: transform;
   transform: translate3d(0, 0, 0);
+  /* cljs .ls-table-header is border-y bg-gray-01 */
+  border-top: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+  background: var(--lx-gray-01, var(--ls-primary-background-color));
 }
 
 .sticky-columns {
@@ -5318,7 +5549,7 @@ select.form-select {
   vertical-align: middle;
   font-weight: 500;
   color: var(--muted-foreground, var(--ls-secondary-text-color));
-  border-right: 1px solid var(--ls-border-color);
+  border-right: 1px solid hsl(var(--border));
 }
 
 /* cljs header button is h-8 (32px); .ls-btn-default's 2.5rem height
@@ -5361,12 +5592,20 @@ select.form-select {
   display: flex;
   flex-direction: row;
   align-items: stretch;
+  /* 33px box including the cljs border-b separator — inner content band
+     is 32px so centered text lands on the same subpixel as cljs */
   height: 33px;
   min-height: 33px;
   max-height: 33px;
+  box-sizing: border-box;
+  /* cljs tailwind border-b = hsl(var(--border)); --ls-border-color is
+     the darker #ccc used by outliner/chrome borders */
+  border-bottom: 1px solid hsl(var(--border));
   padding-top: 0;
   padding-bottom: 0;
   overflow: hidden;
+  transition-property: background-color;
+  transition-duration: 150ms;
 }
 
 .ls-table-row div,
@@ -5403,17 +5642,86 @@ select.form-select {
 }
 
 /* cljs .ls-table-cell { @apply h-full max-h-[33px] overflow-hidden } —
-   caps row height and clips cell content */
+   caps row height and clips cell content. Inside .ls-table-rows the
+   content band is 32px (33px box minus the border-b separator). */
 .ls-table-cell {
   height: 100%;
   max-height: 33px;
   overflow: hidden;
 }
 
+.ls-table-rows .ls-table-cell {
+  height: 32px;
+  max-height: 32px;
+}
+
 .ls-table-cell > div {
   height: 100%;
   min-width: 0;
   overflow: hidden;
+}
+
+/* cljs views.cljs: select checkboxes stay in the DOM and reveal only
+   while the 32px select label is hovered or the box is checked
+   (opacity-0 -> opacity-100) */
+.ls-table-row [data-table-row-select] .lui-checkbox,
+.ls-table-header-cell .lui-checkbox {
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.ls-table-row [data-table-row-select]:hover .lui-checkbox,
+.ls-table-row [data-table-row-select] .lui-checkbox:has(input:checked),
+.ls-table-header-cell:hover .lui-checkbox,
+.ls-table-header-cell .lui-checkbox:has(input:checked) {
+  opacity: 1;
+}
+
+/* cljs table-block-title: the open/open-in-sidebar ghost buttons are
+   hover-only */
+.ls-table-row .ls-title-ghosts {
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+/* cljs reveals the title ghost buttons from .table-block-title's own
+   on-mouse-over — hovering the select label or other cells does NOT
+   reveal them */
+.ls-table-row .table-block-title:hover .ls-title-ghosts,
+.ls-table-row .ls-title-ghosts:hover {
+  opacity: 1;
+}
+
+/* cljs table row selection is bg-muted via :has(.ui__checkbox
+   [data-checked]) — not the outliner's blue .ls-block.selected
+   block-highlight */
+.ls-table-row.ls-block.selected {
+  background-color: hsl(var(--muted));
+}
+
+/* cljs .ls-table-rows > .relative keeps pb-[38px] so the absolute
+   .ls-table-footer ("+ New") clears the last row */
+.ls-table-rows > .relative {
+  padding-bottom: 38px;
+}
+
+/* cljs table text is text-sm (14px/20px) — LUI rows inherited the
+   16px/24px body default */
+.ls-table-rows .ls-table-row,
+.ls-table-rows .ls-table-row .lui-text,
+.ls-table-rows .ls-table-row .lui-link,
+.ls-table-rows .ls-table-row a,
+.ls-table-rows .ls-table-row .select-item,
+.ls-table-rows .ls-table-row .property-value-inner {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.ls-table-header-cell,
+.ls-table-header-cell > .ui__button,
+.ls-table-header-cell .lui-text {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 /* cljs ui.css: fold carets hang 27px into the left gutter instead of
@@ -5433,6 +5741,9 @@ select.form-select {
   gap: 0.25rem;
   overflow: hidden;
   min-width: 0;
+  /* cljs foldable-title/view-head rows measure 28px on tag pages and
+     all-pages — keeps the table header at the cljs offset */
+  height: 28px;
 }
 
 .ls-view-head-left {
@@ -5854,4 +6165,26 @@ html[data-theme=light] {
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
   --border: 300 1% 92%;
+}
+
+/* cljs .ls-page-icon button: text-muted-foreground 38px glyph offset
+   8px inside a 46px wrap (self-start) — LUI's ghost button rendered
+   near-black, 40px, flush top */
+.ls-page-icon {
+  box-sizing: border-box;
+  height: 46px;
+  padding-top: 8px;
+}
+
+.ls-page-icon .lui-button.ui__button {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.ls-page-icon .lui-button.ui__button:hover {
+  color: hsl(var(--foreground));
 }

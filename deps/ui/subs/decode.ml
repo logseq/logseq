@@ -372,8 +372,15 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_order =
       Option.bind (Wire.get w "block/order") order_str_of_wire
   ; block_code_lang = prop_label w "logseq.property.code/lang"
-  ; block_tag_uuids = []
-  ; block_tag_db_ids = []
+  ; block_tag_uuids =
+      List.map
+        (fun t ->
+          match t with
+          | Wire.Map _ ->
+              Option.value (Wire.map_get_uuid t "block/uuid") ~default:""
+          | _ -> "")
+        tag_entries
+  ; block_tag_db_ids = tag_ids
   ; block_page_name =
       (match Wire.get w "block/page" with
        | Some (Wire.Map _ as p) -> (

@@ -217,7 +217,16 @@ let ctx_of inst : W.t =
     | fs -> base @ [ (W.kw "filters", filters_to_wire fs s.filters_or) ]
   in
   let base =
-    match s.group_by with
+    (* cljs effective group-by: stored group-by-property, else block/page
+       for the list display — computed per request, so switching to List
+       View without a stored group still partitions by parent page *)
+    let group_by =
+      match s.group_by with
+      | Some _ -> s.group_by
+      | None when s.display_type = "list" -> Some "block/page"
+      | None -> None
+    in
+    match group_by with
     | Some g -> base @ [ (W.kw "group-by-property-ident", W.Keyword g) ]
     | None -> base
   in
@@ -264,7 +273,12 @@ let apply_view_entity s (v : Views_wire.view_ent) : vstate =
        | None -> None)
   ; sorting =
       (match v.vsorting with
-       | Some w -> sorting_of_wire w
+       (* cljs effective-view-sorting: nil, empty or placeholder all fall
+          back to updated-at desc *)
+       | Some w -> (
+           match sorting_of_wire w with
+           | [] -> [ { s_id = "block/updated-at"; s_asc = false } ]
+           | xs -> xs)
        | None -> [ { s_id = "block/updated-at"; s_asc = false } ])
   ; filters = fs
   ; filters_or = or_

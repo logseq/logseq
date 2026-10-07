@@ -542,12 +542,38 @@ let date_view ctx row : t =
            (day mod 10000 / 100)
            (day mod 100))
   in
-  (column ~gap:0 ~grow:1.0
-     [ value_button
-         ~text:
-           (if D.value_empty_p value then ""
-            else date_display (D.row_type row) value)
-         ~on_press:(fun _ -> Runtime.signal_set open_ true)
+  (Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0
+     ~style_class:"ls-datetime"
+     [ (if D.value_empty_p value then
+          (* empty date has no journal link — keep the ghost button so
+             a click opens the picker *)
+          value_button ~text:""
+            ~on_press:(fun _ -> Runtime.signal_set open_ true)
+        else
+          (match ymd_of_datetime_value value with
+           | Some (y, m, d) ->
+               (* cljs datetime-value renders the journal page-ref —
+                  the text navigates, the pencil opens the picker *)
+               link ~style_class:"page-ref"
+                 ~url:
+                   ("#/page/"
+                   ^ Platform.encode_uri_component
+                       (Dates.journal_title_ymd ~y ~m ~d))
+                 ~target:`self_
+                 ~text:(date_display (D.row_type row) value) []
+           | None ->
+               value_button
+                 ~text:(date_display (D.row_type row) value)
+                 ~on_press:(fun _ -> Runtime.signal_set open_ true)))
+     ; (if D.value_empty_p value then Logseq_dom.nothing
+        else
+          (* cljs bottom-property-edit-icon: always visible inside
+             block-below pills; in panels CSS keeps it hover-only like
+             .property-panel-edit-btn *)
+          button ~variant:`ghost ~size:`icon ~icon:`edit
+            ~style_class:"prop-edit-ico"
+            ~label:(I18n.t "ui/edit")
+            ~on_press:(fun _ -> Runtime.signal_set open_ true) [])
      ; if_ ~test:(Signal.value open_)
          (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
             ~anchor_offset:4.0 ~min_width:220
@@ -820,6 +846,23 @@ let node_view ctx row : t =
 
 (* ---------- dispatch ---------- *)
 
+(* url: cljs renders the value block's title through inline markup —
+   an http(s) string becomes a.external-link anchor that navigates
+   (border-bottom underline). Non-url text still uses the scalar cell *)
+let url_view ctx row : t =
+  let row' = D.row_with_effective_value row in
+  let value = D.row_value row' in
+  let text = D.ref_title value in
+  let is_http =
+    String.length text >= 8
+    && (String.sub text 0 7 = "http://"
+        || String.sub text 0 8 = "https://")
+  in
+  if D.value_empty_p value || not is_http then
+    scalar_edit_cell ctx row
+  else
+    link ~style_class:"external-link" ~url:text ~target:`blank ~text []
+
 (* [view ctx row] renders the cell's value control inside the row's
    value column. *)
 let view ctx row : t =
@@ -832,6 +875,7 @@ let view ctx row : t =
     | "checkbox" -> checkbox_view ctx row'
     | "number" -> scalar_edit_cell ctx row'
     | "date" | "datetime" -> date_view ctx row'
+    | "url" -> url_view ctx row'
     | "node" | "asset" | "page" | "class" | "property" ->
         if ident = "logseq.property.class/extends" then
           extends_view ctx row'

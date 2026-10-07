@@ -278,6 +278,63 @@ let item_header st idx (it : Sidebar_state.item) =
             [] ]
     ]
 
+(* cljs onboarding.cljs help pane: .help.cp__sidebar-help-docs is a
+   flat sequence of p.mt-4.mb-1 > b section titles and ul lists of
+   li > a rows (circle markers). Links point at external docs; the
+   first li is an action opening the shortcut-settings pane.
+   The cljs Development section (roadmap/bug/feature/changelog) is
+   intentionally dropped — requested by the product owner. *)
+let help_pane st =
+  let ext_item ~key label url =
+    box ~key ~style_class:"ls-hp-item"
+      [ link ~url ~target:`blank ~style_class:"ls-hp-link" ~text:label [] ]
+  in
+  let icon_item ~key label ic =
+    box ~key ~style_class:"ls-hp-item"
+      [ text ~style_class:"ls-hp-link ls-hp-iconrow"
+          ~on_press:(fun _ ->
+            Sidebar_state.open_sticky_item st "shortcut-settings")
+          [ row ~cross:`center ~gap:4
+              [ text ~value:label []
+              ; icon_ ~size:18 ic ] ]
+      ]
+  in
+  let icon_ext_item ~key label ic url =
+    box ~key ~style_class:"ls-hp-item"
+      [ link ~url ~target:`blank ~style_class:"ls-hp-link"
+          [ row ~cross:`center ~gap:4
+              [ text ~value:label []
+              ; icon_ ~size:18 ic ] ] ]
+  in
+  let section key title items =
+    [ text ~key:("hpt-" ^ key) ~style_class:"ls-hp-title" ~value:title []
+    ; box ~key:("hpu-" ^ key) ~style_class:"ls-hp-list" items ]
+  in
+  box ~key:"help-docs" ~style_class:"help cp__sidebar-help-docs"
+    (section "usage" (t "help/usage-title")
+       [ icon_item ~key:"li-shortcuts" (t "help.shortcuts/label")
+           "command"
+       ; ext_item ~key:"li-docs" (t "help/docs")
+           "https://docs.logseq.com/"
+       ; ext_item ~key:"li-start" (t "help/start")
+           "https://docs.logseq.com/#/page/tutorial"
+       ; ext_item ~key:"li-faq" "FAQ"
+           "https://docs.logseq.com/#/page/faq" ]
+    @ section "community" (t "help/community-title")
+        [ ext_item ~key:"li-awesome" (t "help/awesome-logseq")
+            "https://github.com/logseq/awesome-logseq"
+        ; ext_item ~key:"li-blog" (t "help/blog") "https://blog.logseq.com"
+        ; icon_ext_item ~key:"li-forum" (t "help/forum-community")
+            "message-circle" "https://discuss.logseq.com" ]
+    @ section "about" (t "help/about-title")
+        [ ext_item ~key:"li-about" (t "help/about")
+            "https://blog.logseq.com/about/" ]
+    @ section "terms" (t "help/terms-title")
+        [ ext_item ~key:"li-privacy" (t "help/privacy")
+            "https://blog.logseq.com/privacy-policy/"
+        ; ext_item ~key:"li-terms" (t "help/terms")
+            "https://blog.logseq.com/terms/" ])
+
 (* cljs sidebar-page-properties: ghost toggle + db-properties-cp +
    hr.my-4. collapsed? = (not class?) — class pages start expanded.
    The area mounts declaratively inside the host div. *)
@@ -365,6 +422,16 @@ let item_body st idx (it : Sidebar_state.item) =
             ~style_class:"cp__cmdk__block rounded-md"
             [ Cmdk_view.sidebar ~query:it.title ]
         ]
+  | "help" ->
+      (* cljs :help items mount onboarding/help directly in
+         .sidebar-panel-content — no page-inner/blocks wrap *)
+      box ~key:("body-" ^ it.key)
+        ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+        ~style_class:
+          ("sidebar-panel-content"
+           ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
+        ~padding_horizontal:8
+        [ help_pane st ]
   | _ ->
   box ~key:("body-" ^ it.key)
     ~accessibility_identifier:("sidebar-panel-content-" ^ n)

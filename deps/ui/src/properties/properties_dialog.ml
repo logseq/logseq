@@ -46,6 +46,7 @@ type phase =
 type dlg_state =
   { d_target : target
   ; d_remove : bool
+  ; d_anchor : (float * float) option
   ; mutable d_phase : phase
   ; mutable d_phase_sig : phase Signal.state option
   }
@@ -510,9 +511,10 @@ let dialog_content d : t =
      (Signal.value phase_sig))
     context parent
 
-(* the dialog rendered inside .cp__overlays — a centered card; web
-   master's .ls-property-dialog > .ls-property-input maps to the card's
-   column of phase content *)
+(* the dialog rendered inside .cp__overlays: with an anchor point it
+   is the anchored ui__popover-content dropdown master uses (title
+   actions, properties-area buttons); without one it stays a centered
+   card like cljs's unanchored command-palette fallback *)
 let view : t =
  fun context parent ->
   let s = state_signal context.Lui_ui.ui_scheduler in
@@ -520,13 +522,26 @@ let view : t =
      (fun dopt ->
         match dopt with
         | None -> column ~gap:2 []
-        | Some d ->
-            dialog ~text:(I18n.t "property/add-or-change")
-              ~style_class:"ls-property-dialog"
-              ~on_dismiss:(fun _ -> close ())
-              [ card ~padding:8 ~min_width:340 ~max_width:520
-                  [ dialog_content d ]
-              ])
+        | Some d -> (
+            match d.d_anchor with
+            | Some (x, y) ->
+                popover ~key:"prop-pop" ~at:(x, y)
+                  ~style_class:"ui__popover-content"
+                  ~available_height:
+                    (Web_dom.win_inner_height -. y -. 8.)
+                  ~data_attrs:[ ("role", "dialog") ]
+                  ~on_dismiss:(fun _ -> close ())
+                  [ box ~key:"prop-body"
+                      ~style_class:"ls-property-dialog"
+                      [ dialog_content d ]
+                  ]
+            | None ->
+                dialog ~text:(I18n.t "property/add-or-change")
+                  ~style_class:"ls-property-dialog"
+                  ~on_dismiss:(fun _ -> close ())
+                  [ card ~padding:8 ~min_width:340 ~max_width:520
+                      [ dialog_content d ]
+                  ]))
      (Signal.value s))
     context parent
 
@@ -534,15 +549,24 @@ let view : t =
 
 (* a second open replaces the dialog — cljs treats it as the single
    active modal *)
-let open_dialog ?(remove = false) ?(phase = Prop_select) target =
+let open_dialog ?(remove = false) ?(phase = Prop_select) ?anchor target =
   (* a second open replaces every popup — cljs treats it as the single
      active modal *)
   S.close_overlays ();
   S.close_all_view_overlays ();
-  let d = { d_target = target; d_remove = remove; d_phase = phase
-          ; d_phase_sig = None } in
+  let d = { d_target = target; d_remove = remove; d_anchor = anchor
+          ; d_phase = phase; d_phase_sig = None } in
   current := Some d;
   publish (Some d)
+
+(* anchored-open helper for click triggers: measure the element and
+   open the popover at its bottom-left (base-ui align=start) *)
+let open_for_anchor_el ?(remove = false) ?(phase = Prop_select) anchor
+    target =
+  let left, _top, _right, bottom, _w =
+    Web_dom.bounding_rect_fields anchor
+  in
+  open_dialog ~remove ~phase ~anchor:(left, bottom) target
 
 (* ---------- triggers ---------- *)
 

@@ -25,3 +25,9 @@ let page_embed : (string -> Lui_elements.t) ref =
     (fun name ->
       Render_dom.el ~tag:"a" ~style_class:"page-ref"
         ~attrs:[ ("data-ref", name) ] ~text:name [])
+
+(* Read-only block row for view list bodies (cljs block-container).
+   Registered by tree.ml — views_table cannot import the blocks layer
+   (cycle via comments -> render -> views). *)
+let block_row_static : (Model.block -> Lui_elements.t) ref =
+  ref (fun _ -> Render_dom.el ~tag:"div" ~style_class:"ls-block" [])

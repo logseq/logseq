@@ -370,7 +370,9 @@ let session_username = Rtc_flows.username
    on_submit instead; name/autocomplete attrs have no component
    equivalent (fields are read from signal state, not the DOM). *)
 let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
-  column ~key ~gap:12
+  (* cljs .cp__user-login rows stretch to the form width;
+     ls-auth-field carries the cljs label lh-5 + wrapper pb-1 *)
+  column ~key ~gap:12 ~cross:`stretch ~style_class:"ls-auth-field"
     [ label ~key:"l" ~value:caption []
     ; (if secure then secure_field else input ~kind:`text)
         ~key:"i" ~style_class:"ui__input"
@@ -397,18 +399,20 @@ let action_link ~key ctx text_ tab =
     []
 
 let back_link ctx =
-  box ~key:"back"
+  (* stays centered inside the stretch-aligned form columns *)
+  column ~key:"back" ~cross:`center
     [ action_link ~key:"a" ctx (I18n.t "account/back-to-login") Login ]
 
 let login_panel ctx fields =
   let on_submit () = submit ctx fields in
-  column ~key:"f-login" ~gap:16 ~cross:`center
+  column ~key:"f-login" ~gap:16 ~cross:`stretch
     [ input_row ~key:"r-email" ~caption:(I18n.t "account/email")
         ~autofocus:true ~secure:false ~value:fields.email ~on_submit
     ; input_row ~key:"r-pw" ~caption:(I18n.t "account/password")
         ~secure:true ~value:fields.password ~on_submit
     ; submit_btn ~key:"lg-btn" (I18n.t "account/sign-in") on_submit
-    ; column ~key:"lg-foot" ~cross:`center ~gap:4
+    ; column ~key:"lg-foot" ~cross:`center ~gap:0
+        ~style_class:"ls-auth-foot"
         [ row ~key:"f1" ~gap:4
             [ text ~key:"f1a" ~style_class:"ls-auth-muted"
                 ~value:(I18n.t "account/dont-have-account-question" ^ " ")
@@ -425,7 +429,7 @@ let login_panel ctx fields =
 
 let signup_panel ctx fields =
   let on_submit () = signup_submit ctx fields in
-  column ~key:"f-signup" ~gap:16 ~cross:`center
+  column ~key:"f-signup" ~gap:16 ~cross:`stretch
     [ input_row ~key:"r-email" ~caption:(I18n.t "account/email")
         ~autofocus:true ~secure:false ~value:fields.email ~on_submit
     ; input_row ~key:"r-user" ~caption:(I18n.t "account/username")
@@ -440,7 +444,7 @@ let signup_panel ctx fields =
 
 let reset_panel ctx fields =
   let on_submit () = forgot_submit ctx fields in
-  column ~key:"f-reset" ~gap:16 ~cross:`center
+  column ~key:"f-reset" ~gap:16 ~cross:`stretch
     [ input_row ~key:"r-email" ~caption:(I18n.t "account/enter-email")
         ~autofocus:true ~secure:false ~value:fields.email ~on_submit
     ; submit_btn ~key:"rs-btn" (I18n.t "account/send-code") on_submit
@@ -449,7 +453,7 @@ let reset_panel ctx fields =
 
 let reset_confirm_panel ctx fields user =
   let on_submit () = reset_submit ctx fields user in
-  column ~key:"f-rset2" ~gap:16 ~cross:`center
+  column ~key:"f-rset2" ~gap:16 ~cross:`stretch
     [ input_row ~key:"r-code" ~caption:(I18n.t "account/enter-code")
         ~autofocus:true ~secure:false ~value:fields.code ~on_submit
     ; input_row ~key:"r-pw" ~caption:(I18n.t "account/password")
