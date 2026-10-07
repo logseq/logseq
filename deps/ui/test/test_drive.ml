@@ -23,6 +23,11 @@ external ls_get_item : string -> string Js.null = "getItem"
 let session_ref : (Model.t, Action.t) S.t option ref = ref None
 let ms_ref : Model.t Signal.signal option ref = ref None
 
+(* sdk/editor helpers read (Runtime.model ()) — test_main stubs it to a
+   frozen Model.initial; rewire to a drive-controlled ref so sdk tests
+   can stage route_page without touching the live mounted model *)
+let drive_model = ref Model.initial
+
 let mount () =
   Stub_dom.install ();
   let registry = Lui_extension.registry () in
@@ -54,6 +59,7 @@ let mount () =
      Runtime.flush keep their historical flush-before-return contract *)
   Runtime.schedule_flush := (fun cb -> cb ());
   session_ref := Some s;
+  Runtime.read_model := (fun () -> !drive_model);
   s
 
 let s () = Option.get !session_ref
@@ -692,22 +698,83 @@ let snapshot_response = function
       | _ -> W.Map [])
   | _ -> W.Map []
 
-let ent_for uuid : W.t =
+(* sdk test entities — one canonical shape per role so the api methods
+   can exercise uuid/class/property/page resolution *)
+let sdk_u1 = "aa000000-0000-4000-8000-000000000001"
+let sdk_u2 = "aa000000-0000-4000-8000-000000000002"
+let sdk_tag_u = "aa000000-0000-4000-8000-000000000003"
+let sdk_btag_u = "aa000000-0000-4000-8000-000000000004"
+let sdk_prop_u = "aa000000-0000-4000-8000-000000000005"
+let sdk_page_u = "aa000000-0000-4000-8000-000000000006"
+let sdk_dpage_u = "aa000000-0000-4000-8000-000000000007"
+let sdk_parent_u = "aa000000-0000-4000-8000-000000000008"
+
+let sdk_ent_for uuid : W.t option =
   let kw s = W.Keyword s in
-  if uuid = view_uuid then
-    W.Map
-      [ kw "block/uuid", W.Uuid uuid
-      ; kw "db/id", W.Int 42
-      ; kw "block/title", W.String "All"
-      ; ( kw "logseq.property.view/type"
-        , W.Map [ kw "db/ident", kw "logseq.property.view/type.table" ] )
-      ]
-  else
-    W.Map
-      [ kw "block/uuid", W.Uuid uuid
-      ; kw "db/id", W.Int 7
-      ; kw "block/title", W.String ("Row " ^ uuid)
-      ]
+  let ent dbid extra =
+    Some
+      (W.Map
+         ([ kw "block/uuid", W.Uuid uuid; kw "db/id", W.Int dbid ]
+         @ extra))
+  in
+  if uuid = sdk_u1 then ent 11 [ kw "block/title", W.String "B1" ]
+  else if uuid = sdk_u2 then ent 22 [ kw "block/title", W.String "B2" ]
+  else if uuid = sdk_tag_u then
+    ent 33
+      [ kw "block/title", W.String "Tag1"
+      ; ( kw "block/tags"
+        , W.List [ W.Map [ kw "db/ident", kw "logseq.class/Tag" ] ] ) ]
+  else if uuid = sdk_btag_u then
+    ent 44
+      [ kw "block/title", W.String "BTag"
+      ; ( kw "block/tags"
+        , W.List [ W.Map [ kw "db/ident", kw "logseq.class/Tag" ] ] )
+      ; kw "logseq.property/built-in?", W.Bool true ]
+  else if uuid = sdk_prop_u then
+    ent 55
+      [ kw "block/title", W.String "Prop1"
+      ; kw "db/ident", kw "user.property/p1"
+      ; kw "logseq.property/type", kw "default" ]
+  else if uuid = sdk_page_u then
+    ent 66 [ kw "block/title", W.String "P" ]
+  else if uuid = sdk_dpage_u then
+    ent 77
+      [ kw "block/title", W.String "DP"
+      ; kw "logseq.property/deleted-at", W.Int64 1700000000000L ]
+  else if uuid = sdk_parent_u then
+    ent 88 [ kw "block/title", W.String "Parent" ]
+  else None
+
+let sdk_ops_log : W.t list ref = ref []
+let sdk_tx_log : W.t list ref = ref []
+
+let sdk_op_args name =
+  List.concat_map
+    (fun op ->
+      match W.elems op with
+      | [ W.Keyword n; W.Array a ] when n = name -> [ a ]
+      | _ -> [])
+    !sdk_ops_log
+
+let ent_for uuid : W.t =
+  match sdk_ent_for uuid with
+  | Some e -> e
+  | None ->
+      let kw s = W.Keyword s in
+      if uuid = view_uuid then
+        W.Map
+          [ kw "block/uuid", W.Uuid uuid
+          ; kw "db/id", W.Int 42
+          ; kw "block/title", W.String "All"
+          ; ( kw "logseq.property.view/type"
+            , W.Map [ kw "db/ident", kw "logseq.property.view/type.table" ] )
+          ]
+      else
+        W.Map
+          [ kw "block/uuid", W.Uuid uuid
+          ; kw "db/id", W.Int 7
+          ; kw "block/title", W.String ("Row " ^ uuid)
+          ]
 
 let blocks_response = function
   | Some (W.Array reqs) ->
@@ -716,7 +783,7 @@ let blocks_response = function
            (fun req ->
              let u =
                match W.get req "id" with
-               | Some (W.Uuid u) -> u
+               | Some (W.Uuid u) | Some (W.String u) -> u
                | _ -> "?"
              in
              W.Map
@@ -756,6 +823,37 @@ let worker_handler name args : W.t =
   | "thread-api/get-all-properties" -> W.List []
   | "thread-api/get-render-snapshots" ->
       snapshot_response (List.nth_opt args 1)
+  | "thread-api/apply-outliner-ops" -> (
+      (match List.nth_opt args 1 with
+       | Some (W.Array ops) -> sdk_ops_log := !sdk_ops_log @ ops
+       | _ -> ());
+      W.Map [ W.Keyword "result", W.Nil ])
+  | "thread-api/validate-block-tag" -> (
+      match List.nth_opt args 2 with
+      | Some (W.Int 33) ->
+          W.Map [ W.Keyword "valid?", W.Bool true ]
+      | _ ->
+          W.Map
+            [ W.Keyword "valid?", W.Bool false
+            ; ( W.Keyword "payload"
+              , W.Map
+                  [ W.Keyword "message", W.String "invalid pair"
+                  ; W.Keyword "type", W.String "error" ] ) ])
+  | "thread-api/transact" -> (
+      (match List.nth_opt args 1 with
+       | Some tx -> sdk_tx_log := !sdk_tx_log @ [ tx ]
+       | _ -> ());
+      W.Nil)
+  | "thread-api/get-block-parent" ->
+      W.Map [ W.Keyword "block/uuid", W.Uuid sdk_parent_u ]
+  | "thread-api/api-list-tags" ->
+      W.List [ W.Map [ W.Keyword "block/title", W.String "TagOne" ] ]
+  | "thread-api/api-get-page-data" -> W.Nil
+  | "thread-api/export-edn" ->
+      W.Map [ W.Keyword "export-body", W.String "{:x 1}" ]
+  | "thread-api/search-blocks" -> W.List []
+  | "thread-api/query-custom" | "thread-api/query-dsl-custom-query" ->
+      W.Array [ W.Array [ ent_for sdk_u1 ] ]
   | _ -> W.Nil
 
 let rec after n f =
@@ -1010,6 +1108,332 @@ let test_journal_reorder_move_collapse () =
   flush ();
   check "expand remounts children" (find_block "r2c" <> None)
 
+(* ---------------- logseq.api surface ----------------
+
+   The sdk bridge methods round-trip through Runtime.invoke; the fake
+   worker resolves synchronously so each api call's promise settles
+   during the runner's `after` drain. Write ops are asserted on the
+   recorded apply-outliner-ops payload, reads on the canned replies. *)
+
+let sdk_expect name p f =
+  ignore
+    (Js.Promise.then_
+       (fun j -> check name (f j); Js.Promise.resolve ())
+       p)
+
+let sdk_expect_reject name p =
+  ignore
+    (Js.Promise.catch
+       (fun _ -> check name true; Js.Promise.resolve ())
+       (Js.Promise.then_
+          (fun _ -> check name false; Js.Promise.resolve ())
+          p))
+
+let sdk_json_get j k =
+  Option.bind (Js.Json.decodeObject j) (fun o -> Js.Dict.get o k)
+
+let test_sdk_api () =
+  let jstr s = Js.Json.string s in
+  let null = Js.Json.null in
+  let jobj pairs = Js.Json.object_ (Js.Dict.fromList pairs) in
+  sdk_ops_log := [];
+  sdk_tx_log := [];
+  (* writes: op payload assertions *)
+  sdk_expect_reject "sdk rename_page rejects non-uuid"
+    (Sdk_write.rename_page (jstr "not-a-page") (jstr "X") null null);
+  sdk_expect "sdk rename_page emits rename-page"
+    (Sdk_write.rename_page (jstr sdk_page_u) (jstr "NewT") null null)
+    (fun j ->
+      Js.Json.decodeBoolean j = Some true
+      && List.mem [ W.Uuid sdk_page_u; W.String "NewT" ]
+           (sdk_op_args "rename-page"));
+  sdk_expect "sdk move_block default moves as sibling"
+    (Sdk_write.move_block (jstr sdk_u1) (jstr sdk_u2) null null)
+    (fun _ ->
+      List.mem
+        [ W.Array [ W.Uuid sdk_u1 ]
+        ; W.Uuid sdk_u2
+        ; W.Map [ W.Keyword "sibling?", W.Bool true ] ]
+        (sdk_op_args "move-blocks"));
+  sdk_expect "sdk move_block children nests"
+    (Sdk_write.move_block (jstr sdk_u1) (jstr sdk_u2)
+       (jobj [ "children", Js.Json.boolean true ]) null)
+    (fun _ ->
+      List.mem
+        [ W.Array [ W.Uuid sdk_u1 ]
+        ; W.Uuid sdk_u2
+        ; W.Map [ W.Keyword "sibling?", W.Bool false ] ]
+        (sdk_op_args "move-blocks"));
+  sdk_expect "sdk move_block before moves to parent top"
+    (Sdk_write.move_block (jstr sdk_u1) (jstr sdk_u2)
+       (jobj [ "before", Js.Json.boolean true ]) null)
+    (fun _ ->
+      List.mem
+        [ W.Array [ W.Uuid sdk_u1 ]
+        ; W.Uuid sdk_parent_u
+        ; W.Map [ W.Keyword "top?", W.Bool true ] ]
+        (sdk_op_args "move-blocks"));
+  (* tags *)
+  sdk_expect "sdk add_block_tag validates then applies"
+    (Sdk_write.add_block_tag (jstr sdk_u1) (jstr sdk_tag_u) null null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_u1; W.Keyword "block/tags"; W.Int 33 ]
+        (sdk_op_args "set-block-property"));
+  sdk_expect "sdk add_block_tag invalid applies nothing"
+    (Sdk_write.add_block_tag (jstr sdk_u1) (jstr sdk_btag_u) null null)
+    (fun _ ->
+      not
+        (List.mem
+           [ W.Uuid sdk_u1; W.Keyword "block/tags"; W.Int 44 ]
+           (sdk_op_args "set-block-property")));
+  sdk_expect "sdk remove_block_tag deletes property value"
+    (Sdk_write.remove_block_tag (jstr sdk_u1) (jstr sdk_tag_u) null null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_u1; W.Keyword "block/tags"; W.Int 33 ]
+        (sdk_op_args "delete-property-value"));
+  sdk_expect "sdk add_tag_extends sets class/extends"
+    (Sdk_write.add_tag_extends (jstr sdk_tag_u) (jstr sdk_tag_u) null null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_tag_u
+        ; W.Keyword "logseq.property.class/extends"
+        ; W.Int 33 ]
+        (sdk_op_args "set-block-property"));
+  sdk_expect_reject "sdk add_tag_extends rejects built-in tag"
+    (Sdk_write.add_tag_extends (jstr sdk_btag_u) (jstr sdk_tag_u) null null);
+  sdk_expect_reject "sdk add_tag_extends rejects non-tag"
+    (Sdk_write.add_tag_extends (jstr sdk_u1) (jstr sdk_tag_u) null null);
+  sdk_expect "sdk remove_tag_extends deletes class/extends"
+    (Sdk_write.remove_tag_extends (jstr sdk_tag_u) (jstr sdk_tag_u) null null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_tag_u
+        ; W.Keyword "logseq.property.class/extends"
+        ; W.Int 33 ]
+        (sdk_op_args "delete-property-value"));
+  sdk_expect "sdk add_tag_property adds class property"
+    (Sdk_write.add_tag_property (jstr sdk_tag_u) (jstr sdk_prop_u) null null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_tag_u; W.Keyword "user.property/p1" ]
+        (sdk_op_args "class-add-property"));
+  sdk_expect "sdk remove_tag_property removes class property"
+    (Sdk_write.remove_tag_property (jstr sdk_tag_u) (jstr sdk_prop_u) null null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_tag_u; W.Keyword "user.property/p1" ]
+        (sdk_op_args "class-remove-property"));
+  sdk_expect "sdk set_property_node_tags applies ids"
+    (Sdk_write.set_property_node_tags (jstr sdk_prop_u)
+       (Js.Json.array [| Js.Json.number 7. |]) null null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_prop_u
+        ; W.Keyword "logseq.property/classes"
+        ; W.Array [ W.Int 7 ] ]
+        (sdk_op_args "set-block-property"));
+  sdk_expect_reject "sdk set_property_node_tags rejects non-number"
+    (Sdk_write.set_property_node_tags (jstr sdk_prop_u)
+       (Js.Json.array [| jstr "x" |]) null null);
+  sdk_expect_reject "sdk set_property_node_tags rejects non-property"
+    (Sdk_write.set_property_node_tags (jstr sdk_u1)
+       (Js.Json.array [| Js.Json.number 7. |]) null null);
+  (* icons *)
+  sdk_expect "sdk set_block_icon applies icon property"
+    (Sdk_write.set_block_icon (jstr sdk_u1) (jstr "tabler-icon")
+       (jstr "IconBolt") null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_u1
+        ; W.Keyword "logseq.property/icon"
+        ; W.Map
+            [ W.Keyword "type", W.Keyword "tabler-icon"
+            ; W.Keyword "id", W.String "IconBolt" ] ]
+        (sdk_op_args "set-block-property"));
+  sdk_expect_reject "sdk set_block_icon rejects bad type"
+    (Sdk_write.set_block_icon (jstr sdk_u1) (jstr "bogus") (jstr "x") null);
+  sdk_expect_reject "sdk set_block_icon rejects blank name"
+    (Sdk_write.set_block_icon (jstr sdk_u1) (jstr "tabler-icon") (jstr " ")
+       null);
+  sdk_expect "sdk remove_block_icon removes icon property"
+    (Sdk_write.remove_block_icon (jstr sdk_u1) null null null)
+    (fun _ ->
+      List.mem
+        [ W.Uuid sdk_u1; W.Keyword "logseq.property/icon" ]
+        (sdk_op_args "remove-block-property"));
+  (* page lifecycle *)
+  sdk_expect "sdk restore_page emits restore-recycled"
+    (Sdk_write.restore_page (jstr sdk_dpage_u) null null null)
+    (fun _ ->
+      List.mem [ W.Uuid sdk_dpage_u ]
+        (sdk_op_args "restore-recycled"));
+  sdk_expect "sdk delete_recycled_page_permanently skips live page"
+    (Sdk_write.delete_recycled_page_permanently (jstr sdk_page_u) null null
+       null)
+    (fun _ ->
+      not
+        (List.mem [ W.Uuid sdk_page_u ]
+           (sdk_op_args "recycle-delete-permanently")));
+  sdk_expect "sdk delete_recycled_page_permanently deletes recycled"
+    (Sdk_write.delete_recycled_page_permanently (jstr sdk_dpage_u) null null
+       null)
+    (fun _ ->
+      List.mem [ W.Uuid sdk_dpage_u ]
+        (sdk_op_args "recycle-delete-permanently"));
+  sdk_expect "sdk prepend_block_in_page inserts"
+    (Sdk_write.prepend_block_in_page (jstr sdk_page_u) (jstr "hi") null null)
+    (fun _ -> sdk_op_args "insert-blocks" <> []);
+  (* misc writes *)
+  sdk_expect "sdk new_block_uuid returns a uuid"
+    (Sdk_write.new_block_uuid null null null null)
+    (fun j ->
+      match Js.Json.decodeString j with
+      | Some s -> String.length s = 36 && String.get s 8 = '-'
+      | None -> false);
+  sdk_expect "sdk force_save_graph true"
+    (Sdk_write.force_save_graph null null null null)
+    (fun j -> Js.Json.decodeBoolean j = Some true);
+  sdk_expect_reject "sdk set_file_content rejects bad path"
+    (Sdk_write.set_file_content (jstr "bad/path") (jstr "x") null null);
+  sdk_expect_reject "sdk set_file_content rejects non-string"
+    (Sdk_write.set_file_content (jstr "logseq/custom.js") (jobj []) null null);
+  sdk_expect "sdk set_file_content transacts file entity"
+    (Sdk_write.set_file_content (jstr "logseq/custom.js") (jstr "x") null null)
+    (fun j ->
+      Js.Json.decodeBoolean j = Some true
+      && (match !sdk_tx_log with
+         | [ W.Array [ m ] ] ->
+             W.get m "file/path" = Some (W.String "logseq/custom.js")
+             && W.get m "file/content" = Some (W.String "x")
+         | _ -> false));
+  (* reads *)
+  sdk_expect "sdk get_current_graph_favorites"
+    (Sdk_read.get_current_graph_favorites null null null null)
+    (fun j ->
+      match Js.Json.decodeArray j with
+      | Some a -> Array.length a = 1
+      | None -> false);
+  sdk_expect "sdk get_current_graph_recent"
+    (Sdk_read.get_current_graph_recent null null null null)
+    (fun j -> Js.Json.decodeArray j <> None);
+  sdk_expect "sdk list_tags keeps kebab keys"
+    (Sdk_read.list_tags null null null null)
+    (fun j ->
+      match Js.Json.decodeArray j with
+      | Some [| t |] ->
+          sdk_json_get t "title" = Some (Js.Json.string "TagOne")
+      | _ -> false);
+  sdk_expect "sdk get_page_data reports missing page"
+    (Sdk_read.get_page_data (jstr "Nope") null null null)
+    (fun j ->
+      match sdk_json_get j "error" with
+      | Some e -> (
+          match Js.Json.decodeString e with
+          | Some s ->
+              String.length s > 9
+              && String.sub s (String.length s - 9) 9 = "not found"
+          | None -> false)
+      | None -> false);
+  sdk_expect "sdk search returns blocks shape"
+    (Sdk_read.search (jstr "b1") null null null)
+    (fun j -> sdk_json_get j "blocks" <> None);
+  sdk_expect "sdk export_edn returns export-body"
+    (Sdk_read.export_edn null null null null)
+    (fun j -> sdk_json_get j "export-body" <> None);
+  sdk_expect "sdk get_file_content"
+    (Sdk_read.get_file_content (jstr "logseq/config.edn") null null null)
+    (fun j ->
+      match Js.Json.decodeString j with
+      | Some s -> String.length s > 0
+      | None -> false);
+  sdk_expect "sdk custom_query datalog flattens rows"
+    (Sdk_read.custom_query
+       (jstr "[:find ?b :where [?b :block/title \"B1\"]]")
+       null null null)
+    (fun j ->
+      match Js.Json.decodeArray j with
+      | Some a -> Array.length a = 1
+      | None -> false);
+  sdk_expect "sdk custom_query dsl flattens rows"
+    (Sdk_read.custom_query (jstr "(and [[B1]])") null null null)
+    (fun j ->
+      match Js.Json.decodeArray j with
+      | Some a -> Array.length a = 1
+      | None -> false);
+  sdk_expect "sdk get_all_pages returns array"
+    (Sdk_read.get_all_pages null null null null)
+    (fun j -> Js.Json.decodeArray j <> None);
+  sdk_expect "sdk get_today_page returns entity"
+    (Sdk_read.get_today_page null null null null)
+    (fun j -> Js.Json.decodeObject j <> None);
+  (* editor / ui state *)
+  sdk_expect "sdk check_editing false"
+    (Sdk_ui.check_editing null null null null)
+    (fun j -> Js.Json.decodeBoolean j = Some false);
+  sdk_expect "sdk select_block selects uuid"
+    (Sdk_ui.select_block (jstr sdk_u1) null null null)
+    (fun _ -> Editor_state.is_selected sdk_u1);
+  sdk_expect "sdk clear_selected_blocks"
+    (Sdk_ui.clear_selected_blocks null null null null)
+    (fun _ -> not (Editor_state.is_selected sdk_u1));
+  (* collapse only applies to blocks with children — stage one in
+     route_page *)
+  drive_model :=
+    { !drive_model with
+      Model.route_page =
+        Some (page [ block sdk_u1 "sdkp1" ~children:[ block sdk_u2 "sdkp2" ] ])
+    };
+  sdk_expect "sdk set_block_collapsed collapses"
+    (Sdk_ui.set_block_collapsed (jstr sdk_u1) (Js.Json.boolean true) null
+       null)
+    (fun _ -> Editor_state.is_collapsed_in sdk_u1);
+  sdk_expect_reject "sdk edit_block rejects non-uuid"
+    (Sdk_ui.edit_block (jstr "nope") null null null);
+  sdk_expect "sdk query_element_by_id missing -> false"
+    (Sdk_ui.query_element_by_id (jstr "no-such-el") null null null)
+    (fun j -> Js.Json.decodeBoolean j = Some false);
+  sdk_expect "sdk get_current_route reports page"
+    (Sdk_ui.get_current_route null null null null)
+    (fun j -> sdk_json_get j "to" = Some (Js.Json.string "page"));
+  sdk_expect "sdk set_left_sidebar_visible resolves"
+    (Sdk_ui.set_left_sidebar_visible (Js.Json.boolean false) null null null)
+    (fun _ -> true);
+  sdk_expect "sdk set_right_sidebar_visible resolves"
+    (Sdk_ui.set_right_sidebar_visible (Js.Json.boolean false) null null null)
+    (fun _ -> true);
+  (* restore sidebar items so async_checks still finds them *)
+  let saved_items =
+    match Sidebar_state.current () with
+    | Some st -> Signal.get_state st.Sidebar_state.items
+    | None -> []
+  in
+  sdk_expect "sdk clear_right_sidebar_blocks clears items"
+    (Sdk_ui.clear_right_sidebar_blocks (jobj []) null null null)
+    (fun _ ->
+      let cleared =
+        match Sidebar_state.current () with
+        | Some st -> Signal.get_state st.Sidebar_state.items = []
+        | None -> true
+      in
+      (match Sidebar_state.current () with
+       | Some st -> Runtime.signal_set st.Sidebar_state.items saved_items
+       | None -> ());
+      cleared);
+  sdk_expect "sdk get_current_page_blocks_tree null without page"
+    (Sdk_read.get_current_page_blocks_tree null null null null)
+    (fun j -> j == Js.Json.null);
+  sdk_expect "sdk get_current_block null when not editing"
+    (Sdk_read.get_current_block null null null null)
+    (fun j -> j == Js.Json.null || Js.Json.decodeObject j <> None);
+  sdk_expect "sdk get_previous_sibling_block resolves"
+    (Sdk_read.get_previous_sibling_block (jstr sdk_u1) null null null)
+    (fun _ -> true);
+  sdk_expect "sdk get_page_linked_references resolves"
+    (Sdk_read.get_page_linked_references (jstr sdk_page_u) null null null)
+    (fun _ -> true)
+
 (* ---------------- runner ---------------- *)
 
 let run ~finish =
@@ -1037,6 +1461,7 @@ let run ~finish =
   test_page_splice_row_level ();
   test_journal_reorder_move_collapse ();
   test_custom_macro_page ();
+  test_sdk_api ();
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)

@@ -516,3 +516,21 @@ let entity_of_arg j =
   | Wire.Uuid u -> get_by_id (Wire.String u)
   | Wire.Int _ | Wire.Keyword _ as id -> get_by_id id
   | _ -> resolved Wire.Nil
+
+(* js-object wire (String keys) -> keyword-keyed wire, recursive —
+   (js->clj m :keywordize-keys true) for worker opts *)
+let rec keywordize_keys (w : Wire.t) : Wire.t =
+  match w with
+  | Wire.Map kvs ->
+      Wire.Map
+        (List.map
+           (fun (k, v) ->
+             ( (match k with
+                | Wire.String s -> Wire.Keyword s
+                | other -> other)
+             , keywordize_keys v ))
+           kvs)
+  | Wire.Array xs -> Wire.Array (List.map keywordize_keys xs)
+  | Wire.List xs -> Wire.List (List.map keywordize_keys xs)
+  | Wire.Set xs -> Wire.Set (List.map keywordize_keys xs)
+  | other -> other
