@@ -117,13 +117,13 @@ let view_overlays (context : Lui_ui.ui_context) =
 
 let push_view_overlay context ~key ~view ~on_escape =
   let s = view_overlays_state_of context in
-  let cur = Signal.get_state s in
+  let cur = Runtime.signal_get s in
   let cur = List.filter (fun o -> o.vo_key <> key) cur in
   Signal.set s (cur @ [ { vo_key = key; vo_view = view; vo_on_escape = on_escape } ])
 
 let pop_view_overlay context =
   let s = view_overlays_state_of context in
-  match List.rev (Signal.get_state s) with
+  match List.rev (Runtime.signal_get s) with
   | top :: rest ->
       Signal.set s (List.rev rest);
       top.vo_on_escape ()
@@ -142,7 +142,7 @@ let close_all_view_overlays () =
 
 let view_overlay_open () =
   match !view_overlays_state with
-  | Some s -> Signal.get_state s <> []
+  | Some s -> Runtime.signal_get s <> []
   | None -> false
 
 (* Escape pops the top view overlay — context-free for the document
@@ -150,7 +150,7 @@ let view_overlay_open () =
 let handle_view_escape () =
   match !view_overlays_state with
   | Some s -> (
-      match List.rev (Signal.get_state s) with
+      match List.rev (Runtime.signal_get s) with
       | top :: rest ->
           Runtime.signal_set s (List.rev rest);
           top.vo_on_escape ();
@@ -292,7 +292,7 @@ let drop_row ~owner_uuid ~title =
            = suffix
       then
         Runtime.signal_set a.a_state
-          (drop_title_of (Signal.get_state a.a_state) title))
+          (drop_title_of (Runtime.signal_get a.a_state) title))
     areas
 
 (* Debounced global refresh: collapses bursts of tx broadcasts into one

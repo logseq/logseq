@@ -134,7 +134,7 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
 
 let submit ctx =
   let st = st ctx in
-  let cur = Signal.get_state st in
+  let cur = Runtime.signal_get st in
   if cur.publishing then ()
   else begin
     Signal.update st (fun s -> { s with publishing = true });

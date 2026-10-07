@@ -237,8 +237,8 @@ let cognito_call ctx target payload f_ok =
   |> ignore
 
 let submit ctx fields =
-  let user = Signal.get_state fields.email
-  and pass = Signal.get_state fields.password in
+  let user = Runtime.signal_get fields.email
+  and pass = Runtime.signal_get fields.password in
   if user = "" || pass = "" then ()
   else
     let init =
@@ -270,10 +270,10 @@ let submit ctx fields =
 let json_obj xs = Js.Json.object_ (Js.Dict.fromList xs)
 
 let signup_submit ctx fields =
-  let email = Signal.get_state fields.email
-  and user = Signal.get_state fields.username
-  and pass = Signal.get_state fields.password
-  and confirm = Signal.get_state fields.confirm_password in
+  let email = Runtime.signal_get fields.email
+  and user = Runtime.signal_get fields.username
+  and pass = Runtime.signal_get fields.password
+  and confirm = Runtime.signal_get fields.confirm_password in
   if user = "" || pass = "" || email = "" then ()
   else if not (validate_password ctx pass) then ()
   else if pass <> confirm then
@@ -308,7 +308,7 @@ let signup_submit ctx fields =
         Js.Promise.resolve ())
 
 let forgot_submit ctx fields =
-  let user = Signal.get_state fields.email in
+  let user = Runtime.signal_get fields.email in
   if user = "" then ()
   else
     let payload =
@@ -322,9 +322,9 @@ let forgot_submit ctx fields =
         Js.Promise.resolve ())
 
 let reset_submit ctx fields user =
-  let code = Signal.get_state fields.code
-  and pass = Signal.get_state fields.password
-  and confirm = Signal.get_state fields.confirm_password in
+  let code = Runtime.signal_get fields.code
+  and pass = Runtime.signal_get fields.password
+  and confirm = Runtime.signal_get fields.confirm_password in
   if code = "" || pass = "" then ()
   else if not (validate_password ctx pass) then ()
   else if pass <> confirm then
@@ -343,7 +343,7 @@ let reset_submit ctx fields user =
         Js.Promise.resolve ())
 
 let confirm_submit ctx fields user _next_step =
-  let code = Signal.get_state fields.code in
+  let code = Runtime.signal_get fields.code in
   if code = "" then ()
   else
     let payload =

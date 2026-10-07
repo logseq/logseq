@@ -276,13 +276,13 @@ let view ~placeholder ?new_option ?(on_enter_text = None)
   let sched = context.Lui_ui.ui_scheduler in
   let st = Signal.state sched { q = ""; searched = None } in
   let visible () =
-    let s = Signal.get_state st in
+    let s = Runtime.signal_get st in
     visible_items ~items ~filter:s.q ~searched:s.searched ~new_option
   in
   let pick () =
     let vis = visible () in
     if vis = [] then (
-      match on_enter_text, String.trim (Signal.get_state st).q with
+      match on_enter_text, String.trim (Runtime.signal_get st).q with
       | Some f, t when t <> "" -> f t
       | _ -> ())
     else
@@ -342,7 +342,7 @@ let view ~placeholder ?new_option ?(on_enter_text = None)
                     ignore
                       (let* found = search q in
                        (* stale guard — a later keystroke owns the list *)
-                       if (Signal.get_state st).q = q then
+                       if (Runtime.signal_get st).q = q then
                          Runtime.signal_set st
                            { q; searched = Some found };
                        Js.Promise.resolve ())

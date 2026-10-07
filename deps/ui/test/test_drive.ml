@@ -49,6 +49,10 @@ let mount () =
     (fun () ->
       ignore (Lui_app.flush s.S.app);
       Editor_actions.focus_pending ());
+  (* Runtime.flush defers through schedule_flush on a real host; in the
+     synchronous test timeline run the callback inline so signal_set /
+     Runtime.flush keep their historical flush-before-return contract *)
+  Runtime.schedule_flush := (fun cb -> cb ());
   session_ref := Some s;
   s
 

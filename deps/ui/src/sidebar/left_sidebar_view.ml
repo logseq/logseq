@@ -93,7 +93,7 @@ let nav_edit_menu st =
         Sidebar_state.toggle_nav st nav
           (not
              (List.mem nav
-                (Signal.get_state st.Sidebar_state.nav_checked))))
+                (Runtime.signal_get st.Sidebar_state.nav_checked))))
       []
   in
   box ~key:"nav-edit-menu"

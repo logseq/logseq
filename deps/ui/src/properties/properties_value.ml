@@ -476,9 +476,9 @@ let scalar_edit_cell ctx row : t =
   in
   let buffer = Signal.state sched initial in
   let commit save =
-    if not (Signal.get_state editing) then ()
+    if not (Runtime.signal_get editing) then ()
     else (
-      let v = Signal.get_state buffer in
+      let v = Runtime.signal_get buffer in
       clear_active_edit ctx row;
       Runtime.signal_set editing false;
       if save then commit_or_cancel ctx row v else ctx.refresh ())
@@ -486,12 +486,12 @@ let scalar_edit_cell ctx row : t =
   let open_editor ~steal () =
     !close_editor ();
     add_active_edit ctx row;
-    set_edit_buffer ctx row (Signal.get_state buffer);
+    set_edit_buffer ctx row (Runtime.signal_get buffer);
     Runtime.signal_set editing true;
     close_editor := (fun () -> commit true);
     if steal then !(Editor_state.close_block_editor) ()
   in
-  if Signal.get_state editing then (
+  if Runtime.signal_get editing then (
     add_active_edit ctx row;
     close_editor := (fun () -> commit true));
   (column ~gap:0 ~grow:1.0
@@ -503,7 +503,7 @@ let scalar_edit_cell ctx row : t =
             open_editor registers active_editor — read the local buffer
             (seeded with the current value) instead of edit_buffer *)
          (text_field ~autofocus:true
-            ~text:(Signal.get_state buffer)
+            ~text:(Runtime.signal_get buffer)
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, t) ->
@@ -581,7 +581,7 @@ let date_view ctx row : t =
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
             [ text_field ~autofocus:true
-                ~text:(Signal.get_state buffer)
+                ~text:(Runtime.signal_get buffer)
                 ~on_input:(fun ev ->
                   match ev with
                   | Lui_protocol.TextChanged (_, t) ->
@@ -589,7 +589,7 @@ let date_view ctx row : t =
                   | _ -> ())
                 ~on_submit:(fun _ ->
                   commit_date_text ctx ident ~is_datetime
-                    (Signal.get_state buffer);
+                    (Runtime.signal_get buffer);
                   Runtime.signal_set open_ false)
                 []
             ])
@@ -681,7 +681,7 @@ let extends_view ctx row : t =
            Js.Promise.resolve ())
   in
   let toggle id =
-    match Signal.get_state picker_st with
+    match Runtime.signal_get picker_st with
     | None -> ()
     | Some (options, selected) ->
         let selected' =

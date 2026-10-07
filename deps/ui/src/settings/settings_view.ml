@@ -173,7 +173,7 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
           ~text_signal:(Signal.value st)
           ~style_class:("ui__select-trigger " ^ h_cls)
           ~on_press:(fun _ev ->
-            Signal.set mst (not (Signal.get_state mst));
+            Signal.set mst (not (Runtime.signal_get mst));
             Runtime.flush ())
           []
       ; reactive ~equal:( == ) (fun open_ ->

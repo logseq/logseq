@@ -54,7 +54,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
     (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let url = Signal.state ctx.ui_scheduler (Option.value (get_url storage_key) ~default:"") in
-  let read_input () = Signal.get_state url in
+  let read_input () = Runtime.signal_get url in
   let reset () =
     Platform.local_storage_remove storage_key;
     on_saved ();
@@ -84,7 +84,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
               ; input ~key:(key ^ "-in")
                   ~accessibility_identifier:(key ^ "-input")
                   ~style_class:"form-input is-small"
-                  ~text:(Signal.get_state url) ~placeholder
+                  ~text:(Runtime.signal_get url) ~placeholder
                   ~on_input:(fun ev ->
                     match ev with
                     | Lui_protocol.TextChanged (_, q) ->
@@ -104,7 +104,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                    ~on_press:(fun _ -> save ())
                    [] ]
               @
-              if Signal.get_state url = "" then []
+              if Runtime.signal_get url = "" then []
               else
                 [ button ~key:(key ^ "-reset")
                     ~variant:(Settings_controls.btn_variant `Outline)

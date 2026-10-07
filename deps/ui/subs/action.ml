@@ -57,3 +57,45 @@ type t =
       } (* latest rtc.log sub-type activity — downloading-detail /
            uploading-detail header buttons *)
   | Noop
+
+(* short constructor name for perf attribution — __uiPerf labels *)
+let tag (a : t) : string =
+  match a with
+  | Boot_graph_ready _ -> "boot-graph-ready"
+  | Graph_closed -> "graph-closed"
+  | Repos_loaded _ -> "repos-loaded"
+  | Page_loaded _ -> "page-loaded"
+  | Page_load_failed -> "page-load-failed"
+  | Journals_loaded _ -> "journals-loaded"
+  | Journals_spliced _ -> "journals-spliced"
+  | Refs_loaded _ -> "refs-loaded"
+  | Ref_parents_loaded _ -> "ref-parents-loaded"
+  | Unlinked_loaded _ -> "unlinked-loaded"
+  | Unlinked_exists _ -> "unlinked-exists"
+  | Navigate_to _ -> "navigate-to"
+  | Worker_event (n, _) -> "worker-event:" ^ n
+  | Refresh_page -> "refresh-page"
+  | Toggle_left_sidebar -> "toggle-left-sidebar"
+  | Toggle_right_sidebar -> "toggle-right-sidebar"
+  | Toggle_search -> "toggle-search"
+  | Block_content_changed _ -> "block-content-changed"
+  | Title_edit_start -> "title-edit-start"
+  | Title_edit_done -> "title-edit-done"
+  | Page_menu_set _ -> "page-menu-set"
+  | Appearance_set _ -> "appearance-set"
+  | Confirm_set _ -> "confirm-set"
+  | Dismiss_all -> "dismiss-all"
+  | Toast_push _ -> "toast-push"
+  | Toast_dismiss _ -> "toast-dismiss"
+  | Toast_dismiss_key _ -> "toast-dismiss-key"
+  | Toasts_clear -> "toasts-clear"
+  | Unlinked_toggle_open -> "unlinked-toggle-open"
+  | Unlinked_toggle_search -> "unlinked-toggle-search"
+  | Unlinked_set_query _ -> "unlinked-set-query"
+  | Help_toggle -> "help-toggle"
+  | Rtc_state _ -> "rtc-state"
+  | Rtc_state_clear -> "rtc-state-clear"
+  | Search_index_progress _ -> "search-index-progress"
+  | Search_index_hide _ -> "search-index-hide"
+  | Rtc_flow_flags _ -> "rtc-flow-flags"
+  | Noop -> "noop"

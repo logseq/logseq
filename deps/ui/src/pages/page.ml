@@ -214,7 +214,7 @@ let title_editor (page : Model.page) : t =
   let commit ?(select = false) () =
     let value =
       String.trim
-        (Signal.get model_st.Signal.state_signal).Edit_model.source
+        (Runtime.signal_get model_st).Edit_model.source
     in
     (match page.page_uuid with
      | Some u ->
@@ -246,7 +246,7 @@ let title_editor (page : Model.page) : t =
     ; menu = (fun _ -> ()) }
   in
   let on_input ev =
-    let m = Signal.get model_st.Signal.state_signal in
+    let m = Runtime.signal_get model_st in
     match ev with
     | Edit_input.Blur -> commit ()
     | _ ->
@@ -493,7 +493,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                     Signal.set caret_hover true;
                     Runtime.flush ()))
                 ~on_pointer_leave:(fun _ ->
-                  if Signal.get_state caret_hover then (
+                  if Runtime.signal_get caret_hover then (
                     Signal.set caret_hover false;
                     Runtime.flush ()))
                 [ row ~key:"pt-ctrl" ~cross:`center ~width:24 ~height:24

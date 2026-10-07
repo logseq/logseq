@@ -242,7 +242,7 @@ let set_silent f =
    an empty page only the title editor exists, but renderers still query
    selection/editing state *)
 let read () =
-  match !st with Some s -> Signal.get_state s | None -> initial
+  match !st with Some s -> Runtime.signal_get s | None -> initial
 
 (* imperative access to the in-flight drag — set only on target/zone
    transitions, never per mousemove *)

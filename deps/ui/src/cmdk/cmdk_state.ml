@@ -1286,11 +1286,11 @@ let shortcut_action cid : (unit -> unit) option =
              List.iter
                (fun (i : Sidebar_state.item) ->
                  Sidebar_state.remove_item sst i.key)
-               (Signal.get_state sst.Sidebar_state.items)))
+               (Runtime.signal_get sst.Sidebar_state.items)))
   | "sidebar/close-top" ->
       Some
         (with_sidebar (fun sst ->
-             match List.rev (Signal.get_state sst.Sidebar_state.items) with
+             match List.rev (Runtime.signal_get sst.Sidebar_state.items) with
              | last :: _ -> Sidebar_state.remove_item sst last.key
              | [] -> ()))
   | "ui/toggle-contents" ->

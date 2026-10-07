@@ -292,7 +292,7 @@ let date_format_row ctx =
                 ~style_class:"ui__select-trigger form-select is-small"
                 ~text:(date_option_text current)
                 ~on_press:(fun _ ->
-                  Signal.set mst (not (Signal.get_state mst));
+                  Signal.set mst (not (Runtime.signal_get mst));
                   Runtime.flush ())
                 []
             ; reactive ~equal:( == ) (fun open_ ->
@@ -561,7 +561,7 @@ let home_page_row ctx =
                   Runtime.signal_set home_text q
               | _ -> ())
             ~on_submit:(fun _ ->
-              let value = Signal.get_state home_text in
+              let value = Runtime.signal_get home_text in
               S.set_home_page value (fun res ->
                   match res with
                   | S.Home_ok -> Toast.success T.home_updated

@@ -94,7 +94,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
                     (fun vis -> if vis then `app "eye-off" else `eye)
                     (Signal.value visible))
            ~on_press:(fun _ ->
-             Runtime.signal_set visible (not (Signal.get_state visible)))
+             Runtime.signal_set visible (not (Runtime.signal_get visible)))
            [])
     ]
 
