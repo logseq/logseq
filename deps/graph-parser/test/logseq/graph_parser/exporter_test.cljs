@@ -2595,6 +2595,44 @@ abc
                    (mapv #(-> % :block/parent :db/id) [country continent]))
                 "Top-level hierarchy parents are moved under Library")))))))
 
+(deftest-async import-skips-class-and-property-namespace-roots-when-moving-to-library
+  ;; Same shape as https://github.com/logseq/db-test/issues/1401:
+  ;; a class namespace root (used as tags::) and a property namespace root
+  ;; (used as x:: value) must not be parented under Library.
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/Vehicle___Car.md" "- a car\n"
+                "pages/Garage.md" "tags:: [[Vehicle]]\n- garage page tagged Vehicle\n"
+                "pages/City___Berlin.md" "- Berlin city child\n"
+                "pages/Trip.md" "city:: Berlin\n- page with city property\n"
+                "pages/Country___Australia.md" "- Sydney\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+          library (ldb/get-built-in-page @conn common-config/library-page-name)
+          vehicle (db-test/find-page-by-title @conn "Vehicle")
+          car (db-test/find-page-by-title @conn "Car")
+          city (d/entity @conn :user.property/city)
+          berlin (db-test/find-page-by-title @conn "Berlin")
+          country (db-test/find-page-by-title @conn "Country")]
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Created graph has no validation errors")
+    (is (ldb/class? vehicle)
+        "Namespace root used as a tag is imported as a class")
+    (is (nil? (:block/parent vehicle))
+        "Class namespace roots are not moved under Library")
+    (is (nil? (:block/order vehicle))
+        "Class namespace roots do not get a Library order")
+    (is (ldb/property? city)
+        "Namespace root used as a property is imported as a property")
+    (is (nil? (:block/parent city))
+        "Property namespace roots are not moved under Library")
+    (is (= (:db/id vehicle) (:db/id (:block/parent car)))
+        "Class namespace children keep their class parent")
+    (is (= (:db/id city) (:db/id (:block/parent berlin)))
+        "Property namespace children keep their property parent")
+    (is (= (:db/id library) (:db/id (:block/parent country)))
+        "Non-class/non-property namespace roots still move under Library")))
+
 (deftest-async import-namespaced-pages-order-after-parent-content-blocks
   (p/let [dir (write-temp-file-graph
                {"logseq/config.edn" "{:file/name-format :triple-lowbar}\n"
