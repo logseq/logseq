@@ -88,8 +88,11 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
            else
              heading ~key:("dlg-t-" ^ name) ~level:2
                ~style_class:"ui__dialog-title" ~value:title [])
-        ; box ~key:("dlg-m-" ^ name)
-            ~style_class:"ui__dialog-main-content"
+        ; (* scroll kind so native backends map it to their scroll view;
+             the class carries overflow-y:auto on web *)
+          scroll ~key:("dlg-m-" ^ name)
+            ~style_class:"ui__dialog-main-content" ~orientation:`vertical
+            ~grow:1.
             [ body_of name ms ]
         ; close_btn ]
     ]
