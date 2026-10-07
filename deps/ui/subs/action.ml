@@ -42,6 +42,7 @@ type t =
   | Unlinked_toggle_open
   | Unlinked_toggle_search
   | Unlinked_set_query of string
+  | Linked_toggle_open
   | Linked_toggle_search
   | Linked_set_query of string
   | Help_toggle

@@ -177,6 +177,7 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_open = false
       ; unlinked_search = false
       ; unlinked_query = ""
+      ; linked_open = true
       ; unlinked_blocks = []
       ; data_gen = model.data_gen + 1
       }
@@ -223,6 +224,8 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_query = ""
       }
   | Unlinked_set_query q -> { model with unlinked_query = q }
+  | Linked_toggle_open ->
+      { model with linked_open = not model.linked_open }
   | Linked_toggle_search ->
       { model with
         linked_search = not model.linked_search
