@@ -167,7 +167,8 @@ pub fn register(shared: &Shared) {
         "ui__dialog-content",
         "background:var(--ls-primary-background-color); \
          border:1px solid var(--ls-border-color); border-radius:8px; \
-         padding:24px; width:100%; max-width:672px; overflow:hidden; \
+         padding:24px; width:100%; max-width:672px; \
+         max-height:80dvh; overflow:hidden; \
          position:relative",
         "",
     );
@@ -175,7 +176,8 @@ pub fn register(shared: &Shared) {
         "ui__alert-dialog-content",
         "background:var(--ls-primary-background-color); \
          border:1px solid var(--ls-border-color); border-radius:8px; \
-         padding:24px; width:100%; max-width:512px; overflow:hidden; \
+         padding:24px; width:100%; max-width:512px; \
+         max-height:80dvh; overflow:hidden; \
          position:relative",
         "",
     );
