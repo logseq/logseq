@@ -362,6 +362,12 @@ let run_listeners (n : node) (name : string) (payload : Js.Json.t) : unit =
                 | None -> kvs)
             | None -> kvs
           in
+          (* DOM listeners read e.type — the wire carries the name
+             separately *)
+          let kvs =
+            if List.mem_assoc "type" kvs then kvs
+            else ("type", JString name) :: kvs
+          in
           JObject (kvs @ [ ("##dispatch", JNumber !current_did) ]))
       | other -> other
     in

@@ -69,7 +69,15 @@ let el_contains = Editor_dom.el_contains
 let el_parent = Views_dom.el_parent
 let el_children = Views_dom.el_children
 let el_is_connected = Views_dom.el_is_connected
-let el_remove = Dom_ext.el_remove
+(* imperative els detach through Imperative_dom.remove so OCaml-side
+   bookkeeping (registry, runtime parents, dom_handlers) stays in sync —
+   the raw host op only drops the host node and leaves the imperative
+   shadow attached; snapshots and other non-imperative els keep the host
+   op path *)
+let el_remove (el : el) : unit =
+  match Imperative_dom.id_of el with
+  | Some _ -> Views_dom.el_remove el
+  | None -> Dom_ext.el_remove el
 let el_matches = Properties_dom.el_matches
 let el_closest = Editor_dom.el_closest
 let closest_sel = Editor_dom.closest_sel
@@ -115,7 +123,16 @@ let is_editable_target = Editor_dom.is_editable_target
 let active_element = Editor_dom.active_element
 let el_style_set_property = Dom_ext.style_set_property
 let el_bounding_rect = Dom_ext.bounding_rect
-let el_listen = Properties_dom.el_listen
+(* imperative elements go through Imperative_dom.add_listener — Vdom.listen
+   only understands vrec shells and mounted snapshots, so a listener added
+   to an element before it mounts (the normal create-then-attach flow)
+   would be silently dropped *)
+let el_listen (el : el) (name : string) (f : ev -> unit) (cap : bool)
+    : unit =
+  match Imperative_dom.id_of el with
+  | Some id -> Imperative_dom.add_listener id name f
+  | None -> Properties_dom.el_listen el name f cap
+
 let el_on el name f = el_listen el name f false
 
 let el_on_once el name f =
