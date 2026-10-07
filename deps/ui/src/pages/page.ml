@@ -691,46 +691,20 @@ let refs_view_head key ?on_search title count : t =
                 ~style_class:"as-text"
                 ~accessibility_identifier:("view-tab-" ^ key)
                 [ text ~key:"vh-n" ~value:(string_of_int count) [] ]
-            ; button ~key:"vh-add" ~variant:`ghost ~size:`icon
-                ~icon:(`app "plus")
-                ~label:(I18n.t "view/add-new-view")
-                ~style_class:"as-text"
-                []
             ]
         ]
-    ; (* the opacity-0/transition hover-reveal classes are gone — the
-         actions row shows statically until the imperative pass *)
+    ; (* only actions with a backing implementation render — the
+         sort/filter/columns/dots controls master shows belong to
+         customized views, which the refs section doesn't carry yet *)
       row ~key:"vh-acts" ~cross:`center ~gap:4
         ~style_class:"view-actions"
-        [ view_ghost_btn "vh-fc" ~title:(I18n.t "reference/page-filter")
-            "filter-cog" 18.
-        ; view_ghost_btn "vh-srt" ~title:I18n.sort_groups_by
-            "arrows-up-down" 18.
-        ; view_ghost_btn "vh-flt" ~title:I18n.filter "filter" 18.
-        ; row ~key:"vh-search" ~style_class:"view-action-search"
-            [ row ~key:"vh-si" ~cross:`center
-                [ view_ghost_btn "vh-sb" ?on_click:on_search
-                    ~title:(I18n.t "cmdk.action/search") "search" 15. ] ]
-        ; box ~key:"vh-type" ~style_class:"view-action-type"
-            [ (* property-value-inner[data-type] is the property-cell
-                 trigger contract (jtrigger/open-value flows) *)
-              box ~key:"vh-tv" ~style_class:"w-full property-value-inner"
-                ~data_attrs:[ ("data-type", "default") ]
-                [ box ~key:"vh-tj"
-                    ~accessibility_identifier:("trigger-" ^ key)
-                    ~grow:1. ~style_class:"jtrigger"
-                    [ box ~key:"vh-ts" ~style_class:"select-item"
-                        [ row ~key:"vh-tc" ~cross:`center
-                            ~style_class:"ls-icon-color-wrap"
-                            [ Icons.icon ~size:18. "list" ]
-                        ]
-                    ]
-                ]
-            ]
-        ; button ~key:"vh-menu" ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots") ~label:(I18n.t "ui/show-more")
-            ~style_class:"ui__button as-ghost ls-dots-menu"
-            []
+        [ (match on_search with
+          | Some _ ->
+              row ~key:"vh-search" ~style_class:"view-action-search"
+                [ row ~key:"vh-si" ~cross:`center
+                    [ view_ghost_btn "vh-sb" ?on_click:on_search
+                        ~title:(I18n.t "cmdk.action/search") "search" 15. ] ]
+          | None -> Logseq_dom.nothing)
         ]
     ]
 
