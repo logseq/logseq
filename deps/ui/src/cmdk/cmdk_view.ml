@@ -669,10 +669,12 @@ let shortcut_el keys =
     (interleave kids)
 
 let hint_button label keys =
+  (* ~text satisfies the store's button text/label requirement —
+     a child text node doesn't count *)
   button ~key:("hb-" ^ label)
     ~style_class:"cp__cmdk-hint"
-    [ text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label []
-    ; hint_shortcut keys ]
+    ~text:label
+    [ hint_shortcut keys ]
 
 (* cljs tip: random per mount between "Press / to filter search
    results" and "Press ⌘⏎ to open search in the sidebar"; clear-filter

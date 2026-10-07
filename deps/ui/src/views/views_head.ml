@@ -215,7 +215,13 @@ let sorting_popup inst anchor =
             E.el_on order_btn "click" (fun ev ->
                 E.ev_stop_propagation ev;
                 set_asc so (not so.V.s_asc));
-            let remove_btn = E.h ~tag:"button" ~cls:"ls-sort-x" () in
+            let remove_btn =
+              (* icon-only buttons need aria-label or the store rejects
+                 the whole mount batch *)
+              E.h ~tag:"button" ~cls:"ls-sort-x"
+                ~attrs:[ ("aria-label", I.delete_sort) ]
+                ()
+            in
             E.el_append_child remove_btn (E.icon "x");
             E.el_on remove_btn "click" (fun ev ->
                 E.ev_stop_propagation ev;

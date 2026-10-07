@@ -92,6 +92,7 @@ let reactions_el uuid (rs : (string * int) list) : t =
         (List.map
            (fun (emoji_id, count) ->
              button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id)
+               ~label:(I.t "command.editor/add-reaction")
                ~on_press:(fun _ -> toggle_reaction uuid emoji_id)
                [ Logseq_emoji.el
                    ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id)
@@ -248,11 +249,11 @@ let header st (area_uuid : string) (count : int) (targets : int) : t =
     if targets > 1 then
       [ button ~key:("ct-" ^ area_uuid)
           ~variant:`ghost
+          ~text:(I.t "block.comments/on-those-blocks")
           ~on_press:(fun _ ->
             let v = Signal.get_state st in
             Signal.set st { v with targets_open = not v.targets_open })
-          [ text ~key:("ctt-" ^ area_uuid)
-              ~value:(I.t "block.comments/on-those-blocks") [] ]
+          []
       ]
     else [] )
 
