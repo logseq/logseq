@@ -345,7 +345,7 @@ let focus_new_block env ~previous_editor_id ?expected () =
       in
       Js.Promise.resolve uuid
 
-let rec new_block_go ?(attempts = 2) env title =
+let rec new_block_go ?(attempts = 3) env title =
   (* gate on the app's editing state and use its uuid for the live
      editor's id — a stale sibling textarea can share the DOM and make
      nth-based ids point at a dead editor *)
@@ -624,7 +624,7 @@ let rec new_block_go ?(attempts = 2) env title =
           type_retry (n - 1)
         end
       in
-      type_retry 3
+      type_retry 4
     end
     else Js.Promise.resolve ()
   in
