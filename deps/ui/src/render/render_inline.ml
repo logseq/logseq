@@ -85,6 +85,7 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
 type pull_cache =
   { c_name_uuid : (string, string) Hashtbl.t
   ; c_uuid_meta : (string, string * bool) Hashtbl.t (* title, is-page *)
+  ; c_macros : (string * string) list option ref (* config.edn :macros *)
   }
 
 let pull_caches : (string, pull_cache) Hashtbl.t = Hashtbl.create 4
@@ -96,6 +97,7 @@ let repo_cache repo =
       let c =
         { c_name_uuid = Hashtbl.create 256
         ; c_uuid_meta = Hashtbl.create 256
+        ; c_macros = ref None
         }
       in
       Hashtbl.replace pull_caches repo c;
@@ -434,35 +436,181 @@ let macro_args body =
       (String.lowercase_ascii (String.sub body 0 i)
       , String.trim (String.sub body (i + 1) (String.length body - i - 1)))
 
-(* cljs extensions/video youtube-regex: the id is the first [\w-]+ after
-   youtu.be/|y2u.be/, /shorts/|/embed/|/v/, or ?v=/&v=; a bare 11-char
-   arg is itself an id (provider hint :youtube). *)
-let youtube_id url =
-  let id_after marker =
-    match find_sub url 0 marker with
-    | j when j >= 0 -> (
-        let k = j + String.length marker in
-        let n = String.length url in
-        let rec stop i =
-          if i < n then
-            match url.[i] with
-            | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' -> stop (i + 1)
-            | _ -> i
-          else i
+(* mldoc inline.ml macro_arg: a [[page ref]], [nested](link),
+   ((block ref)) or "quoted" arg may contain commas — only the bare
+   fallback splits at ',' *)
+let split_macro_args args =
+  let n = String.length args in
+  let buf = Buffer.create n in
+  let out = ref [] in
+  let push () =
+    let a = String.trim (Buffer.contents buf) in
+    Buffer.clear buf;
+    if a <> "" then out := a :: !out
+  in
+  let rec go i depth quoted =
+    if i >= n then (
+      push ();
+      List.rev !out)
+    else
+      let c = String.unsafe_get args i in
+      if quoted then (
+        Buffer.add_char buf c;
+        match c with
+        | '\\' when i + 1 < n ->
+            Buffer.add_char buf (String.unsafe_get args (i + 1));
+            go (i + 2) depth quoted
+        | '"' -> go (i + 1) depth false
+        | _ -> go (i + 1) depth quoted)
+      else
+        match c with
+        | '"' ->
+            Buffer.add_char buf c;
+            go (i + 1) depth true
+        | '[' ->
+            Buffer.add_char buf c;
+            go (i + 1) (depth + 1) quoted
+        | ']' ->
+            Buffer.add_char buf c;
+            let depth' = max 0 (depth - 1) in
+            if depth' = 0 && i + 1 < n && args.[i + 1] = '(' then
+              (* (url) tail of a nested link — commas inside are part
+                 of the same argument *)
+              go_link_tail (i + 1) 1
+            else go (i + 1) depth' quoted
+        | '(' when i + 1 < n && args.[i + 1] = '(' ->
+            Buffer.add_string buf "((";
+            go (i + 2) (depth + 1) quoted
+        | ')' when i + 1 < n && args.[i + 1] = ')' ->
+            Buffer.add_string buf "))";
+            go (i + 2) (max 0 (depth - 1)) quoted
+        | ',' when depth = 0 ->
+            push ();
+            go (i + 1) depth quoted
+        | _ ->
+            Buffer.add_char buf c;
+            go (i + 1) depth quoted
+  and go_link_tail i pd =
+    if i >= n then (
+      push ();
+      List.rev !out)
+    else
+      match String.unsafe_get args i with
+      | '(' ->
+          Buffer.add_char buf '(';
+          go_link_tail (i + 1) (pd + 1)
+      | ')' ->
+          Buffer.add_char buf ')';
+          if pd = 1 then go (i + 1) 0 false else go_link_tail (i + 1) (pd - 1)
+      | c ->
+          Buffer.add_char buf c;
+          go_link_tail (i + 1) pd
+  in
+  go 0 0 false
+
+(* cljs macro-cp: when the args are ≥2 and the first opens a page ref
+   while the last closes one, the whole list is a single (multi-ref)
+   argument — e.g. {{embed [[a]], [[b]]}} *)
+let macro_arguments arg_str =
+  match split_macro_args arg_str with
+  | (first :: _) as args
+    when List.length args >= 2
+         && Str_util.starts_with first "[["
+         && Str_util.ends_with (List.nth args (List.length args - 1)) "]]" ->
+      [ String.concat ", " args ]
+  | args -> args
+
+(* cljs macro->text *)
+let macro_to_text name arguments =
+  match arguments with
+  | [] | [ "null" ] -> "{{" ^ name ^ "}}"
+  | _ -> "{{" ^ name ^ " " ^ String.concat ", " arguments ^ "}}"
+
+(* ---------- video embeds (cljs extensions/video.cljs) ---------- *)
+
+let is_digit c = c >= '0' && c <= '9'
+
+(* [\w-]+ at position j *)
+let word_id_at s j =
+  let n = String.length s in
+  let rec stop i =
+    if i < n then
+      match String.unsafe_get s i with
+      | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' -> stop (i + 1)
+      | _ -> i
+    else i
+  in
+  match stop j - j with
+  | len when len > 0 -> Some (String.sub s j len)
+  | _ -> None
+
+let is_word_id s =
+  s <> "" && String.for_all (fun c ->
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+    || (c >= '0' && c <= '9') || c = '_' || c = '-') s
+
+(* cljs common-util/url? — a scheme:// URL *)
+let looks_like_url s =
+  let n = String.length s in
+  if n < 4 then false
+  else
+    match s.[0] with
+    | 'a' .. 'z' | 'A' .. 'Z' ->
+        let rec go i =
+          i < n
+          &&
+          match String.unsafe_get s i with
+          | ':' -> i + 2 < n && s.[i + 1] = '/' && s.[i + 2] = '/'
+          | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '+' | '-' | '.' ->
+              go (i + 1)
+          | _ -> false
         in
-        match stop k - k with
-        | len when len > 0 -> Some (String.sub url k len)
-        | _ -> None)
+        go 1
+    | _ -> false
+
+(* -> (lowercased host, path incl. leading '/' or "") — the cljs video
+   regexes allow //, http(s):// or bare host prefixes *)
+let host_path_of_url url =
+  let s = String.trim url in
+  let s =
+    if Str_util.starts_with_ci s "https://" then
+      String.sub s 8 (String.length s - 8)
+    else if Str_util.starts_with_ci s "http://" then
+      String.sub s 7 (String.length s - 7)
+    else if Str_util.starts_with s "//" then
+      String.sub s 2 (String.length s - 2)
+    else s
+  in
+  match String.index_opt s '/' with
+  | Some i ->
+      (String.lowercase_ascii (String.sub s 0 i)
+      , String.sub s i (String.length s - i))
+  | None -> (String.lowercase_ascii s, "")
+
+(* cljs video regexes gate the host on (www|m)?\. style groups — a
+   subdomain outside the listed set does not match *)
+let host_is subs host domain =
+  host = domain || List.exists (fun sub -> host = sub ^ "." ^ domain) subs
+
+(* '?p=12' or '&p=12' — cljs bilibili-regex (\?p=(\d+)) *)
+let query_digits url name =
+  let digits_after j =
+    let k = j + String.length name + 2 in
+    let n = String.length url in
+    let rec stop i =
+      if i < n && is_digit (String.unsafe_get url i) then stop (i + 1)
+      else i
+    in
+    match stop k - k with
+    | len when len > 0 -> Some (String.sub url k len)
     | _ -> None
   in
-  match
-    List.find_map id_after
-      [ "youtu.be/"; "y2u.be/"; "/shorts/"; "/embed/"; "/v/"; "v=" ]
-  with
-  | Some id -> Some id
-  | None ->
-      let u = String.trim url in
-      if String.length u = 11 then Some u else None
+  match find_sub url 0 ("?" ^ name ^ "=") with
+  | j when j >= 0 -> digits_after j
+  | _ -> (
+      match find_sub url 0 ("&" ^ name ^ "=") with
+      | j when j >= 0 -> digits_after j
+      | _ -> None)
 
 (* cljs video-start: [?&]t=(\d+) *)
 let youtube_start url =
@@ -471,48 +619,539 @@ let youtube_start url =
       let k = j + 2 in
       let n = String.length url in
       let rec stop i =
-        if i < n && url.[i] >= '0' && url.[i] <= '9' then stop (i + 1)
-        else i
+        if i < n && is_digit url.[i] then stop (i + 1) else i
       in
       match stop k - k with
       | len when len > 0 -> Some (String.sub url k len)
       | _ -> None)
   | _ -> None
 
-let first_arg args =
-  match String.index_opt args ' ' with
-  | Some i -> String.sub args 0 i
-  | None -> args
+type video_provider =
+  | Vp_youtube
+  | Vp_nocookie
+  | Vp_bilibili of string option (* ?p= page *)
+  | Vp_vimeo
+  | Vp_loom
+
+(* cljs get-matched-video: youtube / bilibili / vimeo / loom regexes —
+   the id is the first [\w-]+ in the path segment (or after ?v= for
+   youtube watch links) *)
+let get_matched_video url =
+  let host, path = host_path_of_url url in
+  let id_after prefix =
+    if Str_util.starts_with path prefix then
+      word_id_at path (String.length prefix)
+    else None
+  in
+  let path_seg_id () =
+    if String.length path > 1 && path.[0] = '/' then word_id_at path 1
+    else None
+  in
+  if
+    List.exists
+      (host_is [ "www"; "m" ] host)
+      [ "youtube.com"; "youtu.be"; "y2u.be"; "youtube-nocookie.com" ]
+  then
+    let nocookie = host_is [ "www"; "m" ] host "youtube-nocookie.com" in
+    let id =
+      match List.find_map id_after [ "/shorts/"; "/embed/"; "/v/" ] with
+      | Some id -> Some id
+      | None -> (
+          match path_seg_id () with
+          | Some seg -> (
+              (* /<seg>?v=<id> (e.g. /watch?v=) else the seg is the id *)
+              let k = 1 + String.length seg in
+              if
+                Str_util.starts_with
+                  (String.sub path k (String.length path - k))
+                  "?v="
+              then word_id_at path (k + 3)
+              else Some seg)
+          | None -> None)
+    in
+    (match id with
+     | Some id -> Some ((if nocookie then Vp_nocookie else Vp_youtube), id)
+     | None -> None)
+  else if host_is [ "www" ] host "bilibili.com" then
+    match
+      match id_after "/video/" with
+      | Some _ as id -> id
+      | None -> path_seg_id ()
+    with
+    | Some id -> Some (Vp_bilibili (query_digits url "p"), id)
+    | None -> None
+  else if host_is [ "www" ] host "player.vimeo.com" || host_is [ "www" ] host "vimeo.com" then
+    match
+      match id_after "/video/" with
+      | Some _ as id -> id
+      | None -> path_seg_id ()
+    with
+    | Some id -> Some (Vp_vimeo, id)
+    | None -> None
+  else if host_is [ "www" ] host "loom.com" then
+    match
+      match id_after "/share/" with
+      | Some _ as id -> id
+      | None -> id_after "/embed/"
+    with
+    | Some id -> Some (Vp_loom, id)
+    | None -> None
+  else None
+
+type provider_hint =
+  [ `youtube | `bilibili | `vimeo | `loom ]
+
+type video_embed =
+  | Ve_youtube of string * string option (* id, start seconds *)
+  | Ve_iframe of string (* src *)
+
+(* cljs video/matched-video-embed + input-video provider-hint id
+   fallbacks (youtube bare 11-char, bilibili ≤15 chars, vimeo digits;
+   loom gets the same bare-id treatment) *)
+let input_video input hint =
+  let start = youtube_start input in
+  match get_matched_video input with
+  | Some (Vp_youtube, id) -> Some (Ve_youtube (id, start))
+  | Some (Vp_nocookie, id) ->
+      Some
+        (Ve_iframe
+           ("https://www.youtube-nocookie.com/embed/" ^ id
+            ^ match start with Some s -> "?t=" ^ s | None -> ""))
+  | Some (Vp_bilibili page, id) ->
+      Some
+        (Ve_iframe
+           ("https://player.bilibili.com/player.html?bvid=" ^ id
+            ^ "&high_quality=1&autoplay=0"
+            ^ (match page with Some p -> "&p=" ^ p | None -> "")
+            ^ match start with Some s -> "&t=" ^ s | None -> ""))
+  | Some (Vp_vimeo, id) ->
+      Some (Ve_iframe ("https://player.vimeo.com/video/" ^ id))
+  | Some (Vp_loom, id) ->
+      Some (Ve_iframe ("https://www.loom.com/embed/" ^ id))
+  | None -> (
+      match hint with
+      | Some `youtube when String.length input = 11 ->
+          Some (Ve_youtube (input, start))
+      | Some `bilibili when String.length input <= 15 ->
+          Some
+            (Ve_iframe
+               ("https://player.bilibili.com/player.html?bvid=" ^ input
+                ^ "&high_quality=1&autoplay=0"))
+      | Some `vimeo
+        when input <> "" && String.for_all is_digit input ->
+          Some (Ve_iframe ("https://player.vimeo.com/video/" ^ input))
+      | Some `loom when is_word_id input ->
+          Some (Ve_iframe ("https://www.loom.com/embed/" ^ input))
+      | _ -> None)
+
+(* cljs components/block/video.cljs video-width: a ", w=N" argument
+   (positive int) *)
+let video_width arguments =
+  List.find_map
+    (fun a ->
+      if Str_util.starts_with a "w=" then
+        let v = String.sub a 2 (String.length a - 2) in
+        if v <> "" && String.for_all is_digit v then
+          match int_of_string_opt v with
+          | Some n when n > 0 -> Some n
+          | _ -> None
+        else None
+      else None)
+    arguments
 
 (* TODO(component): <iframe> embeds are imperative (youtube
    enablejsapi postMessage seek, plugin-loaded src) — no iframe kind *)
+
 (* cljs youtube-video iframe + attrs; enablejsapi=1 is required for the
-   timestamp seek postMessage. The shell stays .embed-block (e2e contract
-   waits on it); cljs wraps in .video-embed-shell/.video-embed-frame. *)
+   timestamp seek postMessage *)
 let youtube_iframe id start =
   let src =
     "https://www.youtube.com/embed/" ^ id ^ "?enablejsapi=1"
-    ^ (match start with Some s -> "&start=" ^ s | None -> "")
+    ^ match start with Some s -> "&start=" ^ s | None -> ""
   in
-  box ~style_class:"embed-block"
-    [ D.el ~tag:"iframe"
-        ~attrs:
-          [ ("id", "youtube-player-" ^ id)
-          ; ("allow-full-screen", "allowfullscreen")
-          ; ( "allow"
-            , "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" )
-          ; ("referrer-policy", "strict-origin-when-cross-origin")
-          ; ("referer", "https://logseq.com")
-          ; ("frame-border", "0")
-          ; ("src", src) ]
-        [] ]
+  D.el ~tag:"iframe"
+    ~attrs:
+      [ ("id", "youtube-player-" ^ id)
+      ; ("allow-full-screen", "allowfullscreen")
+      ; ( "allow"
+        , "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" )
+      ; ("referrer-policy", "strict-origin-when-cross-origin")
+      ; ("referer", "https://logseq.com")
+      ; ("frame-border", "0")
+      ; ("src", src) ]
+    []
 
-let embed_iframe src =
-  (* iframes are plugin-loaded in cljs; emit the shell + src so the
-     container is present (e2e waits on iframe inside .embed-block).
-     TODO(component): iframe needs an embed/iframe extension *)
-  box ~style_class:"embed-block"
-    [ D.el ~tag:"iframe" ~attrs:[ ("src", src) ] [] ]
+(* cljs video-embed-cp :iframe attr set — shared by every non-youtube
+   provider *)
+let provider_iframe src =
+  D.el ~tag:"iframe"
+    ~attrs:
+      [ ("allow-full-screen", "allowfullscreen")
+      ; ( "allow"
+        , "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope" )
+      ; ("framespacing", "0")
+      ; ("frame-border", "no")
+      ; ("border", "0")
+      ; ("scrolling", "no")
+      ; ("src", src) ]
+    []
+
+(* cljs block/video-inline-segments-cp .video-embed-block +
+   video-embed-cp .video-embed-shell > .video-embed-frame[width,
+   aspect-ratio] (embed-block kept for the e2e contract). The cljs
+   resize handle rewrites , w=N in the block source — deferred: LUI has
+   no editing-surface write path for it yet *)
+let video_embed_shell ~macro_name ~macro_id ?width inner =
+  let w = max 160 (Option.value ~default:560 width) in
+  D.el ~tag:"div" ~style_class:"video-embed-block embed-block"
+    ~attrs:
+      [ ("data-video-macro-name", macro_name)
+      ; ("data-video-macro-id", macro_id) ]
+    [ D.el ~tag:"div" ~style_class:"video-embed-shell"
+        [ D.el ~tag:"div" ~style_class:"video-embed-frame"
+            ~attrs:
+              [ ( "style"
+                , "width:" ^ string_of_int w ^ "px;aspect-ratio:16 / 9" ) ]
+            [ inner ] ] ]
+
+(* cljs macro-video-cp: provider-hint names accept bare ids; {{video}}
+   requires a real URL — the warning text is literally "{{video …}}" *)
+let macro_video_el name arguments hint =
+  match arguments with
+  | url_or_id :: _ ->
+      if hint <> None || looks_like_url url_or_id then
+        let width = video_width arguments in
+        match input_video url_or_id hint with
+        | Some (Ve_youtube (id, start)) ->
+            video_embed_shell ~macro_name:name ~macro_id:url_or_id ?width
+              (youtube_iframe id start)
+        | Some (Ve_iframe src) ->
+            video_embed_shell ~macro_name:name ~macro_id:url_or_id ?width
+              (provider_iframe src)
+        | None -> D.txt ""
+      else
+        D.el ~tag:"span" ~style_class:"warning mr-1"
+          ~attrs:[ ("title", U.t "block/invalid-url") ]
+          ~text:(macro_to_text "video" arguments)
+          []
+  | [] ->
+      if hint = None then
+        D.el ~tag:"span" ~style_class:"warning mr-1"
+          ~attrs:[ ("title", U.t "block/empty-url") ]
+          ~text:(macro_to_text "video" arguments)
+          []
+      else D.txt ""
+
+(* ---------- tweet embed (cljs ui/tweet-embed) ---------- *)
+
+(* arg ≤15 chars is the id itself; else /status/(\d+) *)
+let tweet_id_of arg =
+  if String.length arg <= 15 then Some arg
+  else
+    match find_sub arg 0 "/status/" with
+    | j when j >= 0 -> (
+        let k = j + 8 in
+        let n = String.length arg in
+        let rec stop i =
+          if i < n && is_digit (String.unsafe_get arg i) then stop (i + 1)
+          else i
+        in
+        match stop k - k with
+        | len when len > 0 -> Some (String.sub arg k len)
+        | _ -> None)
+    | _ -> None
+
+(* cljs (theme= 'dark (state/sub :ui/theme)) — same resolution as
+   settings_view current_mode: system-theme? (default desktop OS) then
+   prefers-dark, else the stored "theme" *)
+let dark_theme () =
+  let system =
+    match Platform.local_storage_get "system-theme?" with
+    | Some v -> Platform.storage_unquote v = "true"
+    | None -> Platform.desktop_os ()
+  in
+  if system then Web_dom.prefers_dark ()
+  else
+    match Platform.local_storage_get "theme" with
+    | Some v -> Platform.storage_unquote v = "dark"
+    | None -> false
+
+let tweet_iframe id =
+  let dark = dark_theme () in
+  D.el ~tag:"iframe" ~style_class:"tweet-embed"
+    ~attrs:
+      [ ( "src"
+        , "https://platform.twitter.com/embed/Tweet.html?id=" ^ id
+          ^ if dark then "&theme=dark" else "" )
+      ; ("style", "width:100%;min-height:240px;border:0")
+      ; ("loading", "lazy")
+      ; ("allow", "encrypted-media; picture-in-picture")
+      ; ("allow-full-screen", "allowfullscreen") ]
+    []
+
+(* ---------- custom macros (cljs state/get-macros) ---------- *)
+
+(* cljs state/built-in-macros *)
+let builtin_macros =
+  [ ("img", "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]") ]
+
+let macros_of_config (cfg : Wire.t) =
+  let user =
+    match Wire.get cfg "macros" with
+    | Some (Wire.Map kvs) ->
+        List.filter_map
+          (fun (k, v) ->
+            match k, Wire.as_string v with
+            | (Wire.Keyword n | Wire.String n | Wire.Symbol n), Some c ->
+                Some (n, c)
+            | _ -> None)
+          kvs
+    | _ -> []
+  in
+  (* cljs get-macros: config map merged over the built-ins *)
+  user
+  @ List.filter (fun (n, _) -> not (List.mem_assoc n user)) builtin_macros
+
+(* cljs macro-util/macro-subs — positional $1..$n replacement *)
+let macro_subs content arguments =
+  let rec go s i = function
+    | [] -> s
+    | a :: rest ->
+        go
+          (Str_util.replace_all s ~pat:("$" ^ string_of_int i) ~rep:a)
+          (i + 1) rest
+  in
+  go content 1 arguments
+
+(* config.edn :macros behind the same memoized-pull pattern — read once
+   per repo, republished into each mount's signal *)
+let macros_state context =
+  let st = Signal.state context.Lui_ui.ui_scheduler [] in
+  let sync = ref true in
+  Render_state.with_repo (fun repo ->
+      let cache = repo_cache repo in
+      match !(cache.c_macros) with
+      | Some ms ->
+          if !sync then Signal.set st ms else Runtime.signal_set st ms
+      | None ->
+          ignore
+            (let* cfg = Sdk_config.read_config repo in
+             let ms = macros_of_config cfg in
+             cache.c_macros := Some ms;
+             if !sync then Signal.set st ms else Runtime.signal_set st ms;
+             Js.Promise.resolve ()));
+  sync := false;
+  st
+
+(* ---------- inline hiccup (cljs Inline_Hiccup + hiccup->html) ---------- *)
+
+(* mldoc syntax/raw_html known_tags — the tag whitelist is checked at
+   parse time before the vector is emitted *)
+let hiccup_known_tags =
+  [ "a"; "abbr"; "address"; "area"; "article"; "aside"; "audio"; "b"
+  ; "base"; "bdi"; "bdo"; "blockquote"; "body"; "br"; "button"; "canvas"
+  ; "caption"; "cite"; "code"; "col"; "colgroup"; "data"; "datalist"
+  ; "dd"; "del"; "dfn"; "div"; "dl"; "dt"; "em"; "embed"; "fieldset"
+  ; "figcaption"; "figure"; "footer"; "form"; "h1"; "h2"; "h3"; "h4"
+  ; "h5"; "h6"; "head"; "header"; "hr"; "html"; "i"; "iframe"; "img"
+  ; "input"; "ins"; "kbd"; "keygen"; "label"; "legend"; "li"; "link"
+  ; "main"; "map"; "mark"; "meta"; "meter"; "nav"; "noscript"; "object"
+  ; "ol"; "optgroup"; "option"; "output"; "p"; "param"; "pre"; "progress"
+  ; "q"; "rb"; "rp"; "rt"; "rtc"; "ruby"; "s"; "samp"; "script"
+  ; "section"; "select"; "small"; "source"; "span"; "strong"; "style"
+  ; "sub"; "sup"; "table"; "tbody"; "td"; "template"; "textarea"
+  ; "tfoot"; "th"; "thead"; "time"; "title"; "tr"; "track"; "u"; "ul"
+  ; "var"; "video"; "details"; "summary"; "wbr" ]
+
+(* cljs runs the emitted html through security/sanitize-html — the
+   metadata/script-capable tags never come out *)
+let hiccup_banned_tags =
+  [ "script"; "style"; "link"; "meta"; "base"; "object"; "embed"
+  ; "head"; "html"; "body"; "title"; "template"; "keygen"; "param" ]
+
+let is_event_attr n =
+  String.length n > 2 && n.[0] = 'o' && n.[1] = 'n'
+
+let bad_url_attr n v =
+  (n = "href" || n = "src" || n = "xlink:href" || n = "formaction")
+  && Str_util.starts_with_ci (String.trim v) "javascript:"
+
+(* 'tag#id.cls1.cls2' — hiccup id/class sugar *)
+let split_tag_spec spec =
+  let n = String.length spec in
+  let m =
+    let rec go i =
+      if i >= n then n
+      else match spec.[i] with '.' | '#' -> i | _ -> go (i + 1)
+    in
+    go 0
+  in
+  let tag = String.sub spec 0 m in
+  let id = ref "" and cls = Buffer.create 8 in
+  let rec go i =
+    if i < n then (
+      let j =
+        let rec k j =
+          if j >= n then n
+          else match spec.[j] with '.' | '#' -> j | _ -> k (j + 1)
+        in
+        k (i + 1)
+      in
+      let piece = String.sub spec (i + 1) (j - i - 1) in
+      (match spec.[i] with
+       | '#' -> id := piece
+       | '.' ->
+           if Buffer.length cls > 0 then Buffer.add_char cls ' ';
+           Buffer.add_string cls piece
+       | _ -> ());
+      go j)
+  in
+  go m;
+  (tag, !id, Buffer.contents cls)
+
+let hiccup_style (kvs : (Wire.t * Wire.t) list) =
+  let buf = Buffer.create 32 in
+  List.iter
+    (fun (k, v) ->
+      let name =
+        match k with
+        | Wire.Keyword s | Wire.String s | Wire.Symbol s -> Some s
+        | _ -> None
+      in
+      let value =
+        match v with
+        | Wire.String s -> Some s
+        | Wire.Int i -> Some (string_of_int i)
+        | Wire.Int64 i -> Some (Int64.to_string i)
+        | Wire.Float f -> Some (Printf.sprintf "%g" f)
+        | Wire.Keyword s | Wire.Symbol s -> Some s
+        | _ -> None
+      in
+      match name, value with
+      | Some n, Some v ->
+          if Buffer.length buf > 0 then Buffer.add_char buf ';';
+          Buffer.add_string buf n;
+          Buffer.add_char buf ':';
+          Buffer.add_string buf v
+      | _ -> ())
+    kvs;
+  Buffer.contents buf
+
+let hiccup_attr_map kvs =
+  let id = ref "" and cls = ref "" and attrs = ref [] in
+  List.iter
+    (fun (k, v) ->
+      match k with
+      | Wire.Keyword n | Wire.String n | Wire.Symbol n -> (
+          match n, v with
+          | _, _ when is_event_attr n -> ()
+          | _, Wire.String s when bad_url_attr n s -> ()
+          | "id", Wire.String s -> id := s
+          | "class", (Wire.String s | Wire.Keyword s | Wire.Symbol s) ->
+              cls := s
+          | "style", Wire.Map style ->
+              attrs := ("style", hiccup_style style) :: !attrs
+          | _, Wire.String s -> attrs := (n, s) :: !attrs
+          | _, Wire.Int i -> attrs := (n, string_of_int i) :: !attrs
+          | _, Wire.Int64 i -> attrs := (n, Int64.to_string i) :: !attrs
+          | _, Wire.Float f -> attrs := (n, Printf.sprintf "%g" f) :: !attrs
+          | _, Wire.Bool true -> attrs := (n, "") :: !attrs
+          | _, (Wire.Keyword s | Wire.Symbol s) ->
+              attrs := (n, s) :: !attrs
+          | _, (Wire.Bool false | Wire.Nil) -> ()
+          | _ -> ())
+      | _ -> ())
+    kvs;
+  (!id, !cls, List.rev !attrs)
+
+let rec hiccup_node spec rest =
+  let tag, spec_id, spec_cls = split_tag_spec spec in
+  if
+    (not (List.mem tag hiccup_known_tags))
+    || List.mem tag hiccup_banned_tags
+  then None
+  else
+    let rest, map_id, map_cls, attrs =
+      match rest with
+      | Wire.Map kvs :: tl ->
+          let i, c, a = hiccup_attr_map kvs in
+          (tl, i, c, a)
+      | _ -> (rest, "", "", [])
+    in
+    let id = match map_id with "" -> spec_id | i -> i in
+    let cls =
+      match spec_cls, map_cls with
+      | "", c | c, "" -> c
+      | a, b -> a ^ " " ^ b
+    in
+    let attrs = if id = "" then attrs else ("id", id) :: attrs in
+    Some
+      (D.el ~tag ~style_class:cls ~attrs
+         (List.concat_map hiccup_child rest))
+
+and hiccup_child w =
+  match w with
+  | Wire.String s -> [ D.txt s ]
+  | Wire.Int i -> [ D.txt (string_of_int i) ]
+  | Wire.Int64 i -> [ D.txt (Int64.to_string i) ]
+  | Wire.Float f -> [ D.txt (Printf.sprintf "%g" f) ]
+  | Wire.Bool b -> [ D.txt (string_of_bool b) ]
+  | Wire.Nil -> []
+  | Wire.Keyword s -> [ D.txt (":" ^ s) ]
+  | Wire.Symbol s -> [ D.txt s ]
+  | Wire.Array (Wire.Keyword spec :: rest) -> (
+      match hiccup_node spec rest with
+      | Some e -> [ e ]
+      | None -> [])
+  | Wire.Array xs | Wire.List xs | Wire.Set xs ->
+      List.concat_map hiccup_child xs
+  | _ -> []
+
+(* cljs: read failure or a non-element form -> warning div *)
+let hiccup_el literal =
+  let warn () =
+    D.el ~tag:"div" ~style_class:"warning"
+      ~attrs:[ ("title", U.t "block/invalid-hiccup") ]
+      ~text:literal []
+  in
+  match (try Edn.parse literal with _ -> Wire.Nil) with
+  | Wire.Array (Wire.Keyword spec :: rest) -> (
+      match hiccup_node spec rest with
+      | Some e -> e
+      | None -> warn ())
+  | _ -> warn ()
+
+(* cljs hiccup match_tag — balanced [..] scan; ']' inside a
+   double-quoted string does not close *)
+let hiccup_close s i =
+  let n = String.length s in
+  let rec go j depth quoted =
+    if j >= n then -1
+    else
+      match String.unsafe_get s j with
+      | _ when quoted -> (
+          match String.unsafe_get s j with
+          | '\\' when j + 1 < n -> go (j + 2) depth true
+          | '"' -> go (j + 1) depth false
+          | _ -> go (j + 1) depth true)
+      | '"' -> go (j + 1) depth true
+      | '[' -> go (j + 1) (depth + 1) quoted
+      | ']' -> if depth = 1 then j else go (j + 1) (depth - 1) quoted
+      | _ -> go (j + 1) depth quoted
+  in
+  go i 0 false
+
+(* tag name ends at space / ] / . / # (mldoc take_till1) *)
+let hiccup_tag_end s i =
+  let n = String.length s in
+  let rec go j =
+    if j >= n then j
+    else
+      match String.unsafe_get s j with
+      | ' ' | '\t' | '\n' | '\r' | ']' | '.' | '#' -> j
+      | _ -> go (j + 1)
+  in
+  go i
 
 
 (* ---------- matchers (return (element, chars consumed, run spec)) ---------- *)
@@ -601,6 +1240,7 @@ and try_bracket ~refs ~self s i =
           , j + 2 - i
           , Rs_atomic (String.trim inner, "ed-page-ref") )
     | _ -> None
+  else if Str_util.starts_at s i "[:" then try_hiccup ~refs ~self s i
   else
     match find_sub s (i + 1) "](" with
     | j when j > i + 1 -> (
@@ -701,16 +1341,20 @@ and resolved_tag_ref ~refs ~self uuid : t =
     [ text ~value:(reactive (fun (n, _) -> "#" ^ n) title_sig) [] ]
     context parent
 
-and macro_el ~refs:_refs ~self:_self body =
-  let name, args = macro_args body in
+and macro_el ~refs ~self body =
+  let name, arg_str = macro_args body in
+  let arguments = macro_arguments arg_str in
   match name with
   | "cloze" -> (
       (* answer\\cue — cue is the last \\-separated segment *)
-      match find_sub args 0 "\\\\" with
+      match find_sub arg_str 0 "\\\\" with
       | j when j >= 0 ->
-          let cue = String.trim (String.sub args (j + 2) (String.length args - j - 2)) in
-          cloze_el (String.trim (String.sub args 0 j)) (Some cue)
-      | _ -> cloze_el (String.trim args) None)
+          let cue =
+            String.trim
+              (String.sub arg_str (j + 2) (String.length arg_str - j - 2))
+          in
+          cloze_el (String.trim (String.sub arg_str 0 j)) (Some cue)
+      | _ -> cloze_el (String.trim arg_str) None)
   | "query" ->
       box ~style_class:"warning"
         [ text ~value:(U.t "block.macro/query-deprecated") [] ]
@@ -723,19 +1367,72 @@ and macro_el ~refs:_refs ~self:_self body =
       (* cljs: {{embed}} is deprecated — renders a warning, not an embed *)
       box ~style_class:"warning"
         [ text ~value:(U.t "block.macro/embed-deprecated") [] ]
-  | "youtube" | "video" -> (
-      let url = first_arg args in
-      match youtube_id url with
-      | Some id -> youtube_iframe id (youtube_start url)
-      | None -> embed_iframe url)
+  | "youtube" -> macro_video_el name arguments (Some `youtube)
+  | "vimeo" -> macro_video_el name arguments (Some `vimeo)
+  | "bilibili" -> macro_video_el name arguments (Some `bilibili)
+  | "loom" -> macro_video_el name arguments (Some `loom)
+  | "video" -> macro_video_el name arguments None
   | "youtube-timestamp" -> (
       (* cljs: parse failure renders nothing *)
-      match parse_timestamp (first_arg args) with
-      | Some seconds -> timestamp_el seconds
-      | None -> D.txt "")
-  | "vimeo" | "bilibili" | "tweet" | "twitter" | "renderer" ->
-      embed_iframe args
-  | _ -> D.txt ("{{" ^ body ^ "}}")
+      match arguments with
+      | ts :: _ -> (
+          match parse_timestamp ts with
+          | Some seconds -> timestamp_el seconds
+          | None -> D.txt "")
+      | [] -> D.txt "")
+  | "tweet" | "twitter" -> (
+      match arguments with
+      | arg :: _ -> (
+          match tweet_id_of arg with
+          | Some id -> tweet_iframe id
+          | None -> D.txt "")
+      | [] -> D.txt "")
+  | _ -> macro_else_el ~refs ~self name arguments
+
+(* cljs macro-else-cp + render-macro — user macros from config.edn
+   :macros render their expanded content through the inline renderer;
+   unknown names keep the literal {{name args}} inside a warning *)
+and macro_else_el ~refs ~self name arguments : t =
+ fun context parent ->
+  let st = macros_state context in
+  (reactive
+     (fun ms ->
+       match List.assoc_opt name ms with
+       | Some content ->
+           D.el ~tag:"div" ~style_class:"macro inline"
+             ~attrs:[ ("data-macro-name", name) ]
+             (parse ~refs ~self (macro_subs content arguments))
+       | None ->
+           D.el ~tag:"div" ~style_class:"macro"
+             ~attrs:[ ("data-macro-name", name) ]
+             [ D.el ~tag:"span" ~style_class:"warning"
+                 ~attrs:
+                   [ ( "title"
+                     , U.tf "block.macro/unsupported-name" [ name ] ) ]
+                 ~text:(macro_to_text name arguments)
+                 [] ])
+     (Signal.value st))
+    context parent
+
+(* [:tag {:attrs} children] — cljs Inline_Hiccup; the tag is checked
+   against the raw-html whitelist before the vector is read *)
+and try_hiccup ~refs ~self s i =
+  ignore (refs, self);
+  match hiccup_tag_end s (i + 2) with
+  | te when te > i + 2 -> (
+      let spec = String.sub s (i + 2) (te - i - 2) in
+      let tag, _, _ = split_tag_spec spec in
+      if
+        List.mem tag hiccup_known_tags
+        && not (List.mem tag hiccup_banned_tags)
+      then
+        match hiccup_close s i with
+        | j when j > i ->
+            let literal = String.sub s i (j + 1 - i) in
+            Some (hiccup_el literal, j + 1 - i, Rs_atomic (literal, "ed-hiccup"))
+        | _ -> None
+      else None)
+  | _ -> None
 
 (* #[[page]] / #tag *)
 
@@ -941,8 +1638,6 @@ and try_date s i =
           , Rs_plain )
     | _ -> None
   else None
-
-and is_digit c = c >= '0' && c <= '9'
 
 (* <u>x</u> <ins>x</ins> etc — small whitelist *)
 and try_html_tag ~refs ~self s i =

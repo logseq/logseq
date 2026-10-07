@@ -36,7 +36,16 @@ let h_element_tag tag =
 
 let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) s : t =
-  if tag <> "span" then
+  if tag = "div" then
+    (* cljs uses div.block-title-wrap.has-video-embed for video titles —
+       a div host so the .video-embed-block children are legal *)
+    D.el ~key:("btw-d-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
+      ((match prefix with Some p -> [ p ] | None -> [])
+       @
+       match Render_inline.plain_text s with
+       | Some v -> [ D.txt v ]
+       | None -> Render_inline.parse ~self s)
+  else if tag <> "span" then
     (* h1..h6.block-title-wrap are e2e contract *)
     match Render_inline.plain_text s, prefix with
     | Some text, None ->
@@ -354,28 +363,68 @@ let query_below_el uuid =
         ]
     ]
 
+(* cljs block-video/contains-video-macro? — a video-macro occurrence
+   (video, youtube, vimeo, bilibili, loom — loom added since it renders
+   the same shell) in the raw title. The name must end at '}' or ' '
+   like the macro-name boundary in mldoc *)
+let contains_video_macro s =
+  let names = [ "video"; "youtube"; "vimeo"; "bilibili"; "loom" ] in
+  let n = String.length s in
+  let rec go j =
+    match Render_inline.find_sub s j "{{" with
+    | k when k >= 0 ->
+        let st = k + 2 in
+        if
+          List.exists
+            (fun name ->
+              let nl = String.length name in
+              st + nl <= n
+              && Str_util.starts_with_ci (String.sub s st nl) name
+              && (st + nl = n
+                  || s.[st + nl] = ' '
+                  || s.[st + nl] = '}'))
+            names
+        then true
+        else go (k + 2)
+    | _ -> false
+  in
+  go 0
+
 (* content for a (possibly quoted) body — headings nest inside quote *)
 let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
     ?(prefix : t option = None) s =
-  match heading with
-  | Some lvl when lvl >= 1 && lvl <= 6 ->
-      wrap ~tag:("h" ^ string_of_int lvl)
-        ~cls:"block-title-wrap as-heading" ~self ~wrap_attrs ~prefix s
-  | _ -> (
-      match heading_level s with
-      | Some (lvl, rest) ->
-          wrap ~tag:("h" ^ string_of_int lvl)
-            ~cls:"block-title-wrap as-heading" ~self ~wrap_attrs ~prefix
-            rest
-      | None ->
-          (* empty title: a <br> gives the inline wrap a line box, so
-             .block-content keeps its clickable area (cljs does the same
-             via the mldoc linebreak node it emits for empty content) *)
-          if s = "" then
-            D.el ~key:"btw-empty" ~tag:"span"
-              ~style_class:"block-title-wrap"
-              [ br ~key:"btw-br" [] ]
-          else wrap ~self ~wrap_attrs ~prefix s)
+  let rest, lvl =
+    match heading with
+    | Some lvl when lvl >= 1 && lvl <= 6 -> (s, Some lvl)
+    | _ -> (
+        match heading_level s with
+        | Some (lvl, rest) -> (rest, Some lvl)
+        | None -> (s, None))
+  in
+  if contains_video_macro rest then
+    (* cljs: video titles render div.block-title-wrap.has-video-embed
+       (.as-heading keeps the heading styling); segments wrap each
+       video macro in .video-embed-block *)
+    wrap ~tag:"div"
+      ~cls:
+        ("block-title-wrap has-video-embed"
+         ^ match lvl with Some _ -> " as-heading" | None -> "")
+      ~self ~wrap_attrs ~prefix rest
+  else
+    match lvl with
+    | Some lvl ->
+        wrap ~tag:("h" ^ string_of_int lvl)
+          ~cls:"block-title-wrap as-heading" ~self ~wrap_attrs ~prefix
+          rest
+    | None ->
+        (* empty title: a <br> gives the inline wrap a line box, so
+           .block-content keeps its clickable area (cljs does the same
+           via the mldoc linebreak node it emits for empty content) *)
+        if rest = "" then
+          D.el ~key:"btw-empty" ~tag:"span"
+            ~style_class:"block-title-wrap"
+            [ br ~key:"btw-br" [] ]
+        else wrap ~self ~wrap_attrs ~prefix rest
 
 
 (* @@html:<fragment> whole-title — parsed into real elements so the e2e
