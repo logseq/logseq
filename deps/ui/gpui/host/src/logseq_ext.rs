@@ -170,7 +170,9 @@ fn register_class_styles() {
     );
     class(
         "ui__dialog-content",
-        "position:absolute;width:100%;max-width:42rem",
+        "position:absolute;width:100%;max-width:42rem;padding:24px;\
+         border:1px solid border;border-radius:8px;\
+         background:background;color:foreground",
         "pointer-events-auto",
     );
     class(
@@ -178,16 +180,31 @@ fn register_class_styles() {
         "position:absolute;width:100%;max-width:32rem",
         "pointer-events-auto",
     );
-    class("ls-dialog-cmdk", "width:90dvw;max-width:56rem", "");
-    class("cp__cmdk__modal", "width:100%", "");
-    class("cp__cmdk", "display:flex;flex-direction:column", "");
+    class("ls-dialog-cmdk", "width:90dvw;max-width:56rem;padding:0", "");
+    class(
+        "cp__cmdk__modal",
+        "position:relative;width:100%;border-radius:8px;overflow:hidden",
+        "",
+    );
+    class(
+        "cp__cmdk",
+        "position:relative;display:flex;flex-direction:column;\
+         justify-content:flex-start;width:100%;height:100%;\
+         border-radius:8px;background:background;color:foreground",
+        "",
+    );
     class("ui__dialog-main-content", "width:100%", "");
     class(
         "cp__cmdk-scroller",
-        "min-height:65dvh;max-height:65dvh",
+        "width:100%;flex-grow:1;min-height:65dvh;max-height:65dvh;\
+         padding-bottom:56px",
         "overflow-y-auto",
     );
-    class("cp__cmdk-search-input", "min-width:16rem;width:100%", "");
+    class(
+        "cp__cmdk-search-input",
+        "min-width:16rem;width:100%;font-size:20px;padding:12px",
+        "",
+    );
     class(
         "ui__dialog-close",
         "position:absolute;top:0.75rem;right:0.75rem",
@@ -207,6 +224,207 @@ fn register_class_styles() {
     class("ui__popover-content", "", "pointer-events-auto");
     class("ui__dropdown-menu-content", "", "pointer-events-auto");
     class("ls-property-dialog", "", "pointer-events-auto");
+
+    // ---- app shell (web .cp__header + groups) ----
+    class(
+        "cp__header",
+        "display:flex;flex-direction:row;align-items:center;\
+         justify-content:space-between;height:48px;flex-shrink:0;\
+         border-bottom:1px solid border;background:background",
+        "",
+    );
+    class("cp__header-l", "display:flex;align-items:center", "");
+    class(
+        "cp__header-r",
+        "display:flex;align-items:center;justify-content:flex-end",
+        "",
+    );
+
+    // ---- cmdk palette (web resources/css/lui-overlay.css) ----
+    class(
+        "cp__cmdk-input-row",
+        "display:flex;flex-direction:row;align-items:center;gap:8px;\
+         height:54px;padding:0 12px;background:muted;\
+         border-bottom:1px solid border",
+        "",
+    );
+    class(
+        "cp__cmdk-group",
+        "display:flex;flex-direction:column;padding-bottom:4px;\
+         border-bottom:1px solid border",
+        "",
+    );
+    class(
+        "cp__cmdk-group-header",
+        "display:flex;flex-direction:row;align-items:center;\
+         justify-content:space-between;gap:8px;height:32px;\
+         padding:6px 12px;font-size:12px;background:muted",
+        "",
+    );
+    class("cp__cmdk-group-title", "font-weight:700;padding-left:2px", "");
+    class(
+        "cp__cmdk-group-count",
+        "padding-left:6px;font-size:11px",
+        "",
+    );
+    class("cp__cmdk-group-spacer", "flex-grow:1", "");
+    class("cp__cmdk-group-more", "opacity:0.5", "");
+    class(
+        "cp__cmdk-group-more-inner",
+        "display:flex;flex-direction:row;align-items:center;gap:4px",
+        "",
+    );
+    // web styles the row via [data-cmdk-item]; gpui keys classes, so
+    // native/cmdk_view carries cp__cmdk-item (+ -hl while highlighted)
+    class(
+        "cp__cmdk-item",
+        "display:flex;flex-direction:column;gap:2px;padding:6px 12px;\
+         margin-left:2px;margin-right:2px;border-radius:8px;\
+         font-size:14px",
+        "",
+    );
+    class(
+        "cp__cmdk-item-hl",
+        "background:secondary;border-radius:8px",
+        "",
+    );
+    class(
+        "cmdk-item-header",
+        "display:flex;flex-direction:row;align-items:center;gap:8px;\
+         padding-left:32px;font-size:12px;white-space:nowrap;\
+         color:muted-foreground",
+        "",
+    );
+    class(
+        "cmdk-item-main",
+        "display:flex;flex-direction:row;align-items:flex-start;gap:12px",
+        "",
+    );
+    class(
+        "cmdk-item-icon",
+        "display:flex;align-items:center;justify-content:center;\
+         width:20px;height:20px;border-radius:4px;background:muted",
+        "",
+    );
+    class(
+        "cmdk-item-body",
+        "display:flex;flex-direction:column;flex-grow:1",
+        "",
+    );
+    class(
+        "cp__cmdk-item-main-text",
+        "display:flex;flex-direction:row;align-items:center;gap:4px;\
+         font-weight:500;white-space:nowrap",
+        "",
+    );
+    class(
+        "cp__cmdk-item-info",
+        "font-size:12px;color:muted-foreground",
+        "",
+    );
+    class(
+        "cp__cmdk-current-page-badge",
+        "border-radius:9999px;border:1px solid border;font-size:12px;\
+         font-weight:500;padding:2px 8px;color:muted-foreground;\
+         background:secondary",
+        "",
+    );
+    class(
+        "shui-shortcut-key",
+        "display:flex;align-items:center;justify-content:center;\
+         height:20px;min-width:20px;padding:2px 4px;font-size:12px;\
+         white-space:nowrap;border-radius:4px;border:1px solid border",
+        "",
+    );
+    class(
+        "shui-shortcut-combo",
+        "display:flex;flex-direction:row;align-items:center",
+        "",
+    );
+    class(
+        "shui-shortcut-separate",
+        "display:flex;flex-direction:row;align-items:center",
+        "",
+    );
+    class("shui-shortcut-separator", "width:6px", "");
+    class(
+        "shui-shortcut-row",
+        "display:flex;flex-direction:row;align-items:center;gap:4px;\
+         height:20px;min-height:20px;max-height:20px",
+        "",
+    );
+    class(
+        "shui-shortcut-compact",
+        "display:flex;flex-direction:row;align-items:center;gap:2px;\
+         font-size:12px;color:muted-foreground",
+        "",
+    );
+    class(
+        "hints",
+        "display:flex;flex-direction:row;align-items:center;\
+         justify-content:space-between;width:100%;min-height:45px;\
+         padding:8px 12px;gap:8px;background:muted;\
+         border-top:1px solid border",
+        "",
+    );
+    class(
+        "cp__cmdk-hints",
+        "display:flex;flex-direction:row;align-items:center;gap:8px",
+        "",
+    );
+    class(
+        "cp__cmdk-hints-inner",
+        "display:flex;flex-direction:row;align-items:center;gap:4px;\
+         font-size:14px",
+        "",
+    );
+    class(
+        "cp__cmdk-hints-row",
+        "display:flex;flex-direction:row;align-items:center;gap:4px",
+        "",
+    );
+    class("cp__cmdk-hints-label", "font-weight:500", "");
+    class(
+        "cp__cmdk-tip",
+        "display:flex;flex-direction:row;align-items:center;gap:4px;\
+         opacity:0.5",
+        "",
+    );
+    class(
+        "cp__cmdk-hint",
+        "display:flex;flex-direction:row;align-items:center;gap:6px;\
+         font-size:12px;color:muted-foreground;opacity:0.4;\
+         height:28px;padding:0 4px",
+        "",
+    );
+    class("cp__cmdk-hint-label", "opacity:0.6", "");
+    class(
+        "cp__cmdk-search-only",
+        "display:flex;flex-direction:column;padding:4px 12px;\
+         opacity:0.7;font-size:12px;font-weight:500",
+        "",
+    );
+    class(
+        "cp__cmdk-search-only-row",
+        "display:flex;flex-direction:row;align-items:center;gap:4px",
+        "",
+    );
+    class("cp__cmdk-search-only-name", "font-weight:500;padding-left:4px", "");
+    class("cp__cmdk-search-only-clear", "padding:4px", "");
+    class("cp__cmdk-empty", "padding:16px;opacity:0.5", "");
+    class(
+        "icon-cp-container",
+        "display:flex;align-items:center;justify-content:center",
+        "",
+    );
+
+    // ---- page surface ----
+    // hover-only affordances on web (title actions fade in, block
+    // controls appear on block hover) have no hover state on gpui —
+    // keep them hidden at rest; absolute positioning pulls the actions
+    // out of the title's layout.
+    class("ls-page-title-actions", "opacity:0", "");
+    class("control-hide", "display:none", "");
 }
 
 /// `logseq-div`/`logseq-span` nodes carrying the `.latex`/`.latex-inline`

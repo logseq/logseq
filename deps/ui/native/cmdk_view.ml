@@ -397,7 +397,15 @@ let shortcut_row key it =
    kind nodes the same way it saw dom attrs *)
 let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
   let item_box =
-    box ~key:"item"
+    (* web styles the row via [data-cmdk-item] and the highlight via
+       [data-highlighted]/[data-kb-highlighted] — gpui's class
+       dictionary is class-keyed, so the row carries cp__cmdk-item and
+       flips cp__cmdk-item-hl with ihl *)
+    Ui_parts.class_signal item_sig
+      (fun (it : S.item) ->
+        if it.S.ihl then "cp__cmdk-item cp__cmdk-item-hl"
+        else "cp__cmdk-item")
+      (box ~key:"item"
       ~data_attrs:(reactive (fun it -> row_data_attrs it) item_sig)
       [ reactive ~equal:(fun (a : S.item) b -> a = b) (fun (it : S.item) -> item_header it it.S.iq) item_sig
         ; row ~key:"main" ~style_class:"cmdk-item-main"
@@ -436,7 +444,7 @@ let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
                   a.S.isc = b.S.isc && a.S.idx = b.S.idx
                   && a.S.ihl = b.S.ihl) (fun it -> shortcut_row "sc-row" it) item_sig
             ]
-        ]
+        ])
   in
   box ~key:"item-wrap"
     ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
@@ -604,6 +612,9 @@ let input_row st : t =
         (fun (v : S.view) ->
           input ~key:"input" ~style_class:"cp__cmdk-search-input"
               ~accessibility_identifier:"cmdk-input"
+            (* gpui input kind reads this attr to drop its bordered
+               field chrome (web's borderless .cp__cmdk-search-input) *)
+            ~data_attrs:[ ("data-appearance", "none") ]
             ~grow:1.
             ~placeholder:
               (if v.S.move_mode then
