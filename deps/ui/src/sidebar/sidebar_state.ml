@@ -19,7 +19,7 @@
 open Promise_ext
 let t = I18n.t
 
-let default_navs = [ "flashcards"; "all-pages" ]
+let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
 
 (* A rendered right-sidebar entry. kind maps to .item-type-<kind>. *)
 type item =
