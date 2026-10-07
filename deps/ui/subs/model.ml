@@ -240,6 +240,7 @@ type t =
   ; unlinked_open : bool
   ; unlinked_search : bool
   ; unlinked_query : string
+  ; linked_open : bool
   ; linked_search : bool
   ; linked_query : string
   ; help_open : bool
@@ -284,6 +285,7 @@ let initial =
   ; unlinked_open = true
   ; unlinked_search = false
   ; unlinked_query = ""
+  ; linked_open = true
   ; linked_search = false
   ; linked_query = ""
   ; help_open = false

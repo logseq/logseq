@@ -58,17 +58,25 @@ let on_doc_keydown ev =
     close_top ()
   end
 
+let listeners_installed = ref false
+
 let install_listeners () =
-  (* natively the press event the host forwards is mousedown, not
-     pointerdown — the dismissal semantics are the same *)
-  Overlay.on_document_press "mousedown"
-    ~els:(fun () -> !open_popups)
-    ~on_hit:(function
-      | None -> close_all ()
-      | Some _ -> ());
-  Editor_dom.document_add_listener "keydown" on_doc_keydown true
+  if not !listeners_installed then begin
+    listeners_installed := true;
+    (* natively the press event the host forwards is mousedown, not
+       pointerdown — the dismissal semantics are the same *)
+    Overlay.on_document_press "mousedown"
+      ~els:(fun () -> !open_popups)
+      ~on_hit:(function
+        | None -> close_all ()
+        | Some _ -> ());
+    Editor_dom.document_add_listener "keydown" on_doc_keydown true
+  end
 
 let push_popup el =
+  (* outside-press / Escape dismissal only works once the document
+     listeners exist — install lazily on the first popup *)
+  install_listeners ();
   open_popups := el :: !open_popups;
   publish_open ()
 
@@ -78,8 +86,13 @@ let pop_popup el =
 
 (* -- positioning: fixed, anchored below trigger -- *)
 
+(* The host measures nodes on demand: the first el_rect for an anchor
+   fires measure-node and stays empty until the node-rect reply lands a
+   frame later. Re-place on later ticks so a first-opened popup does not
+   flash at 0,0; a rect that never resolves keeps the old behaviour. *)
 let position_content ~anchor ~content ~align_end ~submenu =
-  let r = D.el_rect anchor in
+  let rec place tries_left =
+    let r = D.el_rect anchor in
   let style = ref "position:fixed;z-index:50;" in
   (if submenu then begin
      (* opens right of the item, top-aligned; radix shifts the panel up
@@ -138,7 +151,14 @@ let position_content ~anchor ~content ~align_end ~submenu =
        ^ Printf.sprintf "%s%s;max-height:%.0fpx;overflow-y:auto;" horiz pos
            (Float.max avail 120.)
    end);
-  D.el_set_attr content "style" !style
+    D.el_set_attr content "style" !style;
+    if
+      tries_left > 0 && D.rect_left r = 0. && D.rect_top r = 0.
+      && D.rect_width r = 0. && D.rect_height r = 0.
+    then
+      Editor_dom.set_timeout (fun () -> place (tries_left - 1)) 32
+  in
+  place 4
 
 (* -- menu -- *)
 

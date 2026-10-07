@@ -1031,7 +1031,7 @@ let refs_filtered (refs : Model.block list) q =
          | None -> false))
       refs
 
-let references_view ?(parents = []) ~search_on ~query
+let references_view ?(parents = []) ?on_fold ~open_ ~search_on ~query
     (refs : Model.block list) : t =
   match refs with
   | [] -> Logseq_el.nothing
@@ -1041,27 +1041,30 @@ let references_view ?(parents = []) ~search_on ~query
         [ column ~key:"rv1" ~gap:8
             [ column ~key:"rv2" ~gap:8
                 [ column ~key:"rv3"
-                    [ foldable_title "refs-t"
+                    [ foldable_title "refs-t" ~collapsed:(not open_)
+                        ~control:(Option.is_some on_fold) ?on_click:on_fold
                         (refs_view_head "refs"
                            ~on_search:(fun () ->
                              Runtime.send Action.Linked_toggle_search;
                              Runtime.flush ())
                            (I18n.t "view/linked-references")
                            (List.length refs))
-                    ; foldable_content "refs-c"
-                        (column ~key:"rvb" ~gap:8
-                           ~style_class:"ls-view-body"
-                           [ box ~key:"refs-sc"
-                               [ (if search_on then
-                                    refs_search_input "lrefs"
-                                      (fun q ->
-                                        Action.Linked_set_query q)
-                                      ()
-                                  else Logseq_el.nothing)
-                               ]
-                           ; column ~key:"rvl" ~gap:8
-                               [ ref_groups_virt "rvg" ~parents groups ]
-                           ])
+                    ; (if open_ then
+                         foldable_content "refs-c"
+                           (column ~key:"rvb" ~gap:8
+                              ~style_class:"ls-view-body"
+                              [ box ~key:"refs-sc"
+                                  [ (if search_on then
+                                       refs_search_input "lrefs"
+                                         (fun q ->
+                                           Action.Linked_set_query q)
+                                         ()
+                                     else Logseq_el.nothing)
+                                  ]
+                              ; column ~key:"rvl" ~gap:8
+                                  [ ref_groups_virt "rvg" ~parents groups ]
+                              ])
+                       else Logseq_el.nothing)
                     ]
                 ]
             ]
@@ -1631,6 +1634,7 @@ let refs_eq (a : Model.t) (b : Model.t) =
   && a.unlinked_open = b.unlinked_open
   && a.unlinked_search = b.unlinked_search
   && a.unlinked_query = b.unlinked_query
+  && a.linked_open = b.linked_open
   && a.linked_search = b.linked_search
   && a.linked_query = b.linked_query
   && a.route = b.route
@@ -1647,7 +1651,10 @@ let refs_wrap (m : Model.t) : t =
             [ box ~key:"tq" ~accessibility_identifier:"today-queries" [] ]
           else [])
         @ [ box ~key:"lrefs"
-              [ references_view ~parents:m.ref_parents
+              [ references_view ~parents:m.ref_parents ~open_:m.linked_open
+                  ~on_fold:(fun () ->
+                    Runtime.send Action.Linked_toggle_open;
+                    Runtime.flush ())
                   ~search_on:m.linked_search ~query:m.linked_query
                   m.page_refs ]
           ; (* cljs when-not class-page?/property-page? — the unlinked

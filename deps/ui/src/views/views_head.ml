@@ -612,6 +612,7 @@ let search_el inst : t =
                    ~accessibility_identifier:input_id
                    ~placeholder:I.type_to_search
                    ~text:(V.get inst).V.input
+                   ~width:220 ~autofocus:true
                    ~on_input:(fun ev ->
                      match ev with
                      | L.TextChanged (_, v) ->
@@ -766,7 +767,6 @@ let render_head inst : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
   let dim = Signal.map (fun open_ -> not open_) (P.open_signal sched) in
-  let s0 = V.get inst in
   let has_add_object =
     match inst.V.kind with
     | V.KTagPage _ | V.KPropertyPage _ -> (
@@ -790,21 +790,20 @@ let render_head inst : t =
     ; Ui_parts.class_signal dim
         (fun d -> "view-actions" ^ if d then " ls-dim" else " ls-lit")
         (row ~key:"actions"
-           [ (if s0.V.sorting <> [] then
-                button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
-                  ~icon:(Views_table.icon_of "arrows-up-down")
-                  ~style_class:"ls-icon-btn"
-                  ~accessibility_identifier:
-                    ("vsort-" ^ string_of_int inst.V.id)
-                  ~on_press:(fun _ ->
-                    match
-                      E.get_element_by_id
-                        ("vsort-" ^ string_of_int inst.V.id)
-                    with
-                    | Some a -> sorting_popup inst a
-                    | None -> ())
-                  []
-              else spacer ~key:"no-sort" [])
+           [ (if_ ~test:(Signal.map (fun (s : V.vstate) -> s.V.sorting <> []) (sig_of inst))
+                (button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
+                   ~icon:(Views_table.icon_of "arrows-up-down")
+                   ~style_class:"ls-icon-btn"
+                   ~accessibility_identifier:
+                     ("vsort-" ^ string_of_int inst.V.id)
+                   ~on_press:(fun _ ->
+                     match
+                       E.get_element_by_id
+                         ("vsort-" ^ string_of_int inst.V.id)
+                     with
+                     | Some a -> sorting_popup inst a
+                     | None -> ())
+                   []))
            ; button ~variant:`ghost ~size:`sm ~label:I.filter
                ~icon:(Views_table.icon_of "filter")
                ~style_class:"ls-icon-btn"

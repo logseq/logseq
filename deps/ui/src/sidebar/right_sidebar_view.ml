@@ -484,8 +484,8 @@ let item_body st idx (it : Sidebar_state.item) =
              ]
             (* linked references sit inside .page-inner in cljs *)
             @ (if it.kind = "page" then
-                 [ Page.references_view ~search_on:false ~query:""
-                     it.linked_refs ]
+                 [ Page.references_view ~open_:true ~search_on:false
+                     ~query:"" it.linked_refs ]
                else []))
         ]
     ]
@@ -508,8 +508,9 @@ let sidebar_item st idx (it : Sidebar_state.item) =
 
 let inner st =
   column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
+    ~grow:1.
     ~style_class:"cp__right-sidebar-inner"
-    [ scroll ~key:"rs-scroll" ~orientation:`vertical
+    [ scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1.
         ~style_class:"cp__right-sidebar-scrollable"
         [ column ~key:"rs-col" ~grow:1.
             [ topbar st

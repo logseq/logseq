@@ -207,6 +207,11 @@ let on_document_event name f = add_document_listener name f
    of registration order *)
 let pre_dispatch_hook : (Js.Json.t -> unit) ref = ref (fun _ -> ())
 
+(* runs after the bubble walk and document listeners — the DOM shim
+   installs the click default action here (a[href^="#"] navigation) *)
+let post_dispatch_hook : (string -> Js.Json.t -> unit) ref =
+  ref (fun _ _ -> ())
+
 (* DOM-style event bubbling: the host posts a dom-event only to the
    deepest hit node, so element-level handlers registered on ancestors
    would never run natively. Views register their per-element handlers
@@ -316,7 +321,7 @@ let emit_event name payload =
                bubble (int_of_float n) 0)
        | None -> ())
    | _ -> ());
-  if not !propagation_stopped then
+  if not !propagation_stopped then begin
   match Hashtbl.find_opt window_listeners name with
   | Some fns ->
       (* document listeners see the enriched payload: "target" injected
@@ -348,6 +353,13 @@ let emit_event name payload =
               (Printexc.to_string e))
         fns
   | None -> ()
+  end;
+  (* DOM default action — runs after listeners had their chance to
+     prevent; skipped entirely for coalesced duplicate clicks *)
+  (try !post_dispatch_hook name payload
+   with e ->
+     Printf.eprintf "[emit_event] post hook threw ev=%s: %s\n%!" name
+       (Printexc.to_string e))
   end
 
 (* ---------- url / hash routing ---------- *)

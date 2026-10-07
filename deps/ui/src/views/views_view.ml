@@ -302,8 +302,18 @@ let build_columns inst =
                props))
   | _ -> apply []
 
-let load_view_data inst =
-  let ctx = V.ctx_of inst in
+(* [fetch_limit] overrides the vstate's staged value — Signal.set is
+   pending until the next stabilize, so a same-tick [V.ctx_of] would
+   still read the old limit *)
+let load_view_data ?(fetch_limit = 0) inst =
+  let ctx =
+    match V.ctx_of inst, fetch_limit > 0 with
+    | W.Map kvs, true ->
+        W.Map
+          ((W.kw "initial-row-count", W.Int fetch_limit)
+          :: List.filter (fun (k, _) -> k <> W.kw "initial-row-count") kvs)
+    | ctx, _ -> ctx
+  in
   let view_uuid = (V.get inst).V.view_uuid in
   let key = Db.key_view_data view_uuid ctx in
   Db.snapshots
@@ -505,6 +515,19 @@ let export_edn inst =
           ; toast_kind = "success" });
      Js.Promise.resolve ())
 
+(* windowed view-data growth — the row stream's virt-end dom-event fires
+   when its last child nears the viewport; each bump doubles the fetched
+   window until it covers the full result count (cljs
+   offset-view-row-count) *)
+let load_more_rows inst =
+  match (V.get inst).V.data with
+  | Wr.VFlat { rows; count; _ }
+    when List.length rows < count ->
+      let limit = min count (2 * List.length rows) in
+      V.update inst (fun s -> { s with V.fetch_limit = limit });
+      load_view_data ~fetch_limit:limit inst
+  | _ -> ()
+
 let add_new_object inst =
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
@@ -556,6 +579,7 @@ let install_ops () =
     ; o_export = export_edn
     ; o_add_object = add_new_object
     ; o_title_of_uuid = title_of_uuid
+    ; o_load_more = load_more_rows
     }
 
 (* ---------- mount ---------- *)

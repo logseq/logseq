@@ -73,7 +73,8 @@ let el_is_connected = Views_dom.el_is_connected
    drop them through the vreg, which unmounts the materialized subtree.
    Imperative els carry imp-* handles the "remove" dom-op can't resolve
    (gpui rejects it) — Imperative_dom.remove detaches from the body
-   overlay and drops the runtime subtree instead. *)
+   overlay and drops the runtime subtree instead, keeping OCaml-side
+   bookkeeping (registry, runtime parents, dom_handlers) in sync. *)
 let el_remove (el : el) : unit =
   if Editor_dom.is_vdom_el el then Vdom.drop_el el
   else Editor_dom.el_remove el
@@ -124,7 +125,16 @@ let is_editable_target = Editor_dom.is_editable_target
 let active_element = Editor_dom.active_element
 let el_style_set_property = Dom_ext.style_set_property
 let el_bounding_rect = Dom_ext.bounding_rect
-let el_listen = Properties_dom.el_listen
+(* imperative elements go through Imperative_dom.add_listener — Vdom.listen
+   only understands vrec shells and mounted snapshots, so a listener added
+   to an element before it mounts (the normal create-then-attach flow)
+   would be silently dropped *)
+let el_listen (el : el) (name : string) (f : ev -> unit) (cap : bool)
+    : unit =
+  match Imperative_dom.id_of el with
+  | Some id -> Imperative_dom.add_listener id name f
+  | None -> Properties_dom.el_listen el name f cap
+
 let el_on el name f = el_listen el name f false
 
 let el_on_once el name f =

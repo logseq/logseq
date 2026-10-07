@@ -560,13 +560,22 @@ let open_dialog ?(remove = false) ?(phase = Prop_select) ?anchor target =
   publish (Some d)
 
 (* anchored-open helper for click triggers: measure the element and
-   open the popover at its bottom-left (base-ui align=start) *)
+   open the popover at its bottom-left (base-ui align=start). On
+   backends with async measurement (gpui) the first rect is still
+   pending, so retry a few ticks rather than anchoring at 0,0. *)
 let open_for_anchor_el ?(remove = false) ?(phase = Prop_select) anchor
     target =
-  let left, _top, _right, bottom, _w =
-    Web_dom.bounding_rect_fields anchor
+  let rec open_measured tries_left =
+    let left, top, _right, bottom, w =
+      Web_dom.bounding_rect_fields anchor
+    in
+    if
+      tries_left > 0 && left = 0. && top = 0. && bottom = 0. && w = 0.
+    then
+      Web_dom.set_timeout (fun () -> open_measured (tries_left - 1)) 32
+    else open_dialog ~remove ~phase ~anchor:(left, bottom) target
   in
-  open_dialog ~remove ~phase ~anchor:(left, bottom) target
+  open_measured 4
 
 (* ---------- triggers ---------- *)
 
