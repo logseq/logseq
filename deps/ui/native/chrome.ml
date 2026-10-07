@@ -271,25 +271,38 @@ let right_sidebar (ms : Model.t Signal.signal) =
    resizer. #left-sidebar{display:none} on desktop keeps the overlay
    out of the click path when closed. *)
 let left_sidebar (ms : Model.t Signal.signal) =
-  Ui_parts.class_signal ms
-    (fun (m : Model.t) ->
-      "cp__sidebar-left-layout"
-      ^ if m.left_sidebar_open then " is-open" else "")
-    (column ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-       [ column ~key:"ls-inner"
-           ~style_class:"left-sidebar-inner as-container"
-           [ box ~key:"ls-wrap" ~style_class:"wrap"
-               [ box ~key:"ls-head"
-                   ~style_class:"sidebar-header-container"
-                   [ Left_sidebar_view.header ms ]
-               ; Left_sidebar_view.contents ms
-               ]
-           ]
-       ; Ui_parts.pressable
-           ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
-           (box ~key:"shade" ~style_class:"shade-mask" [])
-       ; box ~key:"resizer" ~style_class:"left-sidebar-resizer" []
-       ])
+ fun ctx parent ->
+  (Ui_parts.class_signal ms
+     (fun (m : Model.t) ->
+       "cp__sidebar-left-layout"
+       ^ if m.left_sidebar_open then " is-open" else "")
+     (column ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+        [ (* the web stylesheet hides the closed sidebar via .is-open —
+             native backends need the contents structurally absent *)
+          Logseq_dom.if_
+            ~test:
+              (Logseq_dom.own ctx
+                 (Signal.map
+                    (fun (m : Model.t) -> m.Model.left_sidebar_open)
+                    ms))
+            (column ~key:"ls-if-wrap"
+               [ column ~key:"ls-inner"
+                   ~style_class:"left-sidebar-inner as-container"
+                   [ box ~key:"ls-wrap" ~style_class:"wrap"
+                       [ box ~key:"ls-head"
+                           ~style_class:"sidebar-header-container"
+                           [ Left_sidebar_view.header ms ]
+                       ; Left_sidebar_view.contents ms
+                       ]
+                   ]
+               ; Ui_parts.pressable
+                   ~on_press:(fun _ ->
+                     Runtime.send Action.Toggle_left_sidebar)
+                   (box ~key:"shade" ~style_class:"shade-mask" [])
+               ; box ~key:"resizer" ~style_class:"left-sidebar-resizer" []
+               ])
+        ]))
+    ctx parent
 
 let main_content (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
@@ -309,7 +322,10 @@ let main_content (ms : Model.t Signal.signal) =
           (Signal.map (fun (_ : Model.t) ->
                [ ("data-is-margin-less-pages", "false") ]) ms)
         [ box ~key:"main-inner"
-            ~style_class:"cp__sidebar-main-content"
+            (* gpui does not stretch a flex child's cross axis without an
+               explicit width — without w-full the page column shrinks
+               to its content and sits centered inside the scroll area *)
+            ~style_class:"cp__sidebar-main-content w-full min-w-0"
             ~data_attrs_signal:
               (Signal.map (fun (m : Model.t) ->
                    (* cljs container.cljs: data-is-full-width on margin-less +
