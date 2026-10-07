@@ -321,7 +321,7 @@ let nav_group ms st =
                 [ Ui_parts.pressable
                     ~on_press:(fun _ -> Sidebar_state.open_nav_menu st)
                     (row ~style_class:"as-edit"
-                       [ icon_ "filter-edit" ]) ] ]
+                       [ icon_ ~size:14 "filter-edit" ]) ] ]
         ; box ~key:"nav-bd" ~style_class:"bd"
             [ reactive
                 (fun (route, (checked, tag_titles)) ->
@@ -410,19 +410,28 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
    reactive stays because the bd subtree's shape changes with the list *)
 let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
     ~always_bd ~recent =
-  Ui_parts.class_signal items_sig
-    (fun ps ->
-      "sidebar-content-group " ^ class_ ^ " is-expand"
-      ^ if ps = [] then "" else " has-children")
+  let cls_sig =
+    Signal.map2
+      (fun ps collapsed ->
+        "sidebar-content-group " ^ class_
+        ^ (if ps = [] then "" else " has-children")
+        ^ if collapsed then "" else " is-expand")
+      items_sig
+      (Sidebar_state.group_collapsed_sig st class_)
+  in
+  Ui_parts.class_signal cls_sig (fun cls -> cls)
     (box ~key
        [ column ~key:(key ^ "-inner")
            ~style_class:"sidebar-content-group-inner"
-           [ row ~key:(key ^ "-hd") ~cross:`center ~style_class:"hd"
-               [ box ~key:(key ^ "-a") ~style_class:"a"
-                   [ box ~style_class:"wrap-th" ~grow:1.
-                       [ text ~value:label [] ] ]
-               ; box ~key:(key ^ "-b") ~style_class:"b"
-                   [ icon_ ~cls:"more" ~size:15 "chevron-right" ] ]
+           [ Ui_parts.pressable
+               ~on_press:(fun _ ->
+                 Sidebar_state.toggle_group_collapsed st class_)
+               (row ~key:(key ^ "-hd") ~cross:`center ~style_class:"hd"
+                  [ box ~key:(key ^ "-a") ~style_class:"a"
+                      [ box ~style_class:"wrap-th" ~grow:1.
+                          [ text ~value:label [] ] ]
+                  ; box ~key:(key ^ "-b") ~style_class:"b"
+                      [ icon_ ~cls:"more" ~size:15 "chevron-right" ] ])
            ; reactive
                ~equal:(fun a b ->
                  List.map
@@ -522,7 +531,7 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
                    [ icon_ "topology-star" ]
                ; text ~key:"gsel-n"
                    ~value_signal:(Signal.map name_of ms) []
-               ; icon_ "selector" ]) ] ]
+               ; icon_ ~size:18 "selector" ]) ] ]
 ;;
 
 let header (ms : Model.t Signal.signal) : t =

@@ -46,6 +46,7 @@ type t =
   ; favorited : bool Signal.state
   ; items : item list Signal.state
   ; open_menu : string Signal.state
+  ; groups_collapsed : string list Signal.state
   }
 
 let st_ref : t option ref = ref None
@@ -936,6 +937,7 @@ let init (ms : Model.t Signal.signal) : t =
         ; favorited = Signal.state owner false
         ; items = Signal.state owner []
         ; open_menu = Signal.state owner ""
+        ; groups_collapsed = Signal.state owner []
         }
       in
       st_ref := Some st;
@@ -959,6 +961,16 @@ let ensure ms = init ms
 
 (* the singleton — set once init runs *)
 let current () = !st_ref
+
+(* cljs :ui/navigation-item-collapsed? — in-memory toggle keyed by the
+   group's class ("favorites", "recent"); not persisted like cljs *)
+let group_collapsed_sig st key =
+  Signal.map (fun ks -> List.mem key ks) (Signal.value st.groups_collapsed)
+
+let toggle_group_collapsed st key =
+  let ks = Signal.get_state st.groups_collapsed in
+  Runtime.signal_set st.groups_collapsed
+    (if List.mem key ks then List.filter (fun k -> k <> key) ks else key :: ks)
 
 let toggle_nav st nav checked =
   let cur = Signal.get_state st.nav_checked in
