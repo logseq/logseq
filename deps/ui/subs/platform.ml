@@ -229,6 +229,12 @@ external js_get : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 (* base name for the same accessor — shared src calls Platform.json_prop *)
 let json_prop = js_get
 
+(* native hosts re-dispatch synthetic events through Platform.emit_event;
+   on web the real DOM event already reaches document listeners — the
+   shared sink trampoline calls this only for a host-emitted dom-event,
+   which never fires here *)
+let emit_event (_ : string) (_ : Js.Json.t) : unit = ()
+
 let set_document_title : string -> unit =
   [%mel.raw "function (t) { document.title = t }"]
 

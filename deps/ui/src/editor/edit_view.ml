@@ -473,6 +473,27 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
   Lui_ui.on_event context node
     (fun ev ->
       match ev with
+      | ExtensionEvent (_, ident, "dom-event", fields)
+        when ident = Editor_sink.identifier -> (
+          (* native hosts carry document-level events (keydown feeding
+             popups and global chords) through the focused node — unwrap
+             and fan out to the document listeners like the logseq-*
+             dom trampoline does; a no-op on web *)
+          let field name =
+            match String_map.find_opt name fields with
+            | Some (StringValue s) -> Some s
+            | _ -> None
+          in
+          match field "name" with
+          | Some name ->
+              let payload =
+                match field "payload" with
+                | Some p -> (
+                    try Js.Json.parseExn p with _ -> Js.Json.null)
+                | None -> Js.Json.null
+              in
+              Platform.emit_event name payload
+          | None -> ())
       | ExtensionEvent (_, ident, name, fields)
         when ident = Editor_sink.identifier -> (
           match Edit_input.decode name fields with

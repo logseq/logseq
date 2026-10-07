@@ -227,15 +227,17 @@ fn utf8_floor(text: &str, mut index: usize) -> usize {
     index
 }
 
-/// `(x, y, height)` of the caret at model-byte `off`, in px relative to
-/// the `.block-editor` container. Tries every run spanning `off` in
-/// document order, matching the web twin's `frags_at` walk.
+/// `(x, y, height, container origin)` of the caret at model-byte `off`:
+/// x/y/h are px relative to the `.block-editor` container (what the
+/// conduit overlay draws in), origin is the container's window-space
+/// top-left (what the popup anchor adds back to land in viewport px —
+/// the web twin's caretPopupPos contract).
 fn caret_rect(
     shared: &Shared,
     block_id: &str,
     off: i64,
     window: &mut Window,
-) -> Option<(f32, f32, f32)> {
+) -> Option<(f32, f32, f32, Pixels, Pixels)> {
     let (container, runs) = {
         let shared = shared.borrow();
         let editor = find_editor_node(&shared.store, block_id)?;
@@ -270,6 +272,8 @@ fn caret_rect(
             f32::from(x - origin.x),
             f32::from(bounds.origin.y - origin.y),
             f32::from(bounds.size.height),
+            origin.x,
+            origin.y,
         ));
     }
     None
@@ -523,15 +527,9 @@ impl EditorInputState {
         let shared = self.shared.clone();
         let block_id = self.block_id()?;
         let caret = ext_int_prop(&shared.borrow().store, self.node_id, "caret")?;
-        let (x, y, h) = caret_rect(&shared, &block_id, caret, window)?;
-        let container = {
-            let shared = shared.borrow();
-            let editor = find_editor_node(&shared.store, &block_id)?;
-            container_of(&shared.store, editor)
-        }?;
-        let origin = node_bounds(&shared, container)?.origin;
+        let (x, y, h, ox, oy) = caret_rect(&shared, &block_id, caret, window)?;
         Some(Bounds::new(
-            gpui_kit::gpui::point(origin.x + px(x), origin.y + px(y)),
+            gpui_kit::gpui::point(ox + px(x), oy + px(y)),
             gpui_kit::gpui::size(px(0.), px(h)),
         ))
     }
@@ -991,8 +989,29 @@ fn editor_surface(
             // where global shortcuts still fire while a block is being
             // edited. Only unmodified non-text keys (Escape, arrows,
             // Tab, Enter) are consumed here — they belong to the editing
-            // model alone.
+            // model alone. The web DOM delivers the same physical
+            // keydown to document listeners too (autocomplete
+            // Enter/arrows/Escape live there, the editor's own listener
+            // no-ops on the block-editor target): emit the dom-event
+            // directly — propagation stays stopped so the root observer
+            // cannot double-dispatch it.
             if !global_key {
+                lui_gpui::dom::dom_event(
+                    &key_shared,
+                    node_id,
+                    IDENTIFIER,
+                    "keydown",
+                    json!({
+                        "key": dom_key_name(&keystroke.key),
+                        "keyChar": keystroke.key_char,
+                        "metaKey": mods.platform,
+                        "ctrlKey": mods.control,
+                        "shiftKey": mods.shift,
+                        "altKey": mods.alt,
+                        "repeat": event.is_held,
+                    }),
+                    cx,
+                );
                 cx.stop_propagation();
             }
         })
@@ -1065,7 +1084,7 @@ pub fn handle_dom_op(
         "caret-rect" => {
             let off = parsed.get("offset").and_then(Value::as_i64).unwrap_or(0);
             caret_rect(shared, &block_id, off, window)
-                .map(|(x, y, h)| {
+                .map(|(x, y, h, ox, oy)| {
                     vec![(
                         "caret-rect".to_string(),
                         json!({
@@ -1074,6 +1093,8 @@ pub fn handle_dom_op(
                             "x": x.round() as i64,
                             "y": y.round() as i64,
                             "h": h.round() as i64,
+                            "ox": f32::from(ox).round() as i64,
+                            "oy": f32::from(oy).round() as i64,
                         }),
                     )]
                 })

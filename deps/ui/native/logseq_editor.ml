@@ -33,7 +33,9 @@
 
    Commands (OCaml -> host via Host.dom_op; measurement replies come
    back through the platform-event channel under the same name):
-     caret-rect      {block-id, offset} -> {block-id, offset, x, y, h}
+     caret-rect      {block-id, offset} -> {block-id, offset, x, y, h, ox, oy}
+                     x/y/h relative to .block-editor; ox/oy its
+                     window-space origin (popup anchors add them)
      offset-at       {block-id, x, y}   -> {block-id, x, y, offset}
      line-ranges     {block-id}         -> {block-id, ranges} — "lo,hi;…"
      scroll-height   {block-id}         -> {block-id, height}
@@ -119,6 +121,14 @@ let schema =
         ; Lui_extension.event_field "extend" Lui_extension.BoolScalar
             false
         ]
+        (* hosts carry document-level events (keydown feeding popups and
+           global chords) through the focused node as dom-event — the
+           sink's on_event fans them out to Platform.emit_event *)
+    ; Lui_extension.event "dom-event"
+        [ Lui_extension.event_field "name" Lui_extension.StringScalar true
+        ; Lui_extension.event_field "payload" Lui_extension.StringScalar
+            false
+        ]
     ]
 
 let register registry =
@@ -130,7 +140,12 @@ let register registry =
    full query (block-id + args) so a stale reply can never answer a
    different query. *)
 
-type caret_rect_reply = { cx : int; cy : int; ch : int }
+(* x/y/h are .block-editor-container relative (the overlay frame
+   draws in container space); ox/oy are the container's window-space
+   origin — popup anchors add them to land in viewport px like the
+   web twin's caretPopupPos contract *)
+type caret_rect_reply =
+  { cx : int; cy : int; ch : int; ox : int; oy : int }
 
 let caret_rects : (string * int, caret_rect_reply) Hashtbl.t =
   Hashtbl.create 64
@@ -170,6 +185,8 @@ let note_measurement name (j : Js.Json.t) : unit =
                 { cx = int_of_float x
                 ; cy = int_of_float y
                 ; ch = int_of_float h
+                ; ox = Option.value ~default:0 (Option.map int_of_float (jnum "ox" j))
+                ; oy = Option.value ~default:0 (Option.map int_of_float (jnum "oy" j))
                 }
           | _ -> ())
       | "offset-at" -> (
@@ -250,11 +267,14 @@ let popup_pos block_id : (float * float * float) option =
     | Some e when e.Editor_state.uuid = block_id ->
         let off = e.Editor_state.model.Edit_model.caret in
         request block_id "caret-rect" [ ("offset", jnum_v off) ];
+        (* reply coords are container-relative — re-anchor into viewport
+           space (x-20, line bottom - 3, line top), matching the web
+           twin's popup_pos *)
         Option.map
           (fun r ->
-            ( Float.of_int r.cx -. 20.
-            , Float.of_int (r.cy + r.ch)
-            , Float.of_int r.cy ))
+            let vx = Float.of_int (r.cx + r.ox)
+            and vy = Float.of_int (r.cy + r.oy) in
+            (vx -. 20., vy +. Float.of_int r.ch -. 3., vy))
           (Hashtbl.find_opt caret_rects (block_id, off))
     | _ -> None
   in

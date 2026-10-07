@@ -631,6 +631,61 @@ fn register_class_styles() {
     // out of the title's layout.
     class("ls-page-title-actions", "opacity:0", "");
     class("control-hide", "display:none", "");
+
+    // ---- shared-OCaml block editor (resources/css/lui-core.css .ed-*) ----
+    // The overlay paints the selection rects and caret bar over the
+    // .ed-line text runs; each measured rect is an absolutely-positioned
+    // .ed-pos wrapper whose bound padding pushes the bar to (x, y).
+    class("block-editor", "position:relative", "");
+    class("ed-line", "min-height:1.5rem", "");
+    class("ed-delim", "color:var(--ls-secondary-text-color)", "");
+    // .ed-hidden { display:none } — reveal-on-caret delimiters must not
+    // reserve space: collapse the box (invisible() alone keeps the
+    // delimiter's intrinsic width).
+    class(
+        "ed-hidden",
+        "display:none;width:0;height:0;overflow:hidden",
+        "",
+    );
+    class(
+        "ed-pill",
+        "background:var(--ls-tertiary-background-color);border-radius:4px;\
+         padding:0 4px",
+        "cursor-pointer",
+    );
+    class("ed-raw", "background:var(--ls-tertiary-background-color)", "");
+    class("ed-overlay", "position:absolute;inset:0", "pointer-events-none");
+    class("ed-pos", "position:absolute;left:0;top:0", "");
+    class(
+        "ed-sel",
+        "background:var(--ls-block-highlight-color);border-radius:2px",
+        "",
+    );
+    class(
+        "ed-caret",
+        "background:var(--ls-caret-color, var(--ls-primary-text-color))",
+        "",
+    );
+
+    // ---- autocomplete menu rows (lui-overlay.css .menu-link*) ----
+    class(
+        "menu-links-wrapper",
+        "display:flex;flex-direction:column;padding:4px",
+        "",
+    );
+    class("menu-link-wrap", "display:block", "");
+    class(
+        "menu-link",
+        "display:flex;flex-direction:row;align-items:center;\
+         justify-content:space-between;padding:0.375rem 0.5rem;\
+         font-size:0.875rem;color:muted-foreground;border-radius:4px",
+        "",
+    );
+    class(
+        "chosen",
+        "background:var(--ls-menu-hover-color, var(--ls-tertiary-background-color))",
+        "",
+    );
 }
 
 /// `logseq-div`/`logseq-span` nodes carrying the `.latex`/`.latex-inline`
