@@ -44,7 +44,7 @@ Reference: `src/main/frontend/extensions/fsrs.cljs` (rating set `[:again :hard :
 | Keyboard | `s` show answers, `1`–`4` rate, `Escape` close | identical | ok | — |
 | Make a Flashcard ctx item | block ctx menu "Make a Flashcard" → tags block `logseq.class/Card` | same item (flag `:feature/enable-flashcards?`, default on) + `make-flashcard` cmd | ok | — |
 | `+` add card in modal | inserts Card-class block into today's journal | same (`add_cards_block`) | ok | — |
-| Card breadcrumb row | page-name breadcrumb sits above card text | renders on the same line and overlaps the question text (cosmetic) | divergent | `lui-11` |
+| Card breadcrumb row | `mb-4 ml-2 opacity-70 text-sm` row above the card | **was overlapping** the question — `scroll` kind lays children in one grid cell → crumbs + card now wrapped in a single `column` | fixed | `lui-10`, `lui-11` |
 
 ## Fixes landed this slice
 
@@ -54,11 +54,11 @@ Reference: `src/main/frontend/extensions/fsrs.cljs` (rating set `[:again :hard :
 - `pdf_hls.ml` / `asset_dom.ml` — `.block-children`/`.asset-block-wrap` grow in the flex row so annotation ref blocks lay out horizontally.
 - `editor_keys.ml` — `[data-pressable]` added to the click-guard `closest()` selector (annotation refs + pdf labels no longer enter edit mode).
 - `resources/css/extensions-pdf.css` (new) + `resources/index.html` / `static/index.html` + `postcss.config.js` — pdf extension stylesheet wired into the web build.
+- `cards_view.ml` + `lui-overlay.css` — card-set picker: custom styled box + hand-added chevron inside the `select` node produced a double border + double chevron + 40px overflow in a 32px row → now the `select` kind itself is the trigger (`.lui-select` border + built-in `::after` chevron), sized to cljs `!h-8 w-64`; and the scroll-region children are wrapped in one `column` (scroll kind stacks children in a single grid cell → breadcrumb overlapped the card text).
 
 ## Not covered
 
 - cljs master app was not launched this slice; master behavior is asserted from source (`pdf/*.cljs`, `fsrs.cljs`, `toolbar.cljs`, `assets.cljs`).
 - Linked-references menu click-through (item renders; action unverified).
 - Cloze-style cards (`{{cloze}}`) render path not exercised end-to-end (phase machine mirrors cljs `:show-cloze`; no cloze card seeded).
-- Breadcrumb-overlap cosmetic divergence in the review modal.
 - No lui-layer changes needed — all fixes are deps/ui + repo-root css/html/postcss.

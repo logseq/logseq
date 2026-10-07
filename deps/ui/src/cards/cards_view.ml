@@ -43,16 +43,15 @@ let selected_label sel decks =
 let selector_row st =
   row ~key:"sel-row" ~style_class:"ls-row ls-gap" ~cross:`center
     [ box ~key:"combo" ~style_class:"ls-cards-select"
-        [ (* cljs shui/select-trigger: current deck label + chevron —
-             select renders role=combobox on web, a native picker on
-             native (GPUI) *)
+        [ (* cljs shui/select-trigger: the select kind already renders
+             role=combobox + its own ::after chevron on web and a native
+             picker on GPUI — no icon child needed *)
           select ~key:"selv" ~style_class:"ls-cards-select-value"
             ~text:(reactive selected_label
                      (Signal.value st.Cards_state.sel)
                      (Signal.value st.Cards_state.decks))
             ~on_press:(fun _ -> Cards_state.toggle_opts st)
-            [ icon ~key:"chev" ~name:`chevron_down
-                ~style_class:"ls-icon-sm" [] ]
+            []
         ; opts_box st ]
     ; button ~key:"add" ~accessibility_identifier:"ls-cards-add"
         ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
@@ -145,23 +144,28 @@ let rec card_view st b phase =
   column ~key:"card-cur" ~style_class:"ls-card content"
     [ scroll ~key:"scroll" ~orientation:`vertical ~grow:1.
         ~style_class:"ls-card-scroll"
-        [ (* cljs block-breadcrumb — text crumbs (no page links) *)
-          reactive
-            (fun crumbs ->
-              match crumbs with
-              | [] -> spacer ~key:"bc-none" []
-              | cs ->
-                  row ~key:"bc" ~style_class:"breadcrumb ls-card-bc"
-                    (List.concat_map
-                       (fun c ->
-                         [ text ~style_class:"breadcrumb-item"
-                             ~value:c []
-                         ; text ~value:"/" ~padding_horizontal:4 [] ])
-                       cs))
-            (Signal.value st.Cards_state.crumbs)
-        ; (* remount per card+phase so clozes take the right initial
-             revealed state (cloze_reveal_all is read at mount) *)
-          keyed_card st b'
+        [ (* scroll lays its children out in a single grid cell — the
+             crumbs row and the card must sit in ONE column or they
+             render on top of each other *)
+          column ~key:"sc-body"
+            [ (* cljs block-breadcrumb — text crumbs (no page links) *)
+              reactive
+                (fun crumbs ->
+                  match crumbs with
+                  | [] -> spacer ~key:"bc-none" []
+                  | cs ->
+                      row ~key:"bc" ~style_class:"breadcrumb ls-card-bc"
+                        (List.concat_map
+                           (fun c ->
+                             [ text ~style_class:"breadcrumb-item"
+                                 ~value:c []
+                             ; text ~value:"/" ~padding_horizontal:4 [] ])
+                           cs))
+                (Signal.value st.Cards_state.crumbs)
+            ; (* remount per card+phase so clozes take the right initial
+                 revealed state (cloze_reveal_all is read at mount) *)
+              keyed_card st b'
+            ]
         ]
     ; box ~key:"actions" ~style_class:"ls-card-actions"
         [ (if np = "show-cloze" || np = "show-answer" then

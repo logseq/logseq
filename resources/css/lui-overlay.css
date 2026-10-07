@@ -4761,34 +4761,35 @@ select.form-select {
 
 /* cards (flashcards review modal) */
 .ls-cards-select {
+  position: relative;
+  display: inline-flex;
+}
+
+/* cljs shui/select-trigger: !px-2 !py-0 !h-8 w-64 — the .lui-select base
+   supplies border/radius/::after chevron; this only resizes it */
+.ls-cards-select-value {
   width: 16rem;
   height: 2rem;
-  padding: 0 0.5rem;
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  border: 1px solid var(--ls-border-color);
-  border-radius: 0.375rem;
+  min-height: 0;
+  min-width: 0;
+  padding-block: 0;
+  padding-inline: 0.5rem;
   font-size: 0.875rem;
   cursor: pointer;
 }
 
-.ls-cards-select-value {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
+.ls-cards-select-value .lui-select-value {
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
-.ls-cards-select-value .ls-icon-sm,
-.ls-cards-select-value svg {
-  opacity: 0.5;
-  flex-shrink: 0;
-  width: 1rem;
-  height: 1rem;
+/* cljs: [:div.mb-4.ml-2.opacity-70.text-sm (block-breadcrumb ...)] */
+.ls-card-bc {
+  margin: 0 0 1rem 0.5rem;
+  font-size: 0.875rem;
 }
 
 .ls-gap {
