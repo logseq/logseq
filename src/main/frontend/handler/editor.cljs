@@ -1557,6 +1557,13 @@
       (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
         (reset! *action-bar-timeout timeout)))))
 
+(defn- still-editing?
+  "Whether the editor open now is `input-id`, the one an exit started from.
+  An exit saves the block first, and the save waits for the worker: a click
+  meanwhile opens another block's editor, which the exit must leave open."
+  [input-id]
+  (or (nil? input-id) (= input-id (state/get-edit-input-id))))
+
 (defn- select-block-up-down
   [direction]
   (cond
@@ -1564,10 +1571,12 @@
     (state/editing?)
     (when-let [element (state/get-editor-block-container)]
       (when element
-        (p/do!
-         (save-current-block!)
-         (util/scroll-to-block element)
-         (state/exit-editing-and-set-selected-blocks! [element]))))
+        (let [input-id (state/get-edit-input-id)]
+          (p/do!
+           (save-current-block!)
+           (when (still-editing? input-id)
+             (util/scroll-to-block element)
+             (state/exit-editing-and-set-selected-blocks! [element]))))))
 
     ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
@@ -4082,13 +4091,16 @@
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (p/do!
-   (when save-block? (save-current-block!))
-   (if select?
-     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-       (state/exit-editing-and-set-selected-blocks! [node]))
-     (when-not editing-another-block?
-       (state/clear-edit!)))))
+  (let [input-id (state/get-edit-input-id)]
+    (p/do!
+     (when save-block? (save-current-block!))
+     ;; a click during the save opened another editor: it stays open
+     (when (still-editing? input-id)
+       (if select?
+         (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+           (state/exit-editing-and-set-selected-blocks! [node]))
+         (when-not editing-another-block?
+           (state/clear-edit!)))))))
 
 (defn copy-current-ref
   [block-id]
