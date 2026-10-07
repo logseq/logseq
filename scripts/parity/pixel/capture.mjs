@@ -8,21 +8,40 @@ const theme = process.argv[3] || 'light';
 const url = (tag === 'master' ? MASTER_URL : LUI_URL);
 const OUT = `/Users/devin/repos/logseq/docs/pixel-blocks/${theme}`;
 fs.mkdirSync(OUT, { recursive: true });
-const pageUrl = url + '#/page/PPFixture';
-
 const { ctx, page } = await launch(tag);
-// theme: master toggles html.dark; set before nav via localStorage + class
+// persistent profile may restore an arbitrary page (or about:blank) —
+// navigate to the app origin first so localStorage writes land on it
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(tag === 'master' ? 12000 : 20000);
-if (theme === 'dark') {
-  await page.evaluate(() => {
-    try { localStorage.setItem('logseq:theme', 'dark'); } catch {}
-    document.documentElement.classList.add('dark');
-    document.documentElement.setAttribute('data-theme', 'dark');
-    document.body?.classList.add('dark');
-  });
-  await page.waitForTimeout(1200);
+if (tag === 'lui') {
+  // LUI reads `theme` (JSON-quoted) at boot; a signal re-applies it on
+  // render so class hacks get reverted — set storage and reload. The
+  // profile persists localStorage across runs, so the light path must
+  // explicitly reset it too.
+  await page.evaluate((t) => {
+    try {
+      localStorage.setItem('theme', `"${t}"`);
+      localStorage.setItem('system-theme?', '"false"');
+    } catch {}
+  }, theme === 'dark' ? 'dark' : 'light');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(15000);
+} else if (theme === 'dark') {
+    await page.evaluate(() => {
+      try { localStorage.setItem('logseq:theme', 'dark'); } catch {}
+      document.documentElement.classList.add('dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.body?.classList.add('dark');
+    });
+    await page.waitForTimeout(1200);
 }
+// name routes can resolve to a stale Recycle twin on LUI (delete_page
+// recycles rather than removes); the live page's uuid route is exact
+const pageUrl = url + '#/page/' + await page.evaluate(async () => {
+  const p = await window.logseq?.api?.get_page?.('PPFixture');
+  return p?.uuid || 'ppfixture';
+});
+console.log('nav', pageUrl);
 await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(6000);
 // LUI mounts CodeMirror async; wait for it (or give up) so its reflow
