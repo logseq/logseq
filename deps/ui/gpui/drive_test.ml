@@ -130,20 +130,30 @@ let json_attr body k =
    serialize their attributes as a JSON-ish "attrs" prop, while typed
    ~data_attrs emit the wire "data-attrs" prop (\x1e/\x1f records) *)
 let attr_val (n : M.node) k =
-  match M.string_prop n "data-attrs" with
-  | Some body -> (
-      match
-        List.assoc_opt k (Lui_protocol.data_attrs_decode body)
-      with
-      | Some v -> Some v
-      | None -> (
-          match M.string_prop n "attrs" with
-          | None -> None
-          | Some body -> json_attr body k))
-  | None -> (
-      match M.string_prop n "attrs" with
-      | None -> None
-      | Some body -> json_attr body k)
+  (* accessibility-identifier is the typed-kinds' id channel — attr_val
+     "id" reads it so assertions keep their old name *)
+  if k = "id" then
+    match M.string_prop n "accessibility-identifier" with
+    | Some _ as v -> v
+    | None -> (
+        match M.string_prop n "attrs" with
+        | None -> None
+        | Some body -> json_attr body k)
+  else
+    match M.string_prop n "data-attrs" with
+    | Some body -> (
+        match
+          List.assoc_opt k (Lui_protocol.data_attrs_decode body)
+        with
+        | Some v -> Some v
+        | None -> (
+            match M.string_prop n "attrs" with
+            | None -> None
+            | Some body -> json_attr body k))
+    | None -> (
+        match M.string_prop n "attrs" with
+        | None -> None
+        | Some body -> json_attr body k)
 
 let str_opt = function Some s -> s | None -> "None"
 

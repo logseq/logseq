@@ -76,12 +76,19 @@ let check_tok name n tok = check name (has_tok n tok)
 (* dom ~attrs serializes into the "attrs" prop as JSON; kind ~data_attrs
    lands as the "data-attrs" prop — check both *)
 let rec attr_val (n : M.node) k =
-  match M.string_prop n "data-attrs" with
-  | Some payload -> (
-    match List.assoc_opt k (Lui_protocol.data_attrs_decode payload) with
+  (* accessibility-identifier is the typed-kinds' id channel — attr_val
+     "id" reads it so assertions keep their old name *)
+  if k = "id" then
+    match M.string_prop n "accessibility-identifier" with
     | Some _ as v -> v
-    | None -> attr_val_dom n k)
-  | None -> attr_val_dom n k
+    | None -> attr_val_dom n k
+  else
+    match M.string_prop n "data-attrs" with
+    | Some payload -> (
+      match List.assoc_opt k (Lui_protocol.data_attrs_decode payload) with
+      | Some _ as v -> v
+      | None -> attr_val_dom n k)
+    | None -> attr_val_dom n k
 
 and attr_val_dom (n : M.node) k =
   match M.string_prop n "attrs" with
