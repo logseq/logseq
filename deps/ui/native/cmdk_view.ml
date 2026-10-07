@@ -395,12 +395,11 @@ let shortcut_row key it =
 (* data-item-index / data-item-key drive the delegated click +
    mousemove dispatch; the Dom_ext query layer sees ~data_attrs on
    kind nodes the same way it saw dom attrs *)
-let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
-  box ~key:"item-wrap"
-    ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
-    [ box ~key:"item"
-        ~data_attrs:(reactive (fun it -> row_data_attrs it) item_sig)
-        [ reactive ~equal:(fun (a : S.item) b -> a = b) (fun (it : S.item) -> item_header it it.S.iq) item_sig
+let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
+  let item_box =
+    box ~key:"item"
+      ~data_attrs:(reactive (fun it -> row_data_attrs it) item_sig)
+      [ reactive ~equal:(fun (a : S.item) b -> a = b) (fun (it : S.item) -> item_header it it.S.iq) item_sig
         ; row ~key:"main" ~style_class:"cmdk-item-main"
             [ box ~key:"icon" ~style_class:"cmdk-item-icon"
                 [ reactive ~equal:(fun (a : S.item) b -> a.S.iicon = b.S.iicon) (fun (it : S.item) ->
@@ -438,7 +437,14 @@ let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
                   && a.S.ihl = b.S.ihl) (fun it -> shortcut_row "sc-row" it) item_sig
             ]
         ]
-    ]
+  in
+  box ~key:"item-wrap"
+    ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
+    [ (* pressable: the delegated document click can't see inside the
+         native tree — on_press routes row clicks to the item directly *)
+      Ui_parts.pressable
+        ~on_press:(fun _ -> S.run_item st (Signal.get item_sig))
+        item_box ]
 
 (* -- group ----------------------------------------------------------- *)
 

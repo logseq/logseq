@@ -29,7 +29,9 @@ let find_sub s i pat =
     in
     go i
 
-let bracket s = text ~style_class:"bracket" ~value:s []
+(* .bracket's opacity:0.3 in lui-core.css is stylesheet chrome — the
+   muted-foreground token carries the same soft look to native backends *)
+let bracket s = text ~style_class:"bracket" ~foreground:"muted-foreground" ~value:s []
 
 (* cljs page-reference wraps the anchor in .preview-ref-link —
    logseq-span hosts, not text: children of a text node never draw on

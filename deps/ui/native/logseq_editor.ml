@@ -78,6 +78,14 @@ let schema =
     ; Lui_extension.property "composition" Lui_extension.StringScalar
         false None
     ; Lui_extension.property "runs" Lui_extension.StringScalar false None
+    ; (* e2e/a11y hooks: the web adapter materializes
+         textarea#edit-block-<uuid>[data-testid='block editor'] inside
+         the extension; native hosts render the surface themselves, so
+         the same identifiers ride the extension node as props *)
+      Lui_extension.property "accessibility-identifier"
+        Lui_extension.StringScalar false None
+    ; Lui_extension.property "data-testid" Lui_extension.StringScalar
+        false None
     ]
     [ Lui_extension.event "key"
         [ Lui_extension.event_field "key" Lui_extension.StringScalar true

@@ -240,6 +240,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         [ Ui_parts.class_signal cs
             (fun c -> if c then "control-show" else "control-hide")
             (box ~key:("ctrlspan-" ^ uuid)
+               (* control-hide is a stylesheet display:none — the opacity
+                  signal carries the same hide to style-less backends *)
+               ~opacity_signal:
+                 (Signal.map (fun c -> if c then 1.0 else 0.0) cs)
             [ Ui_parts.class_signal cs
                 (fun c ->
                   "rotating-arrow"
@@ -251,7 +255,15 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
     ; box ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap"
         [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
             ~id:("dot-" ^ uuid)
-            ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
+            ~attrs:
+              [ ("blockid", uuid); ("draggable", "true")
+              ; (* the lui-core.css circle is backend styling; native
+                   backends get no stylesheet, so the container's
+                   intrinsic box + centering is emitted inline *)
+                ( "style"
+                , "display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;min-width:14px;border-radius:7px"
+                )
+              ]
             ~style_class_signal:
               (Logseq_dom.class_signal cs (fun c ->
                    bullet_cls ^ if c then " bullet-closed" else ""))
@@ -264,7 +276,14 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                             if S.String_set.mem uuid selected then
                               "selected bullet"
                             else "bullet"))
-                     ~attrs:[ ("blockid", uuid) ]
+                     ~attrs:
+                       [ ("blockid", uuid)
+                       ; (* see the container note above — the dot is
+                            intrinsic geometry, not a class lookup *)
+                         ( "style"
+                         , "width:6px;height:6px;flex-shrink:0;border-radius:999px;opacity:0.8;background:var(--lx-gray-08, var(--ls-block-bullet-color))"
+                         )
+                       ]
                      (match b.Model.block_order_index with
                       | Some idx when order_list ->
                           [ label ~key:("ol-" ^ uuid)
@@ -724,9 +743,23 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
   let b = Signal.get bs in
   row ~key:("children-" ^ uuid)
     ~style_class:"block-children-container"
+    ~data_attrs:
+      [ (* lui-core.css margin-left:29px on .block-children-container is
+           stylesheet geometry — native backends see it via the style
+           data attr; the web DOM ignores data-style *)
+        ("data-style", "position:relative;margin-left:29px;padding-top:2px")
+      ]
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
-        ~attrs:[ ("blockid", uuid) ] []
+        ~attrs:
+          [ ("blockid", uuid)
+          ; (* hover-stripped pill from .block-children-left-border —
+               intrinsic geometry for style-less backends *)
+            ( "style"
+            , "position:absolute;left:-1px;top:0;bottom:0;width:4px;border-radius:2px;opacity:0.6"
+            )
+          ]
+        []
     ; (* cljs lazy-block-children: inside :virtualize? pages the
          .block-children div is a lazy mount boundary — an
          estimated-height placeholder until it nears the viewport *)
@@ -738,6 +771,13 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
                bs)
        else
          column ~key:("clist-" ^ uuid) ~style_class:"block-children"
+           ~data_attrs:
+             [ (* .block-children's 1px indent-guide rule; stylesheet
+                  on web, inline on native *)
+               ( "data-style"
+               , "border-left:1px solid var(--lx-gray-04-alpha, var(--ls-guideline-color))"
+               )
+             ]
            ~grow:1.
            [ child_list ~depth ~editable ~library ~virtualize uuid scope
                bs
@@ -823,10 +863,23 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
 and children_static_el ~depth ~library uuid (b : Model.block) : t =
   row ~key:("children-" ^ uuid)
     ~style_class:"block-children-container"
+    ~data_attrs:
+      [ ("data-style", "position:relative;margin-left:29px;padding-top:2px") ]
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
-        ~attrs:[ ("blockid", uuid) ] []
+        ~attrs:
+          [ ("blockid", uuid)
+          ; ( "style"
+            , "position:absolute;left:-1px;top:0;bottom:0;width:4px;border-radius:2px;opacity:0.6"
+            )
+          ]
+        []
     ; column ~key:("clist-" ^ uuid) ~style_class:"block-children"
+        ~data_attrs:
+          [ ( "data-style"
+            , "border-left:1px solid var(--lx-gray-04-alpha, var(--ls-guideline-color))"
+            )
+          ]
         ~grow:1.
         (List.map (block_row_static ~depth:(depth + 1) ~library)
            b.block_children)

@@ -64,8 +64,11 @@ let title_of = function
   | _ -> ""
 let dialog_view name (ms : Model.t Signal.signal) : t =
   (* the scrim is a column so the press detail payload can carry the
-     click target's class (deepest hit) for backdrop dismissal *)
+     click target's class (deepest hit) for backdrop dismissal.
+     ~grow/~main/~cross fill + center inside the native cover layer
+     (web places the same scrim with position:fixed + grid) *)
   column ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls
+    ~grow:1. ~main:`center ~cross:`center
     ~on_press_detail:(fun ev ->
       match ev with
       | Lui_protocol.PressDetail (_, d) ->

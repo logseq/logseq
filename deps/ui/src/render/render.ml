@@ -237,7 +237,7 @@ let code_block ?(self = "") ?(extra = []) lang code =
   let calc = lang = "calc" in
   row ~key:("fcb-" ^ self) ~grow:1.0
     ~style_class:"ui-fenced-code-editor"
-    [ box ~key:"wrap" ~style_class:"ls-code-editor-wrap"
+    [ box ~key:"wrap" ~grow:1.0 ~style_class:"ls-code-editor-wrap"
         [ code_block_actions ~self lang
         ; row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"
             ([ (if lang <> "" && not calc then

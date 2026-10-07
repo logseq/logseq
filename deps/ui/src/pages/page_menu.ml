@@ -288,9 +288,12 @@ let confirm_view (c : Model.confirm) =
     Runtime.flush ()
   in
   (* backdrop dismiss: only the overlay itself closes — clicks inside
-     the content bubble here but target the dialog *)
+     the content bubble here but target the dialog.
+     ~grow/~main/~cross fill + center inside the native cover layer
+     (web places the same scrim with position:fixed) *)
   column ~key:"alertdlg-overlay"
     ~style_class:"ui__alert-dialog-overlay"
+    ~grow:1. ~main:`center ~cross:`center
     ~on_press_detail:(fun ev ->
       match ev with
       | Lui_protocol.PressDetail (_, d) ->

@@ -877,6 +877,10 @@ fn editor_surface(
     let node_id = node.id;
     let state = input_state(node_id, &shared, cx);
     let focus = state.read(cx).focus.clone();
+    // The root keydown forwarder resolves the focused element's node
+    // through this registry — the sink's own `key` events own editing,
+    // but a stale focus must still route keys at the right target.
+    shared.borrow_mut().register_focus(node_id, focus.clone());
 
     // Focus/blur subscriptions, once per input entity. Installed before
     // draining a pending focus so the landing emits the conduit event.

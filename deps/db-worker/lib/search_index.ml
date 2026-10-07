@@ -1382,6 +1382,24 @@ let search_result_to_block_result ~(conn : conn) ~(q : string)
           else if page_or_obj then result_title
           else match r.snippet with Some s -> Some s | None -> result_title
         in
+        let display_title =
+          (* stored titles carry [[uuid]] refs; consumers render the
+             title verbatim (cmdk, electron), so resolve page refs to
+             [[title]] here like cljs's display title *)
+          match display_title with
+          | Some t ->
+              (* block is a pulled stub — materialize the entity to
+                 reach its block/refs *)
+              let ref_ents =
+                match
+                  Option.bind (Ev.db_id block) (Ldb.ent_of_id db)
+                with
+                | Some e -> Ldb.ref_ents e "block/refs"
+                | None -> []
+              in
+              Some (Db_content.id_ref_to_title_ref t ref_ents)
+          | None -> None
+        in
         let block_page =
           match Ev.ref_node block "block/page" with
           | Some p -> Ev.uuid p

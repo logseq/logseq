@@ -110,23 +110,39 @@ let has_tok n tok =
 
 let check_tok name n tok = check name (has_tok n tok)
 
+let json_attr body k =
+  let pat = "\"" ^ k ^ "\":\"" in
+  let np = String.length pat in
+  let nb = String.length body in
+  let rec scan i =
+    if i + np > nb then None
+    else if String.sub body i np = pat then (
+      let start = i + np in
+      match String.index_from_opt body start '"' with
+      | Some j -> Some (String.sub body start (j - start))
+      | None -> None)
+    else scan (i + 1)
+  in
+  scan 0
+
+(* two attr channels land in the recorded tree: logseq-* dom nodes
+   serialize their attributes as a JSON-ish "attrs" prop, while typed
+   ~data_attrs emit the wire "data-attrs" prop (\x1e/\x1f records) *)
 let attr_val (n : M.node) k =
-  match M.string_prop n "attrs" with
-  | None -> None
-  | Some body ->
-    let pat = "\"" ^ k ^ "\":\"" in
-    let np = String.length pat in
-    let nb = String.length body in
-    let rec scan i =
-      if i + np > nb then None
-      else if String.sub body i np = pat then (
-        let start = i + np in
-        match String.index_from_opt body start '"' with
-        | Some j -> Some (String.sub body start (j - start))
-        | None -> None)
-      else scan (i + 1)
-    in
-    scan 0
+  match M.string_prop n "data-attrs" with
+  | Some body -> (
+      match
+        List.assoc_opt k (Lui_protocol.data_attrs_decode body)
+      with
+      | Some v -> Some v
+      | None -> (
+          match M.string_prop n "attrs" with
+          | None -> None
+          | Some body -> json_attr body k))
+  | None -> (
+      match M.string_prop n "attrs" with
+      | None -> None
+      | Some body -> json_attr body k)
 
 let str_opt = function Some s -> s | None -> "None"
 
@@ -217,6 +233,11 @@ let find_block uuid =
     (fun n -> attr_val n "blockid" = Some uuid)
     (M.all_nodes (tree ()))
 
+let node_of_id id =
+  match M.find (tree ()) (M.Id id) with
+  | n :: _ -> Some n
+  | [] -> None
+
 (* ---------------- shell + header ---------------- *)
 
 let test_shell () =
@@ -303,9 +324,12 @@ let test_block_edit () =
   has "prop:accessibility-identifier=\"edit-block-b1\"";
   (match find_block "b1" with
    | Some b1 ->
+       (* native editor surface: the e2e hooks ride the logseq-editor
+          extension node as props (no interior textarea on native) *)
        check "editor inside row b1"
          (subtree_contains b1 (fun n ->
-              attr_val n "data-testid" = Some "block editor"))
+              n.M.kind = "extension:logseq-editor"
+              && M.string_prop n "data-testid" = Some "block editor"))
    | None -> check "row b1" false);
   Editor_state.set (fun st -> { st with Editor_state.editing = None });
   (match find_block "b1" with
@@ -561,6 +585,7 @@ let test_render_libs_dom () =
           ; block "bi" "inline $x^2$ math"
           ; block "bt" "at {{youtube-timestamp 1:23}} mark"
           ; block "by" "{{youtube https://youtu.be/7xTGNNLPyMI?t=30}}"
+          ; block "bl" "see [Devin](https://devin.ai) now"
           ; { (block "bc" "(+ 1 2)") with
               Model.block_display_type = Some "code"
             ; block_code_lang = Some "clojure" }
@@ -592,8 +617,12 @@ let test_render_libs_dom () =
          (subtree_contains a (fun c ->
               has_tok c "youtube-timestamp-label"
               && M.string_prop c "text" = Some "01:23"));
+       (* web materializes the clock glyph through the logseq-svg
+          adapter; native emits the same icon as a typed icon node *)
        check "ts clock svg"
-         (subtree_contains a (fun c -> c.M.kind = "extension:logseq-svg"))
+         (subtree_contains a (fun c ->
+              c.M.kind = "icon"
+              || c.M.kind = "extension:logseq-svg"))
    | [] -> check "youtube-timestamp node" false);
   (match
      find_where (fun n -> attr_val n "id" = Some "youtube-player-7xTGNNLPyMI")
@@ -606,18 +635,35 @@ let test_render_libs_dom () =
        attr_eq "yt iframe referrer-policy" f "referrer-policy"
          "strict-origin-when-cross-origin"
    | [] -> check "youtube iframe node" false);
-  (* display-mode code block = .extensions__code > .code-editor >
-     textarea[data-lang] — CodeMirror mounts onto the textarea in the
-     browser and generates .CodeMirror-line nodes, so the patch tree
-     itself only carries the mount surface *)
+  (* display-mode code block: web mounts CodeMirror onto an interior
+     textarea inside logseq-textarea; native emits the same surface as
+     the logseq-codemirror extension with lang/value props *)
   (match
      find_where
        (fun n ->
-         n.M.kind = "extension:logseq-textarea"
-         && attr_val n "data-lang" = Some "clojure")
+         (n.M.kind = "extension:logseq-codemirror"
+          && M.string_prop n "lang" = Some "clojure")
+         || (n.M.kind = "extension:logseq-textarea"
+             && attr_val n "data-lang" = Some "clojure"))
    with
-   | p :: _ -> check "code text" (M.string_prop p "text" = Some "(+ 1 2)")
-   | [] -> check "code-editor textarea node" false)
+   | p :: _ ->
+       check "code text"
+         (M.string_prop p "value" = Some "(+ 1 2)"
+          || M.string_prop p "text" = Some "(+ 1 2)")
+   | [] -> check "code-editor textarea node" false);
+  (* markdown external link: the anchor keeps its label children and
+     url/target props (electron-vs-gpui audit: the label used to drop
+     entirely on gpui) *)
+  (match find_where (fun n -> has_tok n "external-link") with
+   | a :: _ ->
+       check "ext link label"
+         (subtree_contains a (fun c ->
+              M.string_prop c "text" = Some "Devin"));
+       check "ext link url"
+         (M.string_prop a "url" = Some "https://devin.ai");
+       check "ext link target"
+         (M.string_prop a "target" = Some "_blank")
+   | [] -> check "external-link node" false)
 
 (* ---------------- async stage: worker-fed views ---------------- *)
 
@@ -915,12 +961,48 @@ let test_journal_reorder_move_collapse () =
   (* sibling DOM order: all_nodes is id-sorted, not visual — walk the
      row's parent children instead *)
   let sibling_order uuid =
+    (* on native each keyed row sits inside a lazy-mount wrapper, so a
+       slot child may not itself carry ls-block — resolve each slot
+       child to its first ls-block descendant, keeping slot order *)
+    let rec first_block n =
+      if has_tok n "ls-block" then Some n
+      else
+        let rec find_in = function
+          | [] -> None
+          | c :: rest -> (
+              match first_block c with
+              | Some _ as r -> r
+              | None -> find_in rest)
+        in
+        find_in (M.children (tree ()) n.M.id)
+    in
     match find_block uuid with
-    | Some { M.parent = Some pid; _ } ->
-        List.filter_map
-          (fun c -> attr_val c "blockid")
-          (List.filter (fun c -> has_tok c "ls-block")
-             (M.children (tree ()) pid))
+    | Some row ->
+        (* the slot is the nearest ancestor whose children resolve to
+           more than one block row: web rows are direct children, on
+           native each sits inside a lazy-mount wrapper one level up *)
+        let rec slot_of pid =
+          let rows =
+            List.filter_map first_block (M.children (tree ()) pid)
+          in
+          if List.length rows >= 2 then Some pid
+          else
+            match node_of_id pid with
+            | Some { M.parent = Some p; _ } -> slot_of p
+            | _ -> None
+        in
+        (match row.M.parent with
+         | Some pid -> (
+             match slot_of pid with
+             | Some sid ->
+                 List.filter_map
+                   (fun c ->
+                     match first_block c with
+                     | Some r -> attr_val r "blockid"
+                     | None -> None)
+                   (M.children (tree ()) sid)
+             | None -> [])
+         | None -> [])
     | _ -> []
   in
   (match sibling_order "r2" with
