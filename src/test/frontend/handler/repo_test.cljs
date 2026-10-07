@@ -49,12 +49,20 @@
                             (swap! calls conj [:metadata (keys metadata)])
                             (p/resolved nil))
                           graph-handler/<upsert-current-graph-registry!
-                          (fn [] (p/resolved nil))
+                          (fn []
+                            (swap! calls conj [:registry])
+                            (p/resolved nil))
                           graph-handler/remember-current-graph-id-in-tab!
-                          (fn [] (p/resolved nil))]
+                          (fn []
+                            (swap! calls conj [:remember-in-tab])
+                            (p/resolved nil))]
             (p/let [created (repo-handler/new-db! "  created  " {})
                     _ (do
                         (is (= "logseq_db_created" created))
+                        ;; db-test #1361: a reload opens the tab's graph
+                        (is (some #{[:remember-in-tab]} @calls)
+                            "the tab remembers the new graph, as a switch does")
+                        (is (some #{[:registry]} @calls))
                         (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))
                         (is (some #{[:redirect-home]} @calls))
                         (is (some #{[:rerender]} @calls))
@@ -63,7 +71,9 @@
               (is (= "logseq_db_imported" imported))
               (is (some #(= [:restore "logseq_db_imported" {:file-graph-import? true}] %) @calls))
               (is (not-any? #{[:redirect-home] [:rerender]} @calls)
-                  "File-graph import must keep the Importing UI instead of leaving for home.")))
+                  "File-graph import must keep the Importing UI instead of leaving for home.")
+              (is (not-any? #{[:remember-in-tab]} @calls)
+                  "An import leaves the tab's graph to the import flow")))
           (p/catch
            (fn [error]
              (is false (str error))))
