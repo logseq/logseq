@@ -609,20 +609,30 @@ let scroller st : t =
 
 let input_row st : t =
  fun ctx parent ->
-  row ~key:"input-row" ~style_class:"cp__cmdk-input-row"
-    [ (* .cp__cmdk-search-input is queried/focused by cmdk_state —
-         the class anchor is unchanged; no placeholder_signal exists,
-         so the move_mode reactive remounts the input *)
+  let move_sig =
+    Signal.map (fun (v : S.view) -> v.S.move_mode)
+      st.S.vs.Signal.state_signal
+  in
+  row ~key:"input-row" ~style_class:"cp__cmdk-input-row" ~cross:`center
+    [ (* move_mode can flip while the palette stays open (move-blocks
+         command); no placeholder_signal exists, so a keyed remount
+         swaps the placeholder — the caller re-focuses the input right
+         after the state publish. Subscribing the whole view state
+         remounted the field every keystroke (dyn equal on the view
+         record always differs) and ate the in-flight text *)
       reactive
-        (fun (v : S.view) ->
+        (fun move_mode ->
           input ~key:"input" ~style_class:"cp__cmdk-search-input"
               ~accessibility_identifier:"cmdk-input"
             (* gpui input kind reads this attr to drop its bordered
                field chrome (web's borderless .cp__cmdk-search-input) *)
             ~data_attrs:[ ("data-appearance", "none") ]
             ~grow:1.
+            (* sidebar blocks mount seeded with the query; the modal is
+               always "" so this is a no-op there *)
+            ~text:(S.get st).S.input
             ~placeholder:
-              (if v.S.move_mode then
+              (if move_mode then
                  I18n.t "cmdk.input/move-blocks-placeholder"
                else I18n.t "cmdk.input/default-placeholder")
             ~on_input:(fun ev ->
@@ -630,7 +640,7 @@ let input_row st : t =
               | Lui_protocol.TextChanged (_, q) -> S.on_input st q
               | _ -> ())
             [])
-        st.S.vs.Signal.state_signal
+        move_sig
     ]
     ctx parent
 
