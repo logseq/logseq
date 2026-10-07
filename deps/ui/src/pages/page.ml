@@ -206,31 +206,43 @@ let title_editor (page : Model.page) : t =
    a.tag[draggable][data-ref] > span. The .ls-block-right/.hover wrappers
    render even when the page has no tags (empty container). *)
 let title_tag_chips (page : Model.page) : t list =
+  let opt_at l i =
+    match List.nth_opt l i with
+    | Some x -> x
+    | None -> ""
+  in
+  let quads =
+    List.mapi
+      (fun i tag ->
+        ( tag
+        , opt_at page.Model.page_tag_uuids i
+        , opt_at page.Model.page_tag_idents i
+        , Option.value
+            (List.nth_opt page.Model.page_tag_db_ids i) ~default:0 ))
+      page.Model.page_tags
+  in
+  (* master shows no tag chips for built-in private classes on the title
+     row — a journal-day page's :logseq.class/Journal tag is system
+     metadata, not user decoration *)
+  let visible =
+    List.filter (fun (_tag, _tuuid, ident, _dbid) ->
+        not (Tree.private_tag_ident ident))
+      quads
+  in
   [ row ~key:"pt-right" ~gap:4 ~cross:`center
       ~style_class:"ls-block-right"
       [ box ~key:"ptr-ghost"
-          (match page.Model.page_tags with
+          (match visible with
            | [] -> []
            | tags ->
                [ row ~key:"pt-tags" ~gap:4 ~style_class:"block-tags"
                    (List.mapi
-                     (fun i tag ->
-                       let opt_at l =
-                         match List.nth_opt l i with
-                         | Some x -> x
-                         | None -> ""
-                       in
+                     (fun i (tag, tuuid, ident, dbid) ->
                        Tree.tag_chip
                          ~key:("p" ^ string_of_int i)
                          ~owner_uuid:
                            (Option.value page.Model.page_uuid ~default:"")
-                         ~tag
-                         ~tuuid:(opt_at page.Model.page_tag_uuids)
-                         ~ident:(opt_at page.Model.page_tag_idents)
-                         ~dbid:
-                           (Option.value
-                              (List.nth_opt page.Model.page_tag_db_ids i)
-                              ~default:0))
+                         ~tag ~tuuid ~ident ~dbid)
                      tags)
                ]
            )
