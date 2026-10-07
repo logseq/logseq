@@ -257,6 +257,10 @@ let event_listed events name =
    a human double-click. *)
 let last_click_ms = ref (-1.)
 
+(* the web drives block drags through dnd-kit sensors; here the gesture
+   is driven by editor_keys' mousedown/mousemove/click listeners *)
+let native_drag () = true
+
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
   let now = date_now_ms () in
@@ -332,6 +336,7 @@ let emit_event name payload =
       in
       List.iter
         (fun f ->
+          if not !propagation_stopped then
           try f payload
           with e ->
             Printf.eprintf "[emit_event] listener threw ev=%s: %s\n%!" name
@@ -438,7 +443,7 @@ let history_forward () =
 
 (* ---------- clipboard ---------- *)
 
-let copy_to_clipboard s = request_host "clipboard-write" s
+let copy_to_clipboard s = Host.clipboard_write s
 
 (* window.open → the native host shells out to the system browser *)
 let open_url (u : string) = Host.open_url u
@@ -447,8 +452,19 @@ let clipboard_write_text (s : string) : unit Js.Promise.t =
   ignore (copy_to_clipboard s);
   Js.Promise.resolve ()
 
+(* "clipboard-read" requests are answered by a same-named platform
+   event; one resolver per outstanding read, FIFO *)
+let clipboard_read_resolvers : (string -> unit) Queue.t = Queue.create ()
+
 let clipboard_read_text () : string Js.Promise.t =
-  Js.Promise.resolve ""
+  Js.Promise.make (fun ~resolve ~reject:_ ->
+      Queue.add resolve clipboard_read_resolvers;
+      Host.clipboard_read ())
+
+let note_clipboard_text s =
+  match Queue.take_opt clipboard_read_resolvers with
+  | Some resolve -> resolve s
+  | None -> ()
 
 (* ---------- misc ---------- *)
 

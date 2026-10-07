@@ -948,8 +948,12 @@ let ev_which (e : ev) : int =
   Option.value (Option.map int_of_float (Dom_ext.num_prop "which" e))
     ~default:0
 
-let clipboard_set_text (_cd : clipboard_data) (_mime : string)
-    (_text : string) : unit = ()
+let clipboard_set_text (_cd : clipboard_data) (mime : string)
+    (text : string) : unit =
+  (* no clipboardData object natively — a copy/cut event's setData goes
+     straight to the OS clipboard; only the plain-text representation
+     matters to the paste paths that read text/plain *)
+  if mime = "text/plain" then Host.clipboard_write text
 
 let node_name (el : el) : string =
   match el with

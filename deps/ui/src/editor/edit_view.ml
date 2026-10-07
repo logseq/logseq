@@ -467,12 +467,42 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
     (StringValue ("edit-block-" ^ block_id));
   Lui_ui.extension_property context node "data-testid"
     (StringValue "block editor");
+  (* the web adapter's hidden textarea carries class ed-input +
+     data-block-id; the clipboard guards (editing_clipboard_target,
+     targets_block_editor) and document keydown routing match on those
+     selectors, so the native sink needs the same surface *)
+  Lui_ui.extension_property context node "style-class"
+    (StringValue "ed-input");
+  Lui_ui.extension_property context node "attrs"
+    (StringValue
+       (Printf.sprintf {|{"data-block-id":"%s"}|} block_id));
   Lui_ui.extension_property_signal context node "runs" runs_s;
   Lui_ui.extension_property_signal context node "caret" caret_s;
   Lui_ui.extension_property_signal context node "composition" comp_s;
   Lui_ui.on_event context node
     (fun ev ->
       match ev with
+      | ExtensionEvent (_, ident, "dom-event", fields)
+        when ident = Editor_sink.identifier -> (
+          (* native hosts carry document-level events (keydown feeding
+             popups and global chords) through the focused node — unwrap
+             and fan out to the document listeners like the logseq-*
+             dom trampoline does; a no-op on web *)
+          let field name =
+            match String_map.find_opt name fields with
+            | Some (StringValue s) -> Some s
+            | _ -> None
+          in
+          match field "name" with
+          | Some name ->
+              let payload =
+                match field "payload" with
+                | Some p -> (
+                    try Js.Json.parseExn p with _ -> Js.Json.null)
+                | None -> Js.Json.null
+              in
+              Platform.emit_event name payload
+          | None -> ())
       | ExtensionEvent (_, ident, name, fields)
         when ident = Editor_sink.identifier -> (
           match Edit_input.decode name fields with

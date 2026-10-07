@@ -1003,6 +1003,19 @@ let open_ac t kind =
   let rec measure tries =
     match (get t).ac with
     | Some a when a.flip = None && a.kind = kind -> (
+        (* native measurement replies land on the async event channel —
+           the first popup_pos call can still see the fallback anchor
+           while the caret-rect reply is in flight; re-read on every
+           retry so the popup snaps to the caret once the host answers *)
+        let a =
+          match Editor_sink.popup_pos a.auuid with
+          | Some (x', y', cy') when x' <> a.x || y' <> a.y || cy' <> a.cy
+            ->
+              let a' = { a with x = x'; y = y'; cy = cy' } in
+              set_ac t (Some a');
+              a'
+          | _ -> a
+        in
         match Web_dom.query_selector "#ui__ac-inner" with
         | Some inner -> (
             match Web_dom.el_closest inner ".ui__popover-content" with

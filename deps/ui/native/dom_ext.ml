@@ -44,8 +44,8 @@ let target (ev : event) : element option =
   | _ -> None
 
 let prevent_default (_ : event) : unit = ()
-let stop_propagation (_ : event) : unit = ()
-let stop_immediate_propagation (_ : event) : unit = ()
+let stop_propagation (_ : event) : unit = Platform.request_stop ()
+let stop_immediate_propagation (_ : event) : unit = Platform.request_stop ()
 
 (* ---------- element queries ---------- *)
 

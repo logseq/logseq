@@ -229,6 +229,17 @@ external js_get : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 (* base name for the same accessor — shared src calls Platform.json_prop *)
 let json_prop = js_get
 
+(* native hosts re-dispatch synthetic events through Platform.emit_event;
+   on web the real DOM event already reaches document listeners — the
+   shared sink trampoline calls this only for a host-emitted dom-event,
+   which never fires here *)
+let emit_event (_ : string) (_ : Js.Json.t) : unit = ()
+
+(* web block drags run through dnd-kit pointer sensors (Block_dnd); the
+   native surface has no HTML5 drag and drives the gesture itself
+   (editor_keys' mousedown/mousemove path listens only when true) *)
+let native_drag () = false
+
 let set_document_title : string -> unit =
   [%mel.raw "function (t) { document.title = t }"]
 

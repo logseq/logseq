@@ -192,6 +192,24 @@ fn handle_platform_request(
                 payload.to_owned(),
             ));
         }
+        "clipboard-read" => {
+            // navigator.clipboard.readText — OCaml resolves one queued
+            // promise per reply, so answer every request, even empty.
+            let text = cx
+                .read_from_clipboard()
+                .and_then(|item| item.text())
+                .unwrap_or_default();
+            let envelope = format!(
+                "clipboard-read\n{}",
+                serde_json::json!({ "text": text })
+            );
+            unsafe {
+                lui_ocaml_platform_event(
+                    envelope.as_ptr().cast::<c_char>(),
+                    envelope.len() as c_int,
+                )
+            };
+        }
         "open-url" => cx.open_url(payload),
         "ui-state" => {
             // {"lang","root-classes","body-classes","data":{"theme":..}}

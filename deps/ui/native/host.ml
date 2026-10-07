@@ -85,6 +85,7 @@ let host_op : (string -> string -> unit) ref = ref (fun _ _ -> ())
 let set_host_op f = host_op := f
 let open_url (u : string) = !host_op "open-url" u
 let clipboard_write (s : string) = !host_op "clipboard" s
+let clipboard_read () = !host_op "clipboard-read" ""
 let dom_op (name : string) (payload : string) = !host_op "dom-op" (name ^ "\n" ^ payload)
 
 (* appearance: Swift pushes it via platform_event "appearance" *)
