@@ -88,6 +88,10 @@ let schema =
         Lui_extension.StringScalar false None
     ; Lui_extension.property "data-testid" Lui_extension.StringScalar
         false None
+    ; Lui_extension.property "style-class" Lui_extension.StringScalar
+        false None
+    ; Lui_extension.property "attrs" Lui_extension.StringScalar false
+        None
     ]
     [ Lui_extension.event "key"
         [ Lui_extension.event_field "key" Lui_extension.StringScalar true

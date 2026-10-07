@@ -1014,6 +1014,43 @@ fn editor_surface(
                 );
                 cx.stop_propagation();
             }
+            // ⌘C/⌘X/⌘V: emit the clipboard events a browser fires on
+            // the textarea — the editing keymap has no plain copy/cut/
+            // paste branches because on web they're real events, not
+            // keys. The sink carries .ed-input + data-block-id so the
+            // OCaml target gate takes its editing arm; the root observer
+            // only emits `paste` itself when no conduit is focused.
+            // ⌘⇧V / ⌘⇧C stay model keymap commands (paste-text-in-one-
+            // block / copy-text), matching cljs.
+            if mods.platform
+                && !mods.control
+                && !mods.alt
+                && !mods.shift
+            {
+                let clip_name = match keystroke.key.as_str() {
+                    "c" => Some("copy"),
+                    "x" => Some("cut"),
+                    "v" => Some("paste"),
+                    _ => None,
+                };
+                if let Some(clip_name) = clip_name {
+                    let text = if clip_name == "paste" {
+                        cx.read_from_clipboard()
+                            .and_then(|item| item.text())
+                            .unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+                    lui_gpui::dom::dom_event(
+                        &key_shared,
+                        node_id,
+                        IDENTIFIER,
+                        clip_name,
+                        json!({ "clipboardData": { "text": text } }),
+                        cx,
+                    );
+                }
+            }
         })
         .child(canvas(
             |_, _, _| {},

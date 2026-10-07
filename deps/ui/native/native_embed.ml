@@ -635,6 +635,14 @@ let platform_event payload =
         name = "caret-rect" || name = "offset-at"
         || name = "line-ranges" || name = "scroll-height"
       then Logseq_editor.note_measurement name json
+      else if name = "clipboard-read" then (
+        match json with
+        | Js.Json.JObject kvs ->
+            Platform.note_clipboard_text
+              (Option.bind (List.assoc_opt "text" kvs)
+                 Js.Json.decodeString
+              |> Option.value ~default:"")
+        | _ -> Platform.note_clipboard_text "")
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 

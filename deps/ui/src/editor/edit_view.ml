@@ -467,6 +467,15 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
     (StringValue ("edit-block-" ^ block_id));
   Lui_ui.extension_property context node "data-testid"
     (StringValue "block editor");
+  (* the web adapter's hidden textarea carries class ed-input +
+     data-block-id; the clipboard guards (editing_clipboard_target,
+     targets_block_editor) and document keydown routing match on those
+     selectors, so the native sink needs the same surface *)
+  Lui_ui.extension_property context node "style-class"
+    (StringValue "ed-input");
+  Lui_ui.extension_property context node "attrs"
+    (StringValue
+       (Printf.sprintf {|{"data-block-id":"%s"}|} block_id));
   Lui_ui.extension_property_signal context node "runs" runs_s;
   Lui_ui.extension_property_signal context node "caret" caret_s;
   Lui_ui.extension_property_signal context node "composition" comp_s;
