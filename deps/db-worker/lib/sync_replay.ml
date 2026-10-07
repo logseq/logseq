@@ -1544,6 +1544,20 @@ let replay_pending_txs repo (conn : conn)
                     , Option.value local_tx.outliner_op ~default:"" ]
               | _ ->
                   incr failed;
+                  (* dump the normalized verbatim tx items (bounded) — a
+                     strict-resolve crash needs the actual item shape to
+                     find which position escaped sanitize *)
+                  let tx_dump =
+                    match normalize_tx_data_for_rebase local_tx.tx with
+                    | [] -> ""
+                    | items ->
+                        let s =
+                          Transit_codec.to_string (Wire.Array items)
+                        in
+                        if String.length s > 4096
+                        then String.sub s 0 4096 ^ "…"
+                        else s
+                  in
                   Worker_log.warn "db-sync/pending-replay-failed"
                     [ "repo", repo
                     ; "tx-id", local_tx.tx_id
@@ -1552,6 +1566,7 @@ let replay_pending_txs repo (conn : conn)
                     ; "ops"
                     , Transit_codec.to_string
                         (Wire.Array local_tx.forward_outliner_ops)
+                    ; "tx", tx_dump
                     ; "error", Printexc.to_string e ];
                   ignore (mark_failed_txs repo [ local_tx.tx_id ])))
          pending
