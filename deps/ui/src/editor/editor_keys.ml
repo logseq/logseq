@@ -899,12 +899,118 @@ let queue_racing_key ev uuid =
   in
   S.pending_focus_actions := action :: !S.pending_focus_actions
 
+(* -- native block drag (gpui) --
+   The web path runs dnd-kit pointer sensors over HTML5 drag (Block_dnd);
+   the native surface has no HTML5 drag, so the same drop contract is
+   driven by document mousedown/mousemove/click on .bullet-container —
+   armed on pointer down, activated past the 4px distance constraint the
+   sensors use, committed on the release click. Platform.native_drag
+   gates every hook so the web keeps the sensor path alone. *)
+
+type drag_phase =
+  | Drag_armed of string * float * float (* uuid, downX, downY *)
+  | Drag_active of string
+
+let drag_phase : drag_phase option ref = ref None
+let drag_tgt : (string * string) option ref = ref None (* uuid, move_to *)
+
+let drag_active () =
+  match !drag_phase with Some (Drag_active _) -> true | _ -> false
+
+let drag_reset () =
+  (if drag_active () && S.ready () then S.set_drag None);
+  drag_phase := None;
+  drag_tgt := None
+
+let arm_drag ev =
+  match D.closest_sel ".bullet-container" (D.ev_target ev) with
+  | Some el -> (
+      match D.el_get_attr el "blockid" with
+      | Some u ->
+          drag_phase :=
+            Some (Drag_armed (u, D.ev_client_x ev, D.ev_client_y ev))
+      | None -> ())
+  | None -> ()
+
+(* mirrors dnd-kit's collision pass: the innermost .ls-block under the
+   pointer wins, then the zone math of Block_dnd.update_drop_target.
+   el_bounding_rect is the fire-and-poll cache on native — a still-uncached
+   rect reads 0×0 and falls back to "sibling" until the measure reply
+   lands a frame later *)
+let update_drag_target ev src =
+  let tgt =
+    match D.closest_sel ".ls-block" (D.ev_target ev) with
+    | Some el -> (
+        match D.el_get_attr el "blockid" with
+        | Some t when t <> src && not (A.is_descendant t src) ->
+            let rect = D.el_bounding_rect el in
+            let move_to =
+              if D.rect_width rect <= 0.0 then "sibling"
+              else
+                let first =
+                  match S.find_parent t with
+                  | Some (_, idx) -> idx = 0
+                  | None -> false
+                in
+                let near_top =
+                  Float.abs (D.ev_client_y ev -. D.rect_top rect) <= 16.0
+                in
+                let x_off = D.ev_client_x ev -. D.rect_left rect in
+                if first && near_top then "top"
+                else if x_off > 50.0 then "nested"
+                else "sibling"
+            in
+            Some (t, move_to)
+        | _ -> None)
+    | None -> None
+  in
+  (* over nothing/invalid, keep the last candidate like the web listener *)
+  let tgt = match tgt with Some _ -> tgt | None -> !drag_tgt in
+  drag_tgt := tgt;
+  let next =
+    match tgt with
+    | Some (t, m) -> Some (src, t, m)
+    | None -> Some (src, "", "")
+  in
+  if next <> S.drag () then S.set_drag next
+
+let on_native_mousemove ev =
+  if S.ready () then
+    match !drag_phase with
+    | Some (Drag_armed (u, x0, y0)) ->
+        let dx = Float.abs (D.ev_client_x ev -. x0) in
+        let dy = Float.abs (D.ev_client_y ev -. y0) in
+        if dx +. dy >= 4.0 then begin
+          drag_phase := Some (Drag_active u);
+          update_drag_target ev u
+        end
+    | Some (Drag_active u) -> update_drag_target ev u
+    | _ -> ()
+
+(* true when the release click commits an in-flight drag — the click
+   itself is swallowed (a drag release is not a bullet click) *)
+let drop_active_drag () =
+  if drag_active () then begin
+    (match !drag_phase, !drag_tgt with
+     | Some (Drag_active src), Some (t, m) ->
+         A.drop_dragged_block src t m
+     | _ -> ());
+    drag_reset ();
+    true
+  end
+  else false
+
 let on_keydown ev =
   (if Lazy.force perf_keys then
      Printf.eprintf "PERF kdown key=%s editing=%s ac=%b\n%!" (D.ev_key ev)
        (match S.editing () with Some e -> e.S.uuid | None -> "-")
        (ac_popup_open ()));
   if S.ready () then begin
+    (match !drag_phase with
+     | Some (Drag_active _)
+       when String.lowercase_ascii (D.ev_key ev) = "escape" ->
+         drag_reset ()
+     | _ -> ());
     if Editor_commands.popup_key ev then
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (D.ev_key ev))
@@ -1072,18 +1178,24 @@ let on_cut ev =
     | Some _ -> ()
     | None -> A.cut_selection ev
 
-(* -- clicks -- *)
-
 let on_click ev =
-  (* a block-range drag ends with a click on the anchor row — the
-     gesture already produced a selection, the click must not open the
-     anchor's editor *)
-  if Block_selection.consume_suppress () then ()
-  else
-    let target = D.ev_target ev in
-    (* the add-button path defers through S.defer_init, so it works even
-       on an empty page where no block_row has mounted the state yet *)
-    match D.closest_sel ".block-add-button" target with
+  if drop_active_drag () then
+    (* the release click is the drop — keep it from other document
+       listeners (page-ref navigation, outside-edit commit) *)
+    D.ev_stop_immediate ev
+  else begin
+    drag_reset ();
+    (* armed-but-unmoved pointer down = a plain click *)
+    (* a block-range drag ends with a click on the anchor row — the
+       gesture already produced a selection, the click must not open
+       the anchor's editor *)
+    if Block_selection.consume_suppress () then ()
+    else begin
+      let target = D.ev_target ev in
+      (* the add-button path defers through S.defer_init, so it works
+         even on an empty page where no block_row has mounted the
+         state yet *)
+      match D.closest_sel ".block-add-button" target with
   | Some btn ->
       A.append_block ?for_page:(D.el_get_attr btn "data-parentblockid")
         ~scope:(A.scope_of_el btn) ()
@@ -1252,6 +1364,8 @@ let on_click ev =
                                                                 u))
                                                     | None ->
                                                         ()))))))))))))
+    end
+  end
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)
@@ -1305,6 +1419,10 @@ let on_editor_insert ev =
    autocomplete/context-menu popups keep editing — the apply action
    refocuses the sink input (cljs keeps the block in edit mode) *)
 let on_mousedown ev =
+  (* a pointer going down ends any stale drag that missed its release
+     click (released outside the document) *)
+  drag_reset ();
+  if Platform.native_drag () then arm_drag ev;
   if S.ready () then begin
     (* record which block's content the pointer went down on — including
        outside any block (clears the record) — and the editing uuid the
@@ -1414,6 +1532,8 @@ let install_once () =
     D.add_document_listener "cut" on_cut true;
     D.add_document_listener "click" on_click true;
     D.add_document_listener "mousedown" on_mousedown true;
+    if Platform.native_drag () then
+      D.add_document_listener "mousemove" on_native_mousemove true;
     D.add_document_listener "ls:editor-insert" on_editor_insert true;
     D.add_document_listener "dragstart" on_dragstart true;
     D.add_document_listener "dragover" on_file_dragover true;

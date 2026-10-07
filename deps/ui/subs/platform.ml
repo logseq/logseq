@@ -235,6 +235,11 @@ let json_prop = js_get
    which never fires here *)
 let emit_event (_ : string) (_ : Js.Json.t) : unit = ()
 
+(* web block drags run through dnd-kit pointer sensors (Block_dnd); the
+   native surface has no HTML5 drag and drives the gesture itself
+   (editor_keys' mousedown/mousemove path listens only when true) *)
+let native_drag () = false
+
 let set_document_title : string -> unit =
   [%mel.raw "function (t) { document.title = t }"]
 

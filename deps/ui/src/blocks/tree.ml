@@ -42,12 +42,20 @@ let block_key (b : Model.block) =
 
 (* -- per-row signals -- *)
 
-let row_class_str (b : Model.block) uuid (selected : S.String_set.t) =
+(* drag affordance classes come from the native bullet-drag gesture —
+   S.drag_sig stays None on web, so the classes never appear there *)
+let row_class_str (b : Model.block) uuid (selected : S.String_set.t)
+    (drag : (string * string * string) option) =
   let order_list = b.Model.block_order_list = Some "number" in
   let blank = String.trim b.block_title = "" in
   let embed = b.Model.block_link <> None in
   (* cljs :class order — dynamic flags first, base classes last *)
   (if S.String_set.mem uuid selected then "selected " else "")
+  ^ (match drag with
+     | Some (src, _, _) when src = uuid -> "block-dragging "
+     | Some (_, tgt, move_to) when tgt = uuid ->
+         "block-drag-over block-drag-over-" ^ move_to ^ " "
+     | _ -> "")
   ^ (if order_list then "is-order-list " else "")
   ^ (if blank then "is-blank " else "")
   ^ (if embed then "embed-block " else "")
@@ -56,9 +64,9 @@ let row_class_str (b : Model.block) uuid (selected : S.String_set.t) =
 
 let row_class_sig uuid blank embed (b : Model.block) =
   ignore (blank, embed);
-  Signal.map
-    (fun selected -> row_class_str b uuid selected)
-    (S.selected_sig ())
+  Signal.map2
+    (fun selected drag -> row_class_str b uuid selected drag)
+    (S.selected_sig ()) (S.drag_sig ())
 
 (* same class signal driven by a per-item block signal — keyed rows get
    fresh block records on republish, so blank/embed/order-list must not
@@ -67,10 +75,11 @@ let row_class_sig uuid blank embed (b : Model.block) =
    reach it *)
 let row_class_sig_of (bs : Model.block Signal.signal) =
   Signal.map2
-    (fun (b : Model.block) selected ->
+    (fun ((b : Model.block), selected) drag ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_class_str b uuid selected)
-    bs (S.selected_sig ())
+      row_class_str b uuid selected drag)
+    (Signal.map2 (fun b selected -> (b, selected)) bs (S.selected_sig ()))
+    (S.drag_sig ())
 
 (* effective collapse for a block: scoped UI overrides, then persisted
    set || view default — projected on the [collapse_view] carried by

@@ -257,6 +257,10 @@ let event_listed events name =
    a human double-click. *)
 let last_click_ms = ref (-1.)
 
+(* the web drives block drags through dnd-kit sensors; here the gesture
+   is driven by editor_keys' mousedown/mousemove/click listeners *)
+let native_drag () = true
+
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
   let now = date_now_ms () in
@@ -332,6 +336,7 @@ let emit_event name payload =
       in
       List.iter
         (fun f ->
+          if not !propagation_stopped then
           try f payload
           with e ->
             Printf.eprintf "[emit_event] listener threw ev=%s: %s\n%!" name

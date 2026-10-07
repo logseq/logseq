@@ -686,6 +686,26 @@ fn register_class_styles() {
         "background:var(--ls-menu-hover-color, var(--ls-tertiary-background-color))",
         "",
     );
+
+    // ---- native block drag affordances (editor_keys drives the
+    // gesture; web shows the same states via dnd-kit classes) ----
+    class("block-dragging", "opacity:0.4", "");
+    class("block-drag-over", "position:relative", "");
+    class(
+        "block-drag-over-top",
+        "border-top:2px solid var(--ls-primary-color, var(--ls-link-text-color))",
+        "",
+    );
+    class(
+        "block-drag-over-sibling",
+        "border-bottom:2px solid var(--ls-primary-color, var(--ls-link-text-color))",
+        "",
+    );
+    class(
+        "block-drag-over-nested",
+        "border-left:2px solid var(--ls-primary-color, var(--ls-link-text-color))",
+        "",
+    );
 }
 
 /// `logseq-div`/`logseq-span` nodes carrying the `.latex`/`.latex-inline`

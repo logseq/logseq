@@ -54,6 +54,10 @@ type t =
       (* bumped by Render_inline cache invalidations via worker_events —
          lets painted rows recheck their rendered-ref gens without
          subscribing the whole state record *)
+  ; drag : (string * string * string) option
+      (* native bullet-drag affordance: (src_uuid, tgt_uuid, move_to)
+         while a drag gesture is in flight — the web dnd-kit path never
+         sets it *)
   }
 
 let initial =
@@ -66,6 +70,7 @@ let initial =
   ; collapsed_ui = String_set.empty
   ; expanded_ui = String_set.empty
   ; inv_tick = 0
+  ; drag = None
   }
 
 include State_cell.Make (struct
@@ -170,6 +175,7 @@ type field_sigs =
   ; action_bar_sig : bool Signal.signal
   ; collapse_sig : collapse_view Signal.signal
   ; invalidation_sig : int Signal.signal
+  ; drag_sig : (string * string * string) option Signal.signal
   }
 
 let field_sigs_opt : field_sigs option ref = ref None
@@ -201,6 +207,8 @@ let field_sigs () =
                  s)
         ; invalidation_sig =
             Signal.cutoff ( = ) (Signal.map (fun st -> st.inv_tick) s)
+        ; drag_sig =
+            Signal.cutoff ( = ) (Signal.map (fun st -> st.drag) s)
         }
       in
       field_sigs_opt := Some f;
@@ -212,6 +220,7 @@ let anchor_sig () = (field_sigs ()).anchor_sig
 let action_bar_sig () = (field_sigs ()).action_bar_sig
 let collapse_sig () = (field_sigs ()).collapse_sig
 let invalidation_sig () = (field_sigs ()).invalidation_sig
+let drag_sig () = (field_sigs ()).drag_sig
 
 (* Render_inline cache invalidation dirtied painted rows' ref gens —
    fold a tick into the state so row invalidation signals emit on the
@@ -234,6 +243,11 @@ let set_silent f =
    selection/editing state *)
 let read () =
   match !st with Some s -> Signal.get_state s | None -> initial
+
+(* imperative access to the in-flight drag — set only on target/zone
+   transitions, never per mousemove *)
+let drag () = (read ()).drag
+let set_drag v = set (fun st -> { st with drag = v })
 
 (* imperative readers get the pending (not-yet-published) value:
    Signal.update composes onto it, so a published snapshot can lag the
