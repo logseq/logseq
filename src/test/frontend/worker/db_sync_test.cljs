@@ -37,6 +37,7 @@
    [logseq.db :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
    [logseq.db-sync.storage :as sync-storage]
+   [logseq.db-sync.tx-sanitize :as tx-sanitize]
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
    [logseq.db.common.delete-blocks :as delete-blocks]
@@ -813,6 +814,30 @@
               (is (= #{[(:db/id server-page) :block/title "page 1"]}
                      (set (map (juxt :e :a :v)
                                (set/difference local-datoms server-datoms))))))))))))
+
+(deftest stamps-on-missing-entities-are-dropped-test
+  (testing "sanitize-tx drops raw-eid stamp ops on entities the server doesn't
+            have, so they can't resurrect invalid ghost entities"
+    (let [{:keys [conn child1]} (setup-parent-child)
+          live-eid (:db/id child1)
+          dead-eid (inc (apply max (map :e (d/datoms @conn :eavt))))
+          missing-uuid (random-uuid)]
+      (is (= [[:db/add live-eid :block/updated-at 1]
+              [:db/add [:block/uuid (:block/uuid child1)] :block/title "x"]
+              [:db/add [:block/uuid missing-uuid] :block/updated-at 1]
+              {:db/id live-eid :block/updated-at 1}
+              {:db/id dead-eid :block/title "kept — not a pure stamp"}]
+             (#'tx-sanitize/sanitize-tx
+              @conn
+              [[:db/add dead-eid :block/updated-at 1]
+               [:db/add live-eid :block/updated-at 1]
+               [:db/add [:block/uuid (:block/uuid child1)] :block/title "x"]
+               ;; lookup-refs pass through unresolved; the tx fails on them later
+               [:db/add [:block/uuid missing-uuid] :block/updated-at 1]
+               {:db/id dead-eid :block/updated-at 1}
+               {:db/id live-eid :block/updated-at 1}
+               {:db/id dead-eid :block/updated-at 1 :block/order "a0"}
+               {:db/id dead-eid :block/title "kept — not a pure stamp"}]))))))
 
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done
