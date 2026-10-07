@@ -188,12 +188,37 @@ fn handle_platform_request(
     }
 }
 
+/// Last viewport size pushed to OCaml as a `window-size` platform event —
+/// `Host.set_window_size` feeds `Web_dom.win_inner_*`, which the emitters
+/// use to anchor window-edge popups (help menu) and clamp popup flips.
+static LAST_WIN_SIZE: Mutex<(f32, f32)> = Mutex::new((0., 0.));
+
+fn push_window_size(window: &gpui_kit::gpui::Window) {
+    let size = window.viewport_size();
+    let w = f32::from(size.width);
+    let h = f32::from(size.height);
+    let mut last = match LAST_WIN_SIZE.lock() {
+        Ok(g) => g,
+        Err(e) => e.into_inner(),
+    };
+    if last.0 != w || last.1 != h {
+        *last = (w, h);
+        let envelope = format!("window-size\n{{\"width\":{w},\"height\":{h}}}");
+        eprintln!("[win-size] push {envelope:?}");
+        let r = unsafe {
+            lui_ocaml_platform_event(envelope.as_ptr().cast::<c_char>(), envelope.len() as c_int)
+        };
+        eprintln!("[win-size] result={r}");
+    }
+}
+
 /// UI-side tick: apply queued patches and service platform requests.
 /// The OCaml mailbox itself is pumped on the dedicated pump thread, so
 /// this stays light even while OCaml is mid-flush.
 fn pump_tick(shared: &Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui_kit::gpui::App) {
     drain_patches(shared, cx);
     drain_requests(shared, window, cx);
+    push_window_size(window);
     lui_gpui::dom::fire_viewport_events(shared, window, cx);
 }
 
@@ -212,17 +237,6 @@ fn drain_requests(
     window: &mut gpui_kit::gpui::Window,
     cx: &mut gpui_kit::gpui::App,
 ) {
-    // debug: LOGSEQ_GPUI_DUMP_TREE=<ms> dumps the store tree once after t
-    static DUMPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if !DUMPED.load(std::sync::atomic::Ordering::Relaxed) {
-        if let Ok(ms) = std::env::var("LOGSEQ_GPUI_DUMP_TREE") {
-            if boot_ms() >= ms.parse::<f64>().unwrap_or(0.0) {
-                DUMPED.store(true, std::sync::atomic::Ordering::Relaxed);
-                eprintln!("logseq-gpui: dumping tree t={:.1}ms", boot_ms());
-                lui_gpui::domops::handle_dom_op(shared, "dump-frames", "{}", window, cx);
-            }
-        }
-    }
     let requests = PENDING_REQUESTS
         .lock()
         .map(|mut queue| std::mem::take(&mut *queue))

@@ -242,7 +242,7 @@ fn element(
                 .child(SharedString::from(tex.to_string()))
         }
     };
-    style::all(element, node).into_any_element()
+    style::all(element, node, cx.theme()).into_any_element()
 }
 
 /// Compile + rasterize one formula (or fetch it from the cache). Errors

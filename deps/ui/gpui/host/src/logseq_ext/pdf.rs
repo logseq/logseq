@@ -463,6 +463,7 @@ pub fn render(
             .items_center()
             .child(page_el),
         node,
+        cx.theme(),
     )
     .into_any_element()
 }
@@ -484,6 +485,7 @@ fn placeholder(node: &NodeSnapshot, text: &str, cx: &mut Context<LuiNodeView>) -
             .text_color(cx.theme().muted_foreground)
             .child(text.to_string()),
         node,
+        cx.theme(),
     )
     .into_any_element()
 }

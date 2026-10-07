@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use gpui_kit::component::input::{Editor, EditorState, InputEvent};
 use gpui_kit::gpui::{
-    div, AnyElement, AppContext, Context, ElementId, Focusable, InteractiveElement,
+    div, px, AnyElement, AppContext, Context, ElementId, Focusable, InteractiveElement,
     IntoElement, ParentElement, Styled, Window,
 };
 use lui_core::wire::Value;
@@ -25,6 +25,7 @@ use lui_core::wire::Value;
 use lui_gpui::Shared;
 use lui_gpui::extension::fire_extension;
 use lui_gpui::node_view::{LuiNodeView, NodeSnapshot};
+use gpui_kit::component::theme::ActiveTheme;
 use lui_gpui::style;
 
 fn ext<'a>(node: &'a NodeSnapshot, name: &str) -> Option<&'a str> {
@@ -95,7 +96,7 @@ pub fn render(
     let cm = cm_state(view);
     if cm.borrow().editor.is_none() {
         let state = cx.new(|cx| {
-            let mut state = EditorState::new(window, cx);
+            let mut state = EditorState::new(window, cx).line_number(true);
             if !lang.is_empty() {
                 state = state.language(lang.clone());
             }
@@ -160,10 +161,26 @@ pub fn render(
     }
 
     let shared = view.shared.clone();
+    // Root keydown forwarding needs the focused element's node — register
+    // the editor's focus handle so keys route at the right target.
+    shared
+        .borrow_mut()
+        .register_focus(node_id, state.read(cx).focus_handle(cx));
+    // Web sizes the CodeMirror wrap to its content (height: auto); gpui's
+    // Editor fills its parent, so a `~grow` wrap with unconstrained
+    // height collapses to zero — give the wrap an explicit content
+    // height from the value's line count.
+    let lines = wire_value.lines().count().max(1);
+    let line_h = state
+        .read(cx)
+        .line_height()
+        .unwrap_or_else(|| px(20.));
+    let editor_h = px(f32::from(line_h) * lines as f32 + 12.);
     let mut element = div()
         .id(ElementId::Integer(node.id as u64))
-        .child(Editor::new(&state))
-        .h_full();
+        .w_full()
+        .min_h(editor_h)
+        .child(Editor::new(&state));
     // Escape reaches us through the bubble phase even though the inner
     // input keymap consumes the Escape action itself.
     element = element.on_key_down(move |event, _window, cx| {
@@ -178,5 +195,5 @@ pub fn render(
             );
         }
     });
-    style::all(element, node).into_any_element()
+    style::all(element, node, cx.theme()).into_any_element()
 }

@@ -1013,8 +1013,10 @@ let on_keydown ev =
       let target = D.ev_target ev in
       (* CodeMirror surfaces (fenced-code editor, query source editor)
          own their keys — Esc/arrows/Tab go through the editor's own
-         listeners, never the block-editor dispatch *)
-      match D.closest_sel ".CodeMirror" target with
+         listeners, never the block-editor dispatch. On the native host
+         no inner .CodeMirror div exists, so the emitted .code-editor
+         wrap around the mount is the guard ancestor instead. *)
+      match D.closest_sel ".CodeMirror, .code-editor" target with
       | Some _ -> ()
       | None -> (
           (* property value textareas own their key handling
