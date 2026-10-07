@@ -126,6 +126,21 @@ let count_refs (w : Wire.t) (k : string) : int =
       List.length xs
   | _ -> 0
 
+(* pull [*] emits ref values as bare db-id ints (or {:db/id} stubs where
+   explicit ref fields were requested) *)
+let ref_ids (w : Wire.t) (k : string) : int list =
+  match Wire.get w k with
+  | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
+      List.filter_map
+        (fun x ->
+          match x with
+          | Wire.Int n -> Some n
+          | Wire.Int64 n -> Some (Int64.to_int n)
+          | Wire.Map _ -> Wire.map_get_int x "db/id"
+          | _ -> None)
+        xs
+  | _ -> []
+
 (* cljs editor-handler/db-collapsable?: the entity's property keys minus
    internal db-attribute and created-* properties, or a query ref. On the
    wire the entity carries every logseq.property/* and user.property/*
@@ -399,6 +414,8 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_is_comments_area = false
   ; block_is_comment = false
   ; block_comment_targets = count_refs w "logseq.property.comments/blocks"
+  ; block_comment_target_ids =
+      ref_ids w "logseq.property.comments/blocks"
   ; block_children = children
   ; block_link = link
   ; block_embed_children = []
