@@ -732,10 +732,10 @@ let main_content (ms : Model.t Signal.signal) =
            ~style_class:"scrollbar-spacing relative"
            [ Ui_parts.class_signal ms
                (fun (m : Model.t) ->
-                 (* cljs container.cljs: data-is-full-width on
-                    all-pages/all-files/my-publishing routes — mirrored
-                    as .is-full-width (stylesheet class; attrs have no
-                    kind-level signal channel) *)
+                 (* cljs container.cljs: #main-content-container centers
+                    the max-width column via flex justify-center — for the
+                    grid-backed scroll kind the column's margin-inline:auto
+                    rule in lui-core.css does the centering *)
                  "cp__sidebar-main-content"
                  ^ (match m.route with
                     | Model.All_pages -> " is-full-width"
@@ -745,12 +745,13 @@ let main_content (ms : Model.t Signal.signal) =
                   [ Ui_parts.class_signal ms
                       (fun (m : Model.t) ->
                         (* cljs container.cljs: div.mx-auto.pb-24 around
-                           main-content; home/margin-less routes keep an
-                           empty class + 0 margin *)
+                           main-content — the graphs view also mounts its
+                           host under this .mx-auto; home/margin-less
+                           routes keep the flush variant *)
                         match m.route with
                         | Model.Journals | Model.Home ->
                             "cp__content-wrap cp__content-wrap--flush"
-                        | _ -> "cp__content-wrap")
+                        | _ -> "cp__content-wrap mx-auto pb-24")
                       (box ~key:"content-wrap" [ Page.region ms ])
                   ])
            ]
