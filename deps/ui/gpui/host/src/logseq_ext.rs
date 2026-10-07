@@ -140,6 +140,87 @@ pub fn register(shared: &Shared) {
         "color:var(--ls-link-text-color)",
         "",
     );
+    // resources/css/lui-overlay.css — modal scrim + dialog surface.
+    // The web scrim is `color-mix(bg 90%, transparent)`; `--lui-c-*`
+    // vars have no gpui counterpart, so both layers resolve through the
+    // `--ls-*` semantic table (theme-aware). A fully opaque scrim keeps
+    // page content from bleeding through dialogs.
+    lui_gpui::style::register_class_style(
+        "ui__dialog-overlay",
+        "background:var(--ls-primary-background-color)",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "ui__alert-dialog-overlay",
+        "background:var(--ls-primary-background-color)",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "ui__dialog-content",
+        "background:var(--ls-primary-background-color); \
+         border:1px solid var(--ls-border-color); border-radius:8px; \
+         padding:24px; width:100%; max-width:672px; overflow:hidden; \
+         position:relative",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "ui__alert-dialog-content",
+        "background:var(--ls-primary-background-color); \
+         border:1px solid var(--ls-border-color); border-radius:8px; \
+         padding:24px; width:100%; max-width:512px; overflow:hidden; \
+         position:relative",
+        "",
+    );
+    // .ui__dialog-content.ls-dialog-settings { max-width: 64rem }
+    lui_gpui::style::register_class_style(
+        "ls-dialog-settings",
+        "max-width:1024px",
+        "",
+    );
+    // .ui__dialog-main-content { min-height:0; overflow-y:auto }
+    lui_gpui::style::register_class_style(
+        "ui__dialog-main-content",
+        "min-height:0",
+        "w-full overflow-y-auto",
+    );
+    // .cp__theme-modes-options { display:flex; gap:12px } — the theme
+    // mode tiles lay out horizontally, not as a stacked list.
+    lui_gpui::style::register_class_style(
+        "cp__theme-modes-options",
+        "flex-direction:row",
+        "",
+    );
+    // Theme mode tiles — web gives each .mode-* a preview fill + the
+    // .mode-active accent ring.
+    lui_gpui::style::register_class_style(
+        "mode-light",
+        "background:#f3f4f6; border:1px solid var(--ls-border-color); \
+         border-radius:8px; height:56px",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "mode-dark",
+        "background:#191919; border:1px solid var(--ls-border-color); \
+         border-radius:8px; height:56px",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "mode-system",
+        "background:#6b7280; border:1px solid var(--ls-border-color); \
+         border-radius:8px; height:56px",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "mode-active",
+        "border:2px solid var(--ls-link-text-color)",
+        "",
+    );
+    // .ui__dialog-close { position:absolute; right/top:1rem; opacity:.7 }
+    lui_gpui::style::register_class_style(
+        "ui__dialog-close",
+        "position:absolute; top:16px; right:16px; opacity:0.7",
+        "cursor-pointer",
+    );
     let mut shared = shared.borrow_mut();
     shared
         .extension_renderers

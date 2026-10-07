@@ -15,6 +15,7 @@ use std::time::Instant;
 
 mod editor;
 mod logseq_ext;
+mod menu;
 
 use gpui_kit::component::Root;
 use gpui_kit::gpui::{point, px, size, Bounds, WindowBounds, WindowOptions};
@@ -448,7 +449,10 @@ fn main() {
     }
 
     eprintln!("logseq-gpui: app() start t={:.1}ms", boot_ms());
-    let app = gpui_kit::application().with_assets(gpui_kit::assets::Assets);
+    // AllAssets over the curated `Assets` — OCaml icon props map onto the
+    // full Lucide catalog, which the default set only partially covers
+    // (e.g. `icons/x.svg` is absent there).
+    let app = gpui_kit::application().with_assets(gpui_kit::assets::AllAssets);
     eprintln!("logseq-gpui: app() done t={:.1}ms", boot_ms());
     app.run(move |cx| {
         eprintln!("logseq-gpui: run entry t={:.1}ms", boot_ms());
@@ -517,6 +521,9 @@ fn main() {
         })
         .expect("Failed to open window");
         eprintln!("logseq-gpui: open_window returned t={:.1}ms", boot_ms());
+        // Native menubar — menu-* platform events + OS actions; lives in
+        // menu.rs (Electron set_app_menu counterpart).
+        menu::install(cx);
         // bare binary launches come up inactive — without this the
         // window can't become macOS key window and keyboard input
         // never reaches it; deferred so it lands after app.run settles

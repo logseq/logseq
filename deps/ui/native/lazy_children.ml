@@ -10,6 +10,13 @@ module D = Logseq_dom
 let forced : (string, unit) Hashtbl.t = Hashtbl.create 8
 let force uuid = Hashtbl.replace forced uuid ()
 
+(* Per-uuid latches for `lazy_rows`, shared across invocations: the
+   container's dom-event handler is registered once on first emit and
+   keeps its original closure even when later republishes reuse the
+   node, so a table recreated per call would leave the handler mutating
+   latches the live rows no longer subscribe to. *)
+let near_states : (string, bool Signal.state) Hashtbl.t = Hashtbl.create 16
+
 (* TODO(component): the lazy-mount dom-event is a host-side contract
    (onAppear triggers the mount); the attr half could ride ~data_attrs
    but no component kind carries a custom event channel, so the
@@ -67,9 +74,6 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
     (D.keyed ~source ~key ~cmp ~mount) ctx parent
   else begin
     let sched = ctx.Lui_ui.ui_scheduler in
-    let near_states : (string, bool Signal.state) Hashtbl.t =
-      Hashtbl.create 16
-    in
     let near_of uuid =
       match Hashtbl.find_opt near_states uuid with
       | Some s -> s
