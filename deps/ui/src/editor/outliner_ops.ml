@@ -263,12 +263,22 @@ let collapse_expand pairs =
     ; Wire.Map []
     ]
 
+(* cljs <create! defaults :split-namespace? true — a "Foo/Bar" title
+   creates the namespace parents instead of failing name validation *)
 let create_page title =
-  op "create-page" [ Wire.String title; Wire.Map [] ]
+  op "create-page"
+    [ Wire.String title
+    ; Wire.Map [ kw "split-namespace?" (Wire.Bool true) ]
+    ]
 
 let create_class title =
   op "create-page"
-    [ Wire.String title; Wire.Map [ kw "class?" (Wire.Bool true) ] ]
+    [ Wire.String title
+    ; Wire.Map
+        [ kw "class?" (Wire.Bool true)
+        ; kw "split-namespace?" (Wire.Bool true)
+        ]
+    ]
 
 let set_block_property uuid prop v =
   op "set-block-property" [ Wire.Uuid uuid; Wire.Keyword prop; v ]
@@ -921,6 +931,10 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
 let apply ?opts ops =
   let* _ = apply_result ?opts ops in
   Js.Promise.resolve ()
+
+(* cljs <create! title via outliner-op create-page — a journal-formatted
+   title is auto-tagged :logseq.class/Journal by the worker *)
+let apply_create_page title = apply [ create_page title ]
 
 (* While an editor is open a per-op fetch+rebuild starves keystroke
    dispatch under RTC traffic (~200-300ms of whole-page reconcile per

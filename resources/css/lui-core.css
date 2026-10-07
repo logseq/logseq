@@ -230,6 +230,11 @@ blockquote {
   width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
+  /* cljs container.cljs centers the max-width column with a flex
+     justify-center row; the web emit mounts it inside .lui-scroll
+     (display:grid), where auto inline margins absorb the free space the
+     same way */
+  margin-inline: auto;
   container-type: inline-size;
 
   .page {

@@ -40,50 +40,49 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
       let m = [ field "db/id" (Wire.Int e.id) ] in
       let m =
         match Ldb.ident_of e with
-        | Some i -> field "db/ident" (kw i) :: m
+        | Some i -> assoc "db/ident" (kw i) m
         | None -> m
       in
       let m =
         match tag_idents with
         | [] -> m
-        | ts -> field "block/tags" (Wire.Array ts) :: m
+        | ts -> assoc "block/tags" (Wire.Array ts) m
       in
       let m =
         match Ldb.value e "block/uuid" with
-        | Some v -> field "block/uuid" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "block/uuid" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
         match Ldb.ident_of e with
-        | Some i -> field "db/ident" (kw i) :: m
+        | Some i -> assoc "db/ident" (kw i) m
         | None -> m
       in
       let m =
         match Ldb.value e "logseq.property/icon" with
-        | Some v -> field "logseq.property/icon" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "logseq.property/icon" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
         match raw_title with
         | Some v ->
             field "block/title" (Ds_wire.transit_of_value v)
-            :: field "block/raw-title" (Ds_wire.transit_of_value v)
-            :: m
+            :: assoc "block/raw-title" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
         match Ldb.value e "block/name" with
-        | Some v -> field "block/name" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "block/name" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
         match Ldb.value e "block/journal-day" with
-        | Some v -> field "block/journal-day" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "block/journal-day" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
         match Ldb.value e "logseq.property/icon" with
-        | Some v -> field "logseq.property/icon" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "logseq.property/icon" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
@@ -96,22 +95,22 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
       in
       let m =
         match property_value with
-        | Some v -> field "logseq.property/value" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "logseq.property/value" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
         match Ldb.value e "logseq.property.asset/type" with
-        | Some v -> field "logseq.property.asset/type" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "logseq.property.asset/type" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
         match Ldb.value e "logseq.property.asset/width" with
-        | Some v -> field "logseq.property.asset/width" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "logseq.property.asset/width" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
         match Ldb.value e "logseq.property.asset/height" with
-        | Some v -> field "logseq.property.asset/height" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "logseq.property.asset/height" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       let m =
@@ -132,7 +131,7 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
       in
       let m =
         match Ldb.value e "db/ident" with
-        | Some v -> field "db/ident" (Ds_wire.transit_of_value v) :: m
+        | Some v -> assoc "db/ident" (Ds_wire.transit_of_value v) m
         | None -> m
       in
       Wire.Map (List.rev m)

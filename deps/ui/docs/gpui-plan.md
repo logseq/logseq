@@ -19,22 +19,22 @@ Rust + gpui-kit 渲染，功能验收对齐 Electron/web 现有能力。
 │  └─ 新增: dom.rs(logseq-* 标签→布局) + tailwind.rs(style-class 解析)    │
 │                                                                          │
 │  logseq_ui_gpui (OCaml, native object, 静态链接进 host)                  │
-│  └─ deps/ui/gpui/ ≈ deps/ui/apple/ 的 dune copy — native twin 全套复用  │
+│  └─ deps/ui/gpui/ ≈ deps/ui/native/ 的 dune copy — native twin 全套复用  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 复用策略（web / gpui 共享代码）
 
 1. **OCaml 应用层零拷贝**：Model/Update/View/所有 UI 组件走同一套
-   `src/` + `subs/` 源码，platform 差异已由 `apple/` 的 native twin 吸收。
+   `src/` + `subs/` 源码，platform 差异已由 `native/` 的 native twin 吸收。
 2. **deps/ui/gpui 不含独立 .ml 实现**：dune 里 `(copy ../apple/x.ml)` 复用
-   apple/ 全部 native 文件（platform.ml、host.ml、fetch.ml、daemon_client.ml、
+   native/ 全部 native 文件（platform.ml、host.ml、fetch.ml、daemon_client.ml、
    vdom.ml、dom_ext.ml、imperative_dom.ml、logseq_dom.ml、native_embed.ml、
    logseq_lui_bridge.c…）。gpui/ 目录只有 dune + host/ Rust 代码。
-3. **共享文件的两处小改**（对 apple 零影响）：
-   - `apple/logseq_dom.ml`：`schema_of` profiles 加 `gpui_profile`
+3. **共享文件的两处小改**（对 native 零影响）：
+   - `native/logseq_dom.ml`：`schema_of` profiles 加 `gpui_profile`
      `{ MacOS; GPUIHost }`，使 logseq-\* 扩展在 GPUI host 注册。
-   - `apple/native_embed.ml`：`host_code 6 → Lui_protocol.GPUIHost`。
+   - `native/native_embed.ml`：`host_code 6 → Lui_protocol.GPUIHost`。
 4. **组件化迁移（架构主轴，见 M2*）**：视图源码从 `dom ~tag ~classes`
    DOM 拼法迁到 `Lui_elements` 组件 kind 拼法（`column ~gap ~p …`）。
    layout/样式走 kind 的类型化 props，`style_class` 保留但语义降级为
@@ -97,7 +97,7 @@ host → OCaml：
 1. **OCaml 层（无需 Rust）**：`deps/ui/test/drive.ml` 已有 in-process
    Drive —— recording backend 重放 patch + `Lui_app.dispatch_event`
    注入事件 + Stub_dom/Fake_worker。gpui 版把 drive 测试编进 native
-   target（apple native twin 已提供全部 browser-global shim），断言
+   target（native twin 已提供全部 browser-global shim），断言
    patch 流结构 —— 这套测试 web/gpui/apple 三方共用。
 2. **Rust 层单测**：`cargo test` —
    - `tailwind.rs`：class → Styled 映射表快照测试

@@ -45,7 +45,7 @@ let selector_row st =
     [ box ~key:"combo" ~style_class:"ls-cards-select"
         [ (* cljs shui/select-trigger: current deck label + chevron —
              select renders role=combobox on web, a native picker on
-             Apple/GPUI *)
+             native (GPUI) *)
           select ~key:"selv" ~style_class:"ls-cards-select-value"
             ~text:(reactive selected_label
                      (Signal.value st.Cards_state.sel)

@@ -75,7 +75,25 @@ let sync_buffer uuid v =
    (enter_edit awaits the title ref before updating S.editing), so the
    rest wait for the next pass rather than applying against the stale
    editing block *)
+let perf_keys =
+  lazy
+    (match Sys.getenv_opt "LOGSEQ_PERF" with
+     | Some _ -> true
+     | None -> false)
+
 let focus_attempts = ref 0
+
+(* at most one retry timer in flight: apply_focus is also invoked per
+   flush and per re-arm, and when every call scheduled its own timer a
+   sink that can't mount multiplied parallel retry chains instead of
+   retrying once at a time *)
+let retry_timer_armed = ref false
+
+(* exponential backoff: a row that mounts a patch or two later clears
+   on the early 12ms tries; a sink that can't mount yet backs off
+   (12ms x8, 24ms x8, 48ms x8, 96ms x8, then ~200ms) instead of
+   flooding the event loop *)
+let retry_delay_ms attempts = min 200 (12 lsl (min 4 (attempts / 8)))
 
 (* replayed keys can re-enter the queue through the flush their op
    triggers — the gate keeps a nested pass from replaying twice *)
@@ -98,6 +116,28 @@ let drain_pending_focus_actions () =
    every retry saturates the host's op queue while the focus event still
    hasn't had a turn, which is exactly what keeps ae from resolving *)
 let last_focus_emitted : string option ref = ref None
+
+(* the mousedown that opened an edit lands before the sink exists —
+   hit-test its recorded coords against the now-mounted runs so the
+   caret lands on the click point instead of the enter_edit default *)
+let click_offset uuid =
+  match !S.click_point with
+  | Some (u, ms, x, y)
+    when u = uuid && Platform.date_now_ms () -. ms < 1500. -> (
+      match
+        ( Editor_sink.conduit uuid
+        , D.get_element_by_id ("edit-block-" ^ uuid) )
+      with
+      | Some conduit, Some el -> (
+          match D.closest_sel ".block-editor" (Some el) with
+          | Some c ->
+              let r = D.el_bounding_rect c in
+              conduit.Edit_input.offset_at
+                ~x:(int_of_float x - int_of_float (D.rect_left r))
+                ~y:(int_of_float y - int_of_float (D.rect_top r))
+          | None -> None)
+      | _ -> None)
+  | _ -> None
 
 let rec apply_focus () =
   (* a stale retry timer can fire after its arm was consumed or replaced;
@@ -136,14 +176,15 @@ let rec apply_focus () =
              refresh) must not stomp the caret: if the user typed
              since this focus was requested, the stored caret is
              stale — keep where the model put it *)
-          if !S.last_edit_input_ms <= armed_ms then set_caret uuid caret;
+          if !S.last_edit_input_ms <= armed_ms then
+            (match click_offset uuid with
+             | Some off -> set_caret uuid off
+             | None -> set_caret uuid caret);
           drain_pending_focus_actions ())
         else (
-          prerr_endline
-            ("PERF focus-retry t="
-             ^ string_of_float (Platform.date_now_ms () /. 1000.)
-             ^ " uuid=" ^ uuid);
-          flush stderr;
+          if Lazy.force perf_keys then
+            Printf.eprintf "PERF focus-retry t=%f uuid=%s\n%!"
+              (Platform.date_now_ms () /. 1000.) uuid;
           retry_focus ()))
 
 and retry_focus () =
@@ -161,12 +202,23 @@ and retry_focus () =
               top-level key like the nested list had *)
            !(S.scroll_key_into_view) u
        | None -> ());
-    D.set_timeout apply_focus 12
+    if not !retry_timer_armed then begin
+      retry_timer_armed := true;
+      D.set_timeout
+        (fun () ->
+          retry_timer_armed := false;
+          apply_focus ())
+        (retry_delay_ms !focus_attempts)
+    end
   end
   else (
     S.pending_focus := None;
     focus_attempts := 0;
     last_focus_emitted := None;
+    (* one line per exhausted arm — never mounting is a bug worth
+       seeing, just not 50 PERF lines per click *)
+    Platform.console_error
+      "focus retry budget exhausted — editor sink never mounted";
     drain_pending_focus_actions ())
 
 (* flush-time pass over pending focus — main.ml and the test driver run
@@ -247,12 +299,6 @@ let scope_of_uuid uuid =
   match D.get_element_by_id ("ls-block-" ^ uuid) with
   | Some el -> scope_of_el el
   | None -> "main"
-
-let perf_keys =
-  lazy
-    (match Sys.getenv_opt "LOGSEQ_PERF" with
-     | Some _ -> true
-     | None -> false)
 
 let enter_edit ?scope uuid caret =
   let scope =
@@ -1664,10 +1710,27 @@ let conduit_of uuid =
 (* fold freshly measured visual lines back into the model (line_bounds,
    first/last_line feed keys and Del_line deletes); empty measurement
    keeps the '\n' table *)
+(* measured ranges are only valid when they strictly partition the
+   buffer [0, len): the DOM they hit-test can lag the model publish by
+   a paint, and a stale read comes back degenerate ([0,0] or pad-only
+   rows). Writing one of those corrupts the line table permanently —
+   the repaint shows only pads, every later measure stays degenerate *)
+let measured_partitions len rs =
+  match rs with
+  | [] -> false
+  | (lo, _) :: _ when lo <> 0 -> false
+  | _ ->
+      let rec go exp = function
+        | [] -> exp = len
+        | (a, b) :: tl -> a = exp && b >= a && go b tl
+      in
+      go 0 rs
+
 let refresh_lines m (conduit : Edit_input.conduit) =
   match conduit.line_ranges () with
-  | [] -> m
-  | rs -> Edit_model.set_lines m rs
+  | rs when measured_partitions (String.length m.Edit_model.source) rs ->
+      Edit_model.set_lines m rs
+  | _ -> m
 
 (* wrap the model selection with a markdown marker pair *)
 let wrap_selection uuid marker =

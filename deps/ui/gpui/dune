@@ -1,157 +1,157 @@
-; GPUI native host build — same module set as apple/. The shared
+; GPUI native host build — same module set as native/. The shared
 ; ../src + ../subs copies and the generated-table rules below are
-; identical to apple/dune; the apple/*.ml files (the native platform
+; identical to native/dune; the native/*.ml files (the native platform
 ; twin: platform.ml, vdom.ml, logseq_dom.ml, bridge, …) are copied
-; from ../apple so the two hosts can never drift. Only the library
+; from ../native so the two hosts can never drift. Only the library
 ; name differs; host selection is the host_code the Rust host passes
 ; to lui_ocaml_start (6 = GPUIHost).
 
 (rule
- (copy ../apple/asset_dom.ml asset_dom.ml))
+ (copy ../native/asset_dom.ml asset_dom.ml))
 (rule
- (copy ../apple/asset_store.ml asset_store.ml))
+ (copy ../native/asset_store.ml asset_store.ml))
 (rule
- (copy ../apple/block_dnd.ml block_dnd.ml))
+ (copy ../native/block_dnd.ml block_dnd.ml))
 (rule
- (copy ../apple/browser_ui.ml browser_ui.ml))
+ (copy ../native/browser_ui.ml browser_ui.ml))
 (rule
- (copy ../apple/chrome.ml chrome.ml))
+ (copy ../native/chrome.ml chrome.ml))
 (rule
- (copy ../apple/cmdk_state.ml cmdk_state.ml))
+ (copy ../native/cmdk_state.ml cmdk_state.ml))
 (rule
- (copy ../apple/cmdk_view.ml cmdk_view.ml))
+ (copy ../native/cmdk_view.ml cmdk_view.ml))
 (rule
- (copy ../apple/code_mirror.ml code_mirror.ml))
+ (copy ../native/code_mirror.ml code_mirror.ml))
 (rule
- (copy ../apple/comments.ml comments.ml))
+ (copy ../native/comments.ml comments.ml))
 (rule
- (copy ../apple/daemon_client.ml daemon_client.ml))
+ (copy ../native/daemon_client.ml daemon_client.ml))
 (rule
- (copy ../apple/dates.ml dates.ml))
+ (copy ../native/dates.ml dates.ml))
 (rule
- (copy ../apple/dnd_kit.ml dnd_kit.ml))
+ (copy ../native/dnd_kit.ml dnd_kit.ml))
 (rule
- (copy ../apple/dom_ext.ml dom_ext.ml))
+ (copy ../native/dom_ext.ml dom_ext.ml))
 (rule
- (copy ../apple/editor_cmds.ml editor_cmds.ml))
+ (copy ../native/editor_cmds.ml editor_cmds.ml))
 (rule
- (copy ../apple/editor_dom.ml editor_dom.ml))
+ (copy ../native/editor_dom.ml editor_dom.ml))
 (rule
- (copy ../apple/emoji_mart.ml emoji_mart.ml))
+ (copy ../native/emoji_mart.ml emoji_mart.ml))
 (rule
- (copy ../apple/export_page.ml export_page.ml))
+ (copy ../native/export_page.ml export_page.ml))
 (rule
- (copy ../apple/fetch.ml fetch.ml))
+ (copy ../native/fetch.ml fetch.ml))
 (rule
- (copy ../apple/fuzzy.ml fuzzy.ml))
+ (copy ../native/fuzzy.ml fuzzy.ml))
 (rule
- (copy ../apple/host.ml host.ml))
+ (copy ../native/host.ml host.ml))
 (rule
- (copy ../apple/html_to_md.ml html_to_md.ml))
+ (copy ../native/html_to_md.ml html_to_md.ml))
 (rule
- (copy ../apple/icon_picker.ml icon_picker.ml))
+ (copy ../native/icon_picker.ml icon_picker.ml))
 (rule
- (copy ../apple/icon_picker_names.ml icon_picker_names.ml))
+ (copy ../native/icon_picker_names.ml icon_picker_names.ml))
 (rule
- (copy ../apple/icon_tabler_data.ml icon_tabler_data.ml))
+ (copy ../native/icon_tabler_data.ml icon_tabler_data.ml))
 (rule
- (copy ../apple/icons.ml icons.ml))
+ (copy ../native/icons.ml icons.ml))
 (rule
- (copy ../apple/imperative_dom.ml imperative_dom.ml))
+ (copy ../native/imperative_dom.ml imperative_dom.ml))
 (rule
- (copy ../apple/js.ml js.ml))
+ (copy ../native/js.ml js.ml))
 (rule
- (copy ../apple/lazy_children.ml lazy_children.ml))
+ (copy ../native/lazy_children.ml lazy_children.ml))
 (rule
- (copy ../apple/logseq_dom.ml logseq_dom.ml))
+ (copy ../native/logseq_dom.ml logseq_dom.ml))
 (rule
- (copy ../apple/logseq_codemirror.ml logseq_codemirror.ml))
+ (copy ../native/logseq_codemirror.ml logseq_codemirror.ml))
 (rule
- (copy ../apple/logseq_editor.ml logseq_editor.ml))
+ (copy ../native/logseq_editor.ml logseq_editor.ml))
 (rule
- (copy ../apple/logseq_emoji.ml logseq_emoji.ml))
+ (copy ../native/logseq_emoji.ml logseq_emoji.ml))
 (rule
- (copy ../apple/logseq_katex.ml logseq_katex.ml))
+ (copy ../native/logseq_katex.ml logseq_katex.ml))
 (rule
- (copy ../apple/logseq_virt.ml logseq_virt.ml))
+ (copy ../native/logseq_virt.ml logseq_virt.ml))
 (rule
- (copy ../apple/menu_bar.ml menu_bar.ml))
+ (copy ../native/menu_bar.ml menu_bar.ml))
 (rule
- (copy ../apple/native_embed.ml native_embed.ml))
+ (copy ../native/native_embed.ml native_embed.ml))
 (rule
- (copy ../apple/page_menu.ml page_menu.ml))
+ (copy ../native/page_menu.ml page_menu.ml))
 (rule
- (copy ../apple/pdf.ml pdf.ml))
+ (copy ../native/pdf.ml pdf.ml))
 (rule
- (copy ../apple/pdf_annotation.ml pdf_annotation.ml))
+ (copy ../native/pdf_annotation.ml pdf_annotation.ml))
 (rule
- (copy ../apple/pdf_assets.ml pdf_assets.ml))
+ (copy ../native/pdf_assets.ml pdf_assets.ml))
 (rule
- (copy ../apple/pdf_hls.ml pdf_hls.ml))
+ (copy ../native/pdf_hls.ml pdf_hls.ml))
 (rule
- (copy ../apple/pdf_toolbar.ml pdf_toolbar.ml))
+ (copy ../native/pdf_toolbar.ml pdf_toolbar.ml))
 (rule
- (copy ../apple/pdf_utils.ml pdf_utils.ml))
+ (copy ../native/pdf_utils.ml pdf_utils.ml))
 (rule
- (copy ../apple/platform.ml platform.ml))
+ (copy ../native/platform.ml platform.ml))
 (rule
- (copy ../apple/plugin_host.ml plugin_host.ml))
+ (copy ../native/plugin_host.ml plugin_host.ml))
 (rule
- (copy ../apple/plugin_readme.ml plugin_readme.ml))
+ (copy ../native/plugin_readme.ml plugin_readme.ml))
 (rule
- (copy ../apple/plugins_view.ml plugins_view.ml))
+ (copy ../native/plugins_view.ml plugins_view.ml))
 (rule
- (copy ../apple/properties_data.ml properties_data.ml))
+ (copy ../native/properties_data.ml properties_data.ml))
 (rule
- (copy ../apple/properties_dom.ml properties_dom.ml))
+ (copy ../native/properties_dom.ml properties_dom.ml))
 (rule
- (copy ../apple/properties_value.ml properties_value.ml))
+ (copy ../native/properties_value.ml properties_value.ml))
 (rule
- (copy ../apple/render_libs.ml render_libs.ml))
+ (copy ../native/render_libs.ml render_libs.ml))
 (rule
- (copy ../apple/sdk_convert.ml sdk_convert.ml))
+ (copy ../native/sdk_convert.ml sdk_convert.ml))
 (rule
- (copy ../apple/sdk_util.ml sdk_util.ml))
+ (copy ../native/sdk_util.ml sdk_util.ml))
 (rule
- (copy ../apple/sdk_write.ml sdk_write.ml))
+ (copy ../native/sdk_write.ml sdk_write.ml))
 (rule
- (copy ../apple/settings_page.ml settings_page.ml))
+ (copy ../native/settings_page.ml settings_page.ml))
 (rule
- (copy ../apple/sidebar_state.ml sidebar_state.ml))
+ (copy ../native/sidebar_state.ml sidebar_state.ml))
 (rule
- (copy ../apple/sprintf.ml sprintf.ml))
+ (copy ../native/sprintf.ml sprintf.ml))
 (rule
- (copy ../apple/transit.ml transit.ml))
+ (copy ../native/transit.ml transit.ml))
 (rule
- (copy ../apple/vdom.ml vdom.ml))
+ (copy ../native/vdom.ml vdom.ml))
 (rule
- (copy ../apple/version.ml version.ml))
+ (copy ../native/version.ml version.ml))
 (rule
- (copy ../apple/views_dom.ml views_dom.ml))
+ (copy ../native/views_dom.ml views_dom.ml))
 (rule
- (copy ../apple/views_popup.ml views_popup.ml))
+ (copy ../native/views_popup.ml views_popup.ml))
 (rule
- (copy ../apple/views_query.ml views_query.ml))
+ (copy ../native/views_query.ml views_query.ml))
 (rule
- (copy ../apple/views_table.ml views_table.ml))
+ (copy ../native/views_table.ml views_table.ml))
 (rule
- (copy ../apple/views_virt.ml views_virt.ml))
+ (copy ../native/views_virt.ml views_virt.ml))
 (rule
- (copy ../apple/virt_list.ml virt_list.ml))
+ (copy ../native/virt_list.ml virt_list.ml))
 (rule
- (copy ../apple/virtual_scroll.ml virtual_scroll.ml))
+ (copy ../native/virtual_scroll.ml virtual_scroll.ml))
 (rule
- (copy ../apple/virtualizer.ml virtualizer.ml))
+ (copy ../native/virtualizer.ml virtualizer.ml))
 (rule
- (copy ../apple/web_dom.ml web_dom.ml))
+ (copy ../native/web_dom.ml web_dom.ml))
 (rule
- (copy ../apple/webapi.ml webapi.ml))
+ (copy ../native/webapi.ml webapi.ml))
 (rule
- (copy ../apple/worker_client.ml worker_client.ml))
+ (copy ../native/worker_client.ml worker_client.ml))
 (rule
- (copy ../apple/logseq_lui_bridge.c logseq_lui_bridge.c))
+ (copy ../native/logseq_lui_bridge.c logseq_lui_bridge.c))
 
-; Generate apple/dicts_gen.ml from the shared cljs dicts — same shape as
+; Generate native/dicts_gen.ml from the shared cljs dicts — same shape as
 ; the src/ rule; the dicts dir lives outside this dune-project
 ; (../../src/resources/dicts), so it can't be a tracked dep — run
 ; `dune build --force` to pick up dict edits.
@@ -446,7 +446,7 @@
 ; distinct object name — a dir can't hold two foreign_stubs groups that
 ; compile the same .c
 (rule
- (copy ../apple/logseq_lui_bridge.c drive_test_bridge.c))
+ (copy ../native/logseq_lui_bridge.c drive_test_bridge.c))
 
 (test
  (name drive_test)

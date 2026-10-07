@@ -7,6 +7,7 @@ let cli_launcher_marker = "logseq-cli-managed"
 (* deps record — mirrors the destructured deps map of the cljs fns. *)
 type deps =
   { windows : bool
+  ; packaged : bool
   ; cli_path : string
   ; cli_dir : string option
   ; cli_dir_fn : (unit -> string option) option
@@ -113,6 +114,10 @@ let install_cli_launcher (d : deps) : unit =
   with error ->
     let message = error_message error in
     d.log_warn "cli/install" "Failed to install logseq launcher" error;
-    d.show_error_box "Logseq"
-      (d.t "electron/cli-install-failed" [| message |])
+    (* dev runs legitimately lack static/logseq-cli.js — it is staged by
+       `pnpm cli:release`, which the dev watchers don't run; a packaged
+       build missing it is a real packaging failure worth a modal *)
+    if d.packaged || d.exists d.cli_path then
+      d.show_error_box "Logseq"
+        (d.t "electron/cli-install-failed" [| message |])
 

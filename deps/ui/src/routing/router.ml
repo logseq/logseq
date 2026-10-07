@@ -37,7 +37,7 @@ let parse_path (p : string) : Model.route =
           match seg with
           | "page" -> Model.Page (decode rest)
           | "block" -> Model.Block_zoom (decode rest)
-          | "all-journals" -> Model.Journals
+          | "all-journals" | "journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
           | "graph" -> Model.Graph_view
@@ -46,7 +46,7 @@ let parse_path (p : string) : Model.route =
           | _ -> Model.Not_found p)
       | None -> (
           match p with
-          | "all-journals" -> Model.Journals
+          | "all-journals" | "journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
           | "graph" -> Model.Graph_view
@@ -286,7 +286,7 @@ let stale_page (p : Model.page) () =
   | None -> true
 
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
-let load_page_ref for_route ref_v =
+let rec load_page_ref for_route ref_v =
   incr Runtime.load_gen;
   let gen = !Runtime.load_gen in
   let is_stale () = stale for_route || gen <> !Runtime.load_gen in
@@ -313,6 +313,28 @@ let load_page_ref for_route ref_v =
       let* p' = fetch_blocks p in
       Platform.perf_mark "nav:blocks";
       let* p'' = Outliner_ops.resolve_page_tags (repo ()) p' in
+      (* cljs page-inner renders the :block/parent namespace chain as a
+         breadcrumb above the title — same parents endpoint the
+         block-zoom load uses, keyed by the page uuid *)
+      let* p'' =
+        match p''.Model.page_uuid with
+        | Some u ->
+            (let* parents_w =
+               Runtime.invoke2 "thread-api/get-block-parents"
+                 (Wire.String (repo ()))
+                 (Wire.List
+                    [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
+             in
+             let page_parents =
+               Wire.elems parents_w
+               |> List.filter_map (fun w ->
+                      match w with
+                      | Wire.Map _ -> Some (Decode.block_of_wire w)
+                      | _ -> None)
+             in
+             Js.Promise.resolve { p'' with Model.page_parents })
+        | None -> Js.Promise.resolve p''
+      in
       Platform.perf_mark "nav:tags";
       if not (is_stale ()) then (
         (* a fresh page snapshot is authoritative —
@@ -338,13 +360,18 @@ let load_page_ref for_route ref_v =
              | None -> ())
          | _ -> ()));
       Js.Promise.resolve ()
-  | None ->
-      (* cljs keeps the :page route and paints inline
-         (t :page/not-found); only unknown route segments get
-         the full-screen 404 *)
-      if (not (is_stale ())) && !loaded_route <> Some for_route
-      then Runtime.send Action.Page_load_failed;
-      Js.Promise.resolve ()))
+  | None -> (
+      (* cljs journal nav lands on dates that have no page yet — the
+         route creates the journal page on the fly; non-journal names
+         keep the inline :page/not-found *)
+      match ref_v with
+      | Wire.String n when Dates.is_journal_title n ->
+          (let* _ = Outliner_ops.apply_create_page n in
+           load_page_ref for_route ref_v)
+      | _ ->
+          if (not (is_stale ())) && !loaded_route <> Some for_route
+          then Runtime.send Action.Page_load_failed;
+          Js.Promise.resolve ())))
   |> Js.Promise.catch (fun _ ->
          if (not (is_stale ())) && !loaded_route <> Some for_route then
            Runtime.send Action.Page_load_failed;

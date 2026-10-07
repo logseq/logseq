@@ -63,7 +63,7 @@ let mart_load =
 
 let install () = ignore (Lazy.force mart_load)
 
-(* mart id -> native glyph (skins[0].native). The native apple twin reads
+(* mart id -> native glyph (skins[0].native). The native native twin reads
    the same field from its generated table; DOM renderers pass it as
    data-emoji so non-web platforms can draw the emoji without emoji-mart. *)
 let emoji_char (id : string) : string option =

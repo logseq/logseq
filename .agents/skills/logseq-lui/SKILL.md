@@ -5,7 +5,7 @@ description: "LUI view-layer rules for deps/ui (OCaml + lui_ppx). Use whenever w
 
 # deps/ui LUI View Rules
 
-All view code in `deps/ui/src/**` and `deps/ui/apple/**` is built from
+All view code in `deps/ui/src/**` and `deps/ui/native/**` is built from
 `Lui_elements` kinds + typed props. `lui_ppx` is enabled.
 
 ## Hard rules

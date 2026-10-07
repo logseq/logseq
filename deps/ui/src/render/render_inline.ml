@@ -33,7 +33,7 @@ let bracket s = text ~style_class:"bracket" ~value:s []
 
 (* cljs page-reference wraps the anchor in .preview-ref-link —
    logseq-span hosts, not text: children of a text node never draw on
-   hosts that treat text as a leaf (apple) *)
+   hosts that treat text as a leaf (native) *)
 let preview_link inner =
   D.el ~tag:"span"
     [ D.el ~tag:"span" ~style_class:"preview-ref-link" [ inner ] ]
@@ -370,7 +370,7 @@ let timestamp_el seconds : t =
 
 (* emphasis is a logseq-<tag> host, not text ~as_: its children are the
    parsed run and may carry logseq-* nodes (emoji/katex/link labels),
-   which a standard text node rejects on apple (and whose children some
+   which a standard text node rejects on native (and whose children some
    backends never draw). try_html_tag pre-maps ins->u, s->del *)
 let emph tag children = D.el ~tag children
 

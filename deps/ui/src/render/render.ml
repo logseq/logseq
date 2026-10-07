@@ -63,7 +63,7 @@ let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
     | Some v, Some p ->
         (* logseq-span, not text: prefix/title children must render on
            every backend, and text is a leaf on hosts that drop a text
-           node's children (apple) or reject extension children inside
+           node's children (native) or reject extension children inside
            it *)
         D.el ~key:("btw-a-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
           [ p; D.txt v ]

@@ -82,7 +82,7 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector : string -> el option = "querySelector"
   [@@mel.scope "document"] [@@mel.return nullable]
 
-(* the apple twin names the document-scoped query doc_query *)
+(* the native twin names the document-scoped query doc_query *)
 let doc_query = query_selector
 
 external query_selector_all : string -> node_list = "querySelectorAll"
@@ -94,7 +94,7 @@ external query_selector_all_arr : string -> el array = "querySelectorAll"
 external active_element_dom : el option = "document.activeElement"
   [@@mel.return nullable]
 
-(* function form — the apple twin re-queries the focused node on every
+(* function form — the native twin re-queries the focused node on every
    call, so shared call sites take `active_element ()` rather than a
    value that would be captured once *)
 let active_element () = active_element_dom
@@ -293,7 +293,7 @@ let cd_files dt = json_array_from (cd_file_list dt)
 
 external el_matches : el -> string -> bool = "matches" [@@mel.send]
 
-external el_closest : el -> string -> el option = "closest" [@@mel.send]
+external el_closest_raw : el -> string -> el option = "closest" [@@mel.send]
   [@@mel.return nullable]
 
 external el_query : el -> string -> el option = "querySelector"
@@ -616,7 +616,7 @@ let for_each_touched roots sel f =
   in
   List.iter
     (fun root ->
-      (match el_closest root sel with Some el -> emit el | None -> ());
+      (match el_closest_raw root sel with Some el -> emit el | None -> ());
       let nl = el_query_all root sel in
       for i = 0 to nl_length nl - 1 do
         match nl_item nl i with Some el -> emit el | None -> ()
@@ -734,15 +734,23 @@ let ensure_raw_text_observer () =
 
 (* ---------- caret / selection ---------- *)
 
+(* event targets are usually elements, but a synthetic or odd event can
+   report document/window (no .closest) — only Elements answer the
+   ancestor queries *)
+let is_element el = el_node_type el = 1
+
+(* .closest exists on Elements only — event targets can be document/window *)
+let el_closest el sel = if is_element el then el_closest_raw el sel else None
+
 let closest_sel sel target =
-  match target with Some el -> el_closest el sel | None -> None
+  match target with Some el -> el_closest el sel | _ -> None
 
 let is_editable_target target =
   match target with
-  | Some el ->
+  | Some el when is_element el ->
       el_tag el = "TEXTAREA" || el_tag el = "INPUT" || el_tag el = "SELECT"
       || el_closest el "[contenteditable='true']" <> None
-  | None -> false
+  | _ -> false
 
 (* Focus a text input/textarea and move caret to the end. *)
 let el_focus el =

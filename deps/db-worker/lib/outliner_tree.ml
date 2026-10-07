@@ -30,12 +30,16 @@ let reaction_selector =
    {:logseq.property/created-by-ref [:db/id :block/uuid :block/title]}]"
 
 let block_reactions db (block_id : entity_id) : Wire.t =
+  (* cljs resolves :_target through entity-attr -search, which never
+     requires :db/index; reaction/target is not indexed in the fixed
+     schema, so go through reverse_attr_values (Avet when accessible,
+     bounded Aevt seek otherwise). *)
   Wire.Array
-    (List.of_seq
-       (datoms db Avet ~a:"logseq.property.reaction/target"
-          ~v:(Ref block_id) ())
-    |> List.map (fun (d : datom) ->
-           match pull_string db reaction_selector (Entity_id d.e) with
+    (Ldb.reverse_attr_values db block_id
+       (reverse_ref "logseq.property.reaction/target")
+    |> List.filter_map (function Ref id -> Some id | _ -> None)
+    |> List.map (fun id ->
+           match pull_string db reaction_selector (Entity_id id) with
            | Some p -> Ds_wire.transit_of_pulled p
            | None -> Wire.Nil))
 

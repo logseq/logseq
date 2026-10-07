@@ -2,7 +2,7 @@
    real View.view / Update.apply app in-process (recording backend, no
    DOM, no real worker) and asserts on the node tree Drive sees --
    structure, classes, text, and event-dispatch effects. Browser globals
-   come from the apple platform shims already linked into this target;
+   come from the native platform shims already linked into this target;
    worker calls go to Fake_worker. One shared session for the whole file:
    the feature state modules are first-mount singletons, so tests order
    their setup and clean up after themselves (close menus/dialogs,
@@ -172,7 +172,7 @@ let click_sel str =
   | Some n -> click_node n
   | None -> check ("click target: " ^ str) false
 
-(* Swift/GPUI host contract: a lazily-mounted container's onAppear fires
+(* Native host contract: a lazily-mounted container's onAppear fires
    the "lazy-mount" dom-event with its nodeId. The drive harness plays
    the host and mounts every pending lazy subtree eagerly — the web
    harness gets the same coverage from the stub IntersectionObserver
@@ -220,7 +220,7 @@ let find_block uuid =
 (* ---------------- shell + header ---------------- *)
 
 let test_shell () =
-  (* native chrome (apple/chrome.ml): the header is a host toolbar --
+  (* native chrome (native/chrome.ml): the header is a host toolbar --
      tb-leading/tb-trailing with nav/home/search/dots/rs-toggle -- not
      the web's #head row; the left-menu button is a host-chrome
      affordance and does not exist in the app tree *)

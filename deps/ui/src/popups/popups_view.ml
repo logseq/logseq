@@ -20,7 +20,7 @@ let dom = Logseq_dom.dom
 
 (* cljs svg/help-circle used inside the Query item's doc tooltip *)
 let help_circle_svg : t =
-  icon ~key:"hc" ~name:(`app "help-circle") ~point_size:16
+  icon ~key:"hc" ~name:((Icons.name_ref "help-circle")) ~point_size:16
     ~style_class:"icon" []
 ;;
 
@@ -96,7 +96,7 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
   match it.S.ai_title_icon with
   | Some ic ->
       row ~key ~style_class:"icon-cp-container" ~gap:4
-        [ icon ~key:"ti" ~name:(`app ic) ~point_size:14
+        [ icon ~key:"ti" ~name:((Icons.name_ref ic)) ~point_size:14
             ~style_class:"ui__icon" []
         ; hl ]
   | None -> hl
@@ -110,10 +110,10 @@ let node_icon_slot ~key (it : S.ac_item) : t =
      | Some (icn, true) ->
          [ box ~key:"cp" ~style_class:"icon-cp-container"
              ~foreground:"inherit"
-             [ icon ~key:"ni" ~name:(`app icn) ~point_size:14
+             [ icon ~key:"ni" ~name:((Icons.name_ref icn)) ~point_size:14
                  ~style_class:"ui__icon" [] ] ]
      | Some (icn, false) ->
-         [ icon ~key:"ni" ~name:(`app icn) ~point_size:14
+         [ icon ~key:"ni" ~name:((Icons.name_ref icn)) ~point_size:14
              ~style_class:"ui__icon" [] ]
      | None -> [])
 ;;
@@ -158,7 +158,7 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
     ((match it.S.ai_icon with
       | Some ic ->
           [ text ~key:"ic" ~style_class:"ls-ac-ic"
-              [ icon ~key:"icn" ~name:(`app ic) ~style_class:"ui__icon" []
+              [ icon ~key:"icn" ~name:((Icons.name_ref ic)) ~style_class:"ui__icon" []
               ; text ~key:"s" ~value:txt [] ] ]
       (* no-icon commands render the label as a bare text node *)
       | None -> [ text ~key:"t" ~value:txt [] ])
@@ -194,7 +194,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
         ~on_dom_event:(fun name _payload ->
           if name = "click" then
             S.apply_index st (Signal.get item_sig).S.ai_idx)
-        [ text ~key:"flex1"
+        [ box ~key:"flex1"
             [ reactive
                 ~equal:(fun (a : S.ac_item * S.view) (b : S.ac_item * S.view) ->
                   let ai, av = a and bi, bv = b in
@@ -318,8 +318,9 @@ let ac_inner (st : S.t) : t =
   in
   scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
     ~style_class:"hide-scrollbar"
-    [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
-        ~mount:(fun u_sig ->
+    [ column ~key:"ac-col"
+        [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
+            ~mount:(fun u_sig ->
           (* the key fingerprints the unit fully, so sampling once is
              stable *)
           match Signal.sample u_sig with
@@ -330,7 +331,7 @@ let ac_inner (st : S.t) : t =
                    ~style_class:"ui__ac-group-name"
                    ~value:(Option.value ~default:"" g.g_hdr)
                    []
-                 :: List.map row g.g_items)) ]
+                 :: List.map row g.g_items)) ] ]
     context parent
 ;;
 
@@ -513,18 +514,18 @@ let cm_heading_row (st : S.t) : t =
     List.init 6 (fun i ->
         let n = string_of_int (i + 1) in
         cm_heading_btn st ("h-" ^ n) (U.tf "editor/heading" [ n ]) n
-          (icon ~key:"ic" ~name:(`app ("h-" ^ n)) ~style_class:"ui__icon"
+          (icon ~key:"ic" ~name:((Icons.name_ref ("h-" ^ n))) ~style_class:"ui__icon"
              []))
   in
   box ~key:"headings" ~style_class:"ls-cm-headings"
     [ row ~key:"headings-row" ~style_class:"ls-cm-headings-row"
         (hs
         @ [ cm_heading_btn st "h-auto" (U.t "editor/auto-heading") "auto"
-              (icon ~key:"ic" ~name:(`app "h-auto")
+              (icon ~key:"ic" ~name:((Icons.name_ref "h-auto"))
                  ~style_class:"ui__icon" [])
           ; cm_heading_btn st "h-rm" (U.t "editor/remove-heading")
               "none"
-              (icon ~key:"ic" ~name:(`app "heading-off")
+              (icon ~key:"ic" ~name:((Icons.name_ref "heading-off"))
                  ~style_class:"ui__icon" []) ]) ]
 ;;
 

@@ -88,9 +88,13 @@ let sync_app_state repo =
 
 (* cljs <rtc-start! => :rtc/sync-auth-state + invoke :thread-api/db-sync-start *)
 let start repo =
-  sync_app_state (Some repo);
-  set_sync_config ();
-  ignore
+  (* db-sync-start fails missing-field on list-remote-graphs without an
+     auth token — emit! gates on login too, so do the same here for the
+     direct callers that bypass it *)
+  if Platform.local_storage_get "id-token" <> None then begin
+    sync_app_state (Some repo);
+    set_sync_config ();
+    ignore
     ((let* w =
         Runtime.invoke1 "thread-api/db-sync-start" (Wire.String repo)
       in
@@ -101,6 +105,7 @@ let start repo =
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("db-sync-start failed", e);
             Js.Promise.resolve ()))
+  end
 
 (* cljs <rtc-stop! => invoke :thread-api/db-sync-stop (no args) *)
 let stop () =
