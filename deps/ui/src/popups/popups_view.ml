@@ -584,17 +584,17 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
             ~data_attrs:[ ("role", "menuitem") ]
-            [ text ~key:"lbl" ~value:label []
-            ; icon ~key:"chev" ~name:`chevron_right
+            ~text:label
+            [ icon ~key:"chev" ~name:`chevron_right
                 ~style_class:"ls-menu-chevron" [] ]
       | S.Ci_item (label, scut, cmd) ->
           menu_item ~key:"item" ~style_class:cm_item_cls
             ~data_attrs:[ ("role", "menuitem") ]
             ~on_press:(fun _ -> run_cm_item st cmd)
-            (text ~key:"lbl" ~value:label []
-             :: (match scut with
-                 | Some s -> [ cm_shortcut_el s ]
-                 | None -> [])))
+            ~text:label
+            (match scut with
+             | Some s -> [ cm_shortcut_el s ]
+             | None -> []))
         (Logseq_dom.own context (Signal.map snd entry_sig)) ]
     context parent
 ;;
@@ -605,10 +605,10 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
       menu_item ~key:"sub-item" ~style_class:cm_item_cls
         ~data_attrs:[ ("role", "menuitem") ]
         ~on_press:(fun _ -> run_cm_item st cmd)
-        (text ~key:"lbl" ~value:label []
-         :: (match scut with
-             | Some s -> [ cm_shortcut_el s ]
-             | None -> []))
+        ~text:label
+        (match scut with
+         | Some s -> [ cm_shortcut_el s ]
+         | None -> [])
   | _ -> spacer ~key:"x" []
 ;;
 
@@ -758,7 +758,9 @@ let pv_open st (wrap : Web_dom.el) =
   pv_pending := Some wrap;
   match
     Option.bind
-      (Web_dom.el_query wrap "a[data-ref]")
+      (if Web_dom.el_is_connected wrap then
+         Web_dom.el_query wrap "a[data-ref]"
+       else None)
       (fun a -> Web_dom.el_get_attr a "data-ref")
   with
   | None -> ()
@@ -774,7 +776,7 @@ let pv_open st (wrap : Web_dom.el) =
             S.fetch_preview (Router.repo ()) name
         in
         (match !pv_pending with
-         | Some el when el == wrap ->
+         | Some el when el == wrap && Web_dom.el_is_connected wrap ->
              S.set_pv st
                (Some
                   { S.pv_x = x
