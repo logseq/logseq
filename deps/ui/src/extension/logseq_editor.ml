@@ -252,6 +252,10 @@ type ed_state =
   ; mutable caret_off : int
   ; mutable composing : bool
   ; mutable on_mousedown : (Js.Json.t -> unit) option
+  ; mutable dragging : bool
+  ; mutable on_mousemove : (Js.Json.t -> unit) option
+  ; mutable on_mouseup : (Js.Json.t -> unit) option
+  ; mutable drag_off : int
   }
 
 external state_get : W.Element.t -> ed_state Js.Undefined.t = "__lsEd"
@@ -265,7 +269,8 @@ let state_of el =
   | Some s -> s
   | None ->
       { block_id = ""; runs = [||]; caret_off = 0; composing = false
-      ; on_mousedown = None
+      ; on_mousedown = None; dragging = false; on_mousemove = None
+      ; on_mouseup = None; drag_off = -1
       }
 
 (* block-id -> input element; commands resolve through this *)
@@ -585,6 +590,9 @@ let on_mousedown el ev =
           | Some off ->
               prevent_default ev;
               focus el;
+              let st = state_of el in
+              st.dragging <- true;
+              st.drag_off <- off;
               emit_now el "pointer"
                 (String_map.empty
                 |> String_map.add "offset" (IntValue off)
@@ -592,6 +600,27 @@ let on_mousedown el ev =
           | None -> ())
       | _ -> ())
   | None -> ()
+
+(* press-drag inside the editor = text selection (native textarea
+   parity): each move re-hit-tests and extends the model selection
+   from the mousedown offset *)
+let on_mousemove el ev =
+  let st = state_of el in
+  if st.dragging && int_of_float (jnum ev "buttons") land 1 = 1 then
+    match
+      offset_at_el el ~x:(jnum ev "clientX") ~y:(jnum ev "clientY")
+    with
+    | Some off when off <> st.drag_off ->
+        st.drag_off <- off;
+        emit_now el "pointer"
+          (String_map.empty
+          |> String_map.add "offset" (IntValue off)
+          |> String_map.add "extend" (BoolValue true))
+    | _ -> ()
+
+let on_mouseup el _ev =
+  let st = state_of el in
+  st.dragging <- false
 
 (* --- adapter + conduit --------------------------------------------------------- *)
 
@@ -611,10 +640,16 @@ let create _id document emit =
   set_class_name el "ed-input";
   Dom_adapter.emit_set el emit;
   let on_md ev = on_mousedown el ev in
+  let on_mm ev = on_mousemove el ev in
+  let on_mu ev = on_mouseup el ev in
   let st = state_of el in
   st.on_mousedown <- Some on_md;
+  st.on_mousemove <- Some on_mm;
+  st.on_mouseup <- Some on_mu;
   state_set el st;
   add_doc_listener document "mousedown" on_md;
+  add_doc_listener document "mousemove" on_mm;
+  add_doc_listener document "mouseup" on_mu;
   add_listener el "keydown" (on_keydown el);
   add_listener el "beforeinput" (on_beforeinput el);
   add_listener el "paste" (on_paste el);
@@ -657,8 +692,15 @@ let remove_property el name =
 let cleanup el =
   let st = state_of el in
   if st.block_id <> "" then Hashtbl.remove by_block st.block_id;
-  match st.on_mousedown with
-  | Some f -> remove_doc_listener (owner_document el) "mousedown" f
+  let doc = owner_document el in
+  (match st.on_mousedown with
+   | Some f -> remove_doc_listener doc "mousedown" f
+   | None -> ());
+  (match st.on_mousemove with
+   | Some f -> remove_doc_listener doc "mousemove" f
+   | None -> ());
+  match st.on_mouseup with
+  | Some f -> remove_doc_listener doc "mouseup" f
   | None -> ()
 
 let adapter : Lui_web_types.web_extension_adapter =

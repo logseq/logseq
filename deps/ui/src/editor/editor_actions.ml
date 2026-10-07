@@ -1826,6 +1826,33 @@ let arrow_nav uuid up =
       | None -> ())
   | None -> if up then (exit_edit ~select:false; focus_page_title ())
 
+(* ArrowLeft/Right at a collapsed buffer edge crosses into the adjacent
+   block — master keeps one logical caret across block boundaries:
+   left at the buffer start lands at the previous block's end, right
+   at the buffer end lands at the next block's start *)
+let arrow_edge uuid up =
+  let scope =
+    match S.editing () with Some e -> e.scope | None -> "main"
+  in
+  let nb =
+    (if up then S.prev_visible ~scope else S.next_visible ~scope) uuid
+  in
+  match nb with
+  | Some b -> (
+      match b.Model.block_uuid with
+      | Some nu ->
+          save_if_dirty uuid;
+          if up then
+            ignore
+              (let* buffer =
+                 Ops.title_for_edit (String.trim (display_title nu))
+               in
+               enter_edit nu (String.length buffer);
+               Js.Promise.resolve ())
+          else enter_edit nu 0
+      | None -> ())
+  | None -> ()
+
 (* append a fresh block at the bottom of the current page — or, on
    journals, at the bottom of the journal item the add-button lives in
    (its parentblockid attr carries the page uuid) *)

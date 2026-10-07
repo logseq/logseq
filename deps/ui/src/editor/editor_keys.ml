@@ -303,6 +303,17 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
           m)
         else defer ()
     | "ArrowUp" | "ArrowDown" -> edit_arrows ~route ~conduit uuid kev m
+    | "ArrowLeft" | "ArrowRight"
+      when (not shift) && (not meta) && (not ctrl) && (not kev.alt) ->
+        let s, e = A.sel_span_of m in
+        let len = String.length m.Edit_model.source in
+        if kev.key = "ArrowLeft" && s = 0 && e = 0 then (
+          A.arrow_edge uuid true;
+          m)
+        else if kev.key = "ArrowRight" && s = len && e = len then (
+          A.arrow_edge uuid false;
+          m)
+        else defer ()
     | _ -> (
         (* cljs shortcut tables key on the unshifted key plus modifier
            flags — same normalization the DOM path used *)
@@ -1064,10 +1075,15 @@ let on_cut ev =
 (* -- clicks -- *)
 
 let on_click ev =
-  let target = D.ev_target ev in
-  (* the add-button path defers through S.defer_init, so it works even on
-     an empty page where no block_row has mounted the state yet *)
-  match D.closest_sel ".block-add-button" target with
+  (* a block-range drag ends with a click on the anchor row — the
+     gesture already produced a selection, the click must not open the
+     anchor's editor *)
+  if Block_selection.consume_suppress () then ()
+  else
+    let target = D.ev_target ev in
+    (* the add-button path defers through S.defer_init, so it works even
+       on an empty page where no block_row has mounted the state yet *)
+    match D.closest_sel ".block-add-button" target with
   | Some btn ->
       A.append_block ?for_page:(D.el_get_attr btn "parentblockid")
         ~scope:(A.scope_of_el btn) ()
@@ -1414,6 +1430,9 @@ let install_once () =
           && D.closest_sel ".ui-fenced-code-editor" (D.ev_target ev)
              = None
         then Block_selection.pointerdown ev)
+      true;
+    D.add_document_listener "pointermove"
+      (fun ev -> if S.ready () then Block_selection.pointermove ev)
       true;
     D.add_document_listener "pointerup"
       (fun _ev -> Block_selection.pointerup ())
