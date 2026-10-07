@@ -636,11 +636,15 @@ let header (ms : Model.t Signal.signal) =
                           p.Model.page_parents)
                       b.Model.route_page)
                 (fun (m : Model.t) ->
-                  (* cljs header.cljs block-breadcrumb: ancestor trail in
-                     the header only while zoomed into a block (the page
-                     itself carries its own breadcrumb) *)
-                  match m.Model.route_page with
-                  | Some p when p.Model.page_parents <> [] ->
+                  (* cljs header.cljs ready-block-breadcrumb: the header
+                     trail only renders for a uuid-routed PAGE entity
+                     with a :block/parent — name routes, zoomed blocks
+                     and block (object) routes render nothing *)
+                  match m.Model.route, m.Model.route_page with
+                  | Model.Page name, Some p
+                    when Wire.is_uuid_string name
+                         && p.Model.page_parents <> []
+                         && not (Page.is_block_route p) ->
                       let item key ~href ~text =
                         link ~key ~style_class:"breadcrumb-item"
                           ~url:href ~target:`self_ ~text []

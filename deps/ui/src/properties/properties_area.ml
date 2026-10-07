@@ -61,13 +61,15 @@ let property_icon row =
         [ box ~style_class:"bullet" [] ]
 
 (* the key (name + bullet) opens the property menu — the dropdown_menu
-   anchors to the enclosing stack *)
-let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
+   anchors to the enclosing stack. cljs property-key-cp skips the
+   .property-icon picker for other-position keys (pills) *)
+let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
+    row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let menu_open = Signal.state sched false in
   (column ~gap:0 ~style_class:"property-key-inner"
-     [ property_icon row
+     [ (if icon then property_icon row else Logseq_dom.nothing)
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~style_class:"property-k flex select-none jtrigger w-full"
          ~label:(D.row_title row)
@@ -88,9 +90,15 @@ let show_panel_bullet row =
   || D.value_empty_p (D.row_value row)
 
 let value_cell ctx row : t =
+  (* cljs renders entity-valued properties (even :default/:url) as a
+     nested ls-block — its block-control bullet shows beside the value;
+     show_panel_bullet covers the cljs .property-panel-bullet rule *)
+  let entity_value =
+    match D.row_value row with W.Map _ -> true | _ -> false
+  in
   Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0
     ~style_class:"ls-block property-value-container property-value-panel"
-    ((if show_panel_bullet row then
+    ((if show_panel_bullet row || entity_value then
         [ box ~key:"vpb" ~style_class:"property-panel-bullet"
             [ box ~style_class:"bullet-container"
                 [ box ~style_class:"bullet" [] ]
@@ -100,13 +108,13 @@ let value_cell ctx row : t =
     @ [ V.view ctx row ])
 
 let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
-  Lui_elements.row ~gap:0 ~cross:`start ~grow:1.0
+  Lui_elements.row ~gap:12 ~cross:`start ~grow:1.0
     ~style_class:
       ("property-pair property-panel-row"
       ^ (if D.value_empty_p (D.row_value row) then
            " property-panel-row-empty"
          else ""))
-    [ column ~min_width:80 ~max_width:200 ~cross:`stretch ~gap:0
+    [ column ~min_width:150 ~max_width:260 ~cross:`stretch ~gap:0
         ~style_class:"property-key-panel"
         [ key_cell ctx ~owner_is_tag ~owner_title row ]
     ; value_cell ctx row
@@ -181,28 +189,30 @@ let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
        @ (if can_toggle && d.hidden <> [] then [ toggle_row ] else []))
 
 let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
-  column ~gap:2 ~style_class:"properties-panel"
+  column ~gap:0 ~style_class:"properties-panel"
     (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d)
 
 (* ---------- pills (block-below) ---------- *)
 
-let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
-  column ~gap:0
+(* cljs bottom-property-pill-cp: inline-flex pill = [key + ":"] row
+   then .bottom-property-content value — all on one line *)
+let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
+  row ~gap:4 ~cross:`center
     ~style_class:"bottom-property-pill bottom-property-pill-focusable"
-    [ Lui_elements.row ~gap:4 ~cross:`center 
-        [ key_cell ctx ~owner_is_tag ~owner_title row
+    [ Lui_elements.row ~gap:0 ~cross:`center
+        [ key_cell ctx ~owner_is_tag ~owner_title ~icon:false prow
         ; text ~value:":"
             ~style_class:"select-none" []
         ]
-    ; Lui_elements.row ~gap:0 ~min_height:20
+    ; Lui_elements.row ~gap:4 ~cross:`center ~min_height:20
         ~style_class:"bottom-property-content property-value-container"
-        [ V.view ctx row ]
+        [ V.view ctx prow ]
     ]
 
 let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
-  row ~gap:4 ~grow:1.0
-    ~min_width:0 ~style_class:"positioned-properties flex-col text-sm overflow-x-hidden w-full"
-    [ row ~gap:8 ~cross:`center ~grow:1.0
+  column ~gap:4 ~grow:1.0
+    ~min_width:0 ~style_class:"positioned-properties block-below text-sm overflow-x-hidden w-full"
+    [ row ~gap:6 ~cross:`center ~grow:1.0
         ~min_width:0 ~style_class:"bottom-properties-row w-full"
         [ row ~gap:8 ~cross:`center ~grow:1.0
             ~min_width:0 ~style_class:"bottom-properties-pills-strip basis-0"
@@ -267,8 +277,10 @@ let block_ctx uuid key : V.ctx =
   ; class_schema = false
   }
 
-(* panel + below pills — mounts as the .ls-block-content-indent child
-   of .ls-block; empty when there is nothing to show *)
+(* panel — mounts as the .ls-block-content-indent child of .ls-block;
+   empty when there is nothing to show. The block-below pills mount
+   separately inside .block-content ([block_below_pills]), matching cljs
+   where they sit between the editor row and the reactions *)
 let block_area ~uuid : t =
  fun context parent ->
   let key = block_key uuid in
@@ -276,7 +288,7 @@ let block_area ~uuid : t =
   let node =
     (reactive
        (fun (d : S.area_data) ->
-          if d.rows = [] && d.hidden = [] && d.below = [] then
+          if d.rows = [] && d.hidden = [] then
             (* reactive branch roots must keep identical props: set-prop
                diffs on stack kind (gap/style-class) are unsupported
                on native and abort the whole reconcile *)
@@ -285,24 +297,38 @@ let block_area ~uuid : t =
             let ctx = block_ctx uuid key in
             column ~gap:2
               ~style_class:"ls-block-content-indent"
-              ((if d.rows = [] && d.hidden = [] then []
-                else
-                  [ column ~key:("parea-" ^ uuid)
-                      ~accessibility_identifier:uuid
-                      ~style_class:"ls-properties-area"
-                      [ panel_view ctx ~owner_is_tag:false
-                          ~owner_title:""
-                          ~can_toggle:
-                            (can_toggle_hidden ctx ~below_rows:d.below)
-                          d
-                      ]
-                  ])
-              @ (if d.below = [] then []
-                 else
-                   [ pills_view ctx ~owner_is_tag:false ~owner_title:""
-                       d.below
-                   ])))
+              [ column ~key:("parea-" ^ uuid)
+                  ~accessibility_identifier:uuid
+                  ~style_class:"ls-properties-area ls-block-properties"
+                  [ panel_view ctx ~owner_is_tag:false
+                      ~owner_title:""
+                      ~can_toggle:
+                        (can_toggle_hidden ctx ~below_rows:d.below)
+                      d
+                  ]
+              ])
        (Signal.value st))
+      context parent
+  in
+  S.note_area_node ~key node;
+  node
+
+(* below pills: .positioned-properties.block-below mounts inside the
+   block-content column below the title row *)
+let block_below_pills ~uuid : t =
+ fun context parent ->
+  let key = block_key uuid in
+  let st = block_state context uuid in
+  let node =
+    (reactive
+       (fun (d : S.area_data) ->
+          if d.below = [] then
+            Logseq_dom.nothing
+          else
+            let ctx = block_ctx uuid key in
+            pills_view ctx ~owner_is_tag:false ~owner_title:"" d.below)
+       (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
+       ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.below = b.below))
       context parent
   in
   S.note_area_node ~key node;
@@ -597,9 +623,10 @@ let bidi_area (p : Model.page) : t =
   let node =
     (reactive
        (fun (d : S.area_data) ->
-          if d.bidi = [] then
-            column ~gap:8 ~grow:1.0
-              ~style_class:"w-full ls-bidirectional-properties mt-8" []
+          (* cljs bidirectional-properties-section renders only
+             (when (seq groups)) — an empty .mt-8 column otherwise eats
+             the page-inner gap *)
+          if d.bidi = [] then Logseq_dom.nothing
           else
             column ~gap:8 ~grow:1.0
               ~style_class:"w-full ls-bidirectional-properties mt-8"

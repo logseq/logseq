@@ -229,12 +229,14 @@ let column_of_ident (s : V.vstate) (ident : string) : V.column option =
 let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   let s = V.get inst in
   let props = List.filter_map column_of_property properties in
+  (* cljs (conj properties tags-column) — conj on a list conses, so
+     Tags lands BEFORE the property columns, not after *)
   let with_tags =
     if List.exists (fun c -> c.V.c_id = "block/tags") props then props
     else
-      props
-      @ [ { (builtin_column "block/tags" I.filter_tags "node" ()) with
-            V.c_many = true } ]
+      { (builtin_column "block/tags" I.filter_tags "node" ()) with
+        V.c_many = true }
+      :: props
   in
   match inst.V.kind with
   | V.KAllPages ->
@@ -417,7 +419,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
             (row ~cross:`center ~grow:1.
                ~style_class:"table-block-title"
                [ row [ text ~value:title [] ]
-               ; row ~cross:`center
+               ; row ~cross:`center ~style_class:"ls-title-ghosts"
                    [ ghost "arrow-right" I.open_
                    ; ghost "layout-sidebar-right" I.open_in_sidebar ]
                ]) ]
@@ -818,9 +820,11 @@ let keyed_row_key (u, blk) =
 (* cljs row keydown (views.cljs): only while the row is selected —
    Enter opens the row in the sidebar and clears the selection,
    ArrowLeft/Right move the .selected cell marker to the first/last
-   non-checkbox cell, Escape clears the selection. Rides the dom-event
-   channel since kinds expose no key events; the stop(e) half is
-   adapter-side and not portable. *)
+   non-checkbox cell, Escape clears only the block selection
+   (state/clear-selection!) — the checkbox row-selection driving the
+   bulk action bar is NOT touched, so selected rows stay selected.
+   Rides the dom-event channel since kinds expose no key events; the
+   stop(e) half is adapter-side and not portable. *)
 let table_row_keydown inst ~row_uuid name payload =
   if name = "keydown" && V.Sset.mem row_uuid (V.get inst).V.selected then
     match Platform.payload_str payload "key" with
@@ -854,7 +858,9 @@ let table_row_keydown inst ~row_uuid name payload =
              | None -> ())
          | None -> ())
     | "Escape" ->
-        V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+        (* cljs clears the block selection here, not the checkbox
+           row-selection — nothing to clear on our side *)
+        ()
     | _ -> ()
 
 (* cljs table-row: .ls-table-row.ls-block[blockid][data-id][tabindex=0]
@@ -1187,20 +1193,22 @@ let render_list inst s : t =
                ~body:(list_stream inst g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
+      (* cljs list-view partitions: a plain breadcrumb header
+         (.ml-6.text-sm.opacity-70) above each parent group's rows —
+         no foldable caret. The native row body stays title-only
+         (no block layer here) *)
       D.fragment
-        (List.mapi
-           (fun i g ->
-             foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(text ~value:(group_title s g.Wr.glv) [])
-               ~body:
-                 (D.fragment
-                    (List.mapi
-                       (fun j (buuid, rows) ->
-                         foldable inst
-                           ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                           ~title:(text ~value:(row_title s buuid) [])
-                           ~body:(list_stream inst rows))
-                       g.Wr.glparts)))
+        (List.concat_map
+           (fun g ->
+             List.mapi
+               (fun j (buuid, rows) ->
+                 box ~key:("part-" ^ string_of_int j)
+                   [ box ~style_class:"ml-6 text-sm opacity-70 hover:opacity-100 mt-1"
+                       [ link ~url:("#/page/" ^ buuid) ~target:`self_
+                           ~style_class:"page-ref"
+                           ~text:(row_title s buuid) [] ]
+                   ; list_stream inst rows ])
+               g.Wr.glparts)
            gs)
   | _ -> list_stream inst (all_row_uuids s)
 

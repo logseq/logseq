@@ -1311,6 +1311,10 @@ html[data-theme='dark'] {
 .ls-page-blocks {
   min-height: 60px;
   overflow: hidden;
+  /* cljs page.cljs renders .ls-page-blocks with margin-left: -20 on
+     desktop so the block control column hangs outside the content
+     column */
+  margin-left: -20px;
 }
 
 h1.title,
@@ -1450,6 +1454,7 @@ a.page-title {
     .property-icon {
       display: flex;
       align-items: center;
+      margin-right: 4px;
 
       svg {
         width: 15px;
@@ -1584,7 +1589,8 @@ a.page-title {
     display: inline-flex;
     align-items: center;
     opacity: 0.6;
-    margin-left: 2px;
+    margin-left: 7px;
+    margin-right: -7px;
     min-height: 24px;
 
     .bullet-container {
@@ -1592,6 +1598,17 @@ a.page-title {
       left: 0;
       top: 0;
     }
+  }
+
+  /* cljs renders the key (.property-k anchor) and scalar values as
+     plain inline text affordances — the ghost-button chrome must not
+     pad, stretch, or center them inside a 28px panel row */
+  .property-key-panel .lui-button,
+  .property-value-panel .lui-button {
+    justify-content: flex-start;
+    height: auto;
+    min-height: 0;
+    padding: 0;
   }
 
   .property-panel-edit-btn {
@@ -1624,6 +1641,140 @@ a.page-title {
     pointer-events: auto;
   }
 
+}
+
+/* cljs property.css: inside a block the properties area hugs the
+   content column (margin-left:7 when .ls-block-properties, mt 2px) */
+.ls-block .ls-properties-area {
+  margin-left: 0;
+  margin-top: 2px;
+}
+
+.ls-block .ls-properties-area.ls-block-properties {
+  margin-left: 7px;
+}
+
+/* cljs block.css .positioned-properties.block-below: inline pills
+   strip under the block title cell */
+.positioned-properties.block-below {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  overflow-x: hidden;
+  width: 100%;
+  min-width: 0;
+}
+
+.bottom-properties-row {
+  padding: 0.25rem 0;
+  width: 100%;
+  min-width: 0;
+  max-height: 2rem;
+  overflow-y: hidden;
+}
+
+.bottom-properties-pills-strip {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  overflow-x: hidden;
+}
+
+.bottom-property-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  height: 1.5rem;
+  max-width: 100%;
+  font-size: 0.875rem;
+  background-color: var(--ls-secondary-background-color);
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+  color: var(--ls-primary-text-color);
+  box-shadow: inset 0 0 0 1px var(--ls-border-color);
+
+  line-height: 20px;
+
+  /* pill key is plain compact text — no icon, no ghost-button chrome */
+  .property-key-inner {
+    min-height: 0;
+    gap: 0;
+  }
+
+  .property-k {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    line-height: 20px;
+  }
+
+  .lui-button {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    justify-content: flex-start;
+  }
+
+  .property-value-container,
+  &.property-value-container {
+    flex: 0 0 auto;
+    min-width: 0;
+    min-height: 0;
+  }
+}
+
+/* cljs common.css .external-link — border-bottom underline, no
+   text-decoration */
+.external-link {
+  text-decoration: none;
+  border-bottom: 1px solid;
+  word-break: break-all;
+}
+
+/* cljs page.cljs add-block row: the inner flex row carries
+   margin-left:6px past the .ls-block-content-indent padding */
+.block-add-button .bab-inner {
+  margin-left: 6px;
+}
+
+/* LUI .lui-button defaults to 13px; pills are text-sm */
+.bottom-property-pill .lui-button,
+.bottom-property-pill .lui-link {
+  font-size: 0.875rem;
+}
+
+.bottom-property-content {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  position: relative;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* cljs bottom-property-edit-icon: always visible inside pills; the
+   same pencil inside a panel row is hover-only like
+   .property-panel-edit-btn */
+.prop-edit-ico {
+  width: 18px;
+  height: 18px;
+  min-width: 0;
+  padding: 0;
+  opacity: 0;
+}
+
+.property-pair.property-panel-row:hover .prop-edit-ico,
+.bottom-property-pill .prop-edit-ico,
+.prop-edit-ico:focus-visible {
+  opacity: 1;
 }
 
 /* the blanket .jtrigger{flex:1} must not grow the shui checkbox inside
@@ -1772,12 +1923,14 @@ a.page-title {
   }
 }
 
+/* cljs block.cljs carries these as an inline style: capacitor 0,
+   page-icon -36px, else -30px */
 .block-main-container.is-page-title-row {
-  margin-left: -61px;
+  margin-left: -36px;
 }
 
 .block-main-container.is-page-title-row.ls-pt-no-icon {
-  margin-left: -55px;
+  margin-left: -30px;
 }
 
 .block-main-container.is-page-title-row > .block-control-wrap {
@@ -2932,4 +3085,55 @@ a.close {
 .tweet-embed {
   border-radius: 0.5rem;
   overflow: hidden;
+}
+
+/* list-view group-by partition header (cljs .ml-6.text-sm.opacity-70) */
+.ls-view-partition-title {
+  margin-left: 1.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  opacity: 0.7;
+}
+.ls-view-partition-title:hover {
+  opacity: 1;
+}
+
+/* grouped list view wrapper (cljs .flex.flex-col.border-t.pt-2.gap-2) */
+.ls-view-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid hsl(var(--border));
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+}
+
+/* master tag-page title icon: bordered rounded box around a small glyph */
+.ls-page-title .ls-page-icon-btn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 0;
+}
+.ls-page-title .ls-page-icon-btn .ui__icon,
+.ls-page-title .ls-page-icon-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* master tag-page title icon box (targets the mounted ls-page-icon row) */
+.ls-page-title .ls-page-icon .ui__button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+}
+.ls-page-title .ls-page-icon .ui__icon,
+.ls-page-title .ls-page-icon svg {
+  width: 22px;
+  height: 22px;
 }

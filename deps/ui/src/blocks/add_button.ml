@@ -15,18 +15,23 @@ let set_parent_attr btn puuid =
   | Some v when String.equal v puuid -> ()
   | _ -> el_set_attr btn "parentblockid" puuid
 
-let build_el ?puuid () =
+(* cljs page.cljs add-button-inner: block routes carry
+   .ls-block-content-indent + margin-left 6, page routes margin-left 22 *)
+let build_el ?puuid ?(indented = false) () =
   let btn = create_element "div" in
   el_set_class btn
-    "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
-     transition-opacity ease-in duration-100 !py-0 opacity-0";
+    ("ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
+      transition-opacity ease-in duration-100 !py-0 opacity-0"
+    ^ if indented then " ls-block-content-indent" else "");
   el_set_attr btn "tabindex" "0";
   (match puuid with Some u -> set_parent_attr btn u | None -> ());
   let row = create_element "div" in
   el_set_class row "flex flex-row";
   let bullet_wrap = create_element "div" in
   el_set_class bullet_wrap "flex items-center";
-  el_set_attr bullet_wrap "style" "height: 28px; margin-left: 22px;";
+  el_set_attr bullet_wrap "style"
+    (if indented then "height: 28px; margin-left: 6px;"
+     else "height: 28px; margin-left: 22px;");
   let container = create_element "span" in
   el_set_class container "bullet-container";
   let bullet = create_element "span" in
@@ -38,20 +43,20 @@ let build_el ?puuid () =
   btn
 
 (* opacity matches cljs: hidden while a block on this page is being
-   edited or when the page already has children — counted from the DOM
+   edited or when the owner entity has children — counted from the DOM
    (cljs child-uuids includes the unsaved blank block, which is not in
    the page model) *)
-let refresh_opacity ?puuid ~has_children btn =
+let refresh_opacity ?puuid ~has_children ~indented btn =
   let cls =
-    if
-      (Editor_state.ready () && Editor_state.editing () <> None)
-      || has_children
-    then
-      "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
-       transition-opacity ease-in duration-100 !py-0 opacity-0"
-    else
-      "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
-       transition-opacity ease-in duration-100 !py-0 opacity-50"
+    "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
+     transition-opacity ease-in duration-100 !py-0 "
+    ^ (if
+         (Editor_state.ready () && Editor_state.editing () <> None)
+         || has_children
+       then
+         "opacity-0"
+       else "opacity-50")
+    ^ if indented then " ls-block-content-indent" else ""
   in
   (match el_get_attr btn "class" with
    | Some c when String.equal c cls -> ()
@@ -70,14 +75,35 @@ let ensure_all roots =
             | Some p -> p.Model.page_uuid
             | None -> None)
       in
+      (* cljs block-route-root: the add-button's owner is the route block
+         itself — its child-uuids are the children inside .block-children,
+         not the top-level .ls-block (which is the route block). Page
+         routes count the page's top-level rows instead. *)
+      let indented =
+        match puuid with
+        | Some u -> (
+            match
+              el_query parent ".ls-block:not(.block-add-button)"
+            with
+            | Some el ->
+                el_get_attr el "id" = Some ("ls-block-" ^ u)
+            | None -> false)
+        | None -> false
+      in
       let has_children =
-        match el_query parent ".ls-block:not(.block-add-button)" with
+        match
+          (if indented then
+             el_query parent ".block-children .ls-block"
+           else el_query parent ".ls-block:not(.block-add-button)")
+        with
         | Some _ -> true
         | None -> false
       in
       match el_query parent ".block-add-button" with
-      | Some existing -> refresh_opacity ?puuid ~has_children existing
-      | None -> el_append_child parent (build_el ?puuid ()))
+      | Some existing ->
+          refresh_opacity ?puuid ~has_children ~indented existing
+      | None ->
+          el_append_child parent (build_el ?puuid ~indented ()))
 
 let installed = State_cell.Once.make ()
 

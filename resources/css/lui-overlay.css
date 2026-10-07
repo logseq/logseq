@@ -5291,6 +5291,16 @@ select.form-select {
   min-width: 0;
 }
 
+/* cljs .ls-view-body is mt-1 */
+.ls-view-body {
+  margin-top: 4px;
+}
+
+/* cljs page-inner children carry .mt-4 on the blocks section */
+.page-inner > .ls-page-blocks {
+  margin-top: 16px;
+}
+
 /* cljs table.css: .ls-table-header is one flex row (absolute in cljs;
    kept in flow here so the rows list needs no top offset) —
    .sticky-columns and the unpinned cell row are flex items on the same
@@ -5303,6 +5313,10 @@ select.form-select {
   min-width: 100%;
   will-change: transform;
   transform: translate3d(0, 0, 0);
+  /* cljs .ls-table-header is border-y bg-gray-01 */
+  border-top: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+  background: var(--lx-gray-01, var(--ls-primary-background-color));
 }
 
 .sticky-columns {
@@ -5318,7 +5332,7 @@ select.form-select {
   vertical-align: middle;
   font-weight: 500;
   color: var(--muted-foreground, var(--ls-secondary-text-color));
-  border-right: 1px solid var(--ls-border-color);
+  border-right: 1px solid hsl(var(--border));
 }
 
 /* cljs header button is h-8 (32px); .ls-btn-default's 2.5rem height
@@ -5361,12 +5375,20 @@ select.form-select {
   display: flex;
   flex-direction: row;
   align-items: stretch;
+  /* 33px box including the cljs border-b separator — inner content band
+     is 32px so centered text lands on the same subpixel as cljs */
   height: 33px;
   min-height: 33px;
   max-height: 33px;
+  box-sizing: border-box;
+  /* cljs tailwind border-b = hsl(var(--border)); --ls-border-color is
+     the darker #ccc used by outliner/chrome borders */
+  border-bottom: 1px solid hsl(var(--border));
   padding-top: 0;
   padding-bottom: 0;
   overflow: hidden;
+  transition-property: background-color;
+  transition-duration: 150ms;
 }
 
 .ls-table-row div,
@@ -5403,17 +5425,86 @@ select.form-select {
 }
 
 /* cljs .ls-table-cell { @apply h-full max-h-[33px] overflow-hidden } —
-   caps row height and clips cell content */
+   caps row height and clips cell content. Inside .ls-table-rows the
+   content band is 32px (33px box minus the border-b separator). */
 .ls-table-cell {
   height: 100%;
   max-height: 33px;
   overflow: hidden;
 }
 
+.ls-table-rows .ls-table-cell {
+  height: 32px;
+  max-height: 32px;
+}
+
 .ls-table-cell > div {
   height: 100%;
   min-width: 0;
   overflow: hidden;
+}
+
+/* cljs views.cljs: select checkboxes stay in the DOM and reveal only
+   while the 32px select label is hovered or the box is checked
+   (opacity-0 -> opacity-100) */
+.ls-table-row [data-table-row-select] .lui-checkbox,
+.ls-table-header-cell .lui-checkbox {
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.ls-table-row [data-table-row-select]:hover .lui-checkbox,
+.ls-table-row [data-table-row-select] .lui-checkbox:has(input:checked),
+.ls-table-header-cell:hover .lui-checkbox,
+.ls-table-header-cell .lui-checkbox:has(input:checked) {
+  opacity: 1;
+}
+
+/* cljs table-block-title: the open/open-in-sidebar ghost buttons are
+   hover-only */
+.ls-table-row .ls-title-ghosts {
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+/* cljs reveals the title ghost buttons from .table-block-title's own
+   on-mouse-over — hovering the select label or other cells does NOT
+   reveal them */
+.ls-table-row .table-block-title:hover .ls-title-ghosts,
+.ls-table-row .ls-title-ghosts:hover {
+  opacity: 1;
+}
+
+/* cljs table row selection is bg-muted via :has(.ui__checkbox
+   [data-checked]) — not the outliner's blue .ls-block.selected
+   block-highlight */
+.ls-table-row.ls-block.selected {
+  background-color: hsl(var(--muted));
+}
+
+/* cljs .ls-table-rows > .relative keeps pb-[38px] so the absolute
+   .ls-table-footer ("+ New") clears the last row */
+.ls-table-rows > .relative {
+  padding-bottom: 38px;
+}
+
+/* cljs table text is text-sm (14px/20px) — LUI rows inherited the
+   16px/24px body default */
+.ls-table-rows .ls-table-row,
+.ls-table-rows .ls-table-row .lui-text,
+.ls-table-rows .ls-table-row .lui-link,
+.ls-table-rows .ls-table-row a,
+.ls-table-rows .ls-table-row .select-item,
+.ls-table-rows .ls-table-row .property-value-inner {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.ls-table-header-cell,
+.ls-table-header-cell > .ui__button,
+.ls-table-header-cell .lui-text {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 /* cljs ui.css: fold carets hang 27px into the left gutter instead of
@@ -5433,6 +5524,9 @@ select.form-select {
   gap: 0.25rem;
   overflow: hidden;
   min-width: 0;
+  /* cljs foldable-title/view-head rows measure 28px on tag pages and
+     all-pages — keeps the table header at the cljs offset */
+  height: 28px;
 }
 
 .ls-view-head-left {
@@ -5854,4 +5948,26 @@ html[data-theme=light] {
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
   --border: 300 1% 92%;
+}
+
+/* cljs .ls-page-icon button: text-muted-foreground 38px glyph offset
+   8px inside a 46px wrap (self-start) — LUI's ghost button rendered
+   near-black, 40px, flush top */
+.ls-page-icon {
+  box-sizing: border-box;
+  height: 46px;
+  padding-top: 8px;
+}
+
+.ls-page-icon .lui-button.ui__button {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.ls-page-icon .lui-button.ui__button:hover {
+  color: hsl(var(--foreground));
 }

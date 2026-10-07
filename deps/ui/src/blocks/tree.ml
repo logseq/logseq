@@ -548,6 +548,12 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                     ]
                                 ]
                             ]
+                        ; (* cljs .flex.flex-col.w-full inner column:
+                             .positioned-properties.block-below pills sit
+                             below the content-or-editor cell, before the
+                             reactions and the .ls-block-content-indent
+                             properties area *)
+                          Properties_area.block_below_pills ~uuid
                         ]
                     ; (* .positioned-properties.block-left chips render
                          inline at the end of .block-main-content *)
@@ -842,11 +848,20 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                         ~style_class:"ls-block-right self-start"
                                         ~gap:4 ~cross:`center
                                         [ spacer ~key:("bg-" ^ key) []
+                                        ; (* cljs .ls-block-right order:
+                                             positioned-properties
+                                             :block-right then tag chips *)
+                                          Properties_area.block_right_chips
+                                            ~uuid
                                         ; tags_el uuid b
                                         ]
                                     ]
                                 ]
                             ]
+                        ; (* same as row_main: block-below pills under
+                             the content cell — list-view rows render
+                             these (Rating/Published/Finished) *)
+                          Properties_area.block_below_pills ~uuid
                         ]
                     ; Properties_area.block_left_chips ~uuid
                     ]
@@ -1009,3 +1024,9 @@ let page_embed (name : string) : t =
     ctx parent
 
 let () = Render_state.page_embed := page_embed
+
+(* views_table renders list rows through this hook — it cannot import
+   the blocks layer directly (cycle via comments -> render -> views) *)
+let () =
+  Render_state.block_row_static :=
+    (fun b -> block_row_static b)
