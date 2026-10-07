@@ -585,7 +585,8 @@ let search_el inst : t =
      event maps it *)
   box ~style_class:"view-action-search"
     [ row ~style_class:"ls-row"
-        [ ghost_btn "search" ~on_click:(fun () ->
+        [ ghost_btn "search" ~title_:(I.t "nav/search")
+            ~on_click:(fun () ->
               if not (V.get inst).V.search_open then begin
                 V.update inst (fun s -> { s with V.search_open = true });
                 E.set_timeout
@@ -609,7 +610,7 @@ let search_el inst : t =
                              refresh inst)
                      | _ -> ())
                    []
-               ; ghost_btn "x" ~on_click:(fun () ->
+               ; ghost_btn "x" ~title_:I.close ~on_click:(fun () ->
                      V.update inst (fun s ->
                          { s with V.input = ""; search_open = false });
                      refresh inst) ]) ]

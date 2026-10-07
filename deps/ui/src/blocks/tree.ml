@@ -187,13 +187,22 @@ let icon_el uuid (icon : Model.icon) : t =
 
 
 
-(* cljs ldb/private-tags: built-in classes hidden/locked for direct use;
-   internal idents are already filtered out upstream *)
+(* cljs ldb/private-tags: built-in classes hidden/locked for direct use *)
 let private_tag_ident (ident : string) : bool =
   List.mem ident
     [ "logseq.class/Page"; "logseq.class/Property"; "logseq.class/Tag";
       "logseq.class/Asset"; "logseq.class/Journal";
       "logseq.class/Whiteboard"; "logseq.class/Pdf-annotation" ]
+
+(* cljs tags-cp hidden idents: ldb/internal-tags (Page/Property/Tag/
+   Root/Asset) plus classes carrying :logseq.property.class/hide-from-node;
+   private built-ins (Journal, Whiteboard) never render as chips either *)
+let hidden_tag_ident (ident : string) : bool =
+  private_tag_ident ident
+  || List.mem ident
+       [ "logseq.class/Root"; "logseq.class/Comments"
+       ; "logseq.class/Comment"; "logseq.class/Code-block"
+       ; "logseq.class/Quote-block"; "logseq.class/Math-block" ]
 
 (* cljs block-control-icon-size: heading chrome sizes differ, collapsed
    bullets shrink *)
@@ -430,7 +439,8 @@ let tags_el uuid (b : Model.block) : t =
           I18n.contains b.block_title ("#" ^ tag)
           || (tuuid <> "" && I18n.contains b.block_title tuuid)
         in
-        if inline then None else Some (tag, tuuid, ident, dbid))
+        if inline || hidden_tag_ident ident then None
+        else Some (tag, tuuid, ident, dbid))
       quads
   in
   match visible with

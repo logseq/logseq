@@ -223,35 +223,44 @@ let title_editor (page : Model.page) : t =
 (* cljs title-tag chip: .block-tag > .flex.items-center > a.hash-symbol +
    a.tag[draggable][data-ref] > span. The .ls-block-right/.hover wrappers
    render even when the page has no tags (empty container). *)
+(* cljs tags-cp drops internal/private/hide-from-node class idents —
+   journal pages never show a #Journal chip *)
 let title_tag_chips (page : Model.page) : t list =
+  let opt_at l i =
+    match List.nth_opt l i with
+    | Some x -> x
+    | None -> ""
+  in
+  let visible =
+    List.filter_mapi
+      (fun i tag ->
+        if Tree.hidden_tag_ident (opt_at page.Model.page_tag_idents i) then
+          None
+        else Some (i, tag))
+      page.Model.page_tags
+  in
   [ row ~key:"pt-right" ~gap:4 ~cross:`center
       ~style_class:"ls-block-right"
       [ box ~key:"ptr-ghost"
-          (match page.Model.page_tags with
+          (match visible with
            | [] -> []
-           | tags ->
+           | _ ->
                [ row ~key:"pt-tags" ~gap:4 ~style_class:"block-tags"
-                   (List.mapi
-                     (fun i tag ->
-                       let opt_at l =
-                         match List.nth_opt l i with
-                         | Some x -> x
-                         | None -> ""
-                       in
-                       Tree.tag_chip
-                         ~key:("p" ^ string_of_int i)
-                         ~owner_uuid:
-                           (Option.value page.Model.page_uuid ~default:"")
-                         ~tag
-                         ~tuuid:(opt_at page.Model.page_tag_uuids)
-                         ~ident:(opt_at page.Model.page_tag_idents)
-                         ~dbid:
-                           (Option.value
-                              (List.nth_opt page.Model.page_tag_db_ids i)
-                              ~default:0))
-                     tags)
-               ]
-           )
+                   (List.map
+                      (fun (i, tag) ->
+                        Tree.tag_chip
+                          ~key:("p" ^ string_of_int i)
+                          ~owner_uuid:
+                            (Option.value page.Model.page_uuid ~default:"")
+                          ~tag
+                          ~tuuid:(opt_at page.Model.page_tag_uuids i)
+                          ~ident:(opt_at page.Model.page_tag_idents i)
+                          ~dbid:
+                            (Option.value
+                               (List.nth_opt page.Model.page_tag_db_ids i)
+                               ~default:0))
+                      visible)
+               ])
       ]
   ]
 
@@ -710,11 +719,15 @@ let refs_view_head key ?on_search title count : t =
         ~style_class:"view-actions"
         [ view_ghost_btn "vh-fc" ~title:(I18n.t "reference/page-filter")
             "filter-cog" 18.
-        ; view_ghost_btn "vh-srt" "arrows-up-down" 18.
-        ; view_ghost_btn "vh-flt" "filter" 18.
+        ; view_ghost_btn "vh-srt"
+            ~title:(I18n.t "property.built-in/table-sorting")
+            "arrows-up-down" 18.
+        ; view_ghost_btn "vh-flt" ~title:(I18n.t "reference.filter/title")
+            "filter" 18.
         ; row ~key:"vh-search" ~style_class:"view-action-search"
             [ row ~key:"vh-si" ~cross:`center
-                [ view_ghost_btn "vh-sb" ?on_click:on_search "search" 15. ] ]
+                [ view_ghost_btn "vh-sb" ~title:(I18n.t "nav/search")
+                    ?on_click:on_search "search" 15. ] ]
         ; box ~key:"vh-type" ~style_class:"view-action-type"
             [ (* property-value-inner[data-type] is the property-cell
                  trigger contract (jtrigger/open-value flows) *)
@@ -1376,7 +1389,7 @@ let top_view (m : Model.t) : t =
              [ title_row m page; library_add_pages_button ]
        | _ ->
            box ~key:"ptm" ~display:`contents
-             (breadcrumbs page.page_title
+             (breadcrumbs page
               @ [ title_row m page
                 ; (* cljs bidirectional-properties-area: sibling of the
                      blocks list inside .page-inner *)
