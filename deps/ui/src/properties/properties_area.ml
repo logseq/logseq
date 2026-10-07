@@ -288,8 +288,9 @@ let block_left_chips ~uuid : t =
     (reactive
        (fun (d : S.area_data) ->
           if d.left = [] then
-            row ~gap:8 ~cross:`center
-              ~style_class:"positioned-properties block-left" []
+            (* cljs block-positioned-properties renders nothing when the
+               position has no properties *)
+            Logseq_dom.nothing
           else
             let ctx = block_ctx uuid key in
             row ~gap:8 ~cross:`center
