@@ -927,9 +927,13 @@ let menu_keydown (ev : Web_dom.ev) =
           in
           let it = List.nth items i in
           List.iter
-            (fun e -> Web_dom.el_remove_attr e "data-highlighted")
+            (fun e ->
+              Web_dom.el_remove_attr e "data-highlighted";
+              (* base-ui roving tabindex: only the active item is 0 *)
+              Web_dom.el_set_attr e "tabindex" "-1")
             items;
           Web_dom.el_set_attr it "data-highlighted" "";
+          Web_dom.el_set_attr it "tabindex" "0";
           cm_hi_el := Some it;
           Web_dom.el_focus it;
           let o = Js.Dict.empty () in

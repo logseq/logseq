@@ -13,21 +13,14 @@
    metrics on the content node, matching popup-normal-style in
    shui/components.cljs. */
 
-/* The shipped theme vars switch shape between themes: light defines
-   --background/--foreground/--card/--card-foreground/--border as
-   complete oklch colors, dark as hsl triplets — so neither var(--x)
-   nor hsl(var(--x)) is valid in both. These aliases always resolve to
-   a complete color. (--muted-foreground, --destructive and the
-   triplet vars --muted/--popover/--input/--ring/--primary/--secondary/
-   --accent keep one shape in both themes and need no alias.) */
+/* The shipped theme vars --background/--foreground/--card/
+   --card-foreground/--border are hsl TRIPLETS in both themes (the
+   complete oklch tokens live under the --lui-* namespace, but they track
+   a different palette than Logseq's). Always wrap in hsl() to get a
+   complete color — a bare var(--x) in a color slot silently invalidates
+   the whole declaration (e.g. border: 1px solid var(--x) falls back to
+   no border). */
 :root {
-  --lui-c-background: var(--background);
-  --lui-c-foreground: var(--foreground);
-  --lui-c-card: var(--card);
-  --lui-c-card-foreground: var(--card-foreground);
-  --lui-c-border: var(--border);
-}
-html[data-theme="dark"], body.dark-theme {
   --lui-c-background: hsl(var(--background));
   --lui-c-foreground: hsl(var(--foreground));
   --lui-c-card: hsl(var(--card));
@@ -590,9 +583,11 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* tag-search inline hint (mod+enter creates a tag page) */
 .ls-tag-search-hint {
+  margin: 8px 0;
   padding: 0 0.25rem;
   opacity: 0.5;
   font-size: 0.875rem;
+  line-height: 20px;
   display: flex;
   flex-direction: row;
   align-items: center;

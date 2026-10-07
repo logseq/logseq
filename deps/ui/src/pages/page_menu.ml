@@ -11,8 +11,8 @@ let dom = Logseq_dom.dom
 let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 
 (* cljs dropdown-menu-item renders its :icon before the title *)
-let icon_item key label icon_name on_click =
-  Menu_item.el ~key ~label
+let icon_item ?(data_attrs = []) key label icon_name on_click =
+  Menu_item.el ~key ~label ~data_attrs
     ~before:[ Icons.icon ~size:18. ~cls:"ls-menu-item-icon" icon_name ]
     ~on_click ()
 
@@ -142,9 +142,11 @@ let user_item () : Lui_elements.t =
   let email = Option.value (Rtc_flows.email ()) ~default:"" in
   let masked = Signal.state ctx.Lui_ui.ui_scheduler true in
   let maskedv = Signal.value masked in
-  (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs *)
+  (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs;
+     data-menu-tail keeps it out of the open-time initial highlight *)
   box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"
-    ~data_attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
+    ~data_attrs:
+      [ ("role", "menuitem"); ("tabindex", "-1"); ("data-menu-tail", "") ]
     [ column ~key:"u-span" ~style_class:"relative"
         [ text ~key:"u-name" ~value:username []
         ; row ~key:"u-mail" ~cross:`center
@@ -223,7 +225,12 @@ let global_items () =
   if Rtc_flows.logged_in () then
     [ separator "acct-hr"; user_item () ]
   else
-    [ icon_item "login" I18n.login "user" (fun () ->
+    (* cljs mounts the session tail after the menu's nav list syncs, so
+       base-ui's initial focus lands on the last item before it (Import);
+       data-menu-tail excludes it from the initial highlight only —
+       ArrowDown still reaches it *)
+    [ icon_item ~data_attrs:[ ("data-menu-tail", "") ] "login" I18n.login
+        "user" (fun () ->
           close ();
           Sidebar_state.open_dialog "login") ]
 

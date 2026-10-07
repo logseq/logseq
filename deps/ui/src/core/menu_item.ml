@@ -25,9 +25,9 @@ let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
    with icon/label/check spans; [attrs] is accepted for call-site
    compatibility but ignored — role/tabindex are carried by the kind *)
 let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
-    ?(after = []) ~label ~on_click () =
+    ?(after = []) ?(data_attrs = []) ~label ~on_click () =
   ignore attrs;
-  menu_item ~key ~style_class:cls ~text:label
+  menu_item ~key ~style_class:cls ~data_attrs ~text:label
     ~on_press:(fun _ -> on_click ())
     (before @ after)
 
