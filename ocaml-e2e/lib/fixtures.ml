@@ -20,6 +20,10 @@ let setup_page_env ~env ~port =
   let page = Env.page env in
   Playwright.set_default_timeout page 30000.;
   let context = Playwright.page_context page in
+  let lap label =
+    Printf.eprintf "[fixture-dbg] %s %.1fs\n%!" label (Js.Date.now () /. 1000.)
+  in
+  lap "begin";
   let* () = Settings.install_init_script context in
   let* () =
     Playwright.grant_permissions context
@@ -27,8 +31,12 @@ let setup_page_env ~env ~port =
   in
   Pw.on_console env (Env.record_console env);
   let* () = open_app env ~port in
+  lap "open_app";
   let* _ = Settings.developer_mode env in
-  Settings.refresh_test_env env
+  lap "developer_mode";
+  let* r = Settings.refresh_test_env env in
+  lap "refresh_test_env";
+  Js.Promise.resolve r
 
 (** wally's [make-page {:persistent false}]: [chromium.launch] then
     [browser.newPage]. Returns [(env, browser)]; closing the browser at the
@@ -73,7 +81,12 @@ let shared_open_page =
             Js.Promise.then_
               (fun (env, browser) ->
                 ignore env;
-                Playwright.browser_close browser)
+                Printf.eprintf "[fixture-dbg] close-begin %.1fs\n%!"
+                  (Js.Date.now () /. 1000.);
+                let* () = Playwright.browser_close browser in
+                Printf.eprintf "[fixture-dbg] close-done %.1fs\n%!"
+                  (Js.Date.now () /. 1000.);
+                Js.Promise.resolve ())
               p);
         Js.Promise.then_
           (fun (env, _browser) -> Js.Promise.resolve env)
