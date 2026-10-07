@@ -19,7 +19,7 @@ open Lui_elements
 
 module S = Editor_state
 
-let mount uuid scope : t =
+let mount ?(cls = "") uuid scope : t =
  fun ctx parent ->
   (* per-mount measurement state — the conduit writes caret/selection
      rects back through apply_input after each event; registered so
@@ -38,7 +38,7 @@ let mount uuid scope : t =
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
     [ Edit_view.view ~model:model_sig
-        ~frame:frame.Signal.state_signal ~block_id:uuid
+        ~frame:frame.Signal.state_signal ~block_id:uuid ~cls
         ~on_input:(Editor_keys.apply_input ~frame uuid)
     ])
     ctx parent

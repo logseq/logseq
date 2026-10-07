@@ -486,7 +486,7 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
 
 (* --- root --------------------------------------------------------------------- *)
 
-let view ~model ~frame ~block_id ~on_input : t =
+let view ~model ~frame ~block_id ~on_input ~cls : t =
  fun context parent ->
   let cache = line_cache () in
   (* [lines_step] returns the previous list untouched when nothing a
@@ -502,7 +502,7 @@ let view ~model ~frame ~block_id ~on_input : t =
   in
   let caret_s = own context (Signal.map caret_prop model) in
   let comp_s = own context (Signal.map composition_prop model) in
-  (column ~style_class:"block-editor"
+  (column ~style_class:("block-editor" ^ cls)
      [ keyed ~source:lines_s ~key:(fun l -> l.lidx) ~cmp:Int.compare
          ~mount:(line_view ~on_input)
      ; overlay frame

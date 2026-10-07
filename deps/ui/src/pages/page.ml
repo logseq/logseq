@@ -280,7 +280,7 @@ let title_editor (page : Model.page) : t =
   (Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
      [ Edit_view.view
          ~model:model_st.Signal.state_signal
-         ~frame:frame.Signal.state_signal ~block_id:uuid ~on_input
+         ~frame:frame.Signal.state_signal ~block_id:uuid ~on_input ~cls:""
      ])
     ctx parent
 

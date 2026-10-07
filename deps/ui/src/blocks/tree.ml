@@ -334,7 +334,7 @@ let content_el uuid (b : Model.block) : t =
                      b)        ]
     ]
 
-let editor_el uuid scope : t = Editor_surface.mount uuid scope
+let editor_el ?(cls = "") uuid scope : t = Editor_surface.mount ~cls uuid scope
 
 let content_wrapper uuid (b : Model.block) : t =
   (* cljs puts .block-content-wrapper only around display content;
@@ -369,7 +369,19 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
                  DOM must not swap or the instance is destroyed *)
               content_wrapper uuid b
           | _ ->
-              if editing && editable then editor_el uuid scope
+              if editing && editable then
+                (* cljs styles the editor textarea uniline-block.hN —
+                   carry the heading level so the edit surface keeps the
+                   read-mode geometry instead of collapsing to 16/24 *)
+                let cls =
+                  match
+                    Render.heading_level (S.title_for uuid b.block_title)
+                  with
+                  | Some (lvl, _) ->
+                      " uniline-block h" ^ string_of_int lvl
+                  | None -> ""
+                in
+                editor_el ~cls uuid scope
               else content_wrapper uuid b))
     (* the derivation outlives the mount unless it's owned into the
        row's scope — editing_sig is shared *)

@@ -152,7 +152,7 @@ let mount ?(units = M.Bytes) source =
     let ed_s = Signal.map (fun m -> m.ed) ms in
     let frame_s = Signal.map (fun m -> m.frame) ms in
     Edit_view.view ~model:ed_s ~frame:frame_s ~block_id:"b1"
-      ~on_input:(fun ev -> ignore (send (In ev)))
+      ~on_input:(fun ev -> ignore (send (In ev))) ~cls:""
   in
   let app =
     Lui_app.create_with_extensions backend registry

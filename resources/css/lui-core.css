@@ -2485,57 +2485,73 @@ a.page-title {
 
 /* Headings in blocks */
 .ls-block h1,
-.editor-inner .h1.uniline-block {
+.editor-inner .h1.uniline-block,
+.block-editor.uniline-block.h1 {
   font-size: 2rem;
   min-height: 1.5em;
   line-height: 1.38em;
 }
 
 .ls-block h2,
-.editor-inner .h2.uniline-block {
+.editor-inner .h2.uniline-block,
+.block-editor.uniline-block.h2 {
   font-size: 1.5rem;
   min-height: 1.5em;
   line-height: 1.38em;
 }
 
 .ls-block h3,
-.editor-inner .h3.uniline-block {
+.editor-inner .h3.uniline-block,
+.block-editor.uniline-block.h3 {
   font-size: 1.2rem;
   min-height: 1.2em;
   line-height: 1.15em;
 }
 
 .ls-block h4,
-.editor-inner .h4.uniline-block {
+.editor-inner .h4.uniline-block,
+.block-editor.uniline-block.h4 {
   font-size: 1rem;
   min-height: 1em;
 }
 
 .ls-block h5,
-.editor-inner .h5.uniline-block {
+.editor-inner .h5.uniline-block,
+.block-editor.uniline-block.h5 {
   font-size: 0.83rem;
   min-height: 0.83em;
 }
 
 .ls-block h6,
-.editor-inner .h6.uniline-block {
+.editor-inner .h6.uniline-block,
+.block-editor.uniline-block.h6 {
   font-size: 0.75rem;
   min-height: 0.75rem;
 }
 
 .ls-block :is(h1, h2, h3, h4, h5, h6),
 .editor-inner .uniline-block:is(.h1, .h2, .h3, .h4, .h5, .h6),
+.block-editor.uniline-block:is(.h1, .h2, .h3, .h4, .h5, .h6),
 .editor-inner .multiline-block:is(.h1, .h2, .h3, .h4, .h5, .h6)::first-line {
   font-weight: 600;
 }
 
-.editor-inner textarea.uniline-block:is(.h3, .h4, .h5, .h6) {
+.editor-inner textarea.uniline-block:is(.h3, .h4, .h5, .h6),
+.block-editor.uniline-block:is(.h3, .h4, .h5, .h6) {
   line-height: 24px;
   min-height: 24px;
 }
 
+/* inside a heading editor the line's own 1.5em floor would exceed the
+   heading line-height (e.g. h1 1.38em) — drop it so the text line box
+   governs, matching the cljs textarea height */
+.block-editor.uniline-block:is(.h1, .h2, .h3, .h4, .h5, .h6) .ed-line {
+  min-height: 1em;
+}
+
 .ls-block :is(h1, h2),
-.editor-inner .uniline-block:is(.h1, .h2) {
+.editor-inner .uniline-block:is(.h1, .h2),
+.block-editor.uniline-block:is(.h1, .h2) {
   border-bottom: 1px solid var(--lx-gray-06, var(--ls-border-color));
   margin-top: 0.25rem;
   margin-bottom: 0.5rem;
