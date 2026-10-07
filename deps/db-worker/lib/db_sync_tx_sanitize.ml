@@ -205,6 +205,56 @@ let drop_conflicted_encrypted_retracts tx_data =
            | _ -> true)
         tx_data
 
+(* cljs bookkeeping-attrs — safe to drop when their target entity
+   doesn't exist on the server. Stamping them on a retracted eid would
+   resurrect an invalid ghost entity (e.g. only {:block/updated-at}),
+   which then fails validation and rejects the tx. *)
+let bookkeeping_stamp_attrs =
+  [ "block/created-at"; "block/updated-at"; "block/order" ]
+
+(* cljs missing-positive-eid? *)
+let missing_positive_eid db = function
+  | Int64 n ->
+      Int64.compare n 0L > 0
+      && (match Datascript.Util.int64_to_int n with
+          | Some i ->
+              (match entity db (Entity_id i) with
+               | Some _ -> false
+               | None -> true)
+          | None -> true)
+  | _ -> false
+
+(* cljs drop-stamps-on-missing-entities — drops stamp ops (`[:db/add e
+   bookkeeping-attr v]` and entity maps carrying only bookkeeping attrs)
+   whose target eid has no entity in db. Synced txs carry raw eids that
+   can go stale when another client deleted the entity; writing them
+   would resurrect a ghost entity that fails validation. *)
+let drop_stamps_on_missing_entities db tx_data =
+  List.filter
+    (fun item ->
+       not
+         (match item with
+          | Map kvs ->
+              (match map_get "db/id" item with
+               | Some id ->
+                   missing_positive_eid db id
+                   && List.for_all
+                        (fun (k, _v) ->
+                           match k with
+                           | Keyword s ->
+                               s = "db/id"
+                               || List.mem s bookkeeping_stamp_attrs
+                           | _ -> false)
+                        kvs
+               | None -> false)
+          | _ ->
+              (match vec_items item with
+               | Some (Keyword "db/add" :: e :: Keyword a :: _ :: _rest)
+                 when List.mem a bookkeeping_stamp_attrs ->
+                   missing_positive_eid db e
+               | _ -> false)))
+    tx_data
+
 let touched_entity_eid db item : entity_id option =
   match item with
   | Map _ ->
@@ -235,6 +285,7 @@ let sanitize_tx ?(drop_missing_retract_ops = false)
     ?(retract_touched_descendants = false) (db : db) (tx_data : value list)
     : value list =
   let tx_data = strip_migration_deleted_attrs tx_data in
+  let tx_data = drop_stamps_on_missing_entities db tx_data in
   let tx_data =
     if not (Value_set.is_empty ignored_kv_entities) then
       strip_ignored_kv_entity_ops db tx_data
