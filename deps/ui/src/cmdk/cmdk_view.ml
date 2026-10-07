@@ -930,7 +930,11 @@ let install_listeners st =
 (* modal shell mirrors shui dialog markup: overlay + centered
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
 let modal_shell st =
-  box ~key:"cmdk-shell"
+  (* cp__overlay-layer/cp__dialog-shell are inert on web (no rule targets
+     them); on gpui the registered class dictionary makes each link a
+     window-sized layer and centers the abspos content by flex
+     alignment, the expressible form of `translate(-50%,-50%)`. *)
+  box ~key:"cmdk-shell" ~style_class:"cp__overlay-layer cp__dialog-shell"
     [ column ~key:"dismiss"
         ~style_class:"cp__cmdk-dismiss"
         ~grow:1.
@@ -964,4 +968,6 @@ let render (_ms : Model.t Signal.signal) : t =
   (* The keyed box gives the conditional its own reconcile-stable parent:
      spliced directly under #app-container its dynamic segment goes stale
      after navigation and later mounts emit an inconsistent op batch *)
-  box ~key:"cmdk_view" [ if_ ~test:open_sig (modal_shell st) ] context parent
+  box ~key:"cmdk_view" ~style_class:"cp__overlay-layer"
+    [ if_ ~test:open_sig (modal_shell st) ]
+    context parent

@@ -183,7 +183,10 @@ let modal st =
      scrim has no children, so every press on it is an overlay press —
      no payload target-class check needed. *)
   let opened_at = Platform.date_now_ms () in
-  box ~key:"cards-shell"
+  (* cp__overlay-layer/cp__dialog-shell are inert on web; on gpui the
+     registered class dictionary makes the shell a window-sized layer
+     and centers the abspos content by flex alignment. *)
+  box ~key:"cards-shell" ~style_class:"cp__overlay-layer cp__dialog-shell"
     [ Ui_parts.pressable
         ~on_press:(fun _ ->
           if Platform.date_now_ms () -. opened_at > 400. then

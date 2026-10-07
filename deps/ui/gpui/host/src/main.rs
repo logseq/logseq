@@ -338,6 +338,30 @@ fn drain_requests(
     window: &mut gpui_kit::gpui::Window,
     cx: &mut gpui_kit::gpui::App,
 ) {
+    // Sync parked WKWebView overlays with their iframe nodes' bounds.
+    logseq_ext::webview::sweep(shared, window);
+    // debug: LOGSEQ_GPUI_DUMP_TREE=<ms> dumps the store tree once after t
+    static DUMPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !DUMPED.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Ok(ms) = std::env::var("LOGSEQ_GPUI_DUMP_TREE") {
+            if boot_ms() >= ms.parse::<f64>().unwrap_or(0.0) {
+                DUMPED.store(true, std::sync::atomic::Ordering::Relaxed);
+                eprintln!("logseq-gpui: dumping tree t={:.1}ms", boot_ms());
+                lui_gpui::domops::handle_dom_op(shared, "dump-frames", "{}", window, cx);
+            }
+        }
+    }
+    // debug: LOGSEQ_GPUI_DUMP_EVERY=<ms> dumps the store tree every <ms>ms.
+    static NEXT_DUMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    if let Ok(ms) = std::env::var("LOGSEQ_GPUI_DUMP_EVERY") {
+        let period = ms.parse::<u64>().unwrap_or(0).max(100);
+        let now = boot_ms() as u64;
+        if now >= NEXT_DUMP.load(std::sync::atomic::Ordering::Relaxed) {
+            NEXT_DUMP.store(now + period, std::sync::atomic::Ordering::Relaxed);
+            eprintln!("logseq-gpui: dumping tree t={:.1}ms", boot_ms());
+            lui_gpui::domops::handle_dom_op(shared, "dump-frames", "{}", window, cx);
+        }
+    }
     let requests = PENDING_REQUESTS
         .lock()
         .map(|mut queue| std::mem::take(&mut *queue))

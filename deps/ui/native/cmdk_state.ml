@@ -135,7 +135,14 @@ let make ?(register = true) scheduler : t =
   end;
   st
 
-let get st = Signal.get st.vs.state_signal
+(* Signal.set stages the value as pending until the next stabilize —
+   state_signal still reads the previously published value. Read pending
+   first so same-tick updates (on_input -> refresh, chained set_in calls)
+   see the freshest view instead of lagging one update behind. *)
+let get st =
+  match !(st.vs.Signal.pending) with
+  | Some v -> v
+  | None -> Signal.get st.vs.Signal.state_signal
 
 (* whether the palette is open — chrome like the selection action-bar
    hides while it is up *)
@@ -918,8 +925,7 @@ let open_search_sidebar st =
 
 let open_latest ?(move = false) () =
   match !latest_t with
-  | Some st ->
-      if (get st).open_ && not move then close st else open_palette ~move st
+  | Some st -> if (get st).open_ && not move then close st else open_palette ~move st
   | None -> ()
 
 (* mod+shift+k (go/search-in-page): the command-table arm only scopes an

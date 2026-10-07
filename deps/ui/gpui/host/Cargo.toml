@@ -31,6 +31,16 @@ hayro = "0.8"
 hayro-syntax = "0.8"
 image = "0.25"
 
+# WKWebView overlay for logseq-iframe embeds (video/tweet/hiccup iframes) —
+# macOS only; other platforms keep the placeholder chip.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSURL", "NSURLRequest", "NSGeometry", "NSString", "NSValue"] }
+objc2-app-kit = { version = "0.3", features = ["NSView", "NSWindow"] }
+objc2-web-kit = "0.3"
+block2 = "0.6"
+raw-window-handle = "0.6"
+
 [dev-dependencies]
 # test-support exposes TestAppContext/#[gpui_kit::test] for the headless
 # smoke test in src/main.rs

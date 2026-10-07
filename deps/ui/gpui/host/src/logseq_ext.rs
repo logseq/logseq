@@ -16,6 +16,8 @@
 //!   generic `.latex`/`.latex-inline` slot shape (a node whose
 //!   `.opacity-0` child holds the raw tex); everything else falls
 //!   through to the framework's dom renderer.
+//! - `logseq-iframe` — a real WKWebView overlay parked on the node's
+//!   bounds (macOS); other platforms keep a labeled chip.
 
 use std::rc::Rc;
 use std::sync::LazyLock;
@@ -100,6 +102,7 @@ fn app_svg(name: &str) -> Option<String> {
 pub mod codemirror;
 pub mod katex;
 pub mod pdf;
+pub mod webview;
 
 /// Register the logseq extension renderers onto the shared backend bag.
 /// Call once at boot, next to `editor::register`.
@@ -120,10 +123,90 @@ pub fn register(shared: &Shared) {
     shared
         .extension_renderers
         .insert("logseq-span".to_string(), div_or_latex_slot);
+    shared
+        .extension_renderers
+        .insert("logseq-iframe".to_string(), webview::render);
     // `icon ~name:(`app n)` falls through the built-in IconName set to
     // this resolver — every tabler name rasterizes instead of the
     // `[icon]` placeholder.
     shared.app_icon_svg = Some(Rc::new(|name| app_svg(name)));
+
+    register_class_styles();
+}
+
+/// Semantic `cp__*`/`ui__*`/`ls-*` classes the overlay layer needs on
+/// gpui. Taffy anchors `position:absolute` to the nearest positioned
+/// ancestor (always the direct parent here), so every link from
+/// `.cp__overlays` down to a fixed-positioned leaf must be a
+/// window-sized layer — `cp__overlays`/`cp__overlay-layer` fill the
+/// window, `cp__dialog-shell` additionally centers abspos children via
+/// flex alignment (the expressible form of the web's
+/// `translate(-50%,-50%)` centering). `pointer-events` values steer
+/// `deepest_hit`: inert layers are click-transparent while backdrop,
+/// dialog, toast and menu leaves stay interactive. Web keeps its real
+/// stylesheet for all of these — this table is gpui-only.
+fn register_class_styles() {
+    use lui_gpui::style::register_class_style as class;
+    class("cp__overlays", "position:absolute;inset:0", "pointer-events-none");
+    class("cp__overlay-layer", "position:absolute;inset:0", "pointer-events-none");
+    class(
+        "cp__dialog-shell",
+        "position:absolute;inset:0;display:flex;flex-direction:column;\
+         justify-content:center;align-items:center",
+        "pointer-events-none",
+    );
+    class("cp__cmdk-dismiss", "position:absolute;inset:0", "pointer-events-auto");
+    class(
+        "ui__dialog-overlay",
+        "position:absolute;inset:0;display:flex;flex-direction:column;\
+         justify-content:center;align-items:center",
+        "pointer-events-auto",
+    );
+    class(
+        "ui__alert-dialog-overlay",
+        "position:absolute;inset:0;display:flex;flex-direction:column;\
+         justify-content:center;align-items:center",
+        "pointer-events-auto",
+    );
+    class(
+        "ui__dialog-content",
+        "position:absolute;width:100%;max-width:42rem",
+        "pointer-events-auto",
+    );
+    class(
+        "ui__alert-dialog-content",
+        "position:absolute;width:100%;max-width:32rem",
+        "pointer-events-auto",
+    );
+    class("ls-dialog-cmdk", "width:90dvw;max-width:56rem", "");
+    class("cp__cmdk__modal", "width:100%", "");
+    class("cp__cmdk", "display:flex;flex-direction:column", "");
+    class("ui__dialog-main-content", "width:100%", "");
+    class(
+        "cp__cmdk-scroller",
+        "min-height:65dvh;max-height:65dvh",
+        "overflow-y-auto",
+    );
+    class("cp__cmdk-search-input", "min-width:16rem;width:100%", "");
+    class(
+        "ui__dialog-close",
+        "position:absolute;top:0.75rem;right:0.75rem",
+        "",
+    );
+    class(
+        "ui__toaster-viewport",
+        "position:absolute;top:3rem;right:1rem;width:22.5rem",
+        "pointer-events-none",
+    );
+    class(
+        "ui__toast",
+        "position:absolute;top:0;right:0;width:100%;border-width:1px;\
+         border-radius:6px;background:background",
+        "pointer-events-auto",
+    );
+    class("ui__popover-content", "", "pointer-events-auto");
+    class("ui__dropdown-menu-content", "", "pointer-events-auto");
+    class("ls-property-dialog", "", "pointer-events-auto");
 }
 
 /// `logseq-div`/`logseq-span` nodes carrying the `.latex`/`.latex-inline`
