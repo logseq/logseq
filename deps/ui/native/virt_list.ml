@@ -43,7 +43,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       | None -> Signal.constant sched data
     in
     let attrs_sig =
-      Logseq_dom.attrs_signal arr_sig (fun (arr : 'a array) ->
+      Logseq_el.attrs_signal arr_sig (fun (arr : 'a array) ->
           list_attrs
           @ [ ("data-virt-count", string_of_int (Array.length arr)) ])
     in
@@ -161,7 +161,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
   let sched = ctx.Lui_ui.ui_scheduler in
   let count_sig = Signal.map List.length source in
   let attrs_sig =
-    Logseq_dom.attrs_signal count_sig (fun n ->
+    Logseq_el.attrs_signal count_sig (fun n ->
         [ ("data-virt-count", string_of_int n) ])
   in
   (* same lazy latch as [list]: rows outside the first [initial_rows]

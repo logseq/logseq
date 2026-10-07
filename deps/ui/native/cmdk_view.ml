@@ -19,8 +19,8 @@
 
 open Lui_elements
 
-let if_ = Logseq_dom.if_
-let keyed = Logseq_dom.keyed
+let if_ = Lui_elements.if_
+let keyed = Lui_elements.keyed
 
 module S = Cmdk_state
 
@@ -526,7 +526,7 @@ let group_header (st : S.t) (g : S.group) : t =
 let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
  fun ctx parent ->
   let items_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun (g : S.group) -> g.S.gitems) group_sig)
   in
   (column ~key:"group" ~style_class:(group_wrapper_class (Signal.get group_sig))
@@ -547,7 +547,7 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
 let groups_body st : t =
  fun ctx parent ->
   let groups_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun (v : S.view) -> v.S.groups)
          st.S.vs.Signal.state_signal)
   in
@@ -571,7 +571,7 @@ let search_only_chip st (gid : S.group_id) =
 let scroller st : t =
  fun ctx parent ->
   let has_items_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (v : S.view) ->
            v.S.groups <> []
@@ -581,7 +581,7 @@ let scroller st : t =
          st.S.vs.Signal.state_signal)
   in
   let input_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun (v : S.view) -> v.S.input)
          st.S.vs.Signal.state_signal)
   in
@@ -593,7 +593,7 @@ let scroller st : t =
           match f with
           | None -> spacer ~key:"flt-none" []
           | Some gid -> search_only_chip st gid)
-        (Logseq_dom.own ctx
+        (Logseq_el.own ctx
            (Signal.map (fun (v : S.view) -> v.S.filter)
               st.S.vs.Signal.state_signal))
     ; groups_body st
@@ -602,7 +602,7 @@ let scroller st : t =
             text ~key:"empty" ~style_class:"cp__cmdk-empty"
               ~value:(I18n.t "search/no-result") []
           else spacer ~key:"empty-none" [])
-        (Logseq_dom.own ctx
+        (Logseq_el.own ctx
            (Signal.map2 (fun q has -> (q, has)) input_sig has_items_sig))
     ]
     ctx parent
@@ -745,14 +745,14 @@ let hints st : t =
             [ text ~key:"hint-label" ~style_class:"cp__cmdk-hints-label"
                 ~value:(I18n.t "cmdk.tip/label") []
             ; reactive ~equal:(fun (a : bool * int) b -> a = b) tip_el
-                (Logseq_dom.own ctx
+                (Logseq_el.own ctx
                    (Signal.map
                       (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
                       st.S.vs.Signal.state_signal))
             ]
         ]
     ; reactive ~equal:(fun (a : S.item option) b -> a = b) action_hints
-        (Logseq_dom.own ctx
+        (Logseq_el.own ctx
            (Signal.map
               (fun (v : S.view) -> S.item_at v v.S.hl)
               st.S.vs.Signal.state_signal))
@@ -947,7 +947,7 @@ let render (_ms : Model.t Signal.signal) : t =
   Editor_dom.ensure_raw_text_observer ();
   install_listeners ();
   let open_sig =
-    Logseq_dom.own context
+    Logseq_el.own context
       (Signal.map (fun (v : S.view) -> v.S.open_)
          st.S.vs.Signal.state_signal)
   in

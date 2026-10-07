@@ -78,7 +78,7 @@ let emit ?key ~role ~props ~signal_props children : Lui_elements.t =
   List.iter
     (fun (name, s) ->
       Lui_ui.extension_property_signal context node name
-        (Logseq_dom.own context s))
+        (Logseq_el.own context s))
     signal_props;
   (match parent with
    | Some p -> Lui_ui.append context p node

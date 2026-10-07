@@ -57,7 +57,7 @@ let row_class_str (b : Model.block) uuid (selected : S.String_set.t) =
 
 let row_class_sig uuid blank embed (b : Model.block) =
   ignore (blank, embed);
-  Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+  Logseq_el.class_signal (S.selected_sig ()) (fun selected ->
       row_class_str b uuid selected)
 
 (* same class signal driven by a per-item block signal — keyed rows get
@@ -83,14 +83,14 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block)
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
   [ ("id", "ls-block-" ^ uuid)
-  ; ("blockid", uuid)
-  ; ("containerid", uuid)
+  ; ("data-blockid", uuid)
+  ; ("data-containerid", uuid)
   ; ("data-block-title", b.block_title)
   ; ("data-comment-item", string_of_bool b.Model.block_is_comment)
   ; ("data-comments-area"
     , string_of_bool (Comments.is_comments_area b))
   ; ("data-block-format", "markdown")
-  ; ("haschild", string_of_bool has_children)
+  ; ("data-haschild", string_of_bool has_children)
   ; ( "data-collapsed"
     , string_of_bool
         (has_children
@@ -98,16 +98,16 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block)
   ; ("data-db-collapsable", string_of_bool b.Model.block_db_collapsable)
   ; (* cljs level = render depth (config :level, 0 at page root), not the
        db block/level *)
-    ("level", string_of_int depth)
+    ("data-level", string_of_int depth)
   ]
   (* cljs sets blockid to the linked entity's uuid and
      originalblockid to the linking block's — we keep blockid as the
      embed block's own uuid so delegated editing/ops resolve it *)
-  @ (if embed then [ ("originalblockid", uuid); ("data-embed", "true") ]
+  @ (if embed then [ ("data-originalblockid", uuid); ("data-embed", "true") ]
      else [])
 
 let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
-  Logseq_dom.attrs_signal (S.collapse_sig ()) (fun v ->
+  Logseq_el.attrs_signal (S.collapse_sig ()) (fun v ->
       row_attrs_of ~scope ~depth uuid b v)
 
 let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
@@ -225,7 +225,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
      a fresh map per class_signal triples the subscriptions on every
      S.set publish. Owned into the row's scope so the collapse_sig
      subscription dies on unmount *)
-  let cs = Logseq_dom.own ctx (collapsed_sig ~scope b) in
+  let cs = Logseq_el.own ctx (collapsed_sig ~scope b) in
   (* #dot-<uuid> + blockid/draggable on the bullet stays dom (e2e
      target + imperative dnd contract); the rest rides data_attrs and
      reactive style_class — --ls-block-icon-size lives in the
@@ -256,7 +256,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
             ~id:("dot-" ^ uuid)
             ~attrs:
-              [ ("blockid", uuid); ("draggable", "true")
+              [ ("data-blockid", uuid); ("draggable", "true")
               ; (* the lui-core.css circle is backend styling; native
                    backends get no stylesheet, so the container's
                    intrinsic box + centering is emitted inline *)
@@ -265,19 +265,19 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                 )
               ]
             ~style_class_signal:
-              (Logseq_dom.class_signal cs (fun c ->
+              (Logseq_el.class_signal cs (fun c ->
                    bullet_cls ^ if c then " bullet-closed" else ""))
             [ (match node_icon ~library b with
                | Some icon -> icon_el uuid icon
                | None ->
                    dom ~key:("b-" ^ uuid) ~tag:"span"
                      ~style_class_signal:
-                       (Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+                       (Logseq_el.class_signal (S.selected_sig ()) (fun selected ->
                             if S.String_set.mem uuid selected then
                               "selected bullet"
                             else "bullet"))
                      ~attrs:
-                       [ ("blockid", uuid)
+                       [ ("data-blockid", uuid)
                        ; (* see the container note above — the dot is
                             intrinsic geometry, not a class lookup *)
                          ( "style"
@@ -309,7 +309,7 @@ let content_el uuid (b : Model.block) : t =
   dom ~key:("content-" ^ uuid) ~style_class:"block-content inline"
     ~id:("block-content-" ^ uuid)
     ~attrs:
-      ([ ("blockid", uuid); ("containerid", uuid); ("style", "width:100%")
+      ([ ("data-blockid", uuid); ("data-containerid", uuid); ("style", "width:100%")
        ; ( "data-type"
          , Option.value b.Model.block_ls_type ~default:"default" ) ]
        @
@@ -385,7 +385,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
               else content_wrapper uuid b))
     (* the derivation outlives the mount unless it's owned into the
        row's scope — editing_sig is shared *)
-    (Logseq_dom.own ctx
+    (Logseq_el.own ctx
        (Signal.map
           (fun e ->
             match e with
@@ -422,7 +422,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
           link ~key:("th-" ^ key)
             ~url:"#" ~target:`self_
             ~style_class:"hash-symbol select-none" ~text:"#" []
-        ; (if priv then Logseq_dom.nothing
+        ; (if priv then Logseq_el.nothing
            else
              (* the 'x' press needs a pressable kind — link is not one,
                 so it renders as text; .block-tag:hover reveals it *)
@@ -480,7 +480,7 @@ let tags_el uuid (b : Model.block) : t =
       quads
   in
   match visible with
-  | [] -> Logseq_dom.nothing
+  | [] -> Logseq_el.nothing
   | tags ->
       row ~key:("tags-" ^ uuid) ~gap:4 ~style_class:"block-tags"
         (List.mapi
@@ -607,10 +607,10 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
        else if Render.is_cards_block b then
          (* class-Cards blocks get the same results shell *)
          Render.query_below_el uuid
-       else Logseq_dom.nothing)
+       else Logseq_el.nothing)
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library ~virtualize uuid scope b
-       else Logseq_dom.nothing)
+       else Logseq_el.nothing)
     ]
 
 (* keyed-row variant of row_el: the .ls-block shell is a stable node
@@ -653,7 +653,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
           a == b && ga = gb && not (gen_bumped a ia ib))
         (fun ((b : Model.block), _g, _i) ->
           row_main ~editable ~library scope b)
-        (Logseq_dom.own ctx
+        (Logseq_el.own ctx
            (Signal.map2
               (fun (b : Model.block) (_tick : int) ->
                 let g, i = Render_inline.invalidation () in
@@ -665,9 +665,9 @@ and row_sig ~depth ~editable ~library ~virtualize scope
          that becomes a query/cards block after mount (title or property
          edit) republishes bs and mounts the section instead of keeping
          the mount-time b0 snapshot *)
-      Logseq_dom.if_
+      Lui_elements.if_
         ~test:
-          (Logseq_dom.own ctx
+          (Logseq_el.own ctx
              (Signal.map
                 (fun (b : Model.block) ->
                   Render.is_query_block b || Render.is_cards_block b)
@@ -687,7 +687,7 @@ and row_children ~depth ~editable ~library ~virtualize scope
      ~110 nodes per op. Owned into the row's scope so the map2's
      subscription on the shared collapse_sig dies with the row *)
   let show_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map2
          (fun (b : Model.block) (v : S.collapse_view) ->
            let uuid = Option.value b.block_uuid ~default:"" in
@@ -699,7 +699,7 @@ and row_children ~depth ~editable ~library ~virtualize scope
   in
   (reactive
     (fun show ->
-      if not show then Logseq_dom.nothing
+      if not show then Logseq_el.nothing
       else
         let b = Signal.get bs in
         let uuid = Option.value b.block_uuid ~default:"" in
@@ -754,8 +754,8 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
        (* keyed like the top-level list: indent/outdent/move splices a
           row in or out and only that row's node moves — siblings keep
           their DOM identity instead of the whole subtree remounting *)
-       [ Logseq_dom.keyed
-           ~source:(Logseq_dom.own ctx (Signal.map S.children_of bs))
+       [ Lui_elements.keyed
+           ~source:(Logseq_el.own ctx (Signal.map S.children_of bs))
            ~key:block_key ~cmp:String.compare
            ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
                      ~library ~virtualize) ]))
@@ -775,7 +775,7 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~attrs:
-          [ ("blockid", uuid)
+          [ ("data-blockid", uuid)
           ; (* hover-stripped pill from .block-children-left-border —
                intrinsic geometry for style-less backends *)
             ( "style"
@@ -813,7 +813,7 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
   if_
     ~test:
-      (Logseq_dom.own ctx
+      (Logseq_el.own ctx
          (Signal.map
             (fun v ->
               not
@@ -888,7 +888,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
         ]
     ; Properties_area.block_area ~uuid
     ; (if has_children then children_static_el ~depth ~library uuid b
-       else Logseq_dom.nothing)
+       else Logseq_el.nothing)
     ])
   ctx parent
 
@@ -900,7 +900,7 @@ and children_static_el ~depth ~library uuid (b : Model.block) : t =
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~attrs:
-          [ ("blockid", uuid)
+          [ ("data-blockid", uuid)
           ; ( "style"
             , "position:absolute;left:-1px;top:0;bottom:0;width:4px;border-radius:2px;opacity:0.6"
             )

@@ -49,7 +49,7 @@
         (is (pos? (.evaluate image "image => image.naturalWidth"))))
       (let [first-image (.first (w/-query ".ls-page-blocks .asset-container img"))
             first-block (.first (w/-query ".ls-page-blocks .ls-block:has(.asset-container img)"))
-            block-uuid (.getAttribute first-block "blockid")]
+            block-uuid (.getAttribute first-block "data-blockid")]
         (w/click first-image)
         (assert/assert-is-visible ".pswp.pswp--open")
         (.waitForFunction page "() => window.pswp?.opener?.isOpen" nil)

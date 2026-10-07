@@ -11,9 +11,9 @@ let el ?key ~block ~display ~tex () : Lui_elements.t =
   Render_libs.ensure ();
   let id = "ls-katex-" ^ Platform.random_uuid () in
   Render_libs.katex_register_pending id display;
-  Logseq_dom.dom ?key
+  Logseq_el.el ?key
     ~tag:(if block then "div" else "span")
     ~style_class:(if block then "latex initial" else "latex-inline initial")
     ~id
-    [ Logseq_dom.dom ~tag:"span" ~style_class:"opacity-0" ~text:tex [] ]
+    [ Logseq_el.el ~tag:"span" ~style_class:"opacity-0" ~text:tex [] ]
     context parent

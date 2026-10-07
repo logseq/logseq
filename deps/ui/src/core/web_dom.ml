@@ -591,7 +591,7 @@ let for_each_selector sel f =
 let selected_block_uuids () =
   query_selector_all_arr ".ls-block.selected"
   |> Array.to_list
-  |> List.filter_map (fun el -> el_get_attr el "blockid")
+  |> List.filter_map (fun el -> el_get_attr el "data-blockid")
 
 (* first match in a node_list, descending into each element's subtree *)
 let nl_find els sel =

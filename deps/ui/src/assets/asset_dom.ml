@@ -636,7 +636,7 @@ let file_block uuid (b : Model.block) : t =
       .Signal.state_signal
   in
   let src_attrs base =
-    Logseq_dom.attrs_signal url (fun u ->
+    Logseq_el.attrs_signal url (fun u ->
         if u = "" then base else ("src", u) :: base)
   in
   let body =
@@ -664,7 +664,7 @@ let file_block uuid (b : Model.block) : t =
       dom ~key:("afl-" ^ uuid) ~tag:"a" ~style_class:"asset-ref"
         ~text:file
         ~attrs_signal_v:
-          (Logseq_dom.attrs_signal url (fun u ->
+          (Logseq_el.attrs_signal url (fun u ->
                if u = "" then [ ("download", file) ]
                else [ ("href", u); ("download", file) ]))
         []

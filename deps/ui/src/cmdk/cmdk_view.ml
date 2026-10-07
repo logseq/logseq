@@ -19,8 +19,8 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-let if_ = Logseq_dom.if_
-let keyed = Logseq_dom.keyed
+let if_ = Lui_elements.if_
+let keyed = Lui_elements.keyed
 
 module S = Cmdk_state
 
@@ -780,7 +780,7 @@ let hints st : t =
                 ~style_class:"cp__cmdk-hints-label"
                 ~value:(I18n.t "cmdk.tip/label") []
             ; reactive tip_el
-                (Logseq_dom.own ctx
+                (Logseq_el.own ctx
                    (Signal.map
                       (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
                       st.S.vs.Signal.state_signal))
@@ -792,7 +792,7 @@ let hints st : t =
         ~equal:(fun (a : S.item option) b ->
           hint_variant a = hint_variant b)
         action_hints
-        (Logseq_dom.own ctx
+        (Logseq_el.own ctx
            (Signal.map
               (fun (v : S.view) -> S.item_at v v.S.hl)
               st.S.vs.Signal.state_signal))

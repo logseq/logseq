@@ -56,6 +56,7 @@ let mount () =
   Platform.set_location_search "?rtc-test=true";
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_el.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
   let view ctx ms send =
@@ -230,7 +231,7 @@ let load_test_page () =
 
 let find_block uuid =
   List.find_opt
-    (fun n -> attr_val n "blockid" = Some uuid)
+    (fun n -> attr_val n "data-blockid" = Some uuid)
     (M.all_nodes (tree ()))
 
 let node_of_id id =
@@ -293,10 +294,10 @@ let test_block_tree () =
          [ b1; b2; b2c ];
        attr_eq "block row id" b1 "id" "ls-block-b1";
        check "child row nested under parent"
-         (subtree_contains b2 (fun n -> attr_val n "blockid" = Some "b2c"));
+         (subtree_contains b2 (fun n -> attr_val n "data-blockid" = Some "b2c"));
        check "b2c not at top level"
          (not
-            (subtree_contains b1 (fun n -> attr_val n "blockid" = Some "b2c")));
+            (subtree_contains b1 (fun n -> attr_val n "data-blockid" = Some "b2c")));
        (* bullet affordance in each row *)
        List.iter
          (fun n ->
@@ -549,6 +550,7 @@ let views_session : (Model.t, Action.t) S.t option ref = ref None
 let test_views_table () =
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_el.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
   let vs =
@@ -1075,7 +1077,7 @@ let test_journal_reorder_move_collapse () =
                  List.filter_map
                    (fun c ->
                      match first_block c with
-                     | Some r -> attr_val r "blockid"
+                     | Some r -> attr_val r "data-blockid"
                      | None -> None)
                    (M.children (tree ()) sid)
              | None -> [])

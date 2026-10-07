@@ -139,7 +139,7 @@ let area_display (b : Model.block) context : t =
   let st = hl_img_sig b context in
   reactive (fun r ->
       match r with
-      | None -> Logseq_dom.nothing
+      | None -> Logseq_el.nothing
       | Some r ->
           (* asset-container is width:auto unless hl-area pins a px
              width — then it fills *)

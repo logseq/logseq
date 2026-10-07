@@ -360,7 +360,7 @@ let save_src inst src =
 let cm_host inst : Lui_elements.t =
  fun ctx parent ->
   let open_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun s -> s.V.query_editor_open)
          inst.V.st.Signal.state_signal)

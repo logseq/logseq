@@ -877,11 +877,11 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   dom ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
     ~id:("ls-block-" ^ row_uuid)
     ~style_class_signal:
-      (Logseq_dom.class_signal (sig_of inst) (fun (s : V.vstate) ->
+      (Logseq_el.class_signal (sig_of inst) (fun (s : V.vstate) ->
            "ls-table-row ls-block"
            ^ if V.Sset.mem row_uuid s.V.selected then " selected" else ""))
     ~attrs:
-      [ ("blockid", row_uuid); ("data-id", row_uuid); ("tabindex", "0") ]
+      [ ("data-blockid", row_uuid); ("data-id", row_uuid); ("tabindex", "0") ]
     ~events:"keydown"
     ~on_dom_event:(table_row_keydown inst ~row_uuid)
     [ (* cljs: .sticky-columns holds pinned cells, sibling .flex.flex-row
@@ -1036,7 +1036,7 @@ let grouped_table inst ~rows : t =
 let list_row_el ~row_uuid ~title : t =
   dom ~key:("ls-lr-" ^ row_uuid) ~tag:"div"
     ~id:("ls-block-" ^ row_uuid) ~style_class:"ls-block"
-    ~attrs:[ ("blockid", row_uuid); ("data-id", row_uuid) ]
+    ~attrs:[ ("data-blockid", row_uuid); ("data-id", row_uuid) ]
     [ row ~gap:4 ~style_class:"block-main-container"
         [ box ~style_class:"block-content"
             ~accessibility_identifier:("block-content-" ^ row_uuid)

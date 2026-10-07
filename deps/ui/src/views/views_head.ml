@@ -79,7 +79,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
   let v0 = Signal.get v_sig in
   let isig = sig_of inst in
   let current_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun (s : V.vstate) -> s.V.view_uuid = v0.Wr.vu) isig)
   in
   (* data-view-tab-id is a DOM marker with no component prop —
@@ -122,7 +122,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
            [ icon ~point_size:16
                ~style_class:("ls-icon-" ^ view_type_icon v0)
                ~name_signal:
-                 (Logseq_dom.own ctx
+                 (Logseq_el.own ctx
                     (Signal.map
                        (fun (v : Wr.view_ent) ->
                          Views_table.icon_of (view_type_icon v))
@@ -133,7 +133,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
            []
        ; if_
            ~test:
-             (Logseq_dom.own ctx
+             (Logseq_el.own ctx
                 (Signal.map
                    (fun (s : V.vstate) ->
                      s.V.view_uuid = v0.Wr.vu
@@ -142,7 +142,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                    isig))
            (text ~style_class:"ls-count"
               ~value_signal:
-                (Logseq_dom.own ctx
+                (Logseq_el.own ctx
                    (Signal.map
                       (fun s -> string_of_int (count_of s)) isig))
               []) ])
@@ -154,7 +154,7 @@ let tabs_el inst ~dim : t =
   row ~style_class:"views"
     [ D.keyed
         ~source:
-          (Logseq_dom.own ctx
+          (Logseq_el.own ctx
              (Signal.map (fun (s : V.vstate) -> s.V.views) (sig_of inst)))
         ~key:(fun (v : Wr.view_ent) -> v.Wr.vu)
         ~cmp:String.compare
@@ -566,7 +566,7 @@ let display_type_el inst : t =
                [ box ~style_class:"select-item"
                    [ box ~style_class:"ls-icon-color-wrap"
                        [ Views_table.icon_dyn
-                           (Logseq_dom.own ctx
+                           (Logseq_el.own ctx
                               (Signal.map
                                  (fun (s : V.vstate) ->
                                    match s.V.display_type with
@@ -585,7 +585,7 @@ let search_el inst : t =
   let deb = E.debounce 300 in
   let input_id = "vsearch-" ^ string_of_int inst.V.id in
   let open_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun (s : V.vstate) -> s.V.search_open) (sig_of inst))
   in
   (* DOM-only keydown lost its Escape-closes-search path — no component
@@ -728,7 +728,7 @@ let filters_row inst : t =
        (fun (a : V.vstate) (b : V.vstate) ->
          a.V.filters == b.V.filters && a.V.filters_or = b.V.filters_or)
      (fun (s : V.vstate) ->
-       if s.V.filters = [] then Logseq_dom.nothing
+       if s.V.filters = [] then Logseq_el.nothing
        else
          let chips =
            List.mapi (fun i f -> filter_chip inst i f) s.V.filters
@@ -781,7 +781,7 @@ let render_head inst : t =
            | V.KQuery _ ->
                text ~style_class:"ls-query-count"
                  ~value_signal:
-                   (Logseq_dom.own ctx
+                   (Logseq_el.own ctx
                       (Signal.map
                          (fun (s : V.vstate) -> I.live_query (count_of s))
                          (sig_of inst)))

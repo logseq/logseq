@@ -1136,7 +1136,7 @@ let run_add_reaction st =
   | uuids -> (
       let anchor =
         match uuids with
-        | u :: _ -> Properties_dom.doc_query ("[blockid='" ^ u ^ "']")
+        | u :: _ -> Properties_dom.doc_query ("[data-blockid='" ^ u ^ "']")
         | [] -> None
       in
       match anchor with

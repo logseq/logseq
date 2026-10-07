@@ -161,7 +161,7 @@ let load_test_page () =
 
 let find_block uuid =
   List.find_opt
-    (fun n -> attr_val n "blockid" = Some uuid)
+    (fun n -> attr_val n "data-blockid" = Some uuid)
     (M.all_nodes (tree ()))
 
 (* ---------------- shell + header ---------------- *)
@@ -211,10 +211,10 @@ let test_block_tree () =
          [ b1; b2; b2c ];
        attr_eq "block row id" b1 "id" "ls-block-b1";
        check "child row nested under parent"
-         (subtree_contains b2 (fun n -> attr_val n "blockid" = Some "b2c"));
+         (subtree_contains b2 (fun n -> attr_val n "data-blockid" = Some "b2c"));
        check "b2c not at top level"
          (not
-            (subtree_contains b1 (fun n -> attr_val n "blockid" = Some "b2c")));
+            (subtree_contains b1 (fun n -> attr_val n "data-blockid" = Some "b2c")));
        (* bullet affordance in each row *)
        List.iter
          (fun n ->
@@ -948,7 +948,7 @@ let test_journal_reorder_move_collapse () =
     match find_block uuid with
     | Some { M.parent = Some pid; _ } ->
         List.filter_map
-          (fun c -> attr_val c "blockid")
+          (fun c -> attr_val c "data-blockid")
           (List.filter (fun c -> has_tok c "ls-block")
              (M.children (tree ()) pid))
     | _ -> []

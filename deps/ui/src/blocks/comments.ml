@@ -119,7 +119,7 @@ let title_cell uuid (b : Model.block) : t =
                block; the standard editor machinery mounts the surface *)
             Editor_actions.enter_edit uuid 0)
           [])
-    (Logseq_dom.own ctx (editing_sig uuid)))
+    (Logseq_el.own ctx (editing_sig uuid)))
     ctx parent
 
 let comment_row uuid (b : Model.block) : t =

@@ -471,7 +471,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
                   []
               ]
           ]))
-    (Logseq_dom.own ctx
+    (Logseq_el.own ctx
        (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)))
     ctx parent
 
@@ -493,7 +493,7 @@ let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
                (if downloading then "sync/downloading"
                 else "sync/uploading"))
           [])
-    (Logseq_dom.own ctx
+    (Logseq_el.own ctx
        (Signal.map
           (fun (m : Model.t) ->
             if downloading then m.rtc_downloading else m.rtc_uploading)
@@ -534,7 +534,7 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
             | None -> ())
           []
       else spacer ~key:"lgs-off" ~style_class:"hidden" [])
-    (Logseq_dom.own ctx
+    (Logseq_el.own ctx
        (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)))
     ctx parent
 
@@ -882,7 +882,7 @@ let help_menu_popup : t =
     ]
 
 let help_area (ms : Model.t Signal.signal) : t =
-  Logseq_dom.fragment
+  Logseq_el.fragment
     [ box ~key:"help" ~style_class:"cp__sidebar-help-btn"
         [ Ui_parts.pressable
             ~on_press:(fun _ ->

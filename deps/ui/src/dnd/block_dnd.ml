@@ -3,8 +3,8 @@
    block-drag-over / block-drop).
 
    A MutationObserver keeps one dnd-kit Draggable per mounted
-   .bullet-container[blockid] (drag source) and one Droppable per
-   .ls-block[blockid]. Drop-target resolution mirrors the native
+   .bullet-container[data-blockid] (drag source) and one Droppable per
+   .ls-block[data-blockid]. Drop-target resolution mirrors the native
    closest('.ls-block'): nested blocks outrank their ancestors via
    collisionPriority = nesting depth, so the innermost block under the
    pointer always wins the collision sort. *)
@@ -35,7 +35,7 @@ let rec block_depth acc el =
 
 let register_source m el =
   if not (Web_dom.js_map_has draggables el) then
-    match Web_dom.el_get_attr el "blockid" with
+    match Web_dom.el_get_attr el "data-blockid" with
     | Some u ->
         let d =
           K.new_draggable
@@ -48,7 +48,7 @@ let register_source m el =
 
 let register_target m el =
   if not (Web_dom.js_map_has droppables el) then
-    match Web_dom.el_get_attr el "blockid" with
+    match Web_dom.el_get_attr el "data-blockid" with
     | Some u ->
         let dp =
           K.new_droppable
@@ -70,8 +70,8 @@ let sweep map destroy =
 
 let scan m =
   Array.iter (register_source m)
-    (Web_dom.query_selector_all_arr ".bullet-container[blockid]");
-  Array.iter (register_target m) (Web_dom.query_selector_all_arr ".ls-block[blockid]");
+    (Web_dom.query_selector_all_arr ".bullet-container[data-blockid]");
+  Array.iter (register_target m) (Web_dom.query_selector_all_arr ".ls-block[data-blockid]");
   sweep draggables K.destroy_draggable;
   sweep droppables K.destroy_droppable
 
@@ -102,7 +102,7 @@ let coords_of ev op =
 (* cljs block-drag-over: near the top of the first block -> :top; deep
    indent (x-offset > 50) -> :nested; else :sibling *)
 let update_drop_target src tgt_el page_x client_y =
-  match Web_dom.el_get_attr tgt_el "blockid" with
+  match Web_dom.el_get_attr tgt_el "data-blockid" with
   | Some tgt when tgt <> src && not (A.is_descendant tgt src) ->
       let rect = Web_dom.el_bounding_rect tgt_el in
       let first =

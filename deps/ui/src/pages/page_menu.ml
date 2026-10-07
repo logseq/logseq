@@ -335,7 +335,7 @@ let confirm_view (c : Model.confirm) =
         ; (* cljs dialog-confirm! sends the description as :content —
              it lands in div.ui__alert-dialog-main-content (a grid sibling
              of the header), not as ui__alert-dialog-description *)
-          (if desc = "" then Logseq_dom.nothing
+          (if desc = "" then Logseq_el.nothing
            else
              box ~key:"adlg-dw"
                ~style_class:"ui__alert-dialog-main-content"
@@ -378,4 +378,4 @@ let dialog_view (m : Model.t) =
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c
-      | None -> Logseq_dom.nothing)
+      | None -> Logseq_el.nothing)

@@ -384,12 +384,12 @@ let viewer_el : Lui_elements.t =
              (hls/page/scale/modes/flags) and receives annotation events *)
           (* TODO(component): logseq-pdf native extension widget —
              events + on_dom_event have no component equivalent *)
-          Logseq_dom.dom ~tag:"pdf"
+          Logseq_el.el ~tag:"pdf"
             ~style_class:"w-full h-full"
             ~events
             ~on_dom_event
             ~attrs_signal_v:
-              (Logseq_dom.attrs_signal view_s (fun vo ->
+              (Logseq_el.attrs_signal view_s (fun vo ->
                    match vo with
                    | Some v -> attrs_of_view v
                    | None -> [ "path", a.Model.pdf_url ]))

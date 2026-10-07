@@ -69,7 +69,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
   let sched = context.Lui_ui.ui_scheduler in
   let menu_open = Signal.state sched false in
   (column ~gap:0 ~style_class:"property-key-inner"
-     [ (if icon then property_icon row else Logseq_dom.nothing)
+     [ (if icon then property_icon row else Logseq_el.nothing)
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~style_class:"property-k flex select-none jtrigger w-full"
          ~label:(D.row_title row)
@@ -323,7 +323,7 @@ let block_below_pills ~uuid : t =
     (reactive
        (fun (d : S.area_data) ->
           if d.below = [] then
-            Logseq_dom.nothing
+            Logseq_el.nothing
           else
             let ctx = block_ctx uuid key in
             pills_view ctx ~owner_is_tag:false ~owner_title:"" d.below)
@@ -346,7 +346,7 @@ let block_left_chips ~uuid : t =
           if d.left = [] then
             (* cljs block-positioned-properties renders nothing when the
                position has no properties *)
-            Logseq_dom.nothing
+            Logseq_el.nothing
           else
             let ctx = block_ctx uuid key in
             row ~gap:8 ~cross:`center
@@ -375,7 +375,7 @@ let block_right_chips ~uuid : t =
     (reactive
        (fun (d : S.area_data) ->
           if d.right = [] then
-            Logseq_dom.nothing
+            Logseq_el.nothing
           else
             let ctx = block_ctx uuid key in
             row ~gap:2 ~cross:`center
@@ -634,7 +634,7 @@ let bidi_area (p : Model.page) : t =
           (* cljs bidirectional-properties-section renders only
              (when (seq groups)) — an empty .mt-8 column otherwise eats
              the page-inner gap *)
-          if d.bidi = [] then Logseq_dom.nothing
+          if d.bidi = [] then Logseq_el.nothing
           else
             column ~gap:8 ~grow:1.0
               ~style_class:"w-full ls-bidirectional-properties mt-8"

@@ -445,7 +445,7 @@ let body (_ms : Model.t Signal.signal) : t =
   (* every derivation is owned into the mount's scope — unowned map2s
      would stay subscribed to the shared state signals after the panel
      unmounts or the tab flips *)
-  let own2 f a b = Logseq_dom.own ctx (Signal.map2 f a b) in
+  let own2 f a b = Logseq_el.own ctx (Signal.map2 f a b) in
   let mkt_sig =
     own2 pair
       (own2 pair

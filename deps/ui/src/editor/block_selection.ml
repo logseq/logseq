@@ -19,7 +19,7 @@ let pointerdown ev =
   if Web_dom.ev_buttons ev = 1 then
     match Web_dom.closest_sel ".ls-block" (Web_dom.ev_target ev) with
     | Some block_el -> (
-        match Web_dom.el_get_attr block_el "blockid" with
+        match Web_dom.el_get_attr block_el "data-blockid" with
         | Some uuid ->
             down := true;
             set_anchor uuid

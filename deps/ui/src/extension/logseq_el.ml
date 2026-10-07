@@ -74,9 +74,7 @@ let register registry =
   List.iter
     (fun tag ->
       Lui_extension.register_component registry (schema_of tag))
-    tags;
-  Logseq_emoji.register registry;
-  Logseq_katex.register registry
+    tags
 
 let web_adapters : web_extension_adapter String_map.t =
   List.fold_left

@@ -100,7 +100,7 @@ let icon_dyn (sig_ : string Signal.signal) : t =
  fun ctx parent ->
   (* the name derivation is owned into the mount's scope — sig_ is a
      shared column/vstate signal and an unowned map outlives the icon *)
-  icon ~name_signal:(Logseq_dom.own ctx (Signal.map icon_of sig_))
+  icon ~name_signal:(Logseq_el.own ctx (Signal.map icon_of sig_))
     ~point_size:16 [] ctx parent
 
 (* ---------- columns ---------- *)
@@ -346,7 +346,7 @@ let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
  fun ctx parent ->
   checkbox ~accessibility_identifier:id ~label:aria_label
     ~style_class:(if jtrigger then "jtrigger" else "")
-    ~checked_signal:(Logseq_dom.own ctx (Signal.map shown (sig_of inst)))
+    ~checked_signal:(Logseq_el.own ctx (Signal.map shown (sig_of inst)))
     ~on_toggle:(fun ev ->
       match ev with
       | L.ToggleChanged (_, on) -> on_toggle on
@@ -571,7 +571,7 @@ let header_button inst (c : V.column) : t =
   (* sort_sig/arrow derivations ride the mount's scope — the shared
      vstate signal outlives the button otherwise *)
   let sort_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) ->
            List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
@@ -580,7 +580,7 @@ let header_button inst (c : V.column) : t =
   button ~variant:`ghost ~size:`sm ~text:c.V.c_name ~grow:1.
     ~main:`start ~height:32 ~padding_horizontal:8
     [ if_
-        ~test:(Logseq_dom.own ctx (Signal.map (fun o -> o <> None) sort_sig))
+        ~test:(Logseq_el.own ctx (Signal.map (fun o -> o <> None) sort_sig))
         (icon_dyn
            (Signal.map
               (fun o ->
@@ -951,11 +951,11 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   dom ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
     ~id:("ls-block-" ^ row_uuid)
     ~style_class_signal:
-      (Logseq_dom.class_signal (sig_of inst) (fun (s : V.vstate) ->
+      (Logseq_el.class_signal (sig_of inst) (fun (s : V.vstate) ->
            "ls-table-row ls-block"
            ^ if V.Sset.mem row_uuid s.V.selected then " selected" else ""))
     ~attrs:
-      [ ("blockid", row_uuid); ("data-id", row_uuid); ("tabindex", "0") ]
+      [ ("data-blockid", row_uuid); ("data-id", row_uuid); ("tabindex", "0") ]
     ~events:"keydown"
     ~on_dom_event:(table_row_keydown inst ~row_uuid)
     [ (* cljs: .sticky-columns holds pinned cells, sibling .flex.flex-row
@@ -978,7 +978,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
 let row_stream inst cols uuids : t =
  fun ctx parent ->
   let items_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
          inst.V.st.Signal.state_signal)
@@ -1174,7 +1174,7 @@ let list_row_el_sig inst ~row_uuid (item_sig : row_item Signal.signal) : t =
 let foldable inst ~key ~title ~(body : t) : t =
  fun ctx parent ->
   let collapsed_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> V.Sset.mem key s.V.collapsed_groups)
          inst.V.st.Signal.state_signal)
@@ -1230,7 +1230,7 @@ let group_title s gv =
 let list_stream inst uuids : t =
  fun ctx parent ->
   let items_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
          inst.V.st.Signal.state_signal)
@@ -1312,7 +1312,7 @@ let render_gallery inst _s : t =
   grid ~gap:8 ~padding:8 ~columns:4
     [ keyed
         ~source:
-          (Logseq_dom.own ctx
+          (Logseq_el.own ctx
              (Signal.map
                 (fun (s' : V.vstate) -> flat_items s')
                 inst.V.st.Signal.state_signal))

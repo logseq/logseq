@@ -148,7 +148,7 @@ let export_png (st : S.t Signal.state) =
   let cur = S.cur st in
   let selector =
     match cur.S.block_uuids with
-    | u :: _ -> "[blockid='" ^ u ^ "']"
+    | u :: _ -> "[data-blockid='" ^ u ^ "']"
     | [] -> "#main-content-container"
   in
   match Web_dom.query_selector selector with

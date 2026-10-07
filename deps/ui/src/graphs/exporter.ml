@@ -266,10 +266,10 @@ let auto_backup ctx =
                ~value:(T.t "export.backup/unsupported-desc") [] ]
        else
          let folder_sig = (folder_st ctx).Signal.state_signal in
-         Logseq_dom.fragment
-           [ Logseq_dom.if_
+         Logseq_el.fragment
+           [ Lui_elements.if_
                ~test:
-                 (Logseq_dom.own ctx
+                 (Logseq_el.own ctx
                     (Signal.map (fun f -> f <> None) folder_sig))
                (column ~key:"ab-in" ~gap:16
                   [ row ~key:"ab-row" ~gap:4 ~cross:`center
@@ -299,9 +299,9 @@ let auto_backup ctx =
                                   Js.Promise.resolve ()));
                         auto_backup_interval ())
                       [] ])
-           ; Logseq_dom.if_
+           ; Lui_elements.if_
                ~test:
-                 (Logseq_dom.own ctx
+                 (Logseq_el.own ctx
                     (Signal.map (fun f -> f = None) folder_sig))
                (column ~key:"ab-in" ~gap:16
                   [ button ~key:"ab-set"

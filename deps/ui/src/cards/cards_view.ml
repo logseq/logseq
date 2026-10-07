@@ -27,7 +27,7 @@ let opts_box st =
         dropdown_menu ~key:"opts" ~anchor:`below ~anchor_alignment:`start
           ~on_dismiss:(fun _ -> Cards_state.toggle_opts st)
           options)
-    (Logseq_dom.own ctx
+    (Logseq_el.own ctx
        (Signal.map2 (fun a b -> (a, b))
           (Signal.value st.Cards_state.opts_open)
           (Signal.value st.Cards_state.decks))))
@@ -201,10 +201,10 @@ let rec card_view st b phase =
 and keyed_card st b : t =
  fun ctx parent ->
   let item_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun ph -> [ (b, ph) ]) (Signal.value st.Cards_state.phase))
   in
-  Logseq_dom.keyed ~source:item_sig
+  Lui_elements.keyed ~source:item_sig
     ~key:(fun (bb, ph) ->
       Printf.sprintf "%d-%s"
         (Option.value bb.Model.block_db_id ~default:0)
@@ -226,13 +226,13 @@ let cards_body st =
  fun ctx parent ->
   (* each map level owns its upstream subscription on the shared cells *)
   let cp_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map2 (fun a b -> (a, b))
          (Signal.value st.Cards_state.cards)
          (Signal.value st.Cards_state.pos))
   in
   let all_sig =
-    Logseq_dom.own ctx (Signal.value st.Cards_state.all_cards)
+    Logseq_el.own ctx (Signal.value st.Cards_state.all_cards)
   in
   (reactive
     (fun (cards, pos, phase, cur, all) ->
@@ -265,14 +265,14 @@ let cards_body st =
                   ~value:(t_ "flashcard.review/finished") []
               ; box ~key:"btns" ~style_class:"mt-4"
                   [ practice_again_btn st ] ])
-    (Logseq_dom.own ctx
+    (Logseq_el.own ctx
        (Signal.map2
           (fun (a, b) (phase, cur, all) -> (a, b, phase, cur, all))
           cp_sig
-          (Logseq_dom.own ctx
+          (Logseq_el.own ctx
              (Signal.map2
                 (fun (a, b) c -> (a, b, c))
-                (Logseq_dom.own ctx
+                (Logseq_el.own ctx
                    (Signal.map2 (fun x y -> (x, y))
                       (Signal.value st.Cards_state.phase)
                       (Signal.value st.Cards_state.cur)))
@@ -328,5 +328,5 @@ let modal st =
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in
   reactive
-    (fun open_ -> if open_ then modal st else Logseq_dom.nothing)
+    (fun open_ -> if open_ then modal st else Logseq_el.nothing)
     (Signal.value st.Cards_state.open_)

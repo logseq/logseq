@@ -270,7 +270,7 @@ let repos_menu st =
     ~style_class:"ui__dropdown-menu-content repos-list"
     [ column ~key:"wrap"
         ~style_class:(if n_repos <= 1 then "no-repos" else "")
-        [ (if n_repos <= 1 then Logseq_dom.nothing
+        [ (if n_repos <= 1 then Logseq_el.nothing
            else
              row ~key:"hd" ~main:`space_between ~cross:`center
                ~style_class:"repos-hd"
@@ -311,7 +311,7 @@ let menu_host st =
       | "repos" -> repos_menu st
       | m when String.length m > 3 && String.sub m 0 3 = "lp-" ->
           lp_menu st
-      | _ -> Logseq_dom.nothing)
+      | _ -> Logseq_el.nothing)
     menu_sig)
     ctx parent
 
@@ -334,7 +334,7 @@ let shortcut_hint binding =
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
    inner `a.item` also gets `active` when the route matches *)
 let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
-    ?(more = Logseq_dom.nothing) () =
+    ?(more = Logseq_el.nothing) () =
   let act = if active then " active" else "" in
   let tail = match shortcut with Some s -> [ shortcut_hint s ] | None -> [] in
   box ~key ~style_class:(class_ ^ act)
@@ -391,7 +391,7 @@ let nav_items ~active_route (checked, tag_titles) =
                             if n > 0 then
                               text ~style_class:"ml-1 inline-block py-0.5 px-3 text-xs font-medium rounded-full"
                                 ~value:(string_of_int n) []
-                            else Logseq_dom.nothing)
+                            else Logseq_el.nothing)
                           (Cards_state.Due_count.signal ()))
                  ()))
       | "all-pages" ->
@@ -574,7 +574,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                      (fun (p : Model.page) -> (p.page_uuid, p.page_title))
                      b)
                (fun ps ->
-                 if ps = [] && not always_bd then Logseq_dom.nothing
+                 if ps = [] && not always_bd then Logseq_el.nothing
                  else
                    box ~key:(key ^ "-bd") ~style_class:"bd"
                      [ list ~key:(key ^ "-ul") ~style_class:ul_class
@@ -676,7 +676,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
 
 let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  Logseq_dom.fragment [ graphs_selector st ms; nav_group ms st ]
+  Logseq_el.fragment [ graphs_selector st ms; nav_group ms st ]
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in

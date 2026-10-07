@@ -279,20 +279,25 @@ let main_content (ms : Model.t Signal.signal) =
                    | Model.All_pages ->
                        ("data-is-full-width", "true") :: marginless
                    | _ -> marginless) ms)
-            [ Logseq_dom.dom ~key:"content-wrap"
-                ~attrs_signal_v:
-                  (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
-                       (* cljs container.cljs: div.mx-auto.pb-24 around
-                          main-content; home/margin-less routes keep an
-                          empty class + 0 margin *)
-                       match m.route with
-                       | Model.Journals | Model.Home ->
-                           [ ("style", "margin-bottom: 0") ]
-                       | _ ->
-                           [ ("class", "mx-auto pb-24")
-                           ; ("style", "margin-bottom: 120px") ]))
-                [ Page.region ms ]
-            ])
+            [ Ui_parts.class_signal ms
+                (fun (m : Model.t) ->
+                  (* cljs container.cljs: div.mx-auto.pb-24 around
+                     main-content; home/margin-less routes keep an
+                     empty class + 0 margin *)
+                  match m.route with
+                  | Model.Journals | Model.Home -> ""
+                  | _ -> "mx-auto pb-24")
+                (column ~key:"content-wrap"
+                   ~data_attrs_signal:
+                     (Signal.map
+                        (fun (m : Model.t) ->
+                          match m.route with
+                          | Model.Journals | Model.Home ->
+                              [ ("style", "margin-bottom: 0") ]
+                          | _ -> [ ("style", "margin-bottom: 120px") ])
+                        ms)
+                   [ Page.region ms ]) ]
+            )
         ]
     ])
 
@@ -418,7 +423,7 @@ let help_menu_popup () : t =
     ] ]
 
 let help_area (ms : Model.t Signal.signal) : t =
-  Logseq_dom.fragment
+  Logseq_el.fragment
     (* click handler on the OUTER element: the native hit test resolves the
        smallest frame at the point and may land on the wrapper or the svg —
        the document listener walks ancestors, so the handler must sit on

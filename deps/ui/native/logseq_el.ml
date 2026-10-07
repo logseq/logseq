@@ -38,7 +38,10 @@ let tags =
     (* SVG (tabler icons render circle/rect/line/polyline/polygon/g/…
        alongside svg/path) *)
   ; "svg"; "path"; "circle"; "rect"; "line"; "polyline"; "polygon"; "g"
-  ; "defs"; "use"; "ellipse"; "tspan"; "sup" ]
+  ; "defs"; "use"; "ellipse"; "tspan"; "sup"
+    (* native widget tags emitted as family nodes on native hosts — no
+       dedicated schema is registered for them *)
+  ; "em-emoji"; "pdf" ]
 
 let identifier tag = "logseq-" ^ tag
 
@@ -82,12 +85,20 @@ let carrier_schema =
         ]
     ]
 
+(* during migration the logseq-<tag> family is still registered by
+   Logseq_dom.register — this registers only the carrier; when the
+   family dies [register] takes over the tag schemas below *)
 let register registry =
+  Lui_extension.register_component registry carrier_schema
+
+(* full registration for the post-teardown registry: the tag schemas
+   plus the carrier (keep both branches of the handoff in one place) *)
+let register_all registry =
   List.iter
     (fun tag ->
       Lui_extension.register_component registry (schema_of tag))
     tags;
-  Lui_extension.register_component registry carrier_schema
+  register registry
 
 let esc s =
   let b = Buffer.create (String.length s + 2) in

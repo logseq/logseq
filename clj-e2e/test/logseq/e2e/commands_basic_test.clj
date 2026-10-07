@@ -430,7 +430,7 @@
                              (w/-query
                               (format ".ls-block[data-block-title='%s']"
                                       candidate-title)))
-                            "blockid")
+                            "data-blockid")
             candidate-row (format ".custom-query-results :text('%s')"
                                   candidate-title)]
         (is (string? candidate-uuid))

@@ -15,9 +15,9 @@ open Promise_ext
 open Lui_elements
 module T = I18n
 
-let if_ = Logseq_dom.if_
-let keyed = Logseq_dom.keyed
-let fragment = Logseq_dom.fragment
+let if_ = Lui_elements.if_
+let keyed = Lui_elements.keyed
+let fragment = Logseq_el.fragment
 
 type member =
   { m_uuid : string
@@ -330,11 +330,11 @@ let body (_ms : Model.t Signal.signal) : t =
 let widget (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let model_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun (m : Model.t) -> (m.repo, m.rtc)) ms)
   in
   let vis_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun ((repo : string option), (r : Model.rtc option)) ->
            Rtc_flows.refresh_db_rtc_uuid repo;
@@ -344,7 +344,7 @@ let widget (ms : Model.t Signal.signal) : t =
          model_sig)
   in
   (fragment
-     [ if_ ~test:(Logseq_dom.own ctx (Signal.map not vis_sig))
+     [ if_ ~test:(Logseq_el.own ctx (Signal.map not vis_sig))
          (box ~key:"collab-off" ~style_class:"hidden" [])
      ; if_ ~test:vis_sig
          (row ~key:"collab" ~gap:4 ~cross:`center
@@ -357,7 +357,7 @@ let widget (ms : Model.t Signal.signal) : t =
                 []
             ; keyed
                 ~source:
-                  (Logseq_dom.own ctx
+                  (Logseq_el.own ctx
                      (Signal.map
                         (fun ((_, r) : string option * Model.rtc option) ->
                           match r with

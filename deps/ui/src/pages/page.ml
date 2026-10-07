@@ -385,7 +385,7 @@ let title_content (page : Model.page) : t =
     ~id:("block-content-" ^ uuid) ~events:(String.concat " " events)
     ?on_dom_event:on_event
     ~attrs:
-      [ ("blockid", uuid); ("containerid", uuid); ("data-type", "default")
+      [ ("data-blockid", uuid); ("data-containerid", uuid); ("data-type", "default")
       ; ("style", "width: 100%") ]
     [ row ~key:"pt-bci" ~main:`space_between
         [ box ~key:"pt-bh" ~style_class:"block-head-wrap"
@@ -466,16 +466,16 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
              extension *)
           dom ~key:"pt-block"
             ~style_class_signal:
-              (Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
+              (Logseq_el.class_signal (S.selected_sig ()) (fun selected ->
                    if S.String_set.mem uuid selected then
                      "selected ls-block"
                    else "ls-block"))            ~id:("ls-block-" ^ uuid)
             ~attrs:
-              [ ("blockid", uuid); ("containerid", uuid)
+              [ ("data-blockid", uuid); ("data-containerid", uuid)
               ; ("data-block-title", page.page_title)
-              ; ("haschild", "false")
+              ; ("data-haschild", "false")
               ; ("data-comment-item", "false")
-              ; ("data-comments-area", "false"); ("level", "0")
+              ; ("data-comments-area", "false"); ("data-level", "0")
               ; ("data-collapsed", "false")
               ; ( "data-db-collapsable"
                 , if page.Model.page_db_collapsable then "true" else "false" )
@@ -650,14 +650,14 @@ let add_button_el ?puuid
      ".block-add-button" and reads parentblockid — imperative contract *)
   (dom ~key:"bab"
      ~style_class_signal:
-       (Logseq_dom.class_signal fs (fun (has, indented) ->
+       (Logseq_el.class_signal fs (fun (has, indented) ->
             "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
             ^ (if has then "opacity-0" else "opacity-50")
             ^ (if indented then " ls-block-content-indent" else "")))
      ~attrs:
        (("tabindex", "0")
         :: (match puuid with
-            | Some u -> [ ("parentblockid", u) ]
+            | Some u -> [ ("data-parentblockid", u) ]
             | None -> []))
      ~events:"click"
      [ row ~key:"bab-row"
@@ -720,7 +720,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
         dom ~key:"blc" ~style_class:"flex-1"
           ~attrs:
             (match puuid with
-             | Some u -> [ ("containerid", u) ]
+             | Some u -> [ ("data-containerid", u) ]
              | None -> [])
           list_wrap ]
   in
@@ -1034,7 +1034,7 @@ let refs_filtered (refs : Model.block list) q =
 let references_view ?(parents = []) ~search_on ~query
     (refs : Model.block list) : t =
   match refs with
-  | [] -> Logseq_dom.nothing
+  | [] -> Logseq_el.nothing
   | _ ->
       let groups = refs_grouped (refs_filtered refs query) in
       column ~key:"refs" ~style_class:"references"
@@ -1057,7 +1057,7 @@ let references_view ?(parents = []) ~search_on ~query
                                       (fun q ->
                                         Action.Linked_set_query q)
                                       ()
-                                  else Logseq_dom.nothing)
+                                  else Logseq_el.nothing)
                                ]
                            ; column ~key:"rvl" ~gap:8
                                [ ref_groups_virt "rvg" ~parents groups ]
@@ -1072,7 +1072,7 @@ let references_view ?(parents = []) ~search_on ~query
 let journal_references_view (p : Model.page) : t =
   let key = Option.value p.Model.page_uuid ~default:p.Model.page_title in
   match p.Model.page_linked_refs with
-  | [] -> Logseq_dom.nothing
+  | [] -> Logseq_el.nothing
   | refs ->
       column ~key:("jrefs-" ^ key)
         ~style_class:"references"
@@ -1098,7 +1098,7 @@ let unlinked_row (b : Model.block) : t =
            link ~key:("urp-" ^ key)
              ~url:("#/page/" ^ name)
              ~target:`self_ ~text:name []
-       | None -> Logseq_dom.nothing)
+       | None -> Logseq_el.nothing)
     ; Tree.block_row ~scope:"unlinked" b
     ]
 
@@ -1125,7 +1125,7 @@ let unlinked_references_view (m : Model.t) : t =
      :block-unlinked-ref-exists resource is true — independent of the
      fold state, since opening is what triggers the refs fetch *)
   match m.unlinked_exists with
-  | false -> Logseq_dom.nothing
+  | false -> Logseq_el.nothing
   | true ->
   let refs = m.unlinked_refs in
   let filtered =
@@ -1167,7 +1167,7 @@ let unlinked_references_view (m : Model.t) : t =
                              refs_search_input "urefs"
                                (fun q -> Action.Unlinked_set_query q)
                                ()
-                          else Logseq_dom.nothing)
+                          else Logseq_el.nothing)
                         ; column ~key:"urefs-body" ~gap:8
                             ~style_class:"ls-view-body"
                             [ column ~key:"uvl" ~gap:8
@@ -1238,18 +1238,18 @@ let journal_item_sig (ms : Model.t Signal.signal)
      otherwise each mounted journal leaves live subscribers on the
      shared model signal *)
   let blocks_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun (p : Model.page) -> p.Model.page_blocks) ps)
   in
   let nonempty =
-    Logseq_dom.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
+    Logseq_el.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
   in
   let jrefs_eq (a : Model.page) (b : Model.page) =
     a.Model.page_linked_refs == b.Model.page_linked_refs
     && is_today_journal a = is_today_journal b
   in
   Ui_parts.class_signal
-    (Logseq_dom.own ctx (Signal.map2 (fun _ _ -> ()) ps ms))
+    (Logseq_el.own ctx (Signal.map2 (fun _ _ -> ()) ps ms))
     (fun _ ->
       "journal-item content relative"
       ^ if is_last () then " journal-last-item" else "")
@@ -1267,7 +1267,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                         { (Signal.get ms) with
                           Model.editing_title = editing_title }
                         p)
-                    (Logseq_dom.own ctx
+                    (Logseq_el.own ctx
                        (Signal.map2
                           (fun (p : Model.page) (m : Model.t) ->
                             (p, m.Model.editing_title))
@@ -1280,7 +1280,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                       [ ("data-cid", "main"); ("data-pu", key) ]
                     (* cljs plain-block-list emits no .blocks-list-wrap
                        on empty pages *)
-                    [ Logseq_dom.if_ ~test:nonempty
+                    [ Lui_elements.if_ ~test:nonempty
                         (box ~key:"blw"
                            ~style_class:"blocks-list-wrap"
                            ~data_attrs:[ ("data-level", "0") ]
@@ -1323,7 +1323,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
 let journals_view_ms (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let journals_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map (fun (m : Model.t) -> m.Model.journals) ms)
   in
   (box ~key:"journals" ~accessibility_identifier:"journals"
@@ -1333,13 +1333,13 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
             [ box ~key:"jil"
                 ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
-                [ Logseq_dom.if_
+                [ Lui_elements.if_
                     ~test:
-                      (Logseq_dom.own ctx
+                      (Logseq_el.own ctx
                          (Signal.map (fun js -> js = []) journals_sig))
                     (box ~key:"jp" ~padding:24
                        ~style_class:"journal-item-placeholder animate-pulse" [])
-                ; Logseq_dom.keyed ~source:journals_sig
+                ; Lui_elements.keyed ~source:journals_sig
                     ~key:(fun (p : Model.page) ->
                       Option.value p.Model.page_uuid
                         ~default:p.Model.page_title)
@@ -1428,14 +1428,14 @@ let blocks_sig_of (ms : Model.t Signal.signal) =
    touched row instead of re-diffing every mounted block *)
 let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
-  let blocks_sig = Logseq_dom.own ctx (blocks_sig_of ms) in
+  let blocks_sig = Logseq_el.own ctx (blocks_sig_of ms) in
   let nonempty =
-    Logseq_dom.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
+    Logseq_el.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
   in
   let keyed_list =
     box ~key:"blw" ~style_class:"blocks-list-wrap"
       ~data_attrs:[ ("data-level", "0") ]
-      [ Logseq_dom.keyed ~source:blocks_sig ~key:Tree.block_key
+      [ Lui_elements.keyed ~source:blocks_sig ~key:Tree.block_key
           ~cmp:String.compare
           ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true) ]
   in
@@ -1475,12 +1475,12 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
           dom ~key:"blc" ~style_class:"flex-1"
             ~attrs:
               (match puuid with
-               | Some u -> [ ("containerid", u) ]
+               | Some u -> [ ("data-containerid", u) ]
                | None -> [])
-            [ Logseq_dom.if_ ~test:nonempty list_el ]
+            [ Lui_elements.if_ ~test:nonempty list_el ]
         ; add_button_el ?puuid
             ~flags:(fun _ ->
-              Logseq_dom.own ctx
+              Logseq_el.own ctx
                 (Signal.map
                    (fun (m : Model.t) ->
                      match m.Model.route_page with
@@ -1504,7 +1504,7 @@ let title_row (m : Model.t) (page : Model.page) : t =
    direct rows the static build emitted *)
 let top_view (m : Model.t) : t =
   match m.route_page with
-  | None -> Logseq_dom.nothing
+  | None -> Logseq_el.nothing
   | Some page ->
       (match m.route with
        | Model.Block_zoom _ ->
@@ -1571,7 +1571,7 @@ let refs_eq (a : Model.t) (b : Model.t) =
 
 let refs_wrap (m : Model.t) : t =
   match m.route_page with
-  | None -> Logseq_dom.nothing
+  | None -> Logseq_el.nothing
   | Some page ->
       column ~key:"refs-wrap" ~gap:32
         (* cljs page-inner: #today-queries div first on today's journal,
@@ -1586,7 +1586,7 @@ let refs_wrap (m : Model.t) : t =
           ; (* cljs when-not class-page?/property-page? — the unlinked
                section is omitted entirely on node pages *)
             (if page.page_is_tag || page.page_is_property
-             then Logseq_dom.nothing
+             then Logseq_el.nothing
              else box ~key:"urefs" [ unlinked_references_view m ])
           ])
 
@@ -1597,7 +1597,7 @@ let page_tabs_el (m : Model.t) : t =
   match m.Model.route_page with
   | Some p when p.Model.page_is_tag || p.Model.page_is_property -> (
       match p.Model.page_uuid with
-      | None -> Logseq_dom.nothing
+      | None -> Logseq_el.nothing
       | Some uuid ->
           let kind =
             if p.Model.page_is_tag then Views_state.KTagPage uuid
@@ -1612,7 +1612,7 @@ let page_tabs_el (m : Model.t) : t =
                         [ Views_view.view ~kind ~owner:(Wire.Uuid uuid) ] ]
                 ]
             ])
-  | _ -> Logseq_dom.nothing
+  | _ -> Logseq_el.nothing
 
 let page_view_ms (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
