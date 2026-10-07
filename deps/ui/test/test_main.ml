@@ -1356,8 +1356,13 @@ let test_cmdk_groups () =
       (Cmdk_state.group_order v q rows total)
   in
   let v = Cmdk_state.initial_view in
+  (* cljs :default refresh only fires on an input change, so a fresh-open
+     blank palette shows recents alone; the filters group appears once
+     the input has been edited *)
   check "blank input order"
-    (gids v "" [] 0
+    (gids v "" [] 0 = [ Cmdk_state.G_recently_updated ]);
+  check "blank input order after edit"
+    (gids { v with Cmdk_state.edited = true } "" [] 0
      = [ Cmdk_state.G_recently_updated; Cmdk_state.G_filters ]);
   check "query order"
     (gids v "abc" [] 0

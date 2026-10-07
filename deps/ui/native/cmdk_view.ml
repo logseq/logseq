@@ -742,6 +742,18 @@ let palette st : t =
     ~data_attrs:[ ("data-keep-selection", "true") ]
     [ input_row st; scroller st; hints st ]
 
+(* cljs cmdk-block: the :sidebar? variant renders the same cp__cmdk body
+   inside .cp__cmdk__block, without the modal shell and without the hints
+   row ((when-not sidebar? (hints))) *)
+let sidebar ~query : t =
+ fun ctx parent ->
+  let st = S.make_sidebar ctx.Lui_ui.ui_scheduler query in
+  (box ~key:("cmdk-sb-" ^ query)
+     ~style_class:"cp__cmdk"
+     ~data_attrs:[ ("data-keep-selection", "true") ]
+     [ input_row st; scroller st ])
+    ctx parent
+
 (* -- delegated event listeners (installed once per mount) ------------ *)
 
 let int_of_string_opt s =

@@ -270,7 +270,13 @@ let test_cmdk () =
     (find_where (fun n -> has_tok n "cp__cmdk__modal") <> []);
   check "cmdk search input"
     (find_where (fun n -> has_tok n "cp__cmdk-search-input") <> []);
-  (* command items from the static command table arrive synchronously *)
+  (* a fresh-open blank palette shows recents only (cljs :default never
+     fires before the first edit); typing seeds the query — items arrive
+     once the search resolves *)
+  (match !Cmdk_state.latest_st with
+   | Some st -> Cmdk_state.on_input st "a"
+   | None -> check "cmdk state registered" false);
+  flush ();
   let items = cmdk_items () in
   check "cmdk has items" (items <> []);
   (* ArrowDown moves the highlight onto an item *)
@@ -278,6 +284,9 @@ let test_cmdk () =
   flush ();
   let hl = find_attr "data-highlighted" "true" in
   check "cmdk highlight after ArrowDown" (hl <> []);
+  (* first Escape clears the seeded input (cljs clear-or-close), the
+     second closes the modal *)
+  Stub_dom.keydown "Escape";
   Stub_dom.keydown "Escape";
   flush ();
   check "cmdk closed on Escape"

@@ -134,6 +134,7 @@ let make ?(register = true) scheduler : t =
      sidebar cmdk blocks are independent and must not steal the refs *)
   if register then begin
     latest_vs := Some vs.Signal.state_signal;
+    latest_t := Some st;
     latest_st := Some st
   end;
   st
@@ -703,12 +704,16 @@ let upsert_create v =
     { gid = G_create; gtitle = ""; gitems = create_items v.input
     ; gtotal = 0; glimit = 1; gexpanded = false; gfilter_active = false }
   in
-  (* cljs filtered order puts create after the filtered group *)
+  (* cljs filtered order puts create after the filtered group.
+     renumber here too: until the search lands there is no apply_results
+     pass, and hl addresses items by idx — an unnumbered create row
+     could never be highlighted *)
   { v with
     groups =
-      (match v.filter with
-       | Some _ -> others @ [ g ]
-       | None -> g :: others)
+      renumber
+        (match v.filter with
+         | Some _ -> others @ [ g ]
+         | None -> g :: others)
   }
 
 (* cljs load-results :initial — recently-updated pages from storage ids *)

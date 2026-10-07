@@ -533,6 +533,29 @@ let push_item st it =
     Runtime.signal_set st.items (items @ [ it ])
   end
 
+(* cljs sidebar-add-block! :search — a cmdk-block pane pinned to the
+   right sidebar, one per query *)
+let add_search_item st q =
+  let key = "search-" ^ q in
+  if has_item st key then ()
+  else begin
+    ensure_right_open ();
+    push_item st
+      { key
+      ; kind = "search"
+      ; uuid = None
+      ; title = q
+      ; icon = Some ("search", "gray")
+      ; breadcrumb = []
+      ; blocks = []
+      ; linked_refs = []
+      ; page_ref = None
+      ; page = None
+      ; props_collapsed = true
+      ; collapsed = false
+      }
+  end
+
 let remove_item st key =
   Runtime.signal_set st.items
     (List.filter (fun (i : item) -> i.key <> key)
