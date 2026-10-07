@@ -86,7 +86,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
      accessibility_identifier carries the stable anchor *)
   Ui_parts.class_signal current_sig
     (fun cur -> "ls-view-tab" ^ if cur then "" else " ls-dim")
-    (button ~variant:`ghost ~size:`sm
+    (button ~variant:`ghost ~size:`sm ~label:v0.Wr.vtitle
        ~accessibility_identifier:(view_tab_anchor_id inst v0)
        ~on_press:(fun _ ->
          let v = Signal.get v_sig in
@@ -525,7 +525,7 @@ and mk_group_sort inst ident label =
         V.persist_group_sort_by_ident inst ident (fun () -> refresh inst) )
 
 let more_actions_el inst : t =
-  button ~variant:`ghost ~size:`sm ~icon:`ellipsis
+  button ~variant:`ghost ~size:`sm ~icon:`ellipsis ~label:(I.t "header/more")
     ~style_class:"ls-icon-btn"
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst) []
@@ -694,7 +694,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
         [ box 
             [ box ~style_class:"ls-view-filter-value-item"
                 [ text ~value:(filter_value_label inst f) [] ] ] ]
-    ; button ~variant:`ghost ~size:`icon ~icon:`x
+    ; button ~variant:`ghost ~size:`icon ~icon:`x ~label:I.delete
         ~style_class:"ls-vf-chip-x"
         ~on_press:(fun _ ->
           V.update inst (fun s ->
@@ -779,7 +779,7 @@ let render_head inst : t =
         (fun d -> "view-actions" ^ if d then " ls-dim" else " ls-lit")
         (row ~key:"actions"
            [ (if s0.V.sorting <> [] then
-                button ~variant:`ghost ~size:`sm
+                button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
                   ~icon:(Views_table.icon_of "arrows-up-down")
                   ~style_class:"ls-icon-btn"
                   ~accessibility_identifier:
@@ -793,7 +793,7 @@ let render_head inst : t =
                     | None -> ())
                   []
               else spacer ~key:"no-sort" [])
-           ; button ~variant:`ghost ~size:`sm
+           ; button ~variant:`ghost ~size:`sm ~label:I.filter
                ~icon:(Views_table.icon_of "filter")
                ~style_class:"ls-icon-btn"
                ~accessibility_identifier:

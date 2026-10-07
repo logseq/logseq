@@ -579,21 +579,19 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
           (* opens on hover — cm_hover finds it by the cm-sub-<i> id;
              role=menuitem rides data_attrs (the kind's ~role variant
              list doesn't cover it) *)
-          menu_item ~key:"sub"
+          menu_item ~key:"sub" ~text:label
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
             ~data_attrs:[ ("role", "menuitem") ]
-            [ text ~key:"lbl" ~value:label []
-            ; icon ~key:"chev" ~name:`chevron_right
+            [ icon ~key:"chev" ~name:`chevron_right
                 ~style_class:"ls-menu-chevron" [] ]
       | S.Ci_item (label, scut, cmd) ->
-          menu_item ~key:"item" ~style_class:cm_item_cls
+          menu_item ~key:"item" ~style_class:cm_item_cls ~text:label
             ~data_attrs:[ ("role", "menuitem") ]
             ~on_press:(fun _ -> run_cm_item st cmd)
-            (text ~key:"lbl" ~value:label []
-             :: (match scut with
-                 | Some s -> [ cm_shortcut_el s ]
-                 | None -> [])))
+            (match scut with
+             | Some s -> [ cm_shortcut_el s ]
+             | None -> []))
         (Logseq_dom.own context (Signal.map snd entry_sig)) ]
     context parent
 ;;
@@ -601,13 +599,12 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
 let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
   match it with
   | S.Ci_item (label, scut, cmd) ->
-      menu_item ~key:"sub-item" ~style_class:cm_item_cls
+      menu_item ~key:"sub-item" ~style_class:cm_item_cls ~text:label
         ~data_attrs:[ ("role", "menuitem") ]
         ~on_press:(fun _ -> run_cm_item st cmd)
-        (text ~key:"lbl" ~value:label []
-         :: (match scut with
-             | Some s -> [ cm_shortcut_el s ]
-             | None -> []))
+        (match scut with
+         | Some s -> [ cm_shortcut_el s ]
+         | None -> [])
   | _ -> spacer ~key:"x" []
 ;;
 

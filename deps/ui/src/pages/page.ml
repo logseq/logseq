@@ -428,6 +428,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       ~style_class:"ls-page-icon"
                                       [ button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
+                                          ~label:(I18n.t "context-menu/set-icon")
                                           ~style_class:"ui__button as-ghost"
                                           ~on_press:(fun _ ->
                                             page_icon_picker page
@@ -713,7 +714,7 @@ let refs_view_head key ?on_search title count : t =
                 ]
             ]
         ; button ~key:"vh-menu" ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots")
+            ~icon:(`app "dots") ~label:(I18n.t "header/more")
             ~style_class:"ui__button as-ghost ls-dots-menu"
             []
         ]

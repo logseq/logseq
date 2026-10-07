@@ -573,6 +573,7 @@ let search_only_chip st (gid : S.group_id) =
             ~style_class:"cp__cmdk-search-only-name"
             ~value:(gid_label gid) []
         ; button ~key:"clr" ~icon:`x ~size:`icon
+            ~label:(I18n.t "ui/delete")
             ~style_class:"cp__cmdk-search-only-clear"
             ~on_press:(fun _ -> S.clear_filter st)
             []
@@ -668,7 +669,7 @@ let shortcut_el keys =
     (interleave kids)
 
 let hint_button label keys =
-  button ~key:("hb-" ^ label)
+  button ~key:("hb-" ^ label) ~label
     ~style_class:"cp__cmdk-hint"
     [ text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label []
     ; hint_shortcut keys ]

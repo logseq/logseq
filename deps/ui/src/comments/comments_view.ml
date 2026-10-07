@@ -91,7 +91,7 @@ let reactions_el uuid (rs : (string * int) list) : t =
       row ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
         (List.map
            (fun (emoji_id, count) ->
-             button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id)
+             button ~key:("rxb-" ^ uuid ^ "-" ^ emoji_id) ~label:emoji_id
                ~on_press:(fun _ -> toggle_reaction uuid emoji_id)
                [ Logseq_emoji.el
                    ~key:("rxe-" ^ uuid ^ "-" ^ emoji_id)
@@ -247,6 +247,7 @@ let header st (area_uuid : string) (count : int) (targets : int) : t =
     @
     if targets > 1 then
       [ button ~key:("ct-" ^ area_uuid)
+          ~label:(I.t "block.comments/on-those-blocks")
           ~variant:`ghost
           ~on_press:(fun _ ->
             let v = Signal.get_state st in

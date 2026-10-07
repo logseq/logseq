@@ -219,6 +219,7 @@ let item_header st idx (it : Sidebar_state.item) =
   row ~key:("hd-" ^ it.key) ~main:`space_between
     ~style_class:"sidebar-item-header color-level"
     [ button ~key:("hdr-" ^ it.key) ~grow:1. ~padding_horizontal:8
+        ~label:it.Sidebar_state.title
         ~accessibility_identifier:("sidebar-panel-header-" ^ n)
         ~on_press:(fun _ -> Sidebar_state.toggle_collapsed st it.key)
         [ row ~key:("arrow-" ^ it.key) ~cross:`center
@@ -232,7 +233,7 @@ let item_header st idx (it : Sidebar_state.item) =
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
         [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots")
+            ~icon:(`app "dots") ~label:(I18n.t "sidebar.right/more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32
