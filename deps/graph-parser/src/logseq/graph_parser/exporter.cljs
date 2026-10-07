@@ -41,6 +41,7 @@
             [logseq.graph-parser.exporter.finalize :as exporter-finalize]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.import-profile :as import-profile]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
             [promesa.core :as p]))
@@ -1425,6 +1426,27 @@
      ast-blocks)
     @results))
 
+(defn- maybe-asset-link-text?
+  "Cheap filter before parsing property values for asset links."
+  [s]
+  (and (string? s)
+       (or (string/includes? s "assets/")
+           (string/includes? s "assets\\")
+           (string/includes? (string/lower-case s) ".pdf")
+           (string/includes? s "zotero"))))
+
+(defn- asset-links-from-text
+  [user-config text format]
+  (when (maybe-asset-link-text? text)
+    (:asset-links (walk-ast-blocks user-config
+                                   (gp-mldoc/inline->edn text (gp-mldoc/default-config (or format :markdown)))))))
+
+(defn- property-value-asset-title?
+  [pvalue]
+  (and (map? pvalue)
+       (:logseq.property/created-from-property pvalue)
+       (maybe-asset-link-text? (:block/title pvalue))))
+
 (defn- handle-queries
   "If a block contains a simple or advanced queries, converts block to a #Query node. If a block
    contains a cards query converts to a #Cards node"
@@ -1905,6 +1927,44 @@
           (assoc :asset-blocks-tx asset-blocks)))
       (p/resolved {:block block}))))
 
+(defn- import-user-config
+  [options]
+  (or (:user-config options)
+      (get-in options [:extract-options :user-config])
+      {}))
+
+(defn- options-file-format
+  [options]
+  (if (= "org" (some-> (:file options) path/file-ext)) :org :markdown))
+
+(defn- asset-handle-opts
+  [options]
+  (-> (select-keys options [:log-fn :notify-user :<get-file-stat])
+      (assoc :user-config (import-user-config options)
+             :format (options-file-format options))))
+
+(defn- <handle-assets-in-property-value
+  [pvalue import-state opts]
+  (if-let [asset-links (seq (asset-links-from-text (:user-config opts)
+                                                   (:block/title pvalue)
+                                                   (:format opts)))]
+    (<handle-assets-in-block pvalue {:asset-links (vec asset-links)} import-state opts)
+    (p/resolved {:block pvalue})))
+
+(defn- <handle-assets-in-property-values
+  "Convert asset markdown links in property value entities the same way block
+   bodies are converted, and create the referenced Asset entities."
+  [pvalues-tx import-state opts]
+  (if (some property-value-asset-title? pvalues-tx)
+    (p/let [results (p/all (mapv (fn [pvalue]
+                                   (if (property-value-asset-title? pvalue)
+                                     (<handle-assets-in-property-value pvalue import-state opts)
+                                     (p/resolved {:block pvalue})))
+                                 pvalues-tx))]
+      {:pvalues-tx (mapv :block results)
+       :asset-blocks-tx (into [] (mapcat :asset-blocks-tx) results)})
+    (p/resolved {:pvalues-tx pvalues-tx :asset-blocks-tx []})))
+
 (defn- hls-annotation-md-file?
   [file]
   (string/starts-with? (str (path/basename file)) "hls__"))
@@ -2250,19 +2310,28 @@
     (complete-block-tx-data db block* (:block-after-built-in-props core) pre-blocks per-file-state
                             walked-ast-blocks options core nil)))
 
+(defn- <complete-block-tx-with-assets
+  [db block* pre-blocks per-file-state walked-ast-blocks options core]
+  (let [asset-opts (asset-handle-opts options)
+        import-state (:import-state options)]
+    (p/let [{block-after-assets :block :keys [asset-blocks-tx]}
+            (if (seq (:asset-links walked-ast-blocks))
+              (<handle-assets-in-block (:block-after-built-in-props core)
+                                       walked-ast-blocks
+                                       import-state
+                                       asset-opts)
+              (p/resolved {:block (:block-after-built-in-props core)}))
+            {:keys [pvalues-tx] pvalue-asset-tx :asset-blocks-tx}
+            (<handle-assets-in-property-values (:properties-tx core) import-state asset-opts)]
+      (complete-block-tx-data db block* block-after-assets pre-blocks per-file-state
+                              walked-ast-blocks options
+                              (assoc core :properties-tx pvalues-tx)
+                              (concat asset-blocks-tx pvalue-asset-tx)))))
+
 (defn- <build-block-tx
   [db block* pre-blocks per-file-state walked-ast-blocks options]
-  (let [core (build-block-tx-core db block* pre-blocks per-file-state walked-ast-blocks options)]
-    (if (seq (:asset-links walked-ast-blocks))
-      (p/let [{block-after-assets :block :keys [asset-blocks-tx]}
-              (<handle-assets-in-block (:block-after-built-in-props core)
-                                      walked-ast-blocks
-                                      (:import-state options)
-                                      (select-keys options [:log-fn :notify-user :<get-file-stat :user-config]))]
-        (complete-block-tx-data db block* block-after-assets pre-blocks per-file-state
-                                  walked-ast-blocks options core asset-blocks-tx))
-      (p/resolved (complete-block-tx-data db block* (:block-after-built-in-props core) pre-blocks
-                                          per-file-state walked-ast-blocks options core nil)))))
+  (<complete-block-tx-with-assets db block* pre-blocks per-file-state walked-ast-blocks options
+                                  (build-block-tx-core db block* pre-blocks per-file-state walked-ast-blocks options)))
 
 (defn- update-page-alias
   [m page-names-to-uuids]
@@ -2347,6 +2416,15 @@
 (defn- block-has-asset-links?
   [walked-by-uuid block]
   (seq (:asset-links (get walked-by-uuid (:block/uuid block)))))
+
+(defn- block-has-property-asset-links?
+  [block]
+  (boolean (some maybe-asset-link-text? (vals (:block/properties-text-values block)))))
+
+(defn- block-needs-async-asset-handling?
+  [walked-by-uuid block]
+  (or (block-has-asset-links? walked-by-uuid block)
+      (block-has-property-asset-links? block)))
 
 (defn- block-uuid-ref?
   [ref]
@@ -2989,7 +3067,7 @@
     (p/loop [tx-data []
              blocks blocks']
       (if-let [block (first blocks)]
-        (if (block-has-asset-links? walked-by-uuid block)
+        (if (block-needs-async-asset-handling? walked-by-uuid block)
           (p/let [block-tx-data (<build-block-tx @conn block pre-blocks per-file-state
                                                  (get walked-by-uuid (:block/uuid block))
                                                  tx-options)]
@@ -3031,6 +3109,19 @@
           :current-journal-created-at (journal-file-created-at file)
           :preserve-empty-property-block-uuids preserve-empty-properties-uuids}))
 
+(defn- <build-pages-and-property-assets
+  [conn pages blocks tx-options]
+  (p/let [{:keys [pages-tx page-properties-tx per-file-state existing-pages]}
+          (build-pages-tx conn pages blocks tx-options)
+          {:keys [pvalues-tx asset-blocks-tx]}
+          (<handle-assets-in-property-values page-properties-tx
+                                             (:import-state tx-options)
+                                             (asset-handle-opts tx-options))]
+    {:pages-tx pages-tx
+     :page-properties-tx (concat pvalues-tx asset-blocks-tx)
+     :per-file-state per-file-state
+     :existing-pages existing-pages}))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph.
 
@@ -3048,16 +3139,14 @@
           _ (log-phase-ms! log-fn :parse parse-start {:file file})
           prep-start (when log-fn (import-profile/now-ms))
           {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
-          walked-by-uuid (index-walked-ast-blocks (or (:user-config options)
-                                                      (get-in options [:extract-options :user-config])
-                                                      {})
-                                                blocks)
+          walked-by-uuid (index-walked-ast-blocks (import-user-config options) blocks)
           tx-options (file-graph-tx-options options pages file preserve-empty-properties-uuids)
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           _ (log-phase-ms! log-fn :prep prep-start {:file file})
           _ (import-progress! options {:phase :pages-tx :file file})
           pages-start (when log-fn (import-profile/now-ms))
-          {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
+          {:keys [pages-tx page-properties-tx per-file-state existing-pages]}
+          (<build-pages-and-property-assets conn pages blocks tx-options)
           _ (log-phase-ms! log-fn :pages-tx pages-start {:file file})
           pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
           _ (import-progress! options {:phase :blocks-tx :file file})

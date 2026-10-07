@@ -1143,6 +1143,53 @@ abc
         (p/finally (fn [_]
                      (set! (.-write (.-stderr js/process)) original-stderr-write))))))
 
+(deftest-async import-asset-links-in-page-and-block-property-values
+  (let [pdf-bytes "%PDF-1.1\n%%EOF\n"
+        graph-dir (write-temp-file-graph
+                   {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}"
+                    "pages/Vertrag.md"
+                    (str "url:: ![Anlage 1.pdf](../assets/Anlage_1_1700757846845_0.pdf)\n\n"
+                         "- page with asset in property\n"
+                         "- body link ![Body.pdf](../assets/Body_1700757846845_0.pdf)\n")
+                    "pages/Block_Prop.md" "- block\n  Link:: ![x.pdf](../assets/x.pdf)\n"
+                    "assets/Anlage_1_1700757846845_0.pdf" pdf-bytes
+                    "assets/Body_1700757846845_0.pdf" pdf-bytes
+                    "assets/x.pdf" pdf-bytes})]
+    (p/let [conn (db-test/create-conn)
+            assets (atom [])
+            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})
+            page-asset (db-test/find-block-by-content @conn "Anlage_1_1700757846845_0")
+            block-asset (db-test/find-block-by-content @conn "x")
+            body-asset (db-test/find-block-by-content @conn "Body_1700757846845_0")
+            page (db-test/find-page-by-title @conn "Vertrag")
+            block (db-test/find-block-by-content @conn "block")
+            body-block (db-test/find-block-by-content @conn #"body link")]
+      (is (some? page-asset) "Page property PDF becomes an Asset")
+      (is (some? block-asset) "Block property PDF becomes an Asset")
+      (is (some? body-asset) "Body PDF still becomes an Asset")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"}
+             (select-keys (db-test/readable-properties page-asset)
+                          [:block/tags :logseq.property.asset/type]))
+          "Page property asset has correct type")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"}
+             (select-keys (db-test/readable-properties block-asset)
+                          [:block/tags :logseq.property.asset/type]))
+          "Block property asset has correct type")
+      (is (= (page-ref/->page-ref (:block/uuid page-asset))
+             (:user.property/url (db-test/readable-properties page)))
+          "Page property value references the imported asset")
+      (is (= (page-ref/->page-ref (:block/uuid block-asset))
+             (:user.property/link (db-test/readable-properties block)))
+          "Block property value references the imported asset")
+      (is (= (str "body link " (page-ref/->page-ref (:block/uuid body-asset)))
+             (:block/title body-block))
+          "Body asset links are unchanged")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
 (deftest extract-template-blocks
   (let [page-uuid (random-uuid)
         parent-uuid (random-uuid)
