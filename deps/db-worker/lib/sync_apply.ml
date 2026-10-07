@@ -420,6 +420,7 @@ let item_nth (item : Wire.t) i = Db_normalize.nth_wire item i
 let tx_item_block_uuid (db : db) (v : Wire.t) : string option =
   match v with
   | Wire.Uuid s -> Some s
+  | Wire.String s when Sync_state.uuid_string s -> Some s
   | Wire.Array [ a; u ] | Wire.List [ a; u ]
     when a = Wire.keyword "block/uuid" ->
       uuid_str_of_wire u
@@ -494,6 +495,27 @@ let rec block_uuid_refs_deep (w : Wire.t) : string list =
       | Wire.Tagged (_, v) -> block_uuid_refs_deep v
       | _ -> [])
 
+let ref_attr (db : db) (attr : attr) : bool =
+  Schema.schema_attr_is_ref (Datascript.schema db) attr
+  || Db_normalize.entity_value_type_ref db attr
+
+(* e-position bare uuid forms — normalized tx entries emit the entity
+   position as a uuid string/keyword-less value (not the [:block/uuid u]
+   lookup-ref shape). An unresolvable one is a missing ref exactly like a
+   lookup-ref miss: without this, `db/add` onto it registers the string
+   as a tempid and materializes a uuid-less shell entity. Value-position
+   bare uuids are NOT refs (a [:db/add e :block/uuid u] value creates u),
+   so this applies only to the entity slot. *)
+let entity_pos_uuid (e : Wire.t) : string option =
+  match block_uuid_lookup_ref_value e with
+  | Some u -> Some u
+  | None -> (
+      match e with
+      | Wire.Uuid u -> Some (Datascript.Util.uuid_canonicalize u)
+      | Wire.String s when Sync_state.uuid_string s ->
+          Some (Datascript.Util.uuid_canonicalize s)
+      | _ -> None)
+
 let tx_item_ref_block_uuids (item : Wire.t) : string list =
   (* cljs inspects (second item) and (nth item 3 nil) on ANY vector —
      short ops like [:db/retractEntity [:block/uuid u]] carry the ref at
@@ -501,59 +523,147 @@ let tx_item_ref_block_uuids (item : Wire.t) : string list =
      deep walk additionally covers refs inside coll values *)
   match item with
   | Wire.Array l | Wire.List l when List.length l >= 2 ->
-      List.filter_map block_uuid_lookup_ref_value
-        (List.nth l 1
-         :: (if List.length l >= 4 then [ List.nth l 3 ] else []))
+      List.filter_map entity_pos_uuid [ List.nth l 1 ]
+      @ List.filter_map block_uuid_lookup_ref_value
+          (if List.length l >= 4 then [ List.nth l 3 ] else [])
       @ block_uuid_refs_deep item
   | _ -> block_uuid_refs_deep item
-
-let tx_data_has_block_uuid_ref (tx_data : Wire.t list) : bool =
-  List.exists (fun item -> tx_item_ref_block_uuids item <> []) tx_data
 
 let tx_item_retract_entity_block_uuid (item : Wire.t) : string option =
   match item with
   | Wire.Array [ op; e ] | Wire.List [ op; e ]
-    when op = Wire.keyword "db/retractEntity" || op = Wire.keyword "db.fn/retractEntity" ->
-      block_uuid_lookup_ref_value e
+    when op = Wire.keyword "db/retractEntity" || op = Wire.keyword "db.fn/retractEntity" -> (
+      match block_uuid_lookup_ref_value e with
+      | Some u -> Some u
+      | None -> (
+          (* verbatim txs carry the e-position as a bare uuid string —
+             a lookup-ref matcher alone misses those and remote-deleted
+             tracking never records the delete *)
+          uuid_str_of_wire e))
+  | Wire.Array [ op; _; a; v ] | Wire.List [ op; _; a; v ]
+    when op = Wire.keyword "db/retract" && a = Wire.keyword "block/uuid" -> (
+      (* a journaled entity delete lands as a plain datom retract of the
+         uuid attr — without counting it, remote-deleted tracking never
+         sees the delete and a later verbatim confirm resurrects the
+         entity *)
+      match block_uuid_lookup_ref_value v with
+      | Some u -> Some u
+      | None -> uuid_str_of_wire v)
   | _ -> None
 
 (* set ops on string lists *)
 module SSet = Set.Make (String)
+
+(* keys for the confirmed-asserted set: subject and ref values
+   normalize to block/uuid strings so a pending row's eid/lookup-ref
+   forms and the confirmed datom forms collide on the same key; plain
+   values serialize through the transit codec for the same reason.
+   "eid:"/raw-wire fallbacks keep unresolvable subjects distinct *)
+let asserted_e_key_of_wire (db : db) (e : Wire.t) : string =
+  match tx_item_block_uuid db e with
+  | Some u -> "u" ^ u
+  | None -> "w" ^ Transit_codec.to_string e
+
+let asserted_v_key_of_wire (db : db) (a : string) (v : Wire.t) : string =
+  if Ldb.ref_attr db a then
+    match tx_item_block_uuid db v with
+    | Some u -> "r" ^ u
+    | None -> "w" ^ Transit_codec.to_string v
+  else "v" ^ Transit_codec.to_string v
+
+let asserted_key_of_item (db : db) (e : Wire.t) (a : string) (v : Wire.t)
+    : string =
+  asserted_e_key_of_wire db e ^ "" ^ a ^ ""
+  ^ asserted_v_key_of_wire db a v
+
+let asserted_key_of_datom (db : db) (d : datom) : string option =
+  let e_key =
+    match Datascript.entity db (Entity_id d.e) with
+    | Some ent -> (
+        match Datascript.entity_attr ent "block/uuid" with
+        | Some (One_value (Uuid u)) -> "u" ^ u
+        | _ -> "i" ^ string_of_int d.e)
+    | None -> "i" ^ string_of_int d.e
+  in
+  let v_key =
+    match d.v with
+    | Ref eid -> (
+        match Datascript.entity db (Entity_id eid) with
+        | Some ent -> (
+            match Datascript.entity_attr ent "block/uuid" with
+            | Some (One_value (Uuid u)) -> Some ("r" ^ u)
+            | _ -> None)
+        | None -> None)
+    | _ -> Some ("v" ^ Transit_codec.to_string (Ds_wire.transit_of_value d.v))
+  in
+  match v_key with
+  | Some vk -> Some (e_key ^ "" ^ d.a ^ "" ^ vk)
+  | None -> None
+
+(* fold applied confirmed items into remote_asserted: db/add and db/cas
+   assert, db/retract and retractEntity rescind. Items that never made
+   it through the apply pipeline are absent — record exactly what
+   transacted. Call on the server conn only *)
+let record_remote_asserted (db : db) (repo : string) (items : Wire.t list)
+    : unit =
+  let keys = ref (Sync_state.remote_asserted repo) in
+  let add_e_prefix k pref =
+    String.length k > String.length pref
+    && String.sub k 0 (String.length pref) = pref
+  in
+  List.iter
+    (fun (item : Wire.t) ->
+       match item with
+       | Wire.Array (op :: e :: _)
+       | Wire.List (op :: e :: _)
+         when op = Wire.keyword "db/retractEntity"
+              || op = Wire.keyword "db.fn/retractEntity" ->
+           let pref = asserted_e_key_of_wire db e ^ "" in
+           keys := SSet.filter (fun k -> not (add_e_prefix k pref)) !keys
+       | Wire.Array (op :: e :: a_w :: v_w :: _)
+       | Wire.List (op :: e :: a_w :: v_w :: _)
+         when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract"
+              || op = Wire.keyword "db/cas" -> (
+           match a_w with
+           | Wire.Keyword a | Wire.Symbol a -> (
+               let v' =
+                 if op = Wire.keyword "db/cas" then
+                   match item with
+                   | Wire.Array (_ :: _ :: _ :: _ :: nv :: _)
+                   | Wire.List (_ :: _ :: _ :: _ :: nv :: _) -> nv
+                   | _ -> v_w
+                 else v_w
+               in
+               let k = asserted_key_of_item db e a v' in
+               if op = Wire.keyword "db/retract" then
+                 keys := SSet.remove k !keys
+               else keys := SSet.add k !keys)
+           | _ -> ())
+       | _ -> ())
+    items;
+  Sync_state.set_remote_asserted repo !keys
+
+
 module Int_set = Set.Make (Int)
 
-let remote_txs_retract_entity_block_uuid_suffixes (remote_txs : Wire.t list)
-    : SSet.t list =
-  (* cljs reduces over (reverse remote-txs) prepending each accumulated
-     delete set, so the resulting list is already aligned with the forward
-     remote-txs order: suffix i = deletes from tx i through the last tx. *)
-  let _, suffixes =
-    List.fold_left
-      (fun (deleted, suffixes) remote_tx ->
-         let tx_items =
-           match Wire.get "tx-data" remote_tx with
-           | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
-           | _ -> []
-         in
-         let deleted' =
-           List.fold_left
-             (fun acc item ->
-                match tx_item_retract_entity_block_uuid item with
-                | Some u -> SSet.add u acc
-                | None -> acc)
-             deleted tx_items
-         in
-         (deleted', deleted' :: suffixes))
-      (SSet.empty, []) (List.rev remote_txs)
-  in
-  suffixes
-
-let tx_item_missing_deleted_block_ref (db : db) (deleted : SSet.t)
-    (item : Wire.t) : bool =
-  List.exists
-    (fun block_uuid ->
-       SSet.mem block_uuid deleted
-       && Outliner_op.entity_of_uuid db block_uuid = None)
-    (tx_item_ref_block_uuids item)
+(* bare uuid-string/Uuid values under a ref attr are entity refs too —
+   block_uuid_refs_deep only sees [:block/uuid _] lookup arrays, so a
+   normalized item carrying [:db/add e user.property/X "<uuid>"] slips
+   past the detectors; left unresolvable, datascript registers the
+   string as a value-only tempid and crashes the whole tx *)
+let tx_item_ref_value_uuids (db : db) (item : Wire.t) : string list =
+  match item with
+  | Wire.Array (_ :: _ :: a :: rest) | Wire.List (_ :: _ :: a :: rest) -> (
+      match a with
+      | (Wire.Keyword attr | Wire.String attr) when ref_attr db attr ->
+          List.filter_map
+            (fun v ->
+               match uuid_str_of_wire v with
+               | Some u -> Some (Datascript.Util.uuid_canonicalize u)
+               | None -> None)
+            rest
+      | _ -> [])
+  | _ -> []
 
 let tx_item_missing_block_ref ?(display_db : db option) (db : db)
     (created : SSet.t) (item : Wire.t) : bool =
@@ -565,7 +675,7 @@ let tx_item_missing_block_ref ?(display_db : db option) (db : db)
        match display_db with
        | Some ddb -> Outliner_op.entity_of_uuid ddb block_uuid = None
        | None -> true)
-    (tx_item_ref_block_uuids item)
+    (tx_item_ref_block_uuids item @ tx_item_ref_value_uuids db item)
 
 let tx_item_entity_block_uuid ?(temp_id_uuid = Hashtbl.create 0)
     (db : db) (item : Wire.t) : string option =
@@ -601,25 +711,6 @@ let tx_temp_id_uuid (tx_data : Wire.t list) : (string, string) Hashtbl.t =
        | None -> ())
     tx_data;
   tbl
-
-let drop_stale_deleted_block_ref_ops (db : db) (deleted : SSet.t)
-    (tx_data : Wire.t list) : Wire.t list =
-  let temp_id_uuid = tx_temp_id_uuid tx_data in
-  let stale_entity_uuids =
-    List.filter_map
-      (fun item ->
-         if tx_item_missing_deleted_block_ref db deleted item then
-           tx_item_entity_block_uuid ~temp_id_uuid db item
-         else None)
-      tx_data
-    |> List.fold_left (fun s u -> SSet.add u s) SSet.empty
-  in
-  List.filter
-    (fun item ->
-       match tx_item_entity_block_uuid ~temp_id_uuid db item with
-       | Some u -> not (SSet.mem u stale_entity_uuids)
-       | None -> true)
-    tx_data
 
 let drop_missing_block_ref_ops ?(display_db : db option) (db : db)
     (tx_data : Wire.t list) : Wire.t list =
@@ -705,10 +796,6 @@ let upload_tempid (v : Wire.t) : bool =
   | Wire.Int n -> n < 0
   | Wire.String _ -> true
   | _ -> false
-
-let ref_attr (db : db) (attr : attr) : bool =
-  Schema.schema_attr_is_ref (Datascript.schema db) attr
-  || Db_normalize.entity_value_type_ref db attr
 
 (* [a v] lookup-refs such as [:block/uuid u]: when the same ref appears in a
    ref-attr value position elsewhere in the tx, datoms whose entity position
@@ -1108,15 +1195,36 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
       match Datascript.entity db (Ds_wire.entity_ref_of_transit e) with
       | Some ent -> (
           match Ldb.ref_ent ent "block/page" with
-          | Some page -> Some (Wire.Int page.id)
+          | Some page -> (
+              (* a bare local eid on the wire resolves against the wrong
+                 db — send the uuid lookup-ref (or ident) instead *)
+              match Db_normalize.entity_block_uuid page with
+              | Some u ->
+                  Some (Wire.Array [ Wire.keyword "block/uuid"; u ])
+              | None -> Db_normalize.entity_ident page)
           | None -> None)
       | None -> None
     with _ -> None
   in
-  let rewritten =
-    List.filter_map
-      (fun item ->
-         match item with
+  (* e-key -> uuid for entities this entry creates — a
+     [:db/add e :block/uuid u] item. The server has no prior state for
+     such an entity, so when one of its items is dropped as unresolvable
+     the whole entry must fail rather than land a partial shell *)
+  let created_e_keys : (string, string) Hashtbl.t = Hashtbl.create 8 in
+  List.iter
+    (fun item ->
+       match item with
+       | Wire.Array l | Wire.List l
+         when List.length l >= 4
+              && List.nth l 0 = Wire.keyword "db/add"
+              && List.nth l 2 = Wire.keyword "block/uuid" ->
+           Hashtbl.replace created_e_keys
+             (Transit_codec.to_string (List.nth l 1))
+             (Transit_codec.to_string (List.nth l 3))
+       | _ -> ())
+    items;
+  let keep_item (item : Wire.t) : Wire.t option =
+    match item with
          | Wire.Array l | Wire.List l when List.length l >= 2 -> (
              (* e-position inspection must cover short ops too —
                 [:db/retractEntity [:block/uuid u]] is a no-op on the
@@ -1235,23 +1343,53 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
              else if kept = kvs then Some item
              else if kept = [] then None
              else Some (Wire.Map kept)
-         | _ -> Some item)
+         | _ -> Some item
+  in
+  let dropped = ref [] in
+  let rewritten =
+    List.filter_map
+      (fun item ->
+         match keep_item item with
+         | Some _ as r -> r
+         | None -> dropped := item :: !dropped; None)
       items
   in
   let rewritten =
     if Hashtbl.length parent_edge_dropped = 0 then rewritten
     else
-      List.filter
+      List.filter_map
         (fun item ->
            match item with
            | Wire.Array (op :: e :: a :: _) | Wire.List (op :: e :: a :: _)
              when op = Wire.keyword "db/retract"
                   && a = Wire.keyword "block/parent"
                   && Hashtbl.mem parent_edge_dropped (Transit_codec.to_string e) ->
-               false
-           | _ -> true)
+               dropped := item :: !dropped;
+               None
+           | _ -> Some item)
         rewritten
   in
+  (* an entity this entry creates cannot land partially — the verbatim
+     model has no prior state for it, so a structure ref that resolves
+     nowhere means the whole create is unapplyable. Fail the entry: the
+     uploader reports it missing-block-entity, the client marks it
+     failed and unapplies it — the same convergence the real server's
+     strict transact produces via entity-id/missing. Letting the rest
+     of the entity land would materialize an invalid shell instead *)
+  List.iter
+    (fun item ->
+       match item with
+       | Wire.Array (_ :: e :: _) | Wire.List (_ :: e :: _) -> (
+           match
+             Hashtbl.find_opt created_e_keys (Transit_codec.to_string e)
+           with
+           | Some u ->
+               failwith
+                 ("pending tx creates block " ^ u
+                 ^ " with unresolvable refs")
+           | None -> ())
+       | _ -> ())
+    !dropped;
   if List.length rewritten = List.length items then rewritten
   else pass rewritten
   in
@@ -1739,6 +1877,17 @@ let send_tx_batch (client : Sync_state.client)
       tx_entries
     |> List.sort_uniq compare
   in
+  (* the exact sanitized tx-data sent on the wire — confirm applies this
+     verbatim so the server conn mirrors the journaled form rather than a
+     re-derived sanitize against the (possibly diverged) local conn *)
+  let tx_datas =
+    List.filter_map
+      (fun e ->
+         match Wire.get "tx-id" e, Wire.get "tx-data" e with
+         | Some (Wire.String id), Some d -> Some (id, d)
+         | _ -> None)
+      tx_entries
+  in
   send ws
     (Wire.Map
        [ Wire.keyword "type", Wire.String "tx/batch"
@@ -1752,6 +1901,7 @@ let send_tx_batch (client : Sync_state.client)
     ; outliner_ops
     ; large_upload_progress = large_upload_progress tx_entries'
     ; t_before = local_tx
+    ; tx_datas
     ; sent_at = Time.monotonic_now ()
     ; timer = None };
   Db_worker_effect.pure ()

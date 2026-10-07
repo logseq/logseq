@@ -138,6 +138,7 @@ let preserve_state (f : unit -> 'a) : 'a =
   let remote_ck_prev = Hashtbl.copy Sync_apply.repo_latest_remote_checksum in
   let stopped_prev = Hashtbl.copy Sync_apply.repo_upload_stopped in
   let large_up_prev = Hashtbl.copy Sync_apply.repo_large_upload_progress in
+  let remote_del_prev = Hashtbl.copy Sync_state.remote_deleted_uuids in
   let prep_prev = !(Sync_apply.prepare_upload_tx_entries_fn) in
   let flush_prev = !(Sync_apply.flush_pending_fn) in
   let client_prev = !(Sync_state.db_sync_client) in
@@ -222,6 +223,9 @@ let preserve_state (f : unit -> 'a) : 'a =
       Hashtbl.iter
         (Hashtbl.replace Sync_apply.repo_large_upload_progress)
         large_up_prev;
+      Hashtbl.reset Sync_state.remote_deleted_uuids;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_state.remote_deleted_uuids) remote_del_prev;
       Sync_state.db_sync_client := client_prev;
       Sync_state.dev_or_test := dev_or_test_prev;
       Sync_apply.prepare_upload_tx_entries_fn := prep_prev;
@@ -1673,6 +1677,7 @@ let test_flush_pending_reports_upload_response_timeout () =
                 ; outliner_ops = [ "save-block" ]
                 ; large_upload_progress = []
                 ; t_before = Some 0
+                ; tx_datas = []
                 ; sent_at = Time.monotonic_now ()
                 ; timer = None };
               (Option.get !timeout_cb) ();
@@ -7541,11 +7546,14 @@ let test_rebase_insert_indent_save_sequence_keeps_structural_state () =
                    (fun p -> wire_uuid_str (entity_block_uuid p))
                    (Ldb.ref_ent block_after "block/parent")
                  = Some parent_uuid);
+              (* ingest derives the child's page from its parent's
+                 post-tx position — a verbatim move leaves no stale
+                 block/page behind *)
               check "page uuid"
                 (Option.map
                    (fun p -> wire_uuid_str (entity_block_uuid p))
                    (Ldb.ref_ent block_after "block/page")
-                 = Some page_1_uuid)
+                 = Some page_2_uuid)
           | None -> Alcotest.fail "block missing"))
 
 (* cljs rebase-keeps-local-insert-and-save-when-sibling-target-deleted-test *)
@@ -10506,102 +10514,6 @@ let test_delete_expansion_includes_generated_pvalue_children () =
       check "sync retracts nested"
         (List.mem nested_child.id sync_retracted_ids))
 
-(* cljs apply-remote-txs-computes-remote-deletes-once-per-batch-test *)
-let test_apply_remote_txs_computes_remote_deletes_once () =
-  preserve_state (fun () ->
-      wire_no_e2ee ();
-      let conn, ops, parent, _c1, child2, _c3 = setup_parent_child () in
-      let parent_id = parent.id in
-      let child2_uuid = ent_block_uuid child2 in
-      let delete_set_computations = ref 0 in
-      let original =
-        !Sync_replay.remote_txs_retract_entity_block_uuid_suffixes_fn
-      in
-      let remote_txs =
-        List.init 128 (fun index ->
-            wire_map
-              [ ( "tx-data"
-                , Wire.Array
-                    [ db_add (Wire.Int parent_id) "block/title"
-                        (Wire.String
-                           (Printf.sprintf "remote title %d" index)) ] ) ])
-        @ [ wire_map
-              [ ( "tx-data"
-                , Wire.Array
-                    [ db_retract_entity
-                        (block_uuid_lookup (Wire.Uuid child2_uuid)) ] ) ] ]
-      in
-      Sync_replay.remote_txs_retract_entity_block_uuid_suffixes_fn :=
-        (fun txs ->
-           incr delete_set_computations;
-           original txs);
-      Fun.protect
-        ~finally:(fun () ->
-            Sync_replay.remote_txs_retract_entity_block_uuid_suffixes_fn :=
-              original)
-        (fun () ->
-           with_datascript_conns conn (Some ops) (fun () ->
-               await_unit
-                 (Sync_replay.apply_remote_txs test_repo (mk_client ())
-                    remote_txs);
-               check "computed once" (!delete_set_computations = 1);
-               check "last title"
-                 (Ldb.value
-                    (Option.get
-                       (Ldb.ent_of_id (Datascript.db conn) parent_id))
-                    "block/title"
-                  = Some (String "remote title 127"));
-               check "child2 deleted"
-                 (ent_by_block_uuid (Datascript.db conn) child2_uuid
-                  = None))))
-
-(* cljs apply-remote-txs-skips-block-ref-filters-when-txs-have-no-block-uuid-refs-test *)
-let test_apply_remote_txs_skips_block_ref_filters_no_refs () =
-  preserve_state (fun () ->
-      wire_no_e2ee ();
-      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
-      let parent_uuid = ent_block_uuid parent in
-      let remote_txs =
-        List.init 128 (fun index ->
-            wire_map
-              [ ( "tx-data"
-                , Wire.Array
-                    [ db_add (Wire.Int parent.id) "block/title"
-                        (Wire.String (Printf.sprintf "remote title %d" index))
-                    ] ) ])
-      in
-      let stale_calls = ref 0 in
-      let missing_calls = ref 0 in
-      let orig_stale =
-        !Sync_replay.drop_stale_deleted_block_ref_ops_fn
-      in
-      let orig_missing = !Sync_replay.drop_missing_block_ref_ops_fn in
-      Sync_replay.drop_stale_deleted_block_ref_ops_fn :=
-        (fun db deleted txs ->
-           incr stale_calls;
-           orig_stale db deleted txs);
-      Sync_replay.drop_missing_block_ref_ops_fn :=
-        (fun ?display_db db txs ->
-           incr missing_calls;
-           orig_missing ?display_db db txs);
-      Fun.protect
-        ~finally:(fun () ->
-            Sync_replay.drop_stale_deleted_block_ref_ops_fn := orig_stale;
-            Sync_replay.drop_missing_block_ref_ops_fn := orig_missing)
-        (fun () ->
-           with_datascript_conns conn (Some ops) (fun () ->
-               await_unit
-                 (Sync_replay.apply_remote_txs test_repo (mk_client ())
-                    remote_txs);
-               check "stale skipped" (!stale_calls = 0);
-               check "missing skipped" (!missing_calls = 0);
-               let parent' =
-                 Option.get
-                   (ent_by_block_uuid (Datascript.db conn) parent_uuid)
-               in
-               check "title applied"
-                 (Ldb.value parent' "block/title"
-                  = Some (String "remote title 127")))))
 
 (* cljs apply-remote-txs-keeps-refs-to-block-recreated-after-earlier-delete-test *)
 let test_apply_remote_txs_keeps_refs_recreated_after_earlier_delete () =
@@ -14018,6 +13930,249 @@ let test_pending_unapply_done_skips_split () =
                (Lookup_ref ("block/uuid", Uuid (wire_uuid_str c1_u)))
              = None)))
 
+(* seed 1991875 regression: an unconfirmed row that merely re-asserts
+   [:block/uuid u] on an already-confirmed entity is wire-identical to a
+   create, so uuid alone can't mark the entity pending-created. The sweep
+   must retract only phantoms — entities whose every datom carries an
+   unconfirmed row's tx stamp *)
+let test_unapply_sweep_keeps_confirmed_entity () =
+  preserve_state (fun () ->
+      let conn, ops, _p, c1, _c2, _c3 = setup_parent_child () in
+      let kept_u = entity_block_uuid c1 in
+      Worker_state.set_datascript_conn test_repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Sync_client_op.update_local_tx test_repo 0;
+      mark_graph_remote conn;
+      (* phantom: every datom committed under the unconfirmed stamp *)
+      let ghost_u = fresh_uuid () in
+      let stamp = 777777 in
+      let stamped_add (e : int) (a : string) (v : Wire.t) : Wire.t =
+        Wire.Array [ kw "db/add"; Wire.Int e; kw a; v; Wire.Int stamp ]
+      in
+      ignore
+        (Db_transact.transact conn
+           [ stamped_add 424242 "block/uuid" (Wire.Uuid ghost_u)
+           ; stamped_add 424242 "block/title" (Wire.String "ghost") ]
+           [ "skip-validate-db?", Bool true ]);
+      seed_client_op_txs test_repo
+        [ (* failed verbatim row re-asserting uuid on the confirmed
+             entity — element-4 stamps feed the sweep's stamp set *)
+          seed_tx ~created_at:1 ~failed:true
+            ~tx_data_v:
+              (Wire.Array
+                 [ Wire.Array
+                     [ kw "db/add"; block_uuid_lookup kept_u
+                     ; kw "block/uuid"; kept_u; Wire.Int 777778 ] ])
+            "tx-reassert"
+        ; seed_tx ~created_at:2 ~failed:true
+            ~tx_data_v:
+              (Wire.Array
+                 [ Wire.Array
+                     [ kw "db/add"; Wire.String "g"; kw "block/uuid"
+                     ; Wire.Uuid ghost_u; Wire.Int stamp ]
+                 ; Wire.Array
+                     [ kw "db/add"; Wire.String "g"; kw "block/title"
+                     ; Wire.String "ghost"; Wire.Int stamp ] ])
+            "tx-ghost" ];
+      let server_prev = Sync_state.server_conn test_repo in
+      Fun.protect
+        ~finally:(fun () ->
+          (match server_prev with
+           | Some c -> Sync_state.set_server_conn test_repo c
+           | None -> Sync_state.drop_server_conn test_repo);
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          Sync_replay.split_off_server_if_remote test_repo;
+          let server =
+            match Sync_state.server_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no server conn after split"
+          in
+          let db = Conn.db server in
+          check "confirmed entity survives the sweep"
+            (Datascript.entity db
+               (Lookup_ref ("block/uuid", Uuid (wire_uuid_str kept_u)))
+             <> None);
+          check "phantom swept"
+            (Datascript.entity db
+               (Lookup_ref ("block/uuid", Uuid ghost_u))
+             = None)))
+
+(* a value-position ref to a uuid the tx never writes drops: the
+   journal only carries refs whose targets the server ingest could
+   resolve, so a ref to an entity absent on this conn with no writes
+   in the same tx is never journal-real — materializing a bare uuid
+   shell would also fail schema validation. The sibling item in the
+   same tx still applies *)
+let test_apply_remote_txs_drops_value_ref_to_missing_uuid () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _p, c1, c2, _c3 = setup_parent_child () in
+      let dead_u = ent_block_uuid c2 in
+      let c1_u = ent_block_uuid c1 in
+      with_datascript_conns conn (Some ops) (fun () ->
+          await_unit
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ "outliner-op", kw "delete-blocks"
+                   ; ( "tx-data"
+                     , Wire.Array
+                         [ db_retract_entity
+                             (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
+          await_unit
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_add (block_uuid_lookup (Wire.Uuid c1_u))
+                             "block/title" (Wire.String "edited")
+                         ; db_add (block_uuid_lookup (Wire.Uuid c1_u))
+                             "block/tags"
+                             (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
+          let db = Datascript.db conn in
+          check "unresolvable v-ref drops, no bare shell"
+            (ent_by_block_uuid db dead_u = None);
+          (match ent_by_block_uuid db c1_u with
+           | Some e ->
+               check "sibling item in same tx applied"
+                 (Ldb.value e "block/title" = Some (String "edited"));
+               check "dead tag ref not landed"
+                 (not
+                    (List.exists
+                       (fun t ->
+                          match Datascript.entity_attr t "block/uuid" with
+                          | Some (One_value (Uuid u)) -> u = dead_u
+                          | _ -> false)
+                       (Ldb.ref_ents e "block/tags")))
+           | None -> Alcotest.fail "entity missing")))
+
+(* seed 80527 regression: remote_deleted cannot gate the verbatim
+   uploaded tx-data a confirm applies. A uuid recorded deleted was
+   pulled before the client's upload journaled, so on the server the
+   client's re-add always lands after the delete — the entity is live
+   there and the confirm must revive it locally too. Dropping those
+   adds loses the revive the server kept and permanently diverges the
+   conn *)
+let test_confirm_uploaded_revives_remote_deleted () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, p, _c1, c2, _c3 = setup_parent_child () in
+      let dead_u = ent_block_uuid c2 in
+      let page_u = ent_block_uuid p in
+      let dead_ref = block_uuid_lookup (Wire.Uuid dead_u) in
+      let page_ref = block_uuid_lookup (Wire.Uuid page_u) in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          await_unit
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ "outliner-op", kw "delete-blocks"
+                   ; ( "tx-data"
+                     , Wire.Array
+                         [ db_retract_entity
+                             (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
+          check "remote delete registered"
+            (ent_by_block_uuid (Datascript.db conn) dead_u = None);
+          Sync_replay.confirm_pending_txs
+            ~uploaded:
+              [ ( "tx-r1"
+                , Wire.List
+                    [ db_add (Wire.String "e1") "block/uuid"
+                        (Wire.Uuid dead_u)
+                    ; db_add dead_ref "block/title"
+                        (Wire.String "revived")
+                    ; db_add dead_ref "block/page" page_ref
+                    ; db_add dead_ref "block/parent" page_ref
+                    ; db_add dead_ref "block/order"
+                        (Wire.String "a0")
+                    ; db_add dead_ref "block/created-at" (Wire.Int 1)
+                    ; db_add dead_ref "block/updated-at" (Wire.Int 1) ] )
+              ]
+            test_repo [ "tx-r1" ];
+          let db = Datascript.db conn in
+          (match ent_by_block_uuid db dead_u with
+           | Some e ->
+               check "confirmed re-add revived entity"
+                 (Ldb.value e "block/title" = Some (String "revived"))
+           | None ->
+               Alcotest.fail
+                 "confirm dropped server-accepted revive"));
+      check "remote_deleted cleared by confirm"
+        (not
+           (Sync_state.SSet.mem dead_u
+              (Sync_state.remote_deleted test_repo))))
+
+(* seed 735127 regression: a pending block/parent ref whose target is
+   missing on the server falls back to the entity's live page — the
+   rewritten value must go on the wire as a [:block/uuid u] lookup-ref,
+   never a bare local eid (the server resolves ints against its own db) *)
+let test_prepare_upload_parent_fallback_sends_uuid_ref () =
+  preserve_state (fun () ->
+      let conn, ops, _p, c1, _c2, _c3 = setup_parent_child () in
+      let child_u = entity_block_uuid c1 in
+      let page_u =
+        match Ldb.value c1 "block/page" with
+        | Some (Ref id) ->
+            wire_uuid_str
+              (entity_block_uuid
+                 (Option.get (Ldb.ent_of_id (Datascript.db conn) id)))
+        | _ -> failwith "child has no block/page"
+      in
+      (* the server-side view sees the child entity but not the pending
+         parent target *)
+      let srv = Db_test_util.create_conn () in
+      ignore
+        (Db_transact.transact srv
+           [ db_add (Wire.String "t") "block/uuid" child_u
+           ; db_add (Wire.String "t") "block/title" (Wire.String "stub") ]
+           [ "skip-validate-db?", Bool true ]);
+      let missing_u = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"move-blocks"
+                ~tx_data_v:
+                  (Wire.Array
+                     [ db_add (block_uuid_lookup child_u) "block/parent"
+                         (block_uuid_lookup (Wire.Uuid missing_u)) ])
+                "tx-move" ];
+          let pending = Sync_apply.pending_txs test_repo () in
+          let tx_entries, _drops, _ =
+            Sync_apply.prepare_upload_tx_entries ~repo:test_repo
+              ~server_db:(Datascript.db srv) (Some conn) pending
+          in
+          match tx_entries with
+          | [ entry ] -> (
+              match Wire.get "tx-data" entry with
+              | Some (Wire.Array items | Wire.List items) -> (
+                  let parent_item =
+                    List.find_opt
+                      (fun i ->
+                         match i with
+                         | Wire.Array l | Wire.List l ->
+                             List.length l >= 4
+                             && List.nth l 2 = kw "block/parent"
+                         | _ -> false)
+                      items
+                  in
+                  match parent_item with
+                  | Some
+                      (Wire.Array
+                        [ _; _; _
+                        ; Wire.Array
+                            [ Wire.Keyword "block/uuid"; Wire.Uuid u ] ]
+                    | Wire.List
+                        [ _; _; _
+                        ; Wire.Array
+                            [ Wire.Keyword "block/uuid"; Wire.Uuid u ] ])
+                    -> check "parent fallback is the live page uuid ref"
+                         (u = page_u)
+                  | Some item ->
+                      Alcotest.failf "unexpected parent item: %s"
+                        (Ds_wire.edn_of_transit item)
+                  | None -> Alcotest.fail "parent item dropped")
+              | _ -> Alcotest.fail "no tx-data")
+          | _ -> Alcotest.fail "expected one tx entry"))
+
 (* the exempt flag is a persisted client_ops meta: set once by an
    exempt gc purge, it must survive reads until a fresh server-image
    anchor clears it *)
@@ -14154,6 +14309,100 @@ let test_unapply_failed_row_keeps_entity () =
              <> None);
           check "un-apply still completes"
             (Sync_client_op.pending_unapply_done test_repo)))
+
+(* seed 381449 regression: a pending row's forward datoms can be
+   re-asserted by a remote tx before the row is un-applied — a
+   re-assert is a datascript no-op, so the shared datom keeps its
+   unconfirmed stamp and nothing distinguishes it from purely-pending
+   state. The remote-asserted set recorded at apply time marks the
+   (e,a,v) confirmed-owned: the reversed retract must skip it, or the
+   un-apply strips confirmed state down to a bare uuid shell *)
+let test_unapply_keeps_remote_asserted_values () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _parent, _c1, _c2, _c3 = setup_parent_child () in
+      Worker_state.set_datascript_conn test_repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Sync_client_op.update_local_tx test_repo 0;
+      mark_graph_remote conn;
+      let prop_u = fresh_uuid () in
+      let prop_ref = block_uuid_lookup (Wire.Uuid prop_u) in
+      let stamp = 424242 in
+      ignore
+        (Db_transact.transact conn
+           [ (* uuid datom lands confirmed — the entity itself stays
+                out of the phantom sweep *)
+             db_add (Wire.String "p") "block/uuid" (Wire.Uuid prop_u)
+           ; (* attrs arrive under the pending row's stamp — the
+                pre-split mixed conn carries them unconfirmed *)
+             Wire.Array
+               [ kw "db/add"; prop_ref; kw "block/title"
+               ; Wire.String "Sim Prop"; Wire.Int stamp ]
+           ; Wire.Array
+               [ kw "db/add"; prop_ref; kw "db/ident"
+               ; Wire.Keyword "user.property/SimProp"; Wire.Int stamp ] ]
+           [ "skip-validate-db?", Bool true ]);
+      (* the remote tx re-asserts the same values verbatim — a no-op on
+         the datoms but recorded as confirmed-asserted *)
+      await_unit
+        (Sync_replay.apply_remote_txs test_repo (mk_client ())
+           [ wire_map
+               [ "outliner-op", kw "create-property"
+               ; ( "tx-data"
+                 , Wire.Array
+                     [ db_add prop_ref "block/title"
+                         (Wire.String "Sim Prop")
+                     ; db_add prop_ref "db/ident"
+                         (Wire.Keyword "user.property/SimProp") ] ) ] ]);
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1
+            ~tx_data_v:
+              (Wire.Array
+                 [ Wire.Array
+                     [ kw "db/add"; prop_ref; kw "block/uuid"
+                     ; Wire.Uuid prop_u; Wire.Int stamp ]
+                 ; Wire.Array
+                     [ kw "db/add"; prop_ref; kw "block/title"
+                     ; Wire.String "Sim Prop"; Wire.Int stamp ]
+                 ; Wire.Array
+                     [ kw "db/add"; prop_ref; kw "db/ident"
+                     ; Wire.Keyword "user.property/SimProp"
+                     ; Wire.Int stamp ] ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ Wire.Array
+                     [ kw "db/retract"; prop_ref; kw "block/title"
+                     ; Wire.String "Sim Prop"; Wire.Int stamp ]
+                 ; Wire.Array
+                     [ kw "db/retract"; prop_ref; kw "db/ident"
+                     ; Wire.Keyword "user.property/SimProp"
+                     ; Wire.Int stamp ] ])
+            "tx-prop" ];
+      Fun.protect
+        ~finally:(fun () ->
+          Sync_state.drop_server_conn test_repo;
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          Sync_replay.split_off_server_if_remote test_repo;
+          let server =
+            match Sync_state.server_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no server conn after split"
+          in
+          let attr_on a =
+            match
+              Datascript.entity (Conn.db server)
+                (Lookup_ref ("block/uuid", Uuid prop_u))
+            with
+            | Some e -> Datascript.entity_attr e a
+            | None -> None
+          in
+          check "remote-asserted title survives un-apply"
+            (attr_on "block/title"
+             = Some (One_value (String "Sim Prop")));
+          check "remote-asserted ident survives un-apply"
+            (attr_on "db/ident"
+             = Some (One_value (Keyword "user.property/SimProp")))))
 
 (* a row whose reversed items can't transact warns and continues; the
    done marker is withheld so the next open retries the failed row *)
@@ -14990,12 +15239,6 @@ let () =
             "delete-expansion-includes-generated-pvalue-children" `Quick
             test_delete_expansion_includes_generated_pvalue_children
         ; Alcotest.test_case
-            "apply-remote-txs-computes-remote-deletes-once" `Quick
-            test_apply_remote_txs_computes_remote_deletes_once
-        ; Alcotest.test_case
-            "apply-remote-txs-skips-block-ref-filters-no-refs" `Quick
-            test_apply_remote_txs_skips_block_ref_filters_no_refs
-        ; Alcotest.test_case
             "apply-remote-txs-keeps-refs-recreated-after-earlier-delete"
             `Quick
             test_apply_remote_txs_keeps_refs_recreated_after_earlier_delete
@@ -15125,8 +15368,23 @@ let () =
             "unapply-failed-row-keeps-entity-test" `Quick
             test_unapply_failed_row_keeps_entity
         ; Alcotest.test_case
+            "unapply-keeps-remote-asserted-values-test" `Quick
+            test_unapply_keeps_remote_asserted_values
+        ; Alcotest.test_case
             "unapply-row-failure-blocks-done-test" `Quick
             test_unapply_row_failure_blocks_done
+        ; Alcotest.test_case
+            "unapply-sweep-keeps-confirmed-entity-test" `Quick
+            test_unapply_sweep_keeps_confirmed_entity
+        ; Alcotest.test_case
+            "apply-remote-txs-drops-value-ref-to-missing-uuid-test" `Quick
+            test_apply_remote_txs_drops_value_ref_to_missing_uuid
+        ; Alcotest.test_case
+            "confirm-uploaded-revives-remote-deleted-test" `Quick
+            test_confirm_uploaded_revives_remote_deleted
+        ; Alcotest.test_case
+            "prepare-upload-parent-fallback-sends-uuid-ref-test" `Quick
+            test_prepare_upload_parent_fallback_sends_uuid_ref
         ; Alcotest.test_case
             "exempt-no-anchor-recomputes-before-image-test" `Quick
             test_exempt_no_anchor_recomputes_before_image
