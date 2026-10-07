@@ -386,14 +386,18 @@ let inner st =
     ~style_class:"cp__right-sidebar-inner"
     [ scroll ~key:"rs-scroll" ~orientation:`vertical
         ~style_class:"cp__right-sidebar-scrollable"
-        [ topbar st
-        ; reactive
-            (fun items ->
-              column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
-                ~style_class:"sidebar-item-list scrollbar-spacing"
-                (box ~key:"rs-drop" ~style_class:"sidebar-drop-indicator" []
-                 :: List.mapi (sidebar_item st) items))
-            (Signal.value st.Sidebar_state.items)
+        [ (* scroll children overlay each other (lui-scroll > * is grid
+             1/1) — the topbar and items stack inside a single column *)
+          column ~key:"rs-scroll-body" ~grow:1.
+            [ topbar st
+            ; reactive
+                (fun items ->
+                  column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
+                    ~style_class:"sidebar-item-list scrollbar-spacing"
+                    (box ~key:"rs-drop" ~style_class:"sidebar-drop-indicator" []
+                     :: List.mapi (sidebar_item st) items))
+                (Signal.value st.Sidebar_state.items)
+            ]
         ]
     ]
 

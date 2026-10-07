@@ -592,22 +592,26 @@ let scroller st : t =
   let input_sig =
     Signal.map (fun (v : S.view) -> v.S.input) st.S.vs.Signal.state_signal
   in
+  (* scroll children overlay each other (lui-scroll > * is grid 1/1) —
+     the results stack inside a single column instead *)
   scroll ~key:"scroller" ~orientation:`vertical
     ~style_class:scroller_class
-    [ reactive
-        (fun (v : S.view) ->
-          match v.S.filter with
-          | Some gid -> search_only_chip st gid
-          | None -> spacer ~key:"chip" [])
-        st.S.vs.Signal.state_signal
-    ; groups_body st
-    ; if_
-        ~test:
-          (Signal.map2
-             (fun (q : string) has -> q <> "" && not has)
-             input_sig has_items_sig)
-        (box ~key:"empty" ~style_class:"cp__cmdk-empty"
-           [ text ~key:"empty-t" ~value:(I18n.t "search/no-result") [] ])
+    [ column ~key:"scroller-body" ~grow:1.
+        [ reactive
+            (fun (v : S.view) ->
+              match v.S.filter with
+              | Some gid -> search_only_chip st gid
+              | None -> spacer ~key:"chip" [])
+            st.S.vs.Signal.state_signal
+        ; groups_body st
+        ; if_
+            ~test:
+              (Signal.map2
+                 (fun (q : string) has -> q <> "" && not has)
+                 input_sig has_items_sig)
+            (box ~key:"empty" ~style_class:"cp__cmdk-empty"
+               [ text ~key:"empty-t" ~value:(I18n.t "search/no-result") [] ])
+        ]
     ]
     ctx parent
 

@@ -318,7 +318,10 @@ let ac_inner (st : S.t) : t =
   in
   scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
     ~style_class:"hide-scrollbar"
-    [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
+    [ (* scroll children overlay each other (lui-scroll > * is grid 1/1)
+         — the keyed rows stack inside a single column *)
+      column ~key:"ac-list"
+        [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
         ~mount:(fun u_sig ->
           (* the key fingerprints the unit fully, so sampling once is
              stable *)
@@ -330,7 +333,7 @@ let ac_inner (st : S.t) : t =
                    ~style_class:"ui__ac-group-name"
                    ~value:(Option.value ~default:"" g.g_hdr)
                    []
-                 :: List.map row g.g_items)) ]
+                 :: List.map row g.g_items)) ] ]
     context parent
 ;;
 

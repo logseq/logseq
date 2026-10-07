@@ -787,14 +787,17 @@ let choices_pane_view m ~set_pane ~close : t =
   in
   (column ~gap:0
      [ scroll ~max_height:240
-         [ keyed
-             ~source:(Signal.value choices_st)
+         [ (* scroll children overlay each other (lui-scroll > * is grid
+              1/1) — the keyed choices stack inside a single column *)
+           column ~key:"choices"
+             [ keyed
+                 ~source:(Signal.value choices_st)
              ~key:(fun c ->
                Option.value (D.entity_uuid_of c) ~default:(D.ref_title c))
              ~cmp:String.compare
              ~mount:(fun c_sig ->
                submenu ~text:(D.ref_title (Signal.get c_sig))
-                 (choice_children (Signal.get c_sig)))
+                 (choice_children (Signal.get c_sig))) ]
          ]
      ; menu_item ~icon:`plus ~text:(I18n.t "property/add-choice")
          ~on_press:(fun _ ->
