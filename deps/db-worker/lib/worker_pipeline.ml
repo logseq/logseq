@@ -558,7 +558,7 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                    [ "db/id", Int64 (Int64.of_int root.id)
                    ; "block/parent", Int64 (Int64.of_int lp.id)
                    ; "block/order",
-                     String (Db_order.gen_key None None) ] ]
+                     String (Db_order.gen_key_from_max ()) ] ]
            | _ -> [])
     in
     List.concat_map
