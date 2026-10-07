@@ -1191,11 +1191,55 @@ let utc_ms (c : Time.civil) : int64 =
 let utc_civil (ms : int64) : Time.civil =
   Time.civil_of_epoch_ms Time.utc (Time.epoch_ms ms)
 
+let local_civil (ms : int64) : Time.civil =
+  Time.civil_of_epoch_ms (Time.local_tz ()) (Time.epoch_ms ms)
+
+(* cljs local-ms — the instant of a local civil time *)
+let local_ms y mo d h mi : int64 =
+  Time.epoch_ms_to_int64
+    (Time.epoch_ms_of_civil (Time.local_tz ())
+       (Time.civil ~year:y ~month:mo ~day:d ~hour:h ~minute:mi ~second:0
+          ~ms:0))
+
+(* cljs t/local-date-time + tc/to-long — epoch ms of a local-zone civil *)
+let local_civil_ms y mo d h mi : Time.epoch_ms =
+  Time.epoch_ms (local_ms y mo d h mi)
+
+(* cljs fixed-now — mid June: weeks away from any clock change north or
+   south of the equator, so stepping days and weeks from it is the same in
+   local and UTC time *)
+let fixed_now_ms : int64 =
+  utc_ms
+    (Time.civil ~year:2026 ~month:6 ~day:15 ~hour:12 ~minute:0 ~second:0
+       ~ms:0)
+
+(* cljs (with-redefs t/now ...) — pin the command clock to a fixed
+   instant so local-calendar stepping is deterministic *)
+let with_now (now : int64) (f : unit -> 'a) : 'a =
+  let prev = !Commands.now_fn in
+  Fun.protect
+    ~finally:(fun () -> Commands.now_fn := prev)
+    (fun () ->
+       Commands.now_fn := (fun () -> Time.epoch_ms now);
+       f ())
+
 let plus_months (t : int64) (n : int) : int64 =
   utc_ms (Commands.add_units (utc_civil t) Commands.Month n)
 
 let plus_years (t : int64) (n : int) : int64 =
   utc_ms (Commands.add_units (utc_civil t) Commands.Year n)
+
+(* cljs local-days — local calendar days between two instants; a day
+   step keeps local time of day, so across a clock change it is 23 or
+   25 hours *)
+let local_days (from : int64) (to_ : int64) : int =
+  let midnight ms =
+    let y, mo, d, _, _, _, _ = Time.civil_fields (local_civil ms) in
+    utc_ms
+      (Time.civil ~year:y ~month:mo ~day:d ~hour:0 ~minute:0 ~second:0
+         ~ms:0)
+  in
+  Int64.to_int (Int64.div (Int64.sub (midnight to_) (midnight from)) day_ms)
 
 (* cljs in-minutes/in-hours/... relative to the test's now snapshot *)
 let in_minutes ~(now : int64) (t : int64) : int =
@@ -1204,23 +1248,30 @@ let in_minutes ~(now : int64) (t : int64) : int =
 let in_hours ~(now : int64) (t : int64) : int =
   Int64.to_int (Int64.div (Int64.sub t now) hour_ms)
 
-let in_days ~(now : int64) (t : int64) : int =
-  Int64.to_int (Int64.div (Int64.sub t now) day_ms)
+let in_days ~(now : int64) (t : int64) : int = local_days now t
 
-let in_weeks ~(now : int64) (t : int64) : int =
-  Int64.to_int (Int64.div (Int64.sub t now) week_ms)
+let in_weeks ~(now : int64) (t : int64) : int = local_days now t / 7
 
-(* cljs t/in-months / t/in-years — whole-unit civil diff *)
+(* cljs t/in-months / t/in-years — whole-unit civil diff, local calendar *)
 let in_months ~(now : int64) (t : int64) : int =
-  Commands.in_units (utc_civil now) (utc_civil t) Commands.Month
+  Commands.in_units ~tz:(Time.local_tz ()) (local_civil now)
+    (local_civil t) Commands.Month
 
 let in_years ~(now : int64) (t : int64) : int =
-  Commands.in_units (utc_civil now) (utc_civil t) Commands.Year
+  Commands.in_units ~tz:(Time.local_tz ()) (local_civil now)
+    (local_civil t) Commands.Year
 
-(* cljs t/day-of-week — consistent weekday index is enough for
-   equality assertions *)
+(* cljs t/day-of-week — weekday of the instant's local date *)
 let day_of_week (t : int64) : int =
-  Int64.to_int (Int64.rem (Int64.div t day_ms) 7L)
+  let y, mo, d, _, _, _, _ = Time.civil_fields (local_civil t) in
+  Int64.to_int
+    (Int64.rem
+       (Int64.div
+          (utc_ms
+             (Time.civil ~year:y ~month:mo ~day:d ~hour:0 ~minute:0
+                ~second:0 ~ms:0))
+          day_ms)
+       7L)
 
 let civil_ms y mo d h mi =
   utc_ms
@@ -1230,7 +1281,7 @@ let civil_ms y mo d h mi =
 let opt_get_exn = function Some x -> x | None -> failwith "get_next_time"
 
 let test_get_next_time () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   let one_minute_ago = minus_ms now minute_ms in
   let one_hour_ago = minus_ms now hour_ms in
   let one_day_ago = minus_ms now day_ms in
@@ -1367,7 +1418,7 @@ let test_get_next_time () =
        (opt_get_exn (get_next_time3 (plus_years now (-10)) year_unit 1)) = 1)
 
 let test_dotted_plus_advances_from_completion () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   check ".+ scheduled 4d ago -> 7d out"
     (in_days ~now
        (opt_get_exn
@@ -1399,7 +1450,7 @@ let test_dotted_plus_advances_from_completion () =
      = 7)
 
 let test_plus_advances_from_scheduled () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   check "+ scheduled 10d ago weekly -> -3d"
     (in_days ~now
        (opt_get_exn
@@ -1426,7 +1477,7 @@ let test_plus_advances_from_scheduled () =
      = -2)
 
 let test_double_plus_advances_until_future () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   let ten_days_ago = minus_ms now (Int64.mul 10L day_ms) in
   check "++ scheduled 10d ago weekly -> +4d"
     (in_days ~now
@@ -1449,7 +1500,7 @@ let test_double_plus_advances_until_future () =
      = 1)
 
 let test_repeat_type_defaults_to_double_plus () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   let ten_days_ago = minus_ms now (Int64.mul 10L day_ms) in
   (* cljs nil repeat-type -> fallthrough to double-plus; "" matches no
      repeat-type ident and takes the same branch *)
@@ -1463,7 +1514,7 @@ let test_repeat_type_defaults_to_double_plus () =
   check "repeat-type default: 4d out" (in_days ~now via_nil = 4)
 
 let test_get_next_time_rejects_non_positive_frequency () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   let ten_days_ago = minus_ms now (Int64.mul 10L day_ms) in
   check "freq 0 -> nil" (get_next_time3 ten_days_ago week_unit 0 = None);
   check "freq -1 -> nil" (get_next_time3 ten_days_ago week_unit (-1) = None);
@@ -1473,14 +1524,14 @@ let test_get_next_time_rejects_non_positive_frequency () =
     (get_next_time4 ten_days_ago week_unit (-2) plus = None)
 
 let test_get_next_time_rejects_unknown_unit () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   check "empty unit map -> nil"
     (get_next_time3 now (unit_entity None) 1 = None);
   check "bogus ident -> nil"
     (get_next_time4 now (unit_entity (Some "bogus")) 1 dotted_plus = None)
 
 let test_dotted_plus_frequency_greater_than_one () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   check ".+ 5h ago 15min -> 15min out"
     (in_minutes ~now
        (opt_get_exn
@@ -1500,7 +1551,7 @@ let test_dotted_plus_frequency_greater_than_one () =
      = 3)
 
 let test_double_plus_month_and_year () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   check "++ monthly 2mo ago -> 0/1mo out"
     (List.mem
        (in_months ~now
@@ -1522,10 +1573,10 @@ let test_double_plus_month_and_year () =
      = 1)
 
 let test_double_plus_month_clamp_stays_future () =
-  (* cljs pins now = 2026-03-30 and scheduled = 2026-01-31; with the
-     real clock this fixture is in the past, so ++ still advances until
+  (* cljs pins now = 2026-03-30 and scheduled = 2026-01-31; with
+     fixed-now the fixture is in the past, so ++ still advances until
      strictly after now — assert the observable invariant *)
-  let now = now_ms () in
+  let now = fixed_now_ms in
   let scheduled = civil_ms 2026 1 31 0 0 in
   check "++ month-clamp result strictly after now"
     (match get_next_time4 scheduled month_unit 1 double_plus with
@@ -1533,7 +1584,7 @@ let test_double_plus_month_clamp_stays_future () =
      | None -> false)
 
 let test_double_plus_far_overdue_minute_is_bounded () =
-  let now = now_ms () in
+  let now = fixed_now_ms in
   let two_years_ago = plus_years now (-2) in
   (* cljs counts t/minutes invocations via with-redefs to bound the
      iteration; OCaml repeat_next_timestamp takes a recur_unit — the
@@ -1553,24 +1604,69 @@ let test_double_plus_month_end_keeps_its_day () =
      drifted day" — db-test#1354: the bulk t/plus clamps the day
      (Jan 31 + 5 months = Jun 30) and stepping on from the clamped date
      drifts (Jun 30 + 1 month = Jul 30, not Jul 31). *)
+  (* cljs uses t/local-date-time for now/scheduled — the local times the
+     date picker stores *)
   let now =
     Time.civil ~year:2026 ~month:7 ~day:1 ~hour:0 ~minute:0 ~second:0
       ~ms:0
   in
-  let scheduled = civil_ms 2026 1 31 0 0 in
+  let scheduled = local_ms 2026 1 31 0 0 in
   check "++ month-end Jan 31 -> Jul 31"
     (opt_get_exn
        (Commands.get_next_time ~now scheduled month_unit 1 double_plus)
-     = civil_ms 2026 7 31 0 0);
+     = local_ms 2026 7 31 0 0);
   let now =
     Time.civil ~year:2028 ~month:3 ~day:1 ~hour:0 ~minute:0 ~second:0
       ~ms:0
   in
-  let scheduled = civil_ms 2026 10 31 9 30 in
+  let scheduled = local_ms 2026 10 31 9 30 in
   check "++ month-end Oct 31 9:30 -> Mar 31 9:30"
     (opt_get_exn
        (Commands.get_next_time ~now scheduled month_unit 1 double_plus)
-     = civil_ms 2028 3 31 9 30)
+     = local_ms 2028 3 31 9 30)
+
+(* (deftest repeated-instant-steps-in-the-local-calendar-test) *)
+let test_repeated_instant_steps_in_the_local_calendar () =
+  (* db-test #1355: months and years were added in UTC, so east of UTC
+     local midnight of the 1st (the last day of the month before in UTC)
+     came back at the end of the same month. The assertions read local
+     civil fields, so they hold east and west of UTC alike. *)
+  let local_day (ms : int64) =
+    let y, mo, d, h, mi, _, _ = Time.civil_fields (local_civil ms) in
+    (y, mo, d, h, mi)
+  in
+  let next_local value unit freq repeat_type now =
+    local_day
+      (opt_get_exn
+         (Commands.get_next_time ~now:(local_civil now) value unit freq
+            repeat_type))
+  in
+  check "`++` monthly from March 1 is April 1"
+    ((2026, 4, 1, 0, 0)
+     = next_local (local_ms 2026 3 1 0 0) month_unit 1 double_plus
+         (local_ms 2026 3 1 9 0));
+  check "`++` yearly from 2027-03-01 is 2028-03-01"
+    ((2028, 3, 1, 0, 0)
+     = next_local (local_ms 2027 3 1 0 0) year_unit 1 double_plus
+         (local_ms 2027 3 1 9 0));
+  check "`+` every 3 months from Aug 31 is Nov 30"
+    ((2026, 11, 30, 0, 0)
+     = next_local (local_ms 2026 8 31 0 0) month_unit 3 plus
+         (local_ms 2026 8 31 9 0));
+  check "`.+` monthly, completed Apr 30 at 17:00, is May 30 at 17:00"
+    ((2026, 5, 30, 17, 0)
+     = next_local (local_ms 2026 4 1 0 0) month_unit 1 dotted_plus
+         (local_ms 2026 4 30 17 0));
+  check "`++` weekly keeps local midnight"
+    ((2026, 3, 8, 0, 0)
+     = next_local (local_ms 2026 3 1 0 0) week_unit 1 double_plus
+         (local_ms 2026 3 1 9 0));
+  check "`++` hourly is 1 hour later"
+    (opt_get_exn
+       (Commands.get_next_time
+          ~now:(local_civil (local_ms 2026 3 1 10 30))
+          (local_ms 2026 3 1 10 0) hour_unit 1 double_plus)
+     = Int64.add (local_ms 2026 3 1 10 0) hour_ms)
 
 (* cljs tx-add-value — find [:db/add eid attr v] in tx ops *)
 let tx_add_value (txs : tx_op list) (eid : entity_id) (a : attr)
@@ -1630,10 +1726,12 @@ let test_repeated_task_with_deadline_and_missing_temporal_property () =
 
 (* (deftest repeated-task-monthly-deadline-from-31st-test) *)
 let test_repeated_task_monthly_deadline_from_31st () =
-  (* "monthly `++` deadline set on the 31st reschedules to the 31st" *)
+  (* "monthly `++` deadline set on the 31st reschedules to the 31st" —
+     cljs uses t/local-date-time for the deadline, expected and pinned
+     now, the local times the date picker stores *)
   let conn = Sqlite_export.create_conn () in
-  let deadline = civil_ms 2026 1 31 0 0 in
-  let expected_next_deadline = civil_ms 2026 7 31 0 0 in
+  let deadline = local_ms 2026 1 31 0 0 in
+  let expected_next_deadline = local_ms 2026 7 31 0 0 in
   ignore
     (Datascript.transact_conn_string conn
        (Printf.sprintf
@@ -1671,10 +1769,7 @@ let test_repeated_task_monthly_deadline_from_31st () =
       ~finally:(fun () -> Commands.now_fn := prev)
       (fun () ->
          Commands.now_fn :=
-           (fun () ->
-              Time.epoch_ms_of_civil Time.utc
-                (Time.civil ~year:2026 ~month:7 ~day:1 ~hour:9 ~minute:0
-                   ~second:0 ~ms:0));
+           (fun () -> local_civil_ms 2026 7 1 9 0);
          Commands.run_commands report.db_after report.tx_data)
   in
   check "monthly ++ from 31st: next deadline is Jul 31"
@@ -1728,12 +1823,6 @@ let test_repeated_task_reschedules_numeric_scheduled_value () =
     (match tx_add_value commands_tx block.id "logseq.property/scheduled" with
      | Some (Int64 _) | Some (Float _) -> true
      | _ -> false)
-
-(* cljs t/local-date-time + tc/to-long — epoch ms of a local-zone civil *)
-let local_civil_ms y mo d h mi : Time.epoch_ms =
-  Time.epoch_ms_of_civil
-    (Time.local_tz ())
-    (Time.civil ~year:y ~month:mo ~day:d ~hour:h ~minute:mi ~second:0 ~ms:0)
 
 (* cljs reschedule-date-property — completes a weekly repeating task whose
    temporal property is the user :date property due, set to journal day
@@ -1915,31 +2004,48 @@ let test_resolve_recur_frequency () =
   check "resolve-recur-frequency: tx has 2 ops" (List.length tx2 = 2)
 
 let commands_cases : unit Alcotest.test_case list =
-  [ Alcotest.test_case "get-next-time-test" `Quick test_get_next_time
+  [ Alcotest.test_case "get-next-time-test" `Quick
+      (fun () -> with_now fixed_now_ms test_get_next_time)
   ; Alcotest.test_case "dotted-plus-advances-from-completion-test"
-      `Quick test_dotted_plus_advances_from_completion
+      `Quick
+      (fun () ->
+         with_now fixed_now_ms test_dotted_plus_advances_from_completion)
   ; Alcotest.test_case "plus-advances-from-scheduled-test" `Quick
-      test_plus_advances_from_scheduled
+      (fun () -> with_now fixed_now_ms test_plus_advances_from_scheduled)
   ; Alcotest.test_case "double-plus-advances-until-future-test" `Quick
-      test_double_plus_advances_until_future
+      (fun () ->
+         with_now fixed_now_ms test_double_plus_advances_until_future)
   ; Alcotest.test_case "repeat-type-defaults-to-double-plus-test" `Quick
-      test_repeat_type_defaults_to_double_plus
+      (fun () ->
+         with_now fixed_now_ms test_repeat_type_defaults_to_double_plus)
   ; Alcotest.test_case
       "get-next-time-rejects-non-positive-frequency-test" `Quick
-      test_get_next_time_rejects_non_positive_frequency
+      (fun () ->
+         with_now fixed_now_ms
+           test_get_next_time_rejects_non_positive_frequency)
   ; Alcotest.test_case "get-next-time-rejects-unknown-unit-test" `Quick
-      test_get_next_time_rejects_unknown_unit
+      (fun () ->
+         with_now fixed_now_ms test_get_next_time_rejects_unknown_unit)
   ; Alcotest.test_case "dotted-plus-frequency-greater-than-one-test"
-      `Quick test_dotted_plus_frequency_greater_than_one
+      `Quick
+      (fun () ->
+         with_now fixed_now_ms
+           test_dotted_plus_frequency_greater_than_one)
   ; Alcotest.test_case "double-plus-month-and-year-test" `Quick
-      test_double_plus_month_and_year
+      (fun () -> with_now fixed_now_ms test_double_plus_month_and_year)
   ; Alcotest.test_case "double-plus-month-clamp-stays-future-test"
-      `Quick test_double_plus_month_clamp_stays_future
+      `Quick
+      (fun () ->
+         with_now fixed_now_ms test_double_plus_month_clamp_stays_future)
   ; Alcotest.test_case "double-plus-month-end-keeps-its-day-test" `Quick
       test_double_plus_month_end_keeps_its_day
+  ; Alcotest.test_case "repeated-instant-steps-in-the-local-calendar-test"
+      `Quick test_repeated_instant_steps_in_the_local_calendar
   ; Alcotest.test_case
       "double-plus-far-overdue-minute-is-bounded-test" `Quick
-      test_double_plus_far_overdue_minute_is_bounded
+      (fun () ->
+         with_now fixed_now_ms
+           test_double_plus_far_overdue_minute_is_bounded)
   ; Alcotest.test_case
       "repeated-task-with-deadline-and-missing-temporal-property-test"
       `Quick test_repeated_task_with_deadline_and_missing_temporal_property
