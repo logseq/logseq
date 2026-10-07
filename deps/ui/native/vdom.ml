@@ -525,9 +525,9 @@ let clear_children el =
                   Hashtbl.find_opt rt.Lui_runtime.runtime_children node
                 with
                 | Some ks -> ks
-                | None -> []
+                | None -> Lui_sequence.empty
               in
-              List.iter
+              Lui_sequence.iter
                 (fun k ->
                   let ours =
                     Hashtbl.fold
@@ -612,7 +612,7 @@ let insert_before parent_el child before_el =
                   match
                     Hashtbl.find_opt rt.Lui_runtime.runtime_children pnode
                   with
-                  | Some ks -> ks
+                  | Some ks -> Lui_sequence.to_list ks
                   | None -> []
                 in
                 let rec go i = function
@@ -649,7 +649,7 @@ let parent_and_index el : (el * int) option =
                       Hashtbl.find_opt rt.Lui_runtime.runtime_children
                         pnode
                     with
-                    | Some ks -> ks
+                    | Some ks -> Lui_sequence.to_list ks
                     | None -> []
                   in
                   let rec go i = function
@@ -673,7 +673,7 @@ let parent_and_index el : (el * int) option =
                 match
                   Hashtbl.find_opt rt.Lui_runtime.runtime_children p
                 with
-                | Some ks -> ks
+                | Some ks -> Lui_sequence.to_list ks
                 | None -> []
               in
               let rec go i = function
