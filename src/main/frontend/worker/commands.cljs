@@ -158,11 +158,25 @@
 (defn- get-next-time
   "The next occurrence, in milliseconds, of a repeat whose current value is
   `current-value` (milliseconds). `now` defaults to the current time; a date
-  repeat passes today's UTC midnight so that it computes in whole UTC days."
+  repeat passes today's UTC midnight and `local? false` so that it computes in
+  whole UTC days.
+
+  An instant (Deadline, Scheduled) is stepped in the local calendar: a value
+  picked without a time is local midnight, and stepping a month in UTC moved
+  local midnight of March 1 east of UTC (Feb 28 or 29 in UTC) to March 28
+  or 29 local, the end of the same month."
   ([current-value unit frequency repeat-type]
-   (get-next-time current-value unit frequency repeat-type (t/now)))
+   (get-next-time current-value unit frequency repeat-type (t/now) true))
   ([current-value unit frequency repeat-type now]
-   (let [current-date-time (tc/to-date-time current-value)
+   (get-next-time current-value unit frequency repeat-type now true))
+  ([current-value unit frequency repeat-type now local?]
+   (let [->dt (if local?
+                ;; a local DateTime at the same instant: month and day
+                ;; arithmetic then follows the local calendar
+                #(goog.date.DateTime. (js/Date. (tc/to-long %)))
+                tc/to-date-time)
+         current-date-time (->dt current-value)
+         now (->dt now)
          [recur-unit period-f] (case (:db/ident unit)
                                  :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
                                  :logseq.property.repeat/recur-unit.hour [t/hours t/in-hours]
@@ -221,7 +235,7 @@
                              (date-time-util/ms->journal-day (tc/to-long (t/now)))))
               (t/now))]
     (when (and frequency unit current-value)
-      (when-let [next-time-long (get-next-time current-value unit frequency repeat-type now)]
+      (when-let [next-time-long (get-next-time current-value unit frequency repeat-type now (not date?))]
         (let [next-day (if date?
                          (date-time-util/utc-ms->journal-day next-time-long)
                          (date-time-util/ms->journal-day next-time-long))
