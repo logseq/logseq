@@ -896,7 +896,7 @@ let () =
     let p1 = Env.page env1 in
     let p2 = Env.page env2 in
     let* () = new_rtc_page env p1 p2 in
-    let large_text = read_utf8 "../clj-e2e/resources/large_text.txt" in
+    let large_text = read_utf8 "resources/large_text.txt" in
     let* () =
       Env.with_page env p1 (fun () ->
           let* () =

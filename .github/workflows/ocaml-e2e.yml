@@ -1,19 +1,19 @@
-name: Clojure E2E
+name: OCaml E2E
 
 on:
   push:
     branches: [master]
     paths:
-      - 'clj-e2e/**'
-      - '.github/workflows/clj-e2e.yml'
+      - 'ocaml-e2e/**'
+      - '.github/workflows/ocaml-e2e.yml'
       - src/**
       - deps/**
       - packages/**
   pull_request:
     branches: [master]
     paths:
-      - 'clj-e2e/**'
-      - '.github/workflows/clj-e2e.yml'
+      - 'ocaml-e2e/**'
+      - '.github/workflows/ocaml-e2e.yml'
       - src/**
       - deps/**
       - packages/**
@@ -21,9 +21,7 @@ on:
 env:
   CLOJURE_VERSION: '1.12.4.1618'
   JAVA_VERSION: '21'
-  # This is the latest node version we can run.
   NODE_VERSION: '24'
-  BABASHKA_VERSION: '1.12.215'
   OCAML_VERSION: '5.5.1'
 
 jobs:
@@ -57,7 +55,6 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
-          bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
@@ -70,7 +67,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam', 'ocaml-e2e/*.opam') }}
           restore-keys: |
             ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
 
@@ -81,14 +78,12 @@ jobs:
           path: |
             ~/.m2/repository
             ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-e2e-${{ hashFiles('deps.edn', 'clj-e2e/deps.edn') }}
+          key: ${{ runner.os }}-clojure-deps-e2e-${{ hashFiles('deps.edn') }}
           restore-keys: ${{ runner.os }}-clojure-deps-
 
       - name: Fetch Clojure deps
         if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: |
-          clojure -A:cljs -P
-          cd clj-e2e && clojure -P -M:test
+        run: clojure -A:cljs -P
 
       - name: Shadow-cljs cache
         uses: actions/cache@v4
@@ -123,6 +118,10 @@ jobs:
         run: |
           pnpm gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && pnpm db-worker:build
 
+      - name: Build ocaml-e2e tests
+        working-directory: ocaml-e2e
+        run: opam exec -- dune build
+
       - name: Upload E2E test build
         uses: actions/upload-artifact@v4
         with:
@@ -130,70 +129,61 @@ jobs:
           path: static/
           retention-days: 1
 
+      - name: Upload compiled e2e tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocaml-e2e-build
+          path: ocaml-e2e/_build/default/test/test_node/
+          retention-days: 1
+
   test:
     name: Test ${{ matrix.shard }}
     needs: build
     runs-on: ubuntu-22.04
-    timeout-minutes: 12
+    timeout-minutes: 30
     strategy:
       fail-fast: false
-      max-parallel: 5
       matrix:
         include:
           - shard: editor
-            namespaces: logseq.e2e.editor-basic-test
-          - shard: commands
-            namespaces: >-
-              logseq.e2e.commands-basic-test
-              logseq.e2e.query-builder-basic-test
-              logseq.e2e.multi-tabs-basic-test
-              logseq.e2e.reference-basic-test
-          - shard: outliner-rtc
-            namespaces: >-
-              logseq.e2e.outliner-basic-test
-              logseq.e2e.library-basic-test
-              logseq.e2e.rtc-basic-test
-              logseq.e2e.assets-basic-test
+            filters: editor_basic
+          - shard: commands-outliner
+            filters: commands_basic outliner_basic undo_redo
+          - shard: rtc
+            filters: rtc
+            extra: --include-slow --rtc-concurrency 4
           - shard: graph-properties
-            namespaces: >-
-              logseq.e2e.graph-navigation-basic-test
-              logseq.e2e.block-property-basic-test
-              logseq.e2e.cmdk-scroll-basic-test
+            filters: >-
+              graph property tag reference cmdk
+              bidirectional left_sidebar right_sidebar
           - shard: remaining
-            namespaces: >-
-              logseq.e2e.view-basic-test
-              logseq.e2e.property-basic-test
-              logseq.e2e.plugins-basic-test
-              logseq.e2e.property-config-basic-test
-              logseq.e2e.tag-basic-test
-              logseq.e2e.right-sidebar-basic-test
-              logseq.e2e.export-basic-test
-              logseq.e2e.flashcards-basic-test
-              logseq.e2e.import-basic-test
+            filters: >-
+              view plugins export flashcards import library query
+              multi_tabs assets
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          distribution: 'zulu'
-          java-version: ${{ env.JAVA_VERSION }}
+          version: 10.33.0
 
-      - name: Set up Clojure
-        uses: DeLaGuardo/setup-clojure@13.5
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          cli: ${{ env.CLOJURE_VERSION }}
-          bb: ${{ env.BABASHKA_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
 
-      - name: Clojure cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-e2e-${{ hashFiles('deps.edn', 'clj-e2e/deps.edn') }}
-          restore-keys: ${{ runner.os }}-clojure-deps-
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
 
       - name: Download E2E test build
         uses: actions/download-artifact@v4
@@ -201,24 +191,35 @@ jobs:
           name: static-build
           path: static
 
-      - name: Run e2e tests
-        env:
-          E2E_NAMESPACES: ${{ matrix.namespaces }}
-        run: |
-          read -r -a namespaces <<< "$E2E_NAMESPACES"
-          for namespace in "${namespaces[@]}"; do
-            bb dev -n "$namespace"
-          done
-        working-directory: clj-e2e
-        # env:
-        #   DEBUG: "pw:api"
+      - name: Download compiled e2e tests
+        uses: actions/download-artifact@v4
+        with:
+          name: ocaml-e2e-build
+          path: ocaml-e2e/_build/default/test/test_node
 
-      - name: Collect screenshots
+      - name: Serve app build
+        run: |
+          python3 -m http.server 3002 -d static/ &
+          for i in $(seq 1 30); do
+            curl -sf -o /dev/null http://localhost:3002/ && exit 0 || sleep 1
+          done
+          echo "app server failed to start" && exit 1
+
+      - name: Run e2e tests
+        working-directory: ocaml-e2e
+        env:
+          E2E_FILTERS: ${{ matrix.filters }}
+          E2E_EXTRA: ${{ matrix.extra }}
+        run: |
+          read -r -a filters <<< "$E2E_FILTERS"
+          node parallel-runner.mjs $E2E_EXTRA "${filters[@]}"
+
+      - name: Collect test logs
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-screenshots-${{ matrix.shard }}
-          path: clj-e2e/e2e-dump/*
+          name: e2e-logs-${{ matrix.shard }}
+          path: ocaml-e2e/.parallel-logs/
           retention-days: 1
 
   success:

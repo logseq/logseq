@@ -369,7 +369,7 @@ async function runFile(t) {
     : ["--test", t.path];
   const result = await new Promise((resolve) => {
     const child = spawn("node", args, {
-      cwd: HERE, // tests resolve ../clj-e2e resources relative to ocaml-e2e/
+      cwd: HERE, // test resources resolve relative to ocaml-e2e/
       env: { ...process.env, E2E_SLOW_MO: String(opt.slowMo) },
       detached: true, // own process group so timeout kills the browser too
       stdio: ["ignore", "pipe", "pipe"],
