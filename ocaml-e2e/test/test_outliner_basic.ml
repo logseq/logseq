@@ -431,13 +431,40 @@ let create_test_page_and_insert_blocks env =
   Js.Promise.resolve ()
 
 let indent_and_outdent env =
+  (* ArrowUp is delivered to whatever element had focus — under load the
+     focus move lags the keypress and the following indent/outdent lands
+     on the wrong block (its own x-check still passes, on the wrong
+     editor). Re-press until the editing content proves the focus moved. *)
+  let arrow_up_to expected =
+    let rec go tries =
+      let* () = K.arrow_up env in
+      let deadline = Js.Date.now () +. 3000. in
+      let rec poll () =
+        let* content = Util.get_edit_content env in
+        if content = Some expected then Js.Promise.resolve true
+        else if Js.Date.now () > deadline then Js.Promise.resolve false
+        else
+          let* () = Util.wait_timeout env 120. in
+          poll ()
+      in
+      let* ok = poll () in
+      if ok then Js.Promise.resolve ()
+      else if tries <= 1 then
+        let* content = Util.edit_content env in
+        Js.Promise.reject
+          (Failure
+             ("arrow_up never reached " ^ expected ^ ", editing=" ^ content))
+      else go (tries - 1)
+    in
+    go 3
+  in
   let* () = B.new_blocks env [ "b1"; "b2" ] in
   let* () = B.indent env in
   let* () = B.outdent env in
   (* indent a block with its children *)
   let* () = B.new_block env "b3" in
   let* () = B.indent env in
-  let* () = K.arrow_up env in
+  let* () = arrow_up_to "b2" in
   let* () = B.indent env in
   let* () = Util.exit_edit env in
   let* x1 = block_text_position env "b1" in
@@ -448,7 +475,7 @@ let indent_and_outdent env =
   let* () = B.open_last_block env in
   let* () = B.new_blocks env [ "b4"; "b5" ] in
   let* () = B.indent env in
-  let* () = K.arrow_up env in
+  let* () = arrow_up_to "b4" in
   let* () = B.outdent env in
   let* () = Util.exit_edit env in
   let* x2 = block_text_position env "b2" in
