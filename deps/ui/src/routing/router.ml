@@ -37,7 +37,7 @@ let parse_path (p : string) : Model.route =
           match seg with
           | "page" -> Model.Page (decode rest)
           | "block" -> Model.Block_zoom (decode rest)
-          | "all-journals" -> Model.Journals
+          | "all-journals" | "journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
           | "graph" -> Model.Graph_view
@@ -46,7 +46,7 @@ let parse_path (p : string) : Model.route =
           | _ -> Model.Not_found p)
       | None -> (
           match p with
-          | "all-journals" -> Model.Journals
+          | "all-journals" | "journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
           | "graph" -> Model.Graph_view
@@ -360,13 +360,18 @@ let rec load_page_ref for_route ref_v =
              | None -> ())
          | _ -> ()));
       Js.Promise.resolve ()
-  | None ->
-      (* cljs keeps the :page route and paints inline
-         (t :page/not-found); only unknown route segments get
-         the full-screen 404 *)
-      if (not (is_stale ())) && !loaded_route <> Some for_route
-      then Runtime.send Action.Page_load_failed;
-      Js.Promise.resolve ()))
+  | None -> (
+      (* cljs journal nav lands on dates that have no page yet — the
+         route creates the journal page on the fly; non-journal names
+         keep the inline :page/not-found *)
+      match ref_v with
+      | Wire.String n when Dates.is_journal_title n ->
+          (let* _ = Outliner_ops.apply_create_page n in
+           load_page_ref for_route ref_v)
+      | _ ->
+          if (not (is_stale ())) && !loaded_route <> Some for_route
+          then Runtime.send Action.Page_load_failed;
+          Js.Promise.resolve ())))
   |> Js.Promise.catch (fun _ ->
          if (not (is_stale ())) && !loaded_route <> Some for_route then
            Runtime.send Action.Page_load_failed;

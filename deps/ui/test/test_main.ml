@@ -202,10 +202,9 @@ let test_router () =
     (Router.parse_path "settings" = Settings);
   (* hash paths that must NOT silently 404 — regression guards for the
      cmdk go/* items that navigate via these exact strings *)
-  check "#/journals is Not_found"
-    (match Router.parse_path "journals" with
-     | Not_found _ -> true
-     | _ -> false);
+  (* cljs parity: #/journals is the canonical master route *)
+  check "#/journals is Journals"
+    (Router.parse_path "journals" = Journals);
   check "#/all-graphs is Not_found"
     (match Router.parse_path "all-graphs" with
      | Not_found _ -> true
@@ -1108,8 +1107,10 @@ let test_outliner_ops4 () =
          Wire.get m "block/collapsed?" = Some (Wire.Bool true)
      | _ -> false);
   check "create_page op"
-    (op_name_args (Outliner_ops.create_page "t")
-     = Some ("create-page", [ Wire.String "t"; Wire.Map [] ]));
+    (match op_name_args (Outliner_ops.create_page "t") with
+     | Some ("create-page", [ _; Wire.Map _ as m ]) ->
+         Wire.get m "split-namespace?" = Some (Wire.Bool true)
+     | _ -> false);
   check "create_class op"
     (match op_name_args (Outliner_ops.create_class "t") with
      | Some ("create-page", [ _; Wire.Map _ as m ]) ->

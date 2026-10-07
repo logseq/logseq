@@ -615,6 +615,9 @@ let create_page_with_flags name journal class_ uuid custom_uuid props schema =
     ; (Wire.kw "class?", Wire.Bool class_)
     ; ( Wire.kw "uuid"
       , Wire.Uuid (match custom_uuid with Some u -> u | None -> uuid) )
+    ; (* cljs <create! defaults :split-namespace? true — "Foo/Bar"
+         creates the namespace parents instead of failing validation *)
+      (Wire.kw "split-namespace?", Wire.Bool true)
     ]
 
   in

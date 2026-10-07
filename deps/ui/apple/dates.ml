@@ -30,6 +30,40 @@ let journal_day_of (d : Js.Date.t) =
 let today () = journal_title_of (date_now ())
 let today_journal_day () = journal_day_of (date_now ())
 
+(* "MMM do, yyyy" -> Some (day, month, year); the journal nav target of
+   a date that has no page yet is created on the fly like cljs *)
+let journal_title_parts (s : string) =
+  let len = String.length s in
+  match String.index_opt s ',' with
+  | Some comma when comma + 2 < len -> (
+      match
+        int_of_string_opt (String.sub s (comma + 2) (len - comma - 2))
+      with
+      | Some y -> (
+          match String.index_opt s ' ' with
+          | Some sp when sp = 3 && comma - sp > 3 -> (
+              let mon = String.sub s 0 sp in
+              let rest = String.sub s (sp + 1) (comma - sp - 1) in
+              let rlen = String.length rest in
+              let suf = String.sub rest (rlen - 2) 2 in
+              let d = String.sub rest 0 (rlen - 2) in
+              match
+                ( List.find_index
+                    (fun m -> m = mon)
+                    (Array.to_list month_abbr)
+                , int_of_string_opt d )
+              with
+              | Some m, Some d
+                when (suf = "st" || suf = "nd" || suf = "rd" || suf = "th")
+                     && d >= 1 && d <= 31 ->
+                  Some (d, m + 1, y)
+              | _ -> None)
+          | _ -> None)
+      | None -> None)
+  | _ -> None
+
+let is_journal_title s = journal_title_parts s <> None
+
 (* "Sep 27, 2026" — matches cljs format-time-travel-date's
    toLocaleDateString {month: "short", day: "numeric", year: "numeric"} *)
 let short_date_of_ts ts =
