@@ -70,10 +70,16 @@ let el_parent = Views_dom.el_parent
 let el_children = Views_dom.el_children
 let el_is_connected = Views_dom.el_is_connected
 (* vdom els ({#new} without #ref/ref-id) resolve to nothing host-side —
-   drop them through the vreg, which unmounts the materialized subtree *)
+   drop them through the vreg, which unmounts the materialized subtree.
+   Imperative els carry imp-* handles the "remove" dom-op can't resolve
+   (gpui rejects it) — Imperative_dom.remove detaches from the body
+   overlay and drops the runtime subtree instead. *)
 let el_remove (el : el) : unit =
   if Editor_dom.is_vdom_el el then Vdom.drop_el el
-  else Dom_ext.el_remove el
+  else
+    match Imperative_dom.id_of el with
+    | Some _ -> Views_dom.el_remove el
+    | None -> Dom_ext.el_remove el
 let el_matches = Properties_dom.el_matches
 let el_closest = Editor_dom.el_closest
 let closest_sel = Editor_dom.closest_sel

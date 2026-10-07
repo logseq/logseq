@@ -107,7 +107,11 @@ let show_for trig =
            x y);
       shown := Some tip
 
-let on_mouseover ev =
+(* mousemove rather than mouseover: gpui feeds document mousemove only
+   (no per-element enter/leave), and on web the armed_on guard makes
+   the extra per-move calls no-ops — moving off the trigger hits the
+   `None -> hide` arm the same way mouseout would. *)
+let on_mousemove ev =
   match D.ev_target ev with
   | None -> ()
   | Some el -> (
@@ -132,7 +136,7 @@ let on_dismiss _ = hide ()
 let install () =
   if not !installed then begin
     installed := true;
-    D.add_document_listener "mouseover" on_mouseover false;
+    D.add_document_listener "mousemove" on_mousemove false;
     D.add_document_listener "pointerdown" on_dismiss true;
     D.add_document_listener "keydown" on_dismiss true;
     (* tooltips die with their anchor's scroll like the tippy instance *)

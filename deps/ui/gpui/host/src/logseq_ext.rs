@@ -302,6 +302,25 @@ fn register_class_styles() {
         "position:absolute;width:100%;max-width:32rem",
         "pointer-events-auto",
     );
+    // cljs ui/tooltip: dark floating bubble anchored under the trigger;
+    // the inline style sets position:fixed + left/top + z-index (el attrs
+    // win over class declarations, so only the paint rules live here).
+    class(
+        "ui__tooltip-content",
+        "background:#0f172a;color:#ffffff;font-size:12px;\
+         padding:4px 8px;border-radius:6px",
+        "pointer-events-none whitespace-nowrap",
+    );
+    class(
+        "ui__tooltip-arrow",
+        "position:absolute;width:8px;height:8px;background:#0f172a",
+        "",
+    );
+    class(
+        "ls-tooltip-keys",
+        "display:inline-flex;gap:2px;margin-left:6px;opacity:0.7",
+        "",
+    );
     class("ls-dialog-cmdk", "width:90dvw;max-width:56rem;padding:0", "");
     class(
         "cp__cmdk__modal",
