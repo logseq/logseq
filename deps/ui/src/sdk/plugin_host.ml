@@ -296,6 +296,78 @@ let marketplace_pkgs owner =
       ignore (dirty_signal owner);
       p
 
+(* cljs plugin-handler/pkg-asset: http(s) urls pass through; relative
+   assets resolve under the marketplace packages/ dir *)
+let pkg_asset id asset =
+  if asset = "" then ""
+  else if String.length asset >= 4 && String.sub asset 0 4 = "http"
+  then asset
+  else
+    let rec strip s =
+      if String.length s > 0 && (s.[0] = '.' || s.[0] = '/') then
+        strip (String.sub s 1 (String.length s - 1))
+      else s
+    in
+    let a = strip asset in
+    if a = "" then "" else
+      "https://raw.githubusercontent.com/logseq/marketplace/master/packages/"
+      ^ id ^ "/" ^ a
+
+(* cljs plugin-handler/gh-repo-url *)
+let gh_repo_url repo = "https://github.com/" ^ repo
+
+(* cljs plugin-handler/load-marketplace-stats: stats.json is keyed by
+   package id; total downloads is summed from the release triples *)
+let stats_url =
+  "https://raw.githubusercontent.com/logseq/marketplace/master/stats.json"
+
+type pkg_stat = { stars : int; downloads : int }
+
+let marketplace_stats : Js.Json.t Js.Promise.t option ref = ref None
+
+let fetch_stats () =
+  match !marketplace_stats with
+  | Some p -> p
+  | None ->
+      let p =
+        (let* r = fetch_ stats_url in
+         let* j = resp_json r in
+         bump ();
+         Js.Promise.resolve j)
+        |> Js.Promise.catch (fun _ -> Js.Promise.resolve Js.Json.null)
+      in
+      marketplace_stats := Some p;
+      p
+
+let package_stat stats id =
+  match Js.Json.decodeObject stats with
+  | None -> None
+  | Some _ -> (
+      let s = getf stats id in
+      match Js.Json.decodeObject s with
+      | None -> None
+      | Some _ ->
+          let stars =
+            Option.value ~default:0.
+              (Js.Json.decodeNumber (getf s "stargazers_count"))
+            |> int_of_float
+          in
+          let downloads =
+            match Js.Json.decodeArray (getf s "releases") with
+            | Some rels ->
+                Array.fold_left
+                  (fun acc rel ->
+                    match Js.Json.decodeArray rel with
+                    | Some r when Array.length r > 2 -> (
+                        match Js.Json.decodeNumber r.(2) with
+                        | Some n -> acc + int_of_float n
+                        | None -> acc)
+                    | _ -> acc)
+                  0 rels
+            | None -> 0
+          in
+          Some { stars; downloads })
+
 let r2_entry_url repo version =
   "https://plugins.logseq.io/r2/" ^ repo ^ "/" ^ version
 
