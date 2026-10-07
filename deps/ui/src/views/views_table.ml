@@ -992,6 +992,7 @@ let row_stream inst cols uuids : t =
                Array.of_list (List.map (row_item_of s) uuids))
              inst.V.st.Signal.state_signal
            |> Signal.own_signal dctx.Lui_ui.ui_scope))
+      ~on_end:(fun () -> (V.ops ()).V.o_load_more inst)
       ~render:(fun (u, blk) -> row_el inst cols ~row_uuid:u ~blk)
       (Array.of_list items)
       ctx parent
@@ -1250,6 +1251,7 @@ let list_stream inst uuids : t =
                Array.of_list (List.map (row_item_of s) uuids))
              inst.V.st.Signal.state_signal
            |> Signal.own_signal dctx.Lui_ui.ui_scope))
+      ~on_end:(fun () -> (V.ops ()).V.o_load_more inst)
       ~render:(fun (u, blk) -> list_row_el ~row_uuid:u ~blk)
       (Array.of_list items)
       ctx parent

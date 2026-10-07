@@ -73,6 +73,10 @@ type vstate =
   ; props_loaded : bool
   ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
   ; ref_titles : (string, string) Hashtbl.t (* referenced uuid -> title *)
+  ; fetch_limit : int
+        (* windowed view-data fetch size — 0 means one screen; grows as the
+           row stream reports its end near the viewport (cljs row-offset
+           refetch: each window doubles, capped by the result count) *)
   }
 
 type inst =
@@ -118,6 +122,7 @@ let empty_vstate () : vstate =
   ; all_props = Hashtbl.create 17
   ; ref_titles = Hashtbl.create 8
   ; asset_class = false
+  ; fetch_limit = 0
   }
 
 let next_id = ref 0
@@ -239,7 +244,7 @@ let ctx_of inst : W.t =
           Web_dom.win_inner_height /. 33.
           |> max 0. |> ceil |> int_of_float |> max 1 |> min 1000
         in
-        base @ [ (W.kw "initial-row-count", W.Int n) ]
+        base @ [ (W.kw "initial-row-count", W.Int (max n s.fetch_limit)) ]
     | _ -> base
   in
   let base =
@@ -379,6 +384,7 @@ type ops =
   ; o_export : inst -> unit
   ; o_add_object : inst -> unit
   ; o_title_of_uuid : inst -> string -> string
+  ; o_load_more : inst -> unit
   }
 
 let ops_ref : ops option ref = ref None

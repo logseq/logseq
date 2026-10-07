@@ -505,6 +505,21 @@ let export_edn inst =
           ; toast_kind = "success" });
      Js.Promise.resolve ())
 
+(* windowed view-data growth — the row stream's virt-end dom-event fires
+   when its last child nears the viewport; each bump doubles the fetched
+   window until it covers the full result count (cljs
+   offset-view-row-count) *)
+let load_more_rows inst =
+  match (V.get inst).V.data with
+  | Wr.VFlat { rows; count; _ }
+    when List.length rows < count ->
+      V.update inst (fun s ->
+          { s with
+            V.fetch_limit = min count (2 * List.length rows)
+          });
+      load_view_data inst
+  | _ -> ()
+
 let add_new_object inst =
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
@@ -556,6 +571,7 @@ let install_ops () =
     ; o_export = export_edn
     ; o_add_object = add_new_object
     ; o_title_of_uuid = title_of_uuid
+    ; o_load_more = load_more_rows
     }
 
 (* ---------- mount ---------- *)
