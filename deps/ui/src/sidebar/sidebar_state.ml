@@ -1061,6 +1061,14 @@ let on_model st (m : Model.t) =
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
 let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
+
+(* anchor for the graphs-selector dropdown — the trigger row's
+   bottom-left corner (cljs popup-show! align :start) *)
+let repos_xy : (float * float) ref = ref (0., 0.)
+
+let open_repos_menu st ~x ~y =
+  repos_xy := (x, y);
+  Runtime.signal_set st.open_menu "repos"
 (* anchor for the right-sidebar item actions menu — cljs popup-show!
    positions at the pointer (contextmenu) / trigger click *)
 let im_xy : (float * float) ref = ref (0., 0.)
@@ -1112,7 +1120,7 @@ let on_doc_click st ev =
     match
       click_target
         ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
-         .sidebar-page-actions, .sidebar-item-more"
+         .cp__graphs-selector, .sidebar-page-actions, .sidebar-item-more"
         ev
     with
     | Some _ -> ()

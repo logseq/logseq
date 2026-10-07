@@ -195,6 +195,86 @@ let lp_menu st =
         ~style_class:"ui__dropdown-menu-content w-60" items
 ;;
 
+(* ---------- repos dropdown (cljs graphs-selector popup) ---------- *)
+
+(* cljs repo.cljs repos-dropdown-content: "Switch to:" header (only
+   when >1 repo), the switch list minus the current graph, then the
+   quick-actions footer. Remote rows render only for a logged-in user. *)
+let repos_menu st =
+  let x, y = !Sidebar_state.repos_xy in
+  let m = Runtime.model () in
+  let cur = Option.value m.Model.repo ~default:"" in
+  let by_seen a b =
+    compare
+      (Option.value (Graphs_meta.last_seen b) ~default:0.)
+      (Option.value (Graphs_meta.last_seen a) ~default:0.)
+  in
+  (* cljs combine-local-&-remote-graphs merges by :url — a remote graph
+     that exists locally renders once, as the local row *)
+  let remote =
+    if Rtc_flows.logged_in () then
+      let local_names = List.map Graphs_view.short_name !Graphs_ops.repos in
+      List.filter
+        (fun (n, _, _, _) -> not (List.mem n local_names))
+        !Graphs_ops.remote_graphs
+    else []
+  in
+  let switch_repos =
+    List.sort by_seen
+      (List.filter (fun r -> r <> cur) !Graphs_ops.repos)
+  in
+  let n_repos = List.length switch_repos + List.length remote + 1 in
+  let close () = Sidebar_state.close_menu st in
+  let repo_item repo =
+    Menu_item.el ~key:("rp-" ^ repo) ~cls:Menu_item.graphs_cls
+      ~label:(Graphs_view.short_name repo)
+      ~on_click:(fun () ->
+        close ();
+        ignore (Graphs_ops.navigate_journal repo))
+      ()
+  in
+  let remote_item (n, uuid, e2ee, _role) =
+    Menu_item.el ~key:("rr-" ^ uuid) ~cls:Menu_item.graphs_cls ~label:n
+      ~after:[ icon_ ~size:18 (if e2ee then "lock" else "cloud") ]
+      ~on_click:(fun () ->
+        close ();
+        ignore (Graphs_ops.download_remote ~name:n ~uuid ~e2ee))
+      ()
+  in
+  let action key label icn act =
+    (* cljs repos-footer: ghost button rows — icon + label, w-full *)
+    Ui_parts.pressable
+      ~on_press:(fun _ ->
+        close ();
+        act ())
+      (row ~key ~cross:`center ~gap:6 ~padding_horizontal:12
+         ~padding_vertical:4 ~style_class:"ui__button repos-qa-btn"
+         ~data_attrs:[ ("role", "menuitem") ]
+         [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])
+  in
+  popover ~key:"repos-menu" ~at:(x, y) ~role:`menu ~min_width:300
+    ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+    ~style_class:"ui__dropdown-menu-content repos-list"
+    [ column ~key:"wrap"
+        ~style_class:(if n_repos <= 1 then "no-repos" else "")
+        [ (if n_repos <= 1 then Logseq_dom.nothing
+           else
+             row ~key:"hd" ~main:`space_between ~cross:`center
+               ~style_class:"repos-hd"
+               [ text ~key:"h4" ~style_class:"repos-h4"
+                   ~value:I18n.switch_to [] ])
+        ; column ~key:"lst" ~style_class:"cp__repos-list-wrap"
+            (List.map repo_item switch_repos
+            @ List.map remote_item remote)
+        ; column ~key:"qa" ~style_class:"cp__repos-quick-actions"
+            [ action "qa-new" I18n.create_db_graph "database-plus"
+                (fun () -> Dialogs_state.open_ "new-graph")
+            ; action "qa-imp" I18n.import_existing_notes "database-import"
+                (fun () -> Platform.set_location_hash "#/import")
+            ; action "qa-all" I18n.all_graphs "layout-2" (fun () ->
+                  Platform.set_location_hash
+                    (Runtime.nav_hash "#/graphs")) ] ] ]
+
 let menu_host st =
  fun ctx parent ->
   (* nested maps each own their upstream subscription on the shared
@@ -215,6 +295,7 @@ let menu_host st =
       match menu with
       | "nav-edit" -> nav_edit_menu st
       | "plugins" -> plugins_menu st
+      | "repos" -> repos_menu st
       | m when String.length m > 3 && String.sub m 0 3 = "lp-" ->
           lp_menu st
       | _ -> Logseq_dom.nothing)
@@ -509,7 +590,7 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
    shade-mask + resizer; these pieces fill its .wrap skeleton *)
 
 (* cljs repo/graphs-selector: icon + graph display name + selector chevron *)
-let graphs_selector (ms : Model.t Signal.signal) : t =
+let graphs_selector st (ms : Model.t Signal.signal) : t =
   let name_of (m : Model.t) =
     match m.repo with
     | Some r ->
@@ -518,15 +599,22 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
         else r
     | None -> t "graph.switch/select-prompt"
   in
-  box ~key:"gsel" 
+  box ~key:"gsel"
     [ row ~key:"gsel-box" ~cross:`center ~main:`space_between
         ~style_class:"cp__graphs-selector"
         [ Ui_parts.pressable
             ~on_press:(fun _ ->
-              (* cljs opens a repos dropdown menu here; until that menu
-                 exists, land on the All graphs page (graph switching,
-                 create, and row actions live there) *)
-              Platform.set_location_hash (Runtime.nav_hash "#/graphs"))
+              (* cljs repo.cljs graphs-selector: repos dropdown flush
+                 under the trigger, 4px left of its left edge (measured
+                 on the cljs popover) *)
+              match Web_dom.query_selector ".cp__graphs-selector .item"
+              with
+              | Some el ->
+                  let r = Web_dom.el_bounding_rect el in
+                  Sidebar_state.open_repos_menu st
+                    ~x:(Web_dom.rect_left r -. 4.)
+                    ~y:(Web_dom.rect_bottom r)
+              | None -> ())
             (row ~key:"gsel-a" ~cross:`center ~gap:4 ~style_class:"item"
                [ box ~key:"gsel-th" ~style_class:"thumb"
                    [ icon_ "topology-star" ]
@@ -537,7 +625,7 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
 
 let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  Logseq_dom.fragment [ graphs_selector ms; nav_group ms st ]
+  Logseq_dom.fragment [ graphs_selector st ms; nav_group ms st ]
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in

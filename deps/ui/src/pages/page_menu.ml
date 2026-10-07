@@ -13,7 +13,7 @@ let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 (* cljs dropdown-menu-item renders its :icon before the title *)
 let icon_item key label icon_name on_click =
   Menu_item.el ~key ~label
-    ~before:[ Icons.icon ~size:15. ~cls:"ls-menu-item-icon" icon_name ]
+    ~before:[ Icons.icon ~size:18. ~cls:"ls-menu-item-icon" icon_name ]
     ~on_click ()
 
 let separator key = Menu_item.separator ~key
@@ -234,9 +234,11 @@ let view (x, y, with_app_items) (p : Model.page option) =
   let ax =
     if with_app_items then
       (* toolbar dots menu is 16rem wide (cljs header.cljs); x is the
-         trigger's right edge -> anchor the menu's right edge to it like
-         the cljs dropdown *)
-      Float.min x (inner_width -. 8.) -. 256.
+         desired menu right edge -> clamp it 5px inside the viewport
+         like the cljs popover. The cljs menu renders its right edge
+         ~1px right of the computed anchor (measured +33 inset offset),
+         so -255 reproduces the observed position *)
+      Float.min x (inner_width -. 5.) -. 255.
     else
       (* cljs anchors a 1px point at the click; the 280px
          ls-context-menu-content centers on it *)
