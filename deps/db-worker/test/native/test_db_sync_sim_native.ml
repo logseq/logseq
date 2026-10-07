@@ -47,11 +47,17 @@ let default_seed = 1337
 
 (* ---------- cljs new-client-ops-db ---------- *)
 
-let new_client_ops_db () : Sqlite.db =
+(* the pending queue lives in this sqlite file; a real client restart
+   closes and reopens it — returning the path lets the chaos driver do
+   exactly that *)
+let new_client_ops_db_with_path () : string * Sqlite.db =
   let path = Filename.temp_file "client-ops-" ".sqlite" in
   let db = Sqlite.open_db ~path in
   Sync_client_op.ensure_schema db;
-  db
+  (path, db)
+
+let new_client_ops_db () : Sqlite.db =
+  snd (new_client_ops_db_with_path ())
 
 (* ---------- rng (cljs make-rng / env-seed — bit-identical) ---------- *)
 
@@ -103,7 +109,15 @@ let report_history_bang (seed : int) (history : history)
     (match extra with
      | Some kvs ->
          " extra=" ^ Ds_wire.edn_of_transit (Wire.Map (List.map (fun (k, v) -> (kw k, v)) kvs))
-     | None -> "")
+     | None -> "");
+  (* the full op stream is the minimization input — dump it on failure *)
+  if extra <> None then
+    List.iteri
+      (fun i entry ->
+        Printf.eprintf "[db-sync-sim-history] %d %s\n%!" i
+          (Ds_wire.edn_of_transit
+             (Wire.Map (List.map (fun (k, v) -> (kw k, v)) entry))))
+      !history
 
 (* cljs install-invalid-tx-repro! — payload kept as a Wire map so the
    cljs map-equality assertion is a structural compare. *)
@@ -381,11 +395,12 @@ let await_unit (t : unit Db_worker_effect.t) : unit =
 (* ---------- cljs page/block op helpers ---------- *)
 
 (* cljs worker-page/create! *)
-let page_create conn (title : string) ?uuid ?class_ () =
+let page_create conn (title : string) ?uuid ?class_ ?journal () =
   ignore
     (Outliner_page.create_bang conn title
        ~opts:(fun () ->
-         Outliner_page.create (db_of_conn conn) title ?uuid ?class_ ())
+         Outliner_page.create (db_of_conn conn) title ?uuid ?class_
+           ?journal ())
        ())
 
 (* cljs ensure-base-page! *)
@@ -727,6 +742,16 @@ type sim_client =
   ; online : bool
   ; gen_uuid : (unit -> string) option }
 
+(* tx-id -> tx-data as sent on the wire — confirm applies this verbatim *)
+let uploaded_of_entries (tx_entries : Wire.t list)
+    : (string * Wire.t) list =
+  List.filter_map
+    (fun e ->
+       match Wire.get "tx-id" e, Wire.get "tx-data" e with
+       | Some (Wire.String id), Some d -> Some (id, d)
+       | _ -> None)
+    tx_entries
+
 let sync_client_bang ?(upload = server_upload_bang) (server : server)
     (c : sim_client) : bool =
   if not c.online then false
@@ -772,7 +797,8 @@ let sync_client_bang ?(upload = server_upload_bang) (server : server)
           (if accepted then begin
              (* mirrors sync_handle_message tx-batch-ok: confirmed txs
                 land on the server conn before the queue drops them *)
-             Sync_replay.confirm_pending_txs repo tx_ids;
+             Sync_replay.confirm_pending_txs
+               ~uploaded:(uploaded_of_entries tx_entries) repo tx_ids;
              ignore (Sync_apply.mark_pending_txs_false repo tx_ids);
              (if tx_ids <> [] then begin
                 Sync_client_op.update_local_tx repo t;
@@ -834,7 +860,13 @@ let block_attr_map (db : db) : block_attrs UuidMap.t =
           if
             (not (Ldb.built_in ent))
             && Ldb.value ent "logseq.property/deleted-at" = None
-            && (is_page ent || page <> None)
+            && (is_page ent || page <> None
+                (* property/class/closed-value entities carry no
+                   block/page — they're part of the user schema and
+                   must converge like content *)
+                || Ldb.ident_of ent <> None
+                || Ldb.value ent "logseq.property/type" <> None
+                || Ldb.value ent "db/valueType" <> None)
           then (
             match ent_uuid ent with
             | Some u ->
@@ -994,6 +1026,172 @@ let sync_loop_bang (server : server) (clients : sim_client list) : unit =
          client_block_uuids
      in
      (if List.length (List.sort_uniq compare block_counts) <> 1 then begin
+        Printf.eprintf "[count-diff] %s\n%!"
+          (Transit_codec.to_string (Wire.List block_uuid_diffs));
+        List.iter
+          (fun (repo, uuids, _) ->
+             let extras = UuidSet.diff uuids base_uuids in
+             let missing = UuidSet.diff base_uuids uuids in
+             let dump_uuid u where =
+               let db =
+                 match where with
+                 | `display -> (
+                     match
+                       List.find_opt (fun c -> c.repo = repo) online_clients
+                     with
+                     | Some c -> db_of_conn c.conn
+                     | None -> db_of_conn server.srv_conn)
+                 | `server_conn -> (
+                     match Sync_state.server_conn repo with
+                     | Some c -> db_of_conn c
+                     | None -> db_of_conn server.srv_conn)
+               in
+               match
+                 Datascript.entity db (Lookup_ref ("block/uuid", Uuid u))
+               with
+               | None ->
+                   Printf.eprintf "  uuid %s absent on %s\n%!" u
+                     (match where with `display -> "display" | `server_conn -> "server")
+               | Some ent ->
+                   let page =
+                     match Ldb.ref_ent ent "block/page" with
+                     | Some p -> (
+                         match Datascript.entity_attr p "block/uuid" with
+                         | Some (One_value (Uuid pu)) -> pu
+                         | _ -> "?")
+                     | None -> "NONE"
+                   in
+                   let deleted =
+                     match Ldb.value ent "logseq.property/deleted-at" with
+                     | Some _ -> "DELETED"
+                     | None -> "live"
+                   in
+                   let parent =
+                     match Ldb.ref_ent ent "block/parent" with
+                     | Some p -> (
+                         match Datascript.entity_attr p "block/uuid" with
+                         | Some (One_value (Uuid pu)) -> pu
+                         | _ -> "?")
+                     | None -> "none"
+                   in
+                   Printf.eprintf
+                     "  uuid %s %s %s page=%s parent=%s title=%s on %s\n%!" u
+                     (if Ldb.built_in ent then "builtin" else "user")
+                     deleted page parent
+                     (match Ldb.string_value ent "block/title" with
+                      | Some s -> String.sub s 0 (min 20 (String.length s))
+                      | None -> "NONE")
+                     (match where with `display -> "display" | `server_conn -> "server")
+             in
+             Printf.eprintf " %s extras=%d missing=%d\n%!" repo
+               (UuidSet.cardinal extras) (UuidSet.cardinal missing);
+             UuidSet.iter (fun u -> dump_uuid u `display; dump_uuid u `server_conn) extras;
+             UuidSet.iter (fun u -> dump_uuid u `display; dump_uuid u `server_conn) missing;
+             List.iter
+               (fun u ->
+                  let hits =
+                    List.concat_map
+                      (fun (stx : server_tx) ->
+                         List.filter_map
+                           (fun item ->
+                              let s = Transit_codec.to_string item in
+                              if Ns_util.str_contains s u then
+                                Some (Printf.sprintf "t%d:%s" stx.srv_t s)
+                              else None)
+                           stx.srv_tx)
+                      server.srv_txs
+                  in
+                  let n = List.length hits in
+                  let shown =
+                    if n <= 10 then hits
+                    else take 4 hits @ [ "..." ]
+                         @ List.filteri (fun i _ -> i >= n - 4) hits
+                  in
+                  Printf.eprintf "[journal] %s writes(%d): %s\n%!" u
+                    n (String.concat " | " shown))
+               (UuidSet.elements (UuidSet.union extras missing)))
+          client_block_uuids;
+        let sdb = db_of_conn server.srv_conn in
+        List.iter
+          (fun u ->
+             let in_avet =
+               Datascript.datoms sdb Avet ~a:"block/uuid" ()
+               |> List.of_seq
+               |> List.exists (fun (d : datom) ->
+                      match d.v with Uuid uu -> uu = u | _ -> false)
+             and in_eavt =
+               Datascript.datoms sdb Eavt ~a:"block/uuid" ()
+               |> List.of_seq
+               |> List.exists (fun (d : datom) ->
+                      match d.v with Uuid uu -> uu = u | _ -> false)
+             and n_avet =
+               List.length
+                 (List.of_seq
+                    (Datascript.datoms sdb Avet ~a:"block/uuid" ()))
+             and n_eavt =
+               List.length
+                 (List.of_seq
+                    (Datascript.datoms sdb Eavt ~a:"block/uuid" ()))
+             in
+             Printf.eprintf "[server-idx] %s avet=%b eavt=%b (avet=%d eavt=%d)\n%!"
+               u in_avet in_eavt n_avet n_eavt;
+             Printf.eprintf "[server-ent] %s -> %s\n%!" u
+               (match
+                  Outliner_op.entity_of_uuid (Conn.db server.srv_conn) u
+                with
+                | Some e ->
+                    let uuid_v =
+                      match Datascript.entity_attr e "block/uuid" with
+                      | Some (One_value (Uuid _)) -> "Uuid"
+                      | Some (One_value (String _)) -> "String"
+                      | Some (One_value (Ref _)) -> "Ref"
+                      | Some _ -> "other"
+                      | None -> "NONE"
+                    in
+                    Printf.sprintf
+                      "id=%d title=%s builtin=%b deleted=%s page=%s parent=%s uuid_v=%s"
+                      e.id
+                      (match Ldb.string_value e "block/title" with
+                       | Some s -> s
+                       | None -> "NONE")
+                      (Ldb.built_in e)
+                      (match Ldb.value e "logseq.property/deleted-at" with
+                       | Some _ -> "DELETED"
+                       | None -> "live")
+                      (match Ldb.ref_ent e "block/page" with
+                       | Some p -> (
+                           match Datascript.entity_attr p "block/uuid" with
+                           | Some (One_value (Uuid pu)) -> pu
+                           | _ -> "?")
+                       | None -> "NONE")
+                      (match Ldb.ref_ent e "block/parent" with
+                       | Some p -> (
+                           match Datascript.entity_attr p "block/uuid" with
+                           | Some (One_value (Uuid pu)) -> pu
+                           | _ -> "?")
+                       | None -> "NONE")
+                      uuid_v
+                | None -> "ABSENT"))
+          (UuidSet.elements
+             (UuidSet.union
+                (UuidSet.diff server_uuids base_uuids)
+                (UuidSet.diff base_uuids server_uuids)));
+        Printf.eprintf "[count-diff-server] server=%d missing=%s extra=%s\n%!"
+          (UuidSet.cardinal server_uuids)
+          (Transit_codec.to_string
+             (Wire.List
+                (List.map
+                   (fun u -> Wire.Uuid u)
+                   (take 10
+                      (UuidSet.elements
+                         (UuidSet.diff base_uuids server_uuids))))))
+          (Transit_codec.to_string
+             (Wire.List
+                (List.map
+                   (fun u -> Wire.Uuid u)
+                   (take 10
+                      (UuidSet.elements
+                         (UuidSet.diff server_uuids base_uuids))))));
         raise
           (Dispatcher.Exn_info
              ( "blocks count not equal after sync"
@@ -1111,6 +1309,40 @@ let sync_loop_bang (server : server) (clients : sim_client list) : unit =
                        , wire_of_uuid_attrs (take 5 server_checksum_extra) ) ] )
                ]
         in
+        (let diverged_uuids =
+               List.concat_map
+                 (fun (repo, attrs) ->
+                    let missing, extra =
+                      map_diff base_checksum_attrs attrs
+                    in
+                    List.map fst (take 5 (missing @ extra)))
+                 client_checksum_maps
+             in
+             (* for each diverged uuid, dump its journal writes so the
+                last-write winner is visible per replica *)
+             List.iter
+               (fun u ->
+                  let hits =
+                    List.concat_map
+                      (fun (stx : server_tx) ->
+                         List.filter_map
+                           (fun item ->
+                              let s = Transit_codec.to_string item in
+                              if Ns_util.str_contains s u
+                              then Some (Printf.sprintf "t%d:%s" stx.srv_t s)
+                              else None)
+                           stx.srv_tx)
+                      server.srv_txs
+                  in
+                  let n = List.length hits in
+                  let shown =
+                    if n <= 12 then hits
+                    else take 6 hits @ [ "..." ]
+                         @ List.filteri (fun i _ -> i >= n - 6) hits
+                  in
+                  Printf.eprintf "[journal] %s writes(%d): %s\n%!" u
+                    n (String.concat " | " shown))
+               diverged_uuids);
         raise
           (Dispatcher.Exn_info ("checksums not equal after sync", payload))
         )
@@ -1267,6 +1499,161 @@ let new_state base_uuid : sim_state = { pages = [ base_uuid ]; blocks = [] }
 let set_add l u = if List.mem u l then l else l @ [ u ]
 let set_remove l u = List.filter (fun x -> x <> u) l
 
+(* ---------- typed property pool ----------
+
+   The chaos driver upserts these specs by title on every client, so
+   the same db/ident lands everywhere — covering number, checkbox,
+   date (journal ref), node (entity ref), url, and card-many
+   add/replace on top of the original default-text property. *)
+type sim_property_spec =
+  { sp_title : string
+  ; sp_schema : Wire.t
+  ; sp_type : string (* default | number | checkbox | url | date | node *)
+  ; sp_many : bool }
+
+let sim_property_specs : sim_property_spec list =
+  [ { sp_title = sim_default_property_title
+    ; sp_schema = sim_default_property_schema
+    ; sp_type = "default"
+    ; sp_many = false }
+  ; { sp_title = "Sim Number"
+    ; sp_schema =
+        edn_wire
+          "{:logseq.property/type :number :db/cardinality \
+           :db.cardinality/one}"
+    ; sp_type = "number"
+    ; sp_many = false }
+  ; { sp_title = "Sim Checkbox"
+    ; sp_schema =
+        edn_wire
+          "{:logseq.property/type :checkbox :db/cardinality \
+           :db.cardinality/one}"
+    ; sp_type = "checkbox"
+    ; sp_many = false }
+  ; { sp_title = "Sim Url"
+    ; sp_schema =
+        edn_wire
+          "{:logseq.property/type :url :db/cardinality \
+           :db.cardinality/one}"
+    ; sp_type = "url"
+    ; sp_many = false }
+  ; { sp_title = "Sim Date"
+    ; sp_schema =
+        edn_wire
+          "{:logseq.property/type :date :db/cardinality \
+           :db.cardinality/one}"
+    ; sp_type = "date"
+    ; sp_many = false }
+  ; { sp_title = "Sim Node"
+    ; sp_schema =
+        edn_wire
+          "{:logseq.property/type :node :db/cardinality \
+           :db.cardinality/one}"
+    ; sp_type = "node"
+    ; sp_many = false }
+  ; { sp_title = "Sim Many Text"
+    ; sp_schema =
+        edn_wire
+          "{:logseq.property/type :default :db/cardinality \
+           :db.cardinality/many}"
+    ; sp_type = "default"
+    ; sp_many = true }
+  ; { sp_title = "Sim Many Node"
+    ; sp_schema =
+        edn_wire
+          "{:logseq.property/type :node :db/cardinality \
+           :db.cardinality/many}"
+    ; sp_type = "node"
+    ; sp_many = true } ]
+
+let sim_pick_property_bang (rng : unit -> float) conn
+    : (sim_property_spec * entity) option =
+  match rand_nth_bang rng sim_property_specs with
+  | Some spec -> (
+      match ensure_property_bang conn spec.sp_title spec.sp_schema with
+      | Some property -> Some (spec, property)
+      | None -> None)
+  | None -> None
+
+(* journal pages get deterministic uuids (gen_journal_page_uuid day),
+   so every client that creates the same day converges on one entity —
+   and the date property type accepts journal-page eids as values *)
+let sim_journal_page_bang (rng : unit -> float) conn : entity option =
+  let day = 20260100 + 1 + rand_int_bang rng 28 in
+  match Ldb.get_journal_page_by_day (db_of_conn conn) day with
+  | (Some _ as e) -> e
+  | None ->
+      page_create conn
+        (Outliner_page.journal_title_of_int day
+           Outliner_page.default_journal_title_formatter)
+        ~journal:true ();
+      Ldb.get_journal_page_by_day (db_of_conn conn) day
+
+(* a wire value acceptable to set-block-property/batch-set-property
+   for the given spec; Wire.Nil on failure (the op then records
+   nothing) *)
+let sim_spec_value (rng : unit -> float) conn (state : sim_state)
+    (spec : sim_property_spec) : Wire.t =
+  let db = db_of_conn conn in
+  match spec.sp_type with
+  | "checkbox" -> Wire.Bool (rand_int_bang rng 2 = 0)
+  | "number" -> Wire.String (string_of_int (rand_int_bang rng 100000))
+  | "url" ->
+      Wire.String
+        (Printf.sprintf "https://example.com/%d" (rand_int_bang rng 1000000))
+  | "date" -> (
+      match sim_journal_page_bang rng conn with
+      | Some j -> Wire.Int j.id
+      | None -> Wire.Nil)
+  | "node" -> (
+      let targets =
+        existing_entities db state.pages @ existing_blocks db state.blocks
+      in
+      match rand_nth_bang rng targets with
+      | Some t -> Wire.Int t.id
+      | None -> Wire.Nil)
+  | _ ->
+      Wire.String
+        (Printf.sprintf "prop-value-%d" (rand_int_bang rng 1000000))
+
+(* card-many: a scalar adds one element, a sequential value replaces
+   the whole set — alternate so both code paths run *)
+let sim_spec_wire_value (rng : unit -> float) conn (state : sim_state)
+    (spec : sim_property_spec) : Wire.t =
+  if spec.sp_many && rand_int_bang rng 3 = 0 then
+    Wire.List
+      [ sim_spec_value rng conn state spec
+      ; sim_spec_value rng conn state spec ]
+  else sim_spec_value rng conn state spec
+
+(* block titles that sometimes carry [[page refs]], [[journal refs]]
+   or #tags — exercises title-driven ref/tag sync *)
+let sim_random_title (rng : unit -> float) conn (state : sim_state)
+    (block : entity) : string =
+  let db = db_of_conn conn in
+  let base = Printf.sprintf "title-%d" block.id in
+  match rand_int_bang rng 10 with
+  | 0 | 1 -> (
+      match rand_nth_bang rng (existing_entities db state.pages) with
+      | Some page -> (
+          match ent_title_value page with
+          | Some t -> Printf.sprintf "%s [[%s]]" base t
+          | None -> base)
+      | None -> base)
+  | 2 -> (
+      match rand_nth_bang rng (user_classes db) with
+      | Some tag -> (
+          match ent_title_value tag with
+          | Some t -> Printf.sprintf "%s #%s" base t
+          | None -> base)
+      | None -> base)
+  | 3 ->
+      let day = 20260100 + 1 + rand_int_bang rng 28 in
+      Printf.sprintf "%s [[%s]]" base
+        (Outliner_page.journal_title_of_int day
+           Outliner_page.default_journal_title_formatter)
+  | _ -> base
+
 (* ---------- sim ops ---------- *)
 
 (* cljs op-* fns; results are cljs-map-like assoc lists with "op" key. *)
@@ -1354,7 +1741,7 @@ let op_update_title rng conn state (_base_uuid : string option) : op_result opti
       match ent_at_uuid db (ent_uuid_exn ent) with
       | Some block when not (is_page block) ->
           let uuid = ent_uuid_exn block in
-          let new_title = Printf.sprintf "title-%d" block.id in
+          let new_title = sim_random_title rng conn state block in
           update_title_bang conn uuid new_title;
           Some
             [ "op", kw "update-title"
@@ -1367,6 +1754,139 @@ let op_save_block rng conn state (base_uuid : string option) : op_result option 
   match op_update_title rng conn state base_uuid with
   | Some result ->
       Some (("op", kw "save-block") :: List.remove_assoc "op" result)
+  | None -> None
+
+(* ---------- extended user-op coverage ----------
+
+   tag add/remove, collapse toggle, journal-page creation, and typed
+   property values — all go through the same apply-ops! path as real
+   user ops so the pending queue sees the verbatim txs users produce. *)
+
+let op_tag_add rng conn state (base_uuid : string option) gen_uuid : op_result option =
+  match ensure_random_block rng conn state base_uuid gen_uuid with
+  | Some block -> (
+      match ensure_class_bang rng conn with
+      | Some tag -> (
+          try
+            ignore
+              (apply_ops_bang conn
+                 (edn_wire
+                    (Printf.sprintf
+                       "[[:batch-set-property [[%d] :block/tags %d {}]]]"
+                       block.id tag.id))
+                 (Wire.Map []));
+            Some
+              [ "op", kw "tag-add"
+              ; "uuid", Wire.Uuid (ent_uuid_exn block)
+              ; "tag", Wire.Uuid (ent_uuid_exn tag) ]
+          with _ -> None)
+      | None -> None)
+  | None -> None
+
+let op_tag_remove rng conn state (_base_uuid : string option) : op_result option =
+  let db = db_of_conn conn in
+  let tagged =
+    List.filter
+      (fun b -> Ldb.ref_ents b "block/tags" <> [])
+      (existing_blocks db state.blocks)
+  in
+  match rand_nth_bang rng tagged with
+  | Some block -> (
+      match rand_nth_bang rng (Ldb.ref_ents block "block/tags") with
+      | Some tag -> (
+          try
+            ignore
+              (apply_ops_bang conn
+                 (edn_wire
+                    (Printf.sprintf
+                       "[[:batch-delete-property-value [[%d] :block/tags %d]]]"
+                       block.id tag.id))
+                 (Wire.Map []));
+            Some
+              [ "op", kw "tag-remove"
+              ; "uuid", Wire.Uuid (ent_uuid_exn block)
+              ; "tag", Wire.Uuid (ent_uuid_exn tag) ]
+          with _ -> None)
+      | None -> None)
+  | None -> None
+
+let op_collapse_expand rng conn state (base_uuid : string option) gen_uuid : op_result option =
+  match ensure_random_block rng conn state base_uuid gen_uuid with
+  | Some block -> (
+      match ent_uuid block with
+      | Some u ->
+          let expand = rand_int_bang rng 4 = 0 in
+          (try
+             ignore
+               (apply_ops_bang conn
+                  (edn_wire
+                     (Printf.sprintf
+                        "[[:collapse-expand-blocks [[{:block/uuid %s \
+                         :block/collapsed? %s}]] nil]]"
+                        (uuid_lit u)
+                        (if expand then "false" else "true")))
+                  (Wire.Map []));
+             Some
+               [ "op", kw "collapse-expand-blocks"
+               ; "uuid", Wire.Uuid u
+               ; "expanded?", Wire.Bool expand ]
+           with _ -> None)
+      | None -> None)
+  | None -> None
+
+let op_create_journal_page rng conn _state : op_result option =
+  match sim_journal_page_bang rng conn with
+  | Some page ->
+      Some
+        [ "op", kw "create-journal-page"
+        ; "uuid", Wire.Uuid (ent_uuid_exn page) ]
+  | None -> None
+
+(* delete one element of a card-many property on a block that actually
+   holds it — the cljs delete-property-value path on a many set *)
+let op_delete_many_property_value rng conn state : op_result option =
+  match
+    rand_nth_bang rng
+      (List.filter (fun s -> s.sp_many) sim_property_specs)
+  with
+  | Some spec -> (
+      match ensure_property_bang conn spec.sp_title spec.sp_schema with
+      | Some property -> (
+          match Ldb.ident_of property with
+          | Some ident ->
+              let holders =
+                List.filter
+                  (fun b -> Ldb.values b ident <> [])
+                  (existing_blocks (db_of_conn conn) state.blocks)
+              in
+              (match rand_nth_bang rng holders with
+               | Some block -> (
+                   match rand_nth_bang rng (Ldb.values block ident) with
+                   | Some v ->
+                       let value_wire =
+                         match v with
+                         | Ref id -> Wire.Int id
+                         | _ -> Ds_wire.transit_of_value v
+                       in
+                       (try
+                          ignore
+                            (apply_ops_bang conn
+                               (edn_wire
+                                  (Printf.sprintf
+                                     "[[:delete-property-value [%d %s %s]]]"
+                                     block.id ident
+                                     (Ds_wire.edn_of_transit value_wire)))
+                               (Wire.Map []));
+                          Some
+                            [ "op", kw "delete-property-value"
+                            ; "uuid", Wire.Uuid (ent_uuid_exn block)
+                            ; "property", kw ident
+                            ; "value", value_wire ]
+                        with _ -> None)
+                   | None -> None)
+               | None -> None)
+          | None -> None)
+      | None -> None)
   | None -> None
 
 let op_insert_blocks rng conn state (base_uuid : string option) gen_uuid : op_result option =
@@ -1550,9 +2070,12 @@ let op_transact rng conn state : op_result option =
       | None -> None)
   | None -> None
 
-let op_upsert_property _rng conn : op_result option =
-  let title = sim_default_property_title in
-  let schema = sim_default_property_schema in
+let op_upsert_property rng conn : op_result option =
+  let title, schema =
+    match rand_nth_bang rng sim_property_specs with
+    | Some spec -> (spec.sp_title, spec.sp_schema)
+    | None -> (sim_default_property_title, sim_default_property_schema)
+  in
   let existing = find_property_by_title (db_of_conn conn) title in
   ignore
     (apply_ops_bang conn
@@ -1600,13 +2123,13 @@ let pick_settable_property_input rng conn (property : entity)
 let op_set_block_property rng conn state (base_uuid : string option) gen_uuid : op_result option =
   match ensure_random_block rng conn state base_uuid gen_uuid with
   | Some block -> (
-      match
-        ensure_property_bang conn sim_default_property_title
-          sim_default_property_schema
-      with
-      | Some property ->
+      match sim_pick_property_bang rng conn with
+      | Some (spec, property) ->
           let value, _options =
-            pick_settable_property_input rng conn property "prop-value"
+            if spec.sp_type = "default" then
+              pick_settable_property_input rng conn property "prop-value"
+            else
+              (sim_spec_wire_value rng conn state spec, Wire.Map [])
           in
           (try
              ignore
@@ -1635,13 +2158,13 @@ let op_set_block_property rng conn state (base_uuid : string option) gen_uuid : 
 let op_remove_block_property rng conn state (base_uuid : string option) gen_uuid : op_result option =
   match ensure_random_block rng conn state base_uuid gen_uuid with
   | Some block -> (
-      match
-        ensure_property_bang conn sim_default_property_title
-          sim_default_property_schema
-      with
-      | Some property ->
+      match sim_pick_property_bang rng conn with
+      | Some (spec, property) ->
           let value, _options =
-            pick_settable_property_input rng conn property "remove-prop"
+            if spec.sp_type = "default" then
+              pick_settable_property_input rng conn property "remove-prop"
+            else
+              (sim_spec_wire_value rng conn state spec, Wire.Map [])
           in
           (try
              ignore
@@ -1718,11 +2241,8 @@ let op_create_property_text_block rng conn : op_result option =
   | None -> None
 
 let op_batch_set_property rng conn state (base_uuid : string option) gen_uuid : op_result option =
-  match
-    ensure_property_bang conn sim_default_property_title
-      sim_default_property_schema
-  with
-  | Some property -> (
+  match sim_pick_property_bang rng conn with
+  | Some (spec, property) -> (
       let blocks =
         List.init 2 (fun _ ->
             ensure_random_block rng conn state base_uuid gen_uuid)
@@ -1738,7 +2258,10 @@ let op_batch_set_property rng conn state (base_uuid : string option) gen_uuid : 
       | _ ->
           let block_ids = List.map (fun b -> b.id) blocks in
           let value, options =
-            pick_settable_property_input rng conn property "batch-prop"
+            if spec.sp_type = "default" then
+              pick_settable_property_input rng conn property "batch-prop"
+            else
+              (sim_spec_wire_value rng conn state spec, Wire.Map [])
           in
           (try
              ignore
@@ -1769,11 +2292,8 @@ let op_batch_set_property rng conn state (base_uuid : string option) gen_uuid : 
   | None -> None
 
 let op_batch_remove_property rng conn state (base_uuid : string option) gen_uuid : op_result option =
-  match
-    ensure_property_bang conn sim_default_property_title
-      sim_default_property_schema
-  with
-  | Some property -> (
+  match sim_pick_property_bang rng conn with
+  | Some (spec, property) -> (
       match
         Option.bind base_uuid (fun bu -> ent_at_uuid (db_of_conn conn) bu)
       with
@@ -1799,7 +2319,10 @@ let op_batch_remove_property rng conn state (base_uuid : string option) gen_uuid
            | _ ->
                let block_ids = List.map (fun b -> b.id) blocks in
                let value, options =
-                 pick_settable_property_input rng conn property "to-remove"
+                 if spec.sp_type = "default" then
+                   pick_settable_property_input rng conn property "to-remove"
+                 else
+                   (sim_spec_wire_value rng conn state spec, Wire.Map [])
                in
                (try
                   ignore
@@ -2017,6 +2540,11 @@ let op_add_existing_values_to_closed_values rng conn : op_result option =
   | None -> None
 
 let op_delete_property_value rng conn state (base_uuid : string option) gen_uuid : op_result option =
+  (* half the time delete one element of a card-many user property;
+     otherwise set+delete a block/tags class the way the cljs test did *)
+  if rand_int_bang rng 2 = 0 then
+    op_delete_many_property_value rng conn state
+  else
   match ensure_class_bang rng conn with
   | Some class_ -> (
       match ensure_random_block rng conn state base_uuid gen_uuid with
@@ -2362,7 +2890,11 @@ let op_table : op_entry list =
   ; { op_name = "copy-paste-block-tree-into-empty-target"; op_weight = 4 }
   ; { op_name = "cut-paste-block-with-child"; op_weight = 4 }
   ; { op_name = "delete-block"; op_weight = 4 }
-  ; { op_name = "update-title"; op_weight = 8 } ]
+  ; { op_name = "update-title"; op_weight = 8 }
+  ; { op_name = "tag-add"; op_weight = 3 }
+  ; { op_name = "tag-remove"; op_weight = 2 }
+  ; { op_name = "collapse-expand-blocks"; op_weight = 2 }
+  ; { op_name = "create-journal-page"; op_weight = 2 } ]
 
 let required_core_outliner_op_names =
   [ "save-block"
@@ -2608,6 +3140,12 @@ let run_ops_bang (rng : unit -> float) (ctx : run_ctx) (steps : int)
       | "cut-paste-block-with-child" ->
           op_cut_paste_block_with_child rng ctx.conn ctx.state ctx.base_uuid
       | "delete-block" -> op_delete_block rng ctx.conn ctx.state
+      | "tag-add" ->
+          op_tag_add rng ctx.conn ctx.state ctx.base_uuid ctx.gen_uuid
+      | "tag-remove" -> op_tag_remove rng ctx.conn ctx.state ctx.base_uuid
+      | "collapse-expand-blocks" ->
+          op_collapse_expand rng ctx.conn ctx.state ctx.base_uuid ctx.gen_uuid
+      | "create-journal-page" -> op_create_journal_page rng ctx.conn ctx.state
       | _ -> None
     in
     match result with
@@ -2674,6 +3212,11 @@ let rec prime_op_context_bang (rng : unit -> float) (ctx : run_ctx)
   | "redo" ->
       setup_run "insert-blocks" ~times:2;
       setup_run "undo" ~times:1
+  | "tag-add" | "collapse-expand-blocks" ->
+      setup_run "insert-blocks" ~times:2
+  | "tag-remove" ->
+      setup_run "insert-blocks" ~times:2;
+      setup_run "tag-add" ~times:1
   | _ -> ()
 
 (* cljs ensure-op-recorded! *)
@@ -2836,6 +3379,218 @@ let assert_checksum_cache_aligned_bang (seed : int) (server : server)
          (first = server_checksum)
    | [] -> ())
 
+(* ---------- full uuid-keyed projection ----------
+
+   block_attr_map only covers parent/order/title/page; convergence for
+   the 3-client stress also needs properties, tags, refs, collapsed —
+   everything. So this map captures every datom attr of every
+   user-visible entity (same built_in/deleted/page filter as
+   block_attr_map), with ref values normalized through the target's
+   block/uuid so raw eid allocation differences don't count as
+   divergence. Timestamps stay: they travel in the verbatim tx, so the
+   merged value must converge too. *)
+
+let norm_datom_value (db : db) (v : value) : string =
+  match v with
+  | Ref id -> (
+      match Datascript.entity db (Entity_id id) with
+      | Some e -> (
+          match ent_uuid e with
+          | Some u -> "R:" ^ u
+          | None -> "R:e" ^ string_of_int id)
+      | None -> "R:gone" ^ string_of_int id)
+  | _ -> "V:" ^ Ds_wire.edn_of_transit (Ds_wire.transit_of_value v)
+
+let full_attr_map (db : db) : (string * string list) list UuidMap.t =
+  let eids =
+    result_eids
+      (Datascript.q_string db "[:find [?e ...] :where [?e :block/uuid]]")
+  in
+  List.fold_left
+    (fun m eid ->
+      match Datascript.entity db (Entity_id eid) with
+      | Some ent ->
+          let page = Ldb.ref_ent ent "block/page" in
+          if
+            (not (Ldb.built_in ent))
+            && Ldb.value ent "logseq.property/deleted-at" = None
+            && (is_page ent || page <> None
+                (* property/class/closed-value entities carry no
+                   block/page — they're part of the user schema and
+                   must converge like content *)
+                || Ldb.ident_of ent <> None
+                || Ldb.value ent "logseq.property/type" <> None
+                || Ldb.value ent "db/valueType" <> None)
+          then (
+            match ent_uuid ent with
+            | Some u ->
+                let attrs = Hashtbl.create 16 in
+                Seq.iter
+                  (fun (d : datom) ->
+                    if
+                      d.a <> "block/uuid"
+                      && d.a <> "block/tx-id"
+                      (* block/tx-id is the per-replica tx counter —
+                         legitimately divergent like eids *)
+                      && d.a <> "block/refs"
+                      && d.a <> "block/updated-at"
+                      (* block/refs + block/updated-at are non-canonical
+                         per the sync checksum (relevant_attrs covers only
+                         uuid/parent/page/order/title/name): refs is
+                         write-time materialization that legitimately
+                         differs when a verbatim create tx upserts onto a
+                         live entity vs a fresh one, and updated-at is
+                         client-clock LWW metadata *)
+                      && not (Ns_util.str_starts_with d.a "block.temp/")
+                    then
+                      Hashtbl.replace attrs d.a
+                        (norm_datom_value db d.v
+                         :: Option.value (Hashtbl.find_opt attrs d.a)
+                              ~default:[]))
+                  (Datascript.datoms db Eavt ~e:eid ());
+                let props =
+                  Hashtbl.fold
+                    (fun a vs acc -> (a, List.sort compare vs) :: acc)
+                    attrs []
+                  |> List.sort compare
+                in
+                UuidMap.add u props m
+            | None -> m)
+          else m
+      | None -> m)
+    UuidMap.empty eids
+
+(* report (and count) the first divergences between two full_attr_maps *)
+let attr_diffs (a : (string * string list) list UuidMap.t)
+    (b : (string * string list) list UuidMap.t) : string list =
+  let diffs = ref [] in
+  UuidMap.iter
+    (fun u pa ->
+      match UuidMap.find_opt u b with
+      | None -> diffs := Printf.sprintf "%s only-in-first" u :: !diffs
+      | Some pb ->
+          if pa <> pb then begin
+            let amap = List.to_seq pa |> Hashtbl.of_seq
+            and bmap = List.to_seq pb |> Hashtbl.of_seq in
+            let keys =
+              List.sort_uniq compare
+                (Hashtbl.fold (fun k _ acc -> k :: acc) amap []
+                 @ Hashtbl.fold (fun k _ acc -> k :: acc) bmap [])
+            in
+            List.iter
+              (fun k ->
+                let va = Option.value (Hashtbl.find_opt amap k) ~default:[]
+                and vb = Option.value (Hashtbl.find_opt bmap k) ~default:[] in
+                if va <> vb then
+                  diffs :=
+                    Printf.sprintf "%s %s: %s <> %s" u k
+                      (String.concat "," va) (String.concat "," vb)
+                    :: !diffs)
+              keys
+          end)
+    a;
+  UuidMap.iter
+    (fun u _ ->
+      if not (UuidMap.mem u a) then
+        diffs := Printf.sprintf "%s only-in-second" u :: !diffs)
+    b;
+  List.rev !diffs
+
+let assert_full_attrs_bang (seed : int) (history : history)
+    (labeled_maps : (string * (string * string list) list UuidMap.t) list)
+    : unit =
+  match labeled_maps with
+  | [] -> ()
+  | (first_label, first) :: rest ->
+      List.iter
+        (fun (label, m) ->
+          if not (UuidMap.equal (fun x y -> x = y) first m) then begin
+            report_history_bang seed history
+              (Some
+                 [ "type", kw "full-attrs-mismatch"
+                 ; "repo", Wire.String label ]);
+            let diffs = attr_diffs first m in
+            List.iteri
+              (fun i s ->
+                if i < 10 then
+                  Printf.eprintf "[chaos] diff %s<>%s: %s\n%!" first_label
+                    label s)
+              diffs;
+            (* dump both sides' full attr sets for the first diverging
+               entities — derived attrs (block/refs, block/page,
+               block/updated-at) only make sense next to the attrs they
+               derive from *)
+            List.iteri
+              (fun i s ->
+                if i < 3 then
+                  match String.index_opt s ' ' with
+                  | Some sp -> (
+                      let u = String.sub s 0 sp in
+                      match
+                        (UuidMap.find_opt u first, UuidMap.find_opt u m)
+                      with
+                      | Some pa, Some pb ->
+                          let show l =
+                            l
+                            |> List.map (fun (a, vs) ->
+                                   Printf.sprintf "%s=%s" a
+                                     (String.concat "," vs))
+                            |> String.concat " "
+                          in
+                          Printf.eprintf
+                            "[chaos] entity %s\n  %s: %s\n  %s: %s\n%!" u
+                            first_label (show pa) label (show pb)
+                      | _ -> ())
+                  | None -> ())
+              diffs;
+            check
+              (Printf.sprintf "attrs %s = %s" first_label label)
+              false
+          end
+          else
+            check (Printf.sprintf "attrs %s = %s" first_label label) true)
+        rest
+
+(* validate-db on every conn the model owns — server image + display
+   projections + the sim server's own conn. This is the RTC validator:
+   it skips closed-values membership checks, which cljs only enables
+   for non-RTC graphs ("we can't ensure this when merging updates from
+   server") — a property that gains closed-values can coexist with
+   pre-existing free-text values on a synced graph *)
+let assert_valid_dbs_bang (seed : int) (history : history)
+    (labeled_dbs : (string * db) list) : unit =
+  List.iter
+    (fun (label, db) ->
+      match (Db_validate.validate_db db).errors with
+      | [] ->
+          check (Printf.sprintf "validate_db empty (%s)" label) true
+      | errors ->
+          report_history_bang seed history
+            (Some
+               [ "type", kw "invalid-db"; "label", Wire.String label
+               ; ( "errors"
+                 , Wire.Int (List.length errors) ) ]);
+          List.iteri
+            (fun i (g : Db_validate.grouped_error) ->
+              if i < 5 then begin
+                Printf.eprintf "[chaos] validate %s: %s errs=%d\n%!" label
+                  g.ge_dispatch_key (List.length g.ge_errors);
+                List.iteri
+                  (fun j (e : Malli.error) ->
+                    if j < 6 then
+                      Printf.eprintf "[chaos]   err %s: %s\n%!"
+                        (String.concat "/"
+                           (List.map
+                              (fun v -> Ds_wire.edn_of_transit
+                                  (Ds_wire.transit_of_value v))
+                              e.e_in))
+                        e.e_message)
+                  g.ge_errors
+              end)
+            errors;
+          check (Printf.sprintf "validate_local_db empty (%s)" label) false)
+    labeled_dbs
+
 (* ---------- pending-sync chaos driver ----------
 
    Brute-force property testing of the display-conn pending model:
@@ -2852,7 +3607,8 @@ type chaos_client =
   ; mutable c_conn : conn (* current display conn — swapped on restart *)
   ; c_client : Sync_state.client
   ; mutable c_online : bool
-  ; c_gen : (unit -> string) option }
+  ; c_gen : (unit -> string) option
+  ; c_ops_path : string option (* pending-queue sqlite file, reopened on restart *) }
 
 type upload_outcome =
   { u_stale : bool
@@ -2944,6 +3700,42 @@ let chaos_upload_bang (rng : unit -> float) (server : server)
     ; u_failed = !failed }
   end
 
+(* close + reopen the client's pending-queue sqlite — the file-level
+   half of a real restart (the datascript conn reload is
+   restart_sim_client's job) *)
+let reopen_client_ops_db (repo : string) (ops_path : string) : unit =
+  (match Hashtbl.find_opt Sync_state.client_ops_conns repo with
+   | Some db -> (try Sqlite.close db with _ -> ())
+   | None -> ());
+  let db = Sqlite.open_db ~path:ops_path in
+  Sync_client_op.ensure_schema db;
+  Hashtbl.replace Sync_state.client_ops_conns repo db
+
+(* production graph open: the loaded conn carries only the durable
+   server image — the display conn is rebuilt on top of it and pending
+   rows replay forward *)
+let restart_sim_client ?(ops_path : string option) (repo : string) : conn =
+  (match ops_path with
+   | Some path -> reopen_client_ops_db repo path
+   | None -> ());
+  let srv =
+    match Sync_state.server_conn repo with
+    | Some s -> s
+    | None -> failwith "chaos restart before split"
+  in
+  let loaded = conn_from_db (db_of srv) in
+  Sync_state.drop_server_conn repo;
+  Worker_state.set_datascript_conn repo loaded;
+  Sync_replay.split_off_server_if_remote repo;
+  match Worker_state.datascript_conn repo with
+  | Some display ->
+      ignore
+        (Datascript.listen display
+           (Printf.sprintf "db-sync-sim/%s" repo)
+           (enqueue_listener repo));
+      display
+  | None -> failwith "chaos restart produced no display conn"
+
 (* sync_client_bang with the chaos uploader and production reject
    handling: confirmed prefix lands on the server conn first, the
    failed entry drops through fail_pending_txs, the tail stays queued *)
@@ -2961,7 +3753,8 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
        let txs = server_pull server local_tx in
        let remote_txs =
          List.map
-           (fun tx_data -> Wire.Map [ kw "tx-data", Wire.List tx_data ])
+           (fun tx_data ->
+              Wire.Map [ kw "tx-data", Wire.List tx_data ])
            txs
        in
        await_unit (Sync_replay.apply_remote_txs repo c.c_client remote_txs);
@@ -2985,9 +3778,25 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
         end);
        (if tx_entries <> [] then begin
           let res = chaos_upload_bang rng server tx_entries in
-          (if not res.u_stale then begin
+          if res.u_applied <> [] && rand_int_bang rng 16 = 0 then begin
+            (* lost response: the server committed the prefix but the
+               upload reply never reached the client — pending rows stay
+               queued verbatim and will be re-uploaded (and re-applied
+               server-side) once the client is back, so the server must
+               be idempotent on replay. The client may also die (conn
+               close+reopen, queue persisted) or drop offline here. *)
+            progress := true;
+            (if rand_int_bang rng 2 = 0 then
+               c.c_conn <-
+                 restart_sim_client ?ops_path:c.c_ops_path repo);
+            if rand_int_bang rng 2 = 0 then c.c_online <- false
+          end
+          else if not res.u_stale then begin
              (if res.u_applied <> [] then begin
-                Sync_replay.confirm_pending_txs repo res.u_applied;
+                ignore
+                  (Sync_replay.confirm_pending_txs
+                     ~uploaded:(uploaded_of_entries tx_entries) repo
+                     res.u_applied);
                 ignore
                   (Sync_apply.mark_pending_txs_false ~rebuild:false repo
                      res.u_applied)
@@ -2998,10 +3807,37 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
                   if res.u_applied <> [] then
                     Sync_replay.rebuild_display repo ~jump_tx_data:[]);
              (if res.u_applied <> [] then begin
-                Sync_client_op.update_local_tx repo server.srv_counter;
+                (* advance local_tx only over the window this batch's
+                   applied entries actually occupy: the applied prefix
+                   journaled contiguously from local_tx'+1 — other
+                   clients' entries in the same window sit before or
+                   after it, not inside. Using server.srv_counter would
+                   skip remote txs journaled after our prefix — they
+                   must stay above the watermark so the next pull
+                   delivers them *)
+                Sync_client_op.update_local_tx repo
+                  (local_tx' + List.length res.u_applied);
+                (* re-pull the own window: the journal may carry
+                   ingest-side augmentation the verbatim upload lacked
+                   (descendant cascades), and own txs are never
+                   delivered by a normal pull *)
+                let own_txs =
+                  server_pull server local_tx'
+                  |> List.filteri (fun i _ ->
+                         i < List.length res.u_applied)
+                in
+                let own_remote =
+                  List.map
+                    (fun tx_data ->
+                       Wire.Map [ kw "tx-data", Wire.List tx_data ])
+                    own_txs
+                in
+                await_unit
+                  (Sync_replay.apply_remote_txs repo c.c_client
+                     own_remote);
                 progress := true
               end)
-           end)
+           end
         end)
      end);
     !progress
@@ -3020,59 +3856,49 @@ let chaos_sync_loop_bang (rng : unit -> float) (server : server)
   in
   loop 0
 
-(* production graph open: the loaded conn carries only the durable
-   server image — the display conn is rebuilt on top of it and pending
-   rows replay forward *)
-let restart_sim_client (repo : string) : conn =
-  let srv =
-    match Sync_state.server_conn repo with
-    | Some s -> s
-    | None -> failwith "chaos restart before split"
-  in
-  let loaded = conn_from_db (db_of srv) in
-  Sync_state.drop_server_conn repo;
-  Worker_state.set_datascript_conn repo loaded;
-  Sync_replay.split_off_server_if_remote repo;
-  match Worker_state.datascript_conn repo with
-  | Some display ->
-      ignore
-        (Datascript.listen display
-           (Printf.sprintf "db-sync-sim/%s" repo)
-           (enqueue_listener repo));
-      display
-  | None -> failwith "chaos restart produced no display conn"
-
-let chaos_run_seed (seed : int) : unit =
+(* generalized to N clients: every client shares one uuid pool, gets
+   its own display conn + pending-queue file, and runs the same chaos
+   rolls; final asserts compare every client against every other AND
+   against the sim server's own image *)
+let chaos_run_seed (repos : string list) (seed : int) : unit =
+  (* deterministic uuid draws: lib internals (outliner_page/property,
+     sync_apply) fall back to Uuid_gen.uuid which is /dev/urandom-seeded,
+     and block-id generation falls back to datascript squuid (wall-clock
+     + Random) — without reseeding, identical seeds diverge run to run *)
+  Uuid_gen.seed_for_test seed;
+  Common_uuid.new_block_id_override := Some Uuid_gen.uuid;
   let rng = make_rng seed in
   let gen_uuid () = rng_uuid rng in
   let base_uuid = gen_uuid () in
-  let conn_a = create_remote_conn ()
-  and conn_b = create_remote_conn () in
-  let ops_a = new_client_ops_db ()
-  and ops_b = new_client_ops_db () in
-  let client_a = make_client repo_a
-  and client_b = make_client repo_b in
+  let conns = List.map (fun _ -> create_remote_conn ()) repos in
+  let ops = List.map (fun _ -> new_client_ops_db_with_path ()) repos in
+  let sync_clients = List.map make_client repos in
   let server = make_server () in
   let history = ref [] in
   with_test_repos
-    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
-    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (List.map
+       (fun (repo, (conn, (_, ops_db))) ->
+         repo, { conn; ops_conn = Some ops_db })
+       (List.combine repos (List.combine conns ops)))
     (fun () ->
       let { repro; restore } = install_invalid_tx_repro_bang seed history in
       Fun.protect ~finally:restore (fun () ->
-          let ca =
-            { c_repo = repo_a; c_conn = conn_a; c_client = client_a
-            ; c_online = true; c_gen = Some gen_uuid }
-          and cb =
-            { c_repo = repo_b; c_conn = conn_b; c_client = client_b
-            ; c_online = true; c_gen = Some gen_uuid }
+          let clients =
+            List.map
+              (fun (repo, conn, (ops_path, _), client) ->
+                { c_repo = repo; c_conn = conn; c_client = client
+                ; c_online = true; c_gen = Some gen_uuid
+                ; c_ops_path = Some ops_path })
+              (List.map
+                 (fun ((repo, conn), (ops, client)) -> (repo, conn, ops, client))
+                 (List.combine (List.combine repos conns)
+                    (List.combine ops sync_clients)))
           in
-          let clients = [ ca; cb ] in
-          (* shared pool: both clients pick targets from every uuid
-             either side ever created — this is what manufactures the
+          (* shared pool: all clients pick targets from every uuid
+             any side ever created — this is what manufactures the
              remote-delete-vs-pending races the model has to survive *)
           let shared = new_state base_uuid in
-          let states = [ repo_a, shared; repo_b, shared ] in
+          let states = List.map (fun r -> r, shared) repos in
           let rounds = 150 in
           for i = 1 to rounds do
             (match rand_nth_bang rng clients with
@@ -3122,7 +3948,8 @@ let chaos_run_seed (seed : int) : unit =
                         (fun (t : Sync_client_op.local_tx_entry) -> t.tx_id)
                         (Sync_apply.pending_txs c.c_repo ())
                     in
-                    c.c_conn <- restart_sim_client c.c_repo;
+                    c.c_conn <-
+                      restart_sim_client ?ops_path:c.c_ops_path c.c_repo;
                     let after_rows = Sync_apply.pending_txs c.c_repo () in
                     let after_ids =
                       List.map
@@ -3162,6 +3989,10 @@ let chaos_run_seed (seed : int) : unit =
              remainder and run the shared convergence asserts *)
           List.iter (fun c -> c.c_online <- true) clients;
           chaos_sync_loop_bang rng server clients;
+          (* the chaos uploader may re-mark a client offline mid-drain
+             (lost-upload-response fault injection) — force them back
+             online for the deterministic settle *)
+          List.iter (fun c -> c.c_online <- true) clients;
           let sims =
             List.map
               (fun c ->
@@ -3177,36 +4008,69 @@ let chaos_run_seed (seed : int) : unit =
               (if pend <> [] then
                  report_history_bang seed history
                    (Some
-                      [ "type", kw "pending-undrained"
+                      ([ "type", kw "pending-undrained"
                       ; "repo", Wire.String c.c_repo
-                      ; "count", Wire.Int (List.length pend) ]));
+                      ; "count", Wire.Int (List.length pend) ]
+                       @ List.concat_map
+                           (fun (e : Sync_client_op.local_tx_entry) ->
+                              [ "tx-id", Wire.String e.tx_id
+                              ; "outliner-op"
+                              , (match e.outliner_op with
+                                 | Some o -> kw o
+                                 | None -> Wire.Nil)
+                              ; "tx-data", e.tx ])
+                           pend)));
               check
                 (Printf.sprintf "pending drained (%s)" c.c_repo)
                 (pend = []))
             clients;
-          let issues_a = db_issues (db_of_conn ca.c_conn)
-          and issues_b = db_issues (db_of_conn cb.c_conn) in
-          (if issues_a <> [] || issues_b <> [] then begin
+          let all_issues =
+            List.map
+              (fun c -> (c.c_repo, db_issues (db_of_conn c.c_conn)))
+              clients
+          in
+          (if List.exists (fun (_, l) -> l <> []) all_issues then begin
              report_history_bang seed history
                (Some [ "type", kw "db-issues" ]);
              List.iter
-               (fun (i : issue) ->
-                  Printf.eprintf "[chaos] issue A %s %s\n%!" i.issue_type
-                    i.issue_uuid)
-               issues_a;
-             List.iter
-               (fun (i : issue) ->
-                  Printf.eprintf "[chaos] issue B %s %s\n%!" i.issue_type
-                    i.issue_uuid)
-               issues_b
+               (fun (repo, issues) ->
+                 List.iter
+                   (fun (i : issue) ->
+                      Printf.eprintf "[chaos] issue %s %s %s\n%!" repo
+                        i.issue_type i.issue_uuid)
+                   issues)
+               all_issues
            end);
-          check "db A issues empty" (issues_a = []);
-          check "db B issues empty" (issues_b = []);
-          let attrs_a = block_attr_map (db_of_conn ca.c_conn)
-          and attrs_b = block_attr_map (db_of_conn cb.c_conn) in
-          assert_synced_attrs_bang seed history attrs_a attrs_b attrs_b;
+          List.iter
+            (fun (repo, issues) ->
+              check
+                (Printf.sprintf "db %s issues empty" repo)
+                (issues = []))
+            all_issues;
+          (* uuid-keyed full projection: every display conn must match
+             the sim server's own image — block content, structure,
+             properties, tags, refs, collapsed *)
+          let display_maps =
+            List.map
+              (fun c ->
+                (c.c_repo, full_attr_map (db_of_conn c.c_conn)))
+              clients
+          in
+          assert_full_attrs_bang seed history
+            ( ("server", full_attr_map (db_of_conn server.srv_conn))
+             :: display_maps );
+          assert_valid_dbs_bang seed history
+            ( ("server", db_of_conn server.srv_conn)
+            :: List.concat_map
+                 (fun c ->
+                   (c.c_repo ^ "-display", db_of_conn c.c_conn)
+                   :: (match Sync_state.server_conn c.c_repo with
+                       | Some srv ->
+                           [ (c.c_repo ^ "-server", db_of_conn srv) ]
+                       | None -> []))
+                 clients );
           assert_checksum_cache_aligned_bang seed server
-            [ repo_a, ca.c_conn; repo_b, cb.c_conn ]))
+            (List.map (fun c -> (c.c_repo, c.c_conn)) clients)))
 
 let test_pending_chaos_property_sim () =
   let base_seed = Option.value (env_seed ()) ~default:default_seed in
@@ -3218,7 +4082,21 @@ let test_pending_chaos_property_sim () =
   for s = 0 to seed_count - 1 do
     let seed = base_seed + (7919 * s) in
     Printf.eprintf "[chaos] running seed=%d\n%!" seed;
-    chaos_run_seed seed
+    chaos_run_seed [ repo_a; repo_b ] seed
+  done
+
+(* 3 clients — same machinery, third party on the shared pool *)
+let test_three_clients_chaos_property_sim () =
+  let base_seed = Option.value (env_seed ()) ~default:default_seed in
+  let seed_count =
+    match Sys.getenv_opt "DB_SYNC_CHAOS3_SEEDS" with
+    | Some s -> (try int_of_string s with _ -> 6)
+    | None -> 6
+  in
+  for s = 0 to seed_count - 1 do
+    let seed = base_seed + (7919 * s) in
+    Printf.eprintf "[chaos3] running seed=%d\n%!" seed;
+    chaos_run_seed [ repo_a; repo_b; repo_c ] seed
   done
 
 (* ---------- tests (cljs deftest order) ---------- *)
@@ -6012,4 +6890,6 @@ let () =
             "verbatim-apply-drops-cycle-parent-edge-test" `Quick
             test_verbatim_apply_drops_cycle_parent_edge
         ; Alcotest.test_case "pending-chaos-property-sim-test" `Quick
-            test_pending_chaos_property_sim ] ) ]
+            test_pending_chaos_property_sim
+        ; Alcotest.test_case "three-clients-chaos-property-sim-test" `Quick
+            test_three_clients_chaos_property_sim ] ) ]
