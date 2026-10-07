@@ -394,19 +394,21 @@ let load_views inst ~on_done =
       | _ -> on_done ())
     [ Db.resource_views inst.V.owner inst.V.feature ]
 
-(* resolve the uuid of the owner page/entity behind inst.owner *)
+(* resolve the uuid of the owner page/entity behind inst.owner — f
+   gets None when the page is absent (cljs all_pages gates the view on
+   [:page-identity views-page-name] and renders nothing when missing) *)
 let owner_uuid inst f =
   match inst.V.owner with
-  | W.Uuid u -> f u
+  | W.Uuid u -> f (Some u)
   | W.String name -> (
       let key = Db.key_page_identity name in
       Db.snapshots
         ~f:(fun snap ->
           match Wr.snapshot_slot_value snap key with
-          | Some (W.Uuid u) -> f u
-          | _ -> ())
+          | Some (W.Uuid u) -> f (Some u)
+          | _ -> f None)
         [ Db.res key ])
-  | _ -> ()
+  | _ -> f None
 
 (* cljs create-view! parents view blocks under the shared $$$views page
    (common-config/views-page-name) and skips the insert when that page
@@ -421,37 +423,44 @@ let views_page_uuid f =
     [ Db.res key ]
 
 let create_view ~title ~uuid inst ~after =
-  owner_uuid inst (fun ouuid ->
-      views_page_uuid (function
-        | Some vpuuid ->
-            Db.insert_view_block ~title ~uuid ~page_uuid:vpuuid
-              ~owner_uuid:ouuid ~feature_type:inst.V.feature
-              ~after:(fun () ->
-                load_views inst ~on_done:(fun () -> after ())) ()
-        | None -> ()))
+  owner_uuid inst (function
+    | Some ouuid ->
+        views_page_uuid (function
+          | Some vpuuid ->
+              Db.insert_view_block ~title ~uuid ~page_uuid:vpuuid
+                ~owner_uuid:ouuid ~feature_type:inst.V.feature
+                ~after:(fun () ->
+                  load_views inst ~on_done:(fun () -> after ())) ()
+          | None -> ())
+    | None -> ())
 
-(* auto-create the default "All" view (cljs create-view! auto-triggered?) *)
+(* auto-create the default "All" view (cljs create-view! auto-triggered?);
+   when the owner or $$$views page cannot be resolved the view settles
+   into its empty state instead of staying on Loading *)
 let ensure_default_view inst =
   match (V.get inst).V.views with
   | v :: _ -> select_view inst v
   | [] ->
-      owner_uuid inst (fun ouuid ->
-          let uuid =
-            Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
-          in
-          views_page_uuid (function
-            | Some vpuuid ->
-                Db.insert_view_block ~title:I.all ~uuid ~page_uuid:vpuuid
-                  ~owner_uuid:ouuid ~feature_type:inst.V.feature
-                  ~after:(fun () ->
-                    load_views inst ~on_done:(fun () ->
-                        match (V.get inst).V.views with
-                        | v :: _ -> select_view inst v
-                        | [] ->
-                            V.update inst
-                              (fun s -> { s with V.view_uuid = uuid });
-                            refresh inst)) ()
-            | None -> ()))
+      owner_uuid inst (function
+        | Some ouuid ->
+            let uuid =
+              Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
+            in
+            views_page_uuid (function
+              | Some vpuuid ->
+                  Db.insert_view_block ~title:I.all ~uuid ~page_uuid:vpuuid
+                    ~owner_uuid:ouuid ~feature_type:inst.V.feature
+                    ~after:(fun () ->
+                      load_views inst ~on_done:(fun () ->
+                          match (V.get inst).V.views with
+                          | v :: _ -> select_view inst v
+                          | [] ->
+                              V.update inst
+                                (fun s -> { s with V.view_uuid = uuid });
+                              refresh inst)) ()
+              | None ->
+                  V.update inst (fun s -> { s with V.loading = false }))
+        | None -> V.update inst (fun s -> { s with V.loading = false }))
 
 (* ---------- actions ---------- *)
 
