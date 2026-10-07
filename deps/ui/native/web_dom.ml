@@ -69,7 +69,11 @@ let el_contains = Editor_dom.el_contains
 let el_parent = Views_dom.el_parent
 let el_children = Views_dom.el_children
 let el_is_connected = Views_dom.el_is_connected
-let el_remove = Dom_ext.el_remove
+(* vdom els ({#new} without #ref/ref-id) resolve to nothing host-side —
+   drop them through the vreg, which unmounts the materialized subtree *)
+let el_remove (el : el) : unit =
+  if Editor_dom.is_vdom_el el then Vdom.drop_el el
+  else Dom_ext.el_remove el
 let el_matches = Properties_dom.el_matches
 let el_closest = Editor_dom.el_closest
 let closest_sel = Editor_dom.closest_sel
