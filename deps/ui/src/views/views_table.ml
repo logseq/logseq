@@ -7,7 +7,7 @@
    reactive props — no imperative rebuilds. Overlay surfaces (menus,
    dialogs) mount imperatively through Views_popup. *)
 
-module D = Logseq_dom
+module D = Logseq_el
 module E = Web_dom
 module I = I18n
 module V = Views_state
@@ -20,9 +20,8 @@ type t = Lui_elements.t
 
 open Lui_elements
 
-let dom = D.dom
-let if_ = D.if_
-let keyed = D.keyed
+let if_ = Lui_elements.if_
+let keyed = Lui_elements.keyed
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
   inst.V.st.Signal.state_signal
 
@@ -423,7 +422,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                [ (* inline host, not a lui row: flex items collapse the
                     trailing space in runs like "Clean Code #Book" —
                     cljs keeps one inline flow *)
-                 dom ~tag:"span" (Render_inline.parse ~self:row_uuid title)
+                 text (Render_inline.parse ~self:row_uuid title)
                ; row ~cross:`center ~style_class:"ls-title-ghosts"
                    [ ghost "arrow-right" I.open_
                    ; ghost "layout-sidebar-right" I.open_in_sidebar ]
@@ -948,7 +947,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  dom ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
+  Logseq_el.el ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
     ~id:("ls-block-" ^ row_uuid)
     ~style_class_signal:
       (Logseq_el.class_signal (sig_of inst) (fun (s : V.vstate) ->

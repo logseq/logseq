@@ -139,6 +139,13 @@ let own context (source : 'a Signal.signal) =
   else
     source
 
+(* fallback for tags not yet in [tags]: emit the nearest registered
+   tag plus a data-tag attr recording the intended one (the runtime
+   raises on unregistered identifiers) *)
+let registered_tag tag = List.mem tag tags
+
+let fallback_tag = function _ -> "span"
+
 (* [el ?key ?tag ?attrs ?events ?style_class ?id ?text ?on_dom_event
    children] — the raw-element escape.
    - attrs: (name, value) pairs emitted as one JSON "attrs" prop
@@ -153,6 +160,10 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(id = "") ?(text = "") ?on_dom_event
     (children : Lui_elements.t list) : Lui_elements.t =
  fun context parent ->
+  let tag, attrs =
+    if registered_tag tag then (tag, attrs)
+    else (fallback_tag tag, attrs @ [ ("data-tag", tag) ])
+  in
   let node = Lui_ui.extension context (identifier tag) in
   Option.iter (Lui_ui.key context node) key;
   if attrs <> [] then
@@ -213,3 +224,11 @@ let fragment (children : Lui_elements.t list) : Lui_elements.t =
       Lui_elements.mount_children context p children;
       p
   | None -> invalid_arg "fragment requires a parent node"
+
+(* Plain text run — a `text` kind (span.lui-text on web). cljs hiccup
+   emits raw strings interleaved with elements; the kind keeps the run
+   as an inline element so it renders on native hosts too *)
+let txt (s : string) : Lui_elements.t = Lui_elements.text ~value:s []
+
+let text_of_class_signal source f =
+  Signal.map (fun v -> Lui_protocol.StringValue (f v)) source

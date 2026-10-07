@@ -14,7 +14,7 @@
    render_dom.ml. *)
 
 open Lui_elements
-module D = Render_dom
+module D = Logseq_el
 
 (* .block-title-wrap with inline-parsed children; plain titles become a
    direct text node (cljs parity — Playwright :text-is needs it).

@@ -199,8 +199,6 @@
 (rule
  (copy ../src/render/render_calc.ml render_calc.ml))
 (rule
- (copy ../src/render/render_dom.ml render_dom.ml))
-(rule
  (copy ../src/render/render_html.ml render_html.ml))
 (rule
  (copy ../src/render/render_inline.ml render_inline.ml))

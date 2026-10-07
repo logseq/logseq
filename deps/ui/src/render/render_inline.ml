@@ -4,7 +4,7 @@
 
 open Promise_ext
 open Lui_elements
-module D = Render_dom
+module D = Logseq_el
 module U = I18n
 
 (* positional substring index, -1 when absent — byte-compare, no

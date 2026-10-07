@@ -3,7 +3,7 @@
    Pdf-annotation ref-block chrome rendered inside .block-title-wrap. *)
 
 open Lui_elements
-module D = Render_dom
+module D = Logseq_el
 (* ---------- cljs area-display ---------- *)
 
 (* per-block resolved hl-image record: src drives the async render *)

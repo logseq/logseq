@@ -4,7 +4,7 @@
    template too). *)
 
 open Lui_elements
-module D = Render_dom
+module D = Logseq_el
 
 type node =
   | Text of string

@@ -9,7 +9,7 @@
    reactive props — no imperative rebuilds. Overlay surfaces (menus,
    dialogs) mount imperatively through Views_popup. *)
 
-module D = Logseq_dom
+module D = Logseq_el
 module E = Web_dom
 module I = I18n
 module V = Views_state
@@ -22,9 +22,8 @@ type t = Lui_elements.t
 
 open Lui_elements
 
-let dom = D.dom
-let if_ = D.if_
-let keyed = D.keyed
+let if_ = Lui_elements.if_
+let keyed = Lui_elements.keyed
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
   inst.V.st.Signal.state_signal
 
@@ -874,7 +873,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  dom ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
+  Logseq_el.el ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
     ~id:("ls-block-" ^ row_uuid)
     ~style_class_signal:
       (Logseq_el.class_signal (sig_of inst) (fun (s : V.vstate) ->
@@ -1034,9 +1033,10 @@ let grouped_table inst ~rows : t =
 (* same .ls-block[blockid] contract as row_el: the context-menu, block
    picker and dnd readers resolve list rows by blockid/data-id *)
 let list_row_el ~row_uuid ~title : t =
-  dom ~key:("ls-lr-" ^ row_uuid) ~tag:"div"
-    ~id:("ls-block-" ^ row_uuid) ~style_class:"ls-block"
-    ~attrs:[ ("data-blockid", row_uuid); ("data-id", row_uuid) ]
+  column ~key:("ls-lr-" ^ row_uuid)
+    ~accessibility_identifier:("ls-block-" ^ row_uuid)
+    ~style_class:"ls-block"
+    ~data_attrs:[ ("data-blockid", row_uuid); ("data-id", row_uuid) ]
     [ row ~gap:4 ~style_class:"block-main-container"
         [ box ~style_class:"block-content"
             ~accessibility_identifier:("block-content-" ^ row_uuid)
