@@ -796,8 +796,17 @@ let apply_input ?frame uuid ev =
              runs, so measured line ranges and caret rects are fresh *)
           let conduit' = A.conduit_of uuid in
           let m2 = A.refresh_lines m' conduit' in
-          if m2 != m' then A.update_model uuid (fun _ -> m2);
-          Signal.update fr (fun _ -> Edit_input.measure conduit' m2))
+          if m2 != m' then
+            (* apply only the measured line ranges onto the CURRENT
+               model — the flush above can re-enter (focus landing ->
+               set_caret) and publish a newer model; a wholesale
+               `fun _ -> m2` would resurrect this event's stale caret *)
+            A.update_model uuid (fun m ->
+                Edit_model.set_lines m m2.Edit_model.lines);
+          let m_now =
+            match A.edit_model uuid with Some m -> m | None -> m2
+          in
+          Signal.update fr (fun _ -> Edit_input.measure conduit' m_now))
       | None -> ())
   | _ -> ()
 

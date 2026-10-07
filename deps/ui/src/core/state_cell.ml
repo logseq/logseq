@@ -33,7 +33,17 @@ module Make (A : ARG) = struct
     | Some s -> s
     | None -> failwith (A.name ^ " state not mounted")
 
-  let value () = Signal.get_state (state ())
+  (* pending-aware read: Signal.set/update stage into [pending] and only
+     publish to [current] at stabilize — a reader inside the same flush
+     (e.g. an apply_input re-entered by a focus event during
+     apply_focus) would otherwise see a stale model and could publish
+     it back wholesale, clobbering the staged write *)
+  let value () =
+    let s = state () in
+    match !(s.Signal.pending) with
+    | Some v -> v
+    | None -> Signal.get_state s
+
   let signal () = (state ()).Signal.state_signal
 
   let set f =

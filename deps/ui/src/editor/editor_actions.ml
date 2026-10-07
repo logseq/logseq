@@ -36,7 +36,8 @@ let update_model uuid f =
   S.set (fun st ->
       match st.S.editing with
       | Some e when e.S.uuid = uuid ->
-          { st with S.editing = Some (S.with_model e (f e.S.model)) }
+          let nm = f e.S.model in
+          { st with S.editing = Some (S.with_model e nm) }
       | _ -> st)
 
 let caret_of uuid =
@@ -122,10 +123,13 @@ let drain_pending_focus_actions () =
            Platform.console_error ("queued key replay failed", e));
         drain_gate := false
 
-(* the dom id of the el el_focus was last sent for — re-emitting the op
-   every retry saturates the host's op queue while the focus event still
-   hasn't had a turn, which is exactly what keeps ae from resolving *)
-let last_focus_emitted : string option ref = ref None
+(* the arm the focus op was last emitted for — re-emitting every retry
+   saturates the host's op queue while the focus event still hasn't had
+   a turn, which is exactly what keeps ae from resolving. The arm
+   triple (not just the uuid) keys the dedup and every arm-site resets
+   it: a second edit on the same block mounts a NEW input element that
+   still needs its own emit *)
+let last_focus_emitted : (string * int * float) option ref = ref None
 
 (* the mousedown that opened an edit lands before the sink exists —
    hit-test its recorded coords against the now-mounted runs so the
@@ -140,12 +144,12 @@ let click_offset uuid =
       with
       | Some conduit, Some el -> (
           match D.closest_sel ".block-editor" (Some el) with
+          | None -> None
           | Some c ->
               let r = D.el_bounding_rect c in
               conduit.Edit_input.offset_at
                 ~x:(int_of_float x - int_of_float (D.rect_left r))
-                ~y:(int_of_float y - int_of_float (D.rect_top r))
-          | None -> None)
+                ~y:(int_of_float y - int_of_float (D.rect_top r)))
       | _ -> None)
   | _ -> None
 
@@ -169,12 +173,23 @@ let rec apply_focus () =
            waits until the sink can focus — on web the input mounts a
            patch or two after pending_focus arms, and an emit fired
            into the void would never be repeated *)
-        if Some uuid <> !last_focus_emitted && Editor_sink.can_focus uuid
+        if
+          !last_focus_emitted <> Some (uuid, caret, armed_ms)
+          && Editor_sink.can_focus uuid
         then begin
           Editor_sink.focus_input uuid;
-          last_focus_emitted := Some uuid
+          last_focus_emitted := Some (uuid, caret, armed_ms)
         end;
-        if Editor_sink.is_focused uuid then (
+        (* emitting focus_input flushes the sink's focus event through
+           apply_input -> Runtime.flush -> focus_pending, which re-enters
+           apply_focus on the still-armed pending_focus — a nested call
+           can land this arm first. Only land while the arm we matched
+           is still the armed one: a nested landing (None) or a newer
+           arm must not be stomped by this stale pass's caret *)
+        if
+          Editor_sink.is_focused uuid
+          && !S.pending_focus = Some (uuid, caret, armed_ms)
+        then (
           (* a pending apply+refresh can still replace the sink after
              landing — only consume the pending state once the input
              really holds focus; otherwise keep retrying so the
@@ -191,6 +206,7 @@ let rec apply_focus () =
              | Some off -> set_caret uuid off
              | None -> set_caret uuid caret);
           drain_pending_focus_actions ())
+        else if !S.pending_focus = None then ()
         else (
           if Lazy.force perf_keys then
             Printf.eprintf "PERF focus-retry t=%f uuid=%s\n%!"
@@ -237,6 +253,7 @@ let focus_pending () = apply_focus ()
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
+  last_focus_emitted := None;
   (* pending_focus_actions intentionally kept: keys queued during the
      remount window belong to the next focus landing as well *)
   focus_attempts := 0;
@@ -248,6 +265,7 @@ let request_focus uuid caret =
    a remounted input still ends up focused *)
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
+  last_focus_emitted := None;
   focus_attempts := 0;
   D.set_timeout apply_focus 0;
   ignore
@@ -332,7 +350,7 @@ let enter_edit ?scope uuid caret =
             S.set (fun st ->
                 { st with
                   S.editing =
-                    Some (S.mk_editing ~uuid ~buffer ~scope ~base:buffer ())
+                    Some (S.mk_editing ~caret ~uuid ~buffer ~scope ~base:buffer ())
                 ; selected = S.String_set.empty
                 ; anchor = None
                 ; action_bar = false

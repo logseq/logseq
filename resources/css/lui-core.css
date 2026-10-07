@@ -2677,6 +2677,62 @@ a.page-title {
   background: var(--ls-tertiary-background-color);
 }
 
+/* edit-surface inline marks mirror their read-mode element styles so the
+   text geometry stays identical when a block enters editing — mirrors
+   `b/strong`, `i/em`, `del/s`, `u/ins`, `mark`, `:not(pre) > code` and
+   `sub/sup` UA + theme rules above. */
+.ed-bold,
+.ed-b,
+.ed-strong {
+  font-weight: bolder;
+}
+
+.ed-italic,
+.ed-i,
+.ed-em {
+  font-style: italic;
+}
+
+.ed-strike,
+.ed-s,
+.ed-del {
+  text-decoration: line-through;
+}
+
+.ed-u,
+.ed-ins {
+  text-decoration: underline;
+}
+
+.ed-hl,
+.ed-mark {
+  background: var(--ls-page-mark-bg-color, #fef3ac);
+  color: var(--ls-page-mark-color, #262626);
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.ed-code {
+  border-radius: var(--ls-border-radius-low, 3px);
+  font-size: 0.9em;
+  font-family: MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW',
+    monospace;
+  background-color: var(--lx-gray-06, var(--ls-page-inline-code-bg-color));
+  color: var(--lx-gray-11, var(--ls-page-inline-code-color));
+  line-height: 1.45;
+  padding: 3px 5px;
+}
+
+.ed-sub {
+  vertical-align: sub;
+  font-size: smaller;
+}
+
+.ed-sup {
+  vertical-align: super;
+  font-size: smaller;
+}
+
 .ed-pad {
   /* zero-width caret landing target at line end */
   display: inline-block;

@@ -722,8 +722,14 @@ let is_focused block_id =
   | _ -> false
 
 (* the pending-focus emit must wait for the conduit input to be
-   registered — el.focus() on a detached element silently does nothing *)
-let can_focus block_id = Option.is_some (input_el block_id)
+   registered AND attached — el.focus() on a detached element silently
+   does nothing, and the emit dedup would swallow the retry *)
+external el_is_connected : W.Element.t -> bool = "isConnected" [@@mel.get]
+
+let can_focus block_id =
+  match input_el block_id with
+  | Some el -> el_is_connected el
+  | None -> false
 
 
 (* caret anchor for popups, in viewport coords — mirrors the old

@@ -12,6 +12,9 @@ const url = side === 'master' ? MASTER_URL : LUI_URL;
 const wait = side === 'master' ? 12000 : 20000;
 
 const { page, ctx } = await launch(side);
+const dbg = [];
+page.on('console', m => { const t = m.text(); if (t.includes('DBG')) dbg.push(t); });
+// master build has no DBG lines; LUI only
 const nav = async () => {
   await page.keyboard.press('Escape').catch(() => {});
   await page.waitForTimeout(300);
@@ -49,32 +52,55 @@ const probes = [
 
 const chr = '§';
 
-const clickPoint = async ({ uuid, charIdx }) => page.evaluate(({ uuid, charIdx }) => {
+const clickPoint = async ({ uuid, charIdx }) => page.evaluate(async ({ uuid, charIdx }) => {
   const blocks = [...document.querySelectorAll('.ls-block')];
   const b = blocks.find(e => e.getAttribute('blockid') === uuid || e.id === 'ls-block-' + uuid);
   if (!b) return { err: 'no block' };
   const r0 = b.getBoundingClientRect();
   if (!(r0.height > 10)) return { err: 'hidden' };
-  const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  let n;
-  while ((n = walker.nextNode())) { if (n.textContent.trim()) nodes.push(n); }
-  let remaining = charIdx, hit = null, hitOff = 0;
-  for (const tn of nodes) {
-    if (remaining <= tn.textContent.length) { hit = tn; hitOff = remaining; break; }
-    remaining -= tn.textContent.length;
-  }
-  if (!hit) return { err: 'short' };
-  const range = document.createRange();
-  range.setStart(hit, Math.max(0, hitOff - 1));
-  range.setEnd(hit, hitOff);
-  let r = range.getBoundingClientRect();
+  const measure = () => {
+    const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) {
+      if (!n.textContent.trim()) continue;
+      // reveal-on-caret delimiters are not part of the rendered character
+      // stream — skip them hidden or shown, so charIdx means rendered
+      // characters on both read and edit surfaces
+      if (n.parentElement?.closest('.ed-delim')) continue;
+      if (n.parentElement && n.parentElement.getBoundingClientRect().width === 0) continue;
+      nodes.push(n);
+    }
+    let remaining = charIdx, hit = null, hitOff = 0;
+    for (const tn of nodes) {
+      if (remaining <= tn.textContent.length) { hit = tn; hitOff = remaining; break; }
+      remaining -= tn.textContent.length;
+    }
+    if (!hit) return { err: 'short' };
+    const range = document.createRange();
+    range.setStart(hit, Math.max(0, hitOff - 1));
+    range.setEnd(hit, hitOff);
+    return { hit, r: range.getBoundingClientRect() };
+  };
+  let m = measure();
+  if (m.err) return m;
+  let r = m.r;
   if (!r.width || !r.height) return { err: 'empty' };
-  if (r.y < 60 || r.y > 740) {
-    hit.parentElement.scrollIntoView({ block: 'center' });
-    r = range.getBoundingClientRect();
+  if (r.y < 60 || r.y > 740) m.hit.parentElement.scrollIntoView({ block: 'center' });
+  // scroll triggers virtualization re-layout: re-measure until the rect is
+  // stable across two frames — a stale point lands between blocks and the
+  // click targets the list container, never reaching enter_edit
+  for (let i = 0; i < 12; i++) {
+    await new Promise(res => setTimeout(res, 150));
+    const m2 = measure();
+    if (m2.err) return m2;
+    const r2 = m2.r;
+    if (Math.abs(r2.x - r.x) < 0.5 && Math.abs(r2.y - r.y) < 0.5) {
+      return { x: r2.x + r2.width / 2, y: r2.y + r2.height / 2 };
+    }
+    r = r2;
   }
-  return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2, warn: 'unstable' };
 }, { uuid, charIdx });
 
 const restore = async (uuid, content) => page.evaluate(
@@ -89,8 +115,21 @@ for (const [idx, charIdx, name] of probes) {
   if (!blk) { results.push({ name, err: 'no top ' + idx }); continue; }
   const pt = await clickPoint({ uuid: blk.uuid, charIdx });
   if (pt.err) { results.push({ name, err: pt.err }); continue; }
+  dbg.length = 0;
   await page.mouse.click(pt.x, pt.y);
   await page.waitForTimeout(900);
+  // lazy renders can shift layout between mousedown and click, retargeting
+  // the gesture onto the list container (a real-app quirk also worth
+  // knowing, but it is not what this probe measures). Once the editor is
+  // open, re-measure and click again on the settled geometry.
+  const st1 = await page.evaluate(() => !!document.querySelector('.block-editor'));
+  const pt2 = await clickPoint({ uuid: blk.uuid, charIdx });
+  if (!pt2.err && (Math.abs(pt2.x - pt.x) > 0.5 || Math.abs(pt2.y - pt.y) > 0.5 || !st1)) {
+    // when the first click missed the block entirely (!st1), the layout has
+    // now settled — retry on the re-measured point
+    await page.mouse.click(pt2.x, pt2.y);
+    await page.waitForTimeout(700);
+  }
   const state = await page.evaluate(() => {
     const out = { hash: location.hash.slice(0, 60) };
     const ta = document.querySelector('textarea');
@@ -151,7 +190,7 @@ for (const [idx, charIdx, name] of probes) {
       await page.waitForTimeout(500);
     }
   }
-  results.push({ name, x: +pt.x.toFixed(1), ...state });
+  results.push({ name, x: +pt.x.toFixed(1), ...state, dbg: dbg.filter(l => !l.includes('apply_focus entry')) });
   await nav(); // reset page + exit edit mode
 }
 console.log(JSON.stringify(results, null, 1));
