@@ -54,15 +54,23 @@ let on_doc_keydown ev =
     close_top ()
   end
 
+let listeners_installed = ref false
+
 let install_listeners () =
-  Overlay.on_document_press "pointerdown"
-    ~els:(fun () -> !open_popups)
-    ~on_hit:(function
-      | None -> close_all ()
-      | Some _ -> ());
-  Web_dom.add_document_listener "keydown" on_doc_keydown true
+  if not !listeners_installed then begin
+    listeners_installed := true;
+    Overlay.on_document_press "pointerdown"
+      ~els:(fun () -> !open_popups)
+      ~on_hit:(function
+        | None -> close_all ()
+        | Some _ -> ());
+    Web_dom.add_document_listener "keydown" on_doc_keydown true
+  end
 
 let push_popup el =
+  (* outside-press / Escape dismissal only works once the document
+     listeners exist — install lazily on the first popup *)
+  install_listeners ();
   open_popups := el :: !open_popups;
   publish_open ()
 

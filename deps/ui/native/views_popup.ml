@@ -58,17 +58,25 @@ let on_doc_keydown ev =
     close_top ()
   end
 
+let listeners_installed = ref false
+
 let install_listeners () =
-  (* natively the press event the host forwards is mousedown, not
-     pointerdown — the dismissal semantics are the same *)
-  Overlay.on_document_press "mousedown"
-    ~els:(fun () -> !open_popups)
-    ~on_hit:(function
-      | None -> close_all ()
-      | Some _ -> ());
-  Editor_dom.document_add_listener "keydown" on_doc_keydown true
+  if not !listeners_installed then begin
+    listeners_installed := true;
+    (* natively the press event the host forwards is mousedown, not
+       pointerdown — the dismissal semantics are the same *)
+    Overlay.on_document_press "mousedown"
+      ~els:(fun () -> !open_popups)
+      ~on_hit:(function
+        | None -> close_all ()
+        | Some _ -> ());
+    Editor_dom.document_add_listener "keydown" on_doc_keydown true
+  end
 
 let push_popup el =
+  (* outside-press / Escape dismissal only works once the document
+     listeners exist — install lazily on the first popup *)
+  install_listeners ();
   open_popups := el :: !open_popups;
   publish_open ()
 
