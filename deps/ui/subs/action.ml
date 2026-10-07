@@ -11,9 +11,8 @@ type t =
   (* in-place delta splice into the journals list — same publish as
      Journals_loaded but no data_gen bump: the mounted keyed collections
      repaint only the touched rows instead of remounting the region *)
-  | Refs_loaded of Model.block list
-  | Ref_parents_loaded of (string * string list) list
-  | Unlinked_loaded of Model.block list
+  | Ref_count_loaded of int (* cljs [:block-ref-count] — gates the
+                                linked-references section *)
   | Unlinked_exists of bool
   | Navigate_to of Model.route
   | Worker_event of string * Wire.t
@@ -40,11 +39,6 @@ type t =
   | Toast_dismiss_key of string
   | Toasts_clear
   | Unlinked_toggle_open
-  | Unlinked_toggle_search
-  | Unlinked_set_query of string
-  | Linked_toggle_open
-  | Linked_toggle_search
-  | Linked_set_query of string
   | Help_toggle
   | Rtc_state of Model.rtc (* rtc-sync-state broadcast *)
   | Rtc_state_clear (* a graph's sync is (re)starting — hide stale state *)
@@ -69,9 +63,7 @@ let tag (a : t) : string =
   | Page_load_failed -> "page-load-failed"
   | Journals_loaded _ -> "journals-loaded"
   | Journals_spliced _ -> "journals-spliced"
-  | Refs_loaded _ -> "refs-loaded"
-  | Ref_parents_loaded _ -> "ref-parents-loaded"
-  | Unlinked_loaded _ -> "unlinked-loaded"
+  | Ref_count_loaded _ -> "ref-count-loaded"
   | Unlinked_exists _ -> "unlinked-exists"
   | Navigate_to _ -> "navigate-to"
   | Worker_event (n, _) -> "worker-event:" ^ n
@@ -91,15 +83,10 @@ let tag (a : t) : string =
   | Toast_dismiss_key _ -> "toast-dismiss-key"
   | Toasts_clear -> "toasts-clear"
   | Unlinked_toggle_open -> "unlinked-toggle-open"
-  | Unlinked_toggle_search -> "unlinked-toggle-search"
-  | Unlinked_set_query _ -> "unlinked-set-query"
   | Help_toggle -> "help-toggle"
   | Rtc_state _ -> "rtc-state"
   | Rtc_state_clear -> "rtc-state-clear"
   | Search_index_progress _ -> "search-index-progress"
   | Search_index_hide _ -> "search-index-hide"
   | Rtc_flow_flags _ -> "rtc-flow-flags"
-  | Linked_toggle_open -> "linked-toggle-open"
-  | Linked_toggle_search -> "linked-toggle-search"
-  | Linked_set_query _ -> "linked-set-query"
   | Noop -> "noop"

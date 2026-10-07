@@ -247,6 +247,21 @@ let decode_view_data (v : W.t) : view_data =
             })
   | _ -> VEmpty
 
+(* :ref-pages-count on the normalized view-data map — [[title count]...]
+   sorted desc by count (cljs get-ref-pages-count) *)
+let decode_ref_counts (v : W.t) : (string * int) list =
+  match W.get v "ref-pages-count" with
+  | Some arr ->
+      W.elems arr
+      |> List.filter_map (fun p ->
+             match W.elems p with
+             | [ title; n ] ->
+                 (match W.as_string title, W.as_int n with
+                  | Some t, Some n -> Some (t, n)
+                  | _ -> None)
+             | _ -> None)
+  | None -> []
+
 let rec prop_text v =
   match v with
   | W.String s -> s

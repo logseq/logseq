@@ -118,33 +118,53 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                { s' with V.selected = V.Sset.empty });
            refresh inst
          end)
-       [ box ~style_class:"ls-icon-color-wrap"
-           [ icon ~point_size:16
-               ~style_class:("ls-icon-" ^ view_type_icon v0)
-               ~name_signal:
-                 (Logseq_el.own ctx
-                    (Signal.map
-                       (fun (v : Wr.view_ent) ->
-                         Views_table.icon_of (view_type_icon v))
-                       v_sig))
-               [] ]
+       [ (* cljs view-tab-button: (when-not references? icon) — the refs
+            sections show the bare title *)
+         if_
+           ~test:
+             (Logseq_el.own ctx
+                (Signal.map
+                   (fun (_ : V.vstate) ->
+                     match inst.V.kind with
+                     | V.KLinkedRefs | V.KUnlinkedRefs -> false
+                     | _ -> true)
+                   isig))
+           (box ~style_class:"ls-icon-color-wrap"
+              [ icon ~point_size:16
+                  ~style_class:("ls-icon-" ^ view_type_icon v0)
+                  ~name_signal:
+                    (Logseq_el.own ctx
+                       (Signal.map
+                          (fun (v : Wr.view_ent) ->
+                            Views_table.icon_of (view_type_icon v))
+                          v_sig))
+                  [] ])
        ; text
            ~value:(reactive (fun (v : Wr.view_ent) -> V.display_title v) v_sig)
            []
-       ; if_
+       ; (* show-items-count? is set for linked-references but not
+            unlinked — linked also appends /total when the unfiltered
+            block-ref-count exceeds the filtered items-count *)
+         if_
            ~test:
              (Logseq_el.own ctx
                 (Signal.map
                    (fun (s : V.vstate) ->
                      s.V.view_uuid = v0.Wr.vu
                      && inst.V.feature <> "query-result"
+                     && inst.V.kind <> V.KUnlinkedRefs
                      && count_of s > 0)
                    isig))
            (text ~style_class:"ls-count"
               ~value_signal:
                 (Logseq_el.own ctx
                    (Signal.map
-                      (fun s -> string_of_int (count_of s)) isig))
+                      (fun (s : V.vstate) ->
+                        let n = count_of s in
+                        if inst.V.kind = V.KLinkedRefs && s.V.refs_total > n
+                        then Printf.sprintf "%d/%d" n s.V.refs_total
+                        else string_of_int n)
+                      isig))
               []) ])
     ctx parent
 
@@ -758,11 +778,205 @@ let filters_row inst : t =
      (sig_of inst))
     ctx parent
 
+(* ---------- linked-references include/exclude (cljs
+   reference_filters.cljs filter-dialog) ---------- *)
+
+(* filter-cog color: success includes only, error excludes only,
+   warning both (cljs :reference/page-filter icon classes) *)
+(* ---------- linked-references filters (include/exclude pages) ---------- *)
+
+(* refetches the owner page's includes/excludes + the unfiltered
+   [:block-ref-count] total — the filter-cog icon state and the
+   items-count/total suffix in the tab both read these *)
+let load_ref_filters ?(on_done = fun () -> ()) inst =
+  match V.owner_uuid inst with
+  | Some uuid ->
+      Views_db.pull_ref_filters uuid (fun (inc, exc) ->
+          V.update inst (fun s ->
+              { s with V.ref_includes = inc; ref_excludes = exc });
+          on_done ());
+      Views_db.snapshots
+        ~f:(fun snap ->
+          match Wr.snapshot_slot_value snap (Views_db.key_ref_count uuid) with
+          | Some (W.Int n) ->
+              V.update inst (fun s -> { s with V.refs_total = n })
+          | _ -> ())
+        [ Views_db.resource_ref_count uuid ]
+  | None -> ()
+
+(* page-handler/db-based-save-filter! — click toggles include,
+   shift-click toggles exclude; clicking an active filter removes it *)
+let save_ref_filter ?(on_done = fun () -> ()) inst ~title ~incl ~add =
+  match V.owner_uuid inst with
+  | None -> ()
+  | Some uuid ->
+      let lc = String.lowercase_ascii (Str_util.trim title) in
+      V.resolve_name_id lc (fun eid ->
+          match eid with
+          | Some eid ->
+              Views_db.save_ref_filter uuid
+                ~prop:
+                  (if incl then Views_db.includes_prop
+                   else Views_db.excludes_prop)
+                ~ref_eid:eid ~add (fun () ->
+                  load_ref_filters ~on_done inst;
+                  refresh inst)
+          | None -> ())
+
+let refs_cog_class (s : V.vstate) =
+  match s.V.ref_includes <> [], s.V.ref_excludes <> [] with
+  | true, false -> " text-success"
+  | false, true -> " text-error"
+  | true, true -> " text-warning"
+  | false, false -> ""
+
+let ref_filter_dialog inst anchor =
+  let deb = E.debounce 200 in
+  let query = ref "" in
+  let input_id = "vrfsearch-" ^ string_of_int inst.V.id in
+  let lc s = String.lowercase_ascii (Str_util.trim s) in
+  let pop = E.h ~cls:"ui__dropdown-menu-content p-4" () in
+  let chips_wrap = E.h ~cls:"cp__filters" () in
+  let refs_wrap = E.h ~cls:"ls-filters-refs" () in
+  let rec ref_button title count_opt =
+    E.h ~tag:"button" ~cls:"ls-ref-btn"
+      ~children:
+        ([ E.h ~tag:"span" ~text:title () ]
+         @ (match count_opt with
+            | Some n ->
+                [ E.h ~tag:"sup" ~text:(" " ^ string_of_int n) () ]
+            | None -> []))
+      ~on_click:(fun ev ->
+        (* cljs ref-button: add? = ref in neither filter; include? =
+           new click -> not shift, existing -> its current column so
+           delete-property-value targets the right property *)
+        let s = V.get inst in
+        let lcr = lc title in
+        let included =
+          List.exists (fun (n, _) -> n = lcr) s.V.ref_includes
+        in
+        let excluded =
+          List.exists (fun (n, _) -> n = lcr) s.V.ref_excludes
+        in
+        let not_in_filters = (not included) && not excluded in
+        save_ref_filter inst ~title
+          ~incl:(if not_in_filters then not (E.ev_shift ev) else included)
+          ~add:not_in_filters ~on_done:render_dynamic)
+      ()
+  and render_dynamic () =
+    let s = V.get inst in
+    E.el_replace_children chips_wrap;
+    E.el_replace_children refs_wrap;
+    let chip_row label xs =
+      E.h ~cls:"flex flex-row flex-wrap items-center"
+        ~children:
+          (E.h ~cls:"ls-filters-label" ~text:label ()
+           :: List.map (fun (_, title) -> ref_button title None) xs)
+        ()
+    in
+    if s.V.ref_includes <> [] then
+      E.el_append_child chips_wrap
+        (chip_row (I.t "reference.filter/includes") s.V.ref_includes);
+    if s.V.ref_excludes <> [] then
+      E.el_append_child chips_wrap
+        (chip_row (I.t "reference.filter/excludes") s.V.ref_excludes);
+    (* refs = ref-pages-count minus filtered names, fuzzy-narrowed by
+       the search input then re-sorted by count desc *)
+    let in_filters n =
+      List.exists (fun (x, _) -> x = lc n)
+        (s.V.ref_includes @ s.V.ref_excludes)
+    in
+    let refs =
+      s.V.ref_pages_count
+      |> List.filter (fun (t, _) -> not (in_filters t))
+      |> fun xs ->
+      if !query = "" then xs
+      else
+        Fuzzy.fuzzy_search ~extract:fst ~limit:100 xs !query
+        |> List.stable_sort (fun (_, a) (_, b) -> compare b a)
+    in
+    if refs <> [] then
+      E.el_append_child refs_wrap
+        (E.h ~cls:"flex gap-2 flex-wrap items-center"
+           ~attrs:[ ("style", "width:500px;max-width:500px") ]
+           ~children:(List.map (fun (t, n) -> ref_button t (Some n)) refs)
+           ())
+  in
+  E.el_append_child pop
+    (E.h ~cls:"ls-filters filters"
+       ~children:
+         [ E.h ~cls:"ls-filters-header"
+             ~children:
+               [ E.h ~cls:"ls-filters-icon"
+                   ~children:[ E.icon ~size:20. "filter" ] ()
+               ; E.h ~cls:"ls-filters-title-wrap"
+                   ~children:
+                     [ E.h ~tag:"h3" ~cls:"ls-filters-title"
+                         ~text:(I.t "reference.filter/title") ()
+                     ; E.h ~tag:"span" ~cls:"text-xs"
+                         ~text:(I.t "reference.filter/directions") () ]
+                   () ]
+             ()
+         ; chips_wrap
+         ; E.h ~cls:"cp__filters-input-panel"
+             ~children:
+               [ E.icon "search"
+               ; E.h ~tag:"input"
+                   ~cls:"cp__filters-input w-full bg-transparent"
+                   ~attrs:
+                     [ ("type", "text")
+                     ; ("id", input_id)
+                     ; ( "placeholder"
+                       , I.t "reference.filter/search-placeholder" ) ]
+                   ~on_input:(fun ev ->
+                     let v =
+                       match E.ev_target ev with
+                       | Some t -> E.el_value t
+                       | None -> ""
+                     in
+                     deb (fun () ->
+                         query := v;
+                         render_dynamic ()))
+                   () ]
+             ()
+         ; refs_wrap ]
+       ());
+  render_dynamic ();
+  E.el_append_child P.document_body pop;
+  P.position_content ~anchor ~content:pop ~align_end:true ~submenu:false;
+  P.push_popup pop;
+  (* cljs focuses the search input ~32ms after mount *)
+  E.set_timeout
+    (fun () ->
+      match E.get_element_by_id input_id with
+      | Some inp -> E.el_focus inp
+      | None -> ())
+    32
+
+let refs_filter_btn inst : t =
+ fun ctx parent ->
+  Ui_parts.class_signal
+    (Logseq_el.own ctx
+       (Signal.map (fun (s : V.vstate) -> refs_cog_class s) (sig_of inst)))
+    (fun c -> "ls-icon-btn" ^ c)
+    (button ~variant:`ghost ~size:`sm ~label:(I.t "reference/page-filter")
+       ~icon:(Views_table.icon_of "filter-cog")
+       ~accessibility_identifier:("vrefcog-" ^ string_of_int inst.V.id)
+       ~on_press:(fun _ ->
+         match
+           E.get_element_by_id ("vrefcog-" ^ string_of_int inst.V.id)
+         with
+         | Some a -> ref_filter_dialog inst a
+         | None -> ())
+       [])
+    ctx parent
+
 (* ---------- head ---------- *)
 
 (* cljs view-head fades actions/tabs to opacity-75, lit on hover —
    mouseover/mouseout are DOM-only, so lit now follows "a popup is
-   open" alone *)
+   open" alone; refs sections hide actions entirely until the head
+   is hovered (opacity-0 via .ls-refs) *)
 let render_head inst : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
@@ -775,7 +989,13 @@ let render_head inst : t =
         | None -> false)
     | _ -> false
   in
-  row ~style_class:"ls-view-head"
+  row
+    ~style_class:
+      ("ls-view-head"
+      ^
+      (match inst.V.kind with
+       | V.KLinkedRefs | V.KUnlinkedRefs -> " ls-refs"
+       | _ -> ""))
     [ row ~style_class:"ls-view-head-left"
         [ (match inst.V.kind with
            | V.KQuery _ ->
@@ -790,20 +1010,30 @@ let render_head inst : t =
     ; Ui_parts.class_signal dim
         (fun d -> "view-actions" ^ if d then " ls-dim" else " ls-lit")
         (row ~key:"actions"
-           [ (if_ ~test:(Signal.map (fun (s : V.vstate) -> s.V.sorting <> []) (sig_of inst))
-                (button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
-                   ~icon:(Views_table.icon_of "arrows-up-down")
-                   ~style_class:"ls-icon-btn"
-                   ~accessibility_identifier:
-                     ("vsort-" ^ string_of_int inst.V.id)
-                   ~on_press:(fun _ ->
-                     match
-                       E.get_element_by_id
-                         ("vsort-" ^ string_of_int inst.V.id)
-                     with
-                     | Some a -> sorting_popup inst a
-                     | None -> ())
-                   []))
+           [ (match inst.V.kind with
+              | V.KLinkedRefs -> refs_filter_btn inst
+              | _ -> spacer ~key:"no-refcog" [])
+           ; (* cljs (seq sorting): the button reacts to the applied view
+                entity — mount-time sorting is [] until load_views lands *)
+             if_
+               ~test:
+                 (Logseq_el.own ctx
+                    (Signal.map
+                       (fun (s : V.vstate) -> s.V.sorting <> [])
+                       (sig_of inst)))
+               (button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
+                  ~icon:(Views_table.icon_of "arrows-up-down")
+                  ~style_class:"ls-icon-btn"
+                  ~accessibility_identifier:
+                    ("vsort-" ^ string_of_int inst.V.id)
+                  ~on_press:(fun _ ->
+                    match
+                      E.get_element_by_id
+                        ("vsort-" ^ string_of_int inst.V.id)
+                    with
+                    | Some a -> sorting_popup inst a
+                    | None -> ())
+                  [])
            ; button ~variant:`ghost ~size:`sm ~label:I.filter
                ~icon:(Views_table.icon_of "filter")
                ~style_class:"ls-icon-btn"

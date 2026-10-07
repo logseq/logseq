@@ -52,6 +52,8 @@ let key_query spec = W.Array [ W.kw "query"; spec ]
 
 let key_page_identity name = W.Array [ W.kw "page-identity"; W.String name ]
 
+let key_ref_count uuid = W.Array [ W.kw "block-ref-count"; W.Uuid uuid ]
+
 (* request resources are the bare key vectors; in the response the slot key
    is [:resource <key>] (see snapshot_slot_value) *)
 let res (k : W.t) = k
@@ -61,6 +63,8 @@ let resource_view_data view_uuid ctx = res (key_view_data view_uuid ctx)
 let resource_views owner feature = res (key_views owner feature)
 
 let resource_query spec = res (key_query spec)
+
+let resource_ref_count uuid = res (key_ref_count uuid)
 
 let pull_many selector_edn ids f =
   (let* w =
@@ -221,6 +225,50 @@ let delete_page uuid f =
     [ Outliner_ops.op "delete-page" [ W.Uuid uuid; W.Map [] ] ]
     f
 
+(* ---------- linked-references include/exclude filters ---------- *)
+
+let includes_prop = "logseq.property.linked-references/includes"
+
+let excludes_prop = "logseq.property.linked-references/excludes"
+
+(* pull the owner page's included/excluded ref pages — (block/name,
+   block/title) pairs like cljs db-reference/get-filters *)
+let pull_ref_filters owner_uuid f =
+  pull_many
+    ("[:db/id {:" ^ includes_prop
+   ^ " [:db/id :block/name :block/title]} {:" ^ excludes_prop
+   ^ " [:db/id :block/name :block/title]}]")
+    [ owner_uuid ] (fun rows ->
+      let names prop =
+        match rows with
+        | [ page ] -> (
+            match W.get page prop with
+            | Some vs ->
+                List.filter_map
+                  (fun e ->
+                    match W.map_get_string e "block/name" with
+                    | Some n ->
+                        Some
+                          ( n
+                          , Option.value
+                              (W.map_get_string e "block/title")
+                              ~default:n )
+                    | None -> None)
+                  (W.elems vs)
+            | None -> [])
+        | _ -> []
+      in
+      f (names includes_prop, names excludes_prop))
+
+(* page-handler/db-based-save-filter!: add -> set-block-property,
+   remove -> delete-property-value *)
+let save_ref_filter owner_uuid ~prop ~ref_eid ~add f =
+  apply_ops
+    [ Outliner_ops.op
+        (if add then "set-block-property" else "delete-property-value")
+        [ W.Uuid owner_uuid; W.Keyword prop; W.Int ref_eid ] ]
+    f
+
 (* insert a view block under the $$$views page; [owner_uuid] is the
    entity the view is for (tag page / $$$views page / property). cljs
    api-insert-new-block! inserts after the last child (sibling insert)
@@ -257,15 +305,30 @@ let insert_view_block ?(after = fun () -> ()) ~title ~uuid ~page_uuid
         | Some u -> (u, true)
         | None -> (page_uuid, false)
       in
+      let refs_props =
+        (* cljs create-view!: refs views are list views grouped by
+           block/page — stamped on the view entity at insert time *)
+        match feature_type with
+        | "linked-references" | "unlinked-references" ->
+            [ ( W.String "logseq.property.view/type"
+              , W.Array
+                  [ W.kw "db/ident"
+                  ; W.Keyword "logseq.property.view/type.list" ] )
+            ; ( W.String "logseq.property.view/group-by-property"
+              , W.Array [ W.kw "db/ident"; W.Keyword "block/page" ] )
+            ]
+        | _ -> []
+      in
       let block_map =
         W.Map
-          [ (W.String "block/uuid", W.Uuid uuid)
-          ; (W.String "block/title", W.String title)
-          ; ( W.String "logseq.property/view-for"
-            , W.Array [ W.kw "block/uuid"; W.Uuid owner_uuid ] )
-          ; ( W.String "logseq.property.view/feature-type"
-            , W.Keyword feature_type )
-          ]
+          ([ (W.String "block/uuid", W.Uuid uuid)
+           ; (W.String "block/title", W.String title)
+           ; ( W.String "logseq.property/view-for"
+             , W.Array [ W.kw "block/uuid"; W.Uuid owner_uuid ] )
+           ; ( W.String "logseq.property.view/feature-type"
+             , W.Keyword feature_type )
+           ]
+          @ refs_props)
       in
       (let* _ =
         Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String (repo ()))

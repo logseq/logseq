@@ -486,6 +486,12 @@ let en_overrides = function
   | "view/unlinked-references" -> "Unlinked references"
   | "view/add-new-view" -> "Add new view"
   | "reference/page-filter" -> "Page filter"
+  | "reference.filter/title" -> "Filter"
+  | "reference.filter/directions" ->
+      "Click to include and shift-click to exclude. Click again to remove."
+  | "reference.filter/includes" -> "Includes: "
+  | "reference.filter/excludes" -> "Excludes: "
+  | "reference.filter/search-placeholder" -> "Search in linked pages"
   | "page/open-properties" -> "Open properties"
   | "page/hide-properties" -> "Hide properties"
   | "page/not-found" -> "Page not found"

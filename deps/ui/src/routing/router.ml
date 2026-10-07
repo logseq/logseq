@@ -148,18 +148,33 @@ let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
       Js.Promise.resolve blocks
   | None -> Js.Promise.resolve []
 
-(* refs/unlinked fetches resolve after their page load committed — guard
-   the send so a stale in-flight fetch can't overwrite the current route *)
-let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
-  (let* blocks = fetch_refs_blocks p in
-  Js.Promise.resolve
-    (if not (is_stale ()) then (
-       Runtime.send (Action.Refs_loaded blocks);
-       Outliner_ops.fetch_ref_group_parents ~stale:is_stale blocks)))
-  |> Js.Promise.catch (fun e ->
-         Platform.console_error ("get-block-refs failed", e);
-         Js.Promise.resolve ())
-  |> ignore
+(* cljs [:block-ref-count page-uuid] resource — the unfiltered refs
+   total that gates .references; fetches resolve after the page load
+   committed so a stale in-flight fetch can't overwrite the route *)
+let fetch_ref_count ~stale:(is_stale : unit -> bool) (p : Model.page) =
+  match p.Model.page_uuid with
+  | Some uuid ->
+      let rk =
+        Wire.Array [ Wire.Keyword "block-ref-count"; Wire.Uuid uuid ]
+      in
+      (let* w =
+         Runtime.invoke2 "thread-api/get-render-snapshots"
+           (Wire.String (repo ()))
+           (Wire.Map
+              [ (Wire.Keyword "blocks", Wire.Array [])
+              ; (Wire.Keyword "children", Wire.Array [])
+              ; (Wire.Keyword "resources", Wire.Array [ rk ]) ])
+       in
+       Js.Promise.resolve
+         (match Views_wire.snapshot_slot_value w rk with
+          | Some (Wire.Int n) when not (is_stale ()) ->
+              Runtime.send (Action.Ref_count_loaded n)
+          | _ -> ()))
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("block-ref-count failed", e);
+             Js.Promise.resolve ())
+      |> ignore
+  | None -> ()
 
 
 (* only the on-screen days are fetched up front — scrolling near the
@@ -387,9 +402,7 @@ let rec load_page_ref for_route ref_v =
            page title (pdf overlay CSS keys off the attribute) *)
         Web_dom.body_set_data "page" p''.Model.page_title;
         (Platform.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
-        fetch_refs ~stale:is_stale p'';
-        Outliner_ops.fetch_unlinked_refs
-          ~stale:is_stale p'';
+        fetch_ref_count ~stale:is_stale p'';
         Outliner_ops.fetch_unlinked_exists
           ~stale:is_stale p'';
         (* zoom-out to a page parent keeps the zoomed
@@ -448,7 +461,7 @@ let load_home () =
             Editor_state.clear_overrides ();
             loaded_route := Some (Model.Page name);
             (Platform.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
-            fetch_refs
+            fetch_ref_count
               ~stale:(fun () ->
                 stale (Model.Page name))
               p'');
@@ -700,13 +713,12 @@ let reload () =
 
 let init () =
   Runtime.hooks.nav_load_done <- (fun () -> loading_route := None);
-  (* the cheap side-fetches a delta-spliced refresh still needs — linked
-     refs plus the unlinked section's exists/list checks *)
+  (* the cheap side-fetches a delta-spliced refresh still needs — the
+     linked-refs count plus the unlinked section's exists check *)
   Runtime.refresh_page_side :=
     (fun p ->
       let stale = stale_page p in
-      fetch_refs ~stale p;
-      Outliner_ops.fetch_unlinked_refs ~stale p;
+      fetch_ref_count ~stale p;
       Outliner_ops.fetch_unlinked_exists ~stale p);
   (* delta-spliced journals update: the owning journal's linked refs
      still need their cheap refresh (a block-title edit can create or

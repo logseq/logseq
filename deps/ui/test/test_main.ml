@@ -269,12 +269,12 @@ let test_update_loaders () =
     (m3.route_page = None && m3.page_missing);
   let m4 = Update.update m3 (Action.Journals_loaded [ p ]) in
   check "journals loaded" (m4.journals = [ p ]);
-  let r = [ block "r1" "ref" ] in
-  let m5 = Update.update m4 (Action.Refs_loaded r) in
-  check "refs loaded" (m5.page_refs = r);
-  let u = [ block "u1" "unlinked" ] in
-  let m6 = Update.update m5 (Action.Unlinked_loaded u) in
-  check "unlinked loaded" (m6.unlinked_refs = u);
+  let m5 = Update.update m4 (Action.Ref_count_loaded 3) in
+  check "ref count loaded" (m5.Model.page_ref_count = 3);
+  let m6 = Update.update m5 (Action.Unlinked_exists true) in
+  check "unlinked exists" m6.Model.unlinked_exists;
+  let m6' = Update.update m6 Action.Unlinked_toggle_open in
+  check "unlinked toggle" (m6'.Model.unlinked_open = not m6.Model.unlinked_open);
   (* identity arms return the model unchanged *)
   let ident a = Update.update m6 a == m6 in
   check "noop identity" (ident Action.Noop);
@@ -316,26 +316,13 @@ let test_update_popups () =
   check "dismiss_all clears confirm too" (m7.confirm = None)
 
 let test_update_popups2 () =
-  let m7 =
-    Update.update
-      { Model.initial with unlinked_query = "abc" }
-      Action.Dismiss_all
-  in
-  (* unlinked refs state; unlinked_open defaults to true *)
+  let m7 = Update.update Model.initial Action.Dismiss_all in
+  (* unlinked refs fold; unlinked_open defaults to true *)
   let m8 = Update.update m7 Action.Unlinked_toggle_open in
   check "unlinked open toggles off" (not m8.unlinked_open);
   check "unlinked open toggles back"
     (Update.update m8 Action.Unlinked_toggle_open).unlinked_open;
-  let m9 =
-    Update.update
-      { m8 with unlinked_query = "abc" }
-      Action.Unlinked_toggle_search
-  in
-  check "unlinked search toggles + clears query"
-    (m9.unlinked_search && m9.unlinked_query = "");
-  let m10 = Update.update m9 (Action.Unlinked_set_query "x") in
-  check "unlinked query set" (m10.unlinked_query = "x");
-  let m11 = Update.update m10 Action.Help_toggle in
+  let m11 = Update.update m8 Action.Help_toggle in
   check "help open" m11.help_open;
   check "help toggle back"
     (not (Update.update m11 Action.Help_toggle).help_open);
@@ -348,11 +335,8 @@ let test_update_popups2 () =
     ; page_menu = Some (0., 0., 0., true, None)
     ; appearance = Some (1., 1.)
     ; unlinked_open = true
-    ; unlinked_search = true
-    ; unlinked_query = "q"
-    ; unlinked_blocks = [ block "u" "x" ]
-    ; page_refs = [ block "r" "x" ]
-    ; unlinked_refs = [ block "r" "x" ]
+    ; unlinked_exists = true
+    ; page_ref_count = 5
     ; page_missing = true
     }
   in
@@ -360,10 +344,8 @@ let test_update_popups2 () =
   check "navigate resets page-local state"
     (nav.route = Model.All_pages && not nav.editing_title
     && nav.page_menu = None && nav.appearance = None
-    && not nav.unlinked_open && not nav.unlinked_search
-    && nav.unlinked_query = "" && nav.unlinked_blocks = []
-    && nav.page_refs = [] && nav.unlinked_refs = []
-    && not nav.page_missing)
+    && not nav.unlinked_open && not nav.unlinked_exists
+    && nav.page_ref_count = 0 && not nav.page_missing)
 
 (* ---- Dates ---- *)
 
