@@ -503,7 +503,27 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
        | "select" -> select_cell inst ~row_uuid ~blk
        | "block/title" -> title_cell inst ~row_uuid ~blk c
        | "file" -> Asset_dom.file_cell_el blk
-       | _ -> prop_cell ~blk c) ]
+       | _ -> (
+           match c.V.c_prop with
+           | Some p ->
+               (* cljs table cells are inline value editors — reuse the
+                  property-panel cell on a row synthesized from the
+                  column's property entity + this row's value *)
+               let row =
+                 W.Map
+                   [ (W.Keyword "property", p)
+                   ; (W.Keyword "property-id", W.Keyword c.V.c_id)
+                   ; (W.Keyword "value", cell_value blk c) ]
+               in
+               let pctx : Properties_value.ctx =
+                 { block_uuid = row_uuid
+                 ; block_id = Properties_data.entity_id_of blk
+                 ; refresh = (fun () -> refresh inst)
+                 ; is_page = is_page_row blk
+                 ; class_schema = false }
+               in
+               inner_cell [ Properties_value.view pctx row ]
+           | None -> prop_cell ~blk c)) ]
 
 (* ---------- header ---------- *)
 

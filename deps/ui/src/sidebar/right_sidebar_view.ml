@@ -225,7 +225,10 @@ let item_header st idx (it : Sidebar_state.item) =
   row ~key:("hd-" ^ it.key) ~main:`space_between
     ~style_class:"sidebar-item-header color-level"
     [ button ~key:("hdr-" ^ it.key) ~grow:1. ~padding_horizontal:8
-        ~label:it.title
+        (* page/block sidebar items can carry an empty title — a button
+           with neither text nor accessibility label is rejected and
+           kills the whole mount batch *)
+        ~label:(if it.title = "" then t "ui/untitled" else it.title)
         ~accessibility_identifier:("sidebar-panel-header-" ^ n)
         ~on_press:(fun _ -> Sidebar_state.toggle_collapsed st it.key)
         [ row ~key:("arrow-" ^ it.key) ~cross:`center
