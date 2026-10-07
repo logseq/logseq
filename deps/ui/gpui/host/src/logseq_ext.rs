@@ -389,11 +389,11 @@ fn register_class_styles() {
          font-size:14px;font-weight:500;opacity:0.8;border-radius:6px",
         "",
     );
-    // .item.active — current nav row, web fills it with gray-04
-    // (the token behind --ls-quaternary-background-color).
+    // .item.active — current nav row, web fills it with solid gray-04
+    // (lui-core.css `--lx-gray-04`, not the alpha step).
     class(
         "active",
-        "background:var(--lx-gray-04-alpha, var(--rx-gray-04-alpha))",
+        "background:var(--lx-gray-04, var(--ls-quaternary-background-color))",
         "",
     );
     // .hd — collapsible group headers (Favorites/Recent/Navigations).
@@ -413,6 +413,22 @@ fn register_class_styles() {
         "display:flex;flex-direction:column;gap:2px;margin-top:4px",
         "",
     );
+    // Web insets every sidebar row 12px via the two content containers.
+    class(
+        "sidebar-header-container",
+        "display:flex;flex-direction:column;gap:4px;\
+         padding:0 12px;margin-bottom:4px",
+        "",
+    );
+    class(
+        "sidebar-contents-container",
+        "display:flex;flex-direction:column;gap:4px;\
+         padding:4px 12px 0;overflow:hidden",
+        "",
+    );
+    // .hd .more — the section disclosure chevron (web: opacity .8,
+    // margins reproduce the cljs 20px icon slot).
+    class("more", "opacity:0.8;margin-left:2.5px;margin-right:10.5px", "");
     // .keyboard-shortcut — web only reveals the shortcut chips on row
     // hover (opacity transition); hover states can't be expressed in
     // the flat dictionary, so keep the web's default state: hidden.

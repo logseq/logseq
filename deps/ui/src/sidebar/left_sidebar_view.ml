@@ -22,7 +22,11 @@ let t = Sidebar_state.t
    double-render *)
 let icon_ ?key ?(cls = "") ?(size = 16) name =
   icon ?key
-    ~name:(match name with "chevron-right" -> `chevron_right | n -> `app n)
+    ~name:
+      (match name with
+      | "chevron-right" -> `chevron_right
+      | "chevron-down" -> `chevron_down
+      | n -> `app n)
     ~point_size:size
     ~style_class:("ui__icon" ^ if cls = "" then "" else " " ^ cls)
     []
@@ -563,7 +567,16 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                       [ box ~style_class:"wrap-th" ~grow:1.
                           [ text ~value:label [] ] ]
                   ; box ~key:(key ^ "-b") ~style_class:"b"
-                      [ icon_ ~cls:"more" ~size:15 "chevron-right" ] ])
+                      [ (* web rotates .more 90deg on .is-expand —
+                           backends without transforms swap the icon *)
+                         reactive
+                           (fun collapsed ->
+                             icon_ ~cls:"more" ~size:15
+                               (if collapsed
+                                then "chevron-right"
+                                else "chevron-down"))
+                           (Sidebar_state.group_collapsed_sig st class_)
+                      ] ])
            ; reactive
                ~equal:(fun a b ->
                  List.map
@@ -665,11 +678,12 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                     ~x:(Web_dom.rect_left r -. 4.)
                     ~y:(Web_dom.rect_bottom r)
               | None -> ())
-            (row ~key:"gsel-a" ~cross:`center ~gap:4 ~style_class:"item"
-               [ box ~key:"gsel-th" ~style_class:"thumb"
-                   [ icon_ "topology-star" ]
-               ; text ~key:"gsel-n"
-                   ~value_signal:(Signal.map name_of ms) []
+            (row ~key:"gsel-a" ~cross:`center ~grow:1. ~style_class:"item"
+               [ row ~key:"gsel-l" ~cross:`center ~gap:4 ~grow:1.
+                   [ box ~key:"gsel-th" ~style_class:"thumb"
+                       [ icon_ "topology-star" ]
+                   ; text ~key:"gsel-n"
+                       ~value_signal:(Signal.map name_of ms) [] ]
                ; icon_ ~size:18 "selector" ]) ] ]
 ;;
 
