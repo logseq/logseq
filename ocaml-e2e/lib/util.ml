@@ -231,18 +231,27 @@ let wait_overlays_closed env =
 
 let rec search ?(tries = 3) env text =
   let* already = Pw.visible env ".cp__cmdk-search-input" in
+  let open_step () =
+    let* opened = cmdk_open env in
+    if opened then Js.Promise.resolve ()
+    else
+      let* () = double_esc env in
+      let* () = wait_overlays_closed env in
+      (* under rtc-parallel load the toolbar itself can lag tens of
+         seconds after the page shell mounts *)
+      let* () = Pw.wait_for env ~timeout:45000. "#search-button" in
+      let* _ = E2e_assert.in_normal_mode env in
+      let* () = Pw.click env "#search-button" in
+      Pw.wait_for env ".cp__cmdk-search-input"
+  in
   let* () =
     if already then Js.Promise.resolve ()
     else
-      let* opened = cmdk_open env in
-      if opened then Js.Promise.resolve ()
-      else
-        let* () = double_esc env in
-        let* () = wait_overlays_closed env in
-        let* () = Pw.wait_for env ~timeout:15000. "#search-button" in
-        let* _ = E2e_assert.in_normal_mode env in
-        let* () = Pw.click env "#search-button" in
-        Pw.wait_for env ".cp__cmdk-search-input"
+      Pw.catch_timeout (open_step ()) (fun () ->
+          if tries <= 1 then open_step ()
+          else
+            let* () = Keyboard.esc env in
+            search ~tries:(tries - 1) env text)
   in
   let* () =
     (* the cmdk can remount between open and fill — the input detaches and
