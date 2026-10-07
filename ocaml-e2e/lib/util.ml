@@ -186,6 +186,38 @@ let exit_edit env =
                  clear_state ()
          in
          let* () = clear_state () in
+         (* an editor can stay mounted after the editing state cleared
+            (an untracked textarea — get_editor saw nothing, esc/force
+            were skipped, and non_editor_mode waits forever). Keep
+            pressing esc + exitEditingMode until the DOM is clean too. *)
+         let dom_deadline = Js.Date.now () +. 45000. in
+         let rec clear_dom () =
+           let* n =
+             Pw.count env
+               "[data-testid='block editor']:visible, [datatestid='block editor']:visible"
+           in
+           if n = 0 then Js.Promise.resolve ()
+           else if Js.Date.now () > dom_deadline then
+             let* (dbg : string) =
+               Pw.eval_js env
+                 "(() => { const ts = [...document.querySelectorAll(\"[data-testid='block editor'], [datatestid='block editor']\")].filter(e => e.offsetParent); \
+                  return JSON.stringify(ts.map(t => ({id: t.id, cls: t.className, inWrapper: !!t.closest('.editor-wrapper'), inModal: !!t.closest('#cards-modal'), host: t.closest('.ls-block')?.getAttribute('blockid'), editing: !!logseq.api.get_state_from_store('editor/block')}))) })()"
+             in
+             Js.Promise.reject
+               (Failure
+                  ("exit_edit: block editor still mounted after 45s " ^ dbg))
+           else
+             let* () = Keyboard.esc env in
+             let* _ =
+               Js.Promise.catch
+                 (fun _ -> Js.Promise.resolve Js.null)
+                 (Api.ls_api_call env "editor.exitEditingMode"
+                    [| Api.bool false |])
+             in
+             let* () = wait_timeout env 300. in
+             clear_dom ()
+         in
+         let* () = clear_dom () in
          let* _ = E2e_assert.non_editor_mode env in
          Js.Promise.resolve ())
 
