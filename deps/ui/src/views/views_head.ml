@@ -6,7 +6,7 @@
    props. Ephemeral surfaces (view-tab menu, column/filter pickers) mount
    imperatively via Views_popup with an id-addressable node as anchor. *)
 
-module D = Logseq_dom
+module D = Logseq_el
 module E = Web_dom
 module I = I18n
 module V = Views_state
@@ -19,7 +19,7 @@ type t = Lui_elements.t
 
 open Lui_elements
 
-let if_ = D.if_
+let if_ = Lui_elements.if_
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
   inst.V.st.Signal.state_signal
 
@@ -152,7 +152,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
 let tabs_el inst ~dim : t =
  fun ctx parent ->
   row ~style_class:"views"
-    [ D.keyed
+    [ Lui_elements.keyed
         ~source:
           (Logseq_el.own ctx
              (Signal.map (fun (s : V.vstate) -> s.V.views) (sig_of inst)))

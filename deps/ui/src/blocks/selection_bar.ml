@@ -10,7 +10,7 @@ open Lui_elements
 
 module S = Editor_state
 
-let dom = Logseq_dom.dom
+
 
 (* title moves to ~label (the a11y name on native hosts); icon buttons
    carry ~icon, text buttons ~text — the button kind supplies

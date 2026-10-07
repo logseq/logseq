@@ -18,7 +18,7 @@
 
 open Lui_elements
 
-let dom = Logseq_dom.dom
+
 let if_ = Lui_elements.if_
 let keyed = Lui_elements.keyed
 

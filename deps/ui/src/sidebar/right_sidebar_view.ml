@@ -12,9 +12,8 @@
          .sidebar-item-list > .sidebar-item.item-type-<kind>*)
 
 open Lui_elements
-module D = Logseq_dom
+module D = Logseq_el
 
-let dom = D.dom
 let t = Sidebar_state.t
 
 (* component icon: tabler names go through the `app:` registry (only `x`

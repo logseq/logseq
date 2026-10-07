@@ -20,7 +20,7 @@
 
 open Lui_elements
 open Promise_ext
-let dom = Logseq_dom.dom
+let dom = Logseq_el.el
 
 external fetch_ : string -> Js.Json.t Js.Promise.t = "fetch"
   [@@mel.scope "window"]
@@ -183,7 +183,7 @@ let body (_ms : Model.t Signal.signal) : t =
        (* cljs remote-readme-display *)
        (* TODO(component): no iframe/embed kind — remote readmes need a
           webview host; keeping minimal dom until one exists *)
-       dom ~key:"readme-frame" ~tag:"iframe"
+       Logseq_el.el ~key:"readme-frame" ~tag:"iframe"
          ~style_class:"lsp-frame-readme"
          ~attrs:[ ("src", "./marketplace.html?repo=" ^ t.repo) ]
          []
@@ -191,7 +191,7 @@ let body (_ms : Model.t Signal.signal) : t =
        (* TODO(component): data-capture-click anchor delegation (readme
           links open externally via the payload's href) is a dom-adapter
           hook with no component prop — minimal dom wrapper stays *)
-       dom ~key:"rd" 
+       Logseq_el.el ~key:"rd" 
          ~attrs:[ ("data-capture-click", "") ]
          ~events:"click"
          ~on_dom_event:(fun name payload ->

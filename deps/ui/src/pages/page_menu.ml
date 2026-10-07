@@ -5,7 +5,7 @@
 
 open Lui_elements
 
-let dom = Logseq_dom.dom
+
 
 
 let item key label on_click = Menu_item.el ~key ~label ~on_click ()

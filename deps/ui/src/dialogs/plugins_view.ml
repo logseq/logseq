@@ -577,7 +577,7 @@ let item_input pid key s cur =
     | "range" ->
         (* TODO(component): input type=range has no component kind —
            needs a slider kind or ~kind:`range on `input` *)
-        Logseq_dom.dom ~key:"in" ~tag:"input"
+        Logseq_el.el ~key:"in" ~tag:"input"
           ~attrs:[ ("type", input_as); ("value", v) ]
           ~events:"change"
           ~on_dom_event:(fun n p ->

@@ -13,7 +13,7 @@ open Lui_elements
 
 module S = Editor_state
 
-let dom = Logseq_dom.dom
+let dom = Logseq_el.el
 
 (* --- shared pieces ------------------------------------------------ *)
 

@@ -12,7 +12,7 @@ module A = Asset_store
 
 open Lui_elements
 
-let dom = Logseq_dom.dom
+let dom = Logseq_el.el
 let repo = Runtime.repo
 
 (* ---------- raw externals ---------- *)
@@ -646,22 +646,22 @@ let file_block uuid (b : Model.block) : t =
     then
       (* cljs audio-cp: <audio controls> — m4a carries a typed
          <source> child instead of a src attr *)
-      dom ~key:("au-" ^ uuid) ~tag:"audio"
+      Logseq_el.el ~key:("au-" ^ uuid) ~tag:"audio"
         ~attrs_signal_v:(src_attrs [ ("controls", "") ])
         (if ext = "m4a" then
-           [ dom ~key:"src" ~tag:"source"
+           [ Logseq_el.el ~key:"src" ~tag:"source"
                ~attrs_signal_v:
                  (src_attrs [ ("type", "audio/mp4") ])
                [] ]
          else [])
     else if List.mem ext video_exts then
       (* cljs asset-video: <video.asset-video controls src> *)
-      dom ~key:("vd-" ^ uuid) ~tag:"video" ~style_class:"asset-video"
+      Logseq_el.el ~key:("vd-" ^ uuid) ~tag:"video" ~style_class:"asset-video"
         ~attrs_signal_v:(src_attrs [ ("controls", "") ])
         []
     else
       (* cljs web: a.asset-ref[href=src][download=file-name] *)
-      dom ~key:("afl-" ^ uuid) ~tag:"a" ~style_class:"asset-ref"
+      Logseq_el.el ~key:("afl-" ^ uuid) ~tag:"a" ~style_class:"asset-ref"
         ~text:file
         ~attrs_signal_v:
           (Logseq_el.attrs_signal url (fun u ->

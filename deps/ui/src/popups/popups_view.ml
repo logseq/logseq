@@ -14,7 +14,7 @@ open Lui_elements
 module S = Popups_state
 module U = I18n
 
-let dom = Logseq_dom.dom
+let dom = Logseq_el.el
 
 (* -- autocomplete item ----------------------------------------------- *)
 
@@ -189,7 +189,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
     [ (* cljs/e2e contract: a.menu-link[#ac-<idx>].chosen — a real
          anchor (menu_item kind emits a non-anchor node); .chosen and
          the click ride the dom event/style-class channel *)
-      dom ~key:"lnk" ~tag:"a"
+      Logseq_el.el ~key:"lnk" ~tag:"a"
         ~id:("ac-" ^ string_of_int (Signal.get item_sig).S.ai_idx)
         ~style_class_signal:
           (Logseq_el.class_signal pair (fun (it, v) ->

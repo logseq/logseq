@@ -1263,7 +1263,7 @@ let list_stream inst uuids : t =
 let render_list inst s : t =
   match s.V.data with
   | Wr.VGrouped gs ->
-      D.fragment
+      Logseq_el.fragment
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1322,7 +1322,7 @@ let render_gallery inst _s : t =
 let render_table inst s : t =
   match s.V.data with
   | Wr.VGrouped gs ->
-      D.fragment
+      Logseq_el.fragment
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1330,13 +1330,13 @@ let render_table inst s : t =
                ~body:(grouped_table inst ~rows:g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
-      D.fragment
+      Logseq_el.fragment
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
                ~title:(text ~value:(group_title s g.Wr.glv) [])
                ~body:
-                 (D.fragment
+                 (Logseq_el.fragment
                     (List.mapi
                        (fun j (buuid, rows) ->
                          foldable inst

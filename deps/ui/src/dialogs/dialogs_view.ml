@@ -7,7 +7,7 @@
 
 open Lui_elements
 
-let dom = Logseq_dom.dom
+
 let keyed = Lui_elements.keyed
 
 let overlay_cls = "ui__dialog-overlay"

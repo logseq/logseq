@@ -22,7 +22,7 @@ module D = Web_dom
 module I = I18n
 module Ops = Outliner_ops
 
-let dom = Logseq_dom.dom
+
 
 type area_st =
   { box_open : bool

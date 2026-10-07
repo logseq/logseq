@@ -4,7 +4,7 @@
    decodes rows, and implements the query source editor shell
    (.ls-query-setting → fake CodeMirror editing). *)
 
-module D = Logseq_dom
+module D = Logseq_el
 module E = Web_dom
 module V = Views_state
 module W = Wire
@@ -365,7 +365,7 @@ let cm_host inst : Lui_elements.t =
          (fun s -> s.V.query_editor_open)
          inst.V.st.Signal.state_signal)
   in
-  D.if_ ~test:open_sig
+  Lui_elements.if_ ~test:open_sig
     (fun ctx parent ->
       let cur =
         match parse_src (V.get inst).V.qsrc with

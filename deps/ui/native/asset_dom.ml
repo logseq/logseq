@@ -7,7 +7,7 @@ open Promise_ext
 module S = Editor_state
 module W = Wire
 
-let dom = Logseq_dom.dom
+let dom = Logseq_el.el
 let t = Lui_elements.spacer ~key:"asset-dom" []
 
 let upload_files (_files : Js.Json.t array) : unit = ()
@@ -203,7 +203,7 @@ let file_cell_el (w : Wire.t) : Lui_elements.t =
     [ (* TODO(component): needs the logseq-img extension element
          itself — the native host resolves the asset path off
          data-asset-file; the image kind has no such resolver hook *)
-      dom ~tag:"img"
+      Logseq_el.el ~tag:"img"
         ~attrs:[ ("title", file); ("data-asset-file", file) ]
         [] ]
 
@@ -230,7 +230,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
      click event carry the native asset-resolution contract — the
      attrs could ride ~data_attrs but the extension tag itself has no
      kind equivalent *)
-  dom ~key:("asset-" ^ uuid) ~tag:"div"
+  Logseq_el.el ~key:("asset-" ^ uuid) ~tag:"div"
     ~style_class:
       "asset-container"
     ~attrs:

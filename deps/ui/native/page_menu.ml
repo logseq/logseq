@@ -4,7 +4,7 @@
    div.text and div[role='alertdialog'], which LUI menu/dialog nodes do
    not emit. *)
 
-let dom = Logseq_dom.dom
+let dom = Logseq_el.el
 
 let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 
@@ -168,7 +168,7 @@ let view (x, _atop, y, with_app_items) (p : Model.page option) =
      web, but the native popover backends renders children inline (no
      positioning) — the dom shell stays until LUIApple implements
      popover placement *)
-  dom ~key:"page-menu" ~tag:"div"
+  Logseq_el.el ~key:"page-menu" ~tag:"div"
     (* toolbar dots menu is w-64 (cljs header.cljs); the page
        right-click keeps the context-menu look *)
     ~style_class:

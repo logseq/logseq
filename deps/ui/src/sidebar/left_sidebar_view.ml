@@ -11,9 +11,8 @@
    chrome.ml; this file owns everything inside it. *)
 
 open Lui_elements
-module D = Logseq_dom
+module D = Logseq_el
 
-let dom = D.dom
 let t = Sidebar_state.t
 
 (* component icon: tabler names go through the `app:` registry (the only
@@ -293,11 +292,11 @@ let menu_host st =
   (* nested maps each own their upstream subscription on the shared
      state cells — own both levels *)
   let menu_sig =
-    D.own ctx
+    Logseq_el.own ctx
       (Signal.map2
          (fun menu (checked, favorited) -> (menu, checked, favorited))
          (Signal.value st.Sidebar_state.open_menu)
-         (D.own ctx
+         (Logseq_el.own ctx
             (Signal.map2
                (fun a b -> (a, b))
                (Signal.value st.nav_checked)
@@ -386,7 +385,7 @@ let nav_items ~active_route (checked, tag_titles) =
                  ~on_click:(fun () ->
                    Cards_state.update_due_count ();
                    Sidebar_state.open_cards ())
-                 ~more:(D.dyn
+                 ~more:(Lui_elements.dyn
                           (fun (n : int) ->
                             if n > 0 then
                               text ~style_class:"ml-1 inline-block py-0.5 px-3 text-xs font-medium rounded-full"
@@ -417,11 +416,11 @@ let nav_group ms st =
   if not (Cards_state.Due_count.ready ()) then ()
   else Cards_state.update_due_count ();
   let navs_sig =
-    D.own ctx
+    Logseq_el.own ctx
       (Signal.map2
          (fun route rest -> (route, rest))
-         (D.own ctx (Signal.map (fun (m : Model.t) -> m.Model.route) ms))
-         (D.own ctx
+         (Logseq_el.own ctx (Signal.map (fun (m : Model.t) -> m.Model.route) ms))
+         (Logseq_el.own ctx
             (Signal.map2
                (fun a b -> (a, b))
                (Signal.value st.Sidebar_state.nav_checked)

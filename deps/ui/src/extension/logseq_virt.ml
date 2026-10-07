@@ -41,7 +41,7 @@ let schema =
     true (* rows carry arbitrary view children *)
     (* logseq-virt nodes nest (region > list > spacer > row) and row
        interiors emit logseq-<tag>/editor/codemirror widgets *)
-    (identifier :: Logseq_dom.child_identifiers
+    (identifier :: Logseq_el.child_identifiers
      @ [ Logseq_editor.identifier; Logseq_codemirror.identifier ])
     [ Lui_extension.property "role" Lui_extension.StringScalar false
         None

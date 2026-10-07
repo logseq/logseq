@@ -20,7 +20,7 @@
    context; each imperative node registers a Lui_runtime.on_event
    trampoline that unwraps {name, payload} and feeds Platform.emit_event,
    which bubbles through runtime_parents invoking the per-node
-   dom_handlers entry this module installs — the same path Logseq_dom.dom
+   dom_handlers entry this module installs — the same path Logseq_el.el
    uses for declarative elements. *)
 
 open Lui_protocol
@@ -250,7 +250,7 @@ let host_fields (_ : el) : (string * Js.Json.t) list = []
 
 let ident_of_tag tag =
   if tag = "#text" then "logseq-span"
-  else if List.mem tag Logseq_dom.tags then "logseq-" ^ tag
+  else if List.mem tag Logseq_el.tags then "logseq-" ^ tag
   else "logseq-div"
 
 let attrs_json (n : node) : string =

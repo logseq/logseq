@@ -5,7 +5,7 @@
    mount order is per-block-children, same as the cljs IO gate. *)
 
 open Lui_elements
-module D = Logseq_dom
+module D = Logseq_el
 
 let forced : (string, unit) Hashtbl.t = Hashtbl.create 8
 let force uuid = Hashtbl.replace forced uuid ()
@@ -28,9 +28,9 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
     Signal.state ctx.Lui_ui.ui_scheduler (Hashtbl.mem forced uuid)
   in
   let near_sig = near.Signal.state_signal in
-  (D.dom ~key ~style_class:"block-children"
+  (Logseq_el.el ~key ~style_class:"block-children"
      ~attrs_signal_v:
-       (D.attrs_signal near_sig (fun n ->
+       (Logseq_el.attrs_signal near_sig (fun n ->
           (if n then []
            else
              [ ("style", Printf.sprintf "min-height:%.0fpx" min_height) ])
@@ -38,7 +38,7 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
      ~events:"lazy-mount"
      ~on_dom_event:(fun name _payload ->
        if name = "lazy-mount" then Signal.set near true)
-     [ D.if_ ~test:near_sig (render ()) ])
+     [ Lui_elements.if_ ~test:near_sig (render ()) ])
     ctx parent
 
 (* Parse the uuids array out of a batched lazy-mount payload. *)
@@ -71,7 +71,7 @@ let uuids_of_payload payload =
 let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
  fun ctx parent ->
   if Lui_ui.host ctx <> Lui_protocol.GPUIHost then
-    (D.keyed ~source ~key ~cmp ~mount) ctx parent
+    (Lui_elements.keyed ~source ~key ~cmp ~mount) ctx parent
   else begin
     let sched = ctx.Lui_ui.ui_scheduler in
     let near_of uuid =
@@ -82,21 +82,21 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
           Hashtbl.replace near_states uuid s;
           s
     in
-    (D.dom  ~events:"lazy-mount"
+    (Logseq_el.el  ~events:"lazy-mount"
        ~on_dom_event:(fun name payload ->
          if name = "lazy-mount" then
            List.iter
              (fun uuid -> Signal.set (near_of uuid) true)
              (uuids_of_payload payload))
-       [ D.keyed ~source ~key ~cmp
+       [ Lui_elements.keyed ~source ~key ~cmp
            ~mount:(fun bs ->
              let b = Signal.get bs in
              let uuid = key b in
              let near = near_of uuid in
              let near_sig = near.Signal.state_signal in
-             D.dom 
+             Logseq_el.el 
                ~attrs_signal_v:
-                 (D.attrs_signal near_sig (fun n ->
+                 (Logseq_el.attrs_signal near_sig (fun n ->
                     ("data-lazy-mount", uuid)
                     :: (if n then []
                         else
@@ -111,6 +111,6 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
                   reaches the same latch through the container above *)
                ~on_dom_event:(fun name _payload ->
                  if name = "lazy-mount" then Signal.set near true)
-               [ D.if_ ~test:near_sig (mount bs) ]) ])
+               [ Lui_elements.if_ ~test:near_sig (mount bs) ]) ])
       ctx parent
   end
