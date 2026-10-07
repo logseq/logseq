@@ -25,10 +25,7 @@ let init_worker () =
   in
   (* cljs pushes sync-app-state at boot so a stored login reaches
             the worker before any db-sync call *)
-  let* _ =
-    Rtc_ops.sync_app_state (Runtime.model ()).Model.repo;
-    Js.Promise.resolve ()
-  in
+  let* _ = Rtc_ops.sync_app_state (Runtime.model ()).Model.repo in
   (* cljs ships a transact context with :dev? = config/dev?
             (DEV-RELEASE); e2e builds compile that flag in, which turns
             on the worker's :db-worker/outliner-op-perf logging *)
