@@ -213,6 +213,10 @@ let item_title (it : Sidebar_state.item) =
       (* cljs: (icon "command") + (t :help.shortcuts/label) *)
       row ~key:"pt-shortcuts" ~cross:`center ~gap:8
         [ icon_ "command"; text ~value:it.title [] ]
+  | [], "search" ->
+      (* cljs :search item header: ti-search icon + the query *)
+      row ~key:"pt-search" ~cross:`center ~gap:8
+        [ icon_ "search"; text ~value:it.title [] ]
   | [], _ -> text ~key:"pt-plain" ~value:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
@@ -242,7 +246,7 @@ let item_header st idx (it : Sidebar_state.item) =
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
         [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots") ~label:(t "ui/show-more")
+            ~icon:(`app "dots") ~label:(t "sidebar.right/more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32
@@ -340,6 +344,20 @@ let item_body st idx (it : Sidebar_state.item) =
      The cljs data-page-tags / data-sb-inner marker attrs have no readers
      and are dropped; the -20px page margin-left was a DOM-only inline
      style with no typed prop — dropped *)
+  match it.Sidebar_state.kind with
+  | "search" ->
+      (* cljs build-sidebar-item :search mounts a cmdk-block, not the
+         page-inner block tree *)
+      box ~key:("body-" ^ it.key)
+        ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+        ~style_class:
+          ("sidebar-panel-content"
+           ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
+        [ box ~key:("cmdkb-" ^ it.key)
+            ~style_class:"cp__cmdk__block rounded-md"
+            [ Cmdk_view.sidebar ~query:it.title ]
+        ]
+  | _ ->
   box ~key:("body-" ^ it.key)
     ~accessibility_identifier:("sidebar-panel-content-" ^ n)
     ~style_class:

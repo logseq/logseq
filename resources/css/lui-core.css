@@ -1170,6 +1170,19 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     flex: 1;
     min-height: 100px;
 
+    /* cljs header row is auto-height at ~32px (h-8 children); the
+       default button height pushed ours to 40px */
+    .sidebar-item-header {
+      height: 32px;
+      min-height: 32px;
+      box-sizing: border-box;
+      align-items: center;
+    }
+
+    .sidebar-item-header .button {
+      height: 32px;
+    }
+
     &.item-type-block .sidebar-item-header {
       background: linear-gradient(
         0deg,

@@ -513,6 +513,7 @@ let group_header (st : S.t) (g : S.group) : t =
     ; spacer ~key:"gsp" ~style_class:"cp__cmdk-group-spacer" []
     ; (if (g.S.gtotal > g.S.glimit || g.S.gexpanded)
           && not g.S.gfilter_active
+          && not (S.get st).S.sidebar
        then
          Ui_parts.pressable ~on_press:toggle
            (row ~key:"gmore"
@@ -536,6 +537,10 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
     Signal.map (fun (g : S.group) -> g.S.gitems) group_sig
   in
   column ~key:"group" ~style_class:"cp__cmdk-group"
+    ~data_attrs:(reactive
+                   (fun (g : S.group) ->
+                     [ ("data-cmdk-group-kind", gid_name g.S.gid) ])
+                   group_sig)
     [ reactive
         ~equal:(fun (a : S.group) b ->
           (a.S.gid = S.G_create) = (b.S.gid = S.G_create)
@@ -635,6 +640,9 @@ let input_row st : t =
         (fun move_mode ->
           input ~key:"input" ~style_class:"cp__cmdk-search-input"
             ~grow:1.
+            (* sidebar blocks mount seeded with the query; the modal is
+               always "" so this is a no-op there *)
+            ~text:(S.get st).S.input
             ~placeholder:
               (if move_mode then
                  I18n.t "cmdk.input/move-blocks-placeholder"
@@ -795,6 +803,18 @@ let palette st : t =
     ~data_attrs:[ ("data-keep-selection", "true") ]
     [ input_row st; scroller st; hints st ]
 
+(* cljs cmdk-block: the :sidebar? variant renders the same cp__cmdk body
+   inside .cp__cmdk__block, without the modal shell and without the hints
+   row ((when-not sidebar? (hints))) *)
+let sidebar ~query : t =
+ fun ctx parent ->
+  let st = S.make_sidebar ctx.Lui_ui.ui_scheduler query in
+  (box ~key:("cmdk-sb-" ^ query)
+     ~style_class:"cp__cmdk"
+     ~data_attrs:[ ("data-keep-selection", "true") ]
+     [ input_row st; scroller st ])
+    ctx parent
+
 (* -- delegated event listeners (installed once per mount) ------------ *)
 
 let int_of_string_opt s =
@@ -827,7 +847,11 @@ let handle_keydown st (ev : Web_dom.ev) =
     | "Enter" ->
         Web_dom.ev_prevent_default ev;
         Web_dom.ev_stop_propagation ev;
-        if Web_dom.ev_shift ev then S.run_highlighted_sidebar st
+        (* cljs consume-open-search-sidebar-keydown! binds mod+enter
+           before the highlighted-item action *)
+        if Web_dom.ev_meta ev || Web_dom.ev_ctrl ev then
+          S.open_search_sidebar st
+        else if Web_dom.ev_shift ev then S.run_highlighted_sidebar st
         else S.run_highlighted st
     | "k" when Web_dom.ev_meta ev || Web_dom.ev_ctrl ev ->
         Web_dom.ev_prevent_default ev;
