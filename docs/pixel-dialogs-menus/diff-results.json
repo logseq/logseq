@@ -1,103 +1,103 @@
 [
  {
-  "stem": "18-block-ctx",
-  "diff": 4.36669921875,
-  "pixels": 44715
- },
- {
   "stem": "11-export-page",
-  "diff": 2.4904296875,
-  "pixels": 25502
- },
- {
-  "stem": "10-appearance",
-  "diff": 2.36337890625,
-  "pixels": 24201
- },
- {
-  "stem": "02-settings-general",
-  "diff": 2.017578125,
-  "pixels": 20660
- },
- {
-  "stem": "32-dark-settings",
-  "diff": 1.9982421875,
-  "pixels": 20462
- },
- {
-  "stem": "03-settings-keymap",
-  "diff": 1.7796875,
-  "pixels": 18224
- },
- {
-  "stem": "33-dark-block-ctx",
-  "diff": 1.404296875,
-  "pixels": 14380
- },
- {
-  "stem": "03-settings-advanced",
-  "diff": 1.39609375,
-  "pixels": 14296
- },
- {
-  "stem": "34-dark-right-sidebar",
-  "diff": 1.37470703125,
-  "pixels": 14077
- },
- {
-  "stem": "03-settings-editor",
-  "diff": 1.2654296875,
-  "pixels": 12958
- },
- {
-  "stem": "23-sidebar-help",
-  "diff": 1.1658203125,
-  "pixels": 11938
- },
- {
-  "stem": "19-set-property",
-  "diff": 1.0517578125,
-  "pixels": 10770
- },
- {
-  "stem": "31-dark-dots-menu",
-  "diff": 0.9660156249999999,
-  "pixels": 9892
- },
- {
-  "stem": "01-dots-menu",
-  "diff": 0.960546875,
-  "pixels": 9836
+  "diff": 2.6168945312500003,
+  "pixels": 26797
  },
  {
   "stem": "14-login",
-  "diff": 0.7615234375,
-  "pixels": 7798
+  "diff": 2.02626953125,
+  "pixels": 20749
  },
  {
-  "stem": "22-sidebar-contents",
-  "diff": 0.6359374999999999,
-  "pixels": 6512
+  "stem": "03-settings-keymap",
+  "diff": 1.8875,
+  "pixels": 19328
  },
  {
-  "stem": "21-right-sidebar",
-  "diff": 0.6328125,
-  "pixels": 6480
+  "stem": "18-block-ctx",
+  "diff": 1.6023437500000002,
+  "pixels": 16408
  },
  {
-  "stem": "03-settings-features",
-  "diff": 0.62421875,
-  "pixels": 6392
+  "stem": "03-settings-advanced",
+  "diff": 1.49775390625,
+  "pixels": 15337
  },
  {
-  "stem": "16-title-ctx",
-  "diff": 0.59482421875,
-  "pixels": 6091
+  "stem": "02-settings-general",
+  "diff": 1.47265625,
+  "pixels": 15080
+ },
+ {
+  "stem": "32-dark-settings",
+  "diff": 1.4376953125,
+  "pixels": 14722
+ },
+ {
+  "stem": "33-dark-block-ctx",
+  "diff": 1.399609375,
+  "pixels": 14332
+ },
+ {
+  "stem": "34-dark-right-sidebar",
+  "diff": 1.35517578125,
+  "pixels": 13877
+ },
+ {
+  "stem": "10-appearance",
+  "diff": 1.30771484375,
+  "pixels": 13391
+ },
+ {
+  "stem": "03-settings-editor",
+  "diff": 1.2193359375000001,
+  "pixels": 12486
+ },
+ {
+  "stem": "23-sidebar-help",
+  "diff": 1.17275390625,
+  "pixels": 12009
+ },
+ {
+  "stem": "19-set-property",
+  "diff": 1.04921875,
+  "pixels": 10744
+ },
+ {
+  "stem": "17-delete-confirm",
+  "diff": 1.0380859375,
+  "pixels": 10630
  },
  {
   "stem": "13-plugins",
-  "diff": 0.57890625,
-  "pixels": 5928
+  "diff": 0.77158203125,
+  "pixels": 7901
+ },
+ {
+  "stem": "01-dots-menu",
+  "diff": 0.7335937499999999,
+  "pixels": 7512
+ },
+ {
+  "stem": "03-settings-features",
+  "diff": 0.70693359375,
+  "pixels": 7239
+ },
+ {
+  "stem": "31-dark-dots-menu",
+  "diff": 0.70400390625,
+  "pixels": 7209
+ },
+ {
+  "stem": "22-sidebar-contents",
+  "diff": 0.6428710937500001,
+  "pixels": 6583
+ },
+ {
+  "stem": "21-right-sidebar",
+  "diff": 0.63974609375,
+  "pixels": 6551
  },
  {
   "stem": "25-recycle",
@@ -105,34 +105,34 @@
   "pixels": 5278
  },
  {
-  "stem": "00-home",
-  "diff": 0.48486328125,
-  "pixels": 4965
- },
- {
-  "stem": "30-dark-home",
-  "diff": 0.484375,
-  "pixels": 4960
+  "stem": "16-title-ctx",
+  "diff": 0.500390625,
+  "pixels": 5124
  },
  {
   "stem": "15-parity-page",
-  "diff": 0.48330078125,
-  "pixels": 4949
+  "diff": 0.48291015625,
+  "pixels": 4945
  },
  {
   "stem": "20-help-menu",
-  "diff": 0.48330078125,
-  "pixels": 4949
+  "diff": 0.48291015625,
+  "pixels": 4945
  },
  {
   "stem": "24-sidebar-closed",
-  "diff": 0.48330078125,
-  "pixels": 4949
+  "diff": 0.48291015625,
+  "pixels": 4945
  },
  {
-  "stem": "17-delete-confirm",
-  "diff": 0.43974609375,
-  "pixels": 4503
+  "stem": "00-home",
+  "diff": 0.48134765625000003,
+  "pixels": 4929
+ },
+ {
+  "stem": "30-dark-home",
+  "diff": 0.45126953125,
+  "pixels": 4621
  },
  {
   "stem": "12-import",

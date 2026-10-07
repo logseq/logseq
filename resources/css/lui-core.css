@@ -1308,6 +1308,8 @@ html[data-theme='dark'] {
   }
 }
 
+/* cljs page.cljs: margin-left:-20 inline on every non-mobile
+   .ls-page-blocks; mt-4 only outside the sidebar */
 .ls-page-blocks {
   min-height: 60px;
   overflow: hidden;
@@ -1315,6 +1317,21 @@ html[data-theme='dark'] {
      desktop so the block control column hangs outside the content
      column */
   margin-left: -20px;
+}
+
+.page-inner > .ls-page-blocks {
+  margin-top: 1rem;
+}
+
+.cp__right-sidebar .page-inner > .ls-page-blocks {
+  margin-top: 0;
+}
+
+/* the empty bidirectional-properties column sits inside a display:contents
+   wrapper, so it is never a direct child of .page-inner — hide it so it
+   does not consume a grid/flex gap slot (cljs mounts no element at all) */
+.page-inner .ls-bidirectional-properties:empty {
+  display: none;
 }
 
 h1.title,

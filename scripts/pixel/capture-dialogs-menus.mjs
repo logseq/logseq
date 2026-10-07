@@ -60,6 +60,20 @@ await page.evaluate(async () => {
   try { await api.create_page('Alpha'); } catch {}
   try { await api.append_block_in_page('Alpha', 'Alpha body'); } catch {}
 });
+// cljs keep the page's initial empty block between the first append and
+// the rest ([First][empty][Second][Third]); LUI doesn't auto-create it —
+// insert an empty sibling after First so both pages render the same rows.
+if (TAG === 'lui') {
+  await page.evaluate(async () => {
+    const api = window.logseq?.api;
+    try {
+      const tree = await api.get_page_blocks_tree('Parity');
+      if (tree?.length === 3 && tree[0]?.uuid && tree[1]?.title !== '')
+        await api.insert_block(tree[0].uuid, '', { sibling: true });
+    } catch {}
+  });
+  await sleep(800);
+}
 await sleep(2500);
 // navigate to the fixture page so all subsequent captures share the same content
 await page.evaluate(async () => {
@@ -161,7 +175,10 @@ await step('18-block-ctx', async () => {
   // locator resolves to different element granularity per DOM, so a
   // text-relative offset would land at different viewport points.
   const bullets = page.locator('.bullet-container');
-  const bb = await bullets.nth(1).boundingBox().catch(() => null);
+  // nth(2) = 'Second block' (row order [First][empty][Second][Third] in
+  // both apps) — the same block the pre-click already selected, so the
+  // right-click doesn't move the selection tint differently per app
+  const bb = await bullets.nth(2).boundingBox().catch(() => null);
   const cx = bb ? bb.x + bb.width / 2 : rbb.x - 12;
   const cy = bb ? bb.y + bb.height / 2 : rbb.y + 10;
   await page.mouse.click(cx, cy, { button: 'right' });
@@ -248,7 +265,10 @@ await step('33-dark-block-ctx', async () => {
   // locator resolves to different element granularity per DOM, so a
   // text-relative offset would land at different viewport points.
   const bullets = page.locator('.bullet-container');
-  const bb = await bullets.nth(1).boundingBox().catch(() => null);
+  // nth(2) = 'Second block' (row order [First][empty][Second][Third] in
+  // both apps) — the same block the pre-click already selected, so the
+  // right-click doesn't move the selection tint differently per app
+  const bb = await bullets.nth(2).boundingBox().catch(() => null);
   const cx = bb ? bb.x + bb.width / 2 : rbb.x - 12;
   const cy = bb ? bb.y + bb.height / 2 : rbb.y + 10;
   await page.mouse.click(cx, cy, { button: 'right' });

@@ -123,7 +123,7 @@ let copy_save_row ctx =
          (Signal.map
             (fun (st : S.t) -> st.content <> None || st.png <> None)
             (st_sig ctx)))
-    (row ~key:"export-btns" ~gap:8
+    (row ~key:"export-btns" ~gap:24 ~style_class:"export-btns"
     [ button ~key:"export-copy" ~variant:`primary ~size:`sm
         ~style_class:"ui__button as-solid"
         ~on_press:(fun _ ->
@@ -143,13 +143,13 @@ let copy_save_row ctx =
         [] ])
 
 let options_rows ctx =
-  box ~key:"export-opts"
-    [ row ~key:"row-indent" ~cross:`center ~gap:16
+  box ~key:"export-opts" ~style_class:"export-opts"
+    [ row ~key:"row-indent" ~cross:`center ~gap:16 ~min_height:46
         [ shown ctx in_text
             (label ~key:"indent-l"
                ~value:(I18n.t "export/indent-style-label") [])
         ; indent_select ctx ]
-    ; row ~key:"row-rm" ~cross:`center ~gap:16
+    ; row ~key:"row-rm" ~cross:`center ~gap:16 ~min_height:24
         [ checkbox ctx ~key:"cb-page-ref" ~show:in_structured
             ~on:(fun st -> removal st "page-ref")
             ~on_toggle:(fun () -> toggle_removal ctx "page-ref")
@@ -162,7 +162,7 @@ let options_rows ctx =
             ~on:(fun st -> removal st "tag")
             ~on_toggle:(fun () -> toggle_removal ctx "tag")
             ~text:(I18n.t "export/remove-tags") () ]
-    ; row ~key:"row-nl" ~cross:`center ~gap:16
+    ; row ~key:"row-nl" ~cross:`center ~gap:16 ~min_height:24
         [ checkbox ctx ~key:"cb-newline" ~show:in_text
             ~on:(fun st -> st.S.newline_after_block)
             ~on_toggle:(fun () ->
@@ -173,14 +173,14 @@ let options_rows ctx =
             ~on:(fun st -> removal st "property")
             ~on_toggle:(fun () -> toggle_removal ctx "property")
             ~text:(I18n.t "export/remove-properties") () ]
-    ; row ~key:"row-open" ~cross:`center
+    ; row ~key:"row-open" ~cross:`center ~min_height:24
         [ checkbox ctx ~key:"cb-open" ~show:in_structured
             ~on:(fun st -> st.S.open_blocks_only)
             ~on_toggle:(fun () ->
               P.opt_change (S.st ctx) (fun s ->
                   { s with open_blocks_only = not s.open_blocks_only }))
             ~text:(I18n.t "export/open-blocks-only") () ]
-    ; row ~key:"row-level" ~cross:`center ~gap:8
+    ; row ~key:"row-level" ~cross:`center ~gap:8 ~min_height:46
         [ shown ctx in_structured
             (label ~key:"level-l" ~value:(I18n.t "export/level-lte") [])
         ; level_select ctx ] ]
@@ -233,7 +233,8 @@ let body (_ms : Model.t Signal.signal) : t =
     S.open_ ctx;
     P.regen (S.st ctx);
     column ~key:"export-page" ~style_class:"export"
-      [ column ~key:"export-inner" ~padding:24 ~gap:12
+      [ (* cljs .export.-m-5 > .p-6 → net 4px inner offset *)
+         column ~key:"export-inner" ~padding:4 ~gap:12
           [ row ~key:"export-tabs" ~gap:16
               ([ fmt_btn ctx "ft-text" (I18n.t "export/format-text") S.Text
                ; fmt_btn ctx "ft-opml" "OPML" S.Opml

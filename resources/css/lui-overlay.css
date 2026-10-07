@@ -1657,6 +1657,14 @@ div[data-keep-selection].menu-links-wrapper {
   display: none;
 }
 
+/* same for the check slot: cljs menus have no trailing 16px box — the
+   invisible check would push the shortcut/chevron off the right edge */
+.ui__dropdown-menu-content .lui-menu-item-check,
+.ui__context-menu-content .lui-menu-item-check,
+.ui__popover-content .lui-menu-item-check {
+  display: none;
+}
+
 /* cljs items are flex rows with normal (0) gap; spacing between icon and
    label comes from the icon's own margin (gap-1 = 4px) */
 .ui__dropdown-menu-content .lui-menu-item,
@@ -1781,6 +1789,13 @@ div[data-keep-selection].menu-links-wrapper {
   max-height: 80vh;
   overflow-y: auto;
 }
+
+/* cljs export dialog gaps: 6px between the preview textarea and the
+   options block (margin-collapsed select my-2), mt-4 before the
+   copy/save row — the export-inner column's uniform gap-3 overshoots
+   both */
+.ls-dialog-export-page .export-opts { margin-top: -6px; }
+.ls-dialog-export-page .export-btns { margin-top: 4px; }
 
 /* cljs shui/dialog-open! on publish-page-dialog uses the default
    .ui__dialog-content sizing (w-full max-w-2xl, lg:max-w-3xl) */
@@ -3096,9 +3111,7 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .panel-wrap .it label,
-.panel-wrap .it .it-label,
-#appearance_settings .it label,
-#appearance_settings .it .it-label {
+.panel-wrap .it .it-label {
   min-height: 28px;
   line-height: 28px;
   display: flex;
@@ -3108,6 +3121,9 @@ div[data-keep-selection].menu-links-wrapper {
 /* cljs .it is grid-cols-3: the control column spans 2 only when the
    row has two children (label + control); three-child rows (e.g.
    label | switch | shortcut kbd) keep one column each */
+/* the control column's col-span-2 is on the element in cljs markup —
+   it applies in the appearance popup too (only the label/control
+   min-heights are panel-wrap scoped) */
 .panel-wrap .it > *:nth-child(2):last-child,
 .panel-wrap .it .it-control,
 #appearance_settings .it > *:nth-child(2):last-child,
@@ -3255,6 +3271,7 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0;
   padding-right: 0.5rem;
   min-height: 0;
+  gap: 0; /* platform list-item gap doubles the label's padding-top */
   opacity: 0.9;
   border-radius: 0.25rem;
   width: auto;

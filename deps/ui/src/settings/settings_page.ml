@@ -725,7 +725,9 @@ let appearance_body (_x, y) : t =
               ~accessibility_identifier:"appearance_settings"
               ~style_class:"cp__settings-appearance-dialog-inner"
               [ reactive ~equal:( == ) (fun (_ : S.t) ->
-                    column ~key:"app-rows" (appearance_rows ctx))
+                    (* cljs cp__settings-appearance-dialog-inner:
+                       flex-col gap-4 between the .it rows *)
+                    column ~key:"app-rows" ~gap:16 (appearance_rows ctx))
                   (S.signal ()) ]
           ]
       ]
