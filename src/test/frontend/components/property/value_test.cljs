@@ -481,7 +481,7 @@
                    :db/ident :logseq.class/Tag}]
     (is (= []
            (#'property-value/scoped-class-nodes
-            property [page-class tag-class] nil {})))))
+            property [page-class tag-class] nil {} [])))))
 
 (deftest property-value-selected-detects-current-ref-value-test
   (is (true? (#'property-value/property-value-selected?
@@ -616,27 +616,71 @@
             property
             [topic-class]
             [matching-parent matching-child matching-wrapped matching-entity-tags unrelated]
-            {10 [11]})))))
+            {10 [11]} [])))))
 
-(deftest selected-node-property-values-skips-empty-placeholder-test
-  (let [property {:db/ident :user.property/subjects}
-        selected {:db/id 200
-                  :block/title "Lost tag"
-                  :block/tags [20]}]
-    (is (= [selected]
-           (#'property-value/selected-node-property-values
-            {:user.property/subjects #{selected
-                                       {:db/ident :logseq.property/empty-placeholder}
-                                       nil}}
-            property)))
-    (is (= [selected]
-           (#'property-value/selected-node-property-values
-            {:user.property/subjects selected}
-            property)))
-    (is (= []
-           (#'property-value/selected-node-property-values
-            {:user.property/subjects :logseq.property/empty-placeholder}
-            property)))))
+(deftest scoped-node-selector-renders-hydrated-selected-choices-test
+  (let [selected {:db/id 200
+                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                  :block/title "Read [[11111111-1111-1111-1111-111111111111]]"}
+        property {:db/ident :user.property/subjects
+                  :logseq.property/type :node
+                  :logseq.property/classes [{:db/id 10 :db/ident :user.class/Subject}]}
+        selected-choice {:value selected :label "Read [[Named page]]"}
+        unrelated-choice {:value {:db/id 201 :block/title "Already removed"}
+                          :label "Already removed"}
+        captured* (atom nil)]
+    (with-redefs [hooks/use-state (fn [initial] [initial identity])
+                  hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-effect! (fn [& _])
+                  property-value/select-aux (fn [_block _property opts]
+                                              (reset! captured* opts)
+                                              nil)]
+      (doseq [values [[selected] selected]]
+        (render-static
+         (property-value/select-node
+          property
+          {:block {:db/id 1 :user.property/subjects values}
+           :multiple-choices? true
+           :class-data {:selected-nodes [selected-choice unrelated-choice]}}
+          []))
+        (is (= ["Read [[Named page]]"] (map :label-value (:items @captured*))))
+        (is (= [200] (map :value (:items @captured*))))
+        (is (= [200] (:selected-choices @captured*))))
+      (render-static
+       (property-value/select-node
+        property
+        {:block {:db/id 1 :user.property/subjects []}
+         :multiple-choices? true
+         :class-data {:selected-nodes [selected-choice]}}
+        []))
+      (is (empty? (:items @captured*))
+          "A hydrated out-of-scope choice disappears once it is no longer selected."))))
+
+(deftest scoped-node-selector-keeps-newly-selected-choices-test
+  (let [selected {:db/id 200
+                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                  :block/title "New subject"}
+        property {:db/ident :user.property/subjects
+                  :logseq.property/type :node
+                  :logseq.property/classes [{:db/id 10 :db/ident :user.class/Subject}]}
+        captured* (atom nil)]
+    (with-redefs [hooks/use-state (fn [initial] [initial identity])
+                  hooks/use-memo (fn [f _deps] (f))
+                  hooks/use-effect! (fn [& _])
+                  property-value/select-aux (fn [_block _property opts]
+                                              (reset! captured* opts)
+                                              nil)]
+      (doseq [choice [selected (assoc {:value (select-keys selected [:db/id :block/uuid])}
+                                     :label "New subject")]]
+        (render-static
+         (property-value/select-node
+          property
+          {:block {:db/id 1 :user.property/subjects [selected]}
+           :multiple-choices? true
+           :class-data {:selected-nodes []}}
+          [choice {:db/id 201 :block/title "Unselected out of scope"}]))
+        (is (= [200] (map :value (:items @captured*))))
+        (is (= ["New subject"] (map :label-value (:items @captured*))))))))
 
 (deftest scoped-class-nodes-keeps-selected-nodes-outside-scope-test
   (let [property {:db/ident :user.property/subjects
@@ -653,8 +697,7 @@
                    :block/title "Other"
                    :block/tags [20]}
         block {:user.property/subjects #{selected-out-of-scope}}
-        selected-nodes (#'property-value/selected-node-property-values
-                        block property)
+        selected-nodes [selected-out-of-scope]
         selected-ids (set (#'property-value/property-value->ids
                            (:user.property/subjects block)))]
     (is (= [selected-out-of-scope]
@@ -742,7 +785,7 @@
                           :label "Unrelated block"}]
     (is (= [matching-choice]
            (#'property-value/scoped-class-nodes
-            property [page-class] [matching-choice unrelated-choice] {})))))
+            property [page-class] [matching-choice unrelated-choice] {} [])))))
 
 (deftest load-initial-node-choices-loads-existing-values-for-broad-page-scope-test
   (async done
