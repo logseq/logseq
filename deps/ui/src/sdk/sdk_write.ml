@@ -935,39 +935,101 @@ let remove_property a _b _c _d =
 (* cljs add-tag-extends passes (:db/id tag) (:db/id extend); the
    set-block-property op's SBlockId arg accepts uuids only *)
 
+(* entity/property? — logseq.property/type marks a property node *)
+let is_property_entity (w : Wire.t) =
+  Wire.get w "logseq.property/type" <> None
+
+let db_ident_of (w : Wire.t) =
+  match Wire.get w "db/ident" with
+  | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+  | _ -> None
+
+(* cljs ldb/built-in? *)
+let built_in (w : Wire.t) =
+  match Wire.get w "logseq.property/built-in?" with
+  | Some (Wire.Bool b) -> b
+  | _ -> false
+
+(* cljs throw-error-if-not-tag!: "Not a tag: <raw arg>" *)
+let not_a_tag j =
+  Js.Promise.reject
+    (Failure
+       ("Not a tag: "
+       ^ (match arg_string j with
+          | Some s -> s
+          | None -> Js.Json.stringify j)))
+
+(* cljs add-tag-extends: class? on both sides, built-in tags' extends
+   are frozen *)
 let add_tag_extends a b _c _d =
   let* (tag, ext) = Js.Promise.all2 (get_entity_json a, get_entity_json b) in
-  match block_uuid_of tag, Wire.map_get_int ext "db/id" with
-  | Some t, Some e ->
-      let* _ =
-        apply_op "set-block-property"
-          [ Wire.Uuid t
-          ; Wire.Keyword "logseq.property.class/extends"
-          ; Wire.Int e
-          ]
-      in
-      resolved_nil
-  | _ -> resolved_nil
+  if not (is_class_entity tag) then not_a_tag a
+  else if not (is_class_entity ext) then not_a_tag b
+  else if built_in tag then
+    Js.Promise.reject (Failure "Built-in tag's extends can't be modified")
+  else
+    match block_uuid_of tag, Wire.map_get_int ext "db/id" with
+    | Some t, Some e ->
+        let* _ =
+          apply_op "set-block-property"
+            [ Wire.Uuid t
+            ; Wire.Keyword "logseq.property.class/extends"
+            ; Wire.Int e
+            ]
+        in
+        resolved_nil
+    | _ -> resolved_nil
+
+(* cljs remove-tag-extends: same validation, delete-property-value! *)
+let remove_tag_extends a b _c _d =
+  let* (tag, ext) = Js.Promise.all2 (get_entity_json a, get_entity_json b) in
+  if not (is_class_entity tag) then not_a_tag a
+  else if not (is_class_entity ext) then not_a_tag b
+  else if built_in tag then
+    Js.Promise.reject (Failure "Built-in tag's extends can't be modified")
+  else
+    match block_uuid_of tag, Wire.map_get_int ext "db/id" with
+    | Some t, Some e ->
+        let* _ =
+          apply_op "delete-property-value"
+            [ Wire.Uuid t
+            ; Wire.Keyword "logseq.property.class/extends"
+            ; Wire.Int e
+            ]
+        in
+        resolved_nil
+    | _ -> resolved_nil
 
 
-(* cljs set-property-node-tags: set-block-property! (:db/id property)
-   :logseq.property/classes [tag-db-ids...] *)
+(* cljs set-property-node-tags: <get-block on the raw property id,
+   entity/property? check, then every tag-id must be a number —
+   set-block-property! :logseq.property/classes [tag-db-ids...] *)
 let set_property_node_tags a b _c _d =
-  match arg_string a with
-  | None -> resolved_nil
-  | Some id ->
-      let ident = property_ident id in
+  let* p = get_entity_json a in
+  if not (is_property_entity p) then
+    Js.Promise.reject (Failure "Not a valid property")
+  else
+    let items = list_items (arg_wire b) in
+    if
+      List.exists
+        (fun w ->
+          match w with
+          | Wire.Int _ | Wire.Int64 _ | Wire.Float _ -> false
+          | _ -> true)
+        items
+    then Js.Promise.reject (Failure "Tag id should be a number")
+    else
       let tags =
-        arg_wire b |> list_items
-        |> List.filter_map (fun w ->
-               match w with
-               | Wire.Int n -> Some (Wire.Int n)
-               | Wire.Int64 n -> Some (Wire.Int (Int64.to_int n))
-               | Wire.Float f -> Some (Wire.Int (int_of_float f))
-               | _ -> None)
+        List.map
+          (fun w ->
+            match w with
+            | Wire.Int n -> Wire.Int n
+            | Wire.Int64 n -> Wire.Int (Int64.to_int n)
+            | Wire.Float f -> Wire.Int (int_of_float f)
+            | other -> other)
+          items
       in
-      (let* p = get_entity_ident ident in
-      match block_uuid_of p with
+      (match block_uuid_of p with
       | None -> resolved_nil
       | Some puuid ->
           let* _ =
@@ -1008,15 +1070,6 @@ let get_property_entity j =
   | Some w -> get_by_id w
   | None -> Js.Promise.resolve Wire.Nil
 
-(* entity/property? — logseq.property/type marks a property node *)
-let is_property_entity (w : Wire.t) =
-  Wire.get w "logseq.property/type" <> None
-
-let db_ident_of (w : Wire.t) =
-  match Wire.get w "db/ident" with
-  | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
-  | _ -> None
-
 (* cljs (and (built-in? p) (not (public-built-in-property? p))) *)
 let private_built_in (w : Wire.t) =
   let flag k =
@@ -1038,12 +1091,42 @@ let add_block_tag a b _c _d =
          ^ (match arg_string b with Some s -> s | None -> "")))
   else
     match block_uuid_of block, Wire.map_get_int tag "db/id" with
-    | Some uuid, Some tid ->
-        let* _ =
-          apply_op "set-block-property"
-            [ Wire.Uuid uuid; Wire.Keyword "block/tags"; Wire.Int tid ]
+    | Some uuid, Some tid -> (
+        (* cljs db-page-handler/add-tag: save-current-block! then
+           <valid-tag?; an invalid pair shows the worker's notification
+           payload instead of tagging *)
+        (match Editor_state.editing_uuid () with
+         | Some u -> Editor_actions.save_if_dirty u
+         | None -> ());
+        let block_id =
+          match Wire.map_get_int block "db/id" with
+          | Some n -> Wire.Int n
+          | None -> Wire.Uuid uuid
         in
-        resolved_nil
+        let* v =
+          Runtime.invoke3 "thread-api/validate-block-tag"
+            (Wire.String (repo ()))
+            block_id (Wire.Int tid)
+        in
+        match Wire.get v "valid?" with
+        | Some (Wire.Bool true) ->
+            let* _ =
+              apply_op "set-block-property"
+                [ Wire.Uuid uuid; Wire.Keyword "block/tags"; Wire.Int tid ]
+            in
+            resolved_nil
+        | _ ->
+            let payload =
+              match Wire.get v "payload" with
+              | Some p -> p
+              | None -> Wire.Map []
+            in
+            let msg = Option.value ~default:"" (Wire.map_get_string payload "message") in
+            let ty = Option.value ~default:"error" (Wire.map_get_string payload "type") in
+            ignore
+              (Sdk_ui.show_msg (Js.Json.string msg) (Js.Json.string ty)
+                 Js.Json.null Js.Json.null);
+            resolved_nil)
     | _ -> resolved_nil
 
 (* cljs tag-add-property: class-add-property op after tag/property
@@ -1168,3 +1251,278 @@ let import_edn a _b _c _d =
            (match Wire.get result "error" with
             | Some (Wire.String e) -> Js.Promise.reject (Failure e)
             | _ -> resolved_nil))
+
+(* cljs remove-block-tag: same resolution as add-block-tag, then
+   delete-property-value! :block/tags (:db/id tag) — no validate call *)
+let remove_block_tag a b _c _d =
+  let* (block, tag) =
+    Js.Promise.all2 (get_entity_json a, get_tag_entity b)
+  in
+  if not (is_class_entity tag) then not_a_tag b
+  else
+    match block_uuid_of block, Wire.map_get_int tag "db/id" with
+    | Some uuid, Some tid ->
+        let* _ =
+          apply_op "delete-property-value"
+            [ Wire.Uuid uuid; Wire.Keyword "block/tags"; Wire.Int tid ]
+        in
+        resolved_nil
+    | _ -> resolved_nil
+
+(* cljs tag-remove-property: class-remove-property! then re-fetch the
+   tag through get-case-page (result->js) *)
+let remove_tag_property a b _c _d =
+  let* (tag, property) =
+    Js.Promise.all2 (get_tag_entity a, get_property_entity b)
+  in
+  if not (is_class_entity tag) then
+    Js.Promise.reject (Failure "Not a valid tag")
+  else if not (is_property_entity property) then
+    Js.Promise.reject (Failure "Not a valid property")
+  else
+    match block_uuid_of tag, db_ident_of property with
+    | Some uuid, Some ident ->
+        let* _ =
+          apply_op "class-remove-property"
+            [ Wire.Uuid uuid; Wire.Keyword ident ]
+        in
+        let* tag' = get_by_id (Wire.Uuid uuid) in
+        resolved_result tag'
+    | _ -> resolved_nil
+
+(* cljs set-block-icon: icon-type whitelist, non-blank name, emoji
+   names resolve to their mart id — set-block-property!
+   :logseq.property/icon {:type kw :id string} *)
+let emoji_id_of_name name =
+  (* cljs name->emoji: emojis grouped by display :name *)
+  try
+    match Js.Json.decodeObject (Lazy.force Emoji_mart.mart_emojis) with
+    | Some dict ->
+        Js.Dict.entries dict |> Array.to_list
+        |> List.find_map (fun (_key, j) ->
+               (match
+                  Js.Json.decodeString (Web_dom.js_get j "name")
+                with
+                | Some n when n = name ->
+                    Js.Json.decodeString (Web_dom.js_get j "id")
+                | _ -> None))
+    | None -> None
+  with _ -> None
+
+let set_block_icon a b c _d =
+  let icon_type = Option.value ~default:"" (arg_string b) in
+  let icon_name = Option.value ~default:"" (arg_string c) in
+  if icon_type <> "tabler-icon" && icon_type <> "emoji" then
+    Js.Promise.reject
+      (Failure "icon-type should be one of [tabler-icon, emoji]")
+  else if String.trim icon_name = "" then
+    Js.Promise.reject (Failure "icon-name should be a non-blank string")
+  else
+    let icon_id =
+      if icon_type = "emoji" then emoji_id_of_name icon_name
+      else Some icon_name
+    in
+    match icon_id with
+    | None -> Js.Promise.reject (Failure ("Can't find emoji for " ^ icon_name))
+    | Some icon_id ->
+        let* block = get_entity_json a in
+        (match block_uuid_of block with
+         | Some uuid ->
+             let* _ =
+               apply_op "set-block-property"
+                 [ Wire.Uuid uuid
+                 ; Wire.Keyword "logseq.property/icon"
+                 ; Wire.Map
+                     [ (Wire.kw "type", Wire.Keyword icon_type)
+                     ; (Wire.kw "id", Wire.String icon_id) ]
+                 ]
+             in
+             resolved_nil
+         | None -> resolved_nil)
+
+let remove_block_icon a _b _c _d =
+  let* block = get_entity_json a in
+  match block_uuid_of block with
+  | Some uuid ->
+      let* _ =
+        apply_op "remove-block-property"
+          [ Wire.Uuid uuid; Wire.Keyword "logseq.property/icon" ]
+      in
+      resolved_nil
+  | None -> resolved_nil
+
+(* cljs prepend-block-in-page: same page-or-today resolution as
+   append-block-in-page, insert at the first child *)
+let prepend_block_in_page a b c _d =
+  let page_arg, content, opts =
+    match arg_string b with
+    | Some content -> (arg_string a, content, arg_map c)
+    | None -> (None, Option.value ~default:"" (arg_string a), arg_map b)
+  in
+  let target_id =
+    match page_arg with
+    | Some p -> Js.Promise.resolve p
+    | None -> (
+        match (Runtime.model ()).Model.route_page with
+        | Some p ->
+            Js.Promise.resolve
+              (Option.value ~default:"" p.Model.page_uuid)
+        | None ->
+            let r = Option.value ~default:"" (Runtime.model ()).Model.repo in
+            let* page_w =
+              Runtime.invoke2 "thread-api/get-journal-page-by-day"
+                (Wire.String r)
+                (Wire.Int (Dates.today_journal_day ()))
+            in
+            Js.Promise.resolve
+              (Option.value ~default:""
+                 (Wire.map_get_uuid page_w "block/uuid")))
+  in
+  let opts' =
+    let forced =
+      [ (Wire.String "sibling", Wire.Bool false)
+      ; (Wire.String "before", Wire.Bool false)
+      ; (Wire.String "start", Wire.Bool true) ]
+    in
+    match opts with
+    | Wire.Map kvs ->
+        Wire.Map
+          (forced
+          @ List.filter
+              (fun (k, _) ->
+                match k with
+                | Wire.String s | Wire.Keyword s ->
+                    s <> "sibling" && s <> "before" && s <> "start"
+                | _ -> true)
+              kvs)
+    | _ -> Wire.Map forced
+  in
+  let* target_id = target_id in
+  let* e = get_entity target_id in
+  let* () =
+    match e, Wire.is_uuid_string target_id, target_id with
+    | Wire.Nil, false, name when name <> "" ->
+        let* _ =
+          apply_op "create-page" [ Wire.String name; Wire.Map [] ]
+        in
+        Js.Promise.resolve ()
+    | _ -> Js.Promise.resolve ()
+  in
+  insert_block (Js.Json.string target_id) (Js.Json.string content)
+    (Sdk_convert.json_of_wire opts')
+    Js.Json.null
+
+(* cljs api move-block -> dnd/move-blocks:
+   {before:true} -> move above target's parent position (:top?),
+   {children:true} -> nest inside target (:sibling? false),
+   default -> move after target (:sibling? true) *)
+let move_block a b c _d =
+  let* (src, tgt) = Js.Promise.all2 (get_entity_json a, get_entity_json b) in
+  match block_uuid_of src, block_uuid_of tgt with
+  | Some src_u, Some tgt_u ->
+      let opts = arg_map c in
+      let before = opt_bool "before" opts in
+      let children = opt_bool "children" opts in
+      if before then (
+        let* p = parent_of (repo ()) tgt_u in
+        match p with
+        | Some pu ->
+            let* _ =
+              apply_op "move-blocks"
+                [ Wire.Array [ Wire.Uuid src_u ]
+                ; Wire.Uuid pu
+                ; Wire.Map [ (Wire.kw "top?", Wire.Bool true) ] ]
+            in
+            resolved_nil
+        | None -> resolved_nil)
+      else
+        let* _ =
+          apply_op "move-blocks"
+            [ Wire.Array [ Wire.Uuid src_u ]
+            ; Wire.Uuid tgt_u
+            ; Wire.Map
+                [ (Wire.kw "sibling?", Wire.Bool (not children)) ] ]
+        in
+        resolved_nil
+  | _ -> resolved_nil
+
+(* cljs page-handler/rename!: uuid arg required, returns true *)
+let rename_page a b _c _d =
+  match arg_string a, arg_string b with
+  | Some u, _ when not (Wire.is_uuid_string u) ->
+      Js.Promise.reject (Failure "Invalid page uuid")
+  | Some u, Some name ->
+      let* _ =
+        apply_op "rename-page" [ Wire.Uuid u; Wire.String name ]
+      in
+      resolved (Js.Json.boolean true)
+  | _ -> resolved_nil
+
+(* cljs restore-page: page-handler/restore-recycled! on the uuid *)
+let restore_page a _b _c _d =
+  let* page = get_entity_json a in
+  match block_uuid_of page with
+  | Some uuid ->
+      let* _ = apply_op "restore-recycled" [ Wire.Uuid uuid ] in
+      resolved_nil
+  | None -> resolved_nil
+
+(* cljs delete-recycled-page-permanently: only recycled pages *)
+let delete_recycled_page_permanently a _b _c _d =
+  let* page = get_entity_json a in
+  let recycled =
+    match Wire.get page "logseq.property/deleted-at" with
+    | Some (Wire.Int _) | Some (Wire.Int64 _) | Some (Wire.Date_ms _) ->
+        true
+    | _ -> false
+  in
+  match recycled, block_uuid_of page with
+  | true, Some uuid ->
+      let* _ = apply_op "recycle-delete-permanently" [ Wire.Uuid uuid ] in
+      resolved_nil
+  | _ -> resolved_nil
+
+(* cljs new-block-uuid: a fresh block uuid string *)
+let new_block_uuid _a _b _c _d =
+  resolved (Js.Json.string (Platform.random_uuid ()))
+
+(* cljs force-save-graph — no manual save step exists on the web
+   runtime; every write already goes through the worker *)
+let force_save_graph _a _b _c _d = resolved (Js.Json.boolean true)
+
+(* cljs set-file-content: restricted to the four built-in custom file
+   paths; raw file entity tx *)
+let set_file_content a b _c _d =
+  let valid_paths =
+    [ "logseq/custom.js"; "logseq/custom.css"
+    ; "logseq/publish.js"; "logseq/publish.css" ]
+  in
+  match arg_string b, arg_string a with
+  | None, _ ->
+      Js.Promise.reject (Failure "content should be a string")
+  | Some content, Some path ->
+      if not (List.mem path valid_paths) then
+        Js.Promise.reject (Failure "Invalid path")
+      else
+        let* _ =
+          Runtime.invoke "thread-api/transact"
+            [ Wire.String (repo ())
+            ; Wire.Array
+                [ Wire.Map
+                    [ (Wire.kw "file/path", Wire.String path)
+                    ; (Wire.kw "file/content", Wire.String content) ] ]
+            ; Wire.Nil
+            ; Wire.Nil ]
+        in
+        resolved (Js.Json.boolean true)
+  | _, _ -> resolved_nil
+
+(* cljs download-graph-db / download-graph-pages reuse the graph
+   exporter (sqlite binary / db-only zip) *)
+let download_graph_db _a _b _c _d =
+  let* () = Exporter.export_binary () in
+  resolved_nil
+
+let download_graph_pages _a _b _c _d =
+  let* () = Exporter.export_zip () in
+  resolved_nil

@@ -17,22 +17,6 @@ let read_config repo =
          try Edn.parse s with _ -> Wire.Map [])
      | _ -> Wire.Map [])
 
-(* js-object wire (String keys) -> config wire (keyword keys, recursive) *)
-let rec keywordize (w : Wire.t) : Wire.t =
-  match w with
-  | Wire.Map kvs ->
-      Wire.Map
-        (List.map
-           (fun (k, v) ->
-             ( (match k with
-                | Wire.String s -> Wire.Keyword s
-                | other -> other)
-             , keywordize v ))
-           kvs)
-  | Wire.Array xs -> Wire.Array (List.map keywordize xs)
-  | Wire.List xs -> Wire.List (List.map keywordize xs)
-  | Wire.Set xs -> Wire.Set (List.map keywordize xs)
-  | other -> other
 
 let write_config repo (cfg : Wire.t) =
   let now_ms = Int64.of_float (Js.Date.now ()) in
@@ -104,7 +88,7 @@ let set_configs a _b _c _d =
             ( (match k with
                | Wire.String s -> Wire.Keyword s
                | other -> other)
-            , keywordize v ))
+            , keywordize_keys v ))
           entries
       in
       let* () = write_config repo (Wire.Map (kept @ added)) in

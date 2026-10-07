@@ -171,6 +171,10 @@ let ev_flag ev name = truthy_field ev name
 
 let make_event ?(fields = []) ~target name : Js.Json.t =
   let ev = Js.Json.object_ (Js.Dict.empty ()) in
+  (* marks stub events — real Event objects (e.g. new CustomEvent via
+     document.dispatchEvent) have readonly target/currentTarget and
+     must skip field mutation *)
+  set_field ev "__stub" true;
   set_field ev "type" (Js.Json.string name);
   set_field ev "target" (json_of target);
   set_field ev "currentTarget" Js.null;
@@ -192,7 +196,7 @@ let make_event ?(fields = []) ~target name : Js.Json.t =
 
 let fire_listeners n ev phase =
   let r = rec_r n in
-  set_field ev "currentTarget" n;
+  if truthy_field ev "__stub" then set_field ev "currentTarget" n;
   let ty =
     match Js.Json.decodeString (json_of (get_field ev "type")) with
     | Some s -> s
@@ -343,7 +347,16 @@ and remove_class el c =
 and toggle_class el c =
   if has_class el c then remove_class el c else add_class el c
 
-and dispatch_event_stub el (ev : Js.Json.t) : bool = dispatch_el el ev
+and dispatch_event_stub el (ev : Js.Json.t) : bool =
+  if truthy_field ev "__stub" then dispatch_el el ev
+  else
+    let chain =
+      chain_up el
+      @ if el == !document_ref then [] else [ !document_ref ]
+    in
+    List.iter (fun n -> fire_listeners n ev true) chain;
+    List.iter (fun n -> fire_listeners n ev false) (List.rev chain);
+    true
 
 and install_methods el r =
   let set name f = set_field el name f in
