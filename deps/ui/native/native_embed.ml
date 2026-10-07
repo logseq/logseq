@@ -89,6 +89,7 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
     | Some s -> Some s
     | None -> std_prop_string rt node prop
   in
+  let kind = Hashtbl.find_opt rt.Lui_runtime.mounted_nodes node in
   let tag =
     match Hashtbl.find_opt rt.Lui_runtime.runtime_extension_nodes node with
     | Some ident ->
@@ -97,8 +98,29 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
           String.sub ident 7 (String.length ident - 7)
         else ident
     | None -> (
-        match Hashtbl.find_opt rt.Lui_runtime.mounted_nodes node with
-        | Some kind -> Lui_wire_schema.node_kind_name kind
+        (* standard kinds present the HTML tag their DOM twin would carry
+           (matching lui-gpui's dom_tag_of_kind) — delegated selectors
+           like a[data-ref] / button.x match on it *)
+        match kind with
+        | Some Lui_protocol.Link -> "a"
+        | Some
+            ( Lui_protocol.Button | Lui_protocol.ToggleButton
+            | Lui_protocol.BottomTab ) ->
+            "button"
+        | Some
+            ( Lui_protocol.Input | Lui_protocol.TextField
+            | Lui_protocol.SearchField | Lui_protocol.SecureField
+            | Lui_protocol.NumberStepper ) ->
+            "input"
+        | Some Lui_protocol.Textarea -> "textarea"
+        | Some (Lui_protocol.Select | Lui_protocol.Combobox) -> "select"
+        | Some Lui_protocol.MenuItem -> "menuitem"
+        | Some
+            ( Lui_protocol.FileImage | Lui_protocol.Image
+            | Lui_protocol.FilePreview ) ->
+            "img"
+        | Some Lui_protocol.ListItem -> "li"
+        | Some k -> Lui_wire_schema.node_kind_name k
         | None -> "div")
   in
   let attrs =
@@ -123,6 +145,36 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
                  (fun (k, v) -> (k, Js.Json.JString v))
                  (Lui_protocol.data_attrs_decode raw))
         | None -> Js.Json.JObject [])
+  in
+  let attrs =
+    (* the typed props are the DOM attrs a real element would carry —
+       delegated selectors ([aria-label], a[target=_blank]) and readers
+       (tooltip label, default-action href) look for them in attrs, not
+       in the prop table *)
+    match attrs with
+    | Js.Json.JObject kvs ->
+        let kvs =
+          match
+            std_prop_string rt node Lui_protocol.AccessibilityLabel
+          with
+          | Some label -> ("aria-label", Js.Json.JString label) :: kvs
+          | None -> kvs
+        in
+        let kvs =
+          match kind with
+          | Some Lui_protocol.Link ->
+              let push name prop acc =
+                match std_prop_string rt node prop with
+                | Some v -> (name, Js.Json.JString v) :: acc
+                | None -> acc
+              in
+              kvs
+              |> push "target" Lui_protocol.TargetValue
+              |> push "href" Lui_protocol.UrlValue
+          | _ -> kvs
+        in
+        Js.Json.JObject kvs
+    | other -> other
   in
   let acc_id =
     Option.value
