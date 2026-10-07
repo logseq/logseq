@@ -241,12 +241,10 @@ let node_of_id id =
 (* ---------------- shell + header ---------------- *)
 
 let test_shell () =
-  (* native chrome (native/chrome.ml): the header is a host toolbar --
-     tb-leading/tb-trailing with nav/home/search/dots/rs-toggle -- not
-     the web's #head row; the left-menu button is a host-chrome
-     affordance and does not exist in the app tree *)
-  has "prop:accessibility-identifier=\"nav-back\"";
-  has "prop:accessibility-identifier=\"nav-fwd\"";
+  (* web-parity header (a1faf4c9): left-menu + search on the left,
+     rtc/home/dots/rs-toggle on the right; no back/fwd nav buttons *)
+  has "prop:accessibility-identifier=\"left-menu\"";
+  has "prop:accessibility-identifier=\"home-btn\"";
   has "prop:accessibility-identifier=\"search-button\"";
   has "prop:accessibility-identifier=\"toolbar-dots-btn\"";
   has "prop:accessibility-identifier=\"rs-toggle\"";
@@ -591,7 +589,7 @@ let test_render_libs_dom () =
             ; block_code_lang = Some "clojure" }
           ; block "bv" "{{vimeo 76979871}}"
           ; block "bb" "{{bilibili BV1xK4y1p7F8}}"
-          ; block "bl" "{{loom e5b8c04bca094dd8a56e76b64085464f}}"
+          ; block "bo" "{{loom e5b8c04bca094dd8a56e76b64085464f}}"
           ; block "btw" "{{tweet https://twitter.com/logseq/status/1593969270893658112}}"
           ; block "bw"
               "{{video https://www.youtube.com/watch?v=dQw4w9WgXcQ, w=300}}"
