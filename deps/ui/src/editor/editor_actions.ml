@@ -205,13 +205,35 @@ let rec apply_focus () =
             (match click_offset uuid with
              | Some off -> set_caret uuid off
              | None -> set_caret uuid caret);
-          (* the sink's runs prop and first layout can lag the landing
-             by a patch or two, so the immediate measure often yields no
-             caret rect (Enter→new block, arrow-in): re-measure after the
-             DOM settles or the caret bar never paints until the next
-             input event *)
-          D.set_timeout (fun () -> refresh_overlay uuid) 0;
-          D.set_timeout (fun () -> refresh_overlay uuid) 40;
+          (* the sink's runs prop and first layout can lag the landing —
+             a split/merge's remount by far more than a patch or two —
+             and the immediate measure then yields no caret rect, so the
+             caret bar never paints until the next input event: keep
+             re-measuring until the overlay has a caret rect (or this
+             block stops editing) *)
+          let rec retry_measure attempt =
+            D.set_timeout
+              (fun () ->
+                match S.editing () with
+                | Some e when e.S.uuid = uuid -> (
+                    refresh_overlay uuid;
+                    let missing =
+                      match !S.active_frame with
+                      | Some fr -> (
+                          let f =
+                            match !(fr.Signal.pending) with
+                            | Some v -> v
+                            | None -> Signal.get_state fr
+                          in
+                          Option.is_none f.Edit_input.caret)
+                      | None -> true
+                    in
+                    if missing && attempt < 25 then
+                      retry_measure (attempt + 1))
+                | _ -> ())
+              (if attempt = 0 then 0 else 40)
+          in
+          retry_measure 0;
           drain_pending_focus_actions ())
         else if !S.pending_focus = None then ()
         else (
