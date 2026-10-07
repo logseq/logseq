@@ -620,6 +620,7 @@ let preferred_unix_cli_dir () : string option =
   Electron_cli_install.preferred_unix_cli_dir
     {
       windows = Electron_state.win32;
+      packaged = App.is_packaged App.t;
       cli_path = "";
       cli_dir = None;
       cli_dir_fn = None;
@@ -684,6 +685,7 @@ let install_cli_launcher () : unit =
   Electron_cli_install.install_cli_launcher
     {
       windows = Electron_state.win32;
+      packaged = App.is_packaged App.t;
       cli_path;
       cli_dir = None;
       cli_dir_fn = Some cli_dir_fn;

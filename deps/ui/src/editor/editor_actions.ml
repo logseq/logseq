@@ -75,7 +75,25 @@ let sync_buffer uuid v =
    (enter_edit awaits the title ref before updating S.editing), so the
    rest wait for the next pass rather than applying against the stale
    editing block *)
+let perf_keys =
+  lazy
+    (match Sys.getenv_opt "LOGSEQ_PERF" with
+     | Some _ -> true
+     | None -> false)
+
 let focus_attempts = ref 0
+
+(* at most one retry timer in flight: apply_focus is also invoked per
+   flush and per re-arm, and when every call scheduled its own timer a
+   sink that can't mount multiplied parallel retry chains instead of
+   retrying once at a time *)
+let retry_timer_armed = ref false
+
+(* exponential backoff: a row that mounts a patch or two later clears
+   on the early 12ms tries; a sink that can't mount yet backs off
+   (12ms x8, 24ms x8, 48ms x8, 96ms x8, then ~200ms) instead of
+   flooding the event loop *)
+let retry_delay_ms attempts = min 200 (12 lsl (min 4 (attempts / 8)))
 
 (* replayed keys can re-enter the queue through the flush their op
    triggers — the gate keeps a nested pass from replaying twice *)
@@ -139,11 +157,9 @@ let rec apply_focus () =
           if !S.last_edit_input_ms <= armed_ms then set_caret uuid caret;
           drain_pending_focus_actions ())
         else (
-          prerr_endline
-            ("PERF focus-retry t="
-             ^ string_of_float (Platform.date_now_ms () /. 1000.)
-             ^ " uuid=" ^ uuid);
-          flush stderr;
+          if Lazy.force perf_keys then
+            Printf.eprintf "PERF focus-retry t=%f uuid=%s\n%!"
+              (Platform.date_now_ms () /. 1000.) uuid;
           retry_focus ()))
 
 and retry_focus () =
@@ -161,12 +177,23 @@ and retry_focus () =
               top-level key like the nested list had *)
            !(S.scroll_key_into_view) u
        | None -> ());
-    D.set_timeout apply_focus 12
+    if not !retry_timer_armed then begin
+      retry_timer_armed := true;
+      D.set_timeout
+        (fun () ->
+          retry_timer_armed := false;
+          apply_focus ())
+        (retry_delay_ms !focus_attempts)
+    end
   end
   else (
     S.pending_focus := None;
     focus_attempts := 0;
     last_focus_emitted := None;
+    (* one line per exhausted arm — never mounting is a bug worth
+       seeing, just not 50 PERF lines per click *)
+    Platform.console_error
+      "focus retry budget exhausted — editor sink never mounted";
     drain_pending_focus_actions ())
 
 (* flush-time pass over pending focus — main.ml and the test driver run
@@ -247,12 +274,6 @@ let scope_of_uuid uuid =
   match D.get_element_by_id ("ls-block-" ^ uuid) with
   | Some el -> scope_of_el el
   | None -> "main"
-
-let perf_keys =
-  lazy
-    (match Sys.getenv_opt "LOGSEQ_PERF" with
-     | Some _ -> true
-     | None -> false)
 
 let enter_edit ?scope uuid caret =
   let scope =

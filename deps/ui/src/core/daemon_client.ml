@@ -198,11 +198,33 @@ let invoke (t : transport) (name : string) (args : Wire.t list) :
   | "thread-api/create-or-open-db" -> (
       match args with
       | Wire.String repo :: _ ->
+          (* cljs persist_db/<new ran `ipc "createGraph"` before attaching
+             the daemon: the daemon's admission refuses a repo whose
+             lifecycle state is not phase=available, so a brand-new repo's
+             graph dir must exist before db-worker-runtime. A create
+             request carries `config` (graph.ml passes it); open passes an
+             empty opts map and must not silently recreate a deleted
+             graph. *)
+          let creating =
+            match args with
+            | [ _; Wire.Map _ as opts ] -> Wire.get opts "config" <> None
+            | _ -> false
+          in
+          let* generation =
+            if creating then
+              ipc [ Wire.String "createGraph"; Wire.String repo ]
+            else Js.Promise.resolve Wire.Nil
+          in
+          let runtime_opts =
+            match generation with
+            | Wire.String _ -> Wire.Map [ (Wire.kw "generation", generation) ]
+            | _ -> Wire.Map []
+          in
           let* rt =
             ipc
               [ Wire.String "db-worker-runtime"
               ; Wire.String repo
-              ; Wire.Map [] ]
+              ; runtime_opts ]
           in
           (match Wire.map_get_string rt "base-url" with
            | Some base when base <> "" ->

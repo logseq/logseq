@@ -837,7 +837,8 @@ type cli_install_result =
   ; errors : (string * string) list (* (title, content) *)
   }
 
-let run_install ?(windows = false) ?(cli_dir = Some "/home/me/.local/bin")
+let run_install ?(windows = false) ?(packaged = true)
+    ?(cli_dir = Some "/home/me/.local/bin")
     ?(cli_dir_fn : (unit -> string option) option)
     ?(exe_path = "/Applications/Logseq.app/Contents/MacOS/Logseq")
     ?(appimage_path : string option) ?(existing_files : string list = [])
@@ -850,6 +851,7 @@ let run_install ?(windows = false) ?(cli_dir = Some "/home/me/.local/bin")
   let files = ref existing_files in
   let deps : Electron_cli_install.deps =
     { windows
+    ; packaged
     ; cli_path = "/app/logseq-cli.js"
     ; cli_dir
     ; cli_dir_fn
@@ -891,6 +893,7 @@ let () =
       let created = ref [] in
       let deps : Electron_cli_install.deps =
         { windows = false
+        ; packaged = false
         ; cli_path = "/app/logseq-cli.js"
         ; cli_dir = None
         ; cli_dir_fn = None
@@ -1025,6 +1028,46 @@ let () =
           |> Fest.deep_equal
                (Common_util.str_includes content "permission denied")
                true
+      | [] -> Fest.expect |> Fest.ok false)
+
+let () =
+  Fest.test
+    "install-cli-launcher-suppresses-missing-script-dialog-in-dev" (fun () ->
+      (* dev runs legitimately lack the staged static/logseq-cli.js —
+         warn only, no modal on every cold start *)
+      let result = run_install ~packaged:false () in
+      Fest.expect |> Fest.deep_equal result.errors [];
+      Fest.expect |> Fest.deep_equal result.writes [])
+
+let () =
+  Fest.test
+    "install-cli-launcher-shows-missing-script-dialog-when-packaged"
+    (fun () ->
+      let result = run_install ~packaged:true () in
+      match result.errors with
+      | (title, content) :: _ ->
+          Fest.expect |> Fest.deep_equal title "Logseq";
+          Fest.expect
+          |> Fest.deep_equal
+               (Common_util.str_includes content "Missing CLI script")
+               true
+      | [] -> Fest.expect |> Fest.ok false)
+
+let () =
+  Fest.test
+    "install-cli-launcher-shows-other-errors-in-dev" (fun () ->
+      (* only the missing-script case is legitimate in dev — real
+         install failures still surface *)
+      let result =
+        run_install ~packaged:false
+          ~existing_files:[ "/app/logseq-cli.js" ]
+          ~write_file:(fun _ _ -> raise (as_exn (js_error "disk full")))
+          ()
+      in
+      match result.errors with
+      | (_title, content) :: _ ->
+          Fest.expect
+          |> Fest.deep_equal (Common_util.str_includes content "disk full") true
       | [] -> Fest.expect |> Fest.ok false)
 
 (* ---------- electron.embedding-server-test -> Electron_embedding_server *)
