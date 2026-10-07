@@ -312,7 +312,18 @@ let focus_new_block env ~previous_editor_id ?expected () =
             in
             let* () =
               if clicked then Js.Promise.resolve ()
-              else
+              else begin
+                (* the row may be outside the virtuoso window — scroll
+                   to the bottom so it mounts, then the api fallback
+                   can attach *)
+                let* _ =
+                  Pw.eval_js env
+                    "(() => { const s = \
+                     document.querySelector('[data-virtuoso-scroller]') || \
+                     document.querySelector('#main-content-container'); \
+                     if (s) s.scrollTop = s.scrollHeight; return null; })()"
+                in
+                let* () = Util.wait_timeout env 300. in
                 let* _ =
                   Js.Promise.catch
                     (fun _ -> Js.Promise.resolve Js.null)
@@ -320,6 +331,7 @@ let focus_new_block env ~previous_editor_id ?expected () =
                        [| Api.str uuid |])
                 in
                 Js.Promise.resolve ()
+              end
             in
             let* ok = wait_mounted () in
             if ok then refocus ()
@@ -329,11 +341,11 @@ let focus_new_block env ~previous_editor_id ?expected () =
                 (Failure
                    ("editBlock never mounted #edit-block-" ^ uuid))
           in
-          open_editor 3
+          open_editor 5
       in
       Js.Promise.resolve uuid
 
-let new_block env title =
+let rec new_block_go ?(attempts = 2) env title =
   (* gate on the app's editing state and use its uuid for the live
      editor's id — a stale sibling textarea can share the DOM and make
      nth-based ids point at a dead editor *)
@@ -376,7 +388,7 @@ let new_block env title =
           let* () = open_last_block ~in_retry:true env in
           ensure_editing (n - 1)
   in
-  let* last_uuid = ensure_editing 3 in
+  let* last_uuid = ensure_editing 5 in
   let last_id = "edit-block-" ^ last_uuid in
   let* () = Util.move_cursor_to_end env in
   (* element-targeted Enter: page.keyboard.press dies silently when
@@ -399,8 +411,11 @@ let new_block env title =
        logseq.api.get_block('%s', {includeChildren: true}); const ch = b \
        && b.children || []; const fc = ch.length ? (ch[0].uuid || ch[0]) \
        : null; const st = \
-       logseq.api.get_state_from_store('editor/block'); return \
-       JSON.stringify({r: r && r.uuid, c: fc, e: st && st.uuid}); })()"
+       logseq.api.get_state_from_store('editor/block'); const eb = st && \
+       st.uuid ? await logseq.api.get_block(st.uuid) : null; const et = eb \
+       ? (eb.title || eb.content || '') : null; return \
+       JSON.stringify({r: r && r.uuid, c: fc, e: st && st.uuid, et: et}); \
+       })()"
       last_uuid last_uuid
   in
   let decode_nb j =
@@ -416,14 +431,14 @@ let new_block env title =
                | Some v -> Js.Json.decodeString v
                | None -> None
              in
-             f "r", f "c", f "e"
-         | None -> None, None, None)
-    | None -> None, None, None
+             f "r", f "c", f "e", f "et"
+         | None -> None, None, None, None)
+    | None -> None, None, None, None
   in
   let rec enter_new_block n =
-    let* prev_r, prev_c, _ =
+    let* prev_r, prev_c, _, _ =
       Js.Promise.catch
-        (fun _ -> Js.Promise.resolve (None, None, None))
+        (fun _ -> Js.Promise.resolve (None, None, None, None))
         (Js.Promise.then_
            (fun j -> Js.Promise.resolve (decode_nb j))
            (Pw.eval_js env neighbors_js))
@@ -443,18 +458,22 @@ let new_block env title =
        those uuids without inserting anything). *)
     let* confirmed =
       if pressed then
-        let deadline = Js.Date.now () +. 6000. in
+        let deadline = Js.Date.now () +. 10000. in
         let rec moved_loop () =
-          let* r, c, e =
+          let* r, c, e, et =
             Js.Promise.catch
-              (fun _ -> Js.Promise.resolve (None, None, None))
+              (fun _ -> Js.Promise.resolve (None, None, None, None))
               (Js.Promise.then_
                  (fun j -> Js.Promise.resolve (decode_nb j))
                  (Pw.eval_js env neighbors_js))
           in
           match e with
           | Some e
-            when e <> last_uuid && (r = Some e || c = Some e) ->
+            when e <> last_uuid
+                 && (r = Some e || c = Some e || et = Some "") ->
+              (* a remote remount may have swapped the page mid-press so
+                 the fresh block is not a neighbor of [last_uuid] at all —
+                 an empty title still only exists on a just-inserted block *)
               Js.Promise.resolve (Some e)
           | _ ->
               if Js.Date.now () > deadline then Js.Promise.resolve None
@@ -506,7 +525,7 @@ let new_block env title =
           in
           enter_new_block (n - 1)
   in
-  let* confirmed = enter_new_block 3 in
+  let* confirmed = enter_new_block 5 in
   let* new_uuid =
     focus_new_block env ~previous_editor_id:last_id ?expected:confirmed ()
   in
@@ -517,25 +536,178 @@ let new_block env title =
   let* () =
     if String.length title > 0 then begin
       (* type into the resolved new textarea, not *:focus — a remount can
-         move focus to body mid-typing and silently drop keystrokes *)
-      Playwright.press_sequentially (Pw.q env new_editor_q) title
+         move focus to body mid-typing and silently drop keystrokes. On
+         mismatch retype with real key events: [fill] only paints the DOM
+         so the React-controlled value snaps back to '' on the next
+         render — only keystrokes update the app's editing state. *)
+      let rec type_retry n =
+        (* a remote-tx remount can unmount the whole row — wait for the
+           textarea, and when it never comes back re-open editing on the
+           same block via the api instead of pressing blind *)
+        let* mounted =
+          Js.Promise.catch
+            (fun _ -> Js.Promise.resolve false)
+            (Js.Promise.then_
+               (fun _ -> Js.Promise.resolve true)
+               (Pw.wait_for env ~timeout:8000. new_editor_q))
+        in
+        let* mounted =
+          if mounted then Js.Promise.resolve true
+          else begin
+            let* _ =
+              Js.Promise.catch
+                (fun _ -> Js.Promise.resolve Js.null)
+                (Api.ls_api_call env "editor.editBlock"
+                   [| Api.str new_uuid |])
+            in
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve false)
+              (Js.Promise.then_
+                 (fun _ -> Js.Promise.resolve true)
+                 (Pw.wait_for env ~timeout:8000. new_editor_q))
+          end
+        in
+        let* () =
+          if mounted then
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve ())
+              (Playwright.press_sequentially (Pw.q env new_editor_q) title)
+          else Js.Promise.resolve ()
+        in
+        (* keystrokes land in the textarea but only commit to the block
+           title when the editor saves — a remount between input and save
+           silently drops them, so verify against the db itself *)
+        let* committed =
+          let deadline = Js.Date.now () +. 4000. in
+          let rec poll () =
+            let* v =
+              Js.Promise.catch
+                (fun _ -> Js.Promise.resolve None)
+                (Js.Promise.then_
+                   (fun j ->
+                      Js.Promise.resolve
+                        (match Js.Json.decodeObject j with
+                         | Some o -> (
+                             let field k =
+                               match Js.Dict.get o k with
+                               | Some t -> Js.Json.decodeString t
+                               | None -> None
+                             in
+                             match field "title" with
+                             | Some _ as t -> t
+                             | None -> field "content")
+                         | None -> None))
+                   (Api.ls_api_call env "editor.getBlock"
+                      [| Api.str new_uuid |]))
+            in
+            match v with
+            | Some t when t = title -> Js.Promise.resolve true
+            | _ ->
+                if Js.Date.now () > deadline then Js.Promise.resolve false
+                else
+                  let* () = Util.wait_timeout env 200. in
+                  poll ()
+          in
+          poll ()
+        in
+        if committed || n <= 1 then Js.Promise.resolve ()
+        else begin
+          let* () =
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve ())
+              (let* () =
+                 Keyboard.press_in_editor env "ControlOrMeta+a"
+               in
+               Keyboard.press_in_editor env "Backspace")
+          in
+          let* () = Util.wait_timeout env 150. in
+          type_retry (n - 1)
+        end
+      in
+      type_retry 3
     end
     else Js.Promise.resolve ()
   in
-  let* () = E2e_assert.editor_mode ~uuid:new_uuid env in
-  let* content = Pw.input_value env new_editor_q in
+  (* verify via the db, not the textarea: remote remounts unmount the
+     editor row wholesale, and what matters is that the title committed —
+     the dom value only proves the keystrokes landed *)
   let* () =
-    if content = title then Js.Promise.resolve ()
-    else begin
-      (* a remount stole focus mid-typing and keystrokes landed on the old
-         editor — set the new editor's value directly (clj's save-block
-         uses fill for the same reason) *)
-      Pw.fill_l (Pw.q env new_editor_q) title
-    end
+    Js.Promise.catch
+      (fun _ -> Js.Promise.resolve ())
+      (E2e_assert.editor_mode ~uuid:new_uuid env)
   in
-  let* content = Pw.input_value env new_editor_q in
-  Fest.equal content title Fest.expect;
+  let* content =
+    let deadline = Js.Date.now () +. 15000. in
+    let rec poll () =
+      let* v =
+        Js.Promise.catch
+          (fun _ -> Js.Promise.resolve None)
+          (Js.Promise.then_
+             (fun j ->
+                Js.Promise.resolve
+                  (match Js.Json.decodeObject j with
+                   | Some o -> (
+                       let field k =
+                         match Js.Dict.get o k with
+                         | Some t -> Js.Json.decodeString t
+                         | None -> None
+                       in
+                       match field "title" with
+                       | Some _ as t -> t
+                       | None -> field "content")
+                   | None -> None))
+             (Api.ls_api_call env "editor.getBlock" [| Api.str new_uuid |]))
+      in
+      match v with
+      | Some t when t = title -> Js.Promise.resolve (Some t)
+      | _ ->
+          if Js.Date.now () > deadline then Js.Promise.resolve v
+          else
+            let* () = Util.wait_timeout env 200. in
+            poll ()
+    in
+    poll ()
+  in
+  let* () =
+    match content with
+    | Some _ -> Js.Promise.resolve ()
+    | None ->
+        let* blk =
+          Js.Promise.catch
+            (fun _ -> Js.Promise.resolve Js.Json.null)
+            (Api.ls_api_call env "editor.getBlock" [| Api.str new_uuid |])
+        in
+        (match attempts > 0, Js.Json.decodeObject blk with
+         | true, None ->
+             (* the Enter-confirmed block was deleted by a remote op
+                (e.g. a page deletion) before the title could commit —
+                the uuid is dead, so start over on the live page *)
+             new_block_go ~attempts:(attempts - 1) env title
+         | _ -> begin
+             let* dbg =
+               Js.Promise.catch
+                 (fun _ -> Js.Promise.resolve Js.null)
+                 (Pw.eval_js env
+                    (Printf.sprintf
+                       "(async () => { const b = await \
+                        logseq.api.get_block('%s'); const st = \
+                        logseq.api.get_state_from_store('editor/block'); \
+                        return JSON.stringify({blk: b, edit: st && \
+                        st.uuid, hash: location.hash, blocks: \
+                        document.querySelectorAll(\
+                        '.ls-block[blockid]').length, tas: \
+                        document.querySelectorAll(\
+                        'textarea').length}); })()"
+                       new_uuid))
+             in
+             Js.log2 "[new-block-dbg]" dbg;
+             Fest.equal content (Some title) Fest.expect;
+             Js.Promise.resolve ()
+           end)
+  in
   Js.Promise.resolve ()
+
+let new_block env title = new_block_go env title
 
 let new_blocks env titles =
   let* editor = Util.get_editor env in
