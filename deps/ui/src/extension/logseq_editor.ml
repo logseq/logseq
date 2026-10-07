@@ -57,6 +57,13 @@ let schema =
     ; Lui_extension.property "composition" Lui_extension.StringScalar
         false None
     ; Lui_extension.property "runs" Lui_extension.StringScalar false None
+    ; (* same wire vocabulary as the native twin: the e2e/a11y hooks the
+         web adapter materializes on the hidden textarea ride the
+         extension node as props on native hosts (ignored here) *)
+      Lui_extension.property "accessibility-identifier"
+        Lui_extension.StringScalar false None
+    ; Lui_extension.property "data-testid" Lui_extension.StringScalar
+        false None
     ]
     [ Lui_extension.event "key"
         [ Lui_extension.event_field "key" Lui_extension.StringScalar true

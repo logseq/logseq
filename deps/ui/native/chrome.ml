@@ -278,26 +278,34 @@ let left_sidebar (ms : Model.t Signal.signal) =
     ~equal:(fun (a : Model.t) (b : Model.t) ->
       a.left_sidebar_open = b.left_sidebar_open)
     (fun (m : Model.t) ->
-      if not m.left_sidebar_open then spacer ~key:"ls-closed" []
-      else
-        box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-          ~min_height:0 ~style_class:"cp__sidebar-left-layout self-stretch"
-          [ row ~key:"ls-dock" ~grow:1. ~min_height:0
-              ~style_class:"items-stretch"
-              [ column ~key:"ls-inner" ~width:260 ~min_height:0
-                  ~background:"secondary"
-                  ~style_class:"left-sidebar-inner as-container"
-                  [ column ~key:"ls-wrap" ~grow:1. ~min_height:0
-                      ~style_class:"wrap"
-                      [ box ~key:"ls-head"
-                          ~style_class:"sidebar-header-container"
-                          [ Left_sidebar_view.header ms ]
-                      ; Left_sidebar_view.contents ms
-                      ]
-                  ]
-              ; box ~key:"resizer" ~width:4 ~style_class:"left-sidebar-resizer" []
-              ]
-          ])
+      (* the subtree stays mounted while closed (web only CSS-hides it):
+         contents signal subscriptions and drive checks see the same
+         nodes open or closed — collapse to zero width instead of
+         unmounting *)
+      box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+        ~min_height:0
+        ~style_class:
+          ("cp__sidebar-left-layout self-stretch"
+           ^ if m.left_sidebar_open then " is-open" else "")
+        [ row ~key:"ls-dock" ~grow:1. ~min_height:0
+            ~style_class:"items-stretch"
+            [ column ~key:"ls-inner" ~min_height:0
+                ~width:(if m.left_sidebar_open then 260 else 0)
+                ~background:"secondary"
+                ~style_class:"left-sidebar-inner as-container overflow-hidden"
+                [ column ~key:"ls-wrap" ~grow:1. ~min_height:0
+                    [ box ~key:"ls-head"
+                        ~style_class:"sidebar-header-container"
+                        [ Left_sidebar_view.header ms ]
+                    ; Left_sidebar_view.contents ms
+                    ]
+                ]
+            ; (if not m.left_sidebar_open then spacer ~key:"resizer-none" []
+               else
+                 box ~key:"resizer" ~width:4
+                   ~style_class:"left-sidebar-resizer" [])
+            ]
+        ])
     ms
 
 let main_content (ms : Model.t Signal.signal) =
@@ -317,8 +325,17 @@ let main_content (ms : Model.t Signal.signal) =
         ~data_attrs_signal:
           (Signal.map (fun (_ : Model.t) ->
                [ ("data-is-margin-less-pages", "false") ]) ms)
-        [ box ~key:"main-inner"
-            ~style_class:"cp__sidebar-main-content"
+        [ Ui_parts.class_signal ms
+            (fun (m : Model.t) ->
+              (* cljs: .cp__sidebar-main-content centers a max-width
+                 column via margin auto; is-full-width (margin-less
+                 routes) stretches it — no stylesheet natively, so the
+                 full-width variant maps to w-full *)
+              "cp__sidebar-main-content"
+              ^ (match m.route with
+                 | Model.All_pages -> " w-full"
+                 | _ -> ""))
+            (box ~key:"main-inner"
             ~data_attrs_signal:
               (Signal.map (fun (m : Model.t) ->
                    (* cljs container.cljs: data-is-full-width on margin-less +
@@ -343,7 +360,7 @@ let main_content (ms : Model.t Signal.signal) =
                            [ ("class", "mx-auto pb-24")
                            ; ("style", "margin-bottom: 120px") ]))
                 [ Page.region ms ]
-            ]
+            ])
         ]
     ])
 

@@ -423,11 +423,14 @@ let item_of_row w i : item =
     | _ -> false
   in
   let title =
+    (* web twin prefers unique-title (display-resolved refs); native
+       re-highlights itself so strip pfts markers here *)
     match
-      [ str_field w "block.temp/original-title"; str_field w "block/title" ]
+      [ str_field w "block.temp/unique-title"
+      ; str_field w "block.temp/original-title"; str_field w "block/title" ]
       |> List.filter_map Fun.id
     with
-    | t :: _ -> t
+    | t :: _ -> strip_pfts t
     | [] -> ""
   in
   { ikey = "node-" ^ uuid ^ "-" ^ string_of_int i; idx = -1

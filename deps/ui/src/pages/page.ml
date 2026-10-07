@@ -280,7 +280,23 @@ let title_content (page : Model.page) : t =
   let uuid = Option.value page.page_uuid ~default:"" in
   let events, on_event =
     match page.page_journal_day with
-    | Some _ -> ([], None)
+    | Some _ ->
+        (* cljs journal titles redirect to the day's page (a no-op on
+           their own page) — route through the hash like goto_page *)
+        ( [ "click" ]
+        , Some
+            (fun _name payload ->
+              let shift, interactive =
+                ( Platform.payload_bool payload "shiftKey"
+                , Platform.payload_bool payload "interactive" )
+              in
+              match page.page_uuid with
+              | Some uuid when not shift && not interactive ->
+                  Editor_actions.exit_edit ~select:false;
+                  Runtime.mark_nav ();
+                  Platform.set_location_hash
+                    (Runtime.nav_hash ("#/page/" ^ uuid))
+              | _ -> ()) )
     | None ->
         ( [ "click" ]
         , Some

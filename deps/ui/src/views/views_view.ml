@@ -307,7 +307,8 @@ let load_view_data inst =
   Db.snapshots
     ~f:(fun snap ->
       match Wr.snapshot_slot_value snap key with
-      | None -> V.update inst (fun s -> { s with V.data = Wr.VEmpty; loading = false })
+      | None ->
+          V.update inst (fun s -> { s with V.data = Wr.VEmpty; loading = false })
       | Some v ->
           let d =
             try Wr.decode_view_data v
