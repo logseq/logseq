@@ -340,6 +340,14 @@ fn pump_tick(shared: &Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui
     editor::reconcile_stale_focus(shared, window, cx);
     push_window_size(window);
     lui_gpui::dom::fire_viewport_events(shared, window, cx);
+    // Imperative overlay bounds feed — OCaml's imperative_dom reads
+    // element rects from this table (clamping, flip-above math).
+    if let Some(payload) = lui_gpui::domops::imperative_rects_payload(shared) {
+        let envelope = format!("imperative-rects\n{payload}");
+        unsafe {
+            lui_ocaml_platform_event(envelope.as_ptr().cast::<c_char>(), envelope.len() as c_int)
+        };
+    }
 }
 
 /// vsync-driven tick scheduled from the window: `cx.spawn` +
