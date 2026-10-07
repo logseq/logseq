@@ -393,8 +393,10 @@ let new_block_safe env title =
                  String.sub s 0 (min 160 (String.length s))
            | None -> last_err := "nonstr-err");
           Js.Promise.resolve false)
-        (let* () = B.new_block env "" in
-         let* () = B.save_block env title in
+        (* B.new_block already creates the block and types the title into
+           the live editor with db-level verification — save_block on top
+           would just be a second editor session doing the same commit *)
+        (let* () = B.new_block env title in
          Js.Promise.resolve true)
     in
     if created then Js.Promise.resolve ()

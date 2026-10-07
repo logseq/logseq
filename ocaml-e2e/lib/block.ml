@@ -807,8 +807,8 @@ let copy env = Keyboard.press env ~delay:100. "ControlOrMeta+c"
    editor handler fire, inserting the clipboard twice (observed: a second
    batch appended after the next block). *)
 let paste env = Keyboard.press_in_editor env ~delay:100. "ControlOrMeta+v"
-let undo env = Keyboard.press env ~delay:100. "ControlOrMeta+z"
-let redo env = Keyboard.press env ~delay:100. "ControlOrMeta+y"
+let undo env = Keyboard.press env ~delay:30. "ControlOrMeta+z"
+let redo env = Keyboard.press env ~delay:30. "ControlOrMeta+y"
 
 let wait_for_editor_x_change env x1 moved =
   let rec go attempts_left =
