@@ -308,6 +308,22 @@ let remote_asserted repo : SSet.t =
 let set_remote_asserted repo (keys : SSet.t) : unit =
   Hashtbl.replace remote_asserted_keys repo keys
 
+(* (subject, attr, value) keys a confirmed write RETRACTED — needed for
+   the mirror-image case: a pending row's reversed add restores a
+   pre-op value only while confirmed state still holds it. When a
+   remote tx retracted the same (e,a,v), restoring it resurrects a
+   value the server explicitly dropped. Cardinality-one attrs also
+   gate on remote_asserted carrying a different live value *)
+let remote_retracted_keys : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+let remote_retracted repo : SSet.t =
+  match Hashtbl.find_opt remote_retracted_keys repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let set_remote_retracted repo (keys : SSet.t) : unit =
+  Hashtbl.replace remote_retracted_keys repo keys
+
 let server_conn repo = Hashtbl.find_opt server_conns repo
 let set_server_conn repo conn = Hashtbl.replace server_conns repo conn
 let drop_server_conn repo =

@@ -139,6 +139,12 @@ let preserve_state (f : unit -> 'a) : 'a =
   let stopped_prev = Hashtbl.copy Sync_apply.repo_upload_stopped in
   let large_up_prev = Hashtbl.copy Sync_apply.repo_large_upload_progress in
   let remote_del_prev = Hashtbl.copy Sync_state.remote_deleted_uuids in
+  let remote_asserted_prev =
+    Hashtbl.copy Sync_state.remote_asserted_keys
+  in
+  let remote_retracted_prev =
+    Hashtbl.copy Sync_state.remote_retracted_keys
+  in
   let prep_prev = !(Sync_apply.prepare_upload_tx_entries_fn) in
   let flush_prev = !(Sync_apply.flush_pending_fn) in
   let client_prev = !(Sync_state.db_sync_client) in
@@ -226,6 +232,14 @@ let preserve_state (f : unit -> 'a) : 'a =
       Hashtbl.reset Sync_state.remote_deleted_uuids;
       Hashtbl.iter
         (Hashtbl.replace Sync_state.remote_deleted_uuids) remote_del_prev;
+      Hashtbl.reset Sync_state.remote_asserted_keys;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_state.remote_asserted_keys)
+        remote_asserted_prev;
+      Hashtbl.reset Sync_state.remote_retracted_keys;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_state.remote_retracted_keys)
+        remote_retracted_prev;
       Sync_state.db_sync_client := client_prev;
       Sync_state.dev_or_test := dev_or_test_prev;
       Sync_apply.prepare_upload_tx_entries_fn := prep_prev;
@@ -14404,6 +14418,116 @@ let test_unapply_keeps_remote_asserted_values () =
             (attr_on "db/ident"
              = Some (One_value (Keyword "user.property/SimProp")))))
 
+(* seed 1337 regression: the restore side mirrors remote-asserted. A
+   pending row whose forward UN-deleted an entity reverses to db/add
+   items restoring the deleted state; when a remote tx revived the same
+   entity first (retract deleted-at, point parent at a live page), the
+   reversed adds resurrect confirmed-dead state. The remote-retracted
+   set and cardinality-one remote-asserted values gate the restores *)
+let test_unapply_skips_remote_superseded_restores () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _parent, _c1, _c2, _c3 = setup_parent_child () in
+      Worker_state.set_datascript_conn test_repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Sync_client_op.update_local_tx test_repo 0;
+      mark_graph_remote conn;
+      let page_u = fresh_uuid () in
+      let recycle_u = fresh_uuid () in
+      let real_u = fresh_uuid () in
+      let page_ref = block_uuid_lookup (Wire.Uuid page_u) in
+      let recycle_ref = block_uuid_lookup (Wire.Uuid recycle_u) in
+      let real_ref = block_uuid_lookup (Wire.Uuid real_u) in
+      ignore
+        (Db_transact.transact conn
+           [ db_add (Wire.String "p") "block/uuid" (Wire.Uuid page_u)
+           ; db_add page_ref "block/title" (Wire.String "Stale Page")
+           ; db_add page_ref "block/order" (Wire.String "a0")
+           ; db_add page_ref "block/created-at" (Wire.Int 1)
+           ; db_add page_ref "block/updated-at" (Wire.Int 1)
+           ; db_add page_ref "block/page" page_ref
+           ; db_add (Wire.String "r") "block/uuid" (Wire.Uuid recycle_u)
+           ; db_add (Wire.String "g") "block/uuid" (Wire.Uuid real_u)
+           ; (* confirmed soft-delete state the pending row undid *)
+             db_add page_ref "logseq.property/deleted-at"
+               (Wire.Int 1791)
+           ; db_add page_ref "block/parent" recycle_ref ]
+           [ "skip-validate-db?", Bool true ]);
+      (* remote revive lands first: drops deleted-at, re-parents to the
+         live page *)
+      await_unit
+        (Sync_replay.apply_remote_txs test_repo (mk_client ())
+           [ wire_map
+               [ "outliner-op", kw "restore-recycled"
+               ; ( "tx-data"
+                 , Wire.Array
+                     [ Wire.Array
+                         [ kw "db/retract"; page_ref
+                         ; kw "logseq.property/deleted-at"; Wire.Int 1791 ]
+                     ; Wire.Array
+                         [ kw "db/retract"; page_ref; kw "block/parent"
+                         ; recycle_ref ]
+                     ; db_add page_ref "block/parent" real_ref ] ) ] ]);
+      (* pending restore row: forward removed the delete markers, so its
+         reversal re-adds them *)
+      let stamp = 424243 in
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1
+            ~tx_data_v:
+              (Wire.Array
+                 [ Wire.Array
+                     [ kw "db/retract"; page_ref
+                     ; kw "logseq.property/deleted-at"; Wire.Int 1791
+                     ; Wire.Int stamp ]
+                 ; Wire.Array
+                     [ kw "db/retract"; page_ref; kw "block/parent"
+                     ; recycle_ref; Wire.Int stamp ] ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ Wire.Array
+                     [ kw "db/add"; page_ref
+                     ; kw "logseq.property/deleted-at"; Wire.Int 1791
+                     ; Wire.Int stamp ]
+                 ; Wire.Array
+                     [ kw "db/add"; page_ref; kw "block/parent"
+                     ; recycle_ref; Wire.Int stamp ] ])
+            "tx-restore" ];
+      Fun.protect
+        ~finally:(fun () ->
+          Sync_state.drop_server_conn test_repo;
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          Sync_replay.split_off_server_if_remote test_repo;
+          let server =
+            match Sync_state.server_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no server conn after split"
+          in
+          let ent =
+            match
+              Datascript.entity (Conn.db server)
+                (Lookup_ref ("block/uuid", Uuid page_u))
+            with
+            | Some e -> e
+            | None -> failwith "revived page vanished"
+          in
+          check "remote-retracted deleted-at stays absent"
+            (Datascript.entity_attr ent "logseq.property/deleted-at"
+             = None);
+          check "remote-asserted parent wins over reversed restore"
+            (match Datascript.entity_attr ent "block/parent" with
+             | Some (One_entity pe) -> (
+                 match
+                   ( pe.Datascript.db_id
+                   , Datascript.entity (Conn.db server)
+                       (Lookup_ref ("block/uuid", Uuid real_u)) )
+                 with
+                 | Some (Entity_id pid), Some re -> pid = re.Datascript.id
+                 | Some (Lookup_ref ("block/uuid", Uuid u)), _ ->
+                     u = real_u
+                 | _, _ -> false)
+             | _ -> false)))
+
 (* a row whose reversed items can't transact warns and continues; the
    done marker is withheld so the next open retries the failed row *)
 let test_unapply_row_failure_blocks_done () =
@@ -15370,6 +15494,9 @@ let () =
         ; Alcotest.test_case
             "unapply-keeps-remote-asserted-values-test" `Quick
             test_unapply_keeps_remote_asserted_values
+        ; Alcotest.test_case
+            "unapply-skips-remote-superseded-restores-test" `Quick
+            test_unapply_skips_remote_superseded_restores
         ; Alcotest.test_case
             "unapply-row-failure-blocks-done-test" `Quick
             test_unapply_row_failure_blocks_done
