@@ -703,6 +703,13 @@ fn register_class_styles() {
         "background:var(--ls-caret-color, var(--ls-primary-text-color))",
         "",
     );
+    // .ls-block.selected — block-select (Esc / multi-block) highlight
+    class(
+        "selected",
+        "background:var(--ls-block-highlight-color);border-radius:4px",
+        "",
+    );
+    class("block-highlight", "background:var(--ls-block-highlight-color)", "");
 
     // ---- autocomplete menu rows (lui-overlay.css .menu-link*) ----
     class(

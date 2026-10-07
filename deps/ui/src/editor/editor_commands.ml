@@ -1042,12 +1042,12 @@ let open_link_form image uuid from =
     D.h ~tag:"input" 
       ~attrs:
         [ ("type", "text")
-        ; ("placeholder", I18n.t "editor/link-url-placeholder") ]
+        ; ("placeholder", I18n.t "ui/link") ]
       ()
   in
   let label_inp =
     D.h ~tag:"input" 
-      ~attrs:[ ("type", "text"); ("placeholder", I18n.t "editor/link-label-placeholder") ] ()
+      ~attrs:[ ("type", "text"); ("placeholder", I18n.t "ui/label") ] ()
   in
   let root =
     D.h ~cls:"ls-editor-link-form"

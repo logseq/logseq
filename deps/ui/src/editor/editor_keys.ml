@@ -743,10 +743,32 @@ let is_other_block_editor uuid target =
       | None -> false)
   | _ -> false
 
+(* native conduits answer caret-rect/offset-at asynchronously — a
+   vertical arrow on a cold cache fires the request and no-ops, so one
+   keypress moves nothing (web conduit replies synchronously). Re-fire
+   the same event until the caret moves, bounded: a hop needs at most
+   two reply round-trips (caret_rect, then offset_at). Aborts on a newer
+   input, a caret change, block switch, or exhaustion — mine_ms tracks
+   this retry chain's own note_input stamps so a real keystroke wins *)
+let rec retry_vertical uuid ev armed_caret mine_ms attempts =
+  if attempts > 0 then
+    D.set_timeout
+      (fun () ->
+        match S.editing () with
+        | Some e2
+          when e2.S.uuid = uuid
+               && !S.last_edit_input_ms <= mine_ms
+               && e2.S.model.Edit_model.caret = armed_caret ->
+            apply_input uuid ev;
+            retry_vertical uuid ev armed_caret !S.last_edit_input_ms
+              (attempts - 1)
+        | _ -> ())
+      16
+
 (* every Edit_input event for the open block editor lands here: the
    Logseq keymap owns the commands first, Edit_input handles the rest,
    and buffer changes schedule the debounced save plus popup matching *)
-let apply_input ?frame uuid ev =
+and apply_input ?frame uuid ev =
   match S.editing () with
   | Some e when e.S.uuid = uuid -> (
       (* Focus/Blur/Menu are lifecycle emits, not input — counting them
@@ -795,6 +817,16 @@ let apply_input ?frame uuid ev =
         | _ -> Edit_input.handle ~route ~conduit m0 ev
       in
       A.update_model uuid (fun _ -> m');
+      (match ev with
+       | Edit_input.Key
+           ({ Edit_model.key = "ArrowUp" | "ArrowDown"; meta = false
+            ; ctrl = false; alt = false; _ }, _)
+         when m'.Edit_model.caret = m0.Edit_model.caret
+              && m'.Edit_model.anchor = m0.Edit_model.anchor
+              && not (S.selection_active ()) ->
+           retry_vertical uuid ev m0.Edit_model.caret
+             !S.last_edit_input_ms 6
+       | _ -> ());
       if m'.Edit_model.source <> m0.source then begin
         Outliner_ops.schedule_save uuid m'.Edit_model.source;
         Popups_state.on_model_input ~deleted:
