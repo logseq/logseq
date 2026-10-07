@@ -62,7 +62,7 @@ let select_el ctx ~key ~show ~value ~options ~on_change =
                  (List.map
                     (fun (v, label) ->
                       menu_item ~key:(key ^ "-mi-" ^ v) ~text:label
-                        ~selected:(v = value (Signal.get_state (S.st ctx)))
+                        ~selected:(v = value (S.cur (S.st ctx)))
                         ~style_class:"ui__dropdown-menu-item"
                         ~on_press:(fun _ ->
                           on_change v;
@@ -127,7 +127,7 @@ let copy_save_row ctx =
     [ button ~key:"export-copy" ~variant:`primary ~size:`sm
         ~style_class:"ui__button as-solid"
         ~on_press:(fun _ ->
-          match (Signal.get_state (S.st ctx)).S.fmt with
+          match (S.cur (S.st ctx)).S.fmt with
           | S.Png -> P.copy_png (S.st ctx)
           | _ -> P.copy (S.st ctx))
         ~text:(reactive
@@ -240,7 +240,7 @@ let body (_ms : Model.t Signal.signal) : t =
                ; fmt_btn ctx "ft-html" "HTML" S.Html ]
                (* cljs hides the PNG tab once the export has top-level
                   uuids *)
-               @ (if (Signal.get_state (S.st ctx)).S.has_top_level then
+               @ (if (S.cur (S.st ctx)).S.has_top_level then
                     []
                   else [ fmt_btn ctx "ft-png" "PNG" S.Png ])
                @ [ fmt_btn ctx "ft-edn" "EDN" S.Edn ])

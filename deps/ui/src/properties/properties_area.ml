@@ -406,10 +406,10 @@ let title_actions (p : Model.page) : t =
   let uuid = Option.value ~default:"" p.Model.page_uuid in
   let key = page_key uuid in
   let anchor_id = "pta-" ^ uuid in
-  let add_btn text on_press =
+  let add_btn ?a11y text on_press =
     button ~variant:`ghost ~size:`sm ~text_alignment:`start
       ~style_class:"as-ghost text-muted-foreground"
-      ~label:text ~text ~on_press []
+      ?accessibility_identifier:a11y ~label:text ~text ~on_press []
   in
   let node =
     (row ~key:"pta" ~accessibility_identifier:anchor_id
@@ -456,23 +456,31 @@ let title_actions (p : Model.page) : t =
                        !Runtime.reload_current_view ()))
              | None -> ())
        ; (if p.Model.page_is_tag then
-            add_btn (I18n.t "class/add-property") (fun _ ->
-                Properties_dialog.open_dialog
-                  { Properties_dialog.uuid
-                  ; uuids = []
-                  ; db_id = p.Model.page_db_id
-                  ; is_tag = true
-                  ; title = p.Model.page_title
-                  })
+            add_btn ~a11y:(anchor_id ^ "-prop")
+              (I18n.t "class/add-property") (fun _ ->
+                match Web_dom.doc_query ("#" ^ anchor_id ^ "-prop") with
+                | Some anchor ->
+                    Properties_dialog.open_for_anchor_el anchor
+                      { Properties_dialog.uuid
+                      ; uuids = []
+                      ; db_id = p.Model.page_db_id
+                      ; is_tag = true
+                      ; title = p.Model.page_title
+                      }
+                | None -> ())
           else
-            add_btn (I18n.t "property/set-property") (fun _ ->
-                Properties_dialog.open_dialog
-                  { Properties_dialog.uuid
-                  ; uuids = []
-                  ; db_id = p.Model.page_db_id
-                  ; is_tag = false
-                  ; title = p.Model.page_title
-                  }))
+            add_btn ~a11y:(anchor_id ^ "-prop")
+              (I18n.t "property/set-property") (fun _ ->
+                match Web_dom.doc_query ("#" ^ anchor_id ^ "-prop") with
+                | Some anchor ->
+                    Properties_dialog.open_for_anchor_el anchor
+                      { Properties_dialog.uuid
+                      ; uuids = []
+                      ; db_id = p.Model.page_db_id
+                      ; is_tag = false
+                      ; title = p.Model.page_title
+                      }
+                | None -> ()))
        ])
       context parent
   in

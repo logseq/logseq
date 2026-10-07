@@ -297,9 +297,32 @@
   font-weight: 600;
 }
 
+/* the kind's children mount before its built-in slots (slots aren't
+   retained children); restore cljs order: icon slot, label, view
+   children (shortcut / submenu chevron), check slot */
+.lui-menu-item > .lui-menu-item-icon {
+  order: -3;
+}
+
+.lui-menu-item > .lui-menu-item-label {
+  order: -2;
+}
+
+.lui-menu-item > .lui-menu-item-check {
+  order: 1;
+}
+
+/* cljs dropdown-menu-item packs icon + title with gap-1 (4px) */
+.ui__dropdown-menu-item.lui-menu-item,
+.ui__dropdown-menu-sub-trigger.lui-menu-item {
+  gap: 0.25rem;
+}
+
 /* menu item internals — cljs keeps labels on one line (menu sizes to
-   content); LUI's flex shrink would wrap two-word labels */
-.menu-item-label {
+   content); LUI's flex shrink would wrap two-word labels. The kind emits
+   .lui-menu-item-label; .menu-item-label remains for imperative markup */
+.menu-item-label,
+.lui-menu-item-label {
   flex: 1;
   min-width: 0;
   /* cljs menu items never wrap — keeps sub-trigger rows at 32px and
@@ -1449,9 +1472,10 @@ div[data-keep-selection].menu-links-wrapper {
   display: grid;
   place-items: center;
   overflow-y: auto;
-  /* theme --background is a full color (oklch) not an hsl triple —
-     hsl(var(--background)/.9) is invalid; color-mix handles both shapes */
-  background: color-mix(in oklab, var(--lui-c-background) 90%, transparent);
+  /* --lui-c-background is an hsl triple (0 0% 100%), not a full color —
+     wrap it in hsl() before mixing or the declaration is invalid and the
+     scrim renders transparent */
+  background: color-mix(in oklab, hsl(var(--lui-c-background)) 90%, transparent);
   animation: lui-fade-in 150ms ease-out;
 }
 
@@ -1459,7 +1483,7 @@ div[data-keep-selection].menu-links-wrapper {
   position: fixed;
   inset: 0;
   z-index: 999;
-  background: color-mix(in oklab, var(--lui-c-background) 80%, transparent);
+  background: color-mix(in oklab, hsl(var(--lui-c-background)) 80%, transparent);
   backdrop-filter: blur(4px);
   animation: lui-fade-in 150ms ease-out;
 }
@@ -1474,8 +1498,12 @@ div[data-keep-selection].menu-links-wrapper {
   display: grid;
   gap: 1rem;
   width: 100%;
-  box-sizing: content-box;
+  box-sizing: border-box;
   max-width: 42rem;
+  /* master: max-h-[80vh] + overflow-y-auto — tall dialog content scrolls
+     inside the dialog instead of growing the dialog past the viewport */
+  max-height: 80vh;
+  overflow-y: auto;
   padding: 1.5rem;
   border: 1px solid var(--lui-c-border);
   border-radius: 0.5rem;
@@ -1646,6 +1674,13 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0;
 }
 
+/* master's untitled dialogs still mount a hidden h2.ui__dialog-title —
+   display:none removes it from the content grid so it contributes no
+   row gap before .ui__dialog-main-content */
+.ui__dialog-content > .ui__dialog-title-empty {
+  display: none;
+}
+
 .ui__dialog-close {
   position: absolute;
   right: 1rem;
@@ -1799,6 +1834,8 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ui__dialog-content[label="app-settings"],
 .ui__dialog-content.ls-dialog-settings {
+  /* cljs sizes the settings dialog border-box: 1024px incl padding */
+  box-sizing: border-box;
   width: min(1024px, calc(100vw - 2rem));
   max-width: calc(100vw - 2rem);
 }
@@ -1865,6 +1902,14 @@ div[data-keep-selection].menu-links-wrapper {
   display: block;
   width: 100%;
   margin: 0.5rem 0 1rem;
+}
+
+/* cljs login.css: login form controls span the card width */
+.ui__dialog-content[label="user-login"] .form-input,
+.ui__dialog-content.ls-dialog-login .form-input,
+.ui__dialog-content[label="user-login"] .ui__button.as-solid,
+.ui__dialog-content.ls-dialog-login .ui__button.as-solid {
+  width: 100%;
 }
 
 /* cljs login.css: .ui__dialog-content[label=user-login] centers a
@@ -2844,6 +2889,10 @@ div[data-keep-selection].menu-links-wrapper {
   max-height: 75dvh;
 }
 
+/* the cljs selectors below targeted real <header>/<aside>/<ul>/<li>
+   elements; the LUI tree emits div/button nodes with the same class
+   names, so every selector here uses the class twins */
+.cp__settings-inner > .cp__settings-header,
 .cp__settings-inner > header {
   padding: 0 10px 10px;
   border-bottom: 1px solid
@@ -2855,6 +2904,7 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0;
 }
 
+.cp__settings-inner > .settings-aside,
 .cp__settings-inner aside {
   background: var(--lx-gray-03-alpha,
       var(--ls-secondary-background-color, hsl(var(--muted))));
@@ -2863,30 +2913,16 @@ div[data-keep-selection].menu-links-wrapper {
   flex-shrink: 0;
 }
 
-.cp__settings-inner aside > ul {
-  margin: 0;
-  padding: 0;
-}
-
-.cp__settings-inner aside > ul > li > button {
+.cp__settings-inner .settings-menu > .settings-menu-item {
   width: 100%;
 }
 
-.cp__settings-inner aside > ul > li > button > strong {
+.cp__settings-inner .settings-menu-item {
   font-size: 0.875rem;
   font-weight: 400;
-  padding-left: 0.25rem;
-  opacity: 0.9;
 }
 
-.cp__settings-inner aside > ul > li.active {
-  background: rgb(0 0 0 / 0.1);
-}
-
-.dark .cp__settings-inner aside > ul > li.active {
-  background: rgb(255 255 255 / 0.08);
-}
-
+.cp__settings-inner > .settings-article,
 .cp__settings-inner > article {
   padding: 1rem;
   flex: 1;
@@ -2897,6 +2933,8 @@ div[data-keep-selection].menu-links-wrapper {
   overflow-y: auto;
 }
 
+.cp__settings-inner > .settings-aside > .cp__settings-header,
+.cp__settings-inner > .settings-article > .cp__settings-header,
 .cp__settings-inner > aside > .cp__settings-header,
 .cp__settings-inner > article > .cp__settings-header {
   height: 2.5rem;
@@ -2908,12 +2946,12 @@ div[data-keep-selection].menu-links-wrapper {
   gap: 0.5rem;
 }
 
-.cp__settings-inner aside > .cp__settings-header {
+.cp__settings-inner .settings-aside > .cp__settings-header {
   padding-left: 0.5rem;
   padding-right: 0.5rem;
 }
 
-.cp__settings-inner aside > .cp__settings-header > .ui__icon {
+.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon {
   width: 2rem;
   height: 2rem;
   border-radius: 0.25rem;
@@ -2922,30 +2960,31 @@ div[data-keep-selection].menu-links-wrapper {
   place-items: center;
 }
 
-.cp__settings-inner aside > .cp__settings-header > .ui__icon > svg,
-.cp__settings-inner aside > .cp__settings-header > .ui__icon.lui-icon {
+.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon > svg,
+.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon.lui-icon {
   width: 1.5rem;
   height: 1.5rem;
 }
 
-h1.cp__settings-modal-title {
+.cp__settings-modal-title {
   font-size: 1.5rem;
   font-weight: 600;
   text-transform: lowercase;
 }
 
-h1.cp__settings-category-title {
+.cp__settings-category-title {
   font-size: 1.25rem;
 }
 
-h1.cp__settings-modal-title::first-letter,
-h1.cp__settings-category-title::first-letter {
+.cp__settings-modal-title::first-letter,
+.cp__settings-category-title::first-letter {
   text-transform: uppercase;
 }
 
 /* qualified so it wins over the `.cp__settings-inner aside > ul` reset —
    cljs .settings-menu keeps its mt-4 */
 .cp__settings-inner aside > ul.settings-menu,
+.cp__settings-inner .settings-aside > .settings-menu,
 .settings-menu {
   padding: 0;
   margin: 1rem 0 0;
@@ -2958,11 +2997,49 @@ h1.cp__settings-category-title::first-letter {
   border-radius: 0.25rem;
 }
 
+/* the item is the button itself in the LUI tree (cljs wraps a
+   .settings-menu-link button in li.settings-menu-item): same padding
+   and horizontal layout as the cljs link, no list-item default slots */
+.settings-menu-item.lui-list-item {
+  padding: 0.375rem 0.5rem;
+  min-height: 0;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  text-align: left;
+}
+
+/* list-item's data-selected accent background is unused here — .active
+   carries the highlight, matching cljs li.active */
+.settings-menu-item.lui-list-item[data-selected],
+.settings-menu-item.lui-list-item:hover,
+.settings-menu-item.lui-list-item[data-selected]:hover {
+  background: transparent;
+  color: inherit;
+}
+
+.settings-menu-item.lui-list-item.active,
+.dark .settings-menu-item.lui-list-item.active[data-selected] {
+  background: rgb(0 0 0 / 0.1);
+}
+
+.dark .settings-menu-item.lui-list-item.active,
+.dark .settings-menu-item.lui-list-item.active[data-selected] {
+  background: rgb(255 255 255 / 0.08);
+}
+
 .settings-menu-item:hover {
   background: rgb(0 0 0 / 0.1);
 }
 
+.settings-menu-item.lui-list-item:hover {
+  background: rgb(0 0 0 / 0.1);
+}
+
 .dark .settings-menu-item:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.dark .settings-menu-item.lui-list-item:hover {
   background: rgb(255 255 255 / 0.08);
 }
 
@@ -3001,10 +3078,15 @@ h1.cp__settings-category-title::first-letter {
   max-width: calc(100vw - 20rem);
 }
 
-.panel-wrap .it {
+/* cljs .it rows carry sm:grid sm:grid-cols-3 sm:gap-4 on the element
+   itself — the grid applies in every settings container, including the
+   appearance popup */
+.panel-wrap .it,
+.cp__settings-inner .it,
+#appearance_settings .it {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 /* direct child like cljs .panel-wrap>.it:first-of-type — the accent
@@ -3014,7 +3096,9 @@ h1.cp__settings-category-title::first-letter {
 }
 
 .panel-wrap .it label,
-.panel-wrap .it .it-label {
+.panel-wrap .it .it-label,
+#appearance_settings .it label,
+#appearance_settings .it .it-label {
   min-height: 28px;
   line-height: 28px;
   display: flex;
@@ -3025,7 +3109,9 @@ h1.cp__settings-category-title::first-letter {
    row has two children (label + control); three-child rows (e.g.
    label | switch | shortcut kbd) keep one column each */
 .panel-wrap .it > *:nth-child(2):last-child,
-.panel-wrap .it .it-control {
+.panel-wrap .it .it-control,
+#appearance_settings .it > *:nth-child(2):last-child,
+#appearance_settings .it .it-control {
   grid-column: span 2;
   display: flex;
   align-items: flex-start;
@@ -3102,6 +3188,7 @@ h1.cp__settings-category-title::first-letter {
 
 .cp__theme-modes-options {
   display: flex;
+  flex-direction: row;
   align-items: center;
   margin: 0;
   padding: 0;
@@ -3155,6 +3242,95 @@ h1.cp__settings-category-title::first-letter {
   font-size: 0.75rem;
   line-height: 1rem;
   font-weight: 500;
+}
+
+/* LUI twin: list > button.lui-list-item > .mode-* box + .lui-text label
+   (cljs ul > li > i + strong). The list-item kind lays out as a row —
+   flip to column so the thumbnail sits above the label like cljs */
+.cp__theme-modes-options > .lui-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  padding-right: 0.5rem;
+  min-height: 0;
+  opacity: 0.9;
+  border-radius: 0.25rem;
+  width: auto;
+}
+
+.cp__theme-modes-options > .lui-list-item:hover {
+  opacity: 1;
+}
+
+/* the thumbnail + label carry the visual state — kill the list-item
+   hover/selected chrome (bg-accent would cover the swatch) */
+.cp__theme-modes-options > .lui-list-item:hover,
+.cp__theme-modes-options > .lui-list-item[data-selected] {
+  background: transparent;
+  color: inherit;
+}
+
+.cp__theme-modes-options .mode-light,
+.cp__theme-modes-options .mode-dark,
+.cp__theme-modes-options .mode-system {
+  display: block;
+  width: 92px;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  aspect-ratio: 160 / 110;
+  background: url("../img/light-theme.png") no-repeat center / cover;
+  background-color: var(--lx-gray-04, hsl(var(--muted)));
+}
+
+.cp__theme-modes-options .mode-dark {
+  background-image: url("../img/dark-theme.png");
+}
+
+.cp__theme-modes-options .mode-system {
+  background-image: url("../img/system-theme.png");
+}
+
+.cp__theme-modes-options .mode-active {
+  box-shadow: inset 0 0 0 2px var(--ls-link-text-color, hsl(var(--primary, #0f7b6c)));
+}
+
+.cp__theme-modes-options > .lui-list-item > .lui-text {
+  display: block;
+  padding-right: 0.5rem;
+  padding-top: 0.375rem;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+}
+
+/* context-menu color/heading rows: the button kind's empty icon/label
+   slots would shrink the swatch/heading child to zero width */
+.ls-cm-swatch > .lui-button-icon,
+.ls-cm-swatch > .lui-button-label,
+.ls-cm-heading-btn > .lui-button-icon,
+.ls-cm-heading-btn > .lui-button-label {
+  display: none;
+}
+
+/* cljs common.css .heading-bg: 18px round swatch inside a 30px hit
+   area; .remove is a bordered hollow circle holding a "-" glyph */
+.ls-cm-swatch > .heading-bg {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.ls-cm-swatch > .heading-bg.remove {
+  border: 1px solid var(--lx-gray-07, hsl(var(--border)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
 }
 
 /* shortcuts pane */
@@ -4282,23 +4458,24 @@ select.form-select {
   transform: translateX(0.875rem);
 }
 
+/* the kind emits <label class="lui-checkbox"> around the 1rem input
+   and a .lui-control-label span — the cljs rule's 1rem box must apply
+   to the input, not the wrapper, or the label text shrinks to zero */
 .ui__checkbox {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
+  gap: 0.375rem;
   cursor: pointer;
-  border-radius: 0.125rem;
-  border: 1px solid hsl(var(--primary));
-  background: transparent;
-  color: hsl(var(--primary-foreground));
-  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1rem;
+}
+
+.ui__checkbox > .lui-checkbox-control {
+  flex-shrink: 0;
 }
 
 .ui__checkbox[data-checked] {
-  background: hsl(var(--primary));
+  background: transparent;
 }
 
 /* buttons used across overlays (cljs ui__button variants) */

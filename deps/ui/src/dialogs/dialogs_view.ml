@@ -80,7 +80,11 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
         (* cljs shui dialog/core: h2.ui__dialog-title (only when the
            dialog has a title) then .ui__dialog-main-content > body *)
         [ (let title = title_of name in
-           if title = "" then spacer ~key:("dlg-t-" ^ name) []
+           if title = "" then
+             (* cljs renders a visually-hidden h2.ui__dialog-title (radix
+                needs a title); display:none keeps it out of the content
+                grid so it adds no 16px gap before .ui__dialog-main-content *)
+             box ~key:("dlg-t-" ^ name) ~style_class:"ui__dialog-title-empty" []
            else
              heading ~key:("dlg-t-" ^ name) ~level:2
                ~style_class:"ui__dialog-title" ~value:title [])

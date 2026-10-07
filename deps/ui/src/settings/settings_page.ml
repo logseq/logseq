@@ -11,7 +11,7 @@ module S = Settings_state
 module V = Settings_view
 module C = Settings_controls
 
-let version = "2.0.1"
+let version = "2.0.2"
 
 (* config.edn-backed toggle row — folds the (config_bool, config_toggle)
    pair every config toggle repeats *)
@@ -77,7 +77,7 @@ let language_row ctx =
 
 let theme_row ctx =
   let mode = Signal.state ctx.Lui_ui.ui_scheduler (V.current_mode ()) in
-  row ~key:"theme" ~style_class:"it ls-it-top" ~gap:24
+  row ~key:"theme" ~style_class:"it ls-it-top"
     [ column ~key:"theme-lc" ~style_class:"ls-it-label-col"
         [ label ~key:"theme-l" ~style_class:"ls-label"
             ~value:
@@ -159,13 +159,13 @@ let color_label = function
   | "grass" -> T.color_grass
   | _ -> T.color_orange
 
-(* the cljs inline outline/opacity styles became typed props:
-   ~background covers the swatch fill; the active ring is ~selected +
-   ~border_width — the 4px-vs-1px outline and dimmed-dot opacity are
-   per-kind defaults on native *)
+(* cljs settings.cljs accent-color-row: 20px rounded-full button at
+   opacity .5 (1 when active), 1px/4px outline in rx-06/07, inner 8px
+   dot in rx-07 hidden unless active; "none" is a red bar *)
 let accent_swatch ~key ~modal ~current color =
   let active = color = current and none = color = "none" in
   box ~key ~style_class:"ls-swatch-cell"
+    ~opacity:(if active then 1. else 0.5)
     [ button ~key:(key ^ "-b") ~variant:`ghost
         ~style_class:(C.btn_cls ~variant:`Text () ^ " ls-swatch")
         ~label:(color_label color)
@@ -173,9 +173,11 @@ let accent_swatch ~key ~modal ~current color =
         ~selected:active ~autofocus:(modal && active)
         ~border_color:("var(--rx-" ^ color ^ (if active then "-07)" else "-06)"))
         ~border_width:(if active then 4 else 1)
+        ~width:20 ~height:20 ~corner_radius:999 ~padding:0
         ~on_press:(fun _ -> S.set_accent color)
         [ box ~key:(key ^ "-s")
             ~style_class:(if none then "ls-swatch-none" else "ls-swatch-dot")
+            ~opacity:(if none || active then 1. else 0.)
             ?background:
               (if none then None else Some ("var(--rx-" ^ color ^ "-07)"))
             []
@@ -280,7 +282,7 @@ let date_format_row ctx =
   let mst = dfmt_menu_state ctx in
   (* cljs date-format-row carries a duplicated hiccup class shorthand;
      reproduced verbatim for DOM parity *)
-  row ~key:"dfmt" ~gap:24
+  row ~key:"dfmt"
     ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
     [ C.label_el ~key:"dfmt-l" ~for_:"custom_date_format"
         ~text:T.custom_date_format []
@@ -632,7 +634,7 @@ let pane_of ~modal ctx tab =
   | _ -> general_pane ~modal ctx
 
 let article ~modal ctx =
-  column ~key:"settings-article"
+  column ~key:"settings-article" ~style_class:"settings-article"
     [ row ~key:"art-h" ~style_class:"cp__settings-header"
         [ heading ~key:"art-ht" ~level:1
             ~style_class:"cp__settings-category-title"
@@ -700,7 +702,7 @@ let appearance_rows ctx =
   ; accent_row ~modal:true
   ]
 
-let appearance_body (x, y) : t =
+let appearance_body (_x, y) : t =
  fun ctx parent ->
   S.ensure ctx;
   let node =
@@ -712,11 +714,10 @@ let appearance_body (x, y) : t =
             Runtime.send (Action.Appearance_set None))
           (box ~key:"appearance-backdrop"
              ~style_class:"ls-popup-backdrop" [])
-        (* right-edge anchor: ~at is the left edge, so place it at
-           anchor - min-width (the positioner clamps wider content to the
-           right viewport edge like right:8 did) *)
+        (* cljs PopupContent right-anchors the appearance panel:
+           ~620px wide, right edge ~32px from the viewport edge *)
       ; popover ~key:"appearance-wrap"
-          ~at:(Float.min x (inner_width -. 8.) -. 192., y)
+          ~at:(inner_width -. 32. -. 624., y) ~width:624
           ~on_dismiss:(fun _ ->
             Runtime.send (Action.Appearance_set None))
           ~style_class:"ui__dropdown-menu-content appearance-popup"
