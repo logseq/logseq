@@ -15,9 +15,10 @@ let dom = Logseq_dom.dom
 (* title moves to ~label (the a11y name on native hosts); icon buttons
    carry ~icon, text buttons ~text — the button kind supplies
    type=button and the icon/label spans on web *)
-let action_btn key ?(title = "") ?(text = "") ?icon on_click : t =
+let action_btn ?id key ?(title = "") ?(text = "") ?icon on_click : t =
   button ~key
     ~style_class:"ui__button selection-action-button"
+    ?accessibility_identifier:id
     ?icon
     ~label:title ~text
     ~on_press:(fun _ -> on_click ())
@@ -148,7 +149,6 @@ and node () : t =
           | None -> Logseq_dom.nothing
           | Some blk ->
               let l, t, _r, _b, _w = Web_dom.bounding_rect_fields blk in
-              let below = t -. 2. in
               (* cljs radix popover anchors the bar 48px above the first
                  selected block — popover ~at is the same point placement;
                  no ~on_dismiss: the bar's own mousedown listener decides
@@ -180,14 +180,23 @@ and node () : t =
                     ; action_btn "sab-del" ~icon:`trash
                         ~title:(I18n.t "editor/delete-selection")
                         (fun () -> Editor_actions.delete_selection ())
-                    ; action_btn "sab-dots" ~icon:(`app "dots")
+                    ; action_btn "sab-dots" ~id:"sab-dots"
+                        ~icon:(`app "dots")
                         ~title:(I18n.t "ui/show-more")
                         (fun () ->
-                          match !(Popups_state.active) with
-                          | Some st ->
-                              Popups_state.open_cm st ~x:l ~y:below
+                          (* cljs: the bar's dots menu is a dropdown
+                             anchored to the trigger button *)
+                          match
+                            ( !(Popups_state.active)
+                            , D.get_element_by_id "sab-dots" )
+                          with
+                          | Some st, Some btn ->
+                              let ax, atop, abot =
+                                Popups_state.anchor_of_el btn
+                              in
+                              Popups_state.open_cm st ~ax ~atop ~abot
                                 ~block_id:first ~multi:true
-                          | None -> ())
+                          | _ -> ())
                     ]
                 ]))
       source )

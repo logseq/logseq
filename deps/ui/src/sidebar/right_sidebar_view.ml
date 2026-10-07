@@ -92,13 +92,23 @@ let item_menu st (it : Sidebar_state.item) =
     it.Sidebar_state.kind = "page" || it.Sidebar_state.kind = "contents"
   in
   let sep key = divider ~key ~style_class:"menu-separator" [] in
-  (* popover ~at the stored pointer coords — same placement the inline
-     fixed style carried; children are Menu_item.el rows (core-owned) *)
+  (* cljs popup-show!: element-anchored dropdown — centered on the
+     target (ls-anchor-cx), flipping above when the space below runs
+     out (ls-anchor-top lifts it by its own height) *)
+  let ax, atop, abot = !Sidebar_state.im_xy in
+  let flip = Popups_state.anchor_above atop abot in
+  let w = 160. in
+  let x =
+    Float.max ((w /. 2.) +. 5.)
+      (Float.min ax (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
+  in
   popover ~key:("imenu-" ^ it.key)
-    ~at:(fst !Sidebar_state.im_xy, snd !Sidebar_state.im_xy)
+    ~at:(x, if flip then atop else abot)
     ~role:`menu ~min_width:160
     ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-    ~style_class:"ui__dropdown-menu-content"
+    ~style_class:
+      ("ui__dropdown-menu-content ls-anchor-cx"
+      ^ if flip then " ls-anchor-top" else "")
     (menu_item st (t "ui/close")
        (fun () -> Sidebar_state.remove_item st it.key)
      :: (if multi then
@@ -253,16 +263,14 @@ let item_header st idx (it : Sidebar_state.item) =
             (* press events carry no pointer coordinates — anchor the
                menu at the button's rect instead of click clientX/Y *)
             ~on_press:(fun _ ->
-              let x, y =
+              let ax, atop, abot =
                 match
                   Web_dom.get_element_by_id ("sbi-more-" ^ it.key)
                 with
-                | Some el ->
-                    let r = Web_dom.el_bounding_rect el in
-                    (Web_dom.rect_left r, Web_dom.rect_bottom r)
-                | None -> (0., 0.)
+                | Some el -> Popups_state.anchor_of_el el
+                | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
               in
-              Sidebar_state.open_item_menu st it.key ~x ~y)
+              Sidebar_state.open_item_menu st it.key ~ax ~atop ~abot)
             []
         ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~icon:`x ~label:(t "ui/close") ~width:32 ~height:32

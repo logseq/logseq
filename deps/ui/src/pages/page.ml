@@ -89,13 +89,23 @@ let open_menu (page : Model.page) name payload =
     I18n.contains (Platform.payload_str payload "targetClass") "block-tag"
   in
   if name = "contextmenu" && not on_tag_chip then (
+    (* cljs popup-show! anchors the menu to the event target element,
+       not the raw pointer — elementFromPoint resolves that target *)
+    let ax, atop, abot =
+      match
+        Web_dom.element_at
+          (Platform.payload_num payload "clientX")
+          (Platform.payload_num payload "clientY")
+      with
+      | Some el -> Popups_state.anchor_of_el el
+      | None ->
+          Popups_state.anchor_at_point
+            ~x:(Platform.payload_num payload "clientX")
+            ~y:(Platform.payload_num payload "clientY")
+    in
     Runtime.send
       (Action.Page_menu_set
-         (Some
-            ( Platform.payload_num payload "clientX"
-            , Platform.payload_num payload "clientY"
-            , false
-            , page.page_uuid )));
+         (Some (ax, atop, abot, false, page.page_uuid)));
     Runtime.flush ())
 
 (* generic: works for any entity uuid (page or block) *)

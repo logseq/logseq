@@ -427,7 +427,7 @@ let test_right_sidebar () =
 let test_context_menu () =
   (match !Popups_state.active with
    | Some t ->
-       Popups_state.open_cm t ~x:10. ~y:10. ~block_id:"b1" ~multi:false;
+       Popups_state.open_cm t ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
        flush ();
        let menu =
          find_where (fun n -> has_tok n "ls-context-menu-content")
@@ -470,7 +470,7 @@ let test_dialogs () =
 (* ---------------- page menu / confirm / toasts / help ---------------- *)
 
 let test_page_menu () =
-  send (Action.Page_menu_set (Some (100., 50., true, None)));
+  send (Action.Page_menu_set (Some (100., 40., 50., true, None)));
   let menus =
     find_where (fun n -> has_tok n "ui__dropdown-menu-content")
   in

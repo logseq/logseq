@@ -92,9 +92,10 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
 
 (* typed variant over ls-btn-* classes — the multi-token style_class
    route left the primary styling unapplied on web (confirm button
-   rendered white-on-transparent); data-variant is the typed path *)
+   rendered white-on-transparent); data-variant is the typed path.
+   cljs alert-dialog footer buttons are :size :sm *)
 let btn key label variant act =
-  button ~key ~variant
+  button ~key ~variant ~size:`sm
     ~style_class:btn_style
     ~text:label
     ~on_press:(fun _ -> act ())
@@ -127,15 +128,17 @@ let confirm_view (c : Dialogs_state.confirm) =
            else
              [ column ~key:"cfrm-h"
                  ~style_class:"ui__alert-dialog-header"
-                 ( [ heading ~key:"cfrm-t" ~level:2
-                       ~style_class:"ui__alert-dialog-title"
-                       ~value:c.title [] ]
-                 @
-                 if c.desc = "" then []
-                 else
-                   [ paragraph ~key:"cfrm-d"
-                       ~style_class:"ui__alert-dialog-description"
-                       ~value:c.desc [] ] ) ] )
+                 [ heading ~key:"cfrm-t" ~level:2
+                     ~style_class:"ui__alert-dialog-title"
+                     ~value:c.title [] ] ] )
+        (* cljs dialog-confirm! puts the description in :content, wrapped
+           in div.ui__alert-dialog-main-content — a grid sibling of the
+           header, not AlertDialogDescription inside it *)
+        @ (if c.desc = "" then []
+             else
+               [ box ~key:"cfrm-d" ~style_class:"ui__alert-dialog-main-content"
+                   [ paragraph ~key:"cfrm-dp"
+                       ~style_class:"ls-confirm-desc" ~value:c.desc [] ] ])
         @ [ row ~key:"cfrm-f" ~style_class:"ui__alert-dialog-footer"
               [ btn "cfrm-cancel" I18n.cancel `outline
                   Dialogs_state.close_confirm

@@ -68,13 +68,10 @@ let dots_btn =
     ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
     ~height:30 ~accessibility_identifier:"toolbar-dots-btn"
     ~on_press:(fun _ ->
-      let pos =
-        Some (Dom_ext.window_inner_width () -. 48., 48.)
-      in
-      Dom_ext.toolbar_dots_pos := pos;
+      let x = Dom_ext.window_inner_width () -. 48. in
+      Dom_ext.toolbar_dots_pos := Some (x, 48.);
       Runtime.send
-        (Action.Page_menu_set
-           (Option.map (fun (x, y) -> (x, y, true, None)) pos)))
+        (Action.Page_menu_set (Some (x, 48., 48., true, None))))
     []
 
 (* Out puts back/forward in the navigation group; the native hash

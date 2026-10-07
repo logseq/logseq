@@ -642,14 +642,16 @@ let scroll_row_into_view ~scroller ~row =
        (Js.Json.JObject [("scroller", scroller); ("row", row)]))
 
 (* cljs editor.cljs popup pos: x = caret.left - 20, y = caret line
-   bottom, also returning the caret line top for flip-above math.
+   bottom - 3 (cljs uses rect.top + computed lineHeight, which sits
+   ~3px above the caret bottom), plus the caret line top for
+   flip-above math.
    Textarea event targets carry "caretRect" (the IME caret rect in
    window top-left space); snapshots without it fall back to the
    element's bottom-left corner. *)
 let caret_popup_pos el =
   match prop "caretRect" el with
   | Js.Json.JObject _ as r ->
-      (rect_left r -. 20., rect_bottom r, rect_top r)
+      (rect_left r -. 20., rect_bottom r -. 3., rect_top r)
   | _ ->
       let r = bounding_rect el in
       (rect_left r -. 20., rect_bottom r +. 4., 0.)

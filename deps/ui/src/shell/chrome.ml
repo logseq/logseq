@@ -67,6 +67,7 @@ let dots_button =
             (Action.Page_menu_set
                (Some
                   ( Web_dom.rect_right r +. 32.
+                  , Web_dom.rect_top r
                   , Web_dom.rect_bottom r
                   , true
                   , None )))

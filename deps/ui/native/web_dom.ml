@@ -19,6 +19,11 @@ let js_get j k = Dom_ext.prop k j
 
 let get_element_by_id = Editor_dom.get_element_by_id
 let query_selector = Editor_dom.query_selector
+
+(* the imperative DOM has no point hit-test — callers fall back to the
+   stored pointer anchor *)
+let element_at _ _ = None
+
 let doc_query = Dom_ext.doc_query_selector
 let document_element = Editor_dom.document_element
 let document_body = Views_dom.document_body
@@ -74,6 +79,10 @@ let el_query_all_arr (root : el) (sel : string) : el array =
   match el_query_all root sel with
   | Js.Json.JArray arr -> arr
   | _ -> [||]
+let query_selector_all_arr (sel : string) : el array =
+  match Editor_dom.query_selector_all sel with
+  | Js.Json.JArray arr -> arr
+  | _ -> [||]
 let el_id = Editor_dom.el_id
 let el_dom_id = Editor_dom.el_dom_id
 let el_tag = Editor_dom.el_tag
@@ -83,6 +92,8 @@ let el_blur = Views_dom.el_blur
 let el_click = Views_dom.el_click
 let el_select_text = Properties_dom.el_select_text
 let el_scroll_into_view = Editor_dom.el_scroll_into_view
+let el_scroll_into_view_opts (el : el) (_opts : Js.Json.t) : unit =
+  el_scroll_into_view el
 let scroll_row_into_view = Dom_ext.scroll_row_into_view
 let el_scroll_height = Views_dom.el_scroll_height
 let el_scroll_top = Views_dom.el_scroll_top

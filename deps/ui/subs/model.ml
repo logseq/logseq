@@ -226,7 +226,9 @@ type t =
   ; left_sidebar_open : bool
   ; right_sidebar_open : bool
   ; editing_title : bool
-  ; page_menu : (float * float * bool * string option) option
+  ; page_menu
+      : (float * float * float * bool * string option) option
+        (* anchor cx/top/bottom, with_app_items, page uuid *)
     (* click position + with_app_items (toolbar dots vs page context
        menu) + the menu page uuid; uuid None = resolve from the current
        route like cljs right-sidebar/get-current-page *)

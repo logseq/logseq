@@ -727,14 +727,17 @@ let can_focus block_id = Option.is_some (input_el block_id)
 
 
 (* caret anchor for popups, in viewport coords — mirrors the old
-   caret_popup_pos contract: (x, y bottom of the caret line, y top) *)
+   caret_popup_pos contract: (x, popup top, caret line top).
+   cljs: pos = (rect.left - 20, rect.top + lineHeight) where the
+   computed lineHeight sits ~3px above the caret bottom, so the popup
+   overlaps the line's descender space *)
 let popup_pos block_id : (float * float * float) option =
   match input_el block_id with
   | None -> None
   | Some el ->
       let st = state_of el in
       Option.map
-        (fun r -> (r.fx -. 20., r.fy +. r.fh, r.fy))
+        (fun r -> (r.fx -. 20., r.fy +. r.fh -. 3., r.fy))
         (caret_rect_el el st.caret_off)
 
 (* bounding rect of the block-editor container — popup clamp anchor.

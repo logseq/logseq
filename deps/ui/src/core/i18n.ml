@@ -240,6 +240,8 @@ let en_overrides = function
   | "editor/cycle-todo" -> "Rotate the TODO state"
   | "editor/search-for-node" -> "Search for a node"
   | "editor/search-for-tag" -> "Search for a tag"
+  | "editor/reference-node-use-page-ref" ->
+      "To reference a node, please use `[[]]`."
   | "editor/display-tag-inline-hint" ->
       "to display this tag inline instead of at the end of this node."
   | "editor/block-search" -> "Search for a block"

@@ -132,13 +132,21 @@ let ac_node_label_el (v : S.view) (it : S.ac_item) : t =
     | None -> ""
   in
   column ~key:"node" ~style_class:"ls-ac-node"
-    ((match it.S.ai_breadcrumb with
-      | Some bc when bc <> "" ->
-          [ box ~key:"bc" ~style_class:"ls-ac-bc"
-              [ text ~key:"b"
-                  ~style_class:"breadcrumb block-parents breadcrumb--search-result"
-                  ~value:bc [] ] ]
-      | _ -> [])
+    ((* cljs node-render mounts the .text-xs.opacity-70.mb-1 breadcrumb
+        div whenever the entity qualifies (Some _ here; "" renders the
+        empty div — its content height plus mb-1 is what pushes tag
+        items to 36px) *)
+      (match it.S.ai_breadcrumb with
+       | Some "" ->
+           [ box ~key:"bc" ~style_class:"ls-ac-bc" [] ]
+       | Some bc ->
+           [ box ~key:"bc" ~style_class:"ls-ac-bc"
+               [ text ~key:"b"
+                   ~style_class:
+                     "breadcrumb block-parents \
+                      breadcrumb--search-result"
+                   ~value:bc [] ] ]
+       | None -> [])
     @ [ row ~key:"row" ~style_class:"ls-ac-node-row"
           ((if db_tag then [] else [ node_icon_slot ~key:"ic" it ])
           @ [ node_title_el ~key:"ti" ~query it ]) ])
@@ -379,7 +387,7 @@ let ac_popover (st : S.t) : t =
                | Some a -> (
                    match a.S.flip with
                    | Some (_, avail') -> avail'
-                   | None -> Web_dom.win_inner_height -. a.S.y -. 8.)
+                   | None -> Web_dom.win_inner_height -. a.S.y -. 5.)
                | None -> 0.)
              vs))
      ~on_dismiss:(fun _ -> S.close_ac st)
@@ -618,7 +626,7 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
 let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
     : t =
   popover ~key:"cm-sub" ~at:(x, y) ~role:`menu
-    ~available_height:(Web_dom.win_inner_height -. y -. 8.)
+    ~available_height:(Web_dom.win_inner_height -. y -. 5.)
     ~style_class:"ui__dropdown-menu-sub-content"
     ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
     ~on_dismiss:(fun _ -> close_cm st)
@@ -661,10 +669,12 @@ let cm_popover (st : S.t) : t =
   let vs = st.S.vs.Signal.state_signal in
   (Ui_parts.class_signal vs
      (fun (v : S.view) ->
-       "ui__dropdown-menu-content ls-context-menu-content"
+       "ui__dropdown-menu-content ls-context-menu-content ls-anchor-cx"
        ^
        (match v.S.cm with
-        | Some m when m.S.tag <> None -> " ls-tag-menu"
+        | Some m ->
+            (if m.S.tag <> None then " ls-tag-menu" else "")
+            ^ (if m.S.flip then " ls-anchor-top" else "")
         | _ -> ""))
      (popover ~key:"cm" ~role:`menu
         ~at_signal:
@@ -673,12 +683,13 @@ let cm_popover (st : S.t) : t =
                 (fun (v : S.view) ->
                   match v.S.cm with
                   | Some m ->
-                      (* cljs anchors a 1px point at the click and the
-                         base-ui dropdown centers the content on it *)
+                      (* the positioner translates back half its width
+                         (ls-anchor-cx): clamp the anchor center so the
+                         menu stays inside the viewport *)
                       let w = if m.S.tag <> None then 240. else 280. in
-                      ( Float.max 8.
-                          (Float.min (m.S.cx -. (w /. 2.))
-                             (Web_dom.win_inner_width -. (w +. 8.)))
+                      ( Float.max ((w /. 2.) +. 5.)
+                          (Float.min m.S.cx
+                             (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
                       , m.S.cy )
                   | None -> (0., 0.))
                 vs))
@@ -687,7 +698,12 @@ let cm_popover (st : S.t) : t =
              (Signal.map
                 (fun (v : S.view) ->
                   match v.S.cm with
-                  | Some m -> Web_dom.win_inner_height -. m.S.cy -. 8.
+                  | Some m ->
+                      (* a flipped menu grows upward from the anchor's
+                         top edge; a below menu fills down to the
+                         viewport edge *)
+                      if m.S.flip then m.S.atop -. 5.
+                      else Web_dom.win_inner_height -. m.S.cy -. 5.
                   | None -> 0.)
                 vs))
         ~data_attrs:[ ("data-keep-selection", "") ]
@@ -818,7 +834,7 @@ let pv_track st el =
    inline styles live in lui-overlay.css *)
 let pv_popover (st : S.t) (p : S.pv) : t =
   popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y)
-    ~available_height:(Web_dom.win_inner_height -. p.S.pv_y -. 8.)
+    ~available_height:(Web_dom.win_inner_height -. p.S.pv_y -. 5.)
     ~style_class:"ui__popover-content ls-preview-popup"
     ~on_dismiss:(fun _ -> S.close_pv st)
     [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
@@ -865,11 +881,76 @@ let pv_dyn (st : S.t) : t =
            st.S.vs.Signal.state_signal)))
     context parent
 
+(* base-ui dropdown-menu roving focus: ArrowUp/Down (and Home/End) move
+   data-highlighted + DOM focus across the enabled menuitems of the
+   topmost visible menu, looping; Enter selects the highlighted item.
+   Hover shares the same data-highlighted marker via cm_highlight. *)
+let menu_keydown (ev : Web_dom.ev) =
+  let menus =
+    Array.to_list
+      (Web_dom.query_selector_all_arr ".ui__dropdown-menu-content")
+  in
+  let menu =
+    menus
+    |> List.filter (fun m ->
+           Web_dom.rect_width (Web_dom.el_bounding_rect m) > 0.)
+    |> List.rev
+    |> (fun l -> List.nth_opt l 0)
+  in
+  match menu with
+  | None -> false
+  | Some m -> (
+      let items =
+        Array.to_list
+          (Web_dom.el_query_all_arr m
+             ".ui__dropdown-menu-item:not([data-disabled]):not([aria-disabled='true']), .ui__dropdown-menu-sub-trigger:not([data-disabled])")
+      in
+      match (Web_dom.ev_key ev, items) with
+      | (("ArrowDown" | "ArrowUp" | "Home" | "End") as k), _ :: _ ->
+          let cur =
+            match
+              List.find_index
+                (fun it ->
+                  Web_dom.el_get_attr it "data-highlighted" <> None)
+                items
+            with
+            | Some i -> i
+            | None -> -1
+          in
+          let n = List.length items in
+          let i =
+            match k with
+            | "ArrowDown" -> if cur < 0 then 0 else (cur + 1) mod n
+            | "ArrowUp" -> if cur < 0 then n - 1 else (cur + n - 1) mod n
+            | "Home" -> 0
+            | _ -> n - 1
+          in
+          let it = List.nth items i in
+          List.iter
+            (fun e -> Web_dom.el_remove_attr e "data-highlighted")
+            items;
+          Web_dom.el_set_attr it "data-highlighted" "";
+          cm_hi_el := Some it;
+          Web_dom.el_focus it;
+          let o = Js.Dict.empty () in
+          Js.Dict.set o "block" (Js.Json.string "nearest");
+          Web_dom.el_scroll_into_view_opts it (Js.Json.object_ o);
+          true
+      | "Enter", _ :: _ -> (
+          match !cm_hi_el with
+          | Some e -> Web_dom.el_click e; true
+          | None -> true)
+      | _ -> false)
+;;
+
 let handle_keydown st (ev : Web_dom.ev) =
   if S.ac_keydown st ev then (
     Web_dom.ev_prevent_default ev;
     (* stopImmediate: same-target listeners registered later (the editor's
        own keydown) must not also react to the key the popup consumed *)
+    Web_dom.ev_stop_immediate ev)
+  else if menu_keydown ev then (
+    Web_dom.ev_prevent_default ev;
     Web_dom.ev_stop_immediate ev)
   else
     match Web_dom.ev_key ev with
@@ -905,8 +986,8 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                     | Some r -> r
                     | None -> tuuid
                   in
-                  S.open_cm_tag st ~x:(Web_dom.ev_client_x ev)
-                    ~y:(Web_dom.ev_client_y ev) ~block_id:bid
+                  let ax, atop, abot = S.anchor_of_el el in
+                  S.open_cm_tag st ~ax ~atop ~abot ~block_id:bid
                     ~tag_uuid:tuuid ~tag_id:tid ~tag_title:title
                     ~priv:(priv = Some "true")
               | None -> ())
@@ -937,8 +1018,11 @@ let handle_contextmenu st (ev : Web_dom.ev) =
               if not (Editor_state.is_selected id) then
                 Editor_actions.select_single id;
               close_cm_picker ();
-              S.open_cm st ~x:(Web_dom.ev_client_x ev)
-                ~y:(Web_dom.ev_client_y ev) ~block_id:id
+              (* cljs popup-show! re-anchors the menu to the event
+                 target element (centered, dropping from its bottom
+                 edge), not the raw pointer *)
+              let ax, atop, abot = S.anchor_of_el el in
+              S.open_cm st ~ax ~atop ~abot ~block_id:id
                 ~multi:(List.length (Web_dom.selected_block_uuids ()) >= 2)
           | None -> ())
       | None -> (
@@ -958,8 +1042,8 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                   Web_dom.ev_prevent_default ev;
                   Web_dom.ev_stop_propagation ev;
                   close_cm_picker ();
-                  S.open_cm st ~x:(Web_dom.ev_client_x ev)
-                    ~y:(Web_dom.ev_client_y ev) ~block_id:first
+                  let ax, atop, abot = S.anchor_of_el el in
+                  S.open_cm st ~ax ~atop ~abot ~block_id:first
                     ~multi:(List.length sel >= 2)
               | Some id, _
                 when not (Web_dom.is_editable_target (Some el)) ->
@@ -968,8 +1052,8 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                   if not (Editor_state.is_selected id) then
                     Editor_actions.select_single id;
                   close_cm_picker ();
-                  S.open_cm st ~x:(Web_dom.ev_client_x ev)
-                    ~y:(Web_dom.ev_client_y ev) ~block_id:id ~multi:false
+                  let ax, atop, abot = S.anchor_of_el el in
+                  S.open_cm st ~ax ~atop ~abot ~block_id:id ~multi:false
               | _ -> ())
           | None -> ()))
 ;;

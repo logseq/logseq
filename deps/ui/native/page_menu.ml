@@ -145,7 +145,7 @@ let global_items () =
 
 let inner_width () : float = Host.inner_width ()
 
-let view (x, y, with_app_items) (p : Model.page option) =
+let view (x, _atop, y, with_app_items) (p : Model.page option) =
   let style =
     if with_app_items then
       (* toolbar dots menu: x is the trigger's right edge -> anchor
@@ -273,8 +273,8 @@ let resolve_menu_page (m : Model.t) uuid =
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
   match m.page_menu with
-  | Some (x, y, with_app, uuid) ->
-      view (x, y, with_app) (resolve_menu_page m uuid)
+  | Some (ax, atop, abot, with_app, uuid) ->
+      view (ax, atop, abot, with_app) (resolve_menu_page m uuid)
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c

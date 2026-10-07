@@ -752,6 +752,31 @@ let apply_input ?frame uuid ev =
         match ev with
         | Edit_input.Key (kev, repeat) ->
             edit_key ~route ~conduit ~repeat uuid kev m0
+        | Edit_input.Insert "(" ->
+            (* cljs autopair-left-paren?: "(" pairs to "()" only after a
+               boundary char (:start, "\n", " ", "]", "(") and never with
+               an active selection; when the result is "((" master warns
+               to use [[ — block-ref search never opens *)
+            let src = m0.Edit_model.source in
+            let prev =
+              if m0.Edit_model.caret = 0 then ' '
+              else
+                Char.chr
+                  (Edit_model.decode_cp m0.Edit_model.units src
+                     (Edit_model.prev_cp m0.Edit_model.units src
+                        m0.Edit_model.caret))
+            in
+            if
+              m0.Edit_model.anchor = None
+              && (prev = ' ' || prev = '\n' || prev = ']' || prev = '(')
+            then (
+              if prev = '(' then
+                Toast.warning
+                  (I18n.t "editor/reference-node-use-page-ref");
+              let mo = Edit_model.insert_text m0 "()" in
+              let c = m0.Edit_model.caret + 1 in
+              Edit_model.select mo ~anchor:c ~focus:c)
+            else Edit_input.handle ~route ~conduit m0 ev
         | Edit_input.Insert text ->
             let mo = overtype m0 text in
             if mo != m0 then mo

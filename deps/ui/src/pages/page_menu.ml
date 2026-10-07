@@ -230,29 +230,40 @@ let global_items () =
 external inner_width : float = "innerWidth" [@@mel.scope "window"]
 external inner_height : float = "innerHeight" [@@mel.scope "window"]
 
-let view (x, y, with_app_items) (p : Model.page option) =
-  let ax =
+let view (ax, atop, abot, with_app_items) (p : Model.page option) =
+  (* cljs popup-show!: pointer menus anchor to the event target
+     element — ls-anchor-cx centers the positioner on ax and
+     ls-anchor-top lifts it by its own height when it flips above *)
+  let flip =
+    (not with_app_items) && Popups_state.anchor_above atop abot
+  in
+  let x =
     if with_app_items then
-      (* toolbar dots menu is 16rem wide (cljs header.cljs); x is the
+      (* toolbar dots menu is 16rem wide (cljs header.cljs); ax is the
          desired menu right edge -> clamp it 5px inside the viewport
          like the cljs popover. The cljs menu renders its right edge
          ~1px right of the computed anchor (measured +33 inset offset),
          so -255 reproduces the observed position *)
-      Float.min x (inner_width -. 5.) -. 255.
+      Float.min ax (inner_width -. 5.) -. 255.
     else
-      (* cljs anchors a 1px point at the click; the 280px
-         ls-context-menu-content centers on it *)
-      Float.max 8. (Float.min (x -. 140.) (inner_width -. 288.))
+      (* the 280px ls-context-menu-content centers on the anchor *)
+      Float.max 148.
+        (Float.min ax (inner_width -. 148.))
   in
+  let y = if flip then atop else abot in
   (* popover ~at is the same point placement the inline left/top carried;
      --available-height = viewport space below y *)
-  popover ~key:"page-menu" ~at:(ax, y)
-    ~available_height:(inner_height -. y -. 8.)
+  popover ~key:"page-menu" ~at:(x, y)
+    ~available_height:
+      (if flip then atop -. 5. else inner_height -. y -. 5.)
     ~role:`menu
     ~on_dismiss:(fun _ -> Runtime.send (Action.Page_menu_set None))
     ~style_class:
       (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"
-       else "ui__dropdown-menu-content ls-context-menu-content")
+       else
+         "ui__dropdown-menu-content ls-context-menu-content \
+          ls-anchor-cx"
+         ^ if flip then " ls-anchor-top" else "")
     (* cljs header.cljs toolbar-dots-menu = page items + hr + app
        items; a page right-click shows page items only *)
     (match p, with_app_items with
@@ -266,23 +277,23 @@ let confirm_view (c : Model.confirm) =
   let icon_opt, title, desc, desc_cls, act =
     match c with
     | Model.Confirm_delete_page (u, page_title, permanent) ->
-        ( Some (Icons.icon ~size:20. "alert-triangle")
+        ( Some (Icons.icon ~size:18. "alert-triangle")
         , (if permanent then I18n.delete_page_permanent_desc
            else I18n.delete_page_desc)
         , "- " ^ page_title
-        , "ui__alert-dialog-description"
+        , "ls-confirm-desc"
         , fun () -> ignore (Page_ops.delete u) )
     | Model.Confirm_convert_tag_to_page id ->
         ( None
         , I18n.convert_tag_to_page
         , I18n.convert_tag_to_page_desc
-        , "ui__alert-dialog-description"
+        , "ls-confirm-desc"
         , fun () -> ignore (Page_ops.convert_tag_to_page id) )
     | Model.Confirm_delete_asset u ->
         ( None
         , I18n.asset_confirm_delete
         , ""
-        , "ui__alert-dialog-description"
+        , "ls-confirm-desc"
         , fun () -> Asset_dom.delete_asset u )
   in
   let close () =
@@ -322,12 +333,20 @@ let confirm_view (c : Model.confirm) =
            | None ->
                heading ~key:"adlg-t" ~level:2 ~as_:`H2
                  ~style_class:"ui__alert-dialog-title" ~value:title [])
-        ; text ~key:"adlg-d" ~style_class:desc_cls ~value:desc []
+        ; (* cljs dialog-confirm! sends the description as :content —
+             it lands in div.ui__alert-dialog-main-content (a grid sibling
+             of the header), not as ui__alert-dialog-description *)
+          (if desc = "" then Logseq_dom.nothing
+           else
+             box ~key:"adlg-dw"
+               ~style_class:"ui__alert-dialog-main-content"
+               [ text ~key:"adlg-d" ~style_class:desc_cls ~value:desc [] ])
         ; row ~key:"adlg-f" ~style_class:"ui__alert-dialog-footer"
-            [ button ~key:"adlg-cancel" ~variant:`outline
+            [ (* cljs dialog-confirm footer buttons are :size :sm *)
+              button ~key:"adlg-cancel" ~variant:`outline ~size:`sm
                 ~text:I18n.cancel ~style_class:"ui__button"
                 ~on_press:(fun _ -> close ()) []
-            ; button ~key:"adlg-confirm" ~variant:`primary
+            ; button ~key:"adlg-confirm" ~variant:`primary ~size:`sm
                 ~text:I18n.confirm ~style_class:"ui__button"
                 ~on_press:(fun _ ->
                   close ();
@@ -355,8 +374,8 @@ let resolve_menu_page (m : Model.t) uuid =
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
   match m.page_menu with
-  | Some (x, y, with_app, uuid) ->
-      view (x, y, with_app) (resolve_menu_page m uuid)
+  | Some (ax, atop, abot, with_app, uuid) ->
+      view (ax, atop, abot, with_app) (resolve_menu_page m uuid)
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c

@@ -132,6 +132,18 @@ html[data-theme="dark"], body.dark-theme {
   animation: lui-fade-zoom-in 150ms ease-out;
 }
 
+/* cljs popup-show! element anchor: the positioner sits at the target's
+   center-x and slides back half the content's own width (align:center);
+   ls-anchor-top additionally lifts it by its own height so it hangs
+   from the anchor's top edge (side:top flip) */
+.lui-popup-positioner:has(> .ls-anchor-cx) {
+  transform: translateX(-50%);
+}
+
+.lui-popup-positioner:has(> .ls-anchor-cx.ls-anchor-top) {
+  transform: translateX(-50%) translateY(-100%);
+}
+
 /* cljs shui.css: dropdown menus inherit body text color, not popover-foreground */
 .ui__dropdown-menu-content,
 .ui__dropdown-menu-sub-content,
@@ -1049,6 +1061,30 @@ div[data-keep-selection].menu-links-wrapper {
   animation: lui-fade-zoom-in 120ms ease-out;
 }
 
+/* cljs TooltipArrow: h-2 w-2 rotate-45 border bg-popover — the diamond
+   half-overlaps the bubble edge */
+.ui__tooltip-arrow {
+  position: absolute;
+  width: 0.5rem;
+  height: 0.5rem;
+  transform: rotate(45deg);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--popover));
+}
+
+/* cljs with-shortcut tooltip body: title over keycaps, items-start gap-1 */
+.ls-tooltip-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.ls-tooltip-col > span:first-child {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
 .ls-tooltip-keys {
   display: flex;
   align-items: center;
@@ -1497,6 +1533,19 @@ div[data-keep-selection].menu-links-wrapper {
 .ui__alert-dialog-title {
   font-size: 1.125rem;
   font-weight: 600;
+  line-height: 1.75rem;
+}
+
+/* cljs dialog-confirm :content wrapper — div.ui__alert-dialog-main-content
+   around p.opacity-60 (16px text, ~8px breathing room each side) */
+.ui__alert-dialog-main-content {
+  padding-block: 8px;
+}
+
+.ui__alert-dialog-main-content .ls-confirm-desc {
+  font-size: 1rem;
+  line-height: 1.5rem;
+  opacity: 0.6;
 }
 
 .ui__alert-dialog-description {
@@ -1768,6 +1817,20 @@ div[data-keep-selection].menu-links-wrapper {
 .ls-icon-sm {
   width: 1rem;
   height: 1rem;
+}
+
+/* cljs shui button :size :sm is h-7 rounded px-3 py-1 (28px, keeps the
+   text-sm base size) — the kind's data-size=sm rule lands a larger
+   iOS-style 36px, so restore the cljs geometry */
+.lui-button.ui__button[data-size="sm"] {
+  height: 1.75rem;
+  min-height: 1.75rem;
+  padding-inline: 0.75rem;
+  padding-block: 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  width: auto;
 }
 
 /* base button inside dialogs (neutral variant) */

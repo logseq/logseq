@@ -176,7 +176,7 @@ let lp_menu st =
   in
   match !Sidebar_state.lp_ctx with
   | None -> spacer ~key:"lp-none" []
-  | Some (target, recent, x, y) ->
+  | Some (target, recent, ax, atop, abot) ->
       let items =
         (if recent then []
          else
@@ -188,11 +188,24 @@ let lp_menu st =
               [ "⇧"; "Click" ]
               (fun () -> Sidebar_state.open_ref st target) ]
       in
-      (* pointer-anchored overlay — same popover ~at placement as
-         menu_box *)
-      popover ~key:"lp-menu" ~at:(x, y) ~role:`menu
+      (* cljs popup-show! anchors the dropdown to the event target:
+         centered on it below (ls-anchor-cx translates the positioner
+         back half its width), flipping above when the space below runs
+         out (ls-anchor-top lifts it by its own height) *)
+      let w = 240. in
+      let flip = Popups_state.anchor_above atop abot in
+      let x =
+        Float.max ((w /. 2.) +. 5.)
+          (Float.min ax
+             (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
+      in
+      popover ~key:"lp-menu" ~at:(x, if flip then atop else abot)
+        ~role:`menu
         ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-        ~style_class:"ui__dropdown-menu-content w-60" items
+        ~style_class:
+          ("ui__dropdown-menu-content w-60 ls-anchor-cx"
+          ^ if flip then " ls-anchor-top" else "")
+        items
 ;;
 
 (* ---------- repos dropdown (cljs graphs-selector popup) ---------- *)
@@ -450,9 +463,23 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
           if
             Str_util.contains cls "sidebar-page-actions"
             || Str_util.contains cls "ls-icon-dots"
-          then
-            Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~x:d.x
-              ~y:d.y
+          then (
+            (* cljs anchors the dots dropdown to the button element,
+               not the press point *)
+            let ax, atop, abot =
+              match
+                Option.bind (Web_dom.element_at d.x d.y) (fun hit ->
+                    match
+                      Web_dom.el_closest hit ".sidebar-page-actions"
+                    with
+                    | Some btn -> Some btn
+                    | None -> Some hit)
+              with
+              | Some btn -> Popups_state.anchor_of_el btn
+              | None -> Popups_state.anchor_at_point ~x:d.x ~y:d.y
+            in
+            Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~ax
+              ~atop ~abot)
           else
             let shift = d.Lui_protocol.modifiers land 2 <> 0 in
             (* navigate by title: #/page/<uuid> hashes hit the
