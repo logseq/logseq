@@ -59,10 +59,6 @@ let root_dom_id = ref ""
 let lui_app : Lui_runtime.application option ref = ref None
 let host_scope : Signal.scope option ref = ref None
 
-let install (app : ('a, 'b) Lui_app.reducer_app) =
-  lui_app := Some (Lui_app.runtime app);
-  host_scope := Some (Signal.scope "imperative-elements")
-
 let app () =
   match !lui_app with
   | Some a -> a
@@ -327,6 +323,36 @@ let prune_flags () =
     drop prevented;
     drop immediates
   end
+
+(* host clicks arrive through a carrier node (an extension ancestor of the
+   hit), so the carrier's own shadow chain never contains the `a` — the
+   payload's "target" snapshot carries the hit element's attrs plus its
+   ancestor chain (root-first) and is the authoritative upward walk *)
+let click_default_action_target (payload : Js.Json.t) : unit =
+  if (not (is_prevented !current_did)) && not (is_stopped !current_did)
+  then
+    let href_of (j : Js.Json.t) : string option =
+      match prop_json "attrs" j with
+      | JObject kvs -> (
+          match List.assoc_opt "href" kvs with
+          | Some (JString h) -> Some h
+          | _ -> None)
+      | _ -> None
+    in
+    let rec scan = function
+      | [] -> None
+      | j :: rest -> (
+          match href_of j with Some _ as h -> h | None -> scan rest)
+    in
+    let target = prop_json "target" payload in
+    (* nearest ancestor is last in the snapshot — walk it first. a bare
+       "#" is the placeholder page-ref/tag anchors carry — those navigate
+       through the delegated document listener, not the href *)
+    match scan (target :: List.rev (ancestors_list target)) with
+    | Some href when String.length href > 1 && href.[0] = '#' ->
+        Runtime.mark_nav ();
+        Platform.set_location_hash (Runtime.nav_hash href)
+    | _ -> ()
 
 (* ---------- event dispatch ---------- *)
 
@@ -1023,3 +1049,12 @@ let dispatch (target_id : int) (name : string)
         walk n;
         if name = "click" then click_default_action n
       end
+
+let install (app : ('a, 'b) Lui_app.reducer_app) =
+  lui_app := Some (Lui_app.runtime app);
+  host_scope := Some (Signal.scope "imperative-elements");
+  (* every emit_event click gets its default action: the target snapshot
+     (hit element + ancestor chain) is walked for a[href^="#"] *)
+  Platform.post_dispatch_hook :=
+    (fun name payload ->
+      if name = "click" then click_default_action_target payload)
