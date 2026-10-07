@@ -78,17 +78,23 @@ let ratings =
   ; ("easy", "flashcard.rating/easy", "4", "primary-green")
   ]
 
+(* cljs btn-with-shortcut: outline sm button with per-rating --primary
+   tint (bg-primary/5 border-primary), interior [label][kbd shortcut];
+   ~label feeds aria (LUI renders ~text after children, so the visible
+   order lives in the children) *)
 let rating_btn st i (r, label_key, sc, color) =
   let id = "card-" ^ r in
   row ~key:id ~style_class:"ls-row ls-gap" ~cross:`center
     [ button ~key:"b" ~accessibility_identifier:id
-        ~style_class:(id ^ " " ^ color)
-        ~text:(t_ label_key)
+        ~style_class:(id ^ " !px-2 !py-1 bg-primary/5 hover:bg-primary/10 \
+                       border-primary opacity-90 hover:opacity-100 " ^ color)
+        ~label:(t_ label_key)
         ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" sc)
         ~variant:`outline ~size:`sm
         ~on_press:(fun _ -> Cards_state.rate st r)
-        [ text ~key:"sc" ~style_class:"scale-90"
-            ~value:sc [] ]
+        [ row ~key:"inner" ~style_class:"gap-1" ~cross:`center
+            [ text ~value:(t_ label_key) []
+            ; kbd ~style_class:"scale-90 shui-shortcut-key" ~value:sc [] ] ]
     ; text ~key:"due" ~style_class:"ls-desc"
         ~value:(reactive
                   (fun (ls : string list) ->
@@ -141,7 +147,9 @@ let rec card_view st b phase =
     if phase = "show-answer" then b
     else { b with Model.block_children = [] }
   in
-  column ~key:"card-cur" ~style_class:"ls-card content"
+  (* grow:1 fills #cards-modal so the scroll region expands and the
+     action row pins to the dialog bottom (cljs flex-1 min-h-0) *)
+  column ~key:"card-cur" ~grow:1. ~style_class:"ls-card content"
     [ scroll ~key:"scroll" ~orientation:`vertical ~grow:1.
         ~style_class:"ls-card-scroll"
         [ (* scroll lays its children out in a single grid cell — the
@@ -170,13 +178,20 @@ let rec card_view st b phase =
     ; box ~key:"actions" ~style_class:"ls-card-actions"
         [ (if np = "show-cloze" || np = "show-answer" then
              button ~key:"answers" ~accessibility_identifier:"card-answers"
-               ~style_class:"ls-btn-pad"
-               ~shortcut_hint:"s"
+               ~style_class:"card-answers !px-2 !py-1 bg-primary/5 \
+                             hover:bg-primary/10 border-primary \
+                             opacity-90 hover:opacity-100"
+               ~variant:`outline ~size:`sm
+               ~label:(if np = "show-answer" then t_ "flashcard.review/show-answers"
+                       else t_ "flashcard.review/show-clozes")
                ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" "s")
-               ~text:(if np = "show-answer" then t_ "flashcard.review/show-answers"
-                      else t_ "flashcard.review/show-clozes")
                ~on_press:(fun _ -> Cards_state.advance_phase st)
-               []
+               [ row ~key:"inner" ~style_class:"gap-1" ~cross:`center
+                   [ text ~value:(if np = "show-answer"
+                                  then t_ "flashcard.review/show-answers"
+                                  else t_ "flashcard.review/show-clozes") []
+                   ; kbd ~style_class:"scale-90 shui-shortcut-key"
+                       ~value:"s" [] ] ]
            else rating_buttons st)
         ]
     ]
@@ -292,7 +307,10 @@ let modal st =
         ~max_width:672 ~gap:16 ~padding:24 ~style_class:"ui__dialog-content ls-dialog-flashcards grid w-full lg:max-w-3xl border sm:rounded-lg bg-background shadow-lg ui__dialog-zoom-in"
         ~data_attrs:
           [ ("data-state", "open"); ("role", "dialog") ]
-        [ box ~key:"cards-main" ~style_class:"ui__dialog-main-content"
+        [ (* column (not box): flex-column parent so cards-modal's
+             ~grow:1. can claim the main-content height on every
+             platform *)
+          column ~key:"cards-main" ~style_class:"ui__dialog-main-content"
             [ column ~key:"cards-modal"
                 ~accessibility_identifier:"cards-modal"
                 ~style_class:"ls-cards-stack" ~grow:1.

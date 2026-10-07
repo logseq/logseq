@@ -37,8 +37,8 @@ Reference: `src/main/frontend/extensions/fsrs.cljs` (rating set `[:again :hard :
 | `#card` tag → Practice | page with tagged blocks shows Practice affordance + cards due | Practice button + card picker | ok | `lui-10` |
 | Review modal | `#cards-modal`: card-source select ("All cards" ▾) + `+` add-card + `n/total` counter + × | identical | ok | `lui-10` |
 | Question shown, answer hidden | card body renders question; nested/answer content hidden until reveal | same hiding convention | ok | `lui-10` |
-| Show answers (`s` / click) | reveals answer + swaps to rating buttons | identical | ok | `lui-11` |
-| Rating buttons | **Again / Hard / Good / Easy** with per-rating due labels + shortcut digits | identical 4-button set + labels + `1`–`4` | ok | `lui-11` |
+| Show answers (`s` / click) | outline `sm` button `card-answers` (`!px-2 !py-1 bg-primary/5 border-primary`) with interior `[label][kbd s]`, pinned at dialog bottom | identical classes + interior + bottom position | fixed | `master-10`, `lui-10` |
+| Rating buttons | **Again / Hard / Good / Easy** `btn-with-shortcut` outline sm buttons, per-rating `--primary` tint (`primary-red/-purple/-logseq/-green` → `bg-primary/5 border-primary opacity-90`), `[label][kbd]` interior, due label + `info` icon, row `gap-8` pinned at dialog bottom | identical; **was** solid `default` variant, no tint classes, no kbd chip, actions floating mid-dialog (`ui__dialog-main-content` is `display:block` so `flex:1` never stretched) | fixed | `master-11`, `lui-11` |
 | Rating persists fsrs props | `:logseq.property.fsrs/state`, `:logseq/last-rating`, `:logseq.property.fsrs/due` (epoch) | verified live: `state=learning`, `last-rating=good`, `due` epoch | ok | — |
 | Next card / completion | advance `n/total` → "Congrats, you've reviewed all the cards for this query, see you next time!" + Practice again | identical copy + button | ok | `lui-12` |
 | Keyboard | `s` show answers, `1`–`4` rate, `Escape` close | identical | ok | — |
@@ -55,10 +55,11 @@ Reference: `src/main/frontend/extensions/fsrs.cljs` (rating set `[:again :hard :
 - `editor_keys.ml` — `[data-pressable]` added to the click-guard `closest()` selector (annotation refs + pdf labels no longer enter edit mode).
 - `resources/css/extensions-pdf.css` (new) + `resources/index.html` / `static/index.html` + `postcss.config.js` — pdf extension stylesheet wired into the web build.
 - `cards_view.ml` + `lui-overlay.css` — card-set picker: custom styled box + hand-added chevron inside the `select` node produced a double border + double chevron + 40px overflow in a 32px row → now the `select` kind itself is the trigger (`.lui-select` border + built-in `::after` chevron), sized to cljs `!h-8 w-64`; and the scroll-region children are wrapped in one `column` (scroll kind stacks children in a single grid cell → breadcrumb overlapped the card text).
+- `cards_view.ml` — action buttons now mirror cljs `btn-with-shortcut`/`rating-btns`: outline `sm` variant with `!px-2 !py-1 bg-primary/5 hover:bg-primary/10 border-primary opacity-90 hover:opacity-100` + per-rating `primary-*` tint class, interior `row.gap-1` of `[text][kbd.shui-shortcut-key]`, `~tooltip` `flashcard/shortcut-tooltip` (`~label` is aria-only — verified in `lui_elements.js` → `AccessibilityLabel`). Bottom-pinning uses pure LUI layout, no CSS: `cards-main` is a `column` kind (was `box`/`display:block`, so `~grow` could never apply) and `card-cur` uses `~grow:1.` — cross-platform flex semantics (`lui-column` = `display:flex; flex-direction:column`), verified live: `#cards-modal` 188px→577px, actions at dialog bottom.
 
 ## Not covered
 
-- cljs master app was not launched this slice; master behavior is asserted from source (`pdf/*.cljs`, `fsrs.cljs`, `toolbar.cljs`, `assets.cljs`).
+- cljs master verified two ways: source (`pdf/*.cljs`, `fsrs.cljs`, `toolbar.cljs`, `assets.cljs`) + live captures of `app.logseq.com`'s cards modal (`master-10`, `master-11`) used to align the action-row position/styling.
 - Linked-references menu click-through (item renders; action unverified).
 - Cloze-style cards (`{{cloze}}`) render path not exercised end-to-end (phase machine mirrors cljs `:show-cloze`; no cloze card seeded).
 - No lui-layer changes needed — all fixes are deps/ui + repo-root css/html/postcss.
