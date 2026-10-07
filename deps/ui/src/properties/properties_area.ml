@@ -214,6 +214,7 @@ let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
   (match block_w with
    | W.Map _ ->
        let left = D.positioned_rows block_w "block-left" in
+       let right = D.positioned_rows block_w "block-right" in
        let below = D.positioned_rows block_w "block-below" in
        let display =
          Option.value ~default:W.Nil
@@ -221,7 +222,7 @@ let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
        in
        let rows, hidden = D.split_display display in
        publish
-         { S.empty_area_data with left; below; rows; hidden }
+         { S.empty_area_data with left; right; below; rows; hidden }
    | _ -> ());
   Js.Promise.resolve ()
 
@@ -301,6 +302,35 @@ let block_left_chips ~uuid : t =
                  d.left))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.left = b.left))
+      context parent
+  in
+  S.note_area_node ~key node;
+  node
+
+(* right chips: .positioned-properties.block-right inside
+   .ls-block-right (cljs block-positioned-properties :block-right —
+   e.g. the task priority pill) *)
+let block_right_chips ~uuid : t =
+ fun context parent ->
+  let key = block_key uuid in
+  let st = block_state context uuid in
+  let node =
+    (reactive
+       (fun (d : S.area_data) ->
+          if d.right = [] then
+            Logseq_dom.nothing
+          else
+            let ctx = block_ctx uuid key in
+            row ~gap:2 ~cross:`center
+              ~style_class:"positioned-properties block-right"
+              (List.map
+                 (fun r ->
+                   row ~gap:2 ~cross:`center
+                     ~style_class:"property-value-inner"
+                     [ V.view ctx r ])
+                 d.right))
+       (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
+       ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.right = b.right))
       context parent
   in
   S.note_area_node ~key node;

@@ -185,6 +185,7 @@ let toggle_hidden () =
    bidirectional groups {title, entities}. *)
 type area_data =
   { left : W.t list
+  ; right : W.t list
   ; below : W.t list
   ; rows : W.t list
   ; hidden : W.t list
@@ -193,8 +194,8 @@ type area_data =
   }
 
 let empty_area_data =
-  { left = []; below = []; rows = []; hidden = []; class_rows = []
-  ; bidi = [] }
+  { left = []; right = []; below = []; rows = []; hidden = []
+  ; class_rows = []; bidi = [] }
 
 (* one entry per surface key ("block:<uuid>", "page:<uuid>",
    "sb:<uuid>"): the data signal every mounted subtree reads, the
