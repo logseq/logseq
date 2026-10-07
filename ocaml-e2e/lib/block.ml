@@ -275,22 +275,61 @@ let focus_new_block env ~previous_editor_id ?expected () =
         if mounted then Js.Promise.resolve ()
         else
           (* a remote-tx remount can drop the freshly opened editor before
-             it ever mounts — retry the API open once *)
-          let rec open_editor attempt =
-            let* _ =
-              Api.ls_api_call env "editor.editBlock" [| Api.str uuid |]
-            in
-            Js.Promise.catch
-              (fun _ ->
-                 if attempt > 0 then open_editor (attempt - 1)
-                 else
-                   Js.Promise.reject
-                     (Failure
-                        ("editBlock never mounted #edit-block-" ^ uuid)))
-              (E2e_assert.is_visible_l ~timeout:15000.
-                 (Pw.q env ("#edit-block-" ^ uuid ^ ":focus")))
+             it ever mounts, or mount it without DOM focus. Prefer the
+             real path — click the block's own .block-content, which
+             opens its editor in place; editBlock only mounts an editor
+             for a row already rendered, so it is the fallback when the
+             row can't be clicked. Then wait for the mount itself and
+             refocus the element — callers dispatch keypresses to the
+             element, not *:focus. *)
+          let row_q =
+            Printf.sprintf ".ls-block[blockid=\"%s\"] .block-content" uuid
           in
-          open_editor 2
+          let wait_mounted () =
+            Pw.catch_timeout
+              (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+                 (E2e_assert.is_visible_l ~timeout:12000.
+                    (Pw.q env ("#edit-block-" ^ uuid))))
+              (fun () -> Js.Promise.resolve false)
+          in
+          let refocus () =
+            let* _ =
+              Pw.eval_js env
+                (Printf.sprintf
+                   "(() => { const t = \
+                    document.querySelector('#edit-block-%s'); if (t && \
+                    document.activeElement !== t) t.focus(); })()"
+                   uuid)
+            in
+            Js.Promise.resolve ()
+          in
+          let rec open_editor attempt =
+            let* clicked =
+              Js.Promise.catch
+                (fun _ -> Js.Promise.resolve false)
+                (Js.Promise.then_ (fun () -> Js.Promise.resolve true)
+                   (Pw.click_l (Pw.q env row_q)))
+            in
+            let* () =
+              if clicked then Js.Promise.resolve ()
+              else
+                let* _ =
+                  Js.Promise.catch
+                    (fun _ -> Js.Promise.resolve Js.null)
+                    (Api.ls_api_call env "editor.editBlock"
+                       [| Api.str uuid |])
+                in
+                Js.Promise.resolve ()
+            in
+            let* ok = wait_mounted () in
+            if ok then refocus ()
+            else if attempt > 0 then open_editor (attempt - 1)
+            else
+              Js.Promise.reject
+                (Failure
+                   ("editBlock never mounted #edit-block-" ^ uuid))
+          in
+          open_editor 3
       in
       Js.Promise.resolve uuid
 
