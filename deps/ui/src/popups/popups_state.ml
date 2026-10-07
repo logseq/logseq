@@ -777,7 +777,17 @@ let run_node_search t ac =
        Runtime.invoke3 "thread-api/search-blocks"
          (Wire.String (repo ()))
          (Wire.String ac.query)
-         (Cmdk_state.search_opts ~dev:false false 20)
+         (* cljs <get-matched-blocks passes :enable-snippet? false — the
+            page-ref menu renders no snippets and snippet() is the
+            expensive part of the FTS query *)
+         (Wire.Map
+            [ (Wire.kw "limit", Wire.Int 20)
+            ; (Wire.kw "search-limit", Wire.Int 100)
+            ; (Wire.kw "enable-snippet?", Wire.Bool false)
+            ; (Wire.kw "include-breadcrumb?", Wire.Bool true)
+            ; (Wire.kw "include-matched-count?", Wire.Bool true)
+            ; (Wire.kw "built-in?", Wire.Bool true)
+            ; (Wire.kw "dev?", Wire.Bool false) ])
      in
      let rows =
        match w with
@@ -800,9 +810,52 @@ let run_node_search t ac =
                 | _ -> false)
               rows
           in
+          (* cljs <get-matched-blocks: block-search rows go through a
+             client-side fuzzy re-rank (limit 50) and the unmatched
+             leftovers are appended rather than dropped. The loaded page
+             titles stand in for cljs's leftover source so a search index
+             that is still (re)building can't starve the menu, and nlp
+             date pages join the pool as they do in cljs nlp-pages?. *)
+          let matched_pages = List.mapi page_item_of_row pages
+          and matched_blocks = List.mapi page_item_of_row blocks in
+          let seen = Hashtbl.create 32 in
+          List.iter
+            (fun it -> Hashtbl.replace seen it.ai_label ())
+            matched_pages;
+          let leftover =
+            List.filter_map
+              (fun title ->
+                 if Hashtbl.mem seen title then None
+                 else Some (mk_item ~key:("page:" ^ title) ~label:title
+                              ~node:true ~node_icon:("file", true)
+                              (Emit ("[[" ^ title ^ "]]", 0))))
+              (Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50
+                 !(t.titles) a.query)
+          in
+          List.iter
+            (fun it -> Hashtbl.replace seen it.ai_label ()) leftover;
+          let nlp =
+            List.filter_map
+              (fun en ->
+                 let jt = Dates.journal_title_of (nlp_date_of en) in
+                 let label = U.t (nlp_i18n_key en) in
+                 if Hashtbl.mem seen jt || Hashtbl.mem seen label
+                 then None
+                 else
+                   Some
+                     (mk_item ~key:("nlp:" ^ en) ~node:true
+                        ~node_icon:("calendar", false) ~label
+                        ~icon:"calendar"
+                        (Emit ("[[" ^ jt ^ "]]", 0))))
+              (Fuzzy.fuzzy_search
+                 ~extract:(fun en ->
+                    en ^ " "
+                    ^ Dates.journal_title_of (nlp_date_of en))
+                 ~limit:10 nlp_en_names a.query)
+          in
           let matched =
-            take 20
-              (List.mapi page_item_of_row (pages @ blocks))
+            take 50
+              (matched_pages @ nlp @ leftover @ matched_blocks)
           in
           let items =
             match

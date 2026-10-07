@@ -212,7 +212,8 @@ let right_sidebar (ms : Model.t Signal.signal) =
 let left_sidebar (ms : Model.t Signal.signal) =
   reactive
     ~equal:(fun (a : Model.t) (b : Model.t) ->
-      a.left_sidebar_open = b.left_sidebar_open)
+      a.left_sidebar_open = b.left_sidebar_open
+      && a.left_sidebar_width = b.left_sidebar_width)
     (fun (m : Model.t) ->
       (* the subtree stays mounted while closed (web only CSS-hides it):
          contents signal subscriptions and drive checks see the same
@@ -226,7 +227,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
         [ row ~key:"ls-dock" ~grow:1. ~min_height:0
             ~style_class:"items-stretch"
             [ column ~key:"ls-inner" ~min_height:0
-                ~width:(if m.left_sidebar_open then 260 else 0)
+                ~width:(if m.left_sidebar_open then m.left_sidebar_width else 0)
                 (* web: --left-sidebar-bg-color = --lx-gray-02 (the
                    near-white mauve-02 tone, one step above the page);
                    gpui `muted` is the matching surface tone. *)

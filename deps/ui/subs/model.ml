@@ -224,6 +224,7 @@ type t =
   ; repos : string list
   ; theme_dark : bool
   ; left_sidebar_open : bool
+  ; left_sidebar_width : int (* cljs --ls-left-sidebar-width, px *)
   ; right_sidebar_open : bool
   ; editing_title : bool
   ; page_menu
@@ -275,6 +276,22 @@ let initial =
       (match Platform.local_storage_get "ls-left-sidebar-open?" with
        | Some "true" -> true
        | _ -> false)
+  ; left_sidebar_width =
+      (* cljs restores persisted :ls-left-sidebar-width into
+         --ls-left-sidebar-width on mount; default 246px *)
+      (match Platform.local_storage_get "ls-left-sidebar-width" with
+       | Some w0 ->
+           let w0 = String.trim w0 in
+           let n =
+             if String.length w0 > 2
+                && String.sub w0 (String.length w0 - 2) 2 = "px"
+             then String.sub w0 0 (String.length w0 - 2)
+             else w0
+           in
+           (match float_of_string_opt n with
+            | Some f -> int_of_float (Float.round f)
+            | None -> 246)
+       | None -> 246)
   ; right_sidebar_open = false
   ; editing_title = false
   ; page_menu = None
