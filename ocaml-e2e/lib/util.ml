@@ -159,20 +159,33 @@ let exit_edit env =
            else force_exit ()
        in
        let* () = force_exit () in
-       (* a remount can leave :editor/block state set with no editor DOM —
-          the read view then never renders (.extensions__code etc).
-          Clear a lingering editing state as well. *)
-       let* editing = Pw.eval_js env editing_uuid_js in
-       (match Js.Nullable.toOption editing with
-        | Some _ ->
-            let* _ =
-              Api.ls_api_call env "editor.exitEditingMode"
-                [| Api.bool false |]
-            in
-            Js.Promise.resolve ()
-        | None -> Js.Promise.resolve ())
+       Js.Promise.resolve ()
    | None -> Js.Promise.resolve ())
   |> Js.Promise.then_ (fun () ->
+         (* a remount can leave :editor/block state set with no editor
+            DOM at all (a code block's editor isn't .editor-wrapper
+            textarea, and a virtualized row can unmount entirely) — the
+            read view then never renders (.extensions__code etc). Clear
+            the lingering state even when get_editor saw nothing, and
+            keep clearing: a remount can re-set it right after a clear. *)
+         let deadline = Js.Date.now () +. 15000. in
+         let rec clear_state () =
+           let* e = Pw.eval_js env editing_uuid_js in
+           match Js.Nullable.toOption e with
+           | None -> Js.Promise.resolve ()
+           | Some _ ->
+               if Js.Date.now () > deadline then Js.Promise.resolve ()
+               else
+                 let* _ =
+                   Js.Promise.catch
+                     (fun _ -> Js.Promise.resolve Js.null)
+                     (Api.ls_api_call env "editor.exitEditingMode"
+                        [| Api.bool false |])
+                 in
+                 let* () = wait_timeout env 300. in
+                 clear_state ()
+         in
+         let* () = clear_state () in
          let* _ = E2e_assert.non_editor_mode env in
          Js.Promise.resolve ())
 
