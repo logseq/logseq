@@ -181,16 +181,25 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
 (* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
    carries .open/.closed; only renders contents while open *)
 let right_sidebar (ms : Model.t Signal.signal) =
-  (* #right-sidebar is read imperatively (sidebar_state
-     get_element_by_id) — the id rides ~accessibility_identifier,
-     .open/.closed the class_signal wrapper *)
-  Ui_parts.class_signal ms
+  reactive
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      a.right_sidebar_open = b.right_sidebar_open)
     (fun (m : Model.t) ->
-      "cp__right-sidebar h-screen "
-      ^ if m.right_sidebar_open then "open" else "closed")
-    (box ~key:"right-sidebar"
-       ~accessibility_identifier:"right-sidebar"
-       [ Right_sidebar_view.render ms ])
+      (* web sizes .cp__right-sidebar.open from a persisted resizer
+         width; on gpui that imperative path is a stub, so mirror the
+         left dock: keep mounted, collapse to zero width while closed *)
+      box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+        ~min_height:0
+        ~style_class:
+          ("cp__right-sidebar h-screen "
+           ^ if m.right_sidebar_open then "open" else "closed")
+        [ row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
+            ~width:(if m.right_sidebar_open then 320 else 0)
+            ~background:"muted"
+            ~style_class:"overflow-hidden shrink-0"
+            [ Right_sidebar_view.render ms ]
+        ])
+    ms
 
 (* left_sidebar.cljs:570 — on the web #left-sidebar.cp__sidebar-left-layout
    is an overlay layer (display:none until .is-open, absolute shade-mask +
