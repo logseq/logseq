@@ -231,10 +231,11 @@ let el_query_all (el : el) (sel : string) : Js.Json.t =
 let el_focus (el : el) : unit =
   doc_op "focus" (JObject ([ ("ref", el) ] @ shadow_field el))
 
-(* document.body — floating elements (menus/popups) mount at the top of
-   the tree so position:fixed lifts them into the window-level overlay
-   layer; #app-container is the topmost app element, the body analogue *)
-let document_body : el = JObject [ ("#ref", JString "app-container") ]
+(* document.body — the {#ref:-1} body marker resolves to Host_body in
+   host_ref_of, so floating elements (menus/popups) mount through
+   imperative-attach into the window-level overlay layer where their
+   position:fixed styles self-place them *)
+let document_body : el = JObject [ ("#ref", JNumber (-1.)) ]
 let window_inner_height : float = Host.inner_height ()
 
 let window_inner_width : float = Host.inner_width ()

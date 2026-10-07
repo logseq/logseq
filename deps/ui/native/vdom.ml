@@ -47,12 +47,22 @@ let vid_counter = ref 0
 let vrec_of_el (el : el) : vrec option =
   match el with
   | Js.Json.JObject kvs -> (
-      match List.assoc_opt "#new" kvs with
-      | Some v -> (
-          match Js.Json.decodeNumber v with
-          | Some n -> Hashtbl.find_opt vregs (int_of_float n)
-          | None -> None)
-      | None -> None)
+      (* a "#new" in a lui-node snapshot is a lui node id, not a vid —
+         vdom els minted by new_el only carry "#new"/"tag", so any
+         node-id/ref handle rules the payload out of the vdom registry *)
+      let hostish =
+        List.mem_assoc "node-id" kvs
+        || List.mem_assoc "#ref" kvs
+        || List.mem_assoc "ref-id" kvs
+      in
+      if hostish then None
+      else
+        match List.assoc_opt "#new" kvs with
+        | Some v -> (
+            match Js.Json.decodeNumber v with
+            | Some n -> Hashtbl.find_opt vregs (int_of_float n)
+            | None -> None)
+        | None -> None)
   | _ -> None
 
 let new_el (tag : string) : el =
@@ -124,7 +134,8 @@ let node_of_el (el : el) : int option =
           match el with
           | Js.Json.JObject kvs -> (
               match List.assoc_opt "#ref" kvs with
-              | Some (Js.Json.JNumber 0.) -> root_node ()
+              | Some (Js.Json.JNumber n) when n = 0. || n = -1. ->
+                  root_node ()
               | Some (Js.Json.JString id) -> node_of_dom_id id
               | _ -> (
                   match List.assoc_opt "ref-id" kvs with
@@ -267,7 +278,9 @@ let snapshot_of_vrec (v : vrec) : Js.Json.t =
     ; ("attrs", attrs_json_of v.v_attrs)
     ; ("text", Js.Json.JString v.v_text) ]
 
-let rec materialize_into rt parent_node (v : vrec) (index : int) =
+(* create the extension node for v with props + listeners; does not
+   insert it under a runtime parent *)
+let create_node rt (v : vrec) : unit =
   match v.v_node with
   | Some _ -> ()
   | None ->
@@ -306,7 +319,14 @@ let rec materialize_into rt parent_node (v : vrec) (index : int) =
                   (cur @ [ (n, fun _ -> ()) ]))
             [ "input"; "keydown"; "focus"; "blur" ];
         refresh_handler rt node
-      end;
+      end
+
+let rec materialize_into rt parent_node (v : vrec) (index : int) =
+  match v.v_node with
+  | Some _ -> ()
+  | None ->
+      create_node rt v;
+      let node = Option.get v.v_node in
       let clamped =
         min index (List.length (Lui_runtime.children rt parent_node))
       in
@@ -317,6 +337,35 @@ let rec materialize_into rt parent_node (v : vrec) (index : int) =
           | Some cv -> materialize_into rt node cv i
           | None -> ())
         v.v_children
+
+(* document/body-level appends ({#ref:0} document_element, {#ref:-1}
+   document.body) resolve to the root node — but root's child list is
+   reconcile-owned, so the next root render drops any imperatively
+   inserted child while its stale view keeps painting unhittable.
+   Orphan-materialize and mount through imperative-attach instead: the
+   window-level layer is outside the reconcile path, matching how
+   imperative els reach the body *)
+let materialize_floating rt (v : vrec) : unit =
+  match v.v_node with
+  | Some _ -> ()
+  | None ->
+      create_node rt v;
+      let node = Option.get v.v_node in
+      List.iteri
+        (fun i child ->
+          match vrec_of_el child with
+          | Some cv -> materialize_into rt node cv i
+          | None -> ())
+        v.v_children;
+      Host.dom_op "imperative-attach"
+        (Js.Json.stringify
+           (Js.Json.JObject
+              [ ("nodeId", Js.Json.JNumber (float_of_int node)) ]))
+
+let parent_is_root pnode =
+  match !app with
+  | Some app -> pnode = Lui_app.root_node app
+  | None -> false
 
 (* ---------- element ops ---------- *)
 
@@ -568,9 +617,11 @@ let insert_at_index parent_el child index =
       | Some pnode, Some rt -> (
           match vrec_of_el child with
           | Some cv ->
-              materialize_into rt pnode cv
-                (min index
-                   (List.length (Lui_runtime.children rt pnode)))
+              if parent_is_root pnode then materialize_floating rt cv
+              else
+                materialize_into rt pnode cv
+                  (min index
+                     (List.length (Lui_runtime.children rt pnode)))
           | None -> ())
       | _ -> ())
 
@@ -589,8 +640,10 @@ let append_child parent_el child =
       | None -> (
           match node_of_el parent_el, rt () with
           | Some pnode, Some rt ->
-              materialize_into rt pnode cv
-                (List.length (Lui_runtime.children rt pnode))
+              if parent_is_root pnode then materialize_floating rt cv
+              else
+                materialize_into rt pnode cv
+                  (List.length (Lui_runtime.children rt pnode))
           | _ -> ()))
   | None -> ()
 

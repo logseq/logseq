@@ -183,7 +183,8 @@ let item_btn (p : picker) (it : item) : E.el =
   match it with
   | Emoji_item (id, name) ->
       let b =
-        D.mk ~cls:"ls-emoji-preview"
+        D.mk
+          ~cls:"ls-emoji-preview size-8 flex items-center justify-center"
           ~attrs:[ ("title", name); ("tabindex", "0") ]
           "button"
       in
@@ -192,7 +193,8 @@ let item_btn (p : picker) (it : item) : E.el =
       b
   | Tabler_item (display, kebab) ->
       let b =
-        D.mk ~cls:"ls-emoji-cell"
+        D.mk
+          ~cls:"ls-emoji-cell size-8 flex items-center justify-center"
           ~attrs:[ ("title", icon_id display); ("tabindex", "0") ]
           "button"
       in
@@ -240,13 +242,13 @@ let pane_section ?(virtual_list = false) ?(searching = false) label
     let wrap = D.mk  "div" in
     List.iter
       (fun row ->
-        let r = D.mk ~cls:"its icons-row" "div" in
+        let r = D.mk ~cls:"its icons-row flex flex-row" "div" in
         List.iter (fun b -> D.el_append_child r b) row;
         D.el_append_child wrap r)
       (chunks 9 items);
     D.el_append_child sec wrap)
   else (
-    let its = D.mk ~cls:"its" "div" in
+    let its = D.mk ~cls:"its flex flex-row" "div" in
     List.iter (fun b -> D.el_append_child its b) items;
     D.el_append_child sec its);
   sec
@@ -455,7 +457,7 @@ let presets_popover (p : picker) (anchor_btn : E.el) : E.el =
 (* ---------- view ---------- *)
 
 let view (p : picker) : E.el =
-  let root = D.mk ~cls:"cp__emoji-icon-picker" "div" in
+  let root = D.mk ~cls:"cp__emoji-icon-picker w-80" "div" in
   D.el_set_attr root "data-keep-selection" "true";
   D.el_listen root "keydown"
     (fun ev ->
@@ -464,7 +466,7 @@ let view (p : picker) : E.el =
       | _ -> ())
     true;
   let hd = D.mk ~cls:"hd" "div" in
-  let si = D.mk ~cls:"search-input" "div" in
+  let si = D.mk ~cls:"search-input flex flex-row items-center gap-2" "div" in
   D.el_append_child si (icon_el ~size:16. ("tabler-icon", "search"));
   let input =
     D.mk ~cls:ui_input_cls
@@ -500,11 +502,11 @@ let view (p : picker) : E.el =
   D.el_append_child hd si;
   D.el_append_child root hd;
   let bd = D.mk ~cls:("bd " ^ tab_name p.tab) "div" in
-  let pane = D.mk ~cls:"content-pane" "div" in
+  let pane = D.mk ~cls:"content-pane overflow-y-auto max-h-80" "div" in
   D.el_append_child bd pane;
   D.el_append_child root bd;
-  let ft = D.mk ~cls:"ft" "div" in
-  let tabs_row = D.mk ~cls:"ls-ep-tabs" "div" in
+  let ft = D.mk ~cls:"ft flex flex-row items-center gap-1" "div" in
+  let tabs_row = D.mk ~cls:"ls-ep-tabs flex flex-row gap-1" "div" in
   List.iter
     (fun (t, label) ->
       let b =

@@ -256,9 +256,19 @@ let ac_attached () =
   | None -> false
 
 let set t v = Runtime.signal_set t.vs v
-let set_ac t ac = set t { (get t) with ac }
-let set_cm t cm = set t { (get t) with cm }
-let set_pv t pv = set t { (get t) with pv }
+
+(* field writes must compose onto the staged value: Signal.set stages a
+   whole-record pending value, so a setter built from `get` (the last
+   published view) would clobber another field's pending write queued in
+   the same flush — e.g. close_ac/close_cm/close_pv in the outside-click
+   handler would leave the menu open forever *)
+let update t f =
+  Signal.update t.vs f;
+  Runtime.flush ()
+
+let set_ac t ac = update t (fun v -> { v with ac })
+let set_cm t cm = update t (fun v -> { v with cm })
+let set_pv t pv = update t (fun v -> { v with pv })
 let close_ac t = set_ac t None
 let close_cm t = set_cm t None
 let close_pv t = set_pv t None

@@ -162,9 +162,14 @@ let query_in_roots (roots : el list) (sel : string) : el list =
   lui_hits @ shadow_query scope sel
 
 let query_selector (sel : string) : el option =
-  match query_in_roots [ document_element ] sel with
-  | h :: _ -> Some h
-  | [] -> None
+  (* no BODY element exists in the LUI tree — body queries get the
+     document marker so body-level appends resolve to the floating
+     imperative layer (host_ref_of → Host_body → imperative-attach) *)
+  if sel = "body" then Some document_element
+  else
+    match query_in_roots [ document_element ] sel with
+    | h :: _ -> Some h
+    | [] -> None
 
 let query_selector_all (sel : string) : node_list =
   Js.Json.JArray (Array.of_list (query_in_roots [ document_element ] sel))
@@ -290,16 +295,24 @@ let el_get_attr (el : el) (name : string) : string option =
               match List.assoc_opt ("attr-" ^ name) kvs with
               | Some v -> Js.Json.decodeString v
               | None -> (
-                  match List.assoc_opt "attrs" kvs with
-                  | Some (Js.Json.JObject attrs) ->
-                      Option.bind (List.assoc_opt name attrs)
-                        Js.Json.decodeString
-                  | _ -> (
-                      (* snapshots carry the DOM class under "class", not
-                         attrs *)
+                  let from_attrs =
+                    match List.assoc_opt "attrs" kvs with
+                    | Some (Js.Json.JObject attrs) ->
+                        Option.bind (List.assoc_opt name attrs)
+                          Js.Json.decodeString
+                    | _ -> None
+                  in
+                  match from_attrs with
+                  | Some _ -> from_attrs
+                  | None -> (
+                      (* snapshots carry the DOM class/id as top-level
+                         "class"/"id" fields, not inside attrs *)
                       match name with
                       | "class" ->
                           Option.bind (List.assoc_opt "class" kvs)
+                            Js.Json.decodeString
+                      | "id" ->
+                          Option.bind (List.assoc_opt "id" kvs)
                             Js.Json.decodeString
                       | _ -> None)))
           | _ -> None)))

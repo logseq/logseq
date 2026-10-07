@@ -83,41 +83,55 @@ let alloc () =
 let get id = Hashtbl.find_opt nodes id
 
 let id_of (el : el) : int option =
+  (* imperative payloads always carry a "#ref"/"ref-id" handle;
+     Vdom's {"#new": vid} shells don't — the two registries mint from
+     the same int space, so without this check a vdom shell would
+     decode as (or collide with) an imperative id *)
+  let imperative_of_new kvs =
+    match
+      ( List.assoc_opt "#new" kvs
+      , List.mem_assoc "#ref" kvs || List.mem_assoc "ref-id" kvs )
+    with
+    | Some v, true -> (
+        match decodeNumber v with
+        | Some f ->
+            let id = int_of_float f in
+            if Hashtbl.mem nodes id then Some id else None
+        | None -> None)
+    | _ -> None
+  in
   match el with
   | JObject kvs -> (
-      (* imperative payloads always carry a "#ref"/"ref-id" handle;
-         Vdom's {"#new": vid} shells don't — the two registries mint from
-         the same int space, so without this check a vdom shell would
-         decode as (or collide with) an imperative id *)
-      let imperative =
-        match
-          ( List.assoc_opt "#new" kvs
-          , List.mem_assoc "#ref" kvs || List.mem_assoc "ref-id" kvs )
-        with
-        | Some v, true -> (
-            match decodeNumber v with
-            | Some f ->
-                let id = int_of_float f in
-                (* host-emitted target snapshots carry "#new"/"#ref" as
-                   element handles (lui node id + dom id), not imperative
-                   ids — only a registered imperative element counts,
-                   otherwise the snapshot's own ancestor chain is the
-                   authoritative walk for closest() *)
-                if Hashtbl.mem nodes id then Some id else None
-            | None -> None)
-        | _ -> None
-      in
-      (match imperative with
-       | Some _ -> imperative
-       | None -> (
-           (* snapshot payload of a materialized imperative extension node —
-              resolve it back through the lui-node index *)
-           match List.assoc_opt "node-id" kvs with
-           | Some v -> (
-               match decodeNumber v with
-               | Some nid -> Hashtbl.find_opt lui_index (int_of_float nid)
-               | None -> None)
-           | None -> None)))
+      match List.assoc_opt "node-id" kvs with
+      | Some v -> (
+          match decodeNumber v with
+          | Some nid when nid <> 0. -> (
+              (* any snapshot carrying a nonzero "node-id" is a lui-node
+                 snapshot — "#new" then holds a lui node id, which shares
+                 the int space with imperative ids only by accident.
+                 the lui-node index is the authoritative reverse map *)
+              match Hashtbl.find_opt lui_index (int_of_float nid) with
+              | Some _ as r -> r
+              | None -> (
+                  (* imperative-side payloads carry "#new" = s_id and
+                     "node-id" = s_lui — accept a "#new" hit only when
+                     the node's own s_lui agrees, else a host snapshot
+                     would collide with a registered imperative seq id *)
+                  match imperative_of_new kvs with
+                  | Some id -> (
+                      match get id with
+                      | Some n when n.s_lui = int_of_float nid -> Some id
+                      | _ -> None)
+                  | None -> None))
+          | _ ->
+              (* imperative-side payloads (flat_snapshot) emit
+                 "node-id": 0 for unmaterialized elements — fall back to
+                 the registered "#new" seq id *)
+              imperative_of_new kvs)
+      | None ->
+          (* payloads without "node-id" (vdom shells, imperative-side
+             snapshots) still resolve through "#new" *)
+          imperative_of_new kvs)
   | _ -> None
 
 (* ---------- attr helpers ---------- *)

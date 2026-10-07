@@ -1162,7 +1162,7 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
 ;;
 
 let cm_hover st el =
-  match Web_dom.el_closest el "[id^='cm-sub-']" with
+  (match Web_dom.el_closest el "[id^='cm-sub-']" with
   | Some trg -> (
       match Web_dom.el_get_attr trg "id" with
       | Some s -> (
@@ -1180,7 +1180,7 @@ let cm_hover st el =
                   S.open_cm_sub st ~index:idx ~x:0. ~y:0.;
                   open_cm_picker st pk trg cm
               | None -> ())
-          | _ -> ())
+          | Some _, _ | None, _ -> ())
       | None -> ())
   | None ->
       (* hovering a regular item inside the menu closes the open submenu *)
@@ -1188,7 +1188,7 @@ let cm_hover st el =
          && Web_dom.el_closest el ".ls-context-menu-content" <> None
          && Web_dom.el_closest el ".ui__dropdown-menu-sub-content" = None then (
         S.close_cm_sub st;
-        close_cm_picker ())
+        close_cm_picker ()))
 ;;
 
 let handle_mousemove st (ev : Web_dom.ev) =

@@ -84,9 +84,17 @@ let el_attr (el : element) (name : string) : string option =
   | Some verdict -> verdict
   | None -> (
       match prop "attrs" el with
-      | Js.Json.JObject kvs ->
-          Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
-      | _ -> str_prop ("attr-" ^ name) el)
+      | Js.Json.JObject kvs -> (
+          match
+            Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
+          with
+          | Some _ as v -> v
+          | None ->
+              if name = "id" then str_prop "id" el
+              else str_prop ("attr-" ^ name) el)
+      | _ ->
+          if name = "id" then str_prop "id" el
+          else str_prop ("attr-" ^ name) el)
 
 (* the snapshot "class" prop mirrors style-class; elements that declare
    their class inside attrs keep it there instead — DOM semantics treat
@@ -108,11 +116,13 @@ let class_list (el : element) : string list =
 let has_attr (el : element) (name : string) : bool =
   el_attr el name <> None || (name = "class" && class_list el <> [])
 
+type attr_op = Aeq | Aprefix | Asuffix | Acontains | Apresent
+
 type compound =
   { c_tag : string option
   ; c_classes : string list
   ; c_id : string option
-  ; c_attrs : (string * string option) list
+  ; c_attrs : (string * attr_op * string) list
   ; c_nots : compound list }
 
 (* parse one compound selector: [tag][.cls]*[#id]*[[attr[=v]]]*[:not(inner)]* *)
@@ -161,16 +171,33 @@ let rec parse_compound (s : string) : compound =
           go j tag classes (Some name) attrs nots
       | '[' ->
           let inner, j = take_bracket i '[' ']' in
-          let name, value =
+          let name, op, value =
             match String.index_opt inner '=' with
             | Some eq ->
-                ( String.sub inner 0 eq
-                , Some
-                    (String.sub inner (eq + 1)
-                       (String.length inner - eq - 1)) )
-            | None -> (inner, None)
+                let op_suffix, name_len =
+                  if eq > 0 then
+                    match inner.[eq - 1] with
+                    | '^' -> (Aprefix, eq - 1)
+                    | '$' -> (Asuffix, eq - 1)
+                    | '*' -> (Acontains, eq - 1)
+                    | _ -> (Aeq, eq)
+                  else (Aeq, eq)
+                in
+                let raw =
+                  String.sub inner (eq + 1) (String.length inner - eq - 1)
+                in
+                let rlen = String.length raw in
+                let unquoted =
+                  if rlen >= 2
+                     && (raw.[0] = '\'' || raw.[0] = '"')
+                     && raw.[rlen - 1] = raw.[0]
+                  then String.sub raw 1 (rlen - 2)
+                  else raw
+                in
+                (String.sub inner 0 name_len, op_suffix, unquoted)
+            | None -> (inner, Apresent, "")
           in
-          go j tag classes id ((name, value) :: attrs) nots
+          go j tag classes id ((name, op, value) :: attrs) nots
       | ':'
         when i + 4 < len && String.sub s i 4 = ":not"
              && s.[i + 4] = '(' ->
@@ -196,10 +223,19 @@ let rec match_compound (el : element) (c : compound) : bool =
       | Some i -> String.equal i (el_id_attr el)
       | None -> true)
   && List.for_all
-       (fun (name, value) ->
-         match value with
-         | Some v -> el_attr el name = Some v
-         | None -> has_attr el name)
+       (fun (name, op, value) ->
+         match op with
+         | Apresent -> has_attr el name
+         | _ -> (
+             match el_attr el name with
+             | Some actual -> (
+                 match op with
+                 | Aeq -> String.equal actual value
+                 | Aprefix -> String.starts_with ~prefix:value actual
+                 | Asuffix -> String.ends_with ~suffix:value actual
+                 | Acontains -> Str_util.contains actual value
+                 | Apresent -> true)
+             | None -> false))
        c.c_attrs
   && List.for_all (fun n -> not (match_compound el n)) c.c_nots
 
