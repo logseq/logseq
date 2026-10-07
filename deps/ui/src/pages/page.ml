@@ -381,7 +381,8 @@ let title_content (page : Model.page) : t =
      data-type are non-data-* attrs — needs a pointer_detail extension
      (target element identity + interactive hit) and block attrs on the
      block extension *)
-  dom ~key:"pt-content" ~style_class:"block-content inline !cursor-pointer"
+  Logseq_el.el ~key:"pt-content"
+    ~style_class:"block-content inline !cursor-pointer"
     ~id:("block-content-" ^ uuid) ~events:(String.concat " " events)
     ?on_dom_event:on_event
     ~attrs:
@@ -464,13 +465,13 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
              block attr contract (blockid/containerid/data-… attrs) and
              a dynamic selected class — migrates with the block
              extension *)
-          dom ~key:"pt-block"
-            ~style_class_signal:
-              (Logseq_el.class_signal (S.selected_sig ()) (fun selected ->
-                   if S.String_set.mem uuid selected then
-                     "selected ls-block"
-                   else "ls-block"))            ~id:("ls-block-" ^ uuid)
-            ~attrs:
+          Ui_parts.class_signal (S.selected_sig ())
+            (fun selected ->
+              if S.String_set.mem uuid selected then "selected ls-block"
+              else "ls-block")
+            (column ~key:"pt-block"
+               ~accessibility_identifier:("ls-block-" ^ uuid)
+               ~data_attrs:
               [ ("data-blockid", uuid); ("data-containerid", uuid)
               ; ("data-block-title", page.page_title)
               ; ("data-haschild", "false")
@@ -581,7 +582,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
         ; (* cljs db-properties-cp: the page properties area sits
              inside the title's .ls-block, after .block-main-container *)
           Properties_area.page_area page
-        ]
+        ])
       ]
     ; (* cljs plugin slot extension point after the title block *)
       row ~key:"pt-slot"
@@ -600,7 +601,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
      target_class but not the interactive hit, so title-edit would
      fire on action-button clicks too. Needs a pointer_detail
      extension (target identity + interactive flag) *)
-  dom ~key:"page-title"
+  Logseq_el.el ~key:"page-title"
     ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
     ~attrs:[ ("data-testid", "page title") ]
     ~events:"click contextmenu"
@@ -648,24 +649,23 @@ let add_button_el ?puuid
   let fs = flags context in
   (* TODO(component): the doc-level click listener matches closest
      ".block-add-button" and reads parentblockid — imperative contract *)
-  (dom ~key:"bab"
-     ~style_class_signal:
-       (Logseq_el.class_signal fs (fun (has, indented) ->
-            "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
-            ^ (if has then "opacity-0" else "opacity-50")
-            ^ (if indented then " ls-block-content-indent" else "")))
-     ~attrs:
-       (("tabindex", "0")
-        :: (match puuid with
-            | Some u -> [ ("data-parentblockid", u) ]
-            | None -> []))
-     ~events:"click"
+  (Ui_parts.class_signal fs
+     (fun (has, indented) ->
+       "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
+       ^ (if has then "opacity-0" else "opacity-50")
+       ^ (if indented then " ls-block-content-indent" else ""))
+     (column ~key:"bab"
+        ~data_attrs:
+          (("tabindex", "0")
+           :: (match puuid with
+               | Some u -> [ ("data-parentblockid", u) ]
+               | None -> []))
      [ row ~key:"bab-row"
          [ row ~key:"bab-inner" ~cross:`center ~height:28
              ~style_class:"bab-inner"
              [ box ~key:"bab-bc" ~style_class:"bullet-container"
                  [ box ~key:"bab-b" ~style_class:"bullet" [] ]
-             ] ] ])
+             ] ] ]))
     context parent
 
 let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
@@ -717,8 +717,8 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
       [ (* TODO(component): containerid is outside the data-* attribute
            vocabulary — stays a dom attr until the block-container
            contract moves *)
-        dom ~key:"blc" ~style_class:"flex-1"
-          ~attrs:
+        box ~key:"blc" ~style_class:"flex-1"
+          ~data_attrs:
             (match puuid with
              | Some u -> [ ("data-containerid", u) ]
              | None -> [])
@@ -1472,8 +1472,8 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
         [ (* TODO(component): containerid is outside the data-*
              attribute vocabulary — stays a dom attr until the
              block-container contract moves *)
-          dom ~key:"blc" ~style_class:"flex-1"
-            ~attrs:
+          box ~key:"blc" ~style_class:"flex-1"
+            ~data_attrs:
               (match puuid with
                | Some u -> [ ("data-containerid", u) ]
                | None -> [])

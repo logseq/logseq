@@ -138,6 +138,7 @@ let mount ?(units = M.Bytes) source =
   in
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_el.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
   Logseq_virt.register registry;
