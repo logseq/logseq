@@ -511,15 +511,14 @@ let add_new_object inst =
       let uuid = Platform.random_uuid () in
       Db.insert_object_block ~uuid ~page_uuid:owner_uuid ~title:""
         ~tags:[ owner_uuid ] ~props:[] (fun _ ->
-          let detail = Js.Dict.empty () in
-          Js.Dict.set detail "uuid" (Js.Json.string uuid);
-          E.dispatch_custom "ls:open-right-sidebar"
-            (Js.Json.object_ detail);
+          (* cljs edit-block! on the new page-child: the object mounts in
+             the owner page's block tree and edits in place there — the
+             right sidebar stays closed *)
           let rec try_edit n =
             if n <= 0 then ()
             else
               match E.get_element_by_id ("ls-block-" ^ uuid) with
-              | Some _ -> Editor_actions.enter_edit ~scope:"sidebar" uuid 0
+              | Some _ -> Editor_actions.enter_edit uuid 0
               | None -> E.set_timeout (fun () -> try_edit (n - 1)) 100
           in
           try_edit 20)

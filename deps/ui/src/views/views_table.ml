@@ -1337,15 +1337,9 @@ let body_el inst (s : V.vstate) ~(filters : t) : t =
          text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground"
            []
        else
-         D.fragment
-           [ (match s.V.display_type with
-              | "list" -> render_list inst s
-              | "gallery" -> render_gallery inst s
-              | _ -> render_table inst s)
-           ; (match s.V.data with
-              | Wr.VFlat { rows = []; _ } ->
-                  text ~value:I.no_matched_result ~padding:8
-                    ~foreground:"muted-foreground" []
-              | _ -> spacer ~key:"no-empty-notice" [])
-           ])
+         (* master renders no empty-state copy under an empty table *)
+         (match s.V.display_type with
+          | "list" -> render_list inst s
+          | "gallery" -> render_gallery inst s
+          | _ -> render_table inst s))
     ]
