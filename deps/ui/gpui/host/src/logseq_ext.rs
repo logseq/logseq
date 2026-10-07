@@ -27,12 +27,12 @@ use lui_gpui::node_view::{LuiNodeView, NodeSnapshot};
 use lui_gpui::Shared;
 
 /// Bundled tabler children table (`icon-name -> [[tag, attrs], ...]`),
-/// the same payload the SwiftUI host and OCaml `icon_tabler_data`
+/// the same payload OCaml `icon_tabler_data`
 /// consume. Resolves `app:` icon names the gpui-kit built-in set
 /// doesn't cover.
 static TABLER: LazyLock<serde_json::Value> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../apple/Sources/Logseq/Resources/tabler-children.json"
+        "../../../assets/tabler-children.json"
     ))
     .unwrap_or(serde_json::Value::Null)
 });

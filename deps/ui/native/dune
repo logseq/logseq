@@ -1,156 +1,3 @@
-; GPUI native host build — same module set as native/. The shared
-; ../src + ../subs copies and the generated-table rules below are
-; identical to native/dune; the native/*.ml files (the native platform
-; twin: platform.ml, vdom.ml, logseq_dom.ml, bridge, …) are copied
-; from ../native so the two hosts can never drift. Only the library
-; name differs; host selection is the host_code the Rust host passes
-; to lui_ocaml_start (6 = GPUIHost).
-
-(rule
- (copy ../native/asset_dom.ml asset_dom.ml))
-(rule
- (copy ../native/asset_store.ml asset_store.ml))
-(rule
- (copy ../native/block_dnd.ml block_dnd.ml))
-(rule
- (copy ../native/browser_ui.ml browser_ui.ml))
-(rule
- (copy ../native/chrome.ml chrome.ml))
-(rule
- (copy ../native/cmdk_state.ml cmdk_state.ml))
-(rule
- (copy ../native/cmdk_view.ml cmdk_view.ml))
-(rule
- (copy ../native/code_mirror.ml code_mirror.ml))
-(rule
- (copy ../native/comments.ml comments.ml))
-(rule
- (copy ../native/daemon_client.ml daemon_client.ml))
-(rule
- (copy ../native/dates.ml dates.ml))
-(rule
- (copy ../native/dnd_kit.ml dnd_kit.ml))
-(rule
- (copy ../native/dom_ext.ml dom_ext.ml))
-(rule
- (copy ../native/editor_cmds.ml editor_cmds.ml))
-(rule
- (copy ../native/editor_dom.ml editor_dom.ml))
-(rule
- (copy ../native/emoji_mart.ml emoji_mart.ml))
-(rule
- (copy ../native/export_page.ml export_page.ml))
-(rule
- (copy ../native/fetch.ml fetch.ml))
-(rule
- (copy ../native/fuzzy.ml fuzzy.ml))
-(rule
- (copy ../native/host.ml host.ml))
-(rule
- (copy ../native/html_to_md.ml html_to_md.ml))
-(rule
- (copy ../native/icon_picker.ml icon_picker.ml))
-(rule
- (copy ../native/icon_picker_names.ml icon_picker_names.ml))
-(rule
- (copy ../native/icon_tabler_data.ml icon_tabler_data.ml))
-(rule
- (copy ../native/icons.ml icons.ml))
-(rule
- (copy ../native/imperative_dom.ml imperative_dom.ml))
-(rule
- (copy ../native/js.ml js.ml))
-(rule
- (copy ../native/lazy_children.ml lazy_children.ml))
-(rule
- (copy ../native/logseq_dom.ml logseq_dom.ml))
-(rule
- (copy ../native/logseq_codemirror.ml logseq_codemirror.ml))
-(rule
- (copy ../native/logseq_editor.ml logseq_editor.ml))
-(rule
- (copy ../native/logseq_emoji.ml logseq_emoji.ml))
-(rule
- (copy ../native/logseq_katex.ml logseq_katex.ml))
-(rule
- (copy ../native/logseq_virt.ml logseq_virt.ml))
-(rule
- (copy ../native/menu_bar.ml menu_bar.ml))
-(rule
- (copy ../native/native_embed.ml native_embed.ml))
-(rule
- (copy ../native/page_menu.ml page_menu.ml))
-(rule
- (copy ../native/pdf.ml pdf.ml))
-(rule
- (copy ../native/pdf_annotation.ml pdf_annotation.ml))
-(rule
- (copy ../native/pdf_assets.ml pdf_assets.ml))
-(rule
- (copy ../native/pdf_hls.ml pdf_hls.ml))
-(rule
- (copy ../native/pdf_toolbar.ml pdf_toolbar.ml))
-(rule
- (copy ../native/pdf_utils.ml pdf_utils.ml))
-(rule
- (copy ../native/platform.ml platform.ml))
-(rule
- (copy ../native/plugin_host.ml plugin_host.ml))
-(rule
- (copy ../native/plugin_readme.ml plugin_readme.ml))
-(rule
- (copy ../native/plugins_view.ml plugins_view.ml))
-(rule
- (copy ../native/properties_data.ml properties_data.ml))
-(rule
- (copy ../native/properties_dom.ml properties_dom.ml))
-(rule
- (copy ../native/properties_value.ml properties_value.ml))
-(rule
- (copy ../native/render_libs.ml render_libs.ml))
-(rule
- (copy ../native/sdk_convert.ml sdk_convert.ml))
-(rule
- (copy ../native/sdk_util.ml sdk_util.ml))
-(rule
- (copy ../native/sdk_write.ml sdk_write.ml))
-(rule
- (copy ../native/settings_page.ml settings_page.ml))
-(rule
- (copy ../native/sidebar_state.ml sidebar_state.ml))
-(rule
- (copy ../native/sprintf.ml sprintf.ml))
-(rule
- (copy ../native/transit.ml transit.ml))
-(rule
- (copy ../native/vdom.ml vdom.ml))
-(rule
- (copy ../native/version.ml version.ml))
-(rule
- (copy ../native/views_dom.ml views_dom.ml))
-(rule
- (copy ../native/views_popup.ml views_popup.ml))
-(rule
- (copy ../native/views_query.ml views_query.ml))
-(rule
- (copy ../native/views_table.ml views_table.ml))
-(rule
- (copy ../native/views_virt.ml views_virt.ml))
-(rule
- (copy ../native/virt_list.ml virt_list.ml))
-(rule
- (copy ../native/virtual_scroll.ml virtual_scroll.ml))
-(rule
- (copy ../native/virtualizer.ml virtualizer.ml))
-(rule
- (copy ../native/web_dom.ml web_dom.ml))
-(rule
- (copy ../native/webapi.ml webapi.ml))
-(rule
- (copy ../native/worker_client.ml worker_client.ml))
-(rule
- (copy ../native/logseq_lui_bridge.c logseq_lui_bridge.c))
-
 ; Generate native/dicts_gen.ml from the shared cljs dicts — same shape as
 ; the src/ rule; the dicts dir lives outside this dune-project
 ; (../../src/resources/dicts), so it can't be a tracked dep — run
@@ -401,9 +248,9 @@
  (copy ../src/views/views_wire.ml views_wire.ml))
 
 (library
- (name logseq_ui_gpui)
+ (name logseq_ui_native)
  (wrapped false)
- (modules (:standard \ native_embed drive drive_test test_check fake_worker))
+ (modules (:standard \ native_embed))
  (modes native)
  (libraries
    lui
@@ -424,35 +271,8 @@
 (executable
  (name native_embed)
  (modules native_embed)
- (libraries logseq_ui_gpui)
+ (libraries logseq_ui_native)
  (foreign_stubs
   (language c)
   (names logseq_lui_bridge))
  (modes (native object)))
-
-; native drive tests — the same replay+dispatch harness and check/promise
-; helpers test/test_drive.ml uses under melange, run against the native
-; platform twin. drive_test.ml is the native-only driver (document keydown
-; via Platform.emit_event, localStorage via Platform.local_storage_get,
-; rtc-test via Platform.set_location_search).
-(rule
- (copy ../test/drive.ml drive.ml))
-(rule
- (copy ../test/test_check.ml test_check.ml))
-(rule
- (copy ../test/fake_worker.ml fake_worker.ml))
-
-; the bridge's js-name C stubs (atob, require, loadDictFile, …) under a
-; distinct object name — a dir can't hold two foreign_stubs groups that
-; compile the same .c
-(rule
- (copy ../native/logseq_lui_bridge.c drive_test_bridge.c))
-
-(test
- (name drive_test)
- (modules drive_test drive test_check fake_worker)
- (libraries logseq_ui_gpui)
- (foreign_stubs
-  (language c)
-  (names drive_test_bridge))
- (modes native))

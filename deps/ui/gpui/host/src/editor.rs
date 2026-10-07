@@ -1,7 +1,7 @@
 //! `logseq-editor` conduit — the gpui host half of the shared-OCaml
 //! editor surface (deps/ui/docs/editor-surface-extension.md).
 //!
-//! The OCaml twin (`gpui/logseq_editor.ml`, copied from `apple/`) emits a
+//! The OCaml twin (`gpui/logseq_editor.ml`, copied from `native/`) emits a
 //! `logseq-editor` extension node whose `runs` prop zips in document
 //! order against the `.ed-r` text runs rendered inside the enclosing
 //! `.block-editor` column. This module supplies the platform half:

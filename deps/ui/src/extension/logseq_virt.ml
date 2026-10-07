@@ -24,7 +24,7 @@
    MutationObserver measure path) and the IntersectionObserver row
    visibility contract live here because they are behaviors of the
    scroll boundary itself, not of any single view site. Native hosts
-   keep their own twins (apple/) and ignore this file's adapter. *)
+   keep their own twins (native/) and ignore this file's adapter. *)
 
 open Lui_protocol
 open Lui_web_types

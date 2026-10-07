@@ -6,7 +6,7 @@
    centered card inside .cp__overlays (every platform presents it
    natively; anchored popover positioning belongs to the imperative
    popup layer which this module no longer uses — recorded in
-   apple/NOTES.md).
+   the native twin).
 
    Phases (cljs property.cljs property-input):
    1. property select — text field + property list ("New option:"

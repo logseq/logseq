@@ -4,7 +4,7 @@
    hidden .opacity-0 tex child (a logseq-span); the render_libs doc-scan
    lazy-loads katex + mhchem and calls katex.render into the slot.
    Native hosts emit the same generic logseq-<tag> shape as before (the
-   apple twin does not register this schema).
+   native twin does not register this schema).
 
    Props:
      tex     — raw latex source (required)

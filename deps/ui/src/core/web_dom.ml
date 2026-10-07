@@ -82,7 +82,7 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector : string -> el option = "querySelector"
   [@@mel.scope "document"] [@@mel.return nullable]
 
-(* the apple twin names the document-scoped query doc_query *)
+(* the native twin names the document-scoped query doc_query *)
 let doc_query = query_selector
 
 external query_selector_all : string -> node_list = "querySelectorAll"
@@ -94,7 +94,7 @@ external query_selector_all_arr : string -> el array = "querySelectorAll"
 external active_element_dom : el option = "document.activeElement"
   [@@mel.return nullable]
 
-(* function form — the apple twin re-queries the focused node on every
+(* function form — the native twin re-queries the focused node on every
    call, so shared call sites take `active_element ()` rather than a
    value that would be captured once *)
 let active_element () = active_element_dom

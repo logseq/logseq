@@ -111,7 +111,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
 
 (* Signal-driven row stream: feeds the items signal into [list]'s
    data_sig splice path so a delta republishes only the touched rows
-   instead of remounting the whole list — mirrors the apple twin's
+   instead of remounting the whole list — mirrors the native twin's
    keyed rows_sig. *)
 let rows_sig ~key ~cmp:_ ~mount ?(on_end = fun () -> ())
     ?(initial_rows = -1) ~estimate_size
