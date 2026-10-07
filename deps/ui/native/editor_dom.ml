@@ -324,6 +324,13 @@ let el_set_attr (el : el) (name : string) (v : string) : unit =
           @ Imperative_dom.shadow_field el)))
   end
 
+let el_remove (el : el) : unit =
+  match Imperative_dom.id_of el with
+  | Some id -> Imperative_dom.remove id
+  | None ->
+      Host.dom_op "remove"
+        (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
+
 let el_remove_attr (el : el) (name : string) : unit =
   if is_vdom_el el then Vdom.remove_attr el name
   else begin
