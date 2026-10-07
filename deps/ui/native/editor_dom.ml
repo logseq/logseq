@@ -204,6 +204,11 @@ let prevent_default (ev : ev) : unit =
   | Some d -> Imperative_dom.mark_prevented d
   | None -> ()
 
+let default_prevented (ev : ev) : bool =
+  match Dom_ext.num_prop "##dispatch" ev with
+  | Some d -> Imperative_dom.is_prevented d
+  | None -> false
+
 let stop_propagation (ev : ev) : unit =
   Platform.request_stop ();
   match Dom_ext.num_prop "##dispatch" ev with

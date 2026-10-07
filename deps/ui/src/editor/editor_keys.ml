@@ -955,16 +955,21 @@ let on_keydown ev =
               (* the sink's own listener emits the conduit event for
                  this key — nothing to do at document level *)
               ()
-          | Some uuid -> (
+          | Some uuid when mods ev || D.ev_alt ev -> (
               (* the window-level keyMonitor forwards editing-mode chords
                  with no target (AppKit never maps mod+. etc. to a
                  doCommandBy selector, so the sink's own emit path never
                  sees them). While a block is being edited they still
                  belong to the editor — run the editing keymap on the
-                 model *)
+                 model. Modifier chords only: an unbound plain key whose
+                 target is not this block's conduit belongs to the global
+                 keymap, not the editing buffer — otherwise every browse
+                 keystroke ("g h", "t l", ...) writes into whatever block
+                 still has editing state. *)
               match pending_event ev with
               | Some ev' -> apply_input uuid ev'
               | None -> ())
+          | Some _ -> ()
           | None ->
               (* a stale conduit input that was unmounted by the previous
                  key (e.g. Shift+Arrow exiting edit mode) can still

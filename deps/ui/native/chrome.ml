@@ -219,7 +219,8 @@ let left_sidebar (ms : Model.t Signal.signal) =
             [ column ~key:"ls-inner" ~min_height:0
                 ~width:(if m.left_sidebar_open then 260 else 0)
                 ~background:"secondary"
-                ~style_class:"left-sidebar-inner as-container overflow-hidden"
+                ~style_class:
+                  "left-sidebar-inner as-container overflow-hidden shrink-0"
                 [ column ~key:"ls-wrap" ~grow:1. ~min_height:0
                     [ box ~key:"ls-head"
                         ~style_class:"sidebar-header-container"
@@ -238,7 +239,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
 let main_content (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "cp__sidebar-main-layout flex-1 flex"
+      "cp__sidebar-main-layout flex-1 min-h-0 flex"
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
     [ left_sidebar ms
@@ -248,7 +249,11 @@ let main_content (ms : Model.t Signal.signal) =
          carried by data_attrs_signal *)
       box ~key:"main-content"
         ~accessibility_identifier:"main-content-container"
-        ~main:`center ~style_class:"scrollbar-spacing w-full flex flex-row outline-none relative"
+        (* flex-1 min-w-0 (not w-full): a 100%-basis sibling shrinks
+           the docked 260px sidebar instead of filling the leftover
+           track — on flex engines without the web stylesheet the class
+           token is the only rule *)
+        ~main:`center ~style_class:"scrollbar-spacing flex-1 min-w-0 flex flex-row self-stretch outline-none relative"
         ~data_attrs_signal:
           (Signal.map (fun (_ : Model.t) ->
                [ ("data-is-margin-less-pages", "false") ]) ms)
@@ -457,17 +462,22 @@ let not_found_page : t =
 let shell (ms : Model.t Signal.signal) : t =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "theme-container-inner ls-hl-colored"
+      (* h-full: the root view stretches children horizontally but sizes
+         them to content vertically — without a definite height the
+         whole chrome chain shrink-wraps and the docked sidebar renders
+         as a floating content-sized panel *)
+      "theme-container-inner ls-hl-colored h-full"
       ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
       ^ if m.right_sidebar_open then " ls-right-sidebar-open" else "")
     (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-    [ box ~key:"app" ~accessibility_identifier:"app-container"
-        [ Ui_parts.class_signal ms
-            (fun (m : Model.t) ->
-              if m.left_sidebar_open then "overflow-hidden" else "w-full")
-            (column ~key:"left-container"
-               ~accessibility_identifier:"left-container"
-               (topbar ms @ [ hidden_chrome ms; main_content ms ]))
+    [ (* horizontal shell: left-container grows, right-sidebar docks
+         at the trailing edge (web: #app-container is display:flex row) *)
+      row ~key:"app" ~accessibility_identifier:"app-container"
+        ~style_class:"h-full min-h-0"
+        [ column ~key:"left-container"
+            ~accessibility_identifier:"left-container"
+            ~style_class:"flex-1 min-w-0 h-full overflow-hidden"
+            (topbar ms @ [ hidden_chrome ms; main_content ms ])
         ; right_sidebar ms
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]

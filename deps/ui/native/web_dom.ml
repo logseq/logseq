@@ -204,6 +204,7 @@ let ev_input_type = Dom_ext.input_type
 let ev_movement_x = Dom_ext.movement_x
 let ev_movement_y = Dom_ext.movement_y
 let ev_prevent_default = Editor_dom.prevent_default
+let ev_default_prevented = Editor_dom.default_prevented
 let ev_stop_propagation = Editor_dom.stop_propagation
 let ev_stop_immediate = Dom_ext.stop_immediate_propagation
 let ev_clipboard = Editor_dom.ev_clipboard
