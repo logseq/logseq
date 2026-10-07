@@ -240,6 +240,10 @@ let emit_event (_ : string) (_ : Js.Json.t) : unit = ()
    (editor_keys' mousedown/mousemove path listens only when true) *)
 let native_drag () = false
 
+(* the web reveals the fold caret on row hover — keep the collapsed-
+   only signal behavior here *)
+let native_block_controls () = false
+
 let set_document_title : string -> unit =
   [%mel.raw "function (t) { document.title = t }"]
 

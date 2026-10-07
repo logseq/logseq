@@ -236,6 +236,13 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
      S.set publish. Owned into the row's scope so the collapse_sig
      subscription dies on unmount *)
   let cs = Logseq_el.own ctx (collapsed_sig ~scope b) in
+  let has_children = b.Model.block_children <> [] in
+  (* the web reveals the fold caret only on row hover (the lui-core.css
+     [data-has-children] rule); hover-less backends keep it visible at
+     rest whenever the block can fold *)
+  let caret_shown c =
+    c || (Platform.native_block_controls () && has_children)
+  in
   (* #dot-<uuid> + data-blockid/draggable on the bullet ride data_attrs
      and accessibility-identifier on the box (e2e target + imperative
      dnd contract); the classes go through Ui_parts.class_signal —
@@ -249,18 +256,35 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         ~url:"#" ~target:`self_
         ~accessibility_identifier:("control-" ^ uuid)
         [ Ui_parts.class_signal cs
-            (fun c -> if c then "control-show" else "control-hide")
+            (fun c ->
+              if caret_shown c then "control-show" else "control-hide")
             (box ~key:("ctrlspan-" ^ uuid)
                (* control-hide is a stylesheet display:none — the opacity
                   signal carries the same hide to style-less backends *)
                ~opacity_signal:
-                 (Signal.map (fun c -> if c then 1.0 else 0.0) cs)
+                 (Signal.map
+                    (fun c ->
+                      if c then 1.0
+                      else if caret_shown c then 0.4
+                      else 0.0)
+                    cs)
             [ Ui_parts.class_signal cs
                 (fun c ->
                   "rotating-arrow"
                   ^ if c then " collapsed" else " not-collapsed")
                 (box ~key:("ra-" ^ uuid)
-                   [ Ui_parts.rotating_arrow ("arw-" ^ uuid) ])
+                   [ (* the web rotates .not-collapsed 90° — style-less
+                        backends have no element transform, so they swap
+                        in the pre-rotated svg *)
+                     reactive
+                       (fun c ->
+                         if c || not (Platform.native_block_controls ())
+                         then Ui_parts.rotating_arrow ("arw-" ^ uuid)
+                         else
+                           icon ~key:("arw-" ^ uuid)
+                             ~name:(`app "rotating-arrow-down")
+                             ~point_size:16 [])
+                       cs ])
             ])
         ]
     ; box ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap"

@@ -48,6 +48,14 @@ fn custom_svg(name: &str) -> Option<&'static str> {
             d=\"M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
             128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 \
             0 402.48 0 384.662z\"/></svg>",
+        // the web rotates the caret 90° via .not-collapsed; there's no
+        // element transform here, so the expanded state gets its own
+        // pre-rotated svg.
+        "rotating-arrow-down" => "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 192 512\" \
+            fill=\"currentColor\"><g transform=\"rotate(90 96 256)\"><path fill-rule=\"evenodd\" \
+            d=\"M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
+            128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 \
+            0 402.48 0 384.662z\"/></g></svg>",
         "youtube-timestamp-icon" => "<svg xmlns=\"http://www.w3.org/2000/svg\" \
             fill=\"currentColor\" viewBox=\"0 0 20 20\"><path clip-rule=\"evenodd\" \
             fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 \
@@ -383,7 +391,11 @@ fn register_class_styles() {
     );
     // .item.active — current nav row, web fills it with gray-04
     // (the token behind --ls-quaternary-background-color).
-    class("active", "background:var(--lx-gray-04-alpha)", "");
+    class(
+        "active",
+        "background:var(--lx-gray-04-alpha, var(--rx-gray-04-alpha))",
+        "",
+    );
     // .hd — collapsible group headers (Favorites/Recent/Navigations).
     class(
         "hd",
@@ -428,9 +440,18 @@ fn register_class_styles() {
     class(
         "bullet",
         "width:6px;height:6px;border-radius:9999px;opacity:0.8;\
-         background:var(--lx-gray-08)",
+         background:var(--lx-gray-08, var(--ls-block-bullet-color))",
         "",
     );
+    // .bullet-closed — collapsed rows tint the bullet container with the
+    // gray-04 halo (web lui-core.css `.bullet-closed`).
+    class(
+        "bullet-closed",
+        "background:var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color))",
+        "",
+    );
+    // .block-control — the fold caret rides at 40% opacity on web.
+    class("block-control", "opacity:0.4", "");
 
     // ---- cmdk palette (web resources/css/lui-overlay.css) ----
     class(
@@ -527,20 +548,20 @@ fn register_class_styles() {
         "shui-shortcut-key",
         "display:flex;align-items:center;justify-content:center;\
          height:20px;min-width:20px;padding:2px 4px;font-size:12px;\
-         white-space:nowrap;color:var(--lx-gray-12)",
+         white-space:nowrap;color:var(--lx-gray-12, var(--rx-gray-12))",
         "",
     );
     class(
         "shui-key-boxed",
-        "background:var(--lx-gray-06-alpha);\
-         border:1px solid var(--lx-gray-06-alpha);border-radius:4px",
+        "background:var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));\
+         border:1px solid var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));border-radius:4px",
         "",
     );
     class(
         "shui-shortcut-combo",
         "display:flex;flex-direction:row;align-items:center;\
-         background:var(--lx-gray-06-alpha);\
-         border:1px solid var(--lx-gray-06-alpha);border-radius:4px",
+         background:var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));\
+         border:1px solid var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));border-radius:4px",
         "",
     );
     class(
@@ -550,7 +571,7 @@ fn register_class_styles() {
     );
     class(
         "shui-shortcut-separator",
-        "width:1px;background:var(--lx-gray-07-alpha)",
+        "width:1px;background:var(--lx-gray-07-alpha, var(--rx-gray-07-alpha))",
         "self-stretch",
     );
     class(

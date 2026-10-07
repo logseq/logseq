@@ -261,6 +261,11 @@ let last_click_ms = ref (-1.)
    is driven by editor_keys' mousedown/mousemove/click listeners *)
 let native_drag () = true
 
+(* the web reveals the fold caret on row hover (lui-core.css
+   [data-has-children] rule); there's no hover here, so collapsable
+   blocks keep the caret visible at rest *)
+let native_block_controls () = true
+
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
   let now = date_now_ms () in
