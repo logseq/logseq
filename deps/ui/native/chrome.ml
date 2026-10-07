@@ -245,21 +245,25 @@ let main_content (ms : Model.t Signal.signal) =
       "cp__sidebar-main-layout flex-1 min-h-0 flex"
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
+       ~grow:1. ~min_height:0
     [ left_sidebar ms
     ; (* #main-content-container is queried by graphs/recycle.ml —
          the id rides ~accessibility_identifier; the data-is-* attrs
          are imperative contracts (graphs_view, container.cljs hooks)
-         carried by data_attrs_signal *)
-      box ~key:"main-content"
+         carried by data_attrs_signal. On web this element is the page's
+         vertical scroller (.scrollbar-spacing = overflow-y:auto) —
+         emit the real scroll kind so pages taller than the window
+         actually scroll. *)
+      scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
         ~accessibility_identifier:"main-content-container"
-        (* flex-1 min-w-0 (not w-full): a 100%-basis sibling shrinks
-           the docked 260px sidebar instead of filling the leftover
-           track — on flex engines without the web stylesheet the class
-           token is the only rule *)
-        ~main:`center ~style_class:"scrollbar-spacing flex-1 min-w-0 flex flex-row self-stretch outline-none relative"
+        ~style_class:"scrollbar-spacing"
         ~data_attrs_signal:
           (Signal.map (fun (_ : Model.t) ->
                [ ("data-is-margin-less-pages", "false") ]) ms)
+        [ (* the row keeps the pre-scroll layout: flex-row +
+             justify-center centered .cp__sidebar-main-content
+             horizontally (scroll children stretch to viewport width) *)
+          row ~key:"main-content-row" ~main:`center ~grow:1.
         [ Ui_parts.class_signal ms
             (fun (m : Model.t) ->
               (* cljs: .cp__sidebar-main-content centers a max-width
@@ -301,6 +305,7 @@ let main_content (ms : Model.t Signal.signal) =
                         ms)
                    [ Page.region ms ]) ]
             )
+        ]
         ]
     ])
 
