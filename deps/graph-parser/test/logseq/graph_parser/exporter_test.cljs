@@ -1143,6 +1143,53 @@ abc
         (p/finally (fn [_]
                      (set! (.-write (.-stderr js/process)) original-stderr-write))))))
 
+(deftest-async import-asset-links-in-page-and-block-property-values
+  (let [pdf-bytes "%PDF-1.1\n%%EOF\n"
+        graph-dir (write-temp-file-graph
+                   {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}"
+                    "pages/Vertrag.md"
+                    (str "url:: ![Anlage 1.pdf](../assets/Anlage_1_1700757846845_0.pdf)\n\n"
+                         "- page with asset in property\n"
+                         "- body link ![Body.pdf](../assets/Body_1700757846845_0.pdf)\n")
+                    "pages/Block_Prop.md" "- block\n  Link:: ![x.pdf](../assets/x.pdf)\n"
+                    "assets/Anlage_1_1700757846845_0.pdf" pdf-bytes
+                    "assets/Body_1700757846845_0.pdf" pdf-bytes
+                    "assets/x.pdf" pdf-bytes})]
+    (p/let [conn (db-test/create-conn)
+            assets (atom [])
+            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})
+            page-asset (db-test/find-block-by-content @conn "Anlage_1_1700757846845_0")
+            block-asset (db-test/find-block-by-content @conn "x")
+            body-asset (db-test/find-block-by-content @conn "Body_1700757846845_0")
+            page (db-test/find-page-by-title @conn "Vertrag")
+            block (db-test/find-block-by-content @conn "block")
+            body-block (db-test/find-block-by-content @conn #"body link")]
+      (is (some? page-asset) "Page property PDF becomes an Asset")
+      (is (some? block-asset) "Block property PDF becomes an Asset")
+      (is (some? body-asset) "Body PDF still becomes an Asset")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"}
+             (select-keys (db-test/readable-properties page-asset)
+                          [:block/tags :logseq.property.asset/type]))
+          "Page property asset has correct type")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"}
+             (select-keys (db-test/readable-properties block-asset)
+                          [:block/tags :logseq.property.asset/type]))
+          "Block property asset has correct type")
+      (is (= (page-ref/->page-ref (:block/uuid page-asset))
+             (:user.property/url (db-test/readable-properties page)))
+          "Page property value references the imported asset")
+      (is (= (page-ref/->page-ref (:block/uuid block-asset))
+             (:user.property/link (db-test/readable-properties block)))
+          "Block property value references the imported asset")
+      (is (= (str "body link " (page-ref/->page-ref (:block/uuid body-asset)))
+             (:block/title body-block))
+          "Body asset links are unchanged")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
 (deftest extract-template-blocks
   (let [page-uuid (random-uuid)
         parent-uuid (random-uuid)
@@ -2626,6 +2673,51 @@ abc
           "Text references are rewritten to the standard journal uuid")
       (is (= (:db/id journal) (get-in ref-block [:block/page :db/id]))
           "Structured block page reference still points to the same journal entity"))))
+
+(defn- assert-rolle-property-and-class-are-distinct
+  [conn]
+  (let [klass (d/entity @conn :user.class/Rolle)
+        prop (d/entity @conn :user.property/rolle)
+        alice (or (db-test/find-page-by-title @conn "A_Alice")
+                  (db-test/find-page-by-title @conn "Alice"))
+        tagged-page-id (ffirst (d/q '[:find ?p
+                                      :where
+                                      [?p :block/tags :user.class/Rolle]
+                                      [?p :block/name]]
+                                    @conn))]
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Created graph has no validation errors")
+    (is (and (some? klass) (ldb/class? klass) (not (ldb/property? klass)))
+        "Rolle tag is a class, not a property")
+    (is (and (some? prop) (ldb/property? prop) (not (ldb/class? prop)))
+        "rolle is a property, not a class")
+    (is (not= (:block/uuid klass) (:block/uuid prop))
+        "Class and property are distinct entities")
+    (is (some? tagged-page-id)
+        "A page tagged Rolle references the class")
+    (is (some? (:user.property/rolle alice))
+        "Alice's rolle value is on the property")))
+
+(deftest-async import-property-and-class-same-title-property-first
+  ;; https://github.com/logseq/db-test/issues/1402
+  ;; Property page is created first; later tags:: [[Rolle]] must not reuse it.
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/A_Alice.md" "rolle:: Admin\n\n- Alice has a rolle property\n"
+                "pages/B_Admin.md" "tags:: [[Rolle]]\n\n- Admin is tagged Rolle\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})]
+    (assert-rolle-property-and-class-are-distinct conn)))
+
+(deftest-async import-property-and-class-same-title-class-first
+  ;; Inverse file order of import-property-and-class-same-title-property-first.
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/Admin.md" "tags:: [[Rolle]]\n\n- Admin is tagged Rolle\n"
+                "pages/Alice.md" "rolle:: Admin\n\n- Alice has a rolle property\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})]
+    (assert-rolle-property-and-class-are-distinct conn)))
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
