@@ -848,23 +848,6 @@ let node_view ctx row : t =
 
 (* ---------- dispatch ---------- *)
 
-(* url: cljs renders the value block's title through inline markup —
-   an http(s) string becomes a.external-link anchor that navigates
-   (border-bottom underline). Non-url text still uses the scalar cell *)
-let url_view ctx row : t =
-  let row' = D.row_with_effective_value row in
-  let value = D.row_value row' in
-  let text = D.ref_title value in
-  let is_http =
-    String.length text >= 8
-    && (String.sub text 0 7 = "http://"
-        || String.sub text 0 8 = "https://")
-  in
-  if D.value_empty_p value || not is_http then
-    scalar_edit_cell ctx row
-  else
-    link ~style_class:"external-link" ~url:text ~target:`blank ~text []
-
 (* [view ctx row] renders the cell's value control inside the row's
    value column. *)
 let rec view ctx row : t =
@@ -882,7 +865,6 @@ let rec view ctx row : t =
         if ident = "logseq.property.class/extends" then
           extends_view ctx row'
         else node_view ctx row'
-    | "url" -> url_view ctx row'
     | _ ->
         let cell = scalar_edit_cell ctx row' in
         (* cljs embeds every non-closed scalar value in a
