@@ -2,7 +2,7 @@
 # opam deps for deps/ui (Melange UI app). Run after the logseq blueprint's
 # `install OCaml toolchain` + db-worker's install-opam-deps.sh.
 set -eu
-opam pin add -y -n lui git+https://github.com/logseq/lui.git#33b6908946f80954bf6a9175e14174ec6105abb0
+opam pin add -y -n lui git+https://github.com/logseq/lui.git#3feedc3e791362dc03757f8df7d213089b720371
 opam pin add -y -n ocaml-signal git+https://github.com/logseq/ocaml-signal.git#976b40f
 opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
 opam pin add -y -n melange-transit-core git+https://github.com/logseq/melange-transit.git#main
