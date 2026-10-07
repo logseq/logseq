@@ -6,7 +6,7 @@
    natively — see NOTES.md). *)
 
 open Promise_ext
-module D = Render_dom
+module D = Logseq_el
 module W = Wire
 
 (* per-block resolved hl-image record: src drives the async render *)

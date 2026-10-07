@@ -10,7 +10,7 @@
 
    Keeping the indirection here — instead of letting shared code import
    the web conduit directly — also keeps the module graph acyclic:
-   logseq_editor -> dom_adapter -> cm_adapter -> code_mirror ->
+   logseq_editor -> web_ext_adapters -> cm_adapter -> code_mirror ->
    editor_actions would close a loop if editor_actions pointed back.
 
    Defaults are no-ops so a surface that has not registered an

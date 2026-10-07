@@ -142,7 +142,7 @@ let export_png (st : S.t Signal.state) =
   let cur = Signal.get_state st in
   let selector =
     match cur.S.block_uuids with
-    | u :: _ -> "[blockid='" ^ u ^ "']"
+    | u :: _ -> "[data-blockid='" ^ u ^ "']"
     | [] -> "#main-content-container"
   in
   match B.qs selector with

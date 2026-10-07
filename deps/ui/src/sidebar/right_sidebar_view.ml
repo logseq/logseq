@@ -12,9 +12,8 @@
          .sidebar-item-list > .sidebar-item.item-type-<kind>*)
 
 open Lui_elements
-module D = Logseq_dom
+module D = Logseq_el
 
-let dom = D.dom
 let t = Sidebar_state.t
 
 (* component icon: tabler names go through the `app:` registry (only `x`
@@ -527,14 +526,14 @@ let inner st =
 let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let st = Sidebar_state.ensure ms in
-  (Logseq_dom.fragment
+  (Logseq_el.fragment
      [ (* aria-value*/orientation attrs on the resizer were inert DOM
           markup — the separator kind carries the role *)
        separator ~key:"rs-resizer" ~orientation:`vertical
          ~style_class:"resizer" []
      ; if_
          ~test:
-           (Logseq_dom.own ctx
+           (Logseq_el.own ctx
               (Signal.map
                  (fun (m : Model.t) -> m.Model.right_sidebar_open)
                  ms))

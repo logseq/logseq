@@ -13,9 +13,9 @@
 open Lui_protocol
 open Lui_elements
 
-module D = Logseq_dom
+module D = Logseq_el
 
-let keyed = D.keyed
+let keyed = Lui_elements.keyed
 
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
   [@@mel.scope "window"]
@@ -102,7 +102,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ~style_class:list_class ~data_attrs:list_attrs
     [ Logseq_virt.spacer ~key:("vs-" ^ list_id) ~height_s
         [ keyed
-            ~source:(D.own ctx (Signal.map (fun s -> s.Logseq_virt.v_rows) vstate_sig))
+            ~source:(Logseq_el.own ctx (Signal.map (fun s -> s.Logseq_virt.v_rows) vstate_sig))
             ~key:(fun r -> row_version_key versions r)
             ~cmp:String.compare ~mount:row_mount
         ]
@@ -119,7 +119,7 @@ let rows_sig ~key ~cmp:_ ~mount ?(on_end = fun () -> ())
  fun ctx parent ->
   ignore initial_rows;
   let sched = ctx.Lui_ui.ui_scheduler in
-  let arr_sig = D.own ctx (Signal.map Array.of_list source) in
+  let arr_sig = Logseq_el.own ctx (Signal.map Array.of_list source) in
   list ~key_of:key ~estimate_size ~on_end
     ~data_sig:(fun _ -> Some arr_sig)
     ~render:(fun it -> mount (Signal.constant sched it))

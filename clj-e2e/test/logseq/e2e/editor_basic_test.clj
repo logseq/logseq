@@ -1026,7 +1026,7 @@
   (let [old-logs (set (console-logs))]
     (doseq [idx (range 3)]
       (b/new-block (str "render budget " idx))
-      (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+      (let [block-uuid (.getAttribute (util/get-edit-block-container) "data-blockid")]
         (b/delete-blocks)
         (assert/assert-have-count (str "#ls-block-" block-uuid) 0)))
     (util/wait-timeout 800)
@@ -1048,7 +1048,7 @@
   (b/new-blocks ["source"])
   (b/new-block "")
   (b/save-block "pending block")
-  (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+  (let [block-uuid (.getAttribute (util/get-edit-block-container) "data-blockid")]
     (util/move-cursor-to-start)
     (k/backspace)
     (is (nil? (ls-api-call! :editor.getBlock block-uuid)))
@@ -1283,7 +1283,7 @@
     (let [content "中文🙂 e\u0301 editor persistence"
           page-name (p/get-page-name)]
       (b/new-block content)
-      (let [block-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+      (let [block-uuid (.getAttribute (util/get-edit-block-container) "data-blockid")]
         (k/esc)
         (assert/assert-have-count util/editor-q 0)
         (assert/assert-is-visible
@@ -1469,7 +1469,7 @@
     (util/exit-edit)
     (let [block (loc/filter ".ls-page-blocks .ls-block"
                             :has-text "sample task")
-          uuid (.getAttribute block "blockid")
+          uuid (.getAttribute block "data-blockid")
           block-selector (format "#ls-block-%s" uuid)]
       (assert/assert-is-visible
        (loc/filter (str block-selector " .block-tag") :has-text "Task"))
@@ -1519,7 +1519,7 @@
     (util/input-command "Code block")
     (assert/assert-is-visible ".CodeMirror, .cm-editor")
     (let [code-block-uuid
-          (.getAttribute (w/-query ".ls-block:has(.CodeMirror)") "blockid")]
+          (.getAttribute (w/-query ".ls-block:has(.CodeMirror)") "data-blockid")]
       (w/click (.first (w/-query "pre.CodeMirror-line")))
       (util/input "const value = 1;\nvalue + 1;")
       (k/esc)
@@ -1735,7 +1735,7 @@
       (is (nil? (ls-api-call! :editor.getBlock missing-uuid))))
     (assert/assert-is-hidden ".ui__loading, .loading-graph")
     (b/new-block "worker recovery target")
-    (let [uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+    (let [uuid (.getAttribute (util/get-edit-block-container) "data-blockid")]
       (util/exit-edit)
       (is (string? uuid))
       (is (= "worker recovery target"
@@ -1758,7 +1758,7 @@
   (testing "node reference search inserts a reference and rerenders target updates"
     (let [source-page (p/get-page-name)]
       (b/new-block "reference autocomplete unique target")
-      (let [target-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+      (let [target-uuid (.getAttribute (util/get-edit-block-container) "data-blockid")]
         (b/new-block "")
         (util/press-seq "[[reference autocomplete unique")
         (assert/assert-is-visible ".ui__popover-content")
@@ -1805,7 +1805,7 @@
 (deftest external-property-update-preserves-edit-buffer-test
   (testing "an external property/child delta does not replace unrelated active text"
     (b/new-block "active editor text")
-    (let [uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+    (let [uuid (.getAttribute (util/get-edit-block-container) "data-blockid")]
       (util/move-cursor-to-end)
       (util/press-seq " local draft")
       (ls-api-call! :editor.upsertBlockProperty uuid "external-property" "updated")

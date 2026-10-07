@@ -7,7 +7,7 @@
 open Promise_ext
 open Lui_elements
 
-let if_ = Logseq_dom.if_
+let if_ = Lui_elements.if_
 module T = I18n
 
 let toggle st =

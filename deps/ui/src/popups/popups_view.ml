@@ -14,7 +14,7 @@ open Lui_elements
 module S = Popups_state
 module U = I18n
 
-let dom = Logseq_dom.dom
+let dom = Logseq_el.el
 
 (* -- autocomplete item ----------------------------------------------- *)
 
@@ -180,7 +180,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
   (* own the derivation: unowned map2 leaves a live subscriber on the
      shared view signal after the item unmounts *)
   let pair =
-    Logseq_dom.own context
+    Logseq_el.own context
       (Signal.map2
          (fun (it : S.ac_item) (v : S.view) -> (it, v))
          item_sig st.S.vs.Signal.state_signal)
@@ -189,10 +189,10 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
     [ (* cljs/e2e contract: a.menu-link[#ac-<idx>].chosen — a real
          anchor (menu_item kind emits a non-anchor node); .chosen and
          the click ride the dom event/style-class channel *)
-      dom ~key:"lnk" ~tag:"a"
+      Logseq_el.el ~key:"lnk" ~tag:"a"
         ~id:("ac-" ^ string_of_int (Signal.get item_sig).S.ai_idx)
         ~style_class_signal:
-          (Logseq_dom.class_signal pair (fun (it, v) ->
+          (Logseq_el.class_signal pair (fun (it, v) ->
                "menu-link"
                ^ (match v.S.ac with
                    | Some ac when ac.S.chosen = it.S.ai_idx -> " chosen"
@@ -296,7 +296,7 @@ let ac_inner (st : S.t) : t =
  fun context parent ->
   (* the empty state is a sentinel keyed item *)
   let units_sig =
-    Logseq_dom.own context
+    Logseq_el.own context
       (Signal.map
          (fun (v : S.view) ->
            match v.S.ac with
@@ -368,7 +368,7 @@ let ac_popover (st : S.t) : t =
      land on the positioner *)
   (popover ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
      ~at_signal:
-       (Logseq_dom.own context
+       (Logseq_el.own context
           (Signal.map
              (fun (v : S.view) ->
                match v.S.ac with
@@ -380,7 +380,7 @@ let ac_popover (st : S.t) : t =
                | None -> (0., 0.))
              vs))
      ~available_height_signal:
-       (Logseq_dom.own context
+       (Logseq_el.own context
           (Signal.map
              (fun (v : S.view) ->
                match v.S.ac with
@@ -399,7 +399,7 @@ let ac_popover (st : S.t) : t =
               | None -> ""))
          (box ~key:"ac-c"
             ~data_attrs_signal:
-              (Logseq_dom.own context
+              (Logseq_el.own context
                  (Signal.map
                     (fun (v : S.view) ->
                       match v.S.ac with
@@ -425,7 +425,7 @@ let ac_popover (st : S.t) : t =
             ; (* cljs page-search-aux: mod+enter hint under the tag list *)
               if_
                 ~test:
-                  (Logseq_dom.own context
+                  (Logseq_el.own context
                      (Signal.map
                         (fun (v : S.view) ->
                           match v.S.ac with
@@ -606,7 +606,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
             (match scut with
              | Some s -> [ cm_shortcut_el s ]
              | None -> []))
-        (Logseq_dom.own context (Signal.map snd entry_sig)) ]
+        (Logseq_el.own context (Signal.map snd entry_sig)) ]
     context parent
 ;;
 
@@ -657,7 +657,7 @@ let cm_popover (st : S.t) : t =
   (* see ac_popover: signals must be built per mount *)
  fun context parent ->
   let entries_sig =
-    Logseq_dom.own context
+    Logseq_el.own context
       (Signal.map
          (fun (v : S.view) ->
            match v.S.cm with
@@ -681,7 +681,7 @@ let cm_popover (st : S.t) : t =
         | _ -> ""))
      (popover ~key:"cm" ~role:`menu
         ~at_signal:
-          (Logseq_dom.own context
+          (Logseq_el.own context
              (Signal.map
                 (fun (v : S.view) ->
                   match v.S.cm with
@@ -697,7 +697,7 @@ let cm_popover (st : S.t) : t =
                   | None -> (0., 0.))
                 vs))
         ~available_height_signal:
-          (Logseq_dom.own context
+          (Logseq_el.own context
              (Signal.map
                 (fun (v : S.view) ->
                   match v.S.cm with
@@ -717,14 +717,14 @@ let cm_popover (st : S.t) : t =
                 ~cmp:Stdlib.compare
                 ~mount:(fun entry_sig -> cm_item_el st entry_sig) ]
         ; (* popover children must be standard kinds — the empty branch's
-             logseq-raw-text placeholder has to sit inside a box *)
+             display:contents anchor has to sit inside a box *)
           box ~key:"cm-sub-wrap"
             [ reactive
                 (fun sub ->
                   match sub with
                   | Some (_, x, y, items) -> cm_sub_el st x y items
-                  | None -> Logseq_dom.nothing)
-                (Logseq_dom.own context (cm_sub_state st)) ]
+                  | None -> Logseq_el.nothing)
+                (Logseq_el.own context (cm_sub_state st)) ]
         ]))
     context parent
 ;;
@@ -877,9 +877,9 @@ let pv_dyn (st : S.t) : t =
      ~equal:( == )
      (fun pv ->
        match pv with
-       | None -> Logseq_dom.nothing
+       | None -> Logseq_el.nothing
        | Some p -> pv_popover st p)
-     (Logseq_dom.own context
+     (Logseq_el.own context
         (Signal.map (fun (v : S.view) -> v.S.pv)
            st.S.vs.Signal.state_signal)))
     context parent
@@ -979,11 +979,11 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                 int_of_string_opt
             , Web_dom.el_get_attr chip "data-tag-priv"
             , Web_dom.el_closest el
-                ".bullet-container[blockid], .ls-block[blockid]" )
+                ".bullet-container[data-blockid], .ls-block[data-blockid]" )
           with
           | Some tuuid, Some tid, priv, Some blk
             when tuuid <> "" -> (
-              match Web_dom.el_get_attr blk "blockid" with
+              match Web_dom.el_get_attr blk "data-blockid" with
               | Some bid ->
                   Web_dom.ev_prevent_default ev;
                   Web_dom.ev_stop_propagation ev;
@@ -1003,18 +1003,18 @@ let handle_contextmenu st (ev : Web_dom.ev) =
       if Web_dom.el_closest el ".ls-page-title" <> None then ()
       else
       (* cljs app-context-menu-observer: the block menu only opens from
-         .bullet-container[blockid] (or a :block/link row's
-         .ls-block[originalblockid]); right-click on block text is left to
+         .bullet-container[data-blockid] (or a :block/link row's
+         .ls-block[data-originalblockid]); right-click on block text is left to
          the native menu unless it lands inside an existing selection *)
       match
         Web_dom.el_closest el
-          ".bullet-container[blockid], .ls-block[originalblockid]"
+          ".bullet-container[data-blockid], .ls-block[data-originalblockid]"
       with
       | Some blk -> (
           let id =
-            match Web_dom.el_get_attr blk "originalblockid" with
+            match Web_dom.el_get_attr blk "data-originalblockid" with
             | Some oid -> Some oid
-            | None -> Web_dom.el_get_attr blk "blockid"
+            | None -> Web_dom.el_get_attr blk "data-blockid"
           in
           match id with
           | Some id ->
@@ -1038,10 +1038,10 @@ let handle_contextmenu st (ev : Web_dom.ev) =
              no native context menu (gpui), any right-click inside a block
              row that isn't on an editable target opens the block menu —
              .bullet-container's hit area is too small to be the only entry *)
-          match Web_dom.el_closest el ".ls-block[blockid]" with
+          match Web_dom.el_closest el ".ls-block[data-blockid]" with
           | Some blk -> (
               match
-                (Web_dom.el_get_attr blk "blockid"
+                (Web_dom.el_get_attr blk "data-blockid"
                 , Web_dom.selected_block_uuids ())
               with
               | Some id, (first :: _ as sel)
@@ -1083,7 +1083,7 @@ let handle_click st (ev : Web_dom.ev) =
    into editor_keys) *)
 let open_block_picker uuid emoji_only =
   match
-    Web_dom.query_selector (".ls-block[blockid='" ^ uuid ^ "']")
+    Web_dom.query_selector (".ls-block[data-blockid='" ^ uuid ^ "']")
   with
   | Some anchor ->
       let uuids =
@@ -1234,17 +1234,17 @@ let render (_ms : Model.t Signal.signal) : t =
   let st = S.make context.Lui_ui.ui_scheduler in
   install_listeners st;
   let ac_open =
-    Logseq_dom.own context
+    Logseq_el.own context
       (Signal.map (fun (v : S.view) -> v.S.ac <> None)
          st.S.vs.Signal.state_signal)
   in
   let cm_open =
-    Logseq_dom.own context
+    Logseq_el.own context
       (Signal.map (fun (v : S.view) -> v.S.cm <> None)
          st.S.vs.Signal.state_signal)
   in
   let body =
-    Logseq_dom.fragment
+    Logseq_el.fragment
       [ if_ ~test:ac_open (ac_popover st)
       ; if_ ~test:cm_open (cm_popover st)
       ; pv_dyn st ]

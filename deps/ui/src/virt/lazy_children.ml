@@ -10,7 +10,7 @@
 open Lui_elements
 
 module V = Virtualizer
-module D = Logseq_dom
+module D = Logseq_el
 
 type element = V.element
 
@@ -93,15 +93,15 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
     set_timeout (fun () -> attach ctx el_id near) 0;
   (column ~key ~accessibility_identifier:el_id ~style_class:"block-children"
      ~grow:1.
-     [ D.if_
-         ~test:(D.own ctx (Signal.map (fun n -> not n) near_sig))
+     [ Lui_elements.if_
+         ~test:(Logseq_el.own ctx (Signal.map (fun n -> not n) near_sig))
          (spacer ~key:"lazy-ph"
             ~min_height:(int_of_float (Float.round min_height)) [])
-     ; D.if_ ~test:near_sig (render ()) ])
+     ; Lui_elements.if_ ~test:near_sig (render ()) ])
     ctx parent
 
 (* Web journal rows stay eager — the page-level virtualizer owns the
    windowing and nested per-row IO gates would fight its measurements.
    Only the native twin gates rows (gpui first-frame cost). *)
 let lazy_rows ~key ~cmp ~mount ~estimate_height:_ ~source : t =
-  D.keyed ~source ~key ~cmp ~mount
+  Lui_elements.keyed ~source ~key ~cmp ~mount

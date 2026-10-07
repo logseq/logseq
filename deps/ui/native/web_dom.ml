@@ -231,7 +231,7 @@ let now_ms = Platform.date_now_ms
 (* ---------- selection / misc ---------- *)
 
 let selected_block_uuids = Platform.selected_block_uuids
-let ensure_raw_text_observer = Editor_dom.ensure_raw_text_observer
+let ensure_dom_fixups = Editor_dom.ensure_dom_fixups
 let for_each_touched = Editor_dom.for_each_touched
 let run_doc_scans = Editor_dom.run_doc_scans
 let register_doc_scan ?run_if ?sync f =

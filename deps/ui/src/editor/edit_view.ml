@@ -35,7 +35,7 @@ type rect = Edit_input.rect
 type frame = Edit_input.frame
 
 (* tie a derived signal's upstream subscription to the mount scope —
-   same helper as Logseq_dom.own, kept local so the editor surface has
+   same helper as Logseq_el.own, kept local so the editor surface has
    zero logseq-dom deps *)
 let own context (source : 'a Signal.signal) =
   if !(source.Signal.upstream_subscriptions) <> [] then

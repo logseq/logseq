@@ -29,7 +29,7 @@ let pressable ~on_press (elem : t) : t =
     invalid_arg
       (Printf.sprintf
          "Ui_parts.pressable: kind %s admits no Press — route the press \
-          through a supported kind or a dom ~events node"
+          through a supported kind or a Logseq_el.el ~events node"
          (Lui_wire_schema.node_kind_name kind));
   enable context node Lui_protocol.PressEnabled;
   register_press context node on_press;

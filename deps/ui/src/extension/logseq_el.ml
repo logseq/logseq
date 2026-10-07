@@ -1,8 +1,17 @@
-(* logseq-<tag> extension family — raw DOM elements for attributes and DOM
-   events the LUI schema does not cover (blockid, data-*, pointer/keyboard).
+(* Raw-element escape — the renamed `dom` (component-residuals.md:
+   "D.el/dom stays as the *documented* raw-element escape for user
+   markup; rename if dom must die").
 
-   The element tag is encoded in the identifier ("logseq-a" -> <a>) because
-   adapter create runs before any SetExtensionProp op.
+   Emits `lui-dom-<tag>` extension nodes — the upstream raw-DOM family
+   (`logseq/lui` platform/web/melange/extensions/lui_web_dom_ext.ml)
+   rather than the retired app-side `logseq-<tag>` family. Schemas are
+   registered here (a superset of the upstream tag list) so callers
+   keep arbitrary-tag coverage; the web adapter comes from
+   [Lui_web_dom_ext.adapter_of_tag].
+
+   Only user-authored markup (`@@html` fragments, `:view` hiccup) and
+   elements that genuinely need verbatim attrs may use [el]; typed
+   Lui_elements kinds cover everything else.
 
    Props (extension properties):
      attrs  — JSON object {name: value} applied via setAttribute
@@ -14,39 +23,42 @@
      dom-event {name: string, payload: JSON string of event fields} *)
 
 open Lui_protocol
+open Lui_web_types
 
 let web_profile =
   { Lui_protocol.profile_os = WebOS; Lui_protocol.profile_host = WebHost }
 
-(* tags the UI emits; each becomes a "logseq-<tag>" extension component *)
+(* markup tags the escape covers; each becomes a "lui-dom-<tag>"
+   extension component *)
 let tags =
   [ "div"; "span"; "a"; "button"; "textarea"; "input"; "img"; "main"
-  ; "header"; "h1"; "h2"; "h3"; "h4"; "h5"; "h6"; "p"; "ul"; "li"; "nav"; "section"
-  ; "strong"; "em"; "code"; "pre"; "label"; "form"; "select"; "option"
-  ; "video"; "audio"; "iframe"; "small"; "kbd"; "table"; "thead"; "tbody"
-  ; "tr"; "td"; "th"; "colgroup"; "col"; "br"; "hr"; "canvas"; "article"
-  ; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"; "i"
-  ; "del"; "ins"; "sub"; "blockquote"
+  ; "header"; "h1"; "h2"; "h3"; "h4"; "h5"; "h6"; "p"; "ul"; "ol"; "li"
+  ; "nav"; "section"; "strong"; "em"; "code"; "pre"; "label"; "form"
+  ; "select"; "option"; "video"; "audio"; "iframe"; "small"; "kbd"
+  ; "table"; "thead"; "tbody"; "tr"; "td"; "th"; "br"; "hr"; "canvas"
+  ; "article"; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"
+  ; "i"; "del"; "ins"; "sub"; "blockquote"
     (* SVG (tabler icons render circle/rect/line/polyline/polygon/g/…
        alongside svg/path) *)
   ; "svg"; "path"; "circle"; "rect"; "line"; "polyline"; "polygon"; "g"
-  ; "defs"; "use"; "ellipse"; "tspan"; "sup"; "raw-text" ]
-let identifier tag = "logseq-" ^ tag
+  ; "defs"; "use"; "ellipse"; "tspan"; "sup" ]
 
-(* dedicated widget extensions (logseq-em-emoji/logseq-katex) nest
-   inside logseq-<tag> parents the same way tags nest in each other *)
+let identifier tag = "lui-dom-" ^ tag
+
+(* dedicated widget extensions nest inside raw-element parents the same
+   way tags nest in each other — listed literally so the widget modules
+   can depend on [Logseq_el] without a cycle *)
 let child_identifiers =
   List.map identifier tags
-  @ [ Logseq_emoji.identifier; Logseq_katex.identifier ]
+  @ [ "logseq-em-emoji"; "logseq-katex"; "logseq-codemirror" ]
 
 let schema_of tag =
   Lui_extension.component (identifier tag) [ web_profile ]
     true (* standard_children *)
-    child_identifiers (* logseq-* elements nest freely *)
+    child_identifiers (* raw elements nest freely *)
     [ Lui_extension.property "attrs" Lui_extension.StringScalar false None
     ; Lui_extension.property "events" Lui_extension.StringScalar false None
     ; Lui_extension.property "text" Lui_extension.StringScalar false None
-    ; Lui_extension.property "html" Lui_extension.StringScalar false None
     ; Lui_extension.property "style-class" Lui_extension.StringScalar false
         None
     ; Lui_extension.property "accessibility-identifier"
@@ -63,12 +75,17 @@ let register registry =
   List.iter
     (fun tag ->
       Lui_extension.register_component registry (schema_of tag))
-    tags;
-  Logseq_emoji.register registry;
-  Logseq_katex.register registry
+    tags
+
+let web_adapters : web_extension_adapter String_map.t =
+  List.fold_left
+    (fun acc tag ->
+      String_map.add (identifier tag)
+        (Lui_web_dom_ext.adapter_of_tag tag) acc)
+    String_map.empty tags
 
 let tag_of_identifier name =
-  let prefix = "logseq-" in
+  let prefix = "lui-dom-" in
   let plen = String.length prefix in
   if String.length name > plen
      && String.sub name 0 plen = prefix
@@ -96,10 +113,6 @@ let attrs_json attrs =
 
 let string_of_wire = function StringValue s -> s | _ -> ""
 
-(* [dom ?key ?tag ?attrs ?events ?style_class ?id ?text ?on_dom_event children]
-   - attrs: (name, value) pairs emitted as one JSON "attrs" prop
-   - events: space-separated DOM names ("keydown click input")
-   - on_dom_event: (event_name, payload_json option) -> unit *)
 let class_signal (source : 'a Signal.signal) (f : 'a -> string) =
   Signal.map (fun v -> StringValue (f v)) source
 
@@ -117,51 +130,46 @@ let reactive_text f source = Signal.map (fun v -> StringValue (f v)) source
 (* A derived signal (Signal.map/cutoff over another signal) keeps its
    upstream subscription alive until the derived signal itself is disposed —
    an unowned map leaks a subscriber that re-runs its transform on every
-   source publish forever. Every derived signal handed to dom/dyn/if_/keyed
-   is therefore tied to the node's scope; shared state signals
-   (Signal.value/state_signal) carry no upstream links and are left alone so
-   they survive the unmount. *)
+   source publish forever. Every derived signal handed to an extension
+   prop or if_/keyed is therefore tied to the node's scope; shared state
+   signals (Signal.value/state_signal) carry no upstream links and are
+   left alone so they survive the unmount. *)
 let own context (source : 'a Signal.signal) =
   if !(source.Signal.upstream_subscriptions) <> [] then
     Signal.own_signal context.Lui_ui.ui_scope source
   else
     source
 
-(* perf trace: wraps a dyn ~equal and reports which site remounted *)
-let trace_equal name eq a b =
-  let r = eq a b in
-  if (not r) && Sys.getenv_opt "LOGSEQ_PERF" <> None then
-    Printf.eprintf "[dyn-remount] %s\n%!" name;
-  r
+(* fallback for tags not yet in [tags]: emit the nearest registered
+   tag plus a data-tag attr recording the intended one (the runtime
+   raises on unregistered identifiers) *)
+let registered_tag tag = List.mem tag tags
 
-(* dyn/if_/keyed own their signal sources inside Lui_elements — derived
-   signals are tied to the node scope there, so these wrappers only
-   adjust signatures. *)
-let dyn ?equal f (source : 'a Signal.signal) : Lui_elements.t =
-  Lui_elements.dyn ?equal f source
+let fallback_tag = function _ -> "span"
 
-let if_ ~test children : Lui_elements.t =
-  Lui_elements.if_ ~test children
-
-let keyed ~source ~key ~cmp ~mount : Lui_elements.t =
-  Lui_elements.keyed ~source ~key ~cmp ~mount
-
-let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
+(* [el ?key ?tag ?attrs ?events ?style_class ?id ?text ?on_dom_event
+   children] — the raw-element escape.
+   - attrs: (name, value) pairs emitted as one JSON "attrs" prop
+   - events: space-separated DOM names ("keydown click input")
+   - on_dom_event: (event_name, payload_json option) -> unit *)
+let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(style_class = "")
     ?(style_class_signal : Lui_protocol.wire_value Signal.signal option)
     ?(attrs_signal_v : Lui_protocol.wire_value Signal.signal option)
     ?(text_signal : Lui_protocol.wire_value Signal.signal option)
     ?(id_signal : Lui_protocol.wire_value Signal.signal option)
-    ?(id = "") ?(text = "") ?(html = "") ?on_dom_event
+    ?(id = "") ?(text = "") ?on_dom_event
     (children : Lui_elements.t list) : Lui_elements.t =
  fun context parent ->
+  let tag, attrs =
+    if registered_tag tag then (tag, attrs)
+    else (fallback_tag tag, attrs @ [ ("data-tag", tag) ])
+  in
   let node = Lui_ui.extension context (identifier tag) in
   Option.iter (Lui_ui.key context node) key;
   if attrs <> [] then
     Lui_ui.extension_property context node "attrs"
       (StringValue (attrs_json attrs));
-  if html <> "" then
-    Lui_ui.extension_property context node "html" (StringValue html);
   if events <> "" then
     Lui_ui.extension_property context node "events" (StringValue events);
   if style_class <> "" then
@@ -184,8 +192,8 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
       Lui_ui.on_event context node (fun raw ->
           match raw with
           | ExtensionEvent (_, ident, "dom-event", values)
-            when String.length ident > 7
-                 && String.sub ident 0 7 = "logseq-" ->
+            when String.length ident > 8
+                 && String.sub ident 0 8 = "lui-dom-" ->
               let field name =
                 Option.map string_of_wire (String_map.find_opt name values)
               in
@@ -200,11 +208,13 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   Lui_elements.mount_children context node children;
   node
 
-(* Renders nothing visible: a <raw-text> placeholder that the document
-   observer swaps for an empty Text node — a real anchor node for
-   dyn/if_/keyed positions that yields zero extra elements (cljs's nil). *)
-let nothing : Lui_elements.t =
-  dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", "") ] []
+(* the native twin's invisible document-event carrier — a no-op on web
+   (real DOM events reach document listeners directly) *)
+let carrier : Lui_elements.t = Lui_elements.box ~display:`contents []
+
+(* Renders nothing visible: a `display:contents` box — a real anchor node
+   for dyn/if_/keyed positions that yields zero layout (cljs's nil). *)
+let nothing : Lui_elements.t = Lui_elements.box ~display:`contents []
 
 (* Mounts children directly into the parent with no wrapper element —
    only valid in static child lists where parent is always Some. *)
@@ -215,3 +225,11 @@ let fragment (children : Lui_elements.t list) : Lui_elements.t =
       Lui_elements.mount_children context p children;
       p
   | None -> invalid_arg "fragment requires a parent node"
+
+(* Plain text run — a `text` kind (span.lui-text on web). cljs hiccup
+   emits raw strings interleaved with elements; the kind keeps the run
+   as an inline element so it renders on native hosts too *)
+let txt (s : string) : Lui_elements.t = Lui_elements.text ~value:s []
+
+let text_of_class_signal source f =
+  Signal.map (fun v -> Lui_protocol.StringValue (f v)) source

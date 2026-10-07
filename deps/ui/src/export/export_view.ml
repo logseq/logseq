@@ -119,7 +119,7 @@ let fmt_btn ctx key label fmt =
 let copy_save_row ctx =
   if_
     ~test:
-      (Logseq_dom.own ctx
+      (Logseq_el.own ctx
          (Signal.map
             (fun (st : S.t) -> st.content <> None || st.png <> None)
             (st_sig ctx)))
@@ -208,7 +208,7 @@ let png_preview ctx =
             ~style_class:"my-4" [] ]
     ; if_
         ~test:
-          (Logseq_dom.own ctx
+          (Logseq_el.own ctx
              (Signal.map (fun (st : S.t) -> st.png = None) (st_sig ctx)))
         (icon ~key:"png-loading" ~name:(`app "loader-2") []) ]
 
@@ -226,7 +226,7 @@ let lower_options ctx =
                 ~on:(fun st -> st.S.png_transparent)
                 ~on_toggle:(fun () -> P.set_png_transparent (S.st ctx)) () ]
       | _ -> options_rows ctx)
-    (Logseq_dom.own ctx (Signal.map (fun (st : S.t) -> st.fmt) (st_sig ctx)))
+    (Logseq_el.own ctx (Signal.map (fun (st : S.t) -> st.fmt) (st_sig ctx)))
 
 let body (_ms : Model.t Signal.signal) : t =
   fun ctx parent ->
@@ -259,7 +259,7 @@ let body (_ms : Model.t Signal.signal) : t =
                              Option.value ~default:"" st.content)
                            (st_sig ctx))
                       [])
-              (Logseq_dom.own ctx
+              (Logseq_el.own ctx
                  (Signal.map
                     (fun (st : S.t) -> st.fmt) (st_sig ctx)))
           ; lower_options ctx

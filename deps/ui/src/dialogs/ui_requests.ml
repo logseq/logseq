@@ -6,7 +6,7 @@
 
 open Lui_elements
 
-let if_ = Logseq_dom.if_
+let if_ = Lui_elements.if_
 
 let resolve id result =
   ignore
@@ -85,7 +85,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
     [ field
     ; if_
         ~test:
-          (Logseq_dom.own ctx
+          (Logseq_el.own ctx
              (Signal.map (fun v -> v <> "") (Signal.value value)))
         (button ~key:(key ^ "-eye") ~variant:`ghost
            ~style_class:"ls-eye-btn"

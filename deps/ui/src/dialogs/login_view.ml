@@ -501,7 +501,7 @@ let panel ctx fields (a : auth_ui) : t =
             ( I18n.t "account/confirm"
             , [ confirm_panel ctx fields user next_step ] ))
   in
-  Logseq_dom.fragment
+  Logseq_el.fragment
     (heading ~key:"lg-t" ~level:2
        ~style_class:"ui__dialog-title ls-auth-title" ~value:title []
      :: (if a.err = "" then []

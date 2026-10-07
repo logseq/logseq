@@ -26,7 +26,9 @@ let ms_ref : Model.t Signal.signal option ref = ref None
 let mount () =
   Stub_dom.install ();
   let registry = Lui_extension.registry () in
-  Logseq_dom.register registry;
+  Logseq_emoji.register registry;
+  Logseq_katex.register registry;
+  Logseq_el.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
   Logseq_virt.register registry;
@@ -35,7 +37,7 @@ let mount () =
     View.view ctx ms send
   in
   let s =
-    S.mount ~registry ~profile:Logseq_dom.web_profile ~initial:Model.initial
+    S.mount ~registry ~profile:Logseq_el.web_profile ~initial:Model.initial
       ~reducer:Update.apply ~view ()
   in
   Runtime.app_send :=
@@ -76,12 +78,19 @@ let check_tok name n tok = check name (has_tok n tok)
 (* dom ~attrs serializes into the "attrs" prop as JSON; kind ~data_attrs
    lands as the "data-attrs" prop — check both *)
 let rec attr_val (n : M.node) k =
-  match M.string_prop n "data-attrs" with
-  | Some payload -> (
-    match List.assoc_opt k (Lui_protocol.data_attrs_decode payload) with
+  (* accessibility-identifier is the typed-kinds' id channel — attr_val
+     "id" reads it so assertions keep their old name *)
+  if k = "id" then
+    match M.string_prop n "accessibility-identifier" with
     | Some _ as v -> v
-    | None -> attr_val_dom n k)
-  | None -> attr_val_dom n k
+    | None -> attr_val_dom n k
+  else
+    match M.string_prop n "data-attrs" with
+    | Some payload -> (
+      match List.assoc_opt k (Lui_protocol.data_attrs_decode payload) with
+      | Some _ as v -> v
+      | None -> attr_val_dom n k)
+    | None -> attr_val_dom n k
 
 and attr_val_dom (n : M.node) k =
   match M.string_prop n "attrs" with
@@ -161,7 +170,7 @@ let load_test_page () =
 
 let find_block uuid =
   List.find_opt
-    (fun n -> attr_val n "blockid" = Some uuid)
+    (fun n -> attr_val n "data-blockid" = Some uuid)
     (M.all_nodes (tree ()))
 
 (* ---------------- shell + header ---------------- *)
@@ -211,10 +220,10 @@ let test_block_tree () =
          [ b1; b2; b2c ];
        attr_eq "block row id" b1 "id" "ls-block-b1";
        check "child row nested under parent"
-         (subtree_contains b2 (fun n -> attr_val n "blockid" = Some "b2c"));
+         (subtree_contains b2 (fun n -> attr_val n "data-blockid" = Some "b2c"));
        check "b2c not at top level"
          (not
-            (subtree_contains b1 (fun n -> attr_val n "blockid" = Some "b2c")));
+            (subtree_contains b1 (fun n -> attr_val n "data-blockid" = Some "b2c")));
        (* bullet affordance in each row *)
        List.iter
          (fun n ->
@@ -479,15 +488,17 @@ let views_session : (Model.t, Action.t) S.t option ref = ref None
 
 let test_views_table () =
   let registry = Lui_extension.registry () in
-  Logseq_dom.register registry;
+  Logseq_emoji.register registry;
+  Logseq_katex.register registry;
+  Logseq_el.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
   Logseq_virt.register registry;
   let vs =
-    S.mount ~registry ~profile:Logseq_dom.web_profile ~initial:Model.initial
+    S.mount ~registry ~profile:Logseq_el.web_profile ~initial:Model.initial
       ~reducer:Update.update
       ~view:(fun _ctx _ms _send ->
-        Logseq_dom.dom
+        Logseq_el.el
           [ Views_view.view ~kind:Views_state.KAllPages
               ~owner:(W.String "$$$views") ])
       ()
@@ -948,7 +959,7 @@ let test_journal_reorder_move_collapse () =
     match find_block uuid with
     | Some { M.parent = Some pid; _ } ->
         List.filter_map
-          (fun c -> attr_val c "blockid")
+          (fun c -> attr_val c "data-blockid")
           (List.filter (fun c -> has_tok c "ls-block")
              (M.children (tree ()) pid))
     | _ -> []

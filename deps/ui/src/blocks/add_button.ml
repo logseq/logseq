@@ -11,9 +11,9 @@ open Web_dom
    the sync doc scan revisits this button on every flush, so only write
    when the value differs or the observer would spin forever *)
 let set_parent_attr btn puuid =
-  match el_get_attr btn "parentblockid" with
+  match el_get_attr btn "data-parentblockid" with
   | Some v when String.equal v puuid -> ()
-  | _ -> el_set_attr btn "parentblockid" puuid
+  | _ -> el_set_attr btn "data-parentblockid" puuid
 
 (* cljs page.cljs add-button-inner: block routes carry
    .ls-block-content-indent + margin-left 6, page routes margin-left 22 *)

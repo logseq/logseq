@@ -661,7 +661,7 @@ let on_normal_key ev =
       match D.closest_sel ".block-add-button" (D.ev_target ev) with
       | Some btn ->
           D.ev_prevent_default ev;
-          A.append_block ?for_page:(D.el_get_attr btn "parentblockid") ()
+          A.append_block ?for_page:(D.el_get_attr btn "data-parentblockid") ()
       | None -> (
           match S.anchor () with
           | Some u when selected () ->
@@ -1085,7 +1085,7 @@ let on_click ev =
        on an empty page where no block_row has mounted the state yet *)
     match D.closest_sel ".block-add-button" target with
   | Some btn ->
-      A.append_block ?for_page:(D.el_get_attr btn "parentblockid")
+      A.append_block ?for_page:(D.el_get_attr btn "data-parentblockid")
         ~scope:(A.scope_of_el btn) ()
   | None ->
       if S.ready () then
@@ -1099,7 +1099,7 @@ let on_click ev =
         | None -> (
             match D.closest_sel ".block-children-left-border" target with
             | Some el -> (
-                match D.el_get_attr el "blockid" with
+                match D.el_get_attr el "data-blockid" with
                 | Some u ->
                     A.toggle_collapse ~scope:(A.scope_of_el el) u
                 | None -> ())
@@ -1182,7 +1182,7 @@ let on_click ev =
                                             ()
                                         | Some el -> (
                                             match
-                                              D.el_get_attr el "blockid"
+                                              D.el_get_attr el "data-blockid"
                                             with
                                             | Some u ->
                                                 (* scope by container: the
@@ -1232,7 +1232,7 @@ let on_click ev =
                                                 | Some el -> (
                                                     match
                                                       D.el_get_attr el
-                                                        "blockid"
+                                                        "data-blockid"
                                                     with
                                                     | Some u ->
                                                         let scope =
@@ -1328,7 +1328,7 @@ let on_mousedown ev =
        | None -> (
            match D.closest_sel ".block-content" (D.ev_target ev) with
            | Some el ->
-               ( Option.value (D.el_get_attr el "blockid") ~default:""
+               ( Option.value (D.el_get_attr el "data-blockid") ~default:""
                , now, stale )
            | None -> (
                (* the add-block row appends a block then enters edit —

@@ -15,7 +15,7 @@ module S = Properties_state
 module I18n = I18n
 module W = Wire
 
-let dom = Logseq_dom.dom
+
 
 (* cljs query-builder/db-based-block-filters + operators *)
 let filters =
@@ -101,8 +101,8 @@ let block_el uuid (_b : Model.block) : Lui_elements.t =
              .lui-button-label span — Playwright's button:text('filter')
              locator only matches when the button itself is the smallest
              element containing the text, i.e. a direct text node. Keep
-             dom ~text until the e2e contract or the adapter changes. *)
-          dom ~key:("qb-" ^ uuid) ~tag:"button" ~id:("qb-" ^ uuid)
+             Logseq_el.el ~text until the e2e contract or the adapter changes. *)
+          Logseq_el.el ~key:("qb-" ^ uuid) ~tag:"button" ~id:("qb-" ^ uuid)
             ~style_class:
               "jtrigger !px-1 h-6 add-filter text-muted-foreground"
             ~attrs:[ ("type", "button") ]

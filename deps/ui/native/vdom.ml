@@ -216,7 +216,7 @@ let listen el name f =
       | _ -> ())
 
 (* every materialized element gets one LUI on_event hook mirroring
-   logseq_dom.ml's: dom-event -> Platform.emit_event (which bubbles
+   native logseq_el.ml's: dom-event -> Platform.emit_event (which bubbles
    through dom_handlers and fires window_listeners) *)
 let wire_dom_event rt node v =
   let scope = Signal.scope "vel" in

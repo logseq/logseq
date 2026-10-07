@@ -6,7 +6,7 @@
 open Promise_ext
 open Lui_elements
 
-let dom = Logseq_dom.dom
+let dom = Logseq_el.el
 module T = I18n
 let finish_import repo label =
   let short = Graphs_ops.short_name repo in
@@ -228,7 +228,7 @@ let on_change id () =
    `lui-file-picker` element — no Picked event, no web File objects.
    Needs a web FilePicker backend plus directory-pick support *)
 let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
-  dom ~key:id ~tag:"label"
+  Logseq_el.el ~key:id ~tag:"label"
     ~style_class:"action-input"
     [ box ~key:(id ^ "-ic") ~style_class:"as-flex-center"
         [ icon ~key:(id ^ "-ico") ~name:(`app "logseq-logo")
@@ -237,7 +237,7 @@ let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
         ~style_class:"ls-imp-field"
         [ text ~key:(id ^ "-s") ~as_:`Strong ~value:label []
         ; text ~key:(id ^ "-d") ~as_:`Small ~value:desc [] ]
-    ; dom ~key:(id ^ "-i") ~tag:"input"
+    ; Logseq_el.el ~key:(id ^ "-i") ~tag:"input"
         ~style_class:"ls-hidden-input"
         ~attrs:
           ([ ("id", id); ("type", "file"); ("accept", accept) ]

@@ -156,7 +156,7 @@
     (b/new-blocks [seed-title candidate-title ""])
     (let [candidate-uuid (.getAttribute
                           (w/-query (str ".ls-block[data-block-title='" candidate-title "']"))
-                          "blockid")]
+                          "data-blockid")]
       (util/input-command "query")
       (w/click (util/-query-last "button:text('filter')"))
       (util/input "page reference")

@@ -14,7 +14,7 @@
    render_dom.ml. *)
 
 open Lui_elements
-module D = Render_dom
+module D = Logseq_el
 
 (* .block-title-wrap with inline-parsed children; plain titles become a
    direct text node (cljs parity — Playwright :text-is needs it).
@@ -244,7 +244,7 @@ let code_block ?(self = "") ?(extra = []) lang code =
                  text ~key:"lang"
                    ~style_class:"extensions__code-lang"
                    ~value:(String.lowercase_ascii lang) []
-               else Logseq_dom.fragment [])
+               else Logseq_el.fragment [])
              ; row ~key:"ce" ~grow:1.0 ~style_class:"code-editor"
                  [ (* logseq-codemirror block role: the adapter emits the
                       textarea#edit-block-<uuid>[data-lang] surface and
@@ -252,7 +252,7 @@ let code_block ?(self = "") ?(extra = []) lang code =
                       instance) *)
                    Logseq_codemirror.cm ~key:"ta" ~uuid:self ~lang
                      ~value:code ~source_role:"block" ()
-                 ; (if not calc then Logseq_dom.fragment []
+                 ; (if not calc then Logseq_el.fragment []
                     else
                       match calc_results_el code with
                       | Some el -> el

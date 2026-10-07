@@ -1110,7 +1110,7 @@ let run_add_reaction st =
   | uuids -> (
       let anchor =
         match uuids with
-        | u :: _ -> Web_dom.query_selector ("[blockid='" ^ u ^ "']")
+        | u :: _ -> Web_dom.query_selector ("[data-blockid='" ^ u ^ "']")
         | [] -> None
       in
       match anchor with
@@ -1161,7 +1161,7 @@ let run_add_property_icon st =
   | uuids -> (
       let anchor =
         match uuids with
-        | u :: _ -> Web_dom.query_selector ("[blockid='" ^ u ^ "']")
+        | u :: _ -> Web_dom.query_selector ("[data-blockid='" ^ u ^ "']")
         | [] -> None
       in
       match anchor with

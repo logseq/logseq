@@ -9,6 +9,6 @@ let el ?key ~name () : Lui_elements.t =
     | Some c -> c
     | None -> ""
   in
-  Logseq_dom.dom ?key ~tag:"em-emoji"
+  Logseq_el.el ?key ~tag:"em-emoji"
     ~attrs:[ ("id", name); ("data-emoji", ch) ]
     []

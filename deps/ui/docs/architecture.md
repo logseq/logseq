@@ -43,12 +43,12 @@ copied from `resources/index.html` when it changes.
 
 - `View.view` runs ONCE. Dynamic UI = signal-driven props
   (`style_class_signal`, `text_signal`, `attrs_signal_v`, `id_signal` on
-  `Logseq_dom.dom`) or `dyn ~equal f signal` / `if_ ~test` subtrees.
+  `Logseq_el.el`) or `dyn ~equal f signal` / `if_ ~test` subtrees.
 - After mutating state outside an event handler (async `then_`, timers):
   `Runtime.signal_set signal v` (sets + flushes). Inside `on_dom_event`
   handlers a flush happens automatically after the handler.
 - `dyn` needs a real parent node — the root of a subtree can't be `dyn`;
-  wrap in a `box`/`Logseq_dom.dom` container.
+  wrap in a `box`/`Logseq_el.el` container.
 
 ## State ownership
 
@@ -61,15 +61,15 @@ copied from `resources/index.html` when it changes.
 
 ## DOM building — the `logseq-*` extension family
 
-`Logseq_dom.dom` is the workhorse (raw elements with attrs + DOM events):
+`Logseq_el.el` is the escape hatch (raw elements with attrs + DOM events):
 
 ```ocaml
 open Lui_elements
-Logseq_dom.dom ~key:"x" ~tag:"button" ~id:"search-button"
+Logseq_el.el ~key:"x" ~tag:"button" ~id:"search-button"
   ~style_class:"cp__header-btn"             (* static class *)
-  ~style_class_signal:(Logseq_dom.class_signal ms (fun m -> "..."))
+  ~style_class_signal:(Logseq_el.class_signal ms (fun m -> "..."))
   ~attrs:[ ("data-testid", "page title"); ("role", "menuitem") ]
-  ~attrs_signal_v:(Logseq_dom.attrs_signal ms (fun m -> [ ("aria-checked", ...) ]))
+  ~attrs_signal_v:(Logseq_el.attrs_signal ms (fun m -> [ ("aria-checked", ...) ]))
   ~text:"..."  ~text_signal:(...)
   ~events:"click keydown input"             (* space-separated DOM events *)
   ~on_dom_event:(fun name payload -> ... )  (* payload: JSON string *)
@@ -82,7 +82,7 @@ targetId targetClass`. On `input`/`change` events `value`/`checked` carry
 the target's current values — read them with `Platform.json_*` helpers.
 
 Standard LUI elements (`box`, `text`, `dyn`, `if_`) are fine inside
-`Logseq_dom.dom` children — extension elements nest freely.
+`Logseq_el.el` children — extension elements nest freely.
 
 ## Worker calls
 

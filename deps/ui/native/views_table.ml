@@ -9,7 +9,7 @@
    reactive props — no imperative rebuilds. Overlay surfaces (menus,
    dialogs) mount imperatively through Views_popup. *)
 
-module D = Logseq_dom
+module D = Logseq_el
 module E = Web_dom
 module I = I18n
 module V = Views_state
@@ -22,9 +22,8 @@ type t = Lui_elements.t
 
 open Lui_elements
 
-let dom = D.dom
-let if_ = D.if_
-let keyed = D.keyed
+let if_ = Lui_elements.if_
+let keyed = Lui_elements.keyed
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
   inst.V.st.Signal.state_signal
 
@@ -546,7 +545,7 @@ let header_button inst (c : V.column) : t =
   (* sort_sig/arrow derivations ride the mount's scope — the shared
      vstate signal outlives the button otherwise *)
   let sort_sig =
-    D.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) ->
            List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
@@ -554,9 +553,9 @@ let header_button inst (c : V.column) : t =
   in
   button ~variant:`ghost ~size:`sm ~text:c.V.c_name ~grow:1.
     ~main:`start ~height:32 ~padding_horizontal:8
-    [ if_ ~test:(D.own ctx (Signal.map (fun o -> o <> None) sort_sig))
+    [ if_ ~test:(Logseq_el.own ctx (Signal.map (fun o -> o <> None) sort_sig))
         (icon_dyn
-           (D.own ctx
+           (Logseq_el.own ctx
               (Signal.map
                  (fun o ->
                    match o with
@@ -749,7 +748,7 @@ let action_bar inst : t =
   let isig = sig_of inst in
   (if_
      ~test:
-       (D.own ctx
+       (Logseq_el.own ctx
           (Signal.map
              (fun s -> not (V.Sset.is_empty s.V.selected)) isig))
     (box ~style_class:"table-action-bar absolute top-0"
@@ -874,14 +873,14 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  dom ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
+  Logseq_el.el ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
     ~id:("ls-block-" ^ row_uuid)
     ~style_class_signal:
-      (Logseq_dom.class_signal (sig_of inst) (fun (s : V.vstate) ->
+      (Logseq_el.class_signal (sig_of inst) (fun (s : V.vstate) ->
            "ls-table-row ls-block"
            ^ if V.Sset.mem row_uuid s.V.selected then " selected" else ""))
     ~attrs:
-      [ ("blockid", row_uuid); ("data-id", row_uuid); ("tabindex", "0") ]
+      [ ("data-blockid", row_uuid); ("data-id", row_uuid); ("tabindex", "0") ]
     ~events:"keydown"
     ~on_dom_event:(table_row_keydown inst ~row_uuid)
     [ (* cljs: .sticky-columns holds pinned cells, sibling .flex.flex-row
@@ -904,7 +903,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
 let row_stream inst cols uuids : t =
  fun ctx parent ->
   let items_sig =
-    D.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
          inst.V.st.Signal.state_signal)
@@ -1034,9 +1033,10 @@ let grouped_table inst ~rows : t =
 (* same .ls-block[blockid] contract as row_el: the context-menu, block
    picker and dnd readers resolve list rows by blockid/data-id *)
 let list_row_el ~row_uuid ~title : t =
-  dom ~key:("ls-lr-" ^ row_uuid) ~tag:"div"
-    ~id:("ls-block-" ^ row_uuid) ~style_class:"ls-block"
-    ~attrs:[ ("blockid", row_uuid); ("data-id", row_uuid) ]
+  column ~key:("ls-lr-" ^ row_uuid)
+    ~accessibility_identifier:("ls-block-" ^ row_uuid)
+    ~style_class:"ls-block"
+    ~data_attrs:[ ("data-blockid", row_uuid); ("data-id", row_uuid) ]
     [ row ~gap:4 ~style_class:"block-main-container"
         [ box ~style_class:"block-content"
             ~accessibility_identifier:("block-content-" ^ row_uuid)
@@ -1097,7 +1097,7 @@ let list_row_el_sig inst ~row_uuid (item_sig : row_item Signal.signal) : t =
 let foldable inst ~key ~title ~(body : t) : t =
  fun ctx parent ->
   let collapsed_sig =
-    D.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> V.Sset.mem key s.V.collapsed_groups)
          inst.V.st.Signal.state_signal)
@@ -1151,7 +1151,7 @@ let group_title s gv =
 let list_stream inst uuids : t =
  fun ctx parent ->
   let items_sig =
-    D.own ctx
+    Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> List.map (row_item_of s) uuids)
          inst.V.st.Signal.state_signal)
@@ -1185,7 +1185,7 @@ let list_stream inst uuids : t =
 let render_list inst s : t =
   match s.V.data with
   | Wr.VGrouped gs ->
-      D.fragment
+      Logseq_el.fragment
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1197,7 +1197,7 @@ let render_list inst s : t =
          (.ml-6.text-sm.opacity-70) above each parent group's rows —
          no foldable caret. The native row body stays title-only
          (no block layer here) *)
-      D.fragment
+      Logseq_el.fragment
         (List.concat_map
            (fun g ->
              List.mapi
@@ -1217,7 +1217,7 @@ let render_gallery inst _s : t =
   row ~gap:8 ~padding:8 ~columns:4
     [ keyed
         ~source:
-          (D.own ctx
+          (Logseq_el.own ctx
              (Signal.map
                 (fun (s' : V.vstate) -> flat_items s')
                 inst.V.st.Signal.state_signal))
@@ -1228,7 +1228,7 @@ let render_gallery inst _s : t =
 let render_table inst s : t =
   match s.V.data with
   | Wr.VGrouped gs ->
-      D.fragment
+      Logseq_el.fragment
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1236,13 +1236,13 @@ let render_table inst s : t =
                ~body:(grouped_table inst ~rows:g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
-      D.fragment
+      Logseq_el.fragment
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
                ~title:(text ~value:(group_title s g.Wr.glv) [])
                ~body:
-                 (D.fragment
+                 (Logseq_el.fragment
                     (List.mapi
                        (fun j (buuid, rows) ->
                          foldable inst
@@ -1263,7 +1263,7 @@ let body_el inst (s : V.vstate) ~(filters : t) : t =
          text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground"
            []
        else
-         D.fragment
+         Logseq_el.fragment
            [ (match s.V.display_type with
               | "list" -> render_list inst s
               | "gallery" -> render_gallery inst s

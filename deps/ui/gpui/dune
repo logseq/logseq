@@ -1,7 +1,7 @@
 ; GPUI native host build — same module set as native/. The shared
 ; ../src + ../subs copies and the generated-table rules below are
 ; identical to native/dune; the native/*.ml files (the native platform
-; twin: platform.ml, vdom.ml, logseq_dom.ml, bridge, …) are copied
+; twin: platform.ml, vdom.ml, logseq_el.ml, bridge, …) are copied
 ; from ../native so the two hosts can never drift. Only the library
 ; name differs; host selection is the host_code the Rust host passes
 ; to lui_ocaml_start (6 = GPUIHost).
@@ -63,7 +63,7 @@
 (rule
  (copy ../native/lazy_children.ml lazy_children.ml))
 (rule
- (copy ../native/logseq_dom.ml logseq_dom.ml))
+ (copy ../native/logseq_el.ml logseq_el.ml))
 (rule
  (copy ../native/logseq_codemirror.ml logseq_codemirror.ml))
 (rule
@@ -351,8 +351,6 @@
  (copy ../src/render/render.ml render.ml))
 (rule
  (copy ../src/render/render_calc.ml render_calc.ml))
-(rule
- (copy ../src/render/render_dom.ml render_dom.ml))
 (rule
  (copy ../src/render/render_html.ml render_html.ml))
 (rule

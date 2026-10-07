@@ -97,7 +97,7 @@
   (w/eval-js
    "(() => {
       const editor = document.querySelector('.editor-wrapper textarea');
-      return editor?.closest('[blockid]')?.getAttribute('blockid') ?? null;
+      return editor?.closest('[data-blockid]')?.getAttribute('blockid') ?? null;
     })();"))
 
 (deftest focused-root-block-cannot-indent-or-move-test

@@ -7,8 +7,8 @@
 
 open Lui_elements
 
-let dom = Logseq_dom.dom
-let keyed = Logseq_dom.keyed
+
+let keyed = Lui_elements.keyed
 
 let overlay_cls = "ui__dialog-overlay"
 
@@ -205,7 +205,7 @@ let render (ms : Model.t Signal.signal) : t =
   let ureq_sig =
     Signal.map (fun (d : Dialogs_state.t) -> d.ui_request) ds
   in
-  Logseq_dom.fragment
+  Logseq_el.fragment
     [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
         ~mount:(fun name_sig ->
           (* name is stable per key — sample once *)

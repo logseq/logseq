@@ -22,7 +22,7 @@ module D = Web_dom
 module I = I18n
 module Ops = Outliner_ops
 
-let dom = Logseq_dom.dom
+
 
 type area_st =
   { box_open : bool
@@ -86,7 +86,7 @@ let toggle_reaction uuid emoji_id =
 (* shared reaction chips row — used by both block rows and comment rows *)
 let reactions_el uuid (rs : (string * int) list) : t =
   match rs with
-  | [] -> Logseq_dom.nothing
+  | [] -> Logseq_el.nothing
   | _ ->
       row ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
         (List.map

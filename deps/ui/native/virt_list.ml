@@ -9,7 +9,7 @@
    fixed-size lists). *)
 
 open Lui_elements
-module D = Logseq_dom
+module D = Logseq_el
 
 let enabled_min ~virtualize ~min count =
   virtualize && count > min
@@ -43,7 +43,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       | None -> Signal.constant sched data
     in
     let attrs_sig =
-      Logseq_dom.attrs_signal arr_sig (fun (arr : 'a array) ->
+      Logseq_el.attrs_signal arr_sig (fun (arr : 'a array) ->
           list_attrs
           @ [ ("data-virt-count", string_of_int (Array.length arr)) ])
     in
@@ -123,9 +123,9 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
         (* TODO(component): the lazy-mount dom-event is the Swift spine
            contract — the attr could ride ~data_attrs but no component
            kind carries a custom event channel *)
-        D.dom 
+        Logseq_el.el 
           ~attrs_signal_v:
-            (D.attrs_signal ns (fun n ->
+            (Logseq_el.attrs_signal ns (fun n ->
                ("data-lazy-mount", k)
                :: (if n then []
                    else
@@ -135,15 +135,15 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
                      ])))
           ~events:"lazy-mount"
           ~on_dom_event:(fun _name _payload -> Signal.set near true)
-          [ D.if_ ~test:ns (render it) ]
+          [ Lui_elements.if_ ~test:ns (render it) ]
     in
     (* TODO(component): data-virt-count could ride ~data_attrs but the
        virt-end dom-event driving pagination has no component
        equivalent *)
-    D.dom ~style_class:list_class ~events:"virt-end"
+    Logseq_el.el ~style_class:list_class ~events:"virt-end"
       ~attrs_signal_v:attrs_sig
       ~on_dom_event:(fun _name _payload -> on_end ())
-      [ D.keyed
+      [ Lui_elements.keyed
           ~source:(Signal.map Array.to_list source_sig)
           ~key:key_of_versioned ~cmp:String.compare
           ~mount:(fun item_sig -> row_mount (Signal.get item_sig)) ]
@@ -161,7 +161,7 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
   let sched = ctx.Lui_ui.ui_scheduler in
   let count_sig = Signal.map List.length source in
   let attrs_sig =
-    Logseq_dom.attrs_signal count_sig (fun n ->
+    Logseq_el.attrs_signal count_sig (fun n ->
         [ ("data-virt-count", string_of_int n) ])
   in
   (* same lazy latch as [list]: rows outside the first [initial_rows]
@@ -196,9 +196,9 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
       let ns = near.Signal.state_signal in
       (* TODO(component): same lazy-mount dom-event Swift spine contract as
          [list] — stays a logseq-div *)
-      D.dom 
+      Logseq_el.el 
         ~attrs_signal_v:
-          (D.attrs_signal ns (fun n ->
+          (Logseq_el.attrs_signal ns (fun n ->
              ("data-lazy-mount", k)
              :: (if n then []
                  else
@@ -208,12 +208,12 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
                    ])))
         ~events:"lazy-mount"
         ~on_dom_event:(fun _name _payload -> Signal.set near true)
-        [ D.if_ ~test:ns (mount item_sig) ]
+        [ Lui_elements.if_ ~test:ns (mount item_sig) ]
   in
   (* TODO(component): same data-virt-count + virt-end dom-event Swift spine
      contract as [list] — stays a logseq-div *)
-  (D.dom  ~events:"virt-end"
+  (Logseq_el.el  ~events:"virt-end"
      ~attrs_signal_v:attrs_sig
      ~on_dom_event:(fun _name _payload -> on_end ())
-     [ D.keyed ~source:source ~key ~cmp ~mount:row_mount ])
+     [ Lui_elements.keyed ~source:source ~key ~cmp ~mount:row_mount ])
     ctx parent

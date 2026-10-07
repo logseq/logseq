@@ -4,7 +4,7 @@
 
 open Promise_ext
 open Lui_elements
-module D = Render_dom
+module D = Logseq_el
 module U = I18n
 
 (* positional substring index, -1 when absent — byte-compare, no
@@ -1287,7 +1287,7 @@ and page_ref ?(tag = false) ~refs ~self name =
     else
       D.el ~tag:"span" ~style_class:"page-reference"
         ~attrs_signal_v:
-          (Logseq_dom.attrs_signal uuid_sig
+          (Logseq_el.attrs_signal uuid_sig
              (fun u -> [ ("data-ref", if u = "" then name else u) ]))
         [ bracket "[["
         ; preview_link (page_link ~tag:false ~uuid_sig name)

@@ -495,7 +495,7 @@ let scalar_edit_cell ctx row : t =
     add_active_edit ctx row;
     close_editor := (fun () -> commit true));
   (column ~gap:0 ~grow:1.0
-     [ if_ ~test:(Logseq_dom.own context (Signal.map (fun e -> not e) (Signal.value editing)))
+     [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
          (value_button ~text:initial ~on_press:(fun _ ->
               open_editor ~steal:true ()))
      ; if_ ~test:(Signal.value editing)
@@ -567,7 +567,7 @@ let date_view ctx row : t =
                value_button
                  ~text:(date_display (D.row_type row) value)
                  ~on_press:(fun _ -> Runtime.signal_set open_ true)))
-     ; (if D.value_empty_p value then Logseq_dom.nothing
+     ; (if D.value_empty_p value then Logseq_el.nothing
         else
           (* cljs bottom-property-edit-icon: always visible inside
              block-below pills; in panels CSS keeps it hover-only like

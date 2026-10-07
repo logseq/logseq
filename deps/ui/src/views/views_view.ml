@@ -7,7 +7,7 @@
    vstate signal — nothing scans the DOM to find mounted views. *)
 
 open Promise_ext
-module D = Logseq_dom
+module D = Logseq_el
 module E = Web_dom
 module V = Views_state
 module Wr = Views_wire
@@ -22,7 +22,6 @@ open Lui_elements
 
 type t = Lui_elements.t
 
-let dom = D.dom
 let sig_of (inst : V.inst) : V.vstate Signal.signal =
   inst.V.st.Signal.state_signal
 
@@ -108,7 +107,7 @@ let rec hiccup_els inst (w : W.t) : t list =
       in
       (* TODO(component): :view hiccup takes arbitrary user tags +
          attrs — no fixed component kind; keep dom for element nodes *)
-      [ dom ~tag ~attrs (List.concat_map (hiccup_els inst) children) ]
+      [ Logseq_el.el ~tag ~attrs (List.concat_map (hiccup_els inst) children) ]
   | W.Array xs | W.List xs | W.Set xs ->
       List.concat_map (hiccup_els inst) xs
   | W.String s -> [ text ~value:s [] ]
@@ -181,7 +180,7 @@ let query_content inst (s : V.vstate) : t =
   if is_dsl_blank then spacer ~key:"blank" []
   else if s.V.query_view <> W.Nil then
     (* :view fn output replaces the default table (cljs custom-query) *)
-    D.fragment (hiccup_els inst s.V.query_view)
+    Logseq_el.fragment (hiccup_els inst s.V.query_view)
   else if s.V.query_scalar_rows <> [] then
     list
       (List.map
@@ -214,7 +213,7 @@ let query_content inst (s : V.vstate) : t =
   else text ~value:I.no_matched_result ~padding_vertical:8 []
 
 let query_view_el inst : t =
-  D.fragment
+  Logseq_el.fragment
     [ box 
         [ reactive ~equal:body_eq
             (fun s ->

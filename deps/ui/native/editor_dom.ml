@@ -574,10 +574,10 @@ let debounce ms =
     clear_timeout !id;
     id := set_timeout_id f ms
 
-(* the DOM-level raw-text fixups (hidden delimiters, lui node ids) are a
+(* the DOM-level fixups (hidden delimiters, lui node ids) are a
    web rendering trick — the native text views show block source
    directly *)
-let ensure_raw_text_observer () = ()
+let ensure_dom_fixups () = ()
 
 let closest_sel sel target =
   match target with

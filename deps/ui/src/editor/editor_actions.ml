@@ -844,7 +844,7 @@ let index_of lst u =
    it extends down into the blocks *)
 let anchor_is_page_title anchor =
   match
-    D.query_selector (".ls-page-title .ls-block[blockid='" ^ anchor ^ "']")
+    D.query_selector (".ls-page-title .ls-block[data-blockid='" ^ anchor ^ "']")
   with
   | Some _ -> true
   | None -> false
@@ -1023,7 +1023,7 @@ let indent_or_outdent ~indent =
           uuids;
       (* outdent of a block rendered inside a page embed must move it next
          to the embed block, not inside the linked page — cljs
-         get-first-block-original reads originalblockid off the ancestor
+         get-first-block-original reads data-originalblockid off the ancestor
          .ls-block; the model parent is the embed block *)
       let parent_original =
         match S.find_parent focus with
@@ -1855,7 +1855,7 @@ let arrow_edge uuid up =
 
 (* append a fresh block at the bottom of the current page — or, on
    journals, at the bottom of the journal item the add-button lives in
-   (its parentblockid attr carries the page uuid) *)
+   (its data-parentblockid attr carries the page uuid) *)
 let append_block ?for_page ?(scope = "main") () =
   let page =
     match for_page with

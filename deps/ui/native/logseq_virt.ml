@@ -9,6 +9,6 @@
 
 let region ?key ?(style_class = "") ?(data_attrs = []) ?(style = "")
     (children : Lui_elements.t list) : Lui_elements.t =
-  Logseq_dom.dom ?key ~style_class
+  Logseq_el.el ?key ~style_class
     ~attrs:(data_attrs @ if style = "" then [] else [ ("style", style) ])
     children

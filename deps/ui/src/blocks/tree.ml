@@ -25,7 +25,6 @@ open Lui_elements
 
 module S = Editor_state
 
-let dom = Logseq_dom.dom
 
 let contains_sub s sub =
   let n = String.length s and m = String.length sub in
@@ -57,8 +56,9 @@ let row_class_str (b : Model.block) uuid (selected : S.String_set.t) =
 
 let row_class_sig uuid blank embed (b : Model.block) =
   ignore (blank, embed);
-  Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
-      row_class_str b uuid selected)
+  Signal.map
+    (fun selected -> row_class_str b uuid selected)
+    (S.selected_sig ())
 
 (* same class signal driven by a per-item block signal — keyed rows get
    fresh block records on republish, so blank/embed/order-list must not
@@ -69,7 +69,7 @@ let row_class_sig_of (bs : Model.block Signal.signal) =
   Signal.map2
     (fun (b : Model.block) selected ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      Lui_protocol.StringValue (row_class_str b uuid selected))
+      row_class_str b uuid selected)
     bs (S.selected_sig ())
 
 (* effective collapse for a block: scoped UI overrides, then persisted
@@ -82,15 +82,16 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block)
     (v : S.collapse_view) =
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
-  [ ("id", "ls-block-" ^ uuid)
-  ; ("blockid", uuid)
-  ; ("containerid", uuid)
+  (* the row's DOM id is the kind's accessibility-identifier — it stays
+     out of data_attrs so the id prop owns it *)
+  [ ("data-blockid", uuid)
+  ; ("data-containerid", uuid)
   ; ("data-block-title", b.block_title)
   ; ("data-comment-item", string_of_bool b.Model.block_is_comment)
   ; ("data-comments-area"
     , string_of_bool (Comments.is_comments_area b))
   ; ("data-block-format", "markdown")
-  ; ("haschild", string_of_bool has_children)
+  ; ("data-haschild", string_of_bool has_children)
   ; ( "data-collapsed"
     , string_of_bool
         (has_children
@@ -98,24 +99,24 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block)
   ; ("data-db-collapsable", string_of_bool b.Model.block_db_collapsable)
   ; (* cljs level = render depth (config :level, 0 at page root), not the
        db block/level *)
-    ("level", string_of_int depth)
+    ("data-level", string_of_int depth)
   ]
   (* cljs sets blockid to the linked entity's uuid and
      originalblockid to the linking block's — we keep blockid as the
      embed block's own uuid so delegated editing/ops resolve it *)
-  @ (if embed then [ ("originalblockid", uuid); ("data-embed", "true") ]
+  @ (if embed then [ ("data-originalblockid", uuid); ("data-embed", "true") ]
      else [])
 
 let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
-  Logseq_dom.attrs_signal (S.collapse_sig ()) (fun v ->
-      row_attrs_of ~scope ~depth uuid b v)
+  Signal.map
+    (fun v -> row_attrs_of ~scope ~depth uuid b v)
+    (S.collapse_sig ())
 
 let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
   Signal.map2
     (fun (b : Model.block) (v : S.collapse_view) ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      Lui_protocol.StringValue
-        (Logseq_dom.attrs_json (row_attrs_of ~scope ~depth uuid b v)))
+      row_attrs_of ~scope ~depth uuid b v)
     bs (S.collapse_sig ())
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
@@ -225,11 +226,12 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
      a fresh map per class_signal triples the subscriptions on every
      S.set publish. Owned into the row's scope so the collapse_sig
      subscription dies on unmount *)
-  let cs = Logseq_dom.own ctx (collapsed_sig ~scope b) in
-  (* #dot-<uuid> + blockid/draggable on the bullet stays dom (e2e
-     target + imperative dnd contract); the rest rides data_attrs and
-     reactive style_class — --ls-block-icon-size lives in the
-     lui-core.css [data-heading] rules *)
+  let cs = Logseq_el.own ctx (collapsed_sig ~scope b) in
+  (* #dot-<uuid> + data-blockid/draggable on the bullet ride data_attrs
+     and accessibility-identifier on the box (e2e target + imperative
+     dnd contract); the classes go through Ui_parts.class_signal —
+     --ls-block-icon-size lives in the lui-core.css [data-heading]
+     rules *)
 
   box ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
@@ -253,43 +255,43 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             ])
         ]
     ; box ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap"
-        [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
-            ~id:("dot-" ^ uuid)
-            ~attrs:
-              [ ("blockid", uuid); ("draggable", "true")
-              ; (* the lui-core.css circle is backend styling; native
-                   backends get no stylesheet, so the container's
-                   intrinsic box + centering is emitted inline *)
-                ( "style"
-                , "display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;min-width:14px;border-radius:7px"
-                )
-              ]
-            ~style_class_signal:
-              (Logseq_dom.class_signal cs (fun c ->
-                   bullet_cls ^ if c then " bullet-closed" else ""))
-            [ (match node_icon ~library b with
-               | Some icon -> icon_el uuid icon
-               | None ->
-                   dom ~key:("b-" ^ uuid) ~tag:"span"
-                     ~style_class_signal:
-                       (Logseq_dom.class_signal (S.selected_sig ()) (fun selected ->
-                            if S.String_set.mem uuid selected then
-                              "selected bullet"
-                            else "bullet"))
-                     ~attrs:
-                       [ ("blockid", uuid)
-                       ; (* see the container note above — the dot is
-                            intrinsic geometry, not a class lookup *)
-                         ( "style"
-                         , "width:6px;height:6px;flex-shrink:0;border-radius:999px;opacity:0.8;background:var(--lx-gray-08, var(--ls-block-bullet-color))"
-                         )
-                       ]
+        [ Ui_parts.class_signal cs
+            (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
+            (box ~key:("dotw-" ^ uuid)
+               ~accessibility_identifier:("dot-" ^ uuid)
+               ~data_attrs:
+                 [ ("data-blockid", uuid); ("draggable", "true")
+                 ; (* the lui-core.css circle is backend styling; native
+                      backends get no stylesheet, so the container's
+                      intrinsic box + centering is emitted inline *)
+                   ( "style"
+                   , "display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;min-width:14px;border-radius:7px"
+                   )
+                 ]
+               [ (match node_icon ~library b with
+                  | Some icon -> icon_el uuid icon
+                  | None ->
+                      Ui_parts.class_signal (S.selected_sig ())
+                        (fun selected ->
+                          if S.String_set.mem uuid selected then
+                            "selected bullet"
+                          else "bullet")
+                        (box ~key:("b-" ^ uuid)
+                           ~data_attrs:
+                             [ ("data-blockid", uuid)
+                             ; (* see the container note above — the dot
+                                  is intrinsic geometry, not a class
+                                  lookup *)
+                               ( "style"
+                               , "width:6px;height:6px;flex-shrink:0;border-radius:999px;opacity:0.8;background:var(--lx-gray-08, var(--ls-block-bullet-color))"
+                               )
+                             ]
                      (match b.Model.block_order_index with
                       | Some idx when order_list ->
                           [ label ~key:("ol-" ^ uuid)
                               ~value:(string_of_int idx ^ ".") [] ]
-                      | _ -> []))
-            ]
+                      | _ -> [])))
+            ])
         ]
     ]
     ctx parent
@@ -306,10 +308,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
 let content_el uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable *)
-  dom ~key:("content-" ^ uuid) ~style_class:"block-content inline"
-    ~id:("block-content-" ^ uuid)
-    ~attrs:
-      ([ ("blockid", uuid); ("containerid", uuid); ("style", "width:100%")
+  box ~key:("content-" ^ uuid) ~style_class:"block-content inline"
+    ~accessibility_identifier:("block-content-" ^ uuid)
+    ~data_attrs:
+      ([ ("data-blockid", uuid); ("data-containerid", uuid); ("style", "width:100%")
        ; ( "data-type"
          , Option.value b.Model.block_ls_type ~default:"default" ) ]
        @
@@ -385,7 +387,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
               else content_wrapper uuid b))
     (* the derivation outlives the mount unless it's owned into the
        row's scope — editing_sig is shared *)
-    (Logseq_dom.own ctx
+    (Logseq_el.own ctx
        (Signal.map
           (fun e ->
             match e with
@@ -422,7 +424,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
           link ~key:("th-" ^ key)
             ~url:"#" ~target:`self_
             ~style_class:"hash-symbol select-none" ~text:"#" []
-        ; (if priv then Logseq_dom.nothing
+        ; (if priv then Logseq_el.nothing
            else
              (* the 'x' press needs a pressable kind — link is not one,
                 so it renders as text; .block-tag:hover reveals it *)
@@ -480,7 +482,7 @@ let tags_el uuid (b : Model.block) : t =
       quads
   in
   match visible with
-  | [] -> Logseq_dom.nothing
+  | [] -> Logseq_el.nothing
   | tags ->
       row ~key:("tags-" ^ uuid) ~gap:4 ~style_class:"block-tags"
         (List.mapi
@@ -500,7 +502,7 @@ let () =
   Editor_keys.install_once ();
   Add_button.install ();
   Asset_dom.install ();
-  Web_dom.ensure_raw_text_observer ()
+  Web_dom.ensure_dom_fixups ()
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
@@ -594,9 +596,10 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
   (* the reload key is scope-namespaced: the same block uuid renders in the
      main list, sidebars, previews and embeds simultaneously, and a bare
      ls-<uuid> key makes those distinct rows claim each other's DOM node *)
-  dom ~key:("ls-" ^ scope ^ "-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
+  Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
+    (column ~key:("ls-" ^ scope ^ "-" ^ key)
+       ~accessibility_identifier:("ls-block-" ^ key)
+       ~data_attrs_signal:(row_attrs_sig ~scope ~depth uuid b)
     [ row_main ~editable ~library scope b
     ; (* .ls-block-content-indent: block properties area + block-below
          pills, sibling of .block-main-container *)
@@ -607,11 +610,11 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
        else if Render.is_cards_block b then
          (* class-Cards blocks get the same results shell *)
          Render.query_below_el uuid
-       else Logseq_dom.nothing)
+       else Logseq_el.nothing)
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library ~virtualize uuid scope b
-       else Logseq_dom.nothing)
-    ]
+       else Logseq_el.nothing)
+    ])
 
 (* keyed-row variant of row_el: the .ls-block shell is a stable node
    (keyed reconcile needs a node per item) and the content inside it is
@@ -644,16 +647,17 @@ and row_sig ~depth ~editable ~library ~virtualize scope
             || contains_sub title ("((" ^ u ^ "))"))
       ib
   in
-  (dom ~key:("ls-" ^ scope ^ "-" ^ key)
-    ~style_class_signal:(row_class_sig_of bs)
-    ~attrs_signal_v:(row_attrs_sig_of ~scope ~depth bs)
+  (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
+    (column ~key:("ls-" ^ scope ^ "-" ^ key)
+       ~accessibility_identifier:("ls-block-" ^ key)
+       ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth bs)
     [ reactive
         ~equal:
           (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
           a == b && ga = gb && not (gen_bumped a ia ib))
         (fun ((b : Model.block), _g, _i) ->
           row_main ~editable ~library scope b)
-        (Logseq_dom.own ctx
+        (Logseq_el.own ctx
            (Signal.map2
               (fun (b : Model.block) (_tick : int) ->
                 let g, i = Render_inline.invalidation () in
@@ -665,9 +669,9 @@ and row_sig ~depth ~editable ~library ~virtualize scope
          that becomes a query/cards block after mount (title or property
          edit) republishes bs and mounts the section instead of keeping
          the mount-time b0 snapshot *)
-      Logseq_dom.if_
+      Lui_elements.if_
         ~test:
-          (Logseq_dom.own ctx
+          (Logseq_el.own ctx
              (Signal.map
                 (fun (b : Model.block) ->
                   Render.is_query_block b || Render.is_cards_block b)
@@ -675,7 +679,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
         (Render.query_below_el
            (Option.value b0.Model.block_uuid ~default:""))
     ; row_children ~depth ~editable ~library ~virtualize scope bs
-    ])
+    ]))
     ctx parent
 
 and row_children ~depth ~editable ~library ~virtualize scope
@@ -687,7 +691,7 @@ and row_children ~depth ~editable ~library ~virtualize scope
      ~110 nodes per op. Owned into the row's scope so the map2's
      subscription on the shared collapse_sig dies with the row *)
   let show_sig =
-    Logseq_dom.own ctx
+    Logseq_el.own ctx
       (Signal.map2
          (fun (b : Model.block) (v : S.collapse_view) ->
            let uuid = Option.value b.block_uuid ~default:"" in
@@ -699,7 +703,7 @@ and row_children ~depth ~editable ~library ~virtualize scope
   in
   (reactive
     (fun show ->
-      if not show then Logseq_dom.nothing
+      if not show then Logseq_el.nothing
       else
         let b = Signal.get bs in
         let uuid = Option.value b.block_uuid ~default:"" in
@@ -754,8 +758,8 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
        (* keyed like the top-level list: indent/outdent/move splices a
           row in or out and only that row's node moves — siblings keep
           their DOM identity instead of the whole subtree remounting *)
-       [ Logseq_dom.keyed
-           ~source:(Logseq_dom.own ctx (Signal.map S.children_of bs))
+       [ Lui_elements.keyed
+           ~source:(Logseq_el.own ctx (Signal.map S.children_of bs))
            ~key:block_key ~cmp:String.compare
            ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
                      ~library ~virtualize) ]))
@@ -772,10 +776,10 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
            data attr; the web DOM ignores data-style *)
         ("data-style", "position:relative;margin-left:29px;padding-top:2px")
       ]
-    [ dom ~key:("border-" ^ uuid)
+    [ box ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
-        ~attrs:
-          [ ("blockid", uuid)
+        ~data_attrs:
+          [ ("data-blockid", uuid)
           ; (* hover-stripped pill from .block-children-left-border —
                intrinsic geometry for style-less backends *)
             ( "style"
@@ -813,7 +817,7 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
   if_
     ~test:
-      (Logseq_dom.own ctx
+      (Logseq_el.own ctx
          (Signal.map
             (fun v ->
               not
@@ -841,9 +845,10 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   let embed = b.block_link <> None in
   let has_children = b.block_children <> [] in
   let blank = String.trim b.block_title = "" in
-  dom ~key:("rfs-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope:"ref" ~depth uuid b)
+  Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
+    (column ~key:("rfs-" ^ key)
+       ~accessibility_identifier:("ls-block-" ^ key)
+       ~data_attrs_signal:(row_attrs_sig ~scope:"ref" ~depth uuid b)
     [ box ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
         ~data_attrs:(heading_attrs b)
@@ -853,7 +858,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                 [ row ~key:("bmc-" ^ key)
                      ~gap:8
                     [ column ~key:("col3-" ^ key) ~grow:1.
-                        [ dom ~key:("cew-" ^ key)
+                        [ box ~key:("cew-" ^ key)
                             ~style_class:"block-content-or-editor-wrap"
                             [ box ~key:("cei-" ^ key)
                                 ~style_class:"block-content-or-editor-inner"
@@ -888,8 +893,8 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
         ]
     ; Properties_area.block_area ~uuid
     ; (if has_children then children_static_el ~depth ~library uuid b
-       else Logseq_dom.nothing)
-    ])
+       else Logseq_el.nothing)
+    ]))
   ctx parent
 
 and children_static_el ~depth ~library uuid (b : Model.block) : t =
@@ -897,10 +902,10 @@ and children_static_el ~depth ~library uuid (b : Model.block) : t =
     ~style_class:"block-children-container"
     ~data_attrs:
       [ ("data-style", "position:relative;margin-left:29px;padding-top:2px") ]
-    [ dom ~key:("border-" ^ uuid)
+    [ box ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
-        ~attrs:
-          [ ("blockid", uuid)
+        ~data_attrs:
+          [ ("data-blockid", uuid)
           ; ( "style"
             , "position:absolute;left:-1px;top:0;bottom:0;width:4px;border-radius:2px;opacity:0.6"
             )

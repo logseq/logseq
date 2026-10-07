@@ -18,7 +18,7 @@ module D = Web_dom
 module W = Wire
 module U = I18n
 
-let dom = Logseq_dom.dom
+
 
 let comments_area_ident = "logseq.class/Comments"
 let comment_ident = "logseq.class/Comment"
@@ -152,7 +152,7 @@ let title_editor_el uuid : t =
     [ Ui_parts.editor_inner ~key:("ctei-" ^ uuid)
         [ (* TODO(component): #edit-block-<uuid> textarea — imperative
              editor surface, migrates with logseq-editor extension *)
-          dom ~key:("ctet-" ^ uuid) ~tag:"textarea"
+          Logseq_el.el ~key:("ctet-" ^ uuid) ~tag:"textarea"
             ~id:("edit-block-" ^ uuid) ~text:buffer [] ] ]
 
 (* cljs comments-area-title-view: the label swaps for the block editor

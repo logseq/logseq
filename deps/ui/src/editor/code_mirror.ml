@@ -379,7 +379,7 @@ let bound el =
 
 let uuid_of_el el =
   match D.el_closest el ".ls-block" with
-  | Some block -> D.el_get_attr block "blockid"
+  | Some block -> D.el_get_attr block "data-blockid"
   | None -> None
 
 let mount ?(read_only = false) uuid textarea =

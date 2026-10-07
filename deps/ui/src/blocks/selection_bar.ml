@@ -10,7 +10,7 @@ open Lui_elements
 
 module S = Editor_state
 
-let dom = Logseq_dom.dom
+
 
 (* title moves to ~label (the a11y name on native hosts); icon buttons
    carry ~icon, text buttons ~text — the button kind supplies
@@ -109,27 +109,27 @@ and node () : t =
     (* every map level holds an upstream subscription on the shared state
        signals — own each so the mount scope releases them *)
     let sel_sig =
-      Logseq_dom.own ctx
+      Logseq_el.own ctx
         (Signal.map2
            (fun _sel bar -> (Editor_actions.selected_uuids (), bar))
            (S.selected_sig ()) (S.action_bar_sig ()))
     in
     let source =
       let base =
-        Logseq_dom.own ctx
+        Logseq_el.own ctx
           (Signal.map (fun (sel, bar) -> (sel, bar, false, false)) sel_sig)
       in
       let with_popup =
         match Popups_state.non_cm_popup_signal () with
         | Some ps ->
-            Logseq_dom.own ctx
+            Logseq_el.own ctx
               (Signal.map2 (fun (sel, bar, _, c) p -> (sel, bar, p, c)) base ps)
         | None -> base
       in
       let with_cmdk =
         match Cmdk_state.open_signal () with
         | Some cs ->
-            Logseq_dom.own ctx
+            Logseq_el.own ctx
               (Signal.map2 (fun (sel, bar, p, _) c -> (sel, bar, p, c)) with_popup cs)
         | None -> with_popup
       in
@@ -140,13 +140,13 @@ and node () : t =
            , (bar : bool)
            , (popup : bool)
            , (cmdk : bool) ) ->
-        if popup || cmdk || not bar then Logseq_dom.nothing
+        if popup || cmdk || not bar then Logseq_el.nothing
         else
           match sel with
-      | [] -> Logseq_dom.nothing
+      | [] -> Logseq_el.nothing
       | first :: _ -> (
           match Web_dom.get_element_by_id ("ls-block-" ^ first) with
-          | None -> Logseq_dom.nothing
+          | None -> Logseq_el.nothing
           | Some blk ->
               let l, t, _r, _b, _w = Web_dom.bounding_rect_fields blk in
               (* cljs radix popover anchors the bar 48px above the first

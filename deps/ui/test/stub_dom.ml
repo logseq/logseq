@@ -299,7 +299,7 @@ and install_fields el r =
     ];
   (* real DOM `children` is element-only and live; `childNodes` stays the
      full kid list. Patch apply indexes `children`, so the distinction
-     matters for text-node children (raw-text swaps) *)
+     matters for text-node children (e.g. detached text nodes) *)
   let desc = Js.Json.object_ (Js.Dict.empty ()) in
   set_field desc "enumerable" true;
   set_field desc "get"
