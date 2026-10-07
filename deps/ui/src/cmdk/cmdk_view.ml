@@ -573,6 +573,7 @@ let search_only_chip st (gid : S.group_id) =
             ~style_class:"cp__cmdk-search-only-name"
             ~value:(gid_label gid) []
         ; button ~key:"clr" ~icon:`x ~size:`icon
+            ~label:I18n.close
             ~style_class:"cp__cmdk-search-only-clear"
             ~on_press:(fun _ -> S.clear_filter st)
             []

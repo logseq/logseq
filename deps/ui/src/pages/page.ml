@@ -428,6 +428,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       ~style_class:"ls-page-icon"
                                       [ button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
+                                          ~label:(I18n.t "property/set-icon")
                                           ~style_class:"ui__button as-ghost"
                                           ~on_press:(fun _ ->
                                             page_icon_picker page
@@ -691,11 +692,13 @@ let refs_view_head key ?on_search title count : t =
         ~style_class:"view-actions"
         [ view_ghost_btn "vh-fc" ~title:(I18n.t "reference/page-filter")
             "filter-cog" 18.
-        ; view_ghost_btn "vh-srt" "arrows-up-down" 18.
-        ; view_ghost_btn "vh-flt" "filter" 18.
+        ; view_ghost_btn "vh-srt" ~title:I18n.sort_groups_by
+            "arrows-up-down" 18.
+        ; view_ghost_btn "vh-flt" ~title:I18n.filter "filter" 18.
         ; row ~key:"vh-search" ~style_class:"view-action-search"
             [ row ~key:"vh-si" ~cross:`center
-                [ view_ghost_btn "vh-sb" ?on_click:on_search "search" 15. ] ]
+                [ view_ghost_btn "vh-sb" ?on_click:on_search
+                    ~title:(I18n.t "cmdk.action/search") "search" 15. ] ]
         ; box ~key:"vh-type" ~style_class:"view-action-type"
             [ (* property-value-inner[data-type] is the property-cell
                  trigger contract (jtrigger/open-value flows) *)
@@ -713,7 +716,7 @@ let refs_view_head key ?on_search title count : t =
                 ]
             ]
         ; button ~key:"vh-menu" ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots")
+            ~icon:(`app "dots") ~label:(I18n.t "ui/show-more")
             ~style_class:"ui__button as-ghost ls-dots-menu"
             []
         ]

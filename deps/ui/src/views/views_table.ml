@@ -758,6 +758,7 @@ let action_bar inst : t =
                     isig)
                []
            ; button ~variant:`ghost ~size:`icon ~icon:`trash
+               ~label:(I.t "editor/delete-selection")
                ~on_press:(fun _ -> delete_selected inst ()) []
            ]
        ])

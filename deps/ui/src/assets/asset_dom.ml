@@ -399,7 +399,7 @@ let action_bar uuid b : t =
   box ~key:("aab-" ^ uuid)
     [ button ~key:("aabbtn-" ^ uuid) ~variant:`ghost ~size:`icon
         ~accessibility_identifier:("asset-menu-btn-" ^ uuid)
-        ~icon:(`app "dots-vertical")
+        ~icon:(`app "dots-vertical") ~label:(I18n.t "ui/show-more")
         ~on_press:(fun _ ->
           match B.query_selector ("#asset-menu-btn-" ^ uuid) with
           | Some el ->

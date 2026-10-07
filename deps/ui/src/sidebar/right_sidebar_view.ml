@@ -232,7 +232,7 @@ let item_header st idx (it : Sidebar_state.item) =
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
         [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots")
+            ~icon:(`app "dots") ~label:(t "ui/show-more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32

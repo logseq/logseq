@@ -526,6 +526,7 @@ and mk_group_sort inst ident label =
 
 let more_actions_el inst : t =
   button ~variant:`ghost ~size:`sm ~icon:`ellipsis
+    ~label:(I.t "ui/show-more")
     ~style_class:"ls-icon-btn"
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst) []
@@ -585,7 +586,8 @@ let search_el inst : t =
      event maps it *)
   box ~style_class:"view-action-search"
     [ row ~style_class:"ls-row"
-        [ ghost_btn "search" ~on_click:(fun () ->
+        [ ghost_btn "search" ~title_:(I.t "cmdk.action/search")
+            ~on_click:(fun () ->
               if not (V.get inst).V.search_open then begin
                 V.update inst (fun s -> { s with V.search_open = true });
                 E.set_timeout
@@ -609,7 +611,8 @@ let search_el inst : t =
                              refresh inst)
                      | _ -> ())
                    []
-               ; ghost_btn "x" ~on_click:(fun () ->
+               ; ghost_btn "x" ~title_:I.close
+                   ~on_click:(fun () ->
                      V.update inst (fun s ->
                          { s with V.input = ""; search_open = false });
                      refresh inst) ]) ]
@@ -694,7 +697,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
         [ box 
             [ box ~style_class:"ls-view-filter-value-item"
                 [ text ~value:(filter_value_label inst f) [] ] ] ]
-    ; button ~variant:`ghost ~size:`icon ~icon:`x
+    ; button ~variant:`ghost ~size:`icon ~icon:`x ~label:I.delete
         ~style_class:"ls-vf-chip-x"
         ~on_press:(fun _ ->
           V.update inst (fun s ->
@@ -781,6 +784,7 @@ let render_head inst : t =
            [ (if s0.V.sorting <> [] then
                 button ~variant:`ghost ~size:`sm
                   ~icon:(Views_table.icon_of "arrows-up-down")
+                  ~label:I.sort_groups_by
                   ~style_class:"ls-icon-btn"
                   ~accessibility_identifier:
                     ("vsort-" ^ string_of_int inst.V.id)
@@ -795,6 +799,7 @@ let render_head inst : t =
               else spacer ~key:"no-sort" [])
            ; button ~variant:`ghost ~size:`sm
                ~icon:(Views_table.icon_of "filter")
+               ~label:I.filter
                ~style_class:"ls-icon-btn"
                ~accessibility_identifier:
                  ("vfilter-" ^ string_of_int inst.V.id)
