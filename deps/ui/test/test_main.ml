@@ -293,17 +293,17 @@ let test_update_popups () =
   check "title edit done" (not m2.editing_title);
   (* page_menu / appearance / confirm are mutually exclusive *)
   let m3 =
-    Update.update m2 (Action.Page_menu_set (Some (10., 20., true, None)))
+    Update.update m2 (Action.Page_menu_set (Some (10., 15., 20., true, None)))
   in
-  check "page_menu set" (m3.page_menu = Some (10., 20., true, None));
+  check "page_menu set" (m3.page_menu = Some (10., 15., 20., true, None));
   let m4 = Update.update m3 (Action.Appearance_set (Some (1., 2.))) in
   check "appearance clears page_menu"
     (m4.appearance = Some (1., 2.) && m4.page_menu = None);
   let m5 =
-    Update.update m4 (Action.Page_menu_set (Some (3., 4., false, None)))
+    Update.update m4 (Action.Page_menu_set (Some (3., 3., 4., false, None)))
   in
   check "page_menu clears appearance"
-    (m5.page_menu = Some (3., 4., false, None) && m5.appearance = None);
+    (m5.page_menu = Some (3., 3., 4., false, None) && m5.appearance = None);
   let m6 =
     Update.update m5
       (Action.Confirm_set
@@ -345,7 +345,7 @@ let test_update_popups2 () =
   let dirty =
     { Model.initial with
       Model.editing_title = true
-    ; page_menu = Some (0., 0., true, None)
+    ; page_menu = Some (0., 0., 0., true, None)
     ; appearance = Some (1., 1.)
     ; unlinked_open = true
     ; unlinked_search = true
@@ -1319,9 +1319,11 @@ let test_cmdk_view () =
      | Some it -> it.ititle = "two"
      | None -> false);
   check "item_at oob" (Cmdk_state.item_at v 99 = None);
-  check "dom key changes on hl"
+  check "dom key stable on hl"
     (Cmdk_state.item_dom_key i1
-     <> Cmdk_state.item_dom_key { i1 with ihl = true });
+     = Cmdk_state.item_dom_key { i1 with ihl = true });
+  check "dom key differs per item"
+    (Cmdk_state.item_dom_key i1 <> Cmdk_state.item_dom_key i2);
   check "dom key stable"
     (Cmdk_state.item_dom_key i1 = Cmdk_state.item_dom_key i1);
   (* node_exists suppresses the Create row *)
@@ -1354,8 +1356,13 @@ let test_cmdk_groups () =
       (Cmdk_state.group_order v q rows total)
   in
   let v = Cmdk_state.initial_view in
+  (* cljs :default refresh only fires on an input change, so a fresh-open
+     blank palette shows recents alone; the filters group appears once
+     the input has been edited *)
   check "blank input order"
-    (gids v "" [] 0
+    (gids v "" [] 0 = [ Cmdk_state.G_recently_updated ]);
+  check "blank input order after edit"
+    (gids { v with Cmdk_state.edited = true } "" [] 0
      = [ Cmdk_state.G_recently_updated; Cmdk_state.G_filters ]);
   check "query order"
     (gids v "abc" [] 0

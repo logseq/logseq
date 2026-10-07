@@ -199,7 +199,10 @@ and render_roots host roots =
       (groups_of roots)
 
 let show () =
-  match Web_dom.query_selector "#main-content-container" with
+  (* mount inside the page column, not #main-content-container: the
+     container is a flex row and a sibling host lands beside the page
+     title (cljs renders the recycle content under it) *)
+  match Web_dom.query_selector ".cp__sidebar-main-content" with
   | Some parent -> (
       match Web_dom.query_selector ".ls-recycle-page-content" with
       | Some host -> refresh host

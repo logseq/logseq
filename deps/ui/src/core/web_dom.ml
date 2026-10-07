@@ -82,6 +82,11 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector : string -> el option = "querySelector"
   [@@mel.scope "document"] [@@mel.return nullable]
 
+(* deepest element under a client point — the same node a real
+   pointer event's target resolves to (cljs `(.-target e)`) *)
+external element_at : float -> float -> el option = "elementFromPoint"
+  [@@mel.scope "document"] [@@mel.return nullable]
+
 (* the native twin names the document-scoped query doc_query *)
 let doc_query = query_selector
 

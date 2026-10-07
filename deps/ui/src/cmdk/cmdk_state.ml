@@ -101,7 +101,13 @@ type view =
   ; mouse : bool
   ; filter : group_id option
   ; recents : item list
+  ; edited : bool (* input was edited since open — cljs only loads the
+                     filters group once :default refresh-results fires on
+                     an input change, so a fresh-open blank palette shows
+                     no filters *)
   ; tip : int (* 0 = filter-results, 1 = open-sidebar (cljs rand-tip) *)
+  ; sidebar : bool (* cljs :sidebar? — drops the hints row and the group
+                      show-more link *)
   }
 
 type t =
@@ -112,7 +118,7 @@ type t =
 let initial_view =
   { open_ = false; input = ""; move_mode = false; groups = []
   ; expanded = []; hl = -1; mouse = false; filter = None
-  ; recents = []; tip = 0 }
+  ; recents = []; edited = false; tip = 0; sidebar = false }
 
 let latest_vs : view Signal.signal option ref = ref None
 let latest_t : t option ref = ref None
@@ -121,13 +127,25 @@ let latest_t : t option ref = ref None
    through the same run_command path palette items take *)
 let latest_st : t option ref = ref None
 
-let make scheduler : t =
+let make ?(register = true) scheduler : t =
   let vs = Signal.state scheduler initial_view in
-  latest_vs := Some vs.Signal.state_signal;
   let st = { vs; gen = ref 0 } in
-  latest_st := Some st;
+  (* the modal palette is the singleton shortcuts dispatch through;
+     sidebar cmdk blocks are independent and must not steal the refs *)
+  if register then begin
+    latest_vs := Some vs.Signal.state_signal;
+    latest_t := Some st;
+    latest_st := Some st
+  end;
   st
-let get st = Signal.get st.vs.state_signal
+(* Signal.set stages the value as pending until the next stabilize —
+   state_signal still reads the previously published value. Read pending
+   first so same-tick updates (on_input -> refresh, chained set_in calls)
+   see the freshest view instead of lagging one update behind. *)
+let get st =
+  match !(st.vs.Signal.pending) with
+  | Some v -> v
+  | None -> Signal.get st.vs.Signal.state_signal
 
 (* whether the palette is open — chrome like the selection action-bar
    hides while it is up *)
@@ -165,23 +183,13 @@ let decorate (v : view) : view =
 let set st v = Runtime.signal_set st.vs (decorate v)
 let set_in st f = set st (f (get st))
 
-(* Content-versioned DOM key: any render-visible change yields a new key,
-   so keyed lists drop+remount the row instead of publishing an in-place
-   update — a row must never re-mount its dynamic branches inside the
-   same flush that tears other rows down (that ordering emits create ops
-   for nodes the batch already dropped). *)
-let item_dom_key (it : item) =
-  let badge_n =
-    match it.ibadge with
-    | No_badge -> 0
-    | Text_badge -> 1
-    | Header_badge -> 2
-  in
-  Printf.sprintf "%s#%d|%b|%b|%s|%s|%s|%s|%s|%s|%d" it.ikey it.idx it.ihl
-    it.imouse it.iq it.ititle
-    (Option.value ~default:"" it.info)
-    (Option.value ~default:"" it.header)
-    it.iicon it.isc badge_n
+(* Stable DOM key: every dynamic field (query, highlight, mouse state,
+   position, rendered strings) republishes into the row's item_sig
+   reactive props, so in-place updates are safe — a stable key can never
+   re-mount dynamic branches mid-flush. Versioning the key on any of
+   those fields instead remounts every result row on each keystroke or
+   hover (~600 patch ops per char on a 50-item list). *)
+let item_dom_key (it : item) = it.ikey
 
 let flat_items (v : view) : item array =
   Array.of_list (List.concat_map (fun g -> g.gitems) v.groups)
@@ -618,10 +626,12 @@ let group_order v q rows total =
         Option.to_list (create_g ())
         @ cp () @ [ nodes_g (); files_g (); filters_g () ]
       else if String.trim q = "" then
-        (* cljs :default on blank input runs :initial + :filters; the
-           current-page group is emitted too but stays empty without
-           search rows and gets filtered below *)
-        cp () @ [ recents_g (); filters_g () ]
+        (* cljs :default on blank input runs :initial + :filters — but a
+           fresh-open palette never triggers :default (refresh-key
+           unchanged), so a blank-opened palette shows only recents;
+           filters appear once the user edits the input *)
+        if v.edited then cp () @ [ recents_g (); filters_g () ]
+        else cp () @ [ recents_g () ]
       else
         Option.to_list (create_g ())
         @ cp ()
@@ -694,12 +704,16 @@ let upsert_create v =
     { gid = G_create; gtitle = ""; gitems = create_items v.input
     ; gtotal = 0; glimit = 1; gexpanded = false; gfilter_active = false }
   in
-  (* cljs filtered order puts create after the filtered group *)
+  (* cljs filtered order puts create after the filtered group.
+     renumber here too: until the search lands there is no apply_results
+     pass, and hl addresses items by idx — an unnumbered create row
+     could never be highlighted *)
   { v with
     groups =
-      (match v.filter with
-       | Some _ -> others @ [ g ]
-       | None -> g :: others)
+      renumber
+        (match v.filter with
+         | Some _ -> others @ [ g ]
+         | None -> g :: others)
   }
 
 (* cljs load-results :initial — recently-updated pages from storage ids *)
@@ -740,7 +754,7 @@ let load_recents st repo =
      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
 
 let on_input st q =
-  set_in st (fun v -> upsert_create { v with input = q });
+  set_in st (fun v -> upsert_create { v with input = q; edited = true });
   (* search fires on the keystroke itself — a debounce delays the last
      keystroke's results past the worker roundtrip it should overlap.
      gen-stamped responses keep stale answers from overwriting newer
@@ -845,6 +859,7 @@ let open_palette ?(move = false) st =
           ; input = (match saved with Some (q, _) -> q | None -> "")
           ; move_mode = move
           ; mouse = false
+          ; edited = false
           (* cljs move-selected-blocks opens via go-to-search! :nodes,
              which pins the nodes filter — keeps recents/filters out *)
           ; filter =
@@ -883,6 +898,26 @@ let close st =
 let clear_filter st =
   set_in st (fun v -> { v with filter = None });
   refresh st
+
+(* sidebar cmdk block: independent state seeded with the query —
+   a fresh make() never runs :default in cljs either, but here the
+   query is already non-blank so groups load normally *)
+let make_sidebar scheduler q : t =
+  let st = make ~register:false scheduler in
+  set_in st (fun v -> { v with input = q; edited = true; sidebar = true });
+  apply_results st q false [] [] 0;
+  refresh st;
+  st
+
+(* cljs mod+enter -> consume-open-search-sidebar-keydown!: close the
+   palette and pin the current query as a sidebar search pane *)
+let open_search_sidebar st =
+  let v = get st in
+  close st;
+  if String.trim v.input <> "" then
+    match !Sidebar_state.st_ref with
+    | Some sst -> Sidebar_state.add_search_item sst v.input
+    | None -> ()
 
 let clear_or_close st =
   let v = get st in
@@ -1476,7 +1511,7 @@ and run_command st repo (cid : string) =
       close st;
       (match target_uuids () with
        | u :: _ -> Properties_dialog.open_for_block u
-       | [] -> ())
+       | [] -> Properties_dialog.open_for_current ())
   (* cljs :editor/new-property {:property-key _} — the named property's
      dedicated picker, not the generic property sheet *)
   | "editor/add-property-deadline" | "editor/add-property-status"
@@ -1498,6 +1533,18 @@ and run_command st repo (cid : string) =
   | "editor/add-property-icon" -> run_add_property_icon st
   | "editor/add-reaction" -> run_add_reaction st
   | "editor/add-comment" -> run_add_comment repo st
+  | "go/flashcards" ->
+      close st;
+      Sidebar_state.open_cards ()
+  | "editor/toggle-number-list" ->
+      close st;
+      List.iter
+        (fun u -> Editor_commands.toggle_own_list u 0)
+        (Editor_actions.selected_uuids ())
+  | "ui/toggle-brackets" ->
+      close st;
+      ignore (Settings_state.config_toggle "ui/show-brackets?" ~default:true)
+  | "graph/open" -> nav "#/graphs" Model.All_graphs
   | _ -> (
       (match shortcut_action cid with
        | Some f -> f ()

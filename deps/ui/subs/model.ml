@@ -226,7 +226,9 @@ type t =
   ; left_sidebar_open : bool
   ; right_sidebar_open : bool
   ; editing_title : bool
-  ; page_menu : (float * float * bool * string option) option
+  ; page_menu
+      : (float * float * float * bool * string option) option
+        (* anchor cx/top/bottom, with_app_items, page uuid *)
     (* click position + with_app_items (toolbar dots vs page context
        menu) + the menu page uuid; uuid None = resolve from the current
        route like cljs right-sidebar/get-current-page *)
@@ -238,6 +240,8 @@ type t =
   ; unlinked_open : bool
   ; unlinked_search : bool
   ; unlinked_query : string
+  ; linked_search : bool
+  ; linked_query : string
   ; help_open : bool
   ; unlinked_blocks : block list
   ; rtc : rtc option
@@ -280,6 +284,8 @@ let initial =
   ; unlinked_open = true
   ; unlinked_search = false
   ; unlinked_query = ""
+  ; linked_search = false
+  ; linked_query = ""
   ; help_open = false
   ; unlinked_blocks = []
   ; rtc = None

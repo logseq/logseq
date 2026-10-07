@@ -240,6 +240,8 @@ let en_overrides = function
   | "editor/cycle-todo" -> "Rotate the TODO state"
   | "editor/search-for-node" -> "Search for a node"
   | "editor/search-for-tag" -> "Search for a tag"
+  | "editor/reference-node-use-page-ref" ->
+      "To reference a node, please use `[[]]`."
   | "editor/display-tag-inline-hint" ->
       "to display this tag inline instead of at the end of this node."
   | "editor/block-search" -> "Search for a block"
@@ -740,7 +742,9 @@ let group_page_updated = t "view.table/group-page-updated-date"
 let group_page_created = t "view.table/group-page-created-date"
 let filter_tags = t "property.built-in/tags"
 let all_graphs = t "graph/all-graphs"
+let switch_to = t "graph.switch/prompt"
 let create_new_graph = t "graph/create-new"
+let create_db_graph = t "graph/create-db"
 let local_graphs = t "graph/local-graphs"
 let open_in_another_tab = t "graph/open-in-another-tab-action"
 let remote_graphs = t "graph/remote-graphs"

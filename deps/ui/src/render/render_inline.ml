@@ -29,7 +29,9 @@ let find_sub s i pat =
     in
     go i
 
-let bracket s = text ~style_class:"bracket" ~value:s []
+(* .bracket's opacity:0.3 in lui-core.css is stylesheet chrome — the
+   muted-foreground token carries the same soft look to native backends *)
+let bracket s = text ~style_class:"bracket" ~foreground:"muted-foreground" ~value:s []
 
 (* cljs page-reference wraps the anchor in .preview-ref-link —
    logseq-span hosts, not text: children of a text node never draw on
@@ -312,13 +314,16 @@ let block_ref uuid =
     ~attrs:[ ("data-ref", uuid) ]
     [ block_ref_anchor uuid ]
 
-(* cljs asset-container / image-or-fallback *)
+(* cljs .as-plain-image-link / asset-container: a plain <img> sizes to
+   its intrinsic dimensions; the `image` kind is a fixed-frame element
+   (absolute-filled span) and collapses to 0x0 without explicit dims *)
 let image_el ~src ~alt =
-  (* title tooltip is dropped — alt covers the same text; no tooltip
-     prop exists on image *)
-  box ~style_class:"asset-container image normalize"
-    [ image ~url:src ~alt ~loading:`lazy_ ~referrer_policy:`no_referrer
-        ~corner_radius:2 ~style_class:"relative" [] ]
+  D.el ~tag:"div" ~style_class:"asset-container image normalize"
+    [ D.el ~tag:"img"
+        ~attrs:
+          [ ("src", src); ("alt", alt); ("loading", "lazy")
+          ; ("referrerpolicy", "no-referrer") ]
+        [] ]
 
 (* inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/<sub>/<sup>/
    <strong>/<kbd> styling comes from element-selector CSS
@@ -1219,6 +1224,7 @@ and try_match ~refs ~self s i : (t * int * run_spec) option =
   | '_' -> try_uscore ~refs ~self s i
   | '~' -> try_strike ~refs ~self s i
   | '^' -> try_hl ~refs ~self s i
+  | '=' -> try_eq ~refs ~self s i
   | '$' -> try_math s i
   | '{' -> try_macro ~refs ~self s i
   | '<' -> try_lt ~refs ~self s i
@@ -1566,6 +1572,18 @@ and try_strike ~refs ~self s i =
 and try_hl ~refs ~self s i =
   if Str_util.starts_at s i "^^" then
     match find_sub s (i + 2) "^^" with
+    | j when j > i + 2 ->
+        Some
+          ( emph "mark" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          , j + 2 - i
+          , Rs_wrapped (2, 2, true, "ed-hl") )
+    | _ -> None
+  else None
+
+(* ==highlight== — markdown delimiter for the same mldoc Highlight *)
+and try_eq ~refs ~self s i =
+  if Str_util.starts_at s i "==" then
+    match find_sub s (i + 2) "==" with
     | j when j > i + 2 ->
         Some
           ( emph "mark" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))

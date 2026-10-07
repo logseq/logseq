@@ -68,13 +68,10 @@ let dots_btn =
     ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
     ~height:30 ~accessibility_identifier:"toolbar-dots-btn"
     ~on_press:(fun _ ->
-      let pos =
-        Some (Dom_ext.window_inner_width () -. 48., 48.)
-      in
-      Dom_ext.toolbar_dots_pos := pos;
+      let x = Dom_ext.window_inner_width () -. 48. in
+      Dom_ext.toolbar_dots_pos := Some (x, 48.);
       Runtime.send
-        (Action.Page_menu_set
-           (Option.map (fun (x, y) -> (x, y, true, None)) pos)))
+        (Action.Page_menu_set (Some (x, 48., 48., true, None))))
     []
 
 (* Out puts back/forward in the navigation group; the native hash
@@ -266,30 +263,48 @@ let right_sidebar (ms : Model.t Signal.signal) =
        ~accessibility_identifier:"right-sidebar"
        [ Right_sidebar_view.render ms ])
 
-(* left_sidebar.cljs:570 — div#left-sidebar.cp__sidebar-left-layout
-   holds .left-sidebar-inner (contents) + .shade-mask + .left-sidebar-
-   resizer. #left-sidebar{display:none} on desktop keeps the overlay
-   out of the click path when closed. *)
+(* left_sidebar.cljs:570 — on the web #left-sidebar.cp__sidebar-left-layout
+   is an overlay layer (display:none until .is-open, absolute shade-mask +
+   resizer positioned by CSS). Native has no stylesheet, so the sidebar is a
+   plain docked column: always mounted (web only CSS-hides it), fixed 260px
+   width while open and collapsed to zero width while closed (the web
+   default; resizer drag is a separate affordance), surface background via
+   the `secondary` token, and a thin resizer strip at the edge. The shade
+   is an overlay-mode affordance and doesn't exist in a docked layout. *)
 let left_sidebar (ms : Model.t Signal.signal) =
-  Ui_parts.class_signal ms
+  reactive
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      a.left_sidebar_open = b.left_sidebar_open)
     (fun (m : Model.t) ->
-      "cp__sidebar-left-layout"
-      ^ if m.left_sidebar_open then " is-open" else "")
-    (column ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-       [ column ~key:"ls-inner"
-           ~style_class:"left-sidebar-inner as-container"
-           [ box ~key:"ls-wrap" ~style_class:"wrap"
-               [ box ~key:"ls-head"
-                   ~style_class:"sidebar-header-container"
-                   [ Left_sidebar_view.header ms ]
-               ; Left_sidebar_view.contents ms
-               ]
-           ]
-       ; Ui_parts.pressable
-           ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
-           (box ~key:"shade" ~style_class:"shade-mask" [])
-       ; box ~key:"resizer" ~style_class:"left-sidebar-resizer" []
-       ])
+      (* the subtree stays mounted while closed (web only CSS-hides it):
+         contents signal subscriptions and drive checks see the same
+         nodes open or closed — collapse to zero width instead of
+         unmounting *)
+      box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+        ~min_height:0
+        ~style_class:
+          ("cp__sidebar-left-layout self-stretch"
+           ^ if m.left_sidebar_open then " is-open" else "")
+        [ row ~key:"ls-dock" ~grow:1. ~min_height:0
+            ~style_class:"items-stretch"
+            [ column ~key:"ls-inner" ~min_height:0
+                ~width:(if m.left_sidebar_open then 260 else 0)
+                ~background:"secondary"
+                ~style_class:"left-sidebar-inner as-container overflow-hidden"
+                [ column ~key:"ls-wrap" ~grow:1. ~min_height:0
+                    [ box ~key:"ls-head"
+                        ~style_class:"sidebar-header-container"
+                        [ Left_sidebar_view.header ms ]
+                    ; Left_sidebar_view.contents ms
+                    ]
+                ]
+            ; (if not m.left_sidebar_open then spacer ~key:"resizer-none" []
+               else
+                 box ~key:"resizer" ~width:4
+                   ~style_class:"left-sidebar-resizer" [])
+            ]
+        ])
+    ms
 
 let main_content (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
@@ -308,8 +323,17 @@ let main_content (ms : Model.t Signal.signal) =
         ~data_attrs_signal:
           (Signal.map (fun (_ : Model.t) ->
                [ ("data-is-margin-less-pages", "false") ]) ms)
-        [ box ~key:"main-inner"
-            ~style_class:"cp__sidebar-main-content"
+        [ Ui_parts.class_signal ms
+            (fun (m : Model.t) ->
+              (* cljs: .cp__sidebar-main-content centers a max-width
+                 column via margin auto; is-full-width (margin-less
+                 routes) stretches it — no stylesheet natively, so the
+                 full-width variant maps to w-full *)
+              "cp__sidebar-main-content"
+              ^ (match m.route with
+                 | Model.All_pages -> " w-full"
+                 | _ -> ""))
+            (box ~key:"main-inner"
             ~data_attrs_signal:
               (Signal.map (fun (m : Model.t) ->
                    (* cljs container.cljs: data-is-full-width on margin-less +
@@ -334,7 +358,7 @@ let main_content (ms : Model.t Signal.signal) =
                            [ ("class", "mx-auto pb-24")
                            ; ("style", "margin-bottom: 120px") ]))
                 [ Page.region ms ]
-            ]
+            ])
         ]
     ])
 
@@ -346,9 +370,16 @@ let main_content (ms : Model.t Signal.signal) =
    are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
   (* .cp__overlays is an imperative handle — popups_state el_closest
-     walks ancestors to it; the class anchor is unchanged *)
-  box ~key:"overlays" ~style_class:"cp__overlays"
-    [ Cmdk_view.render ms
+     walks ancestors to it; the class anchor is unchanged.
+     Emitted as a cover popover (no ~at): the web positioner spans the
+     viewport and the native backends lift the children into a floating
+     window layer, so fixed-position chrome (dialogs, menus, toasts)
+     never renders in-flow at the document tail. *)
+  popover ~key:"overlays" ~style_class:"cp__overlays"
+    [ (* popover takes only standard-kind children — the logseq-*
+         extension fragments some views emit mount inside a plain box *)
+      box ~key:"overlays-wrap" ~grow:1.
+        [ Cmdk_view.render ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
     ; Dialogs_view.render ms
@@ -381,7 +412,7 @@ let overlays (ms : Model.t Signal.signal) =
           match m.Model.appearance with
           | Some pos -> Settings_page.appearance_body pos
           | None -> spacer ~key:"app-none" []) ms
-    ]
+    ] ]
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup; popup itself not ported yet *)
@@ -400,12 +431,20 @@ let help_item key title icon_name act =
        ; text ~key:(key ^ "-t") ~style_class:"ls-hm-title" ~value:title []
        ])
 
-let help_menu_popup : t =
+(* web css: position fixed, right 0, bottom 52px — a point-anchored
+   popover carries the same geometry on native: the popup's bottom-right
+   corner sits 52px above the window's bottom-right corner. Function
+   (not a value) so ~at reads the live window size at open time *)
+let help_menu_popup () : t =
   let close () =
     Runtime.send Action.Help_toggle;
     Runtime.flush ()
   in
-  column ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
+  popover ~key:"help-menu"
+    ~at:(Dom_ext.window_inner_width (), Dom_ext.window_inner_height () -. 52.)
+    ~anchor:`above ~anchor_alignment:`end_
+    ~on_dismiss:(fun _ -> close ())
+    [ column ~key:"help-menu-inner" ~style_class:"cp__sidebar-help-menu-popup"
     [ column ~key:"hm-wrap" ~style_class:"list-wrap"
         [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
         ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
@@ -442,7 +481,7 @@ let help_menu_popup : t =
                [ text ~key:"hm-rev"
                    ~style_class:"ls-hm-meta"
                    ~value:(I18n.tf "help/revision" [ rev ]) [] ]))
-    ]
+    ] ]
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_dom.fragment
@@ -458,22 +497,10 @@ let help_area (ms : Model.t Signal.signal) : t =
                [ help_svg ] ])
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open) (fun (m : Model.t) ->
           if m.help_open then
-            (* The dismiss catcher mounts while the mouse button that opened
-               the menu is still down — its click lands on the catcher and
-               would instantly re-close the popup. Ignore clicks for a short
-               grace window after construction. *)
-            let opened_at = Platform.date_now_ms () in
-            (* a dyn child must be a real element — Logseq_dom.fragment is
-               only valid in static child lists; inside a dyn it mounts into
-               the wrong parent and the children never materialize *)
-            box ~key:"help-open"
-              [ Ui_parts.pressable
-                  ~on_press:(fun _ ->
-                    if Platform.date_now_ms () -. opened_at > 400.
-                    then ( Runtime.send Action.Help_toggle; Runtime.flush ()))
-                  (box ~key:"help-dismiss"
-                     ~style_class:"cp__cmdk-dismiss" [])
-              ; help_menu_popup ]
+            (* the dismiss catcher box is gone: the popover's own
+               on_dismiss fires on outside press (and, on web, outside
+               click on the positioner) *)
+            box ~key:"help-open" [ help_menu_popup () ]
           else spacer ~key:"help-closed" []) ms
     ]
 

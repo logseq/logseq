@@ -418,7 +418,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
             ~on_press:(fun _ -> open_row_sidebar row_uuid)
             (row ~cross:`center ~grow:1.
                ~style_class:"table-block-title"
-               [ row [ text ~value:title [] ]
+               [ row (Render_inline.parse ~self:row_uuid title)
                ; row ~cross:`center
                    [ ghost "arrow-right" I.open_
                    ; ghost "layout-sidebar-right" I.open_in_sidebar ]
@@ -503,7 +503,27 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
        | "select" -> select_cell inst ~row_uuid ~blk
        | "block/title" -> title_cell inst ~row_uuid ~blk c
        | "file" -> Asset_dom.file_cell_el blk
-       | _ -> prop_cell ~blk c) ]
+       | _ -> (
+           match c.V.c_prop with
+           | Some p ->
+               (* cljs table cells are inline value editors — reuse the
+                  property-panel cell on a row synthesized from the
+                  column's property entity + this row's value *)
+               let row =
+                 W.Map
+                   [ (W.Keyword "property", p)
+                   ; (W.Keyword "property-id", W.Keyword c.V.c_id)
+                   ; (W.Keyword "value", cell_value blk c) ]
+               in
+               let pctx : Properties_value.ctx =
+                 { block_uuid = row_uuid
+                 ; block_id = Properties_data.entity_id_of blk
+                 ; refresh = (fun () -> refresh inst)
+                 ; is_page = is_page_row blk
+                 ; class_schema = false }
+               in
+               inner_cell [ Properties_value.view pctx row ]
+           | None -> prop_cell ~blk c)) ]
 
 (* ---------- header ---------- *)
 
@@ -744,22 +764,78 @@ let delete_selected inst () =
     else do_delete ()
   end
 
+let selected_uuids inst =
+  V.Sset.elements (V.get inst).V.selected
+
+(* cljs selection/action-group on-copy: copy-selection-blocks writes the
+   selected rows' titles to the system clipboard and clears selection *)
+let copy_selected inst () =
+  let s = V.get inst in
+  let titles =
+    List.filter_map
+      (fun u ->
+        match Hashtbl.find_opt s.V.blocks u with
+        | Some blk -> (
+            match Wr.prop_text (cell_value blk title_column) with
+            | "" -> None
+            | t -> Some t)
+        | None -> None)
+      (selected_uuids inst)
+  in
+  if titles <> [] then begin
+    Platform.copy_to_clipboard (String.concat "\n" titles);
+    V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+  end
+
+(* cljs :editor/new-property {:selected-blocks}: the property dialog in
+   batch mode over the selected rows; ~remove selects the unset variant *)
+let open_prop_dlg inst ~remove =
+  match selected_uuids inst with
+  | [] -> ()
+  | u :: _ as us ->
+      Properties_dialog.open_dialog ~remove
+        { uuid = u; uuids = us; db_id = None; is_tag = false; title = "" }
+
+let set_tags_dlg inst =
+  match selected_uuids inst with
+  | [] -> ()
+  | u :: _ as us ->
+      Properties_dialog.open_for_block_with_property ~uuids:us u
+        ~ident:"block/tags"
+
+(* cljs selection/action-group on the view table: Set tags, Copy,
+   Set property, Unset property, then trash — hidden when view-parent
+   is the Page class (all-pages rows are deleted via the row menu) *)
 let action_bar inst : t =
   let isig = sig_of inst in
   if_ ~test:(Signal.map (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
-    (box ~style_class:"table-action-bar absolute top-0"
+    (box ~style_class:"table-action-bar"
        [ row ~gap:4 ~cross:`center ~background:"secondary"
            ~style_class:"ls-table-actions"
-           [ text ~style_class:"selection-count" ~padding_horizontal:8
-               ~value_signal:
-                 (Signal.map
-                    (fun (s : V.vstate) ->
-                      I.selected_count (V.Sset.cardinal s.V.selected))
-                    isig)
-               []
-           ; button ~variant:`ghost ~size:`icon ~icon:`trash ~label:I.delete
-               ~on_press:(fun _ -> delete_selected inst ()) []
-           ]
+           ([ text ~style_class:"selection-count" ~padding_horizontal:8
+                ~value_signal:
+                  (Signal.map
+                     (fun (s : V.vstate) ->
+                       I.selected_count (V.Sset.cardinal s.V.selected))
+                     isig)
+                []
+            ; button ~variant:`ghost ~size:`icon ~icon:(`app "hash")
+                ~label:(I.t "property/set-tags")
+                ~on_press:(fun _ -> set_tags_dlg inst) []
+            ; button ~variant:`ghost ~size:`sm ~text:(I.t "ui/copy")
+                ~on_press:(fun _ -> copy_selected inst ()) []
+            ; button ~variant:`ghost ~size:`sm
+                ~text:(I.t "property/set-property")
+                ~on_press:(fun _ -> open_prop_dlg inst ~remove:false) []
+            ; button ~variant:`ghost ~size:`sm
+                ~text:(I.t "property/unset-property")
+                ~on_press:(fun _ -> open_prop_dlg inst ~remove:true) []
+            ]
+            @ (if inst.V.feature = "all-pages" then []
+               else
+                 [ button ~variant:`ghost ~size:`icon ~icon:`trash
+                     ~label:(I.t "editor/delete-selection")
+                     ~on_press:(fun _ -> delete_selected inst ()) [] ]))
        ])
 
 (* ---------- table ---------- *)
@@ -957,8 +1033,7 @@ let table_header inst cols : t =
                               | None -> ())
                             [] ] ] ]
             | None -> [])
-         @ [ dnd_described "1"; dnd_live "1" ])
-    ; action_bar inst ]
+         @ [ dnd_described "1"; dnd_live "1" ]) ]
 
 (* footer add-new-row (cljs: property-objects always; class-objects for
    non-private classes; all-pages/query never) *)
@@ -989,7 +1064,12 @@ let table_el inst (s : V.vstate) : t =
     [ scroll ~orientation:`horizontal
         ~style_class:"ls-table-rows content"
         [ box ~style_class:"relative"
-            [ table_header inst cols
+            [ (* cljs .table-action-bar.absolute.top-0.left-8 floats over
+                 the header inside the same relative box — overlay carries
+                 the placement (style_class utility tokens are pruned) *)
+              overlay
+                [ table_header inst cols
+                ; align `top_leading (action_bar inst) ]
             ; (* cljs Virtuoso mounts the rows under
                  [data-testid=virtuoso-item-list] inside two bare wrapper
                  divs; each row sits in a bare item div *)
@@ -1003,7 +1083,7 @@ let table_el inst (s : V.vstate) : t =
             ; add_row_footer inst ] ] ]
 
 (* cljs renders a full inner view-table per group — its own column
-   header row (no action bar) plus the group's rows *)
+   header row plus the group's rows *)
 let grouped_table inst ~rows : t =
  fun ctx parent ->
   let s = V.get inst in
@@ -1012,7 +1092,9 @@ let grouped_table inst ~rows : t =
     [ scroll ~orientation:`horizontal
         ~style_class:"ls-table-rows content"
         [ box ~style_class:"relative"
-            [ table_header inst cols
+            [ overlay
+                [ table_header inst cols
+                ; align `top_leading (action_bar inst) ]
             ; box ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
                 [ row_stream inst cols rows ]
@@ -1204,7 +1286,9 @@ let render_list inst s : t =
 
 let render_gallery inst _s : t =
  fun ctx parent ->
-  row ~gap:8 ~padding:8 ~columns:4
+  (* columns is a Grid-only property — on a row node GridColumns is
+     rejected and the whole mount batch dies *)
+  grid ~gap:8 ~padding:8 ~columns:4
     [ keyed
         ~source:
           (Logseq_dom.own ctx
@@ -1253,15 +1337,9 @@ let body_el inst (s : V.vstate) ~(filters : t) : t =
          text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground"
            []
        else
-         D.fragment
-           [ (match s.V.display_type with
-              | "list" -> render_list inst s
-              | "gallery" -> render_gallery inst s
-              | _ -> render_table inst s)
-           ; (match s.V.data with
-              | Wr.VFlat { rows = []; _ } ->
-                  text ~value:I.no_matched_result ~padding:8
-                    ~foreground:"muted-foreground" []
-              | _ -> spacer ~key:"no-empty-notice" [])
-           ])
+         (* master renders no empty-state copy under an empty table *)
+         (match s.V.display_type with
+          | "list" -> render_list inst s
+          | "gallery" -> render_gallery inst s
+          | _ -> render_table inst s))
     ]

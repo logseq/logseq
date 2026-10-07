@@ -67,7 +67,10 @@ type view =
   ; mouse : bool
   ; filter : group_id option
   ; recents : item list
+  ; edited : bool (* input was edited since open — cljs only loads the
+                     last-search state for an unedited palette *)
   ; tip : int (* 0 = filter-results, 1 = open-sidebar (cljs rand-tip) *)
+  ; sidebar : bool (* cljs :sidebar? — drops the hints row *)
   }
 
 type t =
@@ -78,7 +81,7 @@ type t =
 let initial_view =
   { open_ = false; input = ""; move_mode = false; groups = []
   ; expanded = []; hl = -1; mouse = false; filter = None
-  ; recents = []; tip = 0 }
+  ; recents = []; edited = false; tip = 0; sidebar = false }
 
 (* FTS5 highlight markers the worker embeds in search-result titles
    (`$pfts_2lqh>$match$<pfts_2lqh$`); title comparisons strip them *)
@@ -120,12 +123,16 @@ let latest_t : t option ref = ref None
    through the same run_command path palette items take *)
 let latest_st : t option ref = ref None
 
-let make scheduler : t =
+let make ?(register = true) scheduler : t =
   let vs = Signal.state scheduler initial_view in
   let st = { vs; gen = ref 0 } in
-  latest_vs := Some vs.Signal.state_signal;
-  latest_t := Some st;
-  latest_st := Some st;
+  (* the modal palette is the singleton shortcuts dispatch through;
+     sidebar cmdk blocks are independent and must not steal the refs *)
+  if register then begin
+    latest_vs := Some vs.Signal.state_signal;
+    latest_t := Some st;
+    latest_st := Some st
+  end;
   st
 
 let get st = Signal.get st.vs.state_signal
@@ -423,11 +430,14 @@ let item_of_row w i : item =
     | _ -> false
   in
   let title =
+    (* web twin prefers unique-title (display-resolved refs); native
+       re-highlights itself so strip pfts markers here *)
     match
-      [ str_field w "block.temp/original-title"; str_field w "block/title" ]
+      [ str_field w "block.temp/unique-title"
+      ; str_field w "block.temp/original-title"; str_field w "block/title" ]
       |> List.filter_map Fun.id
     with
-    | t :: _ -> t
+    | t :: _ -> strip_pfts t
     | [] -> ""
   in
   { ikey = "node-" ^ uuid ^ "-" ^ string_of_int i; idx = -1
@@ -694,12 +704,16 @@ let upsert_create v =
     { gid = G_create; gtitle = ""; gitems = create_items v.input
     ; gtotal = 0; glimit = 1; gexpanded = false; gfilter_active = false }
   in
-  (* cljs filtered order puts create after the filtered group *)
+  (* cljs filtered order puts create after the filtered group.
+     renumber here too: until the search lands there is no apply_results
+     pass, and hl addresses items by idx — an unnumbered create row
+     could never be highlighted *)
   { v with
     groups =
-      (match v.filter with
-       | Some _ -> others @ [ g ]
-       | None -> g :: others)
+      renumber
+        (match v.filter with
+         | Some _ -> others @ [ g ]
+         | None -> g :: others)
   }
 
 (* cljs load-results :initial — recently-updated pages from storage ids *)
@@ -740,7 +754,7 @@ let load_recents st repo =
      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
 
 let on_input st q =
-  set_in st (fun v -> upsert_create { v with input = q });
+  set_in st (fun v -> upsert_create { v with input = q; edited = true });
   (* search fires on the keystroke itself — a debounce delays the last
      keystroke's results past the worker roundtrip it should overlap.
      gen-stamped responses keep stale answers from overwriting newer
@@ -881,6 +895,26 @@ let close st =
      action; move mode is outside the default context *)
   if not v.move_mode then save_last_search v;
   set_in st (fun v -> { v with open_ = false })
+
+(* sidebar cmdk block: independent state seeded with the query —
+   a fresh make() never runs :default in cljs either, but here the
+   query is already non-blank so groups load normally *)
+let make_sidebar scheduler q : t =
+  let st = make ~register:false scheduler in
+  set_in st (fun v -> { v with input = q; edited = true; sidebar = true });
+  apply_results st q false [] [] 0;
+  refresh st;
+  st
+
+(* cljs mod+enter -> consume-open-search-sidebar-keydown!: close the
+   palette and pin the current query as a sidebar search pane *)
+let open_search_sidebar st =
+  let v = get st in
+  close st;
+  if String.trim v.input <> "" then
+    match !Sidebar_state.st_ref with
+    | Some sst -> Sidebar_state.add_search_item sst v.input
+    | None -> ()
 
 let open_latest ?(move = false) () =
   match !latest_t with

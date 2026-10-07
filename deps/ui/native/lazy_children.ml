@@ -101,6 +101,12 @@ let lazy_rows ~key ~cmp ~mount ~estimate_height ~source : t =
                                 (estimate_height b) )
                           ])))
                ~events:"lazy-mount"
+               (* hosts that can't batch (drive harness, per-node
+                  dispatch) emit lazy-mount straight at the row — the
+                  row lifts its own latch; a batched parent payload
+                  reaches the same latch through the container above *)
+               ~on_dom_event:(fun name _payload ->
+                 if name = "lazy-mount" then Signal.set near true)
                [ D.if_ ~test:near_sig (mount bs) ]) ])
       ctx parent
   end

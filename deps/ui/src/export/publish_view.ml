@@ -235,17 +235,21 @@ let toggle_pw ctx =
     ; if_
         ~test:
           (Signal.map (fun (s : pst) -> Str_util.trim s.password <> "") st_sig)
-        (button ~key:"pub-eye" ~variant:`ghost ~size:`sm
-           ~label:I18n.e2ee_show_password
-           ~style_class:"ui__button as-ghost"
-           ~icon:(reactive
-                (fun (s : pst) ->
-                  if s.visible then `app "eye-off" else `app "eye")
-                st_sig)
-           ~on_press:(fun _ ->
-             Signal.update (st ctx) (fun x ->
-                 { x with visible = not x.visible }))
-           []) ]
+        (Ui_parts.prop_signal Lui_protocol.AccessibilityLabel
+           (Signal.map (fun (s : pst) -> s.visible) st_sig)
+           (fun v ->
+             I18n.t
+               (if v then "publish/hide-password" else "publish/show-password"))
+           (button ~key:"pub-eye" ~variant:`ghost ~size:`sm
+              ~style_class:"ui__button as-ghost"
+              ~icon:(reactive
+                   (fun (s : pst) ->
+                     if s.visible then `app "eye-off" else `app "eye")
+                   st_sig)
+              ~on_press:(fun _ ->
+                Signal.update (st ctx) (fun x ->
+                    { x with visible = not x.visible }))
+              [])) ]
 
 let body (_ms : Model.t Signal.signal) : t =
   fun ctx parent ->

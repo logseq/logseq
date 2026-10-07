@@ -341,7 +341,7 @@ let rec load_page_ref for_route ref_v =
            drop pending committed-buffer title paints *)
         Editor_state.clear_overrides ();
         loaded_route := Some for_route;
-        Runtime.send (Action.Page_loaded p'');
+        (Platform.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
         fetch_refs ~stale:is_stale p'';
         Outliner_ops.fetch_unlinked_refs
           ~stale:is_stale p'';
@@ -402,7 +402,7 @@ let load_home () =
           if not (stale (Model.Page name)) then (
             Editor_state.clear_overrides ();
             loaded_route := Some (Model.Page name);
-            Runtime.send (Action.Page_loaded p'');
+            (Platform.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
             fetch_refs
               ~stale:(fun () ->
                 stale (Model.Page name))
@@ -498,6 +498,7 @@ let load_block_zoom uuid =
                   Editor_state.clear_overrides ();
                   loaded_route
                   := Some (Model.Block_zoom uuid);
+                  (Platform.perf_mark "router:page-loaded";
                   Runtime.send
                     (Action.Page_loaded
                        { Model.page_title =
@@ -525,7 +526,7 @@ let load_block_zoom uuid =
                        ; page_db_collapsable =
                            b.Model
                              .block_db_collapsable
-                       }));
+                       })));
                 (match
                    Editor_actions.consume_pending_zoom ()
                  with

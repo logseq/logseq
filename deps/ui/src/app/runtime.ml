@@ -158,7 +158,12 @@ let invoke name args =
        (fun r ->
          Platform.perf_mark ("done:" ^ name);
          Js.Promise.resolve r)
-       p);
+       p
+     |> Js.Promise.catch (fun _ ->
+       (* callers handle the rejection on [p] itself — this side chain
+          only stamps the perf mark, so swallow its copy to keep it out
+          of unhandledrejection *)
+       Js.Promise.resolve Wire.Nil));
   p
 let invoke1 name a = invoke name [ a ]
 let invoke2 name a b = invoke name [ a; b ]

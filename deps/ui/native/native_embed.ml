@@ -226,7 +226,7 @@ let collect_subtree (root : int) : Js.Json.t list =
              let acc = ext_snapshot rt node :: acc in
              match Hashtbl.find_opt rt.Lui_runtime.runtime_children node
              with
-             | Some kids -> List.fold_left (fun a k -> dfs k a) acc kids
+             | Some kids -> Lui_sequence.fold_left (fun a k -> dfs k a) acc kids
              | None -> acc
            in
            let els = List.rev (dfs root []) in

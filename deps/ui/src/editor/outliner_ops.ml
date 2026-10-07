@@ -856,7 +856,7 @@ let refresh_page () : unit Js.Promise.t =
            refetch was in-flight — never
            overwrite the new route's page *)
         if Runtime.route () = route_at_start then
-          Runtime.send (Action.Page_loaded page);
+          (let _ = Platform.perf_mark "refresh:page-loaded" in Runtime.send (Action.Page_loaded page));
         Js.Promise.resolve ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("refresh_page failed", e);
@@ -1040,7 +1040,7 @@ let apply_queued _page delta =
                    | Some c -> c == base
                    | None -> false) ->
                let t0 = ms () in
-               Runtime.send (Action.Page_loaded p');
+               (let _ = Platform.perf_mark "splice:page-loaded" in Runtime.send (Action.Page_loaded p'));
                if perf then
                  Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
            | _ -> ());

@@ -87,12 +87,13 @@ let ev_client_y (j : Js.Json.t) : float =
   | _ -> 0.
 
 (* open state for the left-sidebar link-item menu: (page ref, is-recent,
-   anchor x, anchor y). open_menu carries "lp-<ref>" while this holds the
-   rest of the menu context *)
-let lp_ctx : (string * bool * float * float) option ref = ref None
+   anchor cx, anchor top, anchor bottom). open_menu carries "lp-<ref>"
+   while this holds the rest of the menu context *)
+let lp_ctx : (string * bool * float * float * float) option ref =
+  ref None
 
-let open_lp_menu st ~target ~recent ~x ~y =
-  lp_ctx := Some (target, recent, x, y);
+let open_lp_menu st ~target ~recent ~ax ~atop ~abot =
+  lp_ctx := Some (target, recent, ax, atop, abot);
   Runtime.signal_set st.open_menu ("lp-" ^ target)
 ;;
 
@@ -533,6 +534,29 @@ let push_item st it =
     Runtime.signal_set st.items (items @ [ it ])
   end
 
+(* cljs sidebar-add-block! :search — a cmdk-block pane pinned to the
+   right sidebar, one per query *)
+let add_search_item st q =
+  let key = "search-" ^ q in
+  if has_item st key then ()
+  else begin
+    ensure_right_open ();
+    push_item st
+      { key
+      ; kind = "search"
+      ; uuid = None
+      ; title = q
+      ; icon = Some ("search", "gray")
+      ; breadcrumb = []
+      ; blocks = []
+      ; linked_refs = []
+      ; page_ref = None
+      ; page = None
+      ; props_collapsed = true
+      ; collapsed = false
+      }
+  end
+
 let remove_item st key =
   Runtime.signal_set st.items
     (List.filter (fun (i : item) -> i.key <> key)
@@ -831,12 +855,20 @@ let on_model st (m : Model.t) =
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
 let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
+
+(* anchor for the graphs-selector dropdown — the trigger row's
+   bottom-left corner (cljs popup-show! align :start) *)
+let repos_xy : (float * float) ref = ref (0., 0.)
+
+let open_repos_menu st ~x ~y =
+  repos_xy := (x, y);
+  Runtime.signal_set st.open_menu "repos"
 (* anchor for the right-sidebar item actions menu — cljs popup-show!
    positions at the pointer (contextmenu) / trigger click *)
-let im_xy : (float * float) ref = ref (0., 0.)
+let im_xy : (float * float * float) ref = ref (0., 0., 0.)
 
-let open_item_menu st key ~x ~y =
-  im_xy := (x, y);
+let open_item_menu st key ~ax ~atop ~abot =
+  im_xy := (ax, atop, abot);
   Runtime.signal_set st.open_menu ("item-" ^ key)
 
 (* cljs left_sidebar.cljs x-menu-content: right-click or the dots
@@ -851,7 +883,8 @@ let on_doc_contextmenu st ev =
       | Some target ->
           open_lp_menu st ~target
             ~recent:(Platform.get_attribute el "data-lp-recent" = Some "1")
-            ~x:(ev_client_x ev) ~y:(ev_client_y ev)
+            ~ax:(ev_client_x ev) ~atop:(ev_client_y ev)
+            ~abot:(ev_client_y ev)
       | None -> ())
   | None -> (
       match
@@ -863,8 +896,8 @@ let on_doc_contextmenu st ev =
               prevent_default ev;
               match Platform.get_attribute it "data-item-key" with
               | Some key ->
-                  open_item_menu st key ~x:(ev_client_x ev)
-                    ~y:(ev_client_y ev)
+                  open_item_menu st key ~ax:(ev_client_x ev)
+                    ~atop:(ev_client_y ev) ~abot:(ev_client_y ev)
               | None -> ())
           | None -> ())
       | None -> ())
@@ -877,7 +910,8 @@ let on_doc_click st ev =
     match
       click_target
         ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
-         .sidebar-page-actions, [data-testid='sidebar-item-more']"
+         .cp__graphs-selector, .sidebar-page-actions, \
+         [data-testid='sidebar-item-more']"
         ev
     with
     | Some _ -> ()

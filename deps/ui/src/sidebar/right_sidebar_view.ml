@@ -57,6 +57,8 @@ let topbar st =
         ~style_class:"cp__right-sidebar-settings hide-scrollbar"
         ([ topbar_btn "contents" (t "page/contents") (fun () ->
                Sidebar_state.open_sticky_item st "contents")
+         ; topbar_btn "page-graph" (t "graph.page/title") (fun () ->
+               Sidebar_state.open_sticky_item st "page-graph")
          ; topbar_btn "help" (t "nav/help") (fun () ->
                Sidebar_state.open_sticky_item st "help")
          ]
@@ -90,13 +92,23 @@ let item_menu st (it : Sidebar_state.item) =
     it.Sidebar_state.kind = "page" || it.Sidebar_state.kind = "contents"
   in
   let sep key = divider ~key ~style_class:"menu-separator" [] in
-  (* popover ~at the stored pointer coords — same placement the inline
-     fixed style carried; children are Menu_item.el rows (core-owned) *)
+  (* cljs popup-show!: element-anchored dropdown — centered on the
+     target (ls-anchor-cx), flipping above when the space below runs
+     out (ls-anchor-top lifts it by its own height) *)
+  let ax, atop, abot = !Sidebar_state.im_xy in
+  let flip = Popups_state.anchor_above atop abot in
+  let w = 160. in
+  let x =
+    Float.max ((w /. 2.) +. 5.)
+      (Float.min ax (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
+  in
   popover ~key:("imenu-" ^ it.key)
-    ~at:(fst !Sidebar_state.im_xy, snd !Sidebar_state.im_xy)
+    ~at:(x, if flip then atop else abot)
     ~role:`menu ~min_width:160
     ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-    ~style_class:"ui__dropdown-menu-content"
+    ~style_class:
+      ("ui__dropdown-menu-content ls-anchor-cx"
+      ^ if flip then " ls-anchor-top" else "")
     (menu_item st (t "ui/close")
        (fun () -> Sidebar_state.remove_item st it.key)
      :: (if multi then
@@ -197,6 +209,10 @@ let item_title (it : Sidebar_state.item) =
   | [], "help" ->
       row ~key:"pt-help" ~cross:`center ~gap:8
         [ icon_ "help"; text ~value:it.title [] ]
+  | [], "page-graph" ->
+      (* cljs: (icon "hierarchy") + (t :graph.page/title) *)
+      row ~key:"pt-page-graph" ~cross:`center ~gap:8
+        [ icon_ "hierarchy"; text ~value:it.title [] ]
   | [], kind
     when kind = "rtc" || kind = "undo-redo" || kind = "profiler" ->
       (* cljs build-sidebar-item: icon + title in .flex.items-center *)
@@ -207,6 +223,10 @@ let item_title (it : Sidebar_state.item) =
       (* cljs: (icon "command") + (t :help.shortcuts/label) *)
       row ~key:"pt-shortcuts" ~cross:`center ~gap:8
         [ icon_ "command"; text ~value:it.title [] ]
+  | [], "search" ->
+      (* cljs :search item header: ti-search icon + the query *)
+      row ~key:"pt-search" ~cross:`center ~gap:8
+        [ icon_ "search"; text ~value:it.title [] ]
   | [], _ -> text ~key:"pt-plain" ~value:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
@@ -219,6 +239,10 @@ let item_header st idx (it : Sidebar_state.item) =
   row ~key:("hd-" ^ it.key) ~main:`space_between
     ~style_class:"sidebar-item-header color-level"
     [ button ~key:("hdr-" ^ it.key) ~grow:1. ~padding_horizontal:8
+        (* page/block sidebar items can carry an empty title — a button
+           with neither text nor accessibility label is rejected and
+           kills the whole mount batch *)
+        ~label:(if it.title = "" then t "ui/untitled" else it.title)
         ~accessibility_identifier:("sidebar-panel-header-" ^ n)
         ~on_press:(fun _ -> Sidebar_state.toggle_collapsed st it.key)
         [ row ~key:("arrow-" ^ it.key) ~cross:`center
@@ -232,23 +256,21 @@ let item_header st idx (it : Sidebar_state.item) =
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
         [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots")
+            ~icon:(`app "dots") ~label:(t "sidebar.right/more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32
             (* press events carry no pointer coordinates — anchor the
                menu at the button's rect instead of click clientX/Y *)
             ~on_press:(fun _ ->
-              let x, y =
+              let ax, atop, abot =
                 match
                   Web_dom.get_element_by_id ("sbi-more-" ^ it.key)
                 with
-                | Some el ->
-                    let r = Web_dom.el_bounding_rect el in
-                    (Web_dom.rect_left r, Web_dom.rect_bottom r)
-                | None -> (0., 0.)
+                | Some el -> Popups_state.anchor_of_el el
+                | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
               in
-              Sidebar_state.open_item_menu st it.key ~x ~y)
+              Sidebar_state.open_item_menu st it.key ~ax ~atop ~abot)
             []
         ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~icon:`x ~label:(t "ui/close") ~width:32 ~height:32
@@ -330,6 +352,20 @@ let item_body st idx (it : Sidebar_state.item) =
      The cljs data-page-tags / data-sb-inner marker attrs have no readers
      and are dropped; the -20px page margin-left was a DOM-only inline
      style with no typed prop — dropped *)
+  match it.Sidebar_state.kind with
+  | "search" ->
+      (* cljs build-sidebar-item :search mounts a cmdk-block, not the
+         page-inner block tree *)
+      box ~key:("body-" ^ it.key)
+        ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+        ~style_class:
+          ("sidebar-panel-content"
+           ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
+        [ box ~key:("cmdkb-" ^ it.key)
+            ~style_class:"cp__cmdk__block rounded-md"
+            [ Cmdk_view.sidebar ~query:it.title ]
+        ]
+  | _ ->
   box ~key:("body-" ^ it.key)
     ~accessibility_identifier:("sidebar-panel-content-" ^ n)
     ~style_class:
@@ -343,8 +379,24 @@ let item_body st idx (it : Sidebar_state.item) =
         ~style_class:"page relative cp__page-inner-wrap"
         [ column ~key:("inner-" ^ it.key) ~gap:16
             ~style_class:"relative page-inner"
-            ([ sidebar_props_row st it
-             ; object_tabs_host it
+            ((match it.Sidebar_state.kind with
+              | "page-graph" ->
+                  [ (* the link-graph canvas isn't ported — same
+                       explicit empty state the #/graph route shows *)
+                    column ~key:"pg-empty" ~cross:`center ~main:`center
+                      ~padding_vertical:64
+                      [ box ~key:"pg-i" ~style_class:"mb-4"
+                          [ icon_ ~size:48 "hierarchy" ]
+                      ; text ~key:"pg-t"
+                          ~value:(t "graph.page/title") []
+                      ; text ~key:"pg-d"
+                          ~value:"Graph view isn't available in this app yet."
+                          []
+                      ]
+                  ]
+              | _ -> [])
+            @ [ sidebar_props_row st it
+              ; object_tabs_host it
              ; box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
                  [ (* data-cid is read by editor_actions' [data-cid]
@@ -359,7 +411,8 @@ let item_body st idx (it : Sidebar_state.item) =
              ]
             (* linked references sit inside .page-inner in cljs *)
             @ (if it.kind = "page" then
-                 [ Page.references_view it.linked_refs ]
+                 [ Page.references_view ~search_on:false ~query:""
+                     it.linked_refs ]
                else []))
         ]
     ]

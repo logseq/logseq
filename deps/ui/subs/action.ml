@@ -24,7 +24,12 @@ type t =
   | Block_content_changed of string * string
   | Title_edit_start
   | Title_edit_done (* value already committed via page op *)
-  | Page_menu_set of (float * float * bool * string option) option
+  | Page_menu_set of
+      (float * float * float * bool * string option) option
+      (* (anchor cx, anchor top, anchor bottom, with_app_items, page
+         uuid) — cljs popup-show! re-anchors pointer menus to the event
+         target element; the toolbar-dots path passes its right-edge
+         anchor as cx and the trigger rect as top/bottom *)
     (* coords, with_app_items, menu page uuid; uuid None = resolve
        from the current route like cljs right-sidebar/get-current-page *)
   | Appearance_set of (float * float) option
@@ -37,6 +42,8 @@ type t =
   | Unlinked_toggle_open
   | Unlinked_toggle_search
   | Unlinked_set_query of string
+  | Linked_toggle_search
+  | Linked_set_query of string
   | Help_toggle
   | Rtc_state of Model.rtc (* rtc-sync-state broadcast *)
   | Rtc_state_clear (* a graph's sync is (re)starting — hide stale state *)

@@ -39,6 +39,49 @@ bar (y 0-56).
 | dark-row-hover   | 6.56%  | 0.50% |
 | light-again      | 1.93%  | 0.20% |
 
+Popup follow-up (post-delivery fixes on the same branch):
+
+| state                | before | after |
+|----------------------|--------|-------|
+| repos dropdown       | n/a    | 1.86% |
+| toolbar dots menu    | 2.20%  | 0.10% |
+
+Both menus now measure identical to master: repos dropdown
+300x118 @ (8,84), dots menu 256x371 @ (1019,40).
+
+## Popup fixes (round 2)
+
+- **Graph switcher dropdown implemented.** Clicking the selector now
+  opens the repos dropdown (switch list sorted by last-seen,
+  remote-graph rows when logged in, quick actions: create-db-graph /
+  import / all-graphs) anchored at the trigger's bottom-left corner,
+  matching cljs `popup-show!` align :start.
+- **Theme-var namespace collision.** `resources/css/lui.css` (the
+  built artifact from `logseq/lui`) emitted `:root{--border:oklch(...),
+  --background:oklch(...), ...}` inside `@layer utilities`, shadowing
+  Logseq's same-named HSL-triplet vars defined in `@layer base`.
+  Every `hsl(var(--x))` consumer silently dropped (~230 declarations:
+  all dropdown/menu borders, ring/input colors, accents). Fixed
+  upstream in lui `platform/web/src/lui.css` by namespacing the
+  tokens to `--lui-*` (`--color-*` theme mapping unchanged), plus a
+  rebuilt `resources/css/lui.css` here. LUI branch:
+  `devin/1791353564-theme-var-namespace`.
+- **Menu-item icon slot.** The LUI `menu_item` kind always emits a
+  `.lui-menu-item-icon` span; with no named icon it stayed
+  `visibility:hidden` but still consumed 18px + 8px gap, shifting
+  labels ~26px right of the cljs layout. Collapsed via
+  `display:none` inside `ui__dropdown/context/popover` content in
+  `lui-overlay.css`; item gap 8px -> 0 and icon 15px -> 18px to match
+  master's `gap-1` icon+label.
+- **Popup edge inset.** LUI's positioner clamps popups 8px (plus a
+  +1px size fudge) off the viewport; the cljs menus sit ~5px off.
+  `clamp_popup_axis` margin is now 5px and the fudge removed in lui
+  `lui_web_position.ml`; the dots menu lands exactly at (1019,40)
+  like master.
+- **Dots-menu anchor.** `chrome.ml` now anchors the menu's right
+  edge at trigger.right + 32 (cljs `align "end" align-offset -32`),
+  flush under the trigger.
+
 Top bar region: 0.41-0.45% → 0.22-0.37%. Remaining residue is glyph
 anti-aliasing: LUI icons are `currentColor` masks (`--lui-icon-image`)
 while master inlines stroked SVGs, so edges differ by ~1px of AA.
@@ -88,14 +131,14 @@ All in `resources/css/lui-core.css` + `deps/ui`:
 
 ## Exceptions (kept LUI's version)
 
-- **Graph switcher click → `/graphs` page, not a dropdown.** Master
-  opens an inline repos dropdown under the selector; LUI navigates to
-  the All-graphs page which hosts the same actions (switch, create,
-  per-graph row actions). The cljs dropdown isn't unreasonable per
-  se, but the page is a strict superset and the selector row itself
-  now renders pixel-identical — the 0.87% residual in that state is
-  the opened-dropdown overlay vs the navigated page, not a styling
-  gap.
+- **Repos-dropdown residual (1.86%).** Menu geometry, padding and
+  items are identical; the residual is icon-mask vs inline-SVG
+  glyph AA and text rasterization (same floor as the rest of the
+  slice).
+- **`data-empty`/edge cases.** With a collapsed sidebar the graphs
+  trigger sits off-viewport and each side clamps the menu to its own
+  collision margin (cljs 8px, LUI 5px). Unreachable state — the
+  trigger can't be clicked while hidden.
 - **Top-bar breadcrumbs absent.** Master renders
   `ui/breadcrumb` inside `#head` on non-journal pages. LUI only
   implements breadcrumbs in the right sidebar (`right_sidebar_view`);

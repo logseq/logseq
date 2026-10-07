@@ -249,11 +249,11 @@ let header st (area_uuid : string) (count : int) (targets : int) : t =
       [ button ~key:("ct-" ^ area_uuid)
           ~label:(I.t "block.comments/on-those-blocks")
           ~variant:`ghost
+          ~text:(I.t "block.comments/on-those-blocks")
           ~on_press:(fun _ ->
             let v = Signal.get_state st in
             Signal.set st { v with targets_open = not v.targets_open })
-          [ text ~key:("ctt-" ^ area_uuid)
-              ~value:(I.t "block.comments/on-those-blocks") [] ]
+          []
       ]
     else [] )
 

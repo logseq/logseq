@@ -184,7 +184,7 @@ let init () =
     ; ui_busy
     ; schedule = (fun f -> Web_dom.set_timeout f 150)
     ; publish_page =
-        (fun p -> Runtime.send (Action.Page_loaded p))
+        (fun p -> (let _ = Platform.perf_mark "worker_events:page-loaded" in Runtime.send (Action.Page_loaded p)))
     ; publish_journals =
         (fun js -> Runtime.send (Action.Journals_loaded js))
     ; resync_editing =

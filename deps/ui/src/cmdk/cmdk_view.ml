@@ -397,10 +397,14 @@ let shortcut_slot (item_sig : S.item Signal.signal) : t =
    mousemove dispatch; [data-cmdk-item][data-hoverable][data-highlighted]
    [data-kb-highlighted] is the lui-overlay.css row contract (and the
    e2e locator) *)
-let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
+let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
   box ~key:"item-wrap"
     ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
-    [ box ~key:"item"
+    [ (* pressable: the delegated document click can't see inside the
+         native tree — on_press routes row clicks to the item directly *)
+      Ui_parts.pressable
+        ~on_press:(fun _ -> S.run_item st (Signal.get item_sig))
+        (box ~key:"item"
         ~data_attrs:(reactive (fun it -> row_data_attrs it) item_sig)
         [ if_
             ~test:
@@ -460,7 +464,7 @@ let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
                 ]
             ; shortcut_slot item_sig
             ]
-        ]
+        ])
     ]
 
 (* -- group ----------------------------------------------------------- *)
@@ -509,6 +513,7 @@ let group_header (st : S.t) (g : S.group) : t =
     ; spacer ~key:"gsp" ~style_class:"cp__cmdk-group-spacer" []
     ; (if (g.S.gtotal > g.S.glimit || g.S.gexpanded)
           && not g.S.gfilter_active
+          && not (S.get st).S.sidebar
        then
          Ui_parts.pressable ~on_press:toggle
            (row ~key:"gmore"
@@ -532,6 +537,10 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
     Signal.map (fun (g : S.group) -> g.S.gitems) group_sig
   in
   column ~key:"group" ~style_class:"cp__cmdk-group"
+    ~data_attrs:(reactive
+                   (fun (g : S.group) ->
+                     [ ("data-cmdk-group-kind", gid_name g.S.gid) ])
+                   group_sig)
     [ reactive
         ~equal:(fun (a : S.group) b ->
           (a.S.gid = S.G_create) = (b.S.gid = S.G_create)
@@ -573,7 +582,7 @@ let search_only_chip st (gid : S.group_id) =
             ~style_class:"cp__cmdk-search-only-name"
             ~value:(gid_label gid) []
         ; button ~key:"clr" ~icon:`x ~size:`icon
-            ~label:(I18n.t "ui/delete")
+            ~label:I18n.close
             ~style_class:"cp__cmdk-search-only-clear"
             ~on_press:(fun _ -> S.clear_filter st)
             []
@@ -631,6 +640,9 @@ let input_row st : t =
         (fun move_mode ->
           input ~key:"input" ~style_class:"cp__cmdk-search-input"
             ~grow:1.
+            (* sidebar blocks mount seeded with the query; the modal is
+               always "" so this is a no-op there *)
+            ~text:(S.get st).S.input
             ~placeholder:
               (if move_mode then
                  I18n.t "cmdk.input/move-blocks-placeholder"
@@ -677,6 +689,12 @@ let hint_button label keys =
     ~style_class:"cp__cmdk-hint"
     [ text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label []
     ; hint_shortcut keys ]
+
+(* cljs tip: random per mount between "Press / to filter search
+   results" and "Press ⌘⏎ to open search in the sidebar"; clear-filter
+   tip while a filter is active. The {1} slot renders as a kbd
+   shortcut. *)
+
 
 (* cljs tip: random per mount between "Press / to filter search
    results" and "Press ⌘⏎ to open search in the sidebar"; clear-filter
@@ -785,6 +803,18 @@ let palette st : t =
     ~data_attrs:[ ("data-keep-selection", "true") ]
     [ input_row st; scroller st; hints st ]
 
+(* cljs cmdk-block: the :sidebar? variant renders the same cp__cmdk body
+   inside .cp__cmdk__block, without the modal shell and without the hints
+   row ((when-not sidebar? (hints))) *)
+let sidebar ~query : t =
+ fun ctx parent ->
+  let st = S.make_sidebar ctx.Lui_ui.ui_scheduler query in
+  (box ~key:("cmdk-sb-" ^ query)
+     ~style_class:"cp__cmdk"
+     ~data_attrs:[ ("data-keep-selection", "true") ]
+     [ input_row st; scroller st ])
+    ctx parent
+
 (* -- delegated event listeners (installed once per mount) ------------ *)
 
 let int_of_string_opt s =
@@ -817,7 +847,11 @@ let handle_keydown st (ev : Web_dom.ev) =
     | "Enter" ->
         Web_dom.ev_prevent_default ev;
         Web_dom.ev_stop_propagation ev;
-        if Web_dom.ev_shift ev then S.run_highlighted_sidebar st
+        (* cljs consume-open-search-sidebar-keydown! binds mod+enter
+           before the highlighted-item action *)
+        if Web_dom.ev_meta ev || Web_dom.ev_ctrl ev then
+          S.open_search_sidebar st
+        else if Web_dom.ev_shift ev then S.run_highlighted_sidebar st
         else S.run_highlighted st
     | "k" when Web_dom.ev_meta ev || Web_dom.ev_ctrl ev ->
         Web_dom.ev_prevent_default ev;
@@ -897,8 +931,10 @@ let install_listeners st =
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
 let modal_shell st =
   box ~key:"cmdk-shell"
-    [ box ~key:"dismiss"
+    [ column ~key:"dismiss"
         ~style_class:"cp__cmdk-dismiss"
+        ~grow:1.
+        ~on_press_detail:(fun _ -> S.close st)
         []
     ; box ~key:"ov"
         ~style_class:"ui__dialog-overlay"
@@ -906,6 +942,7 @@ let modal_shell st =
     ; (* --nested-dialogs lives in the .ls-dialog-cmdk CSS rule now *)
       box ~key:"content"
         ~style_class:"ui__dialog-content ls-dialog-cmdk"
+        ~grow:1. ~main:`center ~cross:`center
         ~data_attrs:[ ("role", "dialog"); ("data-state", "open") ]
         [ heading ~key:"title" ~level:2
             ~style_class:"ui__dialog-title hidden" ~value:"" []

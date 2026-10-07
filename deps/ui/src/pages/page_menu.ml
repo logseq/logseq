@@ -7,21 +7,13 @@ open Lui_elements
 
 let dom = Logseq_dom.dom
 
-(* ~label has no _signal variant — bind a string property signal on the
-   mounted node instead (same pattern as Page.class_signal_el) *)
-let prop_signal_el (prop : Lui_protocol.property) (source : 'a Signal.signal)
-    (f : 'a -> string) (el : t) : t =
- fun ctx parent ->
-  let node = el ctx parent in
-  Lui_ui.string_property_signal ctx node prop (Signal.map f source);
-  node
 
 let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 
 (* cljs dropdown-menu-item renders its :icon before the title *)
-let icon_item key label icon_name on_click =
-  Menu_item.el ~key ~label
-    ~before:[ Icons.icon ~size:15. ~cls:"ls-menu-item-icon" icon_name ]
+let icon_item ?(data_attrs = []) key label icon_name on_click =
+  Menu_item.el ~key ~label ~data_attrs
+    ~before:[ Icons.icon ~size:18. ~cls:"ls-menu-item-icon" icon_name ]
     ~on_click ()
 
 let separator key = Menu_item.separator ~key
@@ -150,9 +142,11 @@ let user_item () : Lui_elements.t =
   let email = Option.value (Rtc_flows.email ()) ~default:"" in
   let masked = Signal.state ctx.Lui_ui.ui_scheduler true in
   let maskedv = Signal.value masked in
-  (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs *)
+  (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs;
+     data-menu-tail keeps it out of the open-time initial highlight *)
   box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"
-    ~data_attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
+    ~data_attrs:
+      [ ("role", "menuitem"); ("tabindex", "-1"); ("data-menu-tail", "") ]
     [ column ~key:"u-span" ~style_class:"relative"
         [ text ~key:"u-name" ~value:username []
         ; row ~key:"u-mail" ~cross:`center
@@ -162,7 +156,7 @@ let user_item () : Lui_elements.t =
                      (fun m -> if m then mask_email email else email)
                      maskedv)
                 []
-            ; prop_signal_el Lui_protocol.AccessibilityLabel maskedv
+            ; Ui_parts.prop_signal Lui_protocol.AccessibilityLabel maskedv
                 (fun m ->
                   I18n.t
                     (if m then "account/show-email-address"
@@ -231,34 +225,52 @@ let global_items () =
   if Rtc_flows.logged_in () then
     [ separator "acct-hr"; user_item () ]
   else
-    [ icon_item "login" I18n.login "user" (fun () ->
+    (* cljs mounts the session tail after the menu's nav list syncs, so
+       base-ui's initial focus lands on the last item before it (Import);
+       data-menu-tail excludes it from the initial highlight only —
+       ArrowDown still reaches it *)
+    [ icon_item ~data_attrs:[ ("data-menu-tail", "") ] "login" I18n.login
+        "user" (fun () ->
           close ();
           Sidebar_state.open_dialog "login") ]
 
 external inner_width : float = "innerWidth" [@@mel.scope "window"]
 external inner_height : float = "innerHeight" [@@mel.scope "window"]
 
-let view (x, y, with_app_items) (p : Model.page option) =
-  let ax =
-    if with_app_items then
-      (* toolbar dots menu is 16rem wide (cljs header.cljs); x is the
-         trigger's right edge -> anchor the menu's right edge to it like
-         the cljs dropdown *)
-      Float.min x (inner_width -. 8.) -. 256.
-    else
-      (* cljs anchors a 1px point at the click; the 280px
-         ls-context-menu-content centers on it *)
-      Float.max 8. (Float.min (x -. 140.) (inner_width -. 288.))
+let view (ax, atop, abot, with_app_items) (p : Model.page option) =
+  (* cljs popup-show!: pointer menus anchor to the event target
+     element — ls-anchor-cx centers the positioner on ax and
+     ls-anchor-top lifts it by its own height when it flips above *)
+  let flip =
+    (not with_app_items) && Popups_state.anchor_above atop abot
   in
+  let x =
+    if with_app_items then
+      (* toolbar dots menu is 16rem wide (cljs header.cljs); ax is the
+         desired menu right edge -> clamp it 5px inside the viewport
+         like the cljs popover. The cljs menu renders its right edge
+         ~1px right of the computed anchor (measured +33 inset offset),
+         so -255 reproduces the observed position *)
+      Float.min ax (inner_width -. 5.) -. 255.
+    else
+      (* the 280px ls-context-menu-content centers on the anchor *)
+      Float.max 148.
+        (Float.min ax (inner_width -. 148.))
+  in
+  let y = if flip then atop else abot in
   (* popover ~at is the same point placement the inline left/top carried;
      --available-height = viewport space below y *)
-  popover ~key:"page-menu" ~at:(ax, y)
-    ~available_height:(inner_height -. y -. 8.)
+  popover ~key:"page-menu" ~at:(x, y)
+    ~available_height:
+      (if flip then atop -. 5. else inner_height -. y -. 5.)
     ~role:`menu
     ~on_dismiss:(fun _ -> Runtime.send (Action.Page_menu_set None))
     ~style_class:
       (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"
-       else "ui__dropdown-menu-content ls-context-menu-content")
+       else
+         "ui__dropdown-menu-content ls-context-menu-content \
+          ls-anchor-cx"
+         ^ if flip then " ls-anchor-top" else "")
     (* cljs header.cljs toolbar-dots-menu = page items + hr + app
        items; a page right-click shows page items only *)
     (match p, with_app_items with
@@ -272,23 +284,23 @@ let confirm_view (c : Model.confirm) =
   let icon_opt, title, desc, desc_cls, act =
     match c with
     | Model.Confirm_delete_page (u, page_title, permanent) ->
-        ( Some (Icons.icon ~size:20. "alert-triangle")
+        ( Some (Icons.icon ~size:18. "alert-triangle")
         , (if permanent then I18n.delete_page_permanent_desc
            else I18n.delete_page_desc)
         , "- " ^ page_title
-        , "ui__alert-dialog-description"
+        , "ls-confirm-desc"
         , fun () -> ignore (Page_ops.delete u) )
     | Model.Confirm_convert_tag_to_page id ->
         ( None
         , I18n.convert_tag_to_page
         , I18n.convert_tag_to_page_desc
-        , "ui__alert-dialog-description"
+        , "ls-confirm-desc"
         , fun () -> ignore (Page_ops.convert_tag_to_page id) )
     | Model.Confirm_delete_asset u ->
         ( None
         , I18n.asset_confirm_delete
         , ""
-        , "ui__alert-dialog-description"
+        , "ls-confirm-desc"
         , fun () -> Asset_dom.delete_asset u )
   in
   let close () =
@@ -296,9 +308,12 @@ let confirm_view (c : Model.confirm) =
     Runtime.flush ()
   in
   (* backdrop dismiss: only the overlay itself closes — clicks inside
-     the content bubble here but target the dialog *)
+     the content bubble here but target the dialog.
+     ~grow/~main/~cross fill + center inside the native cover layer
+     (web places the same scrim with position:fixed) *)
   column ~key:"alertdlg-overlay"
     ~style_class:"ui__alert-dialog-overlay"
+    ~grow:1. ~main:`center ~cross:`center
     ~on_press_detail:(fun ev ->
       match ev with
       | Lui_protocol.PressDetail (_, d) ->
@@ -325,12 +340,20 @@ let confirm_view (c : Model.confirm) =
            | None ->
                heading ~key:"adlg-t" ~level:2 ~as_:`H2
                  ~style_class:"ui__alert-dialog-title" ~value:title [])
-        ; text ~key:"adlg-d" ~style_class:desc_cls ~value:desc []
+        ; (* cljs dialog-confirm! sends the description as :content —
+             it lands in div.ui__alert-dialog-main-content (a grid sibling
+             of the header), not as ui__alert-dialog-description *)
+          (if desc = "" then Logseq_dom.nothing
+           else
+             box ~key:"adlg-dw"
+               ~style_class:"ui__alert-dialog-main-content"
+               [ text ~key:"adlg-d" ~style_class:desc_cls ~value:desc [] ])
         ; row ~key:"adlg-f" ~style_class:"ui__alert-dialog-footer"
-            [ button ~key:"adlg-cancel" ~variant:`outline
+            [ (* cljs dialog-confirm footer buttons are :size :sm *)
+              button ~key:"adlg-cancel" ~variant:`outline ~size:`sm
                 ~text:I18n.cancel ~style_class:"ui__button"
                 ~on_press:(fun _ -> close ()) []
-            ; button ~key:"adlg-confirm" ~variant:`primary
+            ; button ~key:"adlg-confirm" ~variant:`primary ~size:`sm
                 ~text:I18n.confirm ~style_class:"ui__button"
                 ~on_press:(fun _ ->
                   close ();
@@ -358,8 +381,8 @@ let resolve_menu_page (m : Model.t) uuid =
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
   match m.page_menu with
-  | Some (x, y, with_app, uuid) ->
-      view (x, y, with_app) (resolve_menu_page m uuid)
+  | Some (ax, atop, abot, with_app, uuid) ->
+      view (ax, atop, abot, with_app) (resolve_menu_page m uuid)
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c

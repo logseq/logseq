@@ -124,7 +124,15 @@ and cm_sub =
 
 type cm =
   { cx : float
-  ; cy : float
+    (* anchor element center-x — cljs popup-show! re-anchors
+       pointer-opened dropdowns to the event target's rect and centers
+       the content on it *)
+  ; cy : float (* menu top: anchor bottom, or anchor top when flipped —
+                  the ls-anchor-top CSS translate lifts it by its own
+                  height *)
+  ; atop : float (* anchor element top — bounds the flipped menu's
+                    available height *)
+  ; flip : bool (* menu opens above the anchor *)
   ; block_id : string (* owner block/page entity of the menu target *)
   ; multi : bool
   ; entries : cm_item list
@@ -1017,26 +1025,26 @@ let open_ac t kind =
                    that doesn't fit *)
                 let fx =
                   let w = Web_dom.rect_width rect in
-                  if a.x +. w > Web_dom.win_inner_width -. 8. then
+                  if a.x +. w > Web_dom.win_inner_width -. 5. then
                     Some (Float.max 8. (a.x -. w))
                   else None
                 in
                 if fx <> a.flipx then
                   set_ac t (Some { a with flipx = fx });
                 let h = Web_dom.rect_height rect in
-                let below = Web_dom.win_inner_height -. a.y -. 8. in                let above = a.cy -. 8. in
+                let below = Web_dom.win_inner_height -. a.y -. 5. in                let above = a.cy -. 5. in
                 if h > below && above > below then (
                   (* avail is the constraint, h the measured render —
                      the inner's own max-height subtracts chrome from
                      avail, so pass the whole space and place the top
                      so the bottom edge lands just above the caret *)
-                  let avail = above -. 4. in
+                  let avail = above in
                   let h_eff = Float.min h avail in
-                  let top' = Float.max 4.0 (a.cy -. 8. -. h_eff) in
+                  let top' = Float.max 5.0 (a.cy -. 5. -. h_eff) in
                   set_ac t (Some { a with flip = Some (top', avail) }))
                 else if tries <= 0 then
                   Web_dom.el_style_set_property pop "--available-height"
-                    (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 8.))
+                    (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 5.))
                 else retry tries            | None -> retry tries)
         | None -> retry tries)
     | None -> retry tries
@@ -1125,10 +1133,9 @@ let on_buffer_change t ~deleted uuid =
                   close_ac t;
                   open_ac t Page_ref;
                   true
-              | Some '(' when two '(' ->
-                  close_ac t;
-                  open_ac t Block_ref;
-                  true
+              (* cljs autopairs "(" -> "()" and warns to use [[ instead —
+                 "((" never opens block-ref search; the typed char just
+                 joins the open popup's query below *)
               | Some '#' when bounded || two '#' ->
                   if bounded && not (two '#') then open_ac t Tag_search
                   else close_ac t;
@@ -1187,7 +1194,6 @@ let on_buffer_change t ~deleted uuid =
             if c = '/' && (line_starts_with '/' || word_before) then
               open_ac t Slash
             else if c = '[' && two then open_ac t Page_ref
-            else if c = '(' && two then open_ac t Block_ref
             else if
               c = '#' && (line_starts_with '#' || word_before || ref_before)
               && not (pos < S.length v && S.get v pos = '+')
@@ -1717,17 +1723,38 @@ let dev_entries () =
     ]
   else []
 
-let open_cm t ~x ~y ~block_id ~multi =
+(* cljs base-ui auto-side: stay below while the space under the
+   anchor exceeds 280px, flip above only when the top side wins by
+   more than 100px; the flipped menu's top needs the measured popup
+   height, applied after mount by flip_cm_if_pending *)
+let anchor_above atop abot =
+  let bh = Web_dom.win_inner_height -. abot in
+  bh <= 280. && atop -. bh > 100.
+
+(* cm anchor: (center-x, top, bottom) of the event target element; a
+   native host without hit-testing synthesizes a 1px rect at the
+   pointer *)
+let anchor_of_el (el : Web_dom.el) =
+  let r = Web_dom.el_bounding_rect el in
+  ( Web_dom.rect_left r +. (Web_dom.rect_width r /. 2.)
+  , Web_dom.rect_top r
+  , Web_dom.rect_bottom r )
+
+let anchor_at_point ~x ~y = (x, y, y)
+
+let open_cm t ~ax ~atop ~abot ~block_id ~multi =
   let entries =
     (* cljs adds Developer tools only to the single-block menu *)
     if multi then multi_entries ()
     else block_entries () @ dev_entries ()
   in
   close_ac t;
+  let flip = anchor_above atop abot in
   set_cm t
     (Some
-       { cx = x; cy = y; block_id; multi; entries; sub_open = -1
-       ; sub_xy = (0., 0.); tag = None })
+       { cx = ax; cy = (if flip then atop else abot); atop; flip
+       ; block_id; multi; entries; sub_open = -1; sub_xy = (0., 0.)
+       ; tag = None })
 ;;
 
 (* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in
@@ -1745,11 +1772,14 @@ let tag_entries ~title ~priv =
   @ if priv then []
     else [ Ci_item (U.t "block/remove-tag", None, "remove-tag") ]
 
-let open_cm_tag t ~x ~y ~block_id ~tag_uuid ~tag_id ~tag_title ~priv =
+let open_cm_tag t ~ax ~atop ~abot ~block_id ~tag_uuid ~tag_id ~tag_title
+    ~priv =
   close_ac t;
+  let flip = anchor_above atop abot in
   set_cm t
     (Some
-       { cx = x; cy = y; block_id; multi = false
+       { cx = ax; cy = (if flip then atop else abot); atop; flip
+       ; block_id; multi = false
        ; entries = tag_entries ~title:tag_title ~priv
        ; sub_open = -1; sub_xy = (0., 0.)
        ; tag = Some (tag_uuid, tag_id, priv) })

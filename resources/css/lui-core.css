@@ -33,6 +33,21 @@ html:not(.is-native-android) {
   --ls-z-index-level-3: 999;
   --ls-z-index-level-4: 9999;
   --ls-z-index-level-5: 99999;
+
+  /* Bridge shadcn's hsl-component tokens to the whole colors LUI's
+     data-variant rules consume as var(--color-*): lui.css maps
+     --color-primary -> var(--primary), which is the bare triplet
+     "200 97% 37%" here and is not a valid background-color (the
+     confirm dialog's primary button rendered white-on-transparent).
+     The *-foreground tokens are already wrapped by the app's base
+     theme. */
+  --color-primary: hsl(var(--primary));
+  --color-secondary: hsl(var(--secondary));
+  --color-accent: hsl(var(--accent));
+  --color-muted: hsl(var(--muted));
+  --color-destructive: hsl(var(--destructive));
+  --color-card: hsl(var(--card));
+  --color-popover: hsl(var(--popover));
 }
 
 html {
@@ -210,6 +225,11 @@ blockquote {
   padding: 2rem 1rem 2rem 2rem;
   scrollbar-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color))
     var(--ls-primary-background-color);
+  /* cljs container.cljs: flex.justify-center.flex-row — centers the
+     max-width-capped .cp__sidebar-main-content column in the viewport */
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
 
   &::-webkit-scrollbar {
     background-color: var(--ls-primary-background-color);
@@ -1150,6 +1170,19 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     flex: 1;
     min-height: 100px;
 
+    /* cljs header row is auto-height at ~32px (h-8 children); the
+       default button height pushed ours to 40px */
+    .sidebar-item-header {
+      height: 32px;
+      min-height: 32px;
+      box-sizing: border-box;
+      align-items: center;
+    }
+
+    .sidebar-item-header .button {
+      height: 32px;
+    }
+
     &.item-type-block .sidebar-item-header {
       background: linear-gradient(
         0deg,
@@ -2018,10 +2051,12 @@ a.page-title {
 /* cljs block-mouse-over/-leave: hovering the block row reveals the fold
    caret on collapsable blocks (collapsed ones always show it via
    .control-show) */
+/* .lui-link-content wraps link children, so the caret is a descendant
+   rather than a direct child of .block-control */
 .block-main-container:hover
   > .block-control-wrap[data-has-children="true"]
   > .block-control
-  > .control-hide {
+  .control-hide {
   display: revert;
 }
 

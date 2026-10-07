@@ -770,10 +770,11 @@ let action_bar inst : t =
 
 (* dnd-kit a11y nodes — the screen-reader drag instructions. On web
    the .ls-dnd-a11y/.ls-dnd-live classes carry the old inline styles;
-   on native both are hidden via LogseqStyles *)
+   natively there is no stylesheet, so they are zero-size clipped *)
 let dnd_described n : t =
   box ~accessibility_identifier:("DndDescribedBy-" ^ n)
-    ~style_class:"ls-dnd-a11y"
+    ~width:0 ~height:0 ~min_width:0 ~min_height:0
+    ~style_class:"ls-dnd-a11y overflow-hidden"
     [ text
         ~value:
           "To pick up a draggable item, press the space bar. While \
@@ -784,7 +785,8 @@ let dnd_described n : t =
 
 let dnd_live n : t =
   box ~accessibility_identifier:("DndLiveRegion-" ^ n)
-    ~style_class:"ls-dnd-live"
+    ~width:0 ~height:0 ~min_width:0 ~min_height:0
+    ~style_class:"ls-dnd-live overflow-hidden"
     ~data_attrs:
       [ ("role", "status"); ("aria-live", "assertive")
       ; ("aria-atomic", "true") ]

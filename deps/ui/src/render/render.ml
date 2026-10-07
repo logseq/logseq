@@ -237,7 +237,7 @@ let code_block ?(self = "") ?(extra = []) lang code =
   let calc = lang = "calc" in
   row ~key:("fcb-" ^ self) ~grow:1.0
     ~style_class:"ui-fenced-code-editor"
-    [ box ~key:"wrap" ~style_class:"ls-code-editor-wrap"
+    [ box ~key:"wrap" ~grow:1.0 ~style_class:"ls-code-editor-wrap"
         [ code_block_actions ~self lang
         ; row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"
             ([ (if lang <> "" && not calc then
@@ -390,6 +390,125 @@ let contains_video_macro s =
   in
   go 0
 
+(* consecutive lines starting with '>' form a mldoc Quote — cljs
+   [:blockquote.ls-blockquote (markup-elements-cp config l)] *)
+let quote_line_body l =
+  let l = String.trim l in
+  let b = String.sub l 1 (String.length l - 1) in
+  if String.length b > 0 && b.[0] = ' ' then
+    String.sub b 1 (String.length b - 1)
+  else b
+
+let quote_el ~self lines : t =
+  D.el ~tag:"blockquote" ~style_class:"ls-blockquote"
+    (Render_inline.parse ~self
+       (String.concat "\n" (List.map quote_line_body lines)))
+
+(* consecutive lines starting with '|' form a mldoc Table; a row of
+   ---/: cells is a rule — a rule right after row 1 makes it the header
+   (cljs table {:header :groups}), later rules split tbody groups *)
+let table_cells line =
+  let l = String.trim line in
+  let n = String.length l in
+  let b = if n > 0 && l.[0] = '|' then 1 else 0 in
+  let e = if n - b > 0 && l.[n - 1] = '|' then n - 1 else n in
+  List.map String.trim
+    (String.split_on_char '|' (String.sub l b (e - b)))
+
+let table_sep_row cells =
+  cells <> []
+  && List.for_all
+       (fun c ->
+         c <> ""
+         && String.for_all
+              (fun ch -> ch = '-' || ch = ':' || ch = ' ')
+              c
+         && String.contains c '-')
+       cells
+
+let table_el ~self lines : t =
+  let cell_el tag cell =
+    (* cljs tr: every cell carries scope=col + .org-left; contents are
+       map-inline parsed *)
+    D.el ~tag ~attrs:[ ("scope", "col"); ("class", "org-left") ]
+      (Render_inline.parse ~self cell)
+  in
+  let row_el tag cells =
+    D.el ~tag:"tr" (List.map (cell_el tag) cells)
+  in
+  let rows = List.map table_cells lines in
+  let header, body =
+    match rows with
+    | [ h; sep ] when table_sep_row sep -> (Some h, [])
+    | h :: sep :: rest when table_sep_row sep -> (Some h, rest)
+    | _ -> (None, rows)
+  in
+  let groups, cur =
+    List.fold_left
+      (fun (groups, cur) r ->
+        if table_sep_row r then (List.rev cur :: groups, [])
+        else (groups, r :: cur))
+      ([], []) body
+  in
+  let groups = List.rev (List.rev cur :: groups) in
+  D.el ~tag:"div"
+    ~style_class:
+      "table-wrapper classic-table force-visible-scrollbar markdown-table"
+    [ D.el ~tag:"table"
+        ~attrs:
+          [ ("class", "table-auto"); ("border", "2"); ("cellspacing", "0")
+          ; ("cellpadding", "6"); ("rules", "groups")
+          ; ("frame", "hsides") ]
+        ((match header with
+          | Some cells ->
+              [ D.el ~tag:"thead" [ row_el "th" cells ] ]
+          | None -> [])
+         @ List.map
+             (fun g ->
+               D.el ~tag:"tbody" (List.map (row_el "td") g))
+             groups) ]
+
+(* split a multi-line title into mldoc-level segments — Quote (> ),
+   Table (| ) and plain paragraphs — rendered as siblings like cljs
+   markup-elements-cp *)
+let block_els ~self ~wrap_attrs ~prefix s : t list =
+  let kind_of l =
+    let l = String.trim l in
+    if String.length l > 0 && l.[0] = '>' then `Quote
+    else if String.length l > 0 && l.[0] = '|' then `Table
+    else `Para
+  in
+  let segs =
+    let rec go segs cur_kind cur_ls = function
+      | [] -> List.rev ((cur_kind, cur_ls) :: segs)
+      | l :: rest ->
+          let k = kind_of l in
+          if k = cur_kind then go segs k (l :: cur_ls) rest
+          else go ((cur_kind, cur_ls) :: segs) k [ l ] rest
+    in
+    match String.split_on_char '\n' s with
+    | [] -> []
+    | l :: rest -> go [] (kind_of l) [ l ] rest
+  in
+  (* prefix (annotation .prefix-link) attaches to the first segment's
+     wrap, matching the cljs layout *)
+  let used = ref false in
+  let take_prefix () =
+    if !used then None
+    else (
+      used := true;
+      prefix)
+  in
+  List.map
+    (fun (kind, ls) ->
+      match kind with
+      | `Quote -> quote_el ~self (List.rev ls)
+      | `Table -> table_el ~self (List.rev ls)
+      | `Para ->
+          wrap ~self ~wrap_attrs ~prefix:(take_prefix ())
+            (String.concat "\n" (List.rev ls)))
+    segs
+
 (* content for a (possibly quoted) body — headings nest inside quote *)
 let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
     ?(prefix : t option = None) s =
@@ -487,11 +606,10 @@ let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
             | Some (num, rest) ->
                 [ D.el ~key:"rc-typed-list" ~tag:"span"
                     ~style_class:"typed-list"
-                    [ label ~value:num [] ]
-                ; content ?heading ~self ~wrap_attrs ~prefix rest ]
+                    [ label ~value:num [] ] ]
+                @ [ content ?heading ~self ~wrap_attrs ~prefix rest ]
                 @ tail
-            | None ->
-                [ content ?heading ~self ~wrap_attrs ~prefix s ] @ tail)
+            | None -> content ?heading ~self ~wrap_attrs ~prefix s :: tail)
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading.

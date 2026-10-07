@@ -57,16 +57,18 @@ let dots_button =
     ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn" ())
     ~label:(I18n.t "header/more") ~icon:(`app "dots")
     ~on_press:(fun _ ->
-      (* cljs anchors the dropdown to the trigger's right edge, not
-         the click position *)
+      (* cljs header.cljs popup-show! {align "end" align-offset -32}:
+         menu's right edge = trigger right + 32 (before viewport
+         clamp), flush under the trigger *)
       match Web_dom.query_selector ".toolbar-dots-btn" with
       | Some el ->
           let r = Web_dom.el_bounding_rect el in
           Runtime.send
             (Action.Page_menu_set
                (Some
-                  ( Web_dom.rect_right r
-                  , Web_dom.rect_bottom r +. 4.
+                  ( Web_dom.rect_right r +. 32.
+                  , Web_dom.rect_top r
+                  , Web_dom.rect_bottom r
                   , true
                   , None )))
       | None -> ())

@@ -20,7 +20,7 @@ let dom = Logseq_dom.dom
 
 (* cljs svg/help-circle used inside the Query item's doc tooltip *)
 let help_circle_svg : t =
-  icon ~key:"hc" ~name:((Icons.name_ref "help-circle")) ~point_size:16
+  icon ~key:"hc" ~name:(Icons.name_ref "help-circle") ~point_size:16
     ~style_class:"icon" []
 ;;
 
@@ -96,7 +96,7 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
   match it.S.ai_title_icon with
   | Some ic ->
       row ~key ~style_class:"icon-cp-container" ~gap:4
-        [ icon ~key:"ti" ~name:((Icons.name_ref ic)) ~point_size:14
+        [ icon ~key:"ti" ~name:(Icons.name_ref ic) ~point_size:14
             ~style_class:"ui__icon" []
         ; hl ]
   | None -> hl
@@ -110,10 +110,10 @@ let node_icon_slot ~key (it : S.ac_item) : t =
      | Some (icn, true) ->
          [ box ~key:"cp" ~style_class:"icon-cp-container"
              ~foreground:"inherit"
-             [ icon ~key:"ni" ~name:((Icons.name_ref icn)) ~point_size:14
+             [ icon ~key:"ni" ~name:(Icons.name_ref icn) ~point_size:14
                  ~style_class:"ui__icon" [] ] ]
      | Some (icn, false) ->
-         [ icon ~key:"ni" ~name:((Icons.name_ref icn)) ~point_size:14
+         [ icon ~key:"ni" ~name:(Icons.name_ref icn) ~point_size:14
              ~style_class:"ui__icon" [] ]
      | None -> [])
 ;;
@@ -132,13 +132,21 @@ let ac_node_label_el (v : S.view) (it : S.ac_item) : t =
     | None -> ""
   in
   column ~key:"node" ~style_class:"ls-ac-node"
-    ((match it.S.ai_breadcrumb with
-      | Some bc when bc <> "" ->
-          [ box ~key:"bc" ~style_class:"ls-ac-bc"
-              [ text ~key:"b"
-                  ~style_class:"breadcrumb block-parents breadcrumb--search-result"
-                  ~value:bc [] ] ]
-      | _ -> [])
+    ((* cljs node-render mounts the .text-xs.opacity-70.mb-1 breadcrumb
+        div whenever the entity qualifies (Some _ here; "" renders the
+        empty div — its content height plus mb-1 is what pushes tag
+        items to 36px) *)
+      (match it.S.ai_breadcrumb with
+       | Some "" ->
+           [ box ~key:"bc" ~style_class:"ls-ac-bc" [] ]
+       | Some bc ->
+           [ box ~key:"bc" ~style_class:"ls-ac-bc"
+               [ text ~key:"b"
+                   ~style_class:
+                     "breadcrumb block-parents \
+                      breadcrumb--search-result"
+                   ~value:bc [] ] ]
+       | None -> [])
     @ [ row ~key:"row" ~style_class:"ls-ac-node-row"
           ((if db_tag then [] else [ node_icon_slot ~key:"ic" it ])
           @ [ node_title_el ~key:"ti" ~query it ]) ])
@@ -158,7 +166,7 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
     ((match it.S.ai_icon with
       | Some ic ->
           [ text ~key:"ic" ~style_class:"ls-ac-ic"
-              [ icon ~key:"icn" ~name:((Icons.name_ref ic)) ~style_class:"ui__icon" []
+              [ icon ~key:"icn" ~name:(Icons.name_ref ic) ~style_class:"ui__icon" []
               ; text ~key:"s" ~value:txt [] ] ]
       (* no-icon commands render the label as a bare text node *)
       | None -> [ text ~key:"t" ~value:txt [] ])
@@ -379,7 +387,7 @@ let ac_popover (st : S.t) : t =
                | Some a -> (
                    match a.S.flip with
                    | Some (_, avail') -> avail'
-                   | None -> Web_dom.win_inner_height -. a.S.y -. 8.)
+                   | None -> Web_dom.win_inner_height -. a.S.y -. 5.)
                | None -> 0.)
              vs))
      ~on_dismiss:(fun _ -> S.close_ac st)
@@ -514,18 +522,18 @@ let cm_heading_row (st : S.t) : t =
     List.init 6 (fun i ->
         let n = string_of_int (i + 1) in
         cm_heading_btn st ("h-" ^ n) (U.tf "editor/heading" [ n ]) n
-          (icon ~key:"ic" ~name:((Icons.name_ref ("h-" ^ n))) ~style_class:"ui__icon"
+          (icon ~key:"ic" ~name:(Icons.name_ref ("h-" ^ n)) ~style_class:"ui__icon"
              []))
   in
   box ~key:"headings" ~style_class:"ls-cm-headings"
     [ row ~key:"headings-row" ~style_class:"ls-cm-headings-row"
         (hs
         @ [ cm_heading_btn st "h-auto" (U.t "editor/auto-heading") "auto"
-              (icon ~key:"ic" ~name:((Icons.name_ref "h-auto"))
+              (icon ~key:"ic" ~name:(Icons.name_ref "h-auto")
                  ~style_class:"ui__icon" [])
           ; cm_heading_btn st "h-rm" (U.t "editor/remove-heading")
               "none"
-              (icon ~key:"ic" ~name:((Icons.name_ref "heading-off"))
+              (icon ~key:"ic" ~name:(Icons.name_ref "heading-off")
                  ~style_class:"ui__icon" []) ]) ]
 ;;
 
@@ -584,17 +592,17 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
             ~data_attrs:[ ("role", "menuitem") ]
-            [ text ~key:"lbl" ~value:label []
-            ; icon ~key:"chev" ~name:`chevron_right
+            ~text:label
+            [ icon ~key:"chev" ~name:`chevron_right
                 ~style_class:"ls-menu-chevron" [] ]
       | S.Ci_item (label, scut, cmd) ->
           menu_item ~key:"item" ~style_class:cm_item_cls
             ~data_attrs:[ ("role", "menuitem") ]
             ~on_press:(fun _ -> run_cm_item st cmd)
-            (text ~key:"lbl" ~value:label []
-             :: (match scut with
-                 | Some s -> [ cm_shortcut_el s ]
-                 | None -> [])))
+            ~text:label
+            (match scut with
+             | Some s -> [ cm_shortcut_el s ]
+             | None -> []))
         (Logseq_dom.own context (Signal.map snd entry_sig)) ]
     context parent
 ;;
@@ -605,10 +613,10 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
       menu_item ~key:"sub-item" ~style_class:cm_item_cls
         ~data_attrs:[ ("role", "menuitem") ]
         ~on_press:(fun _ -> run_cm_item st cmd)
-        (text ~key:"lbl" ~value:label []
-         :: (match scut with
-             | Some s -> [ cm_shortcut_el s ]
-             | None -> []))
+        ~text:label
+        (match scut with
+         | Some s -> [ cm_shortcut_el s ]
+         | None -> [])
   | _ -> spacer ~key:"x" []
 ;;
 
@@ -618,7 +626,7 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
 let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
     : t =
   popover ~key:"cm-sub" ~at:(x, y) ~role:`menu
-    ~available_height:(Web_dom.win_inner_height -. y -. 8.)
+    ~available_height:(Web_dom.win_inner_height -. y -. 5.)
     ~style_class:"ui__dropdown-menu-sub-content"
     ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
     ~on_dismiss:(fun _ -> close_cm st)
@@ -661,10 +669,12 @@ let cm_popover (st : S.t) : t =
   let vs = st.S.vs.Signal.state_signal in
   (Ui_parts.class_signal vs
      (fun (v : S.view) ->
-       "ui__dropdown-menu-content ls-context-menu-content"
+       "ui__dropdown-menu-content ls-context-menu-content ls-anchor-cx"
        ^
        (match v.S.cm with
-        | Some m when m.S.tag <> None -> " ls-tag-menu"
+        | Some m ->
+            (if m.S.tag <> None then " ls-tag-menu" else "")
+            ^ (if m.S.flip then " ls-anchor-top" else "")
         | _ -> ""))
      (popover ~key:"cm" ~role:`menu
         ~at_signal:
@@ -673,12 +683,13 @@ let cm_popover (st : S.t) : t =
                 (fun (v : S.view) ->
                   match v.S.cm with
                   | Some m ->
-                      (* cljs anchors a 1px point at the click and the
-                         base-ui dropdown centers the content on it *)
+                      (* the positioner translates back half its width
+                         (ls-anchor-cx): clamp the anchor center so the
+                         menu stays inside the viewport *)
                       let w = if m.S.tag <> None then 240. else 280. in
-                      ( Float.max 8.
-                          (Float.min (m.S.cx -. (w /. 2.))
-                             (Web_dom.win_inner_width -. (w +. 8.)))
+                      ( Float.max ((w /. 2.) +. 5.)
+                          (Float.min m.S.cx
+                             (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
                       , m.S.cy )
                   | None -> (0., 0.))
                 vs))
@@ -687,7 +698,12 @@ let cm_popover (st : S.t) : t =
              (Signal.map
                 (fun (v : S.view) ->
                   match v.S.cm with
-                  | Some m -> Web_dom.win_inner_height -. m.S.cy -. 8.
+                  | Some m ->
+                      (* a flipped menu grows upward from the anchor's
+                         top edge; a below menu fills down to the
+                         viewport edge *)
+                      if m.S.flip then m.S.atop -. 5.
+                      else Web_dom.win_inner_height -. m.S.cy -. 5.
                   | None -> 0.)
                 vs))
         ~data_attrs:[ ("data-keep-selection", "") ]
@@ -758,7 +774,9 @@ let pv_open st (wrap : Web_dom.el) =
   pv_pending := Some wrap;
   match
     Option.bind
-      (Web_dom.el_query wrap "a[data-ref]")
+      (if Web_dom.el_is_connected wrap then
+         Web_dom.el_query wrap "a[data-ref]"
+       else None)
       (fun a -> Web_dom.el_get_attr a "data-ref")
   with
   | None -> ()
@@ -774,7 +792,7 @@ let pv_open st (wrap : Web_dom.el) =
             S.fetch_preview (Router.repo ()) name
         in
         (match !pv_pending with
-         | Some el when el == wrap ->
+         | Some el when el == wrap && Web_dom.el_is_connected wrap ->
              S.set_pv st
                (Some
                   { S.pv_x = x
@@ -816,7 +834,7 @@ let pv_track st el =
    inline styles live in lui-overlay.css *)
 let pv_popover (st : S.t) (p : S.pv) : t =
   popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y)
-    ~available_height:(Web_dom.win_inner_height -. p.S.pv_y -. 8.)
+    ~available_height:(Web_dom.win_inner_height -. p.S.pv_y -. 5.)
     ~style_class:"ui__popover-content ls-preview-popup"
     ~on_dismiss:(fun _ -> S.close_pv st)
     [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
@@ -863,11 +881,80 @@ let pv_dyn (st : S.t) : t =
            st.S.vs.Signal.state_signal)))
     context parent
 
+(* base-ui dropdown-menu roving focus: ArrowUp/Down (and Home/End) move
+   data-highlighted + DOM focus across the enabled menuitems of the
+   topmost visible menu, looping; Enter selects the highlighted item.
+   Hover shares the same data-highlighted marker via cm_highlight. *)
+let menu_keydown (ev : Web_dom.ev) =
+  let menus =
+    Array.to_list
+      (Web_dom.query_selector_all_arr ".ui__dropdown-menu-content")
+  in
+  let menu =
+    menus
+    |> List.filter (fun m ->
+           Web_dom.rect_width (Web_dom.el_bounding_rect m) > 0.)
+    |> List.rev
+    |> (fun l -> List.nth_opt l 0)
+  in
+  match menu with
+  | None -> false
+  | Some m -> (
+      let items =
+        Array.to_list
+          (Web_dom.el_query_all_arr m
+             ".ui__dropdown-menu-item:not([data-disabled]):not([aria-disabled='true']), .ui__dropdown-menu-sub-trigger:not([data-disabled])")
+      in
+      match (Web_dom.ev_key ev, items) with
+      | (("ArrowDown" | "ArrowUp" | "Home" | "End") as k), _ :: _ ->
+          let cur =
+            match
+              List.find_index
+                (fun it ->
+                  Web_dom.el_get_attr it "data-highlighted" <> None)
+                items
+            with
+            | Some i -> i
+            | None -> -1
+          in
+          let n = List.length items in
+          let i =
+            match k with
+            | "ArrowDown" -> if cur < 0 then 0 else (cur + 1) mod n
+            | "ArrowUp" -> if cur < 0 then n - 1 else (cur + n - 1) mod n
+            | "Home" -> 0
+            | _ -> n - 1
+          in
+          let it = List.nth items i in
+          List.iter
+            (fun e ->
+              Web_dom.el_remove_attr e "data-highlighted";
+              (* base-ui roving tabindex: only the active item is 0 *)
+              Web_dom.el_set_attr e "tabindex" "-1")
+            items;
+          Web_dom.el_set_attr it "data-highlighted" "";
+          Web_dom.el_set_attr it "tabindex" "0";
+          cm_hi_el := Some it;
+          Web_dom.el_focus it;
+          let o = Js.Dict.empty () in
+          Js.Dict.set o "block" (Js.Json.string "nearest");
+          Web_dom.el_scroll_into_view_opts it (Js.Json.object_ o);
+          true
+      | "Enter", _ :: _ -> (
+          match !cm_hi_el with
+          | Some e -> Web_dom.el_click e; true
+          | None -> true)
+      | _ -> false)
+;;
+
 let handle_keydown st (ev : Web_dom.ev) =
   if S.ac_keydown st ev then (
     Web_dom.ev_prevent_default ev;
     (* stopImmediate: same-target listeners registered later (the editor's
        own keydown) must not also react to the key the popup consumed *)
+    Web_dom.ev_stop_immediate ev)
+  else if menu_keydown ev then (
+    Web_dom.ev_prevent_default ev;
     Web_dom.ev_stop_immediate ev)
   else
     match Web_dom.ev_key ev with
@@ -903,8 +990,8 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                     | Some r -> r
                     | None -> tuuid
                   in
-                  S.open_cm_tag st ~x:(Web_dom.ev_client_x ev)
-                    ~y:(Web_dom.ev_client_y ev) ~block_id:bid
+                  let ax, atop, abot = S.anchor_of_el el in
+                  S.open_cm_tag st ~ax ~atop ~abot ~block_id:bid
                     ~tag_uuid:tuuid ~tag_id:tid ~tag_title:title
                     ~priv:(priv = Some "true")
               | None -> ())
@@ -935,8 +1022,11 @@ let handle_contextmenu st (ev : Web_dom.ev) =
               if not (Editor_state.is_selected id) then
                 Editor_actions.select_single id;
               close_cm_picker ();
-              S.open_cm st ~x:(Web_dom.ev_client_x ev)
-                ~y:(Web_dom.ev_client_y ev) ~block_id:id
+              (* cljs popup-show! re-anchors the menu to the event
+                 target element (centered, dropping from its bottom
+                 edge), not the raw pointer *)
+              let ax, atop, abot = S.anchor_of_el el in
+              S.open_cm st ~ax ~atop ~abot ~block_id:id
                 ~multi:(List.length (Web_dom.selected_block_uuids ()) >= 2)
           | None -> ())
       | None -> (
@@ -956,8 +1046,8 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                   Web_dom.ev_prevent_default ev;
                   Web_dom.ev_stop_propagation ev;
                   close_cm_picker ();
-                  S.open_cm st ~x:(Web_dom.ev_client_x ev)
-                    ~y:(Web_dom.ev_client_y ev) ~block_id:first
+                  let ax, atop, abot = S.anchor_of_el el in
+                  S.open_cm st ~ax ~atop ~abot ~block_id:first
                     ~multi:(List.length sel >= 2)
               | Some id, _
                 when not (Web_dom.is_editable_target (Some el)) ->
@@ -966,8 +1056,8 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                   if not (Editor_state.is_selected id) then
                     Editor_actions.select_single id;
                   close_cm_picker ();
-                  S.open_cm st ~x:(Web_dom.ev_client_x ev)
-                    ~y:(Web_dom.ev_client_y ev) ~block_id:id ~multi:false
+                  let ax, atop, abot = S.anchor_of_el el in
+                  S.open_cm st ~ax ~atop ~abot ~block_id:id ~multi:false
               | _ -> ())
           | None -> ()))
 ;;

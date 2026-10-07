@@ -460,6 +460,13 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
   let node = Lui_ui.extension context Editor_sink.identifier in
   Lui_ui.key context node ("ed-sink-" ^ block_id);
   Lui_ui.extension_property context node "block-id" (StringValue block_id);
+  (* the web adapter materializes these on its hidden textarea; native
+     hosts render the surface, so the same e2e/a11y hooks ride the
+     extension node itself *)
+  Lui_ui.extension_property context node "accessibility-identifier"
+    (StringValue ("edit-block-" ^ block_id));
+  Lui_ui.extension_property context node "data-testid"
+    (StringValue "block editor");
   Lui_ui.extension_property_signal context node "runs" runs_s;
   Lui_ui.extension_property_signal context node "caret" caret_s;
   Lui_ui.extension_property_signal context node "composition" comp_s;

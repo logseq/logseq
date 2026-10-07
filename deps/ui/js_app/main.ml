@@ -54,34 +54,92 @@ let main root =
        |> Lui_protocol.String_map.add Logseq_virt.identifier
             Logseq_virt.adapter)
   in
+  let base_backend = Lui_web.backend renderer in
+  (* per-stage timings for one dispatch/flush cycle land in __uiPerf *)
+  let backend =
+    { Lui_protocol.backend_profile = base_backend.backend_profile
+    ; apply_batch =
+        (fun batch ->
+          let r, ms =
+            Interaction_perf.time (fun () -> base_backend.apply_batch batch)
+          in
+          Interaction_perf.note_apply ms
+            (List.length batch.Lui_protocol.ops);
+          r)
+    }
+  in
   let app =
-    Lui_app.create_with_extensions (Lui_web.backend renderer) registry
+    Lui_app.create_with_extensions backend registry
       Model.initial Update.apply View.view
   in
+  let finish_sample () = Interaction_perf.finish () in
   Runtime.read_model := (fun () -> Lui_app.model app);
   Runtime.app_send :=
     (fun action ->
-      let changed = Lui_app.send app action in
-      Platform.perf_time "flush" (fun () ->
-          ignore (Lui_app.flush app);
-          Logseq_virt.sync ());
+      Interaction_perf.begin_op "send";
+      let changed, sms =
+        Interaction_perf.time (fun () -> Lui_app.send app action)
+      in
+      Interaction_perf.note_send sms;
+      let _, fms =
+        Interaction_perf.time (fun () ->
+            Platform.perf_time "flush" (fun () ->
+                ignore (Lui_app.flush app)))
+      in
+      Interaction_perf.note_flush fms
+        (Lui_runtime.diagnostics (Lui_app.runtime app));
+      let _, vms =
+        Interaction_perf.time (fun () -> Logseq_virt.sync ())
+      in
+      Interaction_perf.note_virt vms;
+      finish_sample ();
       changed);
   Runtime.app_flush :=
     (fun () ->
-      Platform.perf_time "flush" (fun () ->
-          ignore (Lui_app.flush app);
-          Logseq_virt.sync ();
-          (* one focus pass per flush — a pending arm (or keys queued
-             during the remount window) progresses as the DOM
-             re-patches *)
-          Editor_actions.focus_pending ()));
+      Interaction_perf.begin_op "flush";
+      let _, fms =
+        Interaction_perf.time (fun () ->
+            Platform.perf_time "flush" (fun () ->
+                ignore (Lui_app.flush app)))
+      in
+      Interaction_perf.note_flush fms
+        (Lui_runtime.diagnostics (Lui_app.runtime app));
+      let _, vms =
+        Interaction_perf.time (fun () -> Logseq_virt.sync ())
+      in
+      Interaction_perf.note_virt vms;
+      let _, foms =
+        Interaction_perf.time (fun () ->
+            (* one focus pass per flush — a pending arm (or keys queued
+               during the remount window) progresses as the DOM
+               re-patches *)
+            Editor_actions.focus_pending ())
+      in
+      Interaction_perf.note_focus foms;
+      finish_sample ());
   ignore
     (Lui_web.set_event_handler renderer (fun event ->
-         Platform.perf_time "event" (fun () ->
-             ignore (Lui_app.dispatch_event app event);
-             let flushed = Lui_app.flush app in
-             Logseq_virt.sync ();
-             flushed)));
+         Interaction_perf.begin_op "dom-event";
+         let flushed =
+           Platform.perf_time "event" (fun () ->
+               let _, dms =
+                 Interaction_perf.time (fun () ->
+                     ignore (Lui_app.dispatch_event app event))
+               in
+               Interaction_perf.note_dispatch dms;
+               let flushed, fms =
+                 Interaction_perf.time (fun () -> Lui_app.flush app)
+               in
+               Interaction_perf.note_flush fms
+                 (Lui_runtime.diagnostics (Lui_app.runtime app));
+               let _, vms =
+                 Interaction_perf.time (fun () -> Logseq_virt.sync ())
+               in
+               Interaction_perf.note_virt vms;
+               flushed)
+         in
+         finish_sample ();
+         flushed));
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
   Lui_web.mount renderer (Lui_app.root_node app) root;

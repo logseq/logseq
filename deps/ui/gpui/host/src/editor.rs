@@ -26,11 +26,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use gpui_kit::gpui::{
     canvas, div, px, AnyElement, App, AppContext, Bounds, Context, DispatchPhase,
-    ElementInputHandler, Entity, EntityInputHandler, FocusHandle, FocusOutEvent,
+    ElementInputHandler, Entity, EntityId, EntityInputHandler, FocusHandle, FocusOutEvent,
     InteractiveElement, LineLayout, MouseButton, MouseDownEvent, ParentElement, Pixels,
     Point, Styled, Subscription, UTF16Selection, Window,
 };
@@ -404,7 +404,11 @@ fn scroll_height(shared: &Shared, block_id: &str) -> i64 {
 // Emit: extension events back into OCaml, then drain any patches
 // ---------------------------------------------------------------------------
 
-fn emit(shared: &Shared, node_id: i64, name: &CStr, values: String, cx: &mut App) {
+/// FFI half of `emit`: posts the conduit event to OCaml but skips
+/// `drain_pending`. Safe to call mid-render, where re-borrowing the
+/// store to apply patches would panic; queued replies are applied by
+/// the next pump tick.
+fn emit_ffi(node_id: i64, name: &CStr, values: String) {
     let values = CString::new(values).unwrap_or_default();
     unsafe {
         bridge::lui_ocaml_extension_event(
@@ -414,6 +418,10 @@ fn emit(shared: &Shared, node_id: i64, name: &CStr, values: String, cx: &mut App
             values.as_ptr(),
         )
     };
+}
+
+fn emit(shared: &Shared, node_id: i64, name: &CStr, values: String, cx: &mut App) {
+    emit_ffi(node_id, name, values);
     drain_pending(shared, cx);
 }
 
@@ -429,6 +437,11 @@ struct EditorInputState {
     node_id: i64,
     shared: Shared,
     focus: FocusHandle,
+    /// The LuiNodeView entity that renders this conduit — notified after
+    /// a focus grant so its canvas repaints and registers the input
+    /// handler (`handle_input` only registers a focused handler at paint
+    /// time, and a deferred grant lands after the element's first paint).
+    view_entity_id: EntityId,
     /// Marked (composing) text + its UTF-16 range in `text`.
     marked: Option<(String, Range<usize>)>,
     /// Scratch buffer reported to the platform — holds the marked text
@@ -437,11 +450,14 @@ struct EditorInputState {
     subs: Vec<Subscription>,
 }
 
+/// node id -> input entity, keyed by the `logseq-editor` node. Entries
+/// outlive dropped nodes; bounded by mounted editors. Global (not
+/// thread-local) because `on_next_frame` pump callbacks and render run
+/// on different threads — a thread-local map looks empty to the pump.
+static INPUT_STATES: std::sync::LazyLock<Mutex<HashMap<i64, Entity<EditorInputState>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
 thread_local! {
-    /// node id -> input entity, keyed by the `logseq-editor` node. Entries
-    /// outlive dropped nodes; bounded by mounted editors.
-    static INPUT_STATES: RefCell<HashMap<i64, Entity<EditorInputState>>> =
-        RefCell::new(HashMap::new());
     /// block-id -> desired focus state: `set-input-focus` can race ahead
     /// of the surface mount (the request is emitted once on the OCaml
     /// side), so it's drained when the input entity is created.
@@ -454,23 +470,23 @@ fn input_state(
     shared: &Shared,
     cx: &mut Context<LuiNodeView>,
 ) -> Entity<EditorInputState> {
-    INPUT_STATES.with(|states| {
-        let mut states = states.borrow_mut();
-        if let Some(state) = states.get(&node_id) {
-            return state.clone();
-        }
-        let shared = shared.clone();
-        let state = cx.new(|cx| EditorInputState {
-            node_id,
-            shared,
-            focus: cx.focus_handle(),
-            marked: None,
-            text: String::new(),
-            subs: Vec::new(),
-        });
-        states.insert(node_id, state.clone());
-        state
-    })
+    let mut states = INPUT_STATES.lock().unwrap();
+    if let Some(state) = states.get(&node_id) {
+        return state.clone();
+    }
+    let shared = shared.clone();
+    let view_entity_id = cx.entity_id();
+    let state = cx.new(|cx| EditorInputState {
+        node_id,
+        shared,
+        focus: cx.focus_handle(),
+        view_entity_id,
+        marked: None,
+        text: String::new(),
+        subs: Vec::new(),
+    });
+    states.insert(node_id, state.clone());
+    state
 }
 
 fn ext_int_prop(store: &Store, node_id: i64, name: &str) -> Option<i64> {
@@ -717,7 +733,11 @@ fn pointer_down(
     if !bounds.contains(&point) {
         return;
     }
-    focus_editor(node_id, window, cx);
+    // Focus is only ever granted by OCaml's `set-input-focus`, emitted
+    // once this click turns into editing state — a conduit that holds
+    // gpui focus without a grant swallows every keystroke (plain chars
+    // insert into an invisible editor; global chords like `t l` and
+    // ⌘[ never reach the document keydown handler).
     let offset = offset_at(
         shared,
         &block_id,
@@ -731,13 +751,88 @@ fn pointer_down(
     }
 }
 
+/// Grant focus to a conduit and report it deterministically: the
+/// entity-scoped `on_focus` subscription is not reliable on the
+/// deferred/`on_next_frame` path (it fires on direct `focus()` during
+/// an event dispatch but has been observed not to fire when the grant
+/// lands in a frame callback), so the conduit event is emitted from
+/// the grant site itself. A duplicate `focus` emit is idempotent on
+/// the OCaml side (`focused_block := uuid` either way).
+fn grant_focus(
+    state: &Entity<EditorInputState>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let focus = state.read(cx).focus.clone();
+    let was = focus.is_focused(window);
+    focus.focus(window, cx);
+    let now = focus.is_focused(window);
+    if !was && now {
+        state.update(cx, |this, cx| this.emit(c"focus", "{}".into(), cx));
+        // the canvas paint that registers the input handler ran before
+        // this grant (set-input-focus races the mount), so it skipped
+        // the focus check — invalidate the node view to re-paint it
+        let view_entity_id = state.read(cx).view_entity_id;
+        cx.notify(view_entity_id);
+    }
+}
+
 fn focus_editor(node_id: i64, window: &mut Window, cx: &mut App) {
-    let Some(state) = INPUT_STATES.with(|states| states.borrow().get(&node_id).cloned())
+    let Some(state) = INPUT_STATES.lock().unwrap().get(&node_id).cloned()
     else {
         return;
     };
-    let focus = state.read(cx).focus.clone();
-    focus.focus(window, cx);
+    grant_focus(&state, window, cx);
+}
+
+/// Reconcile focused conduit state once per pump tick:
+///
+/// - Blur a conduit whose node left the store while it still held window
+///   focus. `window.focus` is not cleared when a focused element
+///   unmounts, and `INPUT_STATES` retains the `FocusHandle`, so the stale
+///   id keeps `window.focused()` non-empty — which makes the root key
+///   forwarder swallow printable keys as if a text input were still
+///   live. Blurring fires `focus_out`, which emits the conduit `blur`
+///   event so OCaml can commit the buffer.
+///
+/// - Notify the focused conduit's view every tick. gpui recomputes
+///   `focused_text_input_active` at the end of every drawn frame from
+///   the elements that called `handle_input` during that paint; on any
+///   frame where the conduit canvas does not repaint, the platform input
+///   handler is unregistered and `insertText` is silently dropped.
+///   Keeping the view dirty each tick keeps the handler registered.
+pub(crate) fn reconcile_stale_focus(shared: &Shared, window: &mut Window, cx: &mut App) {
+    let states: Vec<(i64, Entity<EditorInputState>)> = INPUT_STATES
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(node_id, state)| (*node_id, state.clone()))
+        .collect();
+    let mut prune: Vec<i64> = Vec::new();
+    for (node_id, state) in states {
+        let (view_entity_id, focused) = {
+            let state = state.read(cx);
+            (state.view_entity_id, state.focus.is_focused(window))
+        };
+        let present = shared.borrow().store.node(node_id).is_some();
+        if !present {
+            // Node left the store: blur once (fires `focus_out` -> conduit
+            // `blur` so OCaml commits the buffer), then drop the entry.
+            if focused {
+                window.blur(cx);
+                state.update(cx, |this, cx| this.emit(c"blur", "{}".into(), cx));
+            }
+            prune.push(node_id);
+        } else if focused {
+            cx.notify(view_entity_id);
+        }
+    }
+    if !prune.is_empty() {
+        let mut states = INPUT_STATES.lock().unwrap();
+        for node_id in prune {
+            states.remove(&node_id);
+        }
+    }
 }
 
 /// `set-input-focus {block-id, focused}` — focus/blur the block's
@@ -754,11 +849,18 @@ fn set_input_focus(
         let shared = shared.borrow();
         find_editor_node(&shared.store, block_id)
     };
-    let Some(node_id) = node_id else { return };
+    let Some(node_id) = node_id else {
+        return;
+    };
     if focused {
         focus_editor(node_id, window, cx);
     } else {
         window.blur(cx);
+        if let Some(state) =
+            INPUT_STATES.lock().unwrap().get(&node_id).cloned()
+        {
+            state.update(cx, |this, cx| this.emit(c"blur", "{}".into(), cx));
+        }
     }
 }
 
@@ -775,6 +877,10 @@ fn editor_surface(
     let node_id = node.id;
     let state = input_state(node_id, &shared, cx);
     let focus = state.read(cx).focus.clone();
+    // The root keydown forwarder resolves the focused element's node
+    // through this registry — the sink's own `key` events own editing,
+    // but a stale focus must still route keys at the right target.
+    shared.borrow_mut().register_focus(node_id, focus.clone());
 
     // Focus/blur subscriptions, once per input entity. Installed before
     // draining a pending focus so the landing emits the conduit event.
@@ -805,17 +911,33 @@ fn editor_surface(
         if let Some(want) =
             PENDING_FOCUS.with(|p| p.borrow_mut().remove(block_id))
         {
-            // focus() called mid-render is dropped when the frame's own
-            // focus bookkeeping runs — land it on the next frame so the
-            // on_focus subscription below can emit the conduit event.
-            let focus = focus.clone();
-            window.on_next_frame(move |window, cx| {
-                if want {
+            // Grant synchronously instead of deferring: `window.focus`
+            // only writes window fields, so a grant during render is
+            // picked up by this frame's own prepaint — `track_focus`
+            // records it in the dispatch tree and the canvas paint
+            // registers the input handler in the same frame. The
+            // confirm event goes through `emit_ffi` (no drain, which
+            // would re-borrow the store mid-render); a deferred grant
+            // can park arbitrarily long because effect flushes only run
+            // when an update cycle ends.
+            if want {
+                let was = focus.is_focused(window);
+                if !was {
                     focus.focus(window, cx);
-                } else {
-                    window.blur(cx);
                 }
-            });
+                if focus.is_focused(window) {
+                    emit_ffi(node_id, c"focus", "{}".into());
+                    // The mount-frame paint does not always reach the
+                    // conduit canvas (clipped paint ranges), which is
+                    // where `handle_input` registers the platform input
+                    // handler — a repaint forces registration so
+                    // insertText works before the first keystroke.
+                    cx.notify();
+                }
+            } else {
+                window.blur(cx);
+                emit_ffi(node_id, c"blur", "{}".into());
+            }
         }
     }
 
@@ -829,6 +951,31 @@ fn editor_surface(
         .on_key_down(move |event, _window, cx| {
             let keystroke = &event.keystroke;
             let mods = &keystroke.modifiers;
+            let global_key = mods.control || mods.platform;
+            // Only printable key_chars are text: gpui reports named keys
+            // (Enter "\r", Tab "\t", Escape "\x1b", Backspace) as
+            // control-char key_chars, and routing them through `insert`
+            // both writes garbage into the model and hides the key from
+            // the conduit keymap (Enter must reach `key` → SplitBlock).
+            let text_key = keystroke
+                .key_char
+                .as_deref()
+                .is_some_and(|s| s.chars().all(|c| !c.is_control()))
+                && !global_key
+                && !mods.function;
+            if text_key {
+                // Emit the text directly as an `insert` conduit event —
+                // the OCaml side applies `insert` the same way insertText
+                // does, without depending on the platform input handler,
+                // whose registration only happens on frames where this
+                // 1px conduit actually paints. Handled here so Cocoa
+                // never also routes the key through `insertText` (which
+                // would double-insert once a handler is registered).
+                let json = json!({ "text": keystroke.key_char.as_ref().unwrap() });
+                emit(&key_shared, node_id, c"insert", json.to_string(), cx);
+                cx.stop_propagation();
+                return;
+            }
             let json = json!({
                 "key": dom_key_name(&keystroke.key),
                 "shift": mods.shift,
@@ -838,19 +985,14 @@ fn editor_surface(
                 "repeat": event.is_held,
             });
             emit(&key_shared, node_id, c"key", json.to_string(), cx);
-            // Text-bearing keys must stay unhandled so Cocoa still
-            // reaches insertText — the buffer receives them as `insert`
-            // events via the registered input handler. Everything else
-            // (commands, navigation, modifiers) belongs to the editing
-            // model now — without consuming it the key keeps bubbling to
-            // the window root, which re-dispatches it as a document
-            // keydown and global chords (e.g. router navigation) fire
-            // while the user is typing.
-            let text_key = keystroke.key_char.is_some()
-                && !mods.control
-                && !mods.platform
-                && !mods.function;
-            if !text_key {
+            // cmd/ctrl-modified keys must bubble: the window root
+            // re-dispatches them as document keydowns where the global
+            // chords live (⌘⇧P palette, ⌘[ back, ⌘K), matching Electron
+            // where global shortcuts still fire while a block is being
+            // edited. Only unmodified non-text keys (Escape, arrows,
+            // Tab, Enter) are consumed here — they belong to the editing
+            // model alone.
+            if !global_key {
                 cx.stop_propagation();
             }
         })
