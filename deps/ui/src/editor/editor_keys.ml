@@ -404,7 +404,7 @@ let edit_arrows ~route ~conduit uuid (kev : Edit_model.key_event)
       (* shift+arrow on a boundary row crosses into block selection *)
       if (up && first) || ((not up) && last) then (
         (match S.editing () with
-         | Some _ -> A.exit_edit ~select:true
+         | Some _ -> A.shift_arrow_select up
          | None -> A.extend_selection up);
         m)
       else Edit_input.handle ~route ~conduit m (Edit_input.Key (kev, false))
