@@ -122,36 +122,11 @@ let update (model : t) (action : Action.t) : t =
          keyed blocks, dyn'd refs) — a publish never needs a data_gen
          bump; the collections repaint or reconcile themselves *)
       { model with journals = js }
-  | Refs_loaded refs ->
+  | Ref_count_loaded n ->
       { model with
-        page_refs = refs
+        page_ref_count = n
       ; data_gen =
-          (if refs = model.page_refs then model.data_gen
-           else model.data_gen + 1)
-      }
-  | Ref_parents_loaded entries ->
-      (* merge into the keyed assoc — linked and unlinked fetches each
-         contribute their own group pages; an unchanged merge keeps the
-         same list so refs_eq's physical compare holds *)
-      let merged =
-        List.fold_left
-          (fun acc (k, v) ->
-            match List.assoc_opt k acc with
-            | Some v' when v' = v -> acc
-            | _ -> (k, v) :: List.remove_assoc k acc)
-          model.ref_parents entries
-      in
-      { model with
-        ref_parents = merged
-      ; data_gen =
-          (if merged == model.ref_parents then model.data_gen
-           else model.data_gen + 1)
-      }
-  | Unlinked_loaded refs ->
-      { model with
-        unlinked_refs = refs
-      ; data_gen =
-          (if refs = model.unlinked_refs then model.data_gen
+          (if n = model.page_ref_count then model.data_gen
            else model.data_gen + 1)
       }
   | Unlinked_exists b ->
@@ -166,18 +141,13 @@ let update (model : t) (action : Action.t) : t =
         route
       ; route_page = None
       ; page_missing = false
-      ; page_refs = []
-      ; ref_parents = []
-      ; unlinked_refs = []
+      ; page_ref_count = 0
       ; unlinked_exists = false
       ; editing_title = false
       ; page_menu = None
       ; appearance = None
       ; confirm = None
       ; unlinked_open = false
-      ; unlinked_search = false
-      ; unlinked_query = ""
-      ; linked_open = true
       ; unlinked_blocks = []
       ; data_gen = model.data_gen + 1
       }
@@ -218,20 +188,6 @@ let update (model : t) (action : Action.t) : t =
   | Toasts_clear -> { model with toasts = [] }
   | Unlinked_toggle_open ->
       { model with unlinked_open = not model.unlinked_open }
-  | Unlinked_toggle_search ->
-      { model with
-        unlinked_search = not model.unlinked_search
-      ; unlinked_query = ""
-      }
-  | Unlinked_set_query q -> { model with unlinked_query = q }
-  | Linked_toggle_open ->
-      { model with linked_open = not model.linked_open }
-  | Linked_toggle_search ->
-      { model with
-        linked_search = not model.linked_search
-      ; linked_query = ""
-      }
-  | Linked_set_query q -> { model with linked_query = q }
   | Help_toggle -> { model with help_open = not model.help_open }
   | Rtc_state rtc -> { model with rtc = Some rtc }
   | Rtc_state_clear -> { model with rtc = None }

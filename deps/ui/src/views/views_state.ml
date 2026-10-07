@@ -33,6 +33,8 @@ type inst_kind =
   | KTagPage of string (* owner tag page uuid *)
   | KPropertyPage of string (* owner property page uuid *)
   | KQuery of { block_uuid : string }
+  | KLinkedRefs (* owner is the viewed page *)
+  | KUnlinkedRefs
 
 (* All view data + view-local UI state. Whole-record updates publish a new
    snapshot; collections that load wholesale (blocks, all_props,
@@ -77,6 +79,15 @@ type vstate =
         (* windowed view-data fetch size — 0 means one screen; grows as the
            row stream reports its end near the viewport (cljs row-offset
            refetch: each window doubles, capped by the result count) *)
+  ; ref_pages_count : (string * int) list
+        (* view-data :ref-pages-count — [[title count]...] for the
+           linked-refs filter dialog *)
+  ; ref_includes : (string * string) list
+        (* (block/name, block/title) of pages in
+           logseq.property.linked-references/includes *)
+  ; ref_excludes : (string * string) list
+  ; refs_total : int (* [:block-ref-count owner] — the unfiltered total *)
+
   }
 
 type inst =
@@ -123,6 +134,10 @@ let empty_vstate () : vstate =
   ; ref_titles = Hashtbl.create 8
   ; asset_class = false
   ; fetch_limit = 0
+  ; ref_pages_count = []
+  ; ref_includes = []
+  ; ref_excludes = []
+  ; refs_total = 0
   }
 
 let next_id = ref 0
@@ -322,6 +337,22 @@ let resolve_property_id ident f =
    Js.Promise.resolve ())
   |> Views_db.catch_quiet
   |> ignore
+
+(* ref-button's [:block/name lc-reference] pull — page db/id by its
+   lowercase name *)
+let resolve_name_id name_lc f =
+  (let* w =
+     Runtime.invoke3 "thread-api/pull" (W.String (Views_db.repo ()))
+       (W.String "[:db/id]")
+       (W.Array [ W.kw "block/name"; W.String name_lc ])
+   in
+   f (W.map_get_int w "db/id");
+   Js.Promise.resolve ())
+  |> Views_db.catch_quiet
+  |> ignore
+
+let owner_uuid (inst : inst) : string option =
+  match inst.owner with W.Uuid u -> Some u | _ -> None
 
 let persist_group_by inst =
   let s = get inst in

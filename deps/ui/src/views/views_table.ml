@@ -254,6 +254,12 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
          else [])
       @ with_tags
       @ [ created_column; updated_column; page_column ]
+  | V.KLinkedRefs | V.KUnlinkedRefs ->
+      (* cljs build-columns [] {:add-page-column? true} — the "#" index
+         column is a cljs-only display column (visible_columns drops
+         "id") *)
+      [ select_column; title_column ] @ with_tags
+      @ [ created_column; updated_column; page_column ]
   | V.KQuery _ ->
       (* cljs get-query-columns: build-columns over view-data :properties
          (idents); created/updated only when pulled for advanced queries *)
@@ -872,7 +878,9 @@ let dnd_live n : t =
 let show_add_property inst =
   match inst.V.kind with
   | V.KTagPage _ -> !Runtime.current_page
-  | V.KPropertyPage _ | V.KAllPages | V.KQuery _ -> None
+  | V.KPropertyPage _ | V.KAllPages | V.KQuery _ | V.KLinkedRefs
+  | V.KUnlinkedRefs ->
+      None
 
 (* rows are (uuid, block) items — the block rides along so a content
    change makes a fresh item value; `keyed` remounts on a key change and
@@ -1062,7 +1070,7 @@ let add_row_footer inst : t =
         match !Runtime.current_page with
         | Some p -> p.Model.page_add_object
         | None -> false)
-    | V.KAllPages | V.KQuery _ -> false
+    | V.KAllPages | V.KQuery _ | V.KLinkedRefs | V.KUnlinkedRefs -> false
   in
   if has_add_object then
     box ~style_class:"ls-table-footer"

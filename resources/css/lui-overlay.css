@@ -5812,6 +5812,108 @@ select.form-select {
   transition: opacity 300ms ease-in;
 }
 
+/* cljs view-head on references sections: view-actions are opacity-0
+   until the head is hovered (the .ls-lit state — a popup open —
+   also forces them visible) */
+.ls-view-head.ls-refs .view-actions {
+  opacity: 0;
+}
+
+.ls-view-head.ls-refs:hover .view-actions,
+.ls-view-head.ls-refs .view-actions.ls-lit {
+  opacity: 1;
+}
+
+/* cljs reference_filters.cljs filter-dialog — the include/exclude
+   popup behind the linked-refs filter-cog */
+.ls-filters {
+  max-width: 500px;
+  min-width: 320px;
+}
+
+.ls-filters-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding-bottom: 0.5rem;
+}
+
+.ls-filters-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: 9999px;
+  background: var(--ls-tertiary-background-color, rgba(0, 0, 0, 0.06));
+  color: var(--ls-secondary-text-color, var(--muted-foreground));
+  flex-shrink: 0;
+}
+
+.ls-filters-title {
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.ls-filters .cp__filters {
+  margin: 0 0 1rem 0.5rem;
+}
+
+.ls-filters .cp__filters:empty {
+  display: none;
+}
+
+.ls-filters-label {
+  margin-right: 0.25rem;
+  font-weight: 500;
+  padding: 0.25rem 0;
+}
+
+.cp__filters-input-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ls-secondary-text-color, var(--muted-foreground));
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+}
+
+.cp__filters-input-panel:focus-within {
+  background: var(--ls-tertiary-background-color, rgba(0, 0, 0, 0.04));
+}
+
+.cp__filters-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+}
+
+.ls-filters-refs {
+  margin-top: 1rem;
+}
+
+.ls-filters-refs:empty {
+  display: none;
+}
+
+.ls-ref-btn {
+  border: 1px solid var(--ls-border-color, hsl(var(--border)));
+  border-radius: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+}
+
+.ls-ref-btn:hover {
+  border-color: var(--ls-secondary-text-color, var(--muted-foreground));
+}
+
 /* generic size variants for ui__button (was shui size utilities) */
 .ui__button.ls-btn-xs {
   height: 1.5rem;

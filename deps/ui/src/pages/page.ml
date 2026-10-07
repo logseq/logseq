@@ -735,29 +735,6 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
            ])
     ]
 
-(* cljs components/block.cljs grouped-blocks-container: refs render
-   grouped under their source page (references-blocks-item > page-cp),
-   so the referencing page's name must appear inside .references *)
-let refs_grouped (refs : Model.block list) : (string * Model.block list) list =
-  (* linear grouping: Hashtbl keyed by source page name, order of first
-     appearance preserved; a per-ref List.find_opt + append rebuild is
-     O(refs x groups) on ref-heavy pages *)
-  let tbl : (string, Model.block list ref) Hashtbl.t = Hashtbl.create 16 in
-  let order = ref [] in
-  List.iter
-    (fun (b : Model.block) ->
-      let name = Option.value b.block_page_name ~default:"" in
-      match Hashtbl.find_opt tbl name with
-      | Some bs -> bs := b :: !bs
-      | None ->
-          Hashtbl.replace tbl name (ref [ b ]);
-          order := name :: !order)
-    refs;
-  List.rev_map
-    (fun name ->
-      (name, List.rev !(Hashtbl.find tbl name)))
-    (List.rev !order)
-
 let fold_arrow ?on_click ?(collapsed = false) key : t =
   let arrow =
     box ~key ~width:14 ~height:16
@@ -775,65 +752,6 @@ let fold_arrow ?on_click ?(collapsed = false) key : t =
   match on_click with
   | Some f -> Ui_parts.pressable ~on_press:(fun _ -> f ()) arrow
   | None -> arrow
-
-let view_ghost_btn key ?title ?on_click icon_name size : t =
-  button ~key ~variant:`ghost ~size:`icon
-    ~style_class:"ui__button as-ghost"
-    ?label:title
-    ?on_press:(Option.map (fun f _ -> f ()) on_click)
-    [ Icons.icon ~size icon_name ]
-
-(* cljs views/view header for :linked-references — foldable title with the
-   "Linked references <count>" view tab and hidden-until-hover actions *)
-let refs_view_head key ?on_search title count : t =
-  row ~key:(key ^ "-head") ~grow:1. ~main:`space_between ~cross:`center
-    ~gap:4 ~style_class:"ls-view-head"
-    [ row ~key:"vh-l" ~cross:`center ~gap:8
-        [ row ~key:"vh-views" ~gap:4 ~cross:`center ~style_class:"views"
-            [ button ~key:"vh-tab" ~variant:`ghost ~text:title
-                ~style_class:"as-text"
-                ~accessibility_identifier:("view-tab-" ^ key)
-                [ text ~key:"vh-n" ~value:(string_of_int count) [] ]
-            ]
-        ]
-    ; (* only actions with a backing implementation render — the
-         sort/filter/columns/dots controls master shows belong to
-         customized views, which the refs section doesn't carry yet *)
-      row ~key:"vh-acts" ~cross:`center ~gap:4
-        ~style_class:"view-actions"
-        [ view_ghost_btn "vh-fc" ~title:(I18n.t "reference/page-filter")
-            "filter-cog" 18.
-        ; view_ghost_btn "vh-srt"
-            ~title:(I18n.t "property.built-in/table-sorting")
-            "arrows-up-down" 18.
-        ; view_ghost_btn "vh-flt" ~title:(I18n.t "reference.filter/title")
-            "filter" 18.
-        ; row ~key:"vh-search" ~style_class:"view-action-search"
-            [ row ~key:"vh-si" ~cross:`center
-                [ view_ghost_btn "vh-sb" ~title:(I18n.t "nav/search")
-                    ?on_click:on_search "search" 15. ] ]
-        ; box ~key:"vh-type" ~style_class:"view-action-type"
-            [ (* property-value-inner[data-type] is the property-cell
-                 trigger contract (jtrigger/open-value flows) *)
-              box ~key:"vh-tv" ~style_class:"w-full property-value-inner"
-                ~data_attrs:[ ("data-type", "default") ]
-                [ box ~key:"vh-tj"
-                    ~accessibility_identifier:("trigger-" ^ key)
-                    ~grow:1. ~style_class:"jtrigger"
-                    [ box ~key:"vh-ts" ~style_class:"select-item"
-                        [ row ~key:"vh-tc" ~cross:`center
-                            ~style_class:"ls-icon-color-wrap"
-                            [ Icons.icon ~size:18. "list" ]
-                        ]
-                    ]
-                ]
-            ]
-        ; button ~key:"vh-menu" ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots") ~label:(I18n.t "header/more")
-            ~style_class:"ui__button as-ghost ls-dots-menu"
-            []
-        ]
-    ]
 
 (* cljs ui/foldable-title: .ls-foldable-title > .foldable-title >
    .ls-foldable-header > [a.ls-foldable-title-control] + header —
@@ -853,119 +771,6 @@ let foldable_content key inner : t =
   box ~key:(key ^ "-fc") ~style_class:"ls-foldable-content"
     [ box ~key:"fci"  [ inner ] ]
 
-(* cljs .breadcrumb.block-parents.breadcrumb--inline — one segment per
-   ancestor title (farthest-first), "/" separators between *)
-let group_breadcrumb key (titles : string list) : t =
-  let segs =
-    List.mapi
-      (fun i title ->
-        (if i > 0 then
-           [ text ~key:("sep-" ^ string_of_int i) ~padding_horizontal:4
-               ~value:"/" [] ]
-         else [])
-        @ [ box ~key:("seg-" ^ string_of_int i)
-              [ row ~key:"si" ~cross:`center
-                  ~style_class:"breadcrumb__segment"
-                  [ text ~key:"sl" ~value:title
-                      ~style_class:"breadcrumb__label" [] ]
-              ]
-          ])
-      titles
-  in
-  row ~key ~style_class:"breadcrumb block-parents"
-    (List.concat segs)
-
-(* one linked-ref group: source page-ref foldable title + its blocks.
-   The static layout keeps the virtuoso index attrs; virtualized rows get
-   data-index from the .ls-virt-row wrapper instead (a second data-index
-   inside would double-measure). ~parents maps group page name ->
-   ancestor titles for the namespace breadcrumb *)
-let ref_group ?(data_attrs = []) ?(style = "") ?(parents = [])
-    (name, blocks) : t =
-  let key = "rg-" ^ name in
-  (* logseq-virt region carries the static-mode index attrs
-     (data-index/data-item-index/overflow-anchor style) *)
-  Logseq_virt.region ~key ~data_attrs ~style
-    [ column ~key:"gi"
-        [ foldable_title (key ^ "-t")
-            (box ~key:"grp"
-               [ (* a.page-ref[data-ref][draggable] is read by
-                    sidebar_state/right-sidebar *)
-                 link ~key:"grl" ~url:"#" ~target:`self_
-                   ~style_class:"page-ref relative"
-                   ~data_attrs:
-                     [ ("tabindex", "0"); ("draggable", "true")
-                     ; ("data-ref", String.lowercase_ascii name) ]
-                   ~text:name []
-               ])
-        ; foldable_content (key ^ "-b")
-            (* cljs: .-ml-2 > div#<viewid> > div(partition) >
-               [.ml-6 breadcrumb + .content list] *)
-            (box ~key:"grm"
-               [ box ~key:"grv"
-                   ~accessibility_identifier:(Platform.random_uuid ())
-                   [ box ~key:"grp2"
-                       [ box ~key:"grb"
-                           (match List.assoc_opt name parents with
-                            | Some ( (_ :: _) as ts ) ->
-                                (* cljs: ancestors farthest-first + the
-                                   source page itself as the last segment *)
-                                [ group_breadcrumb "bc" (ts @ [ name ]) ]
-                            | _ -> [])
-                       ; column ~key:"grc" ~style_class:"content"
-                           (List.map
-                      (fun (b : Model.block) ->
-                        box
-                          ~key:("grw-"
-                                ^ Option.value b.block_uuid ~default:"x")
-                          ~style_class:"relative"
-                          ~min_height:24
-                          [ Tree.block_row_static b ])
-                      blocks)
-                       ]
-                   ]
-               ])
-        ]
-    ]
-
-let ref_groups_virt key ?(parents = [])
-    (groups : (string * Model.block list) list) : t =
-  let items = Array.of_list groups in
-  (* virtualize at group granularity — a tag page can carry hundreds of
-     source-page groups; group rows measure dynamically like journals.
-     The scaffold attrs (data-virtuoso-scroller/data-viewport-type/
-     data-testid=item-list) and the inline styles that are not in the
-     data_attrs vocabulary go through logseq-virt regions *)
-  if Virt_list.enabled ~virtualize:true (Array.length items) then
-    Logseq_virt.region ~key ~style_class:"group-list-view"
-      ~data_attrs:[ ("data-virtuoso-scroller", "true") ]
-      ~style:"position: relative;"
-      [ Virt_list.list
-          ~list_attrs:[ ("data-viewport-type", "window") ]
-          ~key_of:(fun (name, _) -> name)
-          ~estimate_size:(fun _ -> 120.)
-          ~render:(ref_group ~parents) items ]
-  else
-    Logseq_virt.region ~key ~style_class:"group-list-view"
-      ~data_attrs:[ ("data-virtuoso-scroller", "true") ]
-      ~style:"position: relative;"
-      [ box ~key:"vp" ~data_attrs:[ ("data-viewport-type", "window") ]
-          [ Logseq_virt.region ~key:"il"
-              ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
-              ~style:
-                "box-sizing: border-box; margin-top: 0px; \
-                 padding-bottom: 0px; padding-top: 0px;"
-              (List.mapi
-                 (fun i g ->
-                   ref_group ~parents
-                     ~data_attrs:
-                       [ ("data-index", string_of_int i)
-                       ; ("data-item-index", string_of_int i) ]
-                     ~style:"overflow-anchor: none;" g)
-                 groups)
-          ]
-      ]
-
 (* cljs views/view {:add-page-column? true} — each ref row carries the
    source page name. *)
 let references_row (b : Model.block) : t =
@@ -980,95 +785,22 @@ let references_row (b : Model.block) : t =
         ]
   | None -> Tree.block_row_static b
 
-(* cljs reference/references -> views/view :linked-references DOM *)
+(* cljs reference/references -> views/view :linked-references DOM —
+   the section mounts the shared views machinery with the
+   linked-references feature: view-head carries the view tabs + the
+   filter-cog/sort/filter/search/display-type/menu actions, the body
+   renders the grouped-by-page list *)
 
-(* cljs renders a Page column naming the source page; shared by the
-   linked-refs (.references) and unlinked-refs bodies *)
-let ref_item (b : Model.block) : t =
-  column 
-    [ (match b.Model.block_page_name with
-       | None -> box []
-       | Some name ->
-           (* a.references-item-page[data-ref] is read by sidebar_state *)
-           link ~url:"#" ~target:`self_
-             ~style_class:"references-item-page"
-             ~data_attrs:[ ("data-ref", name) ]
-             ~text:name [])
-    ; Tree.block_row b
-    ]
-
-let fetch_unlinked (m : Model.t) =
-  match m.route_page with
-  | Some p ->
-      Outliner_ops.fetch_unlinked_refs
-        ~stale:(fun () -> !Runtime.current_route <> Some m.route)
-        p
-  | None -> ()
-
-let refs_search_input key set_query () : t =
-  box ~key:(key ^ "-search-box") ~style_class:"view-action-search"
-    [ input ~key:(key ^ "-input")
-        ~placeholder:I18n.filter_placeholder
-        ~on_input:(fun ev ->
-          match ev with
-          | Lui_protocol.TextChanged (_, q) ->
-              Runtime.send (set_query q);
-              Runtime.flush ()
-          | _ -> ())
-        []
-    ]
-
-let refs_filtered (refs : Model.block list) q =
-  let q = String.trim q in
-  if q = "" then refs
+let references_view ~page_uuid ~has_refs () : t =
+  (* cljs references gates the whole section on [:block-ref-count
+     page-uuid] > 0 — the unfiltered total, so an include/exclude
+     filter can never hide the section itself *)
+  if not has_refs then Logseq_el.nothing
   else
-    List.filter
-      (fun (b : Model.block) ->
-        I18n.contains_ci b.block_title q
-        ||
-        (match b.block_page_name with
-         | Some p -> I18n.contains_ci p q
-         | None -> false))
-      refs
-
-let references_view ?(parents = []) ?on_fold ~open_ ~search_on ~query
-    (refs : Model.block list) : t =
-  match refs with
-  | [] -> Logseq_el.nothing
-  | _ ->
-      let groups = refs_grouped (refs_filtered refs query) in
-      column ~key:"refs" ~style_class:"references"
-        [ column ~key:"rv1" ~gap:8
-            [ column ~key:"rv2" ~gap:8
-                [ column ~key:"rv3"
-                    [ foldable_title "refs-t" ~collapsed:(not open_)
-                        ~control:(Option.is_some on_fold) ?on_click:on_fold
-                        (refs_view_head "refs"
-                           ~on_search:(fun () ->
-                             Runtime.send Action.Linked_toggle_search;
-                             Runtime.flush ())
-                           (I18n.t "view/linked-references")
-                           (List.length refs))
-                    ; (if open_ then
-                         foldable_content "refs-c"
-                           (column ~key:"rvb" ~gap:8
-                              ~style_class:"ls-view-body"
-                              [ box ~key:"refs-sc"
-                                  [ (if search_on then
-                                       refs_search_input "lrefs"
-                                         (fun q ->
-                                           Action.Linked_set_query q)
-                                         ()
-                                     else Logseq_el.nothing)
-                                  ]
-                              ; column ~key:"rvl" ~gap:8
-                                  [ ref_groups_virt "rvg" ~parents groups ]
-                              ])
-                       else Logseq_el.nothing)
-                    ]
-                ]
-            ]
-        ]
+    column ~key:"refs" ~style_class:"references"
+      [ box ~key:"rvw" ~grow:1.
+          [ Views_view.view ~kind:Views_state.KLinkedRefs
+              ~owner:(Wire.Uuid page_uuid) ] ]
 
 (* journal linked refs render inside a foldable content wrapper, like
    cljs views/view {:foldable-options ...} — journals default expanded. *)
@@ -1084,26 +816,6 @@ let journal_references_view (p : Model.page) : t =
                 (List.map references_row refs)
             ]
         ]
-
-
-
-
-let unlinked_row (b : Model.block) : t =
-  let key =
-    match b.block_uuid, b.block_db_id with
-    | Some u, _ -> u
-    | None, Some id -> "id-" ^ string_of_int id
-    | None, None -> b.block_title
-  in
-  column ~key:("ur-" ^ key) 
-    [ (match b.block_page_name with
-       | Some name ->
-           link ~key:("urp-" ^ key)
-             ~url:("#/page/" ^ name)
-             ~target:`self_ ~text:name []
-       | None -> Logseq_el.nothing)
-    ; Tree.block_row ~scope:"unlinked" b
-    ]
 
 (* cljs collapsed unlinked head: no .ls-view-head wrapper — .views
    (tab text, no count) + a visible add-view + directly under
@@ -1121,70 +833,37 @@ let unlinked_head_collapsed key : t =
         []
     ]
 
-(* cljs reference/unlinked-references — same views/view chrome as linked
-   refs while open; collapsed keeps only the lean .views head *)
+(* cljs reference/unlinked-references — the section mounts the shared
+   views machinery (:defer-resource? maps to the collapsed default:
+   nothing fetches until the fold is opened) *)
 let unlinked_references_view (m : Model.t) : t =
   (* cljs renders the section (foldable header included) whenever the
-     :block-unlinked-ref-exists resource is true — independent of the
-     fold state, since opening is what triggers the refs fetch *)
-  match m.unlinked_exists with
-  | false -> Logseq_el.nothing
-  | true ->
-  let refs = m.unlinked_refs in
-  let filtered =
-    let q = String.trim m.unlinked_query in
-    if q = "" then refs
-    else
-      List.filter
-        (fun (b : Model.block) ->
-          I18n.contains_ci b.block_title q
-          ||
-          (match b.block_page_name with
-           | Some p -> I18n.contains_ci p q
-           | None -> false))
-        refs
-  in
-  (* aria-hidden on ls-foldable-content had no visual effect (no CSS
-     rules read it) — dropped with the attr *)
-  column ~key:"urefs" ~style_class:"unlinked-references"
-    [ column ~key:"uv1" ~gap:8
-        [ column ~key:"uv2" ~gap:8
-            [ column ~key:"uv3"
-                [ foldable_title "urefs-t" ~collapsed:(not m.unlinked_open)
-                    ~on_click:(fun () ->
-                      Runtime.send Action.Unlinked_toggle_open;
-                      if not m.unlinked_open then fetch_unlinked m;
-                      Runtime.flush ())
-                    (if m.unlinked_open
-                     then
-                       refs_view_head "urefs"
-                         ~on_search:(fun () ->
-                           Runtime.send Action.Unlinked_toggle_search;
-                           Runtime.flush ())
-                         (I18n.t "view/unlinked-references")
-                         (List.length refs)
-                     else unlinked_head_collapsed "urefs")
-                ; box ~key:"urefs-content" ~style_class:"ls-foldable-content"
-                    [ box ~key:"ufci" 
-                        [ (if m.unlinked_search then
-                             refs_search_input "urefs"
-                               (fun q -> Action.Unlinked_set_query q)
-                               ()
-                          else Logseq_el.nothing)
-                        ; column ~key:"urefs-body" ~gap:8
-                            ~style_class:"ls-view-body"
-                            [ column ~key:"uvl" ~gap:8
-                                [ ref_groups_virt "uvg"
-                                    ~parents:m.ref_parents
-                                    (refs_grouped filtered) ]
-                            ]
+     :block-unlinked-ref-exists resource is true *)
+  match m.unlinked_exists, m.route_page with
+  | true, Some p -> (
+      match p.Model.page_uuid with
+      | Some uuid ->
+          column ~key:"urefs" ~style_class:"unlinked-references"
+            [ column ~key:"uv1" ~gap:8
+                [ column ~key:"uv2" ~gap:8
+                    [ column ~key:"uv3"
+                        [ (if m.unlinked_open
+                           then
+                             Views_view.view
+                               ~kind:Views_state.KUnlinkedRefs
+                               ~owner:(Wire.Uuid uuid)
+                           else
+                             foldable_title "urefs-t" ~collapsed:true
+                               ~on_click:(fun () ->
+                                 Runtime.send Action.Unlinked_toggle_open;
+                                 Runtime.flush ())
+                               (unlinked_head_collapsed "urefs"))
                         ]
                     ]
                 ]
             ]
-        ]
-
-    ]
+      | None -> Logseq_el.nothing)
+  | _ -> Logseq_el.nothing
 
 (* --- route views -------------------------------------------------- *)
 
@@ -1623,20 +1302,10 @@ let ref_flags (p : Model.page option) =
         , p.page_uuid )
   | None -> None
 
-(* field identity, not structural [=]: page_refs/unlinked_refs carry
-   block trees — an O(tree) compare on every model publish would defeat
-   the point of the stable region *)
 let refs_eq (a : Model.t) (b : Model.t) =
-  a.page_refs == b.page_refs
-  && a.ref_parents == b.ref_parents
-  && a.unlinked_refs == b.unlinked_refs
+  a.page_ref_count = b.page_ref_count
   && a.unlinked_exists = b.unlinked_exists
   && a.unlinked_open = b.unlinked_open
-  && a.unlinked_search = b.unlinked_search
-  && a.unlinked_query = b.unlinked_query
-  && a.linked_open = b.linked_open
-  && a.linked_search = b.linked_search
-  && a.linked_query = b.linked_query
   && a.route = b.route
   && ref_flags a.route_page = ref_flags b.route_page
 
@@ -1650,13 +1319,12 @@ let refs_wrap (m : Model.t) : t =
         ((if is_today_page m page then
             [ box ~key:"tq" ~accessibility_identifier:"today-queries" [] ]
           else [])
-        @ [ box ~key:"lrefs"
-              [ references_view ~parents:m.ref_parents ~open_:m.linked_open
-                  ~on_fold:(fun () ->
-                    Runtime.send Action.Linked_toggle_open;
-                    Runtime.flush ())
-                  ~search_on:m.linked_search ~query:m.linked_query
-                  m.page_refs ]
+        @ [ (match page.Model.page_uuid with
+             | Some uuid ->
+                 box ~key:"lrefs"
+                   [ references_view ~page_uuid:uuid
+                       ~has_refs:(m.page_ref_count > 0) () ]
+             | None -> Logseq_el.nothing)
           ; (* cljs when-not class-page?/property-page? — the unlinked
                section is omitted entirely on node pages *)
             (if page.page_is_tag || page.page_is_property
@@ -1741,8 +1409,6 @@ let region (ms : Model.t Signal.signal) : t =
           && a.page_menu = b.page_menu
           && a.confirm = b.confirm
           && a.unlinked_open = b.unlinked_open
-          && a.unlinked_search = b.unlinked_search
-          && a.unlinked_query = b.unlinked_query
       in
       (* journals keep repaint-on-publish semantics only for the
          placeholder<->list structural transition — day-record splices

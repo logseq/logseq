@@ -700,80 +700,6 @@ let fetch_zoom_parents repo uuid : Model.block list Js.Promise.t =
             | Wire.Map _ -> Some (Decode.block_of_wire w)
             | _ -> None))
 
-(* namespace breadcrumbs on linked/unlinked ref groups: each group's
-   source page resolves its ancestor chain (farthest-first titles) via
-   get-block-parents; non-namespaced pages return [] and keep the empty
-   .ml-6 slot, matching cljs's absent breadcrumb *)
-let fetch_ref_group_parents ~stale:(is_stale : unit -> bool)
-    (refs : Model.block list) =
-  match (Runtime.model ()).Model.repo with
-  | None -> ()
-  | Some repo ->
-      let seen = Hashtbl.create 8 in
-      let pages =
-        List.filter_map
-          (fun (b : Model.block) ->
-            match b.Model.block_page_uuid, b.Model.block_page_name with
-            | Some u, Some n when not (Hashtbl.mem seen u) ->
-                Hashtbl.add seen u n;
-                Some (u, n)
-            | _ -> None)
-          refs
-      in
-      if pages <> [] then
-        let fetch (u, n) =
-          (let* w =
-             Runtime.invoke2 "thread-api/get-block-parents"
-               (Wire.String repo)
-               (Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
-           in
-           let titles =
-             Wire.elems w
-             |> List.filter_map (fun p -> Wire.map_get_string p "block/title")
-           in
-           Js.Promise.resolve (n, titles))
-          |> Js.Promise.catch (fun _ -> Js.Promise.resolve (n, []))
-        in
-        ignore
-          ((let* arr =
-              Js.Promise.all (Array.of_list (List.map fetch pages))
-            in
-            Js.Promise.resolve
-              (if not (is_stale ()) then
-                 let entries =
-                   List.filter (fun (_, ts) -> ts <> []) (Array.to_list arr)
-                 in
-                 if entries <> [] then
-                   Runtime.send (Action.Ref_parents_loaded entries)))
-          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
-
-(* refetch unlinked refs for the current page — a block-title edit can
-   create or remove a text mention; the send is guarded so an in-flight
-   fetch can't overwrite a page the user navigated to *)
-let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
-  (* gated on the unlinked section being open — get-unlinked-references
-     scans every block/title datom, so a collapsed section must not pay
-     it on every refresh. The fold toggle's send flips
-     model.unlinked_open before its fetch, so opening still fetches *)
-  if not (Runtime.model ()).Model.unlinked_open then ()
-  else
-  match (Runtime.model ()).Model.repo, p.Model.page_db_id with
-  | Some repo, Some id ->
-      ignore
-        ((let* w =
-           Runtime.invoke2 "thread-api/get-unlinked-refs" (Wire.String repo)
-             (Wire.Int id)
-         in
-         Js.Promise.resolve
-           (if not (is_stale ()) then (
-              let refs = Decode.blocks_of_wire w in
-              Runtime.send (Action.Unlinked_loaded refs);
-              fetch_ref_group_parents ~stale:is_stale refs)))
-         |> Js.Promise.catch (fun e ->
-                Platform.console_error ("get-unlinked-refs failed", e);
-                Js.Promise.resolve ()))
-  | _ -> ()
-
 (* cljs :block-unlinked-ref-exists resource — a cheap search-based check
    that gates whether the collapsed .unlinked-references section renders
    at all. Unlike get-unlinked-refs it must run regardless of the fold
@@ -821,9 +747,6 @@ let refresh_page () : unit Js.Promise.t =
   match ((Runtime.model ()).Model.repo, (Runtime.model ()).Model.route_page) with
   | Some repo, Some page -> (
       incr Runtime.load_gen;
-      fetch_unlinked_refs
-        ~stale:(fun () -> Runtime.route () <> route_at_start)
-        page;
       fetch_unlinked_exists
         ~stale:(fun () -> Runtime.route () <> route_at_start)
         page;

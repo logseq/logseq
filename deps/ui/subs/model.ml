@@ -214,11 +214,9 @@ type t =
                            renders inline (t :page/not-found), keeping
                            the chrome, not the route-level 404 *)
   ; journals : page list
-  ; page_refs : block list
-  ; ref_parents : (string * string list) list
-    (* group page name -> ancestor titles (farthest-first) — linked/unlinked
-       ref groups on namespaced source pages render a .breadcrumb--inline *)
-  ; unlinked_refs : block list
+  ; page_ref_count : int (* cljs [:block-ref-count page-uuid] — the
+                              unfiltered total gating the linked-references
+                              section *)
   ; unlinked_exists : bool (* cljs :block-unlinked-ref-exists — gates
                               whether the collapsed section renders at all *)
   ; repos : string list
@@ -238,11 +236,6 @@ type t =
   ; toasts : toast list
   ; toast_next : int
   ; unlinked_open : bool
-  ; unlinked_search : bool
-  ; unlinked_query : string
-  ; linked_open : bool
-  ; linked_search : bool
-  ; linked_query : string
   ; help_open : bool
   ; unlinked_blocks : block list
   ; rtc : rtc option
@@ -264,9 +257,7 @@ let initial =
   ; route_page = None
   ; page_missing = false
   ; journals = []
-  ; page_refs = []
-  ; ref_parents = []
-  ; unlinked_refs = []
+  ; page_ref_count = 0
   ; unlinked_exists = false
   ; repos = []
   ; theme_dark = false
@@ -283,11 +274,6 @@ let initial =
   ; toasts = []
   ; toast_next = 0
   ; unlinked_open = true
-  ; unlinked_search = false
-  ; unlinked_query = ""
-  ; linked_open = true
-  ; linked_search = false
-  ; linked_query = ""
   ; help_open = false
   ; unlinked_blocks = []
   ; rtc = None

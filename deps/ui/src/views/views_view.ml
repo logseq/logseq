@@ -30,6 +30,16 @@ let feature_of_kind = function
   | V.KTagPage _ -> "class-objects"
   | V.KPropertyPage _ -> "property-objects"
   | V.KQuery _ -> "query-result"
+  | V.KLinkedRefs -> "linked-references"
+  | V.KUnlinkedRefs -> "unlinked-references"
+
+(* cljs create-view! default titles — the auto-triggered view names
+   itself with the localized feature title *)
+let default_view_title inst =
+  match inst.V.feature with
+  | "linked-references" -> I18n.t "view/linked-references"
+  | "unlinked-references" -> I18n.t "view/unlinked-references"
+  | _ -> I.all
 
 let row_uuids_of (d : Wr.view_data) : string list =
   match d with
@@ -332,6 +342,7 @@ let load_view_data ?(fetch_limit = 0) inst =
               { s with
                 V.data = d
               ; loading = false
+              ; ref_pages_count = Wr.decode_ref_counts v
               ; query_idents =
                   (match d with
                    | Wr.VFlat { qprops; _ } -> qprops
@@ -372,6 +383,9 @@ let refresh inst =
               else V.update inst (fun s -> { s with V.loading = false })))
   | _ ->
       V.update inst (fun s -> { s with V.loading = true });
+      (match inst.V.kind with
+       | V.KLinkedRefs -> Views_head.load_ref_filters inst
+       | _ -> ());
       load_view_data inst
 
 (* ---------- view selection / CRUD ---------- *)
@@ -461,7 +475,8 @@ let ensure_default_view inst =
             in
             views_page_uuid (function
               | Some vpuuid ->
-                  Db.insert_view_block ~title:I.all ~uuid ~page_uuid:vpuuid
+                  Db.insert_view_block ~title:(default_view_title inst)
+                    ~uuid ~page_uuid:vpuuid
                     ~owner_uuid:ouuid ~feature_type:inst.V.feature
                     ~after:(fun () ->
                       load_views inst ~on_done:(fun () ->
