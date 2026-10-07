@@ -817,7 +817,31 @@ let apply_input ?frame uuid ev =
           let m_now =
             match A.edit_model uuid with Some m -> m | None -> m2
           in
-          Signal.update fr (fun _ -> Edit_input.measure conduit' m_now))
+          Signal.update fr (fun _ -> Edit_input.measure conduit' m_now);
+          (* a measure taken mid-layout/remount can come back with no
+             caret rect — iOS taps reorder focus/scroll work around the
+             event — leaving the caret invisible until the next input.
+             keep re-measuring until the overlay paints (same recovery
+             apply_focus uses) *)
+          let f =
+            match !(fr.Signal.pending) with
+            | Some v -> v
+            | None -> Signal.get_state fr
+          in
+          if Option.is_none f.Edit_input.caret then begin
+            let rec retry_caret n =
+              if n > 0 then
+                D.set_timeout
+                  (fun () ->
+                    match S.editing () with
+                    | Some e when e.S.uuid = uuid ->
+                        if not (A.refresh_overlay uuid) then
+                          retry_caret (n - 1)
+                    | _ -> ())
+                  40
+            in
+            retry_caret 12
+          end)
       | None -> ())
   | _ -> ()
 
