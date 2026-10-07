@@ -19,6 +19,7 @@
 @import "./resources/css/lui.css";
 @import "./resources/css/lui-core.css";
 @import "./resources/css/lui-overlay.css";
+@import "./resources/css/extensions-pdf.css";
 /* cljs-era sheets (src/main/frontend/**) are no longer imported: replaced by
    resources/css/lui-core.css + resources/css/lui-overlay.css above. */
 

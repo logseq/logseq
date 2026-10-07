@@ -43,16 +43,15 @@ let selected_label sel decks =
 let selector_row st =
   row ~key:"sel-row" ~style_class:"ls-row ls-gap" ~cross:`center
     [ box ~key:"combo" ~style_class:"ls-cards-select"
-        [ (* cljs shui/select-trigger: current deck label + chevron —
-             select renders role=combobox on web, a native picker on
-             native (GPUI) *)
+        [ (* cljs shui/select-trigger: the select kind already renders
+             role=combobox + its own ::after chevron on web and a native
+             picker on GPUI — no icon child needed *)
           select ~key:"selv" ~style_class:"ls-cards-select-value"
             ~text:(reactive selected_label
                      (Signal.value st.Cards_state.sel)
                      (Signal.value st.Cards_state.decks))
             ~on_press:(fun _ -> Cards_state.toggle_opts st)
-            [ icon ~key:"chev" ~name:`chevron_down
-                ~style_class:"ls-icon-sm" [] ]
+            []
         ; opts_box st ]
     ; button ~key:"add" ~accessibility_identifier:"ls-cards-add"
         ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
@@ -62,7 +61,7 @@ let selector_row st =
         []
     ; text ~key:"prog" ~style_class:"ls-desc ls-nowrap"
         ~value:(reactive
-                  (fun (pos : int) (cards : string list) ->
+                  (fun (pos : int) (cards : int list) ->
                     let n = List.length cards in
                     let cur = if n = 0 then 0 else min (pos + 1) n in
                     Printf.sprintf "%d/%d" cur n)
@@ -71,72 +70,157 @@ let selector_row st =
         []
     ]
 
-(* fsrs.cljs has-cloze? *)
-let has_cloze (s : string) =
-  let needle = "{{cloze " in
-  let ls = String.length s and ln = String.length needle in
-  let rec go i =
-    i + ln <= ls && (String.sub s i ln = needle || go (i + 1))
-  in
-  go 0
+(* cljs rating->shortcut / btn-with-shortcut colors *)
+let ratings =
+  [ ("again", "flashcard.rating/again", "1", "primary-red")
+  ; ("hard", "flashcard.rating/hard", "2", "primary-purple")
+  ; ("good", "flashcard.rating/good", "3", "primary-logseq")
+  ; ("easy", "flashcard.rating/easy", "4", "primary-green")
+  ]
 
-(* fsrs.cljs phase->next-phase *)
-let next_phase cloze phase =
-  match phase with
-  | "init" -> if cloze then "show-cloze" else "show-answer"
-  | "show-cloze" -> if cloze then "show-answer" else "init"
-  | _ -> "init"
+(* cljs btn-with-shortcut: outline sm button with per-rating --primary
+   tint (bg-primary/5 border-primary), interior [label][kbd shortcut];
+   ~label feeds aria (LUI renders ~text after children, so the visible
+   order lives in the children) *)
+let rating_btn st i (r, label_key, sc, color) =
+  let id = "card-" ^ r in
+  row ~key:id ~style_class:"ls-row ls-gap" ~cross:`center
+    [ button ~key:"b" ~accessibility_identifier:id
+        ~style_class:(id ^ " !px-2 !py-1 bg-primary/5 hover:bg-primary/10 \
+                       border-primary opacity-90 hover:opacity-100 " ^ color)
+        ~label:(t_ label_key)
+        ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" sc)
+        ~variant:`outline ~size:`sm
+        ~on_press:(fun _ -> Cards_state.rate st r)
+        [ row ~key:"inner" ~style_class:"gap-1" ~cross:`center
+            [ text ~value:(t_ label_key) []
+            ; kbd ~style_class:"scale-90 shui-shortcut-key" ~value:sc [] ] ]
+    ; text ~key:"due" ~style_class:"ls-desc"
+        ~value:(reactive
+                  (fun (ls : string list) ->
+                    Option.value (List.nth_opt ls i) ~default:"")
+                  (Signal.value st.Cards_state.due_labels))
+        [] ]
 
-let advance_phase st cloze =
-  Runtime.signal_set st.Cards_state.phase
-    (next_phase cloze (Signal.get_state st.Cards_state.phase))
-
-let rate st rating =
-  (* cljs rate-card! persists fsrs/state+due via repeat-card! — the fsrs
-     scheduler library is not ported, so only the index/phase advance is;
-     see migrate-report.md *)
-  ignore rating;
-  Runtime.signal_set st.Cards_state.phase "init";
-  Runtime.signal_set st.Cards_state.pos
-    (Signal.get_state st.Cards_state.pos + 1)
-
-let rating_btn st rating label =
-  let id = "card-" ^ rating in
-  button ~key:id ~accessibility_identifier:id ~style_class:id
-    ~text:label
-    ~on_press:(fun _ -> rate st rating)
-    []
+(* the ⓘ descriptions popup — cljs rating-desc popup *)
+let info_btn st =
+  fun ctx parent ->
+  (box ~key:"info-wrap"
+     [ button ~key:"info" ~variant:`ghost ~size:`sm
+         ~style_class:"!px-0 text-muted-foreground !h-4"
+         ~icon:`info ~label:"rating info"
+         ~on_press:(fun _ -> Cards_state.toggle_info st)
+         []
+     ; reactive
+         (fun open_ ->
+           if not open_ then spacer ~key:"i-closed" []
+           else
+             dropdown_menu ~key:"i-opts" ~anchor:`below
+               ~anchor_alignment:`start
+               ~on_dismiss:(fun _ -> Cards_state.toggle_info st)
+               (List.map
+                  (fun (_, label_key, _, _) ->
+                    let desc_key = label_key ^ "-desc" in
+                    column ~key:("info-" ^ label_key) ~style_class:"p-4"
+                      [ text ~style_class:"font-medium"
+                          ~value:(t_ label_key) []
+                      ; text ~value:(t_ desc_key) [] ])
+                  ratings))
+         (Signal.value st.Cards_state.info_open)
+     ])
+    ctx parent
 
 let rating_buttons st =
   box ~key:"ratings" ~style_class:"ls-center"
     [ row ~key:"row" ~style_class:"ls-ratings"
-        [ rating_btn st "again" (t_ "flashcard.rating/again")
-        ; rating_btn st "hard" (t_ "flashcard.rating/hard")
-        ; rating_btn st "good" (t_ "flashcard.rating/good")
-        ; rating_btn st "easy" (t_ "flashcard.rating/easy")
-        ]
+        (List.mapi (fun i r -> rating_btn st i r) ratings
+         @ [ info_btn st ])
     ]
 
-let card_view st _pos phase title =
-  let cloze = has_cloze title in
-  let np = next_phase cloze phase in
-  column ~key:"card-cur"
-    ~style_class:"ls-card content"
+(* cljs phase-locked option map: :init/:show-cloze hide children,
+   :show-answer shows them (plus ignore-block-collapsed? — Decode drops
+   collapsed flags so LUI children are already expanded) *)
+let rec card_view st b phase =
+  let cloze = Cards_state.has_cloze b.Model.block_title in
+  let np = Cards_state.next_phase cloze phase in
+  let b' =
+    if phase = "show-answer" then b
+    else { b with Model.block_children = [] }
+  in
+  (* grow:1 fills #cards-modal so the scroll region expands and the
+     action row pins to the dialog bottom (cljs flex-1 min-h-0) *)
+  column ~key:"card-cur" ~grow:1. ~style_class:"ls-card content"
     [ scroll ~key:"scroll" ~orientation:`vertical ~grow:1.
         ~style_class:"ls-card-scroll"
-        [ text ~key:"t" ~value:title [] ]
+        [ (* scroll lays its children out in a single grid cell — the
+             crumbs row and the card must sit in ONE column or they
+             render on top of each other *)
+          column ~key:"sc-body"
+            [ (* cljs block-breadcrumb — text crumbs (no page links) *)
+              reactive
+                (fun crumbs ->
+                  match crumbs with
+                  | [] -> spacer ~key:"bc-none" []
+                  | cs ->
+                      row ~key:"bc" ~style_class:"breadcrumb ls-card-bc"
+                        (List.concat_map
+                           (fun c ->
+                             [ text ~style_class:"breadcrumb-item"
+                                 ~value:c []
+                             ; text ~value:"/" ~padding_horizontal:4 [] ])
+                           cs))
+                (Signal.value st.Cards_state.crumbs)
+            ; (* remount per card+phase so clozes take the right initial
+                 revealed state (cloze_reveal_all is read at mount) *)
+              keyed_card st b'
+            ]
+        ]
     ; box ~key:"actions" ~style_class:"ls-card-actions"
         [ (if np = "show-cloze" || np = "show-answer" then
              button ~key:"answers" ~accessibility_identifier:"card-answers"
-               ~style_class:"ls-btn-pad"
-               ~text:(if np = "show-answer" then t_ "flashcard.review/show-answers"
-                      else if np = "show-cloze" then t_ "flashcard.review/show-clozes"
-                      else t_ "flashcard.review/hide-answers")
-               ~on_press:(fun _ -> advance_phase st cloze)
-               []
+               ~style_class:"card-answers !px-2 !py-1 bg-primary/5 \
+                             hover:bg-primary/10 border-primary \
+                             opacity-90 hover:opacity-100"
+               ~variant:`outline ~size:`sm
+               ~label:(if np = "show-answer" then t_ "flashcard.review/show-answers"
+                       else t_ "flashcard.review/show-clozes")
+               ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" "s")
+               ~on_press:(fun _ -> Cards_state.advance_phase st)
+               [ row ~key:"inner" ~style_class:"gap-1" ~cross:`center
+                   [ text ~value:(if np = "show-answer"
+                                  then t_ "flashcard.review/show-answers"
+                                  else t_ "flashcard.review/show-clozes") []
+                   ; kbd ~style_class:"scale-90 shui-shortcut-key"
+                       ~value:"s" [] ] ]
            else rating_buttons st)
         ]
     ]
+
+(* the card subtree keyed on (eid, phase) — a fresh mount re-reads
+   Render_inline.cloze_reveal_all for the new phase *)
+and keyed_card st b : t =
+ fun ctx parent ->
+  let item_sig =
+    Logseq_dom.own ctx
+      (Signal.map (fun ph -> [ (b, ph) ]) (Signal.value st.Cards_state.phase))
+  in
+  Logseq_dom.keyed ~source:item_sig
+    ~key:(fun (bb, ph) ->
+      Printf.sprintf "%d-%s"
+        (Option.value bb.Model.block_db_id ~default:0)
+        ph)
+    ~cmp:String.compare
+    ~mount:(fun item_sig ->
+      Tree.block_row ~scope:"cards" ~editable:false ~library:false
+        (fst (Signal.get item_sig)))
+    ctx parent
+
+let practice_again_btn st =
+  button ~key:"again" ~variant:`outline ~size:`sm
+    ~accessibility_identifier:"card-practice-again"
+    ~text:(t_ "flashcard.review/practice-again")
+    ~on_press:(fun _ -> Cards_state.practice_again st)
+    []
 
 let cards_body st =
  fun ctx parent ->
@@ -147,26 +231,52 @@ let cards_body st =
          (Signal.value st.Cards_state.cards)
          (Signal.value st.Cards_state.pos))
   in
+  let all_sig =
+    Logseq_dom.own ctx (Signal.value st.Cards_state.all_cards)
+  in
   (reactive
-    (fun (cards, pos, phase) ->
-      match List.nth_opt cards pos with
-      | None ->
-          (* cljs: (empty? all-block-ids) -> "Time to create a card!" + the
-             "#Card"/cloze hint, not the review-finished message *)
-          column ~key:"empty" ~style_class:"ls-card content ls-ml"
-            [ heading ~key:"h" ~level:2
-                ~value:(t_ "flashcard.empty/title") []
-            ; paragraph ~key:"d"
-                ~value:(I18n.t1 "flashcard.empty/desc" "#Card")
-                [] ]
-      | Some title ->
+    (fun (cards, pos, phase, cur, all) ->
+      match List.nth_opt cards pos, cur with
+      | Some _, Some b ->
           column ~key:"cards" ~style_class:"ls-cards-col" ~grow:1.
-            [ card_view st pos phase title ])
+            [ card_view st b phase ]
+      | Some _, None -> spacer ~key:"loading" []
+      | None, _ ->
+          (* cljs: (empty? block-ids) -> no-due (or create-a-card when the
+             scope has no cards at all); a consumed list -> finished *)
+          if List.length cards = 0 && all = [] then
+            column ~key:"empty" ~style_class:"ls-card content ls-ml"
+              [ heading ~key:"h" ~level:2
+                  ~value:(t_ "flashcard.empty/title") []
+              ; paragraph ~key:"d"
+                  ~value:(I18n.t1 "flashcard.empty/desc" "#Card")
+                  [] ]
+          else if List.length cards = 0 then
+            column ~key:"nodue" ~style_class:"ls-card content ls-ml"
+              [ heading ~key:"h" ~level:2
+                  ~value:(t_ "flashcard.empty/no-due-title") []
+              ; paragraph ~key:"d"
+                  ~value:(t_ "flashcard.empty/no-due-desc") []
+              ; box ~key:"btns" ~style_class:"mt-4"
+                  [ practice_again_btn st ] ]
+          else
+            column ~key:"fin" ~style_class:"ls-card content ls-ml"
+              [ paragraph ~key:"d"
+                  ~value:(t_ "flashcard.review/finished") []
+              ; box ~key:"btns" ~style_class:"mt-4"
+                  [ practice_again_btn st ] ])
     (Logseq_dom.own ctx
        (Signal.map2
-          (fun (a, b) c -> (a, b, c))
+          (fun (a, b) (phase, cur, all) -> (a, b, phase, cur, all))
           cp_sig
-          (Signal.value st.Cards_state.phase))))
+          (Logseq_dom.own ctx
+             (Signal.map2
+                (fun (a, b) c -> (a, b, c))
+                (Logseq_dom.own ctx
+                   (Signal.map2 (fun x y -> (x, y))
+                      (Signal.value st.Cards_state.phase)
+                      (Signal.value st.Cards_state.cur)))
+                all_sig)))))
     ctx parent
 
 (* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label
@@ -197,7 +307,10 @@ let modal st =
         ~max_width:672 ~gap:16 ~padding:24 ~style_class:"ui__dialog-content ls-dialog-flashcards grid w-full lg:max-w-3xl border sm:rounded-lg bg-background shadow-lg ui__dialog-zoom-in"
         ~data_attrs:
           [ ("data-state", "open"); ("role", "dialog") ]
-        [ box ~key:"cards-main" ~style_class:"ui__dialog-main-content"
+        [ (* column (not box): flex-column parent so cards-modal's
+             ~grow:1. can claim the main-content height on every
+             platform *)
+          column ~key:"cards-main" ~style_class:"ui__dialog-main-content"
             [ column ~key:"cards-modal"
                 ~accessibility_identifier:"cards-modal"
                 ~style_class:"ls-cards-stack" ~grow:1.

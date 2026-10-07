@@ -191,44 +191,49 @@ and action_fn (t : t) (c : ctx) ~(action : string) ~(clear : bool) :
                    hl_id = Some (U.gen_uuid ())
                  ; hl_color = Some color }
                in
-               add_hl t hl;
-               U.clear_all_selection ();
-               A.copy_hl_ref hl
+               ignore
+                 ((let* hl' = add_hl t hl in
+                   U.clear_all_selection ();
+                   A.copy_hl_ref hl';
+                   Js.Promise.resolve ())
+                  |> Js.Promise.catch (fun e ->
+                         Platform.console_error ("pdf hl add failed", e);
+                         Js.Promise.resolve ()))
            | Some _ -> upd_hl t { hl with hl_color = Some color });
            S.last_color := color
        | _ -> ()));
   if clear then
     ignore (Web_dom.set_timeout_id (fun () -> clear_ctx_menu t) 68)
 
-(* cljs add-hl! — conj + area highlights persist the cropped png *)
-and add_hl (t : t) (hl : Model.hl) : unit =
+(* cljs add-hl! — conj + area highlights persist the cropped png.
+   Resolves the hl once hl_image holds the asset db/id (or on failure
+   the original), so callers can chain ensure-ref-block! like cljs *)
+and add_hl (t : t) (hl : Model.hl) : Model.hl Js.Promise.t =
   S.hls := hl :: !S.hls;
   rerender_hl t hl;
   match hl.hl_image with
   | Some _ -> (
       match U.scaled_to_vw_pos t.viewer hl with
-      | Some vw -> (
-          ignore
-            ((let* dbid =
-                A.persist_hl_area_image ~viewer:t.viewer ~new_hl:hl
-                  ~region:vw.hl_bounding
-              in
-              (match dbid with
-               | Some id ->
-                   let hl' = { hl with hl_image = Some id } in
-                   S.hls :=
-                     List.map
-                       (fun (h : Model.hl) ->
-                         if h.hl_id = hl'.hl_id then hl' else h)
-                       !S.hls;
-                   ignore (A.update_hl_block hl')
-               | None -> ());
-              Js.Promise.resolve ())
-             |> Js.Promise.catch (fun e ->
-                    Platform.console_error ("pdf hl persist failed", e);
-                    Js.Promise.resolve ())))
-      | None -> ())
-  | None -> ()
+      | Some vw ->
+          (let* dbid =
+             A.persist_hl_area_image ~viewer:t.viewer ~new_hl:hl
+               ~region:vw.hl_bounding
+           in
+           (match dbid with
+            | Some id ->
+                let hl' = { hl with hl_image = Some id } in
+                S.hls :=
+                  List.map
+                    (fun (h : Model.hl) ->
+                      if h.hl_id = hl'.hl_id then hl' else h)
+                    !S.hls;
+                Js.Promise.resolve hl'
+            | None -> Js.Promise.resolve hl))
+          |> Js.Promise.catch (fun e ->
+                 Platform.console_error ("pdf hl persist failed", e);
+                 Js.Promise.resolve hl)
+      | None -> Js.Promise.resolve hl)
+  | None -> Js.Promise.resolve hl
 
 (* cljs upd-hl! *)
 and upd_hl (t : t) (hl : Model.hl) : unit =
@@ -321,7 +326,7 @@ and render_text_region (t : t) (box : D.el) (vw : Model.hl)
 
 (* cljs pdf-highlight-area-region — style = vw bounding rect;
    interact.js resizable; drag-end persists the crop + updates the hl *)
-and render_area_region (t : t) (_box : D.el) (vw : Model.hl)
+and render_area_region (t : t) (box : D.el) (vw : Model.hl)
     (hl : Model.hl) : unit =
   let b = vw.hl_bounding in
   let region = Web_dom.create_element "div" in
@@ -347,6 +352,7 @@ and render_area_region (t : t) (_box : D.el) (vw : Model.hl)
         ; point = D.ev_client_x e, D.ev_client_y e
         ; reset_fn = None }
   in
+  Web_dom.el_append_child box region;
   Web_dom.el_on region "click" open_ctx;
   Web_dom.el_on region "contextmenu" open_ctx;
   Web_dom.el_on region "dragstart" (fun e ->

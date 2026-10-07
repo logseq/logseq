@@ -1723,6 +1723,13 @@ let dev_entries () =
     ]
   else []
 
+(* cljs state/enable-flashcards? — the :feature/enable-flashcards?
+   config flag (default on) gates the make-a-flashcard menu items *)
+let flashcards_enabled () =
+  if Settings_state.ready () then
+    Settings_state.config_bool "feature/enable-flashcards?" ~default:true
+  else true
+
 (* cljs base-ui auto-side: stay below while the space under the
    anchor exceeds 280px, flip above only when the top side wins by
    more than 100px; the flipped menu's top needs the measured popup
@@ -1745,8 +1752,18 @@ let anchor_at_point ~x ~y = (x, y, y)
 let open_cm t ~ax ~atop ~abot ~block_id ~multi =
   let entries =
     (* cljs adds Developer tools only to the single-block menu *)
-    if multi then multi_entries ()
-    else block_entries () @ dev_entries ()
+    let base =
+      if multi then multi_entries ()
+      else block_entries () @ dev_entries ()
+    in
+    if flashcards_enabled () then base
+    else
+      List.filter
+        (fun e ->
+          match e with
+          | Ci_item (_, _, action) -> action <> "make-flashcard"
+          | _ -> true)
+        base
   in
   close_ac t;
   let flip = anchor_above atop abot in

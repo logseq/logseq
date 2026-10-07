@@ -220,6 +220,8 @@
 (rule
  (copy ../src/cards/cards_view.ml cards_view.ml))
 (rule
+ (copy ../src/cards/fsrs_sched.ml fsrs_sched.ml))
+(rule
  (copy ../src/cmdk/commands_data.ml commands_data.ml))
 (rule
  (copy ../src/comments/comments_view.ml comments_view.ml))

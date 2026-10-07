@@ -334,13 +334,19 @@ let query_setting_el ~block_uuid =
 
 (* cljs cards-block?: logseq.class/Cards tag adds a "Practice" ghost
    button next to the title that opens the flashcards modal
-   ([:modal/show-cards] -> ls:open-cards) *)
-let practice_el =
+   ([:modal/show-cards (:db/id block)] -> ls:open-cards {eid}) *)
+let practice_el ~eid =
   button ~key:"pr" ~variant:`ghost ~size:`sm
     ~label:(I18n.t "block/practice-cards")
     ~text:(I18n.t "block/practice")
     ~on_press:(fun _ ->
-      Web_dom.dispatch_custom "ls:open-cards" Js.Json.null)
+      Web_dom.dispatch_custom "ls:open-cards"
+        (match eid with
+         | Some id ->
+             let o = Js.Dict.empty () in
+             Js.Dict.set o "eid" (Js.Json.number (Float.of_int id));
+             Js.Json.object_ o
+         | None -> Js.Json.null))
     []
 
 let is_query_block (b : Model.block) =
@@ -576,7 +582,8 @@ let title_outer_class (b : Model.block) =
    class-Query blocks keep their title and append the query-setting
    ghost button; the live query shell lives below the block row
    (query_below_el). is_cards: class-Cards blocks append "Practice". *)
-let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
+let title ?heading ?(is_query = false) ?(is_cards = false)
+    ?(card_eid : int option = None) ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) (s : string) : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
@@ -600,7 +607,7 @@ let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
             let tail =
               (if is_query then [ query_setting_el ~block_uuid:self ]
                else [])
-              @ if is_cards then [ practice_el ] else []
+              @ if is_cards then [ practice_el ~eid:card_eid ] else []
             in
             match ordered_prefix s with
             | Some (num, rest) ->
@@ -647,6 +654,7 @@ let title_block ?(self = "") ?resolved ?(annot = false)
                     ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
       | None ->
           title ?heading ~is_query:(is_query_block b)
-            ~is_cards:(is_cards_block b) ~self ~wrap_attrs ~prefix
+            ~is_cards:(is_cards_block b)
+            ~card_eid:b.Model.block_db_id ~self ~wrap_attrs ~prefix
             (Option.value resolved ~default:s))
 

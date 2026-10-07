@@ -341,6 +341,9 @@ let rec load_page_ref for_route ref_v =
            drop pending committed-buffer title paints *)
         Editor_state.clear_overrides ();
         loaded_route := Some for_route;
+        (* cljs update-page-label!: body[data-page] carries the route
+           page title (pdf overlay CSS keys off the attribute) *)
+        Web_dom.body_set_data "page" p''.Model.page_title;
         (Platform.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
         fetch_refs ~stale:is_stale p'';
         Outliner_ops.fetch_unlinked_refs

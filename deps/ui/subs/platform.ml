@@ -119,6 +119,10 @@ external error_message :
    error in field _1 *)
 external error_inner : Js.Promise.error -> 'a = "_1" [@@mel.get]
 
+(* The rejection value itself, for when it is a plain JS object (e.g. a
+   pdfjs Error thrown without an OCaml wrapper) *)
+external error_obj : Js.Promise.error -> Js.Json.t = "%identity"
+
 type url_search_params
 
 external new_url_search_params : string -> url_search_params

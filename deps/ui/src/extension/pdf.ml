@@ -97,11 +97,19 @@ let set_hls_extra (asset : Model.pdf_asset) (extra : Js.Json.t) =
 
 (* ---------- getDocument ---------- *)
 
-let cmap_url () =
-  (if Str_util.ends_with location_host "logseq.com" then "./static/" else "./")
-  ^ "js/pdfjs/cmaps/"
+let static_prefix () =
+  if Str_util.ends_with location_host "logseq.com" then "./static/" else "./"
+
+let cmap_url () = static_prefix () ^ "js/pdfjs/cmaps/"
+
+let set_worker_src : Js.Json.t -> string -> unit =
+  [%mel.raw
+    "function (lib, s) { lib.GlobalWorkerOptions.workerSrc = s }"]
 
 let get_doc ~url ~password : Js.Json.t Js.Promise.t =
+  (* pdfjs 6.x requires an explicit workerSrc in the browser; the old
+     pdf_viewer3 bundle used to set it *)
+  set_worker_src pdfjs_lib (static_prefix () ^ "js/pdfjs/pdf.worker.mjs");
   let opts =
     jso
       [ "url", Js.Json.string url
@@ -320,7 +328,13 @@ let rec load (m : mount) (loader : D.el) (asset : Model.pdf_asset)
 
 and handle_load_error (m : mount) (loader : D.el)
     (asset : Model.pdf_asset) (err : Js.Promise.error) : unit =
-  let err : Js.Json.t = Platform.error_inner err in
+  let inner : Js.Json.t = Platform.error_inner err in
+  (* _1 is only present on OCaml exception blocks; a raw JS Error
+     rejection has none, so fall back to the rejection value itself *)
+  let err : Js.Json.t =
+    if Js.typeof inner = "undefined" then Platform.error_obj err
+    else inner
+  in
   match U.err_name err with
   | "MissingPDFException" ->
       Toast.error

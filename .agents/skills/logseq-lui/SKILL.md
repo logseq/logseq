@@ -18,6 +18,15 @@ All view code in `deps/ui/src/**` and `deps/ui/native/**` is built from
    name strings, no `dom ~tag` calls. Everything is a kind + typed props.
 3. **Typed props are the only layout channel** — gap/padding/width/height/
    flex/alignment go through typed props, never through class names.
+   Layout that "needs" `display:flex`/`flex:1`/`min-height` in
+   `resources/css` is a bug: `~grow` only works inside `column`/`row`
+   parents (a `box` kind is `display:block` on web and a plain
+   container elsewhere — `~grow` children inside it are silently
+   ignored). Fix the kind (`box` → `column`/`row`) and use `~grow` /
+   alignment props; the same layout then works identically on every
+   platform. Similarly, a `scroll` kind lays all its children in one
+   grid cell — wrap multiple children in a single `column`, never in
+   absolute-positioning CSS.
 4. **`~style_class` carries only app-semantic classes** (e.g.
    `ui__toast`, `cp__*`) that real stylesheets target. Utility classes
    (`flex`, `gap-2`, `p-3`, `w-full`, `text-sm`, ...) are deleted, not
