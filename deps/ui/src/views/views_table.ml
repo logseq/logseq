@@ -418,7 +418,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
             ~on_press:(fun _ -> open_row_sidebar row_uuid)
             (row ~cross:`center ~grow:1.
                ~style_class:"table-block-title"
-               [ row [ text ~value:title [] ]
+               [ row (Render_inline.parse ~self:row_uuid title)
                ; row ~cross:`center
                    [ ghost "arrow-right" I.open_
                    ; ghost "layout-sidebar-right" I.open_in_sidebar ]

@@ -112,7 +112,10 @@ let rec hiccup_els inst (w : W.t) : t list =
   | W.Array xs | W.List xs | W.Set xs ->
       List.concat_map (hiccup_els inst) xs
   | W.String s -> [ text ~value:s [] ]
-  | W.Uuid u -> [ text ~value:(title_of_uuid inst u) [] ]
+  | W.Uuid u ->
+      (* the row title may itself contain [[uuid]]/#[[uuid]] refs —
+         inline-parse so nested refs resolve (cljs map-inline) *)
+      Render_inline.parse ~self:u (title_of_uuid inst u)
   | w -> [ text ~value:(Edn.to_string w) [] ]
 
 (* ---------- elements ---------- *)
