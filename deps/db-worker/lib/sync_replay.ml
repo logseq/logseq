@@ -2622,6 +2622,40 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
           | _ -> false)
       | _ -> false
     in
+    (* mirror image on the restore side: a reversed db/add puts back
+       the value this row's forward retract evicted. Confirmed state
+       wins when it explicitly dropped the same (e,a,v) — a remote
+       retract recorded in remote_retracted — or, for cardinality-one
+       attrs, when remote_asserted shows a different live value: the
+       restore would resurrect a value the journal superseded *)
+    let remote_superseded_add (db : db) (item : Wire.t) : bool =
+      match item with
+      | Wire.Array (op :: e_w :: a_w :: v_w :: _)
+      | Wire.List (op :: e_w :: a_w :: v_w :: _)
+        when op = Wire.keyword "db/add" -> (
+          match a_w with
+          | Wire.Keyword a | Wire.Symbol a -> (
+              let key = Sync_apply.asserted_key_of_item db e_w a v_w in
+              if SSet.mem key (Sync_state.remote_retracted repo) then
+                true
+              else if not (snd (attr_class db a)) then begin
+                (* card-one: any other asserted value on (e,a) means
+                   confirmed state holds a different live value *)
+                let prefix =
+                  Sync_apply.asserted_e_key_of_wire db e_w ^ "" ^ a
+                  ^ ""
+                in
+                SSet.exists
+                  (fun k ->
+                     String.length k > String.length prefix
+                     && String.sub k 0 (String.length prefix) = prefix
+                     && k <> key)
+                  (Sync_state.remote_asserted repo)
+              end
+              else false)
+          | _ -> false)
+      | _ -> false
+    in
     unconfirmed
     |> List.rev
     |> List.iter (fun (e : Sync_client_op.unconfirmed_tx_row) ->
@@ -2642,6 +2676,8 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
                     ~forward_items:(stored_items e.un_normalized_tx_data)
                |> List.filter
                     (fun i -> not (confirmed_owned_retract db i))
+               |> List.filter
+                    (fun i -> not (remote_superseded_add db i))
              with
              | [] -> ()
              | items ->

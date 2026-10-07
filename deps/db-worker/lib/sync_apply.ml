@@ -635,9 +635,17 @@ let record_remote_asserted (db : db) (repo : string) (items : Wire.t list)
                  else v_w
                in
                let k = asserted_key_of_item db e a v' in
-               if op = Wire.keyword "db/retract" then
-                 keys := SSet.remove k !keys
-               else keys := SSet.add k !keys)
+               let retracted = ref (Sync_state.remote_retracted repo) in
+               if op = Wire.keyword "db/retract" then begin
+                 keys := SSet.remove k !keys;
+                 retracted := SSet.add k !retracted;
+                 Sync_state.set_remote_retracted repo !retracted
+               end
+               else begin
+                 keys := SSet.add k !keys;
+                 retracted := SSet.remove k !retracted;
+                 Sync_state.set_remote_retracted repo !retracted
+               end)
            | _ -> ())
        | _ -> ())
     items;
