@@ -183,8 +183,9 @@ let view (x, _atop, y, with_app_items) (p : Model.page option) =
      | Some p, false -> page_items p
      | None, _ -> global_items ())
 
-let btn key label cls act =
-  Lui_elements.button ~key ~style_class:cls ~text:label
+let btn key label variant act =
+  Lui_elements.button ~key ~variant ~size:`sm
+    ~style_class:"ui__button" ~text:label
     ~on_press:(fun _ -> act ())
     []
 
@@ -216,18 +217,10 @@ let confirm_view (c : Model.confirm) =
     Runtime.send (Action.Confirm_set None);
     Runtime.flush ()
   in
-  (* backdrop dismiss: only the overlay itself closes — the press-detail
-     payload's target_class is the deepest hit *)
+  (* cljs dialog-confirm! mounts a Radix AlertDialog — outside presses
+     do NOT dismiss; only Escape and the footer buttons close it *)
   Lui_elements.column ~key:"alertdlg-overlay"
     ~style_class:"ui__alert-dialog-overlay"
-    ~on_press_detail:(fun ev ->
-      match ev with
-      | Lui_protocol.PressDetail (_, d) ->
-          if
-            I18n.contains d.Lui_protocol.target_class
-              "ui__alert-dialog-overlay"
-          then close ()
-      | _ -> ())
     [ Lui_elements.column ~key:"alertdlg"
         ~style_class:"ui__alert-dialog-content"
         [ (* cljs dialog-confirm title: flex gap-2 items-center >
@@ -237,7 +230,12 @@ let confirm_view (c : Model.confirm) =
                Lui_elements.row ~key:"adlg-tw" ~cross:`center
                  ~style_class:"ui__alert-dialog-title ls-alert-title"
                  [ i
-                 ; Lui_elements.heading ~key:"adlg-t" ~value:title [] ]
+                 ; (* grow + min_width:0 so a long title shrinks inside
+                      the row and wraps instead of overflowing the
+                      dialog's overflow:hidden edge (taffy does not
+                      model text min-content shrink) *)
+                   Lui_elements.heading ~key:"adlg-t" ~grow:1.
+                     ~min_width:0 ~value:title [] ]
            | None ->
                Lui_elements.heading ~key:"adlg-t"
                  ~style_class:"ui__alert-dialog-title" ~value:title [])
@@ -245,10 +243,8 @@ let confirm_view (c : Model.confirm) =
             ~style_class:desc_cls ~value:desc []
         ; Lui_elements.row ~key:"adlg-f"
             ~style_class:"ui__alert-dialog-footer"
-            [ btn "adlg-cancel" I18n.cancel
-                "ui__button ls-btn-outline" close
-            ; btn "adlg-confirm" I18n.confirm
-                "ui__button ls-btn-primary" (fun () ->
+            [ btn "adlg-cancel" I18n.cancel `outline close
+            ; btn "adlg-confirm" I18n.confirm `primary (fun () ->
                   close ();
                   act ())
             ]
