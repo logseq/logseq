@@ -590,7 +590,12 @@ let wait_editor_text env text =
     (Printf.sprintf ".editor-wrapper textarea:text('%s')" text)
 
 let copy env = Keyboard.press env ~delay:100. "ControlOrMeta+c"
-let paste env = Keyboard.press env ~delay:100. "ControlOrMeta+v"
+
+(* deliver the chord to the live editor element: a *:focus paste landing on
+   <body> mid-remount lets both the document paste handler and a remounted
+   editor handler fire, inserting the clipboard twice (observed: a second
+   batch appended after the next block). *)
+let paste env = Keyboard.press_in_editor env ~delay:100. "ControlOrMeta+v"
 let undo env = Keyboard.press env ~delay:100. "ControlOrMeta+z"
 let redo env = Keyboard.press env ~delay:100. "ControlOrMeta+y"
 
