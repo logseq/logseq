@@ -127,6 +127,16 @@ let custom_icons : (string * string) list =
        d=\"M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
        128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 398.804C21.543 411.404 \
        0 402.48 0 384.662z\"/></svg>" )
+  ; (* tabler "puzzle" — cljs .property-m icon on property key rows *)
+    ( "puzzle"
+    , "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" \
+       fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" \
+       stroke-linecap=\"round\" stroke-linejoin=\"round\"><path \
+       d=\"M4 7h3a1 1 0 0 0 -1 -1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 \
+       1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0 \
+       -1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-1a2 2 0 0 0 -4 0v1a1 \
+       1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h1a2 2 0 0 0 \
+       0 -4h-1a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1\"/></svg>" )
   ; (* cljs video.cljs clock icon, rendered inside a.youtube-timestamp *)
     ( "youtube-timestamp-icon"
     , "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"currentColor\" \

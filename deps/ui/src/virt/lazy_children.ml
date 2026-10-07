@@ -91,7 +91,7 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
   let el_id = "lazy-" ^ key in
   if lazy_feasible && not (Hashtbl.mem forced uuid) then
     set_timeout (fun () -> attach ctx el_id near) 0;
-  (box ~key ~accessibility_identifier:el_id ~style_class:"block-children"
+  (column ~key ~accessibility_identifier:el_id ~style_class:"block-children"
      ~grow:1.
      [ D.if_
          ~test:(D.own ctx (Signal.map (fun n -> not n) near_sig))

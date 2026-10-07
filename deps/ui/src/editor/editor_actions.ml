@@ -55,8 +55,18 @@ let sel_span uuid =
   | Some m -> sel_span_of m
   | None -> (0, 0)
 
+(* programmatic caret moves never pass through apply_input, so the
+   mounted surface's overlay keeps its stale rect — re-measure it from
+   the model just published *)
+let refresh_overlay uuid =
+  match (!S.active_frame, Editor_sink.conduit uuid, edit_model uuid) with
+  | Some fr, Some conduit, Some m ->
+      Signal.update fr (fun _ -> Edit_input.measure conduit m)
+  | _ -> ()
+
 let set_caret uuid pos =
-  update_model uuid (fun m -> Edit_model.select m ~anchor:pos ~focus:pos)
+  update_model uuid (fun m -> Edit_model.select m ~anchor:pos ~focus:pos);
+  refresh_overlay uuid
 
 (* splice [lo, hi) -> text; caret lands after the inserted text *)
 let splice_range uuid lo hi text =

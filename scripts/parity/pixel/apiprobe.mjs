@@ -1,0 +1,10 @@
+import { chromium } from '/Users/devin/repos/logseq-master/node_modules/playwright/index.mjs';
+const url = process.argv[2], waitMs = Number(process.argv[3] || 15000);
+const browser = await chromium.launch({ channel: 'chrome', headless: true });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+const page = await ctx.newPage();
+await page.goto(url, { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(waitMs);
+const names = await page.evaluate(() => Object.keys(window.logseq?.api || {}).filter(k => /page|block|graph|edit|prop|search/i.test(k)).sort());
+console.log(JSON.stringify(names));
+await browser.close();

@@ -22,8 +22,11 @@ module S = Editor_state
 let mount uuid scope : t =
  fun ctx parent ->
   (* per-mount measurement state — the conduit writes caret/selection
-     rects back through apply_input after each event *)
+     rects back through apply_input after each event; registered so
+     caret moves outside apply_input (click hit-test, set_caret) can
+     re-measure the overlay too *)
   let frame = Signal.state ctx.Lui_ui.ui_scheduler Edit_input.empty_frame in
+  S.active_frame := Some frame;
   let model_sig =
     Signal.map
       (fun e ->

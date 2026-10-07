@@ -1486,6 +1486,10 @@ and try_hash ~refs ~self s i =
         trim (String.length raw)
       in
       if k = 0 then None
+      else if i > 0 && s.[i - 1] = '[' && j < n && s.[j] = ']' then
+        (* [#A] priority marker — cljs renders it as literal text; the
+           tag surfaces in .block-tags instead of an inline link *)
+        None
       else
         let name = String.sub raw 0 k in
         let link : t =

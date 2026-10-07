@@ -24,7 +24,7 @@ let tags =
   ; "header"; "h1"; "h2"; "h3"; "h4"; "h5"; "h6"; "p"; "ul"; "li"; "nav"; "section"
   ; "strong"; "em"; "code"; "pre"; "label"; "form"; "select"; "option"
   ; "video"; "audio"; "iframe"; "small"; "kbd"; "table"; "thead"; "tbody"
-  ; "tr"; "td"; "th"; "br"; "hr"; "canvas"; "article"
+  ; "tr"; "td"; "th"; "colgroup"; "col"; "br"; "hr"; "canvas"; "article"
   ; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"; "i"
   ; "del"; "ins"; "sub"; "blockquote"
     (* SVG (tabler icons render circle/rect/line/polyline/polygon/g/…

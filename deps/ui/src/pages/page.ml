@@ -480,11 +480,11 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
               ; ( "data-db-collapsable"
                 , if page.Model.page_db_collapsable then "true" else "false" )
               ; ("data-block-format", "markdown") ]
-            [ (* the -61px/-55px margins the cljs inline style carried
+            [ (* the -36px/-30px margins the cljs inline style carried
                  live on .is-page-title-row (+ .ls-pt-no-icon) in
-                 lui-core.css *)
+                 lui-core.css; cljs page.css gives the title row gap-2 *)
               row ~key:"pt-row"
-                ~gap:4 ~style_class:
+                ~gap:8 ~style_class:
                   ("block-main-container is-page-title-row"
                    ^ if icon_el = None then " ls-pt-no-icon" else "")
                 ~on_pointer_enter:(fun _ ->
@@ -1273,7 +1273,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                             (p, m.Model.editing_title))
                           ps ms))
                 ]
-            ; column ~key:"page-blocks" ~style_class:"ls-page-blocks"
+            ; column ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
                 [ box ~key:"page-blocks-inner"
                     ~style_class:"page-blocks-inner relative"
                     ~data_attrs:
@@ -1461,7 +1461,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     else keyed_list
   in
   (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
-  (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
+  (column ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
     [ box ~key:"page-blocks-inner"
         ~style_class:"page-blocks-inner relative"
         ~data_attrs:

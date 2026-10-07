@@ -84,6 +84,11 @@ let pending_focus : (string * int * float) option ref = ref None
    coords once the input can map them *)
 let click_point : (string * float * float * float) option ref = ref None
 
+(* the mounted edit surface's overlay frame — editor_surface registers it
+   so caret moves outside apply_input (click hit-test, set_caret) can
+   re-measure the caret/selection overlay *)
+let active_frame : Edit_input.frame Signal.state option ref = ref None
+
 (* block uuid whose input last reported the conduit's "focus" event —
    native `Editor_sink.is_focused` reads this (the DOM-level
    document.activeElement tracker only exists on the web profile) *)

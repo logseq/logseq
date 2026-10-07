@@ -446,14 +446,16 @@ let picker_dropdown ~open_ ~placeholder ~new_option ~initial ~on_search
      ])
     context parent
 
-(* helper: ghost-button value cell — [text] = display label *)
+(* helper: ghost-button value cell — [text] = display label.
+   .pv-scalar lets the stylesheet collapse the default 36px button
+   chrome down to the cljs inline-text metrics (line-height 20px) *)
 let value_button ~text ~on_press : t =
   (* an empty value yields text:"" — a button with neither text nor
      accessibility label is rejected by the store and kills the mount
      batch, so keep a label plus the cljs "Empty" placeholder *)
   let text = if text = "" then I18n.t "ui/empty" else text in
   button ~variant:`ghost ~grow:1.0 ~text_alignment:`start ~label:text
-    ~text ~on_press []
+    ~text ~style_class:"pv-scalar" ~on_press []
 
 (* text/number cell: ghost button <-> autofocused text_field *)
 let scalar_edit_cell ctx row : t =
@@ -865,7 +867,7 @@ let url_view ctx row : t =
 
 (* [view ctx row] renders the cell's value control inside the row's
    value column. *)
-let view ctx row : t =
+let rec view ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
   let ident = D.row_ident row' |> Option.value ~default:"" in
@@ -880,4 +882,44 @@ let view ctx row : t =
         if ident = "logseq.property.class/extends" then
           extends_view ctx row'
         else node_view ctx row'
-    | _ -> scalar_edit_cell ctx row'
+    | "url" -> url_view ctx row'
+    | _ ->
+        let cell = scalar_edit_cell ctx row' in
+        (* cljs embeds every non-closed scalar value in a
+           .property-block-container .ls-block row — control-wrap bullet
+           + content; empty values show only .property-panel-bullet *)
+        if ty = "default" && D.ref_title (D.row_value row') <> ""
+        then block_value_wrap cell
+        else cell
+
+(* cljs embeds non-closed values in
+   .property-block-container > .ls-block > .block-main-container —
+   control-wrap (hidden fold arrow + bullet) + a non-flex content wrap
+   so inline values (links) keep inline layout and line-box height *)
+and block_value_wrap (inner : t) : t =
+  Lui_elements.box ~style_class:"property-block-container content w-full"
+    [ Lui_elements.box ~style_class:"ls-block"
+        [ Lui_elements.row ~gap:4 ~cross:`start ~grow:1.0
+            ~style_class:"block-main-container"
+            [ Lui_elements.row ~gap:0 ~cross:`center
+                ~style_class:"block-control-wrap"
+                [ box ~style_class:"block-control" []
+                ; box ~style_class:"bullet-container"
+                    [ box ~style_class:"bullet" [] ] ]
+            ; Lui_elements.box ~grow:1.0
+                ~style_class:"block-content-wrap" [ inner ] ] ] ]
+
+(* cljs url values embed a .property-block-container .ls-block row —
+   external-link title (inline inside the non-flex content wrap);
+   click navigates (target=_blank), editing goes
+   through the property menu. empty values keep the press-to-edit
+   affordance *)
+and url_view ctx row : t =
+  let value = D.row_value row in
+  let url = String.trim (D.value_display value) in
+  if url = "" then scalar_edit_cell ctx row
+  else
+    block_value_wrap
+      (link ~url ~target:`blank ~style_class:"external-link"
+         ~data_attrs:[ ("data-type", "url") ]
+         ~text:url [])

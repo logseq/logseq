@@ -452,11 +452,16 @@ let tags_el uuid (b : Model.block) : t =
   let visible =
     List.filter_map
       (fun (tag, tuuid, ident, dbid) ->
-        (* cljs inline-tag? drops tags that already appear inline in the
-           raw title, as "#name" or "#[[uuid]]" *)
+        (* cljs inline-tag? drops a tag only when the raw title carries it
+           as a #[[uuid]] ref (titles are normalized to uuid form). LUI
+           titles keep the written form, so #name and #[[name]] count as
+           inline too — but [#A] priority syntax is NOT inline: cljs
+           renders it as literal text and keeps the tag chip *)
         let inline =
-          I18n.contains b.block_title ("#" ^ tag)
-          || (tuuid <> "" && I18n.contains b.block_title tuuid)
+          (tuuid <> "" && I18n.contains b.block_title ("#[[" ^ tuuid ^ "]]"))
+          || I18n.contains b.block_title ("#[[" ^ tag ^ "]]")
+          || (I18n.contains b.block_title ("#" ^ tag)
+              && not (I18n.contains b.block_title ("[#" ^ tag ^ "]")))
         in
         if inline || hidden_tag_ident ident then None
         else Some (tag, tuuid, ident, dbid))

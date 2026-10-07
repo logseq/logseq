@@ -560,6 +560,84 @@ let html_body s =
     Some (String.trim (String.sub t 7 (String.length t - 7)))
   else None
 
+(* -- block-body constructs (cljs mldoc emits .block-body siblings of
+   .block-content-inner for titles that carry non-inline content) -- *)
+
+(* "> body" blockquote — cljs markup renders
+   blockquote.ls-blockquote > .is-paragraph > content + <br> *)
+let quote_body s =
+  if String.length s > 1 && s.[0] = '>' then
+    let rest = String.sub s 1 (String.length s - 1) in
+    let rest =
+      if String.length rest > 0 && rest.[0] = ' ' then
+        String.sub rest 1 (String.length rest - 1)
+      else rest
+    in
+    Some (String.trim rest)
+  else None
+
+let quote_el ~self body : t =
+  D.el ~key:("qbody-" ^ self) ~tag:"div" ~style_class:"block-body"
+    [ D.el ~tag:"blockquote" ~style_class:"ls-blockquote"
+        [ D.el ~tag:"div" ~style_class:"is-paragraph"
+            (Render_inline.parse ~self body @ [ br ~key:"qbr" [] ]) ] ]
+
+(* markdown pipe table — cljs markup renders
+   .table-wrapper.classic-table.force-visible-scrollbar.markdown-table >
+   table.table-auto > colgroup + thead + tbody, all cells .org-left *)
+let table_parts s =
+  let lines = String.split_on_char '\n' s in
+  let is_sep l =
+    String.length l > 0 && l.[0] = '|'
+    && String.exists (fun c -> c = '-') l
+    && String.for_all
+         (fun c -> c = '-' || c = '|' || c = ':' || c = ' ')
+         l
+  in
+  let cells line =
+    String.split_on_char '|' line
+    |> List.map String.trim
+    |> List.filter (fun c -> c <> "")
+  in
+  match lines with
+  | l0 :: l1 :: rest
+    when String.length l0 > 0 && l0.[0] = '|' && is_sep l1
+         && List.for_all
+              (fun l -> String.length l > 0 && l.[0] = '|')
+              rest ->
+      Some (cells l0, List.map cells rest)
+  | _ -> None
+
+let table_el ~self (header, rows) : t =
+  let cell tag c =
+    D.el ~tag ~style_class:"org-left"
+      ~attrs:[ ("scope", "col") ]
+      (Render_inline.parse ~self c)
+  in
+  D.el ~key:("tbody-" ^ self) ~tag:"div" ~style_class:"block-body"
+    [ D.el ~tag:"div"
+        ~style_class:
+          "table-wrapper classic-table force-visible-scrollbar markdown-table"
+        [ D.el ~tag:"table" ~style_class:"table-auto"
+            ~attrs:
+              [ ("border", "2"); ("cellspacing", "0"); ("cellpadding", "6")
+              ; ("rules", "groups"); ("frame", "hsides") ]
+            [ D.el ~tag:"colgroup"
+                (List.map
+                   (fun _ -> D.el ~tag:"col" ~style_class:"org-left" [])
+                   header)
+            ; D.el ~tag:"thead"
+                [ D.el ~tag:"tr" (List.map (cell "th") header) ]
+            ; D.el ~tag:"tbody"
+                (List.map
+                   (fun r -> D.el ~tag:"tr" (List.map (cell "td") r))
+                   rows) ] ] ]
+
+let body_el ~self s : t option =
+  match quote_body s with
+  | Some rest -> Some (quote_el ~self rest)
+  | None -> Option.map (table_el ~self) (table_parts s)
+
 (* cljs block-title picks the .block-head-wrap carrier by
    logseq.property.node/display-type: code -> .flex.flex-1.w-full,
    math -> bare .math-block (no carrier), text -> .w-full.inline. *)
@@ -599,6 +677,12 @@ let title ?heading ?(is_query = false) ?(is_cards = false)
       else if deprecated_latex_export s then
         [ deprecated_warning "block/deprecated-latex-export" ]
       else
+        match body_el ~self s with
+        (* block-level mldoc constructs render as the head's direct
+           content — no .block-title-wrap line (cljs mldoc puts
+           .block-body inside .block-content-inner) *)
+        | Some body -> [ body ]
+        | None -> (
         match src_block s with
         | Some (lang, code) -> [ code_block ~self lang code ]
         | None -> (
@@ -616,7 +700,7 @@ let title ?heading ?(is_query = false) ?(is_cards = false)
                     [ label ~value:num [] ] ]
                 @ [ content ?heading ~self ~wrap_attrs ~prefix rest ]
                 @ tail
-            | None -> content ?heading ~self ~wrap_attrs ~prefix s :: tail)
+            | None -> content ?heading ~self ~wrap_attrs ~prefix s :: tail))
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading.
