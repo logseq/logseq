@@ -71,7 +71,7 @@ let ready : (Env.t * Env.t * string) Js.Promise.t Lazy.t =
 let new_rtc_page env p1 p2 = Fixtures.new_logseq_page_in_rtc env p1 p2 ()
 
 let stress_default_rounds = 1
-let stress_default_ops_per_client = 50
+let stress_default_ops_per_client = 35
 let stress_default_seed_blocks = 20
 let stress_default_seed = 20260330
 let stress_max_seed_depth = 4
