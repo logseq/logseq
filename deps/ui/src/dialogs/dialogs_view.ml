@@ -87,9 +87,12 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
         ; close_btn ]
     ]
 
-let btn key label extra act =
-  button ~key
-    ~style_class:(btn_style ^ " " ^ extra)
+(* typed variant over ls-btn-* classes — the multi-token style_class
+   route left the primary styling unapplied on web (confirm button
+   rendered white-on-transparent); data-variant is the typed path *)
+let btn key label variant act =
+  button ~key ~variant
+    ~style_class:btn_style
     ~text:label
     ~on_press:(fun _ -> act ())
     []
@@ -131,9 +134,9 @@ let confirm_view (c : Dialogs_state.confirm) =
                        ~style_class:"ui__alert-dialog-description"
                        ~value:c.desc [] ] ) ] )
         @ [ row ~key:"cfrm-f" ~style_class:"ui__alert-dialog-footer"
-              [ btn "cfrm-cancel" I18n.cancel "ls-btn-outline"
+              [ btn "cfrm-cancel" I18n.cancel `outline
                   Dialogs_state.close_confirm
-              ; btn "cfrm-ok" I18n.confirm "ls-btn-primary"
+              ; btn "cfrm-ok" I18n.confirm `primary
                   Dialogs_state.confirm
               ]
           ] )
@@ -169,7 +172,7 @@ let prompt_view (p : Dialogs_state.prompt) : t =
                       | _ -> ())
                     ~on_submit:(fun _ -> submit ())
                     []
-                ; btn "prmt-ok" I18n.submit "ls-btn-primary"
+                ; btn "prmt-ok" I18n.submit `primary
                     (fun () -> submit ())
                 ] )
           ; close_btn

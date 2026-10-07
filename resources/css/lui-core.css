@@ -33,6 +33,21 @@ html:not(.is-native-android) {
   --ls-z-index-level-3: 999;
   --ls-z-index-level-4: 9999;
   --ls-z-index-level-5: 99999;
+
+  /* Bridge shadcn's hsl-component tokens to the whole colors LUI's
+     data-variant rules consume as var(--color-*): lui.css maps
+     --color-primary -> var(--primary), which is the bare triplet
+     "200 97% 37%" here and is not a valid background-color (the
+     confirm dialog's primary button rendered white-on-transparent).
+     The *-foreground tokens are already wrapped by the app's base
+     theme. */
+  --color-primary: hsl(var(--primary));
+  --color-secondary: hsl(var(--secondary));
+  --color-accent: hsl(var(--accent));
+  --color-muted: hsl(var(--muted));
+  --color-destructive: hsl(var(--destructive));
+  --color-card: hsl(var(--card));
+  --color-popover: hsl(var(--popover));
 }
 
 html {
