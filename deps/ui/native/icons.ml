@@ -100,13 +100,20 @@ let kebab name =
   Buffer.contents b
 ;;
 
+(* tabler-extension (tie) names resolve through a JS extension pack on
+   the web that native hosts don't ship — alias used names to their
+   closest bundled tabler equivalent *)
+let tie_alias (name : string) : string =
+  match name with "new-page" -> "file-plus" | _ -> name
+;;
+
 (* resolve a cljs icon name (camelCase or spaced ok) to an icon value:
    builtin names emit the builtin, everything else the app: registry *)
 let name_ref name : Lui_elements.icon =
   let n = kebab name in
   match builtin_of_name n with
   | Some b -> b
-  | None -> `app n
+  | None -> `app (tie_alias n)
 ;;
 
 (* custom svgs with no tabler counterpart — registered so `app:`
