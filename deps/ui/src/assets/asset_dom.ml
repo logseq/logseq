@@ -398,6 +398,7 @@ let menu_items uuid (b : Model.block) : Views_popup.menu_item list =
 let action_bar uuid b : t =
   box ~key:("aab-" ^ uuid)
     [ button ~key:("aabbtn-" ^ uuid) ~variant:`ghost ~size:`icon
+        ~label:(I18n.t "header/more")
         ~accessibility_identifier:("asset-menu-btn-" ^ uuid)
         ~icon:(`app "dots-vertical")
         ~on_press:(fun _ ->

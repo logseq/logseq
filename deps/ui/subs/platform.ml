@@ -185,7 +185,26 @@ external clipboard_write_text : string -> unit Js.Promise.t = "writeText"
 external clipboard_read_text : unit -> string Js.Promise.t = "readText"
   [@@mel.scope ("navigator", "clipboard")]
 
-let copy_to_clipboard s = ignore (clipboard_write_text s)
+(* execCommand("copy") needs no clipboard-write permission — the async
+   clipboard API prompts when the call lands outside transient user
+   activation. Falls back to writeText where execCommand is gone *)
+let exec_copy : string -> bool =
+  [%mel.raw
+    "function (s) {
+       var ta = document.createElement('textarea');
+       ta.value = s;
+       ta.setAttribute('readonly', '');
+       ta.style.position = 'absolute';
+       ta.style.left = '-9999px';
+       document.body.appendChild(ta);
+       ta.select();
+       var ok = false;
+       try { ok = document.execCommand && document.execCommand('copy'); } catch (e) {}
+       document.body.removeChild(ta);
+       return ok;
+     }"]
+
+let copy_to_clipboard s = if not (exec_copy s) then ignore (clipboard_write_text s)
 
 external decode_uri : string -> string = "decodeURIComponent"
 

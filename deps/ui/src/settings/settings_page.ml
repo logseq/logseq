@@ -103,7 +103,7 @@ let theme_row ctx =
     ]
 
 let font_button ~key ~label ~active ~on_click =
-  button ~key ~variant:`secondary ~selected:active
+  button ~key ~variant:`secondary ~selected:active ~label
     ~style_class:
       (C.btn_cls ~variant:`Secondary () ^ " ls-font-btn"
      ^ if active then " ls-active" else "")
@@ -337,7 +337,7 @@ let editor_pane ctx =
 (* ---- keymap pane (components/shortcut.cljs page) ---- *)
 
 let keymap_pill ~key ~title ~count ~active =
-  button ~key ~selected:active
+  button ~key ~selected:active ~label:title
     ~style_class:
       (if active then "shortcut-filter-pill--active shortcut-filter-pill"
        else "shortcut-filter-pill")

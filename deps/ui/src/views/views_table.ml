@@ -757,7 +757,7 @@ let action_bar inst : t =
                       I.selected_count (V.Sset.cardinal s.V.selected))
                     isig)
                []
-           ; button ~variant:`ghost ~size:`icon ~icon:`trash
+           ; button ~variant:`ghost ~size:`icon ~icon:`trash ~label:I.delete
                ~on_press:(fun _ -> delete_selected inst ()) []
            ]
        ])

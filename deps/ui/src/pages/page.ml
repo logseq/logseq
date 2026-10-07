@@ -35,10 +35,28 @@ let zoom_breadcrumbs (page : Model.page) : t list =
              parents)
       ]
 
-let breadcrumbs title : t list =
-  (* namespaced pages "a/b/c" -> breadcrumb trail; non-namespaced
-     titles render no breadcrumb node at all *)
-  match String.split_on_char '/' title with
+let breadcrumbs (page : Model.page) : t list =
+  (* cljs page-inner breadcrumb = :block/parent namespace chain (links)
+     + the leaf title (text). Pages whose title still carries "/" but
+     have no parent chain (pre-split legacy) fall back to splitting. *)
+  match page.Model.page_parents with
+  | _ :: _ ->
+      let rec trail = function
+        | [] -> []
+        | (p : Model.block) :: rest ->
+            link ~key:("bc-" ^ p.block_title)
+              ~style_class:"breadcrumb-item"
+              ~url:("#/page/" ^ p.block_title)
+              ~target:`self_ ~text:p.block_title []
+            :: text ~key:("bcsep-" ^ p.block_title) ~value:" / " []
+            :: trail rest
+      in
+      [ row ~key:"bc" ~style_class:"breadcrumb"
+          (trail page.page_parents
+           @ [ text ~key:"bc-leaf" ~style_class:"breadcrumb-item"
+                 ~value:page.page_title [] ]) ]
+  | [] ->
+      (match String.split_on_char '/' page.page_title with
   | [] | [ _ ] -> []
   | parts ->
       let rec crumbs acc prefix = function
@@ -59,7 +77,7 @@ let breadcrumbs title : t list =
             let sep = text ~key:("bcsep-" ^ here) ~value:" / " [] in
             crumbs (sep :: item :: acc) here rest
       in
-      [ row ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts) ]
+      [ row ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts) ])
 
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)
@@ -211,35 +229,44 @@ let title_editor (page : Model.page) : t =
 (* cljs title-tag chip: .block-tag > .flex.items-center > a.hash-symbol +
    a.tag[draggable][data-ref] > span. The .ls-block-right/.hover wrappers
    render even when the page has no tags (empty container). *)
+(* cljs tags-cp drops internal/private/hide-from-node class idents —
+   journal pages never show a #Journal chip *)
 let title_tag_chips (page : Model.page) : t list =
+  let opt_at l i =
+    match List.nth_opt l i with
+    | Some x -> x
+    | None -> ""
+  in
+  let visible =
+    List.filter_mapi
+      (fun i tag ->
+        if Tree.hidden_tag_ident (opt_at page.Model.page_tag_idents i) then
+          None
+        else Some (i, tag))
+      page.Model.page_tags
+  in
   [ row ~key:"pt-right" ~gap:4 ~cross:`center
       ~style_class:"ls-block-right"
       [ box ~key:"ptr-ghost"
-          (match page.Model.page_tags with
+          (match visible with
            | [] -> []
-           | tags ->
+           | _ ->
                [ row ~key:"pt-tags" ~gap:4 ~style_class:"block-tags"
-                   (List.mapi
-                     (fun i tag ->
-                       let opt_at l =
-                         match List.nth_opt l i with
-                         | Some x -> x
-                         | None -> ""
-                       in
-                       Tree.tag_chip
-                         ~key:("p" ^ string_of_int i)
-                         ~owner_uuid:
-                           (Option.value page.Model.page_uuid ~default:"")
-                         ~tag
-                         ~tuuid:(opt_at page.Model.page_tag_uuids)
-                         ~ident:(opt_at page.Model.page_tag_idents)
-                         ~dbid:
-                           (Option.value
-                              (List.nth_opt page.Model.page_tag_db_ids i)
-                              ~default:0))
-                     tags)
-               ]
-           )
+                   (List.map
+                      (fun (i, tag) ->
+                        Tree.tag_chip
+                          ~key:("p" ^ string_of_int i)
+                          ~owner_uuid:
+                            (Option.value page.Model.page_uuid ~default:"")
+                          ~tag
+                          ~tuuid:(opt_at page.Model.page_tag_uuids i)
+                          ~ident:(opt_at page.Model.page_tag_idents i)
+                          ~dbid:
+                            (Option.value
+                               (List.nth_opt page.Model.page_tag_db_ids i)
+                               ~default:0))
+                      visible)
+               ])
       ]
   ]
 
@@ -434,6 +461,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       ~style_class:"ls-page-icon"
                                       [ button ~key:"pt-icbtn"
                                           ~variant:`ghost ~size:`icon
+                                          ~label:(I18n.t "context-menu/set-icon")
                                           ~style_class:"ui__button as-ghost"
                                           ~on_press:(fun _ ->
                                             page_icon_picker page
@@ -697,11 +725,15 @@ let refs_view_head key ?on_search title count : t =
         ~style_class:"view-actions"
         [ view_ghost_btn "vh-fc" ~title:(I18n.t "reference/page-filter")
             "filter-cog" 18.
-        ; view_ghost_btn "vh-srt" "arrows-up-down" 18.
-        ; view_ghost_btn "vh-flt" "filter" 18.
+        ; view_ghost_btn "vh-srt"
+            ~title:(I18n.t "property.built-in/table-sorting")
+            "arrows-up-down" 18.
+        ; view_ghost_btn "vh-flt" ~title:(I18n.t "reference.filter/title")
+            "filter" 18.
         ; row ~key:"vh-search" ~style_class:"view-action-search"
             [ row ~key:"vh-si" ~cross:`center
-                [ view_ghost_btn "vh-sb" ?on_click:on_search "search" 15. ] ]
+                [ view_ghost_btn "vh-sb" ~title:(I18n.t "nav/search")
+                    ?on_click:on_search "search" 15. ] ]
         ; box ~key:"vh-type" ~style_class:"view-action-type"
             [ (* property-value-inner[data-type] is the property-cell
                  trigger contract (jtrigger/open-value flows) *)
@@ -719,7 +751,7 @@ let refs_view_head key ?on_search title count : t =
                 ]
             ]
         ; button ~key:"vh-menu" ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots")
+            ~icon:(`app "dots") ~label:(I18n.t "header/more")
             ~style_class:"ui__button as-ghost ls-dots-menu"
             []
         ]
@@ -1363,7 +1395,7 @@ let top_view (m : Model.t) : t =
              [ title_row m page; library_add_pages_button ]
        | _ ->
            box ~key:"ptm" ~display:`contents
-             (breadcrumbs page.page_title
+             (breadcrumbs page
               @ [ title_row m page
                 ; (* cljs bidirectional-properties-area: sibling of the
                      blocks list inside .page-inner *)

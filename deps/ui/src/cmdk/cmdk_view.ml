@@ -573,6 +573,7 @@ let search_only_chip st (gid : S.group_id) =
             ~style_class:"cp__cmdk-search-only-name"
             ~value:(gid_label gid) []
         ; button ~key:"clr" ~icon:`x ~size:`icon
+            ~label:(I18n.t "ui/delete")
             ~style_class:"cp__cmdk-search-only-clear"
             ~on_press:(fun _ -> S.clear_filter st)
             []
@@ -591,9 +592,11 @@ let scroller st : t =
   let input_sig =
     Signal.map (fun (v : S.view) -> v.S.input) st.S.vs.Signal.state_signal
   in
+  (* scroll children overlay each other (lui-scroll > * is grid 1/1) —
+     the results stack inside a single column instead *)
   scroll ~key:"scroller" ~orientation:`vertical
     ~style_class:scroller_class
-    [ column ~key:"scroller-col"
+    [ column ~key:"scroller-body" ~grow:1.
         [ reactive
             (fun (v : S.view) ->
               match v.S.filter with
@@ -608,7 +611,8 @@ let scroller st : t =
                  input_sig has_items_sig)
             (box ~key:"empty" ~style_class:"cp__cmdk-empty"
                [ text ~key:"empty-t" ~value:(I18n.t "search/no-result") [] ])
-        ] ]
+        ]
+    ]
     ctx parent
 
 let input_row st : t =
@@ -669,7 +673,7 @@ let shortcut_el keys =
     (interleave kids)
 
 let hint_button label keys =
-  button ~key:("hb-" ^ label)
+  button ~key:("hb-" ^ label) ~label
     ~style_class:"cp__cmdk-hint"
     [ text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label []
     ; hint_shortcut keys ]

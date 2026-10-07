@@ -264,6 +264,32 @@ let raw_title db (e : entity) : value option =
   else
     value e "block/title"
 
+(* namespaced page lookup — namespaced pages store the leaf segment in
+   :block/name and the hierarchy in :block/parent, so "a/b/c" resolves
+   by finding a leaf-named page whose parent chain matches the prefix
+   segments. *)
+let get_page_by_ns_path db (s : string) : entity option =
+  match List.rev (String.split_on_char '/' s) with
+  | [] | [ _ ] -> None
+  | leaf :: rest ->
+      (* rest is already nearest-first (the split was reversed) *)
+      let parents_lc = List.map page_name_sanity_lc rest in
+      let rec chain_matches (e : entity) = function
+        | [] -> true
+        | name :: names ->
+            (match ref_ent e "block/parent" with
+             | Some p when string_value p "block/name" = Some name ->
+                 chain_matches p names
+             | _ -> false)
+      in
+      List.find_map
+        (fun (d : datom) ->
+          match ent_of_id db d.e with
+          | Some e when is_page e && chain_matches e parents_lc ->
+              Some e
+          | _ -> None)
+        (pages_by_name db leaf)
+
 (* ldb/get-page — eid | uuid | page name (case-insensitive). Lookup
    refs like [:block/uuid u] come in as vectors from transit. *)
 let get_page db (ref_v : value) : entity option =
@@ -278,7 +304,7 @@ let get_page db (ref_v : value) : entity option =
       else
         (match first_page_by_name db s with
          | Some id -> ent_of_id db id
-         | None -> None)
+         | None -> get_page_by_ns_path db s)
   | _ -> None
 
 (* ldb/get-case-page — uuid or exact :block/title. *)

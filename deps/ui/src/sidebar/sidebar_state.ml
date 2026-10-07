@@ -19,7 +19,7 @@
 open Promise_ext
 let t = I18n.t
 
-let default_navs = [ "flashcards"; "all-pages" ]
+let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
 
 (* A rendered right-sidebar entry. kind maps to .item-type-<kind>. *)
 type item =
@@ -72,9 +72,19 @@ let jbool name j =
       | _ -> false)
   | None -> false
 
-external closest :
+external closest_raw :
   Js.Json.t -> string -> Js.Json.t option
   = "closest" [@@mel.send] [@@mel.return nullable]
+
+(* event targets can be document/window — .closest exists on Elements
+   (nodeType 1) only *)
+let closest target sel =
+  match Worker_client.json_field "nodeType" target with
+  | Some nt -> (
+      match Js.Json.classify nt with
+      | Js.Json.JSONNumber 1. -> closest_raw target sel
+      | _ -> None)
+  | None -> None
 
 external prevent_default : Js.Json.t -> unit = "preventDefault"
   [@@mel.send]

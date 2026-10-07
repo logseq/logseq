@@ -236,6 +236,7 @@ let toggle_pw ctx =
         ~test:
           (Signal.map (fun (s : pst) -> Str_util.trim s.password <> "") st_sig)
         (button ~key:"pub-eye" ~variant:`ghost ~size:`sm
+           ~label:I18n.e2ee_show_password
            ~style_class:"ui__button as-ghost"
            ~icon:(reactive
                 (fun (s : pst) ->
