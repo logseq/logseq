@@ -209,12 +209,33 @@ fn handle_platform_request(
                         })
                 });
             if let Some(dark) = dark {
+                use gpui_kit::component::theme::{Theme, ThemeRegistry};
+                // The frame-1 preset seeds `Theme::from(ThemeColor::light())`
+                // with empty mode configs; `Theme::change` then applies an
+                // empty `ThemeConfig` (whose default mode snaps the theme
+                // back to light) instead of a real palette. Populate both
+                // configs from the registry once it exists.
+                if Theme::global(cx).dark_theme.name.is_empty()
+                    || Theme::global(cx).light_theme.name.is_empty()
+                {
+                    let (light_cfg, dark_cfg) = {
+                        let registry = ThemeRegistry::global(cx);
+                        (
+                            registry.default_light_theme().clone(),
+                            registry.default_dark_theme().clone(),
+                        )
+                    };
+                    Theme::update(cx, |theme| {
+                        theme.light_theme = light_cfg;
+                        theme.dark_theme = dark_cfg;
+                    });
+                }
                 let mode = if dark {
                     gpui_kit::component::theme::ThemeMode::Dark
                 } else {
                     gpui_kit::component::theme::ThemeMode::Light
                 };
-                gpui_kit::component::theme::Theme::change(mode, Some(window), cx);
+                Theme::change(mode, Some(window), cx);
             }
         }
         other => eprintln!("logseq-gpui: platform request {other}: {payload}"),

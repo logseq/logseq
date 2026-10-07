@@ -948,7 +948,17 @@ fn editor_surface(
             let keystroke = &event.keystroke;
             let mods = &keystroke.modifiers;
             let global_key = mods.control || mods.platform;
-            let text_key = keystroke.key_char.is_some() && !global_key && !mods.function;
+            // Only printable key_chars are text: gpui reports named keys
+            // (Enter "\r", Tab "\t", Escape "\x1b", Backspace) as
+            // control-char key_chars, and routing them through `insert`
+            // both writes garbage into the model and hides the key from
+            // the conduit keymap (Enter must reach `key` → SplitBlock).
+            let text_key = keystroke
+                .key_char
+                .as_deref()
+                .is_some_and(|s| s.chars().all(|c| !c.is_control()))
+                && !global_key
+                && !mods.function;
             if text_key {
                 // Emit the text directly as an `insert` conduit event —
                 // the OCaml side applies `insert` the same way insertText
