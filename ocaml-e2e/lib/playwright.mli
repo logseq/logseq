@@ -53,6 +53,15 @@ external set_default_timeout : page -> float -> unit = "setDefaultTimeout"
 [@@mel.send]
 (* Local node timer, not page.waitForTimeout — see playwright.ml. *)
 val wait_for_timeout : page -> float -> unit Js.Promise.t
+
+type timer_id
+
+(* Promise plus the timer id behind it — pass the id to [clear_timeout]
+   when a race winner is decided so the handle does not pin the loop. *)
+val wait_for_timeout_cancellable :
+  page -> float -> unit Js.Promise.t * timer_id option ref
+
+val clear_timeout : timer_id -> unit
 val locator :
   ?has:'a ->
   ?has_not:'b ->
