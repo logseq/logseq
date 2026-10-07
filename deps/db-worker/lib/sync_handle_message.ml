@@ -266,6 +266,9 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
               ; (match missing_block_uuids with
                  | Some us -> Some (Wire.keyword "missing-block-uuids", us)
                  | None -> None)
+              ; (match Wire.get "error-detail" message with
+                 | Some d -> Some (Wire.keyword "error-detail", d)
+                 | None -> None)
               ; (match data with
                  | Some d -> Some (Wire.keyword "data", d)
                  | None -> None) ])

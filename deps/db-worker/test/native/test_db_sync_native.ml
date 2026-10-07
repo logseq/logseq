@@ -14260,6 +14260,130 @@ let test_reconcile_exempted_skips_heal () =
             (Sync_client_op.get_local_checksum_covered_tx test_repo
              = Some (Datascript.db conn).max_tx)))
 
+(* cljs bookkeeping-timestamps-do-not-revalidate-entities-test — an
+   entity that is already invalid on the server must not fail txs that
+   only stamp it with :block/updated-at/:block/created-at *)
+let test_bookkeeping_timestamps_do_not_revalidate_entities () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, child2, _c3 = setup_parent_child () in
+      let server_conn = Datascript.conn_from_db (Datascript.db conn) in
+      let new_uuid = fresh_uuid () in
+      let server_page =
+        Option.get
+          (Db_test_util.find_page_by_title (Datascript.db server_conn)
+             "page")
+      in
+      (* corrupt the shared page on the server: strip a required attr
+         bypassing validation (simulating drift accumulated by old
+         versions) *)
+      ignore
+        (Datascript.transact_conn server_conn
+           [ RetractAttr (Entity_id server_page.id, "block/title") ]);
+      with_datascript_conns conn (Some ops) (fun () ->
+          ignore
+            (apply_ops conn
+               [ Wire.Array
+                   [ kw "insert-blocks"
+                   ; Wire.Array
+                       [ Wire.Array
+                           [ wire_map
+                               [ "block/uuid", Wire.Uuid new_uuid
+                               ; "block/title", Wire.String "rapid insert" ] ]
+                       ; Wire.Int child1.id
+                       ; wire_map
+                           [ "sibling?", Wire.Bool true
+                           ; "keep-uuid?", Wire.Bool true ] ] ]
+               ; Wire.Array
+                   [ kw "delete-blocks"
+                   ; Wire.Array
+                       [ Wire.Array [ entity_block_uuid child2 ]
+                       ; wire_map [] ] ] ]
+               local_tx_meta);
+          let tx_entries, _drop_tx_ids, _drop_txs =
+            Sync_apply.prepare_upload_tx_entries ~repo:test_repo
+              (Some conn) (Sync_apply.pending_txs test_repo ())
+          in
+          check "prepared tx entries" (tx_entries <> []);
+          List.iter
+            (fun entry ->
+               try server_apply_entry server_conn entry
+               with exn ->
+                 check
+                   (Printf.sprintf "server applies entry: %s"
+                      (Printexc.to_string exn))
+                   false)
+            tx_entries;
+          (* the page itself stays divergent (server missing
+             :block/title), everything else converges *)
+          let local_keys =
+            List.map
+              (fun (d : datom) -> d.e, d.a, d.v)
+              (List.of_seq (Datascript.datoms (Datascript.db conn) Eavt ()))
+          and server_keys =
+            List.map
+              (fun (d : datom) -> d.e, d.a, d.v)
+              (List.of_seq
+                 (Datascript.datoms (Datascript.db server_conn) Eavt ()))
+          in
+          let diff a b = List.filter (fun k -> not (List.mem k b)) a in
+          check "server has nothing local lacks"
+            (diff server_keys local_keys = []);
+          check "only the page's missing title diverges"
+            (diff local_keys server_keys
+             = [ (server_page.id, "block/title", String "page") ])))
+
+(* cljs stamps-on-missing-entities-are-dropped-test — sanitize-tx drops
+   raw-eid stamp ops on entities the server doesn't have, so they can't
+   resurrect invalid ghost entities *)
+let test_stamps_on_missing_entities_are_dropped () =
+  preserve_state (fun () ->
+      let conn, _ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let db = Datascript.db conn in
+      let live_eid = child1.id in
+      let dead_eid =
+        1
+        + List.fold_left
+            (fun m (d : datom) -> max m d.e) 0
+            (List.of_seq (Datascript.datoms db Eavt ()))
+      in
+      let child_uuid = entity_block_uuid child1 in
+      let missing_uuid = Wire.Uuid (fresh_uuid ()) in
+      let result =
+        List.map Ds_wire.value_of_transit
+          [ db_add (Wire.Int dead_eid) "block/updated-at" (Wire.Int64 1L)
+          ; db_add (Wire.Int live_eid) "block/updated-at" (Wire.Int64 1L)
+          ; db_add (block_uuid_lookup child_uuid) "block/title"
+              (Wire.String "x")
+          ; db_add (block_uuid_lookup missing_uuid) "block/updated-at"
+              (Wire.Int64 1L)
+          ; wire_map [ "db/id", Wire.Int dead_eid; "block/updated-at", Wire.Int64 1L ]
+          ; wire_map [ "db/id", Wire.Int live_eid; "block/updated-at", Wire.Int64 1L ]
+          ; wire_map
+              [ "db/id", Wire.Int dead_eid; "block/updated-at", Wire.Int64 1L
+              ; "block/order", Wire.String "a0" ]
+          ; wire_map
+              [ "db/id", Wire.Int dead_eid
+              ; "block/title", Wire.String "kept — not a pure stamp" ] ]
+        |> Db_sync_tx_sanitize.sanitize_tx db
+      in
+      let expected =
+        List.map Ds_wire.value_of_transit
+          [ db_add (Wire.Int live_eid) "block/updated-at" (Wire.Int64 1L)
+          ; db_add (block_uuid_lookup child_uuid) "block/title"
+              (Wire.String "x")
+          ; (* lookup-refs pass through unresolved; the tx fails on them
+               later *)
+            db_add (block_uuid_lookup missing_uuid) "block/updated-at"
+              (Wire.Int64 1L)
+          ; wire_map
+              [ "db/id", Wire.Int live_eid
+              ; "block/updated-at", Wire.Int64 1L ]
+          ; wire_map
+              [ "db/id", Wire.Int dead_eid
+              ; "block/title", Wire.String "kept — not a pure stamp" ] ]
+      in
+      check "sanitize output" (result = expected))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -15009,6 +15133,12 @@ let () =
         ; Alcotest.test_case
             "reconcile-exempted-skips-heal-test" `Quick
             test_reconcile_exempted_skips_heal
+        ; Alcotest.test_case
+            "bookkeeping-timestamps-do-not-revalidate-entities-test"
+            `Quick test_bookkeeping_timestamps_do_not_revalidate_entities
+        ; Alcotest.test_case
+            "stamps-on-missing-entities-are-dropped-test" `Quick
+            test_stamps_on_missing_entities_are_dropped
         ] )
     ; ( "db-sync-upload"
       , Test_db_sync_upload_native.cases ) ]
