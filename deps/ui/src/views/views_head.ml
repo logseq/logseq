@@ -86,7 +86,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
      accessibility_identifier carries the stable anchor *)
   Ui_parts.class_signal current_sig
     (fun cur -> "ls-view-tab" ^ if cur then "" else " ls-dim")
-    (button ~variant:`ghost ~size:`sm
+    (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
        ~accessibility_identifier:(view_tab_anchor_id inst v0)
        ~on_press:(fun _ ->
          let v = Signal.get v_sig in
