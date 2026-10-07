@@ -22,7 +22,7 @@ Harness: `node scripts/pixel/capture-dialogs-menus.mjs <url> docs/pixel-dialogs-
 | 10-appearance | 2.76% | 1.28% |
 | 03-settings-advanced | 2.66% | 1.28% |
 | 11-export-page | 2.58% | 0.90% |
-| 03-settings-keymap | 2.43% | 1.71% |
+| 03-settings-keymap | 2.43% | 1.22% |
 | 03-settings-editor | 1.93% | 0.99% |
 | 17-delete-confirm | 1.41% | 0.01% |
 | 34-dark-right-sidebar | 1.37% | 0.95% |
@@ -30,7 +30,7 @@ Harness: `node scripts/pixel/capture-dialogs-menus.mjs <url> docs/pixel-dialogs-
 | 23-sidebar-help | 1.17% | 0.71% |
 | everything else | ≤0.99% | ≤0.93% |
 
-All 26 surfaces are now ≤1.71% diff; the residual is almost entirely
+All 26 surfaces are now ≤1.61% diff; the residual is almost entirely
 anti-aliased text pixels, the documented exceptions below, and a small
 number of sub-pixel icon strokes.
 
@@ -115,20 +115,33 @@ probe (10/10 checks pass on both ends):
 - Capture fixture: LUI-only empty sibling block seeded after the first
   block (cljs keeps the auto-created initial block on new pages; LUI
   doesn't create one) so row geometry is comparable.
+- Tag refs: `Title_refs.resolve_names` routes bare `#name` through the
+  class-only `get-tags-by-name` index and excludes `logseq.*`-ident
+  entities — cljs `tag-page?` semantics (built-in classes are Tag-tagged
+  too, so a same-named built-in like `logseq.class/Tag` must not
+  satisfy `#tag`; a fresh `user.class/tag-*` titled as written is minted
+  instead, and existing user classes are reused case-insensitively).
+  `#tag`/`#Journal`/`#MyCamelTag` now store and render with the user's
+  written casing, identical to master.
+- Keymap data + chrome: `keymap_data.ml` now mirrors master's rendered
+  command set exactly — the 9 `:dev/*` commands cljs doesn't register in
+  this build were dropped and the missing `:go/graph-view` row added, so
+  the pills read All·116 / Unset·9 like master. Category headers
+  (`li.th`) are full-width grey bands with the fold chevron at the right
+  edge, the settings aside nav got its `.active` highlight back (a
+  `[data-selected]:hover` transparent rule was outranking it), nav rows
+  match master's fs16/lh24/40px-step geometry, the pane-controls get
+  cljs's 22px top band, the search input is 26px with cljs's double
+  focus ring, and the filter pills/secondary icons are 22px/18px.
+- Capture: `#shadow-connection-error` (shadow-cljs dev HUD badge) is
+  hidden during master captures — dev tooling, not app UI.
 
 ## Exceptions
 
-1. **`#tag` renders as `#Tag`** in LUI blocks and the export preview —
-   the LUI block renderer capitalizes tag display. Kept (render-layer
-   choice), contributes a small text diff in block shots.
-2. **Keymap tab counts differ** (master All·116 / Unset·9; LUI All·125 /
-   Unset·18) — LUI registers a different command set; a data difference,
-   not a styling one. LUI's "Basics" group header also shows a collapse
-   chevron master's lacks.
-3. **Right-click selection**: LUI selects the block under the cursor;
+1. **Right-click selection**: LUI selects the block under the cursor;
    master keeps the prior selection. LUI's behavior kept (matches native
    outliner UX); the capture clicks the already-selected block to keep
    screenshots comparable.
-4. **Menu item DOM tag**: LUI emits `button.lui-menu-item` with
+2. **Menu item DOM tag**: LUI emits `button.lui-menu-item` with
    icon/label/check slots vs cljs `div` markup — identical role/geometry;
    tag-name difference is invisible.

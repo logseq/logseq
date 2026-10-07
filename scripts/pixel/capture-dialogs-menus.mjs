@@ -48,6 +48,9 @@ const dots = async () => { await page.locator(SEL.dots).click(); await sleep(900
 // ---- boot ----
 await page.goto(URL_, { waitUntil: 'domcontentloaded' });
 await sleep(TAG === 'master' ? 12000 : 16000);
+// shadow-cljs injects a dev-only #shadow-connection-error HUD badge
+// ("Reconnecting ...") that sits over the page and is not app UI
+await page.addStyleTag({ content: '#shadow-connection-error { display: none !important; }' });
 
 // ---- seed identical fixture via logseq.api ----
 await page.evaluate(async () => {

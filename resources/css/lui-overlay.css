@@ -2936,7 +2936,8 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .cp__settings-inner .settings-menu-item {
-  font-size: 0.875rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
   font-weight: 400;
 }
 
@@ -3006,12 +3007,15 @@ div[data-keep-selection].menu-links-wrapper {
 .settings-menu {
   padding: 0;
   margin: 1rem 0 0;
+  /* LUI renders the menu as a flex column — master's block <ul> gets
+     its 8px inter-item spacing from collapsed li margins + link box */
+  row-gap: 0.5rem;
 }
 
 .settings-menu-item {
   list-style: none;
   padding: 0;
-  margin: 0.375rem 0;
+  margin: 0;
   border-radius: 0.25rem;
 }
 
@@ -3019,7 +3023,7 @@ div[data-keep-selection].menu-links-wrapper {
    .settings-menu-link button in li.settings-menu-item): same padding
    and horizontal layout as the cljs link, no list-item default slots */
 .settings-menu-item.lui-list-item {
-  padding: 0.375rem 0.5rem;
+  padding: 0.25rem 0.5rem;
   min-height: 0;
   justify-content: flex-start;
   gap: 0.25rem;
@@ -3036,12 +3040,14 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .settings-menu-item.lui-list-item.active,
-.dark .settings-menu-item.lui-list-item.active[data-selected] {
+.settings-menu-item.lui-list-item.active[data-selected],
+.settings-menu-item.lui-list-item.active[data-selected]:hover {
   background: rgb(0 0 0 / 0.1);
 }
 
 .dark .settings-menu-item.lui-list-item.active,
-.dark .settings-menu-item.lui-list-item.active[data-selected] {
+.dark .settings-menu-item.lui-list-item.active[data-selected],
+.dark .settings-menu-item.lui-list-item.active[data-selected]:hover {
   background: rgb(255 255 255 / 0.08);
 }
 
@@ -3354,10 +3360,15 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* shortcuts pane */
+/* cljs .cp__shortcut-page-x > header: px-4 pt-[22px] pb-2 wraps the
+   pane-controls — the 22px top band separates the pane title from the
+   search toolbar */
 .cp__shortcut-page-x-pane-controls {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  padding-top: 1.375rem;
+  padding-bottom: 0.5rem;
 }
 
 .shortcut-toolbar-row {
@@ -3378,10 +3389,19 @@ div[data-keep-selection].menu-links-wrapper {
 
 .shortcut-toolbar-row .search-input-wrap input.form-input {
   width: 100%;
-  height: 2rem;
-  padding-left: 1.75rem;
-  padding-right: 1.75rem;
+  height: 1.625rem;
+  padding: 0.25rem 1.75rem;
   font-size: 0.875rem;
+}
+
+/* cljs form-input focus ring: 2px surface halo + 2px accent band
+   (ring-2 ring-offset-2, hsl(200 97% 37%)) */
+.shortcut-toolbar-row .search-input-wrap input.form-input:focus,
+.shortcut-toolbar-row .search-input-wrap input.form-input:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--lui-c-background, #fff),
+    0 0 0 4px hsl(200 97% 37%);
 }
 
 .shortcut-toolbar-row .search-icon {
@@ -3432,16 +3452,35 @@ div[data-keep-selection].menu-links-wrapper {
   flex-wrap: wrap;
 }
 
+/* cljs pills-row secondary icons are 18x18 icon-links */
+.shortcut-pills-row .ls-toolbar-gap {
+  height: 1.375rem;
+  align-items: center;
+}
+
+.shortcut-pills-row .icon-link,
+.shortcut-pills-row .lui-button.icon-link {
+  width: 1.125rem;
+  height: 1.125rem;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+}
+
 .shortcut-filter-pills {
   display: flex;
   gap: 0.25rem;
   flex-wrap: wrap;
 }
 
-.shortcut-filter-pill {
+.shortcut-filter-pill,
+.lui-button.shortcut-filter-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+  min-height: 0;
+  height: auto;
+  line-height: 1rem;
   padding: 0.125rem 0.5rem;
   border-radius: 9999px;
   border: 1px solid
@@ -3460,7 +3499,8 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* cljs shortcut.css li.th — grey category band rows (Basics,
    Navigation, ...) with the fold chevron at the right edge */
-.cp__shortcut-page-x li.th {
+.cp__shortcut-page-x li.th,
+.lui-list-item.th {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3473,6 +3513,10 @@ div[data-keep-selection].menu-links-wrapper {
   font-size: 15px;
   background-color:
     var(--lx-gray-03, var(--ls-tertiary-background-color, hsl(var(--muted))));
+}
+
+.lui-list-item.th .ls-th-strong {
+  font-weight: 600;
 }
 
 .shortcut-row {

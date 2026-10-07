@@ -163,25 +163,49 @@ type resolved =
   { name : string; uuid : string; is_tag : bool; is_hash : bool
   ; fresh : bool; entity : Wire.t }
 
+(* cljs existing-markdown-hashtag-link-refs + tag-page?: a bare
+   hashtag resolves only to a Tag-class instance (its :block/tags
+   include logseq.class/Tag) — and never to a logseq.* built-in:
+   built-in classes are Tag-tagged too, so a same-named one ("Tag"
+   itself, title "Tag") would outrank the written "#tag". Resolve via
+   the class-only index, keeping only non-built-in entities *)
+let tag_class_by_name name =
+  let* w =
+    Runtime.invoke "thread-api/get-tags-by-name"
+      [ Wire.String (Sdk_util.repo ()); Wire.String name ]
+  in
+  let is_builtin t =
+    match Wire.get t "db/ident" with
+    | Some (Wire.Keyword s) | Some (Wire.String s) ->
+        String.length s >= 7 && String.sub s 0 7 = "logseq."
+    | _ -> false
+  in
+  (* get-tags-by-name emits entity_map_wire (stub refs); a hit is
+     re-fetched through get-blocks by uuid so the wire carries the sdk
+     entity shape, same as get_entity *)
+  match
+    Wire.elems w
+    |> List.filter (fun t -> not (is_builtin t))
+    |> List.filter_map (fun t -> Wire.map_get_uuid t "block/uuid")
+  with
+  | uuid :: _ -> Sdk_util.get_by_id (Wire.Uuid uuid)
+  | [] -> Js.Promise.resolve Wire.Nil
+
 let resolve_names names tags hash =
   let* a =
     names
     |> List.map (fun name ->
-           let* w = Sdk_util.get_entity name in
            let is_tag = List.mem name tags in
            let is_hash = is_tag || List.mem name hash in
+           let* w =
+             if List.mem name hash then tag_class_by_name name
+             else Sdk_util.get_entity name
+           in
            Js.Promise.resolve
              (match Wire.map_get_uuid w "block/uuid" with
               | Some u ->
-                  (* a hashtag refers to the tag-class entity — a
-                     same-named non-class entity (e.g. a page) does not
-                     satisfy it; mint the class instead *)
-                  if is_hash && Wire.get w "db/ident" = None then
-                    { name; uuid = Platform.random_uuid (); is_tag
-                    ; is_hash; fresh = true; entity = Wire.Nil }
-                  else
-                    { name; uuid = u; is_tag; is_hash
-                    ; fresh = false; entity = w }
+                  { name; uuid = u; is_tag; is_hash
+                  ; fresh = false; entity = w }
               | None ->
                   { name; uuid = Platform.random_uuid ()
                   ; is_tag; is_hash; fresh = true
