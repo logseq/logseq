@@ -942,9 +942,9 @@ let render (_ms : Model.t Signal.signal) : t =
     | Some st -> st
     | None -> S.make context.Lui_ui.ui_scheduler
   in
-  (* empty-conditional slots render as <raw-text> placeholders; the
-     observer swap must be armed before cmdk mounts on a fresh page *)
-  Editor_dom.ensure_raw_text_observer ();
+  (* arm the doc-scan fixups (lui-node-id strip) before cmdk mounts on
+     a fresh page *)
+  Editor_dom.ensure_dom_fixups ();
   install_listeners ();
   let open_sig =
     Logseq_el.own context

@@ -55,8 +55,7 @@ let mount () =
      stub DOM's zero viewport *)
   Platform.set_location_search "?rtc-test=true";
   let registry = Lui_extension.registry () in
-  Logseq_dom.register registry;
-  Logseq_el.register registry;
+  Logseq_el.register_all registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
   let view ctx ms send =
@@ -64,7 +63,7 @@ let mount () =
     View.view ctx ms send
   in
   let s =
-    S.mount ~registry ~profile:Logseq_dom.gpui_profile
+    S.mount ~registry ~profile:Logseq_el.gpui_profile
       ~initial:Model.initial ~reducer:Update.apply ~view ()
   in
   Runtime.app_send :=
@@ -559,19 +558,18 @@ let views_session : (Model.t, Action.t) S.t option ref = ref None
 
 let test_views_table () =
   let registry = Lui_extension.registry () in
-  Logseq_dom.register registry;
-  Logseq_el.register registry;
+  Logseq_el.register_all registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
   let vs =
-    S.mount ~registry ~profile:Logseq_dom.gpui_profile
+    S.mount ~registry ~profile:Logseq_el.gpui_profile
       ~initial:Model.initial ~reducer:Update.update
       ~view:(fun ctx _ms _send ->
         (* the views element owns signals on this session's scheduler —
            register it before mount so promise-driven signal_set calls can
            stabilize it while the mount is still running *)
         extra_sched := Some ctx.Lui_ui.ui_scheduler;
-        Logseq_dom.dom
+        Logseq_el.el
           [ Views_view.view ~kind:Views_state.KAllPages
               ~owner:(W.String "$$$views") ])
       ()

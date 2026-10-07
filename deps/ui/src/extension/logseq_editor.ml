@@ -295,7 +295,7 @@ let parse_runs (s : string) : run_span array =
 (* --- emit --------------------------------------------------------------------- *)
 
 let emit_now el name fields =
-  match Js.Undefined.toOption (Dom_adapter.emit_get el) with
+  match Js.Undefined.toOption (Web_ext_adapters.emit_get el) with
   | Some emit -> emit name fields
   | None -> ()
 
@@ -609,7 +609,7 @@ let create _id document emit =
   set_attr el "data-testid" "block editor";
   set_attr el "style" base_style;
   set_class_name el "ed-input";
-  Dom_adapter.emit_set el emit;
+  Web_ext_adapters.emit_set el emit;
   let on_md ev = on_mousedown el ev in
   let st = state_of el in
   st.on_mousedown <- Some on_md;

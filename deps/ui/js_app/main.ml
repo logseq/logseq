@@ -43,7 +43,8 @@ let install_error_reporting () =
 let main root =
   install_error_reporting ();
   let registry = Lui_extension.registry () in
-  Logseq_dom.register registry;
+  Logseq_emoji.register registry;
+  Logseq_katex.register registry;
   Logseq_el.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
@@ -53,7 +54,7 @@ let main root =
       (Lui_protocol.String_map.fold Lui_protocol.String_map.add
          Logseq_el.web_adapters
          (Lui_protocol.String_map.add Logseq_editor.identifier
-            Logseq_editor.adapter Dom_adapter.adapters
+            Logseq_editor.adapter Web_ext_adapters.adapters
           |> Lui_protocol.String_map.add Logseq_virt.identifier
                Logseq_virt.adapter))
   in

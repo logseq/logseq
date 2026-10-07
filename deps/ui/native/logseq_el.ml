@@ -85,9 +85,8 @@ let carrier_schema =
         ]
     ]
 
-(* during migration the logseq-<tag> family is still registered by
-   Logseq_dom.register — this registers only the carrier; when the
-   family dies [register] takes over the tag schemas below *)
+(* the tag schemas are registered by [register_all]; this entry
+   registers only the invisible document-event carrier *)
 let register registry =
   Lui_extension.register_component registry carrier_schema
 

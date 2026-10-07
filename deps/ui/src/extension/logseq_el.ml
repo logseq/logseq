@@ -46,10 +46,11 @@ let tags =
 let identifier tag = "lui-dom-" ^ tag
 
 (* dedicated widget extensions nest inside raw-element parents the same
-   way tags nest in each other *)
+   way tags nest in each other — listed literally so the widget modules
+   can depend on [Logseq_el] without a cycle *)
 let child_identifiers =
   List.map identifier tags
-  @ [ Logseq_emoji.identifier; Logseq_katex.identifier ]
+  @ [ "logseq-em-emoji"; "logseq-katex"; "logseq-codemirror" ]
 
 let schema_of tag =
   Lui_extension.component (identifier tag) [ web_profile ]

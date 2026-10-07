@@ -502,7 +502,7 @@ let () =
   Editor_keys.install_once ();
   Add_button.install ();
   Asset_dom.install ();
-  Web_dom.ensure_raw_text_observer ()
+  Web_dom.ensure_dom_fixups ()
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)

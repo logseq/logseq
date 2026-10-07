@@ -500,10 +500,6 @@ let el_prop_string el name =
   | Some s -> s
   | None -> ""
 
-(* the adapter reads this back to keep the Text node in sync — see
-   dom_adapter.raw_text_node_get *)
-external el_set_swap_text : el -> el -> unit = "__lsText" [@@mel.set]
-
 (* ---------- NodeList ---------- *)
 
 external nl_length : node_list -> int = "length" [@@mel.get]
@@ -682,9 +678,9 @@ let register_doc_scan ?(run_if = fun _ -> true) ?(sync = false) scan =
     let obs =
       new_observer_records (fun recs ->
           (* sync scans run inside the observer microtask — their DOM
-             writes must land before the next paint (a 60ms debounce
-             leaves e.g. <raw-text> placeholders visibly empty for
-             several frames) *)
+             writes must land before the next paint — a 60ms debounce
+             leaves fixup output (stripped lui-node ids, rendered
+             slots) visibly stale for several frames) *)
           List.iter
             (fun ds ->
               if ds.ds_sync && ds.ds_run_if recs then
@@ -695,23 +691,6 @@ let register_doc_scan ?(run_if = fun _ -> true) ?(sync = false) scan =
             doc_scan_timer := set_timeout_id doc_flush 60)
     in
     obs_observe obs document_element (mo_opts ~childList:true ~subtree:true))
-
-(* <raw-text> placeholders carry the intended text in data-raw-text and
-   are swapped for real text nodes once they enter the DOM — extension
-   create() can only return Elements, so this observer performs the
-   swap the adapter cannot.  The swapped node is kept on the placeholder
-   as __lsText so later property writes/removals on the (detached)
-   placeholder can still reach the live text node. *)
-let replace_all_raw_text roots =
-  for_each_touched roots "raw-text" (fun el ->
-      let tn =
-        create_text_node
-          (match el_get_attr el "data-raw-text" with
-           | Some s -> s
-           | None -> "")
-      in
-      el_set_swap_text el tn;
-      el_replace_with el tn)
 
 (* LUI core stamps id="lui-node-<n>" on every registered/extension node
    at create time; cljs emits no such ids, so strip them for DOM parity.
@@ -728,15 +707,13 @@ let strip_lui_node_ids roots =
           if n > 9 && digits 9 then el_remove_attr el "id"
       | None -> ())
 
-let dom_fixups roots =
-  replace_all_raw_text roots;
-  strip_lui_node_ids roots
+let dom_fixups roots = strip_lui_node_ids roots
 
-let raw_text_observer_installed = ref false
+let dom_fixups_installed = ref false
 
-let ensure_raw_text_observer () =
-  if not !raw_text_observer_installed then (
-    raw_text_observer_installed := true;
+let ensure_dom_fixups () =
+  if not !dom_fixups_installed then (
+    dom_fixups_installed := true;
     register_doc_scan ~sync:true dom_fixups)
 
 (* ---------- caret / selection ---------- *)

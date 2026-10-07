@@ -20,7 +20,8 @@ let schema =
   Lui_extension.component identifier
     [ { profile_os = WebOS; profile_host = WebHost } ]
     false (* standard_children *)
-    [ "logseq-span" ] (* only the .opacity-0 tex holder mounts inside *)
+    [ Logseq_el.identifier "span" ]
+    (* only the .opacity-0 tex holder mounts inside *)
     [ Lui_extension.property "tex" Lui_extension.StringScalar true None
     ; Lui_extension.property "display" Lui_extension.BoolScalar false None
     ; Lui_extension.property "inline" Lui_extension.BoolScalar false None
@@ -56,7 +57,9 @@ let el ?key ~block ~display ~tex () : Lui_elements.t =
    | None -> ());
   (* hidden tex holder — keeps the raw tex for copy/AT and is what
      render_katex_one reads before katex.render replaces the subtree *)
-  let holder = Lui_ui.extension context "logseq-span" in
+  let holder =
+    Lui_ui.extension context (Logseq_el.identifier "span")
+  in
   Lui_ui.extension_property context holder "style-class"
     (StringValue "opacity-0");
   Lui_ui.extension_property context holder "text" (StringValue tex);

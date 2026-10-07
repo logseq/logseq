@@ -717,7 +717,7 @@ let cm_popover (st : S.t) : t =
                 ~cmp:Stdlib.compare
                 ~mount:(fun entry_sig -> cm_item_el st entry_sig) ]
         ; (* popover children must be standard kinds — the empty branch's
-             logseq-raw-text placeholder has to sit inside a box *)
+             display:contents anchor has to sit inside a box *)
           box ~key:"cm-sub-wrap"
             [ reactive
                 (fun sub ->

@@ -2,7 +2,7 @@
 
    Regression shape this guards: retained children without a DOM presence
    (portal-mounted kinds, same-batch dropped nodes, never-mounted dynamic
-   segments, detached platform nodes like a raw-text placeholder swapped
+   segments, detached platform nodes (post-swap placeholders)
    to a Text node by the document observer) used to corrupt the DOM
    insertion index, so apply raised "DOM child index is out of bounds"
    and popups never mounted.
@@ -68,13 +68,14 @@ let make_renderer () =
   let host = Stub_dom.make_element "div" in
   Stub_dom.set_field host "ownerDocument" (Stub_dom.document ());
   let registry = Lui_extension.registry () in
-  Logseq_dom.register registry;
+  Logseq_emoji.register registry;
+  Logseq_katex.register registry;
   Logseq_el.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;
   Logseq_virt.register registry;
   Lui_web.create_with_extensions (as_node host) Wv.String_map.empty
-    registry Dom_adapter.adapters
+    registry Web_ext_adapters.adapters
 
 let apply renderer gen ops =
   (Lui_web.backend renderer).Wv.apply_batch { Wv.generation = gen; ops }
@@ -211,9 +212,9 @@ let test_deterministic () =
   run
     [ Wv.CreateNode (a, Wv.Box)
     ; Wv.CreateExtension
-        ( ext, Logseq_dom.identifier "div"
+        ( ext, Logseq_el.identifier "div"
         , ext_fp renderer.T.web_extension_registry
-            (Logseq_dom.identifier "div") )
+            (Logseq_el.identifier "div") )
     ; Wv.CreateNode (b, Wv.Box) ];
   if supported root ext then (
     run
@@ -227,22 +228,6 @@ let test_deterministic () =
     run [ Wv.CreateNode (c, Wv.Box); Wv.InsertChild (root, c, 3) ];
     check_dom_invariants renderer "det:detached-child")
   else check "extension child supported" false;
-
-  (* same shape through the real logseq-raw-text extension *)
-  let raw = fresh () and d = fresh () in
-  run
-    [ Wv.CreateExtension
-        ( raw, Logseq_dom.identifier "raw-text"
-        , ext_fp renderer.T.web_extension_registry
-            (Logseq_dom.identifier "raw-text") )
-    ; Wv.CreateNode (d, Wv.Box) ];
-  if supported root raw then (
-    run [ Wv.InsertChild (root, raw, 0); Wv.InsertChild (root, d, 1) ];
-    (match Store.node store raw with
-     | Some e -> detach (of_json e.T.platform_node)
-     | None -> ());
-    check_dom_invariants renderer "det:raw-text-swap")
-  else check "raw-text child supported" false;
 
   (* portal-mounted retained children do not advance the DOM index *)
   let menu = fresh () and e = fresh () in
@@ -394,8 +379,8 @@ let gen_ops renderer fresh n =
     | x when x < 30 ->
         let id = fresh () in
         let ident =
-          if Random.int 2 = 0 then Logseq_dom.identifier "raw-text"
-          else Logseq_dom.identifier "div"
+          if Random.int 2 = 0 then Logseq_el.identifier "span"
+          else Logseq_el.identifier "div"
         in
         Hashtbl.replace shadow id
           { s_parent = None; s_children = []; s_ext = true
@@ -405,8 +390,8 @@ let gen_ops renderer fresh n =
           (Wv.CreateExtension
              (id, ident, ext_fp renderer.T.web_extension_registry ident))
     | x when x < 34 -> (
-        (* DOM drift: an external agent (the raw-text MutationObserver
-           swap, manual DOM surgery) detaches a platform node while the
+        (* DOM drift: an external agent (a MutationObserver swap,
+           manual DOM surgery) detaches a platform node while the
            node stays retained — apply must keep indexes sane *)
         let attached_platforms =
           List.filter

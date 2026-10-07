@@ -54,7 +54,8 @@ let mount_editor ?(units = M.Bytes) source =
     | In ev -> { m with ed = E.handle ~route ~conduit:!conduit m.ed ev }
   in
   let registry = Lui_extension.registry () in
-  Logseq_dom.register registry;
+  Logseq_emoji.register registry;
+  Logseq_katex.register registry;
   Logseq_el.register registry;
   Logseq_editor.register registry;
   Logseq_codemirror.register registry;

@@ -2,8 +2,8 @@
    mhchem.min.js, lazy-loaded like cljs extensions/latex) and highlight.js
    (highlight.min.js, a defer script tag in index.html) for code blocks,
    plus youtube-timestamp seek. Emitted DOM is identical to the cljs
-   hiccup; a sync document MutationObserver scan (same channel as the
-   raw-text fixup) calls the libs on fresh elements before paint. *)
+   hiccup; a sync document MutationObserver scan (the doc-scan fixup
+   channel) calls the libs on fresh elements before paint. *)
 
 open Promise_ext
 module D = Web_dom

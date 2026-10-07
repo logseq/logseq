@@ -42,7 +42,7 @@ let schema =
     (* logseq-virt nodes nest (region > list > spacer > row) and row
        interiors emit logseq-<tag>/editor/codemirror widgets *)
     (identifier :: Logseq_el.child_identifiers
-     @ [ Logseq_editor.identifier; Logseq_codemirror.identifier ])
+     @ [ Logseq_editor.identifier ])
     [ Lui_extension.property "role" Lui_extension.StringScalar false
         None
     ; Lui_extension.property "index" Lui_extension.IntScalar false None
@@ -507,7 +507,7 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
                    end))
         | None -> None
       in
-      (* Batches that add nodes (row mounts, raw-text swaps) must
+      (* Batches that add nodes (row mounts) must
          measure in this microtask — a debounce starves under scroll
          churn and rows stay at estimate height, overlapping. Pure
          subtree churn (typing inside a mounted row) is debounced to one

@@ -1,6 +1,6 @@
 (* ported from deps/ui/src/pages/page_menu.ml — see the src/ original *)
 (* Page dropdown/context menu and the alertdialog confirm — hand-rolled
-   Logseq_dom markup because e2e requires div[role='menuitem'] >
+   Logseq_el markup because e2e requires div[role='menuitem'] >
    div.text and div[role='alertdialog'], which LUI menu/dialog nodes do
    not emit. *)
 
