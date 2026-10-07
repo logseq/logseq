@@ -166,14 +166,19 @@ let combo_el key keys binding =
             @ [ kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k) ])
           keys))
 
-(* separate: sequential keys, 4px gap, no separators *)
+(* separate: sequential keys, 4px gap, no separators. gpui keys the
+   per-key box off `shui-key-boxed` (web gets the same effect from the
+   `.shui-shortcut-separate kbd` descendant rule, so the extra class is
+   inert there). *)
 let separate_el key keys binding =
   row ~key
     ~style_class:"shui-shortcut-separate shui-shortcut-glow"
     ~accessibility_identifier:binding
     (List.mapi
        (fun i k ->
-         kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k))
+         kbd ~key:(Printf.sprintf "k%d" i)
+           ~style_class:"shui-shortcut-key shui-key-boxed"
+           ~value:(print_shortcut_key k) [])
        keys)
 
 (* chord: space-separated groups each rendered as a combo with a
@@ -397,7 +402,15 @@ let shortcut_row key it =
    kind nodes the same way it saw dom attrs *)
 let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
   let item_box =
-    box ~key:"item"
+    (* web styles the row via [data-cmdk-item] and the highlight via
+       [data-highlighted]/[data-kb-highlighted] — gpui's class
+       dictionary is class-keyed, so the row carries cp__cmdk-item and
+       flips cp__cmdk-item-hl with ihl *)
+    Ui_parts.class_signal item_sig
+      (fun (it : S.item) ->
+        if it.S.ihl then "cp__cmdk-item cp__cmdk-item-hl"
+        else "cp__cmdk-item")
+      (box ~key:"item"
       ~data_attrs:(reactive (fun it -> row_data_attrs it) item_sig)
       [ reactive ~equal:(fun (a : S.item) b -> a = b) (fun (it : S.item) -> item_header it it.S.iq) item_sig
         ; row ~key:"main" ~style_class:"cmdk-item-main"
@@ -436,7 +449,7 @@ let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
                   a.S.isc = b.S.isc && a.S.idx = b.S.idx
                   && a.S.ihl = b.S.ihl) (fun it -> shortcut_row "sc-row" it) item_sig
             ]
-        ]
+        ])
   in
   box ~key:"item-wrap"
     ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
@@ -596,17 +609,30 @@ let scroller st : t =
 
 let input_row st : t =
  fun ctx parent ->
-  row ~key:"input-row" ~style_class:"cp__cmdk-input-row"
-    [ (* .cp__cmdk-search-input is queried/focused by cmdk_state —
-         the class anchor is unchanged; no placeholder_signal exists,
-         so the move_mode reactive remounts the input *)
+  let move_sig =
+    Signal.map (fun (v : S.view) -> v.S.move_mode)
+      st.S.vs.Signal.state_signal
+  in
+  row ~key:"input-row" ~style_class:"cp__cmdk-input-row" ~cross:`center
+    [ (* move_mode can flip while the palette stays open (move-blocks
+         command); no placeholder_signal exists, so a keyed remount
+         swaps the placeholder — the caller re-focuses the input right
+         after the state publish. Subscribing the whole view state
+         remounted the field every keystroke (dyn equal on the view
+         record always differs) and ate the in-flight text *)
       reactive
-        (fun (v : S.view) ->
+        (fun move_mode ->
           input ~key:"input" ~style_class:"cp__cmdk-search-input"
               ~accessibility_identifier:"cmdk-input"
+            (* gpui input kind reads this attr to drop its bordered
+               field chrome (web's borderless .cp__cmdk-search-input) *)
+            ~data_attrs:[ ("data-appearance", "none") ]
             ~grow:1.
+            (* sidebar blocks mount seeded with the query; the modal is
+               always "" so this is a no-op there *)
+            ~text:(S.get st).S.input
             ~placeholder:
-              (if v.S.move_mode then
+              (if move_mode then
                  I18n.t "cmdk.input/move-blocks-placeholder"
                else I18n.t "cmdk.input/default-placeholder")
             ~on_input:(fun ev ->
@@ -614,7 +640,7 @@ let input_row st : t =
               | Lui_protocol.TextChanged (_, q) -> S.on_input st q
               | _ -> ())
             [])
-        st.S.vs.Signal.state_signal
+        move_sig
     ]
     ctx parent
 

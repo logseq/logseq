@@ -2,7 +2,6 @@
 (* App chrome — mirrors components/container.cljs shell:
 
    <main#app-container-wrapper.theme-container-inner>
-     <button#skip-to-main>
      <div#app-container>
        <div#left-container>
          <header#head .cp__header> ... nav buttons ... </header>
@@ -18,92 +17,56 @@
 
 open Lui_elements
 
+(* the web twin mounts #skip-to-main (a11y skip link, CSS-hidden until
+   :focus) — dropped here: gpui has no tab-focus reveal and the button
+   carries no handlers, so it would render as dead chrome *)
 
-let skip_to_main =
-  button ~key:"skip" ~accessibility_identifier:"skip-to-main"
-    ~text:(I18n.t "nav/skip-to-main-content") []
+(* ---- native topbar (web .cp__header parity) ----
 
-(* ---- native topbar (Out parity) ----
-
-   LUI `toolbar` elements with `placement` hoist into the real macOS
-   window toolbar, where macOS 26 draws its liquid-glass items — the
-   same chrome Out gets from ToolbarItem groups. Leading (.navigation)
-   matches Out: sidebar toggle, back/forward, home, then the "›"
-   breadcrumb + current page title. Trailing (.primary-action) is
-   search first, then page-menu dots and the right-sidebar toggle
-   (Out's Aa font menu has no Logseq counterpart). The DOM .cp__header
-   is gone; rtc/plugin toolbar items keep hidden DOM mounts below so
-   their emitters stay live. *)
-
-(* Hoisted toolbar items read as native circular buttons (macOS 26
-   liquid-glass circles, like Notes/Safari) — the LUI surface draws a
-   glassEffect capsule for background "glass" with a pill corner
-   radius, and the toolbar anchor hides the item's shared background
-   for nodes that own a capsule. A square 30pt frame keeps the capsule
-   a circle. *)
-let tb_circle ~key ?(acc = "") ~icon ~label ?disabled_signal
+   Single ~48px row matching the web shell: leading group [sidebar
+   toggle, search], trailing group [rtc status, home, page-menu dots,
+   right-sidebar toggle]. The gpui `toolbar` kind renders in-canvas —
+   two stacked placement toolbars produced doubled bars/borders — so
+   one plain row is the parity form. rtc/plugin toolbar items keep
+   hidden DOM mounts below so their emitters stay live. *)
+let icon_btn ~key ?(acc = "") ~icon ~label ?disabled_signal
     ?foreground_signal on_press =
-  button ~key ~icon ~label ~variant:`ghost
-    ~background:"glass" ~corner_radius:999 ~width:30 ~height:30
+  button ~key ~icon ~label ~variant:`ghost ~size:`icon
     ~accessibility_identifier:(if acc = "" then key else acc)
     ?disabled_signal ?foreground_signal
     ~on_press:(fun _ -> on_press ()) []
+
+(* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
+let left_menu_btn =
+  button ~key:"left-menu-btn" ~icon:`menu ~size:`icon ~variant:`ghost
+    ~label:(I18n.t "header/toggle-left-sidebar")
+    ~accessibility_identifier:"left-menu"
+    ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar) []
 
 (* the DOM header's search button opened via the cmdk DOM-click
    handler; the semantic button calls the palette opener directly
    (Action.Toggle_search is a no-op reducer on native) *)
 let search_btn =
-  tb_circle ~key:"search-btn" ~acc:"search-button" ~icon:`search
-    ~label:"Search" (fun () -> Cmdk_state.open_latest ())
+  icon_btn ~key:"search-btn" ~acc:"search-button" ~icon:`search
+    ~label:(I18n.t "nav/search") (fun () -> Cmdk_state.open_latest ())
 
-(* cljs anchors the dropdown to the trigger's right edge. The dots sits
-   in the hoisted window toolbar, whose items' reported frames are in
-   the toolbar's own coordinate space — unreliable — so the anchor is
-   the fixed trailing position: menu right edge just left of the last
-   button, just under the toolbar. The resolved anchor is recorded in
+(* cljs anchors the dropdown to the trigger's right edge — the fixed
+   trailing position: menu right edge just left of the last button,
+   just under the header. The resolved anchor is recorded in
    Dom_ext.toolbar_dots_pos for the appearance item, which re-anchors
    to the same trigger. *)
 let dots_btn =
-  button ~key:"dots-btn" ~icon:`ellipsis ~label:"Page Menu"
-    ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
-    ~height:30 ~accessibility_identifier:"toolbar-dots-btn"
-    ~on_press:(fun _ ->
+  icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon:`ellipsis
+    ~label:(I18n.t "header/more") (fun () ->
       let x = Dom_ext.window_inner_width () -. 48. in
       Dom_ext.toolbar_dots_pos := Some (x, 48.);
       Runtime.send
         (Action.Page_menu_set (Some (x, 48., 48., true, None))))
-    []
 
-(* Out puts back/forward in the navigation group; the native hash
-   router keeps a real in-memory stack (platform.ml) so these are
-   functional — disabled at the stack edges. *)
-let back_btn ms =
-  button ~key:"nav-back" ~icon:`chevron_left ~label:"Go Back"
-    ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
-    ~height:30 ~accessibility_identifier:"nav-back"
-    ~disabled_signal:
-      (Signal.map
-         (fun (_ : Model.t) -> not (Platform.can_history_back ()))
-         ms)
-    ~on_press:(fun _ -> Platform.history_back ()) []
-
-let forward_btn ms =
-  button ~key:"nav-fwd" ~icon:`chevron_right ~label:"Go Forward"
-    ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
-    ~height:30 ~accessibility_identifier:"nav-fwd"
-    ~disabled_signal:
-      (Signal.map
-         (fun (_ : Model.t) -> not (Platform.can_history_forward ()))
-         ms)
-    ~on_press:(fun _ -> Platform.history_forward ()) []
-
-(* cljs header.cljs hides home on the :home route; a toolbar can't host
-   a dyn-wrapped child (it hoists as a zero-size item), so the button
-   stays and the press no-ops there *)
+(* cljs header.cljs hides home on the :home route — press no-ops there *)
 let home_btn ms =
-  button ~key:"home-btn" ~icon:(`app "home") ~label:"Home"
-    ~variant:`ghost ~background:"glass" ~corner_radius:999 ~width:30
-    ~height:30 ~accessibility_identifier:"home-btn"
+  button ~key:"home-btn" ~icon:(`app "home") ~label:(I18n.t "nav/home")
+    ~variant:`ghost ~size:`icon ~accessibility_identifier:"home-btn"
     ~on_press:(fun _ ->
       match (Signal.get ms).Model.route with
       | Model.Home -> ()
@@ -112,38 +75,11 @@ let home_btn ms =
           Platform.dispatch "ls:navigate" Js.Json.null)
     []
 
-(* Out's breadcrumb: "›" + current page/collection title inside the
-   navigation group. A toolbar child must be a concrete element (a dyn
-   hoists zero-size), so the text rides a reactive text signal. *)
-let crumb_title ms =
-  text ~key:"tb-crumb" 
-    ~value:
-      (reactive
-         (fun (m : Model.t) ->
-           let label =
-             match m.route_page with
-             | Some p when p.Model.page_title <> "" -> p.page_title
-             | _ -> (
-               match m.route with
-               | Model.Home -> ""
-               | Model.Journals -> I18n.t "nav/journals"
-               | Model.All_pages -> I18n.t "nav.all-pages/title"
-               | Model.Settings -> I18n.t "nav/settings"
-               | Model.Graph_view -> I18n.t "nav/graph-view"
-               | Model.All_graphs -> I18n.t "graph/all-graphs"
-               | Model.Library -> I18n.t "library/title"
-               | Model.Import -> I18n.t "import/title"
-               | Model.Not_found _ -> I18n.t "page/not-found-title"
-               | Model.Page _ | Model.Block_zoom _ -> "")
-           in
-           if label = "" then "" else "›  " ^ label)
-         ms)
-    []
-
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_btn ms =
-  tb_circle ~key:"rs-toggle" ~icon:`panel_right ~label:"Toggle Right Sidebar"
+  icon_btn ~key:"rs-toggle" ~icon:`panel_right
+    ~label:(I18n.t "command.ui/toggle-right-sidebar")
     (fun () ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
@@ -153,7 +89,7 @@ let right_toggle_btn ms =
    Dimmed while sync is off, accent while queueing (the .cp__rtc-sync
    CSS states don't map onto native). *)
 let rtc_item (ms : Model.t Signal.signal) : t =
-  tb_circle ~key:"rtc-tb" ~icon:(`app "cloud")
+  icon_btn ~key:"rtc-tb" ~icon:(`app "cloud")
     ~label:"Sync Status" ~acc:"rtc-sync"
     ~disabled_signal:
       (Signal.map
@@ -175,25 +111,18 @@ let rtc_item (ms : Model.t Signal.signal) : t =
          ms)
     (fun () -> ())
 
-(* Out's navigation group: system sidebar toggle (NavigationSplitView
-   supplies it), ‹ › nav, home, › + title. The trailing controls ride
-   one hoisted toolbar separated by flexible spacers — independent
-   items spread across the bar (Safari/Notes-style), not a packed
-   cluster at the right edge. *)
+(* cljs container.cljs: single .cp__header row — .l [sidebar-toggle,
+   search], .r [rtc, home, dots, right-toggle]. *)
 let topbar (ms : Model.t Signal.signal) : t list =
-  [ toolbar ~key:"tb-leading" ~placement:"navigation"
-      ~label:"Window Toolbar"
-      [ back_btn ms; forward_btn ms; home_btn ms; crumb_title ms ]
-  ; toolbar ~key:"tb-trailing" ~placement:"primary-action"
-      ~label:"Toolbar Actions"
-      [ spacer ~key:"tb-s0" []
-      ; rtc_item ms
-      ; spacer ~key:"tb-s1" []
-      ; search_btn
-      ; spacer ~key:"tb-s2" []
-      ; dots_btn
-      ; spacer ~key:"tb-s3" []
-      ; right_toggle_btn ms ]
+  [ row ~key:"head" ~accessibility_identifier:"head"
+      ~style_class:"cp__header" ~cross:`center ~main:`space_between
+      ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
+      [ row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
+          ~style_class:"cp__header-l"
+          [ left_menu_btn; search_btn ]
+      ; row ~key:"head-acts" ~cross:`center ~grow:1. ~main:`end_
+          ~gap:8 ~padding_horizontal:6 ~style_class:"cp__header-r"
+          [ rtc_item ms; home_btn ms; dots_btn; right_toggle_btn ms ] ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
@@ -532,8 +461,7 @@ let shell (ms : Model.t Signal.signal) : t =
       ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
       ^ if m.right_sidebar_open then " ls-right-sidebar-open" else "")
     (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-    [ skip_to_main
-    ; box ~key:"app" ~accessibility_identifier:"app-container"
+    [ box ~key:"app" ~accessibility_identifier:"app-container"
         [ Ui_parts.class_signal ms
             (fun (m : Model.t) ->
               if m.left_sidebar_open then "overflow-hidden" else "w-full")

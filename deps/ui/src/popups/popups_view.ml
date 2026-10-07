@@ -542,7 +542,10 @@ let cm_shortcut_el (binding, caps) : t =
   let combo = String.contains binding '+' in
   let kbd_el i cap =
     kbd ~key:("k" ^ string_of_int i)
-      ~style_class:"shui-shortcut-key" ~value:(Platform.utf8 cap) []
+      ~style_class:
+        (if combo then "shui-shortcut-key"
+         else "shui-shortcut-key shui-key-boxed")
+      ~value:(Platform.utf8 cap) []
   in
   let children =
     List.concat

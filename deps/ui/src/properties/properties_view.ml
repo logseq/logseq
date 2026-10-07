@@ -64,7 +64,10 @@ let on_keydown ev =
 let overlays : t =
  fun context parent ->
   let vos = S.view_overlays context in
-  (column ~gap:0
+  (* cp__overlay-layer/cp__dialog-shell are inert on web; on gpui the
+     registered class dictionary makes the column a window-sized layer
+     and centers the abspos overlay views by flex alignment. *)
+  (column ~gap:0 ~style_class:"cp__overlay-layer cp__dialog-shell"
      [ reactive
          ~equal:(fun a b ->
             List.map (fun (v : S.view_overlay) -> v.vo_key) a

@@ -134,13 +134,17 @@ let combo_el key keys =
             @ [ kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k) ])
           keys))
 
-(* separate: sequential keys, 4px gap, no separators *)
+(* separate: sequential keys, 4px gap, no separators. `shui-key-boxed`
+   mirrors the native twin's class (inert here — web CSS boxes keys via
+   the `.shui-shortcut-separate kbd` descendant rule). *)
 let separate_el key keys =
   row ~key
     ~style_class:"shui-shortcut-separate shui-shortcut-glow"
     (List.mapi
        (fun i k ->
-         kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k))
+         kbd ~key:(Printf.sprintf "k%d" i)
+           ~style_class:"shui-shortcut-key shui-key-boxed"
+           ~value:(print_shortcut_key k) [])
        keys)
 
 (* chord: space-separated groups each rendered as a combo with a
@@ -930,7 +934,11 @@ let install_listeners st =
 (* modal shell mirrors shui dialog markup: overlay + centered
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
 let modal_shell st =
-  box ~key:"cmdk-shell"
+  (* cp__overlay-layer/cp__dialog-shell are inert on web (no rule targets
+     them); on gpui the registered class dictionary makes each link a
+     window-sized layer and centers the abspos content by flex
+     alignment, the expressible form of `translate(-50%,-50%)`. *)
+  box ~key:"cmdk-shell" ~style_class:"cp__overlay-layer cp__dialog-shell"
     [ column ~key:"dismiss"
         ~style_class:"cp__cmdk-dismiss"
         ~grow:1.
@@ -964,4 +972,6 @@ let render (_ms : Model.t Signal.signal) : t =
   (* The keyed box gives the conditional its own reconcile-stable parent:
      spliced directly under #app-container its dynamic segment goes stale
      after navigation and later mounts emit an inconsistent op batch *)
-  box ~key:"cmdk_view" [ if_ ~test:open_sig (modal_shell st) ] context parent
+  box ~key:"cmdk_view" ~style_class:"cp__overlay-layer"
+    [ if_ ~test:open_sig (modal_shell st) ]
+    context parent

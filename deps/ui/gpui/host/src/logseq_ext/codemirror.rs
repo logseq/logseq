@@ -16,6 +16,7 @@ use std::ffi::CString;
 use std::rc::Rc;
 
 use gpui_kit::component::input::{Editor, EditorState, InputEvent};
+use gpui_kit::component::theme::ActiveTheme;
 use gpui_kit::gpui::{
     div, px, AnyElement, AppContext, Context, ElementId, Focusable, InteractiveElement,
     IntoElement, ParentElement, Styled, Window,
@@ -25,7 +26,6 @@ use lui_core::wire::Value;
 use lui_gpui::Shared;
 use lui_gpui::extension::fire_extension;
 use lui_gpui::node_view::{LuiNodeView, NodeSnapshot};
-use gpui_kit::component::theme::ActiveTheme;
 use lui_gpui::style;
 
 fn ext<'a>(node: &'a NodeSnapshot, name: &str) -> Option<&'a str> {

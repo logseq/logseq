@@ -589,6 +589,14 @@ let test_render_libs_dom () =
           ; { (block "bc" "(+ 1 2)") with
               Model.block_display_type = Some "code"
             ; block_code_lang = Some "clojure" }
+          ; block "bv" "{{vimeo 76979871}}"
+          ; block "bb" "{{bilibili BV1xK4y1p7F8}}"
+          ; block "bl" "{{loom e5b8c04bca094dd8a56e76b64085464f}}"
+          ; block "btw" "{{tweet https://twitter.com/logseq/status/1593969270893658112}}"
+          ; block "bw"
+              "{{video https://www.youtube.com/watch?v=dQw4w9WgXcQ, w=300}}"
+          ; block "bh" "[:iframe {:src \"https://example.com/frame\"}]"
+          ; block "bu" "{{not-a-real-macro x}}"
           ]));
   check "math-block shell"
     (find_where (fun n -> has_tok n "math-block") <> []);
@@ -664,6 +672,59 @@ let test_render_libs_dom () =
        check "ext link target"
          (M.string_prop a "target" = Some "_blank")
    | [] -> check "external-link node" false)
+
+(* embed/macro parity with the cljs renderer — provider-mapped iframe
+   srcs, .video-embed-shell geometry + w=N width, tweet id extraction,
+   hiccup iframes, unknown-macro warning *)
+let test_embed_parity () =
+  let iframe_src s =
+    find_where (fun n -> attr_val n "src" = Some s) <> []
+  in
+  check "vimeo iframe src"
+    (iframe_src "https://player.vimeo.com/video/76979871");
+  check "bilibili iframe src"
+    (iframe_src
+       "https://player.bilibili.com/player.html?bvid=BV1xK4y1p7F8&high_quality=1&autoplay=0");
+  check "loom iframe src"
+    (iframe_src
+       "https://www.loom.com/embed/e5b8c04bca094dd8a56e76b64085464f");
+  (match find_where (fun n -> has_tok n "tweet-embed") with
+   | n :: _ ->
+       attr_eq "tweet src" n "src"
+         "https://platform.twitter.com/embed/Tweet.html?id=1593969270893658112"
+   | [] -> check "tweet iframe" false);
+  (match
+     find_where
+       (fun n -> attr_val n "id" = Some "youtube-player-dQw4w9WgXcQ")
+   with
+   | f :: _ ->
+       attr_eq "video iframe src" f "src"
+         "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1"
+   | [] -> check "video iframe node" false);
+  check "w=300 frame style"
+    (find_where (fun n ->
+         has_tok n "video-embed-frame"
+         && attr_val n "style" = Some "width:300px;aspect-ratio:16 / 9")
+     <> []);
+  check "has-video-embed wrap"
+    (find_where (fun n -> has_tok n "has-video-embed") <> []);
+  check "hiccup iframe src" (iframe_src "https://example.com/frame");
+  (match
+     find_where
+       (fun n -> attr_val n "data-macro-name" = Some "not-a-real-macro")
+   with
+   | n :: _ ->
+       check "unknown macro warning"
+         (subtree_contains n (fun c -> has_tok c "warning"))
+   | [] -> check "unknown macro node" false)
+
+(* the :macros page is loaded last so async_checks (after the worker
+   microtasks drain) can assert the expanded content *)
+let test_custom_macro_page () =
+  send (Action.Navigate_to (Model.Page "p"));
+  send
+    (Action.Page_loaded
+       (page [ block "cm" "res {{cm-hi ab}} done" ]))
 
 (* ---------------- async stage: worker-fed views ---------------- *)
 
@@ -758,6 +819,14 @@ let worker_handler name args : W.t =
             [ W.Keyword "block/title", W.String cls ]
       | _ -> W.Map [])
   | "thread-api/get-page-route-info" -> page_summary "Fav Page"
+  | "thread-api/get-file-content" ->
+      (* graph config: one user macro for the custom-macro render path *)
+      W.String "{:macros {\"cm-hi\" \"[[pre $1 post]]\"}}"
+  | "thread-api/list-db" ->
+      (* model_stub has no repo set — the macro config falls back to
+         resolving the graph name through list-db *)
+      W.Array
+        [ W.Map [ W.Keyword "name", W.String "logseq_db_test" ] ]
   | "thread-api/get-page-blocks-tree" -> W.List []
   | "thread-api/get-block-refs" -> W.List []
   | "thread-api/get-ent-tags" -> W.List []
@@ -785,8 +854,8 @@ let async_checks () =
   check "right sidebar items non-empty" (items <> []);
   (* views table: snapshots -> view ents -> view-data -> rows/props
      -> render *)
-  match !views_session with
-  | Some vs ->
+  (match !views_session with
+   | Some vs ->
       let nodes = M.all_nodes vs.S.tree in
       check "views .ls-table rendered"
         (List.exists (fun n -> has_tok n "ls-table") nodes);
@@ -798,7 +867,17 @@ let async_checks () =
         (List.exists (fun n -> has_tok n "ls-table-cell") nodes);
       check "views sticky-columns"
         (List.exists (fun n -> has_tok n "sticky-columns") nodes)
-  | None -> ()
+  | None -> ());
+  (* :macros {"cm-hi" "[[pre $1 post]]"} — expanded content renders
+     through the inline renderer once the config promise resolves;
+     the [[pre ab post]] page-ref link carries data-ref on its anchor *)
+  check "custom macro expanded"
+    (find_where (fun n -> attr_val n "data-ref" = Some "pre ab post")
+     <> []);
+  check "custom macro wrapper"
+    (find_where
+       (fun n -> attr_val n "data-macro-name" = Some "cm-hi")
+     <> [])
 
 (* ---------------- outliner-op repaint granularity ----------------
 
@@ -1069,9 +1148,11 @@ let run ~finish =
   test_not_found ();
   test_views_table ();
   test_render_libs_dom ();
+  test_embed_parity ();
   test_journal_splice_row_level ();
   test_page_splice_row_level ();
   test_journal_reorder_move_collapse ();
+  test_custom_macro_page ();
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)
