@@ -148,6 +148,15 @@ external set_default_timeout : page -> float -> unit = "setDefaultTimeout"
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
 [@@mel.scope "globalThis"]
 
+(** A handle-backed timer the caller can cancel — the id is opaque. *)
+type timer_id
+
+external set_timeout_id : (unit -> unit) -> int -> timer_id = "setTimeout"
+[@@mel.scope "globalThis"]
+
+external clear_timeout : timer_id -> unit = "clearTimeout"
+[@@mel.scope "globalThis"]
+
 external new_promise : ((unit -> unit [@u]) -> unit [@u]) -> unit Js.Promise.t
   = "Promise" [@@mel.new]
 
@@ -155,6 +164,22 @@ let wait_for_timeout _page ms =
   new_promise
     (fun [@u] resolve ->
        set_timeout (fun () -> resolve () [@u]) (int_of_float ms))
+
+(** [wait_for_timeout_cancellable]: like [wait_for_timeout] but returns the
+    timer id alongside so a racing caller can [clear_timeout] it instead of
+    leaving a ref'd handle pinning the event loop. *)
+let wait_for_timeout_cancellable _page ms =
+  let id = ref None in
+  let p =
+    new_promise
+      (fun [@u] resolve ->
+         id :=
+           Some
+             (set_timeout_id
+                (fun () -> resolve () [@u])
+                (int_of_float ms)))
+  in
+  (p, id)
 
 external locator :
   page -> string -> 'opts Js.t -> locator = "locator" [@@mel.send]

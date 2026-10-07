@@ -117,9 +117,25 @@ let get_by_role env ?name role = Playwright.get_by_role ?name (page env) role
 let eval_timeout_ms = 90000.
 
 let with_eval_timeout env label p =
+  let timeout_p, timer_id =
+    Playwright.wait_for_timeout_cancellable (page env) eval_timeout_ms
+  in
+  let clear () =
+    match !timer_id with
+    | Some id -> Playwright.clear_timeout id
+    | None -> ()
+  in
   Js.Promise.race
-    [| p
-     ; (let* () = Playwright.wait_for_timeout (page env) eval_timeout_ms in
+    [| Js.Promise.catch
+         (fun e ->
+            clear ();
+            Playwright.throw_error e)
+         (Js.Promise.then_
+            (fun r ->
+               clear ();
+               Js.Promise.resolve r)
+            p)
+     ; (let* () = timeout_p in
         Js.Promise.reject
           (Failure (Printf.sprintf "eval timeout after %.0fs: %s"
                       (eval_timeout_ms /. 1000.) label)))

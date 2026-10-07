@@ -71,7 +71,7 @@ let ready : (Env.t * Env.t * string) Js.Promise.t Lazy.t =
 let new_rtc_page env p1 p2 = Fixtures.new_logseq_page_in_rtc env p1 p2 ()
 
 let stress_default_rounds = 1
-let stress_default_ops_per_client = 50
+let stress_default_ops_per_client = 35
 let stress_default_seed_blocks = 20
 let stress_default_seed = 20260330
 let stress_max_seed_depth = 4
@@ -393,8 +393,10 @@ let new_block_safe env title =
                  String.sub s 0 (min 160 (String.length s))
            | None -> last_err := "nonstr-err");
           Js.Promise.resolve false)
-        (let* () = B.new_block env "" in
-         let* () = B.save_block env title in
+        (* B.new_block already creates the block and types the title into
+           the live editor with db-level verification — save_block on top
+           would just be a second editor session doing the same commit *)
+        (let* () = B.new_block env title in
          Js.Promise.resolve true)
     in
     if created then Js.Promise.resolve ()

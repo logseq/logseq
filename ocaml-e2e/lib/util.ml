@@ -191,12 +191,18 @@ let exit_edit env =
             were skipped, and non_editor_mode waits forever). Keep
             pressing esc + exitEditingMode until the DOM is clean too. *)
          let dom_deadline = Js.Date.now () +. 45000. in
-         let rec clear_dom () =
+         (* a page-redirect deferred re-focus can re-open an editor right
+            after a clean check — require the DOM to stay clean across a
+            few spaced polls before declaring victory *)
+         let rec clear_dom clean_streak =
            let* n =
              Pw.count env
                "[data-testid='block editor']:visible, [datatestid='block editor']:visible"
            in
-           if n = 0 then Js.Promise.resolve ()
+           if n = 0 && clean_streak >= 2 then Js.Promise.resolve ()
+           else if n = 0 then
+             let* () = wait_timeout env 400. in
+             clear_dom (clean_streak + 1)
            else if Js.Date.now () > dom_deadline then
              let* (dbg : string) =
                Pw.eval_js env
@@ -215,9 +221,9 @@ let exit_edit env =
                     [| Api.bool false |])
              in
              let* () = wait_timeout env 300. in
-             clear_dom ()
+             clear_dom 0
          in
-         let* () = clear_dom () in
+         let* () = clear_dom 0 in
          let* _ = E2e_assert.non_editor_mode env in
          Js.Promise.resolve ())
 
