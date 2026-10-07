@@ -983,19 +983,24 @@ fn editor_surface(
                 "repeat": event.is_held,
             });
             emit(&key_shared, node_id, c"key", json.to_string(), cx);
-            // cmd/ctrl-modified keys must bubble: the window root
-            // re-dispatches them as document keydowns where the global
-            // chords live (⌘⇧P palette, ⌘[ back, ⌘K), matching Electron
-            // where global shortcuts still fire while a block is being
-            // edited. Only unmodified non-text keys (Escape, arrows,
-            // Tab, Enter) are consumed here — they belong to the editing
-            // model alone. The web DOM delivers the same physical
-            // keydown to document listeners too (autocomplete
-            // Enter/arrows/Escape live there, the editor's own listener
-            // no-ops on the block-editor target): emit the dom-event
-            // directly — propagation stays stopped so the root observer
-            // cannot double-dispatch it.
-            if !global_key {
+            // The web DOM delivers the same physical keydown to
+            // document listeners too (autocomplete Enter/arrows/Escape
+            // live there, the editor's own listener no-ops on the
+            // block-editor target): emit the dom-event directly. Then
+            // mark the key consumed — an unconsumed keystroke falls
+            // through to the input context and its key_char lands as
+            // literal text (⌘V inserting "v"). Keys bound to app-level
+            // gpui actions (quit/hide/minimize/close/settings) are the
+            // exception: they must keep bubbling so their KeyBinding
+            // match marks them handled — the root observer emits their
+            // document keydown instead.
+            let app_action_key = mods.platform
+                && !mods.control
+                && matches!(
+                    keystroke.key.as_str(),
+                    "q" | "h" | "m" | "w" | ","
+                );
+            if !app_action_key {
                 lui_gpui::dom::dom_event(
                     &key_shared,
                     node_id,
@@ -1012,44 +1017,42 @@ fn editor_surface(
                     }),
                     cx,
                 );
-                cx.stop_propagation();
-            }
-            // ⌘C/⌘X/⌘V: emit the clipboard events a browser fires on
-            // the textarea — the editing keymap has no plain copy/cut/
-            // paste branches because on web they're real events, not
-            // keys. The sink carries .ed-input + data-block-id so the
-            // OCaml target gate takes its editing arm; the root observer
-            // only emits `paste` itself when no conduit is focused.
-            // ⌘⇧V / ⌘⇧C stay model keymap commands (paste-text-in-one-
-            // block / copy-text), matching cljs.
-            if mods.platform
-                && !mods.control
-                && !mods.alt
-                && !mods.shift
-            {
-                let clip_name = match keystroke.key.as_str() {
-                    "c" => Some("copy"),
-                    "x" => Some("cut"),
-                    "v" => Some("paste"),
-                    _ => None,
-                };
-                if let Some(clip_name) = clip_name {
-                    let text = if clip_name == "paste" {
-                        cx.read_from_clipboard()
-                            .and_then(|item| item.text())
-                            .unwrap_or_default()
-                    } else {
-                        String::new()
+                // ⌘C/⌘X/⌘V: emit the clipboard events a browser fires
+                // on the textarea — the editing keymap has no plain
+                // copy/cut/paste branches because on web they're real
+                // events, not keys. The sink carries .ed-input +
+                // data-block-id so the OCaml target gate takes its
+                // editing arm; the root observer only emits `paste`
+                // itself when no conduit is focused. ⌘⇧V / ⌘⇧C stay
+                // model keymap commands (paste-text-in-one-block /
+                // copy-text), matching cljs.
+                if mods.platform && !mods.control && !mods.alt && !mods.shift
+                {
+                    let clip_name = match keystroke.key.as_str() {
+                        "c" => Some("copy"),
+                        "x" => Some("cut"),
+                        "v" => Some("paste"),
+                        _ => None,
                     };
-                    lui_gpui::dom::dom_event(
-                        &key_shared,
-                        node_id,
-                        IDENTIFIER,
-                        clip_name,
-                        json!({ "clipboardData": { "text": text } }),
-                        cx,
-                    );
+                    if let Some(clip_name) = clip_name {
+                        let text = if clip_name == "paste" {
+                            cx.read_from_clipboard()
+                                .and_then(|item| item.text())
+                                .unwrap_or_default()
+                        } else {
+                            String::new()
+                        };
+                        lui_gpui::dom::dom_event(
+                            &key_shared,
+                            node_id,
+                            IDENTIFIER,
+                            clip_name,
+                            json!({ "clipboardData": { "text": text } }),
+                            cx,
+                        );
+                    }
                 }
+                cx.stop_propagation();
             }
         })
         .child(canvas(
