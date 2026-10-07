@@ -7,16 +7,18 @@
                   event set has no blur event yet, recorded in NOTES)
    - number:      same, commit parses Float
    - checkbox:    LUI checkbox; toggle writes Bool
-   - date/datetime: ghost button opens an anchored dropdown_menu with
+   - date/datetime: ghost button opens an anchored popover with
                   a text_field (YYYY-MM-DD → journal-day ref;
                   datetime parses to ms epoch)
    - node/page/class/asset: chips of the current refs + a picker
-                  button opening an anchored dropdown_menu hosting
+                  button opening an anchored popover hosting
                   Properties_select.view (initial items + async search
                   + "New option")
    - closed-value: same picker dropdown over the row's closed values
-   - logseq.property.class/extends: multi-toggle dropdown_menu whose
-                  menu_items carry ~checked (stays open across picks)
+   - logseq.property.class/extends: multi-toggle popover whose
+                  menu_items carry ~checked (stays open across picks). Note: a
+                  dropdown_menu only accepts menu-item children, so these
+                  non-menu pickers use popover ~role:`menu instead
 
    Writes: create-property-text-block / save-block for text & url,
    set-block-property for scalars and refs, remove-block-property /
@@ -429,7 +431,7 @@ let picker_dropdown ~open_ ~placeholder ~new_option ~initial ~on_search
     (let* items = initial in
      Runtime.signal_set items_st (Some (items, on_search));
      Js.Promise.resolve ());
-  (dropdown_menu ~anchor:`below ~anchor_alignment:`stretch
+  (popover ~role:`menu ~anchor:`below ~anchor_alignment:`stretch
      ~anchor_offset:4.0 ~min_width:240
      ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
      [ reactive
@@ -547,7 +549,7 @@ let date_view ctx row : t =
             else date_display (D.row_type row) value)
          ~on_press:(fun _ -> Runtime.signal_set open_ true)
      ; if_ ~test:(Signal.value open_)
-         (dropdown_menu ~anchor:`below ~anchor_alignment:`start
+         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
             [ text_field ~autofocus:true
@@ -681,7 +683,7 @@ let extends_view ctx row : t =
                []
            ])
      ; if_ ~test:(Signal.value open_)
-         (dropdown_menu ~anchor:`below ~anchor_alignment:`start
+         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
             [ reactive
@@ -750,7 +752,7 @@ let closed_value_view ctx row : t =
                    Runtime.signal_set items_st (Some items);
                    Runtime.signal_set open_ true)))
      ; if_ ~test:(Signal.value open_)
-         (dropdown_menu ~anchor:`below ~anchor_alignment:`stretch
+         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`stretch
             ~anchor_offset:4.0 ~min_width:220
             ~on_dismiss:(fun _ -> close ())
             [ reactive
