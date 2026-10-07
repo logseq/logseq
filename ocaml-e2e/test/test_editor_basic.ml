@@ -1261,6 +1261,35 @@ let () =
         (* element-targeted typing — the post-Backspace refocus can lag, and
            *:focus delivery drops the leading space into a dying textarea *)
         let* () = Keyboard.type_in_editor env " tail" in
+        (* the block merge after Backspace re-renders the editor — chars
+           dispatched mid-remount land on the dying textarea (observed:
+           leading space dropped, "starttail"). Read back and retype the
+           full expected value until it converges. *)
+        let want = "rapid delete start tail" in
+        let rec ensure_value n =
+          let deadline = Js.Date.now () +. 2000. in
+          let rec poll () =
+            let* v = Keyboard.live_editor_value env in
+            match v with
+            | Some s when s = want -> Js.Promise.resolve true
+            | _ ->
+                if Js.Date.now () > deadline then Js.Promise.resolve false
+                else
+                  let* () = Util.wait_timeout env 150. in
+                  poll ()
+          in
+          let* ok = poll () in
+          if ok || n <= 0 then Js.Promise.resolve ()
+          else begin
+            let* () =
+              Keyboard.press_in_editor env "ControlOrMeta+a"
+            in
+            let* () = Keyboard.press_in_editor env "Backspace" in
+            let* () = Keyboard.type_in_editor env want in
+            ensure_value (n - 1)
+          end
+        in
+        let* () = ensure_value 3 in
         let* () = Util.wait_timeout env 800. in
         let* st = editor_input_state env in
         let value =
