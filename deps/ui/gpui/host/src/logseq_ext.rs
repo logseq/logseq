@@ -107,6 +107,39 @@ pub mod webview;
 /// Register the logseq extension renderers onto the shared backend bag.
 /// Call once at boot, next to `editor::register`.
 pub fn register(shared: &Shared) {
+    // Semantic-class layout ported from resources/css/lui-core.css — the
+    // gpui backend has no stylesheet, so classes that carry real layout on
+    // the web are registered here once (`style::register_class_style`).
+    //
+    // .block-head-wrap { display:flex; align-items:center; flex:1;
+    //                    flex-wrap:wrap; justify-content:space-between;
+    //                    width:100% }
+    // Without the flex-1 the wrap shrink-wraps its content and siblings
+    // (fenced code editor, wide blocks) collapse to their intrinsic
+    // minimum instead of filling the block row.
+    lui_gpui::style::register_class_style(
+        "block-head-wrap",
+        "",
+        "flex flex-row flex-wrap items-center justify-between flex-1 w-full",
+    );
+    // .extensions__code-lang { display: none } — the language chip
+    // lives in .code-block-actions on the web; the span is markup only.
+    lui_gpui::style::register_class_style("extensions__code-lang", "", "hidden");
+    // .extensions__code { width:100%; overflow:hidden;
+    //                    border-radius:0.25rem }
+    lui_gpui::style::register_class_style(
+        "extensions__code",
+        "width:100%; overflow:hidden; border-radius:4px",
+        "",
+    );
+    // .page-reference .bracket { opacity: 0.3; display: inline-flex }
+    lui_gpui::style::register_class_style("bracket", "opacity:0.3", "");
+    // .page-ref { color: var(--ls-link-text-color) }
+    lui_gpui::style::register_class_style(
+        "page-ref",
+        "color:var(--ls-link-text-color)",
+        "",
+    );
     let mut shared = shared.borrow_mut();
     shared
         .extension_renderers
