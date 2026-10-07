@@ -27,6 +27,23 @@ let mount ?(cls = "") uuid scope : t =
      re-measure the overlay too *)
   let frame = Signal.state ctx.Lui_ui.ui_scheduler Edit_input.empty_frame in
   S.active_frame := Some frame;
+  (* the conduit input mounts asynchronously (extension node) and its
+     runs prop lands a patch or two later — a frame created after
+     apply_focus's refresh already ran would otherwise stay empty until
+     the next input event. Measure into THIS frame once the sink can
+     answer; retries cover the runs-prop lag *)
+  List.iter
+    (fun ms ->
+      Web_dom.set_timeout
+        (fun () ->
+          match (S.editing (), Editor_sink.conduit uuid) with
+          | Some e, Some conduit
+            when e.S.uuid = uuid && e.S.scope = scope ->
+              Signal.update frame (fun _ ->
+                  Edit_input.measure conduit e.S.model)
+          | _ -> ())
+        ms)
+    [ 0; 40; 120; 300 ];
   let model_sig =
     Signal.map
       (fun e ->
