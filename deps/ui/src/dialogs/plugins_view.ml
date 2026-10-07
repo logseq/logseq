@@ -43,21 +43,28 @@ let search_input ~key st =
     ]
 
 (* cljs plugins.cljs category-tabs: "Plugins (n)" / "Themes (n)" —
+   counts render only on the installed tab (marketplace passes nil) —
    the .active class rides a class_signal on the category state *)
 let category_tab ~key cat_st id caption (ic : icon) n =
   let cls c =
     "ui__button ls-tab-btn" ^ if c = id then " active" else ""
   in
+  let text =
+    match n with
+    | Some n -> Printf.sprintf "%s (%d)" caption n
+    | None -> caption
+  in
   Ui_parts.class_signal (Signal.value cat_st) cls
     (button ~key:(key ^ "-" ^ id)
        ~style_class:(cls (Signal.get_state cat_st))
        ~icon:ic
-       ~text:(Printf.sprintf "%s (%d)" caption n)
+       ~text
        ~on_press:(fun _ -> Runtime.signal_set cat_st id)
        [])
 
 let category_tabs ~key ~nums cat_st =
-  let np, nt = nums in
+  let np = Option.map fst nums in
+  let nt = Option.map snd nums in
   row ~key:(key ^ "-cats")
     ~style_class:"secondary-tabs"
     [ category_tab ~key cat_st "plugins" (t "nav/plugins")
@@ -110,7 +117,12 @@ let list_wrap ~key children =
 
 (* ---------- marketplace card ---------- *)
 
-let market_card pkg =
+(* cljs util/format-number: "1.2k" shorthand for >=1000 *)
+let format_number n =
+  if n < 1000 then string_of_int n
+  else Printf.sprintf "%.1fk" (float_of_int n /. 1000.)
+
+let market_card ~stats ~search_st pkg =
   let open Plugin_host in
   let id = jstr pkg "id" in
   let installed_ = Js.Dict.get installed id <> None in
@@ -122,41 +134,81 @@ let market_card pkg =
   (* cljs get-open-plugin-readme-handler: icon .l and h3 .l both open
      the readme dialog *)
   let open_readme _ = Plugin_readme.open_readme pkg in
+  (* cljs plugin-thumb-icon: the pkg-asset <img>, folder svg fallback *)
+  let thumb =
+    let src = pkg_asset id (jstr pkg "icon") in
+    if src = "" then icon ~key:"ic-f" ~name:(`app "folder") []
+    else image ~key:"ic-img" ~url:src ~style_class:"icon" ~alt:title []
+  in
+  let repo = jstr pkg "repo" in
   row ~key:("mkt-" ^ id) ~style_class:cls ~gap:12
     [ Ui_parts.pressable ~on_press:open_readme
         (box ~key:"l" ~style_class:"l link-block"
-           [ box ~key:"ic" ~style_class:"plugin-icon"
-               [ icon ~name:(`app "puzzle") [] ] ])
+           [ box ~key:"ic" ~style_class:"plugin-icon" [ thumb ] ])
     ; column ~key:"r" ~style_class:"r" ~grow:1.
-        [ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
-            [ text ~key:"t" ~style_class:"l link-block" ~value:title
-                ~on_press:open_readme [] ]
-        ; paragraph ~key:"desc" ~style_class:"desc"
-            ~value:(jstr pkg "description") []
-        ; box ~key:"flag" 
-            [ row ~style_class:"ls-pl-meta"
-                ~main:`space_between
-                [ text ~key:"a" ~value:(jstr pkg "author") []
-                ; text ~key:"i" ~value:("ID: " ^ id) [] ] ]
-        ; row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
-            ~cross:`center
-            [ box ~key:"ctl-l" ~style_class:"l" []
-            ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center
-                [ button ~key:"btn"
-                    ~style_class:
-                      ("btn" ^ if installed_ then " disabled" else "")
-                    (* cljs CSS gives a.btn.disabled pointer-events:none;
-                       keep it clickable (handler no-ops when installed) so
-                       e2e click-install-button can target it *)
-                    ~text:
-                      (if installed_ then t "plugin/installed"
-                       else t "plugin/install")
-                    ~on_press:(fun _ ->
-                      if not installed_ then install_marketplace pkg)
-                    []
-                ]
-            ]
-        ]
+        ([ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
+             [ text ~key:"t" ~style_class:"l link-block" ~value:title
+                 ~on_press:open_readme [] ]
+         ; paragraph ~key:"desc" ~style_class:"desc"
+             ~value:(jstr pkg "description") []
+         ; box ~key:"flag" 
+             [ row ~style_class:"ls-pl-meta"
+                 ~main:`space_between
+                 [ (* cljs: clicking the author searches "@author" *)
+                   text ~key:"a" ~value:(jstr pkg "author")
+                     ~on_press:(fun _ ->
+                       Runtime.signal_set search_st
+                         ("@" ^ jstr pkg "author"))
+                     []
+                 ; text ~key:"i" ~value:("ID: " ^ id) [] ] ]
+         ]
+         (* cljs .flag.is-top: GitHub repo link pinned top-right *)
+         @
+         (if repo = "" then []
+          else
+            [ box ~key:"gh" ~style_class:"flag is-top"
+                [ link ~key:"gh-a" ~url:(gh_repo_url repo)
+                    ~target:`blank ~icon:(`app "github")
+                    ~label:"GitHub" [] ] ])
+         @
+         [ row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
+             ~cross:`center
+             [ row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:8
+                 ((* cljs card-ctls-of-market .l: stars + total downloads
+                     from stats.json *)
+                  match package_stat stats id with
+                  | None -> []
+                  | Some st ->
+                      row ~key:"stars" ~style_class:"stars" ~cross:`center
+                        ~gap:2
+                        [ icon ~name:(`app "star") ~size:`sm []
+                        ; text ~key:"n" ~value:(string_of_int st.stars)
+                            [] ]
+                      ::
+                      (if st.downloads > 0 then
+                         [ row ~key:"dls" ~style_class:"downloads"
+                             ~cross:`center ~gap:2
+                             [ icon ~name:(`app "cloud-down") ~size:`sm []
+                             ; text ~key:"n"
+                                 ~value:(format_number st.downloads) [] ]
+                         ]
+                       else []))
+             ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center
+                 [ button ~key:"btn"
+                     ~style_class:
+                       ("btn" ^ if installed_ then " disabled" else "")
+                     (* cljs CSS gives a.btn.disabled pointer-events:none;
+                        keep it clickable (handler no-ops when installed) so
+                        e2e click-install-button can target it *)
+                     ~text:
+                       (if installed_ then t "plugin/installed"
+                        else t "plugin/install")
+                     ~on_press:(fun _ ->
+                       if not installed_ then install_marketplace pkg)
+                     []
+                 ]
+             ]
+         ])
     ]
 
 (* ---------- installed card ---------- *)
@@ -323,16 +375,19 @@ let installed_panel ~key ~search ~cat ~search_st ~cat_st =
   let n_plugins = List.length all - n_themes in
   column ~key ~style_class:"cp__plugins-installed" ~gap:8
     [ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st
-        ~nums:(n_plugins, n_themes)
+        ~nums:(Some (n_plugins, n_themes))
     ; list_wrap ~key:(key ^ "-list") (List.map installed_card plugins)
     ]
 
-let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~loading =
+(* cljs plugins.cljs .cp__plugins-marketplace-cnt: category tabs carry
+   no counts on the market tab (cljs passes total-nums nil) *)
+let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~stats
+    ~loading =
   let filtered =
     List.filter (fun p -> category_ok cat p && matches search p) pkgs
   in
   column ~key  ~gap:8
-    ([ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st ~nums:(0, 0) ]
+    ([ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st ~nums:None ]
     @
     if loading && pkgs = [] then
       [ box ~key:"pl-loading" ~style_class:"ls-pl-loading"
@@ -341,7 +396,7 @@ let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~loading =
       [ column ~key:(key ^ "-cnt")
           ~style_class:"cp__plugins-marketplace-cnt"
           [ list_wrap ~key:(key ^ "-list")
-              (List.map market_card filtered) ] ])
+              (List.map (market_card ~stats ~search_st) filtered) ] ])
 
 (* ---------- page ---------- *)
 
@@ -354,6 +409,7 @@ let body (_ms : Model.t Signal.signal) : t =
   let inst_search = Signal.state owner "" in
   let inst_cat = Signal.state owner "plugins" in
   let pkgs = Signal.state owner ([] : Js.Json.t list) in
+  let stats = Signal.state owner Js.Json.null in
   let loading = Signal.state owner true in
   ignore (Plugin_host.dirty_signal owner);
   ignore
@@ -367,6 +423,13 @@ let body (_ms : Model.t Signal.signal) : t =
     Signal.set loading false;
     Runtime.flush ();
     Js.Promise.resolve Js.Json.null);
+  (* cljs load-marketplace-stats fires alongside load-marketplace-plugins;
+     stars/downloads render once it lands *)
+  ignore
+    (let* j = Plugin_host.fetch_stats () in
+     Signal.set stats j;
+     Runtime.flush ();
+     Js.Promise.resolve ());
   let tab_btn id label (ic : icon) =
     let cls tb =
       "ls-tab-btn" ^ if tb = id then " active" else ""
@@ -385,8 +448,10 @@ let body (_ms : Model.t Signal.signal) : t =
   let own2 f a b = Logseq_dom.own ctx (Signal.map2 f a b) in
   let mkt_sig =
     own2 pair
-      (own2 pair (Signal.value mkt_search) (Signal.value mkt_cat))
-      (own2 pair (Signal.value pkgs) (Signal.value loading))
+      (own2 pair
+         (own2 pair (Signal.value mkt_search) (Signal.value mkt_cat))
+         (own2 pair (Signal.value pkgs) (Signal.value loading)))
+      (Signal.value stats)
   in
   let inst_sig =
     own2 pair (Signal.value inst_search) (Signal.value inst_cat)
@@ -408,10 +473,11 @@ let body (_ms : Model.t Signal.signal) : t =
           ; box ~key:"pl-panels" 
               [ (if tab_now = "marketplace" then
                    reactive
-                     (fun ((search, cat), (pkg_now, load_now)) ->
+                     (fun (((search, cat), (pkg_now, load_now)), stat_now) ->
                        market_panel ~key:"mkt" ~search ~cat
                          ~search_st:mkt_search ~cat_st:mkt_cat
-                         ~pkgs:pkg_now ~loading:load_now)
+                         ~pkgs:pkg_now ~stats:stat_now
+                         ~loading:load_now)
                      mkt_sig
                  else
                    reactive

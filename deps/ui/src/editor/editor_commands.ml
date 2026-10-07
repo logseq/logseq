@@ -493,7 +493,8 @@ let rec render_repeat p (r : repeat) =
     D.h ~tag:"button" ~cls:"jtrigger ls-repeat-checkbox"
       ~attrs:
         [ ("type", "button"); ("role", "checkbox")
-        ; ("aria-checked", string_of_bool r.repeated) ]
+        ; ("aria-checked", string_of_bool r.repeated)
+        ; ("aria-label", I18n.t "property.built-in/repeat-repeated") ]
       ~children:[ mark ] ()
   in
   if r.repeated then D.el_set_attr box "data-checked" "true";

@@ -112,7 +112,10 @@ let rec hiccup_els inst (w : W.t) : t list =
   | W.Array xs | W.List xs | W.Set xs ->
       List.concat_map (hiccup_els inst) xs
   | W.String s -> [ text ~value:s [] ]
-  | W.Uuid u -> [ text ~value:(title_of_uuid inst u) [] ]
+  | W.Uuid u ->
+      (* the row title may itself contain [[uuid]]/#[[uuid]] refs —
+         inline-parse so nested refs resolve (cljs map-inline) *)
+      Render_inline.parse ~self:u (title_of_uuid inst u)
   | w -> [ text ~value:(Edn.to_string w) [] ]
 
 (* ---------- elements ---------- *)
@@ -394,19 +397,21 @@ let load_views inst ~on_done =
       | _ -> on_done ())
     [ Db.resource_views inst.V.owner inst.V.feature ]
 
-(* resolve the uuid of the owner page/entity behind inst.owner *)
+(* resolve the uuid of the owner page/entity behind inst.owner — f
+   gets None when the page is absent (cljs all_pages gates the view on
+   [:page-identity views-page-name] and renders nothing when missing) *)
 let owner_uuid inst f =
   match inst.V.owner with
-  | W.Uuid u -> f u
+  | W.Uuid u -> f (Some u)
   | W.String name -> (
       let key = Db.key_page_identity name in
       Db.snapshots
         ~f:(fun snap ->
           match Wr.snapshot_slot_value snap key with
-          | Some (W.Uuid u) -> f u
-          | _ -> ())
+          | Some (W.Uuid u) -> f (Some u)
+          | _ -> f None)
         [ Db.res key ])
-  | _ -> ()
+  | _ -> f None
 
 (* cljs create-view! parents view blocks under the shared $$$views page
    (common-config/views-page-name) and skips the insert when that page
@@ -421,37 +426,44 @@ let views_page_uuid f =
     [ Db.res key ]
 
 let create_view ~title ~uuid inst ~after =
-  owner_uuid inst (fun ouuid ->
-      views_page_uuid (function
-        | Some vpuuid ->
-            Db.insert_view_block ~title ~uuid ~page_uuid:vpuuid
-              ~owner_uuid:ouuid ~feature_type:inst.V.feature
-              ~after:(fun () ->
-                load_views inst ~on_done:(fun () -> after ())) ()
-        | None -> ()))
+  owner_uuid inst (function
+    | Some ouuid ->
+        views_page_uuid (function
+          | Some vpuuid ->
+              Db.insert_view_block ~title ~uuid ~page_uuid:vpuuid
+                ~owner_uuid:ouuid ~feature_type:inst.V.feature
+                ~after:(fun () ->
+                  load_views inst ~on_done:(fun () -> after ())) ()
+          | None -> ())
+    | None -> ())
 
-(* auto-create the default "All" view (cljs create-view! auto-triggered?) *)
+(* auto-create the default "All" view (cljs create-view! auto-triggered?);
+   when the owner or $$$views page cannot be resolved the view settles
+   into its empty state instead of staying on Loading *)
 let ensure_default_view inst =
   match (V.get inst).V.views with
   | v :: _ -> select_view inst v
   | [] ->
-      owner_uuid inst (fun ouuid ->
-          let uuid =
-            Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
-          in
-          views_page_uuid (function
-            | Some vpuuid ->
-                Db.insert_view_block ~title:I.all ~uuid ~page_uuid:vpuuid
-                  ~owner_uuid:ouuid ~feature_type:inst.V.feature
-                  ~after:(fun () ->
-                    load_views inst ~on_done:(fun () ->
-                        match (V.get inst).V.views with
-                        | v :: _ -> select_view inst v
-                        | [] ->
-                            V.update inst
-                              (fun s -> { s with V.view_uuid = uuid });
-                            refresh inst)) ()
-            | None -> ()))
+      owner_uuid inst (function
+        | Some ouuid ->
+            let uuid =
+              Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
+            in
+            views_page_uuid (function
+              | Some vpuuid ->
+                  Db.insert_view_block ~title:I.all ~uuid ~page_uuid:vpuuid
+                    ~owner_uuid:ouuid ~feature_type:inst.V.feature
+                    ~after:(fun () ->
+                      load_views inst ~on_done:(fun () ->
+                          match (V.get inst).V.views with
+                          | v :: _ -> select_view inst v
+                          | [] ->
+                              V.update inst
+                                (fun s -> { s with V.view_uuid = uuid });
+                              refresh inst)) ()
+              | None ->
+                  V.update inst (fun s -> { s with V.loading = false }))
+        | None -> V.update inst (fun s -> { s with V.loading = false }))
 
 (* ---------- actions ---------- *)
 
@@ -499,15 +511,14 @@ let add_new_object inst =
       let uuid = Platform.random_uuid () in
       Db.insert_object_block ~uuid ~page_uuid:owner_uuid ~title:""
         ~tags:[ owner_uuid ] ~props:[] (fun _ ->
-          let detail = Js.Dict.empty () in
-          Js.Dict.set detail "uuid" (Js.Json.string uuid);
-          E.dispatch_custom "ls:open-right-sidebar"
-            (Js.Json.object_ detail);
+          (* cljs edit-block! on the new page-child: the object mounts in
+             the owner page's block tree and edits in place there — the
+             right sidebar stays closed *)
           let rec try_edit n =
             if n <= 0 then ()
             else
               match E.get_element_by_id ("ls-block-" ^ uuid) with
-              | Some _ -> Editor_actions.enter_edit ~scope:"sidebar" uuid 0
+              | Some _ -> Editor_actions.enter_edit uuid 0
               | None -> E.set_timeout (fun () -> try_edit (n - 1)) 100
           in
           try_edit 20)

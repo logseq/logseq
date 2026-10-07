@@ -7,14 +7,6 @@ open Lui_elements
 
 let dom = Logseq_dom.dom
 
-(* ~label has no _signal variant — bind a string property signal on the
-   mounted node instead (same pattern as Page.class_signal_el) *)
-let prop_signal_el (prop : Lui_protocol.property) (source : 'a Signal.signal)
-    (f : 'a -> string) (el : t) : t =
- fun ctx parent ->
-  let node = el ctx parent in
-  Lui_ui.string_property_signal ctx node prop (Signal.map f source);
-  node
 
 let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 
@@ -162,7 +154,7 @@ let user_item () : Lui_elements.t =
                      (fun m -> if m then mask_email email else email)
                      maskedv)
                 []
-            ; prop_signal_el Lui_protocol.AccessibilityLabel maskedv
+            ; Ui_parts.prop_signal Lui_protocol.AccessibilityLabel maskedv
                 (fun m ->
                   I18n.t
                     (if m then "account/show-email-address"

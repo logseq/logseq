@@ -854,6 +854,11 @@ let open_sticky_item st kind =
         (match static_item "help" "help" (t "nav/help") with
          | Some it -> push_item st it
          | None -> ())
+    | "page-graph" when not (has_item st "page-graph") ->
+        (match static_item "page-graph" "page-graph" (t "graph.page/title")
+         with
+         | Some it -> push_item st it
+         | None -> ())
     | (("rtc" | "undo-redo" | "profiler") as kind)
       when not (has_item st kind) -> (
         let label =

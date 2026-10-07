@@ -975,3 +975,193 @@ let set_property_node_tags a b _c _d =
               ]
           in
           resolved_nil)
+
+(* ---------- cljs api/db-based tag/property + cli-based import -------
+
+   Missing logseq.api surface used by seeding tooling: add-block-tag,
+   tag-add-property, add-property-value-choices (db-based.cljs) and
+   upsert-nodes / import-edn (db_based/cli.cljs). Same
+   apply-outliner-ops path as the rest of this module. *)
+
+(* tag entity via resolve-tag-eid (uuid / ns-ident / db-id /
+   plugin-ns name), with a case-page title fallback — cljs does
+   <get-block eid then <get-block tag-id *)
+let get_tag_entity j =
+  let* tag = get_by_id (Sdk_read.resolve_tag_eid j) in
+  match tag, arg_string j with
+  | Wire.Nil, Some name -> get_entity name
+  | _ -> Js.Promise.resolve tag
+
+(* property entity: uuid or qualified ident resolve directly; bare
+   names go through the plugin property prefix (property_ident), per
+   cljs resolve-property-eid *)
+let get_property_entity j =
+  match eid_wire_of_json j with
+  | Some (Wire.String s) -> (
+      let s' = trim_leading s in
+      if Wire.is_uuid_string s' then get_by_id (Wire.Uuid s')
+      else if String.contains s' '/' then get_by_id (Wire.Keyword s')
+      else get_entity_ident (property_ident s'))
+  | Some w -> get_by_id w
+  | None -> Js.Promise.resolve Wire.Nil
+
+(* entity/property? — logseq.property/type marks a property node *)
+let is_property_entity (w : Wire.t) =
+  Wire.get w "logseq.property/type" <> None
+
+let db_ident_of (w : Wire.t) =
+  match Wire.get w "db/ident" with
+  | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+  | _ -> None
+
+(* cljs (and (built-in? p) (not (public-built-in-property? p))) *)
+let private_built_in (w : Wire.t) =
+  let flag k =
+    match Wire.get w k with Some (Wire.Bool b) -> b | _ -> false
+  in
+  flag "logseq.property/built-in?" && not (flag "logseq.property/public?")
+
+(* cljs add-block-tag: resolves block + tag, rejects non-class tags,
+   then db-page-handler/add-tag — set-block-property! :block/tags with
+   the tag's db/id *)
+let add_block_tag a b _c _d =
+  let* (block, tag) =
+    Js.Promise.all2 (get_entity_json a, get_tag_entity b)
+  in
+  if not (is_class_entity tag) then
+    Js.Promise.reject
+      (Failure
+         ("Not a tag: "
+         ^ (match arg_string b with Some s -> s | None -> "")))
+  else
+    match block_uuid_of block, Wire.map_get_int tag "db/id" with
+    | Some uuid, Some tid ->
+        let* _ =
+          apply_op "set-block-property"
+            [ Wire.Uuid uuid; Wire.Keyword "block/tags"; Wire.Int tid ]
+        in
+        resolved_nil
+    | _ -> resolved_nil
+
+(* cljs tag-add-property: class-add-property op after tag/property
+   validation; private built-ins are rejected *)
+let add_tag_property a b _c _d =
+  let* (tag, property) =
+    Js.Promise.all2 (get_tag_entity a, get_property_entity b)
+  in
+  if not (is_class_entity tag) then
+    Js.Promise.reject (Failure "Not a valid tag")
+  else if not (is_property_entity property) then
+    Js.Promise.reject (Failure "Not a valid property")
+  else if private_built_in property then
+    Js.Promise.reject
+      (Failure "This is a private built-in property that can't be used.")
+  else
+    match block_uuid_of tag, db_ident_of property with
+    | Some uuid, Some ident ->
+        let* _ =
+          apply_op "class-add-property"
+            [ Wire.Uuid uuid; Wire.Keyword ident ]
+        in
+        (* cljs returns the re-fetched tag entity *)
+        let* tag' = get_by_id (Wire.Uuid uuid) in
+        resolved_result tag'
+    | _ -> resolved_nil
+
+(* cljs add-property-value-choices: property ident + choice uuids ->
+   add-existing-values-to-closed-values! *)
+let add_property_value_choices a b _c _d =
+  let* property = get_property_entity a in
+  if not (is_property_entity property) then
+    Js.Promise.reject (Failure "Not a valid property")
+  else
+    match db_ident_of property with
+    | None -> resolved_nil
+    | Some ident ->
+        let uuids =
+          list_items (arg_wire b)
+          |> List.filter_map (fun w ->
+                 match w with
+                 | Wire.Uuid u -> Some u
+                 | Wire.Map _ -> Wire.map_get_uuid w "uuid"
+                 | Wire.String u when Wire.is_uuid_string u -> Some u
+                 | _ -> None)
+        in
+        let* _ =
+          apply_op "add-existing-values-to-closed-values"
+            [ Wire.Keyword ident
+            ; Wire.Array (List.map (fun u -> Wire.Uuid u) uuids) ]
+        in
+        resolved_nil
+
+(* cljs summarize-upsert-operations: "Dry run: " prefix +
+   "Added: {:page 2, :block 3}. Edited: {...}." with pr-str maps *)
+let summarize_upsert_ops ops dry_run =
+  let counts_of op_name =
+    List.fold_left
+      (fun acc o ->
+        match
+          ( Wire.map_get_string o "operation"
+          , Wire.map_get_string o "entityType" )
+        with
+        | Some op, Some et when op = op_name -> (
+            match List.assoc_opt et acc with
+            | Some _ ->
+                List.map
+                  (fun (k, v) -> if k = et then (k, v + 1) else (k, v))
+                  acc
+            | None -> acc @ [ (et, 1) ])
+        | _ -> acc)
+      [] ops
+  in
+  let pr_map counts =
+    "{"
+    ^ String.concat ", "
+        (List.map
+           (fun (k, n) -> ":" ^ k ^ " " ^ string_of_int n)
+           counts)
+    ^ "}"
+  in
+  (if dry_run then "Dry run: " else "")
+  ^ (match counts_of "add" with
+     | [] -> ""
+     | cs -> "Added: " ^ pr_map cs ^ ".")
+  ^ (match counts_of "edit" with
+     | [] -> ""
+     | cs -> " Edited: " ^ pr_map cs ^ ".")
+
+(* cljs upsert-nodes: build the import EDN in the worker, transact it
+   via the batch-import-edn outliner op unless dry-run *)
+let upsert_nodes a b _c _d =
+  let ops = list_items (arg_wire a) in
+  let opts = arg_map b in
+  let dry_run = opt_bool "dry-run" opts || opt_bool "dryRun" opts in
+  let* edn =
+    Runtime.invoke2 "thread-api/api-build-upsert-nodes-edn"
+      (Wire.String (repo ()))
+      (Wire.Array ops)
+  in
+  let* result =
+    if dry_run then Js.Promise.resolve Wire.Nil
+    else
+      apply_op "batch-import-edn"
+        [ edn; Wire.Map [ (Wire.kw "validate-scope", Wire.Keyword "tx") ] ]
+  in
+  (match Wire.get result "error" with
+   | Some (Wire.String e) -> Js.Promise.reject (Failure e)
+   | _ -> resolved (Js.Json.string (summarize_upsert_ops ops dry_run)))
+
+(* cljs import-edn: arg is a transit-encoded export map string *)
+let import_edn a _b _c _d =
+  match arg_string a with
+  | None -> resolved_nil
+  | Some s ->
+      (match (try Some (Transit.of_string s) with _ -> None) with
+       | None -> Js.Promise.reject (Failure "Invalid transit EDN data")
+       | Some edn ->
+           let* result =
+             apply_op "batch-import-edn" [ edn; Wire.Map [] ]
+           in
+           (match Wire.get result "error" with
+            | Some (Wire.String e) -> Js.Promise.reject (Failure e)
+            | _ -> resolved_nil))

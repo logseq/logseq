@@ -238,6 +238,8 @@ type t =
   ; unlinked_open : bool
   ; unlinked_search : bool
   ; unlinked_query : string
+  ; linked_search : bool
+  ; linked_query : string
   ; help_open : bool
   ; unlinked_blocks : block list
   ; rtc : rtc option
@@ -280,6 +282,8 @@ let initial =
   ; unlinked_open = true
   ; unlinked_search = false
   ; unlinked_query = ""
+  ; linked_search = false
+  ; linked_query = ""
   ; help_open = false
   ; unlinked_blocks = []
   ; rtc = None

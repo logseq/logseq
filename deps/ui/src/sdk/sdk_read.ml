@@ -96,7 +96,8 @@ let get_tag_objects a _b _c _d =
            [ Wire.String (repo ()); Wire.String name ]
      | _ -> Js.Promise.resolve tag)
   in
-  if not (is_class_entity tag) then resolved_nil
+  (* cljs rejects non-class inputs — plugin callers key off the throw *)
+  if not (is_class_entity tag) then Js.Promise.reject (Failure "Not a tag")
   else
     match Wire.map_get_int tag "db/id" with
     | Some cid ->

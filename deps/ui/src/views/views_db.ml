@@ -21,7 +21,10 @@ let catch_write (p : unit Js.Promise.t) =
       Js.Promise.resolve ())
     p
 
-(* fetch several resources in one get-render-snapshots call *)
+(* fetch several resources in one get-render-snapshots call; a failed
+   batch still hands the callback a Nil snapshot so views settle into
+   their empty state instead of wedging on Loading (cljs: the resource
+   simply never resolves, leaving an empty container) *)
 let snapshots ?(f = fun _ -> ()) (resources : W.t list) =
   (let* w =
     Runtime.invoke2 "thread-api/get-render-snapshots" (W.String (repo ()))
@@ -32,7 +35,10 @@ let snapshots ?(f = fun _ -> ()) (resources : W.t list) =
          ])
   in
   f w; Js.Promise.resolve ())
-  |> catch_quiet
+  |> Js.Promise.catch (fun e ->
+      Platform.console_error ("views worker call failed", e);
+      (try f W.Nil with _ -> ());
+      Js.Promise.resolve ())
   |> ignore
 
 (* inner resource keys — used both as the [:resource k] request spec and as

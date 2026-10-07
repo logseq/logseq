@@ -86,7 +86,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
      accessibility_identifier carries the stable anchor *)
   Ui_parts.class_signal current_sig
     (fun cur -> "ls-view-tab" ^ if cur then "" else " ls-dim")
-    (button ~variant:`ghost ~size:`sm ~label:v0.Wr.vtitle
+    (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
        ~accessibility_identifier:(view_tab_anchor_id inst v0)
        ~on_press:(fun _ ->
          let v = Signal.get v_sig in
@@ -215,7 +215,13 @@ let sorting_popup inst anchor =
             E.el_on order_btn "click" (fun ev ->
                 E.ev_stop_propagation ev;
                 set_asc so (not so.V.s_asc));
-            let remove_btn = E.h ~tag:"button" ~cls:"ls-sort-x" () in
+            let remove_btn =
+              (* icon-only buttons need aria-label or the store rejects
+                 the whole mount batch *)
+              E.h ~tag:"button" ~cls:"ls-sort-x"
+                ~attrs:[ ("aria-label", I.delete_sort) ]
+                ()
+            in
             E.el_append_child remove_btn (E.icon "x");
             E.el_on remove_btn "click" (fun ev ->
                 E.ev_stop_propagation ev;
@@ -525,7 +531,8 @@ and mk_group_sort inst ident label =
         V.persist_group_sort_by_ident inst ident (fun () -> refresh inst) )
 
 let more_actions_el inst : t =
-  button ~variant:`ghost ~size:`sm ~icon:`ellipsis ~label:(I.t "header/more")
+  button ~variant:`ghost ~size:`sm ~icon:`ellipsis
+    ~label:(I.t "ui/show-more")
     ~style_class:"ls-icon-btn"
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst) []
@@ -585,7 +592,7 @@ let search_el inst : t =
      event maps it *)
   box ~style_class:"view-action-search"
     [ row ~style_class:"ls-row"
-        [ ghost_btn "search" ~title_:(I.t "nav/search")
+        [ ghost_btn "search" ~title_:(I.t "cmdk.action/search")
             ~on_click:(fun () ->
               if not (V.get inst).V.search_open then begin
                 V.update inst (fun s -> { s with V.search_open = true });
@@ -598,7 +605,10 @@ let search_el inst : t =
               end)
         ; if_ ~test:open_sig
             (row
-               [ search_field ~style_class:"ls-search-input"
+               [ (* input, not search_field: a native search box paints
+                    its own clear control — with the manual x ghost_btn
+                    below that made two *)
+                 input ~style_class:"ls-search-input"
                    ~accessibility_identifier:input_id
                    ~placeholder:I.type_to_search
                    ~text:(V.get inst).V.input
@@ -610,7 +620,8 @@ let search_el inst : t =
                              refresh inst)
                      | _ -> ())
                    []
-               ; ghost_btn "x" ~title_:I.close ~on_click:(fun () ->
+               ; ghost_btn "x" ~title_:I.close
+                   ~on_click:(fun () ->
                      V.update inst (fun s ->
                          { s with V.input = ""; search_open = false });
                      refresh inst) ]) ]

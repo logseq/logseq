@@ -201,11 +201,13 @@ let title_editor (page : Model.page) : t =
             ~default:Edit_input.no_conduit
         in
         let m' = Edit_input.handle ~route ~conduit m ev in
-        if m' != m then Signal.update model_st (fun _ -> m');
-        (* conduit reads live rects — measure after the model publish
-           flushed the run text; stale reads that don't partition the
-           buffer would corrupt the line table (see
-           Editor_actions.measured_partitions) *)
+        if m' != m then begin
+          Signal.update model_st (fun _ -> m');
+          (* flush now so the conduit measures the freshly painted
+             runs — a stale read would re-emit the old line ranges and
+             clamp the just-inserted text out of view *)
+          Runtime.flush ()
+        end;
         let m2 =
           match conduit.Edit_input.line_ranges () with
           | rs
@@ -215,7 +217,10 @@ let title_editor (page : Model.page) : t =
               Edit_model.set_lines m' rs
           | _ -> m'
         in
-        if m2 != m' then Signal.update model_st (fun _ -> m2);
+        if m2 != m' then begin
+          Signal.update model_st (fun _ -> m2);
+          Runtime.flush ()
+        end;
         Signal.update frame (fun _ -> Edit_input.measure conduit m2)
   in
   (Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
@@ -451,8 +456,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                              ~accessibility_identifier:("control-" ^ uuid)
                              [ cs ]))
                      ]
-        ; column ~key:"pt-col1"
-            [ column ~key:"pt-col2"
+        ; column ~key:"pt-col1" ~grow:1. ~cross:`stretch
+            [ column ~key:"pt-col2" ~cross:`stretch
                         [ row ~key:"pt-bmc" ~gap:8
                             ((match icon_el with
                               | None -> []
@@ -472,7 +477,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                           ]
                                       ]
                                   ])
-                            @ [ column ~key:"pt-col3"
+                            @ [ column ~key:"pt-col3" ~grow:1. ~cross:`stretch
                                 [ box ~key:"pt-wrap"
                                     ~style_class:"ls-page-title-container block-content-or-editor-wrap"
                                     [ box ~key:"pt-inner2"
@@ -481,7 +486,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                             ~gap:4 ~cross:`center
                                             ~style_class:"block-row"
                                             ([ column ~key:"pt-cw" ~gap:8
-                                                 ~grow:1.
+                                                 ~grow:1. ~cross:`stretch
                                                  ~style_class:"block-content-wrapper"
                                                  ((if m.editing_title then
                                                     []
@@ -712,15 +717,11 @@ let refs_view_head key ?on_search title count : t =
                 ~style_class:"as-text"
                 ~accessibility_identifier:("view-tab-" ^ key)
                 [ text ~key:"vh-n" ~value:(string_of_int count) [] ]
-            ; button ~key:"vh-add" ~variant:`ghost ~size:`icon
-                ~icon:(`app "plus")
-                ~label:(I18n.t "view/add-new-view")
-                ~style_class:"as-text"
-                []
             ]
         ]
-    ; (* the opacity-0/transition hover-reveal classes are gone — the
-         actions row shows statically until the imperative pass *)
+    ; (* only actions with a backing implementation render — the
+         sort/filter/columns/dots controls master shows belong to
+         customized views, which the refs section doesn't carry yet *)
       row ~key:"vh-acts" ~cross:`center ~gap:4
         ~style_class:"view-actions"
         [ view_ghost_btn "vh-fc" ~title:(I18n.t "reference/page-filter")
@@ -927,23 +928,61 @@ let fetch_unlinked (m : Model.t) =
         p
   | None -> ()
 
-let references_view ?(parents = []) (refs : Model.block list) : t =
+let refs_search_input key set_query () : t =
+  box ~key:(key ^ "-search-box") ~style_class:"view-action-search"
+    [ input ~key:(key ^ "-input")
+        ~placeholder:I18n.filter_placeholder
+        ~on_input:(fun ev ->
+          match ev with
+          | Lui_protocol.TextChanged (_, q) ->
+              Runtime.send (set_query q);
+              Runtime.flush ()
+          | _ -> ())
+        []
+    ]
+
+let refs_filtered (refs : Model.block list) q =
+  let q = String.trim q in
+  if q = "" then refs
+  else
+    List.filter
+      (fun (b : Model.block) ->
+        I18n.contains_ci b.block_title q
+        ||
+        (match b.block_page_name with
+         | Some p -> I18n.contains_ci p q
+         | None -> false))
+      refs
+
+let references_view ?(parents = []) ~search_on ~query
+    (refs : Model.block list) : t =
   match refs with
   | [] -> Logseq_dom.nothing
   | _ ->
-      let groups = refs_grouped refs in
+      let groups = refs_grouped (refs_filtered refs query) in
       column ~key:"refs" ~style_class:"references"
         [ column ~key:"rv1" ~gap:8
             [ column ~key:"rv2" ~gap:8
                 [ column ~key:"rv3"
                     [ foldable_title "refs-t"
                         (refs_view_head "refs"
+                           ~on_search:(fun () ->
+                             Runtime.send Action.Linked_toggle_search;
+                             Runtime.flush ())
                            (I18n.t "view/linked-references")
                            (List.length refs))
                     ; foldable_content "refs-c"
                         (column ~key:"rvb" ~gap:8
                            ~style_class:"ls-view-body"
-                           [ column ~key:"rvl" ~gap:8
+                           [ box ~key:"refs-sc"
+                               [ (if search_on then
+                                    refs_search_input "lrefs"
+                                      (fun q ->
+                                        Action.Linked_set_query q)
+                                      ()
+                                  else Logseq_dom.nothing)
+                               ]
+                           ; column ~key:"rvl" ~gap:8
                                [ ref_groups_virt "rvg" ~parents groups ]
                            ])
                     ]
@@ -967,18 +1006,7 @@ let journal_references_view (p : Model.page) : t =
         ]
 
 
-let unlinked_search_input () : t =
-  box ~key:"urefs-search-box" ~style_class:"view-action-search"
-    [ input ~key:"urefs-input"
-        ~placeholder:I18n.filter_placeholder
-        ~on_input:(fun ev ->
-          match ev with
-          | Lui_protocol.TextChanged (_, q) ->
-              Runtime.send (Action.Unlinked_set_query q);
-              Runtime.flush ()
-          | _ -> ())
-        []
-    ]
+
 
 let unlinked_row (b : Model.block) : t =
   let key =
@@ -1058,7 +1086,10 @@ let unlinked_references_view (m : Model.t) : t =
                      else unlinked_head_collapsed "urefs")
                 ; box ~key:"urefs-content" ~style_class:"ls-foldable-content"
                     [ box ~key:"ufci" 
-                        [ (if m.unlinked_search then unlinked_search_input ()
+                        [ (if m.unlinked_search then
+                             refs_search_input "urefs"
+                               (fun q -> Action.Unlinked_set_query q)
+                               ()
                           else Logseq_dom.nothing)
                         ; column ~key:"urefs-body" ~gap:8
                             ~style_class:"ls-view-body"
@@ -1437,6 +1468,8 @@ let refs_eq (a : Model.t) (b : Model.t) =
   && a.unlinked_open = b.unlinked_open
   && a.unlinked_search = b.unlinked_search
   && a.unlinked_query = b.unlinked_query
+  && a.linked_search = b.linked_search
+  && a.linked_query = b.linked_query
   && a.route = b.route
   && ref_flags a.route_page = ref_flags b.route_page
 
@@ -1451,7 +1484,9 @@ let refs_wrap (m : Model.t) : t =
             [ box ~key:"tq" ~accessibility_identifier:"today-queries" [] ]
           else [])
         @ [ box ~key:"lrefs"
-              [ references_view ~parents:m.ref_parents m.page_refs ]
+              [ references_view ~parents:m.ref_parents
+                  ~search_on:m.linked_search ~query:m.linked_query
+                  m.page_refs ]
           ; (* cljs when-not class-page?/property-page? — the unlinked
                section is omitted entirely on node pages *)
             (if page.page_is_tag || page.page_is_property

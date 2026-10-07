@@ -302,9 +302,16 @@ let view ~placeholder ?new_option ?(on_enter_text = None)
             sheet still shrinks like web. Keep the node mounted across
             filter edits (height prop, not mount churn) and give rows
             stable keys: a drop+recreate per keystroke leaves taps
-            hitting a dead node *)
-         list ~height:(if vis = [] then 0 else 280)
-           (List.map
+            hitting a dead node. The empty-query state shows the same
+            "No matched result" note as the shui select *)
+         column ~gap:0
+           ((if vis = [] && String.trim s.q <> "" then
+               [ text ~key:"select-empty"
+                   ~value:(I18n.t "search/no-result")
+                   ~style_class:"ls-select-empty" [] ]
+             else [])
+            @ [ list ~height:(if vis = [] then 0 else 280)
+               (List.map
               (fun it ->
                  list_item
                    ~key:(if it.it_new then "__new__" else it.it_title)
@@ -315,10 +322,10 @@ let view ~placeholder ?new_option ?(on_enter_text = None)
                    ?icon:
                      (match it.it_icon with
                       | "" -> None
-                      | n -> Some (`app ("tabler-" ^ n)))
+                      | n -> Some (Icons.name_ref n))
                    ~on_press:(fun _ -> it.on_choose ())
                    [])
-              vis))
+              vis) ]))
       (Signal.value st)
   in
   (column ~gap:2

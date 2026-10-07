@@ -573,7 +573,7 @@ let search_only_chip st (gid : S.group_id) =
             ~style_class:"cp__cmdk-search-only-name"
             ~value:(gid_label gid) []
         ; button ~key:"clr" ~icon:`x ~size:`icon
-            ~label:(I18n.t "ui/delete")
+            ~label:I18n.close
             ~style_class:"cp__cmdk-search-only-clear"
             ~on_press:(fun _ -> S.clear_filter st)
             []
@@ -677,6 +677,12 @@ let hint_button label keys =
     ~style_class:"cp__cmdk-hint"
     [ text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label []
     ; hint_shortcut keys ]
+
+(* cljs tip: random per mount between "Press / to filter search
+   results" and "Press ⌘⏎ to open search in the sidebar"; clear-filter
+   tip while a filter is active. The {1} slot renders as a kbd
+   shortcut. *)
+
 
 (* cljs tip: random per mount between "Press / to filter search
    results" and "Press ⌘⏎ to open search in the sidebar"; clear-filter

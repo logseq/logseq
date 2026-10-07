@@ -37,6 +37,8 @@ type t =
   | Unlinked_toggle_open
   | Unlinked_toggle_search
   | Unlinked_set_query of string
+  | Linked_toggle_search
+  | Linked_set_query of string
   | Help_toggle
   | Rtc_state of Model.rtc (* rtc-sync-state broadcast *)
   | Rtc_state_clear (* a graph's sync is (re)starting — hide stale state *)

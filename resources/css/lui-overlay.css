@@ -5130,6 +5130,13 @@ select.form-select {
 /* cljs .ls-table-row is a hard 33px (min/max), not the .ls-block
    padding box used by outline rows */
 .ls-table-row.ls-block {
+  /* cljs .ls-table-row markup is .flex.flex-row — the .sticky-columns
+     pinned band and the unpinned cell row must share one line, not
+     stack as 100%-wide blocks (the opaque sticky band then covers the
+     cells inside the clipped 33px row) */
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   height: 33px;
   min-height: 33px;
   max-height: 33px;
@@ -5602,4 +5609,23 @@ select.form-select {
 .selection-action-button svg {
   width: 13px;
   height: 13px;
+}
+
+/* The vendored LUI platform stylesheet (lui.css) ships a shadcn oklch
+   :root theme in @layer theme; where it redefines these tokens it
+   replaces the HSL triplets this sheet consumes via hsl(var(--name)),
+   silently unstyling overlays, borders and muted text in light mode.
+   Re-pin the poisoned tokens unlayered so the triplet format always
+   wins. Dark mode is unaffected — the vendored .dark selector never
+   matches logseq's html[data-theme=dark]. */
+html[data-theme=light] {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted-foreground: 0 0% 52.3%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 300 1% 92%;
 }

@@ -513,6 +513,12 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                         ~style_class:"ls-block-right self-start"
                                         ~gap:4 ~cross:`center
                                         [ spacer ~key:("bg-" ^ key) []
+                                        ; (* cljs .ls-block-right order:
+                                             positioned-properties
+                                             :block-right (priority pill)
+                                             then tag chips *)
+                                          Properties_area.block_right_chips
+                                            ~uuid
                                         ; (* a comments area's tag chips stay
                                              hidden — the area view already
                                              announces itself *)

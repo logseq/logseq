@@ -57,6 +57,8 @@ let topbar st =
         ~style_class:"cp__right-sidebar-settings hide-scrollbar"
         ([ topbar_btn "contents" (t "page/contents") (fun () ->
                Sidebar_state.open_sticky_item st "contents")
+         ; topbar_btn "page-graph" (t "graph.page/title") (fun () ->
+               Sidebar_state.open_sticky_item st "page-graph")
          ; topbar_btn "help" (t "nav/help") (fun () ->
                Sidebar_state.open_sticky_item st "help")
          ]
@@ -197,6 +199,10 @@ let item_title (it : Sidebar_state.item) =
   | [], "help" ->
       row ~key:"pt-help" ~cross:`center ~gap:8
         [ icon_ "help"; text ~value:it.title [] ]
+  | [], "page-graph" ->
+      (* cljs: (icon "hierarchy") + (t :graph.page/title) *)
+      row ~key:"pt-page-graph" ~cross:`center ~gap:8
+        [ icon_ "hierarchy"; text ~value:it.title [] ]
   | [], kind
     when kind = "rtc" || kind = "undo-redo" || kind = "profiler" ->
       (* cljs build-sidebar-item: icon + title in .flex.items-center *)
@@ -219,6 +225,10 @@ let item_header st idx (it : Sidebar_state.item) =
   row ~key:("hd-" ^ it.key) ~main:`space_between
     ~style_class:"sidebar-item-header color-level"
     [ button ~key:("hdr-" ^ it.key) ~grow:1. ~padding_horizontal:8
+        (* page/block sidebar items can carry an empty title — a button
+           with neither text nor accessibility label is rejected and
+           kills the whole mount batch *)
+        ~label:(if it.title = "" then t "ui/untitled" else it.title)
         ~accessibility_identifier:("sidebar-panel-header-" ^ n)
         ~on_press:(fun _ -> Sidebar_state.toggle_collapsed st it.key)
         [ row ~key:("arrow-" ^ it.key) ~cross:`center
@@ -232,7 +242,7 @@ let item_header st idx (it : Sidebar_state.item) =
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
         [ button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
-            ~icon:(`app "dots")
+            ~icon:(`app "dots") ~label:(t "ui/show-more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32
@@ -343,8 +353,24 @@ let item_body st idx (it : Sidebar_state.item) =
         ~style_class:"page relative cp__page-inner-wrap"
         [ column ~key:("inner-" ^ it.key) ~gap:16
             ~style_class:"relative page-inner"
-            ([ sidebar_props_row st it
-             ; object_tabs_host it
+            ((match it.Sidebar_state.kind with
+              | "page-graph" ->
+                  [ (* the link-graph canvas isn't ported — same
+                       explicit empty state the #/graph route shows *)
+                    column ~key:"pg-empty" ~cross:`center ~main:`center
+                      ~padding_vertical:64
+                      [ box ~key:"pg-i" ~style_class:"mb-4"
+                          [ icon_ ~size:48 "hierarchy" ]
+                      ; text ~key:"pg-t"
+                          ~value:(t "graph.page/title") []
+                      ; text ~key:"pg-d"
+                          ~value:"Graph view isn't available in this app yet."
+                          []
+                      ]
+                  ]
+              | _ -> [])
+            @ [ sidebar_props_row st it
+              ; object_tabs_host it
              ; box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
                  [ (* data-cid is read by editor_actions' [data-cid]
@@ -359,7 +385,8 @@ let item_body st idx (it : Sidebar_state.item) =
              ]
             (* linked references sit inside .page-inner in cljs *)
             @ (if it.kind = "page" then
-                 [ Page.references_view it.linked_refs ]
+                 [ Page.references_view ~search_on:false ~query:""
+                     it.linked_refs ]
                else []))
         ]
     ]

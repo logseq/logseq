@@ -152,7 +152,13 @@ let open_readme (item : Js.Json.t) =
   let repo = jstr item "repo" in
   let repository =
     let r = jstr item "repository" in
-    if r <> "" then r else jstr (getf item "repository") "url"
+    if r <> "" then r
+    else (
+      (* repository may be an {url: ...} object or absent — reading
+         .url off undefined threw and killed the dialog *)
+      match Js.Json.decodeObject (getf item "repository") with
+      | Some _ -> jstr (getf item "repository") "url"
+      | None -> "")
   in
   if repo <> "" then (
     pending := Some { url; repo; repository; html = "" };

@@ -290,7 +290,7 @@ let nav_items ~active_route (checked, tag_titles) =
             (nav_route ~class_:"graph-view-nav"
                ~active:(active_route = Model.Graph_view)
                ~title:(t "nav/graph-view") ~icon_name:"hierarchy"
-               "#/graph")
+               ~shortcut:"g g" "#/graph")
       | "tag/tasks" -> tag_nav ~active_route "tasks" "nav/tasks" tag_titles
       | "tag/assets" -> tag_nav ~active_route "assets" "nav/assets" tag_titles
       | _ -> None)
@@ -395,7 +395,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
         (* cljs .sidebar-page-actions dots button inside .link-item —
            its class hooks (sidebar-page-actions, ls-icon-dots) still
            reach the row's target_class check *)
-        ; button ~variant:`ghost ~size:`icon ~label:(I18n.t "header/more")
+        ; button ~variant:`ghost ~size:`icon
+            ~label:(t "ui/show-more")
             ~height:28 ~padding_vertical:4 ~corner_radius:4 ~padding_horizontal:6 ~style_class:"active:opacity-80 as-ghost cursor-pointer disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 gap-1 hover:bg-secondary/70 hover:text-secondary-foreground select-none sidebar-page-actions absolute !bg-transparent top-0 scale-75 opacity-40 hover:opacity-80 active:opacity-100 text-sm ui__button"
             (* cljs [:i.relative {:style {:top "4px"}}] — the top offset
                rides a stylesheet rule now *)
