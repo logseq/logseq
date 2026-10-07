@@ -183,15 +183,22 @@ let title_editor (page : Model.page) : t =
             ~default:Edit_input.no_conduit
         in
         let m' = Edit_input.handle ~route ~conduit m ev in
-        if m' != m then Signal.update model_st (fun _ -> m');
-        (* conduit reads live rects — measure after the model publish
-           flushed the run text *)
+        if m' != m then begin
+          Signal.update model_st (fun _ -> m');
+          (* flush now so the conduit measures the freshly painted
+             runs — a stale read would re-emit the old line ranges and
+             clamp the just-inserted text out of view *)
+          Runtime.flush ()
+        end;
         let m2 =
           match conduit.Edit_input.line_ranges () with
           | [] -> m'
           | rs -> Edit_model.set_lines m' rs
         in
-        if m2 != m' then Signal.update model_st (fun _ -> m2);
+        if m2 != m' then begin
+          Signal.update model_st (fun _ -> m2);
+          Runtime.flush ()
+        end;
         Signal.update frame (fun _ -> Edit_input.measure conduit m2)
   in
   (Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
@@ -430,8 +437,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                              ~accessibility_identifier:("control-" ^ uuid)
                              [ cs ]))
                      ]
-        ; column ~key:"pt-col1"
-            [ column ~key:"pt-col2"
+        ; column ~key:"pt-col1" ~grow:1. ~cross:`stretch
+            [ column ~key:"pt-col2" ~cross:`stretch
                         [ row ~key:"pt-bmc" ~gap:8
                             ((match icon_el with
                               | None -> []
@@ -451,7 +458,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                           ]
                                       ]
                                   ])
-                            @ [ column ~key:"pt-col3"
+                            @ [ column ~key:"pt-col3" ~grow:1. ~cross:`stretch
                                 [ box ~key:"pt-wrap"
                                     ~style_class:"ls-page-title-container block-content-or-editor-wrap"
                                     [ box ~key:"pt-inner2"
@@ -460,7 +467,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                             ~gap:4 ~cross:`center
                                             ~style_class:"block-row"
                                             ([ column ~key:"pt-cw" ~gap:8
-                                                 ~grow:1.
+                                                 ~grow:1. ~cross:`stretch
                                                  ~style_class:"block-content-wrapper"
                                                  ((if m.editing_title then
                                                     []

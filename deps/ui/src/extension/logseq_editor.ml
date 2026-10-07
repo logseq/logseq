@@ -408,7 +408,14 @@ let line_ranges_el el : (int * int) list =
       let rl = el_rects fel in
       for i = 0 to rl_len rl - 1 do
         let r = rl_at rl i in
-        let top = int_of_float (rect_top r +. 0.5) in
+        (* group by vertical CENTER, not top: same-line runs can have
+           different font metrics (the 0-width pad inline-block measures
+           a taller rect than the text runs and would otherwise form a
+           phantom row above the text, degrading the hit-tested ranges
+           into (hi,hi) and blanking the surface) *)
+        let top =
+          int_of_float (rect_top r +. (rect_height r /. 2.))
+        in
         match Hashtbl.find_opt groups top with
         | Some l -> l := r :: !l
         | None -> Hashtbl.replace groups top (ref [ r ])
