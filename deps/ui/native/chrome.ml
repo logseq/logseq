@@ -470,7 +470,10 @@ let shell (ms : Model.t Signal.signal) : t =
       ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
       ^ if m.right_sidebar_open then " ls-right-sidebar-open" else "")
     (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-    [ (* horizontal shell: left-container grows, right-sidebar docks
+    [ (* invisible logseq-dom carrier: gives the gpui host a stable
+         extension ancestor to forward document events through *)
+      Logseq_el.carrier
+    ; (* horizontal shell: left-container grows, right-sidebar docks
          at the trailing edge (web: #app-container is display:flex row) *)
       row ~key:"app" ~accessibility_identifier:"app-container"
         ~style_class:"h-full min-h-0"

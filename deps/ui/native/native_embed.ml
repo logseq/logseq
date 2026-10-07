@@ -357,6 +357,7 @@ let initialize platform_code host_code (_payload : string) : string =
   in
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
+  Logseq_el.register registry;
   Logseq_codemirror.register registry;
   Logseq_editor.register registry;
   let app =

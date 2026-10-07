@@ -65,6 +65,8 @@
 (rule
  (copy ../native/logseq_dom.ml logseq_dom.ml))
 (rule
+ (copy ../native/logseq_el.ml logseq_el.ml))
+(rule
  (copy ../native/logseq_codemirror.ml logseq_codemirror.ml))
 (rule
  (copy ../native/logseq_editor.ml logseq_editor.ml))
