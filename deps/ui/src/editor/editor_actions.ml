@@ -153,6 +153,25 @@ let click_offset uuid =
       | _ -> None)
   | _ -> None
 
+(* on native the rect and offset-at replies land a tick after the
+   first read — a one-shot [click_offset] would settle on the
+   enter_edit default before the answer arrives. Re-poll while the
+   click_point window holds; a key press since the arm
+   (last_edit_input_ms > armed_ms) keeps the model's caret *)
+let rec apply_click_offset uuid fallback armed_ms attempts =
+  match S.editing () with
+  | Some e when e.S.uuid = uuid && !S.last_edit_input_ms <= armed_ms -> (
+      match click_offset uuid with
+      | Some off -> set_caret uuid off
+      | None ->
+          if attempts <= 0 then set_caret uuid fallback
+          else
+            D.set_timeout
+              (fun () ->
+                apply_click_offset uuid fallback armed_ms (attempts - 1))
+              16)
+  | _ -> ()
+
 let rec apply_focus () =
   (* a stale retry timer can fire after its arm was consumed or replaced;
      queued keys belong to the next landing, not the void — replay them
@@ -202,9 +221,7 @@ let rec apply_focus () =
              since this focus was requested, the stored caret is
              stale — keep where the model put it *)
           if !S.last_edit_input_ms <= armed_ms then
-            (match click_offset uuid with
-             | Some off -> set_caret uuid off
-             | None -> set_caret uuid caret);
+            apply_click_offset uuid caret armed_ms 30;
           (* the sink's runs prop and first layout can lag the landing
              by a patch or two, so the immediate measure often yields no
              caret rect (Enter→new block, arrow-in): re-measure after the
