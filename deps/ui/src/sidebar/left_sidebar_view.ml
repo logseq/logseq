@@ -327,7 +327,7 @@ let shortcut_hint binding =
             ~style_class:"shui-shortcut-separate shui-shortcut-glow"
             (List.map
                (fun k ->
-                 kbd ~style_class:"shui-shortcut-key"
+                 kbd ~style_class:"shui-shortcut-key shui-key-boxed"
                    ~value:(Platform.utf8 (String.uppercase_ascii k)) [])
                keys) ] ]
 

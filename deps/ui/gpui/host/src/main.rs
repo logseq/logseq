@@ -478,6 +478,19 @@ fn main() {
                 point(px(80.), px(80.)),
                 size(px(1280.), px(840.)),
             ))),
+            // macOS platform convention: merge the app header into the
+            // system titlebar (transparent, traffic lights overlaid) and
+            // let the marked `data-window-titlebar` row own dragging.
+            // Other platforms keep server-side decorations and the
+            // in-canvas header.
+            #[cfg(target_os = "macos")]
+            titlebar: Some(gpui_kit::gpui::TitlebarOptions {
+                title: None,
+                appears_transparent: true,
+                traffic_light_position: Some(point(px(9.), px(18.))),
+            }),
+            #[cfg(target_os = "macos")]
+            app_owns_titlebar_drag: true,
             ..Default::default()
         };
         eprintln!("logseq-gpui: opening window t={:.1}ms", boot_ms());

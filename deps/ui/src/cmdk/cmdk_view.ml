@@ -134,13 +134,17 @@ let combo_el key keys =
             @ [ kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k) ])
           keys))
 
-(* separate: sequential keys, 4px gap, no separators *)
+(* separate: sequential keys, 4px gap, no separators. `shui-key-boxed`
+   mirrors the native twin's class (inert here — web CSS boxes keys via
+   the `.shui-shortcut-separate kbd` descendant rule). *)
 let separate_el key keys =
   row ~key
     ~style_class:"shui-shortcut-separate shui-shortcut-glow"
     (List.mapi
        (fun i k ->
-         kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k))
+         kbd ~key:(Printf.sprintf "k%d" i)
+           ~style_class:"shui-shortcut-key shui-key-boxed"
+           ~value:(print_shortcut_key k) [])
        keys)
 
 (* chord: space-separated groups each rendered as a combo with a

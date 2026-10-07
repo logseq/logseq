@@ -226,17 +226,44 @@ fn register_class_styles() {
     class("ls-property-dialog", "", "pointer-events-auto");
 
     // ---- app shell (web .cp__header + groups) ----
+    // macOS merges the header into a transparent titlebar, so the left
+    // cluster sits clear of the traffic lights (Windows/Linux keep the
+    // system titlebar and no inset).
+    #[cfg(target_os = "macos")]
+    let header_pl = "padding-left:78px";
+    #[cfg(not(target_os = "macos"))]
+    let header_pl = "";
     class(
         "cp__header",
-        "display:flex;flex-direction:row;align-items:center;\
-         justify-content:space-between;height:48px;flex-shrink:0;\
-         border-bottom:1px solid border;background:background",
+        &format!(
+            "display:flex;flex-direction:row;align-items:center;\
+             justify-content:space-between;height:48px;flex-shrink:0;\
+             border-bottom:1px solid border;background:background;{header_pl}"
+        ),
         "",
     );
     class("cp__header-l", "display:flex;align-items:center", "");
     class(
         "cp__header-r",
         "display:flex;align-items:center;justify-content:flex-end",
+        "",
+    );
+    // Block bullets (web resources/css/lui-core.css .bullet-*).
+    class(
+        "bullet-link-wrap",
+        "display:flex;flex-direction:row;align-items:center",
+        "",
+    );
+    class(
+        "bullet-container",
+        "display:flex;align-items:center;justify-content:center;\
+         border-radius:9999px",
+        "",
+    );
+    class(
+        "bullet",
+        "width:6px;height:6px;border-radius:9999px;opacity:0.8;\
+         background:var(--lx-gray-08)",
         "",
     );
 
@@ -329,24 +356,38 @@ fn register_class_styles() {
          background:secondary",
         "",
     );
+    // web resources/css/shui.css: the box lives on the combo container or
+    // on each key inside `separate`; the base key is unboxed.
     class(
         "shui-shortcut-key",
         "display:flex;align-items:center;justify-content:center;\
          height:20px;min-width:20px;padding:2px 4px;font-size:12px;\
-         white-space:nowrap;border-radius:4px;border:1px solid border",
+         white-space:nowrap;color:var(--lx-gray-12)",
+        "",
+    );
+    class(
+        "shui-key-boxed",
+        "background:var(--lx-gray-06-alpha);\
+         border:1px solid var(--lx-gray-06-alpha);border-radius:4px",
         "",
     );
     class(
         "shui-shortcut-combo",
-        "display:flex;flex-direction:row;align-items:center",
+        "display:flex;flex-direction:row;align-items:center;\
+         background:var(--lx-gray-06-alpha);\
+         border:1px solid var(--lx-gray-06-alpha);border-radius:4px",
         "",
     );
     class(
         "shui-shortcut-separate",
-        "display:flex;flex-direction:row;align-items:center",
+        "display:flex;flex-direction:row;align-items:center;gap:4px",
         "",
     );
-    class("shui-shortcut-separator", "width:6px", "");
+    class(
+        "shui-shortcut-separator",
+        "width:1px;background:var(--lx-gray-07-alpha)",
+        "self-stretch",
+    );
     class(
         "shui-shortcut-row",
         "display:flex;flex-direction:row;align-items:center;gap:4px;\

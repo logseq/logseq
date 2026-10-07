@@ -402,7 +402,10 @@ let keymap_binding ~key (b : Keymap_data.binding) =
                   else [])
                  @ [ kbd
                        ~key:(key ^ "k" ^ string_of_int i)
-                       ~style_class:"shui-shortcut-key"
+                       ~style_class:
+                         (if b.kind = "separate" then
+                            "shui-shortcut-key shui-key-boxed"
+                          else "shui-shortcut-key")
                        ~value:(Platform.utf8 k) []
                    ])
                b.keys)

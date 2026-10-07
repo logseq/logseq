@@ -116,7 +116,7 @@ let rtc_item (ms : Model.t Signal.signal) : t =
 let topbar (ms : Model.t Signal.signal) : t list =
   [ row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
-      ~height:48
+      ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
       [ row ~key:"head-inner" ~cross:`center ~padding_horizontal:8
           ~style_class:"cp__header-l"
           [ left_menu_btn; search_btn ]

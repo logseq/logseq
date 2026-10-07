@@ -50,7 +50,7 @@ let kbd_seq ~key ~binding:_ keys =
             (List.mapi
                (fun i k ->
                  kbd ~key:(key ^ "-" ^ string_of_int i)
-                   ~style_class:"shui-shortcut-key"
+                   ~style_class:"shui-shortcut-key shui-key-boxed"
                    ~value:(Platform.utf8 (print_key k)) [])
                keys)
         ]

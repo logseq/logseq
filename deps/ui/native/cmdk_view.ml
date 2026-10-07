@@ -166,14 +166,19 @@ let combo_el key keys binding =
             @ [ kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k) ])
           keys))
 
-(* separate: sequential keys, 4px gap, no separators *)
+(* separate: sequential keys, 4px gap, no separators. gpui keys the
+   per-key box off `shui-key-boxed` (web gets the same effect from the
+   `.shui-shortcut-separate kbd` descendant rule, so the extra class is
+   inert there). *)
 let separate_el key keys binding =
   row ~key
     ~style_class:"shui-shortcut-separate shui-shortcut-glow"
     ~accessibility_identifier:binding
     (List.mapi
        (fun i k ->
-         kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k))
+         kbd ~key:(Printf.sprintf "k%d" i)
+           ~style_class:"shui-shortcut-key shui-key-boxed"
+           ~value:(print_shortcut_key k) [])
        keys)
 
 (* chord: space-separated groups each rendered as a combo with a
