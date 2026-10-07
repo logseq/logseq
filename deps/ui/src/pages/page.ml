@@ -1204,6 +1204,15 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
   | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
   | None -> false
 
+(* cljs page-inner wrap classes — shared by the page route and each
+   journal item in the journals list *)
+let page_wrap_cls (m : Model.t) (page : Model.page) : string =
+  "flex-1 page relative cp__page-inner-wrap"
+  ^ (if page.page_journal_day <> None then " is-journals" else "")
+  ^ (if is_today_page m page then " is-today-page" else "")
+  ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
+     else "")
+
 (* journal item backed by the journals signal — the outer keyed
    collection keeps the item mounted across publishes, a title reactive
    repaints title/icon/tag edits, the block list is the same keyed
@@ -1256,7 +1265,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
     (column ~key:("ji-" ^ key)
     [ (* data-page-tags is the page-wrap plugin contract *)
       box ~key:("jiw-" ^ key)
-        ~style_class:"flex-1 page relative cp__page-inner-wrap"
+        ~style_class:(page_wrap_cls (Signal.get ms) p0)
         ~data_attrs:(page_wrap_attrs p0)
         [ column ~key:("jip-" ^ key) ~gap:32
             ~style_class:"relative page-inner"
@@ -1404,12 +1413,7 @@ let scope_of_route (r : Model.route) =
 let page_cls (m : Model.t) =
   let base = "flex-1 page relative cp__page-inner-wrap" in
   match m.route_page with
-  | Some page ->
-      base
-      ^ (if page.page_journal_day <> None then " is-journals" else "")
-      ^ (if is_today_page m page then " is-today-page" else "")
-      ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
-         else "")
+  | Some page -> page_wrap_cls m page
   | None -> base
 
 let wrap_attrs_of (m : Model.t) =

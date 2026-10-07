@@ -1450,7 +1450,12 @@ and run_command st repo (cid : string) =
        | None -> ());
       refresh st
   | "go/home" -> nav "#/" Model.Home
-  | "go/journals" -> nav "#/" Model.Home
+  | "go/journals" ->
+      (* cljs go-to-journals! — #/all-journals when a default-home page
+         owns #/ *)
+      ignore
+        (let* h, r = Router.go_to_journals_target () in
+         Js.Promise.resolve (nav h r; Router.scroll_to_top ()))
   | "go/all-graphs" -> nav "#/graphs" Model.All_graphs
   | "go/graph-view" -> nav "#/graph" Model.Graph_view
   | "go/all-pages" -> nav "#/all-pages" Model.All_pages

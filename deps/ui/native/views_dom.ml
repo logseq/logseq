@@ -218,6 +218,7 @@ let el_remove_attr (el : el) (name : string) : unit =
 let el_scroll_top (_ : el) : float = 0.
 let el_scroll_height (_ : el) : float = 0.
 let el_client_height (_ : el) : float = 0.
+let el_set_scroll_top (_ : el) (_ : float) : unit = ()
 let el_client_width (_ : el) : float = 0.
 
 (* innerHTML is not ported: the logseq-* element family renders text via

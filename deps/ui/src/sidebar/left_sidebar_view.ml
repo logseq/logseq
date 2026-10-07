@@ -448,15 +448,23 @@ let nav_group ms st =
                 (fun (route, (checked, tag_titles)) ->
                   column ~key:"navs" ~style_class:"sidebar-navigations"
                     (* cljs journals item navigates on click; its anchor
-                       carries no href *)
+                       carries no href. go-to-journals! targets
+                       #/all-journals when a default-home page owns #/ *)
                     ((nav_link ~key:"nl-journals" ~class_:"journals-nav"
                        ~active:(route = Model.Journals || route = Model.Home)
                        ~title:(t "nav/journals") ~icon_name:"calendar"
                        ~shortcut:"g j"
                        ~on_click:(fun () ->
-                         Platform.set_location_hash
-                           (Runtime.nav_hash "#/");
-                         Web_dom.dispatch_custom "ls:navigate" Js.Json.null)
+                         ignore
+                           (Js.Promise.then_
+                              (fun (h, _) ->
+                                Platform.set_location_hash
+                                  (Runtime.nav_hash h);
+                                Web_dom.dispatch_custom "ls:navigate"
+                                  Js.Json.null;
+                                Router.scroll_to_top ();
+                                Js.Promise.resolve ())
+                              (Router.go_to_journals_target ())))
                        ())
                     :: nav_items ~active_route:route (checked, tag_titles)
                   ))

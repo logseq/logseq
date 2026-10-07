@@ -183,6 +183,26 @@ let journal_summaries w =
       List.filter_map Decode.page_of_summary xs
   | _ -> []
 
+(* a journals list shorter than the scroller fires no scroll event —
+   after each commit, pull the next chunk until the content overflows
+   or the db runs out of days. Goes through the journals_load_more hook
+   so it works for whichever loader the route installed *)
+let maybe_fill_journals () =
+  ignore
+    (Web_dom.set_timeout_id
+       (fun () ->
+         match Web_dom.get_element_by_id "main-content-container" with
+         | Some el
+           when !journals_has_more
+             (* native DOM stubs report 0 metrics — 0<=0+1 would pump
+                every journal day eagerly *)
+             && Web_dom.el_client_height el > 0.
+             && Web_dom.el_scroll_height el
+                <= Web_dom.el_client_height el +. 1. ->
+             ignore (!Runtime.journals_load_more ())
+         | _ -> ())
+       150)
+
 let load_journals () =
   Platform.perf_mark "nav:journals";
   journals_has_more := true;
@@ -198,7 +218,8 @@ let load_journals () =
   Js.Promise.resolve
     (match Runtime.route () with
      | Model.Journals | Model.Home ->
-         Runtime.send (Action.Journals_loaded js)
+         Runtime.send (Action.Journals_loaded js);
+         maybe_fill_journals ()
      | _ -> ()))
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("load_journals failed", e);
@@ -247,10 +268,11 @@ let load_more_journals () : unit Js.Promise.t =
                    | Some u -> not (SSet.mem u known)
                    | None -> true)
           in
-          if fresh <> [] then
+          if fresh <> [] then (
             Runtime.send
               (Action.Journals_loaded
-                 (!Runtime.current_journals @ fresh))
+                 (!Runtime.current_journals @ fresh));
+            maybe_fill_journals ())
       | _ -> ());
      journals_loading_more := false;
      Js.Promise.resolve ())
@@ -258,6 +280,26 @@ let load_more_journals () : unit Js.Promise.t =
            journals_loading_more := false;
            Platform.console_error ("load_more_journals failed", e);
            Js.Promise.resolve ()))
+
+(* cljs go-to-journals!: a configured :default-home page takes over the
+   home route, so the Journals nav lands on #/all-journals there and on
+   #/ otherwise *)
+let go_to_journals_target () : (string * Model.route) Js.Promise.t =
+  let* cfg = Sdk_config.read_config (repo ()) in
+  Js.Promise.resolve
+    (match
+       match Wire.get cfg "default-home" with
+       | Some dh -> Wire.map_get_string dh "page"
+       | None -> None
+     with
+     | Some _ -> ("#/all-journals", Model.Journals)
+     | None -> ("#/", Model.Home))
+
+(* cljs util/scroll-to-top on the app scroller *)
+let scroll_to_top () =
+  match Web_dom.get_element_by_id "main-content-container" with
+  | Some el -> Web_dom.el_set_scroll_top el 0.
+  | None -> ()
 
 (* fetches for the same route can resolve out of order — only the
    latest-initiated load may commit, otherwise an older response lands
@@ -689,6 +731,23 @@ let init () =
                 Platform.console_error
                   ("journal refs refresh failed", e);
                 Js.Promise.resolve ())));
+  (* cljs all-journals' Virtuoso endReached — scroll doesn't bubble, so a
+     capture listener on the document sees the app scroller's events;
+     nearing the bottom pulls the next chunk of journal days *)
+  Web_dom.add_document_listener "scroll" (fun ev ->
+      match Runtime.route () with
+      | Model.Journals | Model.Home -> (
+          match Web_dom.ev_target ev with
+          | Some el
+            when Web_dom.el_id el = "main-content-container"
+              && Web_dom.el_client_height el > 0.
+              && Web_dom.el_scroll_height el -. Web_dom.el_scroll_top el
+                 -. Web_dom.el_client_height el
+                 <= Web_dom.el_client_height el ->
+              ignore (!Runtime.journals_load_more ())
+          | _ -> ())
+      | _ -> ())
+    true;
   Platform.on_hash_change resolve;
   Web_dom.on_document_event "ls:navigate" (fun _ -> resolve ());
   Web_dom.on_document_event "keydown" (fun ev ->
