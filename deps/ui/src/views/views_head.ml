@@ -599,7 +599,10 @@ let search_el inst : t =
               end)
         ; if_ ~test:open_sig
             (row
-               [ search_field ~style_class:"ls-search-input"
+               [ (* input, not search_field: a native search box paints
+                    its own clear control — with the manual x ghost_btn
+                    below that made two *)
+                 input ~style_class:"ls-search-input"
                    ~accessibility_identifier:input_id
                    ~placeholder:I.type_to_search
                    ~text:(V.get inst).V.input
