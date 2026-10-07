@@ -20,8 +20,25 @@ let env = Fixtures.shared_open_page ()
 external js_string_of : 'a -> string = "String" [@@mel.scope "globalThis"]
 
 let open_recycle env =
-  let* () = Pw.click env ".toolbar-dots-btn" in
-  Pw.click env "[role='menuitem'] div:text('Recycle')"
+  let item = "[role='menuitem'] div:text('Recycle')" in
+  let rec attempt n =
+    let* () = Pw.click env ".toolbar-dots-btn" in
+    let* opened =
+      Pw.catch_timeout
+        (Js.Promise.then_
+           (fun _ -> Js.Promise.resolve true)
+           (Pw.wait_for env ~timeout:8000 item))
+        (fun () -> Js.Promise.resolve false)
+    in
+    if opened then Pw.click env item
+    else if n > 1 then begin
+      (* close whatever state the swallowed click left, then retry *)
+      let* () = K.esc env in
+      attempt (n - 1)
+    end
+    else Pw.click env item
+  in
+  attempt 3
 
 let recycle_root env page_name =
   Loc.filter env ".ls-recycle-page-content section > div > div"
