@@ -1319,9 +1319,11 @@ let test_cmdk_view () =
      | Some it -> it.ititle = "two"
      | None -> false);
   check "item_at oob" (Cmdk_state.item_at v 99 = None);
-  check "dom key changes on hl"
+  check "dom key stable on hl"
     (Cmdk_state.item_dom_key i1
-     <> Cmdk_state.item_dom_key { i1 with ihl = true });
+     = Cmdk_state.item_dom_key { i1 with ihl = true });
+  check "dom key differs per item"
+    (Cmdk_state.item_dom_key i1 <> Cmdk_state.item_dom_key i2);
   check "dom key stable"
     (Cmdk_state.item_dom_key i1 = Cmdk_state.item_dom_key i1);
   (* node_exists suppresses the Create row *)

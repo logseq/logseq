@@ -165,23 +165,13 @@ let decorate (v : view) : view =
 let set st v = Runtime.signal_set st.vs (decorate v)
 let set_in st f = set st (f (get st))
 
-(* Content-versioned DOM key: any render-visible change yields a new key,
-   so keyed lists drop+remount the row instead of publishing an in-place
-   update — a row must never re-mount its dynamic branches inside the
-   same flush that tears other rows down (that ordering emits create ops
-   for nodes the batch already dropped). *)
-let item_dom_key (it : item) =
-  let badge_n =
-    match it.ibadge with
-    | No_badge -> 0
-    | Text_badge -> 1
-    | Header_badge -> 2
-  in
-  Printf.sprintf "%s#%d|%b|%b|%s|%s|%s|%s|%s|%s|%d" it.ikey it.idx it.ihl
-    it.imouse it.iq it.ititle
-    (Option.value ~default:"" it.info)
-    (Option.value ~default:"" it.header)
-    it.iicon it.isc badge_n
+(* Stable DOM key: every dynamic field (query, highlight, mouse state,
+   position, rendered strings) republishes into the row's item_sig
+   reactive props, so in-place updates are safe — a stable key can never
+   re-mount dynamic branches mid-flush. Versioning the key on any of
+   those fields instead remounts every result row on each keystroke or
+   hover (~600 patch ops per char on a 50-item list). *)
+let item_dom_key (it : item) = it.ikey
 
 let flat_items (v : view) : item array =
   Array.of_list (List.concat_map (fun g -> g.gitems) v.groups)

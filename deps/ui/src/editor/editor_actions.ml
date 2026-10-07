@@ -449,7 +449,7 @@ let optimistic_edit (f : Model.page -> Model.page option) =
       match f page with
       | Some page' ->
           Page_delta.mark_own_commit page';
-          Runtime.send (Action.Page_loaded page')
+          (let _ = Platform.perf_mark "optimistic:page-loaded" in Runtime.send (Action.Page_loaded page'))
       | None -> ())
   | None -> (
       let rec loop acc = function
