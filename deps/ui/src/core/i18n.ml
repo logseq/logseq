@@ -496,6 +496,8 @@ let en_overrides = function
       "Tag properties are inherited by all nodes using the tag. For \
        example, each #Task node inherits 'Status' and 'Priority'."
   | "property/set-property" -> "Set property"
+  | "property/set-tags" -> "Set tags"
+  | "property/unset-property" -> "Unset property"
   | "property/add-new" -> "Add property"
   | "property/add-or-change" -> "Add or change property"
   | "property/select-property-placeholder" -> "Select a property"

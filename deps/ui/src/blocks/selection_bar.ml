@@ -95,13 +95,12 @@ let install_listeners () =
    popup/cmdk flags into the same reactive source (nested reactive has no parent
    node to anchor to) *)
 let rec view () : t =
-  (* the editor state signal only exists once a block row has mounted —
-     check it at mount time (this node's ctx fn runs after the block rows
-     it follows in the children list), not at construction where it would
-     permanently stay unmounted on pages that render before any block *)
+  (* mount-order independent: ensure creates the editor state on first
+     use, so the bar works even on pages where it precedes the first
+     block row (gating on S.ready here left it permanently unmounted) *)
   fun ctx parent ->
-    if not (S.ready ()) then Logseq_dom.nothing ctx parent
-    else node () ctx parent
+    S.ensure ctx;
+    node () ctx parent
 
 and node () : t =
  fun ctx parent -> (
@@ -179,8 +178,10 @@ and node () : t =
                         ~text:(I18n.t "property/unset-property")
                         (fun () -> open_prop_dlg ~remove:true)
                     ; action_btn "sab-del" ~icon:`trash
+                        ~title:(I18n.t "editor/delete-selection")
                         (fun () -> Editor_actions.delete_selection ())
                     ; action_btn "sab-dots" ~icon:(`app "dots")
+                        ~title:(I18n.t "ui/show-more")
                         (fun () ->
                           match !(Popups_state.active) with
                           | Some st ->

@@ -404,7 +404,7 @@ let edit_arrows ~route ~conduit uuid (kev : Edit_model.key_event)
       (* shift+arrow on a boundary row crosses into block selection *)
       if (up && first) || ((not up) && last) then (
         (match S.editing () with
-         | Some _ -> A.exit_edit ~select:true
+         | Some _ -> A.shift_arrow_select up
          | None -> A.extend_selection up);
         m)
       else Edit_input.handle ~route ~conduit m (Edit_input.Key (kev, false))
@@ -878,7 +878,13 @@ let is_other_block_editor uuid target =
 let apply_input ?frame uuid ev =
   match S.editing () with
   | Some e when e.S.uuid = uuid -> (
-      S.note_input ();
+      (* Focus/Blur/Menu are lifecycle emits, not input — counting them
+         makes last_edit_input_ms jump past every request_focus arm, so
+         the stale-caret gate in apply_focus would never let the stored
+         (or click-hit-tested) caret land *)
+      (match ev with
+       | Edit_input.Focus | Edit_input.Blur | Edit_input.Menu _ -> ()
+       | _ -> S.note_input ());
       let route = A.route_of uuid in
       let conduit = A.conduit_of uuid in
       let m0 = e.S.model in
@@ -1207,7 +1213,8 @@ let on_click ev =
                         "button, a, input, audio, video, details, summary, \
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
-                         .view-action-type, .ui-fenced-code-editor"
+                         .view-action-type, .ui-fenced-code-editor, \
+                         .block-editor"
                         target
                     with
                     | Some _ -> ()
@@ -1425,6 +1432,11 @@ let on_mousedown ev =
                            ~default:""
                        , now, stale )
                    | None -> ("", now, stale)))));
+    (match !last_block_mousedown with
+     | u, _, _ when u <> "" && u <> "*" ->
+         S.click_point :=
+           Some (u, now, D.ev_client_x ev, D.ev_client_y ev)
+     | _ -> S.click_point := None);
     if S.editing () <> None then
     match
       D.closest_sel ".editor-wrapper, .ui-fenced-code-editor"

@@ -402,21 +402,39 @@ let offset_at_el el ~x ~y : int option =
 (* visual lines as [lo, hi) unit ranges: group every .ed-r element's
    client rects by row top, then hit-test each row's left/right edge *)
 let line_ranges_el el : (int * int) list =
-  let groups = Hashtbl.create 8 in
+  (* collect every run rect, then cluster by row: a pad's line box can
+     sit a couple px off the text run's, so exact-top grouping splits
+     one visual row into a text row and a pad-only row — the pad row
+     then hit-tests to a degenerate [e,e) range that corrupts the
+     model's line table *)
+  let rects = ref [] in
   Array.iter
     (fun fel ->
       let rl = el_rects fel in
       for i = 0 to rl_len rl - 1 do
-        let r = rl_at rl i in
-        let top = int_of_float (rect_top r +. 0.5) in
-        match Hashtbl.find_opt groups top with
-        | Some l -> l := r :: !l
-        | None -> Hashtbl.replace groups top (ref [ r ])
+        rects := rl_at rl i :: !rects
       done)
     (run_els el);
-  Hashtbl.fold (fun top l acc -> (top, !l) :: acc) groups []
-  |> List.sort (fun (a, _) (b, _) -> Int.compare a b)
-  |> List.filter_map (fun (_, rects) ->
+  let sorted =
+    List.sort
+      (fun a b -> Float.compare (rect_top a) (rect_top b))
+      !rects
+  in
+  (* walk top-sorted rects into row clusters: a rect joins the open
+     cluster while its top is within half the tallest member's height;
+     a wrap's next row starts a full line height lower *)
+  let clusters =
+    List.fold_left
+      (fun acc r ->
+        match acc with
+        | (top0, maxh, rs) :: tl when rect_top r <= top0 +. (maxh *. 0.5)
+          ->
+            (top0, Float.max maxh (rect_height r), r :: rs) :: tl
+        | _ -> (rect_top r, rect_height r, [ r ]) :: acc)
+      [] sorted
+  in
+  List.rev clusters
+  |> List.filter_map (fun (_, _, rects) ->
       let left =
         List.fold_left
           (fun m r -> Float.min m (rect_left r))
