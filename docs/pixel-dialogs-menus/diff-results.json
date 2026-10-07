@@ -1,48 +1,33 @@
 [
  {
-  "stem": "11-export-page",
-  "diff": 2.6168945312500003,
-  "pixels": 26797
- },
- {
-  "stem": "14-login",
-  "diff": 2.02626953125,
-  "pixels": 20749
- },
- {
   "stem": "03-settings-keymap",
-  "diff": 1.8875,
-  "pixels": 19328
+  "diff": 1.71162109375,
+  "pixels": 17527
  },
  {
   "stem": "18-block-ctx",
-  "diff": 1.6023437500000002,
-  "pixels": 16408
- },
- {
-  "stem": "03-settings-advanced",
-  "diff": 1.49775390625,
-  "pixels": 15337
- },
- {
-  "stem": "02-settings-general",
-  "diff": 1.47265625,
-  "pixels": 15080
- },
- {
-  "stem": "32-dark-settings",
-  "diff": 1.4376953125,
-  "pixels": 14722
- },
- {
-  "stem": "33-dark-block-ctx",
-  "diff": 1.399609375,
-  "pixels": 14332
+  "diff": 1.63349609375,
+  "pixels": 16727
  },
  {
   "stem": "34-dark-right-sidebar",
-  "diff": 1.35517578125,
-  "pixels": 13877
+  "diff": 1.5360351562499999,
+  "pixels": 15729
+ },
+ {
+  "stem": "33-dark-block-ctx",
+  "diff": 1.3982421875,
+  "pixels": 14318
+ },
+ {
+  "stem": "23-sidebar-help",
+  "diff": 1.3817382812499999,
+  "pixels": 14149
+ },
+ {
+  "stem": "32-dark-settings",
+  "diff": 1.34560546875,
+  "pixels": 13779
  },
  {
   "stem": "10-appearance",
@@ -50,14 +35,14 @@
   "pixels": 13391
  },
  {
-  "stem": "03-settings-editor",
-  "diff": 1.2193359375000001,
-  "pixels": 12486
+  "stem": "03-settings-advanced",
+  "diff": 1.2783203125,
+  "pixels": 13090
  },
  {
-  "stem": "23-sidebar-help",
-  "diff": 1.17275390625,
-  "pixels": 12009
+  "stem": "02-settings-general",
+  "diff": 1.255078125,
+  "pixels": 12852
  },
  {
   "stem": "19-set-property",
@@ -65,29 +50,24 @@
   "pixels": 10744
  },
  {
-  "stem": "17-delete-confirm",
-  "diff": 1.0380859375,
-  "pixels": 10630
- },
- {
-  "stem": "13-plugins",
-  "diff": 0.77158203125,
-  "pixels": 7901
+  "stem": "03-settings-editor",
+  "diff": 0.98681640625,
+  "pixels": 10105
  },
  {
   "stem": "01-dots-menu",
-  "diff": 0.7335937499999999,
-  "pixels": 7512
- },
- {
-  "stem": "03-settings-features",
-  "diff": 0.70693359375,
-  "pixels": 7239
+  "diff": 0.9552734375,
+  "pixels": 9782
  },
  {
   "stem": "31-dark-dots-menu",
-  "diff": 0.70400390625,
-  "pixels": 7209
+  "diff": 0.9062499999999999,
+  "pixels": 9280
+ },
+ {
+  "stem": "11-export-page",
+  "diff": 0.89912109375,
+  "pixels": 9207
  },
  {
   "stem": "22-sidebar-contents",
@@ -100,14 +80,29 @@
   "pixels": 6551
  },
  {
-  "stem": "25-recycle",
-  "diff": 0.5154296875,
-  "pixels": 5278
+  "stem": "13-plugins",
+  "diff": 0.57998046875,
+  "pixels": 5939
+ },
+ {
+  "stem": "14-login",
+  "diff": 0.54482421875,
+  "pixels": 5579
+ },
+ {
+  "stem": "03-settings-features",
+  "diff": 0.52109375,
+  "pixels": 5336
  },
  {
   "stem": "16-title-ctx",
-  "diff": 0.500390625,
-  "pixels": 5124
+  "diff": 0.51787109375,
+  "pixels": 5303
+ },
+ {
+  "stem": "25-recycle",
+  "diff": 0.5154296875,
+  "pixels": 5278
  },
  {
   "stem": "15-parity-page",
@@ -131,12 +126,17 @@
  },
  {
   "stem": "30-dark-home",
-  "diff": 0.45126953125,
-  "pixels": 4621
+  "diff": 0.46220703124999996,
+  "pixels": 4733
  },
  {
   "stem": "12-import",
   "diff": 0.0287109375,
   "pixels": 294
+ },
+ {
+  "stem": "17-delete-confirm",
+  "diff": 0.014160156249999998,
+  "pixels": 145
  }
 ]

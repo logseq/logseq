@@ -1472,10 +1472,10 @@ div[data-keep-selection].menu-links-wrapper {
   display: grid;
   place-items: center;
   overflow-y: auto;
-  /* --lui-c-background is an hsl triple (0 0% 100%), not a full color —
-     wrap it in hsl() before mixing or the declaration is invalid and the
-     scrim renders transparent */
-  background: color-mix(in oklab, hsl(var(--lui-c-background)) 90%, transparent);
+  /* --lui-c-background is already a full hsl() color (the :root alias
+     above) — mixing it directly keeps the scrim at cljs's
+     bg-background/90 */
+  background: color-mix(in oklab, var(--lui-c-background) 90%, transparent);
   animation: lui-fade-in 150ms ease-out;
 }
 
@@ -1483,7 +1483,7 @@ div[data-keep-selection].menu-links-wrapper {
   position: fixed;
   inset: 0;
   z-index: 999;
-  background: color-mix(in oklab, hsl(var(--lui-c-background)) 80%, transparent);
+  background: color-mix(in oklab, var(--lui-c-background) 80%, transparent);
   backdrop-filter: blur(4px);
   animation: lui-fade-in 150ms ease-out;
 }
@@ -1509,8 +1509,9 @@ div[data-keep-selection].menu-links-wrapper {
   border-radius: 0.5rem;
   background: var(--lui-c-background);
   background: var(--ls-primary-background-color, var(--lui-c-background));
-  color: hsl(var(--foreground, var(--ls-primary-text-color, inherit)));
-  color: var(--ls-primary-text-color, var(--lui-c-foreground));
+  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
+     --ls-primary-text-color here would warm every label */
+  color: inherit;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
     0 4px 6px -4px rgb(0 0 0 / 0.1);
   transform: translate(-50%, -50%)
@@ -1538,8 +1539,9 @@ div[data-keep-selection].menu-links-wrapper {
   border-radius: 0.5rem;
   background: var(--lui-c-background);
   background: var(--ls-primary-background-color, var(--lui-c-background));
-  color: hsl(var(--foreground, var(--ls-primary-text-color, inherit)));
-  color: var(--ls-primary-text-color, var(--lui-c-foreground));
+  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
+     --ls-primary-text-color here would warm every label */
+  color: inherit;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
     0 4px 6px -4px rgb(0 0 0 / 0.1);
   transform: translate(-50%, -50%);
@@ -2133,8 +2135,9 @@ div[data-keep-selection].menu-links-wrapper {
   border: 1px solid var(--lui-c-border);
   background: var(--lui-c-background);
   background: var(--ls-primary-background-color, var(--lui-c-background));
-  color: hsl(var(--foreground, var(--ls-primary-text-color, inherit)));
-  color: var(--ls-primary-text-color, var(--lui-c-foreground));
+  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
+     --ls-primary-text-color here would warm every label */
+  color: inherit;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
     0 4px 6px -4px rgb(0 0 0 / 0.1);
   cursor: default;
@@ -4148,6 +4151,26 @@ select.form-select {
   line-height: 1;
   padding-top: 1.5rem;
   padding-bottom: 1.75rem;
+}
+
+/* cljs login.css field rows: label text-sm lh-5 + flex-col gap-3 pb-1
+   wrapper — LUI's label sits at lh-14 with no bottom pad */
+.cp__user-login .ls-auth-field .lui-label {
+  line-height: 20px;
+}
+
+.cp__user-login .ls-auth-field {
+  padding-bottom: 4px;
+}
+
+/* cljs footer is one p.pt-4.text-center with two lh-6 lines; LUI
+   splits it into two rows — pt-4 + two 24px rows */
+.cp__user-login .ls-auth-foot {
+  padding-top: 16px;
+}
+
+.cp__user-login .ls-auth-foot > .lui-row {
+  min-height: 24px;
 }
 
 /* cljs shui input is h-10 px-3 py-2 everywhere it appears in dialogs */

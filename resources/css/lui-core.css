@@ -1132,6 +1132,10 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     margin-top: -8px;
     padding-bottom: 150px;
     height: calc(100vh - 48px);
+    /* cljs mounts the list as a plain block container — item heights
+       are content-driven (flex:1 on .sidebar-item is inert outside a
+       flex parent), NOT an equal split */
+    display: block;
   }
 
   /* cljs right_sidebar.css: @apply pt-2 only (no mb) */
@@ -1284,6 +1288,48 @@ html[data-theme='dark'] {
       background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
     }
   }
+}
+
+/* cljs onboarding.cljs help pane — .help.cp__sidebar-help-docs holds
+   p.mt-4.mb-1 > b titles and ul > li > a rows with circle markers.
+   Measured cljs geometry: pane offset +24px/+8px from
+   .sidebar-panel-content, titles h24 (fs16), ul margin-left 19.2px,
+   li rows h24 fs16. Flex children can't collapse margins, so the
+   first title's mt-4 folds into the pane's own top offset. */
+.help.cp__sidebar-help-docs {
+  display: block;
+  margin: 24px 0 0 8px;
+}
+
+.help .ls-hp-title {
+  display: block;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 24px;
+  margin: 16px 0 4px;
+}
+
+.help > .ls-hp-title:first-child {
+  margin-top: 0;
+}
+
+.help .ls-hp-list {
+  display: block;
+  margin-left: 19.2px;
+}
+
+.help .ls-hp-item {
+  display: list-item;
+  list-style: circle;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+/* action item (Keyboard shortcuts) — same accent link color as the
+   <a> rows, which they get from the global `a` rule */
+.help .ls-hp-iconrow {
+  color: var(--lx-accent-11, var(--ls-link-text-color));
+  cursor: pointer;
 }
 
 /* ========================= Page / journal ================================ */

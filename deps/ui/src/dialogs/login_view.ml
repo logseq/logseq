@@ -370,8 +370,9 @@ let session_username = Rtc_flows.username
    on_submit instead; name/autocomplete attrs have no component
    equivalent (fields are read from signal state, not the DOM). *)
 let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
-  (* cljs .cp__user-login rows stretch to the form width *)
-  column ~key ~gap:12 ~cross:`stretch
+  (* cljs .cp__user-login rows stretch to the form width;
+     ls-auth-field carries the cljs label lh-5 + wrapper pb-1 *)
+  column ~key ~gap:12 ~cross:`stretch ~style_class:"ls-auth-field"
     [ label ~key:"l" ~value:caption []
     ; (if secure then secure_field else input ~kind:`text)
         ~key:"i" ~style_class:"ui__input"
@@ -410,7 +411,8 @@ let login_panel ctx fields =
     ; input_row ~key:"r-pw" ~caption:(I18n.t "account/password")
         ~secure:true ~value:fields.password ~on_submit
     ; submit_btn ~key:"lg-btn" (I18n.t "account/sign-in") on_submit
-    ; column ~key:"lg-foot" ~cross:`center ~gap:4
+    ; column ~key:"lg-foot" ~cross:`center ~gap:0
+        ~style_class:"ls-auth-foot"
         [ row ~key:"f1" ~gap:4
             [ text ~key:"f1a" ~style_class:"ls-auth-muted"
                 ~value:(I18n.t "account/dont-have-account-question" ^ " ")
