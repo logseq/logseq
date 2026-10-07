@@ -26,7 +26,7 @@ protocol) in the real browser app.
 
 ## Login with the e2e account
 
-- Creds (from `clj-e2e/src/logseq/e2e/util.clj` `login-test-account`):
+- Creds (from `ocaml-e2e/lib/util.ml` `login_test_account`, formerly clj-e2e `login-test-account`):
   user `e2etest`, pass `Logseq-e2e`.
 - `localStorage.setItem("login-enabled","true")`, reload, then click
   `.toolbar-dots-btn` → "Login" → type user → Tab → pass → submit.

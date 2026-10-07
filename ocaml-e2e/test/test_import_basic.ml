@@ -26,7 +26,7 @@ let () =
     in
     let invalid_file =
       Node.Path.join2 (process_cwd Node.Process.process)
-        "../clj-e2e/resources/invalid-db-export.edn"
+        "resources/invalid-db-export.edn"
       |> Node.Path.normalize
     in
     let graph_name = "invalid-import-" ^ Js.String.make (Js.Date.now ()) in
