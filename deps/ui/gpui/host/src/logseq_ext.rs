@@ -362,6 +362,57 @@ fn register_class_styles() {
         "display:flex;align-items:center;justify-content:flex-end",
         "",
     );
+    // ---- left sidebar (web resources/css/lui-core.css #left-sidebar) ----
+    // Web scopes these rules under .left-sidebar-inner / .sidebar-
+    // content-group; the gpui dictionary is a flat token map, so each
+    // registration keys a sidebar-specific class name only.
+    class(
+        "left-sidebar-inner",
+        "border-right:1px solid border",
+        "",
+    );
+    // .item — 32px nav rows (Journals/Flashcards/…). The web sheet is
+    // scoped to the sidebar and `item` only appears there as a bare
+    // token, so a global registration is safe.
+    class(
+        "item",
+        "display:flex;flex-direction:row;align-items:center;\
+         height:32px;padding-left:6px;padding-right:2px;\
+         font-size:14px;font-weight:500;opacity:0.8;border-radius:6px",
+        "",
+    );
+    // .item.active — current nav row, web fills it with gray-04
+    // (the token behind --ls-quaternary-background-color).
+    class("active", "background:var(--lx-gray-04-alpha)", "");
+    // .hd — collapsible group headers (Favorites/Recent/Navigations).
+    class(
+        "hd",
+        "display:flex;flex-direction:row;align-items:center;\
+         justify-content:space-between;height:32px;\
+         padding-left:8px;padding-right:4px;border-radius:6px",
+        "",
+    );
+    // .hd .wrap-th — small muted section label.
+    class("wrap-th", "font-size:12px;font-weight:500;opacity:0.5", "");
+    // .hd .as-edit — the trailing filter-edit icon, softened.
+    class("as-edit", "opacity:0.6", "");
+    class(
+        "sidebar-navigations",
+        "display:flex;flex-direction:column;gap:2px;margin-top:4px",
+        "",
+    );
+    // .keyboard-shortcut — web only reveals the shortcut chips on row
+    // hover (opacity transition); hover states can't be expressed in
+    // the flat dictionary, so keep the web's default state: hidden.
+    class("keyboard-shortcut", "display:none", "");
+    // .bd a.link-item — favorites/recents page rows.
+    class(
+        "link-item",
+        "display:flex;flex-direction:row;align-items:center;\
+         height:32px;padding-left:8px;padding-right:8px;\
+         font-size:14px;opacity:0.8;border-radius:6px",
+        "",
+    );
     // Block bullets (web resources/css/lui-core.css .bullet-*).
     class(
         "bullet-link-wrap",

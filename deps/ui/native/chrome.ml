@@ -218,7 +218,10 @@ let left_sidebar (ms : Model.t Signal.signal) =
             ~style_class:"items-stretch"
             [ column ~key:"ls-inner" ~min_height:0
                 ~width:(if m.left_sidebar_open then 260 else 0)
-                ~background:"secondary"
+                (* web: --left-sidebar-bg-color = --lx-gray-02 (the
+                   near-white mauve-02 tone, one step above the page);
+                   gpui `muted` is the matching surface tone. *)
+                ~background:"muted"
                 ~style_class:
                   "left-sidebar-inner as-container overflow-hidden shrink-0"
                 [ column ~key:"ls-wrap" ~grow:1. ~min_height:0
