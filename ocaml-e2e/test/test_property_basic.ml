@@ -69,11 +69,25 @@ let add_new_properties env title_prefix =
                              [...document.querySelectorAll('.block-title')].map(t => t.textContent.trim()).filter(Boolean).slice(0, 40); \
                              const ed = \
                              document.querySelector('.editor-wrapper textarea'); \
-                             return JSON.stringify({titles, editing: ed \
+                             return JSON.stringify({hash: location.hash, \
+                             blockContents: \
+                             document.querySelectorAll('.ls-page-blocks .block-content').length, \
+                             titles, editing: ed \
                              ? ed.value : null}); })()"
                         in
                         let* () =
                           Js.Promise.resolve (Js.log2 "[prop-dbg]" dump)
+                        in
+                        (* an empty dump means the whole outliner is
+                           unmounted (full-page remount or the page query
+                           is queued behind the rtc backlog) — give the
+                           block rows a polling window before the final
+                           click so a late re-render isn't wasted *)
+                        let* _ =
+                          Pw.catch_timeout
+                            (Pw.wait_for env ~timeout:30000.
+                               ".ls-page-blocks .block-title")
+                            (fun () -> Js.Promise.resolve ())
                         in
                         Pw.click_l (Util.get_by_text env block_title true)))
             in
