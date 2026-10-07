@@ -482,7 +482,7 @@ let retry_pending () =
   if r <> "" then
     Hashtbl.iter
       (fun uuid (repo', ext, st) ->
-        if repo' = r && not (Signal.get st.Signal.state_signal) then begin
+        if repo' = r && not (Runtime.signal_get st) then begin
           Hashtbl.remove download_requested uuid;
           resolve_img uuid (uuid ^ "." ^ ext) ext st
         end)
@@ -535,7 +535,7 @@ let asset_container uuid (b : Model.block) : t =
   let file = uuid ^ "." ^ ext in
   fun context parent ->
     let ready = ready_for uuid ext context in
-    (if not (Signal.get ready.Signal.state_signal) then
+    (if not (Runtime.signal_get ready) then
        resolve_img uuid file ext ready);
     (* the lightbox press lives on the img branch only — clicks on the
        action bar (sibling, outside the pressable) must not open it *)
@@ -683,7 +683,7 @@ let pdf_block uuid (b : Model.block) : t =
      a navigation), and data-href/data-url have no readers, so this is a
      pressable label, not a link *)
   (Ui_parts.pressable ~on_press:(fun _ ->
-       let url = Signal.get st.Signal.state_signal in
+       let url = Runtime.signal_get st in
        Pdf_assets.open_pdf_file ~original_path:href
          ~href:(if url = "" then href else url) ~b)
      (text ~key:("pdf-" ^ uuid) ~value:b.Model.block_title

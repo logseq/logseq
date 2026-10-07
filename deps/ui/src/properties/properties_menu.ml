@@ -655,8 +655,8 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
     ; row ~main:`end_
         [ button ~text:(I18n.t "ui/save")
             ~on_press:(fun _ ->
-              on_save (Signal.get_state title_st)
-                (Signal.get_state desc_st))
+              on_save (Runtime.signal_get title_st)
+                (Runtime.signal_get desc_st))
             []
         ]
     ])
@@ -864,7 +864,7 @@ let default_value_pane_view m ~close : t =
                   ignore
                     (D.create_property_text_block ~block_uuid:pu
                        ~ident:"logseq.property/default-value"
-                       ~title:(Signal.get_state buffer)
+                       ~title:(Runtime.signal_get buffer)
                        ~new_block_id:(Platform.random_uuid ()) ());
                   S.refresh_all ();
                   close ()

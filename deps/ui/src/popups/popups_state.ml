@@ -188,7 +188,7 @@ let make scheduler : t =
   active := Some t;
   t
 
-let get t = Signal.get t.vs.Signal.state_signal
+let get t = Runtime.signal_get t.vs
 
 (* signal of whether any popover layer (autocomplete / context menu /
    picker popup) is open — drives chrome that must hide while one is up *)

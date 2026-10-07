@@ -82,7 +82,7 @@ let menu_item st label on_click =
    [page] sep + Open as page *)
 let item_menu st (it : Sidebar_state.item) =
   let multi =
-    List.length (Signal.get_state st.Sidebar_state.items) > 1
+    List.length (Runtime.signal_get st.Sidebar_state.items) > 1
   in
   let collapsed = it.Sidebar_state.collapsed in
   (* cljs page? = type :page|:contents — block items have a page_ref

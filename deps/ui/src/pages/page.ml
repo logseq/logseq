@@ -214,7 +214,7 @@ let title_editor (page : Model.page) : t =
   let commit ?(select = false) () =
     let value =
       String.trim
-        (Signal.get model_st.Signal.state_signal).Edit_model.source
+        (Runtime.signal_get model_st).Edit_model.source
     in
     (match page.page_uuid with
      | Some u ->
@@ -246,7 +246,7 @@ let title_editor (page : Model.page) : t =
     ; menu = (fun _ -> ()) }
   in
   let on_input ev =
-    let m = Signal.get model_st.Signal.state_signal in
+    let m = Runtime.signal_get model_st in
     match ev with
     | Edit_input.Blur -> commit ()
     | _ ->
@@ -493,7 +493,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                     Signal.set caret_hover true;
                     Runtime.flush ()))
                 ~on_pointer_leave:(fun _ ->
-                  if Signal.get_state caret_hover then (
+                  if Runtime.signal_get caret_hover then (
                     Signal.set caret_hover false;
                     Runtime.flush ()))
                 [ row ~key:"pt-ctrl" ~cross:`center ~width:24 ~height:24
@@ -1436,10 +1436,78 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
   let nonempty =
     Logseq_el.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
   in
+  (* incremental mount: a page swap used to re-emit every row in a
+     single flush (~500ms for a 200-block page). Feed keyed only a
+     growing prefix and extend it over deferred tasks — each republish
+     appends one chunk of Insert patches, so first paint and every step
+     stay inside a frame. The per-page reset lives inside the signal
+     chain (spine_sig -> windowed) so a route change can't publish a
+     full spine before the new limit lands. *)
+  let mount_chunk = 16 in
+  let rec take n xs =
+    match xs with
+    | x :: rest when n > 0 -> x :: take (n - 1) rest
+    | _ -> []
+  in
+  let tick = Signal.state ms.Signal.owner 0 in
+  let spine_sig =
+    Logseq_el.own ctx
+      (Signal.map
+         (fun (m : Model.t) ->
+           match m.Model.route_page with
+           | Some p -> (p.Model.page_uuid, p.Model.page_blocks)
+           | None -> (None, []))
+         ms)
+  in
+  let emitted = ref mount_chunk and last_uuid = ref None in
+  let windowed =
+    Logseq_el.own ctx
+      (Signal.map2
+         (fun (u, bs) _t ->
+           if u <> !last_uuid then begin
+             last_uuid := u;
+             emitted := mount_chunk
+           end;
+           take (min !emitted (List.length bs)) bs)
+         spine_sig (Signal.value tick))
+  in
+  (* growth driver: deferred tasks bump the window until the whole
+     spine is emitted; a spine republish (splice or route change)
+     re-arms the loop via the spine_sig subscriber. Only armed when the
+     keyed list is the one mounted — virtualized pages window rows
+     themselves. *)
+  let use_virt =
+    Virt_list.enabled ~virtualize:true (List.length (Signal.get blocks_sig))
+  in
+  if not use_virt then begin
+    let grow_pending = ref false and alive = ref true in
+    let rec grow () =
+      grow_pending := false;
+      if !alive then begin
+        let total = List.length (snd (Signal.get spine_sig)) in
+        if !emitted < total then begin
+          emitted := min (!emitted + mount_chunk) total;
+          Signal.update tick succ;
+          Runtime.flush ();
+          schedule_grow ()
+        end
+      end
+    and schedule_grow () =
+      if not !grow_pending then begin
+        grow_pending := true;
+        Web_dom.set_timeout grow 0
+      end
+    in
+    ignore
+      (Signal.subscribe ~emit_initial:false spine_sig (fun _ ->
+           schedule_grow ()));
+    Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
+    schedule_grow ()
+  end;
   let keyed_list =
     box ~key:"blw" ~style_class:"blocks-list-wrap"
       ~data_attrs:[ ("data-level", "0") ]
-      [ Lui_elements.keyed ~source:blocks_sig ~key:Tree.block_key
+      [ Lui_elements.keyed ~source:windowed ~key:Tree.block_key
           ~cmp:String.compare
           ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true) ]
   in
@@ -1458,12 +1526,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
   (* if_/reactive branches must mount a node — the keyed/virt choice can't be
      a dynamic child, so pick once per region mount; either renderer is
      correct at any size, the threshold is only an optimization *)
-  let list_el =
-    if Virt_list.enabled ~virtualize:true
-         (List.length (Signal.get blocks_sig))
-    then virt_list
-    else keyed_list
-  in
+  let list_el = if use_virt then virt_list else keyed_list in
   (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
   (column ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
     [ box ~key:"page-blocks-inner"

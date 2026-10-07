@@ -50,7 +50,7 @@ let select_el ctx ~key ~show ~value ~options ~on_change =
        [ select ~key
            ~text:(reactive (fun st -> label_of (value st)) st_sig)
            ~on_press:(fun _ ->
-             Signal.set open_st (not (Signal.get_state open_st));
+             Signal.set open_st (not (Runtime.signal_get open_st));
              Runtime.flush ())
            []
        ; reactive (fun open_ ->

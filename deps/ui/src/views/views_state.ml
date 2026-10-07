@@ -131,7 +131,7 @@ let make ~sched ~kind ~feature ~owner : inst =
   ; st = Signal.state sched (empty_vstate ())
   }
 
-let get inst : vstate = Signal.get inst.st.Signal.state_signal
+let get inst : vstate = Runtime.signal_get inst.st
 
 (* publish a new vstate — the only way view state changes *)
 let set inst (s : vstate) = Runtime.signal_set inst.st s

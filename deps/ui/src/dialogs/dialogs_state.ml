@@ -67,7 +67,7 @@ let set f =
   (* cljs settings-effect cleanup: body[data-settings-tab] is removed
      when the settings panel unmounts. Signal.update only queues the
      value, so capture the next state inside the update fn. *)
-  let had = List.mem "settings" (Signal.get_state s).dialogs in
+  let had = List.mem "settings" (Runtime.signal_get s).dialogs in
   let removed = ref false in
   Signal.update s (fun d ->
       let d' = f d in

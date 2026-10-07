@@ -418,14 +418,14 @@ let value_edit_view d prop : t =
     in
     (row ~gap:0 ~grow:1.0
        [ text_field ~autofocus:true
-           ~text:(Signal.get_state buffer)
+           ~text:(Runtime.signal_get buffer)
            ~on_input:(fun ev ->
              match ev with
              | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t
              | _ -> ())
            ~on_submit:(fun _ ->
              V.commit_date_text ctx (ident_of prop) ~is_datetime
-               (Signal.get_state buffer);
+               (Runtime.signal_get buffer);
              close ())
            []
        ])

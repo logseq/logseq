@@ -84,7 +84,7 @@ let dirty_value owner = Signal.value (dirty_signal owner)
 
 let bump () =
   match !(Dirty.st) with
-  | Some s -> Runtime.signal_set s (Signal.get_state s + 1)
+  | Some s -> Runtime.signal_set s (Runtime.signal_get s + 1)
   | None -> ()
 
 (* ---------- injected ui (toolbar slots) ---------- *)

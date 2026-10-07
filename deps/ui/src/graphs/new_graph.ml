@@ -11,7 +11,7 @@ let if_ = Lui_elements.if_
 module T = I18n
 
 let toggle st =
-  Signal.set st (not (Signal.get_state st));
+  Signal.set st (not (Runtime.signal_get st));
   Runtime.flush ()
 
 (* shui/checkbox — the kind draws its own check indicator *)
@@ -42,11 +42,11 @@ let submit cloud e2ee creating =
     Runtime.flush ();
     ignore
       (let* repo =
-        (if Signal.get_state cloud then
+        (if Runtime.signal_get cloud then
            (* cljs: db-sync-ensure-user-rsa-keys runs before
               create-remote-graph so the private key is available (the
               worker may ui-request an e2ee password here) *)
-           let e2ee = Signal.get_state e2ee in
+           let e2ee = Runtime.signal_get e2ee in
            let* _ =
              (if e2ee then Rtc_ops.ensure_rsa_keys ()
               else Js.Promise.resolve true)

@@ -26,7 +26,7 @@ Worker roundtrips come from the existing `invoke:*` `__navEvents` spans
 `Platform.perf_mark "<site>:page-loaded"`.
 
 Harness: `docs/interaction-perf.mjs` — Playwright on
-`/tmp/pw-lui-perf` (graph `logseq_db_Demo`, BenchSmall ~55 blocks,
+`~/pw-lui-perf` (graph `logseq_db_Demo`, BenchSmall ~55 blocks,
 BenchBig ~200). Each op is an event→DOM-change rAF meter plus the
 `__uiPerf` stage sums inside that window, median of 5 runs. Serve with
 `node scripts/serve-static.mjs 3013`, open
@@ -97,24 +97,83 @@ comment ("never re-mount dynamic branches mid-flush") doesn't apply
 because signal republish is an in-place update, not a remount.
 `test_main.ml` assertions updated to the stable-key contract.
 
+## Round 2 — flush coalescing + incremental page mount
+
+Target: outliner ops ≤60ms end-to-end on the main thread, and the
+~300ms page-nav resend. Two structural changes:
+
+### 4. ~70 synchronous flushes per outliner op — coalesced
+
+Every async callback (worker `done:` handlers, sync subscribers) ended
+with `Signal.set` + `Runtime.flush ()`, and a single outliner op queued
+~70 of them — 70 full stabilize/emit/diff passes on the main thread
+(~190ms of churn spread over ~1s after each op). `Runtime.flush` now
+schedules one flush through a host-wired `schedule_flush` ref
+(`setTimeout 0` on web, `Host.set_timeout` on native, inline in tests);
+callbacks across sequential event-loop tasks share a single pass, and
+`Runtime.send` keeps its synchronous tail-flush for callers that mutate
+DOM-read state. Samples per outliner op: ~73 → ~13.
+
+That exposed a latent bug: `Signal.set` only stages `pending` until
+the next stabilize, so `Signal.get_state`/`Signal.get` read the *last
+published* value — any `get`→`set` read-modify-write inside one
+deferred window reverted intermediate writes (cmdk `open_palette`'s
+later `set_in`s clobbered `open_=true` back to false; the same hazard
+existed in sidebar/cards/dialogs/properties/popups/views). Fix:
+`Runtime.signal_get` reads `pending` first, published second; all
+`Signal.get_state` / `Signal.get *.state_signal` sites under `src/`
+converted. Upstream has since added the same pending-aware read inline
+in `cmdk_state`/`state_cell`/`export_state`/`editor_*` — equivalent.
+
+### 5. Page navigation full-page emit — incremental keyed mount
+
+`nav-page-ref` was one `send:page-loaded` flush of ~503ms emitting
+~24.4K ops / ~6.8K nodes (200-block page, keyed path — rtc-test
+disables `Logseq_virt`, and production pages <64 rows take keyed too).
+`blocks_area` now feeds `keyed` a growing prefix of the blocks spine:
+first 16 rows emit in the nav flush, then a `setTimeout(0)` growth loop
+republishes the window one chunk at a time — keyed only mounts newly
+appended rows per republish, so each deferred task emits one chunk.
+The per-page reset lives inside the derived signal chain
+(`spine_sig → windowed`) so a route change can't publish a full spine
+before the new limit lands; the driver is armed only when the keyed
+list is the one mounted (virtualized pages window rows themselves).
+
+Results (median, 200-block BenchBig in rtc-test):
+
+| metric                        | before   | after    |
+|-------------------------------|---------:|---------:|
+| nav raf (event→visible)       |   ~626ms |   ~146ms |
+| largest single flush          |  ~503ms  |  ~40–56ms|
+| first block in DOM            |  ~600ms+ |  ~150ms  |
+| all 200 rows in DOM           |  ~530ms  |  ~525ms  |
+| per-chunk flush (16 rows)     |    —     |  ~26–30ms|
+
+Total CPU is unchanged (~435ms of emit spread over ~12 tasks), but no
+single task exceeds ~60ms and the page paints + accepts input after
+the first chunk. `send:navigate-to` (old-page teardown + shell +
+first chunk, ~3.9K ops) measures 56–80ms across runs — the remaining
+single-emit outlier; shrinking it needs subtree-level detach ops in
+`Lui_runtime`, not done here.
+
+Outliner ops after both changes (median of 5, rtc-test): click-to-edit
+18.3, type-char 3.5, enter-new-block 30.2, escape 6.1, indent 5.3*,
+outdent 21.5, fold 29.9 total_ocaml ms — all under 60ms. (*indent
+samples under-count this run: the op's keystroke sometimes lands on an
+already-indented block and emits nothing.)
+
 ## What is still slow (evidence)
 
-- **Page navigation ~300ms raf.** One full-page emit: ~6.4K live nodes →
-  ~23K patch ops. Split ≈ 165ms OCaml emit/diff/encode + ~77ms DOM
-  apply + worker ~65ms (`get-page-route-info` first call) + ~210ms
-  trailing `favorited-page?`/`get-recent-pages`/`get-blocks` batch
-  (unlinked-refs fetch). The emit is linear in page size; the fixture
-  runs `rtc-test` with `Logseq_virt` disabled so the whole page renders.
-  Cutting this needs either virtualization on the bench path, chunked
-  emit, or cheaper per-op encode — none done here.
-- **Indent/outdent/enter trigger a ~70-send storm (~190ms of worker +
-  ~30ms main-thread churn spread over ~1s).** Each edit sends
-  `Action.Page_loaded` twice (optimistic reparent + authoritative splice
-  — see `optimistic:page-loaded`/`splice:page-loaded` marks), each of
-  which re-runs page subscribers that send further actions. Mostly
-  background after first paint, but it keeps the main thread busy right
-  after the op. A send coalescing/debounce pass on `subs` broadcasts
-  would cut it; out of scope of these changes.
+- **`send:navigate-to` teardown emit** (~3.9K ops, 56–80ms): the
+  old-page unmount + shell emit is still a single pass. Needs
+  subtree-level detach ops at the `Lui_runtime` layer to bound it.
+- **Worker tail after nav/edit** (~180–340ms off the measured path):
+  unlinked-refs fetch (`favorited-page?`/`get-recent-pages`/`get-blocks`)
+  and the post-edit `Page_loaded` double-fire (optimistic + authoritative
+  splice) still run — mostly background, but they keep the worker busy.
+- **Total nav CPU is unchanged** (~435ms emit for 200 blocks spread
+  over ~12 tasks). Per-row emit cost (~20µs/op, ~122 ops/row) is the
+  floor; reducing it needs cheaper wire encode or leaner row subtrees.
 - **`total_ocaml` > raf on several ops** (enter 37.5ms vs 25.5ms raf):
   some flush work lands in a second cycle the rAF probe already
   resolved past. Not a mis-measurement; the stage numbers are exact,

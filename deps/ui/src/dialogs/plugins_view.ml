@@ -56,7 +56,7 @@ let category_tab ~key cat_st id caption (ic : icon) n =
   in
   Ui_parts.class_signal (Signal.value cat_st) cls
     (button ~key:(key ^ "-" ^ id)
-       ~style_class:(cls (Signal.get_state cat_st))
+       ~style_class:(cls (Runtime.signal_get cat_st))
        ~icon:ic
        ~text
        ~on_press:(fun _ -> Runtime.signal_set cat_st id)
@@ -436,7 +436,7 @@ let body (_ms : Model.t Signal.signal) : t =
     in
     Ui_parts.class_signal (Signal.value tab) cls
       (button ~key:("tab-" ^ id)
-         ~style_class:(cls (Signal.get_state tab))
+         ~style_class:(cls (Runtime.signal_get tab))
          ~icon:ic ~text:(t label)
          ~on_press:(fun _ -> Runtime.signal_set tab id)
          [])
@@ -685,7 +685,7 @@ let code_mode_wrap owner pid code_mode =
         ; button ~key:"save" ~style_class:"ui__button is-small"
             ~text:(t "ui/save")
             ~on_press:(fun _ ->
-              match set_json_exn (Signal.get_state code_txt) with
+              match set_json_exn (Runtime.signal_get code_txt) with
               | Some j ->
                   Plugin_host.replace_plugin_settings pid j;
                   Runtime.signal_set code_mode false

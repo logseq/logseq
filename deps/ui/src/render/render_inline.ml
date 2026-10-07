@@ -428,7 +428,7 @@ let cloze_el answer cue : t =
      role/button+tabindex+aria-pressed have no kind props *)
   (Ui_parts.pressable
      ~on_press:(fun _ ->
-       Runtime.signal_set open_ (not (Signal.get_state open_)))
+       Runtime.signal_set open_ (not (Runtime.signal_get open_)))
      (Ui_parts.class_signal sig_
         (fun o -> if o then "cloze cloze-revealed" else "cloze")
         (text

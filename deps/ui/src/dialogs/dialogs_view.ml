@@ -148,7 +148,7 @@ let prompt_view (p : Dialogs_state.prompt) : t =
  fun ctx parent ->
   let value = Signal.state ctx.Lui_ui.ui_scheduler "" in
   let submit () =
-    Dialogs_state.submit_prompt (Signal.get_state value)
+    Dialogs_state.submit_prompt (Runtime.signal_get value)
   in
   let node =
     column ~key:"prmt-ov" ~style_class:overlay_cls

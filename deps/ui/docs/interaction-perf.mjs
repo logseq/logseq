@@ -13,7 +13,8 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 
 const URL_ = 'http://localhost:3013/index.html?rtc-test=true';
-const CTX = '/tmp/pw-lui-perf';
+// /tmp is wiped on restart; keep the seeded profile under $HOME
+const CTX = process.env.HOME + '/pw-lui-perf';
 const RUNS = Number(process.env.RUNS || 5);
 const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)] || null;
 const rnd = (v) => (v == null ? null : +v.toFixed(1));
@@ -86,17 +87,13 @@ async function armMeter(p, event, checkSrc, arg) {
 async function gotoPage(p, name) {
   const cur = await p.evaluate(() => document.querySelector('.ls-block')?.getAttribute('data-block-title') || '');
   if (cur === name) return;
-  await p.keyboard.press('Meta+k');
-  await p.waitForTimeout(1200);
-  await p.keyboard.type(name, { delay: 20 });
-  await p.waitForTimeout(1500);
-  await p.keyboard.press('Enter');
+  const uuid = await p.evaluate(async (n) => {
+    const pg = await window.logseq.api.get_page(n);
+    return pg && (pg.uuid || pg['block/uuid'] || null);
+  }, name);
+  if (!uuid) throw new Error('gotoPage: no page ' + name);
+  await p.evaluate((u) => { location.hash = '#/page/' + u; }, uuid);
   await p.waitForTimeout(2500);
-  const overlay = '.cp__cmdk__modal';
-  for (let i = 0; i < 6 && (await p.locator(overlay).count()) > 0; i++) {
-    await p.keyboard.press('Escape');
-    await p.waitForTimeout(300);
-  }
 }
 
 const titles = (p) =>

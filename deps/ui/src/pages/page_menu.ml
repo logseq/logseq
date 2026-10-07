@@ -50,7 +50,7 @@ let page_items (p : Model.page) =
     match !Sidebar_state.st_ref with
     | Some st ->
         let label =
-          if Signal.get_state st.Sidebar_state.favorited then
+          if Runtime.signal_get st.Sidebar_state.favorited then
             I18n.unfavorite_page
           else I18n.add_to_favorites
         in
@@ -168,7 +168,7 @@ let user_item () : Lui_elements.t =
                         (fun m -> if m then `eye else `app "eye-off")
                         maskedv)
                    ~on_press:(fun _ ->
-                     Signal.set masked (not (Signal.get_state masked));
+                     Signal.set masked (not (Runtime.signal_get masked));
                      Runtime.flush ())
                    [])
             ]

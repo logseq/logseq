@@ -757,10 +757,10 @@ let static_item key kind title =
     }
 
 let has_item st key =
-  List.exists (fun (i : item) -> i.key = key) (Signal.get_state st.items)
+  List.exists (fun (i : item) -> i.key = key) (Runtime.signal_get st.items)
 
 let push_item st it =
-  let items = Signal.get_state st.items in
+  let items = Runtime.signal_get st.items in
   if has_item st it.key then ()
   else begin
     (* a sidebar block is its container's root — cljs mounts it with
@@ -802,7 +802,7 @@ let add_search_item st q =
 let remove_item st key =
   Runtime.signal_set st.items
     (List.filter (fun (i : item) -> i.key <> key)
-       (Signal.get_state st.items))
+       (Runtime.signal_get st.items))
 
 let toggle_props st key =
   Runtime.signal_set st.items
@@ -810,7 +810,7 @@ let toggle_props st key =
        (fun (i : item) ->
          if i.key = key then { i with props_collapsed = not i.props_collapsed }
          else i)
-       (Signal.get_state st.items))
+       (Runtime.signal_get st.items))
 
 let toggle_collapsed st key =
   Runtime.signal_set st.items
@@ -818,32 +818,32 @@ let toggle_collapsed st key =
        (fun (i : item) ->
          if i.key = key then { i with collapsed = not i.collapsed }
          else i)
-       (Signal.get_state st.items))
+       (Runtime.signal_get st.items))
 
 let set_collapsed st key v =
   Runtime.signal_set st.items
     (List.map
        (fun (i : item) ->
          if i.key = key then { i with collapsed = v } else i)
-       (Signal.get_state st.items))
+       (Runtime.signal_get st.items))
 
 let collapse_others st key v =
   Runtime.signal_set st.items
     (List.map
        (fun (i : item) ->
          if i.key = key then i else { i with collapsed = v })
-       (Signal.get_state st.items))
+       (Runtime.signal_get st.items))
 
 let collapse_all st v =
   Runtime.signal_set st.items
     (List.map
        (fun (i : item) -> { i with collapsed = v })
-       (Signal.get_state st.items))
+       (Runtime.signal_get st.items))
 
 let remove_rest st key =
   Runtime.signal_set st.items
     (List.filter (fun (i : item) -> i.key = key)
-       (Signal.get_state st.items))
+       (Runtime.signal_get st.items))
 
 let clear_items st =
   Runtime.signal_set st.items [];
@@ -931,7 +931,7 @@ let open_sticky_item st kind =
 
 let ensure_contents st =
   let repo = Runtime.repo () in
-  if repo <> "" && Signal.get_state st.items = [] then
+  if repo <> "" && Runtime.signal_get st.items = [] then
     add_promise st (contents_item repo)
 
 let refresh_item repo (it : item) : item Js.Promise.t =
@@ -957,7 +957,7 @@ let refresh_item repo (it : item) : item Js.Promise.t =
   | _ -> fallback
 
 let refresh_items repo st =
-  let items = Signal.get_state st.items in
+  let items = Runtime.signal_get st.items in
   if items <> [] then
     ignore
       ((let* arr = Js.Promise.all (Array.of_list (List.map (refresh_item repo) items)) in
@@ -1026,7 +1026,7 @@ let item_hits affected st =
               || k = Subs_state.watch_key_uuid "children" u)
             affected
       | None -> false)
-    (Signal.get_state st.items)
+    (Runtime.signal_get st.items)
 
 let on_sync st affected =
   match (model ()).Model.repo with  | Some repo ->
@@ -1145,7 +1145,7 @@ let on_doc_contextmenu st ev =
 let on_doc_click st ev =
   (* dropdown menus dismiss on outside interaction; the trigger controls and
      the menu content itself are excluded so their own handlers can run *)
-  if Signal.get_state st.open_menu <> "" then (
+  if Runtime.signal_get st.open_menu <> "" then (
     match
       click_target
         ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
@@ -1218,7 +1218,7 @@ let on_doc_keydown st ev =
   | Some k -> (
       match Worker_client.json_string k with
       | Some "Escape" ->
-          if Signal.get_state st.open_menu <> "" then close_menu st
+          if Runtime.signal_get st.open_menu <> "" then close_menu st
           else if (model ()).Model.appearance <> None then
             Runtime.send (Action.Appearance_set None)
 
@@ -1252,7 +1252,7 @@ let init (ms : Model.t Signal.signal) : t =
       Editor_state.add_block_source (fun uuid ->
           List.find_map
             (fun (it : item) -> Editor_state.find_in it.blocks uuid)
-            (Signal.get_state st.items));
+            (Runtime.signal_get st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
       Web_dom.on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with
@@ -1281,12 +1281,12 @@ let group_collapsed_sig st key =
   Signal.map (fun ks -> List.mem key ks) (Signal.value st.groups_collapsed)
 
 let toggle_group_collapsed st key =
-  let ks = Signal.get_state st.groups_collapsed in
+  let ks = Runtime.signal_get st.groups_collapsed in
   Runtime.signal_set st.groups_collapsed
     (if List.mem key ks then List.filter (fun k -> k <> key) ks else key :: ks)
 
 let toggle_nav st nav checked =
-  let cur = Signal.get_state st.nav_checked in
+  let cur = Runtime.signal_get st.nav_checked in
   let next =
     if checked then if List.mem nav cur then cur else cur @ [ nav ]
     else List.filter (fun n -> n <> nav) cur

@@ -126,14 +126,14 @@ let comment_actions st (cuuid : string) : t =
         (I.t "command.editor/add-reaction")
         (fun () -> open_reaction_picker cuuid ("cr-" ^ cuuid))
     ; btn ("ce-" ^ cuuid) `edit (I.t "editor/click-to-edit") (fun () ->
-          Signal.set st { (Signal.get_state st) with editing = Some cuuid })
+          Signal.set st { (Runtime.signal_get st) with editing = Some cuuid })
     ; btn ("cd-" ^ cuuid) `trash (I.t "ui/delete") (fun () ->
           delete_comment cuuid)
     ]
 
 let comment_body st (c : Model.block) : t =
   let cuuid = Option.value c.Model.block_uuid ~default:"" in
-  let st_v = Signal.get_state st in
+  let st_v = Runtime.signal_get st in
   match st_v.editing with
   | Some e when e = cuuid ->
       (* Escape-cancel has no component equivalent — only Enter saves;
@@ -151,7 +151,7 @@ let comment_body st (c : Model.block) : t =
             ~on_submit:(fun _ ->
               save_comment cuuid !latest;
               Signal.set st
-                { (Signal.get_state st) with editing = None })
+                { (Runtime.signal_get st) with editing = None })
             []
         ]
   | _ ->
@@ -173,7 +173,7 @@ let comment_row st (c : Model.block) : t =
 
 let add_box st (area_uuid : string) : t =
   let draft = load_draft area_uuid in
-  let open_ = (Signal.get_state st).box_open || draft = "" in
+  let open_ = (Runtime.signal_get st).box_open || draft = "" in
   let inner =
     if open_ then
       (* Escape-collapse has no component equivalent — the draft still
@@ -196,7 +196,7 @@ let add_box st (area_uuid : string) : t =
       [ Ui_parts.pressable
           ~on_press:(fun _ ->
             Signal.set st
-              { (Signal.get_state st) with box_open = true })
+              { (Runtime.signal_get st) with box_open = true })
           (box ~key:("cbrp-" ^ area_uuid)
              ~style_class:"ls-comment-reply-placeholder"
              [ text ~key:("cbrpt-" ^ area_uuid) ~value:draft [] ])
@@ -251,7 +251,7 @@ let header st (area_uuid : string) (count : int) (targets : int) : t =
           ~variant:`ghost
           ~text:(I.t "block.comments/on-those-blocks")
           ~on_press:(fun _ ->
-            let v = Signal.get_state st in
+            let v = Runtime.signal_get st in
             Signal.set st { v with targets_open = not v.targets_open })
           []
       ]
@@ -274,7 +274,7 @@ let area_el (b : Model.block) : t =
          ~accessibility_identifier:("area-" ^ area_uuid)
          [ header st area_uuid (List.length comments)
              b.Model.block_comment_targets
-         ; (if (Signal.get_state st).targets_open
+         ; (if (Runtime.signal_get st).targets_open
                && b.Model.block_comment_targets > 1
             then
               box ~key:("cts-" ^ area_uuid)

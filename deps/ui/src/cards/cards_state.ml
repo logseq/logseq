@@ -160,10 +160,10 @@ let card_ids repo sel_arg ~due_only =
     (Wire.String repo) sel_arg
 
 let sel_arg st =
-  let sel = Signal.get_state st.sel in
+  let sel = Runtime.signal_get st.sel in
   if sel < 0 then Wire.String "global"
   else
-    match List.nth_opt (Signal.get_state st.decks) sel with
+    match List.nth_opt (Runtime.signal_get st.decks) sel with
     | Some d -> Wire.Int d.deck_eid
     | None -> Wire.String "global"
 
@@ -178,8 +178,8 @@ let load_current st repo =
   Runtime.signal_set st.cur None;
   Runtime.signal_set st.crumbs [];
   Runtime.signal_set st.due_labels [];
-  let pos = Signal.get_state st.pos in
-  match List.nth_opt (Signal.get_state st.cards) pos with
+  let pos = Runtime.signal_get st.pos in
+  match List.nth_opt (Runtime.signal_get st.cards) pos with
   | None -> ()
   | Some eid ->
       (let* w =
@@ -271,8 +271,8 @@ let rate st rating =
   | None -> ()
   | Some r ->
       let r_ = repo () in
-      let pos = Signal.get_state st.pos in
-      (match List.nth_opt (Signal.get_state st.cards) pos with
+      let pos = Runtime.signal_get st.pos in
+      (match List.nth_opt (Runtime.signal_get st.cards) pos with
        | None -> ()
        | Some eid ->
            if r_ = "" then ()
@@ -320,10 +320,10 @@ let rate st rating =
       !refresh_due_count ()
 
 let toggle_opts st =
-  Runtime.signal_set st.opts_open (not (Signal.get_state st.opts_open))
+  Runtime.signal_set st.opts_open (not (Runtime.signal_get st.opts_open))
 
 let toggle_info st =
-  Runtime.signal_set st.info_open (not (Signal.get_state st.info_open))
+  Runtime.signal_set st.info_open (not (Runtime.signal_get st.info_open))
 
 let select_deck st i =
   Runtime.signal_set st.sel i;
@@ -333,7 +333,7 @@ let select_deck st i =
 
 (* cljs practice-again! — review the whole scope, due or not *)
 let practice_again st =
-  Runtime.signal_set st.cards (Signal.get_state st.all_cards);
+  Runtime.signal_set st.cards (Runtime.signal_get st.all_cards);
   Runtime.signal_set st.pos 0;
   set_phase st "init";
   let r = repo () in
@@ -404,7 +404,7 @@ let open_modal st eid_opt =
            they land, then select the matching one (cljs
            initial-cards-id); unknown eid falls back to All cards *)
         let rec wait_sel tries =
-          let decks = Signal.get_state st.decks in
+          let decks = Runtime.signal_get st.decks in
           if decks = [] && tries > 0 then
             Web_dom.set_timeout (fun () -> wait_sel (tries - 1)) 20
           else (
@@ -460,24 +460,24 @@ let next_phase cloze phase =
   | _ -> "init"
 
 let cur_has_cloze st =
-  match Signal.get_state st.cur with
+  match Runtime.signal_get st.cur with
   | Some b -> has_cloze b.Model.block_title
   | None -> false
 
 let advance_phase st =
   set_phase st
-    (next_phase (cur_has_cloze st) (Signal.get_state st.phase))
+    (next_phase (cur_has_cloze st) (Runtime.signal_get st.phase))
 
 (* cljs shortcut.handler/cards: s toggles answers, 1-4 click the
    rating buttons (visible when next-phase = :init) *)
 let on_keydown ev st =
-  if Signal.get_state st.open_ then
+  if Runtime.signal_get st.open_ then
     match Platform.event_str ev "key" with
     | "Escape" -> close st
     | "s" -> advance_phase st
     | k ->
         let np =
-          next_phase (cur_has_cloze st) (Signal.get_state st.phase)
+          next_phase (cur_has_cloze st) (Runtime.signal_get st.phase)
         in
         if np = "init" then
           match k with

@@ -97,7 +97,48 @@ let after_page_load = Subs_state.after_page_load
 let on_page_loaded = Subs_state.on_page_loaded
 
 
-let flush () = !app_flush ()
+(* async flush coalescing: worker-response and sync-sub callbacks each
+   ended with Signal.set + Runtime.flush, and a single outliner op queued
+   ~70 of them — 70 full stabilize/emit/diff passes on the main thread.
+   The public flush schedules one flush via [schedule_flush] instead, so
+   callbacks across sequential event-loop tasks share a single pass (a
+   0ms timer coalesces across tasks — a microtask only merges callbacks
+   inside one task — and still fires in background tabs, unlike rAF).
+   Callers that mutate DOM-read state synchronously go through [send]
+   (whose tail-flush stays synchronous) — measured outliner ops put
+   ~20ms of this deferred work off the event path.
+   [schedule_flush] is host-wired (setTimeout on web, Host.set_timeout
+   on native) to keep this module free of the dom layer — imperative_dom
+   already depends on Runtime, so a direct Web_dom call would cycle.
+   The default runs the callback inline: an unwired scheduler would
+   leave [flush_pending] stuck true and silence every later flush. *)
+let schedule_flush : ((unit -> unit) -> unit) ref =
+  ref (fun cb -> cb ())
+
+let flush_now () = !app_flush ()
+
+let flush_pending = ref false
+
+let flush () =
+  if not !flush_pending then begin
+    flush_pending := true;
+    !schedule_flush (fun () ->
+        flush_pending := false;
+        flush_now ())
+  end
+
+(* Pending-aware state read: with flush deferred, a [Signal.set] only
+   stages its value in [pending] until the next stabilize publishes it.
+   [Runtime.signal_get] reads the last published value only, so a
+   read-modify-write sequence ([set_in]-style) inside one deferred
+   window reverts intermediate writes — e.g. cmdk's open_palette ran
+   several set_in's and the last one overwrote [pending] from stale
+   state, clobbering open_=true back to false. Reads that feed later
+   writes must see the staged value. *)
+let signal_get (state : 'a Signal.state) : 'a =
+  match !(state.Signal.pending) with
+  | Some v -> v
+  | None -> Signal.get_state state
 
 (* doc-scan scheduling — the native host re-runs registered doc scans
    after a flush only when the tree changed structurally or enough time
@@ -137,7 +178,7 @@ let send action =
    | Action.Boot_graph_ready _ -> Platform.perf_mark "action:boot-ready"
    | _ -> ());
   ignore (!app_send action);
-  flush ()
+  flush_now ()
 
 (* Convenience for feature modules: update a signal state and flush so the
    DOM re-renders outside the LUI event loop (async callbacks, timers). *)

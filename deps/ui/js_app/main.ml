@@ -80,7 +80,7 @@ let main root =
   Runtime.read_model := (fun () -> Lui_app.model app);
   Runtime.app_send :=
     (fun action ->
-      Interaction_perf.begin_op "send";
+      Interaction_perf.begin_op ("send:" ^ Action.tag action);
       let changed, sms =
         Interaction_perf.time (fun () -> Lui_app.send app action)
       in
@@ -121,6 +121,7 @@ let main root =
       in
       Interaction_perf.note_focus foms;
       finish_sample ());
+  Runtime.schedule_flush := (fun cb -> Web_dom.set_timeout cb 0);
   ignore
     (Lui_web.set_event_handler renderer (fun event ->
          Interaction_perf.begin_op "dom-event";
