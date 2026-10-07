@@ -98,7 +98,7 @@ let transact args : Wire.t Db_worker_effect.t =
                   | Some Wire.Nil | None -> true
                   | Some _ -> false) ->
               Cljs_map.assoc tx "block/order"
-                (Wire.String (Db_order.gen_key None None))
+                (Wire.String (Db_order.gen_key_from_max ()))
           | t -> t)
         tx_data
     else tx_data

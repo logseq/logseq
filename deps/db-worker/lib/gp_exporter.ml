@@ -485,7 +485,7 @@ let handle_template_blocks (blocks : BM.t list)
                 BM.put b "block/parent"
                   (vec [ kw "block/uuid"; uuidv block_uuid ])
               in
-              BM.put b "block/order" (String (Db_order.gen_key None None))
+              BM.put b "block/order" (String (Db_order.gen_key_from_max ()))
               |> fun b -> BM.dissoc b [ "db/id" ]
               |> Option.some
             else None
@@ -1033,7 +1033,7 @@ let build_status_choice_tx (marker : string) (block_uuid : string) : BM.t =
        (String marker)
        [ "db/ident", kw "logseq.property/status" ])
     "block/order"
-    (String (Db_order.gen_key None None))
+    (String (Db_order.gen_key_from_max ()))
 
 (* custom-marker-status-ref — returns an entity ref value *)
 let custom_marker_status_ref (db : db) (marker : string)
@@ -3212,7 +3212,7 @@ let build_annotation_block (m : value) (color_text_idents : (string * string) li
             (fun (k, v) -> Option.map (fun v -> (k, v)) v)
             user_attrs))
       ([ "block/uuid", uuidv id
-       ; "block/order", strv (Db_order.gen_key None None)
+       ; "block/order", strv (Db_order.gen_key_from_max ())
        ; "logseq.property/ls-type", kw "annotation"
        ; "logseq.property.pdf/hl-value", m
        ; "logseq.property/asset",
@@ -3303,7 +3303,7 @@ let build_pdf_annotations_tx_inner (asset_edn_map : BM.t)
 let build_new_asset (asset_data : BM.t) : BM.t =
   BM.merge
     (with_timestamps
-       [ "block/order", strv (Db_order.gen_key None None)
+       [ "block/order", strv (Db_order.gen_key_from_max ())
        ; "block/page", kw "logseq.class/Asset"
        ; "block/parent", kw "logseq.class/Asset" ])
     ([ "block/tags", List [ kw "logseq.class/Asset" ]
@@ -4056,7 +4056,7 @@ let build_code_snippet_child_blocks (parent_block : BM.t)
                      (get_uuid parent_block "block/uuid")) ]
           ; "block/page",
             Option.value ~default:Nil (getv parent_block "block/page")
-          ; "block/order", strv (Db_order.gen_key None None)
+          ; "block/order", strv (Db_order.gen_key_from_max ())
           ; "block/tags", List [ kw "logseq.class/Code-block" ]
           ; "logseq.property.node/display-type", kw "code" ]
       in
@@ -6489,7 +6489,7 @@ let insert_favorites (conn : conn) (favorited_ids : string list)
                 (Ldb.build_favorite_tx favorite_id
                  @ [ ("block/uuid", Uuid (squuid ()))
                    ; ("db/id", Ref next_id)
-                   ; ("block/order", String (Db_order.gen_key None None))
+                   ; ("block/order", String (Db_order.gen_key_from_max ()))
                    ; ("block/parent", Ref page_id)
                    ; ("block/page", Ref page_id) ]) ] ))
       (-1, []) favorited_ids
@@ -6647,7 +6647,7 @@ let move_top_parent_pages_to_library (conn : conn) (options : options)
           [ ("db/id", Ref parent.id)
           ; ( "block/parent"
             , Ref_to (Lookup_ref ("block/uuid", Uuid library_id)) )
-          ; ("block/order", String (Db_order.gen_key None None)) ])
+          ; ("block/order", String (Db_order.gen_key_from_max ())) ])
         top_parent_pages
     in
     transact_imported_maps conn tx (imported_tx_meta None) options
