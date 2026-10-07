@@ -411,10 +411,12 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
       Rtc_flows.refresh_db_rtc_uuid repo;
       last_rtc := r;
       let visible =
-        (Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
-        && repo <> None
-        && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
-        || (Platform.rtc_test_mode () && repo <> None)
+        (* master hides the indicator entirely when logged out —
+           rtc-test mode does not lift that gate *)
+        Rtc_flows.logged_in ()
+        && ((Rtc_flows.rtc_group () && repo <> None
+             && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
+            || (Platform.rtc_test_mode () && repo <> None))
       in
       if not visible then
         spacer ~key:"rtc-off" ~style_class:"hidden" []

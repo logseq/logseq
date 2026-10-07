@@ -44,8 +44,12 @@ let already_exists name =
 let remote_graphs : (string * string * bool * string) list ref = ref []
 
 let list_remote_graphs () =
-  Rtc_ops.sync_app_state (Runtime.model ()).Model.repo;
-  (let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in
+  (* the sync server rejects list-remote-graphs without a token — skip
+     the request entirely when logged out and keep the local list *)
+  if not (Rtc_flows.logged_in ()) then Js.Promise.resolve !remote_graphs
+  else begin
+    Rtc_ops.sync_app_state (Runtime.model ()).Model.repo;
+    (let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in
   let entries =
     match w with
     | Wire.Array xs | Wire.List xs -> xs
@@ -71,9 +75,10 @@ let list_remote_graphs () =
       entries;
   Js.Promise.resolve !remote_graphs)
   |> Js.Promise.catch (fun e ->
-         (* logged out / offline: keep the previous list *)
+         (* offline / server errors: keep the previous list *)
          Platform.console_error ("list-remote-graphs failed", e);
          Js.Promise.resolve !remote_graphs)
+  end
 
 (* removable? = not (demo && it's the only graph) *)
 let removable repo =
