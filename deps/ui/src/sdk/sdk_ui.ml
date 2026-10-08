@@ -417,3 +417,33 @@ let open_external_link a _b _c _d =
        Web_dom.win_open url
    | _ -> ());
   resolved_nil
+
+(* cljs sdk/ui.cljs check-slot-valid — element-by-id truthy *)
+let check_slot_valid a _b _c _d =
+  resolved
+    (Js.Json.boolean
+       (match arg_string a with
+        | Some id -> Web_dom.get_element_by_id id <> None
+        | None -> false))
+
+(* cljs sdk/ui.cljs resolve-theme-css-props-vals — getComputedStyle of
+   the requested var() props on document.body *)
+let resolve_theme_css_props_vals a _b _c _d =
+  match Js.Json.decodeObject a with
+  | Some o ->
+      let st = Web_dom.el_computed_style Web_dom.document_body in
+      let out = Js.Dict.empty () in
+      Array.iter
+        (fun (k, v) ->
+          match Js.Json.decodeString v with
+          | Some prop ->
+              Js.Dict.set out k
+                (match
+                   Js.Json.decodeString (Web_dom.js_get st prop)
+                 with
+                 | Some s when s <> "" -> Js.Json.string s
+                 | _ -> Js.Json.null)
+          | None -> ())
+        (Js.Dict.entries o);
+      resolved (Js.Json.object_ out)
+  | None -> resolved_nil

@@ -268,6 +268,9 @@ type app_hooks =
   ; (* properties_state — rebuild mounted property areas (they hold
        worker data outside the model) without the 150ms debounce *)
     mutable refresh_property_areas : unit -> unit Js.Promise.t
+  ; (* plugin_host — broadcast app hook firings to LSPluginCore
+       (sidebar-visible-changed, current-graph-changed, ...) *)
+    mutable plugin_event : string -> Js.Json.t -> unit
   }
 
 (* i18n lookup for document titles — installed by src at init (I18n
@@ -281,4 +284,5 @@ let app_hooks =
   ; refresh_journal_side = (fun _ -> ())
   ; refresh_after_ops = (fun () -> Js.Promise.resolve ())
   ; refresh_property_areas = (fun () -> Js.Promise.resolve ())
+  ; plugin_event = (fun _ _ -> ())
   }

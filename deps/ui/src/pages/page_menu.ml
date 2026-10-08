@@ -113,7 +113,22 @@ let page_items (p : Model.page) =
               Runtime.send (Action.Page_menu_set None)) ]
     | _ -> []
   in
+  let plugin_items =
+    (* cljs page-menu-item simple commands append after the builtin
+       entries; ctx carries the clicked page name *)
+    List.map
+      (fun (pid, key, label) ->
+        item ("plugin-" ^ pid ^ "-" ^ key) label (fun () ->
+            Runtime.send (Action.Page_menu_set None);
+            Plugin_host.exec_simple_command
+              ~ctx:
+                (Js.Dict.fromList
+                   [ ("page", Js.Json.string p.Model.page_title) ])
+              pid key))
+      (Plugin_host.simple_commands_of_type "page-menu-item")
+  in
   fav @ del @ [ export_page; publish_page ] @ convert @ dev
+  @ plugin_items
 
 (* cljs util/email.cljs mask-email: '@' and '.' stay visible plus the
    first and last non-separator chars; the rest become '*' *)

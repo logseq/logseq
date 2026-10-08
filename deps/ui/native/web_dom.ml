@@ -23,6 +23,7 @@ let query_selector = Editor_dom.query_selector
 (* the imperative DOM has no point hit-test — callers fall back to the
    stored pointer anchor *)
 let element_at _ _ = None
+let el_computed_style (_ : el) : Js.Json.t = Js.Json.object_ (Js.Dict.empty ())
 
 let doc_query = Dom_ext.doc_query_selector
 let document_element = Editor_dom.document_element

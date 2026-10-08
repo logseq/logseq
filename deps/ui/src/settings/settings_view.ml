@@ -38,8 +38,16 @@ let current_mode () =
 
 (* theme.cljs container effect: dataset.theme + .dark class on
    documentElement, dark-theme vs white-theme light-theme on body *)
+let last_theme_mode = ref ""
+
+(* cljs theme.cljs :theme-mode-changed — fires on effective-mode
+   transitions (user toggle or system-follow), not on boot apply *)
 let apply_theme_dom effective =
   Web_dom.doc_set_data "theme" effective;
+  if effective <> !last_theme_mode then (
+    let first_apply = !last_theme_mode = "" in
+    last_theme_mode := effective;
+    if not first_apply then Plugin_host.fire_theme_mode_changed effective);
   if effective = "dark" then (
     Web_dom.doc_add_class "dark";
     Web_dom.body_add_class "dark-theme";

@@ -1757,6 +1757,20 @@ let block_entries () =
   ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ "\u{2318}"; "\u{2193}" ]), "expand-children")
   ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ "\u{2318}"; "\u{2191}" ]), "collapse-children")
   ]
+  (* cljs block-context-menu-item simple commands append below *)
+  @ (match
+       Plugin_host.simple_commands_of_type "block-context-menu-item"
+     with
+     | [] -> []
+     | cmds ->
+         Ci_sep
+         :: List.map
+              (fun (pid, key, label) ->
+                Ci_item
+                  ( label
+                  , None
+                  , "plugin-ctx:" ^ pid ^ "/" ^ key ))
+              cmds)
 ;;
 
 (* mirrors content.cljs custom-context-menu-content (multi-select) *)

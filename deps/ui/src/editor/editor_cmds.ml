@@ -227,5 +227,22 @@ let run ~command ~block ~value =
       | "cycle-todo" | "deadline" | "scheduled" | "date-picker"
       | "set-icon" | "add-reaction" ->
           Platform.console_error ("editor command not implemented", command)
-      | _ -> Platform.console_error ("unknown editor command", command))
+      | _ ->
+          (* plugin block-context-menu-item — "plugin-ctx:<pid>/<key>" *)
+          if String.starts_with ~prefix:"plugin-ctx:" command then (
+            let rest =
+              String.sub command 11 (String.length command - 11)
+            in
+            match String.rindex_opt rest '/' with
+            | Some i ->
+                Plugin_host.exec_simple_command
+                  ~ctx:
+                    (Js.Dict.fromList
+                       [ ("uuid", Js.Json.string uuid) ])
+                  (String.sub rest 0 i)
+                  (String.sub rest (i + 1)
+                     (String.length rest - i - 1))
+            | None -> ())
+          else
+            Platform.console_error ("unknown editor command", command))
 ;;
