@@ -56,8 +56,6 @@
 (rule
  (copy ../native/fuzzy.ml fuzzy.ml))
 (rule
- (copy ../native/host.ml host.ml))
-(rule
  (copy ../native/html_to_md.ml html_to_md.ml))
 (rule
  (copy ../native/icon_picker.ml icon_picker.ml))
@@ -411,6 +409,7 @@
  (libraries
    lui
    logseq_ui_contracts
+   logseq_ui_native_services
    logseq_ui_shared
    ocaml-signal
    melange-transit-core

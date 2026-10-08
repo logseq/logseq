@@ -257,6 +257,18 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
   ; open_settings = (fun () -> Dialogs_state.open_ "settings")
   ; close_settings = Dialogs_state.close_all
   ; wide_mode_label = I18n.wide_mode
+  ; theme_label = (function "dark" -> I18n.theme_dark | "light" -> I18n.theme_light | "system" -> I18n.theme_system | _ -> invalid_arg "Unknown theme")
+  ; theme_snapshot = (fun () ->
+      { Shared_scenarios.root_dark = Hashtbl.mem Platform.root_classes "dark"
+      ; body_dark = Hashtbl.mem Platform.body_classes "dark-theme"
+      ; body_light = Hashtbl.mem Platform.body_classes "light-theme"
+      ; body_white = Hashtbl.mem Platform.body_classes "white-theme"
+      })
+  ; prefers_dark = Host.prefers_dark
+  ; route_get = Platform.location_hash
+  ; route_set = Platform.set_location_hash
+  ; route_on_change = Platform.on_hash_change
+  ; route_tick = (fun () -> ())
   ; flush
   }
 
@@ -424,6 +436,8 @@ let test_context_menu () =
 
 let test_dialogs () =
   Shared_scenarios.settings (shared_host ());
+  Shared_scenarios.themes (shared_host ());
+  Shared_scenarios.routes (shared_host ());
   (* confirm layer: div[role=alertdialog] *)
   Dialogs_state.ask ~title:"Delete it?" ~desc:"no undo" ~on_confirm:(fun () ->
       Js.log "confirm-firing")

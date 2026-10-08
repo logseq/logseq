@@ -2,7 +2,7 @@
    console/timing, crypto/pfs — everything that is NOT DOM element FFI
    (that lives in Web_dom). *)
 
-open Promise_ext
+let ( let* ) promise f = Js.Promise.then_ f promise
 
 type loc
 

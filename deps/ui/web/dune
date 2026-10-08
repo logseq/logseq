@@ -2,5 +2,5 @@
  (name logseq_ui_web_services)
  (wrapped false)
  (modes melange)
- (libraries logseq_ui_contracts melange.js)
+ (libraries logseq_ui_contracts melange.js melange-webapi melange.dom)
  (preprocess (pps melange.ppx)))

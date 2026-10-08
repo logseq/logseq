@@ -5,6 +5,13 @@
 module M = Drive.Model
 module S = Drive.Session
 
+type theme_snapshot =
+  { root_dark : bool
+  ; body_dark : bool
+  ; body_light : bool
+  ; body_white : bool
+  }
+
 type ('model, 'action) host =
   { session : unit -> ('model, 'action) S.t
   ; check : string -> bool -> unit
@@ -14,6 +21,13 @@ type ('model, 'action) host =
   ; open_settings : unit -> unit
   ; close_settings : unit -> unit
   ; wide_mode_label : string
+  ; theme_label : string -> string
+  ; theme_snapshot : unit -> theme_snapshot
+  ; prefers_dark : unit -> bool
+  ; route_get : unit -> string
+  ; route_set : string -> unit
+  ; route_on_change : (unit -> unit) -> unit
+  ; route_tick : unit -> unit
   ; flush : unit -> unit
   }
 
@@ -115,3 +129,66 @@ let settings h =
   h.flush ();
   h.close_settings ();
   h.flush ()
+
+let theme_item h mode =
+  let label = h.theme_label mode in
+  List.find (fun n -> n.M.kind = "list-item" &&
+    contains h n (fun child -> M.string_prop child "text" = Some label)) (nodes h)
+
+let themes h =
+  h.open_settings ();
+  h.flush ();
+  S.press (h.session ()) (by_identifier h "general").M.id;
+  h.flush ();
+  let select mode =
+    S.press (h.session ()) (theme_item h mode).M.id;
+    h.flush ();
+    h.check (mode ^ " theme is selected")
+      (Hashtbl.find (theme_item h mode).M.props "selected" = Lui_protocol.BoolValue true)
+  in
+  let effective dark =
+    let state = h.theme_snapshot () in
+    h.check "theme applies to the actual host"
+      (state.root_dark = dark && state.body_dark = dark &&
+       state.body_light = not dark && state.body_white = not dark);
+    h.check "effective theme preference keeps its serialized representation"
+      (h.storage_get "theme" = Some (if dark then "\"dark\"" else "\"light\""))
+  in
+  select "dark";
+  effective true;
+  h.check "explicit theme disables system following"
+    (h.storage_get "system-theme?" = Some "false");
+  select "light";
+  effective false;
+  select "system";
+  effective (h.prefers_dark ());
+  h.check "system theme preference persists"
+    (h.storage_get "system-theme?" = Some "true");
+  h.close_settings ();
+  h.flush ();
+  h.open_settings ();
+  h.flush ();
+  S.press (h.session ()) (by_identifier h "general").M.id;
+  h.flush ();
+  h.check "system mode survives the settings remount"
+    (Hashtbl.find (theme_item h "system").M.props "selected" = Lui_protocol.BoolValue true);
+  select "light";
+  h.close_settings ();
+  h.flush ()
+
+let routes h =
+  let before = h.route_get () in
+  let changes = ref [] in
+  h.route_on_change (fun () -> changes := h.route_get () :: !changes);
+  h.route_set "#/settings";
+  h.route_tick ();
+  h.check "route change reaches its observer with the current destination"
+    (!changes = ["#/settings"]);
+  let page = "#/page/snow%20%E9%9B%AA?graph-id=test" in
+  h.route_set page;
+  h.route_tick ();
+  h.check "route retains encoded page and graph context" (h.route_get () = page);
+  h.check "successive route changes retain delivery order"
+    (List.rev !changes = ["#/settings"; page]);
+  h.route_set before;
+  h.route_tick ()
