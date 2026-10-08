@@ -95,9 +95,11 @@ in current master (toolbar = `Add icon`, `Add tag property`, `All` tab,
 
 ## Open diffs (remaining, not exceptions)
 
-- **Tooltip surface (1.82%)**: master renders "Toggle left sidebar" /
-  "More" tooltips on hover; LUI tooltip presence/labels differ
-  (diff-12-tooltip.png). Also includes the linked-refs offset below.
+- ~~Tooltip surface (1.82%)~~ **VERIFIED FIXED**: hover probes show LUI
+  tooltips matching master on both header buttons — "Toggle left sidebar"
+  (131x53 vs 131x54, same label + `T`/`L` keys) and "More" (55x29 vs
+  55x30, 2px x drift = raster). The old diff-12 residual was the
+  linked-refs offset riding the same capture.
 - ~~Linked references vertical offset (~8px)~~ **FIXED** (page-alpha
   1.45%→0.08%): five stacked deltas, all resolved — page plugin slots
   mounted inside the title column (+8px row gap), missing `ml-1` on the
@@ -116,11 +118,15 @@ in current master (toolbar = `Add icon`, `Add tag property`, `All` tab,
   likely rasterization + slight x-offset of bullet/text.
 - **Settings screens (~1.2-1.3%)**: residual text-rasterization + small
   control-spacing deltas, no structural mismatch found.
-- **Rename menu structure**: master's view-tab `Rename` is a submenu with
-  an inline rename editor (`dropdown-menu-sub` + block container); LUI
-  uses a flat menu item invoking `o_rename`. Menu *contents* now match
-  post-fix; the submenu-vs-item structure differs by design of each
-  platform's menu widget.
+- ~~Rename menu structure~~ **FIXED**: LUI's view-tab menu now renders
+  `Rename` as `ui__dropdown-menu-sub-trigger` → `ui__dropdown-menu-sub-content`
+  with the inline editor inside (`MSub` + `MCustom`), matching master's
+  `dropdown-menu-sub` + block container at the same open coordinates.
+  The editor autofocuses when the sub opens (popup layer focuses the
+  first editable). Remaining delta: LUI's editor is a single-line
+  `cp__select-input` (225x46) vs master's full block-container chrome
+  (128x62) — documented simplification; commit-on-Enter and Escape
+  behavior match.
 
 ## Retained exceptions (from round 1, still applicable)
 

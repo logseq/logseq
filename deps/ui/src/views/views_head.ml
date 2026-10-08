@@ -98,7 +98,11 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
            | Some b ->
                ignore
                  (P.show_menu ~anchor:b
-                    (P.MItem (I.rename, fun () -> (V.ops ()).V.o_rename inst v)
+                    ((* cljs Rename is a dropdown-menu-sub with an inline
+                        block-container editor, not a flat item *)
+                     P.MSub
+                       ( I.rename
+                       , [ P.MCustom ((V.ops ()).V.o_rename_box inst v) ] )
                      :: (* cljs only offers Delete when >1 view exists *)
                         (if List.length (V.get inst).V.views > 1 then
                            [ P.MItem
