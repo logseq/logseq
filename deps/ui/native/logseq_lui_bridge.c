@@ -144,19 +144,46 @@ LUI_EXPORT int32_t lui_ocaml_press(int64_t node) {
   return dispatch_long("lui_ocaml_press", node);
 }
 
+/* Press carrying the host's modifier state at tap time (1=ctrl, 2=shift,
+   4=command/meta, 8=secondary). Falls back to plain press when the OCaml
+   side has not registered the extended callback. Mirrors upstream lui's
+   platform/native/lui_ocaml_bridge.c. */
+LUI_EXPORT int32_t lui_ocaml_press_ex(int64_t node, int32_t modifiers) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_press_ex");
+  if (dispatch != NULL) {
+    result = emit_patch("lui_ocaml_press_ex",
+                        caml_callback2_exn(*dispatch, Val_long(node),
+                                           Val_long(modifiers)));
+  } else {
+    dispatch = caml_named_value("lui_ocaml_press");
+    if (dispatch != NULL) {
+      result = emit_patch("lui_ocaml_press",
+                          caml_callback_exn(*dispatch, Val_long(node)));
+    }
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
+LUI_EXPORT int32_t lui_ocaml_load(int64_t node) {
+  return dispatch_long("lui_ocaml_load", node);
+}
+
 LUI_EXPORT int32_t lui_ocaml_long_press(int64_t node) {
   return dispatch_long("lui_ocaml_long_press", node);
 }
 
-static int dispatch_string(const char *name, int64_t node,
-                           const char *text) {
+static int dispatch_bytes(const char *name, int64_t node, const char *data,
+                          int32_t length) {
   int result = 0;
   caml_leave_blocking_section();
   const value *dispatch = caml_named_value(name);
-  if (dispatch != NULL && text != NULL) {
+  if (dispatch != NULL && data != NULL) {
     CAMLparam0();
     CAMLlocal2(text_value, callback_result);
-    text_value = caml_copy_string(text);
+    text_value = copy_bytes(data, length);
     callback_result =
         caml_callback2_exn(*dispatch, Val_long(node), text_value);
     result = emit_patch(name, callback_result);
@@ -166,9 +193,20 @@ static int dispatch_string(const char *name, int64_t node,
   return result;
 }
 
+/* Length-delimited variant called by the gpui host; dispatches to the
+   same OCaml callback as the NUL-terminated form. */
+LUI_EXPORT int32_t lui_ocaml_text_changed_utf8(int64_t node,
+                                               const char *text,
+                                               int32_t byte_length) {
+  return dispatch_bytes("lui_ocaml_text_changed", node, text, byte_length);
+}
+
 LUI_EXPORT int32_t lui_ocaml_text_changed(int64_t node,
                                           const char *text) {
-  return dispatch_string("lui_ocaml_text_changed", node, text);
+  if (text == NULL) {
+    return 0;
+  }
+  return lui_ocaml_text_changed_utf8(node, text, (int32_t)strlen(text));
 }
 
 LUI_EXPORT int32_t lui_ocaml_submit(int64_t node) {
@@ -292,8 +330,16 @@ LUI_EXPORT int32_t lui_ocaml_visible_range(int64_t node, int64_t first,
   return result;
 }
 
+LUI_EXPORT int32_t lui_ocaml_picked_utf8(int64_t node, const char *payload,
+                                         int32_t byte_length) {
+  return dispatch_bytes("lui_ocaml_picked", node, payload, byte_length);
+}
+
 LUI_EXPORT int32_t lui_ocaml_picked(int64_t node, const char *payload) {
-  return dispatch_string("lui_ocaml_picked", node, payload);
+  if (payload == NULL) {
+    return 0;
+  }
+  return lui_ocaml_picked_utf8(node, payload, (int32_t)strlen(payload));
 }
 
 static int dispatch_three_strings(const char *name, int64_t node,
@@ -325,6 +371,52 @@ LUI_EXPORT int32_t lui_ocaml_extension_event(int64_t node,
   (void)identifier;
   return dispatch_three_strings("lui_ocaml_extension_event", node, name,
                                 values);
+}
+
+/* Length-delimited variant called by the gpui host; identifier ignored
+   for the same reason as the NUL-terminated form. */
+LUI_EXPORT int32_t lui_ocaml_extension_event_utf8(
+    int64_t node, const char *identifier, int32_t identifier_len,
+    const char *name, int32_t name_len, const char *json_values,
+    int32_t json_len) {
+  (void)identifier;
+  (void)identifier_len;
+  int result = 0;
+  if (name == NULL || name_len < 0) {
+    return 0;
+  }
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_extension_event");
+  if (dispatch != NULL) {
+    CAMLparam0();
+    CAMLlocal3(name_value, values_value, callback_result);
+    name_value = copy_bytes(name, name_len);
+    values_value = copy_bytes(
+        json_values != NULL ? json_values : "",
+        json_values != NULL && json_len > 0 ? json_len : 0);
+    callback_result = caml_callback3_exn(*dispatch, Val_long(node),
+                                         name_value, values_value);
+    result = emit_patch("lui_ocaml_extension_event", callback_result);
+    CAMLdrop;
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
+/* Host recovery after a rejected delta batch: the OCaml side returns a
+   full-tree batch at the current generation, delivered through the patch
+   callback like any other flush. Mirrors upstream lui's
+   lui_ocaml_resync. */
+LUI_EXPORT int32_t lui_ocaml_resync(void) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *resync = caml_named_value("lui_ocaml_resync");
+  if (resync != NULL) {
+    result = emit_patch("lui_ocaml_resync",
+                        caml_callback_exn(*resync, Val_unit));
+  }
+  caml_enter_blocking_section();
+  return result;
 }
 
 LUI_EXPORT int32_t lui_ocaml_pump(void) {

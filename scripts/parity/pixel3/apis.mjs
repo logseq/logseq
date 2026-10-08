@@ -1,0 +1,11 @@
+import { chromium } from '/Users/devin/repos/logseq/node_modules/playwright/index.mjs';
+const [url, tag] = [process.argv[2], process.argv[3]];
+const ctx = await chromium.launchPersistentContext(`/Users/devin/parity-profiles/${tag}`, { channel: 'chrome', headless: true, viewport: { width: 1280, height: 800 } });
+const page = ctx.pages()[0] || await ctx.newPage();
+await page.goto(url, { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(Number(process.argv[4] || 10000));
+const out = await page.evaluate(() => Object.keys(window.logseq?.api || {}).filter(k => /graph|page|dir/i.test(k)).sort());
+console.log(JSON.stringify(out));
+const st = await page.evaluate(() => JSON.stringify(Object.keys(localStorage).slice(0,40)));
+console.log('LS', st);
+await ctx.close();

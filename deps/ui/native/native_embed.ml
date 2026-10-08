@@ -527,6 +527,12 @@ let dispatch_lui (event : Lui_protocol.event) : string =
 let appear node = dispatch_lui (Lui_protocol.Appear node)
 
 let press node = dispatch_lui (Lui_protocol.Press node)
+
+let press_ex node modifiers =
+  dispatch_lui (Lui_protocol.PressModifiers (node, modifiers))
+
+let load node = dispatch_lui (Lui_protocol.Load node)
+
 let long_press node = dispatch_lui (Lui_protocol.LongPress node)
 
 let text_changed node text =
@@ -700,6 +706,18 @@ let platform_event payload =
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 
+(* Host recovery after a rejected delta batch: encode the full live tree
+   at the current generation; the host clears its mirror and adopts the
+   returned batch as the new baseline. Delivered directly through the
+   bridge patch callback, not the pending queue. *)
+let resync () : string =
+  with_entry_lock (fun () ->
+      match !current_app with
+      | Some app ->
+          Lui_wire.encode_batch
+            (Lui_runtime.resync_batch (Lui_app.runtime app))
+      | None -> "")
+
 let dispose () : string =
   (* daemons deliberately outlive the app — they keep the repo admitted
      and the graph open so the next launch attaches instantly *)
@@ -720,6 +738,9 @@ let () =
   Callback.register "lui_ocaml_init" initialize;
   Callback.register "lui_ocaml_appear" appear;
   Callback.register "lui_ocaml_press" press;
+  Callback.register "lui_ocaml_press_ex" press_ex;
+  Callback.register "lui_ocaml_load" load;
+  Callback.register "lui_ocaml_resync" resync;
   Callback.register "lui_ocaml_long_press" long_press;
   Callback.register "lui_ocaml_text_changed" text_changed;
   Callback.register "lui_ocaml_submit" submit;
