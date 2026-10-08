@@ -135,10 +135,21 @@ let collapsed_sig ~scope (b : Model.block) =
 
 (* cljs data-has-heading on .block-main-container: block.css shifts the
    control wrap down so the bullet tracks the heading's first line *)
-let heading_attrs (b : Model.block) =
+(* #..###### markdown prefix on the raw title is the heading too — the
+   model only carries block_heading when the property normalized (e.g.
+   fixtures that store the literal "# " prefix keep block_heading=None)
+   so fall back to Render.heading_level like the title renderer does *)
+let block_heading_lvl (b : Model.block) =
   match b.block_heading with
-  | Some n when n >= 1 && n <= 6 ->
-      [ ("data-has-heading", string_of_int n) ]
+  | Some n when n >= 1 && n <= 6 -> Some n
+  | _ -> (
+      match Render.heading_level b.block_title with
+      | Some (lvl, _) -> Some lvl
+      | None -> None)
+
+let heading_attrs (b : Model.block) =
+  match block_heading_lvl b with
+  | Some n -> [ ("data-has-heading", string_of_int n) ]
   | _ -> []
 
 (* -- control wrap: collapse arrow + bullet -- *)
@@ -227,7 +238,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
     ( "data-has-children"
     , string_of_bool (b.block_children <> []) )
     ::
-    (match b.block_heading with
+    (match block_heading_lvl b with
     | Some lvl -> [ ("data-heading", string_of_int lvl) ]
     | None -> [])
   in
@@ -300,10 +311,13 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                          container's intrinsic box + centering is
                          emitted inline. On web the stylesheet's
                          .bullet-container (var --ls-block-icon-size)
-                         sizes it — the inline 14px overrode it and
+                         sizes it — inline sizing overrode it and
                          shifted every block row's text 2px left *)
                       [ ( "style"
-                        , "display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;min-width:14px;border-radius:7px"
+                        , "display:inline-flex;align-items:center;justify-content:center;height:16px;border-radius:50%"
+                        ^ if order_list then
+                            ";width:1.4em;min-width:1.4em;white-space:nowrap;padding-left:3px"
+                          else ";width:16px;min-width:16px"
                         )
                       ]
                     else []))
@@ -561,7 +575,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
   box ~key:("main-" ^ key)
       ~style_class:"block-main-container flex flex-row gap-1"
         ~data_attrs:
-          (match b.block_heading with
+          (match block_heading_lvl b with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
            | None -> [])
         [ control_wrap ~scope ~library uuid b

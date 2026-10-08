@@ -408,7 +408,8 @@ let page_key uuid = "page:" ^ uuid
    native backends, where no stylesheet can fade the row in. The row
    listens for its own pointer events too: rendered absolutely above
    the wrapper, hovering it can leave the wrapper's bounds. *)
-let title_actions ~(hover : bool Signal.state) (p : Model.page) : t =
+let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
+    (p : Model.page) : t =
  fun context parent ->
   let uuid = Option.value ~default:"" p.Model.page_uuid in
   let key = page_key uuid in
@@ -432,7 +433,7 @@ let title_actions ~(hover : bool Signal.state) (p : Model.page) : t =
          if Runtime.signal_get hover then (
            Signal.set hover false;
            Runtime.flush ()))
-       [ add_btn
+       ([ add_btn
            (I18n.t "command.editor/add-property-icon")
            (fun _ ->
              match Web_dom.doc_query ("#" ^ anchor_id) with
@@ -498,7 +499,7 @@ let title_actions ~(hover : bool Signal.state) (p : Model.page) : t =
                       ; title = p.Model.page_title
                       }
                 | None -> ()))
-       ])
+        ] @ slots))
       context parent
   in
   S.note_area_node ~key node;

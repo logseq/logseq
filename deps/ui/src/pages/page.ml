@@ -606,8 +606,18 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                  ((if m.editing_title then
                                                     []
                                                   else
-                                                    [ Properties_area.title_actions
-                                                        ~hover:actions_hover page ])
+                                                    [ (* cljs mounts
+                                                         :pagebar hook
+                                                         items inside the
+                                                         title-actions row;
+                                                         there they stay
+                                                         out of the wrapper
+                                                         column's gap *)
+                                                      Properties_area.title_actions
+                                                        ~hover:actions_hover
+                                                        ~slots:(page_plugin_slots
+                                                                  ctx page)
+                                                        page ])
                                                 @ [ (if m.editing_title then
                                                        title_editor page
                                                      else
