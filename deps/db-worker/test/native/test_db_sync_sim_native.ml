@@ -710,7 +710,7 @@ let server_upload_bang (server : server) (t_before : int)
 
 (* cljs build-upload-plan *)
 let build_upload_plan ~(repo : string) ~(server : server) (conn : conn)
-    (pending : Sync_client_op.local_tx_entry list)
+    (pending : Sync_client_op.pending_tx_row list)
     : Wire.t list * Wire.t list =
   let tx_entries, _drop_tx_ids, drop_txs =
     Sync_apply.prepare_upload_tx_entries ~repo
@@ -771,7 +771,7 @@ let sync_client_bang ?(upload = server_upload_bang) (server : server)
        Sync_client_op.update_local_tx repo server_t;
        progress := true
      end);
-    let pending = Sync_apply.pending_txs repo () in
+    let pending = Sync_apply.pending_tx_rows repo () in
     let local_tx' = Option.value (Sync_client_op.get_local_tx repo) ~default:0 in
     let server_t' = server.srv_counter in
     (if pending <> [] && local_tx' = server_t' then begin
@@ -3928,7 +3928,7 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
        Sync_client_op.update_local_tx repo server_t;
        progress := true
      end);
-    let pending = Sync_apply.pending_txs repo () in
+    let pending = Sync_apply.pending_tx_rows repo () in
     let local_tx' =
       Option.value (Sync_client_op.get_local_tx repo) ~default:0
     in

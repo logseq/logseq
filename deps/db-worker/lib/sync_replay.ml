@@ -1707,10 +1707,10 @@ let transact_remote_txs
 (* Attrs whose db/ident creation is still queued — a property that only
    exists inside a pending entry is pending-created, not remotely
    deleted, so verbatim replay must keep items on it. *)
-let pending_property_attrs (pending : Sync_client_op.local_tx_entry list)
+let pending_property_attrs (pending : Sync_client_op.pending_tx_row list)
     : SSet.t =
   List.fold_left
-    (fun acc (e : Sync_client_op.local_tx_entry) ->
+    (fun acc (e : Sync_client_op.pending_tx_row) ->
        List.fold_left
          (fun acc item ->
             match item with
@@ -1728,7 +1728,7 @@ let pending_property_attrs (pending : Sync_client_op.local_tx_entry list)
 
 (* block/uuid adds inside a pending entry's verbatim .tx — the entities
    that entry will create once uploaded. *)
-let entry_created_uuids (local_tx : Sync_client_op.local_tx_entry)
+let entry_created_uuids (local_tx : Sync_client_op.pending_tx_row)
     : string list =
   List.filter_map
     (fun item ->
@@ -1764,11 +1764,11 @@ let rec uuids_in_wire (w : Wire.t) : string list =
    client (rtc-page-test). Defer instead: the entry stays pending; it
    fails naturally if the dep entry itself ever dies. *)
 let references_pending_uuid (db : db)
-    ~(pending : Sync_client_op.local_tx_entry list)
-    (local_tx : Sync_client_op.local_tx_entry) : bool =
+    ~(pending : Sync_client_op.pending_tx_row list)
+    (local_tx : Sync_client_op.pending_tx_row) : bool =
   let pending_created =
     List.concat_map
-      (fun (e : Sync_client_op.local_tx_entry) ->
+      (fun (e : Sync_client_op.pending_tx_row) ->
          if e.tx_id = local_tx.tx_id then [] else entry_created_uuids e)
       pending
   in
@@ -1778,11 +1778,11 @@ let references_pending_uuid (db : db)
        && (match Outliner_op.entity_of_uuid db u with
           | Some e -> List.length (Datascript.entity_attrs e) <= 1
           | None -> true))
-    (List.concat_map uuids_in_wire local_tx.forward_outliner_ops)
+    (List.concat_map uuids_in_wire (Lazy.force local_tx.forward_outliner_ops))
 
 let replay_pending_entry (repo : string) (conn : conn)
     (rebase_db_before : db option) ~(pending_attrs : SSet.t)
-    (local_tx : Sync_client_op.local_tx_entry) : unit =
+    (local_tx : Sync_client_op.pending_tx_row) : unit =
   let db = Conn.db conn in
   (* idempotent replay: a queued op may re-run against a newer base (e.g.
      its own ack echo rebuilt the display while the entry was still
@@ -1806,7 +1806,7 @@ let replay_pending_entry (repo : string) (conn : conn)
   in
   if already_materialized then ()
   else
-    match local_tx.forward_outliner_ops with
+    match Lazy.force local_tx.forward_outliner_ops with
     | _ :: _ as forward_ops ->
         let db_before_apply = Conn.db conn in
         let ops =
@@ -1900,7 +1900,7 @@ let replay_pending_entry (repo : string) (conn : conn)
    that can rebind should do a second pass to drop the residue. *)
 let replay_pending_txs repo (conn : conn)
     (rebase_db_before : db option) : int =
-  let pending = pending_txs repo () in
+  let pending = pending_tx_rows repo () in
   if pending = [] then 0
   else begin
     let failed = ref 0 in
@@ -1912,7 +1912,7 @@ let replay_pending_txs repo (conn : conn)
     let pending_attrs = pending_property_attrs pending in
     (try
        List.iter
-         (fun (local_tx : Sync_client_op.local_tx_entry) ->
+         (fun (local_tx : Sync_client_op.pending_tx_row) ->
             try
               replay_pending_entry repo conn rebase_db_before
                 ~pending_attrs local_tx
@@ -1920,7 +1920,7 @@ let replay_pending_txs repo (conn : conn)
               match e with
               | Dispatcher.Exn_info ("invalid rebase op", _)
                   when references_pending_uuid (Conn.db conn)
-                         ~pending:(pending_txs repo ()) local_tx ->
+                         ~pending:(pending_tx_rows repo ()) local_tx ->
                   Worker_log.info "db-sync/replay-deferred"
                     [ "repo", repo
                     ; "tx-id", local_tx.tx_id
@@ -1949,7 +1949,7 @@ let replay_pending_txs repo (conn : conn)
                     , Option.value local_tx.outliner_op ~default:""
                     ; "ops"
                     , Transit_codec.to_string
-                        (Wire.Array local_tx.forward_outliner_ops)
+                        (Wire.Array (Lazy.force local_tx.forward_outliner_ops))
                     ; "tx", tx_dump
                     ; "error", Printexc.to_string e ];
                   ignore (mark_failed_txs repo [ local_tx.tx_id ])))
@@ -2016,12 +2016,15 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
             the pending set (e.g. a tx-id mark_failed_txs filters out)
             can never terminate — stop instead of spinning at 100%. *)
          let rec drain_failures () =
-           let pending_before = List.length (pending_txs repo ()) in
+           let pending_before =
+             List.length (Sync_client_op.get_pending_local_tx_ids repo ())
+           in
            let failed =
              replay_pending_txs repo display_conn (Some db_before)
            in
            if failed > 0
-              && List.length (pending_txs repo ()) < pending_before
+              && List.length (Sync_client_op.get_pending_local_tx_ids repo ())
+                 < pending_before
            then begin
              Conn.update_db display_conn (fun _ ->
                  display_db_rebind_floor
@@ -2072,10 +2075,10 @@ let confirm_pending_txs ?(uploaded : (string * Wire.t) list = []) repo
   | None -> ()
   | Some server_conn -> (
       let pending_entries =
-        Sync_client_op.get_pending_local_txs_in repo tx_ids
+        Sync_client_op.get_pending_tx_rows_in repo tx_ids
       in
       let pending_ids =
-        List.map (fun (e : Sync_client_op.local_tx_entry) -> e.tx_id)
+        List.map (fun (e : Sync_client_op.pending_tx_row) -> e.tx_id)
           pending_entries
       in
       (* an id the server reported applied can have left the pending
@@ -2097,12 +2100,8 @@ let confirm_pending_txs ?(uploaded : (string * Wire.t) list = []) repo
                    Some
                      { Sync_client_op.tx_id = id
                      ; outliner_op = None
-                     ; forward_outliner_ops = []
-                     ; inverse_outliner_ops = []
-                     ; inferred_outliner_ops = false
-                     ; undo_redo = None
-                     ; tx = items
-                     ; reversed_tx = Wire.List [] }
+                     ; forward_outliner_ops = lazy []
+                     ; tx = items }
                | None -> None)
             orphan_ids
       in
@@ -2126,7 +2125,7 @@ let confirm_pending_txs ?(uploaded : (string * Wire.t) list = []) repo
          the journal never carried — a divergence verbatim LWW cannot
          repair. *)
       List.iter
-        (fun (local_tx : Sync_client_op.local_tx_entry) ->
+        (fun (local_tx : Sync_client_op.pending_tx_row) ->
            try
              let db = Conn.db server_conn in
              (* cljs sanitize-tx-entry: the server applies the same
@@ -2880,10 +2879,13 @@ let split_off_server_if_remote ?(unapply_pending = true) repo : unit =
               entries without shrinking the pending set can never
               terminate (e.g. a tx-id mark_failed_txs filters out) *)
            let rec drain_failures (before : db option) =
-             let pending_before = List.length (pending_txs repo ()) in
+             let pending_before =
+               List.length (Sync_client_op.get_pending_local_tx_ids repo ())
+             in
              let failed = replay_pending_txs repo display before in
              if failed > 0
-                && List.length (pending_txs repo ()) < pending_before
+                && List.length (Sync_client_op.get_pending_local_tx_ids repo ())
+                   < pending_before
              then begin
                Conn.update_db display (fun _ ->
                    display_db_rebind_floor
@@ -2907,7 +2909,7 @@ let split_off_server_if_remote ?(unapply_pending = true) repo : unit =
 
 
 let clear_pending_txs repo : int =
-  let ids = Sync_client_op.get_pending_local_tx_ids repo in
+  let ids = Sync_client_op.get_pending_local_tx_ids repo () in
   (* snapshot upload already carried these to the server — confirm them
      into the server conn before un-pending *)
   confirm_pending_txs repo ids;
@@ -2944,9 +2946,9 @@ let tx_entity_uuid (db : db) (temp_id_uuid : (string, string) Hashtbl.t)
   | _ -> tx_item_block_uuid db e
 
 let local_conflict_block_uuids (db : db)
-    (local_txs : Sync_client_op.local_tx_entry list) : SSet.t =
+    (local_txs : Sync_client_op.pending_tx_row list) : SSet.t =
   List.fold_left
-    (fun acc (t : Sync_client_op.local_tx_entry) ->
+    (fun acc (t : Sync_client_op.pending_tx_row) ->
        tx_items_of t.tx
        |> List.fold_left
             (fun acc2 item ->
@@ -2960,7 +2962,7 @@ let local_conflict_block_uuids (db : db)
     SSet.empty local_txs
 
 let remote_sync_conflicts (db : db)
-    (local_txs : Sync_client_op.local_tx_entry list) (remote_txs : Wire.t list)
+    (local_txs : Sync_client_op.pending_tx_row list) (remote_txs : Wire.t list)
     : (string * string * string * int) list =
   let local_uuids = local_conflict_block_uuids db local_txs in
   if SSet.is_empty local_uuids then []
@@ -3121,7 +3123,7 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
       let conn =
         Option.value (Sync_state.server_conn repo) ~default:display_conn
       in
-      let local_txs = pending_txs repo () in
+      let local_txs = pending_tx_rows repo () in
       let db_migrate = remote_txs_db_migrate remote_txs in
       let tx_meta =
         [ "rtc-tx?", Bool true ]
@@ -3184,7 +3186,7 @@ let apply_remote_txs repo (client : Sync_state.client)
          Db_worker_effect.pure
            (apply_remote_txs_once repo client remote_txs)))
     (fun error ->
-       let local_txs = pending_txs repo () in
+       let local_txs = pending_tx_rows repo () in
        Worker_log.error "db-sync/apply-remote-txs-failed"
          [ "repo", repo
          ; "has-local-changes?", string_of_bool (local_txs <> [])

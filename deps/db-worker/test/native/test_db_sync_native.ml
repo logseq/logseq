@@ -751,7 +751,7 @@ let upload_pending_and_assert_converged (conn : conn)
     (server_conn : conn) : unit =
   let tx_entries, drop_tx_ids, _drop_txs =
     Sync_apply.prepare_upload_tx_entries ~repo:test_repo (Some conn)
-      (Sync_apply.pending_txs test_repo ())
+      (Sync_apply.pending_tx_rows test_repo ())
   in
   List.iter (server_apply_entry server_conn) tx_entries;
   check "client/server checksums converge"
@@ -1557,7 +1557,7 @@ let test_large_upload_chunks_keep_value_replacement_in_one_request () =
               Sync_apply.max_upload_request_datoms := prev_cap)
             (fun () ->
               let rec loop requests =
-                let pending = Sync_apply.pending_txs test_repo () in
+                let pending = Sync_apply.pending_tx_rows test_repo () in
                 let tx_entries, _drop_ids, _drop_txs =
                   Sync_apply.prepare_upload_tx_entries ~repo:test_repo
                     (Some conn) pending
@@ -1816,7 +1816,7 @@ let test_prepare_upload_tx_entries_drops_empty_txs () =
                          (block_uuid_lookup (entity_block_uuid child1))
                          "block/title" (Wire.String "valid-title") ])
                 valid_tx_id ];
-          let pending = Sync_apply.pending_txs test_repo () in
+          let pending = Sync_apply.pending_tx_rows test_repo () in
           let tx_entries, drop_tx_ids, drop_txs =
             Sync_apply.prepare_upload_tx_entries ~repo:test_repo (Some conn)
               pending
@@ -1889,7 +1889,7 @@ let test_prepare_upload_tx_entries_keeps_large_client_op () =
           seed_client_op_txs test_repo
             [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
                 ~tx_data_v:(Wire.Array tx_data) tx_id ];
-          let pending = Sync_apply.pending_txs test_repo () in
+          let pending = Sync_apply.pending_tx_rows test_repo () in
           let tx_entries, drop_tx_ids, _drop_txs =
             Sync_apply.prepare_upload_tx_entries ~repo:test_repo (Some conn)
               pending
@@ -2607,7 +2607,7 @@ let test_tx_reject_missing_blocks_marks_failed_tx_failed () =
               let failed_ent = client_op_tx_row ops failed_tx_id in
               check "pending 0" (tx_row_int failed_ent 1 = 0);
               check "failed 1" (tx_row_int failed_ent 2 = 1);
-              let pending = Sync_apply.pending_txs test_repo () in
+              let pending = Sync_apply.pending_tx_rows test_repo () in
               let tx_entries, _, _ =
                 Sync_apply.prepare_upload_tx_entries ~repo:test_repo
                   (Some conn) pending
@@ -12213,7 +12213,7 @@ let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
                        between runs; when they fall outside the tempid group
                        they travel in a request of their own *)
                     let rec loop requests tempid_requests =
-                 let pending = Sync_apply.pending_txs test_repo () in
+                 let pending = Sync_apply.pending_tx_rows test_repo () in
                  let tx_entries, _drops, _drop_txs =
                    Sync_apply.prepare_upload_tx_entries ~repo:test_repo
                      (Some conn) pending
@@ -12856,7 +12856,7 @@ let test_rebase_multiple_insertions_preserves_identities () =
                     let tx_entries, _, _ =
                       Sync_apply.prepare_upload_tx_entries
                         ~repo:test_repo (Some conn)
-                        (Sync_apply.pending_txs test_repo ())
+                        (Sync_apply.pending_tx_rows test_repo ())
                     in
                     List.iter
                       (fun entry ->
@@ -13016,7 +13016,7 @@ let test_rebase_nested_insert_then_delete_preserves_tree () =
             (ent_by_block_uuid db grandchild_uuid = None);
           let tx_entries, _, _ =
             Sync_apply.prepare_upload_tx_entries ~repo:test_repo
-              (Some conn) (Sync_apply.pending_txs test_repo ())
+              (Some conn) (Sync_apply.pending_tx_rows test_repo ())
           in
           List.iter
             (fun entry ->
@@ -14156,7 +14156,7 @@ let test_prepare_upload_parent_fallback_sends_uuid_ref () =
                      [ db_add (block_uuid_lookup child_u) "block/parent"
                          (block_uuid_lookup (Wire.Uuid missing_u)) ])
                 "tx-move" ];
-          let pending = Sync_apply.pending_txs test_repo () in
+          let pending = Sync_apply.pending_tx_rows test_repo () in
           let tx_entries, _drops, _ =
             Sync_apply.prepare_upload_tx_entries ~repo:test_repo
               ~server_db:(Datascript.db srv) (Some conn) pending
@@ -14681,7 +14681,7 @@ let test_bookkeeping_timestamps_do_not_revalidate_entities () =
                local_tx_meta);
           let tx_entries, _drop_tx_ids, _drop_txs =
             Sync_apply.prepare_upload_tx_entries ~repo:test_repo
-              (Some conn) (Sync_apply.pending_txs test_repo ())
+              (Some conn) (Sync_apply.pending_tx_rows test_repo ())
           in
           check "prepared tx entries" (tx_entries <> []);
           List.iter

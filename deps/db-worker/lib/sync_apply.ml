@@ -1544,7 +1544,7 @@ let drop_cycle_parent_edges
     |> List.filter_map Fun.id
 
 let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
-    (pending : Sync_client_op.local_tx_entry list) :
+    (pending : Sync_client_op.pending_tx_row list) :
     Wire.t list * string list * Wire.t list =
   let missing_entity_tx_ids = ref [] in
   let srv_db =
@@ -1598,7 +1598,7 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
   in
   let entries =
     List.filter_map
-      (fun (e : Sync_client_op.local_tx_entry) ->
+      (fun (e : Sync_client_op.pending_tx_row) ->
          let tx_data =
            match conn with
            | Some c -> (
@@ -1737,6 +1737,10 @@ let prepare_upload_tx_entries_fn = ref prepare_upload_tx_entries
 
 let pending_txs repo ?limit () : Sync_client_op.local_tx_entry list =
   Sync_client_op.get_pending_local_txs repo ?limit ()
+
+(* lean rows for the hot paths — no inverse/reversed transit decode *)
+let pending_tx_rows repo ?limit () : Sync_client_op.pending_tx_row list =
+  Sync_client_op.get_pending_tx_rows repo ?limit ()
 
 let pending_tx_by_id repo tx_id : Sync_client_op.local_tx_entry option =
   Sync_client_op.get_local_tx_entry repo tx_id
@@ -1920,7 +1924,7 @@ let send_tx_batch (client : Sync_state.client)
 (* cljs <upload-pending-batch! *)
 let upload_pending_batch repo (client : Sync_state.client) (conn : conn)
     (local_tx : int option) : unit Db_worker_effect.t =
-  match pending_txs repo ~limit:50 () with
+  match pending_tx_rows repo ~limit:50 () with
   | [] -> Db_worker_effect.pure ()
   | batch ->
       let tx_entries, drop_tx_ids, drop_txs =

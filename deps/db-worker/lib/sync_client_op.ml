@@ -422,10 +422,13 @@ let get_unconfirmed_tx_data repo : unconfirmed_tx_row list =
              ; un_reversed_tx_data = col_text_opt r 3 }
          | None -> invalid_arg "client_ops tx row missing tx_id")
 
-let get_pending_local_tx_ids repo : string list =
-  rows (store repo)
+let get_pending_local_tx_ids repo ?(limit : int option) () : string list =
+  let sql =
     "select tx_id from client_ops where kind = 'tx' and pending = 1 order by created_at asc, id asc"
-    []
+    ^ (match limit with Some _ -> " limit ?" | None -> "")
+  in
+  let params = match limit with Some n -> [ int n ] | None -> [] in
+  rows (store repo) sql params
   |> List.map (fun r ->
          match col_text_opt r 0 with
          | Some tx_id -> tx_id
@@ -459,6 +462,75 @@ let get_pending_local_txs_in repo (tx_ids : string list) : local_tx_entry list =
               ^ ") order by created_at asc, id asc")
              (List.map text ids)
            |> List.map row_to_pending_local_tx)
+    (chunks [] tx_ids)
+
+(* lean pending row for the upload/replay/confirm/count hot paths:
+   decodes normalized_tx_data eagerly and forward_outliner_ops only on
+   first use — the inverse ops, reversed tx, undo_redo and inferred
+   flags stay on the full local_tx_entry decode (undo/redo, un-apply,
+   history ops, tests). *)
+type pending_tx_row =
+  { tx_id : string
+  ; outliner_op : string option
+  ; forward_outliner_ops : Wire.t list Lazy.t
+  ; tx : Wire.t }
+
+let row_to_pending_tx_row (r : Sqlite.row) : pending_tx_row option =
+  match col_text_opt r 0 with
+  | Some tx_id ->
+      Some
+        { tx_id
+        ; outliner_op = col_text_opt r 1
+        ; tx =
+            (match col_text_opt r 2 with
+             | Some s -> read_transit s
+             | None -> Wire.Array [])
+        ; forward_outliner_ops =
+            lazy
+              (match col_text_opt r 3 with
+               | Some s -> normalize_op_entries (read_transit s)
+               | None -> []) }
+  | None -> None
+
+let pending_tx_row_select =
+  "select tx_id, outliner_op, normalized_tx_data, forward_outliner_ops from client_ops where kind = 'tx'"
+
+let get_pending_tx_rows repo ?(limit : int option) () : pending_tx_row list =
+  let sql =
+    pending_tx_row_select
+    ^ " and pending = 1 order by created_at asc, id asc"
+    ^ (match limit with Some _ -> " limit ?" | None -> "")
+  in
+  let params = match limit with Some n -> [ int n ] | None -> [] in
+  rows (store repo) sql params
+  |> List.filter_map row_to_pending_tx_row
+
+(* lean counterpart of get_pending_local_txs_in *)
+let get_pending_tx_rows_in repo (tx_ids : string list) : pending_tx_row list =
+  let rec chunks acc xs =
+    match xs with
+    | [] -> List.rev acc
+    | _ ->
+        let rec take n xs acc' =
+          match n, xs with
+          | 0, _ | _, [] -> (List.rev acc', xs)
+          | _, x :: tl -> take (n - 1) tl (x :: acc')
+        in
+        let c, rest = take 500 xs [] in
+        chunks (c :: acc) rest
+  in
+  List.concat_map
+    (fun ids ->
+       match ids with
+       | [] -> []
+       | _ ->
+           let ph = String.concat "," (List.map (fun _ -> "?") ids) in
+           rows (store repo)
+             (pending_tx_row_select
+              ^ " and pending = 1 and tx_id in (" ^ ph
+              ^ ") order by created_at asc, id asc")
+             (List.map text ids)
+           |> List.filter_map row_to_pending_tx_row)
     (chunks [] tx_ids)
 
 (* ---- sync_conflicts ---- *)
@@ -551,12 +623,7 @@ let mark_failed_txs repo (tx_ids : string list) : int =
 (* client-op/history-action-ops-by-tx-id — feeds Undo_redo hook *)
 (* apply-txs/clear-pending-txs! — mark every pending tx non-pending *)
 let clear_pending_txs repo : int =
-  let ids =
-    List.filter_map
-      (fun (e : local_tx_entry) -> Some e.tx_id)
-      (get_pending_local_txs repo ())
-  in
-  mark_pending_txs_false repo ids
+  mark_pending_txs_false repo (get_pending_local_tx_ids repo ())
 
 let history_action_ops_by_tx_id repo (tx_id : string)
     : (string * Wire.t) list option =

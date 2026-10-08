@@ -332,7 +332,8 @@ let handle_hello repo (client : Sync_state.client) local_tx remote_tx
          | None -> "false"))
     ; ("pending-txs-count"
       , string_of_int
-          (List.length (Sync_apply.pending_txs repo ~limit:50 ()))) ];
+          (List.length
+             (Sync_client_op.get_pending_local_tx_ids repo ~limit:50 ()))) ];
   Sync_apply.enqueue_flush_pending repo client
 
 let handle_online_users repo (client : Sync_state.client) (message : Wire.t) =
