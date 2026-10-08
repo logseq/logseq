@@ -171,7 +171,7 @@ let readable_properties (props : (Wire.t * Wire.t) list) : Wire.t =
            | Wire.String s -> s
            | other -> (
                match other with
-               | _ -> Js.Json.stringify (Sdk_convert.json_of_wire other))
+               | _ -> Sdk_convert.wire_to_string other)
          in
          let v' =
            match v with
@@ -346,7 +346,7 @@ let datascript_query a b c d =
       in
       (* cljs passes camel-case?=nil: plugin-facing keys keep
                 hyphens (journal-day) *)
-      resolved (Sdk_convert.json_of_wire ~camel:false w)
+      resolved (Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:false w))
 
 (* cljs flatten — recursive seq flattening over query rows *)
 let rec flatten_wire (w : Wire.t) : Wire.t list =
@@ -375,7 +375,7 @@ let dsl_query a _b _c _d =
           opts
       in
       (* cljs: (flatten query-result) under normalize camel *)
-      resolved (Sdk_convert.json_of_wire (Wire.List (flatten_wire w)))
+      resolved (Sdk_json.to_js (Sdk_convert.json_of_wire (Wire.List (flatten_wire w))))
 
 (* cljs get_today_page: today's journal title -> get-block entity *)
 let get_today_page _a _b _c _d =
@@ -502,7 +502,7 @@ let list_cli endpoint a =
   let* w =
     Runtime.invoke2 endpoint (Wire.String (repo ())) (keywordize_keys (arg_map a))
   in
-  resolved (Sdk_convert.json_of_wire ~camel:false w)
+  resolved (Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:false w))
 
 let list_tags a _b _c _d = list_cli "thread-api/api-list-tags" a
 
@@ -528,7 +528,7 @@ let get_page_data a _b _c _d =
                    [ ( "error"
                      , Js.Json.string ("Page \"" ^ title ^ "\" not found") )
                    ]))
-       | _ -> resolved (Sdk_convert.json_of_wire ~camel:false w))
+       | _ -> resolved (Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:false w)))
 
 (* cljs app/get_current_graph_favorites -> page-handler/<get-favorites *)
 let get_current_graph_favorites _a _b _c _d =
@@ -604,7 +604,7 @@ let get_file_content a _b _c _d =
           (Wire.String (repo ()))
           (Wire.String path)
       in
-      resolved (Sdk_convert.json_of_wire w)
+      resolved (Sdk_json.to_js (Sdk_convert.json_of_wire w))
 
 (* cljs api search: block search result -> {blocks, has-more?};
    file-level search results don't exist for db graphs *)
@@ -652,8 +652,9 @@ let search a b _c _d =
         | _ -> true
       in
       resolved
-        (Sdk_convert.json_of_wire
-           (Wire.Map
+        (Sdk_json.to_js
+           (Sdk_convert.json_of_wire
+              (Wire.Map
               (List.filter_map Fun.id
                  [ Some (Wire.kw "blocks", blocks)
                  ; Some
@@ -662,7 +663,7 @@ let search a b _c _d =
                  ; (* cljs merges :files (file-graph hits — always empty
                       for db graphs) when no page-db-id is given *)
                    (if has_page then None
-                    else Some (Wire.kw "files", Wire.List [])) ])))
+                    else Some (Wire.kw "files", Wire.List [])) ]))))
 
 (* cljs api-db/custom_query: read-string the source, then
    query-custom/custom-query {:query query} — an edn list or a query
@@ -712,5 +713,5 @@ let custom_query a _b _c _d =
               query_m context
       in
       (* cljs: (flatten query-result) under normalize camel *)
-      resolved (Sdk_convert.json_of_wire (Wire.List (flatten_wire w))))
+      resolved (Sdk_json.to_js (Sdk_convert.json_of_wire (Wire.List (flatten_wire w)))))
 

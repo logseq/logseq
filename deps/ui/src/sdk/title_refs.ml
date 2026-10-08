@@ -145,7 +145,7 @@ let new_page_map name uuid =
    present -> not a new-page-ref), so it must carry the full class
    entity: keyword ident, Tag tag, Root extends, timestamps *)
 let new_tag_map name uuid =
-  let now = Js.Date.getTime (Dates.date_now ()) in
+  let now = Dates.date_now () in
   Wire.Map
     [ (Wire.String "block/name", Wire.String (lc name))
     ; (Wire.String "block/title", Wire.String name)

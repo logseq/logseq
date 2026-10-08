@@ -326,16 +326,13 @@ let trigger_text_of_kind = function
 (* ---- slash command table ---- *)
 
 let journal_offset days =
-  let d = Dates.date_now () in
-  ignore (Js.Date.setDate ~date:(Js.Date.getDate d +. float_of_int days) d);
+  let d = Dates.shift_day (Dates.date_now ()) days in
   "[[" ^ Dates.journal_title_of d ^ "]]"
 ;;
 
 let current_time () =
-  let d = Dates.date_now () in
-  Printf.sprintf "%02d:%02d"
-    (int_of_float (Js.Date.getHours d))
-    (int_of_float (Js.Date.getMinutes d))
+  let f = Dates.fields (Dates.date_now ()) in
+  Printf.sprintf "%02d:%02d" f.hours f.minutes
 ;;
 
 (* (i18n key, icon, desc, action) — icon names mirror commands.cljs :icon/*
@@ -531,19 +528,11 @@ let filter_slash q items =
 (* cljs editor.cljs page-search: an empty [[ query lists the i18n nlp
    date pages (calendar icon); choosing one emits [[<journal title>]]
    parsed from the english name *)
-let nlp_date_of (en : string) : Js.Date.t =
+let nlp_date_of (en : string) : Dates.t =
   let now = Dates.date_now () in
-  let add n = Js.Date.fromFloat (Js.Date.getTime now +. n *. 86400000.) in
-  let shift_month n =
-    let c = Js.Date.fromFloat (Js.Date.getTime now) in
-    ignore (Js.Date.setMonth c ~month:(Js.Date.getMonth c +. n));
-    c
-  in
-  let shift_year n =
-    let c = Js.Date.fromFloat (Js.Date.getTime now) in
-    ignore (Js.Date.setFullYear c ~year:(Js.Date.getFullYear c +. n));
-    c
-  in
+  let add n = Dates.add_days now (int_of_float n) in
+  let shift_month n = Dates.shift_month now (int_of_float n) in
+  let shift_year n = Dates.shift_year now (int_of_float n) in
   match en with
   | "Today" -> now
   | "Tomorrow" -> add 1.

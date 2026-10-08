@@ -1,13 +1,3 @@
-; The package metadata lives outside this Dune project. Re-read it on
-; every build so changing the release version cannot leave stale metadata.
-(rule
- (target version_gen.ml)
- (deps (universe))
- (action
-  (run
-   sh
-   -c
-   "%{exe:../tools/version_gen.exe} \"$DUNE_SOURCEROOT/../../resources/package.json\" %{target}")))
 
 (include_subdirs unqualified)
 

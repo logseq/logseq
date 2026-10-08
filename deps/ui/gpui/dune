@@ -1,13 +1,3 @@
-; The package metadata lives outside this Dune project. Re-read it on
-; every build so changing the release version cannot leave stale metadata.
-(rule
- (target version_gen.ml)
- (deps (universe))
- (action
-  (run
-   sh
-   -c
-   "%{exe:../tools/version_gen.exe} \"$DUNE_SOURCEROOT/../../resources/package.json\" %{target}")))
 
 ; GPUI native host build — same module set as native/. The shared
 ; ../src + ../subs copies and the generated-table rules below are
@@ -38,8 +28,6 @@
 (rule
  (copy ../native/daemon_client.ml daemon_client.ml))
 (rule
- (copy ../native/dates.ml dates.ml))
-(rule
  (copy ../native/dnd_kit.ml dnd_kit.ml))
 (rule
  (copy ../native/dom_ext.ml dom_ext.ml))
@@ -54,17 +42,9 @@
 (rule
  (copy ../native/fetch.ml fetch.ml))
 (rule
- (copy ../native/fuzzy.ml fuzzy.ml))
-(rule
  (copy ../native/html_to_md.ml html_to_md.ml))
 (rule
  (copy ../native/icon_picker.ml icon_picker.ml))
-(rule
- (copy ../native/icon_picker_names.ml icon_picker_names.ml))
-(rule
- (copy ../native/icon_tabler_data.ml icon_tabler_data.ml))
-(rule
- (copy ../native/icons.ml icons.ml))
 (rule
  (copy ../native/imperative_dom.ml imperative_dom.ml))
 (rule
@@ -118,7 +98,7 @@
 (rule
  (copy ../native/render_libs.ml render_libs.ml))
 (rule
- (copy ../native/sdk_convert.ml sdk_convert.ml))
+ (copy ../native/sdk_json.ml sdk_json.ml))
 (rule
  (copy ../native/sdk_util.ml sdk_util.ml))
 (rule
@@ -128,13 +108,9 @@
 (rule
  (copy ../native/sidebar_state.ml sidebar_state.ml))
 (rule
- (copy ../native/sprintf.ml sprintf.ml))
-(rule
  (copy ../native/transit.ml transit.ml))
 (rule
  (copy ../native/vdom.ml vdom.ml))
-(rule
- (copy ../native/version.ml version.ml))
 (rule
  (copy ../native/views_dom.ml views_dom.ml))
 (rule
@@ -182,13 +158,6 @@
    -c
    "%{exe:../tools/emoji_gen.exe} \"$DUNE_SOURCEROOT/../../resources/js/emoji-data.js\" %{target}")))
 
-; Icon-name table for the native icon picker — assets/icon-names.json is
-; inside this project so it stays a tracked dep.
-(rule
- (target icon_names_data.ml)
- (deps ../assets/icon-names.json)
- (action
-  (run %{exe:../tools/icon_names_gen.exe} %{deps} %{target})))
 
 (rule
  (copy ../subs/action.ml action.ml))

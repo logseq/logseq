@@ -56,7 +56,7 @@ let main root =
   Logseq_codemirror.register registry;
   Logseq_virt.register registry;
   let renderer =
-    Lui_web.create_with_extensions root (Icons.app_icons ()) registry
+    Lui_web.create_with_extensions root (Icons.app_icons ~ext:(Icons_ext.app_icons ()) ()) registry
       (Lui_protocol.String_map.fold Lui_protocol.String_map.add
          Logseq_el.web_adapters
          (Lui_protocol.String_map.add Logseq_editor.identifier

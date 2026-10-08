@@ -120,19 +120,14 @@ type popup =
 
 let active : popup option ref = ref None
 
-let days_in_month y m =
-  int_of_float
-    (Js.Date.getDate
-       (Js.Date.make ~year:(float_of_int y)
-          ~month:(float_of_int m) ~date:0. ()))
+let days_in_month y m = Dates.days_in_month ~y ~m
 
 (* LOCAL time — cljs merges the time input via .setHours into the
    calendar day before tc/to-long, so the stored ms is the local
    datetime (getTime), never UTC-midnight day math *)
 let day_date p =
-  Js.Date.make ~year:(float_of_int p.cy)
-    ~month:(float_of_int (p.cm - 1)) ~date:(float_of_int p.cd)
-    ~hours:(float_of_int p.hour) ~minutes:(float_of_int p.tmin) ()
+  Dates.make ~year:p.cy ~month:p.cm ~day:p.cd ~hours:p.hour
+    ~minutes:p.tmin ()
 
 let focus_day p =
   match D.el_query p.root "td[data-focused='true'] button" with
@@ -170,7 +165,7 @@ let commit_cal p =
       close_popup p ~focus_caret:caret
   | Cal_prop ident ->
       let op =
-        Ops.set_block_property p.uuid ident (W.Float (Js.Date.getTime d))
+        Ops.set_block_property p.uuid ident (W.Float (Dates.to_ms d))
       in
       (match A.edit_model p.uuid with
        | Some _ -> prop_batch ~caret:p.from p.uuid [ op ]
@@ -230,10 +225,8 @@ and rebuild_grid p =
       D.el_replace_children tbody;
       let days = days_in_month p.cy p.cm in
       let lead =
-        int_of_float
-          (Js.Date.getDay
-             (Js.Date.make ~year:(float_of_int p.cy)
-                ~month:(float_of_int (p.cm - 1)) ~date:1. ()))
+        (let f = Dates.fields (Dates.make ~year:p.cy ~month:p.cm ~day:1 ()) in
+         f.wday)
       in
       let py, pm =
         if p.cm = 1 then (p.cy - 1, 12) else (p.cy, p.cm - 1)
@@ -326,18 +319,17 @@ let cal_move p delta =
 
 (* cljs nld-parse covers natural language; here a plain JS Date parse
    handles ISO / "Sep 30, 2026" style input, else the warning toast *)
-let parse_nlp_date s =
-  let d = Js.Date.fromString s in
-  if Float.is_nan (Js.Date.getTime d) then None else Some d
+let parse_nlp_date s = Dates.parse s
 
 let nlp_commit p input =
   let v = String.trim (D.el_value input) in
   if v <> "" then
     match parse_nlp_date v with
     | Some d ->
-        p.cy <- int_of_float (Js.Date.getFullYear d);
-        p.cm <- int_of_float (Js.Date.getMonth d) + 1;
-        p.cd <- int_of_float (Js.Date.getDate d);
+        let f = Dates.fields d in
+        p.cy <- f.year;
+        p.cm <- f.month;
+        p.cd <- f.day;
         commit_cal p
     | None ->
         Toast.warning (I18n.tf "date/invalid-date-warning" [ v ])
@@ -665,9 +657,9 @@ and load_repeat p ident =
            | Some v -> (
                match ms_of_wire (unwrap_value v) with
                | Some ms ->
-                   let d = Js.Date.fromFloat ms in
-                   p.hour <- int_of_float (Js.Date.getHours d);
-                   p.tmin <- int_of_float (Js.Date.getMinutes d);
+                   let f = Dates.fields (Dates.of_ms ms) in
+                   p.hour <- f.hours;
+                   p.tmin <- f.minutes;
                    (match D.el_query p.root "input[type='time']"
                     with
                     | Some inp ->
@@ -877,10 +869,8 @@ and cal_clamp_x p =
     D.el_set_attr p.root "style" (String.concat ";" parts))
 
 let open_cal kind uuid from =
-  let today = Dates.date_now () in
-  let cy = int_of_float (Js.Date.getFullYear today)
-  and cm = int_of_float (Js.Date.getMonth today) + 1
-  and cd = int_of_float (Js.Date.getDate today) in
+  let today = Dates.fields (Dates.date_now ()) in
+  let cy = today.year and cm = today.month and cd = today.day in
   let tbody = D.h ~tag:"tbody" () in
   let sel =
     D.h ~tag:"button" ~cls:"ls-date-month-select"
@@ -1003,9 +993,9 @@ let open_cal kind uuid from =
        (match now_btn with
         | Some b ->
             D.el_on b "click" (fun _ ->
-                let now = Dates.date_now () in
-                p.hour <- int_of_float (Js.Date.getHours now);
-                p.tmin <- int_of_float (Js.Date.getMinutes now);
+                let now = Dates.fields (Dates.date_now ()) in
+                p.hour <- now.hours;
+                p.tmin <- now.minutes;
                 D.el_set_value inp
                   (Printf.sprintf "%02d:%02d" p.hour p.tmin);
                 commit_cal p)

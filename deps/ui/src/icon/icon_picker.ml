@@ -47,9 +47,8 @@ external style_set : Js.Json.t -> string -> string -> unit = "setProperty"
 
 (* cljs get-tabler-icons enumerates @tabler/icons-react exports in order
    and csk-prettifies them into display names ("Abacus Off"); the table
-   ships as a lazy chunk (Icon_picker_names) — empty until the first
-   picker open resolves it. *)
-let icon_items () = Array.to_list !Icon_picker_names.items
+   is generated once into the shared library. *)
+let icon_items () = Array.to_list Icon_picker_names.items
 
 (* cljs icon-cp strips spaces from the display name to form the id/title:
    "A B 2" -> "AB2" *)
@@ -603,12 +602,6 @@ let open_picker_with_opts ~(anchor : D.el) ~(del : bool)
     ; x_btn = None; bd = None; pane = None; root = None; pal_wrap = None }
   in
   let root = view p in
-  (* icon names load lazily — re-render the pane once the chunk lands *)
-  ignore
-    (Lazy.force Icon_picker_names.load
-     |> Js.Promise.then_ (fun () ->
-            refresh p;
-            Js.Promise.resolve ()));
   (* cljs chrome: ui__popover-content > ls-property-dialog >
      ls-property-input > ls-property-add > .flex-row >
      property-value-inner > picker *)

@@ -1,13 +1,3 @@
-; The package metadata lives outside this Dune project. Re-read it on
-; every build so changing the release version cannot leave stale metadata.
-(rule
- (target version_gen.ml)
- (deps (universe))
- (action
-  (run
-   sh
-   -c
-   "%{exe:../tools/version_gen.exe} \"$DUNE_SOURCEROOT/../../resources/package.json\" %{target}")))
 
 ; Generate native/dicts_gen.ml from the shared cljs dicts — same shape as
 ; the src/ rule; the dicts dir lives outside this dune-project
@@ -31,13 +21,6 @@
    -c
    "%{exe:../tools/emoji_gen.exe} \"$DUNE_SOURCEROOT/../../resources/js/emoji-data.js\" %{target}")))
 
-; Icon-name table for the native icon picker — assets/icon-names.json is
-; inside this project so it stays a tracked dep.
-(rule
- (target icon_names_data.ml)
- (deps ../assets/icon-names.json)
- (action
-  (run %{exe:../tools/icon_names_gen.exe} %{deps} %{target})))
 
 (rule
  (copy ../subs/action.ml action.ml))

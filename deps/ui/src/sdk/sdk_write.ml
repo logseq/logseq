@@ -145,7 +145,7 @@ let is_seq_wire = function
   | _ -> false
 
 let stringify_wire (v : Wire.t) =
-  Wire.String (Js.Json.stringify (Sdk_convert.json_of_wire v))
+  Wire.String (Sdk_convert.wire_to_string v)
 
 let str_wire (v : Wire.t) =
   Wire.String
@@ -155,7 +155,7 @@ let str_wire (v : Wire.t) =
      | Wire.Int n -> string_of_int n
      | Wire.Int64 n -> Int64.to_string n
      | Wire.Float f -> string_of_float f
-     | other -> Js.Json.stringify (Sdk_convert.json_of_wire other))
+     | other -> Sdk_convert.wire_to_string other)
 
 let property_name_of_ident ident =
   match String.rindex_opt ident '/' with
@@ -499,7 +499,7 @@ let insert_batch_block a b c _d =
           resolved
             (Js.Json.array
                (Array.of_list
-                  (List.map Sdk_convert.json_of_wire
+                  (List.map (fun w -> Sdk_json.to_js (Sdk_convert.json_of_wire w))
                      blocks))))
 
 let append_block_in_page a b c _d =
@@ -550,7 +550,7 @@ let append_block_in_page a b c _d =
   in
   insert_block (Js.Json.string target_id)
     (Js.Json.string content)
-    (Sdk_convert.json_of_wire opts')
+    (Sdk_json.to_js (Sdk_convert.json_of_wire opts'))
     Js.Json.null
 
 let update_block a b c _d =
@@ -667,12 +667,6 @@ let create_page a b c _d =
             (opt_string "customUUID" opts) props schema
       | _ -> resolved_result existing)
 
-external date_of_epoch : float -> Js.Date.t = "Date" [@@mel.new]
-
-external date_of_arg : 'a -> Js.Date.t = "Date" [@@mel.new]
-
-external date_get_time : Js.Date.t -> float = "getTime" [@@mel.send]
-
 (* cljs create_journal_page: new Date(arg) — accepts epoch ms or an
    ISO date string; NaN → no page. journal pages get a day-derived
    uuid worker-side (Common_uuid/gen_journal_page_uuid), so resolve
@@ -681,15 +675,12 @@ let create_journal_page a _b _c _d =
   let day_int =
     match Js.Json.classify a with
     | Js.Json.JSONNumber ms ->
-        Some (Dates.journal_day_of (date_of_epoch ms))
+        Some (Dates.journal_day_of (Dates.of_ms ms))
     | Js.Json.JSONString s -> (
         match float_of_string_opt s with
-        | Some ms -> Some (Dates.journal_day_of (date_of_epoch ms))
-        | None -> (
-            let d = Js.Date.fromString s in
-            match classify_float (Js.Date.getTime d) with
-            | FP_nan -> None
-            | _ -> Some (Dates.journal_day_of d)))
+        | Some ms -> Some (Dates.journal_day_of (Dates.of_ms ms))
+        | None ->
+            Option.map Dates.journal_day_of (Dates.parse s))
     | _ -> None
   in
   match day_int with
@@ -1409,7 +1400,7 @@ let prepend_block_in_page a b c _d =
     | _ -> Js.Promise.resolve ()
   in
   insert_block (Js.Json.string target_id) (Js.Json.string content)
-    (Sdk_convert.json_of_wire opts')
+    (Sdk_json.to_js (Sdk_convert.json_of_wire opts'))
     Js.Json.null
 
 (* cljs api move-block -> dnd/move-blocks:
