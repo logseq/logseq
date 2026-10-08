@@ -2260,11 +2260,20 @@ let upload_pending_batch repo (client : Sync_state.client) (conn : conn)
   match pending_tx_rows repo ~limit:50 () with
   | [] -> Db_worker_effect.pure ()
   | batch ->
+      let t0 = Js.Date.now () in
+      Worker_log.info "db-sync/upload-batch-prepare"
+        [ "repo", repo
+        ; "pending", string_of_int (List.length batch) ];
       let tx_entries, drop_tx_ids, drop_txs =
         !prepare_upload_tx_entries_fn ~repo
           ?server_db:(Option.map Conn.db (Sync_state.server_conn repo))
           (Some conn) batch
       in
+      Worker_log.info "db-sync/upload-batch-prepared"
+        [ "repo", repo
+        ; "ms", string_of_int (int_of_float (Js.Date.now () -. t0))
+        ; "entries", string_of_int (List.length tx_entries)
+        ; "drops", string_of_int (List.length drop_tx_ids) ];
       if drop_tx_ids <> [] then begin
         Worker_log.info "db-sync/drop-tx-ids"
           [ "tx-ids", String.concat "," drop_tx_ids
@@ -2328,8 +2337,30 @@ let flush_pending repo (client : Sync_state.client) : unit Db_worker_effect.t =
     && inflight = [] && ws_open_state && online
     && not upload_stopped_state
   in
-  if not ready then Db_worker_effect.pure ()
-  else
+  if not ready then begin
+    (match conn with
+     | Some _ ->
+         (match pending_tx_rows repo ~limit:1 () with
+          | _ :: _ ->
+              Worker_log.warn "db-sync/flush-pending-skipped"
+                [ "repo", repo
+                ; "local-tx"
+                , (match local_tx with Some t -> string_of_int t | None -> "nil")
+                ; "remote-tx"
+                , (match remote_tx with Some t -> string_of_int t | None -> "nil")
+                ; "inflight", string_of_int (List.length inflight)
+                ; "ws-open", string_of_bool ws_open_state
+                ; "online", string_of_bool online
+                ; "upload-stopped", string_of_bool upload_stopped_state ]
+          | [] -> ())
+     | None ->
+         (match pending_tx_rows repo ~limit:1 () with
+          | _ :: _ ->
+              Worker_log.warn "db-sync/flush-pending-no-conn"
+                [ "repo", repo ]
+          | [] -> ()));
+    Db_worker_effect.pure ()
+  end else
     match conn with
     | None -> Db_worker_effect.pure ()
     | Some conn -> upload_pending_batch repo client conn local_tx

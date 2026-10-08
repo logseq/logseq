@@ -110,7 +110,8 @@ let wait_rtc_idle env ~timeout_ms =
          pendingAsset === 0 && pendingServer === 0); })()"
     in
     match Js.Json.decodeBoolean json with
-    | Some true -> Js.Promise.resolve ()
+    | Some true ->
+        Js.Promise.resolve (Js.log "cloud-idle reached")
     | _ ->
         let now = Js.Date.now () in
         let* () =
@@ -120,7 +121,12 @@ let wait_rtc_idle env ~timeout_ms =
               Pw.eval_js env
                 "JSON.stringify(logseq.api.get_state_from_store('rtc/state'))"
             in
-            Js.Promise.resolve (Js.log2 "cloud-idle pending" snap)
+            Js.log2 "cloud-idle pending" snap;
+            let* lastlog =
+              Pw.eval_js env
+                "JSON.stringify(logseq.api.get_state_from_store('rtc/log'))"
+            in
+            Js.Promise.resolve (Js.log2 "cloud-idle lastlog" lastlog)
           end
           else Js.Promise.resolve ()
         in
