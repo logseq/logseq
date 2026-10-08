@@ -739,6 +739,15 @@ let input_command env command =
         when String.length s > 0
              && String.sub s (String.length s - 1) 1 = "/" ->
           Keyboard.press_in_editor env "Backspace"
+      | None ->
+          (* remount dropped editing entirely — *:focus sits on <body>
+             and re-typing "/" goes nowhere; click the still-mounted
+             editor wrapper to re-enter editing on that same block,
+             falling back to the last block when none is left *)
+          Pw.catch_timeout
+            (Pw.click_l ~timeout:3000.
+               (Pw.q env ".editor-wrapper:visible >> nth=-1"))
+            (fun () -> Pw.click env ".ls-block:visible >> nth=-1")
       | _ -> Js.Promise.resolve ()
     in
     let* () = Keyboard.type_in_editor env ~delay:20. "/" in
