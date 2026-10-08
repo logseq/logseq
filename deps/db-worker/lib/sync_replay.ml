@@ -2047,6 +2047,10 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
           { db_before
           ; db_after = Conn.db display_conn
           ; tx_data
+          (* cljs remote-tx reports carry :db/current-tx->txid in :tempids,
+             but nothing reads it on this path: the sync-db-changes payload
+             to the main thread has no tempids field and no deferred
+             listener inspects report.tempids *)
           ; tempids = []
           ; tx_meta = [ "rtc-tx?", Bool true ] }
         in
