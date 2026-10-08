@@ -31,7 +31,7 @@ let icon_el = Views_table.icon_el
 let ghost_btn ?(extra = "") ?(title_ = "") icon_name ~on_click : t =
   let mk label =
     button ~variant:`ghost ~size:`sm ~icon:(Views_table.icon_of icon_name)
-      ?label ~style_class:("ls-icon-btn" ^ extra)
+      ?label ~style_class:("ls-icon-btn !h-7 !px-1" ^ extra)
       ~on_press:(fun _ -> on_click ()) []
   in
   mk (if title_ = "" then None else Some title_)
@@ -85,7 +85,10 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
   (* data-view-tab-id is a DOM marker with no component prop —
      accessibility_identifier carries the stable anchor *)
   Ui_parts.class_signal current_sig
-    (fun cur -> "ls-view-tab" ^ if cur then "" else " ls-dim")
+    (fun cur ->
+      (* cljs view-tab-button is text-sm (14px), not the LUI button
+         size-sm default 16px *)
+      "ls-view-tab !text-sm !px-1" ^ if cur then "" else " ls-dim")
     (button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
        ~accessibility_identifier:(view_tab_anchor_id inst v0)
        ~on_press:(fun _ ->
@@ -95,7 +98,11 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
            | Some b ->
                ignore
                  (P.show_menu ~anchor:b
-                    (P.MItem (I.rename, fun () -> (V.ops ()).V.o_rename inst v)
+                    ((* cljs Rename is a dropdown-menu-sub with an inline
+                        block-container editor, not a flat item *)
+                     P.MSub
+                       ( I.rename
+                       , [ P.MCustom ((V.ops ()).V.o_rename_box inst v) ] )
                      :: (* cljs only offers Delete when >1 view exists *)
                         (if List.length (V.get inst).V.views > 1 then
                            [ P.MItem
@@ -158,7 +165,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                      && inst.V.kind <> V.KUnlinkedRefs
                      && count_of s > 0)
                    isig))
-           (text ~style_class:"ls-count"
+           (text ~style_class:"ls-count text-muted-foreground"
               ~value_signal:
                 (Logseq_el.own ctx
                    (Signal.map
@@ -183,7 +190,9 @@ let tabs_el inst ~dim : t =
         ~cmp:String.compare
         ~mount:(view_tab inst)
     ; Ui_parts.class_signal dim
-        (fun d -> "ls-add-view " ^ if d then "ls-dim" else "ls-lit")
+        (fun d ->
+          (* cljs add-view: h-7 !px-1 -ml-1 ghost button *)
+          "ls-add-view !h-7 !px-1 -ml-1 " ^ if d then "ls-dim" else "ls-lit")
         (button ~variant:`ghost ~size:`sm ~icon:`plus
            ~label:I.add_new_view
            ~on_press:(fun _ -> (V.ops ()).V.o_create_view inst) []) ]
@@ -556,7 +565,7 @@ and mk_group_sort inst ident label =
 let more_actions_el inst : t =
   button ~variant:`ghost ~size:`sm ~icon:`ellipsis
     ~label:(I.t "ui/show-more")
-    ~style_class:"ls-icon-btn"
+    ~style_class:"ls-icon-btn !h-7 !px-1"
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst) []
 
@@ -961,7 +970,7 @@ let refs_filter_btn inst : t =
   Ui_parts.class_signal
     (Logseq_el.own ctx
        (Signal.map (fun (s : V.vstate) -> refs_cog_class s) (sig_of inst)))
-    (fun c -> "ls-icon-btn" ^ c)
+    (fun c -> "ls-icon-btn !h-7 !px-1" ^ c)
     (button ~variant:`ghost ~size:`sm ~label:(I.t "reference/page-filter")
        ~icon:(Views_table.icon_of "filter-cog")
        ~accessibility_identifier:("vrefcog-" ^ string_of_int inst.V.id)
@@ -1026,7 +1035,7 @@ let render_head inst : t =
                        (sig_of inst)))
                (button ~variant:`ghost ~size:`sm ~label:I.sort_groups_by
                   ~icon:(Views_table.icon_of "arrows-up-down")
-                  ~style_class:"ls-icon-btn"
+                  ~style_class:"ls-icon-btn !h-7 !px-1"
                   ~accessibility_identifier:
                     ("vsort-" ^ string_of_int inst.V.id)
                   ~on_press:(fun _ ->
@@ -1039,7 +1048,7 @@ let render_head inst : t =
                   [])
            ; button ~variant:`ghost ~size:`sm ~label:I.filter
                ~icon:(Views_table.icon_of "filter")
-               ~style_class:"ls-icon-btn"
+               ~style_class:"ls-icon-btn !h-7 !px-1"
                ~accessibility_identifier:
                  ("vfilter-" ^ string_of_int inst.V.id)
                ~on_press:(fun _ ->

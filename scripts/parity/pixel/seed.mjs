@@ -2,7 +2,7 @@
 // Nested structures go through insert_batch_block; blocks that master's
 // batch path rejects (inline #tag / [#A] refs) fall back to append_block_in_page.
 // Usage: node seed.mjs <url> <waitMs>
-import { chromium } from '/Users/devin/repos/logseq-master/node_modules/playwright/index.mjs';
+import { chromium } from '/Users/devin/parity-lab/node_modules/playwright/index.mjs';
 import { FIXTURE_PAGE, BLOCKS, PROPS } from './fixture.mjs';
 
 const [, , URL_, WAIT = '15000'] = process.argv;

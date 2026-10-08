@@ -4,8 +4,8 @@
 // Usage: node probe-editparity.mjs [lui|master] [blockIdx]
 import { launch, MASTER_URL, LUI_URL } from './lib.mjs';
 import { FIXTURE_PAGE } from './fixture.mjs';
-import { PNG } from '/Users/devin/parity-tools/node_modules/pngjs/lib/png.js';
-import pixelmatch from '/Users/devin/parity-tools/node_modules/pixelmatch/index.js';
+import { PNG } from '/Users/devin/parity-lab/node_modules/pngjs/lib/png.js';
+import pixelmatch from '/Users/devin/parity-lab/node_modules/pixelmatch/index.js';
 import fs from 'node:fs';
 
 const tag = process.argv[2] || 'lui';

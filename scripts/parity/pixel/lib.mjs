@@ -1,5 +1,5 @@
 // Shared harness: persistent-context launcher for parity scripts.
-import { chromium } from '/Users/devin/repos/logseq-master/node_modules/playwright/index.mjs';
+import { chromium } from '/Users/devin/parity-lab/node_modules/playwright/index.mjs';
 export const MASTER_URL = 'http://localhost:3001/';
 export const LUI_URL = 'http://localhost:3003/index.html?rtc-test=true';
 export const PROFILES = {

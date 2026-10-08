@@ -1,7 +1,9 @@
 // Shared harness: persistent-context launcher for pixel2 scripts.
-import { chromium } from '/Users/devin/repos/logseq/node_modules/playwright/index.mjs';
-export const MASTER_URL = 'http://localhost:3001/?rtc-test=true';
-export const LUI_URL = 'http://localhost:3010/index.html?rtc-test=true';
+import { chromium } from '/Users/devin/parity-lab/node_modules/playwright/index.mjs';
+// Master reference: deployed cljs app (app.logseq.com) by default; set
+// MASTER_URL to a local shadow-cljs dev server when one is running.
+export const MASTER_URL = process.env.MASTER_URL || 'https://app.logseq.com/';
+export const LUI_URL = process.env.LUI_URL || 'http://localhost:3010/index.html?rtc-test=true';
 export const PROFILES = {
   master: '/Users/devin/parity-profiles/master',
   lui: '/Users/devin/parity-profiles/lui',

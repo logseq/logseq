@@ -606,10 +606,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                  ((if m.editing_title then
                                                     []
                                                   else
-                                                    Properties_area.title_actions
-                                                        ~hover:actions_hover page
-                                                    :: page_plugin_slots ctx
-                                                         page)
+                                                    [ Properties_area.title_actions
+                                                        ~hover:actions_hover page ])
                                                 @ [ (if m.editing_title then
                                                        title_editor page
                                                      else
@@ -867,6 +865,13 @@ let journal_references_view (p : Model.page) : t =
             ]
         ]
 
+(* cljs lsp-pagebar-slot: a sibling of .ls-page-title inside the title's
+   flex-row.space-between wrapper, NOT inside .block-content-wrapper —
+   mounting the empty slot box in the wrapper column shifted the whole
+   title row down by the column gap. *)
+let pagebar_slots_el (page : Model.page) : t =
+ fun ctx parent -> (row ~key:"pbar" (page_plugin_slots ctx page)) ctx parent
+
 (* cljs collapsed unlinked head: no .ls-view-head wrapper — .views
    (tab text, no count) + a visible add-view + directly under
    .ls-foldable-header *)
@@ -1013,6 +1018,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                           (fun (p : Model.page) (m : Model.t) ->
                             (p, m.Model.editing_title))
                           ps ms))
+                ; pagebar_slots_el p0
                 ]
             ; column ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
                 [ box ~key:"page-blocks-inner"
@@ -1034,7 +1040,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                     ]
                 ]
             ]
-        ; column ~key:("jrefs-w-" ^ key) ~gap:32
+        ; column ~key:("jrefs-w-" ^ key) ~gap:32 ~style_class:"ml-1"
             (* cljs journal-page: #today-queries div on the today item,
                then one .fade-in.delay refs section (unlinked refs are
                suppressed on the home route) *)
@@ -1313,7 +1319,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
 
 let title_row (m : Model.t) (page : Model.page) : t =
   row ~key:"page-title-row" ~main:`space_between
-    [ page_title_el m page ]
+    [ page_title_el m page; pagebar_slots_el page ]
 
 (* reactive bodies mount a single node — display:contents keeps the segment
    transparent to .page-inner's grid so its children lay out like the
@@ -1380,7 +1386,7 @@ let refs_wrap (m : Model.t) : t =
   match m.route_page with
   | None -> Logseq_el.nothing
   | Some page ->
-      column ~key:"refs-wrap" ~gap:32
+      column ~key:"refs-wrap" ~gap:32 ~style_class:"ml-1"
         (* cljs page-inner: #today-queries div first on today's journal,
            then linked and unlinked refs .fade-in.delay sections *)
         ((if is_today_page m page then

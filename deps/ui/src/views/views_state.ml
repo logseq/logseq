@@ -411,7 +411,7 @@ type ops =
   { o_refresh : inst -> unit
   ; o_refresh_src : inst -> string -> unit
   ; o_create_view : inst -> unit
-  ; o_rename : inst -> Views_wire.view_ent -> unit
+  ; o_rename_box : inst -> Views_wire.view_ent -> Web_dom.el
   ; o_export : inst -> unit
   ; o_add_object : inst -> unit
   ; o_title_of_uuid : inst -> string -> string

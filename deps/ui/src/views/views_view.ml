@@ -492,14 +492,17 @@ let ensure_default_view inst =
 
 (* ---------- actions ---------- *)
 
-let rename_view inst (v : Wr.view_ent) anchor =
+(* cljs view-tab menu: Rename is a dropdown-menu-sub whose sub-content
+   holds a block-container title editor (inline rename). The head mounts
+   the returned box as MCustom inside the Rename MSub; the popup layer
+   focuses the input when the sub-content opens. *)
+let rename_editor_box inst (v : Wr.view_ent) =
   let input =
     E.h ~tag:"input"
       ~cls:"cp__select-input w-full !p-1.5"
       ~attrs:[ ("type", "text") ] ()
   in
   E.el_set_value input v.Wr.vtitle;
-  let wrap = E.h ~cls:"block-title-wrap p-2" ~children:[ input ] () in
   let commit () =
     let t = E.el_value input in
     P.close_all ();
@@ -513,8 +516,7 @@ let rename_view inst (v : Wr.view_ent) anchor =
           commit ()
       | "Escape" -> P.close_all ()
       | _ -> ());
-  ignore (P.show_menu ~anchor [ P.MCustom wrap ]);
-  E.el_focus input
+  E.h ~cls:"block-title-wrap p-2" ~children:[ input ] ()
 
 let export_edn inst =
   let s =
@@ -584,13 +586,7 @@ let install_ops () =
               with
               | Some v -> select_view inst v
               | None -> refresh inst))
-    ; o_rename =
-        (fun inst v ->
-          match
-            E.get_element_by_id (Views_head.view_tab_anchor_id inst v)
-          with
-          | Some anchor -> rename_view inst v anchor
-          | None -> ())
+    ; o_rename_box = rename_editor_box
     ; o_export = export_edn
     ; o_add_object = add_new_object
     ; o_title_of_uuid = title_of_uuid

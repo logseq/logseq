@@ -95,22 +95,41 @@ in current master (toolbar = `Add icon`, `Add tag property`, `All` tab,
 
 ## Open diffs (remaining, not exceptions)
 
-- **Tooltip surface (1.82%)**: master renders "Toggle left sidebar" /
-  "More" tooltips on hover; LUI tooltip presence/labels differ
-  (diff-12-tooltip.png). Also includes the linked-refs offset below.
-- **Linked references vertical offset (~8px)**: on plain pages
-  (page-alpha 1.77%, and inside 12-tooltip) the entire linked-references
-  list renders ~8px lower in LUI — header row + all item rows offset;
-  "+" affordance after the "Linked references N" header differs.
+- ~~Tooltip surface (1.82%)~~ **VERIFIED FIXED**: hover probes show LUI
+  tooltips matching master on both header buttons — "Toggle left sidebar"
+  (131x53 vs 131x54, same label + `T`/`L` keys) and "More" (55x29 vs
+  55x30, 2px x drift = raster). The old diff-12 residual was the
+  linked-refs offset riding the same capture.
+- ~~Linked references vertical offset (~8px)~~ **FIXED** (page-alpha
+  1.45%→0.08%): five stacked deltas, all resolved — page plugin slots
+  mounted inside the title column (+8px row gap), missing `ml-1` on the
+  refs wrapper (x/width), missing cljs `.flex.flex-col.border-t.pt-2.gap-2
+  .group-list-view` partition wrapper + `-ml-2` group bodies, missing
+  `.ls-foldable-content` grid/`is-collapsed`/`-inner` overflow rules
+  (margin collapse → +4px), `bullet-container` inline 14px box
+  overriding the stylesheet's 16px var (2px per-row text shift),
+  view-head action buttons at size-sm instead of `!h-7 !px-1`,
+  view-tab at 16px instead of `!text-sm !px-1`, `ls-add-view` visible
+  in refs instead of opacity-0-at-rest, fold caret not in
+  `control-show`/`control-hide` contract, `.ls-count` dark instead of
+  muted-foreground. Residual: sub-pixel text raster on the head row
+  (~400px) plus the separate top-header band.
 - **First block row on Page Alpha**: full-row diff — content identical,
   likely rasterization + slight x-offset of bullet/text.
-- **Settings screens (~1.2-1.3%)**: residual text-rasterization + small
-  control-spacing deltas, no structural mismatch found.
-- **Rename menu structure**: master's view-tab `Rename` is a submenu with
-  an inline rename editor (`dropdown-menu-sub` + block container); LUI
-  uses a flat menu item invoking `o_rename`. Menu *contents* now match
-  post-fix; the submenu-vs-item structure differs by design of each
-  platform's menu widget.
+- **Settings screens**: aside `md:w-64` contract was missing — the nav
+  column rendered ~144px wide instead of 256px, shifting the whole
+  article 112px left (settings-general 4.14%→1.21%). Residual ~1.2% =
+  ~3px drift inside `.it` control columns, 1px/row nav stride, and
+  text raster — matching the previously documented floor.
+- ~~Rename menu structure~~ **FIXED**: LUI's view-tab menu now renders
+  `Rename` as `ui__dropdown-menu-sub-trigger` → `ui__dropdown-menu-sub-content`
+  with the inline editor inside (`MSub` + `MCustom`), matching master's
+  `dropdown-menu-sub` + block container at the same open coordinates.
+  The editor autofocuses when the sub opens (popup layer focuses the
+  first editable). Remaining delta: LUI's editor is a single-line
+  `cp__select-input` (225x46) vs master's full block-container chrome
+  (128x62) — documented simplification; commit-on-Enter and Escape
+  behavior match.
 
 ## Retained exceptions (from round 1, still applicable)
 

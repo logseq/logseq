@@ -222,6 +222,17 @@ let remote_row ~rerender (name, uuid, e2ee, role) =
         ignore (Graphs_ops.navigate_journal repo)
       else ignore (Graphs_ops.download_remote ~name ~uuid ~e2ee));
   Web_dom.el_append_child name_span label;
+  (* cljs repos-cp: strong.px-1 > ui/icon lock (e2ee) | cloud for
+     every remote row *)
+  (match
+     Web_dom.tabler_svg_el ~size:14. (if e2ee then "lock" else "cloud")
+   with
+   | Some svg ->
+       let strong = Web_dom.create_element "strong" in
+       Web_dom.el_set_class strong "px-1 flex items-center";
+       Web_dom.el_append_child strong svg;
+       Web_dom.el_append_child name_span strong
+   | None -> ());
   Web_dom.el_append_child left name_span;
   let controls = Web_dom.create_element "div" in
   Web_dom.el_set_class controls "controls";

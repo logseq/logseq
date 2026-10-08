@@ -282,7 +282,14 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
               D.el_append_child document_body sc;
               position_content ~anchor:el ~content:sc ~align_end:false
                 ~submenu:true;
-              push_popup sc
+              push_popup sc;
+              (* cljs dropdown-menu-sub-content editors (view rename box)
+                 take focus on open *)
+              (match
+                 Web_dom.el_query sc "input, textarea, [contenteditable='true']"
+               with
+              | Some inp -> Web_dom.el_focus inp
+              | None -> ())
             end
           in
           D.el_on el "click" (fun ev ->

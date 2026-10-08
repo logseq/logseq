@@ -293,14 +293,20 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             (box ~key:("dotw-" ^ uuid)
                ~accessibility_identifier:("dot-" ^ uuid)
                ~data_attrs:
-                 [ ("data-blockid", uuid); ("draggable", "true")
-                 ; (* the lui-core.css circle is backend styling; native
-                      backends get no stylesheet, so the container's
-                      intrinsic box + centering is emitted inline *)
-                   ( "style"
-                   , "display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;min-width:14px;border-radius:7px"
-                   )
-                 ]
+                 ([ ("data-blockid", uuid); ("draggable", "true") ]
+                 @ (if Platform.native_block_controls () then
+                      (* the lui-core.css circle is backend styling;
+                         native backends get no stylesheet, so the
+                         container's intrinsic box + centering is
+                         emitted inline. On web the stylesheet's
+                         .bullet-container (var --ls-block-icon-size)
+                         sizes it — the inline 14px overrode it and
+                         shifted every block row's text 2px left *)
+                      [ ( "style"
+                        , "display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;min-width:14px;border-radius:7px"
+                        )
+                      ]
+                    else []))
                [ (match node_icon ~library b with
                   | Some icon -> icon_el uuid icon
                   | None ->

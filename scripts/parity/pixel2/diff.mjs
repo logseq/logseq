@@ -2,8 +2,8 @@
 // usage: node scripts/parity/pixel2/diff.mjs <theme> [shotN]  e.g. `light 01`
 import fs from 'node:fs';
 import path from 'node:path';
-import { PNG } from '/Users/devin/parity-tools/node_modules/pngjs/lib/png.js';
-import pixelmatch from '/Users/devin/parity-tools/node_modules/pixelmatch/index.js';
+import { PNG } from '/Users/devin/parity-lab/node_modules/pngjs/lib/png.js';
+import pixelmatch from '/Users/devin/parity-lab/node_modules/pixelmatch/index.js';
 
 const theme = process.argv[2] || 'light';
 const only = process.argv[3];
