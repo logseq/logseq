@@ -229,7 +229,10 @@ fn element(
     let image = rendered_image(tex, display, window, cx);
     let mut element = div();
     if display {
-        element = element.w_full().flex().justify_center();
+        // The slot mounts inside the title's inline h_flex, where `w_full`
+        // resolves against an indefinite parent width — grow along the row
+        // instead so display math actually spans the line and centers.
+        element = element.w_full().flex_1().flex().justify_center();
     }
     element = match image {
         Ok(image) => element.child(img(ImageSource::Render(image))),

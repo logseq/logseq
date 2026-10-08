@@ -25,8 +25,8 @@ let num_prop name j = Js.Json.decodeNumber (prop name j)
 let document_el : element = Js.Json.JObject []
 
 let add_document_listener (name : string) (f : event -> unit)
-    (_capture : bool) : unit =
-  Platform.add_event_listener name (fun j -> f j)
+    (capture : bool) : unit =
+  Platform.add_event_listener ~capture name (fun j -> f j)
 
 let key_ (ev : event) : string option = str_prop "key" ev
 let input_type (ev : event) : string =

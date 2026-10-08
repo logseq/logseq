@@ -194,12 +194,22 @@ let error_inner (e : exn) = e
 let window_listeners : (string, (Js.Json.t -> unit) list) Hashtbl.t =
   Hashtbl.create 8
 
-let add_event_listener name f =
-  let cur = Option.value (Hashtbl.find_opt window_listeners name) ~default:[] in
-  Hashtbl.replace window_listeners name (f :: cur)
+(* document listeners registered with capture=true run before the
+   per-element bubble walk — DOM capture-phase parity. The web relies on
+   it to let document handlers suppress an element's own listener
+   (paste_into_editor stopImmediatePropagation before the conduit's
+   paste listener splices raw text). *)
+let capture_listeners : (string, (Js.Json.t -> unit) list) Hashtbl.t =
+  Hashtbl.create 8
 
-let add_document_listener name f = add_event_listener name f
-let on_document_event name f = add_document_listener name f
+let add_event_listener ?(capture = false) name f =
+  let tbl = if capture then capture_listeners else window_listeners in
+  let cur = Option.value (Hashtbl.find_opt tbl name) ~default:[] in
+  Hashtbl.replace tbl name (f :: cur)
+
+let add_document_listener ?(capture = false) name f =
+  add_event_listener ~capture name f
+let on_document_event name f = add_event_listener name f
 
 (* runs on every event payload before listeners see it — lets the DOM
    shim refresh live element state (value/selection) so listeners that
@@ -283,6 +293,40 @@ let emit_event name payload =
   if name = "click" then last_click_ms := now;
   propagation_stopped := false;
   !pre_dispatch_hook payload;
+  (* every listener sees the enriched payload: "target" injected from
+     the host's nodeId — capture listeners run before the element bubble
+     walk, so they need it just as early *)
+  let payload =
+    match payload with
+    | Js.Json.JObject kvs -> (
+        if List.mem_assoc "target" kvs then payload
+        else
+          match List.assoc_opt "nodeId" kvs with
+          | Some v -> (
+              match Js.Json.decodeNumber v with
+              | Some n -> (
+                  match !event_target_of (int_of_float n) with
+                  | Some target ->
+                      Js.Json.JObject (kvs @ [ ("target", target) ])
+                  | None -> payload)
+              | None -> payload)
+          | None -> payload)
+    | _ -> payload
+  in
+  let run_listeners tbl =
+    match Hashtbl.find_opt tbl name with
+    | Some fns ->
+        List.iter
+          (fun f ->
+            if not !propagation_stopped then
+              try f payload
+              with e ->
+                Printf.eprintf "[emit_event] listener threw ev=%s: %s\n%!"
+                  name (Printexc.to_string e))
+          fns
+    | None -> ()
+  in
+  run_listeners capture_listeners;
   (match payload with
    | Js.Json.JObject kvs -> (
        match List.assoc_opt "nodeId" kvs with
@@ -290,14 +334,6 @@ let emit_event name payload =
            match Js.Json.decodeNumber v with
            | None -> ()
            | Some n ->
-               let payload =
-                 if List.mem_assoc "target" kvs then payload
-                 else
-                   match !event_target_of (int_of_float n) with
-                   | Some target ->
-                       Js.Json.JObject (kvs @ [ ("target", target) ])
-                   | None -> payload
-               in
                let payload_str = Js.Json.stringify payload in
                let rec bubble id depth =
                  if depth < 64 && not !propagation_stopped then begin
@@ -324,39 +360,7 @@ let emit_event name payload =
                bubble (int_of_float n) 0)
        | None -> ())
    | _ -> ());
-  if not !propagation_stopped then begin
-  match Hashtbl.find_opt window_listeners name with
-  | Some fns ->
-      (* document listeners see the enriched payload: "target" injected
-         above when the host only sent a nodeId *)
-      let payload =
-        match payload with
-        | Js.Json.JObject kvs -> (
-            if List.mem_assoc "target" kvs then payload
-            else
-              match List.assoc_opt "nodeId" kvs with
-              | Some v -> (
-                  match Js.Json.decodeNumber v with
-                  | Some n -> (
-                      match !event_target_of (int_of_float n) with
-                      | Some target ->
-                          Js.Json.JObject
-                            (kvs @ [ ("target", target) ])
-                      | None -> payload)
-                  | None -> payload)
-              | None -> payload)
-        | _ -> payload
-      in
-      List.iter
-        (fun f ->
-          if not !propagation_stopped then
-          try f payload
-          with e ->
-            Printf.eprintf "[emit_event] listener threw ev=%s: %s\n%!" name
-              (Printexc.to_string e))
-        fns
-  | None -> ()
-  end;
+  if not !propagation_stopped then run_listeners window_listeners;
   (* DOM default action — runs after listeners had their chance to
      prevent; skipped entirely for coalesced duplicate clicks *)
   (try !post_dispatch_hook name payload

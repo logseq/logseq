@@ -97,6 +97,20 @@ let shortcut_key_str key =
 
 let shortcut_key ev = shortcut_key_str (D.ev_key ev)
 
+(* gpui folds a held shift into the key name for platform shortcuts —
+   cmd+shift+p arrives as {key="P", shift=false} and cmd+shift+/ as
+   {key="?", shift=false}. With a modifier held, a shifted glyph
+   (uppercase letter or shifted symbol) means the flag was folded away;
+   reconstruct it so mod+p and mod+shift+p stay distinct *)
+let shift_held ev =
+  if D.ev_shift ev then true
+  else if not (D.ev_meta ev || D.ev_ctrl ev) then false
+  else
+    match D.ev_key ev with
+    | k when String.length k = 1 ->
+        k <> String.lowercase_ascii k || shortcut_key_str k <> k
+    | _ -> false
+
 (* route through the hash so the router runs its full pipeline —
    Navigate_to + load_route + history. A bare Navigate_to commit skips
    the fetch (empty Journals/All-pages) and loses the history entry *)
@@ -492,7 +506,7 @@ let stroke_of ev =
         | k -> k
       in
       let ms =
-        (if D.ev_shift ev then [ "shift" ] else [])
+        (if shift_held ev then [ "shift" ] else [])
         @ (if D.ev_alt ev then [ "alt" ] else [])
         @ (if D.ev_ctrl ev then [ "ctrl" ] else [])
         @ (if D.ev_meta ev then [ "mod" ] else [])
@@ -584,7 +598,7 @@ let on_global_key ev =
 
 let on_normal_key ev =
   let key = D.ev_key ev in
-  let shift = D.ev_shift ev
+  let shift = shift_held ev
   and alt = D.ev_alt ev
   and meta = D.ev_meta ev in
   let selected () = S.selection_active () in
@@ -882,7 +896,7 @@ and apply_input ?frame uuid ev =
 let pending_event ev : Edit_input.event option =
   let kev =
     { Edit_model.key = D.ev_key ev
-    ; shift = D.ev_shift ev
+    ; shift = shift_held ev
     ; alt = D.ev_alt ev
     ; meta = D.ev_meta ev
     ; ctrl = D.ev_ctrl ev

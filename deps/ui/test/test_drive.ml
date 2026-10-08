@@ -311,6 +311,33 @@ let test_cmdk () =
   check "cmdk closed on Escape"
     (find_where (fun n -> has_tok n "cp__cmdk__modal") = [])
 
+(* gpui can report a shift-held keystroke with the flag folded into the
+   key name ({key="P", shift=false}) — the mod+p binding must not fire
+   off what the DOM would deliver as shiftKey=true *)
+let test_key_leaks () =
+  (* the stub document replaces the real one after module init, so the
+     listeners install_once attached at load are inert — register the
+     global-key layer directly *)
+  Web_dom.add_document_listener "keydown" Editor_keys.on_global_key true;
+  Stub_dom.keydown ~meta:true "P";
+  flush ();
+  check "folded-shift mod+p does not open add-property"
+    (find_where (fun n -> has_tok n "ls-property-dialog") = []);
+  check "folded-shift mod+p opens the palette"
+    (find_where (fun n -> has_tok n "cp__cmdk__modal") <> []);
+  Stub_dom.keydown "Escape";
+  Stub_dom.keydown "Escape";
+  flush ();
+  Stub_dom.keydown ~meta:true ~shift:true "P";
+  flush ();
+  check "mod+shift+p opens the palette"
+    (find_where (fun n -> has_tok n "cp__cmdk__modal") <> []);
+  check "mod+shift+p does not open add-property"
+    (find_where (fun n -> has_tok n "ls-property-dialog") = []);
+  Stub_dom.keydown "Escape";
+  Stub_dom.keydown "Escape";
+  flush ()
+
 (* ---------------- left sidebar (state-driven) ---------------- *)
 
 let sidebar_st () = Sidebar_state.ensure (Option.get !ms_ref)
@@ -1444,6 +1471,7 @@ let run ~finish =
   test_block_tree ();
   test_block_edit ();
   test_cmdk ();
+  test_key_leaks ();
   test_left_sidebar ();
   test_right_sidebar ();
   test_context_menu ();

@@ -971,6 +971,26 @@ fn editor_surface(
                 // would double-insert once a handler is registered).
                 let json = json!({ "text": keystroke.key_char.as_ref().unwrap() });
                 emit(&key_shared, node_id, c"insert", json.to_string(), cx);
+                // The web DOM still delivers the keydown to document
+                // listeners (chords like "t t" live there): emit it too.
+                // The conduit target makes the editor's document handler
+                // a no-op for it, so nothing double-inserts.
+                lui_gpui::dom::dom_event(
+                    &key_shared,
+                    node_id,
+                    IDENTIFIER,
+                    "keydown",
+                    json!({
+                        "key": dom_key_name(&keystroke.key),
+                        "keyChar": keystroke.key_char,
+                        "metaKey": mods.platform,
+                        "ctrlKey": mods.control,
+                        "shiftKey": mods.shift,
+                        "altKey": mods.alt,
+                        "repeat": event.is_held,
+                    }),
+                    cx,
+                );
                 cx.stop_propagation();
                 return;
             }

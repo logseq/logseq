@@ -14,8 +14,8 @@ type rect = Js.Json.t
 let json_prop = Dom_ext.prop
 
 let document_add_listener (name : string) (f : ev -> unit)
-    (_capture : bool) : unit =
-  Platform.add_event_listener name f
+    (capture : bool) : unit =
+  Platform.add_event_listener ~capture name f
 
 (* callers compare elements with physical equality (ae == el), so all
    queries for the same DOM id must return the same allocation *)

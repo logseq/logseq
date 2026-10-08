@@ -585,8 +585,14 @@ fn register_class_styles() {
         "background:var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color))",
         "",
     );
-    // .block-control — the fold caret rides at 40% opacity on web.
-    class("block-control", "opacity:0.4", "");
+    // .block-control — the fold caret rides at 40% opacity on web and
+    // occupies a fixed --ls-block-control-size slot (24px) even when the
+    // caret glyph is hidden; without the slot the bullet column shrinks.
+    class(
+        "block-control",
+        "width:24px;height:24px;flex-shrink:0;opacity:0.4",
+        "",
+    );
 
     // ---- cmdk palette (web resources/css/lui-overlay.css) ----
     class(
