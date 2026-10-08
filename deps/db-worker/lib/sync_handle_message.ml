@@ -281,9 +281,14 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
            (Sync_apply.mark_pending_txs_false ~rebuild:false repo
               successful_tx_ids);
          (match failed_tx_id' with
-          | Some id -> Sync_apply.fail_pending_txs repo [ id ]
-          | None ->
-              request_pull client (Option.value local_tx ~default:0))
+          | Some id ->
+              (* Keep accepted edits visible until their journal echo
+                 arrives; that pull also removes the rejected overlay. *)
+              ignore
+                (Sync_apply.mark_failed_txs
+                   ~rebuild:(successful_tx_ids = []) repo [ id ])
+          | None -> ());
+         request_pull client (Option.value local_tx ~default:0)
        end
        else
          Sync_apply.fail_pending_txs repo inflight;

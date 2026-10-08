@@ -306,20 +306,19 @@ let rebase_resolve_target_and_sibling ?(page_root_fallback = false)
           | None -> None ))
     | None -> (None, None)
   in
-  let page_root tb =
+  let page_root () =
     if not page_root_fallback then None
     else
       let via_base_db =
-        match rebase_db_before with
-        | Some db -> resolve_ancestor_or_page db current_db tb
-        | None -> None
+        match rebase_db_before, target_before with
+        | Some db, Some tb -> resolve_ancestor_or_page db current_db tb
+        | _ -> None
       in
       match via_base_db with
       | Some e -> Some (e, false)
       | None -> (
-          (* the stashed base predates the deleted ancestor (an older
-             pull's rebase base was overwritten) — walk the per-uuid
-             parent chain recorded as each remote delete landed *)
+          (* Later pulls may replace the saved db after this target
+             disappeared. Its UUID still starts the recorded parent chain. *)
           let rec climb u visited =
             if SSet.mem u visited then None
             else
@@ -333,8 +332,8 @@ let rebase_resolve_target_and_sibling ?(page_root_fallback = false)
                   | Some pu -> climb pu (SSet.add u visited)
                   | None -> None)
           in
-          (match Datascript.entity_attr tb "block/uuid" with
-           | Some (One_value (Uuid u)) ->
+          (match block_uuid_lookup_ref_value target_ref with
+           | Some u ->
                Option.map
                  (fun e -> (e, false))
                  (climb u SSet.empty)
@@ -354,9 +353,8 @@ let rebase_resolve_target_and_sibling ?(page_root_fallback = false)
                     (Lookup_ref ("block/uuid", Uuid puuid))
                 with
                 | Some parent -> Some (parent, false)
-                | None -> page_root tb))
-        | Some tb, _, _ -> page_root tb
-        | _ -> None)
+                | None -> page_root ()))
+        | _ -> page_root ())
   in
   r
 
@@ -1416,27 +1414,26 @@ let rebase_pending_entry (repo : string) (conn : conn)
           (fun r -> reports := r :: !reports)
       in
       (try
-         let ops =
-           Outliner_op_construct.canonicalize_insert_ops
-             (Conn.db temp_conn)
-             (tx_items_of local_tx.tx)
-             forward_ops
-         in
-         List.iter
-           (fun op ->
-              ignore
-                (replay_canonical_outliner_op temp_conn op ~repo
-                   (Sync_state.rebase_base_db repo)))
-           ops
+         Db_tx.with_temp_conn_cleanup temp_conn lid (fun () ->
+             let ops =
+               Outliner_op_construct.canonicalize_insert_ops
+                 (Conn.db temp_conn)
+                 (tx_items_of local_tx.tx)
+                 forward_ops
+             in
+             List.iter
+               (fun op ->
+                  ignore
+                    (replay_canonical_outliner_op temp_conn op ~repo
+                       (Sync_state.rebase_base_db repo)))
+               ops)
        with e ->
-         Datascript.unlisten temp_conn lid;
          (match e with
           | Dispatcher.Exn_info ("invalid rebase op", _) ->
               (* the ops can't produce a tx on the new base at all —
                  drop the entry for good *)
               invalid_op := true
           | _ -> raise e));
-      Datascript.unlisten temp_conn lid;
       if !invalid_op then false
       else (
       let datoms =

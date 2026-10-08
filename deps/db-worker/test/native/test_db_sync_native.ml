@@ -9684,15 +9684,19 @@ let test_apply_remote_tx_collapsed_encrypted_title () =
           (* journal truth: a collapsed add+retract pair that leaves a
              required attr empty cannot journal — the apply fails fast
              instead of being silently repaired *)
-          (try
-             await_unit
-               (Sync_replay.apply_remote_tx test_repo (mk_client ())
-                  [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
-                      "block/title" (Ds_wire.transit_of_value title)
-                  ; db_retract (block_uuid_lookup (Wire.Uuid child_uuid))
-                      "block/title" (Ds_wire.transit_of_value title) ]);
-             Alcotest.fail "apply-remote-tx did not raise"
-           with _ -> ());
+          (match
+             (try
+                await_unit
+                  (Sync_replay.apply_remote_tx test_repo (mk_client ())
+                     [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
+                         "block/title" (Ds_wire.transit_of_value title)
+                     ; db_retract (block_uuid_lookup (Wire.Uuid child_uuid))
+                         "block/title" (Ds_wire.transit_of_value title) ]);
+                false
+              with _ -> true)
+           with
+           | true -> ()
+           | false -> Alcotest.fail "apply-remote-tx did not raise");
           let child' =
             Option.get (ent_by_block_uuid (Datascript.db conn) child_uuid)
           in
@@ -10773,22 +10777,26 @@ let test_apply_remote_txs_local_fallback_delete_parent_retracts_child () =
              live server-side parent — on this unsplit conn the pending
              delete already removed it, and the missing ref fails fast
              instead of falling back to a local rewrite *)
-          (try
-             await_unit
-               (Sync_replay.apply_remote_tx test_repo (mk_client ())
-                  [ db_add (Wire.Int (-1)) "block/uuid"
-                      (Wire.Uuid child_uuid)
-                  ; db_add (Wire.Int (-1)) "block/title"
-                      (Wire.String "remote child")
-                  ; db_add (Wire.Int (-1)) "block/parent"
-                      (block_uuid_lookup (Wire.Uuid parent_uuid))
-                  ; db_add (Wire.Int (-1)) "block/page"
-                      (block_uuid_lookup (Wire.Uuid page_uuid))
-                  ; db_add (Wire.Int (-1)) "block/order" (Wire.String "Zz")
-                  ; db_add (Wire.Int (-1)) "block/created-at" (Wire.Int now)
-                  ; db_add (Wire.Int (-1)) "block/updated-at" (Wire.Int now) ]);
-             Alcotest.fail "apply-remote-tx did not raise"
-           with _ -> ());
+          (match
+             (try
+                await_unit
+                  (Sync_replay.apply_remote_tx test_repo (mk_client ())
+                     [ db_add (Wire.Int (-1)) "block/uuid"
+                         (Wire.Uuid child_uuid)
+                     ; db_add (Wire.Int (-1)) "block/title"
+                         (Wire.String "remote child")
+                     ; db_add (Wire.Int (-1)) "block/parent"
+                         (block_uuid_lookup (Wire.Uuid parent_uuid))
+                     ; db_add (Wire.Int (-1)) "block/page"
+                         (block_uuid_lookup (Wire.Uuid page_uuid))
+                     ; db_add (Wire.Int (-1)) "block/order" (Wire.String "Zz")
+                     ; db_add (Wire.Int (-1)) "block/created-at" (Wire.Int now)
+                     ; db_add (Wire.Int (-1)) "block/updated-at" (Wire.Int now) ]);
+                false
+              with _ -> true)
+           with
+           | true -> ()
+           | false -> Alcotest.fail "apply-remote-tx did not raise");
           let db = Datascript.db conn in
           check "remote child absent"
             (ent_by_block_uuid db child_uuid = None);
@@ -14176,19 +14184,23 @@ let test_apply_remote_txs_drops_value_ref_to_missing_uuid () =
              lands, so the ref either resolved (target still journaled
              later) or the item never entered the log. The rewritten
              drop is gone; a broken prefix fails fast *)
-          (try
-             await_unit
-               (Sync_replay.apply_remote_txs test_repo (mk_client ())
-                  [ wire_map
-                      [ ( "tx-data"
-                        , Wire.Array
-                            [ db_add (block_uuid_lookup (Wire.Uuid c1_u))
-                                "block/title" (Wire.String "edited")
-                            ; db_add (block_uuid_lookup (Wire.Uuid c1_u))
-                                "block/tags"
-                                (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
-             Alcotest.fail "apply-remote-txs did not raise"
-           with _ -> ());
+          (match
+             (try
+                await_unit
+                  (Sync_replay.apply_remote_txs test_repo (mk_client ())
+                     [ wire_map
+                         [ ( "tx-data"
+                           , Wire.Array
+                               [ db_add (block_uuid_lookup (Wire.Uuid c1_u))
+                                   "block/title" (Wire.String "edited")
+                               ; db_add (block_uuid_lookup (Wire.Uuid c1_u))
+                                   "block/tags"
+                                   (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
+                false
+              with _ -> true)
+           with
+           | true -> ()
+           | false -> Alcotest.fail "apply-remote-txs did not raise");
           let db = Datascript.db conn in
           check "unresolvable v-ref drops, no bare shell"
             (ent_by_block_uuid db dead_u = None);
@@ -14903,9 +14915,222 @@ let test_stamps_on_missing_entities_are_dropped () =
       in
       check "sanitize output" (result = expected))
 
+let test_partial_reject_pulls_accepted_prefix () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child1, child2, _ = setup_parent_child () in
+      let parent_uuid = ent_block_uuid parent in
+      let child1_uuid = ent_block_uuid child1 in
+      let child2_uuid = ent_block_uuid child2 in
+      let child1_title = Ldb.value child1 "block/title" in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          let save uuid title =
+            let block = Option.get (ent_by_block_uuid (Conn.db display) uuid) in
+            ignore
+              (Outliner_core.save_block_conn display
+                 (Block_map.put (Block_map.of_entity block) "block/title"
+                    (String title))
+                 Outliner_core.default_save_opts Block_map.empty)
+          in
+          save parent_uuid "accepted title";
+          save child1_uuid "rejected title";
+          save child2_uuid "pending tail";
+          let rows = Sync_apply.pending_txs test_repo () in
+          let accepted = List.nth rows 0 and rejected = List.nth rows 1 in
+          let tail = List.nth rows 2 in
+          let sent = ref [] in
+          let ws = fake_ws ~on_send:(fun raw ->
+              sent := Json_codec.parse raw :: !sent) () in
+          let client = mk_client ~ws
+              ~inflight:[ accepted.tx_id; rejected.tx_id; tail.tx_id ] () in
+          ignore
+            (expect_reject_error (fun () ->
+                 Sync_handle_message.handle_message test_repo client
+                   (msg_json
+                      [ "type", Wire.String "tx/reject"
+                      ; "reason", Wire.String "db transact failed"
+                      ; "t", Wire.Int 1
+                      ; "success-tx-ids", Wire.Array [ Wire.String accepted.tx_id ]
+                      ; "failed-tx-id", Wire.String rejected.tx_id ])));
+          await_task !(client.send_queue);
+          check "accepted prefix requests pull from original watermark"
+            (List.exists (fun m ->
+                 Wire.get "type" m = Some (Wire.String "pull")
+                 && Wire.get "since" m = Some (Wire.Int 0)) !sent);
+          check "accepted edit retained until echo"
+            (Ldb.value (Option.get (ent_by_block_uuid (Conn.db display) parent_uuid))
+               "block/title" = Some (String "accepted title"));
+          check "server waits for journal echo"
+            (Ldb.value (Option.get (ent_by_block_uuid (Conn.db conn) parent_uuid))
+               "block/title" <> Some (String "accepted title"));
+          Sync_apply.flush_pending_fn := (fun _ _ -> Db_worker_effect.pure ());
+          await_unit
+            (Sync_handle_message.handle_message_effect test_repo client
+               (msg_json
+                  [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+                  ; "txs", Wire.Array
+                      [ wire_map
+                          [ "t", Wire.Int 1
+                          ; "tx", Wire.String (Transit_codec.to_string accepted.tx) ] ] ]));
+          check "local prefix catches up" (Sync_client_op.get_local_tx test_repo = Some 1);
+          check "accepted edit reaches confirmed state"
+            (Ldb.value (Option.get (ent_by_block_uuid (Conn.db conn) parent_uuid))
+               "block/title" = Some (String "accepted title"));
+          check "rejected edit removed after echo"
+            (Ldb.value (Option.get (ent_by_block_uuid (Conn.db display) child1_uuid))
+               "block/title" = child1_title);
+          check "unprocessed tail remains visible"
+            (Ldb.value (Option.get (ent_by_block_uuid (Conn.db display) child2_uuid))
+               "block/title" = Some (String "pending tail"));
+          await_unit (Sync_apply.flush_pending test_repo client);
+          check "tail resumes uploading"
+            (List.exists (fun m -> Wire.get "type" m = Some (Wire.String "tx/batch")) !sent)))
+
+let test_uuid_text_title_uploads () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _, _, _ = setup_parent_child () in
+      let uuid = ent_block_uuid parent in
+      let title = "00000000-0000-0000-0000-000000000999" in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          let block = Option.get (ent_by_block_uuid (Conn.db display) uuid) in
+          ignore
+            (Outliner_core.save_block_conn display
+               (Block_map.put (Block_map.of_entity block) "block/title" (String title))
+               Outliner_core.default_save_opts Block_map.empty);
+          let entries, dropped, _ = Sync_apply.prepare_upload_tx_entries ~repo:test_repo
+              (Some display) (Sync_apply.pending_tx_rows test_repo ()) in
+          check "title entry not dropped" (dropped = []);
+          let uploaded = List.concat_map (fun entry ->
+              Sync_apply.tx_items_of (Option.get (Wire.get "tx-data" entry))) entries in
+          check "UUID text title is uploaded"
+            (List.exists (function
+                 | Wire.Array (_ :: _ :: a :: v :: _) ->
+                     a = kw "block/title" && v = Wire.String title
+                 | _ -> false) uploaded);
+          await_unit (Sync_replay.apply_remote_tx test_repo (mk_client ()) uploaded);
+          check "UUID text reaches confirmed state"
+            (Ldb.value (Option.get (ent_by_block_uuid (Conn.db conn) uuid))
+               "block/title" = Some (String title))))
+
+let test_upload_rebase_after_remote_windows windows () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, child, _, _ = setup_parent_child () in
+      let target_uuid = ent_block_uuid child in
+      let parent_uuid = ent_block_uuid parent in
+      let delete_tx = (Outliner_core.delete_blocks (Conn.db conn)
+          [ Block_map.of_entity child ]).tx_data in
+      let inserted_uuid = fresh_uuid () in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          let target = Option.get (ent_by_block_uuid (Conn.db display) target_uuid) in
+          ignore
+            (Outliner_core.insert_blocks_conn display
+               [ Block_map.of_transit (wire_map
+                    [ "block/uuid", Wire.Uuid inserted_uuid
+                    ; "block/title", Wire.String "pending child" ]) ]
+               (Block_map.of_entity target)
+               { Outliner_core.default_insert_opts with sibling = false; keep_uuid = true }
+               (Block_map.of_transit (wire_map
+                    [ "sibling?", Wire.Bool false; "keep-uuid?", Wire.Bool true ])));
+          await_unit (Sync_replay.apply_remote_tx test_repo (mk_client ())
+                        (List.map Ds_wire.transit_of_tx_op delete_tx));
+          for i = 2 to windows do
+            await_unit (Sync_replay.apply_remote_tx test_repo (mk_client ())
+                          [ db_add (block_uuid_lookup (Wire.Uuid parent_uuid))
+                              "block/title" (Wire.String ("remote edit " ^ string_of_int i)) ])
+          done;
+          let entries, dropped, _ = Sync_apply.prepare_upload_tx_entries ~repo:test_repo
+              (Some display) (Sync_apply.pending_tx_rows test_repo ()) in
+          check "insertion remains uploadable" (List.length entries = 1 && dropped = []);
+          let uploaded = Sync_apply.tx_items_of
+              (Option.get (Wire.get "tx-data" (List.hd entries))) in
+          await_unit (Sync_replay.apply_remote_tx test_repo (mk_client ()) uploaded);
+          let inserted = Option.get (ent_by_block_uuid (Conn.db conn) inserted_uuid) in
+          check "insertion retains text" (Ldb.value inserted "block/title" = Some (String "pending child"));
+          check "insertion falls back to surviving parent"
+            (Option.map ent_block_uuid (Ldb.ref_ent inserted "block/parent") = Some parent_uuid)))
+
+let test_upload_rebase_releases_temporary_db outcome () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _, _, _ = setup_parent_child () in
+      let uuid = ent_block_uuid parent in
+      with_datascript_conns conn (Some ops) (fun () ->
+          let save_op target title = Wire.Array
+              [ kw "save-block"; Wire.Array
+                  [ wire_map [ "block/uuid", Wire.Uuid target
+                             ; "block/title", Wire.String title ]; wire_map [] ] ] in
+          let forward_ops =
+            [ save_op uuid "rebased title" ]
+            @ (match outcome with
+               | `Success -> []
+               | `Invalid -> [ save_op (fresh_uuid ()) "missing block" ]
+               | `Exception -> [ save_op uuid "second save" ]) in
+          let tx_id = fresh_uuid () in
+          seed_client_op_txs test_repo
+            [ seed_tx ~outliner_op:"save-block" ~forward_ops tx_id ];
+          let entry = List.hd (Sync_apply.pending_tx_rows test_repo ()) in
+          let temporary_db = Weak.create 1 in
+          let pipeline = Option.get !(Db_tx.transact_pipeline_fn) in
+          Db_tx.transact_pipeline_fn := Some (fun report ->
+              let report = pipeline report in
+              Weak.set temporary_db 0 (Some report.db_after);
+              report);
+          let rewrite = Option.get !(Sync_deps.rewrite_block_title_with_retracted_refs) in
+          let rewrites = ref 0 in
+          Sync_deps.rewrite_block_title_with_retracted_refs := Some (fun db block ->
+              incr rewrites;
+              if outcome = `Exception && !rewrites = 2 then failwith "rebase interrupted";
+              rewrite db block);
+          let result =
+            try Ok (Sync_replay.rebase_pending_entry test_repo conn entry)
+            with e -> Error e in
+          Db_tx.transact_pipeline_fn := Some pipeline;
+          Sync_deps.rewrite_block_title_with_retracted_refs := Some rewrite;
+          check "expected rebase outcome"
+            (match outcome, result with
+             | `Success, Ok true | `Invalid, Ok false -> true
+             | `Exception, Error (Failure message) -> message = "rebase interrupted"
+             | _ -> false);
+          check "rebase did not modify live graph"
+            (Ldb.value (Option.get (ent_by_block_uuid (Conn.db conn) uuid))
+               "block/title" <> Some (String "rebased title"));
+          check "temporary database was exercised" (Weak.check temporary_db 0);
+          (* Advance past the pipeline's bounded db cache using live edits. *)
+          for i = 1 to 10 do
+            let block = Option.get (ent_by_block_uuid (Conn.db conn) uuid) in
+            ignore
+              (Outliner_core.save_block_conn conn
+                 (Block_map.put (Block_map.of_entity block) "block/title"
+                    (String ("later edit " ^ string_of_int i)))
+                 Outliner_core.default_save_opts Block_map.empty)
+          done;
+          Gc.full_major ();
+          check "temporary database can be collected" (not (Weak.check temporary_db 0))))
+
 let () =
   Alcotest.run "db-sync-native"
-    [ ( "db-sync"
+    [ ( "journal-truth-regressions"
+      , [ Alcotest.test_case "partial-reject-pulls-accepted-prefix" `Quick
+            test_partial_reject_pulls_accepted_prefix
+        ; Alcotest.test_case "uuid-text-title-uploads" `Quick test_uuid_text_title_uploads
+        ; Alcotest.test_case "upload-rebase-after-one-window" `Quick
+            (test_upload_rebase_after_remote_windows 1)
+        ; Alcotest.test_case "upload-rebase-after-three-windows" `Quick
+            (test_upload_rebase_after_remote_windows 3)
+        ; Alcotest.test_case "upload-rebase-releases-db-on-success" `Quick
+            (test_upload_rebase_releases_temporary_db `Success)
+        ; Alcotest.test_case "upload-rebase-releases-db-on-invalid-op" `Quick
+            (test_upload_rebase_releases_temporary_db `Invalid)
+        ; Alcotest.test_case "upload-rebase-releases-db-on-exception" `Quick
+            (test_upload_rebase_releases_temporary_db `Exception) ] )
+    ; ( "db-sync"
       , [ Alcotest.test_case "resolve-ws-token-refreshes-when-token-expired"
             `Quick test_resolve_ws_token_refreshes
         ; Alcotest.test_case
