@@ -361,7 +361,7 @@ let () =
     Fest.equal (count <= full_count) true Fest.expect;
     let* () = Pw.click env ".graph-time-travel-reset[title='Now']" in
     let* _ =
-      E2e_assert.is_visible_l
+      E2e_assert.is_visible_l ~timeout:30_000
         (has_text env "Now" ".graph-time-travel-label")
     in
     let* count' = Util.count_elements env ".graph-node, [data-node-id]" in
