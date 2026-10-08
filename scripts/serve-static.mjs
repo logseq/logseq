@@ -33,6 +33,9 @@ createServer(async (req, res) => {
     const body = await readFile(file)
     res.writeHead(200, {
       'content-type': types[extname(file)] || 'application/octet-stream',
+      // dev server: always revalidate so code/css edits can't be masked
+      // by heuristic caching in the persistent parity profiles
+      'cache-control': 'no-store',
     })
     res.end(body)
   } catch {

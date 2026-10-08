@@ -582,14 +582,16 @@ let group_order v q rows total =
     ; gfilter_active = false }
   in
   let recents_g () =
+    let items =
+      if String.trim q = "" then v.recents
+      else
+        Fuzzy.fuzzy_search ~extract:(fun (it : item) -> strip_pfts it.ititle)
+          ~limit:99 v.recents q
+    in
     { gid = G_recently_updated
     ; gtitle = I18n.t "cmdk.group/recently-updated"
-    ; gitems =
-        (if String.trim q = "" then v.recents
-         else
-           Fuzzy.fuzzy_search ~extract:(fun (it : item) -> strip_pfts it.ititle)
-             ~limit:99 v.recents q)
-    ; gtotal = List.length v.recents
+    ; gitems = items
+    ; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded
     ; gfilter_active = false }
   in
