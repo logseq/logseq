@@ -414,7 +414,7 @@
 (library
  (name logseq_ui_gpui)
  (wrapped false)
- (modules (:standard \ native_embed drive drive_test test_check fake_worker))
+ (modules (:standard \ native_embed drive_test test_check fake_worker))
  (modes native)
  (libraries
    lui
@@ -447,8 +447,6 @@
 ; via Platform.emit_event, localStorage via Platform.local_storage_get,
 ; rtc-test via Platform.set_location_search).
 (rule
- (copy ../test/drive.ml drive.ml))
-(rule
  (copy ../test/test_check.ml test_check.ml))
 (rule
  (copy ../test/fake_worker.ml fake_worker.ml))
@@ -461,9 +459,10 @@
 
 (test
  (name drive_test)
- (modules drive_test drive test_check fake_worker)
- (libraries logseq_ui_gpui)
+ (modules drive_test test_check fake_worker)
+ (libraries logseq_ui_gpui logseq_ui_scenarios)
  (foreign_stubs
   (language c)
   (names drive_test_bridge))
- (modes native))
+ (modes native)
+ (action (run node %{dep:../test/native_process_test.mjs} %{exe:drive_test.exe})))

@@ -615,6 +615,7 @@ mod tests {
         wakeup_cb,
     };
     use lui_core::bridge;
+    use lui_core::wire_schema::Property;
     use lui_gpui::LuiShared;
 
     /// Headless boot smoke: start the linked OCaml `native_embed` object,
@@ -652,13 +653,15 @@ mod tests {
         let shared = LuiShared::new();
         // Boot work runs on OCaml worker systhreads; pump until the tree
         // materializes (bounded so a dead boot fails instead of hanging).
+        cx.update(gpui_kit::init);
+        let cx = cx.add_empty_window();
         let mut populated = false;
         for _ in 0..500 {
-            cx.update(|app| {
+            cx.update(|window, app| {
                 unsafe {
                     lui_ocaml_pump();
                 }
-                pump_tick(&shared, app);
+                pump_tick(&shared, window, app);
             });
             if !shared.borrow().store.nodes.is_empty() {
                 populated = true;
@@ -681,5 +684,36 @@ mod tests {
             "apply errors: {:?}",
             shared.borrow().last_errors
         );
+
+        let search = shared.borrow().store.nodes.values().find(|node|
+            node.string_prop(Property::AccessibilityIdentifier) == Some("search-button")
+        ).expect("search button must mount").id;
+        cx.update(|window, app| {
+            assert_ne!(unsafe { bridge::lui_ocaml_press_ex(search, 0) }, 0);
+            pump_tick(&shared, window, app);
+        });
+        let input = shared.borrow().store.nodes.values().find(|node|
+            node.string_prop(Property::StyleClass).is_some_and(|classes|
+                classes.split_whitespace().any(|class| class == "cp__cmdk-search-input"))
+        ).expect("real palette input must mount").id;
+        let query = "snow\0雪😀x";
+        cx.update(|window, app| {
+            assert_ne!(unsafe {
+                bridge::lui_ocaml_text_changed_utf8(input, query.as_ptr().cast(), query.len() as i32)
+            }, 0);
+            pump_tick(&shared, window, app);
+        });
+        assert!(shared.borrow().store.nodes.values().any(|node|
+            node.string_prop(Property::TextValue).is_some_and(|text| text.contains(query))
+        ), "UTF-8 input including an embedded NUL must reach the real palette results");
+        shared.borrow_mut().store = Default::default();
+        cx.update(|window, app| {
+            assert_ne!(unsafe { bridge::lui_ocaml_resync() }, 0);
+            pump_tick(&shared, window, app);
+        });
+        assert!(shared.borrow().store.node(root).is_some(), "resync must restore the root");
+        assert!(shared.borrow().store.nodes.values().any(|node|
+            node.string_prop(Property::TextValue).is_some_and(|text| text.contains(query))
+        ), "resync must preserve the current palette state");
     }
 }

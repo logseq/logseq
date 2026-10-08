@@ -650,29 +650,63 @@ impl EntityInputHandler for EditorInputState {
     }
 }
 
-/// UTF-16 range -> slice of `text`, snapped to boundaries.
+/// Slice an OS UTF-16 range only when both offsets are scalar boundaries.
 fn utf16_slice(text: &str, range: Range<usize>) -> Option<String> {
     let mut start_byte = None;
     let mut end_byte = None;
-    for (utf16_ix, (byte_ix, ch)) in text.char_indices().enumerate() {
+    let mut utf16_ix = 0;
+    for (byte_ix, ch) in text.char_indices() {
         if utf16_ix == range.start {
             start_byte = Some(byte_ix);
         }
-        let end = utf16_ix + ch.len_utf16();
-        if end == range.end {
-            end_byte = Some(byte_ix + ch.len_utf8());
+        if utf16_ix == range.end {
+            end_byte = Some(byte_ix);
         }
+        utf16_ix += ch.len_utf16();
     }
-    if range.start == text.encode_utf16().count() {
+    if range.start == utf16_ix {
         start_byte = Some(text.len());
     }
-    if range.end == text.encode_utf16().count() {
+    if range.end == utf16_ix {
         end_byte = Some(text.len());
     }
     match (start_byte, end_byte) {
         (Some(a), Some(b)) if a <= b => Some(text[a..b].to_string()),
-        _ if range.is_empty() => Some(String::new()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod utf16_tests {
+    use super::utf16_slice;
+
+    #[test]
+    fn slices_os_input_ranges_after_astral_characters() {
+        for (text, range, expected) in [
+            ("😀ab", 0..2, "😀"),
+            ("😀ab", 2..3, "a"),
+            ("😀ab", 3..4, "b"),
+            ("a😀b", 1..3, "😀"),
+            ("a😀b", 3..4, "b"),
+            ("e\u{301}x", 1..2, "\u{301}"),
+            ("ab", 0..2, "ab"),
+        ] {
+            assert_eq!(utf16_slice(text, range.clone()).as_deref(), Some(expected), "{text:?} {range:?}");
+        }
+    }
+
+    #[test]
+    fn handles_empty_ranges_at_valid_boundaries() {
+        for (text, offset) in [("", 0), ("😀ab", 0), ("😀ab", 2), ("😀ab", 4)] {
+            assert_eq!(utf16_slice(text, offset..offset), Some(String::new()));
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_ranges_and_surrogate_splits() {
+        for range in [1..2, 0..1, 2..1, 4..5, 5..5] {
+            assert_eq!(utf16_slice("😀ab", range.clone()), None, "{range:?}");
+        }
     }
 }
 

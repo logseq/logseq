@@ -183,6 +183,18 @@ let find_block uuid =
     (fun n -> attr_val n "data-blockid" = Some uuid)
     (M.all_nodes (tree ()))
 
+let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
+  { session = s
+  ; check
+  ; keydown = (fun ~meta key -> Stub_dom.keydown ~meta key)
+  ; toggle_sidebar = (fun () -> click_sel "prop:accessibility-identifier=\"left-menu\"")
+  ; storage_get = Platform.local_storage_get
+  ; open_settings = (fun () -> Dialogs_state.open_ "settings")
+  ; close_settings = Dialogs_state.close_all
+  ; wide_mode_label = I18n.wide_mode
+  ; flush
+  }
+
 (* ---------------- shell + header ---------------- *)
 
 let test_shell () =
@@ -200,25 +212,7 @@ let test_shell () =
 
 (* ---------------- event dispatch: header buttons ---------------- *)
 
-let test_left_menu_dispatch () =
-  click_sel "prop:accessibility-identifier=\"left-menu\"";
-  (match first "prop:accessibility-identifier=\"left-sidebar\"" with
-   | Some n -> check_tok "sidebar is-open after click" n "is-open"
-   | None -> check "left sidebar node" false);
-  (match first "prop:accessibility-identifier=\"main-container\"" with
-   | Some n ->
-       check_tok "main is-left-sidebar-open" n "is-left-sidebar-open"
-   | None -> check "main container" false);
-  (* persisted through the stub localStorage *)
-  (match Js.Null.toOption (ls_get_item "ls-left-sidebar-open?") with
-   | Some "true" -> check "sidebar-open persisted" true
-   | v ->
-       check ("sidebar-open persisted (got " ^ str_opt v ^ ")") false);
-  click_sel "prop:accessibility-identifier=\"left-menu\"";
-  (match first "prop:accessibility-identifier=\"left-sidebar\"" with
-   | Some n ->
-       check "sidebar closed after second click" (not (has_tok n "is-open"))
-   | None -> check "left sidebar node" false)
+let test_left_menu_dispatch () = Shared_scenarios.sidebar (shared_host ())
 
 (* ---------------- editor block tree ---------------- *)
 
@@ -281,35 +275,7 @@ let test_block_edit () =
 
 let cmdk_items () = find_attr "data-cmdk-item" "true"
 
-let test_cmdk () =
-  (* open through the real document keydown listener *)
-  Stub_dom.keydown ~meta:true "k";
-  flush ();
-  check "cmdk modal open"
-    (find_where (fun n -> has_tok n "cp__cmdk__modal") <> []);
-  check "cmdk search input"
-    (find_where (fun n -> has_tok n "cp__cmdk-search-input") <> []);
-  (* a fresh-open blank palette shows recents only (cljs :default never
-     fires before the first edit); typing seeds the query — items arrive
-     once the search resolves *)
-  (match !Cmdk_state.latest_st with
-   | Some st -> Cmdk_state.on_input st "a"
-   | None -> check "cmdk state registered" false);
-  flush ();
-  let items = cmdk_items () in
-  check "cmdk has items" (items <> []);
-  (* ArrowDown moves the highlight onto an item *)
-  Stub_dom.keydown "ArrowDown";
-  flush ();
-  let hl = find_attr "data-highlighted" "true" in
-  check "cmdk highlight after ArrowDown" (hl <> []);
-  (* first Escape clears the seeded input (cljs clear-or-close), the
-     second closes the modal *)
-  Stub_dom.keydown "Escape";
-  Stub_dom.keydown "Escape";
-  flush ();
-  check "cmdk closed on Escape"
-    (find_where (fun n -> has_tok n "cp__cmdk__modal") = [])
+let test_cmdk () = Shared_scenarios.palette (shared_host ())
 
 (* gpui can report a shift-held keystroke with the flag folded into the
    key name ({key="P", shift=false}) — the mod+p binding must not fire
@@ -419,17 +385,7 @@ let test_context_menu () =
 (* ---------------- dialogs ---------------- *)
 
 let test_dialogs () =
-  Dialogs_state.open_ "settings";
-  flush ();
-  (match find_where (fun n -> has_tok n "ui__dialog-content") with
-   | dlg :: _ ->
-       check "settings dialog content" true;
-       (* settings dialogs carry no title — the parity marker is the
-          main-content body *)
-       check "dialog title"
-         (subtree_contains dlg
-            (fun n -> has_tok n "ui__dialog-main-content"))
-   | [] -> check "settings dialog content" false);
+  Shared_scenarios.settings (shared_host ());
   (* confirm layer: div[role=alertdialog] *)
   Dialogs_state.ask ~title:"Delete it?" ~desc:"no undo" ~on_confirm:(fun () ->
       Js.log "confirm-firing")

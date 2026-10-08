@@ -248,6 +248,18 @@ let node_of_id id =
   | n :: _ -> Some n
   | [] -> None
 
+let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
+  { session = s
+  ; check
+  ; keydown = (fun ~meta key -> keydown ~meta key)
+  ; toggle_sidebar = (fun () -> send Action.Toggle_left_sidebar)
+  ; storage_get = Platform.local_storage_get
+  ; open_settings = (fun () -> Dialogs_state.open_ "settings")
+  ; close_settings = Dialogs_state.close_all
+  ; wide_mode_label = I18n.wide_mode
+  ; flush
+  }
+
 (* ---------------- shell + header ---------------- *)
 
 let test_shell () =
@@ -269,29 +281,7 @@ let test_shell () =
 
 (* ---------------- event dispatch: header buttons ---------------- *)
 
-let test_left_menu_dispatch () =
-  (* the left-menu button is host chrome on native -- dispatch the same
-     action the press handler sends *)
-  send Action.Toggle_left_sidebar;
-  flush ();
-  (match first "prop:accessibility-identifier=\"left-sidebar\"" with
-   | Some n -> check_tok "sidebar is-open after click" n "is-open"
-   | None -> check "left sidebar node" false);
-  (match first "prop:accessibility-identifier=\"main-container\"" with
-   | Some n ->
-       check_tok "main is-left-sidebar-open" n "is-left-sidebar-open"
-   | None -> check "main container" false);
-  (* persisted through the platform localStorage *)
-  (match Platform.local_storage_get "ls-left-sidebar-open?" with
-   | Some "true" -> check "sidebar-open persisted" true
-   | v ->
-       check ("sidebar-open persisted (got " ^ str_opt v ^ ")") false);
-  send Action.Toggle_left_sidebar;
-  flush ();
-  (match first "prop:accessibility-identifier=\"left-sidebar\"" with
-   | Some n ->
-       check "sidebar closed after second click" (not (has_tok n "is-open"))
-   | None -> check "left sidebar node" false)
+let test_left_menu_dispatch () = Shared_scenarios.sidebar (shared_host ())
 
 (* ---------------- editor block tree ---------------- *)
 
@@ -350,26 +340,7 @@ let test_block_edit () =
 
 let cmdk_items () = find_attr "data-cmdk-item" "true"
 
-let test_cmdk () =
-  (* open through the real document keydown listener *)
-  keydown ~meta:true "k";
-  flush ();
-  check "cmdk modal open"
-    (find_where (fun n -> has_tok n "cp__cmdk__modal") <> []);
-  check "cmdk search input"
-    (find_where (fun n -> has_tok n "cp__cmdk-search-input") <> []);
-  (* command items from the static command table arrive synchronously *)
-  let items = cmdk_items () in
-  check "cmdk has items" (items <> []);
-  (* ArrowDown moves the highlight onto an item *)
-  keydown "ArrowDown";
-  flush ();
-  let hl = find_attr "data-highlighted" "true" in
-  check "cmdk highlight after ArrowDown" (hl <> []);
-  keydown "Escape";
-  flush ();
-  check "cmdk closed on Escape"
-    (find_where (fun n -> has_tok n "cp__cmdk__modal") = [])
+let test_cmdk () = Shared_scenarios.palette (shared_host ())
 
 (* ---------------- left sidebar (state-driven) ---------------- *)
 
@@ -452,17 +423,7 @@ let test_context_menu () =
 (* ---------------- dialogs ---------------- *)
 
 let test_dialogs () =
-  Dialogs_state.open_ "settings";
-  flush ();
-  (match find_where (fun n -> has_tok n "ui__dialog-content") with
-   | dlg :: _ ->
-       check "settings dialog content" true;
-       (* settings dialogs carry no title — the parity marker is the
-          main-content body *)
-       check "dialog title"
-         (subtree_contains dlg
-            (fun n -> has_tok n "ui__dialog-main-content"))
-   | [] -> check "settings dialog content" false);
+  Shared_scenarios.settings (shared_host ());
   (* confirm layer: div[role=alertdialog] *)
   Dialogs_state.ask ~title:"Delete it?" ~desc:"no undo" ~on_confirm:(fun () ->
       Js.log "confirm-firing")

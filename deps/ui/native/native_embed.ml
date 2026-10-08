@@ -527,6 +527,8 @@ let dispatch_lui (event : Lui_protocol.event) : string =
 let appear node = dispatch_lui (Lui_protocol.Appear node)
 
 let press node = dispatch_lui (Lui_protocol.Press node)
+let press_ex node modifiers =
+  dispatch_lui (Lui_protocol.PressModifiers (node, modifiers))
 let long_press node = dispatch_lui (Lui_protocol.LongPress node)
 
 let text_changed node text =
@@ -597,7 +599,7 @@ let picked node payload =
   in
   dispatch_lui (Lui_protocol.ExtensionEvent (node, "picked", "", m))
 
-let extension_event node name values : string =
+let extension_event node identifier name values : string =
   with_entry_lock (fun () ->
       let t0 = perf_ms () in
       (match !current_app with
@@ -605,7 +607,7 @@ let extension_event node name values : string =
            match
              Lui_runtime.extension_identifier (Lui_app.runtime app) node
            with
-           | Some identifier ->
+           | Some expected_identifier when identifier = expected_identifier ->
                ignore
                  (Lui_app.dispatch_event app
                     (Lui_protocol.ExtensionEvent
@@ -621,6 +623,7 @@ let extension_event node name values : string =
                   a full-doc scan per event *)
                run_doc_scans_after_flush ();
                perf_mark "ext.scans" t2
+           | Some _ -> invalid_arg "Extension identifier does not match the mounted node"
            | None -> ())
        | None -> ());
       let t3 = perf_ms () in
@@ -716,10 +719,21 @@ let root_node () =
   | Some app -> Lui_app.root_node app
   | None -> 0
 
+let resync _ =
+  with_entry_lock (fun () ->
+      let app = Option.get !current_app in
+      ignore (Lui_app.flush app);
+      Queue.clear pending_batches;
+      Queue.add
+        (Lui_wire.encode_batch (Lui_runtime.resync_batch (Lui_app.runtime app)))
+        pending_batches;
+      take_patches ())
+
 let () =
   Callback.register "lui_ocaml_init" initialize;
   Callback.register "lui_ocaml_appear" appear;
   Callback.register "lui_ocaml_press" press;
+  Callback.register "lui_ocaml_press_ex" press_ex;
   Callback.register "lui_ocaml_long_press" long_press;
   Callback.register "lui_ocaml_text_changed" text_changed;
   Callback.register "lui_ocaml_submit" submit;
@@ -741,4 +755,5 @@ let () =
   Callback.register "lui_ocaml_pump" pump;
   Callback.register "lui_ocaml_platform_event" platform_event;
   Callback.register "lui_ocaml_dispose" dispose;
-  Callback.register "lui_ocaml_root_node" root_node
+  Callback.register "lui_ocaml_root_node" root_node;
+  Callback.register "lui_ocaml_resync" resync

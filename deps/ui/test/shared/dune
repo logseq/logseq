@@ -1,0 +1,5 @@
+(library
+ (name logseq_ui_scenarios)
+ (wrapped false)
+ (modes byte native melange)
+ (libraries lui))

@@ -25,10 +25,17 @@ let request_host name payload = !host_request (name ^ "\n" ^ payload)
 
 (* ---------- persisted ui state (localStorage equivalent) ---------- *)
 
-let app_support_dir () =
-  Filename.concat
-    (Filename.concat (Unix.getenv "HOME") "Library")
-    "Application Support/logseq"
+let app_support_dir =
+  let path =
+    match Sys.getenv_opt "LOGSEQ_UI_STATE_DIR" with
+    | Some path when path <> "" -> path
+    | Some _ -> invalid_arg "LOGSEQ_UI_STATE_DIR must not be empty"
+    | None ->
+        Filename.concat
+          (Filename.concat (Unix.getenv "HOME") "Library")
+          "Application Support/logseq"
+  in
+  fun () -> path
 
 let state_file () =
   Filename.concat (app_support_dir ()) "ui-state.json"

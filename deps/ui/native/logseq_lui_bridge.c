@@ -144,19 +144,32 @@ LUI_EXPORT int32_t lui_ocaml_press(int64_t node) {
   return dispatch_long("lui_ocaml_press", node);
 }
 
+LUI_EXPORT int32_t lui_ocaml_press_ex(int64_t node, int32_t modifiers) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_press_ex");
+  if (dispatch != NULL) {
+    result = emit_patch("lui_ocaml_press_ex",
+        caml_callback2_exn(*dispatch, Val_long(node), Val_int(modifiers)));
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
 LUI_EXPORT int32_t lui_ocaml_long_press(int64_t node) {
   return dispatch_long("lui_ocaml_long_press", node);
 }
 
-static int dispatch_string(const char *name, int64_t node,
-                           const char *text) {
+static int dispatch_bytes(const char *name, int64_t node,
+                          const char *text, int32_t length) {
+  if (text == NULL || length < 0) return 0;
   int result = 0;
   caml_leave_blocking_section();
   const value *dispatch = caml_named_value(name);
-  if (dispatch != NULL && text != NULL) {
+  if (dispatch != NULL) {
     CAMLparam0();
     CAMLlocal2(text_value, callback_result);
-    text_value = caml_copy_string(text);
+    text_value = copy_bytes(text, length);
     callback_result =
         caml_callback2_exn(*dispatch, Val_long(node), text_value);
     result = emit_patch(name, callback_result);
@@ -168,7 +181,14 @@ static int dispatch_string(const char *name, int64_t node,
 
 LUI_EXPORT int32_t lui_ocaml_text_changed(int64_t node,
                                           const char *text) {
-  return dispatch_string("lui_ocaml_text_changed", node, text);
+  if (text == NULL) return 0;
+  return dispatch_bytes("lui_ocaml_text_changed", node, text,
+                        (int32_t)strlen(text));
+}
+
+LUI_EXPORT int32_t lui_ocaml_text_changed_utf8(int64_t node,
+    const char *text, int32_t length) {
+  return dispatch_bytes("lui_ocaml_text_changed", node, text, length);
 }
 
 LUI_EXPORT int32_t lui_ocaml_submit(int64_t node) {
@@ -293,22 +313,34 @@ LUI_EXPORT int32_t lui_ocaml_visible_range(int64_t node, int64_t first,
 }
 
 LUI_EXPORT int32_t lui_ocaml_picked(int64_t node, const char *payload) {
-  return dispatch_string("lui_ocaml_picked", node, payload);
+  if (payload == NULL) return 0;
+  return dispatch_bytes("lui_ocaml_picked", node, payload,
+                        (int32_t)strlen(payload));
 }
 
-static int dispatch_three_strings(const char *name, int64_t node,
-                                  const char *a, const char *b) {
+LUI_EXPORT int32_t lui_ocaml_picked_utf8(int64_t node,
+    const char *payload, int32_t length) {
+  return dispatch_bytes("lui_ocaml_picked", node, payload, length);
+}
+
+LUI_EXPORT int32_t lui_ocaml_extension_event_utf8(int64_t node,
+    const char *identifier, int32_t identifier_length,
+    const char *name, int32_t name_length,
+    const char *values, int32_t values_length) {
+  if (identifier == NULL || identifier_length < 0 || name == NULL ||
+      name_length < 0 || values == NULL || values_length < 0) return 0;
   int result = 0;
   caml_leave_blocking_section();
-  const value *dispatch = caml_named_value(name);
-  if (dispatch != NULL && a != NULL && b != NULL) {
+  const value *dispatch = caml_named_value("lui_ocaml_extension_event");
+  if (dispatch != NULL) {
     CAMLparam0();
-    CAMLlocal3(a_value, b_value, callback_result);
-    a_value = caml_copy_string(a);
-    b_value = caml_copy_string(b);
-    callback_result = caml_callback3_exn(*dispatch, Val_long(node),
-                                         a_value, b_value);
-    result = emit_patch(name, callback_result);
+    CAMLlocal4(identifier_value, name_value, values_value, callback_result);
+    identifier_value = copy_bytes(identifier, identifier_length);
+    name_value = copy_bytes(name, name_length);
+    values_value = copy_bytes(values, values_length);
+    value arguments[] = { Val_long(node), identifier_value, name_value, values_value };
+    callback_result = caml_callbackN_exn(*dispatch, 4, arguments);
+    result = emit_patch("lui_ocaml_extension_event", callback_result);
     CAMLdrop;
   }
   caml_enter_blocking_section();
@@ -319,12 +351,14 @@ LUI_EXPORT int32_t lui_ocaml_extension_event(int64_t node,
                                              const char *identifier,
                                              const char *name,
                                              const char *values) {
-  /* LUI's typed ABI takes the identifier; the OCaml side resolves it from
-     the node itself (lui_runtime.extension_identifier), so it is accepted
-     for ABI parity and ignored. */
-  (void)identifier;
-  return dispatch_three_strings("lui_ocaml_extension_event", node, name,
-                                values);
+  if (identifier == NULL || name == NULL || values == NULL) return 0;
+  return lui_ocaml_extension_event_utf8(node,
+      identifier, (int32_t)strlen(identifier), name, (int32_t)strlen(name),
+      values, (int32_t)strlen(values));
+}
+
+LUI_EXPORT int32_t lui_ocaml_resync(void) {
+  return dispatch_long("lui_ocaml_resync", 0);
 }
 
 LUI_EXPORT int32_t lui_ocaml_pump(void) {
