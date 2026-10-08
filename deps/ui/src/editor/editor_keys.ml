@@ -55,18 +55,71 @@ let clear_block (m : Edit_model.t) =
 
 (* cljs autopair overtype: typing the closer that already sits at the
    caret skips it instead of inserting *)
+let autopairs =
+  [ "[", "]"; "{", "}"; "(", ")"; "`", "`"; "~", "~"
+  ; "*", "*"; "_", "_"; "$", "$"; "^", "^"; "=", "="
+  ; "/", "/"; "+", "+" ]
+
 let overtype (m : Edit_model.t) text =
+  let pos, _ = A.sel_span_of m in
   if
-    (text = "]" || text = ")")
-    && m.Edit_model.anchor = None
-    && m.Edit_model.caret < String.length m.Edit_model.source
+    text <> "`" && List.exists (fun (_, closer) -> closer = text) autopairs
+    && pos < String.length m.Edit_model.source
     && Edit_model.decode_cp m.Edit_model.units m.Edit_model.source
-         m.Edit_model.caret
+         pos
        = Char.code text.[0]
   then
-    let c = m.Edit_model.caret + 1 in
+    let c = pos + 1 in
     Edit_model.select m ~anchor:c ~focus:c
   else m
+
+let delete_pair (m : Edit_model.t) =
+  let pos = m.Edit_model.caret and src = m.Edit_model.source in
+  if Edit_model.has_selection m || pos = 0 || pos = String.length src then m
+  else
+    let previous = Edit_model.prev_cp m.units src pos in
+    let opener = String.sub src previous (pos - previous) in
+    match List.assoc_opt opener ((":", ":") :: autopairs) with
+    | Some closer when opener <> "/" && Str_util.starts_at src pos closer ->
+        Edit_model.splice m previous (pos + String.length closer) ""
+    | _ -> m
+
+(* Follow master's keydown ordering: dollar pairs before overtype;
+   formatting markers pair only around nonblank selected text. *)
+let insert_autopair (m : Edit_model.t) text =
+  let lo, hi = A.sel_span_of m in
+  let selected = String.sub m.source lo (hi - lo) in
+  let selected_nonblank = String.trim selected <> "" in
+  let pair closer =
+    let selected = if selected_nonblank then selected else "" in
+    let stop = if selected_nonblank then hi else lo in
+    let updated = Edit_model.splice m lo stop (text ^ selected ^ closer) in
+    Edit_model.select updated ~anchor:(lo + String.length text)
+      ~focus:(lo + String.length text + String.length selected)
+  in
+  if text = "$" && not selected_nonblank then pair "$"
+  else
+    let skipped = overtype m text in
+    if skipped != m then skipped
+    else if List.mem text [ "*"; "^"; "_"; "="; "+"; "/" ] && not selected_nonblank
+         || Popups_state.ac_open () then Edit_model.insert_text m text
+    else
+      match List.assoc_opt text autopairs with
+      | None -> Edit_model.insert_text m text
+      | Some closer ->
+          let pos = lo in
+          let prev = if pos = 0 then ' ' else m.source.[pos - 1] in
+          if text = "(" && not selected_nonblank
+             && not (List.mem prev [ ' '; '\n'; ']'; '(' ])
+          then Edit_model.insert_text m text
+          else if text = "`" && pos < String.length m.source
+                  && m.source.[pos] = '`' && prev <> '`' then
+            Edit_model.select m ~anchor:(pos + 1) ~focus:(pos + 1)
+          else begin
+            if text = "(" && prev = '(' && not selected_nonblank then
+              Toast.warning (I18n.t "editor/reference-node-use-page-ref");
+            pair closer
+          end
 
 (* paste clipboard text into the editing block at the caret as a single
    block (cljs editor/paste-text-in-one-block-at-point) *)
@@ -310,6 +363,9 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
         (if Lazy.force perf_keys then
            Printf.eprintf "PERF kdown-split uuid=%s\n%!" uuid);
         defer () (* keymap -> SplitBlock -> route.split_block *)
+    | "Backspace" when not (meta || ctrl || kev.alt) ->
+        let paired = delete_pair m in
+        if paired != m then paired else defer ()
     | "Tab" | "Escape" | "Backspace" -> defer ()
     | "Delete" ->
         let s, e = A.sel_span_of m in
@@ -820,42 +876,27 @@ and apply_input ?frame uuid ev =
         match ev with
         | Edit_input.Key (kev, repeat) ->
             edit_key ~route ~conduit ~repeat uuid kev m0
-        | Edit_input.Insert "(" ->
-            (* cljs autopair-left-paren?: "(" pairs to "()" only after a
-               boundary char (:start, "\n", " ", "]", "(") and never with
-               an active selection; when the result is "((" master warns
-               to use [[ — block-ref search never opens *)
-            let src = m0.Edit_model.source in
-            let prev =
-              if m0.Edit_model.caret = 0 then Char.code ' '
-              else
-                  Edit_model.decode_cp m0.Edit_model.units src
-                     (Edit_model.prev_cp m0.Edit_model.units src
-                        m0.Edit_model.caret)
-            in
-            if
-              m0.Edit_model.anchor = None
-              && List.mem prev (List.map Char.code [ ' '; '\n'; ']'; '(' ])
-            then (
-              if prev = Char.code '(' then
-                Toast.warning
-                  (I18n.t "editor/reference-node-use-page-ref");
-              let mo = Edit_model.insert_text m0 "()" in
-              let c = m0.Edit_model.caret + 1 in
-              Edit_model.select mo ~anchor:c ~focus:c)
-            else Edit_input.handle ~route ~conduit m0 ev
-        | Edit_input.Insert text ->
-            let mo = overtype m0 text in
-            if mo != m0 then mo
-            else Edit_input.handle ~route ~conduit m0 ev
+        | Edit_input.Insert text -> insert_autopair m0 text
+        | Edit_input.Delete Edit_input.Del_backward ->
+            let paired = delete_pair m0 in
+            if paired != m0 then paired else Edit_input.handle ~route ~conduit m0 ev
         | _ -> Edit_input.handle ~route ~conduit m0 ev
       in
+      (* A caret-only move can measure the unchanged runs before flushing.
+         Publish model and overlay together instead of two DOM batches. *)
+      (match frame with
+       | Some fr when Platform.edit_units = `U16 && m'.source == m0.source
+                      && Edit_view.reveal_dirty m0 m' = [] ->
+           let measured = Edit_input.measure conduit m' in
+           if Option.is_some measured.Edit_input.caret then
+             Signal.update fr (fun _ -> measured)
+       | _ -> ());
       A.update_model uuid (fun _ -> m');
       (match ev with
        | Edit_input.Key
            ({ Edit_model.key = "ArrowUp" | "ArrowDown"; meta = false
             ; ctrl = false; alt = false; _ }, _)
-         when m'.Edit_model.caret = m0.Edit_model.caret
+         when Platform.edit_units = `Bytes && m'.Edit_model.caret = m0.Edit_model.caret
               && m'.Edit_model.anchor = m0.Edit_model.anchor
               && not (S.selection_active ()) ->
            retry_vertical uuid ev m0.Edit_model.caret
@@ -864,7 +905,7 @@ and apply_input ?frame uuid ev =
       if m'.Edit_model.source <> m0.source then begin
         Outliner_ops.schedule_save uuid m'.Edit_model.source;
         Popups_state.on_model_input ~deleted:
-          (match ev with Edit_input.Delete _ -> true | _ -> false)
+          (match ev with Edit_input.Delete _ | Edit_input.Key ({key = "Backspace"; _}, _) -> true | _ -> false)
           uuid
       end;
       match frame with

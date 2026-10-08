@@ -54,10 +54,293 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     if (!condition) throw new Error(JSON.stringify(evidence));
   };
   const test = async (name, run) => {
-    if (!name.includes(filter)) return;
+    if (typeof filter === 'function' ? !filter(name) : !name.includes(filter)) return;
     try { results.push({name, passed: true, evidence: await run()}); }
-    catch (error) { results.push({name, passed: false, error: String(error)}); }
+    catch (error) { results.push({name, passed: false, error: String(error), detail: JSON.stringify(error, Object.getOwnPropertyNames(error))}); }
   };
+
+  await wait(() => document.querySelector('.page-blocks-inner'));
+  const blockReferenceFixture = async title => {
+    key('Escape'); await pause(50);
+    const name = 'Block reference regression ' + crypto.randomUUID();
+    await logseq.api.create_page(name, {}, {});
+    const target = await logseq.api.append_block_in_page(name, title, {});
+    return {target, ...(await fixture(['prefix [[' + target.uuid + ']] suffix']))};
+  };
+  await test('Regression: block references display only the first line', async () => {
+    const {target, blocks} = await blockReferenceFixture('first line\nsecond line');
+    key('Home', {metaKey: true});
+    assert(text() === 'prefix [[first line]] suffix', {value: text(), target: target.uuid});
+    key('Escape'); await pause(450);
+    const read = document.getElementById('block-content-' + blocks[0].uuid);
+    assert(read.textContent.includes('first line') && !read.textContent.includes('second line'), {value: read.textContent});
+  });
+  await test('Regression: block references navigate and select as immutable units', async () => {
+    const {target} = await blockReferenceFixture('reference content');
+    key('Home', {metaKey: true});
+    for (let i = 0; i < 7; i++) key('ArrowRight');
+    key('ArrowRight');
+    assert(input().__lsEd.caret_off === 47, {offset: input().__lsEd.caret_off, target: target.uuid});
+    key('ArrowLeft');
+    assert(input().__lsEd.caret_off === 7, {offset: input().__lsEd.caret_off});
+    key('ArrowRight', {shiftKey: true}); insert('replacement');
+    assert(text() === 'prefix replacement suffix', {value: text()});
+  });
+  await test('Regression: block reference saves preserve UUID identity', async () => {
+    const {target, blocks} = await blockReferenceFixture('unique target ' + crypto.randomUUID());
+    key('End', {metaKey: true}); insert(' edited'); key('Escape'); await pause(450);
+    const saved = (await logseq.api.get_block(blocks[0].uuid)).content;
+    assert(saved === 'prefix [[' + target.uuid + ']] suffix edited', {saved, target: target.uuid});
+    assert(!(await logseq.api.get_page(target.content)), {createdPage: target.content});
+  });
+  await test('Regression: block reference math renders LaTeX in edit and read mode', async () => {
+    const {blocks} = await blockReferenceFixture('$x^2$\nhidden second line');
+    assert(surface().querySelector('.katex'), {value: text()});
+    key('Escape'); await pause(450);
+    assert(document.getElementById('block-content-' + blocks[0].uuid).querySelector('.katex'), {mode: 'read'});
+  });
+  await test('Regression: actual math block references render LaTeX', async () => {
+    const {blocks: [target]} = await fixture(['']);
+    insert('/'); insert('math'); await wait(() => document.querySelector('[role=dialog]'));
+    key('Enter'); await pause(450); key('a', {metaKey: true}); insert('x^2\nhidden line'); key('Escape'); await pause(450);
+    const math = await logseq.api.get_block(target.uuid);
+    assert(math[':logseq.property.node/display-type'] === 'math', {math});
+    const {blocks} = await fixture(['[[' + target.uuid + ']]']);
+    assert(surface().querySelector('.katex'), {value: text()});
+    key('Escape'); await pause(450);
+    assert(document.getElementById('block-content-' + blocks[0].uuid).querySelector('.katex'), {mode: 'read'});
+  });
+  await test('Regression: replacing block reference changes the rendered target', async () => {
+    const {target, blocks, page} = await blockReferenceFixture('target A');
+    const other = await logseq.api.append_block_in_page(page.uuid, 'target B', {});
+    key('Home', {metaKey: true}); key('a', {metaKey: true});
+    insert('prefix [[' + other.uuid + ']] suffix'); await pause(100);
+    assert(text() === 'prefix [[target B]] suffix', {value: text(), first: target.uuid, other: other.uuid});
+    key('Escape'); await pause(450);
+    assert((await logseq.api.get_block(blocks[0].uuid)).content === 'prefix [[' + other.uuid + ']] suffix', {mode: 'saved'});
+  });
+  await test('Regression: newly typed block reference cannot retain an interior caret', async () => {
+    const {target, blocks} = await blockReferenceFixture('target');
+    key('a', {metaKey: true}); insert(''); insert('['); insert('['); insert(target.uuid);
+    assert(input().__lsEd.caret_off === 40, {offset: input().__lsEd.caret_off});
+    insert('x'); key('Escape'); await pause(450);
+    const saved = (await logseq.api.get_block(blocks[0].uuid)).content;
+    assert(saved === '[[' + target.uuid + ']]x', {saved, target: target.uuid});
+  });
+  for (const direction of ['forward', 'backward']) {
+    await test('Regression: block reference word deletion stays whole ' + direction, async () => {
+      const {target} = await blockReferenceFixture('target');
+      key('a', {metaKey: true}); insert(direction === 'forward' ? ' [[' + target.uuid + ']]' : '[[' + target.uuid + ']] ');
+      key(direction === 'forward' ? 'Home' : 'End', {metaKey: true});
+      key(direction === 'forward' ? 'Delete' : 'Backspace', {altKey: true});
+      assert(text() === '', {value: text(), target: target.uuid});
+    });
+    await test('Regression: block reference merge inserts separator ' + direction, async () => {
+      const {target} = await blockReferenceFixture('target');
+      const {blocks} = await fixture(['[[' + target.uuid + ']]', 'text']);
+      if (direction === 'forward') { key('End', {metaKey: true}); key('Delete'); }
+      else {
+        document.getElementById('block-content-' + blocks[1].uuid).click(); await wait(() => input()?.id.endsWith(blocks[1].uuid));
+        key('Home', {metaKey: true}); key('Backspace');
+      }
+      await pause(450); key('Escape'); await pause(450);
+      const saved = (await logseq.api.get_block(blocks[0].uuid)).content;
+      assert(saved === '[[' + target.uuid + ']] text', {saved});
+    });
+  }
+  await test('Regression: wrapped block reference end caret follows its final visual row', async () => {
+    await blockReferenceFixture('long reference ' + 'one two three four five six seven eight '.repeat(12));
+    key('Home', {metaKey: true}); for (let i = 0; i < 7; i++) key('ArrowRight'); key('ArrowRight');
+    const content = document.querySelector('.ed-block-ref');
+    const range = document.createRange(); range.selectNodeContents(content);
+    const rects = [...range.getClientRects()].filter(r => r.width > 0);
+    const last = rects.at(-1); const caret = document.querySelector('.ed-caret').getBoundingClientRect();
+    assert(Math.abs(caret.top - last.top) < 5 && Math.abs(caret.left - last.right) < 5, {caret: {top: caret.top, left: caret.left}, last: {top: last.top, right: last.right}});
+  });
+  await test('Regression: click entry never paints the fallback end caret', async () => {
+    const value = 'click near the start rather than at the end of this long block';
+    const {blocks} = await fixture([value]); key('Escape'); await pause(450);
+    const content = document.getElementById('block-content-' + blocks[0].uuid);
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    const node = walker.nextNode();
+    const range = document.createRange(); range.setStart(node, 3); range.collapse(true);
+    const rect = range.getBoundingClientRect(); const x = rect.left, y = rect.top + rect.height / 2;
+    const positions = [];
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        if (record.target.matches?.('.ed-pos') && record.attributeName === 'style' && record.oldValue)
+          positions.push(record.oldValue);
+      }
+    });
+    observer.observe(document.body, {subtree: true, attributes: true, attributeOldValue: true});
+    try {
+      for (const type of ['mousedown', 'mouseup', 'click']) content.dispatchEvent(new MouseEvent(type, {bubbles: true, clientX: x, clientY: y}));
+      await wait(() => input() && document.activeElement === input()); await pause(100);
+      assert(input().__lsEd.caret_off === 3, {offset: input().__lsEd.caret_off});
+      const editorLeft = surface().getBoundingClientRect().left;
+      const limit = x - editorLeft + 20;
+      const painted = positions.map(p => /padding(?:-inline|-left)?:\s*([\d.]+)px/.exec(p)?.[1]).filter(Boolean).map(Number);
+      assert(painted.every(px => px < limit), {positions, painted, limit});
+      return {positions, offset: input().__lsEd.caret_off};
+    } finally { observer.disconnect(); }
+  });
+  await test('Regression: master autopair preserves selected whitespace', async () => {
+    for (const opener of ['[', '$']) {
+      await fixture(['a  b']); await select(1, 3); insert(opener);
+      const closer = opener === '[' ? ']' : '$';
+      assert(text() === 'a' + opener + closer + '  b', {opener, value: text()});
+    }
+  });
+  await test('Regression: master autopair closer overtypes selected content', async () => {
+    await fixture(['a]bc']); await select(1, 3); insert(']');
+    assert(text() === 'a]bc' && input().__lsEd.caret_off === 2, {value: text(), offset: input().__lsEd.caret_off});
+  });
+  await test('Regression: master slash Backspace deletes only the trigger', async () => {
+    await fixture(['//']); key('Home', {metaKey: true}); key('ArrowRight'); key('Backspace');
+    assert(text() === '/', {value: text()});
+  });
+  await test('Regression: moving caret stays visible and resumes idle blinking', async () => {
+    await fixture(['arrow visibility']); key('Home'); await pause(400);
+    for (const direction of ['ArrowRight', 'ArrowLeft']) {
+      const caret = document.querySelector('.ed-caret');
+      caret.getAnimations()[0].currentTime = 750;
+      key(direction);
+      await new Promise(requestAnimationFrame);
+      assert(getComputedStyle(caret).opacity === '1', {direction, opacity: getComputedStyle(caret).opacity});
+    }
+    const caret = document.querySelector('.ed-caret');
+    const states = new Set();
+    for (let i = 0; i < 12; i++) { states.add(getComputedStyle(caret).opacity); await pause(100); }
+    assert(states.has('0') && states.has('1'), {states: [...states]});
+  });
+  await test('Regression: wrapped lines support Down Up Home End and selection', async () => {
+    const value = 'First line wraps naturally: ' + 'one two three four five six seven eight nine ten '.repeat(12);
+    const {blocks} = await fixture([value, 'next']); key('Home', {metaKey: true});
+    const top = document.querySelector('.ed-caret').getBoundingClientRect().top;
+    key('ArrowDown');
+    const next = document.querySelector('.ed-caret').getBoundingClientRect().top;
+    assert(next > top + 10 && input().id.endsWith(blocks[0].uuid), {top, next, id: input().id});
+    key('Home'); const lo = input().__lsEd.caret_off;
+    key('End'); const hi = input().__lsEd.caret_off;
+    assert(hi > lo, {lo, hi});
+    key('Home'); key('ArrowUp');
+    assert(input().__lsEd.caret_off === 0, {offset: input().__lsEd.caret_off});
+    key('ArrowDown', {shiftKey: true}); insert('X');
+    assert(text().startsWith('X') && text().length < value.length, {text: text()});
+  });
+  await test('Regression: wrapped unbroken text has consistent row navigation', async () => {
+    const {blocks} = await fixture(['a'.repeat(600), 'next']); key('Home', {metaKey: true});
+    const initial = document.querySelector('.ed-caret').getBoundingClientRect().top;
+    key('ArrowDown'); key('Home'); const start = input().__lsEd.caret_off;
+    const second = document.querySelector('.ed-caret').getBoundingClientRect().top;
+    assert(start > 0 && second > initial + 10, {start, initial, second});
+    key('ArrowUp'); assert(input().__lsEd.caret_off === 0 && input().id.endsWith(blocks[0].uuid), {offset: input().__lsEd.caret_off});
+    key('ArrowDown'); assert(document.querySelector('.ed-caret').getBoundingClientRect().top > initial + 10, {offset: input().__lsEd.caret_off});
+  });
+  await test('Regression: Enter and indent keep following rows mounted', async () => {
+    const {blocks} = await fixture(['parent', 'current', ...Array.from({length: 20}, (_, i) => 'following ' + i)]);
+    await wait(() => document.getElementById('block-content-' + blocks.at(-1).uuid));
+    const contents = blocks.slice(2).map(b => document.getElementById('block-content-' + b.uuid));
+    const removed = [];
+    const observer = new MutationObserver(records => {
+      for (const record of records) for (const node of record.removedNodes)
+        for (const content of contents) if (node === content || node.contains?.(content)) removed.push(content.id);
+    });
+    observer.observe(document.querySelector('.page-blocks-inner'), {childList: true, subtree: true});
+    try {
+      key('End'); key('Enter'); await pause(450); key('Tab'); await pause(450);
+      assert(removed.length === 0 && contents.every((node, i) => node === document.getElementById('block-content-' + blocks[i + 2].uuid)), {removed});
+    } finally { observer.disconnect(); }
+  });
+  await test('Regression: arrow navigation stays within a frame budget', async () => {
+    await fixture(['a'.repeat(600)]); key('Home', {metaKey: true}); await pause(400);
+    const samples = [];
+    for (let i = 0; i < 60; i++) {
+      const start = performance.now();
+      key('ArrowRight', {repeat: i > 0});
+      samples.push(performance.now() - start);
+      await new Promise(requestAnimationFrame);
+    }
+    const sorted = [...samples].sort((a, b) => a - b);
+    const p95 = sorted[Math.floor(sorted.length * .95)];
+    assert(p95 < 8.33, {p95, samples});
+    assert(input().__lsEd.caret_off === 60, {offset: input().__lsEd.caret_off});
+    return {p95, median: sorted[Math.floor(sorted.length / 2)]};
+  });
+  await test('Regression: edit references retain brackets and URL geometry', async () => {
+    const {blocks} = await fixture(['prefix [[reference label]] https://example.com/path tail']);
+    key('Escape'); await pause(450);
+    const read = document.querySelector('#block-content-' + blocks[0].uuid + ' a.external-link');
+    const readStyle = getComputedStyle(read);
+    const readText = document.createRange(); readText.selectNodeContents(read);
+    const expected = {font: readStyle.font, color: readStyle.color, height: [...readText.getClientRects()].at(-1).height};
+    document.getElementById('block-content-' + blocks[0].uuid).click(); await wait(() => input());
+    key('Home', {metaKey: true});
+    const reference = document.querySelector('.ed-page-ref');
+    const url = document.querySelector('.ed-url');
+    assert(reference.textContent === '[[reference label]]', {reference: reference.textContent});
+    const actual = getComputedStyle(url);
+    assert(actual.font === expected.font && actual.color === expected.color && Math.abs(url.getBoundingClientRect().height - expected.height) <= 1,
+      {expected, actual: {font: actual.font, color: actual.color, height: url.getBoundingClientRect().height}});
+  });
+  await test('Regression: entering a rendered reference block reuses loaded titles', async () => {
+    key('Escape'); await pause(50);
+    const name = 'Loaded reference ' + crypto.randomUUID();
+    const target = await logseq.api.create_page(name, {}, {});
+    const {blocks} = await fixture(['[[' + target.uuid + ']] [[' + target.uuid + ']]']);
+    key('Escape'); await pause(450);
+    const original = Worker.prototype.postMessage;
+    const requests = [];
+    Worker.prototype.postMessage = function(message, ...rest) {
+      requests.push(JSON.stringify(message));
+      return original.call(this, message, ...rest);
+    };
+    try {
+      document.getElementById('block-content-' + blocks[0].uuid).click();
+      await wait(() => input() && document.activeElement === input());
+      const pulls = requests.filter(m => m.includes('thread-api/pull'));
+      assert(pulls.length === 0 && text().includes(name), {pulls, value: text()});
+    } finally { Worker.prototype.postMessage = original; }
+  });
+  for (const url of ['http://example.com/path', 'https://example.com/path']) {
+    await test('Regression: URL deletes character by character ' + url, async () => {
+      const {blocks} = await fixture([url]); key('End', {metaKey: true});
+      key('Backspace');
+      assert(text() === url.slice(0, -1), {value: text()});
+      key('Home', {metaKey: true}); key('Delete');
+      assert(text() === url.slice(1, -1), {value: text()});
+      key('Escape'); await pause(450);
+      assert((await logseq.api.get_block(blocks[0].uuid)).content === url.slice(1, -1), {value: text()});
+    });
+  }
+  for (const [opener, closer, pairWithoutSelection] of [
+    ['[', ']', true], ['{', '}', true], ['(', ')', true], ['`', '`', true], ['~', '~', true],
+    ['*', '*', false], ['_', '_', false], ['^', '^', false], ['=', '=', false], ['/', '/', false], ['+', '+', false], ['$', '$', true],
+  ]) {
+    await test('Regression: master autopair ' + opener, async () => {
+      await fixture(['']); insert(opener);
+      assert(text() === (pairWithoutSelection ? opener + closer : opener), {opener, value: text()});
+      if (pairWithoutSelection) {
+        key('Backspace'); assert(text() === '', {opener, deleted: text()});
+      }
+      await fixture(['word']); await select(0, 4); insert(opener);
+      assert(text() === opener + 'word' + closer, {opener, wrapped: text()});
+      insert('X'); assert(text() === opener + 'X' + closer, {opener, replaced: text()});
+    });
+  }
+  await test('Regression: nested reference autopair deletion and overtype', async () => {
+    await fixture(['']); insert('['); insert('['); await pause(50);
+    assert(text() === '[[]]' && input().__lsEd.caret_off === 2, {value: text(), offset: input().__lsEd.caret_off});
+    key('Backspace'); assert(text() === '[]' && input().__lsEd.caret_off === 1, {value: text(), offset: input().__lsEd.caret_off});
+    key('Backspace'); assert(text() === '', {value: text()});
+    insert('['); insert('['); insert(']'); insert(']');
+    assert(text() === '[[]]' && input().__lsEd.caret_off === 4, {value: text(), offset: input().__lsEd.caret_off});
+    await fixture(['abc']); key('End'); insert('(');
+    assert(text() === 'abc(', {value: text()});
+    await fixture(['']); insert('`'); insert('`'); insert('`');
+    assert(text() === '``````' && input().__lsEd.caret_off === 3, {value: text(), offset: input().__lsEd.caret_off});
+    insert('x'); insert('`'); assert(input().__lsEd.caret_off === 5, {value: text(), offset: input().__lsEd.caret_off});
+  });
 
   await test('Multiline flow preserves empty lines and caret navigation', async () => {
     const {blocks} = await fixture(['first\n\nthird\nlast']);

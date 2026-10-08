@@ -550,7 +550,7 @@ let asset_container uuid (b : Model.block) : t =
                    with
                    | Some img -> open_lightbox img
                    | None -> ())
-                 (asset_img uuid b file)
+                 (row ~key:("asset-press-" ^ uuid) [ asset_img uuid b file ])
              else asset_placeholder)
            ready.Signal.state_signal
        ; action_bar uuid b ])

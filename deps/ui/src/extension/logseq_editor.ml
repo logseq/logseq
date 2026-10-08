@@ -115,6 +115,10 @@ let register registry =
 type range_t
 type domrect
 type rect_list
+type animation
+
+external animations : W.Element.t -> animation array = "getAnimations" [@@mel.send]
+external animation_time : animation -> float -> unit = "currentTime" [@@mel.set]
 
 external prop_undef : Js.Json.t -> string -> 'a Js.Undefined.t = ""
   [@@mel.get_index]
@@ -206,6 +210,9 @@ external range_set_end : range_t -> Js.Json.t -> int -> unit =
 
 external range_rects : range_t -> rect_list = "getClientRects"
   [@@mel.send]
+
+external range_select_contents : range_t -> Js.Json.t -> unit =
+  "selectNodeContents" [@@mel.send]
 
 external caret_from_point : float -> float -> Js.Json.t =
   "caretRangeFromPoint" [@@mel.scope "document"]
@@ -358,7 +365,10 @@ let frag_rect fel u16 =
       end else rl
     in
     if rl_len rl > 0 then
-      let r = rl_at rl 0 in
+      (* At a soft wrap Chromium returns both the previous row's end
+         and the next row's start. Forward affinity lands on the row
+         whose first character follows this offset. *)
+      let r = rl_at rl (rl_len rl - 1) in
       Some { fx = rect_left r; fy = rect_top r; fh = rect_height r }
     else None)
 
@@ -371,8 +381,14 @@ let caret_rect_el el (off : int) : frect option =
       let a, b, tag = st.runs.(i) in
       let fel = els.(i) in
       if tag = "a" then
-        (* pill: caret sits on the edge the offset reaches *)
-        let r = j_brect fel in
+        (* Inline references can wrap; each boundary uses its own row. *)
+        let range = create_range () in
+        range_select_contents range fel;
+        let rects = range_rects range in
+        let r =
+          if rl_len rects = 0 then j_brect fel
+          else rl_at rects (if off >= b then rl_len rects - 1 else 0)
+        in
         Some
           { fx = (if off >= b then rect_right r else rect_left r)
           ; fy = rect_top r
@@ -473,7 +489,7 @@ let line_ranges_el el : (int * int) list =
         | _ -> (rect_top r, rect_height r, [ r ]) :: acc)
       [] sorted
   in
-  List.rev clusters
+  let ranges = List.rev clusters
   |> List.filter_map (fun (_, _, rects) ->
       let left =
         List.fold_left
@@ -494,6 +510,24 @@ let line_ranges_el el : (int * int) list =
       with
       | Some lo, Some hi -> Some (lo, hi)
       | _ -> None)
+  in
+  let st = state_of el and els = run_els el in
+  let is_separator off =
+    Array.exists (fun (i, (a, b, tag)) ->
+      if a <= off && off < b && tag <> "a" && i < Array.length els then
+        let text = j_text_content els.(i) in
+        off - a < String.length text
+        && List.mem text.[off - a] [ ' '; '\n'; '\t'; '\r' ]
+      else false)
+      (Array.mapi (fun i run -> (i, run)) st.runs)
+  in
+  let rec trim = function
+    | (lo, hi) :: ((next, _) :: _ as rest) ->
+        let hi = if hi = next && hi > lo && is_separator (hi - 1) then hi - 1 else hi in
+        (lo, hi) :: trim rest
+    | last -> last
+  in
+  trim ranges
 
 (* keep the hidden input parked at the caret so the IME candidate
    window opens at the right spot — px are relative to the block editor *)
@@ -536,6 +570,14 @@ let on_keydown el ev =
   let st = state_of el in
   let key = Option.value (jstr ev "key") ~default:"" in
   let meta = jbool ev "metaKey" and ctrl = jbool ev "ctrlKey" in
+  (* Like a textarea, movement restarts the visible half of the blink. *)
+  if List.mem key [ "ArrowLeft"; "ArrowRight"; "ArrowUp"; "ArrowDown"; "Home"; "End" ] then
+    (match container_of el with
+     | Some container ->
+         (match W.Element.querySelector ".ed-caret" container with
+          | Some caret -> Array.iter (fun a -> animation_time a 0.) (animations caret)
+          | None -> ())
+     | None -> ());
   if not (st.composing || jbool ev "isComposing") then emit_now el "key"
     (String_map.empty
     |> String_map.add "key" (StringValue key)

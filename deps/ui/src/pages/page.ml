@@ -266,7 +266,7 @@ let title_editor (page : Model.page) : t =
           match conduit.Edit_input.line_ranges () with
           | rs
             when Editor_actions.measured_partitions
-                   (String.length m'.Edit_model.source)
+                   m'.Edit_model.source
                    rs ->
               Edit_model.set_lines m' rs
           | _ -> m'
@@ -1249,11 +1249,13 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
       if !alive then begin
         let total = List.length (snd (Signal.get spine_sig)) in
         if !emitted < total then begin
-          emitted := min (!emitted + mount_chunk) total;
+          (* Once loaded, edits must not truncate the mounted spine. *)
+          emitted := if !emitted + mount_chunk >= total then max_int
+                     else !emitted + mount_chunk;
           Signal.update tick succ;
           Runtime.flush ();
           schedule_grow ()
-        end
+        end else emitted := max_int
       end
     and schedule_grow () =
       if not !grow_pending then begin

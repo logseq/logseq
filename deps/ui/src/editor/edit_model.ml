@@ -242,18 +242,25 @@ let lines_of_source s =
   in
   go 0 []
 
+let immutable_ref (r : E.run) =
+  r.kind = E.Atomic && List.mem "ed-block-ref" (String.split_on_char ' ' r.cls)
+
+let snap_ref m off ~forward =
+  match List.find_opt
+          (fun r -> immutable_ref r && off > r.E.start_off && off < r.end_off)
+          m.runs with
+  | Some r -> if forward then r.end_off else r.start_off
+  | None -> off
+
 let rebuild m source ~caret ~anchor ~dirty =
-  { m with
-    source
-  ; version = m.version + 1
-  ; runs = E.runs source
-  ; caret
-  ; anchor
-  ; composition = None
-  ; composition_text = ""
-  ; lines = lines_of_source source
-  ; dirty
-  }
+  let next =
+    { m with source; version = m.version + 1; runs = E.runs source
+    ; caret; anchor; composition = None; composition_text = ""
+    ; lines = lines_of_source source; dirty }
+  in
+  { next with
+    caret = snap_ref next caret ~forward:true
+  ; anchor = Option.map (fun off -> snap_ref next off ~forward:(off > caret)) anchor }
 
 let create ?(units = Bytes) source =
   { source
@@ -295,6 +302,8 @@ let set_lines m lines = { m with lines; dirty = None }
 let caret_line m =
   let rec go i = function
     | [] -> max 0 (List.length m.lines - 1)
+    | (_, hi) :: ((next, _) :: _ as tl) when m.caret = hi && hi = next ->
+        go (i + 1) tl
     | (lo, hi) :: _ when m.caret >= lo && m.caret <= hi -> i
     | _ :: tl -> go (i + 1) tl
   in
@@ -323,7 +332,7 @@ let in_reveal m (lo, hi) =
 let delim_shown m (r : E.run) = r.kind = E.Delim && in_reveal m r.reveal
 
 let atomic_expanded m (r : E.run) =
-  r.kind = E.Atomic && in_reveal m r.reveal
+  r.kind = E.Atomic && not (immutable_ref r) && in_reveal m r.reveal
 
 let revealed_delims m =
   List.filter (delim_shown m) m.runs
@@ -352,6 +361,11 @@ let splice m lo hi text =
   let lo = clamp_caret m.units m.source lo
   and hi = clamp_caret m.units m.source hi in
   let lo, hi = min lo hi, max lo hi in
+  let lo, hi =
+    if lo = hi then
+      let off = snap_ref m lo ~forward:true in (off, off)
+    else (snap_ref m lo ~forward:false, snap_ref m hi ~forward:true)
+  in
   (* single O(n) buffer build — String.sub would copy the whole source
      twice under Melange (bytes_of_string per call) *)
   let tl = String.length text in
@@ -459,7 +473,8 @@ let move_target m d ~extend =
 
 let move m d ~extend =
   let caret =
-    clamp_caret m.units m.source (move_target m d ~extend)
+    snap_ref m (clamp_caret m.units m.source (move_target m d ~extend))
+      ~forward:(match d with Right | Word_right | End | Doc_end | Down -> true | _ -> false)
   in
   let anchor =
     if extend then Some (Option.value m.anchor ~default:m.caret)
@@ -469,8 +484,8 @@ let move m d ~extend =
 
 let select m ~anchor ~focus =
   { m with
-    anchor = Some (clamp_caret m.units m.source anchor)
-  ; caret = clamp_caret m.units m.source focus
+    anchor = Some (snap_ref m (clamp_caret m.units m.source anchor) ~forward:(anchor > focus))
+  ; caret = snap_ref m (clamp_caret m.units m.source focus) ~forward:(focus > anchor)
   }
 
 let select_all m =

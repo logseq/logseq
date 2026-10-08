@@ -137,7 +137,7 @@ let test_emit_structure () =
            (fun n -> Option.value (DM.string_prop n "text") ~default:"?")
            texts
        in
-       eqs "frag values" "a ;**;b;**; and ;Page; tail"
+       eqs "frag values" "a ;**;b;**; and ;[[Page]]; tail"
          (String.concat ";" (List.filteri (fun i _ -> i < 7) vals));
        (* pad is a single U+200B code unit *)
        eqi "pad is ZWSP" 1 (String.length (List.nth vals 7));
@@ -512,6 +512,25 @@ let test_shifted_pill_click () =
   eqs "pill click preserves source" "xab\n[[Page]]" (ed h).M.source;
   check "pill click reveals current reference" (cls_nodes h "ed-raw" <> [])
 
+let test_loaded_asset () =
+  Stub_dom.install ();
+  let uuid = "loaded-image-regression" in
+  let original = Test_check.block uuid "Image" in
+  let b = { original with Model.block_asset_type = Some "png" } in
+  let view _context _model _send context parent =
+    let ready = Asset_dom.ready_for uuid "png" context in
+    Signal.set ready true;
+    Asset_dom.asset_container uuid b context parent
+  in
+  (try
+     let s = S.mount ~profile:Logseq_editor.web_profile ~initial:()
+       ~reducer:(fun () () -> ()) ~view () in
+     check "loaded asset mounts without interrupting the page flush"
+       (Option.is_some (DM.first s.S.tree (sel "prop:accessibility-identifier=\"asset-img-loaded-image-regression\"")))
+   with Invalid_argument message ->
+     check ("loaded asset mounts without interrupting the page flush: " ^ message) false);
+  Hashtbl.remove Asset_dom.ready_sigs uuid
+
 let run () =
   test_emit_structure ();
   test_empty_line_pad ();
@@ -524,4 +543,5 @@ let run () =
   test_sink_events ();
   test_input_mapping ();
   test_u16 ();
-  test_bytes_default ()
+  test_bytes_default ();
+  test_loaded_asset ()

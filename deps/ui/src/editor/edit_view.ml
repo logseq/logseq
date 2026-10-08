@@ -72,7 +72,12 @@ let frag_tag = function
   | Frag_raw -> "r"
   | Frag_pad -> "z"
 
-let frag_key f = (f.idx, frag_tag f.kind)
+let frag_key f =
+  let identity =
+    if List.mem "ed-block-ref" (String.split_on_char ' ' f.cls) then f.display
+    else ""
+  in
+  (f.idx, frag_tag f.kind, f.cls, identity)
 
 let cls_suffix f = if f.cls = "" then "" else " " ^ f.cls
 
@@ -125,7 +130,8 @@ let frag_of_run m sb (r : Edit_runs.run) lo hi idx : frag option =
       ; kind
       ; cls = r.cls
       ; text = sub_of sb a (b - a)
-      ; display = r.display
+      ; display = if List.mem "ed-page-ref" (String.split_on_char ' ' r.cls)
+                  then "[[" ^ r.display ^ "]]" else r.display
       ; shown = Edit_model.delim_shown m r
       }
 
@@ -393,6 +399,10 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
         (fun f -> "ed-r ed-raw" ^ cls_suffix f)
         (text ~value:(reactive (fun f -> f.text) frag_s)
            ~style_class:"ed-r ed-raw" [])
+  | Frag_pill when List.mem "ed-block-ref" (String.split_on_char ' ' (Signal.sample frag_s).cls) ->
+      let f = Signal.sample frag_s in
+      row ~style_class:("ed-r ed-pill" ^ cls_suffix f)
+        [ Render_inline.page_ref ~refs:[] ~self:"" f.display ]
   | Frag_pill ->
       (* click reveals the raw source: dropping the caret inside the
          atomic's strict interior expands it via the model *)

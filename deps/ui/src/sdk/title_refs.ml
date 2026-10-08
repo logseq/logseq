@@ -283,6 +283,7 @@ let parse title =
             Render_inline.prime_pull_meta ~name:r.name ~uuid:r.uuid
               ~title:t
               ~is_page:(Wire.map_get_string r.entity "block/name" <> None)
+              ~is_math:(Decode.prop_label r.entity "logseq.property.node/display-type" = Some "math")
         | None -> ())
     resolved;
   let ref_of r =

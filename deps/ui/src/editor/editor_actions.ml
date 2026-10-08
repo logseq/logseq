@@ -56,6 +56,28 @@ let sel_span uuid =
   | Some m -> sel_span_of m
   | None -> (0, 0)
 
+(* the mousedown that opened an edit lands before the sink exists —
+   hit-test its recorded coords against the now-mounted runs so the
+   caret lands on the click point instead of the enter_edit default *)
+let click_offset uuid =
+  match !S.click_point with
+  | Some (u, ms, x, y)
+    when u = uuid && Platform.date_now_ms () -. ms < 1500. -> (
+      match
+        ( Editor_sink.conduit uuid
+        , D.get_element_by_id ("edit-block-" ^ uuid) )
+      with
+      | Some conduit, Some el -> (
+          match D.closest_sel ".block-editor" (Some el) with
+          | None -> None
+          | Some c ->
+              let r = D.el_bounding_rect c in
+              conduit.Edit_input.offset_at
+                ~x:(int_of_float x - int_of_float (D.rect_left r))
+                ~y:(int_of_float y - int_of_float (D.rect_top r)))
+      | _ -> None)
+  | _ -> None
+
 (* programmatic caret moves never pass through apply_input, so the
    mounted surface's overlay keeps its stale rect — re-measure it from
    the model just published *)
@@ -66,6 +88,24 @@ let sel_span uuid =
 let refresh_overlay uuid =
   match (!S.active_frame, Editor_sink.conduit uuid, edit_model uuid) with
   | Some fr, Some conduit, Some m ->
+      (* Resolve a click before the first overlay measurement, so the
+         fallback caret never paints at the end of the block. *)
+      let m =
+        match !S.pending_focus with
+        | Some (u, _, armed_ms) when u = uuid && !S.last_edit_input_ms <= armed_ms ->
+            (match click_offset uuid with
+             | Some off ->
+                 let next = Edit_model.select m ~anchor:off ~focus:off in
+                 if next <> m then
+                   S.set_silent (fun st ->
+                       match st.S.editing with
+                       | Some e when e.uuid = uuid ->
+                           { st with editing = Some (S.with_model e next) }
+                       | _ -> st);
+                 next
+             | None -> m)
+        | _ -> m
+      in
       let measured = Edit_input.measure conduit m in
       let current =
         match !(fr.Signal.pending) with
@@ -144,28 +184,6 @@ let drain_pending_focus_actions () =
    it: a second edit on the same block mounts a NEW input element that
    still needs its own emit *)
 let last_focus_emitted : (string * int * float) option ref = ref None
-
-(* the mousedown that opened an edit lands before the sink exists —
-   hit-test its recorded coords against the now-mounted runs so the
-   caret lands on the click point instead of the enter_edit default *)
-let click_offset uuid =
-  match !S.click_point with
-  | Some (u, ms, x, y)
-    when u = uuid && Platform.date_now_ms () -. ms < 1500. -> (
-      match
-        ( Editor_sink.conduit uuid
-        , D.get_element_by_id ("edit-block-" ^ uuid) )
-      with
-      | Some conduit, Some el -> (
-          match D.closest_sel ".block-editor" (Some el) with
-          | None -> None
-          | Some c ->
-              let r = D.el_bounding_rect c in
-              conduit.Edit_input.offset_at
-                ~x:(int_of_float x - int_of_float (D.rect_left r))
-                ~y:(int_of_float y - int_of_float (D.rect_top r)))
-      | _ -> None)
-  | _ -> None
 
 (* on native the rect and offset-at replies land a tick after the
    first read — a one-shot [click_offset] would settle on the
@@ -779,9 +797,9 @@ let merge_source left right =
     && match List.find_opt
       (fun (r : Edit_runs.run) -> r.kind <> Edit_runs.Delim)
       (List.rev (Edit_runs.runs left)) with
-      | Some { Edit_runs.kind = Atomic; cls; _ } ->
+      | Some { Edit_runs.cls; _ } ->
           List.exists
-            (fun c -> List.mem c [ "ed-page-ref"; "ed-tag"; "ed-url"; "ed-link" ])
+            (fun c -> List.mem c [ "ed-page-ref"; "ed-block-ref"; "ed-tag"; "ed-url"; "ed-link" ])
             (String.split_on_char ' ' cls)
       | _ -> false
   in
@@ -1880,26 +1898,28 @@ let conduit_of uuid =
 (* fold freshly measured visual lines back into the model (line_bounds,
    first/last_line feed keys and Del_line deletes); empty measurement
    keeps the '\n' table *)
-(* measured ranges are only valid when they strictly partition the
-   buffer [0, len): the DOM they hit-test can lag the model publish by
-   a paint, and a stale read comes back degenerate ([0,0] or pad-only
-   rows). Writing one of those corrupts the line table permanently —
-   the repaint shows only pads, every later measure stays degenerate *)
-let measured_partitions len rs =
+(* Browser line edges omit wrapped spaces and newline separators. Accept
+   those gaps, but reject missing text or incomplete/stale measurements. *)
+let measured_partitions source rs =
+  let len = String.length source in
+  let rec whitespace a b =
+    a = b || (a < b && List.mem source.[a] [ ' '; '\n'; '\t'; '\r' ] && whitespace (a + 1) b)
+  in
   match rs with
   | [] -> false
   | (lo, _) :: _ when lo <> 0 -> false
   | _ ->
       let rec go exp = function
         | [] -> exp = len
-        | (a, b) :: tl -> a = exp && b >= a && go b tl
+        | (a, b) :: tl -> a >= exp && b >= a && b <= len
+            && whitespace exp a && go b tl
       in
       go 0 rs
 
 let refresh_lines m (conduit : Edit_input.conduit) =
   if Edit_model.composing m then m else
   match conduit.line_ranges () with
-  | rs when measured_partitions (String.length m.Edit_model.source) rs ->
+  | rs when measured_partitions m.Edit_model.source rs ->
       Edit_model.set_lines m rs
   | _ -> m
 

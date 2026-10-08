@@ -632,7 +632,8 @@ let prefetch_anchor_refs repo (blocks : Model.block list) :
       [ ( Wire.Keyword "properties"
         , Wire.Array
             [ Wire.Keyword "block/uuid"; Wire.Keyword "block/title"
-            ; Wire.Keyword "block/name" ]) ]
+            ; Wire.Keyword "block/name"
+            ; Wire.Keyword "logseq.property.node/display-type" ]) ]
   in
   let reqs =
     List.map
@@ -1251,10 +1252,8 @@ let schedule_save uuid title =
       400
 
 
-(* [[uuid]] / #[[uuid]] -> [[title]] / #title — the cljs
-   id-ref->title-ref pass the edit buffer gets when a block opens.
-   Resolves each uuid via thread-api/pull; unresolvable uuids stay
-   verbatim. *)
+(* Rewrite page UUIDs to editable names; block references retain identity.
+   Reuse metadata loaded by the renderer and resolve only cache misses. *)
 let title_for_edit (title : string) : string Js.Promise.t =
   let n = String.length title in
   (* collect (start, end_excl, has_hash, uuid) tokens *)
@@ -1281,20 +1280,16 @@ let title_for_edit (title : string) : string Js.Promise.t =
       match (Runtime.model ()).Model.repo with
       | None -> Js.Promise.resolve title
       | Some repo ->
-          let uuids = List.map (fun (_, _, _, u) -> u) toks in
+          let uuids = List.sort_uniq String.compare (List.map (fun (_, _, _, u) -> u) toks) in
           let* names =
             Js.Promise.all
               (Array.of_list
                  (List.map
                     (fun u ->
-                   let* w =
-                     Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-                       (Wire.String "[:block/title]")
-                       (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
-                   in
+                   let* meta = Render_inline.ref_meta_for_edit repo u in
                    Js.Promise.resolve
-                     (match Wire.map_get_string w "block/title" with
-                      | Some t when String.trim t <> "" -> Some t
+                     (match meta with
+                      | Some (t, true, _) when String.trim t <> "" -> Some t
                       | _ -> None))
                     uuids))
           in

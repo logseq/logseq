@@ -2744,10 +2744,12 @@ a.page-title {
    .page-ref link / a.tag render accent-colored on transparent — the
    generic .ed-pill grey chip would lose that. Applies to the collapsed
    pill and the revealed raw interior (cls suffix rides both). */
+.ed-pill.ed-block-ref,
 .ed-pill.ed-page-ref,
 .ed-pill.ed-tag,
 .ed-pill.ed-link,
-.ed-pill.ed-url {
+.ed-r.ed-url {
+  display: inline;
   background: none;
   padding: 0;
   color: var(--lx-accent-11, var(--ls-link-text-color));

@@ -62,6 +62,12 @@ let rec seg (acc : run list) sb lo hi ~cls : run list =
       (match t.tok_spec with
        | Render_inline.Rs_plain ->
            acc := plain sb a b cls :: !acc
+       | Rs_atomic (_, "ed-url") ->
+           acc := plain sb a b (join_cls cls "ed-url") :: !acc
+       | Rs_atomic (display, "ed-page-ref") when Wire.is_uuid_string display ->
+           acc :=
+             mk Atomic sb a b ~reveal:(a + 1, b) ~display
+               ~cls:(join_cls cls "ed-block-ref") :: !acc
        | Rs_atomic (display, c) ->
            acc :=
              mk Atomic sb a b ~reveal:(a + 1, b) ~display

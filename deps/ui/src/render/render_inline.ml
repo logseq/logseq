@@ -91,7 +91,7 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
 
 type pull_cache =
   { c_name_uuid : (string, string) Hashtbl.t
-  ; c_uuid_meta : (string, string * bool) Hashtbl.t (* title, is-page *)
+  ; c_uuid_meta : (string, string * bool * bool) Hashtbl.t (* title, is-page, is-math *)
   ; c_macros : (string * string) list option ref (* config.edn :macros *)
   }
 
@@ -162,11 +162,11 @@ let invalidate_pull_uuids (uuids : string list) =
    the save's own broadcast invalidates c_uuid_meta before the anchor's
    pull resolves, so the just-committed title is kept here — the pull
    still runs and replaces it with the committed form *)
-let minted_meta : (string, string * bool) Hashtbl.t = Hashtbl.create 32
+let minted_meta : (string, string * bool * bool) Hashtbl.t = Hashtbl.create 32
 
 let prime_ref_metas (metas : (string * string) list) =
   List.iter
-    (fun (name, u) -> Hashtbl.replace minted_meta u (name, true))
+    (fun (name, u) -> Hashtbl.replace minted_meta u (name, true, false))
     metas;
   match (Runtime.model ()).Model.repo with
   | None -> ()
@@ -174,20 +174,20 @@ let prime_ref_metas (metas : (string * string) list) =
       let cache = repo_cache repo in
       List.iter
         (fun (name, u) ->
-          Hashtbl.replace cache.c_uuid_meta u (name, true);
+          Hashtbl.replace cache.c_uuid_meta u (name, true, false);
           Hashtbl.replace cache.c_name_uuid
             (String.lowercase_ascii name) u)
         metas
 
 (* same priming for an entity already pulled elsewhere (a resolved
    [[name]] -> uuid lookup) — caches only, no minted entry *)
-let prime_pull_meta ~name ~uuid ~title ~is_page =
+let prime_pull_meta ~name ~uuid ~title ~is_page ~is_math =
   match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       let cache = repo_cache repo in
       Hashtbl.replace cache.c_name_uuid (String.lowercase_ascii name) uuid;
-      Hashtbl.replace cache.c_uuid_meta uuid (title, is_page)
+      Hashtbl.replace cache.c_uuid_meta uuid (title, is_page, is_math)
 
 (* batch-fill both caches from a get-blocks response — a page's [[ref]]
    anchors then mount on hits instead of paying a thread-api/pull each *)
@@ -210,7 +210,8 @@ let prime_pull_caches repo (w : Wire.t) =
                   | Some n -> String.trim n <> ""
                   | None -> false
                 in
-                Hashtbl.replace cache.c_uuid_meta uuid (title, is_page);
+                let is_math = Decode.prop_label blk "logseq.property.node/display-type" = Some "math" in
+                Hashtbl.replace cache.c_uuid_meta uuid (title, is_page, is_math);
                 Some uuid
             | None -> None)
         | None -> None
@@ -225,6 +226,33 @@ let prime_pull_caches repo (w : Wire.t) =
              (Option.value uuid ~default:"")
        | _ -> ()))
     (Wire.elems w)
+
+(* Editing uses the same metadata cache as rendered references. *)
+let ref_meta_for_edit repo uuid =
+  let cache = repo_cache repo in
+  match Hashtbl.find_opt cache.c_uuid_meta uuid with
+  | Some meta -> Js.Promise.resolve (Some meta)
+  | None ->
+      let* w =
+        Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+          (Wire.String "[:block/title :block/name :logseq.property.node/display-type]")
+          (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+      in
+      let meta =
+        Option.map
+          (fun title ->
+            let is_page = Option.is_some (Wire.map_get_string w "block/name") in
+            let is_math = Decode.prop_label w "logseq.property.node/display-type" = Some "math" in
+            Hashtbl.replace cache.c_uuid_meta uuid (title, is_page, is_math);
+            (title, is_page, is_math))
+          (Wire.map_get_string w "block/title")
+      in
+      Js.Promise.resolve meta
+
+let first_line title =
+  match String.index_opt title '\n' with
+  | Some i -> String.sub title 0 i
+  | None -> title
 
 (* resolved-meta signal behind [c_uuid_meta]: initialized synchronously
    on a cache hit (plain set — the mount's own flush publishes it), the
@@ -247,7 +275,7 @@ let uuid_meta_state context uuid ~fallback ?(miss = None) () =
            | None -> ());
           (let* w =
             Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-              (Wire.String "[:block/title :block/name]")
+              (Wire.String "[:block/title :block/name :logseq.property.node/display-type]")
               (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
           in
           (match Wire.map_get_string w "block/title" with
@@ -257,7 +285,8 @@ let uuid_meta_state context uuid ~fallback ?(miss = None) () =
                  | Some n -> String.trim n <> ""
                  | None -> false
                in
-               let meta = (t, is_page) in
+               let is_math = Decode.prop_label w "logseq.property.node/display-type" = Some "math" in
+               let meta = (t, is_page, is_math) in
                Hashtbl.replace cache.c_uuid_meta uuid meta;
                Hashtbl.remove minted_meta uuid;
                Runtime.signal_set st meta
@@ -307,8 +336,8 @@ let external_link href label_els =
    pull returns *)
 let block_ref_anchor uuid : t =
  fun context parent ->
-  let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
-  let title_sig = Signal.map fst (Signal.value st) in
+  let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
+  let title_sig = Signal.map (fun (title, _, _) -> title) (Signal.value st) in
   link ~url:"#" ~target:`self_ ~style_class:"relative page-ref"
     ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
     ~text_signal:title_sig
@@ -1318,14 +1347,14 @@ and page_ref ?(tag = false) ~refs ~self name =
 and resolved_ref ~refs ~self uuid : t =
  fun context parent ->
   let st =
-    uuid_meta_state context uuid ~fallback:("", true)
-      ~miss:(Some (uuid, true)) ()
+    uuid_meta_state context uuid ~fallback:("", true, false)
+      ~miss:(Some (uuid, true, false)) ()
   in
   let child_refs =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
   (reactive
-    (fun (title, is_page) ->
+    (fun (title, is_page, is_math) ->
       (* data-ref/data-uuid/tabindex/draggable are delegated-event +
          dnd hooks (a.page-ref) *)
       if title = "" then
@@ -1349,7 +1378,9 @@ and resolved_ref ~refs ~self uuid : t =
                              ; ("draggable", "true")
                              ; ("data-ref", String.lowercase_ascii title) ]
                  (if is_page then [ text ~value:title [] ]
-                  else parse ~refs:child_refs ~self:uuid title))
+                  else [ row ~display:`contents
+                           (if is_math then [ katex_el ~block:false ~display:false (first_line title) ]
+                            else parse ~refs:child_refs ~self:uuid (first_line title)) ]))
           ; bracket "]]" ])
     (Signal.value st))
     context parent
@@ -1358,16 +1389,16 @@ and resolved_ref ~refs ~self uuid : t =
 and resolved_tag_ref ~refs ~self uuid : t =
  fun context parent ->
   ignore (refs, self);
-  let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
+  let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
   let title_sig = Signal.value st in
   link ~url:"#" ~target:`self_ ~style_class:"relative tag"
     ~data_attrs:
       (reactive
-         (fun (n, _) ->
+         (fun (n, _, _) ->
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ text ~value:(reactive (fun (n, _) -> "#" ^ n) title_sig) [] ]
+    [ text ~value:(reactive (fun (n, _, _) -> "#" ^ n) title_sig) [] ]
     context parent
 
 and macro_el ~refs ~self body =
