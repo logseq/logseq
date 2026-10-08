@@ -51,7 +51,7 @@ let kbd_seq ~key ~binding:_ keys =
                (fun i k ->
                  kbd ~key:(key ^ "-" ^ string_of_int i)
                    ~style_class:"shui-shortcut-key shui-key-boxed"
-                   ~value:(Platform.utf8 (print_key k)) [])
+                   ~value:(Ui_services.literal_text (print_key k)) [])
                keys)
         ]
     ]

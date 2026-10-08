@@ -21,12 +21,18 @@ let pending_batches : string Queue.t = Queue.create ()
    burst the same way event-queueing used to, instead of corrupting the
    batch stream. *)
 let entry_lock = Mutex.create ()
+let entry_owner : int option ref = ref None
+
+let assert_entry_owner () =
+  if !entry_owner <> Some (Thread.id (Thread.self ())) then
+    invalid_arg "UI services require ownership of the application entry"
 
 let with_entry_lock f =
   Mutex.lock entry_lock;
+  entry_owner := Some (Thread.id (Thread.self ()));
   match f () with
-  | x -> Mutex.unlock entry_lock; x
-  | exception e -> Mutex.unlock entry_lock; raise e
+  | x -> entry_owner := None; Mutex.unlock entry_lock; x
+  | exception e -> entry_owner := None; Mutex.unlock entry_lock; raise e
 
 let take_patches () : string =
   if Queue.is_empty pending_batches then ""
@@ -369,8 +375,9 @@ let perf_mark name t0 =
   if Lazy.force perf_log
   then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
-let initialize platform_code host_code (_payload : string) : string =
+let initialize_unlocked platform_code host_code (_payload : string) : string =
   Printexc.record_backtrace true;
+  Platform.install_ui_services ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush;
   Queue.clear pending_batches;
   let os =
     match platform_code with
@@ -499,6 +506,9 @@ let initialize platform_code host_code (_payload : string) : string =
   run_doc_scans_after_flush ();
   perf_mark "init.scans" t3;
   take_patches ()
+
+let initialize platform_code host_code payload =
+  with_entry_lock (fun () -> initialize_unlocked platform_code host_code payload)
 
 (* NOTE: never Queue.clear pending_batches at entry — a systhread yield
    inside drain/dispatch (blocking daemon IO) can let another entry emit

@@ -188,7 +188,7 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
   ; check
   ; keydown = (fun ~meta key -> Stub_dom.keydown ~meta key)
   ; toggle_sidebar = (fun () -> click_sel "prop:accessibility-identifier=\"left-menu\"")
-  ; storage_get = Platform.local_storage_get
+  ; storage_get = Ui_services.storage_get
   ; open_settings = (fun () -> Dialogs_state.open_ "settings")
   ; close_settings = Dialogs_state.close_all
   ; wide_mode_label = I18n.wide_mode

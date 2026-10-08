@@ -3,6 +3,6 @@
  (modules test_main test_check stub_dom fake_worker test_drive
          test_lui_apply edit_model_test edit_view_test editor_bench editor_probe)
  (module_systems commonjs)
- (libraries logseq_ui logseq_subs logseq_ui_scenarios melange.js)
+ (libraries logseq_ui_web_services logseq_ui logseq_subs logseq_ui_scenarios melange.js)
  (preprocess
   (pps melange.ppx)))

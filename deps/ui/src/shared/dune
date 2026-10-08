@@ -1,0 +1,8 @@
+(include_subdirs no)
+
+(library
+ (name logseq_ui_shared)
+ (wrapped false)
+ (modes byte native melange)
+ (libraries lui logseq_ui_contracts)
+ (preprocess (pps lui.ppx)))

@@ -1,0 +1,7 @@
+(include_subdirs no)
+
+(library
+ (name logseq_ui_contracts)
+ (wrapped false)
+ (modes byte native melange)
+ (libraries lui))

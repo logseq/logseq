@@ -661,3 +661,16 @@ let location_reload () : unit = ()
    concept; share/other-tab URLs degrade to the graph fragment *)
 let location_origin = ""
 let location_pathname = ""
+
+let install_ui_services ~assert_owner ~request_flush =
+  Ui_services.install
+    { storage =
+        { get = local_storage_get
+        ; set = local_storage_set
+        ; remove = local_storage_remove
+        }
+    ; literal_text = Fun.id
+    ; request_flush
+    ; assert_owner
+    };
+  Ui_task.install { enqueue = Host.enqueue; assert_owner }

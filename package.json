@@ -81,7 +81,7 @@
     "ui:dune-watch": "cd deps/ui && opam exec -- dune build js_app --watch",
     "ui:vite-watch": "cd deps/ui && ../../node_modules/.bin/vite build --watch",
     "test:db-worker": "cd deps/db-worker && opam exec -- dune runtest",
-    "test:ui": "cd deps/ui && opam exec -- dune build test && node _build/default/test/ui_test/test/test_main.js"
+    "test:ui": "cd deps/ui && opam exec -- dune build test && node _build/default/test/ui_test/test/test_main.js && opam exec -- dune runtest test/contracts"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.1",

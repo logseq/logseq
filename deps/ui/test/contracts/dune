@@ -1,0 +1,23 @@
+(library
+ (name ui_task_scenarios)
+ (wrapped false)
+ (modules ui_task_scenarios ui_services_scenarios)
+ (modes byte native melange)
+ (libraries logseq_ui_contracts))
+
+(test
+ (name task_native_test)
+ (modules task_native_test)
+ (libraries ui_task_scenarios threads.posix))
+
+(melange.emit
+ (target task_web_test)
+ (modules task_web_test)
+ (module_systems commonjs)
+ (libraries ui_task_scenarios))
+
+(rule
+ (alias runtest)
+ (deps task_web_test/test/contracts/task_web_test.js)
+ (action
+  (run node %{dep:task_web_test/test/contracts/task_web_test.js})))

@@ -618,6 +618,10 @@ mod tests {
     use lui_core::wire_schema::Property;
     use lui_gpui::LuiShared;
 
+    extern "C" {
+        fn lui_ocaml_stop() -> i32;
+    }
+
     /// Headless boot smoke: start the linked OCaml `native_embed` object,
     /// pump its mailbox until the initial patch batches arrive, then apply
     /// them through the same `take_patches`/`drain_patches` path the
@@ -715,5 +719,21 @@ mod tests {
         assert!(shared.borrow().store.nodes.values().any(|node|
             node.string_prop(Property::TextValue).is_some_and(|text| text.contains(query))
         ), "resync must preserve the current palette state");
+        cx.update(|window, app| {
+            assert_ne!(unsafe { lui_ocaml_stop() }, 0, "OCaml app rejected disposal");
+            pump_tick(&shared, window, app);
+        });
+        assert_eq!(unsafe { bridge::lui_ocaml_root_node() }, 0,
+            "disposal must retire the current root");
+        assert!(shared.borrow().store.nodes.is_empty(),
+            "disposal must remove the mounted tree");
+        cx.update(|window, app| {
+            assert_ne!(unsafe { lui_ocaml_pump() }, 0);
+            pump_tick(&shared, window, app);
+        });
+        assert!(shared.borrow().store.nodes.is_empty(),
+            "late mailbox callbacks must not remount a disposed application");
+        assert!(shared.borrow().last_errors.is_empty(),
+            "disposal apply errors: {:?}", shared.borrow().last_errors);
     }
 }

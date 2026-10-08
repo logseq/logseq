@@ -48,7 +48,7 @@ module Make (A : ARG) = struct
 
   let set f =
     Signal.update (state ()) f;
-    Runtime.flush ()
+    Ui_services.request_flush ()
 end
 
 (* bare option-ref cell with a fail-fast getter — installed handles and

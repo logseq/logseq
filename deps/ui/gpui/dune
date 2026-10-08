@@ -247,13 +247,7 @@
 (rule
  (copy ../subs/promise_ext.ml promise_ext.ml))
 (rule
- (copy ../src/core/state_cell.ml state_cell.ml))
-(rule
  (copy ../src/core/str_util.ml str_util.ml))
-(rule
- (copy ../src/core/ui_parts.ml ui_parts.ml))
-(rule
- (copy ../subs/wire.ml wire.ml))
 (rule
  (copy ../src/dialogs/dialogs_state.ml dialogs_state.ml))
 (rule
@@ -384,8 +378,6 @@
  (copy ../src/settings/keymap_data.ml keymap_data.ml))
 (rule
  (copy ../src/settings/settings_state.ml settings_state.ml))
- (rule
- (copy ../src/settings/settings_controls.ml settings_controls.ml))
 (rule
  (copy ../src/settings/settings_url_view.ml settings_url_view.ml))
 (rule
@@ -418,6 +410,8 @@
  (modes native)
  (libraries
    lui
+   logseq_ui_contracts
+   logseq_ui_shared
    ocaml-signal
    melange-transit-core
    melange-transit-native

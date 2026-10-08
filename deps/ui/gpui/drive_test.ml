@@ -253,7 +253,7 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
   ; check
   ; keydown = (fun ~meta key -> keydown ~meta key)
   ; toggle_sidebar = (fun () -> send Action.Toggle_left_sidebar)
-  ; storage_get = Platform.local_storage_get
+  ; storage_get = Ui_services.storage_get
   ; open_settings = (fun () -> Dialogs_state.open_ "settings")
   ; close_settings = Dialogs_state.close_all
   ; wide_mode_label = I18n.wide_mode
@@ -1128,6 +1128,11 @@ let run ~finish =
   after 30 (fun () -> async_checks (); finish ())
 
 let () =
+  let owner = Thread.id (Thread.self ()) in
+  Platform.install_ui_services
+    ~assert_owner:(fun () ->
+      if Thread.id (Thread.self ()) <> owner then invalid_arg "UI scenario requires its application thread")
+    ~request_flush:Runtime.flush;
   run ~finish:(fun () ->
       Js.log
         (Printf.sprintf "%d checks, %d failures" !checks !failures);

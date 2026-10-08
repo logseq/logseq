@@ -3,6 +3,8 @@
 
 open Test_check
 
+let () = Platform_web.install ~request_flush:Runtime.flush
+
 (* tests exercising model-derived readers stub the live model through
    Runtime.read_model *)
 let model_stub = ref Model.initial
