@@ -91,6 +91,7 @@ tx-log*
 deps/db-sync/data
 *.map
 /dist/db-worker-node.js
+/static/js/db-worker.js
 /dist/build/
 /dist/cli-package/
 /dist/db-worker-node-assets.json
