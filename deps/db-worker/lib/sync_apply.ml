@@ -2342,13 +2342,9 @@ let enqueue_flush_pending repo (client : Sync_state.client) : unit =
   Sync_state.enqueue_catching client.send_queue
     (fun () -> !flush_pending_fn repo client)
     ~on_error:(fun e ->
-       let stack =
-         match Js.Exn.asJsExn e with
-         | Some je -> Option.value (Js.Exn.stack je) ~default:""
-         | None -> ""
-       in
        Worker_log.error "db-sync/flush-pending-queue-failed"
-         [ "repo", repo; "error", Printexc.to_string e; "stack", stack ];
+         [ "repo", repo; "error", Printexc.to_string e
+         ; "stack", Printexc.get_backtrace () ];
        Db_worker_effect.pure ())
 
 (* ---- enqueue-local-tx! ---- *)
