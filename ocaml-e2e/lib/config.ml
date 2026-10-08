@@ -22,4 +22,8 @@ let local_sync =
   | Some ("1" | "true") -> true
   | _ -> false
 
-let mac = false
+(* the app binds move-block chords to mod+shift on macOS and alt+shift
+   elsewhere — match the host the browser actually runs on *)
+external platform : Node.Process.t -> string = "platform" [@@mel.get]
+
+let mac = platform Node.Process.process = "darwin"

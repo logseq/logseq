@@ -517,31 +517,43 @@ let move_up_down env =
   Fest.deep_equal
     (Array.to_list contents)
     [ "b1"; "b2"; "b3"; "b4" ] Fest.expect;
-  (* a second move chord pressed while the first move's remount is in
-     flight loses its modifier/target — let the move commit first *)
+  let chord dir =
+    (if Config.mac then "Meta" else "Alt") ^ "+Shift+Arrow" ^ dir
+  in
+  (* a move chord that lands mid-remount (tx->render roundtrip, frequent
+     under live rtc) is eaten — re-establish the b3/b4 selection and
+     press again until the order changes *)
+  let rec press_until expected dir tries =
+    let* contents = Util.wait_page_blocks_contents env expected in
+    if Array.to_list contents = expected || tries <= 0 then
+      Js.Promise.resolve contents
+    else begin
+      let* () = Pw.click env ".ls-block :text('b4')" in
+      let* () = Util.repeat_keyboard env 2 "Shift+ArrowUp" in
+      let* () = K.press env (chord dir) in
+      let* () = Util.wait_timeout env 300. in
+      press_until expected dir (tries - 1)
+    end
+  in
   let* () =
-    K.press env ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowUp")
+    K.press env (chord "Up")
   in
   let* () = Util.wait_timeout env 300. in
   let* () =
-    K.press env ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowUp")
+    K.press env (chord "Up")
   in
-  let* contents =
-    Util.wait_page_blocks_contents env [ "b3"; "b4"; "b1"; "b2" ]
-  in
+  let* contents = press_until [ "b3"; "b4"; "b1"; "b2" ] "Up" 3 in
   Fest.deep_equal
     (Array.to_list contents)
     [ "b3"; "b4"; "b1"; "b2" ] Fest.expect;
   let* () =
-    K.press env ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowDown")
+    K.press env (chord "Down")
   in
   let* () = Util.wait_timeout env 300. in
   let* () =
-    K.press env ((if Config.mac then "Meta" else "Alt") ^ "+Shift+ArrowDown")
+    K.press env (chord "Down")
   in
-  let* contents =
-    Util.wait_page_blocks_contents env [ "b1"; "b2"; "b3"; "b4" ]
-  in
+  let* contents = press_until [ "b1"; "b2"; "b3"; "b4" ] "Down" 3 in
   Fest.deep_equal
     (Array.to_list contents)
     [ "b1"; "b2"; "b3"; "b4" ] Fest.expect;

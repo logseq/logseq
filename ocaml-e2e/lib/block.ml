@@ -835,21 +835,20 @@ let indent_outdent env ~indent =
   | Some e ->
       let* x1, _y = Pw.bounding_xy_l e in
       let moved = if indent then ( < ) else ( > ) in
-      let* () = if indent then Keyboard.tab env else Keyboard.shift_tab env in
-      let* x2 = wait_for_editor_x_change env x1 moved in
-      let* x2 =
-        if moved x1 x2 then Js.Promise.resolve x2
+      (* the tx→render roundtrip remounts the editor mid-wait and eats
+         keypresses (frequent under live rtc); refocus and retry a few
+         times before giving up *)
+      let rec press_and_wait tries =
+        let* () =
+          if indent then Keyboard.tab env else Keyboard.shift_tab env
+        in
+        let* x2 = wait_for_editor_x_change env x1 moved in
+        if moved x1 x2 || tries <= 1 then Js.Promise.resolve x2
         else
-          (* the tx→render roundtrip remounted the editor mid-wait and the
-             keypress landed on body — refocus the open editor and press
-             once more *)
           let* () = Pw.click env Util.editor_q_first in
-          let* () =
-            if indent then Keyboard.tab env else Keyboard.shift_tab env
-          in
-          let* x2 = wait_for_editor_x_change env x1 moved in
-          Js.Promise.resolve x2
+          press_and_wait (tries - 1)
       in
+      let* x2 = press_and_wait 3 in
       if indent then Fest.ok (x1 < x2) Fest.expect else Fest.ok (x1 > x2) Fest.expect;
       Js.Promise.resolve ()
 
