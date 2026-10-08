@@ -986,6 +986,11 @@ let on_doc_click st ev =
     with
     | Some _ -> ()
     | None -> close_menu st);
+  (* same as src/sidebar/sidebar_state.ml — stop every href="#"
+     anchor's default so it can't race the real navigation *)
+  (match click_target "a[href='#']" ev with
+   | Some _ -> prevent_default ev
+   | None -> ());
   match click_target "a.page-ref, a.tag" ev with
   | Some el -> (
       match
