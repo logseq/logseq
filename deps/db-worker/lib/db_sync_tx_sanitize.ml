@@ -55,9 +55,14 @@ let entity_ref_to_eid (db : db) (r : value) : entity_id option =
   | v ->
       (match entity_ref_of_value v with
        | Some r ->
-           (match (try entity db r with _ -> None) with
-            | Some e -> Some e.id
-            | None -> None)
+           (* entity db r === entid_ref + has-forward-attrs, but skips
+              the lazy entity wrapper — one bounded seek per ref *)
+           (match (try Datascript.entid_ref db r with _ -> None)
+            with
+            | Some id
+              when Option.is_some (Seq.uncons (datoms db Eavt ~e:id ()))
+              -> Some id
+            | _ -> None)
        | None -> None)
 
 module Value_set = Set.Make (struct
