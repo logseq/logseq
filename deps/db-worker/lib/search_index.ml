@@ -1583,14 +1583,89 @@ let truncate_vector_index (vector_index : Vector_index.index option) =
 
 (* ---- build index ---- *)
 
+(* Datom-level mirror of hidden_entity for the index-build scan. On an
+   E node each ref-attr read (block/tags, block/page, and the
+   block/parent ancestor chain) materializes the full attr map of every
+   ref target via materialize_ref_values — whole-entity maps per block
+   per ancestor. The predicate only touches a handful of scalar flags
+   and ref ids, so read them as constrained datoms instead. Keep this
+   aligned with hidden_entity/hidden_search_node/Ev.hidden above. *)
+
+let ref_ids_datom (db : db) (e : entity_id) (a : attr) : entity_id list =
+  (* Ldb.ref_ids without ref-target materialization; drops dangling
+     refs like entity_visible_attr_values. *)
+  datoms db Eavt ~e ~a ()
+  |> Seq.filter_map (fun (d : datom) ->
+         match d.v with
+         | Ref id -> Some id
+         | Int64 i -> Datascript.Util.int64_to_int i
+         | _ -> None)
+  |> List.of_seq
+  |> List.filter (fun id ->
+         Option.is_some (Seq.uncons (datoms db Eavt ~e:id ())))
+
+let truthy_datom (db : db) (e : entity_id) (a : attr) : bool =
+  match find_datom db Eavt ~e ~a () with
+  | Some d -> Ldb.truthy (Some d.v)
+  | None -> false
+
+(* Ev.hidden: own hide?/deleted-at or any block/parent ancestor's *)
+let hidden_datom (db : db) (e : entity_id) : bool =
+  let flags id =
+    truthy_datom db id "logseq.property/hide?"
+    || truthy_datom db id "logseq.property/deleted-at"
+  in
+  let parent_of id =
+    match ref_ids_datom db id "block/parent" with
+    | p :: _ -> Some p
+    | [] -> None
+  in
+  let rec hidden_parent (parent : entity_id option) (seen : entity_id list) : bool =
+    match parent with
+    | Some id when not (List.mem id seen) ->
+        flags id || hidden_parent (parent_of id) (id :: seen)
+    | _ -> false
+  in
+  flags e || hidden_parent (parent_of e) []
+
+(* Ev.has_tag via block/tags ref ids *)
+let has_tag_datom (db : db) (e : entity_id) (tag_ident : string) : bool =
+  List.exists
+    (fun tag ->
+       match find_datom db Eavt ~e:tag ~a:"db/ident" () with
+       | Some d -> d.v = Keyword tag_ident
+       | None -> false)
+    (ref_ids_datom db e "block/tags")
+
+(* hidden_entity: is_property entities check deleted-at or private
+   built-in (property: built-in? && not public?); others take the
+   hidden walk; plus the block/page hidden-unless-"Quick add" rule. *)
+let hidden_entity_datom (db : db) (e : entity_id) : bool =
+  (if has_tag_datom db e "logseq.class/Property" then
+     (* hidden_search_node treats deleted-at by presence, not truthy *)
+     Option.is_some
+       (find_datom db Eavt ~e ~a:"logseq.property/deleted-at" ())
+     || (truthy_datom db e "logseq.property/built-in?"
+         && not (truthy_datom db e "logseq.property/public?"))
+   else hidden_datom db e)
+  ||
+  (match ref_ids_datom db e "block/page" with
+   | page :: _ ->
+       hidden_datom db page
+       && (match find_datom db Eavt ~e:page ~a:"block/title" () with
+            | Some d -> d.v <> String "Quick add"
+            | None -> true)
+   | [] -> false)
+
 let get_all_blocks (db : db) : entity list =
   datoms db Avet ~a:"block/uuid" ()
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
-         | Uuid _ -> Ldb.ent_of_id db d.e
+         | Uuid _ ->
+             if hidden_entity_datom db d.e then None
+             else Ldb.ent_of_id db d.e
          | _ -> None)
   |> List.of_seq
-  |> List.filter (fun e -> not (hidden_entity (Ev.of_entity e)))
 
 let build_blocks_indice ?(include_vector_title = false) (db : db) : index_item list =
   List.filter_map
