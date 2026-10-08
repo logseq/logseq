@@ -2713,6 +2713,101 @@ let test_pull_ok_clears_pending_pull_request_marker () =
           Sync_handle_message.handle_message test_repo client raw_message;
           check "marker cleared" (!(client.pending_pull_since) = None)))
 
+(* 5f6e3a4cd9: cljs tx-item-ref-block-uuids inspects positions 1 and 3 on
+   ANY vector — a short op like [:db/retractEntity [:block/uuid u]] carries
+   the ref at position 1 and must not slip past missing-ref detection *)
+let test_tx_item_ref_block_uuids_short_ops () =
+  let u = fresh_uuid () in
+  let ref_ = block_uuid_lookup (Wire.Uuid u) in
+  check "retractEntity pos-1"
+    (List.mem u
+       (Sync_apply.tx_item_ref_block_uuids
+          (Wire.Array [ kw "db/retractEntity"; ref_ ])));
+  check "add pos-3"
+    (List.mem u
+       (Sync_apply.tx_item_ref_block_uuids
+          (db_add (Wire.Int 1) "block/parent" ref_)))
+
+(* c394d0a69a + 4e5409d7e0: upload sanitize drops items whose missing
+   block/uuid ref sits in attr position, nested inside a coll value, or in
+   a cas/fn slot past position 3 — transact resolves all of them strictly
+   and would crash the entry *)
+let test_prepare_upload_drops_deep_missing_refs () =
+  preserve_state (fun () ->
+      let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      let tx_id = fresh_uuid () in
+      let missing_ref = block_uuid_lookup (Wire.Uuid (fresh_uuid ())) in
+      let live = block_uuid_lookup (entity_block_uuid child1) in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"transact" tx_id
+                ~tx_data_v:
+                  (tx_data
+                     [ db_add live "block/title" (Wire.String "kept")
+                     ; (* attr position *)
+                       Wire.Array [ kw "db/add"; live; missing_ref
+                                  ; Wire.String "v" ]
+                     ; (* nested inside a coll value *)
+                       Wire.Array [ kw "db/add"; live; kw "block/refs"
+                                  ; Wire.Set [ missing_ref ] ]
+                     ; (* extras slot (pos 4) *)
+                       Wire.Array [ kw "db/cas"; live; kw "block/title"
+                                  ; Wire.String "old"; missing_ref ] ]) ];
+          let pending = Sync_apply.pending_tx_rows test_repo () in
+          let tx_entries, _drop_tx_ids, _drop_txs =
+            Sync_apply.prepare_upload_tx_entries ~repo:test_repo (Some conn)
+              pending
+          in
+          match tx_entries with
+          | [ e ] -> (
+              match Wire.get "tx-data" e with
+              | Some (Wire.Array items | Wire.List items) ->
+                  check "one item kept" (List.length items = 1);
+                  check "kept the valid add"
+                    (List.hd items
+                     = db_add live "block/title" (Wire.String "kept"))
+              | _ -> Alcotest.fail "entry has no tx-data")
+          | _ -> Alcotest.fail "expected one tx entry"))
+
+(* b96e0400c1: retractEntity on a property entity derives per-value
+   db/retract ops for every datom carrying its ident — otherwise the
+   property's values outlive it on every replica *)
+let test_sanitize_tx_derives_property_value_retracts () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~properties:
+            [ ( "status"
+              , { Db_test_util.default_property with p_type = "default" }
+              ) ]
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with pg_title = Some "page" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "b1"
+                    ; b_properties = [ "status", Str "Todo" ] } ] } ]
+          ()
+      in
+      let db = Datascript.db conn in
+      let result =
+        List.map Ds_wire.value_of_transit
+          [ Wire.Array
+              [ kw "db/retractEntity"; Wire.Keyword "user.property/status" ] ]
+        |> Db_sync_tx_sanitize.sanitize_tx db
+      in
+      check "ident retracts derived"
+        (List.exists
+           (function
+             | Vector
+                 [ Keyword "db/retract"; Ref _
+                 ; Keyword "user.property/status"; _ ]
+             | List
+                 [ Keyword "db/retract"; Ref _
+                 ; Keyword "user.property/status"; _ ] -> true
+             | _ -> false)
+           result))
+
 (* cljs redefs of flush-pending! + enqueue-asset-sync! shared by the
    hello tests *)
 let with_hello_redefs (f : unit -> 'a) : 'a =
@@ -2722,6 +2817,23 @@ let with_hello_redefs (f : unit -> 'a) : 'a =
     (fun _ _ ~enqueue_asset_task:_ ~current_client:_ ~broadcast_rtc_state:_ ->
        ());
   f ()
+
+(* cb8e827d9a: a hello means a fresh handshake — a pull issued on the dead
+   socket can never be answered, so the dedup marker must clear or every
+   later request_pull at the same local_tx is suppressed forever *)
+let test_hello_clears_pending_pull_marker () =
+  preserve_state (fun () ->
+      let conn, ops, _p, _c1, _c2, _c3 = setup_parent_child () in
+      let raw_message =
+        msg_json [ "type", Wire.String "hello"; "t", Wire.Int 0 ]
+      in
+      let client = mk_client ~pending_pull_since:(Some 3) () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Hashtbl.remove Sync_apply.repo_latest_remote_tx test_repo;
+          with_hello_redefs (fun () ->
+              Sync_handle_message.handle_message test_repo client
+                raw_message;
+              check "marker cleared" (!(client.pending_pull_since) = None))))
 
 (* cljs hello-checksum-mismatch-logs-warning-test *)
 let test_hello_checksum_mismatch_logs_warning () =
@@ -15531,6 +15643,15 @@ let () =
         ; Alcotest.test_case
             "stamps-on-missing-entities-are-dropped-test" `Quick
             test_stamps_on_missing_entities_are_dropped
+        ; Alcotest.test_case "hello-clears-pending-pull-marker-test" `Quick
+            test_hello_clears_pending_pull_marker
+        ; Alcotest.test_case "tx-item-ref-block-uuids-short-ops-test"
+            `Quick test_tx_item_ref_block_uuids_short_ops
+        ; Alcotest.test_case "prepare-upload-drops-deep-missing-refs-test"
+            `Quick test_prepare_upload_drops_deep_missing_refs
+        ; Alcotest.test_case
+            "sanitize-tx-derives-property-value-retracts-test" `Quick
+            test_sanitize_tx_derives_property_value_retracts
         ] )
     ; ( "db-sync-upload"
       , Test_db_sync_upload_native.cases ) ]
