@@ -1065,17 +1065,27 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
                          (Signal.map (fun js -> js = []) journals_sig))
                     (box ~key:"jp" ~padding:24
                        ~style_class:"journal-item-placeholder animate-pulse" [])
-                ; Virt_list.rows_sig
-                    ~key:(fun (p : Model.page) ->
-                      Option.value p.Model.page_uuid
-                        ~default:p.Model.page_title)
-                    ~cmp:String.compare
-                    ~mount:(journal_item_sig ms)
-                    ~initial_rows:4
-                    ~estimate_size:(fun _ -> 800.)
-                    ~on_end:(fun () ->
-                      ignore (!Runtime.journals_load_more ()))
-                    journals_sig
+                ; (if Virt_list.enabled ~virtualize:true
+                         (List.length (Signal.get journals_sig))
+                   then
+                     Virt_list.rows_sig
+                       ~key:(fun (p : Model.page) ->
+                         Option.value p.Model.page_uuid
+                           ~default:p.Model.page_title)
+                       ~cmp:String.compare
+                       ~mount:(journal_item_sig ms)
+                       ~initial_rows:4
+                       ~estimate_size:(fun _ -> 800.)
+                       ~on_end:(fun () ->
+                         ignore (!Runtime.journals_load_more ()))
+                       journals_sig
+                   else
+                     Lui_elements.keyed ~source:journals_sig
+                       ~key:(fun (p : Model.page) ->
+                         Option.value p.Model.page_uuid
+                           ~default:p.Model.page_title)
+                       ~cmp:String.compare
+                       ~mount:(journal_item_sig ms))
                 ]
             ]
         ]
