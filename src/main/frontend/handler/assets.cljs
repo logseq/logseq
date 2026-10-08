@@ -4,6 +4,7 @@
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
@@ -214,7 +215,7 @@
   (if-let [^js url (try
                      (js/URL. (string/replace file-url "assets://" "file://"))
                      (catch :default e
-                       (js/console.error "Failed to construct URL in file-url->encoded-path:" file-url e)
+                       (log/error :assets/file-url-parse-failed {:file-url file-url :error e})
                        nil))]
     (let [path (.-pathname url)
           host (.-host url)
@@ -226,7 +227,8 @@
           ;; decode-protected-assets-schema-path); restore it before the
           ;; drive-letter rule below so it resolves to a native C:/ path
           path (string/replace path "/logseq__colon/" ":/")
-          path (if (re-find #"(?i)^/[a-zA-Z]:" path) ;; Win path fix
+          ;; Win path fix: /C: or /C%3A (encoded drive colon) -> C:
+          path (if (re-find #"(?i)^/[a-zA-Z](?::|%3A)" path)
                  (subs path 1)
                  path)]
       (if (string/blank? host)
