@@ -15,3 +15,12 @@
     -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_COLUMN_METADATA
     -DSQLITE_THREADSAFE=1))))
 
+;; The amalgamation is downloaded and verified at build time instead of
+;; being vendored (~9MB of generated C). Bump the version inside
+;; fetch-sqlite.sh to upgrade SQLite.
+(rule
+ (targets sqlite3.c sqlite3.h sqlite3ext.h)
+ (deps fetch-sqlite.sh)
+ (action
+  (run sh fetch-sqlite.sh)))
+

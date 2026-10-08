@@ -67,7 +67,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/*.opam', 'cli/*.opam', 'ocaml-e2e/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/*.opam', 'cli/*.opam', 'ocaml-e2e/*.opam') }}
           restore-keys: |
             ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
 

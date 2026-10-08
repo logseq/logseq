@@ -2,3 +2,6 @@ _build/
 *.install
 *.sqlite
 *~2F*/
+vendor/sqlite3/sqlite3.c
+vendor/sqlite3/sqlite3.h
+vendor/sqlite3/sqlite3ext.h
