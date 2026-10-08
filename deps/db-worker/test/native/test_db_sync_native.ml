@@ -145,6 +145,9 @@ let preserve_state (f : unit -> 'a) : 'a =
   let remote_retracted_prev =
     Hashtbl.copy Sync_state.remote_retracted_keys
   in
+  let remote_touched_prev =
+    Hashtbl.copy Sync_state.remote_touched_entities
+  in
   let prep_prev = !(Sync_apply.prepare_upload_tx_entries_fn) in
   let flush_prev = !(Sync_apply.flush_pending_fn) in
   let client_prev = !(Sync_state.db_sync_client) in
@@ -240,6 +243,10 @@ let preserve_state (f : unit -> 'a) : 'a =
       Hashtbl.iter
         (Hashtbl.replace Sync_state.remote_retracted_keys)
         remote_retracted_prev;
+      Hashtbl.reset Sync_state.remote_touched_entities;
+      Hashtbl.iter
+        (Hashtbl.replace Sync_state.remote_touched_entities)
+        remote_touched_prev;
       Sync_state.db_sync_client := client_prev;
       Sync_state.dev_or_test := dev_or_test_prev;
       Sync_apply.prepare_upload_tx_entries_fn := prep_prev;

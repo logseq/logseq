@@ -316,6 +316,25 @@ let set_remote_asserted repo (keys : SSet.t) : unit =
    gate on remote_asserted carrying a different live value *)
 let remote_retracted_keys : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
 
+(* accumulate-only: uuids ever written at e-position by an applied
+   confirmed tx. remote_asserted/retracted keys come and go as values
+   are re-asserted and rescinded — this set answers a different
+   question ("did confirmed state ever reach this entity") for the
+   unapply phantom sweep, which must never retractEntity a
+   server-known uuid just because its datoms kept an unconfirmed stamp
+   across a no-op re-assert *)
+let remote_touched_entities : (string, SSet.t) Hashtbl.t =
+  Hashtbl.create 7
+
+let remote_touched repo : SSet.t =
+  match Hashtbl.find_opt remote_touched_entities repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let add_remote_touched repo (u : string) : unit =
+  Hashtbl.replace remote_touched_entities repo
+    (SSet.add u (remote_touched repo))
+
 let remote_retracted repo : SSet.t =
   match Hashtbl.find_opt remote_retracted_keys repo with
   | Some s -> s

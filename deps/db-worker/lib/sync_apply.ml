@@ -626,6 +626,9 @@ let record_remote_asserted (db : db) (repo : string) (items : Wire.t list)
               || op = Wire.keyword "db/cas" -> (
            match a_w with
            | Wire.Keyword a | Wire.Symbol a -> (
+               (match tx_item_block_uuid db e with
+                | Some u -> Sync_state.add_remote_touched repo u
+                | None -> ());
                let v' =
                  if op = Wire.keyword "db/cas" then
                    match item with
@@ -675,6 +678,23 @@ let tx_item_ref_value_uuids (db : db) (item : Wire.t) : string list =
 
 let tx_item_missing_block_ref ?(display_db : db option) (db : db)
     (created : SSet.t) (item : Wire.t) : bool =
+  (* a db/add misses a ref only at strict positions: an e-position
+     [:block/uuid u] lookup resolves through entid-strict (crash on
+     miss) and a v-position ref on a ref-typed attr the same. A bare
+     uuid string at e-position is a tempid — it materializes, never
+     misses — so exclude it from the missing set for add items. *)
+  let refs =
+    match item with
+    | Wire.Array l | Wire.List l
+      when tx_item_add item && List.length l >= 2 ->
+        List.filter_map block_uuid_lookup_ref_value [ List.nth l 1 ]
+        @ List.filter_map block_uuid_lookup_ref_value
+            (if List.length l >= 4 then [ List.nth l 3 ] else [])
+        @ block_uuid_refs_deep item
+        @ tx_item_ref_value_uuids db item
+    | _ ->
+        tx_item_ref_block_uuids item @ tx_item_ref_value_uuids db item
+  in
   List.exists
     (fun block_uuid ->
        (not (SSet.mem block_uuid created))
@@ -683,7 +703,7 @@ let tx_item_missing_block_ref ?(display_db : db option) (db : db)
        match display_db with
        | Some ddb -> Outliner_op.entity_of_uuid ddb block_uuid = None
        | None -> true)
-    (tx_item_ref_block_uuids item @ tx_item_ref_value_uuids db item)
+    refs
 
 let tx_item_entity_block_uuid ?(temp_id_uuid = Hashtbl.create 0)
     (db : db) (item : Wire.t) : string option =

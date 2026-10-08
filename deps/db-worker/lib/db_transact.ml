@@ -319,7 +319,17 @@ let expand_delete_blocks_tx db (txs : Wire.t list) (tx_meta : tx_meta)
     | Some (Keyword k) -> Some k
     | _ -> None
   in
-  if outliner_op = Some "delete-blocks" then
+  (* remote txs arrive with the authoring client's subtree expansion
+     already baked into tx-data — the server ingests those items
+     verbatim (its transact carries no outliner-op meta). Re-expanding
+     on the pull path against this conn's tree state would append
+     retractEntitys the journal never carried whenever the puller's
+     view of the subtree differs (e.g. it created a descendant early
+     via its own upload) *)
+  let remote_apply =
+    List.assoc_opt "transact-remote?" tx_meta = Some (Bool true)
+  in
+  if outliner_op = Some "delete-blocks" && not remote_apply then
     let subtree_tx =
       retracted_entities db txs
       |> List.filter block_entity

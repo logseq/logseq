@@ -1253,16 +1253,21 @@ let rewrite_missing_uuid_refs
      lone block/uuid shell fails schema validation — so refs to one
      drop the item *)
   let written_uuids (items : Wire.t list) : SSet.t =
+    (* only e-positions that materialize an entity count as written —
+       a bare uuid scalar upserts, while a [:block/uuid u] lookup is
+       strict (it crashes on a miss, it never fills an entity in) *)
     List.fold_left
       (fun acc item ->
          match item with
          | Wire.Array (op :: e :: _ :: _)
          | Wire.List (op :: e :: _ :: _)
            when op = Wire.keyword "db/add" -> (
-             match entity_pos_uuid e with
-             | Some u ->
+             match e with
+             | Wire.Uuid u ->
                  SSet.add (Datascript.Util.uuid_canonicalize u) acc
-             | None -> acc)
+             | Wire.String s when Sync_state.uuid_string s ->
+                 SSet.add (Datascript.Util.uuid_canonicalize s) acc
+             | _ -> acc)
          | _ -> acc)
       SSet.empty items
   in
@@ -1278,17 +1283,24 @@ let rewrite_missing_uuid_refs
       (not (on_srv u)) && not (Hashtbl.mem created' u)
       && not (SSet.mem u written)
     in
-    let rec any_missing w =
+    (* a ref whose target can't exist on this conn — not present, not
+       created and not e-written by this tx — can never resolve, so the
+       item carrying it drops and its entity joins stale (the converge
+       pass then drops the entity's remaining items). e-written uuids
+       are excluded by `missing` itself: their refs land verbatim on
+       the materialized shell *)
+    let doomed u = missing u in
+    let rec any_doomed w =
       match uuid_of_ref_pos w with
-      | Some u -> missing u
+      | Some u -> doomed u
       | None -> (
           match w with
-          | Wire.Array xs -> List.exists any_missing xs
-          | Wire.List xs -> List.exists any_missing xs
-          | Wire.Set xs -> List.exists any_missing xs
+          | Wire.Array xs -> List.exists any_doomed xs
+          | Wire.List xs -> List.exists any_doomed xs
+          | Wire.Set xs -> List.exists any_doomed xs
           | Wire.Map kvs ->
-              List.exists (fun (k, v) -> any_missing k || any_missing v) kvs
-          | Wire.Tagged (_, v) -> any_missing v
+              List.exists (fun (k, v) -> any_doomed k || any_doomed v) kvs
+          | Wire.Tagged (_, v) -> any_doomed v
           | _ -> false)
     in
     let drops (item : Wire.t) : bool =
@@ -1299,12 +1311,18 @@ let rewrite_missing_uuid_refs
           (match
              Sync_apply.tx_item_entity_block_uuid ~temp_id_uuid db item
            with
-           | Some u -> SSet.mem (Datascript.Util.uuid_canonicalize u) !stale
+           (* a stale uuid's own db/add items still land: they are the
+              journal's verbatim e-position writes that materialize it —
+              suppressing them makes the stale mark irrevocable and the
+              entity never revives. stale only guards v-position refs *)
+           | Some u ->
+               let u = Datascript.Util.uuid_canonicalize u in
+               SSet.mem u !stale && not (SSet.mem u written)
            | None -> false)
           ||
           match a with
           | Wire.Keyword attr when ref_attr db attr ->
-              List.exists any_missing (v :: rest)
+              List.exists any_doomed (v :: rest)
           | _ -> false)
       | _ -> false
     in
@@ -1312,7 +1330,9 @@ let rewrite_missing_uuid_refs
       List.fold_left
         (fun (k, d) item ->
            if drops item then
-             ( k
+             ( Worker_log.warn "sync/replay-drop"
+                 [ "item", Transit_codec.to_string item ];
+               k
              , (* only entities that can't exist — ones absent on the
                   conn — go stale; a live entity keeps its other items *)
                match
@@ -1591,6 +1611,14 @@ let transact_remote_txs
           |> List.map (resolve_temp_id db)
           |> drop_stale_adds_after_remote_entity_delete
         in
+        (if tx_data = [] && raw_tx_data <> [] then
+           Worker_log.warn "sync/remote-tx-emptied"
+             [ "outliner-op", remote_op
+             ; "raw-items"
+             , String.concat "|"
+                 (List.map
+                    (fun (item : Wire.t) -> Transit_codec.to_string item)
+                    (List.filteri (fun i _ -> i < 30) raw_tx_data)) ]);
         let report =
           match tx_data with
           | [] -> None
@@ -1627,13 +1655,28 @@ let transact_remote_txs
                | Some u -> SSet.add u dead, SSet.remove u alive
                | None -> (
                    match item with
-                   | Wire.Array (op :: _ :: a :: v :: _)
-                   | Wire.List (op :: _ :: a :: v :: _)
+                   | Wire.Array (op :: e :: a :: v :: _)
+                   | Wire.List (op :: e :: a :: v :: _)
                      when op = Wire.keyword "db/add"
                           && a = Wire.keyword "block/uuid" -> (
                        match Sync_apply.uuid_str_of_wire v with
                        | Some u -> SSet.remove u dead, SSet.add u alive
                        | None -> dead, alive)
+                   | Wire.Array (op :: e :: _ :: _)
+                   | Wire.List (op :: e :: _ :: _)
+                     when op = Wire.keyword "db/add" -> (
+                       (* an e-position block/uuid write revives the
+                          entity (upsert materializes it) — without this
+                          arm a delete->upsert-revive leaves remote_deleted
+                          marked and every later verbatim ref to the
+                          revived entity is dropped, yielding bare
+                          shells *)
+                       match block_uuid_lookup_ref_value e with
+                       | Some u -> SSet.remove u dead, SSet.add u alive
+                       | None -> (
+                           match uuid_str_of_wire e with
+                           | Some u -> SSet.remove u dead, SSet.add u alive
+                           | None -> dead, alive))
                    | _ -> dead, alive))
             (SSet.empty, SSet.empty) raw_tx_data
         in
@@ -2731,6 +2774,21 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
        mark ownership. Any confirmed-stamp datom means confirmed state
        reached this entity — retracting it would drop a server-known
        entity every replica shares *)
+    (* confirmed-knowledge check beyond stamps: a verbatim confirmed tx
+       that merely re-asserts an existing (e,a,v) leaves the local
+       unconfirmed stamp in place, so stamp inspection alone marks a
+       shared entity phantom. remote_asserted records exactly which
+       subjects confirmed txs touched — any uuid asserted there is
+       server-known regardless of which stamp its datoms carry *)
+    let asserted_uuids =
+      SSet.fold
+        (fun (k : string) acc ->
+           match String.index_opt k ':' with
+           | Some i when i > 0 && k.[0] = 'u' ->
+               SSet.add (String.sub k 1 (i - 1)) acc
+           | _ -> acc)
+        (Sync_state.remote_asserted repo) SSet.empty
+    in
     let phantom_entity db (ent : entity) : bool =
       let confirmed =
         Seq.exists
@@ -2744,7 +2802,11 @@ let unapply_persisted_pending_txs repo (conn : conn) : unit =
        pending_created_uuids
        |> List.filter_map (fun u ->
               match Outliner_op.entity_of_uuid db u with
-              | Some ent when phantom_entity db ent ->
+              | Some ent when phantom_entity db ent
+                              && not (SSet.mem u asserted_uuids)
+                              && not
+                                   (SSet.mem u
+                                      (Sync_state.remote_touched repo)) ->
                   Some
                     (Wire.Array
                        [ Wire.keyword "db/retractEntity"
