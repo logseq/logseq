@@ -373,8 +373,8 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         (* the last data row rendered — ask the owner for the next page
            (journals scroll-back pagination; a no-op hook on fixed-size
            lists) *)
-        (match List.nth_opt rows (List.length rows - 1) with
-         | Some r when r.v_index >= Array.length !data - 1 -> on_end ()
+        (match List.rev rows with
+         | r :: _ when r.v_index >= Array.length !data - 1 -> on_end ()
          | _ -> ());
         (* cljs virtuoso items-rendered: while a block-range drag is in
            progress the selection extends to the boundary row in the
