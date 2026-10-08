@@ -1655,8 +1655,8 @@ let transact_remote_txs
                | Some u -> SSet.add u dead, SSet.remove u alive
                | None -> (
                    match item with
-                   | Wire.Array (op :: e :: a :: v :: _)
-                   | Wire.List (op :: e :: a :: v :: _)
+                   | Wire.Array (op :: _ :: a :: v :: _)
+                   | Wire.List (op :: _ :: a :: v :: _)
                      when op = Wire.keyword "db/add"
                           && a = Wire.keyword "block/uuid" -> (
                        match Sync_apply.uuid_str_of_wire v with
