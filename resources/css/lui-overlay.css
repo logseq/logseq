@@ -2930,12 +2930,21 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0;
 }
 
-/* cljs settings.css aside: @apply bg-gray-03-alpha p-4 — natural width,
-   no fixed column (stretches full-width in the below-md column layout) */
+/* cljs settings.css aside: @apply bg-gray-03-alpha p-4 + md:w-64
+   {:style {:min-width "10rem"}} — the column is 256px wide at >=md,
+   shrinking to min 160px */
 .cp__settings-inner > .settings-aside,
 .cp__settings-inner aside {
   background: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha));
   padding: 1rem;
+  min-width: 10rem;
+}
+
+@media (min-width: 768px) {
+  .cp__settings-inner > .settings-aside,
+  .cp__settings-inner > aside {
+    width: 16rem;
+  }
 }
 
 .cp__settings-inner .settings-menu > .settings-menu-item {

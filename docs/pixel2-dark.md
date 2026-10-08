@@ -34,7 +34,7 @@ pair under `docs/pixel2-dark/` and emits `diff-*.png` + `diff-results.json`.
 
 | % | surface | note |
 |---|---------|------|
-| 4.49 | 10-settings-general | settings article row offset (~10px vertical drift); colors match |
+| ~~4.49~~ → ~1.2 | 10-settings-general | article x offset — FIXED (aside missing `md:w-64`); residual ~10px vertical drift inside .it control columns |
 | 3.13 | 04-blocks-bottom | ~1-line scroll drift + block-ref uuid text |
 | 2.93 | 03-blocks-mid | scroll drift |
 | 2.51 | 12-appearance | settings article offset |

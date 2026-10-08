@@ -116,8 +116,11 @@ in current master (toolbar = `Add icon`, `Add tag property`, `All` tab,
   (~400px) plus the separate top-header band.
 - **First block row on Page Alpha**: full-row diff — content identical,
   likely rasterization + slight x-offset of bullet/text.
-- **Settings screens (~1.2-1.3%)**: residual text-rasterization + small
-  control-spacing deltas, no structural mismatch found.
+- **Settings screens**: aside `md:w-64` contract was missing — the nav
+  column rendered ~144px wide instead of 256px, shifting the whole
+  article 112px left (settings-general 4.14%→1.21%). Residual ~1.2% =
+  ~3px drift inside `.it` control columns, 1px/row nav stride, and
+  text raster — matching the previously documented floor.
 - ~~Rename menu structure~~ **FIXED**: LUI's view-tab menu now renders
   `Rename` as `ui__dropdown-menu-sub-trigger` → `ui__dropdown-menu-sub-content`
   with the inline editor inside (`MSub` + `MCustom`), matching master's
