@@ -80,17 +80,29 @@ with the full Logseq palette (~30 colors per mode) plus the Solarized
 highlight-editor theme (`ThemeConfig.highlight`), then `Theme::change`.
 Dark gpui-vs-web dropped from ~90% to 2.4–3.5%.
 
+### F2a — page-column centering (fixed)
+
+The `.cp__sidebar-main-content` class registration carried
+`margin-left:auto;margin-right:auto` from the web stylesheet. Under
+taffy, each main-axis auto margin receives the full free space — so
+`margin-left:auto` pushed the 960px column hard right (bounds
+`[320,245 960x378]`) and the OCaml `row ~main:`center` wrapper
+(native/chrome.ml `main_content`) had no space left to center within.
+Dropping the margins lets the row's justify-center place the column at
+`[160,245 960x378]` — same column position as the web.
+
+### F2b — page-title metrics (fixed)
+
+gpui rendered the page title at 20px/600 via the generic `title` style
+utility; the web's `.ls-page-title-container` sets 32px/500 with the
+`--ls-title-text-color`. Registered that class in the host's class
+dictionary — the title now matches the web's metrics.
+
 ### F2 — residual layout divergence vs web (>1%, documented exception)
 
-With palette and content issues fixed, gpui-vs-web sits at 2.4–3.5% — just
-above the web-vs-master baseline (2.0–2.4% light). Diff heatmaps localize
-the remainder to:
-
-- **Page title metrics** — gpui renders the page title smaller and
-  centered; web renders a large left-aligned `ls-page-title`. The gpui
-  side resolves the `title` style-class token to `text_xl + semibold`;
-  the web's `.title` carries app-specific sizing the generic utility
-  resolver doesn't reproduce.
+With palette, centering and title fixed, gpui-vs-web sits at ~2.5% —
+just above the web-vs-master baseline (2.0–2.4% light). Diff heatmaps
+localize the remainder to:
 - **Property rows** — `source-url`/`rating` render as name+value columns
   on web (name left, value mid-column); gpui spreads them name-left /
   value-far-right. The property table is a host-level row layout, not yet
