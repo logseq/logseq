@@ -102,6 +102,51 @@ let run ~enqueue ~drain ~set_owner () =
         Ui_task.cancel dependent;
         drain ();
         check "pending callback respects dependent cancellation" (!calls = 0));
+      "queued completions run in submission order", (fun () ->
+        let first, resolve_first, _ = Ui_task.pending () in
+        let second, resolve_second, _ = Ui_task.pending () in
+        let pushed = ref [] in
+        ignore (Ui_task.bind first (fun _ -> pushed := !pushed @ [ `First ]; Ui_task.resolve ()));
+        ignore (Ui_task.bind second (fun _ -> pushed := !pushed @ [ `Second ]; Ui_task.resolve ()));
+        resolve_first ();
+        resolve_second ();
+        check "queued completions cannot run inline" (!pushed = []);
+        drain ();
+        check "queued completions keep submission order" (!pushed = [ `First; `Second ]));
+      "rejected arm still releases its queued successor", (fun () ->
+        (* the apply queue's either-outcome tail: a failed apply must not
+           poison the queue — the next arm still runs *)
+        let arm, _, reject_arm = Ui_task.pending () in
+        let tail = Ui_task.catch arm (fun _ -> Ui_task.resolve ()) in
+        let successor_ran = ref false in
+        ignore (Ui_task.bind tail (fun () -> successor_ran := true; Ui_task.resolve ()));
+        reject_arm (Failure "apply failed");
+        drain ();
+        check "queued successor runs after a rejected arm" !successor_ran);
+      "graph-switch retires stale completions", (fun () ->
+        (* a route switch cancels the in-flight fetch; its late reply
+           must not publish, and work armed for the new route still
+           completes *)
+        let fetch, resolve_fetch, _ = Ui_task.pending () in
+        let published = ref None and retired = ref false in
+        let landed =
+          Ui_task.bind fetch
+            (fun page -> published := Some page; Ui_task.resolve ())
+        in
+        ignore
+          (Ui_task.catch landed
+             (fun e -> retired := e = Ui_task.Cancelled; Ui_task.resolve ()));
+        Ui_task.cancel landed;
+        Ui_task.cancel fetch;
+        resolve_fetch "stale page";
+        drain ();
+        check "late completion after the switch is suppressed"
+          (!published = None && !retired);
+        let next, resolve_next, _ = Ui_task.pending () in
+        ignore (Ui_task.bind next (fun page -> published := Some page; Ui_task.resolve ()));
+        resolve_next "fresh page";
+        drain ();
+        check "work armed after the switch completes" (!published = Some "fresh page"));
       "creation exceptions reject asynchronously", (fun () ->
         let received = ref None in
         let task = Ui_task.create (fun ~resolve:_ ~reject:_ -> failwith "request startup failed") in
