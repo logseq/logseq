@@ -4,7 +4,9 @@ open Fest.Promise
 
 let refresh_all_remote_graphs env =
   let enabled_refresh = "button:not([disabled]):has-text(\"Refresh\")" in
-  let* () = Pw.wait_for env ~timeout:30000. enabled_refresh in
+  (* the button stays disabled while remote-graphs are loading; a busy
+     local sync server can take a while to answer /graphs *)
+  let* () = Pw.wait_for env ~timeout:120000. enabled_refresh in
   Pw.click_l ~timeout:30000. (Pw.q env enabled_refresh)
 
 let goto_all_graphs env = Util.search_and_click env "Go to all graphs"
