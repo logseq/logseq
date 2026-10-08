@@ -101,6 +101,20 @@ jobs:
           path: static/
           retention-days: 1
 
+      # RTC tests sync against a local db-sync server (the node adapter)
+      # instead of api.logseq.io.
+      - name: Build db-sync node adapter for RTC tests
+        run: |
+          pnpm --dir deps/db-sync install --frozen-lockfile --ignore-workspace
+          pnpm --dir deps/db-sync build:node-adapter
+
+      - name: Upload db-sync node adapter
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-sync-node-adapter
+          path: deps/db-sync/worker/dist/node-adapter.js
+          retention-days: 1
+
   test:
     name: Test ${{ matrix.shard }}
     needs: build
@@ -171,6 +185,29 @@ jobs:
         with:
           name: static-build
           path: static
+
+      - name: Set up Node
+        if: matrix.shard == 'outliner-rtc'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        if: matrix.shard == 'outliner-rtc'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Download db-sync node adapter
+        if: matrix.shard == 'outliner-rtc'
+        uses: actions/download-artifact@v4
+        with:
+          name: db-sync-node-adapter
+          path: deps/db-sync/worker/dist
+
+      - name: Install db-sync deps
+        if: matrix.shard == 'outliner-rtc'
+        run: pnpm --dir deps/db-sync install --frozen-lockfile --ignore-workspace
 
       - name: Run e2e tests
         env:
