@@ -784,19 +784,38 @@ let current_time () : string =
   Printf.sprintf "%d:%02d %s" h12 minute (if hour < 12 then "AM" else "PM")
 
 let variable_rules ~current_page_title ~today_day =
-  let today_date =
+  (* An explicit today_day is a calendar day in its own tz; resolving the
+     journal title through the host-local tz would shift it a day west of
+     the date line.  Do the day arithmetic on civil fields in the date's
+     own tz — out-of-range days roll over on epoch_ms_of_civil. *)
+  let day_fields, tz =
     match today_day with
-    | Some day -> Date_time_util.local_date_start_ms day
-    | None -> Date_time_util.today_ms ()
+    | Some d -> Time.local_date_fields d, Time.local_date_tz d
+    | None ->
+      let year, month, day, _, _, _, _ =
+        Time.civil_fields
+          (Time.civil_of_epoch_ms (Time.local_tz ()) (Time.now ()))
+      in
+      (year, month, day), Time.local_tz ()
   in
-  let today = journal_name today_date in
+  let year, month, day = day_fields in
+  let journal_title year month day =
+    let ms =
+      Time.epoch_ms_of_civil tz
+        (Time.civil ~year ~month ~day ~hour:0 ~minute:0 ~second:0 ~ms:0)
+    in
+    let year, month, day, _, _, _, _ =
+      Time.civil_fields (Time.civil_of_epoch_ms tz ms)
+    in
+    Ldb.journal_title_of_day ((year * 10000) + (month * 100) + day)
+      "MMM do, yyyy"
+  in
+  let today = journal_title year month day in
   [ ("today", Page_ref.to_page_ref today);
     ("yesterday",
-     Page_ref.to_page_ref
-       (journal_name (Date_time_util.minus Days 1 today_date)));
+     Page_ref.to_page_ref (journal_title year month (day - 1)));
     ("tomorrow",
-     Page_ref.to_page_ref
-       (journal_name (Date_time_util.plus Days 1 today_date)));
+     Page_ref.to_page_ref (journal_title year month (day + 1)));
     ("time", current_time ());
     ( "current page",
       Page_ref.to_page_ref
