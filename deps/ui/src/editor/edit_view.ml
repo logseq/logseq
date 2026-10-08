@@ -399,19 +399,25 @@ let line_view ~on_input (line_s : line Signal.signal) : t =
    the block editor; its typed padding props push the inner bar to
    (x, y) — px arrive via Edit_input.measure. *)
 
+(* layout props reject negatives: a mid-reflow measure can report a
+   transient negative rect (e.g. a `**` delimiter insertion shifting
+   runs before the next layout) — clamp rather than crashing the
+   flush inside set_prop *)
+let clamp_nonneg v = if v < 0 then 0 else v
+
 let sel_rect_view (r_s : (int * rect) Signal.signal) : t =
  fun context parent ->
   let rect_s = own context (Signal.map snd r_s) in
   let wrap = (row ~style_class:"ed-pos" []) context parent in
   bind_int context wrap PaddingHorizontal
-    (Signal.map (fun r -> r.Edit_input.x) rect_s);
+    (Signal.map (fun r -> clamp_nonneg r.Edit_input.x) rect_s);
   bind_int context wrap PaddingVertical
-    (Signal.map (fun r -> r.Edit_input.y) rect_s);
+    (Signal.map (fun r -> clamp_nonneg r.Edit_input.y) rect_s);
   let bar = (row ~style_class:"ed-sel" []) context (Some wrap) in
   bind_int context bar WidthValue
-    (Signal.map (fun r -> r.Edit_input.w) rect_s);
+    (Signal.map (fun r -> clamp_nonneg r.Edit_input.w) rect_s);
   bind_int context bar HeightValue
-    (Signal.map (fun r -> r.Edit_input.h) rect_s);
+    (Signal.map (fun r -> clamp_nonneg r.Edit_input.h) rect_s);
   wrap
 
 let caret_view (frame : frame Signal.signal) : t =
@@ -427,11 +433,12 @@ let caret_view (frame : frame Signal.signal) : t =
   in
   let wrap = (row ~style_class:"ed-pos" []) context parent in
   bind_int context wrap PaddingHorizontal
-    (Signal.map (fun r -> r.Edit_input.x) r_s);
+    (Signal.map (fun r -> clamp_nonneg r.Edit_input.x) r_s);
   bind_int context wrap PaddingVertical
-    (Signal.map (fun r -> r.Edit_input.y) r_s);
+    (Signal.map (fun r -> clamp_nonneg r.Edit_input.y) r_s);
   let bar = (row ~style_class:"ed-caret" ~width:2 []) context (Some wrap) in
-  bind_int context bar HeightValue (Signal.map (fun r -> r.Edit_input.h) r_s);
+  bind_int context bar HeightValue
+    (Signal.map (fun r -> clamp_nonneg r.Edit_input.h) r_s);
   wrap
 
 let overlay (frame : frame Signal.signal) : t =

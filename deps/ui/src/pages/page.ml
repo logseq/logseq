@@ -485,6 +485,10 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   (* cljs *control-show? atom: the fold caret appears only while the
      pointer is over the title row, and only for collapsable titles *)
   let caret_hover = Signal.state ctx.Lui_ui.ui_scheduler false in
+  (* cljs shows .ls-page-title-actions on .block-content-wrapper:hover
+     (opacity 0 at rest); no stylesheet on native backends, so the same
+     pointer enter/leave signal drives the opacity prop instead *)
+  let actions_hover = Signal.state ctx.Lui_ui.ui_scheduler false in
   let body =
     (* cljs db-page-title: the page title is a full block row —
        .ls-block > .is-page-title-row > bullet control + nested
@@ -592,11 +596,18 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                             ([ column ~key:"pt-cw" ~gap:8
                                                  ~grow:1. ~cross:`stretch
                                                  ~style_class:"block-content-wrapper"
+                                                 ~on_pointer_enter:(fun _ ->
+                                                   Signal.set actions_hover true;
+                                                   Runtime.flush ())
+                                                 ~on_pointer_leave:(fun _ ->
+                                                   if Runtime.signal_get actions_hover then (
+                                                     Signal.set actions_hover false;
+                                                     Runtime.flush ()))
                                                  ((if m.editing_title then
                                                     []
                                                   else
                                                     Properties_area.title_actions
-                                                        page
+                                                        ~hover:actions_hover page
                                                     :: page_plugin_slots ctx
                                                          page)
                                                 @ [ (if m.editing_title then

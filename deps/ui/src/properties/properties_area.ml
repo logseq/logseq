@@ -400,8 +400,15 @@ let page_key uuid = "page:" ^ uuid
 (* cljs db-page-title-actions: "Add icon" (always) + "Set property"
    ("Add tag property" on tag pages). The icon picker's imperative
    open needs a real anchor element — the actions row itself, resolved
-   by id. *)
-let title_actions (p : Model.page) : t =
+   by id.
+
+   Hover-only like the cljs version (opacity:0 until
+   .block-content-wrapper:hover): the parent wires [hover] from
+   pointer enter/leave — which is also the only hover channel on the
+   native backends, where no stylesheet can fade the row in. The row
+   listens for its own pointer events too: rendered absolutely above
+   the wrapper, hovering it can leave the wrapper's bounds. *)
+let title_actions ~(hover : bool Signal.state) (p : Model.page) : t =
  fun context parent ->
   let uuid = Option.value ~default:"" p.Model.page_uuid in
   let key = page_key uuid in
@@ -415,6 +422,16 @@ let title_actions (p : Model.page) : t =
     (row ~key:"pta" ~accessibility_identifier:anchor_id
        ~cross:`center ~gap:8
        ~style_class:"ls-page-title-actions"
+       ~opacity:(reactive
+                   (fun h -> if h then 1. else 0.)
+                   (Signal.value hover))
+       ~on_pointer_enter:(fun _ ->
+         Signal.set hover true;
+         Runtime.flush ())
+       ~on_pointer_leave:(fun _ ->
+         if Runtime.signal_get hover then (
+           Signal.set hover false;
+           Runtime.flush ()))
        [ add_btn
            (I18n.t "command.editor/add-property-icon")
            (fun _ ->
