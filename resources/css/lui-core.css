@@ -247,8 +247,14 @@ blockquote {
   height: 100%;
   transition: padding-left 0.3s;
 
+  /* cljs container.css: the open left sidebar is an overlay below sm —
+     it does not push content; >=sm it docks and the content shifts */
   &.is-left-sidebar-open {
-    padding-left: var(--ls-left-sidebar-width);
+    padding-left: 0;
+
+    @media (min-width: 640px) {
+      padding-left: var(--ls-left-sidebar-width);
+    }
   }
 }
 
@@ -263,7 +269,13 @@ blockquote {
 
 #main-content-container {
   container-type: inline-size;
-  padding: 2rem 1rem 2rem 2rem;
+  /* cljs container.css @apply sm:py-8 py-2 sm:pl-8 sm:pr-4 — flush
+     horizontal padding below sm so full-bleed pages reach the edges */
+  padding: 0.5rem 0;
+
+  @media (min-width: 640px) {
+    padding: 2rem 1rem 2rem 2rem;
+  }
   scrollbar-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color))
     var(--ls-primary-background-color);
   /* cljs container.cljs: flex.justify-center.flex-row — centers the
@@ -400,6 +412,11 @@ blockquote {
   padding-top: var(--ls-headbar-inner-top-padding);
   margin-top: var(--ls-win32-title-bar-height);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
+
+  /* cljs header.css: the sticky shadow is mobile-only */
+  @media (min-width: 640px) {
+    box-shadow: none;
+  }
   /* the head row lives inside a flex column whose siblings can
      overflow — cljs header keeps its 48px; don't let flex shrink it */
   flex-shrink: 0;
@@ -504,6 +521,20 @@ blockquote {
 
 .cp__header-logo {
   display: none;
+}
+
+/* cljs header.css @media (min-width: 640px) */
+@media (min-width: 640px) {
+  .cp__header-logo {
+    display: block;
+  }
+}
+
+/* cljs header.css: the .l column's sidebar-width reservation only
+   applies while the docked sidebar is open — otherwise it collapses to
+   its natural 72px so the right cluster gets the width back */
+.theme-container-inner:not(.ls-left-sidebar-open) .cp__header > .l {
+  min-width: auto;
 }
 
 .is-electron.is-mac .cp__header > .l {
@@ -616,6 +647,10 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 
     &.is-open {
       width: var(--ls-left-sidebar-width);
+
+      .left-sidebar-inner {
+        overflow: visible;
+      }
     }
 
     &:before {
@@ -640,7 +675,9 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    width: var(--ls-left-sidebar-width);
+    /* cljs container.css: 74vw overlay sheet below sm, fixed dock
+       width >=sm */
+    width: var(--ls-left-sidebar-sm-width);
     background-color: var(--left-sidebar-bg-color);
     border-right: 1px solid var(--lx-gray-03, var(--ls-tertiary-background-color));
     transform: translateX(-100%);
@@ -650,7 +687,9 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 
   .is-open > & {
     transform: translate3d(0, 0, 0);
-    overflow: visible;
+    /* cljs: clipped to the overlay while open below sm; visible >=sm
+       inside the docked width (media rule below) */
+    overflow: hidden;
   }
 
   .is-closing & {
@@ -662,8 +701,20 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
     flex-direction: column;
     position: relative;
     width: 100%;
-    margin-top: 52px;
+    /* cljs container.css: mt-6 below sm, 52px >=sm */
+    margin-top: 24px;
     height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
+  }
+
+  @media (min-width: 640px) {
+    &.as-container {
+      padding-top: 0;
+      width: var(--ls-left-sidebar-width);
+    }
+
+    > .wrap {
+      margin-top: 52px;
+    }
   }
 
   /* cljs container.css a.item — LUI nav rows are .lui-row.item

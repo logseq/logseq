@@ -621,6 +621,7 @@ let nav_item ~key (id, label, icn) =
       else "settings-menu-item")
     (list_item ~key ~style_class:"settings-menu-item"
        ~accessibility_identifier:id
+       ~data_attrs:[ ("data-id", id) ]
        ~icon:(`app icn) ~text:label
        ~selected:(reactive (fun (s : S.t) -> s.tab = id) (S.signal ()))
        ~on_press:(fun _ -> S.set_tab id) [])

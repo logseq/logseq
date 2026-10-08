@@ -736,18 +736,44 @@ let main_content (ms : Model.t Signal.signal) =
            ~accessibility_identifier:"main-content-container"
            ~orientation:`vertical ~grow:1.
            ~style_class:"scrollbar-spacing relative"
-           [ Ui_parts.class_signal ms
-               (fun (m : Model.t) ->
-                 (* cljs container.cljs: #main-content-container centers
-                    the max-width column via flex justify-center — for the
-                    grid-backed scroll kind the column's margin-inline:auto
-                    rule in lui-core.css does the centering *)
-                 "cp__sidebar-main-content"
-                 ^ (match m.route with
-                    | Model.All_pages -> " is-full-width"
-                    | _ -> ""))
-               (column ~key:"main-inner" ~grow:1.
+           ~data_attrs_signal:
+             (Signal.map
+                (fun (m : Model.t) ->
+                  (* cljs container.cljs: data-is-margin-less-pages is
+                     the :graph route — the only margin-less page *)
+                  [ ( "data-is-margin-less-pages"
+                    , match m.route with
+                      | Model.Graph_view -> "true"
+                      | _ -> "false" )
+                  ])
+                ms)
+           [ (* cljs container.cljs: #main-content-container centers
+                the max-width column via flex justify-center — for the
+                grid-backed scroll kind the column's margin-inline:auto
+                rule in lui-core.css does the centering *)
+             column ~key:"main-inner" ~grow:1.
                   ~style_class:"cp__sidebar-main-content"
+                  ~data_attrs_signal:
+                    (Signal.map
+                       (fun (m : Model.t) ->
+                         (* cljs container.cljs: margin-less for :graph;
+                            full-width adds all-files/all-pages/my-publishing
+                            (LUI routes: All_pages only today) *)
+                         let margin_less =
+                           match m.route with
+                           | Model.Graph_view -> true
+                           | _ -> false
+                         in
+                         [ ("data-is-margin-less-pages", string_of_bool margin_less)
+                         ; ( "data-is-full-width"
+                           , string_of_bool
+                               (margin_less
+                                ||
+                                match m.route with
+                                | Model.All_pages -> true
+                                | _ -> false) )
+                         ])
+                       ms)
                   [ Ui_parts.class_signal ms
                       (fun (m : Model.t) ->
                         (* cljs container.cljs: div.mx-auto.pb-24 around
@@ -759,7 +785,7 @@ let main_content (ms : Model.t Signal.signal) =
                             "cp__content-wrap cp__content-wrap--flush"
                         | _ -> "cp__content-wrap mx-auto pb-24")
                       (box ~key:"content-wrap" [ Page.region ms ])
-                  ])
+                  ]
            ]
        ])
 
@@ -919,12 +945,28 @@ let not_found_page : t =
         ~on_press:(fun _ -> Platform.set_location_hash "#/") []
     ]
 
+(* cljs container.cljs: the wrapper's state classes all have CSS
+   consumers — :not(.ls-left-sidebar-open) collapses .cp__header > .l's
+   sidebar-width reservation, .ls-wide-mode widens the content column,
+   .ls-hl-colored restyles pdf block highlights. The storage-backed
+   flags are re-read on each publish so the live DOM toggles in
+   Settings_state (wide-mode) and Pdf_state (hl-colored) stay in sync. *)
 let shell (ms : Model.t Signal.signal) : t =
-  (* the ls-left-sidebar-open/ls-right-sidebar-open classes had no CSS
-     rules — dead, dropped; the class is now static *)
-  box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-    ~style_class:"theme-container-inner"
-    [ skip_to_main
+  Ui_parts.class_signal ms
+    (fun (m : Model.t) ->
+      let wide_mode =
+        match Platform.local_storage_get "wide-mode" with
+        | Some v -> Platform.storage_unquote v = "true" || v = "true"
+        | None -> false
+      in
+      "theme-container-inner"
+      ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
+      ^ (if m.right_sidebar_open then " ls-right-sidebar-open" else "")
+      ^ (if wide_mode then " ls-wide-mode" else "")
+      ^ (if Pdf_state.hl_colored () then " ls-hl-colored" else ""))
+    (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
+       ~style_class:"theme-container-inner"
+       [ skip_to_main
     ; row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1.
         [ Ui_parts.class_signal ms
             (fun (m : Model.t) ->
@@ -952,4 +994,4 @@ let shell (ms : Model.t Signal.signal) : t =
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"route-none" [])
             ms
-    ]
+       ])
