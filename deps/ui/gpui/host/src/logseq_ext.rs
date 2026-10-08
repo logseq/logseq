@@ -149,18 +149,18 @@ pub fn register(shared: &Shared) {
         "",
     );
     // resources/css/lui-overlay.css — modal scrim + dialog surface.
-    // The web scrim is `color-mix(bg 90%, transparent)`; `--lui-c-*`
-    // vars have no gpui counterpart, so both layers resolve through the
-    // `--ls-*` semantic table (theme-aware). A fully opaque scrim keeps
-    // page content from bleeding through dialogs.
+    // The web scrims are `color-mix(bg 90%/80%, transparent)`;
+    // `--lui-c-*` vars have no gpui counterpart, so both layers resolve
+    // through the `--ls-*` semantic table (theme-aware) with the same
+    // alpha via the `/opacity` suffix.
     lui_gpui::style::register_class_style(
         "ui__dialog-overlay",
-        "background:var(--ls-primary-background-color)",
+        "background:var(--ls-primary-background-color)/90",
         "",
     );
     lui_gpui::style::register_class_style(
         "ui__alert-dialog-overlay",
-        "background:var(--ls-primary-background-color)",
+        "background:var(--ls-primary-background-color)/80",
         "",
     );
     lui_gpui::style::register_class_style(
