@@ -136,9 +136,97 @@ let delete db addrs =
     addrs
 
 let storage db =
+  (* Keep the batch separate from the committed read-through cache.
+     Reversed entries preserve write order without repeated list append.
+     Batches flush them as a single transaction; reads during a buffered
+     batch see pending payloads first. *)
+  let pending = ref [] in
+  let pending_cache : (string, storage_payload) Hashtbl.t = Hashtbl.create 1024 in
+  let failed = ref false in
+  let committing = ref false in
+  let check_available () =
+    if !failed then
+      failwith "Graph storage persistence failed; close and reopen the graph"
+    else if !committing then
+      failwith "Graph storage commit in progress"
+  in
+  (* node addresses are sequential and payloads immutable once written,
+     so rows can live in a read-through cache; root/tail rows are
+     refreshed on every flush. The datascript store path re-reads branch
+     nodes to compute index depth, and lazy indexes restore a node per
+     lookup — without the cache each read is a sqlite roundtrip. *)
+  let cache : (string, storage_payload) Hashtbl.t = Hashtbl.create 1024 in
+  let cancel_checkpoint () =
+    let key = Sqlite.filename db in
+    match Hashtbl.find_opt wal_checkpoint_timers key with
+    | Some t -> Timers.clear t; Hashtbl.remove wal_checkpoint_timers key
+    | None -> ()
+  in
+  (* DataScript installs conn.db and its tail before calling storage.
+     On failure those values cannot safely be reused, especially when a
+     COMMIT error leaves its outcome unknown. Fence this storage until the
+     caller closes the SQL handle and restores a new conn from disk. *)
+  let persist f =
+    check_available ();
+    committing := true;
+    match f () with
+    | () -> committing := false
+    | exception e ->
+        failed := true;
+        committing := false;
+        pending := [];
+        Hashtbl.clear pending_cache;
+        Hashtbl.clear cache;
+        cancel_checkpoint ();
+        raise e
+  in
+  let flush () =
+    check_available ();
+    if !pending <> [] then begin
+      let entries = List.rev !pending in
+      persist (fun () ->
+          store db entries;
+          List.iter (fun (addr, p) -> Hashtbl.replace cache addr p) entries;
+          pending := [];
+          Hashtbl.clear pending_cache)
+    end
+  in
   {
-    storage_store = (fun addr_payloads -> store db addr_payloads);
-    storage_restore = (fun addr -> restore db addr);
-    storage_list_addresses = (fun () -> list_addresses db);
-    storage_delete = (fun addrs -> delete db addrs);
+    storage_store =
+      (fun addr_payloads ->
+        check_available ();
+        List.iter (fun (addr, p) -> Hashtbl.replace pending_cache addr p) addr_payloads;
+        pending := List.rev_append addr_payloads !pending;
+        if
+          List.exists
+            (fun (_, payload) ->
+              match payload with
+              | Storage_root _ | Storage_tail _ -> true
+              | Storage_node _ -> false)
+            addr_payloads
+        then flush ());
+    storage_restore =
+      (fun addr ->
+        check_available ();
+        match Hashtbl.find_opt pending_cache addr with
+        | Some payload -> Some payload
+        | None -> (
+            match Hashtbl.find_opt cache addr with
+            | Some payload -> Some payload
+            | None -> (
+                match restore db addr with
+                | Some payload as some ->
+                    Hashtbl.replace cache addr payload;
+                    some
+                | None -> None)));
+    storage_list_addresses =
+      (fun () ->
+        flush ();
+        list_addresses db);
+    storage_delete =
+      (fun addrs ->
+        flush ();
+        persist (fun () ->
+            delete db addrs;
+            List.iter (fun a -> Hashtbl.remove cache a) addrs));
   }
