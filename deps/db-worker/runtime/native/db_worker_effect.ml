@@ -122,11 +122,11 @@ let finally value f =
   result
 
 (* Fire-and-forget like an unobserved promise: log the rejection instead
-   of silently swallowing it (worse than cljs unhandledrejection). *)
+   of silently swallowing it (worse than cljs unhandledrejection). A
+   synchronous raise in the thunk still propagates to the caller. *)
 let async f =
   ignore
-    (catch
-       (try f () with exn -> error exn)
+    (catch (f ())
        (fun exn ->
           Worker_log.error "effect/async-rejected"
             [ ("error", Printexc.to_string exn) ];
