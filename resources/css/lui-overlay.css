@@ -5298,9 +5298,12 @@ select.form-select {
   align-items: center;
 }
 
+/* cljs view-tab count is text-muted-foreground (gray-133) — the
+   ls-secondary-text-color var resolves to the primary dark color in
+   this theme, so muted-foreground must come first */
 .ls-count {
   font-size: 0.75rem;
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
+  color: hsl(var(--muted-foreground), var(--ls-secondary-text-color));
 }
 
 .ls-view-tab {
@@ -5799,6 +5802,32 @@ select.form-select {
   margin-left: -27px;
 }
 
+/* cljs ui.css foldable collapse contract: grid-rows 1fr->0fr animates the
+   fold, and overflow:hidden on the inner makes it a BFC so a child's
+   margin-top (e.g. .ls-view-body mt-1) can't collapse upward and shift
+   the whole body. Missing these rules let the mt-1 collapse and offset
+   linked-refs content by 4px vs master. */
+.ls-foldable-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s ease-in-out;
+}
+
+.ls-foldable-content .ls-foldable-content-inner {
+  opacity: 1;
+  overflow: hidden;
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.ls-foldable-content.is-collapsed {
+  grid-template-rows: 0fr;
+}
+
+.ls-foldable-content.is-collapsed .ls-foldable-content-inner {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* cljs ls-view-head: count/tabs left, view-actions right on one row
    (flex flex-1 flex-nowrap items-center justify-between gap-1) */
 .ls-view-head {
@@ -5845,6 +5874,25 @@ select.form-select {
 .ls-view-head.ls-refs:hover .view-actions,
 .ls-view-head.ls-refs .view-actions.ls-lit {
   opacity: 1;
+}
+
+/* cljs views-tab on references sections: the + (add-view) button rides
+   the same opacity signal as .view-actions — 0 at rest, 1 on hover/lit */
+.ls-view-head.ls-refs .views .ls-add-view {
+  opacity: 0;
+}
+
+.ls-view-head.ls-refs:hover .views .ls-add-view,
+.ls-view-head.ls-refs .views .ls-add-view.ls-lit {
+  opacity: 1;
+}
+
+/* cljs foldable-title: the fold caret span is .control-hide until the
+   title is hovered (or the group is collapsed, which emits
+   .control-show); cljs toggles the class on mouse-over — the :hover
+   reveal is the DOM-free equivalent */
+.ls-foldable-title:hover .ls-foldable-title-control .control-hide {
+  display: revert;
 }
 
 /* cljs reference_filters.cljs filter-dialog — the include/exclude

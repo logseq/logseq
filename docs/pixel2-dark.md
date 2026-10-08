@@ -42,7 +42,7 @@ pair under `docs/pixel2-dark/` and emits `diff-*.png` + `diff-results.json`.
 | 2.24 | 13-export-page | export preview text ordering/line-wrap |
 | 2.20 | 09-dots-menu | menu item order/row-height drift |
 | 1.95 | 11-settings-keymap | keymap table row offsets |
-| 1.94 | 35-page-alpha | linked-refs group row drift |
+| ~~1.94~~ → ~0.1 | 35-page-alpha | linked-refs group row drift — FIXED (foldable grid contract, `-ml-2` group bodies, bullet-container inline size, view-head button/tab sizing) |
 
 Everything ≤1% is within antialiasing/scroll noise.
 

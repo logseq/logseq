@@ -1201,6 +1201,7 @@ let foldable inst ~key ~title ~(body : t) : t =
             [ (* grow so .ls-view-head's justify-content:space-between
                  has room — cljs .foldable-title > * stretches *)
               row ~grow:1. ~cross:`center ~gap:4
+                ~style_class:"ls-foldable-header"
                 [ Ui_parts.pressable
                     ~on_press:(fun _ ->
                       V.update inst (fun s ->
@@ -1210,16 +1211,22 @@ let foldable inst ~key ~title ~(body : t) : t =
                                then V.Sset.remove key s.V.collapsed_groups
                                else V.Sset.add key s.V.collapsed_groups)
                           }))
-                    (box ~style_class:"ls-foldable-title-control block-control cursor-pointer"
+                    (box ~style_class:"ls-foldable-title-control block-control cursor-pointer opacity-50 hover:opacity-100"
                        ~width:14 ~height:16
-                       [ Ui_parts.class_signal collapsed_sig
-                           (fun c ->
-                             "rotating-arrow"
-                             ^ if c then " collapsed"
-                               else " not-collapsed")
-                           (box ~key:"caret"
-                              [ icon ~name:(`app "caret-right")
-                                  ~point_size:16 [] ]) ])
+                       [ (* cljs foldable-caret: span.control-show only
+                            while the title is hovered or the group is
+                            collapsed — control-hide otherwise *)
+                          Ui_parts.class_signal collapsed_sig
+                           (fun c -> if c then "control-show" else "control-hide")
+                           (box ~key:"ctrlh"
+                              [ Ui_parts.class_signal collapsed_sig
+                                  (fun c ->
+                                    "rotating-arrow"
+                                    ^ if c then " collapsed"
+                                      else " not-collapsed")
+                                  (box ~key:"caret"
+                                     [ icon ~name:(`app "caret-right")
+                                         ~point_size:16 [] ]) ]) ])
                 ; title ] ]
         ]
     ; Ui_parts.class_signal collapsed_sig
@@ -1287,18 +1294,23 @@ let list_stream inst uuids : t =
 let render_list inst s : t =
   match s.V.data with
   | Wr.VGrouped gs ->
-      Logseq_el.fragment
+      (* cljs grouped list: .flex.flex-col.border-t.pt-2.gap-2 wrapper +
+         .group-list-view; each group body sits in div.-ml-2 (list rows
+         hang 8px left of the group title) *)
+      column ~gap:8 ~style_class:"border-t pt-2 group-list-view"
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
                ~title:(text ~value:(group_title s g.Wr.gv) [])
-               ~body:(list_stream inst g.Wr.grows))
+               ~body:
+                 (box ~style_class:"-ml-2 mt-1"
+                    [ list_stream inst g.Wr.grows ]))
            gs)
   | Wr.VGroupedList gs ->
       (* cljs renders each partition as a foldable whose title carries
          the page-ref link (caret + page name); the groups wrapper draws
          master's .border-t.pt-2.gap-2 above the partition list *)
-      box ~style_class:"ls-view-groups"
+      column ~gap:8 ~style_class:"border-t pt-2 group-list-view"
         (List.concat
            (List.mapi
               (fun i g ->
@@ -1328,7 +1340,9 @@ let render_list inst s : t =
                               ^ Platform.encode_uri_component pname)
                            ~target:`self_ ~style_class:"page-ref"
                            ~text:pname [])
-                      ~body:(list_stream inst rows))
+                      ~body:
+                        (box ~style_class:"-ml-2 mt-1"
+                           [ list_stream inst rows ]))
                   g.Wr.glparts)
               gs))
   | _ -> list_stream inst (all_row_uuids s)
@@ -1351,7 +1365,9 @@ let render_gallery inst _s : t =
 let render_table inst s : t =
   match s.V.data with
   | Wr.VGrouped gs ->
-      Logseq_el.fragment
+      (* cljs grouped tables share the .flex.flex-col.border-t.pt-2.gap-2
+         partition wrapper (no .group-list-view — that's list display) *)
+      column ~gap:8 ~style_class:"border-t pt-2"
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1359,7 +1375,7 @@ let render_table inst s : t =
                ~body:(grouped_table inst ~rows:g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
-      Logseq_el.fragment
+      column ~gap:8 ~style_class:"border-t pt-2"
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
@@ -1381,8 +1397,10 @@ let render_table inst s : t =
 
 let body_el inst (s : V.vstate) ~(filters : t) : t =
   column ~gap:8 ~style_class:"ls-view-body"
-    [ filters
-    ; (if s.V.loading then
+    ((* cljs filters-row renders nil with no filters — mounting the
+        empty box would still eat the column gap *)
+     (if s.V.filters = [] then [] else [ filters ])
+    @ [ (if s.V.loading then
          text ~value:I.loading_ ~padding:8 ~foreground:"muted-foreground"
            []
        else
@@ -1391,4 +1409,4 @@ let body_el inst (s : V.vstate) ~(filters : t) : t =
           | "list" -> render_list inst s
           | "gallery" -> render_gallery inst s
           | _ -> render_table inst s))
-    ]
+    ])

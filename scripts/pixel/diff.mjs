@@ -1,7 +1,7 @@
 // Pair master/lui screenshots and compute pixelmatch diffs.
 // Usage: node scripts/pixel/diff.mjs <shotsdir>
-import { PNG } from '/Users/devin/pixel-tools/node_modules/pngjs/lib/png.js';
-import pixelmatch from '/Users/devin/pixel-tools/node_modules/pixelmatch/index.js';
+import { PNG } from '/Users/devin/parity-lab/node_modules/pngjs/lib/png.js';
+import pixelmatch from '/Users/devin/parity-lab/node_modules/pixelmatch/index.js';
 import fs from 'node:fs';
 import path from 'node:path';
 

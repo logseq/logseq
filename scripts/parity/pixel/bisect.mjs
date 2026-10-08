@@ -1,4 +1,4 @@
-import { chromium } from '/Users/devin/repos/logseq-master/node_modules/playwright/index.mjs';
+import { chromium } from '/Users/devin/parity-lab/node_modules/playwright/index.mjs';
 import { FIXTURE_PAGE, BLOCKS } from './fixture.mjs';
 const url = process.argv[2];
 const browser = await chromium.launch({ channel: 'chrome', headless: true });

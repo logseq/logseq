@@ -1,4 +1,4 @@
-import { chromium } from '/Users/devin/repos/logseq-master/node_modules/playwright/index.mjs';
+import { chromium } from '/Users/devin/parity-lab/node_modules/playwright/index.mjs';
 const url = process.argv[2], tag = process.argv[3], waitMs = Number(process.argv[4] || 12000);
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });

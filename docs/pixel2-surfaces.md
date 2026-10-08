@@ -98,10 +98,20 @@ in current master (toolbar = `Add icon`, `Add tag property`, `All` tab,
 - **Tooltip surface (1.82%)**: master renders "Toggle left sidebar" /
   "More" tooltips on hover; LUI tooltip presence/labels differ
   (diff-12-tooltip.png). Also includes the linked-refs offset below.
-- **Linked references vertical offset (~8px)**: on plain pages
-  (page-alpha 1.77%, and inside 12-tooltip) the entire linked-references
-  list renders ~8px lower in LUI — header row + all item rows offset;
-  "+" affordance after the "Linked references N" header differs.
+- ~~Linked references vertical offset (~8px)~~ **FIXED** (page-alpha
+  1.45%→0.08%): five stacked deltas, all resolved — page plugin slots
+  mounted inside the title column (+8px row gap), missing `ml-1` on the
+  refs wrapper (x/width), missing cljs `.flex.flex-col.border-t.pt-2.gap-2
+  .group-list-view` partition wrapper + `-ml-2` group bodies, missing
+  `.ls-foldable-content` grid/`is-collapsed`/`-inner` overflow rules
+  (margin collapse → +4px), `bullet-container` inline 14px box
+  overriding the stylesheet's 16px var (2px per-row text shift),
+  view-head action buttons at size-sm instead of `!h-7 !px-1`,
+  view-tab at 16px instead of `!text-sm !px-1`, `ls-add-view` visible
+  in refs instead of opacity-0-at-rest, fold caret not in
+  `control-show`/`control-hide` contract, `.ls-count` dark instead of
+  muted-foreground. Residual: sub-pixel text raster on the head row
+  (~400px) plus the separate top-header band.
 - **First block row on Page Alpha**: full-row diff — content identical,
   likely rasterization + slight x-offset of bullet/text.
 - **Settings screens (~1.2-1.3%)**: residual text-rasterization + small
