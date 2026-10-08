@@ -478,6 +478,13 @@ fn main() {
     // AllAssets over the curated `Assets` — OCaml icon props map onto the
     // full Lucide catalog, which the default set only partially covers
     // (e.g. `icons/x.svg` is absent there).
+    // Linux must run on X11 (natively or through XWayland): WebKitGTK
+    // embeds need an X11 window to reparent into — Wayland cannot host a
+    // foreign surface, so iframe nodes fall back to chips there.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    let app = gpui_kit::platform::linux(gpui_kit::gpui::WindowingModes::X11)
+        .with_assets(gpui_kit::assets::AllAssets);
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
     let app = gpui_kit::application().with_assets(gpui_kit::assets::AllAssets);
     eprintln!("logseq-gpui: app() done t={:.1}ms", boot_ms());
     app.run(move |cx| {
