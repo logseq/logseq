@@ -27,4 +27,5 @@ extend-exclude = ["resources/*",
                   "ocaml-e2e/resources/*",
                   "deps/common/src/logseq/common/plural.cljs",
                   "deps/db-worker/lib/plural.ml",
-                  "deps/db-worker/PORTED.md"]
+                  "deps/db-worker/PORTED.md",
+                  "deps/db-worker/vendor/*"]
