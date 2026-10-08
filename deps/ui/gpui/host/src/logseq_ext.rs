@@ -974,12 +974,13 @@ fn register_class_styles() {
     );
     class(
         "settings-article",
-        "padding:16px;flex-grow:1;min-height:192px;justify-content:flex-start",
+        "padding:16px;flex-grow:1;min-height:192px;justify-content:flex-start;\
+         width:704px;height:70vh",
         "",
     );
     class(
         "panel-wrap",
-        "padding:4px;display:flex;flex-direction:column;gap:16px",
+        "padding:18px 4px 4px 4px;display:flex;flex-direction:column;gap:16px",
         "",
     );
     class(
@@ -999,8 +1000,8 @@ fn register_class_styles() {
     // is inert on content-height columns.
     class(
         "ls-label",
-        "display:block;font-size:14px;font-weight:500;line-height:20px;\
-         opacity:0.7;flex-grow:1",
+        "display:block;font-size:14px;font-weight:500;line-height:28px;\
+         min-height:28px;opacity:0.7;flex-grow:1",
         "",
     );
     class(
@@ -1062,14 +1063,11 @@ fn register_class_styles() {
     class("ls-kbd-label", "padding:0 4px", "");
     class("ls-th-strong", "font-weight:600", "");
     class("ls-icon-sm", "width:16px;height:16px", "");
-    // accent swatch grid — web grid-cols-8; flex-wrap rows land the
-    // same 20px cells 8 per ~250px row
-    class(
-        "cp__accent-colors-list-wrap",
-        "display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;\
-         max-width:250px",
-        "",
-    );
+    // accent swatch grid — the `grid` kind already chunks children into
+    // rows of GridColumns; registering display/flex here would flatten
+    // those rows into one line. Keep the hook empty so markup stays
+    // addressable without restyling it.
+    class("cp__accent-colors-list-wrap", "", "");
     class("ls-swatch-cell", "display:flex;align-items:center", "");
     class(
         "ls-swatch",

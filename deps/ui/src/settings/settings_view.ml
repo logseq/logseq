@@ -133,6 +133,41 @@ let lang_menu ~key st mst =
            [])
        languages)
 
+(* native-only stand-in for the theme screenshots the web cards paint
+   via background-image: a mock editor thumbnail (title bar + text
+   lines) in the mode's palette. "system" splits light/dark halves *)
+let mode_thumb mode =
+  let line ~key ~bg ~w =
+    box ~key ~height:3 ~width:w ~corner_radius:1 ~background:bg []
+  in
+  let lines ~bg_dark =
+    let ink = if bg_dark then "#3a4149" else "#d7dae0" in
+    let soft = if bg_dark then "#2c323a" else "#e8eaee" in
+    [ line ~key:"t1" ~bg:soft ~w:74
+    ; line ~key:"t2" ~bg:ink ~w:58
+    ; line ~key:"t3" ~bg:ink ~w:74
+    ; line ~key:"t4" ~bg:soft ~w:44
+    ]
+  in
+  let pane ~key ~bg ~bg_dark =
+    column ~key ~background:bg ~grow:1. ~height:63 ~padding_horizontal:6
+      ~padding_vertical:4 ~gap:6 (lines ~bg_dark)
+  in
+  match mode with
+  | "system" ->
+    box ~key:("tmi-" ^ mode) ~width:92 ~height:63 ~corner_radius:4
+      [ row ~key:"tmi-h" ~width:92 ~height:63
+          [ pane ~key:"tmi-l" ~bg:"#f4f4f5" ~bg_dark:false
+          ; pane ~key:"tmi-d" ~bg:"#191b1e" ~bg_dark:true
+          ]
+      ]
+  | _ ->
+    let bg, bg_dark =
+      if mode = "dark" then ("#191b1e", true) else ("#f4f4f5", false)
+    in
+    box ~key:("tmi-" ^ mode) ~width:92 ~height:63 ~corner_radius:4
+      [ pane ~key:"tmi-p" ~bg ~bg_dark ]
+
 (* li > i(mode swatch) + strong — list_item ~on_press; the .active
    ring class and the mode-* swatch classes stay reactive via
    class_signal since kinds take only a static ~style_class *)
@@ -159,7 +194,15 @@ let theme_item ~st mode label =
                  ^ (if Platform.local_storage_get "radix-color" <> None
                     then " radix"
                     else ""))
-               (box ~key:("tmi-" ^ mode) ~width:92 [])
+               (if Platform.css_transform_icons () then
+                  (* web paints the real theme screenshot via the
+                     mode-* background-image — empty box *)
+                  box ~key:("tmi-" ^ mode) ~width:92 []
+                else
+                  (* gpui has no image backgrounds — sketch the mock
+                     editor the screenshots show (title bar + text
+                     lines) in each mode's palette *)
+                  mode_thumb mode)
            ; text ~key:("tms-" ^ mode) ~value:label []
            ]
        ])

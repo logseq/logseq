@@ -103,7 +103,7 @@ let theme_row ctx =
     ]
 
 let font_button ~key ~label ~active ~on_click =
-  button ~key ~variant:`secondary ~selected:active ~text:label
+  button ~key ~variant:`secondary ~selected:active ~label
     ~style_class:
       (C.btn_cls ~variant:`Secondary () ^ " ls-font-btn"
      ^ if active then " ls-active" else "")

@@ -35,10 +35,10 @@ toolbar/titlebar.
 
 | Surface                 | master↔LUI | master↔gpui | lui↔gpui | Status |
 |-------------------------|-----------:|------------:|---------:|--------|
-| Baseline (journals)     | 0.22–0.25% | 0.24%       | ~0.3%    | at noise floor |
+| Baseline (journals)     | 0.22–0.25% | 0.24%       | 0.29%    | at noise floor |
 | Left sidebar open       | ~0.4%      | 0.47%       | 0.41%    | at noise floor |
 | cmdk palette (blank)    | ~0.3%      | 0.47%       | 0.42%    | fixed (was 1.08/1.10%) |
-| Settings dialog         | ~0.4%      | ~4.9%       | 4.59%    | exceptions below |
+| Settings dialog         | ~0.4%      | 4.28%       | 4.27%    | exceptions below |
 | Context menu (web↔web)  | 0.40%      | n/a         | n/a      | see Limitations |
 
 Noise floor on this harness is ~0.2–0.5% (text rasterization and
@@ -57,13 +57,16 @@ deps/ui (this branch):
   - `open_palette` resets `edited`, fixing the stale "Filters 5" row on
     blank open (1.08% → 0.42%).
 - `native/settings_page.ml` — resynced drifted twin: added
-  `~style_class:"settings-article"`, version `2.0.1` → `2.0.2`, font
-  picker uses `~text:label` (GPUI `button` renders `~text`, not
-  `~label` — `~label` is accessibility-only on the native backend).
-- `src/settings/settings_view.ml` — `theme_item` wraps the
-  thumbnail + label in a `column` so the theme card stacks vertically on
-  both backends (the `list_item` kind lays children out as a row on
-  native; web relied on a CSS column flip).
+  `~style_class:"settings-article"`, version `2.0.1` → `2.0.2`. Font
+  buttons keep `~label` (accessibility name); the visible Ag/name
+  column is real children, which the gpui `button` kind now mounts
+  (see lui fixes below).
+- `src/settings/settings_view.ml` — `theme_item` stacks thumbnail +
+  label in a `column`, and on native (`Platform.css_transform_icons ()`
+  false) swaps the `background-image` box for `mode_thumb`: a drawn
+  mock-editor thumbnail (title bar + text lines in each mode's
+  palette; `system` splits light/dark panes) since gpui has no image
+  backgrounds.
 - `src/sidebar/left_sidebar_view.ml` (earlier) — emit `chevron-down`
   directly when expanded on native (`Platform.css_transform_icons ()` is
   false there; the CSS-based rotate can't apply).
@@ -78,50 +81,60 @@ deps/ui (this branch):
   `cp__settings-appearance-dialog-inner`, `appearance-popup`,
   `cp__theme-modes-options`, `mode-light/-dark/-system`, `mode-active`,
   `ui__select-trigger`, `as-solid/-secondary/-outline/-text`,
-  `ls-btn-sm`, `ls-active`.
+  `ls-btn-sm`, `ls-active`. `cp__settings-inner` stretches
+  (`align-items:stretch`), `settings-article` is pinned to the web's
+  704px × 70vh top-aligned block, `ls-label` carries the web's 28px
+  line-height/min-height, and `panel-wrap` folds in the web's
+  first-row padding. Also bumped the opam `lui` pin in
+  `deps/ui/scripts/install-opam-deps.sh` to `cffac1a` (lui PR #161
+  head) so a clean environment resolves the same lui revision — keep
+  the pin tracking the merged lui SHA.
 - `gpui/host/src/menu.rs` — added `cmd-k` → `CommandPalette`
   keybinding (was only reachable via menu on some layouts).
 - `native/chrome.ml` — earlier chrome fixes (scroll-row centering wrap).
 
 lui repo (`~/repos/lui-gpui-pin` worktree, pushed as
-`devin/gpui-dialog-padding` on logseq/lui):
+`devin/gpui-dialog-padding` on logseq/lui —
+[PR #161](https://github.com/logseq/lui/pull/161)):
 
 - `platform/gpui/crates/lui-gpui/src/kinds.rs` — removed the baked
-  `.p_4()` on `NodeKind::Dialog` surfaces. Web dialogs own padding via
-  `ui__dialog-content` (1.5rem) and `ls-dialog-*` overrides can zero it;
-  the baked pad doubled it and made every modal ~32px taller than its
-  web twin. `cargo build` resolves the crate through the uncommitted
-  `gpui/host/Cargo.toml` path-dep override to that worktree — the fix
-  must land in logseq/lui for the GPUI host to keep this geometry.
+  `.p_4()` on `NodeKind::Dialog` surfaces; `button()` now mounts
+  `node.children` inside the Button (the font picker's `ls-font`
+  Ag/name column — gpui previously rendered the label prop only);
+  `list_item()` resolves `app:` icon names through the host
+  `app_icon_svg` resolver (settings nav icons); the empty-items
+  `select` trigger uses `.dropdown_caret(true)` so the chevron trails
+  the label like the web `ui__select-trigger`.
+- `platform/gpui/crates/lui-gpui/src/style.rs` — `style::all` applies
+  the semantic `style_class` **before** typed props and the inline
+  `style` attr. On the web, typed props are inline styles and beat
+  classes; previously `as-text`'s `background:transparent` clobbered
+  `~background`, so accent swatches rendered as bare rings.
+- `cargo build` resolves the crates through the uncommitted
+  `gpui/host/Cargo.toml` path-dep override to that worktree — the fixes
+  must land in logseq/lui for the GPUI host to keep this geometry and
+  rendering.
 
 ## Documented exceptions (root cause)
 
-Settings dialog (~4.6% lui↔gpui residual):
+Settings dialog (4.27% lui↔gpui / 4.28% master↔gpui residual — the bulk
+of it is item 1):
 
-1. **Nav item icons missing on gpui.** `nav_item` passes
-   `~icon:(`app icn)` identically on both backends; the gpui
-   `list_item` kind does not paint the icon prop. Renderer gap in
-   lui-gpui (icon glyph pipeline), not a markup drift.
-2. **Theme cards are flat fills, not screenshots.** Web cards are
-   `background-image` PNGs (`img/light-theme.png` etc.); the gpui style
-   layer has no image backgrounds, so `mode-light/-dark/-system` classes
-   carry the theme's approximate fill + `mode-active` ring. Positions
-   and the active ring match; interior raster cannot.
-3. **Font button missing the "Ag" glyph preview.** The gpui `button`
-   kind renders `~text` but not nested children (the `ls-font`
-   two-line "Ag"/name column). `~text:label` gives the name; the
-   preview line is a renderer limitation.
-4. **Accent swatch fills/dots.** Swatches use `~background:
-   var(--rx-<c>-09)` fills with a `~background: var(--rx-<c>-07)` inner
-   dot; on gpui only the border vars paint — the background var
-   resolution produces no fill. Rings + positions match.
-5. **Dialog height.** gpui renders `cp__settings-inner` at its
-   `min-height:55dvh` (462px) while the web article stretches toward
-   `max-height:75dvh`; the card is ~40px shorter and shifts the centered
-   block. Same classes, different stretch semantics under taffy.
-6. **Language select label alignment.** gpui centers the trigger text
-   with the chevron on the left; web is left-aligned text, chevron
-   right. `select` kind layout detail.
+1. **Theme cards are drawn approximations, not the real screenshots.**
+   Web cards are `background-image` PNGs (`img/light-theme.png` etc.);
+   gpui has no image-backed fills, so `mode_thumb` draws a mock editor
+   (title bar + text lines, `system` as split light/dark panes). Card
+   geometry, positions, and the `mode-active` ring match exactly — the
+   interior raster approximates the PNGs but cannot match them
+   pixel-for-pixel. ~1.5–2% of the dialog diff is this region alone.
+   To go further gpui needs `NodeKind::Image`/background-image support
+   in lui-gpui's style layer.
+2. **Per-row text baseline offsets (~1–3px).** Rows sit at the same
+   grid positions but label text baselines differ slightly between
+   Chrome's and gpui's text shaping (line-box rounding); this is raster
+   noise above the 0.2–0.5% floor.
+3. **`k t t` shortcut chip.** The web shortcuts row renders a kbd chip
+   that is absent/mispositioned on gpui — minor, isolated.
 
 Context menu / Esc-dismiss / tooltips / toasts — see Limitations; they
 could not be triggered inside the GPUI window from this host.
