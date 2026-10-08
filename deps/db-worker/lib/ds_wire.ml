@@ -152,6 +152,12 @@ let rec value_of_transit (t : Wire.t) : value =
      values *)
   | Wire.Int64 n -> Int64 n
   | Wire.Float f -> Float f
+  (* ~b Binary decodes to String deliberately: datascript values have no
+     binary type, and live paths rely on it — import-file-graph sends
+     :asset/payload as Uint8Array (~b) and read_import_asset_payload reads
+     it back as String. Re-encoding flips ~b to ~s; every Binary producer
+     in sync_crypt/endpoint_* matches on Wire.Binary directly and never
+     routes through here. *)
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s
   | Wire.Symbol s -> Symbol s
