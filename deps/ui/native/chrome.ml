@@ -266,7 +266,9 @@ let main_content (ms : Model.t Signal.signal) =
          actually scroll. *)
       scroll ~key:"main-content" ~orientation:`vertical ~grow:1.
         ~accessibility_identifier:"main-content-container"
-        ~style_class:"scrollbar-spacing"
+        (* gpui styles by class only — mirror the element's id so the
+           host can register its #main-content-container padding *)
+        ~style_class:"scrollbar-spacing main-content-container"
         ~data_attrs_signal:
           (Signal.map (fun (_ : Model.t) ->
                [ ("data-is-margin-less-pages", "false") ]) ms)

@@ -197,6 +197,14 @@ pub fn register(shared: &Shared) {
         "width:100%;margin-top:8px;margin-bottom:8px",
         "",
     );
+    // .ls-block { padding:0.125rem 0 } — the web row pitch is 28px
+    // (24px line-height + 2+2 padding); gpui's text line box is ~26px,
+    // so 1px edges land on the same pitch.
+    lui_gpui::style::register_class_style(
+        "ls-block",
+        "padding-top:1px;padding-bottom:1px",
+        "",
+    );
     // .ls-block .ls-properties-area.ls-block-properties { margin-top:2px;
     //   margin-left:7px }
     lui_gpui::style::register_class_style(
@@ -608,9 +616,17 @@ fn register_class_styles() {
          padding-bottom:96px",
         "",
     );
+    // #main-content-container { padding:2rem 1rem 2rem 2rem } >=sm —
+    // supplies the web's 32px top offset above the page title.
+    class("main-content-container", "padding:0px 16px 32px 32px", "");
     // .page-inner > .ls-page-blocks hangs the block control column 20px
-    // into the left gutter (cljs page.cljs margin-left:-20 inline).
-    class("ls-page-blocks", "margin-left:-20px;min-height:60px", "");
+    // into the left gutter (cljs page.cljs margin-left:-20 inline); the
+    // 1rem gap below the title comes from the emitted .mt-4 utility.
+    class(
+        "ls-page-blocks",
+        "margin-left:-20px;min-height:60px",
+        "",
+    );
     // .cp__page-inner-wrap > .page-inner { padding-bottom:4rem }
     class("page-inner", "padding-bottom:64px", "");
     // #journals .journal-item — day separators + bottom breathing room.
@@ -855,9 +871,12 @@ fn register_class_styles() {
     // (absolute at top:-1.25rem); the view drives the same reveal
     // through the opacity prop fed by pointer enter/leave. On gpui an
     // absolute row escapes the scroll viewport's clip, so it stays
-    // in-flow above the title — the hidden row reserves the same strip
-    // the web overlay covers.
-    class("ls-page-title-actions", "", "");
+    // in-flow — but at zero height so it reserves no strip.
+    // height:0 keeps the row invisible at rest (its opacity prop is
+    // hover-driven) without reserving layout space — on hover the
+    // buttons overhang the title like the web's absolute overlay
+    // (children aren't clipped when no overflow rule applies).
+    class("ls-page-title-actions", "height:0px", "");
     class("control-hide", "display:none", "");
     // .ls-page-title-container — lui-core.css: the page title renders at
     // 32px/500 (var(--ls-page-title-size)); the generic `title` utility

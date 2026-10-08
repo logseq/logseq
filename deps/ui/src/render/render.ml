@@ -446,9 +446,12 @@ let table_el ~self lines : t =
           , "border:1px solid var(--ls-border-color);padding:6px;\
              min-width:0;flex:1"
             ^ (if tag = "th" then
+                 (* UA stylesheet gives web <th> bold + centered text;
+                    declare both for gpui (v_flex cell — align-items is
+                    the horizontal axis) *)
                  ";background:var(--lx-gray-03,\
                   var(--ls-tertiary-background-color));\
-                  white-space:nowrap"
+                  white-space:nowrap;font-weight:700;align-items:center"
                else "") )
         ]
       (Render_inline.parse ~self cell)
@@ -635,9 +638,12 @@ let table_el ~self (header, rows) : t =
           , "border:1px solid var(--ls-border-color);padding:6px;\
              min-width:0;flex:1"
             ^ (if tag = "th" then
+                 (* UA stylesheet gives web <th> bold + centered text;
+                    declare both for gpui (v_flex cell — align-items is
+                    the horizontal axis) *)
                  ";background:var(--lx-gray-03,\
                   var(--ls-tertiary-background-color));\
-                  white-space:nowrap"
+                  white-space:nowrap;font-weight:700;align-items:center"
                else "") )
         ]
       (Render_inline.parse ~self c)
