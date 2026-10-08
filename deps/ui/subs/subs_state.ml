@@ -264,10 +264,10 @@ type app_hooks =
     mutable refresh_journal_side : Model.page -> unit
   ; (* outliner_ops — refresh the current view after mutations made
        outside the editor (sdk bridge) *)
-    mutable refresh_after_ops : unit -> unit Js.Promise.t
+    mutable refresh_after_ops : unit -> unit Ui_task.t
   ; (* properties_state — rebuild mounted property areas (they hold
        worker data outside the model) without the 150ms debounce *)
-    mutable refresh_property_areas : unit -> unit Js.Promise.t
+    mutable refresh_property_areas : unit -> unit Ui_task.t
   ; (* plugin_host — broadcast app hook firings to LSPluginCore
        (sidebar-visible-changed, current-graph-changed, ...) *)
     mutable plugin_event : string -> Js.Json.t -> unit
@@ -282,7 +282,36 @@ let app_hooks =
   ; rtc_graph_ready = (fun _ -> ())
   ; nav_load_done = (fun () -> ())
   ; refresh_journal_side = (fun _ -> ())
-  ; refresh_after_ops = (fun () -> Js.Promise.resolve ())
-  ; refresh_property_areas = (fun () -> Js.Promise.resolve ())
+  ; refresh_after_ops = (fun () -> Ui_task.resolve ())
+  ; refresh_property_areas = (fun () -> Ui_task.resolve ())
   ; plugin_event = (fun _ _ -> ())
   }
+
+(* promise/task adapters at the transport boundary: shared flows run
+   on Ui_task while worker/sdk call sites still produce Js.Promise.
+   A Js promise rejection carries an opaque error on both runtimes, so
+   it crosses as a labeled failure rather than a fabricated exn *)
+let task_of_promise (p : 'a Js.Promise.t) : 'a Ui_task.t =
+  Ui_task.create (fun ~resolve ~reject ->
+      ignore
+        (Js.Promise.then_
+           (fun v ->
+             resolve v;
+             Js.Promise.resolve ())
+           p);
+      ignore
+        (Js.Promise.catch
+           (fun _ ->
+             let e = Failure "promise rejected" in
+             reject e;
+             Js.Promise.reject e)
+           p))
+
+let promise_of_task (t : 'a Ui_task.t) : 'a Js.Promise.t =
+  Js.Promise.make (fun ~resolve ~reject ->
+      ignore
+        (Ui_task.bind t (fun v ->
+             resolve v [@u];
+             Ui_task.resolve ()));
+      ignore
+        (Ui_task.catch t (fun e -> reject e [@u]; Ui_task.reject e)))

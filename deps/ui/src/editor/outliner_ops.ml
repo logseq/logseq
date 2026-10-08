@@ -893,30 +893,35 @@ let apply_parsed ?opts ~rest pairs =
    instead of refetching+remounting the whole page (cljs apply-delta!).
    refresh_page is the fallback when the delta can't splice *)
 let delta_helpers (page : Model.page) : Page_delta.helpers =
+  (* the splice pipeline works in Ui_task; each enrichment hook is an
+     adapter over the worker's promise fetches *)
   { Page_delta.resolve =
       (fun bs ->
-        match (Runtime.model ()).Model.repo with
-        | None -> resolve_block_tags bs
-        | Some repo ->
-            let* () = prefetch_anchor_refs repo bs in
-            resolve_block_tags bs)
+        Subs_state.task_of_promise
+          (match (Runtime.model ()).Model.repo with
+           | None -> resolve_block_tags bs
+           | Some repo ->
+               let* () = prefetch_anchor_refs repo bs in
+               resolve_block_tags bs))
   ; fill_embeds =
       (fun bs ->
-        match (Runtime.model ()).Model.repo with
-        | None -> Js.Promise.resolve bs
-        | Some repo ->
-            let collapsed = ref S.String_set.empty in
-            let* bs' =
-              fill_embed_children repo (ancestors_of page) collapsed bs
-            in
-            merge_collapsed !collapsed S.String_set.empty;
-            Js.Promise.resolve bs')
+        Subs_state.task_of_promise
+          (match (Runtime.model ()).Model.repo with
+           | None -> Js.Promise.resolve bs
+           | Some repo ->
+               let collapsed = ref S.String_set.empty in
+               let* bs' =
+                 fill_embed_children repo (ancestors_of page) collapsed bs
+               in
+               merge_collapsed !collapsed S.String_set.empty;
+               Js.Promise.resolve bs'))
   ; merge_collapsed
   ; refresh_page_fields =
       (fun p ->
-        match (Runtime.model ()).Model.repo with
-        | Some repo -> resolve_page_tags repo p
-        | None -> Js.Promise.resolve p)
+        Subs_state.task_of_promise
+          (match (Runtime.model ()).Model.repo with
+           | Some repo -> resolve_page_tags repo p
+           | None -> Js.Promise.resolve p))
   }
 
 (* fold the queued deferred deltas then [delta] onto [page],
@@ -935,41 +940,43 @@ let apply_queued _page delta =
      interleave between our splice and our publish — canon rows replace
      block fields wholesale, so a stale arm publishing last would blank
      rows the newer model already advanced *)
-  Page_delta.with_apply_queue (fun () ->
-      match (Runtime.model ()).Model.route_page with
-      | Some base -> (
-          let h = delta_helpers base in
-          let rec go page = function
-            | [] -> Js.Promise.resolve (Some page)
-            | d :: rest -> (
-                let t0 = ms () in
-                let* applied =
-                  Page_delta.apply_to_page ~strict:false h page d
-                in
-                if perf then
-                  Printf.eprintf "[perf] op.apply_to_page %.1fms\n%!"
-                    (ms () -. t0);
-                match applied with
-                | Page_delta.Applied page' -> go page' rest
-                | Page_delta.Unchanged -> go page rest
-                | Page_delta.Failed -> Js.Promise.resolve None)
-          in
-          let* a = go base deltas in
-          (match a with
-           | Some p'
-             when p' != base
-                  && !Runtime.current_route = route_at_start
-                  &&
-                  (match (Runtime.model ()).Model.route_page with
-                   | Some c -> c == base
-                   | None -> false) ->
-               let t0 = ms () in
-               (let _ = Platform.perf_mark "splice:page-loaded" in Runtime.send (Action.Page_loaded p'));
-               if perf then
-                 Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
-           | _ -> ());
-          Js.Promise.resolve (a, touched, deltas))
-      | None -> Js.Promise.resolve (None, touched, deltas))
+  Subs_state.promise_of_task
+    (Page_delta.with_apply_queue (fun () ->
+         let ( let* ) = Ui_task.( let* ) in
+         match (Runtime.model ()).Model.route_page with
+         | Some base -> (
+             let h = delta_helpers base in
+             let rec go page = function
+               | [] -> Ui_task.resolve (Some page)
+               | d :: rest -> (
+                   let t0 = ms () in
+                   let* applied =
+                     Page_delta.apply_to_page ~strict:false h page d
+                   in
+                   if perf then
+                     Printf.eprintf "[perf] op.apply_to_page %.1fms\n%!"
+                       (ms () -. t0);
+                   match applied with
+                   | Page_delta.Applied page' -> go page' rest
+                   | Page_delta.Unchanged -> go page rest
+                   | Page_delta.Failed -> Ui_task.resolve None)
+             in
+             let* a = go base deltas in
+             (match a with
+              | Some p'
+                when p' != base
+                     && !Runtime.current_route = route_at_start
+                     &&
+                     (match (Runtime.model ()).Model.route_page with
+                      | Some c -> c == base
+                      | None -> false) ->
+                  let t0 = ms () in
+                  (let _ = Platform.perf_mark "splice:page-loaded" in Runtime.send (Action.Page_loaded p'));
+                  if perf then
+                    Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
+              | _ -> ());
+             Ui_task.resolve (a, touched, deltas))
+         | None -> Ui_task.resolve (None, touched, deltas)))
 
 (* journals-route fold of the op response (+ any deferred deltas) —
    the route page lives in current_journals, so the page-route splice
@@ -979,61 +986,68 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
   let start_js = !Runtime.current_journals in
-  Page_delta.with_apply_queue (fun () ->
-      let rec go js = function
-        | [] -> Js.Promise.resolve (Page_delta.Applied js)
-        | d :: rest -> (
-            let* applied =
-              Page_delta.apply_to_journals ~strict:false delta_helpers js
-                d
-            in
-            match applied with
-            | Page_delta.Applied js' -> go js' rest
-            | Page_delta.Unchanged -> go js rest
-            | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
-      in
-      let* merged = go start_js deltas in
-      (* a navigation mid-splice emptied the journals — this publish
-         would resurrect the old route's days *)
-      let still_current = !Runtime.current_journals == start_js in
-      (match merged with
-       | Page_delta.Applied js' when js' != start_js && still_current ->
-           Runtime.send (Action.Journals_loaded js');
-           Js.Promise.resolve ()
-       | Page_delta.Applied _ | Page_delta.Unchanged -> Js.Promise.resolve ()
-       | Page_delta.Failed -> (
-           (* a touched day couldn't splice — refetch just the days the
-              deltas touch, never the whole route *)
-           match !Runtime.current_repo with
-           | Some repo -> (
-               let touched_day (p : Model.page) =
-                 List.exists
-                   (fun d -> Page_delta.delta_touches d p)
-                   deltas
-               in
-               let rec refetch acc = function
-                 | [] -> Js.Promise.resolve (List.rev acc)
-                 | (p : Model.page) :: rest ->
-                     if not (touched_day p) then
-                       refetch (p :: acc) rest
-                     else
-                       let* blocks = fetch_page_blocks repo p in
-                       refetch
-                         ({ p with Model.page_blocks = blocks } :: acc)
-                         rest
-               in
-               let* js' = refetch [] start_js in
-               if still_current then (
-                 Runtime.send (Action.Journals_loaded js');
-                 (* the refetched days already contain these deltas'
-                    effects — marking their revs seeds the basis so the
-                    next broadcast splices instead of refetching *)
-                 List.iter Page_delta.note_applied_of_delta deltas);
-               Js.Promise.resolve ())
-           | None -> refresh_page ()))
-      |> Js.Promise.then_ (fun () ->
-             S.prune_overrides touched;
-             Js.Promise.resolve ()))
+  let task =
+    Page_delta.with_apply_queue (fun () ->
+        let ( let* ) = Ui_task.( let* ) in
+        let rec go js = function
+          | [] -> Ui_task.resolve (Page_delta.Applied js)
+          | d :: rest -> (
+              let* applied =
+                Page_delta.apply_to_journals ~strict:false delta_helpers
+                  js d
+              in
+              match applied with
+              | Page_delta.Applied js' -> go js' rest
+              | Page_delta.Unchanged -> go js rest
+              | Page_delta.Failed -> Ui_task.resolve Page_delta.Failed)
+        in
+        let* merged = go start_js deltas in
+        (* a navigation mid-splice emptied the journals — this publish
+           would resurrect the old route's days *)
+        let still_current = !Runtime.current_journals == start_js in
+        match merged with
+        | Page_delta.Applied js' when js' != start_js && still_current ->
+            Runtime.send (Action.Journals_loaded js');
+            Ui_task.resolve ()
+        | Page_delta.Applied _ | Page_delta.Unchanged -> Ui_task.resolve ()
+        | Page_delta.Failed -> (
+            (* a touched day couldn't splice — refetch just the days the
+               deltas touch, never the whole route *)
+            match !Runtime.current_repo with
+            | Some repo -> (
+                let touched_day (p : Model.page) =
+                  List.exists
+                    (fun d -> Page_delta.delta_touches d p)
+                    deltas
+                in
+                let rec refetch acc = function
+                  | [] -> Ui_task.resolve (List.rev acc)
+                  | (p : Model.page) :: rest ->
+                      if not (touched_day p) then
+                        refetch (p :: acc) rest
+                      else
+                        let* blocks =
+                          Subs_state.task_of_promise
+                            (fetch_page_blocks repo p)
+                        in
+                        refetch
+                          ({ p with Model.page_blocks = blocks } :: acc)
+                          rest
+                in
+                let* js' = refetch [] start_js in
+                if still_current then (
+                  Runtime.send (Action.Journals_loaded js');
+                  (* the refetched days already contain these deltas'
+                     effects — marking their revs seeds the basis so the
+                     next broadcast splices instead of refetching *)
+                  List.iter Page_delta.note_applied_of_delta deltas);
+                Ui_task.resolve ())
+            | None -> Subs_state.task_of_promise (refresh_page ())))
+  in
+  Subs_state.promise_of_task task
+  |> Js.Promise.then_ (fun () ->
+         S.prune_overrides touched;
+         Js.Promise.resolve ())
 
 (* Journals/Home counterpart of apply_queued: each delta belongs to
    the journal page whose tree consumes it. The owner is found via a
@@ -1065,73 +1079,75 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
       js;
     idx
   in
-  Page_delta.with_apply_queue (fun () ->
-      let base = (Runtime.model ()).Model.journals in
-      match base with
-      | [] -> Js.Promise.resolve false
-      | _ ->
-          let arr = Array.of_list base in
-          let idx = ref (build_index base) in
-          let owners = ref [] in
-          let rec fold_delta ~retried d =
-            if Page_delta.delta_already_applied d then
-              Js.Promise.resolve `Applied
-            else
-              let cands =
-                List.sort_uniq compare
-                  (List.filter_map
-                     (fun k -> Hashtbl.find_opt !idx k)
-                     (Page_delta.delta_keys d))
-              in
-              let rec try_cands = function
-                | [] ->
-                    if retried then Js.Promise.resolve `Unmatched
-                    else (
-                      (* a uuid an earlier delta in this batch created
-                         isn't in the index yet — rebuild and retry *)
-                      idx := build_index (Array.to_list arr);
-                      fold_delta ~retried:true d)
-                | i :: rest -> (
-                    let j = arr.(i) in
-                    let* applied =
-                      Page_delta.apply_to_page ~strict (delta_helpers j)
-                        j d
-                    in
-                    match applied with
-                    | Page_delta.Applied j' ->
-                        arr.(i) <- j';
-                        owners := j' :: !owners;
-                        Js.Promise.resolve `Applied
-                    | Page_delta.Failed -> Js.Promise.resolve `Unmatched
-                    | Page_delta.Unchanged -> try_cands rest)
-              in
-              try_cands cands
-          in
-          let rec fold = function
-            | [] -> Js.Promise.resolve true
-            | d :: rest -> (
-                let* r = fold_delta ~retried:false d in
-                match r with
-                | `Applied -> fold rest
-                | `Unmatched -> Js.Promise.resolve false)
-          in
-          let* ok = fold deltas in
-          (if ok then
-             match (Runtime.model ()).Model.journals with
-             | cur when cur == base ->
-                 if !owners <> [] then begin
-                   (* fold and publish inside the apply queue so a
-                      racing arm can't interleave between our splice
-                      and our publish *)
-                   Runtime.send
-                     (Action.Journals_spliced (Array.to_list arr));
-                   S.prune_overrides touched;
-                   List.iter
-                     (fun p -> Runtime.hooks.refresh_journal_side p)
-                     !owners
-                 end
-             | _ -> ());
-          Js.Promise.resolve ok)
+  Subs_state.promise_of_task
+    (Page_delta.with_apply_queue (fun () ->
+         let ( let* ) = Ui_task.( let* ) in
+         let base = (Runtime.model ()).Model.journals in
+         match base with
+         | [] -> Ui_task.resolve false
+         | _ ->
+             let arr = Array.of_list base in
+             let idx = ref (build_index base) in
+             let owners = ref [] in
+             let rec fold_delta ~retried d =
+               if Page_delta.delta_already_applied d then
+                 Ui_task.resolve `Applied
+               else
+                 let cands =
+                   List.sort_uniq compare
+                     (List.filter_map
+                        (fun k -> Hashtbl.find_opt !idx k)
+                        (Page_delta.delta_keys d))
+                 in
+                 let rec try_cands = function
+                   | [] ->
+                       if retried then Ui_task.resolve `Unmatched
+                       else (
+                         (* a uuid an earlier delta in this batch created
+                            isn't in the index yet — rebuild and retry *)
+                         idx := build_index (Array.to_list arr);
+                         fold_delta ~retried:true d)
+                   | i :: rest -> (
+                       let j = arr.(i) in
+                       let* applied =
+                         Page_delta.apply_to_page ~strict (delta_helpers j)
+                           j d
+                       in
+                       match applied with
+                       | Page_delta.Applied j' ->
+                           arr.(i) <- j';
+                           owners := j' :: !owners;
+                           Ui_task.resolve `Applied
+                       | Page_delta.Failed -> Ui_task.resolve `Unmatched
+                       | Page_delta.Unchanged -> try_cands rest)
+                 in
+                 try_cands cands
+             in
+             let rec fold = function
+               | [] -> Ui_task.resolve true
+               | d :: rest -> (
+                   let* r = fold_delta ~retried:false d in
+                   match r with
+                   | `Applied -> fold rest
+                   | `Unmatched -> Ui_task.resolve false)
+             in
+             let* ok = fold deltas in
+             (if ok then
+                match (Runtime.model ()).Model.journals with
+                | cur when cur == base ->
+                    if !owners <> [] then begin
+                      (* fold and publish inside the apply queue so a
+                         racing arm can't interleave between our splice
+                         and our publish *)
+                      Runtime.send
+                        (Action.Journals_spliced (Array.to_list arr));
+                      S.prune_overrides touched;
+                      List.iter
+                        (fun p -> Runtime.hooks.refresh_journal_side p)
+                        !owners
+                    end
+                | _ -> ());
+             Ui_task.resolve ok))
 
 let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match
@@ -1407,4 +1423,6 @@ let redo () =
 
 (* sdk bridge (and other non-editor mutation paths) refresh the view
    through this Runtime hook *)
-let () = Runtime.hooks.refresh_after_ops <- (fun () -> refresh_page ())
+let () =
+  Runtime.hooks.refresh_after_ops <-
+    (fun () -> Subs_state.task_of_promise (refresh_page ()))
