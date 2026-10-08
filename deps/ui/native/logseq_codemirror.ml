@@ -23,9 +23,17 @@ let web_profile =
 let gpui_profile =
   { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GPUIHost }
 
+let gpui_profiles =
+  [ gpui_profile
+  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GPUIHost }
+  ; { Lui_protocol.profile_os = WindowsOS
+    ; Lui_protocol.profile_host = GPUIHost
+    }
+  ]
+
 let schema =
   Lui_extension.component identifier
-    [ web_profile; gpui_profile ]
+    (web_profile :: gpui_profiles)
     false (* interior is adapter-owned; no LUI children *)
     []
     [ Lui_extension.property "uuid" Lui_extension.StringScalar false None

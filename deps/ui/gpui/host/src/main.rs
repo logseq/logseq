@@ -419,6 +419,7 @@ unsafe extern "C" fn crash_handler(_sig: libc::c_int) {
 }
 
 fn main() {
+    env_logger::init();
     boot_ms();
     unsafe {
         libc::signal(libc::SIGSEGV, crash_handler as libc::sighandler_t);

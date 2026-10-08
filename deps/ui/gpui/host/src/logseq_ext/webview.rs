@@ -87,6 +87,7 @@ mod embed {
 
     /// A parked embed.
     struct Slot {
+        id: i64,
         webview: wry::WebView,
         url: String,
         seen: Instant,
@@ -152,21 +153,19 @@ mod embed {
             use wry::raw_window_handle::{
                 HasWindowHandle, RawWindowHandle, XlibWindowHandle,
             };
-            let io_err = |e| wry::Error::Io(std::io::Error::other(e));
-            match HasWindowHandle::window_handle(window)
-                .map_err(io_err)?
-                .as_raw()
-            {
+            let handle = HasWindowHandle::window_handle(window)
+                .map_err(|e| wry::Error::Io(std::io::Error::other(e)))?;
+            match handle.as_raw() {
                 RawWindowHandle::Xcb(h) => {
                     let mut xlib = XlibWindowHandle::new(h.window.get().into());
                     xlib.visual_id = h.visual_id.map_or(0, |id| id.get().into());
                     Ok(Self(xlib))
                 }
                 RawWindowHandle::Xlib(h) => Ok(Self(h)),
-                _ => Err(io_err(
+                _ => Err(wry::Error::Io(std::io::Error::other(
                     "WebView on Linux requires an X11 window; start the application with \
                      `gpui_kit::platform::linux(WindowingModes::X11)`",
-                )),
+                ))),
             }
         }
     }
@@ -267,6 +266,7 @@ mod embed {
                         slots.insert(
                             node_id,
                             Slot {
+                                id: node_id,
                                 webview,
                                 url: url.to_string(),
                                 seen: Instant::now(),
@@ -335,6 +335,7 @@ mod embed {
                 let _ = slot.webview.set_visible(true);
             }
         } else if was_visible {
+            eprintln!("webview: hide #{}", slot.id);
             let _ = slot.webview.set_visible(false);
         }
     }
@@ -523,9 +524,13 @@ mod embed {
                 // drop them by store membership so their slots GC below.
                 {
                     let store = shared.borrow();
-                    wanted_cell
-                        .borrow_mut()
-                        .retain(|id, _| store.store.node(*id).is_some());
+                    wanted_cell.borrow_mut().retain(|id, _| {
+                        let kept = store.store.node(*id).is_some();
+                        if !kept {
+                            eprintln!("webview: unmounted #{id}");
+                        }
+                        kept
+                    });
                 }
                 let snapshot = bounds_snapshot
                     .as_ref()
@@ -556,12 +561,22 @@ mod embed {
                     .map(|(id, _)| *id)
                     .collect()
             });
+            let dropped_any = !stale.is_empty();
             for id in stale {
+                eprintln!("webview: gc #{id}");
                 SLOTS.with(|cell| {
                     // Dropping the wry::WebView tears down the native
                     // child view on every platform.
                     cell.borrow_mut().remove(&id);
                 });
+            }
+            #[cfg(target_os = "linux")]
+            if dropped_any {
+                // WebView::drop queues XDestroyWindow on the display's
+                // output buffer; once SLOTS is empty the early return
+                // above stops pumping, so the destroy would never reach
+                // the server and the child window would stay mapped.
+                pump_gtk();
             }
         });
     }
