@@ -620,7 +620,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     (b : Model.block) : t =
 
   let uuid = Option.value b.block_uuid ~default:"" in
-  if b.Model.block_is_comments_area then Comments_view.area_el b
+  if b.Model.block_is_comments_area then Comments_view.area_el_static b
   else
   let key = block_key b in
   let embed = b.block_link <> None in
@@ -751,7 +751,7 @@ and block_row_sig
  fun ctx parent ->
   S.ensure ctx;
   let b0 = Signal.get bs in
-  (if b0.Model.block_is_comments_area then Comments_view.area_el b0
+  (if b0.Model.block_is_comments_area then Comments_view.area_el bs
    else row_sig ~depth ~editable ~library ~virtualize scope bs)
     ctx parent
 
