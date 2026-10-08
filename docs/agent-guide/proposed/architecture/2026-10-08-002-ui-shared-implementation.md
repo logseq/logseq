@@ -43,11 +43,22 @@ Use ordinary merges and additive commits; the user explicitly rejected rebasing.
 | `8f373d1b46` | Normal merge of remote worker build updates into the shared branch | Pushed |
 | [LUI PR 162](https://github.com/logseq/lui/pull/162) | Resync ordinary parentless trees and detached extensions | Merged after all CI checks passed |
 | `ad675c389f` | Theme/route baselines and browser/native platform source extraction, compiled and tested in both runtimes | Checkpoint committed after pause at the user's request |
+| `ef8d49f385`, `287dda11f2` | Task 2 contract layer: semantic theme/nav/doc groups in `ui_services`, web and native implementations, production consumers migrated | Pushed 2026-10-08 (Linux VM) |
 
 The user authorized necessary LUI repository changes, PR creation, and merging after CI passes.
 That authorization does not resume this paused task.
 The user ended the earlier open-ended performance work.
 Preserve responsiveness while migrating; do not reopen a rope, incremental-parser, or 120fps optimization campaign.
+
+### Continuation progress (2026-10-08)
+
+Resumed per user instruction. Environment: Linux VM, opam switch `5.5.0`, `pnpm install --ignore-workspace` in `deps/ui` (plain install resolves the repo-root workspace and misses `@tanstack/virtual-core`/`transit-js`). Web suite baseline: 1,605 checks with one known Linux-only failure (`decorate mod` expects ⌘ on macOS); native drive and contract suites green.
+
+Task 2 contract layer landed in `ef8d49f385` + `287dda11f2`: `ui_services` gained `theme` (semantic mode read/write, live `prefers_dark`, dataset/class apply split preserving dataset→hook→classes ordering), `nav` (push vs quiet `replace_hash`, history, split `on_change`/`on_navigate` channels, `hash_query_param`, `decode_uri`, `reload`), and `doc` (lang, arbitrary `data-*`, reload). Web impl in `web/platform_web.ml` (self-contained document FFI — the services library must not depend on shared src); native impl in `native/services/platform_native.ml` with `emit_event` routing `ls:navigate` to `nav_on_navigate` observers. Consumers migrated: settings_view/state/page, boot, router, subs_state, sidebar, pages, properties_menu, popups, chrome, sdk_ui, plugin_host, exporter, editor nav callers, render_inline, js_app. Contract tests cover theme quoting/classes, live prefers_dark re-query, push vs quiet replace, back/forward stacks, graph-qualified params, the on_change/on_navigate split, and lang pref quoting.
+
+Still open for Task 2's full exit gate: one feature's portable state/view merged end-to-end in both runtimes (settings_page/sidebar_state land in batch 3b below). Platform-level nav/theme ops remain until `cmdk_state.ml` (batch 3c) migrates; Task 6 owns their deletion.
+
+Parallel execution: up to 9 child sessions on `devin/SHAREDUI-*` branches covering batches 3a–3d, 4 (subs Ui_task), 5a editor regressions, 5b editor commands, views, and the Task 6 emulation inventory (read-only). Children write tests in dedicated `shared_scenarios_*.ml` files; the coordinator owns `shared_scenarios.ml`, `test_drive.ml`, contracts, and integration merges into `refactor/lui`.
 
 ### Preserve the working tree
 
