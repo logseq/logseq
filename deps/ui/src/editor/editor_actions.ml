@@ -938,7 +938,23 @@ let extend_selection up =
               h
           in
           match nbr with
-          | None -> ()
+          | None ->
+              (* head is the topmost flat block: cljs
+                 navigable-sibling-block treats .ls-page-title as a
+                 block, so shift+up past it conj's the title row into
+                 the selection *)
+              if up then
+                (match D.query_selector ".ls-page-title .ls-block" with
+                 | Some tb -> (
+                     match D.el_get_attr tb "data-blockid" with
+                     | Some t when not (S.String_set.mem t sel) ->
+                         S.set (fun st ->
+                             { st with
+                               S.selected = S.String_set.add t sel
+                             ; action_bar = true
+                             })
+                     | _ -> ())
+                 | None -> ())
           | Some nb -> (
               match nb.Model.block_uuid with
               | None -> ()

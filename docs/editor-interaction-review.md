@@ -26,6 +26,7 @@ this branch; **exception** = intentional divergence.
 | Interaction | Status | Evidence |
 |---|---|---|
 | Esc → block select, arrows move, shift+arrows extend | parity | `.ls-block.selected` set grows/shrinks |
+| shift+up past topmost block → conj page title | **fixed** | cljs `navigable-sibling-block` treats `.ls-page-title` as a block; `extend_selection` now conj's the title row's `data-blockid` when `prev_visible` yields none. Verified: {body} → {body, title} matches master |
 | Enter → re-enter edit at caret 0 | parity | |
 | shift+click range select | **fixed** | `on_click` ignored modifiers; `Block_selection.modifier_select` (pointerdown) now implements cljs `mousedown` semantics: shift = range from anchor, meta = toggle block in selection, meta+shift = append range; skipped on `.block-control-wrap`, suppresses the follow-up click |
 | meta+click toggle block | **fixed** | same change; verified 2-block discontiguous selection |
