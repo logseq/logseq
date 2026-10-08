@@ -217,10 +217,12 @@ pub fn register(shared: &Shared) {
          position:relative",
         "",
     );
-    // .ui__dialog-content.ls-dialog-settings { max-width: 64rem }
+    // .ui__dialog-content.ls-dialog-settings { max-width: 64rem };
+    // padding:0 pairs with the web .settings-modal margin:-1.5rem —
+    // the settings body fills the card edge-to-edge
     lui_gpui::style::register_class_style(
         "ls-dialog-settings",
-        "max-width:1024px",
+        "max-width:1024px;padding:0",
         "",
     );
     // .ui__dialog-main-content { min-height:0; overflow-y:auto }
@@ -564,22 +566,37 @@ fn register_class_styles() {
     // + .cp__content-wrap) — without the max-width + auto inline margins
     // the page column bleeds full-width and the -20px .ls-page-blocks
     // gutter clips text at the window edge.
+    // The scroller's row wrapper (main-content-row) justify-centers the
+    // column natively: auto margins don't center on this backend, so the
+    // declarations carry the cap only and min-height keeps the column
+    // top-aligned instead of vertically centered by the row.
     class(
         "cp__sidebar-main-content",
-        "width:100%;max-width:var(--ls-main-content-max-width,960px);\
-         margin-left:auto;margin-right:auto;flex-grow:1",
+        "width:100%;max-width:960px;min-height:100%",
         "",
     );
+    // is-full-width routes (all-pages) — native/chrome.ml emits the
+    // token in place of the data-is-full-width attr the web CSS
+    // selects on.
+    class("cp__sidebar-main-content--full", "max-width:100vw", "");
     // .cp__content-wrap { margin:0 auto; width:100%; padding-bottom:6rem }
-    class(
-        "cp__content-wrap",
-        "margin-left:auto;margin-right:auto;width:100%;\
-         padding-bottom:96px",
-        "",
-    );
+    class("cp__content-wrap", "width:100%;padding-bottom:96px", "");
     // .page-inner > .ls-page-blocks hangs the block control column 20px
     // into the left gutter (cljs page.cljs margin-left:-20 inline).
     class("ls-page-blocks", "margin-left:-20px;min-height:60px", "");
+    // h1.title / .ls-page-title-container — 32px medium title
+    // (var(--ls-page-title-size), line-height 1.38)
+    class(
+        "ls-page-title",
+        "font-size:32px;font-weight:500;line-height:44px",
+        "",
+    );
+    class(
+        "ls-page-title-container",
+        "font-size:32px;font-weight:500;line-height:44px",
+        "",
+    );
+    class("title", "font-size:32px;font-weight:500;line-height:44px", "");
     // .cp__page-inner-wrap > .page-inner { padding-bottom:4rem }
     class("page-inner", "padding-bottom:64px", "");
     // #journals .journal-item — day separators + bottom breathing room.
@@ -908,6 +925,236 @@ fn register_class_styles() {
     class(
         "block-drag-over-nested",
         "border-left:2px solid var(--ls-primary-color, var(--ls-link-text-color))",
+        "",
+    );
+
+    // ---- settings dialog (resources/css/lui-overlay.css .cp__settings-*
+    // + .it/.ls-* helpers). The web `.it` row is grid-cols-3 with the
+    // control spanning 2 columns; taffy has no grid templates, so the
+    // label column takes flex-grow:1 and every control column
+    // flex-grow:2 to land the same 1:2 split.
+    // .settings-modal cancels the dialog-content padding on web via
+    // margin:-1.5rem — the gpui twin zeroes it on the dialog class
+    // instead (ls-dialog-settings padding:0 above).
+    class("settings-modal", "", "");
+    class(
+        "cp__settings-inner",
+        "display:flex;flex-direction:row;min-height:55dvh;max-height:75dvh;\
+         width:100%;align-items:stretch",
+        "",
+    );
+    // cljs settings.css aside: bg-gray-03-alpha p-4 (natural width);
+    // justify-start pins menu flow to the top (gpui columns otherwise
+    // center children vertically in a stretched box)
+    class(
+        "settings-aside",
+        "background:secondary;padding:16px;align-self:stretch;\
+         justify-content:flex-start",
+        "",
+    );
+    class(
+        "cp__settings-header",
+        "display:flex;flex-direction:row;align-items:center;\
+         justify-content:flex-start;gap:8px;height:40px;padding:8px 0",
+        "",
+    );
+    class(
+        "cp__settings-modal-title",
+        "font-size:24px;font-weight:600",
+        "",
+    );
+    class("cp__settings-category-title", "font-size:20px", "");
+    class("settings-menu", "margin-top:16px;gap:8px", "");
+    class(
+        "settings-menu-item",
+        "width:100%;padding:4px 8px;border-radius:4px;font-size:16px;\
+         line-height:24px;font-weight:400;gap:4px;\
+         justify-content:flex-start;text-align:left",
+        "",
+    );
+    class(
+        "settings-article",
+        "padding:16px;flex-grow:1;min-height:192px;justify-content:flex-start",
+        "",
+    );
+    class(
+        "panel-wrap",
+        "padding:4px;display:flex;flex-direction:column;gap:16px",
+        "",
+    );
+    class(
+        "it",
+        "display:flex;flex-direction:row;align-items:center;gap:16px;\
+         width:100%",
+        "",
+    );
+    class("ls-it-top", "align-items:flex-start", "");
+    class(
+        "ls-it-label-col",
+        "display:flex;flex-direction:column;flex-grow:1",
+        "",
+    );
+    // .it label — the 1fr grid column (flex-grow:1); outside .it rows
+    // .ls-label only appears inside ls-it-label-col where vertical grow
+    // is inert on content-height columns.
+    class(
+        "ls-label",
+        "display:block;font-size:14px;font-weight:500;line-height:20px;\
+         opacity:0.7;flex-grow:1",
+        "",
+    );
+    class(
+        "ls-it-value",
+        "display:flex;flex-direction:column;flex-grow:2;\
+         min-height:24px;border-radius:6px",
+        "",
+    );
+    class(
+        "ls-it-value-col",
+        "display:flex;flex-direction:column;flex-grow:2",
+        "",
+    );
+    class(
+        "ls-it-actions",
+        "display:flex;flex-direction:row;flex-grow:2;gap:8px;\
+         align-items:center;min-height:24px",
+        "",
+    );
+    class(
+        "ls-it-side",
+        "display:flex;font-size:14px;align-items:center",
+        "",
+    );
+    class(
+        "ls-it-desc",
+        "font-size:12px;color:muted-foreground",
+        "",
+    );
+    class("ls-switch-wrap", "display:flex;gap:16px;align-items:center;border-radius:6px", "");
+    class("ls-switch-narrow", "max-width:320px", "");
+    class("ls-kbd-cell", "text-align:right", "");
+    class("ctls", "display:flex;align-items:center", "");
+    class(
+        "ls-ver-wrap",
+        "display:flex;gap:16px;align-items:center;flex-wrap:wrap",
+        "",
+    );
+    class("ls-ver-text", "font-size:14px", "");
+    class(
+        "fade-link",
+        "font-size:14px;text-decoration:underline;opacity:0.7",
+        "",
+    );
+    class("cp__settings-app-updater", "min-height:20px;position:relative;margin-bottom:-5px", "");
+    class("ls-row-gap", "display:flex;gap:8px", "");
+    class("ls-desc", "font-size:14px;opacity:0.7", "");
+    class("ls-select-md", "width:256px;height:32px", "");
+    class("ls-select-wrap", "max-width:320px;border-radius:6px", "");
+    class("ls-font-global", "padding-top:12px", "");
+    class(
+        "ls-check-row",
+        "display:flex;align-items:center;width:100%;gap:4px",
+        "cursor-pointer",
+    );
+    class("ls-check-label", "padding-left:4px;font-size:14px;opacity:0.7", "");
+    class("ls-check-cell", "display:flex;align-items:center", "");
+    class("ls-btn-label", "padding-right:4px", "");
+    class("ls-kbd-label", "padding:0 4px", "");
+    class("ls-th-strong", "font-weight:600", "");
+    class("ls-icon-sm", "width:16px;height:16px", "");
+    // accent swatch grid — web grid-cols-8; flex-wrap rows land the
+    // same 20px cells 8 per ~250px row
+    class(
+        "cp__accent-colors-list-wrap",
+        "display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;\
+         max-width:250px",
+        "",
+    );
+    class("ls-swatch-cell", "display:flex;align-items:center", "");
+    class(
+        "ls-swatch",
+        "width:20px;height:20px;border-radius:9999px;\
+         display:flex;justify-content:center;align-items:center",
+        "",
+    );
+    class("ls-swatch-dot", "width:8px;height:8px;border-radius:9999px", "");
+    class("ls-swatch-none", "height:2px;width:100%;background:#b91c1c", "");
+    class(
+        "cp__settings-appearance-dialog-inner",
+        "display:flex;flex-direction:column",
+        "",
+    );
+    class("appearance-popup", "position:absolute", "pointer-events-auto");
+
+    // ---- theme mode cards (lui-overlay.css .cp__theme-modes-options) —
+    // the web cards are screenshot thumbnails (img/light-theme.png etc.);
+    // gpui can't paint background images so the boxes carry the theme's
+    // approximate fill + the active ring (exception in the audit doc)
+    class(
+        "cp__theme-modes-options",
+        "display:flex;flex-direction:row;align-items:center;gap:12px",
+        "",
+    );
+    class(
+        "mode-light",
+        "width:92px;height:63px;border-radius:4px;background:#f4f4f4;\
+         border:1px solid border",
+        "",
+    );
+    class(
+        "mode-dark",
+        "width:92px;height:63px;border-radius:4px;background:#1a1a1a;\
+         border:1px solid border",
+        "",
+    );
+    class(
+        "mode-system",
+        "width:92px;height:63px;border-radius:4px;background:#63676b;\
+         border:1px solid border",
+        "",
+    );
+    class(
+        "mode-active",
+        "border:2px solid var(--ls-link-text-color, var(--ls-primary-color))",
+        "",
+    );
+
+    // ---- select trigger + button variants (lui-overlay.css ----
+    // .ui__select-trigger, .ui__button.as-*) ----
+    class(
+        "ui__select-trigger",
+        "display:flex;flex-direction:row;align-items:center;\
+         justify-content:space-between;width:100%;height:40px;\
+         padding:8px 12px;border:1px solid border;border-radius:6px;\
+         background:background;font-size:14px;text-align:left",
+        "cursor-pointer",
+    );
+    class("form-select", "", "");
+    class(
+        "as-solid",
+        "background:primary;color:var(--ls-primary-background-color)",
+        "",
+    );
+    class("as-secondary", "background:secondary;color:secondary-foreground", "");
+    class(
+        "as-outline",
+        "border:1px solid border;background:background",
+        "",
+    );
+    class("as-text", "background:transparent", "");
+    class(
+        "ls-btn-sm",
+        "height:28px;padding:4px 12px;border-radius:4px;font-size:14px",
+        "",
+    );
+    class(
+        "ls-font-btn",
+        "height:40px;font-size:14px;padding:0 16px",
+        "",
+    );
+    class(
+        "ls-active",
+        "border:2px solid var(--ls-link-text-color, var(--ls-primary-color))",
         "",
     );
 }

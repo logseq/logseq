@@ -277,12 +277,14 @@ let main_content (ms : Model.t Signal.signal) =
         [ Ui_parts.class_signal ms
             (fun (m : Model.t) ->
               (* cljs: .cp__sidebar-main-content centers a max-width
-                 column via margin auto; is-full-width (margin-less
-                 routes) stretches it — no stylesheet natively, so the
-                 full-width variant maps to w-full *)
+                 column via margin auto; the row wrapper centers it
+                 natively instead. is-full-width (margin-less routes)
+                 stretches it — w-full alone can't clear the registered
+                 max-width, so it carries a dedicated class token *)
               "cp__sidebar-main-content"
               ^ (match m.route with
-                 | Model.All_pages -> " w-full"
+                 | Model.All_pages ->
+                     " cp__sidebar-main-content--full"
                  | _ -> ""))
             (box ~key:"main-inner"
             ~data_attrs_signal:

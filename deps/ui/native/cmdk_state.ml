@@ -591,14 +591,16 @@ let group_order v q rows total =
     ; gfilter_active = false }
   in
   let recents_g () =
+    let items =
+      if String.trim q = "" then v.recents
+      else
+        Fuzzy.fuzzy_search ~extract:(fun (it : item) -> strip_pfts it.ititle)
+          ~limit:99 v.recents q
+    in
     { gid = G_recently_updated
     ; gtitle = I18n.t "cmdk.group/recently-updated"
-    ; gitems =
-        (if String.trim q = "" then v.recents
-         else
-           Fuzzy.fuzzy_search ~extract:(fun (it : item) -> it.ititle)
-             ~limit:99 v.recents q)
-    ; gtotal = List.length v.recents
+    ; gitems = items
+    ; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded
     ; gfilter_active = false }
   in
@@ -635,10 +637,12 @@ let group_order v q rows total =
         Option.to_list (create_g ())
         @ cp () @ [ nodes_g (); files_g (); filters_g () ]
       else if String.trim q = "" then
-        (* cljs :default on blank input runs :initial + :filters; the
-           current-page group is emitted too but stays empty without
-           search rows and gets filtered below *)
-        cp () @ [ recents_g (); filters_g () ]
+        (* cljs :default on blank input runs :initial + :filters — but a
+           fresh-open palette never triggers :default (refresh-key
+           unchanged), so a blank-opened palette shows only recents;
+           filters appear once the user edits the input *)
+        if v.edited then cp () @ [ recents_g (); filters_g () ]
+        else cp () @ [ recents_g () ]
       else
         Option.to_list (create_g ())
         @ cp ()
@@ -866,6 +870,7 @@ let open_palette ?(move = false) st =
           ; input = (match saved with Some (q, _) -> q | None -> "")
           ; move_mode = move
           ; mouse = false
+          ; edited = false
           (* cljs move-selected-blocks opens via go-to-search! :nodes,
              which pins the nodes filter — keeps recents/filters out *)
           ; filter =

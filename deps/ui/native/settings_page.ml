@@ -11,7 +11,7 @@ module S = Settings_state
 module V = Settings_view
 module C = Settings_controls
 
-let version = "2.0.1"
+let version = "2.0.2"
 
 (* config.edn-backed toggle row — folds the (config_bool, config_toggle)
    pair every config toggle repeats *)
@@ -103,7 +103,7 @@ let theme_row ctx =
     ]
 
 let font_button ~key ~label ~active ~on_click =
-  button ~key ~variant:`secondary ~selected:active
+  button ~key ~variant:`secondary ~selected:active ~text:label
     ~style_class:
       (C.btn_cls ~variant:`Secondary () ^ " ls-font-btn"
      ^ if active then " ls-active" else "")
@@ -634,7 +634,7 @@ let pane_of ~modal ctx tab =
   | _ -> general_pane ~modal ctx
 
 let article ~modal ctx =
-  column ~key:"settings-article"
+  column ~key:"settings-article" ~style_class:"settings-article"
     [ row ~key:"art-h" ~style_class:"cp__settings-header"
         [ heading ~key:"art-ht" ~level:1
             ~style_class:"cp__settings-category-title"

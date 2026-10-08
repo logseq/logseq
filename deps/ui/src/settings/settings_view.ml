@@ -145,17 +145,23 @@ let theme_item ~st mode label =
          use_mode mode;
          Signal.set st mode;
          Runtime.flush ())
-       [ (* cljs: .radix only when an accent color is stored
-            (:ui/radix-color); mode-active draws the .active>i ring *)
-         C.class_signal (Signal.value st)
-           (fun active ->
-             "mode-" ^ mode
-             ^ (if active = mode then " mode-active" else "")
-             ^ (if Platform.local_storage_get "radix-color" <> None
-                then " radix"
-                else ""))
-           (box ~key:("tmi-" ^ mode) ~width:92 [])
-       ; text ~key:("tms-" ^ mode) ~value:label []
+       [ (* thumbnail over label: the cljs li stacks i.mode-* above
+            strong, and the lui list-item kind lays children out as a
+            row on native — wrap them in a column so both backends get
+            the same vertical card *)
+         column ~key:("tmc-" ^ mode) ~cross:`center
+           [ (* cljs: .radix only when an accent color is stored
+                (:ui/radix-color); mode-active draws the .active>i ring *)
+             C.class_signal (Signal.value st)
+               (fun active ->
+                 "mode-" ^ mode
+                 ^ (if active = mode then " mode-active" else "")
+                 ^ (if Platform.local_storage_get "radix-color" <> None
+                    then " radix"
+                    else ""))
+               (box ~key:("tmi-" ^ mode) ~width:92 [])
+           ; text ~key:("tms-" ^ mode) ~value:label []
+           ]
        ])
 
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)

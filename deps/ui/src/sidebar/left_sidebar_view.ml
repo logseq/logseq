@@ -576,11 +576,13 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                           [ text ~value:label [] ] ]
                   ; box ~key:(key ^ "-b") ~style_class:"b"
                       [ (* web rotates .more 90deg on .is-expand —
-                           backends without transforms swap the icon *)
+                           backends without transforms swap the icon:
+                           expanded → chevron-down, collapsed →
+                           chevron-right *)
                          reactive
                            (fun collapsed ->
                              icon_ ~cls:"more" ~size:15
-                               (if collapsed
+                               (if (not collapsed)
                                    && not (Platform.css_transform_icons ())
                                 then "chevron-down"
                                 else "chevron-right"))

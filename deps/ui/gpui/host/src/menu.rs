@@ -108,6 +108,7 @@ pub fn install(cx: &mut App) {
         KeyBinding::new("cmd-m", MinimizeWindow, None),
         KeyBinding::new("cmd-w", CloseWindow, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
+        KeyBinding::new("cmd-k", CommandPalette, None),
     ]);
 
     cx.set_menus([
