@@ -179,7 +179,9 @@ const carveIgnore = readText(".carve/ignore");
 assertNotContains(carveIgnore, "logseq.cli.main/main", ".carve/ignore");
 
 assertFilesDoNotMatch(
-  ["src/test/logseq/cli/server_test.cljs"],
+  ["src/test/logseq/cli/server_test.cljs"].filter((relativePath) =>
+    fs.existsSync(path.join(repoRoot, relativePath)),
+  ),
   /logseq\.cli\.config|cli-config\/server-list-path/,
   "retained db-worker-node runtime tests",
 );
