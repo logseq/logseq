@@ -2562,9 +2562,38 @@ let test_insert_blocks_preserves_existing_reference_ids () =
     (List.map uuid_of (Ldb.ref_ents inserted "block/refs")
      = [ referenced_uuid ])
 
+let test_apply_outdent_modes () =
+  List.iter (fun logical ->
+    let conn = create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "Outdent modes" }
+          ; blocks = [ { default_block with b_title = Some "parent"
+              ; b_children =
+                  [ { default_block with b_title = Some "before" }
+                  ; { default_block with b_title = Some "selected"
+                      ; b_children = [ { default_block with b_title = Some "own" } ] }
+                  ; { default_block with b_title = Some "after" } ] } ] } ] ()
+    in
+    let selected = find_block conn "selected" in
+    let opts = Wire.Map [ Wire.Keyword "logical-outdenting?", Wire.Bool logical ] in
+    apply_ops conn
+      [ Wire.List [ Wire.Keyword "indent-outdent-blocks"
+          ; Wire.List [ Wire.List [ Wire.Uuid (uuid_of selected) ]; Wire.Bool false; opts ] ] ];
+    let parent = find_block conn "parent" in
+    let selected = find_block conn "selected" in
+    let own = find_block conn "own" in
+    let after = find_block conn "after" in
+    check "outdent preserves existing subtree"
+      (Option.map (fun e -> e.id) (Ldb.ref_ent own "block/parent") = Some selected.id);
+    check "outdent mode controls following sibling adoption"
+      (Option.map (fun e -> e.id) (Ldb.ref_ent after "block/parent")
+       = Some (if logical then parent.id else selected.id))
+  ) [ false; true ]
+
 (* op_test.cljs *)
 let op_cases : unit Alcotest.test_case list =
-  [ Alcotest.test_case "insert-blocks-preserves-existing-reference-ids" `Quick test_insert_blocks_preserves_existing_reference_ids;
+  [ Alcotest.test_case "apply-outdent-modes" `Quick test_apply_outdent_modes;
+    Alcotest.test_case "insert-blocks-preserves-existing-reference-ids" `Quick test_insert_blocks_preserves_existing_reference_ids;
     Alcotest.test_case "toggle-reaction-op" `Quick test_toggle_reaction_op;
     Alcotest.test_case "collapse-expand-blocks-op" `Quick test_collapse_expand_blocks_op;
     Alcotest.test_case "resolve-indent-outdent-parent-original-test" `Quick test_resolve_indent_outdent_parent_original;

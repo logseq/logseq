@@ -7,6 +7,11 @@ open Lui_elements
 module D = Logseq_el
 module U = I18n
 
+(* Slice only the requested range. Melange String.sub first materializes
+   the entire source, making repeated rich-text matches quadratic. Native
+   Js.String.slice uses byte offsets; the web implementation uses UTF-16. *)
+let sub s off len = Js.String.slice ~start:off ~end_:(off + len) s
+
 (* positional substring index, -1 when absent — byte-compare, no
    allocation: Melange [String.sub] materializes the whole string per
    call, which made this scan O(n^2) on the web surface *)
@@ -456,8 +461,8 @@ let macro_args body =
   match String.index_opt body ' ' with
   | None -> (String.trim body, "")
   | Some i ->
-      (String.lowercase_ascii (String.sub body 0 i)
-      , String.trim (String.sub body (i + 1) (String.length body - i - 1)))
+      (String.lowercase_ascii (sub body 0 i)
+      , String.trim (sub body (i + 1) (String.length body - i - 1)))
 
 (* mldoc inline.ml macro_arg: a [[page ref]], [nested](link),
    ((block ref)) or "quoted" arg may contain commas — only the bare
@@ -564,7 +569,7 @@ let word_id_at s j =
     else i
   in
   match stop j - j with
-  | len when len > 0 -> Some (String.sub s j len)
+  | len when len > 0 -> Some (sub s j len)
   | _ -> None
 
 let is_word_id s =
@@ -597,17 +602,17 @@ let host_path_of_url url =
   let s = String.trim url in
   let s =
     if Str_util.starts_with_ci s "https://" then
-      String.sub s 8 (String.length s - 8)
+      sub s 8 (String.length s - 8)
     else if Str_util.starts_with_ci s "http://" then
-      String.sub s 7 (String.length s - 7)
+      sub s 7 (String.length s - 7)
     else if Str_util.starts_with s "//" then
-      String.sub s 2 (String.length s - 2)
+      sub s 2 (String.length s - 2)
     else s
   in
   match String.index_opt s '/' with
   | Some i ->
-      (String.lowercase_ascii (String.sub s 0 i)
-      , String.sub s i (String.length s - i))
+      (String.lowercase_ascii (sub s 0 i)
+      , sub s i (String.length s - i))
   | None -> (String.lowercase_ascii s, "")
 
 (* cljs video regexes gate the host on (www|m)?\. style groups — a
@@ -625,7 +630,7 @@ let query_digits url name =
       else i
     in
     match stop k - k with
-    | len when len > 0 -> Some (String.sub url k len)
+    | len when len > 0 -> Some (sub url k len)
     | _ -> None
   in
   match find_sub url 0 ("?" ^ name ^ "=") with
@@ -645,7 +650,7 @@ let youtube_start url =
         if i < n && is_digit url.[i] then stop (i + 1) else i
       in
       match stop k - k with
-      | len when len > 0 -> Some (String.sub url k len)
+      | len when len > 0 -> Some (sub url k len)
       | _ -> None)
   | _ -> None
 
@@ -686,7 +691,7 @@ let get_matched_video url =
               let k = 1 + String.length seg in
               if
                 Str_util.starts_with
-                  (String.sub path k (String.length path - k))
+                  (sub path k (String.length path - k))
                   "?v="
               then word_id_at path (k + 3)
               else Some seg)
@@ -773,7 +778,7 @@ let video_width arguments =
   List.find_map
     (fun a ->
       if Str_util.starts_with a "w=" then
-        let v = String.sub a 2 (String.length a - 2) in
+        let v = sub a 2 (String.length a - 2) in
         if v <> "" && String.for_all is_digit v then
           match int_of_string_opt v with
           | Some n when n > 0 -> Some n
@@ -880,7 +885,7 @@ let tweet_id_of arg =
           else i
         in
         match stop k - k with
-        | len when len > 0 -> Some (String.sub arg k len)
+        | len when len > 0 -> Some (sub arg k len)
         | _ -> None)
     | _ -> None
 
@@ -1009,7 +1014,7 @@ let split_tag_spec spec =
     in
     go 0
   in
-  let tag = String.sub spec 0 m in
+  let tag = sub spec 0 m in
   let id = ref "" and cls = Buffer.create 8 in
   let rec go i =
     if i < n then (
@@ -1020,7 +1025,7 @@ let split_tag_spec spec =
         in
         k (i + 1)
       in
-      let piece = String.sub spec (i + 1) (j - i - 1) in
+      let piece = sub spec (i + 1) (j - i - 1) in
       (match spec.[i] with
        | '#' -> id := piece
        | '.' ->
@@ -1258,7 +1263,7 @@ and try_bracket ~refs ~self s i =
   if Str_util.starts_at s i "[[" then
     match find_sub s (i + 2) "]]" with
     | j when j > i + 2 ->
-        let inner = String.sub s (i + 2) (j - i - 2) in
+        let inner = sub s (i + 2) (j - i - 2) in
         Some
           ( page_ref ~refs ~self inner
           , j + 2 - i
@@ -1270,8 +1275,8 @@ and try_bracket ~refs ~self s i =
     | j when j > i + 1 -> (
         match find_sub s (j + 2) ")" with
         | k when k > j + 2 ->
-            let label = String.sub s (i + 1) (j - i - 1) in
-            let url = String.sub s (j + 2) (k - j - 2) in
+            let label = sub s (i + 1) (j - i - 1) in
+            let url = sub s (j + 2) (k - j - 2) in
             Some
               ( external_link url (parse ~refs ~self label)
               , k + 1 - i
@@ -1375,9 +1380,9 @@ and macro_el ~refs ~self body =
       | j when j >= 0 ->
           let cue =
             String.trim
-              (String.sub arg_str (j + 2) (String.length arg_str - j - 2))
+              (sub arg_str (j + 2) (String.length arg_str - j - 2))
           in
-          cloze_el (String.trim (String.sub arg_str 0 j)) (Some cue)
+          cloze_el (String.trim (sub arg_str 0 j)) (Some cue)
       | _ -> cloze_el (String.trim arg_str) None)
   | "query" ->
       box ~style_class:"warning"
@@ -1444,7 +1449,7 @@ and try_hiccup ~refs ~self s i =
   ignore (refs, self);
   match hiccup_tag_end s (i + 2) with
   | te when te > i + 2 -> (
-      let spec = String.sub s (i + 2) (te - i - 2) in
+      let spec = sub s (i + 2) (te - i - 2) in
       let tag, _, _ = split_tag_spec spec in
       if
         List.mem tag hiccup_known_tags
@@ -1452,7 +1457,7 @@ and try_hiccup ~refs ~self s i =
       then
         match hiccup_close s i with
         | j when j > i ->
-            let literal = String.sub s i (j + 1 - i) in
+            let literal = sub s i (j + 1 - i) in
             Some (hiccup_el literal, j + 1 - i, Rs_atomic (literal, "ed-hiccup"))
         | _ -> None
       else None)
@@ -1465,7 +1470,7 @@ and try_hash ~refs ~self s i =
   if Str_util.starts_at s i "#[[" then
     match find_sub s (i + 3) "]]" with
     | j when j > i + 3 ->
-        let inner = String.sub s (i + 3) (j - i - 3) in
+        let inner = sub s (i + 3) (j - i - 3) in
         Some
           ( (if Wire.is_uuid_string inner
              then preview_link (resolved_tag_ref ~refs ~self inner)
@@ -1486,7 +1491,7 @@ and try_hash ~refs ~self s i =
     let j = stop (i + 1) in
     if j = i + 1 then None
     else
-      let raw = String.sub s (i + 1) (j - i - 1) in
+      let raw = sub s (i + 1) (j - i - 1) in
       (* strip trailing punctuation that is surely not part of the tag *)
       let k =
         let rec trim k =
@@ -1502,7 +1507,7 @@ and try_hash ~refs ~self s i =
            tag surfaces in .block-tags instead of an inline link *)
         None
       else
-        let name = String.sub raw 0 k in
+        let name = sub raw 0 k in
         let link : t =
          fun context parent ->
           let st = name_uuid_state context name in
@@ -1523,8 +1528,8 @@ and try_image s i =
     | j when j >= i + 2 -> (
         match find_sub s (j + 2) ")" with
         | k when k > j + 2 ->
-            let alt = String.sub s (i + 2) (j - i - 2) in
-            let src = String.sub s (j + 2) (k - j - 2) in
+            let alt = sub s (i + 2) (j - i - 2) in
+            let src = sub s (j + 2) (k - j - 2) in
             let el =
               if
                 Str_util.ends_with
@@ -1542,7 +1547,7 @@ and try_code s i =
   match find_sub s (i + 1) "`" with
   | j when j > i + 1 ->
       Some
-        ( code_span (String.sub s (i + 1) (j - i - 1))
+        ( code_span (sub s (i + 1) (j - i - 1))
         , j + 1 - i
         , Rs_wrapped (1, 1, false, "ed-code") )
   | _ -> None
@@ -1553,7 +1558,7 @@ and try_star ~refs ~self s i =
     match find_sub s (i + 2) "**" with
     | j when j > i + 2 ->
         Some
-          ( emph "b" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          ( emph "b" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
           , Rs_wrapped (2, 2, true, "ed-bold") )
     | _ -> None
@@ -1561,7 +1566,7 @@ and try_star ~refs ~self s i =
     match find_sub s (i + 1) "*" with
     | j when j > i + 1 ->
         Some
-          ( emph "i" (parse ~refs ~self (String.sub s (i + 1) (j - i - 1)))
+          ( emph "i" (parse ~refs ~self (sub s (i + 1) (j - i - 1)))
           , j + 1 - i
           , Rs_wrapped (1, 1, true, "ed-italic") )
     | _ -> None
@@ -1572,7 +1577,7 @@ and try_uscore ~refs ~self s i =
     match find_sub s (i + 2) "__" with
     | j when j > i + 2 ->
         Some
-          ( emph "b" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          ( emph "b" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
           , Rs_wrapped (2, 2, true, "ed-bold") )
     | _ -> None
@@ -1580,7 +1585,7 @@ and try_uscore ~refs ~self s i =
     match find_sub s (i + 1) "_" with
     | j when j > i + 1 ->
         Some
-          ( emph "i" (parse ~refs ~self (String.sub s (i + 1) (j - i - 1)))
+          ( emph "i" (parse ~refs ~self (sub s (i + 1) (j - i - 1)))
           , j + 1 - i
           , Rs_wrapped (1, 1, true, "ed-italic") )
     | _ -> None
@@ -1591,7 +1596,7 @@ and try_strike ~refs ~self s i =
     match find_sub s (i + 2) "~~" with
     | j when j > i + 2 ->
         Some
-          ( emph "del" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          ( emph "del" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
           , Rs_wrapped (2, 2, true, "ed-strike") )
     | _ -> None
@@ -1603,7 +1608,7 @@ and try_hl ~refs ~self s i =
     match find_sub s (i + 2) "^^" with
     | j when j > i + 2 ->
         Some
-          ( emph "mark" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          ( emph "mark" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
           , Rs_wrapped (2, 2, true, "ed-hl") )
     | _ -> None
@@ -1615,7 +1620,7 @@ and try_eq ~refs ~self s i =
     match find_sub s (i + 2) "==" with
     | j when j > i + 2 ->
         Some
-          ( emph "mark" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2)))
+          ( emph "mark" (parse ~refs ~self (sub s (i + 2) (j - i - 2)))
           , j + 2 - i
           , Rs_wrapped (2, 2, true, "ed-hl") )
     | _ -> None
@@ -1628,18 +1633,18 @@ and try_math s i =
     | j when j > i + 2 ->
         Some
           ( katex_el ~block:false ~display:true
-              (String.sub s (i + 2) (j - i - 2))
+              (sub s (i + 2) (j - i - 2))
           , j + 2 - i
-          , Rs_atomic (String.sub s (i + 2) (j - i - 2), "ed-latex") )
+          , Rs_atomic (sub s (i + 2) (j - i - 2), "ed-latex") )
     | _ -> None
   else
     match find_sub s (i + 1) "$" with
     | j when j > i + 1 ->
         Some
           ( katex_el ~block:false ~display:false
-              (String.sub s (i + 1) (j - i - 1))
+              (sub s (i + 1) (j - i - 1))
           , j + 1 - i
-          , Rs_atomic (String.sub s (i + 1) (j - i - 1), "ed-latex") )
+          , Rs_atomic (sub s (i + 1) (j - i - 1), "ed-latex") )
     | _ -> None
 
 (* {{macro ...}} *)
@@ -1647,7 +1652,7 @@ and try_macro ~refs ~self s i =
   if Str_util.starts_at s i "{{" then
     match find_sub s (i + 2) "}}" with
     | j when j > i + 2 ->
-        let body = String.sub s (i + 2) (j - i - 2) in
+        let body = sub s (i + 2) (j - i - 2) in
         Some
           ( macro_el ~refs ~self body
           , j + 2 - i
@@ -1680,7 +1685,7 @@ and try_date s i =
     match find_sub s (i + 10) ">" with
     | j when j > i + 10 ->
         Some
-          ( timestamp_text_el ~literal:(String.sub s i (j + 1 - i))
+          ( timestamp_text_el ~literal:(sub s i (j + 1 - i))
           , j + 1 - i
           , Rs_plain )
     | _ -> None
@@ -1698,7 +1703,7 @@ and try_html_tag ~refs ~self s i =
       let close = "</" ^ t ^ ">" in
       match find_sub s (i + open_len) close with
       | j when j >= i + open_len ->
-          let inner = String.sub s (i + open_len) (j - i - open_len) in
+          let inner = sub s (i + open_len) (j - i - open_len) in
           let dom_tag = match t with "ins" -> "u" | "s" -> "del" | x -> x in
           Some
             ( emph dom_tag (parse ~refs ~self inner)
@@ -1719,7 +1724,7 @@ and try_emoji s i =
   let rec stop j = if j < n && is_name_char s.[j] then stop (j + 1) else j in
   let j = stop (i + 1) in
   if j < n && s.[j] = ':' && j - i - 1 >= 1 && j - i - 1 <= 32 then
-    let name = String.sub s (i + 1) (j - i - 1) in
+    let name = sub s (i + 1) (j - i - 1) in
     Some (emoji_el name, j + 1 - i, Rs_atomic (":" ^ name ^ ":", "ed-emoji"))
   else None
 
@@ -1747,7 +1752,7 @@ and try_url s i =
       else stop (j + 1)
     in
     let j = stop i in
-    let url = String.sub s i (j - i) in
+    let url = sub s i (j - i) in
     Some
       (external_link url [ D.txt url ], j - i, Rs_atomic (url, "ed-url")))
   else None

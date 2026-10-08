@@ -104,6 +104,17 @@ let focused_block : string option ref = ref None
    focus_pending once the refreshed model and DOM exist *)
 let pending_focus_actions : (unit -> unit) list ref = ref []
 
+(* Structural edits depend on the preceding worker transaction. Input
+   received while it commits is replayed in order against the resulting
+   editing session, including keystrokes aimed at a retired sink. *)
+let structure_pending = ref false
+let pending_edit_actions : (unit -> unit) Queue.t = Queue.create ()
+
+let drain_edit_actions () =
+  while not !structure_pending && not (Queue.is_empty pending_edit_actions) do
+    (Queue.take pending_edit_actions) ()
+  done
+
 (* wall-clock of the last editing key/input event; worker_events
    defers a sync reload only while the editor is being actively typed in,
    so an idle-but-editing page does not starve remote updates *)

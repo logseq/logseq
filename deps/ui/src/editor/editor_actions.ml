@@ -66,13 +66,17 @@ let sel_span uuid =
 let refresh_overlay uuid =
   match (!S.active_frame, Editor_sink.conduit uuid, edit_model uuid) with
   | Some fr, Some conduit, Some m ->
-      Signal.update fr (fun _ -> Edit_input.measure conduit m);
-      let f =
+      let measured = Edit_input.measure conduit m in
+      let current =
         match !(fr.Signal.pending) with
         | Some v -> v
         | None -> Signal.get_state fr
       in
-      Option.is_some f.Edit_input.caret
+      if Option.is_some measured.Edit_input.caret && measured <> current then begin
+        Signal.update fr (fun _ -> measured);
+        Runtime.flush ()
+      end;
+      Option.is_some measured.Edit_input.caret
   | _ -> false
 
 let set_caret uuid pos =
@@ -308,17 +312,37 @@ let request_focus uuid caret =
      the arm rides the next flush pass *)
   D.set_timeout apply_focus 0
 
-(* set pending focus, then run [p]; re-apply focus after it resolves so
-   a remounted input still ends up focused *)
-let with_focus_after uuid caret p =
+let run_structure ~restore p finish =
+  let context = Runtime.repo (), Runtime.route () in
+  S.structure_pending := true;
+  let current () = context = (Runtime.repo (), Runtime.route ()) in
+  let settled = p |> Js.Promise.catch (fun _error ->
+      let* () = if current () then Ops.refresh_page () else Js.Promise.resolve () in
+      if current () then (
+        S.set (fun st -> { st with S.editing = restore });
+        match restore with
+        | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
+        | None -> S.pending_focus := None);
+      S.structure_pending := false;
+      Runtime.flush_now ();
+      S.drain_edit_actions ();
+      p) in
+  ignore
+    (let* () = settled in
+     S.structure_pending := false;
+     if current () then finish ();
+     Runtime.flush_now ();
+     S.drain_edit_actions ();
+     Js.Promise.resolve ())
+
+(* Arm the optimistic editor now and again after canonical rows land. *)
+let with_focus_after ~restore uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   last_focus_emitted := None;
   focus_attempts := 0;
   D.set_timeout apply_focus 0;
-  ignore
-    (let* () = p in
-     D.set_timeout apply_focus 0;
-     Js.Promise.resolve ())
+  run_structure ~restore p (fun () ->
+    if S.editing_uuid () = Some uuid then request_focus uuid caret)
 
 (* persisted/worker truth; display_title layers committed-but-unrefreshed
    buffers on top so exit-edit paints the saved text on the first frame *)
@@ -375,7 +399,13 @@ let scope_of_uuid uuid =
   | Some el -> scope_of_el el
   | None -> "main"
 
-let enter_edit ?scope uuid caret =
+let rec enter_edit ?scope uuid caret =
+  let context = Runtime.repo (), Runtime.route () in
+  if !S.structure_pending then
+    Queue.add (fun () ->
+      if context = (Runtime.repo (), Runtime.route ()) then
+        enter_edit ?scope uuid caret) S.pending_edit_actions
+  else
   let scope =
     match scope with Some sc -> sc | None -> scope_of_uuid uuid
   in
@@ -390,8 +420,10 @@ let enter_edit ?scope uuid caret =
       | Some _b ->
           (* stored titles are id-ref form; the edit buffer shows page names
              (cljs id-ref->title-ref) *)
-          ignore
+          let restore = S.editing () in
+          let p =
             (let* buffer = Ops.title_for_edit (String.trim (display_title uuid)) in
+            if context = (Runtime.repo (), Runtime.route ()) then (
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             S.set (fun st ->
@@ -401,9 +433,9 @@ let enter_edit ?scope uuid caret =
                 ; selected = S.String_set.empty
                 ; anchor = None
                 ; action_bar = false
-                });
-            request_focus uuid caret;
-            Js.Promise.resolve ())
+                }));
+            Js.Promise.resolve ()) in
+          run_structure ~restore p (fun () -> request_focus uuid caret)
 
   | None -> ()
 
@@ -539,6 +571,21 @@ let optimistic_edit (f : Model.page -> Model.page option) =
       in
       loop [] !Runtime.current_journals)
 
+let apply_indent_outdent ?parent_original uuids indent =
+  let* cfg = Sdk_config.read_config (Runtime.repo ()) in
+  let logical =
+    match Wire.get cfg "editor/logical-outdenting?" with
+    | None -> false
+    | Some (Wire.Bool b) -> b
+    | Some _ -> failwith "Logical outdenting configuration must be boolean"
+  in
+  if parent_original = None then
+    optimistic_edit (fun p ->
+        if indent then Model.indent_blocks p uuids
+        else Model.outdent_blocks ~logical p uuids);
+  Ops.apply_and_refresh
+    [ Ops.indent_outdent ?parent_original ~logical uuids indent ]
+
 (* cljs keydown-new-block: Enter on an empty last child outdents it
    instead of inserting a sibling (when no right sibling exists) *)
 let outdent_empty_last_child uuid e b =
@@ -550,7 +597,8 @@ let outdent_empty_last_child uuid e b =
         let last = List.length parent.Model.block_children - 1 in
         if idx < last then false
         else (
-          ignore (Ops.apply_and_refresh [ Ops.indent_outdent [ uuid ] false ]);
+          with_focus_after ~restore:(Some e) uuid e.S.model.Edit_model.caret
+            (apply_indent_outdent [ uuid ] false);
           true)
     | _ -> false
 (* cljs compute-fst-snd-block-text: the new block's half is triml'd *)
@@ -582,7 +630,7 @@ let split_at_cursor uuid =
       in
       mark "entry";
       let buf = e.S.buffer
-      and pos = fst (sel_span_of e.S.model) in
+      and pos, selection_end = sel_span_of e.S.model in
       let parent_ordered =
         match S.find_parent uuid with
         | Some (Some p, _) -> p.Model.block_order_list <> None
@@ -596,13 +644,21 @@ let split_at_cursor uuid =
         request_focus uuid 0)
       else
         let pos = max 0 (min pos (String.length buf)) in
-        let before = String.sub buf 0 pos in
-        let after = ltrim (String.sub buf pos (String.length buf - pos)) in
+        let prefix = String.sub buf 0 pos in
+        let suffix = ltrim (String.sub buf selection_end (String.length buf - selection_end)) in
+        let focused_root = Runtime.route () = Model.Block_zoom uuid in
+        let above = not focused_root && String.trim prefix = ""
+                    && String.trim suffix <> "" in
+        let before =
+          if above then (if selection_end <> pos then suffix else buf)
+          else prefix in
+        let after = if above then "" else suffix in
         let new_uuid = Platform.random_uuid () in
         let library = library_context () in
         let sibling =
-          library || S.is_collapsed_in ~scope:e.S.scope uuid
-          || b.Model.block_children = []
+          not focused_root
+          && (above || library || S.is_collapsed_in ~scope:e.S.scope uuid
+              || b.Model.block_children = [])
         in
         mark "prelude";
         let p =
@@ -612,15 +668,16 @@ let split_at_cursor uuid =
                ; Ops.block_map_parsed ~page:library new_uuid after |]
           in
           Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
-            [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
-            ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
+            ([ Ops.op "save-block" [ a.(0); Wire.Map [] ]
+            ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ]
+            @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else []))
         in
         mark "ops";
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
         optimistic_edit (fun p ->
-            Model.split_insert p ~uuid ~before
+            Model.split_insert ~above p ~uuid ~before
               ~new_block:
                 (Model.empty_block ~uuid:new_uuid ~title:after
                    ~is_page:library)
@@ -641,7 +698,7 @@ let split_at_cursor uuid =
                   (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope
                      ~base:after ()) });
         mark "editing";
-        with_focus_after new_uuid 0 p;
+        with_focus_after ~restore:(Some e) new_uuid 0 p;
         mark "focus-arm"
   | _ -> ()
 
@@ -684,7 +741,7 @@ let insert_sibling_after uuid =
                 (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope:e.scope
                    ~base:"" ())
           });
-      with_focus_after new_uuid 0 p  | _ -> ()
+      with_focus_after ~restore:(Some e) new_uuid 0 p  | _ -> ()
 
 let move_children_ops (b : Model.block) target_uuid =
   match
@@ -714,6 +771,23 @@ let boundary_merge_allowed source target_uuid =
     (Option.value source.Model.block_uuid ~default:"")
     target_uuid
 
+let merge_source left right =
+  let whitespace = function ' ' | '\t' | '\r' | '\n' -> true | _ -> false in
+  let separator =
+    left <> "" && right <> ""
+    && not (whitespace left.[String.length left - 1] || whitespace right.[0])
+    && match List.find_opt
+      (fun (r : Edit_runs.run) -> r.kind <> Edit_runs.Delim)
+      (List.rev (Edit_runs.runs left)) with
+      | Some { Edit_runs.kind = Atomic; cls; _ } ->
+          List.exists
+            (fun c -> List.mem c [ "ed-page-ref"; "ed-tag"; "ed-url"; "ed-link" ])
+            (String.split_on_char ' ' cls)
+      | _ -> false
+  in
+  let prefix = left ^ (if separator then " " else "") in
+  prefix ^ right, String.length prefix
+
 (* Backspace at caret 0: merge current into previous visible block *)
 let merge_prev uuid =
   match
@@ -737,13 +811,14 @@ let merge_prev uuid =
               ; Ops.delete_blocks [ prev_uuid ]
               ]
             in
+            optimistic_edit (fun p -> Model.delete_block p prev_uuid);
             S.set (fun st ->
                 { st with
                   S.editing =
                     Some
                       (S.with_model e (Edit_model.set_source e.S.model buf))
                 });
-            with_focus_after uuid 0
+            with_focus_after ~restore:(Some e) uuid 0
               (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
           else (
             (* title_for (override ?? model): prev's commit may still be
@@ -753,26 +828,29 @@ let merge_prev uuid =
             (* the merged-away row repaints before the delete lands — pin
                its live buffer so it doesn't flash the stale title *)
             S.override_title uuid (Ops.normalized_title uuid buf);
-            ignore
-              (let* sop =
-                 Ops.save_block_parsed prev_uuid (ptitle ^ buf)
+            let context = Runtime.repo (), Runtime.route () in
+            let p = (let* sop =
+                 Ops.save_block_parsed prev_uuid (fst (merge_source ptitle buf))
                in
                let ops =
                  move_children_ops b prev_uuid
                  @ [ Ops.delete_blocks [ uuid ]; sop ]
                in
                let* pbuf = Ops.title_for_edit (String.trim ptitle) in
+               let merged, caret = merge_source pbuf buf in
+              if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve ()
+              else (
               S.set (fun st ->
                   { st with
                     S.editing =
                       Some
-                        (S.mk_editing ~uuid:prev_uuid ~buffer:(pbuf ^ buf)
-                           ~scope:e.scope ~base:(pbuf ^ buf) ()) });
-              with_focus_after prev_uuid
-                (String.length pbuf)
-                (Ops.apply_and_refresh
-                   ~opts:(Ops.op_opts "delete-blocks") ops);
-              Js.Promise.resolve ())))
+                        (S.mk_editing ~caret ~uuid:prev_uuid ~buffer:merged
+                           ~scope:e.scope ~base:merged ()) });
+              request_focus prev_uuid caret;
+              Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)) in
+            run_structure ~restore:(Some e) p (fun () ->
+              if S.editing_uuid () = Some prev_uuid then
+                request_focus prev_uuid (caret_of prev_uuid))))
   | _ -> ()
 
 (* children of b except [except_uuid] -> move under target *)
@@ -817,46 +895,52 @@ let merge_next uuid =
             (* the row repaints before the delete lands — pin its live
                (empty) buffer so it doesn't flash the stale title *)
             S.override_title uuid (Ops.normalized_title uuid buf);
-            ignore
-              (let* nbuf =
+            let context = Runtime.repo (), Runtime.route () in
+            let p = (let* nbuf =
                  Ops.title_for_edit
                    (String.trim
                       (S.title_for next_uuid next.Model.block_title))
                in
+              if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve ()
+              else (
               S.set (fun st ->
                   { st with
                     S.editing =
                       Some
                         (S.mk_editing ~uuid:next_uuid ~buffer:nbuf
                            ~scope:e.scope ~base:nbuf ()) });
-              with_focus_after next_uuid 0
-                (Ops.apply_and_refresh
-                   ~opts:(Ops.op_opts "delete-blocks") ops);
-              Js.Promise.resolve ()))          else (
+              request_focus next_uuid 0;
+              Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)) in
+            run_structure ~restore:(Some e) p (fun () ->
+              if S.editing_uuid () = Some next_uuid then request_focus next_uuid 0))
+          else (
             let ops =
               move_children_ops next uuid @ [ Ops.delete_blocks [ next_uuid ] ]
 
             in
-            ignore
-              (let* nbuf =
+            let context = Runtime.repo (), Runtime.route () in
+            let p = (let* nbuf =
                  Ops.title_for_edit
                    (String.trim
                       (S.title_for next_uuid next.Model.block_title))
                in
+               let merged, caret = merge_source buf nbuf in
+              if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve ()
+              else (
               S.set (fun st ->
                   { st with
                     S.editing =
                       Some
-                        { (S.with_model e
-                             (Edit_model.create ~units:S.edit_units
-                                (buf ^ nbuf)))
-                          with S.base = buf ^ nbuf }
+                        (S.mk_editing ~caret ~uuid
+                           ~buffer:merged ~scope:e.scope ~base:merged ())
                   });
-              with_focus_after uuid (String.length buf)
-                (Ops.apply_parsed_and_refresh
+              request_focus uuid caret;
+              Ops.apply_parsed_and_refresh
                    ~opts:(Ops.op_opts "delete-blocks") ~rest:ops
-                   [ (uuid, buf ^ nbuf) ]);
-              Js.Promise.resolve ())))  | _ -> ()
+                   [ (uuid, merged) ])) in
+            run_structure ~restore:(Some e) p (fun () ->
+              if S.editing_uuid () = Some uuid then request_focus uuid (caret_of uuid))))
+  | _ -> ()
 
 (* ---- selection ---- *)
 
@@ -1087,17 +1171,12 @@ let indent_or_outdent ~indent =
             p.Model.block_uuid
         | _ -> None
       in
-      (* optimistic local reparent: the DOM moves in this task instead of
-         remounting when the async worker refresh lands (e2e boundingBox
-         races that remount). Worker refresh stays authoritative. *)
-      if parent_original = None then
-        optimistic_edit (fun p ->
-            (if indent then Model.indent_blocks else Model.outdent_blocks)
-              p uuids);
-      with_focus_after focus
-        (String.length (live_buffer focus))
-        (Ops.apply_and_refresh
-           [ Ops.indent_outdent ?parent_original uuids indent ])
+      let caret = match S.editing () with
+        | Some e when e.S.uuid = focus -> e.S.model.Edit_model.caret
+        | _ -> 0
+      in
+      with_focus_after ~restore:(S.editing ()) focus caret
+        (apply_indent_outdent ?parent_original uuids indent)
 
 let move_blocks_up_down up =
   match selected_uuids () with
@@ -1147,7 +1226,7 @@ let delete_selection () =
                      ; anchor = None
                      ; action_bar = false
                      });
-                 with_focus_after pu
+                 with_focus_after ~restore:None pu
                    (String.length buffer)
                    (Ops.apply_and_refresh
                       [ Ops.delete_blocks uuids ]);
@@ -1818,6 +1897,7 @@ let measured_partitions len rs =
       go 0 rs
 
 let refresh_lines m (conduit : Edit_input.conduit) =
+  if Edit_model.composing m then m else
   match conduit.line_ranges () with
   | rs when measured_partitions (String.length m.Edit_model.source) rs ->
       Edit_model.set_lines m rs
@@ -1954,9 +2034,10 @@ let append_block ?for_page ?(scope = "main") () =
              mount, which happens inside this op's refresh — defer the
              edit-mode entry into the initial state so the row mounts
              straight into the editor *)
+          let restore = S.editing () in
           if S.ready () then S.set stage
           else S.defer_init stage;
-          with_focus_after new_uuid 0
+          with_focus_after ~restore new_uuid 0
             (Ops.apply_and_refresh
                [ Ops.insert_blocks
                    [ Ops.block_map ~title:"" ~page:p.Model.page_is_library

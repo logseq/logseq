@@ -383,13 +383,14 @@ let map_list_where (here : block -> bool) (f : block list -> block list)
    its next sibling (or first child when the op expands into children).
    The worker delta stays authoritative — it lands ~100ms later with the
    same uuid and splices the real record over this placeholder *)
-let split_insert (page : page) ~uuid ~before ~(new_block : block) ~sibling
+let split_insert ?(above = false) (page : page) ~uuid ~before ~(new_block : block) ~sibling
     : page option =
   let edit blocks =
     List.concat_map
       (fun b ->
         if b.block_uuid = Some uuid then
-          if sibling then [ { b with block_title = before }; new_block ]
+          if above then [ new_block; { b with block_title = before } ]
+          else if sibling then [ { b with block_title = before }; new_block ]
           else
             [ { b with
                 block_title = before
@@ -409,6 +410,18 @@ let split_insert (page : page) ~uuid ~before ~(new_block : block) ~sibling
    reconciles an identical structure instead of remounting the editing
    textarea mid-flight — e2e boundingBox races that remount). Returns None
    when nothing moves; worker refresh stays authoritative. *)
+let delete_block (page : page) uuid : page option =
+  let changed = ref false in
+  let rec remove blocks =
+    List.filter_map
+      (fun b ->
+        if b.block_uuid = Some uuid then (changed := true; None)
+        else Some { b with block_children = remove b.block_children })
+      blocks
+  in
+  let blocks = remove page.page_blocks in
+  if !changed then Some { page with page_blocks = blocks } else None
+
 let indent_blocks (page : page) (uuids : string list) : page option =
   let sel = List.sort_uniq compare uuids in
   let is_sel b =
@@ -451,7 +464,7 @@ let indent_blocks (page : page) (uuids : string list) : page option =
 
 (* optimistic outdent: lift selected children out of their parent and
    reinsert them after it *)
-let outdent_blocks (page : page) (uuids : string list) : page option =
+let outdent_blocks ~logical (page : page) (uuids : string list) : page option =
   let sel = List.sort_uniq compare uuids in
   let is_sel b =
     match b.block_uuid with Some u -> List.mem u sel | None -> false
@@ -484,9 +497,10 @@ let outdent_blocks (page : page) (uuids : string list) : page option =
               in
               take [] after
             in
+            let parent_children = if logical then prefix @ suffix else prefix in
             let selected =
-              match List.rev selected, suffix with
-              | last :: rprev, _ :: _ ->
+              match logical, List.rev selected, suffix with
+              | false, last :: rprev, _ :: _ ->
                   let last =
                     { last with
                       block_children = last.block_children @ suffix }
@@ -494,7 +508,7 @@ let outdent_blocks (page : page) (uuids : string list) : page option =
                   List.rev (last :: rprev)
               | _ -> selected
             in
-            { b with block_children = prefix } :: selected)
+            { b with block_children = parent_children } :: selected)
       blocks
   in
   match

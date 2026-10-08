@@ -438,7 +438,7 @@ let test_incremental () =
   check "splice keeps untouched line" (List.hd ls3 == List.hd ls1);
   (* IME composition keeps the line list *)
   let m4 =
-    M.composition_update (M.composition_begin m3 m3.M.caret) ~len:2
+    M.composition_update (M.composition_begin m3 m3.M.caret) ~text:"ab"
   in
   let ls4 = Edit_view.lines_step cache m4 in
   check "ime reuses lines" (ls4 == ls3);
@@ -454,11 +454,72 @@ let test_incremental () =
   let ls5 = Edit_view.lines_step cache m5 in
   check "line-count change == full" (ls5 = Edit_view.lines_of m5)
 
+let test_offset_shift_work () =
+  List.iter
+    (fun count ->
+      let source =
+        List.init count (fun i -> "Line " ^ string_of_int i ^ " plain text")
+        |> String.concat "\n"
+      in
+      let h = mount_editor ~units:M.U16 source in
+      send h (In (E.Insert "x"));
+      let d = Lui_runtime.diagnostics (Lui_app.runtime h.s.S.app) in
+      check "offset shifts avoid fragment subtree propagation"
+        (d.flush_signal_dirty_task_count <= (4 * count) + 64);
+      eqs "insertion updates source" ("x" ^ source) (ed h).M.source)
+    [10; 500]
+
+let test_web_flow () =
+  let source = List.init 500 (fun i -> "Line " ^ string_of_int i) |> String.concat "\n" in
+  let h = mount_editor ~units:M.U16 source in
+  check "plain multiline web surface has bounded retained nodes"
+    (DM.node_count h.s.S.tree < 64);
+  let source_of_surface () =
+    cls_nodes h "ed-line"
+    |> List.map (fun row ->
+      DM.children (tree h) row.DM.id
+      |> List.filter (fun n -> not (DM.contains_ic (Option.value (DM.string_prop n "style-class") ~default:"") "ed-pad"))
+      |> List.map (fun n -> Option.value (DM.string_prop n "text") ~default:"")
+      |> String.concat "")
+    |> String.concat "\n"
+  in
+  check "web flow bounds the text reflow region"
+    (List.for_all
+       (fun n -> List.length (String.split_on_char '\n'
+          (Option.value (DM.string_prop n "text") ~default:"")) <= 32)
+       (cls_nodes h "ed-r"));
+  eqs "web flow preserves newline source" source (source_of_surface ());
+  send h (In (E.Insert "x"));
+  eqs "web flow updates source without line nodes" ("x" ^ source) (source_of_surface ());
+  let h = mount_editor ~units:M.U16 "first\n\nlast\n" in
+  eqi "web flow retains one final caret landing pad" 1 (List.length (cls_nodes h "ed-pad"));
+  let prefix = List.init 30 (fun _ -> "plain") |> String.concat "\n" in
+  let atomic = "$$" ^ (List.init 20 (fun _ -> "x") |> String.concat "\n") ^ "$$" in
+  let h = mount_editor ~units:M.U16 (prefix ^ "\n" ^ atomic ^ "\ntail") in
+  eqi "web flow does not split a multiline atomic construct" 1 (List.length (cls_nodes h "ed-pill"))
+
+let test_shifted_pill_click () =
+  let h = mount_editor ~units:M.U16 "ab\n[[Page]]" in
+  let pill_id =
+    match cls_nodes h "ed-pill" with
+    | [pill] -> pill.DM.id
+    | _ -> failwith "expected one reference pill"
+  in
+  send h (In (E.Insert "x"));
+  check "shifted pill retains node identity" (cls_ids h "ed-pill" = [pill_id]);
+  S.press h.s pill_id;
+  eqi "pill click uses shifted source offset" 5 (ed h).M.caret;
+  eqs "pill click preserves source" "xab\n[[Page]]" (ed h).M.source;
+  check "pill click reveals current reference" (cls_nodes h "ed-raw" <> [])
+
 let run () =
   test_emit_structure ();
   test_empty_line_pad ();
   test_incremental ();
   test_shape_gated ();
+  test_offset_shift_work ();
+  test_web_flow ();
+  test_shifted_pill_click ();
   test_overlay ();
   test_sink_events ();
   test_input_mapping ();

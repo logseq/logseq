@@ -302,7 +302,7 @@ let test_composition () =
   check "composing" (M.composing m);
   eq "comp range" (Some (1, 1)) (M.composition_range m)
     (function Some (a, b) -> Printf.sprintf "(%d,%d)" a b | None -> "-");
-  let m = M.composition_update m ~len:6 in
+  let m = M.composition_update m ~text:"abcdef" in
   eq "comp range grown" (Some (1, 7)) (M.composition_range m)
     (function Some (a, b) -> Printf.sprintf "(%d,%d)" a b | None -> "-");
   (* keys pass through while composing *)

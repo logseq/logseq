@@ -243,7 +243,7 @@ let handle ~route ~conduit m (ev : event) : Edit_model.t =
   | Composition (Comp_start, _) ->
       Edit_model.composition_begin m m.Edit_model.caret
   | Composition (Comp_update, text) ->
-      Edit_model.composition_update m ~len:(String.length text)
+      Edit_model.composition_update m ~text
   | Composition (Comp_end, text) -> Edit_model.composition_commit m text
   | Composition (Comp_cancel, _) -> Edit_model.composition_cancel m
   | Focus -> route.focused true; m
@@ -259,6 +259,7 @@ let handle ~route ~conduit m (ev : event) : Edit_model.t =
 (* fold the conduit's measurements into the frame the overlay draws:
    the caret bar plus one selection rect per selected visual line *)
 let measure conduit (m : Edit_model.t) : frame =
+  let m = Edit_model.display_model m in
   let caret = conduit.caret_rect m.Edit_model.caret in
   let selection =
     match Edit_model.selection_range m with

@@ -382,7 +382,7 @@ let () =
     M.select (m pos_plain) ~anchor:pos_plain ~focus:(pos_plain + 10)
   in
   let m_ime = M.composition_begin (m pos_plain) pos_plain in
-  let m_ime_marked = M.composition_update m_ime ~len:4 in
+  let m_ime_marked = M.composition_update m_ime ~text:"test" in
 
   print_header ();
   let s_move =

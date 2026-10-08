@@ -219,6 +219,7 @@ type t =
          (start, stop) tracks where the marked text would sit so the
          view can underline it. Cleared on commit/cancel and on any
          buffer mutation. *)
+  ; composition_text : string
   ; lines : (int * int) list
       (* visual line unit ranges [start, stop). Populated from '\n'
          breaks by default; the host overwrites via [set_lines] with
@@ -249,6 +250,7 @@ let rebuild m source ~caret ~anchor ~dirty =
   ; caret
   ; anchor
   ; composition = None
+  ; composition_text = ""
   ; lines = lines_of_source source
   ; dirty
   }
@@ -261,6 +263,7 @@ let create ?(units = Bytes) source =
   ; caret = 0
   ; anchor = None
   ; composition = None
+  ; composition_text = ""
   ; lines = lines_of_source source
   ; dirty = None
   }
@@ -476,35 +479,48 @@ let select_all m =
 (* --- IME composition -----------------------------------------------------------
    Contract: the conduit does NOT insert marked text into [source];
    the model tracks the virtual [start, stop) range the marked text
-   will occupy so the view can draw the composition underline.
-   [composition_commit] inserts the committed text at the range start
-   (replacing nothing) and clears the window. *)
+   will occupy. The view splices a preview over the original selection;
+   only [composition_commit] replaces that selection in [source]. *)
 
 let composing m = Option.is_some m.composition
 let composition_range m = m.composition
 
-(* textarea semantics: a live selection is replaced by the composition,
-   so it is spliced out before the marked range begins — otherwise
-   committing "字" over a "hello" selection yields "hello字" *)
+(* Keep the committed source and selection intact until compositionend.
+   A cancelled composition must not delete the selected text. *)
 let composition_begin m off =
-  let m, off =
+  let off =
     match selection_range m with
-    | Some (lo, hi) -> (splice m lo hi "", lo)
-    | None -> (m, clamp_caret m.units m.source off)
+    | Some (lo, _) -> lo
+    | None -> clamp_caret m.units m.source off
   in
-  { m with composition = Some (off, off); caret = off; anchor = None }
+  { m with composition = Some (off, off); composition_text = "" }
 
-let composition_update m ~len =
+let composition_update m ~text =
   match m.composition with
-  | Some (start, _) -> { m with composition = Some (start, start + len) }
+  | Some (start, _) ->
+      { m with composition = Some (start, start + String.length text)
+             ; composition_text = text }
   | None -> m
 
 let composition_commit m text =
   match m.composition with
-  | Some (start, _) -> splice m start start text
+  | Some _ when text = "" ->
+      { m with composition = None; composition_text = "" }
+  | Some (start, _) ->
+      let stop = match selection_range m with Some (_, hi) -> hi | None -> start in
+      splice m start stop text
   | None -> insert_text m text
 
-let composition_cancel m = { m with composition = None }
+let composition_cancel m = { m with composition = None; composition_text = "" }
+
+(* The view paints preedit text without publishing it to block/title. *)
+let display_model m =
+  match m.composition with
+  | Some (start, stop) when m.composition_text <> "" ->
+      let hi = match selection_range m with Some (_, hi) -> hi | None -> start in
+      let preview = splice m start hi m.composition_text in
+      { preview with composition = Some (start, stop) }
+  | _ -> m
 
 (* --- keymap --------------------------------------------------------------------
    [key_event -> edit_action]; the platform conduit collects raw keys
