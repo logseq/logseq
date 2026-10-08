@@ -3064,7 +3064,17 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
                    ~opt_view_for_id:(opt_int "view-for-id")
                    ~opt_feat_type:(opt_ident "view-feature-type")
                    ~include_ref_pages_count ()
-             | None -> No_entities)
+             | None ->
+                 let view_for_id = opt_int "view-for-id" in
+                 let index_attr = match feat_type with
+                   | Some "all-pages" -> Some "block/name"
+                   | Some "class-objects" -> Some "block/tags"
+                   | Some "property-objects" ->
+                       Option.bind view_for_id (fun id ->
+                         Option.bind (Ldb.ent_of_id db id) Ldb.ident_of)
+                   | _ -> None in
+                 get_entities db ~feat_type ~index_attr ~view_for_id
+                   ~include_ref_pages_count ())
         in
         let entities =
           match entities_result with

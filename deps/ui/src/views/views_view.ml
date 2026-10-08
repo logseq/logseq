@@ -326,9 +326,7 @@ let load_view_data ?(fetch_limit = 0) inst =
   in
   let view_uuid = (V.get inst).V.view_uuid in
   let key = Db.key_view_data view_uuid ctx in
-  Db.snapshots
-    ~f:(fun snap ->
-      match Wr.snapshot_slot_value snap key with
+  let apply = function
       | None ->
           V.update inst (fun s -> { s with V.data = Wr.VEmpty; loading = false })
       | Some v ->
@@ -367,7 +365,29 @@ let load_view_data ?(fetch_limit = 0) inst =
                | v -> Views_query.collect_uuids v [])
           in
           load_blocks inst uuids (fun () ->
-              load_props inst (fun () -> build_columns inst)))
+              load_props inst (fun () -> build_columns inst))
+  in
+  if Platform.publishing () && view_uuid = "" then
+    let owner_ref = match inst.V.owner with
+      | W.String name -> W.Array [ W.kw "block/name"; W.String name ]
+      | W.Uuid uuid -> W.Array [ W.kw "block/uuid"; W.Uuid uuid ]
+      | _ -> invalid_arg "View owner must be a page name or UUID" in
+    ignore ((let* owner = Runtime.invoke3 "thread-api/pull"
+        (W.String (Db.repo ())) (W.String "[:db/id]") owner_ref in
+      let fields = match ctx with W.Map kvs -> kvs | _ -> assert false in
+      let fields = List.map (fun (k, v) ->
+        ((match k with
+          | W.Keyword "feature-type" -> W.kw "view-feature-type"
+          | W.Keyword "initial-row-count" -> W.kw "row-limit"
+          | k -> k), v)) fields in
+      let fields = (W.kw "render?", W.Bool true) :: fields in
+      let fields = match W.get owner "db/id" with
+        | Some id -> (W.kw "view-for-id", id) :: fields | None -> fields in
+      let* data = Runtime.invoke3 "thread-api/get-view-data"
+          (W.String (Db.repo ())) W.Nil (W.Map fields) in
+      apply (Some data);
+      Js.Promise.resolve ()) |> Db.catch_quiet)
+  else Db.snapshots ~f:(fun snap -> apply (Wr.snapshot_slot_value snap key))
     [ Db.resource_view_data view_uuid ctx ]
 
 let refresh inst =
@@ -467,6 +487,7 @@ let create_view ~title ~uuid inst ~after =
 let ensure_default_view inst =
   match (V.get inst).V.views with
   | v :: _ -> select_view inst v
+  | [] when Platform.publishing () -> refresh inst
   | [] ->
       owner_uuid inst (function
         | Some ouuid ->

@@ -655,7 +655,7 @@ let get_blocks_response repo (requests : Wire.t) : Wire.t option =
         else []
       in
       let conflicts_by_block =
-        if metadata_blocks <> [] then
+        if metadata_blocks <> [] && not (Worker_state.publishing ()) then
           let tbl = Hashtbl.create 15 in
           List.iter
             (fun (c : Sync_client_op.sync_conflict) ->

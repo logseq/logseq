@@ -20,10 +20,10 @@ tne = "tne"
 Damon = "Damon"
 [files]
 extend-exclude = ["resources/*",
-                  "src/resources/*",
+                  "resources/templates/*",
                   "resources/dicts/*",
                   "scripts/resources/*",
-                  "src/test/fixtures/*",
+                  "deps/db-worker/test/fixtures/*",
                   "deps/db-sync/test/logseq/db_sync/fixtures/*.edn",
                   "clj-e2e/resources/*",
                   "deps/common/src/logseq/common/plural.cljs",

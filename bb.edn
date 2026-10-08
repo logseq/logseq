@@ -1,4 +1,4 @@
-{:paths ["scripts/src" "resources" "src/main" "src/resources"]
+{:paths ["scripts/src" "resources"]
  :deps
  {metosin/malli
   {:git/url "https://github.com/metosin/malli"
@@ -49,21 +49,9 @@
    :doc "Build release publishing spa app given graph and output dirs"
    :task (run 'dev:publishing-backend)}
 
-  -dev:watch-publishing-frontend
-  logseq.tasks.dev/watch-publishing-frontend
-
-  -dev:watch-publishing-backend
-  logseq.tasks.dev/watch-publishing-backend
-
-  -dev:publishing-dev
-  {:depends [-dev:watch-publishing-frontend -dev:watch-publishing-backend]
-   :doc "Watch dev publishing spa app given graph and output dirs"}
-
   dev:publishing
-  {:doc "Builds full publishing app given graph and output dirs. Append --dev to watch frontend"
-   :task (if ((set *command-line-args*) "--dev")
-           (run '-dev:publishing-dev {:parallel true})
-           (run '-dev:publishing-release))}
+  {:doc "Build a LUI publishing site from graph and output directories. Use --dev to retain source maps."
+   :task (run '-dev:publishing-release)}
 
   dev:query
   {:doc "Query a DB graph's datascript db"
@@ -109,26 +97,8 @@
   dev:diff-datoms
   logseq.tasks.dev/diff-datoms
 
-  dev:validate-local-storage
-  logseq.tasks.spec/validate-local-storage
-
-  dev:validate-plugins-edn
-  logseq.tasks.malli/validate-plugins-edn
-
-  dev:validate-repo-config-edn
-  logseq.tasks.malli/validate-repo-config-edn
-
-  dev:validate-global-config-edn
-  logseq.tasks.malli/validate-global-config-edn
-
-  dev:validate-ast
-  logseq.tasks.malli/validate-ast
-
   dev:test
   logseq.tasks.dev/test
-
-  dev:run-test-namespaces
-  logseq.tasks.dev/run-test-namespaces
 
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
@@ -144,9 +114,6 @@
   dev:db-sync-start
   {:doc "Start db-sync local server + client watch processes in foreground"
    :task logseq.tasks.dev.db-sync/start}
-
-  dev:gen-malli-kondo-config
-  logseq.tasks.dev/gen-malli-kondo-config
 
   dev:db-worker-node
   {:doc "Build the OCaml db-worker bundle and start db-worker-node (pass-through args forwarded to node)"
@@ -168,18 +135,6 @@
 
   lint:dev
   logseq.tasks.dev.lint/dev
-
-  lint:kondo-git-changes
-  logseq.tasks.dev.lint/kondo-git-changes
-
-  lint:large-vars
-  logseq.bb-tasks.lint.large-vars/-main
-
-  lint:carve
-  logseq.bb-tasks.lint.carve/-main
-
-  lint:ns-docstrings
-  logseq.bb-tasks.lint.ns-docstrings/-main
 
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch
@@ -203,22 +158,4 @@
   logseq.tasks.lang/validate-translations
 
   lang:lint-hardcoded
-  logseq.tasks.lang/lint-hardcoded
-
-  ai:check-common-errors
-  logseq.tasks.common-errors/check-common-errors}
-
- :tasks/config
- {:large-vars
-  ;; TODO: Get to a smaller max-lines-count
-  {:max-lines-count 100
-   ;; TODO: Address vars tagged with cleanup-todo. These
-   ;; are left mostly because they are not high priority
-   ;; or not well understood
-   :metadata-exceptions #{:large-vars/cleanup-todo}}
-
-  :ns-docstrings
-  {:paths ["src/main"]
-   ;; Ignore namespaces that won't be helpful to document initially
-   ;; e.g. frontend.components.onboarding -> "Onboarding fns"
-   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile|logseq.sdk)"}}}
+  logseq.tasks.lang/lint-hardcoded}}

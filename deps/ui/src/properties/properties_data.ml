@@ -213,7 +213,7 @@ let display_opts ~page_title ~tag_dialog ~sidebar =
     ; (W.Keyword "page-title?", W.Bool page_title)
     ; (W.Keyword "sidebar-properties?", W.Bool sidebar)
     ; (W.Keyword "tag-dialog?", W.Bool tag_dialog)
-    ; (W.Keyword "publishing?", W.Bool false)
+    ; (W.Keyword "publishing?", W.Bool (Platform.publishing ()))
     ; (W.Keyword "state-hide-empty-properties?", W.Bool false)
     ]
 

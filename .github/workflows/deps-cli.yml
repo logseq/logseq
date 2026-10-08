@@ -7,8 +7,6 @@ on:
     branches: [master]
     paths:
       - 'cli/**'
-      - 'src/main/logseq/cli/**'
-      - 'src/test/logseq/cli/**'
       - 'cli-e2e/**'
       - 'dist/logseq.js'
       - 'scripts/prepare-cli-package.mjs'
@@ -22,14 +20,10 @@ on:
       - 'deps/db/**'
       - 'deps/common/**'
       - 'deps/db-sync/**'
-      - 'src/main/frontend/worker/**'
-      - 'src/main/logseq/db_worker/**'
   pull_request:
     branches: [master]
     paths:
       - 'cli/**'
-      - 'src/main/logseq/cli/**'
-      - 'src/test/logseq/cli/**'
       - 'cli-e2e/**'
       - 'dist/logseq.js'
       - 'scripts/prepare-cli-package.mjs'
@@ -43,8 +37,6 @@ on:
       - 'deps/db/**'
       - 'deps/common/**'
       - 'deps/db-sync/**'
-      - 'src/main/frontend/worker/**'
-      - 'src/main/logseq/db_worker/**'
   workflow_dispatch:
     inputs:
       git-ref:

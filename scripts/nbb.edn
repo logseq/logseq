@@ -6,6 +6,4 @@
   {:local/root "../deps/outliner"}
   ;; for config.edn
   logseq/common
-  {:local/root "../deps/common"}
-  logseq/publishing
-  {:local/root "../deps/publishing"}}}
+  {:local/root "../deps/common"}}}

@@ -49,7 +49,6 @@ function scopeConfig(scope) {
       //  - deps/db-sync/src+test              ← DB sync server / Node adapter
       //  - deps/db/script+test                ← DB utility scripts (Node)
       //  - deps/graph-parser/src+test+script  ← Parser CLI + tests
-      //  - deps/publishing/script+test        ← Publishing scripts
       //
       // Browser/Worker builds (app, db-worker, inference-worker, mobile) are
       // intentionally excluded because their npm deps are resolved at bundle
@@ -67,8 +66,6 @@ function scopeConfig(scope) {
           'deps/graph-parser/src',
           'deps/graph-parser/test',
           'deps/graph-parser/script',
-          'deps/publishing/script',
-          'deps/publishing/test',
         ],
         packageDirs: ['static/node_modules', 'resources/node_modules', 'node_modules'],
         requireCwds: ['static', 'resources', '.'],

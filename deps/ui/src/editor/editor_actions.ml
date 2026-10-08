@@ -418,6 +418,7 @@ let scope_of_uuid uuid =
   | None -> "main"
 
 let rec enter_edit ?scope uuid caret =
+  if Platform.publishing () then () else
   let context = Runtime.repo (), Runtime.route () in
   if !S.structure_pending then
     Queue.add (fun () ->
@@ -1754,14 +1755,16 @@ let toggle_collapse ?(scope = "main") uuid =
       else
         let now = not (S.effective_collapsed ~scope b) in
         S.set_collapsed ~scope uuid now;
-        ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
+        if not (Platform.publishing ()) then
+          ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
   | _ -> ()
 
 let set_collapsed ?(scope = "main") uuid collapsed =
   match S.find uuid with
   | Some b when S.children_of b <> [] ->
       S.set_collapsed ~scope uuid collapsed;
-      ignore (Ops.apply [ Ops.collapse_expand [ (uuid, collapsed) ] ])
+      if not (Platform.publishing ()) then
+        ignore (Ops.apply [ Ops.collapse_expand [ (uuid, collapsed) ] ])
   | _ -> ()
 
 (* cljs editor/expand! / collapse!: edit mode toggles the open block,

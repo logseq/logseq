@@ -11,12 +11,11 @@
 # Behaviour is independent of the working directory.
 project_root = ".."
 
+# OCaml translation calls are checked through compiler-libs by the BB task.
+ocaml_source_dirs = ["deps/ui/src", "deps/ui/subs", "deps/ui/native", "deps/db-worker/desktop"]
+
 # Directories to scan (relative to project_root).
 include_dirs = [
-  "src/main/frontend",
-  "src/main/electron",
-  "src/main/mobile",
-  "src/electron",
   "deps",
 ]
 
@@ -96,16 +95,9 @@ exclude_patterns = [
   "**/.nbb/**",
   "deps/cli/**",
   "deps/publish/**",
-  "deps/publishing/**",
   "deps/db-sync/src/logseq/db_sync/malli_schema.cljs",           # Malli protocol schema — wire-protocol message type names
   "deps/graph-parser/src/logseq/graph_parser/schema/mldoc.cljc", # mldoc schema — AST node type names (Label, Paragraph, etc.)
   "deps/shui/src/logseq/shui/demo*.cljs",                        # storybook demo UI — intentionally hardcoded
-  "src/main/frontend/components/profiler.cljs",                  # Developer profiling tool
-  "src/main/frontend/db/rtc/debug_ui.cljs",                      # Developer RTC tool
-  "src/main/frontend/handler/export/html.cljs",                  # Raw HTML export — intentional
-  "src/main/frontend/handler/shell.cljs",                        # Run shell command
-  "src/main/frontend/undo_redo/debug_ui.cljs",                   # Developer undo/redo tool
-  "src/main/frontend/**/plugin*",                                # Plugin namespaces — may contain hardcoded strings that are not
 ]
 
 # Maximum character length of the text preview in output.
@@ -320,7 +312,6 @@ exclude_patterns = [
   "**/.nbb/**",
   "deps/cli/**",
   "deps/publish/**",
-  "deps/publishing/**",
 ]
 
 # Directory containing dictionary EDN files (relative to project_root).
@@ -368,6 +359,8 @@ always_used_key_patterns = [
   "^:property/invalid-name-error$",
   "^:publish/page-not-found-error$",
   "^:export/level-all$",
+  # LUI publishing feedback is consumed by the OCaml UI, outside this scan.
+  "^:export/public-pages-failed-error$",
   "^:select/new-option-label$",
   "^:sidebar.left/nav-all-pages$",
   "^:sidebar.left/unfavorite$",

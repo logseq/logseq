@@ -293,6 +293,7 @@ let commands_matched q : Commands_data.cmd list =
     Fuzzy.fuzzy_search_multi ~extract_fns:[ cmd_label ] ~limit:20 cmds q
 
 let commands_items q : item list =
+  if Platform.publishing () then [] else
   List.map command_item (commands_matched q)
 
 (* -- search --------------------------------------------------------- *)
@@ -300,6 +301,7 @@ let commands_items q : item list =
 let hidden_create_names = [ "config.edn"; "custom.js"; "custom.css" ]
 
 let create_items q =
+  if Platform.publishing () then [] else
   if String.trim q = "" then []
   else if
     List.exists
@@ -344,8 +346,9 @@ let filter_items () : item list =
        [ row G_current_page (I18n.t "cmdk.filter/current-page")
            "file" ]
    | None -> [])
-  @ [ row G_nodes (I18n.t "cmdk.filter/nodes") "point-filled"
-    ; row G_codes (I18n.t "cmdk.filter/codes") "code"
+  @ [ row G_nodes (I18n.t "cmdk.filter/nodes") "point-filled" ]
+  @ if Platform.publishing () then [] else
+    [ row G_codes (I18n.t "cmdk.filter/codes") "code"
     ; row G_commands (I18n.t "cmdk.filter/commands") "command"
     ; row G_files (I18n.t "cmdk.filter/files") "file"
     ; row G_themes (I18n.t "cmdk.filter/themes") "palette" ]
@@ -355,7 +358,7 @@ let filter_items () : item list =
 let known_files = [ "logseq/config.edn" ]
 
 let file_items q : item list =
-  if String.trim q = "" then []
+  if Platform.publishing () || String.trim q = "" then []
   else
     Fuzzy.fuzzy_search ~extract:(fun f -> f) ~limit:99 known_files q
     |> List.map (fun f ->
@@ -1498,6 +1501,9 @@ and run_command st repo (cid : string) =
   | "graph/db-add" | "graph/add" ->
       close st;
       Dialogs_state.open_ "new-graph"
+  | "graph/export-as-html" ->
+      close st;
+      ignore (Exporter.export_html ())
   | "dev/validate-db" ->
       close st;
       Option.iter validate_graph repo

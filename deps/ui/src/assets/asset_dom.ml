@@ -490,6 +490,7 @@ let retry_pending () =
 
 (* record asset/width+height once the img decodes — cljs measure-image! *)
 let measure_on_load uuid (b : Model.block) =
+  if Platform.publishing () then () else
   match b.Model.block_asset_width, b.Model.block_asset_height with
   | Some _, Some _ -> ()
   | _ -> (
@@ -540,7 +541,7 @@ let asset_container uuid (b : Model.block) : t =
     (* the lightbox press lives on the img branch only — clicks on the
        action bar (sibling, outside the pressable) must not open it *)
     (box ~key:("ac-" ^ uuid) ~style_class:"asset-container"
-       [ reactive (fun r ->
+       ([ reactive (fun r ->
              if r then
                Ui_parts.pressable
                  ~on_press:(fun _ ->
@@ -553,7 +554,7 @@ let asset_container uuid (b : Model.block) : t =
                  (row ~key:("asset-press-" ^ uuid) [ asset_img uuid b file ])
              else asset_placeholder)
            ready.Signal.state_signal
-       ; action_bar uuid b ])
+       ] @ (if Platform.publishing () then [] else [ action_bar uuid b ])))
       context parent
 
 (* pointerdown -> window pointermove/pointerup drag — the window
@@ -579,9 +580,9 @@ let image_block uuid (b : Model.block) : t =
     [ (* ls-resize-image is an imperative query handle (start_drag) *)
       box ~key:("rim-" ^ uuid) ~corner_radius:6
         ~style_class:"ls-resize-image"
-        [ asset_container uuid b
-        ; resize_handle uuid `Left
-        ; resize_handle uuid `Right ] ]
+        (asset_container uuid b ::
+         if Platform.publishing () then []
+         else [ resize_handle uuid `Left; resize_handle uuid `Right ]) ]
 
 (* resolved object URL for assets/<file> — shared by the pdf/media/
    asset-ref branches (attrs_signal_v so the patch lands in place) *)

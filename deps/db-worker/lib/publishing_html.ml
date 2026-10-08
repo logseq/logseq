@@ -8,31 +8,15 @@ open Datascript
 (* cljs escape-html — copied from hiccup but tweaked for publish usage.
    The logseq____ prefix is intentional: the client unescapes it. *)
 let escape_html (text : string) : string =
-  let replace s pat rep =
-    let n = String.length s and m = String.length pat in
-    if m = 0 then s
-    else begin
-      let b = Buffer.create n in
-      let i = ref 0 in
-      while !i <= n - m do
-        if String.sub s !i m = pat then begin
-          Buffer.add_string b rep;
-          i := !i + m
-        end else begin
-          Buffer.add_char b s.[!i];
-          incr i
-        end
-      done;
-      Buffer.add_substring b s !i (n - !i);
-      Buffer.contents b
-    end
-  in
-  text
-  |> fun s -> replace s "&" "logseq____&amp;"
-  |> fun s -> replace s "<" "logseq____&lt;"
-  |> fun s -> replace s ">" "logseq____&gt;"
-  |> fun s -> replace s "\"" "logseq____&quot;"
-  |> fun s -> replace s "'" "logseq____&apos;"
+  let b = Buffer.create (String.length text) in
+  String.iter (fun c -> match c with
+    | '&' -> Buffer.add_string b "logseq____&amp;"
+    | '<' -> Buffer.add_string b "logseq____&lt;"
+    | '>' -> Buffer.add_string b "logseq____&gt;"
+    | '"' -> Buffer.add_string b "logseq____&quot;"
+    | '\'' -> Buffer.add_string b "logseq____&apos;"
+    | c -> Buffer.add_char b c) text;
+  Buffer.contents b
 
 (* cljs html — vectors are [tag attrs? & elts], maps are attr maps
    (nil values skipped), seqs join with " ", anything else is str. *)
@@ -200,7 +184,12 @@ let publishing_html (transit_db : string) (app_state : value)
           ; Hstr
               "// Single Page Apps for GitHub Pages\n      // https://github.com/rafgraph/spa-github-pages\n      // Copyright (c) 2016 Rafael Pedicini, licensed under the MIT License\n      // ----------------------------------------------------------------------\n      // This script checks to see if a redirect is present in the query string\n      // and converts it back into the correct url and adds it to the\n      // browser's history using window.history.replaceState(...),\n      // which won't cause the browser to attempt to load the new url.\n      // When the single page app is loaded further down in this file,\n      // the correct url will be waiting in the browser's history for\n      // the single page app to route accordingly.\n      (function(l) {\n        if (l.search) {\n          var q = {};\n          l.search.slice(1).split('&').forEach(function(v) {\n            var a = v.split('=');\n            q[a[0]] = a.slice(1).join('=').replace(/~and~/g, '&');\n          });\n          if (q.p !== undefined) {\n            window.history.replaceState(null, null,\n              l.pathname.slice(0, -1) + (q.p || '') +\n              (q.q ? ('?' + q.q) : '') +\n              l.hash\n            );\n          }\n        }\n      }(window.location))" ]
       ; Hvec [ Hstr "script"; Hmap [ "src", Some "static/js/magic_portal.js" ] ]
-      ; Hvec [ Hstr "script"; Hmap [ "src", Some "static/js/main.js" ] ]
+      ; Hseq (List.map (fun filename ->
+          Hvec [ Hstr "script"; Hmap [ "src", Some ("static/js/" ^ filename) ] ])
+          [ "photoswipe.umd.min.js"
+          ; "photoswipe-lightbox.umd.min.js"; "purify.js"
+          ; "icon-data.js"; "emoji-data.js"; "marked.umd.js" ])
+      ; Hvec [ Hstr "script"; Hmap [ "type", Some "module"; "src", Some "static/js/main.js" ] ]
       ; Hvec
           [ Hstr "script"
           ; Hmap [ "defer", Some "true"; "src", Some "static/js/interact.min.js" ] ]
@@ -217,13 +206,11 @@ let publishing_html (transit_db : string) (app_state : value)
               ; "src", Some "static/js/pdfjs/pdf.mjs" ] ]
       ; Hvec
           [ Hstr "script"
-          ; Hmap [ "defer", Some "true"; "src", Some "static/js/pdf_viewer3.mjs" ] ]
+          ; Hmap [ "defer", Some "true"; "type", Some "module"; "src", Some "static/js/pdfjs/pdf_viewer.mjs" ] ]
       ; Hvec
           [ Hstr "script"
           ; Hmap [ "defer", Some "true"; "src", Some "static/js/html2canvas.min.js" ] ]
-      ; Hvec
-          [ Hstr "script"
-          ; Hmap [ "defer", Some "true"; "src", Some "static/js/code-editor.js" ] ]
+
       ; Hvec
           [ Hstr "script"
           ; Hmap [ "defer", Some "true"; "src", Some "static/js/custom.js" ] ] ]

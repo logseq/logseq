@@ -204,14 +204,14 @@ let code_block_actions ~self lang =
   (* the language picker is anchored by the .select-language query in
      Code_mirror — the class stays *)
   row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
-    [ button ~key:"sl" ~variant:`ghost ~size:`sm
+    [ (if Platform.publishing () then text ~value:lang [] else button ~key:"sl" ~variant:`ghost ~size:`sm
         ~style_class:"select-language"
         ~text:
           (if lang <> "" then lang
            else I18n.t "editor/code-language-placeholder")
         ~icon:`chevron_down ~icon_placement:`trailing
         ~on_press:(fun _ -> Code_mirror.open_lang_picker self)
-        []
+        [])
     ; button ~key:"cp" ~variant:`ghost ~size:`sm
         ~icon:`copy ~icon_placement:`leading
         ~text:(I18n.t "ui/copy")
@@ -251,7 +251,7 @@ let code_block ?(self = "") ?(extra = []) lang code =
                       mounts CM on it (editor/code_mirror.ml owns the
                       instance) *)
                    Logseq_codemirror.cm ~key:"ta" ~uuid:self ~lang
-                     ~value:code ~source_role:"block" ()
+                     ~value:code ~read_only:(Platform.publishing ()) ~source_role:"block" ()
                  ; (if not calc then Logseq_el.fragment []
                     else
                       match calc_results_el code with
@@ -730,7 +730,7 @@ let title ?heading ?(is_query = false) ?(is_cards = false)
             (* {{query}} is a normal inline macro — macro_el renders the
                deprecation .warning inside .block-title-wrap like cljs *)
             let tail =
-              (if is_query then [ query_setting_el ~block_uuid:self ]
+              (if is_query && not (Platform.publishing ()) then [ query_setting_el ~block_uuid:self ]
                else [])
               @ if is_cards then [ practice_el ~eid:card_eid ] else []
             in

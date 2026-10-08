@@ -7,7 +7,6 @@ const gulp = require('gulp')
 
 const outputPath = path.join(__dirname, 'static')
 const resourcesPath = path.join(__dirname, 'resources')
-const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 const resourceSyncGlobs = [
   resourceFilePath,
@@ -122,13 +121,7 @@ const prepareElectronMaker = async () => {
   cp.execSync('pnpm ui:build', {
     stdio: 'inherit',
   })
-  cp.execSync('pnpm cljs:release-publishing', {
-    stdio: 'inherit',
-  })
   cp.execSync('pnpm electron:build', {
-    stdio: 'inherit',
-  })
-  cp.execSync('pnpm db-worker:build', {
     stdio: 'inherit',
   })
   cp.execSync('pnpm db-worker:build', {

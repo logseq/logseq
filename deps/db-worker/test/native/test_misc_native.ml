@@ -253,7 +253,7 @@ let conn_from_transit_fixture (rel : string) : conn option =
   | None -> None
 
 let test_ensure_built_in_data_exists () =
-  match conn_from_transit_fixture "src/test/migration/64.8.transit" with
+  match conn_from_transit_fixture "deps/db-worker/test/fixtures/migration/64.8.transit" with
   | None -> check "ensure-built-in-data-exists!: transit fixture readable" false
   | Some conn ->
       let db = db_of conn in

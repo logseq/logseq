@@ -47,14 +47,7 @@
             {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
-            {:runner :cmd :name "pnpm test" :cmd "pnpm test"}]}
-   {:dep "deps/publishing"
-    :steps [kondo-src-test-step
-            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
-            {:runner :bb :name "lint:carve" :cmd "lint:carve"}
-            {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
-            {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}]}])
-
+            {:runner :cmd :name "pnpm test" :cmd "pnpm test"}]}])
 (defn- run-step!
   [dep {:keys [runner name cmd reason]}]
   (case runner

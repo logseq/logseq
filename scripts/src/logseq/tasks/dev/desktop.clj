@@ -5,7 +5,7 @@
             [logseq.tasks.util :as task-util]))
 
 (defn watch
-  "Watches environment to reload cljs, css and other assets"
+  "Watches the UI and static assets for desktop development."
   []
   (shell {:shutdown nil} "pnpm electron-watch"))
 

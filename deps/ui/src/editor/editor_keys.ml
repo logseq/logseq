@@ -1139,6 +1139,8 @@ let drop_active_drag () =
   else false
 
 let on_keydown ev =
+  if Platform.publishing () then ()
+  else begin
   (if Lazy.force perf_keys then
      Printf.eprintf "PERF kdown key=%s editing=%s ac=%b\n%!" (D.ev_key ev)
        (match S.editing () with Some e -> e.S.uuid | None -> "-")
@@ -1266,10 +1268,15 @@ let on_keydown ev =
 
 (* -- clipboard events -- *)
 
+  end
+
 let on_paste ev =
+  if Platform.publishing () then () else begin
   if S.ready () then A.paste_blocks ev
 
 (* a clipboard event aimed at the open editor's conduit input *)
+  end
+
 let editing_clipboard_target uuid target =
   match target with
   | Some el -> (
@@ -1298,6 +1305,7 @@ let on_copy ev =
     | None -> A.copy_selection ev
 
 let on_cut ev =
+  if Platform.publishing () then () else begin
   if S.ready () then
     match S.editing () with
     | Some e
@@ -1315,6 +1323,8 @@ let on_cut ev =
         | None -> ())
     | Some _ -> ()
     | None -> A.cut_selection ev
+
+  end
 
 let on_click ev =
   if drop_active_drag () then
@@ -1342,6 +1352,7 @@ let on_click ev =
         (
         match D.closest_sel ".block-control" target with
         | Some el -> (
+            D.ev_prevent_default ev;
             match uuid_of_prefixed "control-" (D.el_id el) with
             | Some u ->
                 A.toggle_collapse ~scope:(A.scope_of_el el) u
@@ -1547,6 +1558,7 @@ let on_editor_insert ev =
    autocomplete/context-menu popups keep editing — the apply action
    refocuses the sink input (cljs keeps the block in edit mode) *)
 let on_mousedown ev =
+  if Platform.publishing () then () else begin
   (* a pointer going down ends any stale drag that missed its release
      click (released outside the document) *)
   drag_reset ();
@@ -1627,12 +1639,17 @@ let on_mousedown ev =
    - OS file drops never produce a dnd-kit operation; keep the cljs
      handle-data-transfer-drop! "Files" branch as a native path *)
 
+  end
+
 let on_dragstart ev =
+  if Platform.publishing () then () else begin
   match D.closest_sel ".bullet-container" (D.ev_target ev) with
   | Some _ ->
       D.ev_prevent_default ev;
       D.ev_stop_immediate ev
   | None -> ()
+
+  end
 
 let files_of ev =
   match D.ev_data_transfer ev with
@@ -1643,10 +1660,13 @@ let on_file_dragover ev =
   if Array.length (files_of ev) > 0 then D.ev_prevent_default ev
 
 let on_file_drop ev =
+  if Platform.publishing () then () else begin
   let files = files_of ev in
   if Array.length files > 0 then begin
     D.ev_prevent_default ev;
     Asset_dom.upload_files files
+  end
+
   end
 
 let installed = State_cell.Once.make ()
@@ -1671,7 +1691,7 @@ let install_once () =
     D.add_document_listener "pointerdown"
       (fun ev ->
         if
-          S.ready ()
+          not (Platform.publishing ()) && S.ready ()
           (* capture-phase listener fires before the CM wrapper's
              stopPropagation — fenced-code clicks must not start a
              block range selection (cljs clears selection instead) *)
@@ -1680,7 +1700,7 @@ let install_once () =
         then Block_selection.pointerdown ev)
       true;
     D.add_document_listener "pointermove"
-      (fun ev -> if S.ready () then Block_selection.pointermove ev)
+      (fun ev -> if not (Platform.publishing ()) && S.ready () then Block_selection.pointermove ev)
       true;
     D.add_document_listener "pointerup"
       (fun _ev -> Block_selection.pointerup ())

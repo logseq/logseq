@@ -105,6 +105,40 @@ let export_transit () =
     ~mime:"application/transit+json" text;
   Js.Promise.resolve ()
 
+(* Browser downloads the embedded HTML; desktop installs its existing
+   asset-copy bridge at boot. *)
+let save_publishing : (string -> string -> string list -> unit Js.Promise.t) ref =
+  ref (fun _repo html _assets ->
+    Web_dom.download_text ~filename:"index.html" ~mime:"text/html" html;
+    Js.Promise.resolve ())
+
+let export_html () =
+  (let repo = Runtime.repo () in
+   if repo = "" then failwith "Publishing requires an open graph";
+   let* config = Sdk_config.read_config repo in
+   let theme = match Settings_view.current_mode () with
+     | "system" -> if Web_dom.prefers_dark () then "dark" else "light"
+     | mode -> mode in
+   let* w = Runtime.invoke2 "thread-api/build-publishing-html" (Wire.String repo)
+     (Wire.Map
+       [ Wire.Keyword "repo", Wire.String repo
+       ; Wire.Keyword "repo-config", config
+       ; Wire.Keyword "app-state", Wire.Map
+           [ Wire.Keyword "ui/theme", Wire.String theme ] ]) in
+   let html = match Wire.get w "html" with
+     | Some (Wire.String html) -> html
+     | _ -> failwith "Publishing HTML missing" in
+   let assets = match Wire.get w "asset-filenames" with
+     | Some (Wire.Array assets) -> List.map (function
+         | Wire.String name -> name
+         | _ -> failwith "Publishing asset filename must be a string") assets
+     | _ -> failwith "Publishing assets missing" in
+   !save_publishing repo html assets)
+  |> Js.Promise.catch (fun error ->
+       Platform.console_error ("Publishing export failed", error);
+       Toast.error (T.t "export/public-pages-failed-error");
+       Js.Promise.resolve ())
+
 (* cljs [:a {:href "#" :on-click prevent-default}] — an action label,
    not a navigation link, so it maps to pressable text, not `link` *)
 let link ~key label_ desc on_click =
@@ -330,6 +364,9 @@ let body (_ms : Model.t Signal.signal) : t =
              export_zip
          ; link ~key:"ex-edn" T.export_edn_file T.export_edn_desc export_edn
          ; link ~key:"ex-md" T.export_markdown "" export_markdown
+         ; (if Daemon_client.is_electron () then
+              link ~key:"ex-html" (T.t "export/public-pages") "" export_html
+            else Logseq_el.fragment [])
          ; link ~key:"ex-tr" T.export_debug_transit
              T.export_debug_transit_desc export_transit
          ]

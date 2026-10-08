@@ -119,11 +119,8 @@ function mapCssVarColorToTailwind (color, baseColor = {}) {
 module.exports = {
   darkMode: 'class',
   content: [
-    './src/**/*.js',
-    './src/**/*.cljs',
     './resources/**/*.html',
-    './deps/shui/src/**/*.cljs',
-    './deps/shui/src/**/*.cljc'
+    './deps/ui/src/**/*.ml'
   ],
   safelist: [
     'bg-black', 'bg-white',

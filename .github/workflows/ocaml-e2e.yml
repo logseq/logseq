@@ -6,7 +6,7 @@ on:
     paths:
       - 'ocaml-e2e/**'
       - '.github/workflows/ocaml-e2e.yml'
-      - src/**
+      - resources/**
       - deps/**
       - packages/**
   pull_request:
@@ -14,7 +14,7 @@ on:
     paths:
       - 'ocaml-e2e/**'
       - '.github/workflows/ocaml-e2e.yml'
-      - src/**
+      - resources/**
       - deps/**
       - packages/**
 
@@ -78,22 +78,13 @@ jobs:
           path: |
             ~/.m2/repository
             ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-e2e-${{ hashFiles('deps.edn') }}
+          key: ${{ runner.os }}-clojure-deps-e2e-${{ hashFiles('deps/db-sync/deps.edn') }}
           restore-keys: ${{ runner.os }}-clojure-deps-
 
-      - name: Fetch Clojure deps
+      - name: Fetch sync server Clojure deps
+        working-directory: deps/db-sync
         if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: clojure -A:cljs -P
-
-      - name: Shadow-cljs cache
-        uses: actions/cache@v4
-        with:
-          path: .shadow-cljs
-          # ensure update cache every time
-          key: ${{ runner.os }}-shadow-cljs-${{ github.sha }}
-          # will match most recent upload
-          restore-keys: |
-            ${{ runner.os }}-shadow-cljs-
+        run: clojure -M:cljs -P
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile

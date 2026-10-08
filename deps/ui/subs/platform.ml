@@ -6,6 +6,14 @@ open Promise_ext
 
 type loc
 
+external published_db : string option = "logseq_db"
+  [@@mel.scope "globalThis"] [@@mel.return nullable]
+
+external published_state : string option = "logseq_state"
+  [@@mel.scope "globalThis"] [@@mel.return nullable]
+
+let publishing () = published_db <> None
+
 external location_obj : loc = "location"
 
 external hash_of : loc -> string = "hash" [@@mel.get]

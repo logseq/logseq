@@ -51,7 +51,6 @@ node .agents/skills/esm-cjs-risk-scan/scripts/scan_esm_cjs_risk.mjs --verbose
 | `deps/db-sync/src`, `deps/db-sync/test` | DB sync server / Node adapter |
 | `deps/db/script`, `deps/db/test` | DB utility scripts |
 | `deps/graph-parser/src`, `test`, `script` | Graph parser CLI and tests |
-| `deps/publishing/script`, `test` | Publishing CLI and tests |
 
 Browser/Worker builds (`:app`, `:db-worker`, `:inference-worker`, `:mobile`) are intentionally excluded — their npm deps are resolved at bundle time and never `require()`-called directly in Node.
 ## What Gets Scanned

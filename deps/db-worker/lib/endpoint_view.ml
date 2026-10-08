@@ -192,6 +192,11 @@ let get_view_data args =
       let option =
         match arg args 2 with Some w -> w | None -> Wire.Map []
       in
-      Db_worker_effect.pure (Db_view.get_view_data db view_id option))
+      let result = Db_view.get_view_data db view_id option in
+      Db_worker_effect.pure
+        (if Wire.get "render?" option = Some (Wire.Bool true) then
+           Render_resource.normalize_view_data db result
+             (Option.is_some (Wire.get "group-by-property-ident" option))
+         else result))
 
 let () = Dispatcher.register "thread-api/get-view-data" get_view_data

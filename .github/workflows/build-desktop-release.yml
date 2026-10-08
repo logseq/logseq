@@ -54,13 +54,11 @@ on:
   #   - cron: '0 14 * * MON-FRI'
 
 env:
-  CLOJURE_VERSION: '1.12.4.1618'
   NODE_VERSION: '24'
-  JAVA_VERSION: '21'
   OCAML_VERSION: '5.5.1'
 
 jobs:
-  compile-cljs:
+  build-ui:
     runs-on: ubuntu-22.04
     steps:
       - name: Check build options
@@ -96,25 +94,6 @@ jobs:
           key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-
-
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Cache clojure deps
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-          key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
-
-      - name: Setup clojure
-        uses: DeLaGuardo/setup-clojure@13.5
-        with:
-          cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
@@ -192,7 +171,6 @@ jobs:
           pnpm install --frozen-lockfile
           gulp build
           pnpm ui:build
-          pnpm cljs:release-publishing
           pnpm electron:build
           opam exec -- pnpm cli:release
           pnpm db-worker:build
@@ -326,7 +304,7 @@ jobs:
 
   build-linux-x64:
     runs-on: ubuntu-22.04
-    needs: [ compile-cljs, build-db-worker-native ]
+    needs: [ build-ui, build-db-worker-native ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -395,7 +373,7 @@ jobs:
 
   build-linux-arm64:
     runs-on: ubuntu-22.04
-    needs: [ compile-cljs, build-db-worker-native ]
+    needs: [ build-ui, build-db-worker-native ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -465,7 +443,7 @@ jobs:
 
   build-windows-x64:
     runs-on: windows-latest
-    needs: [ compile-cljs, build-db-worker-native ]
+    needs: [ build-ui, build-db-worker-native ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -549,7 +527,7 @@ jobs:
 
   build-windows-arm64:
     runs-on: windows-latest
-    needs: [ compile-cljs, build-db-worker-native ]
+    needs: [ build-ui, build-db-worker-native ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -636,7 +614,7 @@ jobs:
           path: builds
 
   build-macos-x64:
-    needs: [ compile-cljs, build-db-worker-native ]
+    needs: [ build-ui, build-db-worker-native ]
     runs-on: macos-15-intel
     steps:
       - name: Download The Static Asset
@@ -731,7 +709,7 @@ jobs:
           path: builds
 
   build-macos-arm64:
-    needs: [ compile-cljs, build-db-worker-native ]
+    needs: [ build-ui, build-db-worker-native ]
     runs-on: macos-14
     steps:
       - name: Download The Static Asset

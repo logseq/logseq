@@ -432,9 +432,14 @@ let page_plugin_slots ctx (page : Model.page) : t list =
 
 let page_title_el (m : Model.t) (page : Model.page) : t =
  fun ctx parent ->
+  if Platform.publishing () then
+    column ~style_class:"ls-page-title title"
+      [ heading ~level:1 ~value:page.page_title []
+      ; Properties_area.page_area page ] ctx parent
+  else
   (* title rows also render in the journals list before any block row
      mounts the editor state — the .ls-block class signal needs it *)
-  S.ensure ctx;
+  let () = S.ensure ctx in
   (
   (* cljs page-icon: custom :logseq.property/icon -> first tag icon ->
      class "hash" -> property "letter-p"; rendered as the icon-picker
@@ -700,6 +705,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
 let add_button_el ?puuid
     ~(flags : 'a -> (bool * bool) Signal.signal) : t =
  fun context parent ->
+  if Platform.publishing () then Logseq_el.nothing context parent else
   let fs = flags context in
   (* TODO(component): the doc-level click listener matches closest
      ".block-add-button" and reads parentblockid — imperative contract *)

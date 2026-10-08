@@ -122,6 +122,11 @@ let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) : string Js.Promise.t =
 (* resolved object URL for assets/<uuid>.<ext>; extension drives the Blob
    MIME so <img> can decode it *)
 let object_url ~repo ~name ~mime : string Js.Promise.t =
+  if Platform.publishing () then (
+    let url = "assets/" ^ Platform.encode_uri_component name in
+    Hashtbl.replace url_cache (cache_key repo name) url;
+    Js.Promise.resolve url)
+  else
   let k = cache_key repo name in
   match Hashtbl.find_opt url_cache k with
   | Some url -> Js.Promise.resolve url

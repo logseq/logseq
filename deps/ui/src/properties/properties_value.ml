@@ -854,7 +854,19 @@ let rec view ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
   let ident = D.row_ident row' |> Option.value ~default:"" in
-  if D.row_closed_values row' <> [] then closed_value_view ctx row'
+  if Platform.publishing () then
+    let rec display value =
+      match value with
+      | W.Set values | W.List values | W.Array values ->
+          Lui_elements.row ~gap:6 (List.map display values)
+      | W.Map _ -> (match D.ref_uuid value with
+          | Some uuid -> link ~url:("#/page/" ^ uuid) ~target:`self_
+              ~text:(D.ref_title value) []
+          | None -> Logseq_el.fragment (Render_inline.parse (D.value_display value)))
+      | _ -> Logseq_el.fragment (Render_inline.parse (D.value_display value))
+    in
+    display (D.row_effective_value row')
+  else if D.row_closed_values row' <> [] then closed_value_view ctx row'
   else
     match ty with
     | "checkbox" -> checkbox_view ctx row'

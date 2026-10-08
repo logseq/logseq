@@ -7,7 +7,9 @@ on:
     types: [released]
 
 env:
-  CLOJURE_VERSION: '1.12.4.1618'
+  NODE_VERSION: '24'
+  OCAML_VERSION: '5.5.1'
+  BABASHKA_VERSION: '1.12.215'
 
 jobs:
 
@@ -20,6 +22,45 @@ jobs:
         with:
           fetch-depth: 1
           submodules: 'true'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Babashka
+        uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
+      - name: Fetch UI OCaml deps
+        working-directory: deps/ui
+        run: sh scripts/install-opam-deps.sh
+
+      - name: Build LUI web app
+        run: pnpm release
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1

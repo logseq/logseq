@@ -225,4 +225,4 @@ let install () =
        ]);
   Js.Dict.set logseq "sdk" (Sdk_convert.json_obj sdk);
   Worker_client.set_global "logseq" (Sdk_convert.json_obj logseq);
-  Plugin_host.setup ()
+  if not (Platform.publishing ()) then Plugin_host.setup ()

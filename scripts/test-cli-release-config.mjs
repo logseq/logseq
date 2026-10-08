@@ -142,8 +142,8 @@ assertNotContains(
   "desktop release workflow",
 );
 
-const shadowCljs = readText("shadow-cljs.edn");
-assertNotContains(shadowCljs, ":logseq-cli", "shadow-cljs.edn");
+assert.equal(fs.existsSync(path.join(repoRoot, "shadow-cljs.edn")), false,
+  "the app should not depend on the removed Shadow compiler");
 
 const legacyCljsCliPaths = [
   "src/main/logseq/cli/command",
@@ -175,8 +175,7 @@ assert.deepEqual(
   "legacy CLJS CLI sources and tests should be removed",
 );
 
-const carveIgnore = readText(".carve/ignore");
-assertNotContains(carveIgnore, "logseq.cli.main/main", ".carve/ignore");
+
 
 assertFilesDoNotMatch(
   ["src/test/logseq/cli/server_test.cljs"].filter((relativePath) =>
@@ -338,9 +337,8 @@ assert.equal(
   "old deps/cli package should be removed",
 );
 
-const depsEdn = readText("deps.edn");
-assertNotContains(depsEdn, 'logseq/cli', "deps.edn");
-assertNotContains(depsEdn, '"deps/cli"', "deps.edn");
+assert.equal(fs.existsSync(path.join(repoRoot, "deps.edn")), false,
+  "the app should not depend on the removed ClojureScript toolchain");
 
 const bbEdn = readText("bb.edn");
 assertNotContains(bbEdn, "legacy cli", "bb.edn");

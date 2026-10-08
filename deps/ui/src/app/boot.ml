@@ -103,6 +103,9 @@ let ensure_today_journal repo =
       let* _ = Graph.create_today_journal repo in
       Js.Promise.resolve ()
 
+let published_boot : (unit -> unit Js.Promise.t) ref =
+  ref (fun () -> failwith "Publishing boot is not installed")
+
 let run () =
   apply_storage_env ();
   (* emoji-mart: registers <em-emoji> + SearchIndex *)
@@ -115,6 +118,7 @@ let run () =
   w.on_message <- Worker_events.dispatch;
   Worker_events.init ();
   Runtime.worker := Some w;
+  (if Platform.publishing () then !published_boot () else
   (let* () = Graph.init_worker () in
   let* repos = Graph.list_graphs () in
   let* repo =
@@ -131,10 +135,6 @@ let run () =
     Js.Promise.resolve repo
   in
   let* () = ensure_today_journal repo in
-  let* repo =
-    Graph.build_search_index repo;
-    Js.Promise.resolve repo
-  in
   Runtime.send (Action.Boot_graph_ready repo);
   Graph.build_search_index repo;
   (* initial route resolution (deep link or home) *)
@@ -145,7 +145,7 @@ let run () =
      first nav can go back. *)
   if Platform.location_hash () = "" then
     Platform.replace_url_fragment "#/";
-  Js.Promise.resolve ())
+  Js.Promise.resolve ()))
   |> Js.Promise.catch (fun err ->
          Platform.console_error ("boot failed", err);
          Toast.error (I18n.t "graph/load-error");

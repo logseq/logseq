@@ -1,2 +1,0 @@
-{:lint-as {instaparse.macros/defclone clojure.core/def
-           instaparse.macros/set-global-var! clojure.core/set!}}

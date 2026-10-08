@@ -1,3 +1,7 @@
+let published_db : string option = None
+let published_state : string option = None
+let publishing () = false
+
 (* Native twin of core/platform.ml — same surface, DOM effects replaced
    by in-memory host state + platform requests to the native host.
 

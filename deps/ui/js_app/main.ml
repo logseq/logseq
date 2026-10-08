@@ -40,6 +40,11 @@ let install_error_reporting () =
         ("UNHANDLED-REJECTION " ^ describe_json (rejection_reason ev)))
 ;;
 
+let unescape_published s =
+  List.fold_left (fun s (from, into) -> Str_util.replace_all s ~pat:from ~rep:into) s
+    [ "logseq____&amp;", "&"; "logseq____&lt;", "<"; "logseq____&gt;", ">"
+    ; "logseq____&quot;", "\""; "logseq____&apos;", "\'" ]
+
 let main root =
   install_error_reporting ();
   let registry = Lui_extension.registry () in
@@ -187,13 +192,44 @@ let main root =
   ignore (flush ());
   Lui_web.mount renderer (Lui_app.root_node app) root;
   Logseq_virt.sync ();
+  if Daemon_client.is_electron () then
+    Exporter.save_publishing := (fun repo html assets ->
+      let* runtime = Daemon_client.ipc
+        [ Wire.String "db-worker-runtime"; Wire.String repo; Wire.Map [] ] in
+      let graph_dir = match Wire.map_get_string runtime "root-dir" with
+        | Some dir -> dir
+        | None -> failwith "Publishing graph directory missing" in
+      let apis = Daemon_client.getf Daemon_client.window_ "apis" in
+      let* _ = Daemon_client.meth_promise apis "exportPublishAssets"
+        [| Js.Json.string html; Js.Json.string graph_dir
+         ; Js.Json.array (Array.of_list (List.map Js.Json.string assets))
+         ; Js.Json.null |] in
+      Js.Promise.resolve ());
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
   (* views mount declaratively at their host sites — no
      Views_mount observer *)
   Router.init ();
-  Rtc_flows.init ();
+  if not (Platform.publishing ()) then Rtc_flows.init ();
+  Boot.published_boot := (fun () ->
+    let state = Edn.parse (Option.get Platform.published_state) in
+    let repo = Option.get (Wire.map_get_string state "git/current-repo") in
+    let config = match Wire.get state "config" with
+      | Some (Wire.Map entries) -> List.assoc (Wire.String repo) entries
+      | _ -> failwith "Published graph config missing" in
+    let* () = Worker_client.memory_open repo
+      (unescape_published (Option.get Platform.published_db)) in
+    Sdk_config.published_config := Some config;
+    Option.iter Settings_view.apply_theme_dom (Wire.map_get_string state "ui/theme");
+    (match Wire.get state "ui/radix-color" with
+     | Some (Wire.Keyword color) | Some (Wire.String color) ->
+         Web_dom.doc_set_data "color" color
+     | _ -> ());
+    Runtime.send (Action.Repos_loaded [repo]);
+    Runtime.send (Action.Boot_graph_ready repo);
+    Router.resolve ();
+    Js.Promise.resolve ());
   ignore (Boot.run ())
 
 (* gate first render on the active locale: non-English dicts arrive as

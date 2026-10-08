@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve, join } from "node:path";
+import { spawnSync } from "node:child_process";
+
+const root = mkdtempSync(join(tmpdir(), "logseq-publishing-cli-"));
+const graph = resolve(process.env.LOGSEQ_PUBLISHING_GRAPH ?? "/tmp/logseq-publishing-graph");
+const output = join(root, "site");
+const staticDir = join(root, "static");
+const run = (...args) => spawnSync(process.execPath,
+  ["scripts/publishing.mjs", ...args], { encoding: "utf8", timeout: 15000 });
+try {
+  for (const part of ["css", "icons", "img", "js/chunks"]) mkdirSync(join(staticDir, part), {recursive:true});
+  writeFileSync(join(staticDir, "js/main.js"), "import './chunks/lazy.js';");
+  writeFileSync(join(staticDir, "js/chunks/lazy.js"), "export const loaded = true;");
+  writeFileSync(join(staticDir, "js/chunks/lazy.js.map"), "map");
+  mkdirSync(join(graph, "assets"), { recursive:true });
+  mkdirSync(join(graph, "logseq"), { recursive:true });
+  writeFileSync(join(graph, "assets/11111111-1111-4111-8111-111111111111.png"), "public image");
+  writeFileSync(join(graph, "assets/22222222-2222-4222-8222-222222222222.png"), "private image");
+  writeFileSync(join(graph, "logseq/custom.css"), "custom style");
+  writeFileSync(join(graph, "logseq/export.css"), "export style");
+  writeFileSync(join(graph, "logseq/custom.js"), "// custom publishing script");
+  const result = run(staticDir, graph, output);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  const html = readFileSync(join(output, "index.html"), "utf8");
+  assert.match(html, /type="module" src="static\/js\/main.js"/);
+  assert.match(html, /Published/);
+  assert.ok(!html.includes("Private content must not ship"));
+  assert.ok(existsSync(join(output, "static/js/chunks/lazy.js")));
+  assert.ok(!existsSync(join(output, "static/js/chunks/lazy.js.map")));
+  assert.ok(existsSync(join(output, "assets/11111111-1111-4111-8111-111111111111.png")));
+  assert.ok(!existsSync(join(output, "assets/22222222-2222-4222-8222-222222222222.png")));
+  assert.equal(readFileSync(join(output, "static/css/custom.css"), "utf8"), "custom style");
+  assert.equal(readFileSync(join(output, "static/css/export.css"), "utf8"), "export style");
+  assert.equal(readFileSync(join(output, "static/js/custom.js"), "utf8"), "// custom publishing script");
+  const missing = join(root, "missing");
+  const badGraph = run(staticDir, missing, join(root, "bad-graph"));
+  assert.notEqual(badGraph.status, 0, "Missing graph must fail");
+  assert.ok(!existsSync(join(missing, "db.sqlite")), "Must not create an empty graph");
+  const badStatic = run(missing, graph, join(root, "bad-static"));
+  assert.notEqual(badStatic.status, 0, "Missing frontend must fail");
+  assert.ok(!existsSync(join(root, "bad-static")), "Must not export a broken site");
+  writeFileSync(join(root, "occupied"), "file");
+  assert.notEqual(run(staticDir, graph, join(root, "occupied")).status, 0, "Export I/O errors must fail");
+  const devOutput = join(root, "dev");
+  const devResult = run(staticDir, graph, devOutput, "--dev");
+  assert.equal(devResult.status, 0, devResult.stderr + devResult.stdout);
+  assert.ok(existsSync(join(devOutput, "static/js/chunks/lazy.js.map")));
+  console.log("Publishing CLI: SQLite graph, private data, public assets, lazy chunks, custom styles, source maps and errors passed");
+} finally { rmSync(root, {recursive:true, force:true}); }

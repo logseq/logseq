@@ -1,90 +1,58 @@
 # Logseq Codebase Overview
 
-This document helps you understand more about how Logseq works. To contribute, read the [README](https://github.com/logseq/logseq) first.
+The web app, database worker, Electron main process, and CLI are implemented
+in OCaml. Melange compiles JavaScript targets; native targets use shared
+modules with platform-specific implementations of their contracts.
 
-## Tech Stack
+## Build and Test
 
-### Clojure/ClojureScript
+Dune compiles OCaml, Vite bundles JavaScript, and Gulp stages static resources
+and packages the desktop app. Babashka provides development tasks.
 
-Nowadays compile-to-js are common practice. With the advent of web assembly, you can use almost any language to write browser apps. The Logseq app mostly uses Clojure.
+- `pnpm release`: build the LUI web app and database worker.
+- `pnpm test`: run database worker and UI tests.
+- `pnpm test:publishing`: check exported sites, CLI export, and LUI export.
+- `bb lint:dev`: validate shared resources and translation keys.
 
-Simply put, Clojure is a dynamic typing functional programming language, with Lisp's syntax, running on the JVM. ClojureScript is just Clojure compiling to JavaScript.
+Docker packaging requires the `static/` output from `pnpm release`.
+The Docker workflow builds the checked-out revision before packaging it.
 
-Clojure is easy to learn, you can pick it up pretty quickly following the [official guide](https://clojure.org/guides/learn/syntax).
+## Important Directories
 
-Logseq chose ClojureScript not only because of all the [benefits](https://clojure.org/about/rationale) of the language itself but also because of its awesome ecosystem, such as the [DataScript](https://github.com/tonsky/datascript) library. More on that later.
+- `deps/ui/src/`: LUI components, editor behavior, routing, and application state.
+- `deps/ui/js_app/`: web application entry point.
+- `deps/ui/native/` and `deps/ui/gpui/`: native platform implementations.
+- `deps/ui/test/`: UI tests compiled for Node.
+- `deps/db-worker/lib/`: database operations, rendering resources, search,
+  publishing export, and sync behavior.
+- `deps/db-worker/runtime/`: JavaScript and native platform implementations.
+- `deps/db-worker/desktop/`: Electron main process.
+- `deps/db-worker/test/`: native and Melange worker tests and migration fixtures.
+- `cli/`: OCaml command-line application.
+- `ocaml-e2e/`: browser application tests.
+- `cli-e2e/`: command-line integration tests.
+- `resources/`: styles, translation dictionaries, templates, and static assets.
+- `resources/package.json`: application version and desktop dependencies.
+- `scripts/`: build helpers and Babashka tasks.
+- `deps/publish/`: Cloudflare publishing backend, Durable Objects, and R2.
 
-### Build Tools
-
-Shadow-cljs is a tool that helps compiling the ClojureScript code to JavaScript. In addition, it supports more handy features like live reload, code splitting, REPL, etc.
-
-For other tasks like bundling static resources and building the desktop app, which is not covered by shadow-cljs, Logseq uses the good old [Gulp](https://gulpjs.com).
-
-### React & Rum
-
-[React](https://reactjs.org/) is a library for building data-driven UI declaratively. Comparing to the imperative ways (such as DOM manipulation or using jQuery), it's simpler and easier to code correctly.
-
-[Rum](https://github.com/tonsky/rum) is a React wrapper in ClojureScript. More than just providing the familiar React APIs, Rum adds many Clojure flavors to React, especially on the state management part. As a result, if you have experience with React, read Rum's [README](https://github.com/tonsky/rum) before diving into the code.
-
-### DataScript
-
-[DataScript](https://github.com/tonsky/datascript) is an in-memory database that implements the [Datalog](https://en.wikipedia.org/wiki/Datalog) logic programming language. Datalog is very different from and much more expressive than the more common SQL and NoSQL query languages. Many users have implemented interesting features on top of Logseq just by utilizing the rich query language. Get started with Datalog with this [tutorial](http://www.learndatalogtoday.org/)
-
-## Important Directories and Files
-
-This is overview of this repository's most important directories and files.
-
-- Config files are located at the root directory. `package.json` contains the JavaScript dependencies while `deps.edn` contains their ClojureScript counterparts. `shadow-cljs.edn` and `gulpfile.js` contain all the build scripts.
-
-- `resources/` and `public` contain all the static assets
-
-- `src/` is where most of the code is located.
-
-  - `src/electron/` contains code specific to the Electron desktop app.
-
-  - `src/test/` contains all the cljs tests.
-
-  - `resources/dicts/` contains language translations, and `resources/package.json` defines the app version.
-
-  - `src/resources/` contains remaining Clojure(Script) resources such as templates.
-
-  - `src/main/frontend/` contains code that powers the Logseq editor. Directories and files inside are organized by features or functions. Some notable directories:
-    - `src/main/frontend/components/` contains all the UI components.
-    - `src/main/frontend/handler/` contains system component like code.
-    - `src/main/frontend/worker/` contains code for the separate worker asset.
-    - `src/main/frontend/common/` contains common code shared by the worker asset and the frontend.
-  - `src/main/logseq/` contains the api used by plugins.
-  - `src/main/mobile/` contains code for new mobile app.
-  - `src/dev-cljs/` contains some development utilities.
-
-- `deps/` contains ClojureScript dependencies or libraries used by the frontend.
-  - `deps/graph-parser/` is a library that parses a Logseq graph and saves it to a database.
-
-- `scripts` - Dev scripts
-- `ocaml-e2e/` - end to end frontend tests (OCaml/Melange port of the former clj-e2e suite)
-- `android/` -  Android app
-- `ios/` - iOS app
+The root `src/`, `deps.edn`, and `shadow-cljs.edn` have been removed.
+Active ClojureScript services and tooling keep their configuration under
+`deps/` and `scripts/`.
 
 ## Data Flow
 
-### Application State
+The database worker owns graph data in DataScript and persists regular
+graphs through SQLite-backed storage. The frontend calls worker endpoints
+and subscribes to rendering resources. UI state changes pass through the
+application model and LUI signals.
 
-Most of Logseq's application state is divided into two parts. Document-related state (all your pages, blocks, and contents) is stored in DataScript. UI-related state (such as the current editing block) is kept in Clojure's [atom](https://clojure.org/reference/atoms). We then use Rum's reactive component to subscribe to these states. React efficiently re-renders after state changes.
+Editing updates the local editor model immediately. Worker endpoints save
+content and outliner structure; resource updates refresh affected UI.
+Platform modules provide input, selection, and geometry behavior.
 
-### When the App Starts
-
-Logseq loads files from your computer or the cloud, depending on your usage. The files are then parsed (and might be decrypted) and stored in DataScript. Other UI-related states are initialized. React components render for the first time. Event handlers are registered.
-
-### When you Type Something in the Document
-
-It's the typical flow of an event-driven GUI application. Various handlers (which are just functions) are listening for events like drag and drop, edit, format, and so on. When you start typing, the handler for editing blocks is called. It does three things:
-
-- Save your work to the disk or the cloud, so you won't lose them in case of an emergent power off.
-- Update the UI state.
-- Run transactions to update the DataScript database. Since other parts of the app may use data that are affected by the change, we need to rebuild the database query cache.
-
-After the change changes, React will dutifully refresh the screen.
-
-## Architecture
-
-Logseq has undergone a heavy refactoring, results in a much more robust and clear architecture. Read [this article](https://docs.logseq.com/#/page/The%20Refactoring%20Of%20Logseq) written by the main contributor to the refactoring for a detailed tour.
+A published static site embeds an exported database and initializes an
+in-memory DataScript connection on the main thread. It uses existing read
+endpoint contracts without starting a database worker or opening SQLite.
+Search reads DataScript datoms. Editing and mutation commands are disabled;
+navigation, folding, search, and read-only views remain available.

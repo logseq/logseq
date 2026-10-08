@@ -73,10 +73,11 @@ jobs:
           path: |
             ~/.m2/repository
             ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps/graph-parser/deps.edn') }}
           restore-keys: ${{ runner.os }}-clojure-deps-
 
       - name: Fetch Clojure deps
+        working-directory: deps/graph-parser
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:test -P
 

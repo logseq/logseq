@@ -1,7 +1,8 @@
 // Bundles the Melange-emitted ESM tree into static/js/main.js (+ lazy
 // chunks for i18n dicts and CodeMirror modes), loaded by
 // resources/index.html as a module script.
-// Build order: `dune build js_app` (in deps/ui), then `vite build`.
+// Build order: `dune build js_api` (in deps/db-worker),
+// `dune build js_app` (in deps/ui), then `vite build`.
 // Modes:
 //   vite build                      -> dev bundle: readable, full sourcemaps,
 //                                    logseq_dev=true (cljs dev? equivalent)
@@ -10,7 +11,7 @@
 // vite defaults env.mode to "production" for every build, so the flag is
 // detected on argv, not through ConfigEnv.mode.
 import { execSync } from "node:child_process";
-import { createRequire } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { defineConfig } from "vite";
 
@@ -52,6 +53,10 @@ export default defineConfig(() => {
   return {
     resolve: {
       alias: [
+        { find: new RegExp(`^(node:)?(${builtinModules.join("|")})$`),
+          replacement: resolve(import.meta.dirname, "../db-worker/stubs/node-externals.mjs") },
+        { find: "lui-shims/publishing-db",
+          replacement: resolve(import.meta.dirname, "shims/publishing_db.mjs") },
         {
           // Stdlib.Printf -> mini interpreter (shims/printf.js), so the
           // full camlinternalFormat runtime stays out of the bundle.

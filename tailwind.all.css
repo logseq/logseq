@@ -2,11 +2,11 @@
 
 @import "tailwindcss" source(none);
 
-@import "./src/main/frontend/shui/radix.css";
-@import "./src/main/frontend/shui/radix-hsl.css";
-@import "./src/main/frontend/shui/vars-classic.css";
-@import "./src/main/frontend/shui/colors.css";
-@import "./src/main/frontend/shui/index.css";  /* Tailwind base imported here */
+@import "./resources/css/theme/radix.css";
+@import "./resources/css/theme/radix-hsl.css";
+@import "./resources/css/theme/vars-classic.css";
+@import "./resources/css/theme/colors.css";
+@import "./resources/css/theme/index.css";  /* Tailwind base imported here */
 @import "./resources/css/shui.css";
 @import "photoswipe/dist/photoswipe.css";
 @import "katex/dist/katex.min.css";
@@ -20,12 +20,8 @@
 @import "./resources/css/lui-core.css";
 @import "./resources/css/lui-overlay.css";
 @import "./resources/css/extensions-pdf.css";
-/* cljs-era sheets (src/main/frontend/**) are no longer imported: replaced by
-   resources/css/lui-core.css + resources/css/lui-overlay.css above. */
 
-@source "./src/main/**/*.{cljs,cljc,js,css,html}";
 @source "./resources/**/*.html";
-@source "./deps/shui/src/**/*.{cljs,cljc,css}";
 @source "./deps/ui/src/**/*.ml";
 
 @config "./tailwind.config.js";

@@ -8,10 +8,8 @@ import { test } from "node:test";
 const fixture = mkdtempSync(join(tmpdir(), "logseq-app-version-"));
 mkdirSync(join(fixture, "scripts"));
 mkdirSync(join(fixture, "resources"));
-mkdirSync(join(fixture, "src/main/frontend"), { recursive: true });
 copyFileSync(new URL("./get-pkg-version.js", import.meta.url), join(fixture, "scripts/get-pkg-version.js"));
 writeFileSync(join(fixture, "resources/package.json"), JSON.stringify({ version: "9.8.7" }));
-writeFileSync(join(fixture, "src/main/frontend/version.cljs"), '(defonce version "1.2.3")');
 process.on("exit", () => rmSync(fixture, { recursive: true, force: true }));
 
 function releaseVersion(...args) {

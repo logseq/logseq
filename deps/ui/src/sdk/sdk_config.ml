@@ -6,7 +6,12 @@ open Sdk_util
 
 let config_path = "logseq/config.edn"
 
+let published_config : Wire.t option ref = ref None
+
 let read_config repo =
+  match !published_config with
+  | Some config -> Js.Promise.resolve config
+  | None ->
   let* w =
     Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)
       (Wire.String config_path)

@@ -9,9 +9,7 @@ on:
         default: "main"
 
 env:
-  CLOJURE_VERSION: "1.12.4.1618"
   NODE_VERSION: "24"
-  JAVA_VERSION: "21"
   OCAML_VERSION: '5.5.1'
 
 jobs:
@@ -25,12 +23,6 @@ jobs:
           ref: ${{ inputs.branch }}
           fetch-depth: 0
 
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: "zulu"
-          java-version: ${{ env.JAVA_VERSION }}
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -40,11 +32,6 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
-
-      - name: Setup Clojure
-        uses: DeLaGuardo/setup-clojure@13.5
-        with:
-          cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3

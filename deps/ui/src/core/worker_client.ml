@@ -132,7 +132,31 @@ let set_worker_fs worker =
    without a cycle through Runtime *)
 let notify_worker_failure = ref (fun () -> ())
 
+type publishing_api
+
+external load_publishing_api : string -> publishing_api = "require"
+
+external publishing_open : publishing_api -> string -> string -> unit Js.Promise.t = "open"
+  [@@mel.send]
+
+external publishing_invoke : publishing_api -> string -> string -> string Js.Promise.t = "invoke"
+  [@@mel.send]
+
+let memory_open repo transit =
+  publishing_open (load_publishing_api "lui-shims/publishing-db") repo transit
+
+let memory_invoke name args =
+  publishing_invoke (load_publishing_api "lui-shims/publishing-db") name args
+
 let create () =
+  if Platform.publishing () then
+    { invoke_fn = (fun name args ->
+        let* result = memory_invoke name (Transit.to_string (Wire.Array args)) in
+        Js.Promise.resolve (Transit.of_string result))
+    ; on_message = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())
+    }
+  else
   if Daemon_client.is_electron () then (
     let tr = Daemon_client.create_transport () in
     let t =

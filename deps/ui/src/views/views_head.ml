@@ -756,6 +756,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
    inside a nonempty set never repainted *)
 let filters_row inst : t =
  fun ctx parent ->
+  if Platform.publishing () then Logseq_el.nothing ctx parent else
   (reactive
      ~equal:
        (fun (a : V.vstate) (b : V.vstate) ->
@@ -991,6 +992,19 @@ let refs_filter_btn inst : t =
    is hovered (opacity-0 via .ls-refs) *)
 let render_head inst : t =
  fun ctx parent ->
+  if Platform.publishing () then
+    row ~style_class:"ls-view-head" ~gap:8
+      [ keyed ~source:(reactive (fun (s : V.vstate) -> s.V.views) (sig_of inst))
+          ~key:(fun (v : Wr.view_ent) -> v.Wr.vu) ~cmp:String.compare
+          ~mount:(fun vs ->
+            button ~variant:`ghost
+              ~text:(reactive (fun (v : Wr.view_ent) -> V.display_title v) vs)
+              ~on_press:(fun _ ->
+                V.update inst (fun s -> V.apply_view_entity s (Signal.get vs));
+                refresh inst) [])
+      ; text ~value:(reactive (fun s -> I.live_query (count_of s)) (sig_of inst)) []
+      ; search_el inst ] ctx parent
+  else
   let sched = ctx.Lui_ui.ui_scheduler in
   let dim = Signal.map (fun open_ -> not open_) (P.open_signal sched) in
   let has_add_object =

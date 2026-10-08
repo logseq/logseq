@@ -13,7 +13,6 @@ module Path = Gp_node_path
 let ( >>= ) = Eff.Infix.( >>= )
 
 (* cljs js-files / static-dirs *)
-let js_files = [ "main.js"; "code-editor.js" ]
 let static_dirs = [ "css"; "icons"; "img"; "js" ]
 
 (* cljs {:type "success"|"error" :payload s} passed to notification-fn *)
@@ -24,14 +23,16 @@ let iter_eff (f : 'a -> unit Eff.t) (xs : 'a list) : unit Eff.t =
 
 (* remove-js-source-maps *)
 let remove_js_source_maps (output_static_dir : string) : unit Eff.t =
-  let js_dir = Path.join [ output_static_dir; "js" ] in
-  Fs.readdir js_dir >>= fun files ->
-  iter_eff
-    (fun file ->
-      if Filename.check_suffix file ".map" then
-        Fs.remove (Path.join [ js_dir; file ])
-      else Eff.pure ())
-    files
+  let rec remove_maps dir =
+    Fs.readdir dir >>= fun files ->
+    iter_eff (fun file ->
+      let path = Path.join [ dir; file ] in
+      Fs.is_directory path >>= fun is_dir ->
+      if is_dir then remove_maps path
+      else if Filename.check_suffix file ".map" then Fs.remove path
+      else Eff.pure ()) files
+  in
+  remove_maps (Path.join [ output_static_dir; "js" ])
 
 (* default-notification *)
 let default_notification (msg : notification) : unit =
@@ -44,6 +45,8 @@ let copy_file_bang (from : string) (to_ : string) : unit Eff.t =
 
 (* copy-path! *)
 let rec copy_path (from : string) (to_ : string) : unit Eff.t =
+  Fs.exists from >>= fun exists ->
+  if not exists then Eff.pure () else
   Fs.is_directory from >>= fun is_dir ->
   if is_dir then
     Fs.mkdir_p to_ >>= fun () ->
@@ -56,41 +59,9 @@ let rec copy_path (from : string) (to_ : string) : unit Eff.t =
     Fs.is_file from >>= fun is_file ->
     if is_file then copy_file_bang from to_ else Eff.pure ()
 
-(* cleanup-js-dir *)
-let cleanup_js_dir (output_static_dir : string) (source_static_dir : string)
-    (dev : bool) : unit Eff.t =
-  let publishing_dir = Path.join [ output_static_dir; "js"; "publishing" ] in
-  (if not dev then remove_js_source_maps output_static_dir else Eff.pure ())
-  >>= fun () ->
-  iter_eff
-    (fun file ->
-      Fs.remove (Path.join [ output_static_dir; "js"; file ]))
-    js_files
-  >>= fun () ->
-  (if dev then
-     Fs.remove (Path.join [ output_static_dir; "js"; "cljs-runtime" ])
-   else Eff.pure ())
-  >>= fun () ->
-  iter_eff
-    (fun file ->
-      if dev then
-        Fs.symlink
-          ~target:(Path.join [ source_static_dir; "js"; "publishing"; file ])
-          ~link:(Path.join [ output_static_dir; "js"; file ])
-      else
-        Fs.rename
-          (Path.join [ publishing_dir; file ])
-          (Path.join [ output_static_dir; "js"; file ]))
-    js_files
-  >>= fun () ->
-  (if dev then
-     Fs.symlink
-       ~target:
-         (Path.join [ source_static_dir; "js"; "publishing"; "cljs-runtime" ])
-       ~link:(Path.join [ output_static_dir; "js"; "cljs-runtime" ])
-   else Eff.pure ())
-  >>= fun () ->
-  if not dev then Fs.remove publishing_dir else Eff.pure ()
+(* The LUI module entry and its lazy chunks keep their relative layout. *)
+let cleanup_js_dir output_static_dir _source_static_dir dev =
+  if dev then Eff.pure () else remove_js_source_maps output_static_dir
 
 (* cljs fse/copy — recursive copy of a file or dir *)
 let fse_copy (from : string) (to_ : string) : unit Eff.t = copy_path from to_
@@ -175,4 +146,4 @@ let create_export (html : string) (static_dir : string) (repo_path : string)
         ; payload =
             "Export public pages unexpectedly failed with: "
             ^ Printexc.to_string e };
-      Eff.pure ())
+      Eff.error e)

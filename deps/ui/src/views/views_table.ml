@@ -281,7 +281,7 @@ let visible_columns (s : V.vstate) =
   let cols =
     List.filter
       (fun c ->
-        c.V.c_id <> "id" && not (V.Sset.mem c.V.c_id s.V.hidden))
+        c.V.c_id <> "id" && (not (Platform.publishing ()) || c.V.c_id <> "select") && not (V.Sset.mem c.V.c_id s.V.hidden))
       s.V.columns
   in
   match s.V.ordered with
@@ -691,6 +691,7 @@ let header_cell_id inst (c : V.column) =
   "vhc-" ^ string_of_int inst.V.id ^ "-" ^ c.V.c_id
 
 let header_cell inst (c : V.column) : t =
+  if Platform.publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
   let cls =
     "ls-table-header-cell"
     ^ if c.V.c_id = "select" then " !border-0" else ""
@@ -971,7 +972,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
         (List.map cell_wrap pinned)
     ; row
         (List.map cell_wrap free
-         @ (match show_add_property inst with
+         @ (match (if Platform.publishing () then None else show_add_property inst) with
             | Some _ ->
                 [ box
                     [ box ~style_class:"ls-table-cell"
@@ -1036,7 +1037,7 @@ let table_header inst cols : t =
         (List.map cell_item pinned @ [ dnd_described "0"; dnd_live "0" ])
     ; row
         (List.map cell_item free
-         @ (match show_add_property inst with
+         @ (match (if Platform.publishing () then None else show_add_property inst) with
             | Some p ->
                 (* cljs add-property-button: trailing "New property"
                    header cell on class-objects tables only *)
@@ -1063,6 +1064,7 @@ let table_header inst cols : t =
 (* footer add-new-row (cljs: property-objects always; class-objects for
    non-private classes; all-pages/query never) *)
 let add_row_footer inst : t =
+  if Platform.publishing () then Logseq_el.nothing else
   let has_add_object =
     match inst.V.kind with
     | V.KPropertyPage _ -> true

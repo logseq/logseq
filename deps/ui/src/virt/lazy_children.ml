@@ -63,18 +63,22 @@ let near_viewport el =
   rect_top r < vh +. margin && rect_bottom r > -. margin
 
 let attach ctx el_id near =
+  let mount () =
+    Signal.set near true;
+    Runtime.flush ()
+  in
   match get_by_id el_id with
   (* cljs: (or forced? (nil? ref) (near?)) -> mount — a missing element
      mounts immediately rather than staying a placeholder forever *)
-  | None -> Signal.set near true
+  | None -> mount ()
   | Some el ->
-      if near_viewport el then Signal.set near true
+      if near_viewport el then mount ()
       else begin
         let io =
           new_io
             (fun entries ->
               if Array.exists entry_intersecting entries then
-                Signal.set near true)
+                mount ())
             (io_opts ~rootMargin:(Printf.sprintf "%.0fpx 0px" margin))
         in
         io_observe io el;

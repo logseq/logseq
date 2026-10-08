@@ -5,7 +5,7 @@ This guide summarizes Logseq's current UI theme architecture and gives a practic
 It is based on the current repository structure and these theme-related entry points:
 
 - CSS load order: `tailwind.all.css`
-- Design tokens and theme variables: `src/main/frontend/shui/radix.css`, `src/main/frontend/shui/radix-hsl.css`, `src/main/frontend/shui/vars-classic.css`, `src/main/frontend/shui/colors.css`
+- Design tokens and theme variables: `resources/css/theme/radix.css`, `resources/css/theme/radix-hsl.css`, `resources/css/theme/vars-classic.css`, `resources/css/theme/colors.css`
 - Shared shui/Base UI component CSS: `resources/css/shui.css`
 - CodeMirror theme bridge: `resources/css/codemirror.lsradix.css`
 - Frontend component CSS: `src/main/frontend/**/*.css`
@@ -20,11 +20,11 @@ Logseq themes are mostly CSS-variable based. A theme plugin should first overrid
 
 The main stylesheet imports theme foundations before app component CSS:
 
-1. `src/main/frontend/shui/radix.css` — color scales as `--rx-*` variables, for example `--rx-gray-01` through `--rx-gray-12` and alpha variants.
-2. `src/main/frontend/shui/radix-hsl.css` — HSL forms such as `--rx-gray-01-hsl` for Tailwind/shui tokens.
-3. `src/main/frontend/shui/vars-classic.css` — Logseq semantic variables, layout variables, default light/dark values for `data-color=logseq`.
-4. `src/main/frontend/shui/colors.css` — accent palettes selected by `html[data-color=...]`, mapping `--lx-accent-*`, `--lx-gray-*`, shui tokens, and many `--ls-*` values.
-5. `src/main/frontend/shui/index.css` — Tailwind base.
+1. `resources/css/theme/radix.css` — color scales as `--rx-*` variables, for example `--rx-gray-01` through `--rx-gray-12` and alpha variants.
+2. `resources/css/theme/radix-hsl.css` — HSL forms such as `--rx-gray-01-hsl` for Tailwind/shui tokens.
+3. `resources/css/theme/vars-classic.css` — Logseq semantic variables, layout variables, default light/dark values for `data-color=logseq`.
+4. `resources/css/theme/colors.css` — accent palettes selected by `html[data-color=...]`, mapping `--lx-accent-*`, `--lx-gray-*`, shui tokens, and many `--ls-*` values.
+5. `resources/css/theme/index.css` — Tailwind base.
 6. `resources/css/shui.css` — shared UI components built on shui/Base UI/Tailwind tokens.
 7. Third-party CSS: Inter, PhotoSwipe, KaTeX, CodeMirror, PDF.js, Tabler, `codemirror.lsradix.css`.
 8. `src/main/frontend/**/[!_]*.css` — component and extension CSS.

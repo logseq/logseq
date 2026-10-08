@@ -1,0 +1,5 @@
+*
+!Dockerfile
+!static/
+!static/**
+static/node_modules/

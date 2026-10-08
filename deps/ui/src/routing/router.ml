@@ -462,7 +462,7 @@ let rec load_page_ref for_route ref_v =
          route creates the journal page on the fly; non-journal names
          keep the inline :page/not-found *)
       match ref_v with
-      | Wire.String n when Dates.is_journal_title n ->
+      | Wire.String n when Dates.is_journal_title n && not (Platform.publishing ()) ->
           (let* _ = Outliner_ops.apply_create_page n in
            load_page_ref for_route ref_v)
       | _ ->

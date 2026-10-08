@@ -6,6 +6,8 @@
             [borkdude.rewrite-edn :as rewrite]
             [clojure.set :as set]
             [clojure.string :as string]
+            [clojure.edn :as edn]
+            [cheshire.core :as json]
             [frontend.dicts :as dicts]
             [logseq.tasks.lang-lint :as lang-lint]
             [logseq.tasks.util :as task-util]
@@ -285,10 +287,34 @@
   []
   (run-i18n-lint-command! "check-missing" []))
 
-(defn- check-translation-keys
-  "Use logseq-i18n-lint to detect unused translation keys."
-  [args]
-  (run-i18n-lint-command! "check-keys" args))
+(defn- check-ocaml-translations
+  "Checks literal OCaml translation calls against the English dictionary."
+  []
+  (let [config (slurp (str i18n-lint-config-path))
+        [_ source-dirs] (re-find #"(?s)ocaml_source_dirs\s*=\s*(\[[^\]]*\])" config)
+        _ (when-not source-dirs
+            (throw (ex-info "Missing ocaml_source_dirs in i18n lint config" {})))
+        source-files (->> (edn/read-string source-dirs)
+                          (mapcat #(fs/glob % "**.ml"))
+                          (map str)
+                          sort)
+        temp-dir (fs/create-temp-dir {:prefix "logseq-i18n-"})
+        source (str (fs/path temp-dir "i18n_source_scan.ml"))
+        executable (str (fs/path temp-dir "i18n_source_scan"))]
+    (try
+      (fs/copy "scripts/i18n-source-scan.ml" source)
+      (shell {:out :string :err :inherit} "opam" "exec" "--" "ocamlc"
+             "-I" "+compiler-libs" "ocamlcommon.cma" "-o" executable source)
+      (let [result (apply shell {:out :string :err :inherit} executable source-files)
+            en-dicts (:en (get-dicts))
+            missing (->> (json/parse-string (:out result))
+                         (remove (fn [[_ key]] (contains? en-dicts (keyword key))))
+                         distinct)]
+        (when (seq missing)
+          (println "Missing OCaml translation keys:")
+          (doseq [[path key] missing] (println (str path ": " key)))
+          (throw (ex-info "Missing OCaml translation keys" {:missing missing}))))
+      (finally (fs/delete-tree temp-dir)))))
 
 (defn- validate-rich-translations
   "Checks that localized rich translations remain rich zero-arg functions.
@@ -320,9 +346,9 @@
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
   [& args]
+  (check-ocaml-translations)
   (check-missing-translations)
   (validate-non-default-languages (contains? (set args) "--fix"))
-  (check-translation-keys args)
   (validate-rich-translations)
   (validate-translation-placeholders))
 

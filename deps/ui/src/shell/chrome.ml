@@ -48,7 +48,7 @@ let icon_btn ?tip ?keys ~key ~id ~cls ~icon ~on_click () =
 let search_button =
   icon_btn ~key:"search-btn" ~id:"search-button" ~cls:(ghost_btn_cls ())
     ~icon:"search" ~tip:(I18n.t "nav/search") ~keys:"\xE2\x8C\x98 K"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_search) ()
+    ~on_click:(fun _ -> Cmdk_state.open_latest ()) ()
 
 (* cljs ui/tooltip (t :header/more) — .toolbar-dots-btn stays the
    imperative query_selector anchor for the dropdown position *)
@@ -610,6 +610,13 @@ let right_toggle_button ms =
     ()
 
 let header (ms : Model.t Signal.signal) =
+  if Platform.publishing () then
+    row ~accessibility_identifier:"head" ~style_class:"cp__header"
+      ~gap:12 ~cross:`center
+      [ link ~url:"#/" ~target:`self_ ~text:(I18n.t "nav/home") []
+      ; link ~url:"#/all-pages" ~target:`self_ ~text:(I18n.t "nav.all-pages/label") []
+      ; search_button ]
+  else
   (* resolved: cljs's inline fontSize:50 on .cp__header is dropped —
      no typed-prop equivalent and the icon kind sizes itself *)
   row ~key:"head" ~accessibility_identifier:"head"
@@ -729,7 +736,7 @@ let main_content (ms : Model.t Signal.signal) =
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
        ~grow:1. 
-       [ left_sidebar ms
+       [ (if Platform.publishing () then Logseq_el.nothing else left_sidebar ms)
        ; (* data-is-margin-less-pages was always emitted "false" and its
             CSS only matches 'true' — dead attr, dropped *)
          scroll ~key:"main-content"
@@ -796,6 +803,9 @@ let main_content (ms : Model.t Signal.signal) =
    mounted overlay mid-batch). cljs mounts them via portals, which
    are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
+  if Platform.publishing () then
+    box ~style_class:"cp__overlays" [ Cmdk_view.render ms; Toasts_view.render ms ]
+  else
   box ~key:"overlays" ~style_class:"cp__overlays"
     [ Cmdk_view.render ms
     ; Popups_view.render ms
@@ -982,7 +992,7 @@ let shell (ms : Model.t Signal.signal) : t =
             []
         ]
     ; overlays ms
-    ; help_area ms
+    ; (if Platform.publishing () then Logseq_el.nothing else help_area ms)
     ; reactive
             ~equal:(fun (a : Model.t) (b : Model.t) ->
               match a.route, b.route with
