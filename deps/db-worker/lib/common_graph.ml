@@ -24,6 +24,15 @@ let ignored_path (dir : string) (path : string) : bool =
       || Regexp.test (Regexp.compile "/\\.[^.]+") rpath
       || Regexp.test (Regexp.compile "^\\.[^.]+") rpath
 
+(* cljs fix-win-path!: separator rewrite is needed only where
+   Filename.concat emits '\'; elsewhere the raw path is returned so
+   names normalization would change (decomposed Unicode, literal '\')
+   still resolve on disk. *)
+let fix_win_path (path : string) : string =
+  if Filename.dir_sep = "\\" then
+    String.map (fun c -> if c = '\\' then '/' else c) path
+  else path
+
 (* readdir — tree-seq over File_sys.readdir, filtering symbolic links and
    entries whose name starts with '.'. *)
 let readdir (root_dir : string) : string list E.t =
@@ -43,7 +52,8 @@ let readdir (root_dir : string) : string list E.t =
                           if is_dir then
                             E.bind (walk fpath acc) (fun acc' ->
                                 step acc' rest)
-                          else step (fpath :: acc) rest))
+                          else
+                            step (fix_win_path fpath :: acc) rest))
         in
         step acc names)
   in
@@ -94,8 +104,8 @@ let get_default_graphs_dir () : string =
 (* expand-home — node-path/join homedir rest when path starts with ~ *)
 let expand_home (path : string) : string =
   if String.length path > 0 && String.get path 0 = '~' then
-    Common_path.path_join (Runtime_env.home_dir ())
-      [ String.sub path 1 (String.length path - 1) ]
+    Gp_node_path.join
+      [ Runtime_env.home_dir (); String.sub path 1 (String.length path - 1) ]
   else path
 
 (* get-db-graphs-dir *)

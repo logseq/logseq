@@ -110,8 +110,11 @@ let epoch_ms_of_civil tz c =
      constructor and Date.UTC (cljs-time/goog.date semantics). Only
      single-arg setters are used: melange < 7 lacks the optional-arg
      forms and the utc/makeWith* helpers, so each field is set
-     individually. Pinning the day to 1 while year and month shift keeps
-     an oversized day from bleeding into the next month. *)
+     individually. Pinning the day to 1 first keeps an oversized day
+     from bleeding into the next month while year and month shift, and
+     the year must precede month/day: month overflow rolls the year
+     forward, and out-of-range days are judged against the target
+     year's month lengths (Feb 29 needs a leap year already in place). *)
   match tz with
   | Local_tz ->
       let d = Js.Date.make () in
@@ -127,6 +130,9 @@ let epoch_ms_of_civil tz c =
       in
       Int64.of_float (Js.Date.getTime d)
   | Offset_tz off ->
+      (* Same field order in UTC space. Date.UTC itself is unusable
+         here: it maps years 0-99 onto 1900-1999 while setUTCFullYear
+         keeps the literal year. *)
       let d = Js.Date.make () in
       let _ = Js.Date.setUTCDate ~date:1.0 d in
       let _ = Js.Date.setUTCFullYear ~year:(float_of_int c.cv_year) d in

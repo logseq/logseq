@@ -10,6 +10,6 @@
   },
   "scripts": {
     "check:schema-version": "node scripts/check-schema-version.cjs",
-    "build": "node scripts/check-schema-version.cjs && dune build js_api && vite build --mode node && vite build --mode browser"
+    "build": "node scripts/check-schema-version.cjs && dune build js_api bin/main.exe && vite build --mode node && vite build --mode browser"
   }
 }

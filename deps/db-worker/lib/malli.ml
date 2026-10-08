@@ -58,10 +58,7 @@ and prim =
   | PNil
 
 (* cljs integer? — a JS number with no decimal part *)
-let integer_float (f : float) : bool =
-  match classify_float f with
-  | FP_nan | FP_infinite -> false
-  | _ -> Float.equal f (Int64.to_float (Int64.of_float f))
+let integer_float (f : float) : bool = Float.is_integer f
 
 (* cljs pred semantics over datascript values. Instant doubles as the
    int64 scalar rep: epoch-ms values (block/created-at, updated-at,

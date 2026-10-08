@@ -148,15 +148,40 @@ let civil_fields c =
 
 let compare_civil a b = compare (civil_fields a) (civil_fields b)
 
+(* win32unix localtime/mktime raise EINVAL on instants that map before
+   1970-01-01; for those out-of-range inputs the local offset at the
+   epoch stands in so both directions still invert. *)
+let epoch_tz_offset_minutes : int option ref = ref None
+
+let epoch_tz_offset_minutes () =
+  match !epoch_tz_offset_minutes with
+  | Some off -> off
+  | None ->
+      (* mktime reads tm fields as local civil, so its value at an
+         instant is instant-minus-offset. Probe after the epoch: east
+         of UTC a probe at 0 maps to a negative local value, which
+         win32 mktime rejects. *)
+      let probe = 172800. in
+      let secs, _ = Unix.mktime (Unix.gmtime probe) in
+      let off = int_of_float ((probe -. secs) /. 60.) in
+      epoch_tz_offset_minutes := Some off;
+      off
+
 let civil_of_epoch_ms tz ms =
   match tz with
   | Local_tz ->
       (* floor, not truncation: the civil second containing a negative
          epoch-ms is its floor (ms part is taken floor-mod below) *)
-      let tm = Unix.localtime (Float.floor (Int64.to_float ms /. 1000.)) in
-      civil_of_unix_tm
-        tm
-        (Int64.(to_int (rem (add (rem ms 1000L) 1000L) 1000L)))
+      let secs = Float.floor (Int64.to_float ms /. 1000.) in
+      (match
+         (try `Local (Unix.localtime secs)
+          with Unix.Unix_error (Unix.EINVAL, _, _) -> `Fallback)
+       with
+       | `Local tm ->
+           civil_of_unix_tm
+             tm
+             (Int64.(to_int (rem (add (rem ms 1000L) 1000L) 1000L)))
+       | `Fallback -> civil_at_offset (epoch_tz_offset_minutes ()) ms)
   | Offset_tz off -> civil_at_offset off ms
 
 let epoch_ms_of_civil tz c =
@@ -175,8 +200,13 @@ let epoch_ms_of_civil tz c =
         ; tm_isdst = false
         }
       in
-      let secs, _ = Unix.mktime tm in
-      Int64.of_float (secs *. 1000. +. float_of_int c.cv_ms)
+      (match
+         (try `Mk (Unix.mktime tm)
+          with Unix.Unix_error (Unix.EINVAL, _, _) -> `Fallback)
+       with
+       | `Mk (secs, _) ->
+           Int64.of_float (secs *. 1000. +. float_of_int c.cv_ms)
+       | `Fallback -> epoch_ms_at_offset (epoch_tz_offset_minutes ()) c)
   | Offset_tz off -> epoch_ms_at_offset off c
 
 (* ---- local_date ---- *)

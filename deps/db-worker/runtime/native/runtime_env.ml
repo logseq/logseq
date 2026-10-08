@@ -9,7 +9,13 @@ let env = Sys.getenv_opt
 let home_dir () =
   match env "HOME" with
   | Some dir -> dir
-  | None -> (Unix.getpwuid (Unix.getuid ())).Unix.pw_dir
+  | None ->
+      (match env "USERPROFILE" with
+       | Some dir -> dir
+       | None ->
+           (match env "HOMEDRIVE", env "HOMEPATH" with
+            | Some d, Some p -> d ^ p
+            | _ -> (Unix.getpwuid (Unix.getuid ())).Unix.pw_dir))
 
 (* The native worker is the CLI daemon's worker: default :cli, the
    electron owner passes LOGSEQ_OWNER_SOURCE=electron. An empty value
