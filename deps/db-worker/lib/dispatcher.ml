@@ -94,6 +94,22 @@ let invoke_transit name transit_args =
           [ "endpoint", name
           ; "message", msg
           ; "data", Transit_codec.to_string (Wire.Map kvs) ]
+    | Outliner_validate.Notification w ->
+        let message =
+          match w with
+          | Wire.Map _ -> (
+              match Wire.get "payload" w with
+              | Some p -> (
+                  match Wire.get "message" p with
+                  | Some (Wire.String m) -> m
+                  | _ -> exn_message exn)
+              | None -> exn_message exn)
+          | _ -> exn_message exn
+        in
+        Worker_log.error "api/error"
+          [ "endpoint", name
+          ; "message", message
+          ; "data", Transit_codec.to_string w ]
     | exn ->
         Worker_log.error "api/error"
           [ "endpoint", name; "message", exn_message exn ]
