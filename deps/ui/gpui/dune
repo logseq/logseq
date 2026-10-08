@@ -44,7 +44,9 @@
 (rule
  (copy ../native/dom_ext.ml dom_ext.ml))
 (rule
- (copy ../native/editor_cmds.ml editor_cmds.ml))
+ (copy ../src/editor/editor_cmds.ml editor_cmds.ml))
+(rule
+ (copy ../native/editor_cmds_host.ml editor_cmds_host.ml))
 (rule
  (copy ../native/editor_dom.ml editor_dom.ml))
 (rule

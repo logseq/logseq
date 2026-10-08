@@ -124,6 +124,8 @@
 (rule
  (copy ../src/editor/editor_commands.ml editor_commands.ml))
 (rule
+ (copy ../src/editor/editor_cmds.ml editor_cmds.ml))
+(rule
  (copy ../src/editor/editor_embed.ml editor_embed.ml))
 (rule
  (copy ../src/editor/editor_keys.ml editor_keys.ml))

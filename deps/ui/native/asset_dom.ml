@@ -245,16 +245,8 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
        else Lui_elements.spacer ~key:("asset-empty-" ^ uuid) []) ]
 
 let install () =
-  (* slash "Upload an asset" dispatches ls:editor-command
-     {command:"upload"} — the picker op replaces the hidden input the
-     web used to click *)
-  Platform.add_event_listener "ls:editor-command" (fun j ->
-      match Dom_ext.prop "detail" j with
-      | Js.Json.JObject _ as d -> (
-          match Dom_ext.str_prop "command" d with
-          | Some "upload" -> pick_files ()
-          | _ -> ())
-      | _ -> ());
+  (* "upload" is dispatched by the shared editor command dispatcher —
+     Editor_cmds calls pick_files through the installed host *)
   (* window-level file drop — the native host posts
      platform_event "file-drop" {"paths": [...]} when files are dropped
      on the window *)

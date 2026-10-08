@@ -29,6 +29,114 @@ let test_editor_wire_runs () =
   check "long editor wire retains every source span"
     (Array.length parsed = 1800 && parsed.(1799) = (21588, 21600, "p"))
 
+(* ---- Editor_cmds shared dispatch scenarios (web entry) ---- *)
+
+(* the recording host stands in for the browser boundary; Editor_cmds,
+   Editor_state, Outliner_ops and the fake worker stay real *)
+let outcome_tag = function
+  | Editor_cmds.Handled -> "handled"
+  | Editor_cmds.Unavailable_command c -> "unavailable:" ^ c
+  | Editor_cmds.Unimplemented c -> "unimplemented:" ^ c
+  | Editor_cmds.Unknown c -> "unknown:" ^ c
+  | Editor_cmds.No_target -> "no-target"
+
+let rec cmds_after n f =
+  ignore
+    (Js.Promise.(resolve () |> then_ (fun () ->
+         if n <= 0 then (f (); Js.Promise.resolve ())
+         else (cmds_after (n - 1) f; Js.Promise.resolve ()))))
+
+let test_editor_cmds () =
+  let clip = ref [] and side = ref [] and dialogs = ref []
+  and picked = ref 0 and plugs = ref [] and reports = ref [] in
+  let invokes = ref [] in
+  let prev_model = !Runtime.read_model in
+  Editor_cmds.install_host
+    { Editor_cmds.clipboard_write = (fun s -> clip := !clip @ [ s ])
+    ; open_right_sidebar = (fun u -> side := !side @ [ u ])
+    ; pick_files = (fun () -> incr picked)
+    ; exec_plugin_ctx =
+        Editor_cmds.Supported
+          (fun ~uuid ~plugin ~key ->
+            plugs := !plugs @ [ (uuid, plugin, key) ])
+    ; report_error =
+        (fun label detail -> reports := !reports @ [ (label, detail) ])
+    };
+  (* delegate to the drive suite's handler — it logs apply-outliner-ops
+     into sdk_ops_log, which is the ops channel below *)
+  ignore
+    (Fake_worker.install (fun name args ->
+         invokes := !invokes @ [ name ];
+         (match name with
+          | "thread-api/get-property-closed-values" ->
+              Wire.List
+                [ Wire.Map
+                    [ Wire.kw "logseq.property/value", Wire.String "Doing"
+                    ; Wire.kw "db/id", Wire.Int 7 ] ]
+          | "thread-api/get-case-page" ->
+              Wire.Map [ Wire.kw "db/id", Wire.Int 7 ]
+          | _ -> Test_drive.worker_handler name args)));
+  (* detached model readers (Editor_state.find, apply_result's repo gate,
+     refresh paths) see this model for the scenario's duration — the
+     mounted app's own view model is untouched. Restored in drain. *)
+  Runtime.read_model := (fun () ->
+      { Model.initial with
+        Model.repo = Some "logseq_db_test"
+      ; Model.journals = [ page [ block "c1" "Copy me" ] ]
+      });
+  Web_dom.on_document_event "ls:open-dialog" (fun ev ->
+      match
+        Option.bind (Js.Json.decodeObject (Web_dom.js_get ev "detail"))
+          (fun d ->
+            Option.bind (Js.Dict.get d "name") Js.Json.decodeString)
+      with
+      | Some n -> dialogs := !dialogs @ [ n ]
+      | None -> ());
+  Shared_scenarios_editor_cmds.run
+    { Shared_scenarios_editor_cmds.check = check
+    ; run = (fun ~command ~block ~value ->
+          outcome_tag (Editor_cmds.run ~command ~block ~value))
+    ; (* deferred worker-fed ops ride deeper promise chains (title parse,
+         op resolve, apply) — give the drain enough microtask ticks, then
+         restore the swapped model reader + worker and report *)
+      drain = (fun f ->
+          cmds_after 25 (fun () ->
+              f ();
+              Runtime.read_model := prev_model;
+              ignore (Fake_worker.install Test_drive.worker_handler);
+              Js.log
+                (Printf.sprintf "%d checks, %d failures" !checks !failures);
+              if !failures > 0 then exit 1))
+    ; install = (fun () -> ())
+    ; set_editing = (fun u ->
+          (* silent — a request_flush re-render is pointless here and would
+             run view code over the borrowed model reader *)
+          Editor_state.set_silent (fun st ->
+              { st with
+                Editor_state.editing =
+                  Option.map
+                    (fun uuid ->
+                      Editor_state.mk_editing ~uuid ~buffer:"Copy me"
+                        ~scope:"main" ~base:"Copy me" ())
+                    u }))
+    ; clipboard = (fun () -> !clip)
+    ; sidebars = (fun () -> !side)
+    ; dialogs = (fun () -> !dialogs)
+    ; picked = (fun () -> !picked)
+    ; plugin_calls = (fun () -> !plugs)
+    ; reports = (fun () -> !reports)
+    ; invokes = (fun () -> !invokes)
+    ; (* every apply-outliner-ops lands in the drive handler's log —
+         sync-stage ops as well as the deferred ones *)
+      ops = (fun () ->
+          List.filter_map
+            (function
+              | Wire.Array (Wire.Keyword n :: _) -> Some n
+              | _ -> None)
+            !Test_drive.sdk_ops_log)
+    ; plugin_ctx_supported = true
+    }
+
 let test_merge_source () =
   List.iter (fun left ->
     let merged, caret = Editor_actions.merge_source left "suffix" in
@@ -4111,6 +4219,7 @@ let () =
   (* Drive view tests run their worker-fed assertions on a promise tick;
      the summary + exit must wait for that stage *)
   Test_drive.run ~finish:(fun () ->
-      Js.log
-        (Printf.sprintf "%d checks, %d failures" !checks !failures);
-      if !failures > 0 then exit 1)
+      (* after the drive mount + deferred assertions — Editor_state's cell
+         and Platform_web services exist by then; the summary runs at the
+         end of the scenario's own drain stage *)
+      test_editor_cmds ())
