@@ -1940,7 +1940,7 @@ let sort_eids_from_avet db (match_ : entity_id -> bool) (sorting : sorting_item 
        | None ->
            let ds =
              if s_asc then datoms db Avet ~a:s_id ()
-             else List.to_seq (List.rev (List.of_seq (datoms db Avet ~a:s_id ())))
+             else rseek_datoms db Avet ~a:s_id ()
            in
            let matched = avet_take_eids ~scan_attr:s_id ds match_ None offset in
            (match leftover with
