@@ -7,6 +7,9 @@ publish = false
 
 [dependencies]
 flume = "0.12"
+# `log` facade backend — gpui/wgpu diagnostics (device pick, surface,
+# present errors) are invisible without one; RUST_LOG=off silences it.
+env_logger = "0.11"
 # Sibling checkout convention: ../lui path dep.
 # the logseq and lui repos live side by side. Override at build time with
 # LUI_GPUI_CRATE_DIR / LUI_CORE_CRATE_DIR via build.rs path substitution if

@@ -67,11 +67,19 @@ let web_profile =
 let gpui_profile =
   { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GPUIHost }
 
+let gpui_profiles =
+  [ gpui_profile
+  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GPUIHost }
+  ; { Lui_protocol.profile_os = WindowsOS
+    ; Lui_protocol.profile_host = GPUIHost
+    }
+  ]
+
 (* --- schema — identical to the web twin (same wire vocabulary) --------- *)
 
 let schema =
   Lui_extension.component identifier
-    [ web_profile; gpui_profile ]
+    (web_profile :: gpui_profiles)
     false (* standard_children *)
     []
     [ Lui_extension.property "block-id" Lui_extension.StringScalar true

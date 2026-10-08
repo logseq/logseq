@@ -26,6 +26,16 @@ let web_profile =
 let gpui_profile =
   { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = GPUIHost }
 
+(* the GPUI host runs on all three desktop OSes — extension schemas must
+   list each (os, gpui) pair it can present or init rejects them *)
+let gpui_profiles =
+  [ gpui_profile
+  ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GPUIHost }
+  ; { Lui_protocol.profile_os = WindowsOS
+    ; Lui_protocol.profile_host = GPUIHost
+    }
+  ]
+
 (* tags the UI emits; each becomes a "logseq-<tag>" extension component *)
 let tags =
   [ "div"; "span"; "a"; "button"; "textarea"; "input"; "img"; "main"
@@ -52,7 +62,7 @@ let child_identifiers =
 
 let schema_of tag =
   Lui_extension.component (identifier tag)
-    [ web_profile; gpui_profile ]
+    (web_profile :: gpui_profiles)
     true (* standard_children *)
     child_identifiers (* raw elements nest freely *)
     [ Lui_extension.property "attrs" Lui_extension.StringScalar false None
@@ -76,7 +86,7 @@ let carrier_identifier = "logseq-dom"
 
 let carrier_schema =
   Lui_extension.component carrier_identifier
-    [ web_profile; gpui_profile ] false []
+    (web_profile :: gpui_profiles) false []
     []
     [ Lui_extension.event "dom-event"
         [ Lui_extension.event_field "name" Lui_extension.StringScalar true
