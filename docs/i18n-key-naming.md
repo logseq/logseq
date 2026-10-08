@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines how to name new i18n keys in `src/resources/dicts/en.edn`.
+This document defines how to name new i18n keys in `resources/dicts/en.edn`.
 
 Goal: given any new user-facing string, this document should let you determine
 its key name directly.
@@ -67,7 +67,7 @@ Examples:
 
 ## Before Naming a New Key
 
-1. Search `src/resources/dicts/en.edn`.
+1. Search `resources/dicts/en.edn`.
 2. Reuse a key only when both match:
    - semantic owner
    - textual role
@@ -426,7 +426,7 @@ and use a more specific leaf.
   goal. Small roots are acceptable only when they name a first-class product
   feature, entity, or integration with a clear independent boundary.
 - When keeping a new root, update this taxonomy in the same change so the
-  standard stays aligned with `src/resources/dicts/en.edn`.
+  standard stays aligned with `resources/dicts/en.edn`.
 - Not every existing key in `en.edn` is a good naming precedent. Prefer this
   standard even when some legacy keys remain unchanged for compatibility.
 
@@ -678,12 +678,12 @@ For every new string:
 3. Add a subdomain only if the string belongs to a stable section, workflow, or
    representation.
 4. Choose the leaf from the role rules.
-5. Search `src/resources/dicts/en.edn` for an existing key with the same owner
+5. Search `resources/dicts/en.edn` for an existing key with the same owner
    and role.
 6. Reuse only on exact semantic match.
 7. If the new name would create a new root or a singleton dotted subdomain,
    justify why convergence would be worse without it.
-8. Add the English source text to `src/resources/dicts/en.edn`.
+8. Add the English source text to `resources/dicts/en.edn`.
 9. After editing dict files, run `bb lang:format-dicts`.
 
 ## Canonical Examples

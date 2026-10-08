@@ -49,9 +49,6 @@ let debug args =
   Electron_logger.debug_args
     (Array.append [| Js.Json.string "[updater]" |] args)
 
-(* frontend.version/version *)
-let electron_version = "2.0.1"
-
 let updater_channel () =
   let platform = Node.Process.process##platform in
   let arch = Node.Process.process##arch in

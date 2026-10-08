@@ -1,4 +1,4 @@
-{:paths ["scripts/src" "src/main" "src/resources"]
+{:paths ["scripts/src" "resources" "src/main" "src/resources"]
  :deps
  {metosin/malli
   {:git/url "https://github.com/metosin/malli"

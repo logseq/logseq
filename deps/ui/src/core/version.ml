@@ -1,6 +1,6 @@
-(* Version metadata — cljs frontend.version + logseq.common.version *)
+(* App version generated from resources/package.json. *)
 
-let app = "2.0.1"
+let app = Version_gen.app
 
 (* Injected by vite define (LOGSEQ_REVISION); empty when built
    outside the bundle pipeline. *)

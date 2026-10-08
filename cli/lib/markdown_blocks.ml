@@ -153,13 +153,9 @@ let strip_heading_marker title =
     String.sub title (spaces index) (length - spaces index)
   else title
 
-(* mldoc returns one Block_ref entry per occurrence of a real ((uuid))
-   ref — code spans and fenced blocks produce none — so occurrences of
-   ((uuid)) that fall outside markdown code can be normalized to the
-   DB-graph [[uuid]] form, matching the importer's
-   convert-block-refs-to-page-refs. When the outside-code count disagrees
-   with the AST count the scanner is out of sync with mldoc, so that uuid
-   stays verbatim rather than guessing. *)
+(* mldoc identifies valid block-reference UUIDs, including occurrences
+   inside code. Normalize their occurrences only outside fenced blocks
+   and inline code; reference counts do not identify those positions. *)
 let fenced_mask title =
   let len = String.length title in
   let inside = Array.make (len + 1) false in
@@ -249,7 +245,7 @@ let non_code_positions title inside needle =
   List.rev !positions
 
 let normalize_block_refs title =
-  let real_counts = Hashtbl.create 4 in
+  let references = Hashtbl.create 4 in
   (match
      try Js.Json.decodeArray (Mldoc.references title) with _ -> None
    with
@@ -273,36 +269,30 @@ let normalize_block_refs title =
                            Js.Json.decodeString url_parts.(1) )
                        with
                        | Some "Block_ref", Some uuid ->
-                           Hashtbl.replace real_counts uuid
-                             (Option.value
-                                (Hashtbl.find_opt real_counts uuid)
-                                ~default:0
-                             + 1)
+                           Hashtbl.replace references uuid ()
                        | _ -> ())
                    | _ -> ())
                | _ -> ())
            | _ -> ())
          items
    | None -> ());
-  if Hashtbl.length real_counts = 0 then title
+  if Hashtbl.length references = 0 then title
   else
     let inside = fenced_mask title in
     Hashtbl.fold
-      (fun uuid real_refs title ->
+      (fun uuid () title ->
         let needle = "((" ^ uuid ^ "))" in
         let positions = non_code_positions title inside needle in
-        if List.length positions = real_refs then (
-          (* ((u)) and [[u]] have equal length, so positions stay valid. *)
-          let bytes = Bytes.of_string title in
-          let replacement = "[[" ^ uuid ^ "]]" in
-          List.iter
-            (fun p ->
-              Bytes.blit_string replacement 0 bytes p
-                (String.length needle))
-            positions;
-          Bytes.unsafe_to_string bytes)
-        else title)
-      real_counts title
+        (* ((u)) and [[u]] have equal length, so positions stay valid. *)
+        let bytes = Bytes.of_string title in
+        let replacement = "[[" ^ uuid ^ "]]" in
+        List.iter
+          (fun p ->
+            Bytes.blit_string replacement 0 bytes p
+              (String.length needle))
+          positions;
+        Bytes.unsafe_to_string bytes)
+      references title
 
 let title_of_range payload ~start ~stop ~exclude_ranges ~level ~heading =
   let ranges = List.sort (fun (a, _) (b, _) -> compare a b) exclude_ranges in

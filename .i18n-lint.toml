@@ -324,10 +324,10 @@ exclude_patterns = [
 ]
 
 # Directory containing dictionary EDN files (relative to project_root).
-dicts_dir = "src/resources/dicts"
+dicts_dir = "resources/dicts"
 
 # Primary dictionary file (relative to project_root).
-primary_dict = "src/resources/dicts/en.edn"
+primary_dict = "resources/dicts/en.edn"
 
 # Key patterns always considered "used" — for dynamically generated keys
 # that cannot be detected via static analysis.

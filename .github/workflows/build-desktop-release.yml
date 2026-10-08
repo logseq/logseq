@@ -178,7 +178,7 @@ jobs:
       - name: Update Nightly APP Version
         if: ${{ github.event.inputs.build-target == 'nightly' || github.event_name == 'schedule' }}
         run: |
-          sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
+          node -e 'const fs = require("fs"); const p = "resources/package.json"; const pkg = JSON.parse(fs.readFileSync(p, "utf8")); pkg.version = process.argv[1]; fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + "\n");' "${{ steps.ref.outputs.version }}"
 
       - name: Set Build Environment Variables (only when workflow_dispatch)
         if: ${{ github.event_name == 'workflow_dispatch' }}

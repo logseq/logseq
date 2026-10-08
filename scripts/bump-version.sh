@@ -54,7 +54,6 @@ echo -e "${NOTICE_FLAG} Will set new versionCode to be ${WHITE}$NEW_VERSION_CODE
 
 NEW_VERSION=$INPUT_STRING
 
-$SED -i 's/defonce version ".*"/defonce version "'${NEW_VERSION}'"/g' src/main/frontend/version.cljs
 $SED -i 's/"version": ".*"/"version": "'${NEW_VERSION}'"/g' resources/package.json
 $SED -i 's/versionName ".*"/versionName "'${NEW_VERSION}'"/g' android/app/build.gradle
 $SED -i 's/versionCode .*/versionCode '${NEW_VERSION_CODE}'/g' android/app/build.gradle

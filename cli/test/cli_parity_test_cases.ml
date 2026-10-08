@@ -3962,6 +3962,26 @@ let () =
         "ex\r\n```\r\ncode\r\n```\r\nsee [[ffffffff-ffff-4fff-8fff-ffffffffffff]]"
         (expect_some "block title" (Vec.nth parsed 0).Block.title));
 
+  test "CLI parity add block markdown preserves code beside repeated references"
+    (fun () ->
+      let uuid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" in
+      let parsed =
+        expect_ok "repeated refs"
+          (Markdown_blocks.of_markdown
+             ("- **((" ^ uuid ^ "))** and ((" ^ uuid
+              ^ ")) code `((" ^ uuid ^ "))`"))
+      in
+      expect_equal "real references including emphasis are normalized"
+        ("**[[" ^ uuid ^ "]]** and [[" ^ uuid ^ "]] code `((" ^ uuid ^ "))`")
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "code only"
+          (Markdown_blocks.of_markdown ("- `((" ^ uuid ^ "))`"))
+      in
+      expect_equal "code-only reference stays literal"
+        ("`((" ^ uuid ^ "))`")
+        (expect_some "block title" (Vec.nth parsed 0).Block.title));
+
   test "CLI parity add collect created block uuids depth-first and unique"
     (fun () ->
       let child =

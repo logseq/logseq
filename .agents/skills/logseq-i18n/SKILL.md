@@ -1,6 +1,6 @@
 ---
 name: logseq-i18n
-description: "Logseq i18n workflow for adding, renaming, reviewing, or editing translation keys and user-facing strings. Use when: writing UI code with hardcoded text, adding new user-facing strings, editing translation dict files, reviewing i18n compliance, working with notification/show!, adding translatable UI attributes, or any task involving src/resources/dicts/. Also use when the user mentions i18n, translation, localization, or hardcoded strings."
+description: "Logseq i18n workflow for adding, renaming, reviewing, or editing translation keys and user-facing strings. Use when: writing UI code with hardcoded text, adding new user-facing strings, editing translation dict files, reviewing i18n compliance, working with notification/show!, adding translatable UI attributes, or any task involving resources/dicts/. Also use when the user mentions i18n, translation, localization, or hardcoded strings."
 ---
 
 # Logseq i18n Skill
@@ -9,7 +9,7 @@ description: "Logseq i18n workflow for adding, renaming, reviewing, or editing t
 
 - Adding or editing user-facing strings in shipped UI
 - Replacing hardcoded UI text with translations
-- Adding, renaming, deduplicating, or removing keys in `src/resources/dicts/`
+- Adding, renaming, deduplicating, or removing keys in `resources/dicts/`
 - Reviewing code for i18n compliance
 - Editing `notification/show!` calls or translatable UI attributes
 - Updating i18n tooling, docs, or lint configuration
@@ -63,7 +63,7 @@ and similar UI are a bug.
 
 ### Rule 2: Reuse keys by meaning, not by English text
 
-Search `src/resources/dicts/en.edn` first. Reuse a key only when both match:
+Search `resources/dicts/en.edn` first. Reuse a key only when both match:
 
 - semantic owner
 - textual role
@@ -73,7 +73,7 @@ If the English text matches but the meaning differs, create a new key and follow
 
 ### Rule 3: English source lives in `en.edn`
 
-- Add new English source text to `src/resources/dicts/en.edn`.
+- Add new English source text to `resources/dicts/en.edn`.
 - **When introducing a new key for the first time, you must also add the
   Simplified Chinese (`zh-CN`) translation in the same change.** English and
   `zh-CN` are the two required locales for any new key.
@@ -122,7 +122,7 @@ body:
 When adding or changing user-facing text:
 
 1. Use `.i18n-lint.toml` to confirm the text is in i18n scope.
-2. Search `src/resources/dicts/en.edn` for an exact semantic match.
+2. Search `resources/dicts/en.edn` for an exact semantic match.
 3. If no exact match exists, name the key with `docs/i18n-key-naming.md`.
 4. If the naming guide still does not yield one clear key, stop and ask for
    human guidance instead of guessing.

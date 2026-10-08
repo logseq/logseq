@@ -83,7 +83,7 @@ Responsibilities are split across a few files:
 * [docs/contributing-to-translations.md](./contributing-to-translations.md) is
   for locale contributors.
 * [docs/i18n-key-naming.md](./i18n-key-naming.md) is for naming and reusing
-  keys in `src/resources/dicts/en.edn`.
+  keys in `resources/dicts/en.edn`.
 * [.i18n-lint.toml](../.i18n-lint.toml) is the source of truth for hardcoded UI
   text lint scope, translatable helpers/attributes, exclusions, and allowlists.
 
@@ -122,7 +122,7 @@ elsewhere.
 #### Developer workflow
 
 1. Use `.i18n-lint.toml` to decide whether the text is in i18n scope.
-2. Search `src/resources/dicts/en.edn` for an existing key with the same
+2. Search `resources/dicts/en.edn` for an existing key with the same
    semantic owner and textual role.
 3. If no exact match exists, follow
    [the key naming guide](./i18n-key-naming.md) and add the English source text

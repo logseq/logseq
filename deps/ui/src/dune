@@ -1,7 +1,18 @@
+; The package metadata lives outside this Dune project. Re-read it on
+; every build so changing the release version cannot leave stale metadata.
+(rule
+ (target version_gen.ml)
+ (deps (universe))
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../tools/version_gen.exe} \"$DUNE_SOURCEROOT/../../resources/package.json\" %{target}")))
+
 (include_subdirs unqualified)
 
 ; Generate src/dicts_gen.ml from the shared cljs dicts. The dicts dir lives
-; outside this dune-project (../../src/resources/dicts), so it can't be a
+; outside this dune-project (../../resources/dicts), so it can't be a
 ; tracked dep -- run `dune build --force` to pick up dict edits.
 (rule
  (target dicts_gen.ml)
@@ -9,7 +20,7 @@
   (run
    sh
    -c
-   "%{exe:../tools/dict_gen.exe} \"$DUNE_SOURCEROOT/../../src/resources/dicts\" %{target}")))
+   "%{exe:../tools/dict_gen.exe} \"$DUNE_SOURCEROOT/../../resources/dicts\" %{target}")))
 
 (library
  (name logseq_ui)

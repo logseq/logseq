@@ -5,7 +5,7 @@ Thanks for helping improve Logseq translations.
 This guide is for contributors who translate existing UI text or add missing
 translations for a locale. It is not the guide for changing application code,
 inventing dictionary keys, or rewriting the English source text in
-`src/resources/dicts/en.edn`.
+`resources/dicts/en.edn`.
 
 If the English wording or key name is wrong, ask a developer to update
 `en.edn` and follow [the key naming guide](i18n-key-naming.md).
@@ -18,7 +18,7 @@ To run the commands in this doc, install
 ## Where Translations Live
 
 Translation dictionaries live under
-[src/resources/dicts/](https://github.com/logseq/logseq/blob/master/src/resources/dicts/).
+[resources/dicts/](https://github.com/logseq/logseq/blob/master/resources/dicts/).
 Each locale has its own EDN file, for example `es.edn`.
 
 `en.edn` is the source of truth for keys and English text. Most translation
@@ -65,7 +65,7 @@ English, but many are unfinished translations copied from `en.edn`.
 ## Edit a Locale
 
 1. Run `bb lang:missing <locale>`.
-2. Add the missing keys to `src/resources/dicts/<locale>.edn`.
+2. Add the missing keys to `resources/dicts/<locale>.edn`.
 3. Save the file.
 4. Run `bb lang:missing <locale>` again until the list is empty or contains
    only entries you want to leave for later.
@@ -132,7 +132,7 @@ command is for developers who are editing UI code.
 To add a new language:
 
 1. Add an entry to `frontend.dicts/languages`.
-2. Create a new file under `src/resources/dicts/` and name it after the locale,
+2. Create a new file under `resources/dicts/` and name it after the locale,
    for example `zz.edn`.
 3. Add that file to `frontend.dicts/dicts`.
 4. Use the `bb lang:missing <locale>` workflow to populate translations.

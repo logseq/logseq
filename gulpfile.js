@@ -160,13 +160,11 @@ const prepareElectronMaker = async () => {
 
   const pkgPath = path.join(outputPath, 'package.json')
   const pkg = require(pkgPath)
-  const version = fs.readFileSync(
-    path.join(__dirname, 'src/main/frontend/version.cljs')).
-    toString().
-    match(/[0-9.]{3,}/)[0]
+  const { version } = JSON.parse(fs.readFileSync(
+    path.join(__dirname, 'resources/package.json'), 'utf8'))
 
   if (!version) {
-    throw new Error('release version error in src/**/*/version.cljs')
+    throw new Error('Missing app version in resources/package.json')
   }
 
   pkg.version = version

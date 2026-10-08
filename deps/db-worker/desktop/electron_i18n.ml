@@ -1,8 +1,8 @@
 (* Port of electron.i18n — Tongue translations for the Electron main
-   process. Dictionaries are the same src/resources/dicts/*.edn files
+   process. Dictionaries are the same resources/dicts/*.edn files
    the renderer embeds; here they are loaded at runtime (the build
-   copies src/resources/dicts to static/dicts/ next to electron.js; in
-   dev ../src/resources/dicts is tried too). *)
+   copies resources/dicts to static/dicts/ next to electron.js; in
+   dev ../resources/dicts is tried too). *)
 
 module Fs_extra = struct
   external existsSync : string -> bool = "existsSync"
@@ -21,7 +21,7 @@ let dict_file locale = String.lowercase_ascii locale ^ ".edn"
 
 let dict_paths locale =
   [ Node.Path.join [| __dirname; "dicts"; dict_file locale |]
-  ; Node.Path.join [| __dirname; "../src/resources/dicts"; dict_file locale |]
+  ; Node.Path.join [| __dirname; "../resources/dicts"; dict_file locale |]
   ]
 
 let loaded : (string, Tongue.dict) Hashtbl.t = Hashtbl.create 8

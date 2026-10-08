@@ -11,7 +11,7 @@ module S = Settings_state
 module V = Settings_view
 module C = Settings_controls
 
-let version = "2.0.2"
+let version = Version.app
 
 (* config.edn-backed toggle row — folds the (config_bool, config_toggle)
    pair every config toggle repeats *)

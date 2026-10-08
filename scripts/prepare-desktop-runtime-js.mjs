@@ -100,7 +100,7 @@ async function main() {
   // The OCaml electron main loads i18n dictionaries from static/dicts/
   // at runtime (cljs used to inline them at compile time).
   await copyDir(
-    path.join(repoRoot, "src", "resources", "dicts"),
+    path.join(repoRoot, "resources", "dicts"),
     path.join(staticDir, "dicts"),
   );
 

@@ -388,7 +388,7 @@ let set_app_menu () : unit =
               ( "message",
                 Js.Json.string
                   (Electron_i18n.t "electron/version"
-                     [| Electron_updater.electron_version |]) );
+                     [| App.get_version App.t |]) );
             ]))
   in
   let template =

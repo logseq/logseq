@@ -6,7 +6,7 @@
 
 // One chunk per cljs tongue dict; en stays embedded in Dicts_gen.
 const dictLoaders = import.meta.glob(
-  ["../../../src/resources/dicts/*.edn", "!../../../src/resources/dicts/en.edn"],
+  ["../../../resources/dicts/*.edn", "!../../../resources/dicts/en.edn"],
   { query: "?raw", import: "default" },
 );
 
@@ -46,7 +46,7 @@ export function loadCmCore() {
 }
 
 export function loadDictFile(name) {
-  const load = dictLoaders[`../../../src/resources/dicts/${name}`];
+  const load = dictLoaders[`../../../resources/dicts/${name}`];
   if (!load) return Promise.reject(new Error(`unknown i18n dict ${name}`));
   return load();
 }

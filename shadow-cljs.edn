@@ -1,7 +1,7 @@
 ;; shadow-cljs configuration
 {:deps true
  :nrepl {:port 8701}
- :source-paths ["src/main" "src/resources"]
+ :source-paths ["resources" "src/main" "src/resources"]
 
  ;; "." for /static
  :dev-http {3001 ["static" "."]

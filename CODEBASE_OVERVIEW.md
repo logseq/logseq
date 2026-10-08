@@ -44,7 +44,9 @@ This is overview of this repository's most important directories and files.
 
   - `src/test/` contains all the cljs tests.
 
-  - `src/resources/` is a directory and Clojure(Script) resource classpath and includes language translations.
+  - `resources/dicts/` contains language translations, and `resources/package.json` defines the app version.
+
+  - `src/resources/` contains remaining Clojure(Script) resources such as templates.
 
   - `src/main/frontend/` contains code that powers the Logseq editor. Directories and files inside are organized by features or functions. Some notable directories:
     - `src/main/frontend/components/` contains all the UI components.

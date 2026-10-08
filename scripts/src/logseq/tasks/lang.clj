@@ -97,7 +97,7 @@
 (defn- delete-invalid-non-default-languages
   [invalid-keys-by-lang]
   (doseq [[lang invalid-keys] invalid-keys-by-lang]
-    (let [path (fs/path "src/resources/dicts" (str (name lang) ".edn"))
+    (let [path (fs/path "resources/dicts" (str (name lang) ".edn"))
           result (rewrite/parse-string (String. (fs/read-all-bytes path)))
           new-content (str (reduce
                             (fn [result k]
@@ -106,7 +106,7 @@
       (spit (fs/file path) new-content))))
 
 (def ^:private dicts-dir
-  (fs/path "src/resources/dicts"))
+  (fs/path "resources/dicts"))
 
 (def ^:private ignored-dict-node-tags
   #{:comment :newline :whitespace})

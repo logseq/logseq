@@ -11,3 +11,8 @@
  (name icon_names_gen)
  (modes native)
  (libraries yojson))
+
+(executable
+ (name version_gen)
+ (modes native)
+ (libraries yojson))

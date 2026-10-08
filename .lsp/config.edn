@@ -1,5 +1,5 @@
 {:source-aliases #{:cljs}
- :paths-ignore-regex ["src/resources", "target", ".nbb", ".shadow-cljs", ".clj-kondo/.cache", "clj-e2e", "cli-e2e"]
+ :paths-ignore-regex ["resources/dicts", "src/resources", "target", ".nbb", ".shadow-cljs", ".clj-kondo/.cache", "clj-e2e", "cli-e2e"]
  :linters {:clojure-lsp/unused-public-var {:level :off}
            :clj-kondo/unused-namespace    {:level :off}}
  :clean {:ns-inner-blocks-indentation :same-line}

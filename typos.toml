@@ -21,6 +21,7 @@ Damon = "Damon"
 [files]
 extend-exclude = ["resources/*",
                   "src/resources/*",
+                  "resources/dicts/*",
                   "scripts/resources/*",
                   "src/test/fixtures/*",
                   "deps/db-sync/test/logseq/db_sync/fixtures/*.edn",

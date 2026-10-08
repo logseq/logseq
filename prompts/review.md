@@ -37,9 +37,9 @@ You're Clojure(script) expert, you're responsible to check those common errors:
   dictionaries.
 - If a new user-facing surface is not represented in `.i18n-lint.toml`, flag
   the missing lint coverage.
-- Reuse existing `src/resources/dicts/en.edn` keys only on exact semantic owner
+- Reuse existing `resources/dicts/en.edn` keys only on exact semantic owner
   and textual role match. Otherwise follow `docs/i18n-key-naming.md`.
-- Add new English source text to `src/resources/dicts/en.edn`. Add non-English
+- Add new English source text to `resources/dicts/en.edn`. Add non-English
   entries only when providing actual translations. When renaming or removing
   keys, clean up stale keys in affected locale files.
 - `notification/show!` and translated attributes from `.i18n-lint.toml`
