@@ -95,22 +95,25 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
            | Some b ->
                ignore
                  (P.show_menu ~anchor:b
-                    [ P.MItem (I.rename, fun () -> (V.ops ()).V.o_rename inst v)
-                    ; P.MItem
-                        ( I.delete
-                        , fun () ->
-                            Views_db.delete_blocks [ v.Wr.vu ] (fun () ->
-                                let next =
-                                  List.filter
-                                    (fun x -> x.Wr.vu <> v.Wr.vu)
-                                    (V.get inst).V.views
-                                in
-                                V.update inst (fun s ->
-                                    let s = { s with V.views = next } in
-                                    match next with
-                                    | n :: _ -> V.apply_view_entity s n
-                                    | [] -> s);
-                                refresh inst) ) ])
+                    (P.MItem (I.rename, fun () -> (V.ops ()).V.o_rename inst v)
+                     :: (* cljs only offers Delete when >1 view exists *)
+                        (if List.length (V.get inst).V.views > 1 then
+                           [ P.MItem
+                               ( I.delete
+                               , fun () ->
+                                   Views_db.delete_blocks [ v.Wr.vu ] (fun () ->
+                                       let next =
+                                         List.filter
+                                           (fun x -> x.Wr.vu <> v.Wr.vu)
+                                           (V.get inst).V.views
+                                       in
+                                       V.update inst (fun s ->
+                                           let s = { s with V.views = next } in
+                                           match next with
+                                           | n :: _ -> V.apply_view_entity s n
+                                           | [] -> s);
+                                       refresh inst) ) ]
+                         else [])))
            | None -> ()
          else begin
            V.update inst (fun s ->
