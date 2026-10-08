@@ -271,6 +271,9 @@ let native_drag () = true
    blocks keep the caret visible at rest *)
 let native_block_controls () = true
 
+(* no stylesheet transforms here — views swap the icon itself *)
+let css_transform_icons () = false
+
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
   let now = date_now_ms () in

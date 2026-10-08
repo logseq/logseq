@@ -581,8 +581,9 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                            (fun collapsed ->
                              icon_ ~cls:"more" ~size:15
                                (if collapsed
-                                then "chevron-right"
-                                else "chevron-down"))
+                                   && not (Platform.css_transform_icons ())
+                                then "chevron-down"
+                                else "chevron-right"))
                            (Sidebar_state.group_collapsed_sig st class_)
                       ] ])
            ; reactive

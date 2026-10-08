@@ -436,7 +436,7 @@ let push_recent repo id =
   Platform.local_storage_set "recent-pages"
     (Edn.to_string
        (Wire.Map
-          ((Wire.String repo, Wire.List (List.map (fun i -> Wire.Int i) ids))
+          ((Wire.String repo, Wire.Array (List.map (fun i -> Wire.Int i) ids))
            :: kvs)))
 
 (* ---------- worker loaders ---------- *)

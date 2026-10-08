@@ -244,6 +244,11 @@ let native_drag () = false
    only signal behavior here *)
 let native_block_controls () = false
 
+(* web CSS rotates disclosure icons in place (e.g.
+   .sidebar-content-group.is-expand .hd .more); views render a single
+   base icon and the transform supplies the state *)
+let css_transform_icons () = true
+
 let set_document_title : string -> unit =
   [%mel.raw "function (t) { document.title = t }"]
 
