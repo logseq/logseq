@@ -299,22 +299,18 @@ let visible_columns (s : V.vstate) =
 
 (* ---------- cell values ---------- *)
 
-external date_of_ms : float -> Js.Json.t = "Date" [@@mel.new]
-external date_year : Js.Json.t -> int = "getFullYear" [@@mel.send]
-external date_month : Js.Json.t -> int = "getMonth" [@@mel.send]
-external date_day : Js.Json.t -> int = "getDate" [@@mel.send]
-external date_hours : Js.Json.t -> int = "getHours" [@@mel.send]
-external date_minutes : Js.Json.t -> int = "getMinutes" [@@mel.send]
-
 let pad2 n =
   if n < 10 then "0" ^ string_of_int n else string_of_int n
 
 (* cljs date/int->local-time-2 → "yyyy-MM-dd HH:mm" local *)
 let fmt_date ms =
-  let d = date_of_ms ms in
-  Printf.sprintf "%04d-%s-%s %s:%s" (date_year d)
-    (pad2 (date_month d + 1))
-    (pad2 (date_day d)) (pad2 (date_hours d)) (pad2 (date_minutes d))
+  let d = Js.Date.fromFloat ms in
+  Printf.sprintf "%04d-%s-%s %s:%s"
+    (int_of_float (Js.Date.getFullYear d))
+    (pad2 (int_of_float (Js.Date.getMonth d) + 1))
+    (pad2 (int_of_float (Js.Date.getDate d)))
+    (pad2 (int_of_float (Js.Date.getHours d)))
+    (pad2 (int_of_float (Js.Date.getMinutes d)))
 
 let fmt_cell_value (c : V.column) v =
   match v with

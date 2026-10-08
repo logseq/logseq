@@ -191,6 +191,9 @@ let query_content inst (s : V.vstate) : t =
   else if s.V.query_view <> W.Nil then
     (* :view fn output replaces the default table (cljs custom-query) *)
     Logseq_el.fragment (hiccup_els inst s.V.query_view)
+  else if s.V.query_error <> None then
+    text ~value:(Option.value s.V.query_error ~default:"query error")
+      ~padding:8 ~foreground:"muted-foreground" []
   else if s.V.query_scalar_rows <> [] then
     list
       (List.map
@@ -316,6 +319,7 @@ let build_columns inst =
    pending until the next stabilize, so a same-tick [V.ctx_of] would
    still read the old limit *)
 let load_view_data ?(fetch_limit = 0) inst =
+  let gen = V.new_fetch inst in
   let ctx =
     match V.ctx_of inst, fetch_limit > 0 with
     | W.Map kvs, true ->
@@ -327,6 +331,10 @@ let load_view_data ?(fetch_limit = 0) inst =
   let view_uuid = (V.get inst).V.view_uuid in
   let key = Db.key_view_data view_uuid ctx in
   let apply = function
+      | _ when not (V.fetch_fresh inst gen) ->
+          (* stale response — a newer fetch (tab switch, filters,
+             refresh) already superseded this request *)
+          ()
       | None ->
           V.update inst (fun s -> { s with V.data = Wr.VEmpty; loading = false })
       | Some v ->

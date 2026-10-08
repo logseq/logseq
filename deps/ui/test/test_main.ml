@@ -4112,6 +4112,7 @@ let () =
      the summary + exit must wait for that stage *)
   Test_drive.run ~finish:(fun () ->
       Test_drive_sidebar.run ();
-      Js.log
-        (Printf.sprintf "%d checks, %d failures" !checks !failures);
-      if !failures > 0 then exit 1)
+      Views_drive.run ~finish:(fun () ->
+          Js.log
+            (Printf.sprintf "%d checks, %d failures" !checks !failures);
+          if !failures > 0 then exit 1))

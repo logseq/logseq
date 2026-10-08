@@ -1274,6 +1274,269 @@ let test_journal_reorder_move_collapse () =
   flush ();
   check "expand remounts children" (find_block "r2c" <> None)
 
+(* ---------------- shared views scenarios ----------------
+
+   Scripted worker mirroring test/views_drive.ml: the [:views] -> view
+   ents -> [:view-data] -> rows -> get-blocks -> get-all-properties
+   chain answers from mutable scenario state so Shared_scenarios_views
+   can change data and hold/release responses mid-flight. *)
+
+let vws_requests : string list ref = ref []
+let vws_resources : string list ref = ref []
+let vws_views : (string * string * string) list ref = ref []
+let vws_flags : (string, string list) Hashtbl.t = Hashtbl.create 8
+let vws_rows : (string, (string * string) list) Hashtbl.t =
+  Hashtbl.create 8
+let vws_titles : (string, string) Hashtbl.t = Hashtbl.create 64
+let vws_qsrc : (string, string) Hashtbl.t = Hashtbl.create 8
+let vws_qrows : (string, string list) Hashtbl.t = Hashtbl.create 8
+let vws_qerr : (string, string) Hashtbl.t = Hashtbl.create 8
+let vws_held : string list ref = ref []
+let vws_parked : (string * W.t * (W.t -> unit)) list ref = ref []
+
+let vws_flag uuid name =
+  match Hashtbl.find_opt vws_flags uuid with
+  | Some fs -> List.mem name fs
+  | None -> false
+
+let vws_query_block_ent uuid : W.t =
+  let kw s = W.Keyword s in
+  let vbu = uuid ^ "-v" in
+  W.Map
+    [ kw "block/uuid", W.Uuid uuid
+    ; kw "db/id", W.Int 90
+    ; kw "block/title", W.String ""
+    ; kw "logseq.property/query", W.Map [ kw "block/uuid", W.Uuid vbu ]
+    ; ( kw "block/children"
+      , W.Array
+          [ W.Map
+              [ kw "block/uuid", W.Uuid vbu
+              ; kw "block/title"
+              , W.String
+                  (Option.value (Hashtbl.find_opt vws_qsrc uuid)
+                     ~default:"") ] ] ) ]
+
+let vws_view_ent uuid title ty : W.t =
+  let kw s = W.Keyword s in
+  let extra =
+    (if vws_flag uuid "sort" then
+       [ ( kw "logseq.property.table/sorting"
+         , W.Array
+             [ W.Map [ kw "id", kw "block/title"; kw "asc?", W.Bool true ] ] )
+       ]
+     else [])
+    @
+    if vws_flag uuid "filters" then
+      [ ( kw "logseq.property.table/filters"
+        , W.Map
+            [ kw "or?", W.Bool false
+            ; ( kw "filters"
+              , W.Array
+                  [ W.Array [ kw "user.property/p1"; kw "is"; W.String "x" ]
+                  ] ) ] ) ]
+    else []
+  in
+  W.Map
+    ([ kw "block/uuid", W.Uuid uuid
+     ; kw "db/id", W.Int 42
+     ; kw "block/title", W.String title
+     ; kw "logseq.property.view/type", W.Map [ kw "db/ident", kw ty ] ]
+    @ extra)
+
+let vws_ent_for uuid : W.t =
+  let kw s = W.Keyword s in
+  match List.find_opt (fun (u, _, _) -> u = uuid) !vws_views with
+  | Some (u, t, ty) -> vws_view_ent u t ty
+  | None ->
+      if Hashtbl.mem vws_qsrc uuid || Hashtbl.mem vws_qerr uuid then
+        vws_query_block_ent uuid
+      else
+        W.Map
+          [ kw "block/uuid", W.Uuid uuid
+          ; kw "db/id", W.Int 7
+          ; kw "block/title"
+          , W.String
+              (Option.value (Hashtbl.find_opt vws_titles uuid)
+                 ~default:("Row " ^ uuid)) ]
+
+let vws_blocks_response = function
+  | Some (W.Array reqs) ->
+      let kw s = W.Keyword s in
+      W.List
+        (List.map
+           (fun req ->
+             let u =
+               match W.get req "id" with
+               | Some (W.Uuid u) | Some (W.String u) -> u
+               | _ -> "?"
+             in
+             W.Map
+               [ kw "block", vws_ent_for u; kw "children", W.Array [] ])
+           reqs)
+  | _ -> W.List []
+
+let vws_view_data uuid : W.t =
+  let kw s = W.Keyword s in
+  let rows =
+    match Hashtbl.find_opt vws_rows uuid with
+    | Some rs -> List.map fst rs
+    | None -> []
+  in
+  W.Map
+    [ kw "count", W.Int (List.length rows)
+    ; kw "rows", W.Array (List.map (fun u -> W.Uuid u) rows)
+    ; kw "properties", W.List [ kw "block/title" ] ]
+
+let vws_query_value spec : W.t =
+  let kw s = W.Keyword s in
+  let qb =
+    match W.get spec "current-block-uuid" with
+    | Some (W.Uuid u) -> u
+    | _ -> ""
+  in
+  match Hashtbl.find_opt vws_qerr qb with
+  | Some msg ->
+      W.Map
+        [ kw "error", W.Map [ kw "message", W.String msg ] ]
+  | None ->
+      W.Map
+        [ ( kw "rows"
+          , W.Array
+              (List.map (fun u -> W.Uuid u)
+                 (Option.value (Hashtbl.find_opt vws_qrows qb)
+                    ~default:[]))) ]
+
+let vws_slot_value (rk : W.t) : W.t option =
+  match rk with
+  | W.Array (W.Keyword "views" :: _ :: _) ->
+      Some
+        (W.Array (List.map (fun (u, _, _) -> W.Uuid u) !vws_views))
+  | W.Array (W.Keyword "view-data" :: W.Uuid vu :: _) ->
+      Some (vws_view_data vu)
+  | W.Array (W.Keyword "query" :: spec :: _) -> Some (vws_query_value spec)
+  | _ -> None
+
+let rec vws_wire_str (w : W.t) : string =
+  match w with
+  | W.Keyword s -> ":" ^ s
+  | W.String s -> s
+  | W.Uuid u -> u
+  | W.Int i -> string_of_int i
+  | W.Array xs | W.List xs | W.Set xs ->
+      "[" ^ String.concat " " (List.map vws_wire_str xs) ^ "]"
+  | W.Map kvs ->
+      "{"
+      ^ String.concat " "
+          (List.map
+             (fun (k, v) -> vws_wire_str k ^ " " ^ vws_wire_str v)
+             kvs)
+      ^ "}"
+  | _ -> "?"
+
+let vws_snapshots_response req : W.t =
+  let kw s = W.Keyword s in
+  match W.get req "resources" with
+  | Some (W.Array rks) ->
+      vws_resources :=
+        !vws_resources @ [ String.concat " " (List.map vws_wire_str rks) ];
+      W.Map
+        [ ( kw "slots"
+          , W.Map
+              (List.filter_map
+                 (fun rk ->
+                   Option.map
+                     (fun v ->
+                       ( W.Array [ kw "resource"; rk ]
+                       , W.Map [ kw "value", v ] ))
+                     (vws_slot_value rk))
+                 rks) ) ]
+  | _ -> W.Map []
+
+let vws_response (name : string) (args : W.t list) : W.t =
+  match name with
+  | "thread-api/get-render-snapshots" ->
+      vws_snapshots_response
+        (match List.nth_opt args 1 with Some r -> r | None -> W.Map [])
+  | "thread-api/get-blocks" -> vws_blocks_response (List.nth_opt args 1)
+  | "thread-api/get-all-properties" -> W.List []
+  | "thread-api/pull" | "thread-api/pull-many" -> W.List []
+  | _ -> W.Map []
+
+let vws_invoke name args : W.t Js.Promise.t =
+  vws_requests := !vws_requests @ [ name ];
+  let resp = vws_response name args in
+  if List.mem name !vws_held then
+    Js.Promise.make (fun ~resolve ~reject:_ ->
+        vws_parked := !vws_parked @ [ (name, resp, fun w -> resolve w) ])
+  else Js.Promise.resolve resp
+
+let vws_install () =
+  let dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) in
+  Runtime.worker :=
+    Some
+      { Worker_client.invoke_fn = (fun n a -> vws_invoke n a)
+      ; on_message = (fun _ _ -> ())
+      ; dead
+      }
+
+let vws_mount ~kind () =
+  vws_install ();
+  let registry = Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_editor.register registry;
+  Logseq_codemirror.register registry;
+  let vs =
+    S.mount ~registry ~profile:Logseq_el.gpui_profile
+      ~initial:Model.initial ~reducer:Update.update
+      ~view:(fun ctx _ms _send ->
+        extra_sched := Some ctx.Lui_ui.ui_scheduler;
+        Logseq_el.el
+          [ Views_view.view ~kind ~owner:(W.String "$$$views") ])
+      ()
+  in
+  let flush0 = !Runtime.app_flush in
+  Runtime.app_flush := (fun () -> flush0 (); flush_app vs.S.app);
+  vs
+
+let vws_host () : (Model.t, Action.t) Shared_scenarios_views.host =
+  { Shared_scenarios_views.check = check
+  ; mount_table =
+      (fun () -> vws_mount ~kind:Views_state.KAllPages ())
+  ; mount_query =
+      (fun ~uuid ->
+        vws_mount ~kind:(Views_state.KQuery { block_uuid = uuid }) ())
+  ; after = (fun n f -> after n f)
+  ; requests = (fun () -> !vws_requests)
+  ; resources = (fun () -> !vws_resources)
+  ; clear_requests = (fun () -> vws_requests := [])
+  ; set_views = (fun vs -> vws_views := vs)
+  ; set_view_flags =
+      (fun uuid flags -> Hashtbl.replace vws_flags uuid flags)
+  ; set_rows =
+      (fun ~view rows ->
+        Hashtbl.replace vws_rows view rows;
+        List.iter (fun (u, t) -> Hashtbl.replace vws_titles u t) rows)
+  ; set_query =
+      (fun ~uuid ~src ~rows ->
+        Hashtbl.replace vws_qsrc uuid src;
+        Hashtbl.replace vws_qrows uuid rows)
+  ; set_query_error =
+      (fun ~uuid ~msg -> Hashtbl.replace vws_qerr uuid msg)
+  ; hold = (fun name -> vws_held := name :: !vws_held)
+  ; release =
+      (fun name ->
+        match
+          List.find_opt (fun (n, _, _) -> n = name) !vws_parked
+        with
+        | Some ((_, resp, resolve) as p) ->
+            vws_parked := List.filter (fun q -> q != p) !vws_parked;
+            (if not (List.exists (fun (n, _, _) -> n = name) !vws_parked)
+             then vws_held := List.filter (fun n -> n <> name) !vws_held);
+            resolve resp
+        | None -> check ("release: parked " ^ name) false)
+  ; pending = (fun () -> List.map (fun (n, _, _) -> n) !vws_parked)
+  }
+
 (* ---------------- runner ---------------- *)
 
 let run ~finish =
@@ -1305,7 +1568,9 @@ let run ~finish =
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)
-  after 30 (fun () -> async_checks (); finish ())
+  after 30 (fun () ->
+      async_checks ();
+      Shared_scenarios_views.run (vws_host ()) ~finish)
 
 let () =
   let owner = Thread.id (Thread.self ()) in

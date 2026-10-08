@@ -18,14 +18,11 @@ type qsrc =
   | QDsl of string
   | QDatalog of W.t
 
-external date_now : unit -> Js.Json.t = "Date" [@@mel.new]
-external d_year : Js.Json.t -> int = "getFullYear" [@@mel.send]
-external d_month : Js.Json.t -> int = "getMonth" [@@mel.send]
-external d_date : Js.Json.t -> int = "getDate" [@@mel.send]
-
 let today_day () =
-  let d = date_now () in
-  (d_year d * 10000) + ((d_month d + 1) * 100) + d_date d
+  let d = Js.Date.fromFloat (Js.Date.now ()) in
+  (int_of_float (Js.Date.getFullYear d) * 10000)
+  + ((int_of_float (Js.Date.getMonth d) + 1) * 100)
+  + int_of_float (Js.Date.getDate d)
 
 let parse_src (s : string) : qsrc =
   let t = String.trim s in
@@ -197,29 +194,32 @@ let run inst (f : unit -> unit) =
                 f ()
             | Ok spec ->
                 let key = Db.key_query spec in
+                let gen = V.new_fetch inst in
                 Db.snapshots
                   ~f:(fun snap ->
-                    (match Wr.snapshot_slot_value snap key with
-                     | Some v -> decode_result inst v
-                     | None ->
-                         V.update inst (fun s ->
-                             { s with V.query_error = Some "query failed" }));
-                    (match (V.get inst).V.query_view with
-                     | W.Nil -> f ()
-                     | view ->
-                         let uuids = collect_uuids view [] in
-                         Db.get_blocks uuids ~metadata:true (fun ents ->
-                             V.update inst (fun s ->
-                                 let blocks = Hashtbl.copy s.V.blocks in
-                                 List.iter
-                                   (fun b ->
-                                     match W.map_get_uuid b "block/uuid" with
-                                     | Some u ->
-                                         Hashtbl.replace blocks u b
-                                     | None -> ())
-                                   ents;
-                                 { s with V.blocks });
-                             f ())))
+                    if V.fetch_fresh inst gen then begin
+                      (match Wr.snapshot_slot_value snap key with
+                       | Some v -> decode_result inst v
+                       | None ->
+                           V.update inst (fun s ->
+                               { s with V.query_error = Some "query failed" }));
+                      (match (V.get inst).V.query_view with
+                       | W.Nil -> f ()
+                       | view ->
+                           let uuids = collect_uuids view [] in
+                           Db.get_blocks uuids ~metadata:true (fun ents ->
+                               V.update inst (fun s ->
+                                   let blocks = Hashtbl.copy s.V.blocks in
+                                   List.iter
+                                     (fun b ->
+                                       match W.map_get_uuid b "block/uuid" with
+                                       | Some u ->
+                                           Hashtbl.replace blocks u b
+                                       | None -> ())
+                                     ents;
+                                   { s with V.blocks });
+                               f ()))
+                    end)
                   [ Db.resource_query spec ]
           in
           if needs_config src_kind then
@@ -257,9 +257,12 @@ let query_value_block (b : W.t) : W.t option =
 let refresh_block inst f =
   match inst.V.kind with
   | V.KQuery { block_uuid } ->
+      let gen = V.new_fetch inst in
       Db.get_blocks [ block_uuid ] ~metadata:true ~children:true
         ~include_property_block:true
         (fun ents ->
+          if not (V.fetch_fresh inst gen) then ()
+          else begin
           (match ents with
            | b :: _ ->
                (match query_value_block b with
@@ -318,7 +321,8 @@ let refresh_block inst f =
                 | Some v -> V.update inst (fun s -> V.apply_view_entity s v)
                 | None -> ())
            | [] -> ());
-          f ())
+          f ()
+          end)
   | _ -> f ()
 
 (* -- query source editor (fake CodeMirror contract) --
