@@ -755,12 +755,13 @@ let input_command env command =
       (Pw.wait_for ~timeout:10000. env ".ui__popover-content")
       (fun () ->
          if tries > 1 then open_palette (tries - 1)
-         else Pw.wait_for env ".ui__popover-content")
+         else Pw.wait_for ~timeout:60000. env ".ui__popover-content")
   in
   let* () = open_palette 3 in
   let* () = Keyboard.type_in_editor env ~delay:20. command in
   let command_item = Pw.q env "a.menu-link.chosen" in
-  let* _ = E2e_assert.is_visible_l command_item in
+  (* the filtered item lags behind the palette under remote-apply churn *)
+  let* _ = E2e_assert.is_visible_l ~timeout:15000. command_item in
   Pw.click_l command_item
 
 let set_tag ?(hidden = false) env tag =
