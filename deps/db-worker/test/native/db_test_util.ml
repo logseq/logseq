@@ -366,7 +366,7 @@ let schema_edn =
     :logseq.property.asset/type {:db/index true}
     :block/tx-id {}
     :block/closed-value-property {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
-    :logseq.property/default-value {:db/valueType :db.type/ref}
+    :logseq.property/default-value {:db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
     :logseq.property/scalar-default-value {}
     :file/path {:db/unique :db.unique/identity}
     :file/content {}

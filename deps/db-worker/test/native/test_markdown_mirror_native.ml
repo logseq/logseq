@@ -227,14 +227,13 @@ let hidden_built_in_property_pre_txs =
    here. *)
 let resolved_status_ident db (block : entity) =
   match Ldb.ref_ent block "logseq.property/status" with
-  | Some s -> Ldb.string_value s "db/ident"
+  | Some s -> Ldb.ident_of s
   | None ->
       (match Datascript.entity db (Ident "logseq.property/status") with
        | Some prop ->
            (match Ldb.value prop "logseq.property/default-value" with
             | Some (Ref id) ->
-                Option.bind (Ldb.ent_of_id db id)
-                  (fun dv -> Ldb.string_value dv "db/ident")
+                Option.bind (Ldb.ent_of_id db id) Ldb.ident_of
             | Some (Keyword k) -> Some k
             | _ -> None)
        | None -> None)
