@@ -96,7 +96,7 @@ let value_cell ctx row : t =
   let entity_value =
     match D.row_value row with W.Map _ -> true | _ -> false
   in
-  Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0
+  Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0 ~main:`start
     ~style_class:"ls-block property-value-container property-value-panel"
     ((if show_panel_bullet row || entity_value then
         [ box ~key:"vpb" ~style_class:"property-panel-bullet"
