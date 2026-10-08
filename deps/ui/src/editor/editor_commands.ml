@@ -1385,7 +1385,7 @@ let run_editor_cmd uuid command from to_ =
             (W.Keyword "logseq.property/empty-placeholder")
         else
           set_closed_prop ~caret uuid "logseq.property/priority" s)
-      else Editor_cmds.run ~command ~block:None ~value:None
+      else ignore (Editor_cmds.run ~command ~block:None ~value:None)
 
 let on_command ev =
   if S.ready () then
@@ -1430,12 +1430,15 @@ let on_command ev =
                               (if command = "add-reaction" then "emoji"
                                else "icon") ) ]))
             | _ ->
-                Editor_cmds.run ~command ~block:(Some uuid)
-                  ~value:(detail_str ev "value"))
+                ignore
+                  (Editor_cmds.run ~command ~block:(Some uuid)
+                     ~value:(detail_str ev "value")))
         | None -> (
             match S.editing () with
-            | None -> Editor_cmds.run ~command ~block:None
-                        ~value:(detail_str ev "value")
+            | None ->
+                ignore
+                  (Editor_cmds.run ~command ~block:None
+                     ~value:(detail_str ev "value"))
             | Some e ->
                 let from =
                   Option.value (detail_int ev "from") ~default:0
@@ -1448,6 +1451,9 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
+    (* the host adapter supplies clipboard, dispatch, file-pick and
+       plugin capabilities — installed once with the dispatcher *)
+    Editor_cmds.install_host (Editor_cmds_host.host ());
     D.add_document_listener "ls:editor-command" on_command true;
     Code_mirror.install ()
   end

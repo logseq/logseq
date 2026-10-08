@@ -1537,6 +1537,93 @@ let vws_host () : (Model.t, Action.t) Shared_scenarios_views.host =
   ; pending = (fun () -> List.map (fun (n, _, _) -> n) !vws_parked)
   }
 
+(* ---- editor command dispatch scenarios (native entry) ---- *)
+
+(* the recording host stands in for the host-bridge boundary;
+   Editor_cmds, Editor_state, Outliner_ops and the fake worker stay
+   real *)
+let cmds_outcome_tag = function
+  | Editor_cmds.Handled -> "handled"
+  | Editor_cmds.Unavailable_command c -> "unavailable:" ^ c
+  | Editor_cmds.Unimplemented c -> "unimplemented:" ^ c
+  | Editor_cmds.Unknown c -> "unknown:" ^ c
+  | Editor_cmds.No_target -> "no-target"
+
+let test_editor_cmds () =
+  let clip = ref [] and side = ref [] and dialogs = ref []
+  and picked = ref 0 and plugs = ref [] and reports = ref [] in
+  let invokes = ref [] and ops = ref [] in
+  let prev_model = !Runtime.read_model in
+  Editor_cmds.install_host
+    { Editor_cmds.clipboard_write = (fun s -> clip := !clip @ [ s ])
+    ; open_right_sidebar = (fun u -> side := !side @ [ u ])
+    ; pick_files = (fun () -> incr picked)
+    ; exec_plugin_ctx = Editor_cmds.Unavailable
+    ; report_error =
+        (fun label detail -> reports := !reports @ [ (label, detail) ])
+    };
+  ignore
+    (Fake_worker.install (fun name args ->
+         invokes := !invokes @ [ name ];
+         (match name, List.nth_opt args 1 with
+          | "thread-api/apply-outliner-ops", Some (W.Array os) ->
+              ops := !ops
+                @ List.filter_map
+                    (function
+                      | W.Array (W.Keyword n :: _) -> Some n
+                      | _ -> None)
+                    os
+          | _ -> ());
+         (match name with
+          | "thread-api/get-property-closed-values" ->
+              W.List
+                [ W.Map
+                    [ W.Keyword "logseq.property/value", W.String "Doing"
+                    ; W.Keyword "db/id", W.Int 7 ] ]
+          | "thread-api/get-case-page" ->
+              W.Map [ W.Keyword "db/id", W.Int 7 ]
+          | _ -> worker_handler name args)));
+  (* journals (not route_page) keeps refresh_page on the route-less
+     path — no Page_loaded re-enters the mounted drive app *)
+  Runtime.read_model := (fun () ->
+      { Model.initial with
+        Model.repo = Some "logseq_db_test"
+      ; Model.journals = [ page [ block "c1" "Copy me" ] ] });
+  Platform.add_event_listener "ls:open-dialog" (fun j ->
+      match Dom_ext.str_prop "name" (Dom_ext.prop "detail" j) with
+      | Some n -> dialogs := !dialogs @ [ n ]
+      | None -> ());
+  Shared_scenarios_editor_cmds.run
+    { Shared_scenarios_editor_cmds.check = check
+    ; run = (fun ~command ~block ~value ->
+          cmds_outcome_tag (Editor_cmds.run ~command ~block ~value))
+    ; (* the native Js shim settles resolved promises synchronously —
+         every continuation already ran by the time run returns *)
+      drain = (fun f -> f ())
+    ; install = (fun () -> ())
+    ; set_editing = (fun u ->
+          (* silent — no flush re-render over the borrowed model reader *)
+          Editor_state.set_silent (fun st ->
+              { st with
+                Editor_state.editing =
+                  Option.map
+                    (fun uuid ->
+                      Editor_state.mk_editing ~uuid ~buffer:"Copy me"
+                        ~scope:"main" ~base:"Copy me" ())
+                    u }))
+    ; clipboard = (fun () -> !clip)
+    ; sidebars = (fun () -> !side)
+    ; dialogs = (fun () -> !dialogs)
+    ; picked = (fun () -> !picked)
+    ; plugin_calls = (fun () -> !plugs)
+    ; reports = (fun () -> !reports)
+    ; invokes = (fun () -> !invokes)
+    ; ops = (fun () -> !ops)
+    ; plugin_ctx_supported = false
+    };
+  Runtime.read_model := prev_model;
+  ignore (Fake_worker.install worker_handler)
+
 (* ---------------- runner ---------------- *)
 
 let run ~finish =
@@ -1565,6 +1652,7 @@ let run ~finish =
   test_journal_reorder_move_collapse ();
   test_custom_macro_page ();
   Shared_scenarios_props.all (props_host ());
+  test_editor_cmds ();
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)

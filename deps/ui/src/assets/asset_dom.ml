@@ -735,18 +735,7 @@ let file_cell_el (w : W.t) : t =
 
 (* ---------- command hookup ---------- *)
 
-(* slash "Upload an asset" emits ls:editor-command {command} — cljs
-   :editor/click-hidden-file-input clicked a hidden input; the picker
-   op replaces it *)
-let install () =
-  Web_dom.on_document_event "ls:editor-command" (fun ev ->
-      match
-        Js.Json.decodeObject (Web_dom.js_get ev "detail")
-      with
-      | Some d -> (
-          match
-            Option.bind (Js.Dict.get d "command") Js.Json.decodeString
-          with
-          | Some "upload" -> pick_files ()
-          | _ -> ())
-      | None -> ())
+(* "upload" is dispatched by the shared editor command dispatcher —
+   Editor_cmds calls pick_files through the installed host, so this
+   hookup registers nothing on web. *)
+let install () = ()
