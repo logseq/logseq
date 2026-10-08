@@ -658,7 +658,36 @@ let settled_page_blocks_contents env =
 
 let login_test_account ?(username = "e2etest") ?(password = "Logseq-e2e") env =
   let* () = Pw.eval_js env "localStorage.setItem(\"login-enabled\",true);" in
-  let* () = Pw.click env ".toolbar-dots-btn" in
+  (* under parallel load the toolbar/dots menu can mount long after the
+     page shell, or the first menu open can be eaten by a remount —
+     verify the Login item actually shows before clicking it. When the
+     tries run out the app likely wedged during boot: reload once and
+     make one last attempt. *)
+  let rec open_login tries reloaded =
+    let* opened =
+      Pw.catch_timeout
+        (let* () = Pw.wait_for ~timeout:45000. env ".toolbar-dots-btn" in
+         let* () = Pw.click env ".toolbar-dots-btn" in
+         Js.Promise.then_
+           (fun _ -> Js.Promise.resolve true)
+           (Pw.wait_for ~timeout:8000. env "div:text(\"Login\")"))
+        (fun () -> Js.Promise.resolve false)
+    in
+    if opened then Js.Promise.resolve ()
+    else if tries <= 1 then
+      if reloaded then
+        Js.Promise.reject
+          (Failure "login_test_account: Login menu never opened")
+      else
+        let* () = Pw.refresh env in
+        let* _ =
+          E2e_assert.is_visible ~timeout:60000. env
+            "[data-testid='page title']"
+        in
+        open_login 1 true
+    else open_login (tries - 1) reloaded
+  in
+  let* () = open_login 3 false in
   let* () = Pw.click env "div:text(\"Login\")" in
   let* () = input env username in
   let* () = Keyboard.tab env in

@@ -1143,6 +1143,10 @@ let () =
           Printf.sprintf "%s .ls-block:has-text('%s')" journal_selector
             last_block_title
         in
+        (* the seeded journal sits below the fold among older journals —
+           virtuoso only mounts viewport rows, so scroll it into view
+           first or the block selectors can never match *)
+        let* () = scroll_journals_to_text env first_block_title in
         (* the first virtualized mount is slow under parallel load too *)
         let* () =
           Pw.catch_timeout
@@ -1162,7 +1166,10 @@ let () =
         in
         let* () = set_journals_scroll_position env "end" in
         let* () = Pw.wait_for_hidden env journal_selector in
-        let* () = set_journals_scroll_position env "start" in
+        (* scrolling back to scrollTop=0 can't remount the seeded journal —
+           today's journal sits above it in desc order. Scroll back to the
+           target text's own position instead *)
+        let* () = scroll_journals_to_text env first_block_title in
         (* the virtualized remount is slow under parallel load *)
         let* () =
           Pw.catch_timeout
@@ -1896,6 +1903,40 @@ let () =
        the undo to actually restore `before` and re-run `reposition`
        first, otherwise a caret left at end-of-text repeats the same miss
        every try. The final assert is still strict-equals. *)
+    (* a select-all chord whose modifier is eaten leaves only a caret;
+       the following Backspace then deletes one char instead of the
+       selection. Confirm the selection really spans the editor value
+       (re-pressing the chord is idempotent) before going on. *)
+    let press_key_verified env key =
+      if String.ends_with ~suffix:"+a" key then
+        let rec go tries =
+          let* () = K.press_in_editor env key in
+          let deadline = Js.Date.now () +. 1200. in
+          let rec poll () =
+            let* c = Util.get_edit_content env in
+            match c with
+            | Some v ->
+                let* sr = selection_range env in
+                if sr = "0:" ^ string_of_int (String.length v) then
+                  Js.Promise.resolve true
+                else if Js.Date.now () > deadline then
+                  Js.Promise.resolve false
+                else
+                  let* () = Util.wait_timeout env 80. in
+                  poll ()
+            | None ->
+                if Js.Date.now () > deadline then Js.Promise.resolve false
+                else
+                  let* () = Util.wait_timeout env 80. in
+                  poll ()
+          in
+          let* ok = poll () in
+          if ok || tries <= 1 then Js.Promise.resolve ()
+          else go (tries - 1)
+        in
+        go 4
+      else K.press_in_editor env key
+    in
     let press_kill_until env ~tries ~before
         ?(reposition = fun () -> Js.Promise.resolve ()) keys expected =
       let rec go n =
@@ -1906,7 +1947,7 @@ let () =
             B.wait_editor_text env before
         in
         let* () = reposition () in
-        let* () = iter_seq (K.press_in_editor env) keys in
+        let* () = iter_seq (press_key_verified env) keys in
         let deadline = Js.Date.now () +. 2500. in
         let rec poll () =
           let* c = Util.edit_content env in

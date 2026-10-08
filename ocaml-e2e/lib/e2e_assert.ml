@@ -42,7 +42,9 @@ let in_normal_mode env =
   let* _ = is_visible env "#search-button" in
   Js.Promise.resolve true
 
-let graph_loaded env = is_visible env "[data-testid='page title']"
+(* rtc/state idle can precede the title bar's mount by seconds on a remote
+   graph switch — give the title more than playwright's 5s default *)
+let graph_loaded env = is_visible ~timeout:30000. env "[data-testid='page title']"
 
 let editor_mode ?uuid env =
   (* counting ALL .editor-wrapper textareas flakes under remount churn:

@@ -87,6 +87,49 @@ let cloud_idle_dump env =
   |> List.iter (fun m -> Js.log ("[cloud-idle-console] " ^ m));
   Js.Promise.resolve ()
 
+(** Waits for the rtc idle predicate straight from [:rtc/state] — same
+    check the [button.cloud.on.idle] indicator renders, but the DOM class
+    can lag or unmount under parallel load while the state already
+    reports idle (and the state snapshot is what a timeout dump needs). *)
+let wait_rtc_idle env ~timeout_ms =
+  let deadline = Js.Date.now () +. timeout_ms in
+  let last_log = ref (Js.Date.now ()) in
+  let rec poll () =
+    let* json =
+      Pw.eval_js env
+        "(() => { const s = logseq.api.get_state_from_store('rtc/state') || \
+         {}; const online = \
+         logseq.api.get_state_from_store('network/online?'); const local = s.localTx ?? 0; \
+         const remote = s.remoteTx ?? 0; const pendingLocal = \
+         s.unpushedBlockUpdateCount ?? 0; const pendingAsset = \
+         s.pendingAssetOpsCount ?? 0; const pendingServer = \
+         s.pendingServerOpsCount ?? Math.max(0, remote - local); const open = \
+         !!s.rtcLock; return (online && open && pendingLocal === 0 && \
+         pendingAsset === 0 && pendingServer === 0); })()"
+    in
+    match Js.Json.decodeBoolean json with
+    | Some true -> Js.Promise.resolve ()
+    | _ ->
+        let now = Js.Date.now () in
+        let* () =
+          if now -. !last_log > 30000. then begin
+            last_log := now;
+            let* snap =
+              Pw.eval_js env
+                "JSON.stringify(logseq.api.get_state_from_store('rtc/state'))"
+            in
+            Js.Promise.resolve (Js.log2 "cloud-idle pending" snap)
+          end
+          else Js.Promise.resolve ()
+        in
+        if now > deadline then
+          Js.Promise.reject (Failure "rtc idle never reached")
+        else
+          let* () = Util.wait_timeout env 500. in
+          poll ()
+  in
+  poll ()
+
 let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
   let* () = Util.search_and_click env "Add a DB graph" in
   let* () = Pw.wait_for env "h2:text(\"Create a new graph\")" in
@@ -134,7 +177,7 @@ let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
             let* () = cloud_idle_dump env in
             Playwright.throw_error e)
       in
-      Pw.wait_for env ~timeout:300000. cloud_ready_indicator
+      wait_rtc_idle env ~timeout_ms:300000.
       |> Js.Promise.catch (fun e ->
           let* () = cloud_idle_dump env in
           Playwright.throw_error e)
@@ -142,6 +185,9 @@ let new_graph_helper env graph_name ~enable_sync ~graph_e2ee =
   in
   let* () = Pw.wait_for_hidden env ~timeout:30000. new_graph_dialog in
   E2e_assert.graph_loaded env
+  |> Js.Promise.catch (fun e ->
+      let* () = cloud_idle_dump env in
+      Playwright.throw_error e)
 
 let new_graph env graph_name ~enable_sync ?(graph_e2ee = true) () =
   let* _ = new_graph_helper env graph_name ~enable_sync ~graph_e2ee in
@@ -221,13 +267,16 @@ let switch_graph env to_graph_name ~wait_sync ~need_input_password =
             let* () = cloud_idle_dump env in
             Playwright.throw_error e)
       in
-      Pw.wait_for env ~timeout:300000. cloud_ready_indicator
+      wait_rtc_idle env ~timeout_ms:300000.
       |> Js.Promise.catch (fun e ->
           let* () = cloud_idle_dump env in
           Playwright.throw_error e)
     else Js.Promise.resolve ()
   in
   E2e_assert.graph_loaded env
+  |> Js.Promise.catch (fun e ->
+      let* () = cloud_idle_dump env in
+      Playwright.throw_error e)
 
 type summary = { valid : bool }
 
