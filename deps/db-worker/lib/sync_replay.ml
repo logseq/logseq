@@ -1559,10 +1559,6 @@ let rewrite_missing_uuid_refs
 let transact_remote_txs
     ?(repo : string = "") (conn : conn)
     (remote_txs : Wire.t list) () : (Wire.t list * tx_report option) list =
-  (* entities whose items were dropped by rewrite_missing_uuid_refs in
-     this batch — a follow-up tx that e-writes one of them must not
-     resurrect it *)
-  let stale : SSet.t ref = ref SSet.empty in
   let rec loop remaining results =
     match remaining with
     | [] -> List.rev results
@@ -1573,44 +1569,23 @@ let transact_remote_txs
           | Some xs -> tx_items_of xs
           | None -> []
         in
-        (* cljs sanitize-tx-entry flags keyed on the entry's outliner-op —
-           remote delete/fix ops must cascade the same way they did on the
-           server or descendants diverge *)
         let remote_op =
           match Wire.get "outliner-op" remote_tx with
           | Some (Wire.Keyword s) -> s
           | _ -> ""
         in
-        let remote_delete_op =
-          remote_op = "delete-blocks" || remote_op = "delete-page"
-        in
-        let tx_data =
-          raw_tx_data
-          |> fun items ->
-             items
-             |> List.map Ds_wire.value_of_transit
-             |> Db_sync_tx_sanitize.sanitize_tx db
-                 ~drop_missing_retract_ops:
-                   (remote_delete_op || remote_op = "fix")
-                 ~drop_ops_targeting_retracted_entities:remote_delete_op
-                 ~retract_touched_descendants:remote_delete_op
-             |> List.map Ds_wire.transit_of_value
-          (* journal truth: the server applied these datoms verbatim —
-             strip/sanitize is applied, then every remaining item
-             lands — so the pull path must apply them verbatim too.
-             Ref filters keyed on this conn's transient state
-             (remote_deleted, a forward-looking deleted suffix, plain
-             missing-ness) drop datoms that never re-arrive: a uuid
-             deleted now and revived later loses its refs forever,
-             leaving a bare shell. rewrite_missing_uuid_refs only keeps
-             crash-guards that can't violate journal order: strict
-             positions whose targets never resolve are true no-ops, and
-             value-position refs to uuids nothing in this tx writes
-             drop — an unresolved ref can never have journaled *)
-          |> rewrite_missing_uuid_refs db ~stale
-          |> List.map (resolve_temp_id db)
-          |> drop_stale_adds_after_remote_entity_delete
-        in
+        (* journal truth: journaled tx-data is the server's post-ingest,
+           post-transact normalized output — every sanitize drop, cascade
+           expansion, fixup and eid resolution is already baked in. Re-
+           deriving any of it against this conn's transient state (pull-
+           side sanitize, missing-ref rewrites, stale-entity drops)
+           produces a different answer than the journal's, and every such
+           divergence is permanent because the row is consumed once. A
+           genuinely missing ref cannot appear in a correct journal —
+           ingest would have dropped the item or its target journaled
+           earlier — so strict transact resolution surfaces a broken
+           prefix instead of silently patching it *)
+        let tx_data = List.map (resolve_temp_id db) raw_tx_data in
         (if tx_data = [] && raw_tx_data <> [] then
            Worker_log.warn "sync/remote-tx-emptied"
              [ "outliner-op", remote_op
@@ -2066,184 +2041,6 @@ let () =
   Sync_apply.rebuild_display_fn :=
     (fun repo -> rebuild_display repo ~jump_tx_data:[])
 
-(* Marks queued txs confirmed: the exact normalized tx data that was
-   uploaded is applied to the server conn in queue order, so the
-   projection base converges with what the server accepted. *)
-let confirm_pending_txs ?(uploaded : (string * Wire.t) list = []) repo
-    (tx_ids : string list) : unit =
-  match Sync_state.server_conn repo with
-  | None -> ()
-  | Some server_conn -> (
-      let pending_entries =
-        Sync_client_op.get_pending_tx_rows_in repo tx_ids
-      in
-      let pending_ids =
-        List.map (fun (e : Sync_client_op.pending_tx_row) -> e.tx_id)
-          pending_entries
-      in
-      (* an id the server reported applied can have left the pending
-         queue already (a failed replay sweep or a restart boundary)
-         — the server's journal still carries it, so confirm it from
-         the verbatim upload data or the server conn permanently
-         misses a tx the remote side committed *)
-      let orphan_ids =
-        List.filter
-          (fun id -> not (List.mem id pending_ids))
-          tx_ids
-      in
-      let entries =
-        pending_entries
-        @ List.filter_map
-            (fun id ->
-               match List.assoc_opt id uploaded with
-               | Some items ->
-                   Some
-                     { Sync_client_op.tx_id = id
-                     ; outliner_op = None
-                     ; forward_outliner_ops = lazy []
-                     ; tx = items }
-               | None -> None)
-            orphan_ids
-      in
-
-      (* apply each confirmed entry in queue order, sanitized the same
-         way the upload was — refs to uuids the remote side deleted are
-         dropped in value position so the server conn mirrors what the
-         server actually accepted. An entity-position miss means the
-         upload never happened (marked failed earlier), so keep the tx
-         verbatim and let transact surface it.
-
-         `uploaded` carries the sanitized tx-data the wire actually sent
-         (upload_request.tx_datas): prep already ran
-         sanitize_pending_tx_refs + drop_cycle_parent_edges on those
-         items against the server view, so applying them verbatim —
-         with only the shared ingest sanitize — lands the journaled
-         form. Re-sanitizing the stored raw tx against the local conn
-         instead is wrong: the two reference dbs differ (e.g. a uuid the
-         server kept but the local conn lacks), and the block/parent
-         live-page fallback then rewrites the confirmed item to a value
-         the journal never carried — a divergence verbatim LWW cannot
-         repair. *)
-      List.iter
-        (fun (local_tx : Sync_client_op.pending_tx_row) ->
-           try
-             let db = Conn.db server_conn in
-             (* cljs sanitize-tx-entry: the server applies the same
-                sanitize with flags derived from the entry's
-                outliner-op — mirror them here so the server conn
-                ends with what the server accepted *)
-             let delete_op =
-               match local_tx.outliner_op with
-               | Some ("delete-blocks" | "delete-page") -> true
-               | _ -> false
-             in
-             let fix_op = local_tx.outliner_op = Some "fix" in
-             let ingest_sanitize items =
-               List.map Ds_wire.value_of_transit items
-               |> Db_sync_tx_sanitize.sanitize_tx db
-                    ~drop_missing_retract_ops:(delete_op || fix_op)
-                    ~drop_ops_targeting_retracted_entities:delete_op
-                    ~retract_touched_descendants:delete_op
-               |> List.map Ds_wire.transit_of_value
-             in
-             let remote_deleted = Sync_state.remote_deleted repo in
-             let tx_data =
-               match List.assoc_opt local_tx.tx_id uploaded with
-               | Some items ->
-                   (* the uploaded items are what the server accepted —
-                      remote_deleted cannot gate them: a uuid recorded
-                      deleted was pulled BEFORE this upload journaled, so
-                      on the server the client's re-add always lands after
-                      the delete and the entity is live. Dropping those
-                      adds loses the revive the server kept *)
-                   tx_items_of items
-                   |> rewrite_missing_uuid_refs db
-                        ~remote_deleted:SSet.empty
-                   |> List.map (resolve_temp_id db)
-                   |> ingest_sanitize
-               | None -> (
-                   match normalize_tx_data_for_rebase local_tx.tx with
-                   | [] -> []
-                   | tx_data ->
-                       (* sanitize with the upload domain: uuids the
-                          server conn can see, and attrs live on either
-                          conn — the server conn must only ever gain
-                          what the upload could actually have carried *)
-                       let uuid_exists u =
-                         Outliner_op.entity_of_uuid
-                           (Conn.db server_conn) u
-                         <> None
-                       in
-                       let attr_live (a : Wire.t) : bool =
-                         attr_resolves db a
-                         || (match Worker_state.datascript_conn repo with
-                             | Some display ->
-                                 attr_resolves (Conn.db display) a
-                             | None -> true)
-                       in
-                       sanitize_pending_tx_refs ~uuid_exists ~attr_live db
-                         tx_data
-                       |> rewrite_missing_uuid_refs db
-                            ~remote_deleted
-                       |> List.map (resolve_temp_id db)
-                       |> ingest_sanitize
-                       |> drop_cycle_parent_edges db)
-             in
-             if tx_data <> [] then begin
-               let report =
-                 Db_transact.transact server_conn tx_data
-                   [ "rtc-tx?", Bool true ]
-               in
-               Sync_apply.record_remote_asserted db repo tx_data;
-               (* our own confirmed delete never flows through the pull
-                  path, so remote_deleted would never record it — then a
-                  remote tx generated before the delete but arriving
-                  after it re-adds the entity and nothing filters it.
-                  Union the confirmed tx's own entity deletes into the
-                  tracked set so stale remote adds are dropped the same
-                  way they are after a remote delete. Scan the emitted
-                  report datoms, not the input items: resolve rewrites
-                  [:db/retractEntity [:block/uuid u]] into a bare eid
-                  and the server-side cascade (retract-touched-
-                  descendants) retracts children the upload never named —
-                  only the diff sees every deleted entity *)
-               let now_deleted, now_created =
-                 match report with
-                 | Some r ->
-                     List.fold_left
-                       (fun (dead, alive) (d : datom) ->
-                          if d.a = "block/uuid" then
-                            match d.v with
-                            | String u | Uuid u ->
-                                if d.added
-                                then dead, SSet.add u alive
-                                else SSet.add u dead, alive
-                            | _ -> dead, alive
-                          else dead, alive)
-                       (SSet.empty, SSet.empty) r.tx_data
-                 | None -> SSet.empty, SSet.empty
-               in
-               if
-                 not
-                   (SSet.is_empty now_deleted
-                    && SSet.is_empty now_created)
-               then
-                 Sync_state.set_remote_deleted repo
-                   (SSet.diff
-                      (SSet.union (Sync_state.remote_deleted repo)
-                         now_deleted)
-                      now_created)
-             end
-           with e ->
-             (* an exception anywhere in one entry's confirm pipeline
-                must not abort the loop — client.inflight stays set and
-                uploads stall, or a rejected tx re-uploads forever *)
-             ignore (mark_failed_txs repo [ local_tx.tx_id ]);
-             Worker_log.warn "db-sync/confirm-tx-failed"
-               [ "repo", repo
-               ; "tx-id", local_tx.tx_id
-               ; "error", Printexc.to_string e ])
-        entries)
 
 (* Pending entries may have their forward datoms persisted on the conn
    being split: pre-upgrade graphs wrote them under the old model, and a
@@ -2909,10 +2706,11 @@ let split_off_server_if_remote ?(unapply_pending = true) repo : unit =
 
 
 let clear_pending_txs repo : int =
-  let ids = Sync_client_op.get_pending_local_tx_ids repo () in
-  (* snapshot upload already carried these to the server — confirm them
-     into the server conn before un-pending *)
-  confirm_pending_txs repo ids;
+  let ids = Sync_client_op.get_pending_local_tx_ids repo in
+  (* snapshot upload already carried this content to the server, and the
+     server conn is the snapshot's own image — split_off kept the
+     forward datoms for it — so un-pending is pure queue bookkeeping,
+     no locally-derived confirm write *)
   mark_pending_txs_false repo ids
 
 

@@ -742,15 +742,41 @@ type sim_client =
   ; online : bool
   ; gen_uuid : (unit -> string) option }
 
-(* tx-id -> tx-data as sent on the wire — confirm applies this verbatim *)
-let uploaded_of_entries (tx_entries : Wire.t list)
-    : (string * Wire.t) list =
-  List.filter_map
-    (fun e ->
-       match Wire.get "tx-id" e, Wire.get "tx-data" e with
-       | Some (Wire.String id), Some d -> Some (id, d)
-       | _ -> None)
-    tx_entries
+let find_sub (s : string) (sub : string) : int option =
+  let n = String.length s and m = String.length sub in
+  let rec go i =
+    if i + m > n then None
+    else if String.sub s i m = sub then Some i
+    else go (i + 1)
+  in
+  go 0
+
+let extract_uuid_from_error (msg : string) : string =
+  match find_sub msg "#uuid \"" with
+  | Some i ->
+      let rest = String.sub msg (i + 7) (String.length msg - i - 7) in
+      (match find_sub rest "\"" with
+       | Some j -> String.sub rest 0 j
+       | None -> msg)
+  | None -> msg
+
+let wire_mentions_uuid u (w : Wire.t) : bool =
+  match find_sub (Ds_wire.edn_of_transit w) u with
+  | Some _ -> true
+  | None -> false
+
+(* after a verbatim apply failure, dump every window item that mentions
+   the missing uuid — which row created, referenced, or retracted it *)
+let report_uuid_in_window u (own_txs : Wire.t list list) : unit =
+  List.iteri
+    (fun i tx_data ->
+      List.iter
+        (fun item ->
+          if wire_mentions_uuid u item then
+            Printf.eprintf "[uuid-trace] %s idx=%d %s\n%!" u i
+              (Ds_wire.edn_of_transit item))
+        tx_data)
+    own_txs
 
 let sync_client_bang ?(upload = server_upload_bang) (server : server)
     (c : sim_client) : bool =
@@ -795,12 +821,42 @@ let sync_client_bang ?(upload = server_upload_bang) (server : server)
               tx_entries
           in
           (if accepted then begin
-             (* mirrors sync_handle_message tx-batch-ok: confirmed txs
-                land on the server conn before the queue drops them *)
-             Sync_replay.confirm_pending_txs
-               ~uploaded:(uploaded_of_entries tx_entries) repo tx_ids;
-             ignore (Sync_apply.mark_pending_txs_false repo tx_ids);
+             (* journal truth (mirrors tx-batch-ok): un-pend the acked
+                ids, then apply the own window's journaled rows — the
+                only confirm — before advancing local_tx *)
+             ignore
+               (Sync_apply.mark_pending_txs_false ~rebuild:false repo
+                  tx_ids);
              (if tx_ids <> [] then begin
+                (* an unsplit conn (non-remote graph) already carries the
+                   uploaded ops — the journal echo exists only to land
+                   them on a detached server conn *)
+                (match Sync_state.server_conn repo with
+                 | None -> ()
+                 | Some _ ->
+                     let own_txs = server_pull server local_tx' in
+                     (try
+                        List.iteri
+                          (fun i tx_data ->
+                            try
+                              await_unit
+                                (Sync_replay.apply_remote_txs repo
+                                   c.client
+                                   [ Wire.Map
+                                       [ kw "tx-data"
+                                       , Wire.List tx_data ] ])
+                            with e ->
+                              Printf.eprintf
+                                "[own-echo-fail] window-idx=%d/%d \
+                                 t=%d\n%!"
+                                i (List.length own_txs)
+                                (local_tx' + i + 1);
+                              raise e)
+                          own_txs
+                      with Invalid_argument msg ->
+                        let u = extract_uuid_from_error msg in
+                        report_uuid_in_window u own_txs;
+                        raise (Invalid_argument msg)));
                 Sync_client_op.update_local_tx repo t;
                 progress := true
               end)
@@ -3960,34 +4016,13 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
           end
           else if not res.u_stale then begin
              (if res.u_applied <> [] then begin
-                ignore
-                  (Sync_replay.confirm_pending_txs
-                     ~uploaded:(uploaded_of_entries tx_entries) repo
-                     res.u_applied);
+                (* journal truth: own txs reach the server conn only via
+                   the journal echo — un-pend the applied ids first so
+                   they leave the projection overlay before the echo
+                   lands (single rebuild, no double-apply) *)
                 ignore
                   (Sync_apply.mark_pending_txs_false ~rebuild:false repo
-                     res.u_applied)
-              end);
-             (match res.u_failed with
-              | Some id -> Sync_apply.fail_pending_txs repo [ id ]
-              | None ->
-                  if res.u_applied <> [] then
-                    Sync_replay.rebuild_display repo ~jump_tx_data:[]);
-             (if res.u_applied <> [] then begin
-                (* advance local_tx only over the window this batch's
-                   applied entries actually occupy: the applied prefix
-                   journaled contiguously from local_tx'+1 — other
-                   clients' entries in the same window sit before or
-                   after it, not inside. Using server.srv_counter would
-                   skip remote txs journaled after our prefix — they
-                   must stay above the watermark so the next pull
-                   delivers them *)
-                Sync_client_op.update_local_tx repo
-                  (local_tx' + List.length res.u_applied);
-                (* re-pull the own window: the journal may carry
-                   ingest-side augmentation the verbatim upload lacked
-                   (descendant cascades), and own txs are never
-                   delivered by a normal pull *)
+                     res.u_applied);
                 let own_txs =
                   server_pull server local_tx'
                   |> List.filteri (fun i _ ->
@@ -4002,8 +4037,21 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
                 await_unit
                   (Sync_replay.apply_remote_txs repo c.c_client
                      own_remote);
+                (* advance local_tx only over the window this batch's
+                   applied entries actually occupy: the applied prefix
+                   journaled contiguously from local_tx'+1 — other
+                   clients' entries in the same window sit before or
+                   after it, not inside. Using server.srv_counter would
+                   skip remote txs journaled after our prefix — they
+                   must stay above the watermark so the next pull
+                   delivers them *)
+                Sync_client_op.update_local_tx repo
+                  (local_tx' + List.length res.u_applied);
                 progress := true
-              end)
+              end);
+             (match res.u_failed with
+              | Some id -> Sync_apply.fail_pending_txs repo [ id ]
+              | None -> ())
            end
         end)
      end);
