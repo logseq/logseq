@@ -28,7 +28,7 @@ platform :ios do
 
     sync_code_signing(
       type: "appstore",
-      readonly: false
+      readonly: is_ci
     )
 
     version_number = get_version_number(
@@ -62,6 +62,6 @@ platform :ios do
       skip_waiting_for_build_processing: true,
     )
 
-    slack(message: "App Build (#{build_number}) successfully uploaded to TestFlight 🎉!")
+    UI.success("App Build (#{build_number}) successfully uploaded to TestFlight")
   end
 end

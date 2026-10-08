@@ -62,7 +62,10 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Setup build tools
-        run: sudo gem install fastlane -v 2.236.1 --no-document
+        run: |
+          sudo gem install bundler -v 2.7.2 --no-document
+          bundle _2.7.2_ install
+        working-directory: ./ios/App
 
       - name: Set Build Environment Variables
         run: |
@@ -94,16 +97,21 @@ jobs:
         run: pnpm test:ios-web-fonts
 
       - name: Build and upload iOS app
-        run: fastlane beta
+        run: |
+          : "${LOGSEQ_GITHUB_PAT:?LOGSEQ_GITHUB_PAT is required for the certificates repository}"
+          MATCH_GIT_BASIC_AUTHORIZATION="$(printf '%s' "x-access-token:${LOGSEQ_GITHUB_PAT}" | base64 | tr -d '\n')"
+          echo "::add-mask::${MATCH_GIT_BASIC_AUTHORIZATION}"
+          export MATCH_GIT_BASIC_AUTHORIZATION
+          bundle exec fastlane beta
         working-directory: ./ios/App
         env:
           APP_STORE_CONNECT_API_KEY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
           APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY }}
           APP_STORE_CONNECT_API_KEY_IS_KEY_CONTENT_BASE64: true
-          SLACK_URL: ${{ secrets.SLACK_URL }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          MATCH_GIT_URL: https://github.com/logseq/certificates.git
+          LOGSEQ_GITHUB_PAT: ${{ secrets.LOGSEQ_GITHUB_PAT }}
           XCODE_XCARGS: "-allowProvisioningUpdates"
 
       - name: Save Static File
