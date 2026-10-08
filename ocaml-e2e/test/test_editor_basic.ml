@@ -1892,14 +1892,20 @@ let () =
     (* a chord press can lose its modifier or the selection when an
        editor remount lands mid-sequence under parallel load (observed:
        Control+Backspace deleting a single char). Retry the kill after an
-       undo so the press always starts from the pre-kill text; the final
-       assert is still strict-equals. *)
-    let press_kill_until env ~tries keys expected =
+       undo so the press always starts from the pre-kill text: wait for
+       the undo to actually restore `before` and re-run `reposition`
+       first, otherwise a caret left at end-of-text repeats the same miss
+       every try. The final assert is still strict-equals. *)
+    let press_kill_until env ~tries ~before
+        ?(reposition = fun () -> Js.Promise.resolve ()) keys expected =
       let rec go n =
         let* () =
           if n = tries then Js.Promise.resolve ()
-          else B.undo env
+          else
+            let* () = B.undo env in
+            B.wait_editor_text env before
         in
+        let* () = reposition () in
         let* () = iter_seq (K.press_in_editor env) keys in
         let deadline = Js.Date.now () +. 2500. in
         let rec poll () =
@@ -1944,23 +1950,29 @@ let () =
         let* () = B.wait_editor_text env "first cursor line" in
         let* c3 = Util.edit_content env in
         Fest.deep_equal c3 "first cursor line" Fest.expect;
-        let* () = Util.move_cursor_to_end env in
-        let* before = Util.edit_content env in
-        let* () = K.press env (word_modifier ^ "+ArrowLeft") in
-        let* sr3 = selection_range env in
-        let bl = String.length before in
-        Fest.deep_equal
-          (sr3 <> Printf.sprintf "%d:%d" bl bl)
-          true Fest.expect;
+        let bl = String.length "first cursor line" in
+        let position_for_kill () =
+          (* re-establish the caret at the word start on every kill try:
+             undo can restore it at end-of-text, and an undetected stale
+             caret makes each retry delete the same wrong thing *)
+          let* () = Util.move_cursor_to_end env in
+          let* () = K.press env (word_modifier ^ "+ArrowLeft") in
+          let* sr3 = selection_range env in
+          Fest.deep_equal
+            (sr3 <> Printf.sprintf "%d:%d" bl bl)
+            true Fest.expect;
+          Js.Promise.resolve ()
+        in
         let* () =
-          press_kill_until env ~tries:3
+          press_kill_until env ~tries:3 ~before:"first cursor line"
+            ~reposition:position_for_kill
             [ word_modifier ^ "+Backspace" ]
             "first line"
         in
         let* () = B.undo env in
         let* () = assert_editor_value env "first cursor line" in
         let* () =
-          press_kill_until env ~tries:3
+          press_kill_until env ~tries:3 ~before:"first cursor line"
             [ "ControlOrMeta+a"; "Backspace" ]
             ""
         in
