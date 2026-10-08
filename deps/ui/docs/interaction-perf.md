@@ -193,3 +193,48 @@ pnpm gulp:build && pnpm css:build && pnpm ui:build
 node scripts/serve-static.mjs 3013   # then:
 node docs/interaction-perf.mjs       # writes /tmp/interaction-perf.json
 ```
+
+## Round 3 — what landed
+
+Four fixes, measured on the same BenchSmall→BenchBig nav fixture:
+
+1. **`data_attrs_encode` exception tax (lui)** — the per-attr
+   separator validation ran `String.contains` 4x per pair; every miss
+   unwound a `Not_found`, which Melange lowers to `MelangeError`
+   (exception object + stack capture). A nav emitted ~500K of these —
+   491ms of sampled CPU, ~15µs/op. Replaced with a byte scan
+   (lui `4052362`). Per-chunk mount flush: ~41–53ms → **7–17ms**;
+   `send:page-loaded` 66ms → 10ms. This was THE per-op floor (~20µs/op).
+2. **`href="#"` default stomp** — `.page-ref`/`.tag`/`.link-item`
+   anchors never called `preventDefault`, so ~130ms after the
+   programmatic hash write the browser navigated to "#", resolving a
+   spurious `Home`→`load_journals` pipeline mid-nav (a second
+   `get-page-blocks-tree`/`get-blocks`/`get-block-parents` chain plus a
+   stray Journals mount). `on_doc_click` now preventDefaults every
+   `a[href='#']` (sidebar_state + native twin). Nav workerMs
+   ~704–718 → ~270.
+3. **`get-rtc-graph-uuid` refetch loop** — `refresh_db_rtc_uuid`
+   re-invoked the worker on every model emission while the uuid was
+   unresolved (logged-out/rtc-test): ~50–65ms invokes firing per
+   outliner op. Gated on `logged_in && rtc_group` like its consumers.
+4. **Nav pipeline ordering + merged extras** — `resolve` fires
+   `load_route` before the `Navigate_to` commit so `get-page-route-info`
+   rides the worker during the synchronous ~85ms teardown flush instead
+   of queueing behind it; `fetch_ref_count` + `fetch_unlinked_exists`
+   merged into one `get-render-snapshots` call after `Page_loaded`.
+
+Results (median, same fixture):
+
+| metric                 | round-2  | round-3  |
+|------------------------|---------:|---------:|
+| nav total_ocaml        | ~750–870 | **~336** |
+| nav workerMs           | ~704–718 | **~274** |
+| nav raf                | ~251     | ~165     |
+| teardown flush         | ~85–90   | ~88 (unchanged — drop ops carry no attrs) |
+| per-chunk flush        | ~41–53   | ~7–17    |
+| first content flush    | ~66–68   | ~10      |
+
+Still open: `send:navigate-to` teardown (~5K ops, ~88ms) still needs
+the subtree-detach op in `Lui_runtime` + every backend's store (web
+store currently rejects drops on non-leaf/attached nodes). cmdk-pick
+(134ms) is the same teardown shape.

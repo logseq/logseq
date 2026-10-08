@@ -176,6 +176,44 @@ let fetch_ref_count ~stale:(is_stale : unit -> bool) (p : Model.page) =
       |> ignore
   | None -> ()
 
+(* ref-count + unlinked-exists ride on the same snapshot fetch — the
+   nav path always wants both, so one get-render-snapshots round-trip
+   answers the pair instead of two back-to-back invokes *)
+let fetch_page_extras ~stale:(is_stale : unit -> bool) (p : Model.page) =
+  match p.Model.page_uuid with
+  | Some uuid ->
+      let ref_rk =
+        Wire.Array [ Wire.Keyword "block-ref-count"; Wire.Uuid uuid ]
+      and exists_rk =
+        Wire.Array
+          [ Wire.Keyword "block-unlinked-ref-exists"; Wire.Uuid uuid ]
+      in
+      (let* w =
+         Runtime.invoke2 "thread-api/get-render-snapshots"
+           (Wire.String (repo ()))
+           (Wire.Map
+              [ (Wire.Keyword "blocks", Wire.Array [])
+              ; (Wire.Keyword "children", Wire.Array [])
+              ; (Wire.Keyword "resources"
+                , Wire.Array [ ref_rk; exists_rk ]) ])
+       in
+       Js.Promise.resolve
+         (if not (is_stale ()) then begin
+            (match Views_wire.snapshot_slot_value w ref_rk with
+             | Some (Wire.Int n) ->
+                 Runtime.send (Action.Ref_count_loaded n)
+             | _ -> ());
+            match Views_wire.snapshot_slot_value w exists_rk with
+            | Some (Wire.Bool b) ->
+                Runtime.send (Action.Unlinked_exists b)
+            | _ -> ()
+          end))
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("page extras fetch failed", e);
+             Js.Promise.resolve ())
+      |> ignore
+  | None -> ()
+
 
 (* only the on-screen days are fetched up front — scrolling near the
    bottom of the journals list pulls the next chunk (chat-style
@@ -402,9 +440,7 @@ let rec load_page_ref for_route ref_v =
            page title (pdf overlay CSS keys off the attribute) *)
         Web_dom.body_set_data "page" p''.Model.page_title;
         (Platform.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
-        fetch_ref_count ~stale:is_stale p'';
-        Outliner_ops.fetch_unlinked_exists
-          ~stale:is_stale p'';
+        fetch_page_extras ~stale:is_stale p'';
         (* zoom-out to a page parent keeps the zoomed
            block in edit mode (cljs pending-edit) *)
         (match Editor_actions.consume_pending_zoom ()
@@ -682,6 +718,13 @@ let resolve () =
       Editor_actions.exit_edit ~select:false;
       (* cljs unmounts its modal stack on route change *)
       if Dialogs_state.ready () then Dialogs_state.close_all ();
+      (* start the load's worker fetches before the commit — the
+         Navigate_to flush tears the old page down synchronously, and
+         the route-info/tree invokes ride the worker during that span
+         instead of queuing behind it. The load's continuations only
+         run after the send, so their staleness checks still see the
+         committed route *)
+      load_route route;
       Runtime.send (Action.Navigate_to route);
       (* cljs events.cljs router/route-changed → plugin route hook *)
       Plugin_host.fire_route_changed route;
@@ -691,7 +734,6 @@ let resolve () =
       (* cljs settings-effect cleanup: data-settings-tab only while the
          settings route/dialog is active *)
       if route <> Model.Settings then Settings_state.deactivate ();
-      load_route route;
       Option.iter jump_to_anchor (route_anchor ());
       Runtime.flush ())
 
@@ -718,8 +760,7 @@ let init () =
   Runtime.refresh_page_side :=
     (fun p ->
       let stale = stale_page p in
-      fetch_ref_count ~stale p;
-      Outliner_ops.fetch_unlinked_exists ~stale p);
+      fetch_page_extras ~stale p);
   (* delta-spliced journals update: the owning journal's linked refs
      still need their cheap refresh (a block-title edit can create or
      remove a mention) — refetch just that page's refs and republish *)

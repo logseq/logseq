@@ -95,6 +95,15 @@ let username () =
 let email () = jwt_claim "email"
 let user_uuid () = jwt_claim "sub"
 
+(* cljs user.cljs rtc-group? — dev build, a custom sync server, or a
+   cognito group from {team, rtc_2025_07_10} *)
+let rtc_group () =
+  Platform.dev_build
+  || Platform.local_storage_get "sync-server-url" <> None
+  || List.exists
+       (fun g -> g = "team" || g = "rtc_2025_07_10")
+       (jwt_claim_list "cognito:groups")
+
 (* resolved worker db-rtc-uuid for the open repo (cljs
    use-db-rtc-uuid): the indicator/collaborators widgets gate on it.
    Refetches when the repo changed OR the uuid is still unresolved —
@@ -104,29 +113,25 @@ let db_rtc_uuid : string option ref = ref None
 let db_rtc_repo : string option ref = ref None
 
 let refresh_db_rtc_uuid (repo : string option) =
-  match repo with
-  | Some r when !db_rtc_repo <> Some r || !db_rtc_uuid = None -> begin
-      db_rtc_repo := Some r;
-      db_rtc_uuid := None;
-      ignore
-        (let open Promise_ext in
-        let* w =
-          Runtime.invoke1 "thread-api/get-rtc-graph-uuid" (Wire.String r)
-        in
-        db_rtc_uuid := Wire.as_uuid w;
-        Runtime.flush ();
-        Js.Promise.resolve ())
-    end
-  | _ -> ()
-
-(* cljs user.cljs rtc-group? — dev build, a custom sync server, or a
-   cognito group from {team, rtc_2025_07_10} *)
-let rtc_group () =
-  Platform.dev_build
-  || Platform.local_storage_get "sync-server-url" <> None
-  || List.exists
-       (fun g -> g = "team" || g = "rtc_2025_07_10")
-       (jwt_claim_list "cognito:groups")
+  (* every consumer gates on logged_in + rtc_group; outside that the
+     uuid is never read, so an unresolved uuid would otherwise refetch
+     on every model emission forever *)
+  if logged_in () && rtc_group () then
+    match repo with
+    | Some r when !db_rtc_repo <> Some r || !db_rtc_uuid = None -> begin
+        db_rtc_repo := Some r;
+        db_rtc_uuid := None;
+        ignore
+          (let open Promise_ext in
+          let* w =
+            Runtime.invoke1 "thread-api/get-rtc-graph-uuid"
+              (Wire.String r)
+          in
+          db_rtc_uuid := Wire.as_uuid w;
+          Runtime.flush ();
+          Js.Promise.resolve ())
+      end
+    | _ -> ()
 
 (* -- rtc-log + type projections (cljs rtc-log / rtc-download-log /
    rtc-upload-log / rtc-misc-log): latest entry per class. The cljs

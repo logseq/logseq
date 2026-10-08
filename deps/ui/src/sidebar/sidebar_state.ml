@@ -1154,6 +1154,14 @@ let on_doc_click st ev =
     with
     | Some _ -> ()
     | None -> close_menu st);
+  (* in-app anchors all render href="#" (page-ref, tag, link-item,
+     timestamps) and navigate through their own handlers — without
+     preventDefault the browser's "#" default stomps the programmatic
+     hash and resolves a spurious Home/Journals load racing the real
+     navigation *)
+  (match click_target "a[href='#']" ev with
+   | Some _ -> prevent_default ev
+   | None -> ());
   match click_target "a.page-ref, a.tag" ev with
   | Some el -> (
       match
