@@ -121,7 +121,17 @@ let finally value f =
   on_state value finish;
   result
 
-let async f = ignore (catch (f ()) (fun _ -> pure ()) : unit t)
+(* Fire-and-forget like an unobserved promise: log the rejection instead
+   of silently swallowing it (worse than cljs unhandledrejection). *)
+let async f =
+  ignore
+    (catch
+       (try f () with exn -> error exn)
+       (fun exn ->
+          Worker_log.error "effect/async-rejected"
+            [ ("error", Printexc.to_string exn) ];
+          pure ())
+      : unit t)
 
 let on_any task on_ok on_error =
   on_state task (function
