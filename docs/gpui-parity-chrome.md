@@ -86,7 +86,7 @@ deps/ui (this branch):
   704px × 70vh top-aligned block, `ls-label` carries the web's 28px
   line-height/min-height, and `panel-wrap` folds in the web's
   first-row padding. Also bumped the opam `lui` pin in
-  `deps/ui/scripts/install-opam-deps.sh` to `cffac1a` (lui PR #161
+  `deps/ui/scripts/install-opam-deps.sh` to `07ab1908a3f2d` (lui PR #161
   head) so a clean environment resolves the same lui revision — keep
   the pin tracking the merged lui SHA.
 - `gpui/host/src/menu.rs` — added `cmd-k` → `CommandPalette`
