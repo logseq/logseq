@@ -8775,6 +8775,7 @@ dependencies = [
 [[package]]
 name = "taffy"
 version = "0.13.0"
+source = "git+https://github.com/logseq/taffy?tag=v0.13.0-logseq.1#db2dc4978447f67a710d4dbda5ff474c50ab4b46"
 dependencies = [
  "arrayvec",
  "serde",

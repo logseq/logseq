@@ -58,8 +58,9 @@ serde_json = "1"
 
 # taffy 0.13 cache-slot thrash causes exponential relayout on deep flex
 # trees (a single draw ran 15.8M compute_flexbox_layout calls on ~1.5k
-# nodes). The vendored copy is taffy 0.13.0 + one fix in
-# src/tree/cache.rs: store() prefers an empty measure slot instead of
-# overwriting a colliding bucket. layout drops 4.2s -> ~18ms.
+# nodes). The logseq/taffy fork is taffy 0.13.0 + the fix in
+# src/tree/cache.rs: unbounded measure_entries so distinct
+# (known_dimensions, available_space, parent_size) combos no longer
+# collide on 9 slots. layout drops 4.2s -> ~18ms.
 [patch.crates-io]
-taffy = { path = "../vendor/taffy" }
+taffy = { git = "https://github.com/logseq/taffy", tag = "v0.13.0-logseq.1" }
