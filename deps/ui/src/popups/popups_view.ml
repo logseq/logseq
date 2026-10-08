@@ -836,7 +836,11 @@ let pv_track st el =
    ls-preview-popup (page.css: pl-6); the tippy wrapper's remaining
    inline styles live in lui-overlay.css *)
 let pv_popover (st : S.t) (p : S.pv) : t =
-  popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y)
+ fun context parent ->
+  (* same hover-reveal contract as the page title: actions only show
+     while the pointer is over the title's content wrapper *)
+  let hover = Signal.state context.Lui_ui.ui_scheduler false in
+  (popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y)
     ~available_height:(Web_dom.win_inner_height -. p.S.pv_y -. 5.)
     ~style_class:"ui__popover-content ls-preview-popup"
     ~on_dismiss:(fun _ -> S.close_pv st)
@@ -850,12 +854,19 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                     ~style_class:"ls-page-title-container"
                     [ box ~key:"pvtcw"
                         ~style_class:"block-content-wrapper relative"
+                        ~on_pointer_enter:(fun _ ->
+                          Signal.set hover true;
+                          Runtime.flush ())
+                        ~on_pointer_leave:(fun _ ->
+                          if Runtime.signal_get hover then (
+                            Signal.set hover false;
+                            Runtime.flush ()))
                         ([ text ~key:"pvtw"
                              ~style_class:"block-title-wrap"
                              ~value:p.S.pv_title [] ]
                          @ (match p.S.pv_page with
                             | Some page ->
-                                [ Properties_area.title_actions page ]
+                                [ Properties_area.title_actions ~hover page ]
                             | None -> []))
                     ]
                 ]
@@ -868,7 +879,8 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                 ]
             ]
         ]
-    ]
+    ])
+    context parent
 
 let pv_dyn (st : S.t) : t =
   (* see ac_popover: signals must be built per mount *)

@@ -820,12 +820,13 @@ fn register_class_styles() {
     );
 
     // ---- page surface ----
-    // hover-only affordances on web (title actions fade in, block
-    // controls appear on block hover) have no hover state on gpui —
-    // keep title actions visible at rest so "Set property"/"Add icon"
-    // stay reachable; absolute positioning pulls them out of the
-    // title's layout.
-    class("ls-page-title-actions", "opacity:1", "");
+    // Title actions reveal on .block-content-wrapper:hover on web
+    // (absolute at top:-1.25rem); the view drives the same reveal
+    // through the opacity prop fed by pointer enter/leave. On gpui an
+    // absolute row escapes the scroll viewport's clip, so it stays
+    // in-flow above the title — the hidden row reserves the same strip
+    // the web overlay covers.
+    class("ls-page-title-actions", "", "");
     class("control-hide", "display:none", "");
 
     // ---- shared-OCaml block editor (resources/css/lui-core.css .ed-*) ----
