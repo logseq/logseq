@@ -745,7 +745,7 @@ let test_page_ref_and_boolean_queries () =
     |> List.filter (fun r -> page_names [ r ] = [ "page1" ])
     |> testable
   in
-  expect "NOT" [ "b1"; "bar"; "b3" ] (sort not_page2)
+  expect "NOT" [ "b1"; "b3"; "bar" ] (sort not_page2)
 
 (* ============ nested-page-ref-queries ============ *)
 
