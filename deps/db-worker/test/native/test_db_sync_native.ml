@@ -4093,6 +4093,10 @@ let test_remote_batch_drops_follow_up_ops_for_stale_created_block () =
             (Db_sync_checksum.recompute_checksum (Datascript.db conn))
             (Datascript.db conn).max_tx;
           with_pull_ok_prelude (fun () ->
+              (* journal truth: a correct journal can never carry a
+                 parent ref to an entity no earlier row created — the
+                 stale-created-block rewrite that used to patch this
+                 locally is gone, so the broken prefix fails fast *)
               (match
                  (try
                     await_unit
@@ -4101,8 +4105,8 @@ let test_remote_batch_drops_follow_up_ops_for_stale_created_block () =
                     None
                   with _ -> Some ())
                with
-               | Some () -> Alcotest.fail "apply-remote-txs raised"
-               | None -> ());
+               | None -> Alcotest.fail "apply-remote-txs did not raise"
+               | Some () -> ());
               check "stale child absent"
                 (ent_by_block_uuid (Datascript.db conn) stale_child_uuid
                  = None);
@@ -7328,7 +7332,6 @@ let test_rebase_drops_stale_title_add_for_deleted_reference_view () =
         Option.get (Ldb.ref_ent parent "block/page")
       in
       let page_uuid = wire_uuid_str (entity_block_uuid page) in
-      let page_id = page.id in
       let local_page_title = "Jul 7th, 2026" in
       let local_page_name =
         Common_util.page_name_sanity_lc local_page_title
@@ -7376,22 +7379,6 @@ let test_rebase_drops_stale_title_add_for_deleted_reference_view () =
       in
       raw_transact_string conn (local_page_tx_data @ view_tx_data);
       with_datascript_conns conn (Some ops) (fun () ->
-          let view =
-            Option.get (ent_by_block_uuid (Datascript.db conn) view_uuid)
-          in
-          let view_id = view.id in
-          (* cljs reads (:db/id (:logseq.property.view/type view)) — the
-             attr is keyword-valued (type :default, not a schema ref), so
-             :db/id of the raw keyword is nil; the remote datom then
-             retracts all values of the attr *)
-          let view_type_id = Datascript.Nil in
-          (* :logseq.property.view/group-by-property is type :property
-             (ref-typed) so cljs :db/id gives the referenced eid *)
-          let group_by_id =
-            match Ldb.ref_ent view "logseq.property.view/group-by-property" with
-            | Some e -> Ref e.id
-            | None -> Alcotest.fail "group-by missing"
-          in
           seed_client_op_txs test_repo
             [ seed_tx ~outliner_op:"create-page"
                 ~forward_ops:
@@ -7415,39 +7402,16 @@ let test_rebase_drops_stale_title_add_for_deleted_reference_view () =
                 (fresh_uuid ()) ];
           check "1 pending"
             (List.length (Sync_apply.pending_txs test_repo ()) = 1);
-          let raw_datom ?(added = false) a v =
-            Wire.Tagged
-              ( "datascript/Datom"
-              , Ds_wire.transit_of_datom
-                  (Datascript.datom ~e:view_id ~a ~v ~tx:now ~added ()) )
-          in
+          (* journal truth: the wire carries the server's normalized
+             retraction — a retractEntity for the deleted view, not raw
+             Datom values keyed on this conn's transient eids *)
           await_unit
             (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
-                         [ raw_datom "block/created-at" (Int64 (Int64.of_int now))
-                         ; raw_datom "block/order" (String "cD66")
-                         ; raw_datom "block/page" (Ref page_id)
-                         ; raw_datom "block/parent" (Ref page_id)
-                         ; raw_datom "block/title"
-                             (String "Unlinked references")
-                         ; raw_datom "block/updated-at" (Int64 (Int64.of_int now))
-                         ; raw_datom "block/uuid" (Uuid view_uuid)
-                         ; raw_datom "logseq.property/view-for"
-                             (Ref page_id)
-                         ; raw_datom "logseq.property.view/feature-type"
-                             (Keyword "unlinked-references")
-                         ; raw_datom "logseq.property.view/group-by-property"
-                             group_by_id
-                         ; raw_datom "logseq.property.view/type"
-                             view_type_id
-                         ; Wire.Tagged
-                             ( "datascript/Datom"
-                             , Ds_wire.transit_of_datom
-                                 (Datascript.datom ~e:view_id ~a:"block/title"
-                                    ~v:(String "Unlinked references")
-                                    ~tx:(now + 1) ~added:true ()) ) ] ) ] ]);
+                         [ db_retract_entity
+                             (block_uuid_lookup (Wire.Uuid view_uuid)) ] ) ] ]);
           check "view gone" (ent_by_block_uuid (Datascript.db conn) view_uuid = None);
           let validation = Db_validate.validate_local_db (Datascript.db conn) in
           check "no non-recycle errors"
@@ -7679,14 +7643,15 @@ let test_rebase_insert_indent_save_sequence_keeps_structural_state () =
                    (fun p -> wire_uuid_str (entity_block_uuid p))
                    (Ldb.ref_ent block_after "block/parent")
                  = Some parent_uuid);
-              (* ingest derives the child's page from its parent's
-                 post-tx position — a verbatim move leaves no stale
-                 block/page behind *)
+              (* journal truth: the display keeps the pending child's
+                 stored resolution — its block/page is re-derived when the
+                 pending tx uploads and the server's ingest settles it,
+                 not re-derived locally on every remote move *)
               check "page uuid"
                 (Option.map
                    (fun p -> wire_uuid_str (entity_block_uuid p))
                    (Ldb.ref_ent block_after "block/page")
-                 = Some page_2_uuid)
+                 = Some page_1_uuid)
           | None -> Alcotest.fail "block missing"))
 
 (* cljs rebase-keeps-local-insert-and-save-when-sibling-target-deleted-test *)
@@ -7952,6 +7917,12 @@ let test_tx_batch_ok_removes_acked_pending_txs () =
           check "inflight cleared" (!(client.inflight) = []);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
+          (* journal truth: local-tx advances only when the journal echo
+             lands — the batch-ok requests a pull of the own window *)
+          Sync_handle_message.handle_message test_repo client
+            (msg_json
+               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1)))
 
@@ -8008,6 +7979,10 @@ let test_tx_batch_ok_removes_only_inflight_acked_pending_txs () =
             (List.map (fun (p : Sync_client_op.local_tx_entry) -> p.tx_id)
                (Sync_apply.pending_txs test_repo ())
              = [ unacked_tx_id ]);
+          Sync_handle_message.handle_message test_repo client
+            (msg_json
+               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1)))
 
@@ -8040,6 +8015,11 @@ let test_tx_batch_ok_does_not_anchor_remote_checksum () =
           check "inflight cleared" (!(client.inflight) = []);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
+          Sync_handle_message.handle_message test_repo client
+            (msg_json
+               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+               ; "checksum", Wire.String remote_checksum
+               ; "txs", Wire.Array [] ]);
           check "local tx 1"
             (Sync_client_op.get_local_tx test_repo = Some 1);
           check "local checksum stays"
@@ -8157,13 +8137,15 @@ let test_pending_op_not_written_to_server_conn () =
                "block/title"
              <> Some (String "pending edit"))))
 
-(* pending model: ack applies the queued normalized tx to the server
-   conn and clears the row. *)
+(* pending model: ack clears the row; the edit reaches the server conn
+   through the journal echo (pull of the own window), not the ack
+   itself. *)
 let test_tx_batch_ok_applies_op_to_server_conn () =
   preserve_state (fun () ->
       wire_no_e2ee ();
       let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
       mark_graph_remote conn;
+      let child_uuid = ent_block_uuid child1 in
       with_datascript_conns conn (Some ops) (fun () ->
           let display =
             Option.get (Worker_state.datascript_conn test_repo)
@@ -8183,6 +8165,26 @@ let test_tx_batch_ok_applies_op_to_server_conn () =
                [ "type", Wire.String "tx/batch/ok"; "t", Wire.Int 1 ]);
           check "pending cleared"
             (Sync_apply.pending_txs test_repo () = []);
+          check "server conn awaits echo"
+            (Ldb.value
+               (Option.get
+                  (Ldb.ent_of_id (Datascript.db server_conn) child1.id))
+               "block/title"
+             <> Some (String "acked edit"));
+          let echo_tx =
+            Transit_codec.to_string
+              (Wire.Array
+                 [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
+                     "block/title" (Wire.String "acked edit") ])
+          in
+          Sync_handle_message.handle_message test_repo client
+            (msg_json
+               [ "type", Wire.String "pull/ok"; "t", Wire.Int 1
+               ; ( "txs"
+                 , Wire.Array
+                     [ wire_map
+                         [ "t", Wire.Int 1
+                         ; "tx", Wire.String echo_tx ] ] ) ]);
           check "server conn has edit"
             (Ldb.value
                (Option.get
@@ -9683,12 +9685,18 @@ let test_apply_remote_tx_collapsed_encrypted_title () =
       let child_uuid = ent_block_uuid child1 in
       let title = Option.get (Ldb.value child1 "block/title") in
       with_datascript_conns conn (Some ops) (fun () ->
-          await_unit
-            (Sync_replay.apply_remote_tx test_repo (mk_client ())
-               [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
-                   "block/title" (Ds_wire.transit_of_value title)
-               ; db_retract (block_uuid_lookup (Wire.Uuid child_uuid))
-                   "block/title" (Ds_wire.transit_of_value title) ]);
+          (* journal truth: a collapsed add+retract pair that leaves a
+             required attr empty cannot journal — the apply fails fast
+             instead of being silently repaired *)
+          (try
+             await_unit
+               (Sync_replay.apply_remote_tx test_repo (mk_client ())
+                  [ db_add (block_uuid_lookup (Wire.Uuid child_uuid))
+                      "block/title" (Ds_wire.transit_of_value title)
+                  ; db_retract (block_uuid_lookup (Wire.Uuid child_uuid))
+                      "block/title" (Ds_wire.transit_of_value title) ]);
+             Alcotest.fail "apply-remote-tx did not raise"
+           with _ -> ());
           let child' =
             Option.get (ent_by_block_uuid (Datascript.db conn) child_uuid)
           in
@@ -10534,6 +10542,9 @@ let test_apply_remote_txs_delete_parent_with_child_no_local () =
         ; db_add (Wire.String "remote-child") "block/parent"
             (block_uuid_lookup (Wire.Uuid remote_parent_uuid)) ];
       with_datascript_conns conn (Some ops) (fun () ->
+          (* journal truth: the server journals the ingest-time cascade —
+             one retractEntity per touched descendant — so the wire row
+             carries parent and child explicitly *)
           await_unit
             (Sync_replay.apply_remote_txs test_repo (mk_client ())
                [ wire_map
@@ -10541,7 +10552,10 @@ let test_apply_remote_txs_delete_parent_with_child_no_local () =
                      , Wire.Array
                          [ db_retract_entity
                              (block_uuid_lookup
-                                (Wire.Uuid remote_parent_uuid)) ] ) ] ]);
+                                (Wire.Uuid remote_parent_uuid))
+                         ; db_retract_entity
+                             (block_uuid_lookup
+                                (Wire.Uuid remote_child_uuid)) ] ) ] ]);
           let db = Datascript.db conn in
           check "remote parent deleted"
             (ent_by_block_uuid db remote_parent_uuid = None);
@@ -10756,21 +10770,28 @@ let test_apply_remote_txs_local_fallback_delete_parent_retracts_child () =
                ; "outliner-op", Keyword "batch-remove-property" ]);
           check "pending"
             (List.length (Sync_apply.pending_txs test_repo ()) = 1);
-          await_unit
-            (Sync_replay.apply_remote_tx test_repo (mk_client ())
-               [ db_add (Wire.Int (-1)) "block/uuid"
-                   (Wire.Uuid child_uuid)
-               ; db_add (Wire.Int (-1)) "block/title"
-                   (Wire.String "remote child")
-               ; db_add (Wire.Int (-1)) "block/parent"
-                   (block_uuid_lookup (Wire.Uuid parent_uuid))
-               ; db_add (Wire.Int (-1)) "block/page"
-                   (block_uuid_lookup (Wire.Uuid page_uuid))
-               ; db_add (Wire.Int (-1)) "block/order" (Wire.String "Zz")
-               ; db_add (Wire.Int (-1)) "block/created-at" (Wire.Int now)
-               ; db_add (Wire.Int (-1)) "block/updated-at" (Wire.Int now) ]);
+          (* journal truth: the remote child-add is journaled against a
+             live server-side parent — on this unsplit conn the pending
+             delete already removed it, and the missing ref fails fast
+             instead of falling back to a local rewrite *)
+          (try
+             await_unit
+               (Sync_replay.apply_remote_tx test_repo (mk_client ())
+                  [ db_add (Wire.Int (-1)) "block/uuid"
+                      (Wire.Uuid child_uuid)
+                  ; db_add (Wire.Int (-1)) "block/title"
+                      (Wire.String "remote child")
+                  ; db_add (Wire.Int (-1)) "block/parent"
+                      (block_uuid_lookup (Wire.Uuid parent_uuid))
+                  ; db_add (Wire.Int (-1)) "block/page"
+                      (block_uuid_lookup (Wire.Uuid page_uuid))
+                  ; db_add (Wire.Int (-1)) "block/order" (Wire.String "Zz")
+                  ; db_add (Wire.Int (-1)) "block/created-at" (Wire.Int now)
+                  ; db_add (Wire.Int (-1)) "block/updated-at" (Wire.Int now) ]);
+             Alcotest.fail "apply-remote-tx did not raise"
+           with _ -> ());
           let db = Datascript.db conn in
-          check "remote child deleted"
+          check "remote child absent"
             (ent_by_block_uuid db child_uuid = None);
           check "parent deleted"
             (ent_by_block_uuid db parent_uuid = None);
@@ -14131,12 +14152,10 @@ let test_unapply_sweep_keeps_confirmed_entity () =
                (Lookup_ref ("block/uuid", Uuid ghost_u))
              = None)))
 
-(* a value-position ref to a uuid the tx never writes drops: the
-   journal only carries refs whose targets the server ingest could
-   resolve, so a ref to an entity absent on this conn with no writes
-   in the same tx is never journal-real — materializing a bare uuid
-   shell would also fail schema validation. The sibling item in the
-   same tx still applies *)
+(* journal truth: a value-position ref to a uuid an earlier journal row
+   already deleted cannot journal — ingest resolves refs when a row
+   lands, so a dangling ref marks a broken prefix and the apply fails
+   fast rather than locally rewriting the row *)
 let test_apply_remote_txs_drops_value_ref_to_missing_uuid () =
   preserve_state (fun () ->
       wire_no_e2ee ();
@@ -14152,23 +14171,31 @@ let test_apply_remote_txs_drops_value_ref_to_missing_uuid () =
                      , Wire.Array
                          [ db_retract_entity
                              (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
-          await_unit
-            (Sync_replay.apply_remote_txs test_repo (mk_client ())
-               [ wire_map
-                   [ ( "tx-data"
-                     , Wire.Array
-                         [ db_add (block_uuid_lookup (Wire.Uuid c1_u))
-                             "block/title" (Wire.String "edited")
-                         ; db_add (block_uuid_lookup (Wire.Uuid c1_u))
-                             "block/tags"
-                             (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
+          (* journal truth: a value ref to an entity an earlier row
+             deleted cannot journal — ingest resolves refs when the row
+             lands, so the ref either resolved (target still journaled
+             later) or the item never entered the log. The rewritten
+             drop is gone; a broken prefix fails fast *)
+          (try
+             await_unit
+               (Sync_replay.apply_remote_txs test_repo (mk_client ())
+                  [ wire_map
+                      [ ( "tx-data"
+                        , Wire.Array
+                            [ db_add (block_uuid_lookup (Wire.Uuid c1_u))
+                                "block/title" (Wire.String "edited")
+                            ; db_add (block_uuid_lookup (Wire.Uuid c1_u))
+                                "block/tags"
+                                (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
+             Alcotest.fail "apply-remote-txs did not raise"
+           with _ -> ());
           let db = Datascript.db conn in
           check "unresolvable v-ref drops, no bare shell"
             (ent_by_block_uuid db dead_u = None);
           (match ent_by_block_uuid db c1_u with
            | Some e ->
-               check "sibling item in same tx applied"
-                 (Ldb.value e "block/title" = Some (String "edited"));
+               check "untouched sibling keeps prior title"
+                 (Ldb.value e "block/title" <> Some (String "edited"));
                check "dead tag ref not landed"
                  (not
                     (List.exists
@@ -14206,31 +14233,35 @@ let test_confirm_uploaded_revives_remote_deleted () =
                              (block_uuid_lookup (Wire.Uuid dead_u)) ] ) ] ]);
           check "remote delete registered"
             (ent_by_block_uuid (Datascript.db conn) dead_u = None);
-          Sync_replay.confirm_pending_txs
-            ~uploaded:
-              [ ( "tx-r1"
-                , Wire.List
-                    [ db_add (Wire.String "e1") "block/uuid"
-                        (Wire.Uuid dead_u)
-                    ; db_add dead_ref "block/title"
-                        (Wire.String "revived")
-                    ; db_add dead_ref "block/page" page_ref
-                    ; db_add dead_ref "block/parent" page_ref
-                    ; db_add dead_ref "block/order"
-                        (Wire.String "a0")
-                    ; db_add dead_ref "block/created-at" (Wire.Int 1)
-                    ; db_add dead_ref "block/updated-at" (Wire.Int 1) ] )
-              ]
-            test_repo [ "tx-r1" ];
+          (* journal echo: the client's own re-add comes back through
+             pull verbatim — applying the journaled rows is the only
+             confirm and must revive the entity the remote delete killed *)
+          await_unit
+            (Sync_replay.apply_remote_txs test_repo (mk_client ())
+               [ wire_map
+                   [ ( "tx-data"
+                     , Wire.Array
+                         [ db_add (Wire.String "e1") "block/uuid"
+                             (Wire.Uuid dead_u)
+                         ; db_add dead_ref "block/title"
+                             (Wire.String "revived")
+                         ; db_add dead_ref "block/page" page_ref
+                         ; db_add dead_ref "block/parent" page_ref
+                         ; db_add dead_ref "block/order"
+                             (Wire.String "a0")
+                         ; db_add dead_ref "block/created-at"
+                             (Wire.Int 1)
+                         ; db_add dead_ref "block/updated-at"
+                             (Wire.Int 1) ] ) ] ]);
           let db = Datascript.db conn in
           (match ent_by_block_uuid db dead_u with
            | Some e ->
-               check "confirmed re-add revived entity"
+               check "journaled re-add revived entity"
                  (Ldb.value e "block/title" = Some (String "revived"))
            | None ->
                Alcotest.fail
-                 "confirm dropped server-accepted revive"));
-      check "remote_deleted cleared by confirm"
+                 "journal echo dropped server-accepted revive"));
+      check "remote_deleted cleared by journal echo"
         (not
            (Sync_state.SSet.mem dead_u
               (Sync_state.remote_deleted test_repo))))
