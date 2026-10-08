@@ -1465,14 +1465,44 @@
                 (transact-move-blocks! conn blocks target-block sibling? opts outliner-op top-level-blocks)
                 nil))))))))
 
+(defn- move-pages
+  "The pages `nodes` are drawn on, and a `same-page?` that says whether a
+  move to `target` (as its sibling or child) stays on one of them."
+  [db nodes]
+  (let [;; the page a node is drawn on: a block's page, or for a nested page
+        ;; (no :block/page) the page it is nested in
+        node-page-id (fn [node]
+                       (let [node (d/entity db (:db/id node))]
+                         (or (:db/id (:block/page node))
+                             (:db/id (:block/parent node)))))
+        pages (set (map node-page-id nodes))
+        ;; where a node lands as a child or sibling of `target`
+        target-page-id (fn [target sibling?]
+                         (let [target (d/entity db (:db/id target))]
+                           (if (and (not sibling?)
+                                    (or (ldb/page? target) (:block/name target)))
+                             (:db/id target)
+                             (node-page-id target))))]
+    {:pages pages
+     :same-page? (fn [target sibling?]
+                   (contains? pages (target-page-id target sibling?)))}))
+
 (defn- move-blocks-up-down
   "Move blocks up/down."
   [conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
-        opts {:outliner-op :move-blocks-up-down}]
-    (if up?
+        opts {:outliner-op :move-blocks-up-down}
+        {:keys [pages same-page?]} (move-pages db top-level-blocks)]
+    (cond
+      ;; a move up or down stays in 1 page: its target comes from 1 end of
+      ;; the selection, so a selection over 2 pages would carry the blocks
+      ;; of 1 page into the other
+      (> (count pages) 1)
+      nil
+
+      up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
             first-block-parent (:block/parent first-block)
             first-block-left-sibling (ldb/get-left-sibling first-block)
@@ -1484,11 +1514,14 @@
         (when (and left-left
                    (not= (:db/id (:block/page first-block-parent))
                          (:db/id left-left))
+                   ;; never into another page, e.g. a nested page's sibling
+                   (same-page? left-left sibling?)
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
           (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
                                                                     :up? up?}))))
 
+      :else
       (let [last-top-block (last top-level-blocks)
             last-top-block-right (ldb/get-right-sibling last-top-block)
             right (or
@@ -1498,6 +1531,7 @@
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
         (when (and right
+                   (same-page? right sibling?)
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
           (move-blocks conn blocks right (merge opts {:sibling? sibling?

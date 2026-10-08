@@ -424,6 +424,47 @@
      (outliner-core/move-blocks-up-down! (conn/get-db test-db false) [(get-block 9)] true))
     (is (= [3 9 6] (get-children 2)))))
 
+(deftest test-move-blocks-up-down-across-pages
+  (testing "a selection over 2 pages does not move a block into the other page (db-test #1318)"
+    ;; page 1: a(41) b(42) c(43); page 50: e(51) f(52)
+    (transact-tree! [[41] [42] [43]])
+    (d/transact! (conn/get-db test-db false)
+                 (concat [{:db/id 50 :block/uuid 50 :block/name "other page"}]
+                         (gp-block/with-parent-and-order 50
+                           (map #(assoc % :block/page 50 :block/title "x")
+                                (build-node-tree [[51] [52]]))))
+                 {:outliner-op :insert-blocks})
+    (doseq [up? [true false]]
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
+                                           [(get-block 41) (get-block 51)] up?))
+      (is (= [41 42 43] (get-children 1)))
+      (is (= [51 52] (get-children 50)))))
+  (testing "the only block of a nested page stays on it, with a sibling page before and after"
+    ;; page 1 holds pages 60, 70, 80 as children (a namespace); each has 1 block
+    (transact-tree! [[41]])
+    (let [conn (conn/get-db test-db false)
+          page-tx (fn [id order]
+                    {:db/id id :block/uuid id :block/name (str "nested " id)
+                     :block/title (str "nested " id)
+                     :block/parent [:block/uuid 1] :block/order order})]
+      (d/transact! conn [(page-tx 60 "a1") (page-tx 70 "a2") (page-tx 80 "a3")]
+                   {:outliner-op :insert-blocks})
+      (doseq [[page block] [[60 61] [70 71] [80 81]]]
+        (d/transact! conn (gp-block/with-parent-and-order
+                            page
+                            (map #(assoc % :block/page page :block/title "x")
+                                 (build-node-tree [[block]])))
+                     {:outliner-op :insert-blocks}))
+      (doseq [up? [true false]]
+        (outliner-tx/transact!
+         (transact-opts)
+         (outliner-core/move-blocks-up-down! conn [(get-block 71)] up?))
+        (is (= [71] (get-children 70)) (str "moved " (if up? "up" "down") ": stays on its page"))
+        (is (= [61] (get-children 60)))
+        (is (= [81] (get-children 80)))))))
+
 (deftest test-insert-blocks
   (testing "
   add [18 [19 20] 21] after 6
