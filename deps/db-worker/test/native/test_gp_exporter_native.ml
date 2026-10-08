@@ -76,9 +76,12 @@ module Gp_finalize = Gp_exporter_finalize
 (* cljs p/let chains resolve synchronously in the native runtime. *)
 let await (t : 'a Eff.t) : 'a =
   let result = ref None in
-  Eff.on_any t (fun v -> result := Some v) (fun e -> raise e);
+  Eff.on_any t
+    (fun v -> result := Some (Ok v))
+    (fun e -> result := Some (Error e));
   match !result with
-  | Some v -> v
+  | Some (Ok v) -> v
+  | Some (Error e) -> raise e
   | None -> raise (Failure "await: Eff did not resolve")
 
 (* cljs marks these deftests ^:integration — excluded from default runs.

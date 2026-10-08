@@ -12,9 +12,14 @@ let check (name : string) (ok : bool) =
   Alcotest.(check bool) name true ok
 
 let await (t : Wire.t Db_worker_effect.t) : Wire.t =
-  let result = ref Wire.nil in
-  Db_worker_effect.on_any t (fun v -> result := v) (fun e -> raise e);
-  !result
+  let result = ref None in
+  Db_worker_effect.on_any t
+    (fun v -> result := Some (Ok v))
+    (fun e -> result := Some (Error e));
+  match !result with
+  | Some (Ok v) -> v
+  | Some (Error e) -> raise e
+  | None -> failwith "task still pending"
 
 let test_repo = "test-repo"
 

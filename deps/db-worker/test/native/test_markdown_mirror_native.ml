@@ -116,9 +116,12 @@ let mirror_root () =
 
 let run (t : 'a Db_worker_effect.t) : 'a =
   let result = ref None in
-  Db_worker_effect.on_any t (fun v -> result := Some v) (fun e -> raise e);
+  Db_worker_effect.on_any t
+    (fun v -> result := Some (Ok v))
+    (fun e -> result := Some (Error e));
   match !result with
-  | Some v -> v
+  | Some (Ok v) -> v
+  | Some (Error e) -> raise e
   | None -> failwith "effect still pending"
 
 let run_catching (t : 'a Db_worker_effect.t) : ('a, exn) result =
