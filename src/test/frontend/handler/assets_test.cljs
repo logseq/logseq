@@ -137,7 +137,11 @@
                (assets/file-path->assets-url "/tmp/my%20photos/50%ba.png"))))
       (testing "file URL with an encoded Windows drive colon resolves to a drive path"
         (is (= "assets:///C/logseq__colon/Users/a%20b.png"
-               (assets/file-path->assets-url "file:///C%3A/Users/a%20b.png")))))))
+               (assets/file-path->assets-url "file:///C%3A/Users/a%20b.png"))))
+      (testing "literal % in the repo dir is not decoded"
+        (with-redefs [config/get-repo-dir (constantly "/workspace/graph%20dir")]
+          (is (= "assets:///workspace/graph%2520dir/a.png"
+                 (assets/file-path->assets-url "a.png"))))))))
 
 (deftest make-asset-url-electron-test
   (async done
