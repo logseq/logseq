@@ -80,6 +80,7 @@
                    (.all (.prepare db sql))
                    (.exec db sql))))
        :close (fn [] (.close db))
+       :transaction (fn [f] ((.transaction db f)))
        :_db db})
 
 (defn- short-preview

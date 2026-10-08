@@ -191,6 +191,7 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
   let success_tx_ids = Wire.get "success-tx-ids" message in
   let failed_tx_id = Wire.get "failed-tx-id" message in
   let missing_block_uuids = Wire.get "missing-block-uuids" message in
+  let retryable = Wire.get "retryable" message = Some (Wire.Bool true) in
   (match reason with
    | None -> fail_fast "db-sync/missing-field"
                (context ~repo ~typ:"tx/reject" ~field:"reason" ())
@@ -281,18 +282,25 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
            (Sync_apply.mark_pending_txs_false ~rebuild:false repo
               successful_tx_ids);
          (match failed_tx_id' with
-          | Some id ->
+          | Some id when not retryable ->
               (* Keep accepted edits visible until their journal echo
                  arrives; that pull also removes the rejected overlay. *)
               ignore
                 (Sync_apply.mark_failed_txs
                    ~rebuild:(successful_tx_ids = []) repo [ id ])
-          | None -> ());
-         request_pull client (Option.value local_tx ~default:0)
+          | _ -> ())
        end
-       else
+       else if not retryable then
          Sync_apply.fail_pending_txs repo inflight;
        client.inflight := [];
+       if retryable then begin
+         (* Keep the rejected entry and its dependents in the outbox.
+            Reconnect backoff prevents a reject/pull/upload retry loop. *)
+         match client.ws with
+         | Some ws -> Db_worker_effect.async (fun () -> Sync_state.ws_endpoint_close ws)
+         | None -> ()
+       end
+       else request_pull client (Option.value local_tx ~default:0);
        broadcast_rtc_state client;
        Sync_log_and_state.add_rtc_log "rtc.log/tx-rejected" rejected_data;
        fail_fast "db-sync/tx-rejected" rejected_data)
@@ -464,7 +472,10 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
   require_non_negative remote_tx (context ~repo ~typ:"pull/ok" ());
   let remote_tx_n = Option.value (wire_to_int remote_tx) ~default:0 in
   let local_tx_n = Option.value local_tx ~default:0 in
-  if remote_tx_n <= local_tx_n then Db_worker_effect.pure ()
+  if remote_tx_n <= local_tx_n then begin
+    if remote_tx_n = local_tx_n then Sync_apply.enqueue_flush_pending repo client;
+    Db_worker_effect.pure ()
+  end
   else begin
     let txs = Wire.get "txs" message in
     (match txs with
@@ -486,6 +497,9 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
                      | None -> None)
                   ; (match Wire.get "outliner-op" data with
                      | Some o -> Some (Wire.keyword "outliner-op", o)
+                     | None -> None)
+                  ; (match Wire.get "tx-id" data with
+                     | Some id -> Some (Wire.keyword "tx-id", id)
                      | None -> None)
                   ; Some (Wire.keyword "tx-data", tx_data) ]))
     in

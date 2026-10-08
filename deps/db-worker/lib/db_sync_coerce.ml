@@ -97,10 +97,12 @@ let tx_entry v =
 
 let tx_log_entry v =
   let kvs = map_kv v in
+  ignore (opt (Wire.Map kvs) "tx-id" as_uuid);
   ignore (req (Wire.Map kvs) "t" as_int);
   ignore (req (Wire.Map kvs) "tx" as_str);
   ignore (optm (Wire.Map kvs) "outliner-op" as_kw);
-  Wire.Map (norm_field kvs "outliner-op" maybe_kw)
+  Wire.Map (norm_field (norm_field kvs "outliner-op" maybe_kw)
+              "tx-id" (fun v -> Wire.Uuid (as_uuid v)))
 
 let coerce_seq elem xs = List.map elem xs
 
@@ -148,6 +150,7 @@ let tx_reject v =
     err (Printf.sprintf "tx-reject reason %s" reason) v;
   ignore (opt m "t" as_int);
   ignore (opt m "error-detail" as_str);
+  ignore (opt m "retryable" as_bool);
   ignore (opt m "data" as_str);
   Wire.Map
     (norm_field

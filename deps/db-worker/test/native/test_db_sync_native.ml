@@ -1628,8 +1628,9 @@ let test_flush_pending_reports_upload_response_timeout () =
       let tx_id = fresh_uuid () in
       let sent = ref [] in
       let events = ref [] in
+      let closed = ref false in
       let ws =
-        fake_ws ~on_send:(fun raw ->
+        fake_ws ~on_close:(fun () -> closed := true) ~on_send:(fun raw ->
             sent := !sent @ [ Json_codec.parse raw ]) ()
       in
       let client = mk_client ~ws () in
@@ -1660,6 +1661,9 @@ let test_flush_pending_reports_upload_response_timeout () =
               check "timeout 2min" (!timeout_ms = Some (2 * 60 * 1000));
               check "timeout cb set" (!timeout_cb <> None);
               (Option.get !timeout_cb) ();
+              check "timed-out connection closes for journal reconciliation" !closed;
+              check "unacknowledged edit remains pending"
+                (List.length (Sync_apply.pending_txs test_repo ()) = 1);
               check "1 event" (List.length !events = 1);
               let msg, data, extra = List.hd !events in
               check "source db-sync"
@@ -15114,9 +15118,260 @@ let test_upload_rebase_releases_temporary_db outcome () =
           Gc.full_major ();
           check "temporary database can be collected" (not (Weak.check temporary_db 0))))
 
+let test_retryable_reject_preserves_dependent_edits () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, parent, _, _, _ = setup_parent_child () in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          let uuid = fresh_uuid () in
+          ignore (Outliner_core.insert_blocks_conn display
+                    [ [ "block/uuid", Uuid uuid; "block/title", String "new note" ] ]
+                    (Block_map.of_entity parent)
+                    { Outliner_core.default_insert_opts with sibling = false; keep_uuid = true }
+                    [ "sibling?", Bool false; "keep-uuid?", Bool true ]);
+          let block = Option.get (ent_by_block_uuid (Conn.db display) uuid) in
+          ignore (Outliner_core.save_block_conn display
+                    (Block_map.put (Block_map.of_entity block) "block/title"
+                       (String "important unsynced text"))
+                    Outliner_core.default_save_opts Block_map.empty);
+          let original = Sync_apply.pending_txs test_repo () in
+          let closed = ref false in
+          let ws = fake_ws ~on_close:(fun () -> closed := true) () in
+          let client = mk_client ~ws () in
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 0;
+          await_unit (Sync_apply.flush_pending test_repo client);
+          ignore (expect_reject_error (fun () ->
+              Sync_handle_message.handle_message test_repo client
+                (msg_json
+                   [ "type", Wire.String "tx/reject"; "reason", Wire.String "db transact failed"
+                   ; "t", Wire.Int 0; "retryable", Wire.Bool true
+                   ; "failed-tx-id", Wire.String (List.hd original).tx_id ])));
+          check "all dependent edits remain pending"
+            (List.map (fun (r : Sync_client_op.local_tx_entry) -> r.tx_id)
+               (Sync_apply.pending_txs test_repo ())
+             = List.map (fun (r : Sync_client_op.local_tx_entry) -> r.tx_id) original);
+          check "typed text remains visible"
+            (Ldb.string_value (Option.get (ent_by_block_uuid (Conn.db display) uuid))
+               "block/title" = Some "important unsynced text");
+          check "connection closes to use existing reconnect backoff" !closed;
+          let retry, sent = sent_client () in
+          await_unit (Sync_handle_message.handle_message_effect test_repo retry
+                        (msg_json [ "type", Wire.String "hello"; "t", Wire.Int 0 ]));
+          await_task !(retry.send_queue);
+          check "handshake uploads original edits in order"
+            (List.exists (fun m -> Wire.get "type" m = Some (Wire.String "tx/batch")) !sent);
+          check "both edits are retried" (List.length !(retry.inflight) = 2)))
+
+let test_reject_at_same_watermark_uploads_tail () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _, child1, child2, _ = setup_parent_child () in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          List.iter (fun child ->
+              let block = Option.get (ent_by_block_uuid (Conn.db display) (ent_block_uuid child)) in
+              ignore (Outliner_core.save_block_conn display
+                        (Block_map.put (Block_map.of_entity block) "block/title"
+                           (String "pending user text"))
+                        Outliner_core.default_save_opts Block_map.empty)) [ child1; child2 ];
+          let rows = Sync_apply.pending_txs test_repo () in
+          let first = List.hd rows and tail = List.nth rows 1 in
+          let client, sent = sent_client () in
+          Hashtbl.replace Sync_apply.repo_latest_remote_tx test_repo 0;
+          await_unit (Sync_apply.flush_pending test_repo client);
+          ignore (expect_reject_error (fun () ->
+              Sync_handle_message.handle_message test_repo client
+                (msg_json
+                   [ "type", Wire.String "tx/reject"; "reason", Wire.String "db transact failed"
+                   ; "t", Wire.Int 0; "retryable", Wire.Bool false
+                   ; "failed-tx-id", Wire.String first.tx_id
+                   ; "missing-block-uuids", Wire.Array [ Wire.String (ent_block_uuid child1) ] ])));
+          await_task !(client.send_queue);
+          sent := [];
+          await_unit (Sync_handle_message.handle_message_effect test_repo client
+                        (msg_json [ "type", Wire.String "pull/ok"; "t", Wire.Int 0
+                                  ; "txs", Wire.Array [] ]));
+          await_task !(client.send_queue);
+          check "independent tail uploads without another user edit"
+            (!(client.inflight) = [ tail.tx_id ])))
+
+let test_cleanup_keeps_unsynced_failed_edits () =
+  preserve_state (fun () ->
+      let conn, ops, _, child, _, _ = setup_parent_child () in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          let block = Option.get (ent_by_block_uuid (Conn.db display) (ent_block_uuid child)) in
+          ignore (Outliner_core.save_block_conn display
+                    (Block_map.put (Block_map.of_entity block) "block/title"
+                       (String "recoverable user content"))
+                    Outliner_core.default_save_opts Block_map.empty);
+          let row = List.hd (Sync_apply.pending_txs test_repo ()) in
+          ignore (Sync_apply.mark_failed_txs test_repo [ row.tx_id ]);
+          Undo_redo.clear_history test_repo;
+          Endpoint_lifecycle.run_client_ops_cleanup test_repo;
+          let retained = Sync_client_op.get_local_tx_entry test_repo row.tx_id in
+          check "failed payload survives cleanup without undo protection"
+            (match retained with Some r -> wire_equal r.tx row.tx | None -> false);
+          let path = Filename.temp_file "sync-failed-content-" ".sqlite" in
+          Sys.remove path;
+          Fun.protect (fun () ->
+              Sqlite.backup ops ~dst_path:path;
+              let reopened = Sqlite.open_db ~path in
+              Fun.protect (fun () ->
+                  Hashtbl.replace Sync_state.client_ops_conns test_repo reopened;
+                  check "failed content survives reopening the outbox"
+                    (match Sync_client_op.get_local_tx_entry test_repo row.tx_id with
+                     | Some r -> wire_equal r.tx row.tx
+                     | None -> false))
+                ~finally:(fun () ->
+                  Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+                  Sqlite.close reopened)) ~finally:(fun () -> Sys.remove path)))
+
+let test_repeated_rejections_preserve_reconnect_backoff () =
+  with_large_upload (fun client _sent tx_id child ->
+      seed_client_op_txs test_repo
+        [ seed_tx ~outliner_op:"save-block" ~tx_data_v:
+            (Wire.Array [ db_add (block_uuid_lookup (entity_block_uuid child))
+                            "block/title" (Wire.String "pending retry") ]) tx_id ];
+      client.ws <- None;
+      Sync_state.db_sync_client := Some client;
+      Sync_util.auth_token_fn := (fun () -> Some "test-token");
+      Sync_auth.id_token_expired_fn := (fun _ -> false);
+      let original_connect = !Sync_client.websocket_connect_fn in
+      let on_event = ref None in
+      Fun.protect (fun () ->
+          Sync_client.websocket_connect_fn := (fun ~url:_ ~on_event:callback ->
+              on_event := Some callback;
+              fst (Db_worker_effect.wait ()));
+          with_timeout_capture (fun timer delay ->
+              ignore (Sync_client.connect test_repo client "wss://sync.test/graph" (Some "test-token"));
+              let cycle () =
+                let event = Option.get !on_event in
+                event Web_socket.Open;
+                event (Web_socket.Message (msg_json
+                    [ "type", Wire.String "hello"; "t", Wire.Int 0 ]));
+                await_task !(client.receive_queue);
+                client.inflight := [ tx_id ];
+                event (Web_socket.Message (msg_json
+                    [ "type", Wire.String "tx/reject"; "reason", Wire.String "db transact failed"
+                    ; "t", Wire.Int 0; "retryable", Wire.Bool true
+                    ; "failed-tx-id", Wire.String tx_id ]));
+                await_task !(client.receive_queue);
+                event (Web_socket.Close (1000, "retry upload"));
+                Option.get !delay
+              in
+              let first_delay = cycle () in
+              (Option.get !timer) ();
+              let second_delay = cycle () in
+              check "persistent write failure increases retry delay"
+                (first_delay < 2000 && second_delay >= 2000);
+              check "pending payload retained across reconnects"
+                (List.length (Sync_apply.pending_txs test_repo ()) = 1);
+              (Option.get !timer) ();
+              ignore (Sync_apply.mark_pending_txs_false test_repo [ tx_id ]);
+              let event = Option.get !on_event in
+              event Web_socket.Open;
+              event (Web_socket.Message (msg_json
+                  [ "type", Wire.String "hello"; "t", Wire.Int 0 ]));
+              await_task !(client.receive_queue);
+              check "caught-up client resets reconnect delay" ((!(client.reconnect)).attempt = 0)))
+        ~finally:(fun () -> Sync_client.websocket_connect_fn := original_connect))
+
+let test_lost_ack_journal_confirms_before_pending_overlay () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _, child, _, _ = setup_parent_child () in
+      let uuid = ent_block_uuid child in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          let block = Option.get (ent_by_block_uuid (Conn.db display) uuid) in
+          ignore (Outliner_core.save_block_conn display
+                    (Block_map.put (Block_map.of_entity block) "block/title" (String "first client edit"))
+                    Outliner_core.default_save_opts Block_map.empty);
+          let original = List.hd (Sync_apply.pending_txs test_repo ()) in
+          let client, sent = sent_client () in
+          let journal =
+            Wire.Array
+              [ wire_map [ "t", Wire.Int 1; "tx-id", Wire.String original.tx_id
+                         ; "tx", Wire.String (Transit_codec.to_string original.tx) ]
+              ; wire_map [ "t", Wire.Int 2; "tx-id", Wire.String (fresh_uuid ())
+                         ; "tx", Wire.String (Transit_codec.to_string (Wire.Array
+                             [ db_add (block_uuid_lookup (Wire.Uuid uuid)) "block/title"
+                                 (Wire.String "later acknowledged remote edit") ])) ] ]
+          in
+          await_unit (Sync_handle_message.handle_message_effect test_repo client
+                        (msg_json [ "type", Wire.String "hello"; "t", Wire.Int 2 ]));
+          await_task !(client.send_queue);
+          sent := [];
+          await_unit (Sync_handle_message.handle_message_effect test_repo client
+                        (msg_json [ "type", Wire.String "pull/ok"; "t", Wire.Int 2; "txs", journal ]));
+          await_task !(client.send_queue);
+          check "journal echo confirms outbox despite lost ack"
+            (Sync_apply.pending_txs test_repo () = []);
+          check "later acknowledged remote text survives"
+            (Ldb.string_value (Option.get (ent_by_block_uuid (Conn.db display) uuid)) "block/title"
+             = Some "later acknowledged remote edit");
+          check "confirmed operation is not retransmitted"
+            (not (List.exists (fun m -> Wire.get "type" m = Some (Wire.String "tx/batch")) !sent))))
+
+let test_failed_pull_does_not_confirm_journal_echo () =
+  preserve_state (fun () ->
+      wire_no_e2ee ();
+      let conn, ops, _, child, _, _ = setup_parent_child () in
+      let uuid = ent_block_uuid child in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          let display = Option.get (Worker_state.datascript_conn test_repo) in
+          let block = Option.get (ent_by_block_uuid (Conn.db display) uuid) in
+          ignore (Outliner_core.save_block_conn display
+                    (Block_map.put (Block_map.of_entity block) "block/title" (String "pending text"))
+                    Outliner_core.default_save_opts Block_map.empty);
+          let original = List.hd (Sync_apply.pending_txs test_repo ()) in
+          let client, sent = sent_client () in
+          let journal = Wire.Array
+              [ wire_map [ "t", Wire.Int 1; "tx-id", Wire.String original.tx_id
+                         ; "tx", Wire.String (Transit_codec.to_string original.tx) ]
+              ; wire_map [ "t", Wire.Int 2
+                         ; "tx", Wire.String (Transit_codec.to_string (Wire.Array
+                             [ db_add (block_uuid_lookup (Wire.Uuid (fresh_uuid ()))) "block/title"
+                                 (Wire.String "invalid missing entity") ])) ] ] in
+          await_unit (Sync_handle_message.handle_message_effect test_repo client
+                        (msg_json [ "type", Wire.String "hello"; "t", Wire.Int 2 ]));
+          await_task !(client.send_queue);
+          sent := [];
+          await_unit (Sync_handle_message.handle_message_effect test_repo client
+                        (msg_json [ "type", Wire.String "pull/ok"; "t", Wire.Int 2; "txs", journal ]));
+          await_task !(client.send_queue);
+          check "failed pull keeps the pending operation"
+            (List.exists (fun (row : Sync_client_op.local_tx_entry) -> row.tx_id = original.tx_id)
+               (Sync_apply.pending_txs test_repo ()));
+          check "failed pull keeps the confirmed watermark" (Sync_client_op.get_local_tx test_repo = Some 0);
+          check "failed pull preserves local text"
+            (Ldb.string_value (Option.get (ent_by_block_uuid (Conn.db display) uuid)) "block/title" = Some "pending text");
+          check "failed pull does not upload against an incomplete journal"
+            (not (List.exists (fun m -> Wire.get "type" m = Some (Wire.String "tx/batch")) !sent))))
+
 let () =
   Alcotest.run "db-sync-native"
-    [ ( "journal-truth-regressions"
+    [ ( "sync-failure-recovery"
+      , [ Alcotest.test_case "retryable-reject-keeps-dependent-edits" `Quick
+            test_retryable_reject_preserves_dependent_edits
+        ; Alcotest.test_case "same-watermark-reject-resumes-tail" `Quick
+            test_reject_at_same_watermark_uploads_tail
+        ; Alcotest.test_case "cleanup-retains-failed-user-content" `Quick
+            test_cleanup_keeps_unsynced_failed_edits
+        ; Alcotest.test_case "persistent-rejection-backs-off" `Quick
+            test_repeated_rejections_preserve_reconnect_backoff
+        ; Alcotest.test_case "lost-ack-keeps-later-remote-edit" `Quick
+            test_lost_ack_journal_confirms_before_pending_overlay
+        ; Alcotest.test_case "failed-pull-preserves-unconfirmed-intent" `Quick
+            test_failed_pull_does_not_confirm_journal_echo ] )
+    ; ( "journal-truth-regressions"
       , [ Alcotest.test_case "partial-reject-pulls-accepted-prefix" `Quick
             test_partial_reject_pulls_accepted_prefix
         ; Alcotest.test_case "uuid-text-title-uploads" `Quick test_uuid_text_title_uploads
