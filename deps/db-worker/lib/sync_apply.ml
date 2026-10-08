@@ -1326,12 +1326,21 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                    in
                    if dead_property_attr || missing_attr_ref then None
                    else
+                     (* Scalar UUID text is not a reference. Lookup refs
+                        still resolve strictly under every attribute. *)
+                     let value_ref_missing value =
+                       missing_lookup_refs value <> []
+                       || (match a with
+                           | Wire.Keyword attr | Wire.String attr
+                             when ref_live attr -> missing_refs_deep value <> []
+                           | _ -> false)
+                     in
                      (* cas/fn slots past position 3 escape pos-3-only
                         inspection the same way nested value refs do *)
                      let extras_missing =
                        List.length l > 4
                        && List.exists
-                            (fun x -> missing_refs_deep x <> [])
+                            value_ref_missing
                             (List.filteri (fun i _ -> i >= 4) l)
                      in
                      if extras_missing then
@@ -1339,9 +1348,7 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                          failwith "pending tx references missing ref"
                        else None
                      else if
-                       strict_refs
-                       && (missing_refs_deep v <> []
-                           || missing_lookup_refs v <> [])
+                       strict_refs && value_ref_missing v
                      then
                        failwith "pending tx references missing ref"
                      else (
@@ -1759,24 +1766,20 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
      deleted target pointed at); it is dropped for good only when it
      can't produce a wire tx at all *)
   let entries =
-    let _ =
-      match repo, conn with
+    (match repo, conn with
       | Some r, Some c ->
-          (* every missing entry gets its own rebase attempt — fold, not
-             exists: one success must not skip the rest *)
-          List.fold_left
-            (fun any id ->
+          List.iter
+            (fun id ->
                match
                  List.find_opt
                    (fun (e : Sync_client_op.pending_tx_row) ->
                       e.tx_id = id && Lazy.force e.forward_outliner_ops <> [])
                    pending
                with
-               | Some entry -> !rebase_pending_entry_fn r c entry || any
-               | None -> any)
-            false !missing_entity_tx_ids
-      | _ -> false
-    in
+               | Some entry -> ignore (!rebase_pending_entry_fn r c entry)
+               | None -> ())
+            !missing_entity_tx_ids
+      | _ -> ());
     if !missing_entity_tx_ids <> [] && conn <> None then
       (* the rebase rewrote stored .tx rows — re-read them; keep the
          caller's batch boundary. Entries whose rebase failed keep
