@@ -25,7 +25,7 @@
     "@logseq/graph-lifecycle": "file:../deps/graph-lifecycle",
     "@fastify/cors": "11.2.0",
     "@js-joda/core": "3.2.0",
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "abort-controller": "3.0.0",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
