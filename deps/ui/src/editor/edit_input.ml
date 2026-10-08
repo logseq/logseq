@@ -181,25 +181,42 @@ let delete m = function
       | Some (lo, hi) -> Edit_model.splice m lo hi ""
       | None -> m)
 
-(* vertical arrows resolve through the conduit: caret_rect of the
-   current caret, then offset_at one row up/down. No goal-column memory
-   yet — one hop per keypress from the live caret. *)
+(* vertical arrows resolve through the conduit: locate the caret's
+   visual line in line_ranges, then offset_at the midpoint of the
+   adjacent line (measured from that line's own first offset — the
+   caret bar is inset inside its line box, so a bare `r.y - 1` /
+   `r.y + r.h` still lands inside the current row and never moves).
+   No goal-column memory yet — one hop per keypress from the live
+   caret. *)
 let vertical ~conduit ~extend m d =
   match conduit.caret_rect m.Edit_model.caret with
   | None -> m
   | Some r -> (
-      let y =
+      (* same line table the boundary checks in edit_arrows use *)
+      let ranges = m.Edit_model.lines in
+      let caret_line = Edit_model.caret_line m in
+      let target =
         match d with
-        | Edit_model.Up -> r.y - 1
-        | _ -> r.y + r.h
+        | Edit_model.Up when caret_line > 0 ->
+            List.nth_opt ranges (caret_line - 1)
+        | Edit_model.Down when caret_line < List.length ranges - 1 ->
+            List.nth_opt ranges (caret_line + 1)
+        | _ -> None
       in
-      match conduit.offset_at ~x:r.x ~y with
+      match target with
       | None -> m
-      | Some off ->
-          let anchor =
-            if extend then Option.value m.anchor ~default:m.caret else off
-          in
-          Edit_model.select m ~anchor ~focus:off)
+      | Some (lo, _) -> (
+          match conduit.caret_rect lo with
+          | None -> m
+          | Some tr -> (
+              match conduit.offset_at ~x:r.x ~y:(tr.y + (tr.h / 2)) with
+              | None -> m
+              | Some off ->
+                  let anchor =
+                    if extend then Option.value m.anchor ~default:m.caret
+                    else off
+                  in
+                  Edit_model.select m ~anchor ~focus:off)))
 
 (* routed intents + host-resolved moves; every other action already ran
    through Edit_model.apply inside handle_key *)
