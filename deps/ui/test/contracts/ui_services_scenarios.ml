@@ -125,6 +125,7 @@ let run () =
         ; rm_data = (fun name -> Hashtbl.remove datasets name)
         ; reload = (fun () -> ())
         }
+    ; time = Helper_scenarios.fake_time
     }
   in
   Ui_services.install services;

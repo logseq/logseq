@@ -4,4 +4,5 @@ let () =
   let drain () = while not (Queue.is_empty queue) do Queue.take queue () done in
   let set_owner = function None -> !owner | Some value -> owner := value; value in
   Ui_task_scenarios.run ~enqueue ~drain ~set_owner ();
-  Ui_services_scenarios.run ()
+  Ui_services_scenarios.run ();
+  Helper_scenarios.run ()

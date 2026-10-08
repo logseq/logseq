@@ -38,6 +38,29 @@ type doc = {
   reload : unit -> unit;
 }
 
+(* Wall-clock fields in the host's local timezone. [month] is the
+   calendar month (1-12), [day] the day of month, [wday] the weekday
+   (0 = Sunday). of_fields must normalize overflow the way the JS Date
+   constructor/setters do (e.g. month 13 -> January of year+1,
+   day 0 -> last day of the previous month). *)
+type date_fields = {
+  year : int;
+  month : int;
+  day : int;
+  wday : int;
+  hours : int;
+  minutes : int;
+  seconds : int;
+  ms : int;
+}
+
+type time = {
+  now : unit -> float;
+  local_fields : float -> date_fields;
+  of_fields : date_fields -> float;
+  parse : string -> float option;
+}
+
 type t = {
   storage : storage;
   literal_text : string -> string;
@@ -46,6 +69,7 @@ type t = {
   theme : theme;
   nav : nav;
   doc : doc;
+  time : time;
 }
 
 val install : t -> unit
@@ -84,3 +108,8 @@ val doc_set_lang_pref : string -> unit
 val doc_set_data : string -> string -> unit
 val doc_rm_data : string -> unit
 val doc_reload : unit -> unit
+
+val time_now : unit -> float
+val time_local_fields : float -> date_fields
+val time_of_fields : date_fields -> float
+val time_parse : string -> float option

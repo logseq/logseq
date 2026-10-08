@@ -307,6 +307,92 @@ let set_lang_pref code =
    same way reload_page() is a no-op today *)
 let doc_reload () = ()
 
+(* wall-clock via Unix — mktime normalizes overflow the way the JS Date
+   constructor does (month 13 -> January, day 0 -> previous month) *)
+let local_fields ms : Ui_services.date_fields =
+  let tm = Unix.localtime (ms /. 1000.) in
+  { year = tm.Unix.tm_year + 1900
+  ; month = tm.Unix.tm_mon + 1
+  ; day = tm.Unix.tm_mday
+  ; wday = tm.Unix.tm_wday
+  ; hours = tm.Unix.tm_hour
+  ; minutes = tm.Unix.tm_min
+  ; seconds = tm.Unix.tm_sec
+  ; ms = int_of_float (Float.rem ms 1000.)
+  }
+
+let of_fields (f : Ui_services.date_fields) =
+  let tm =
+    { Unix.tm_sec = f.seconds
+    ; tm_min = f.minutes
+    ; tm_hour = f.hours
+    ; tm_mday = f.day
+    ; tm_mon = f.month - 1
+    ; tm_year = f.year - 1900
+    ; tm_wday = 0
+    ; tm_yday = 0
+    ; tm_isdst = false
+    }
+  in
+  (fst (Unix.mktime tm) *. 1000.) +. float_of_int f.ms
+
+(* the web accepts RFC 3339 and its own Date.parse shapes; here the
+   same contract covers RFC 3339, bare YYYY-MM-DD (UTC midnight, as JS
+   does), and the "Sep 30, 2026" journal-title shape *)
+let month_of_abbr =
+  [ "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep"
+  ; "Oct"; "Nov"; "Dec" ]
+
+let date_parse s =
+  match Ptime.of_rfc3339 s with
+  | Ok (pt, _, _) -> Some (Ptime.to_float_s pt *. 1000.)
+  | Error _ -> (
+      let ymd m d y =
+        match Ptime.of_date_time ((y, m, d), ((0, 0, 0), 0)) with
+        | Some pt -> Some (Ptime.to_float_s pt *. 1000.)
+        | None -> None
+      in
+      (* YYYY-MM-DD *)
+      match String.split_on_char '-' s with
+      | [ ys; ms'; ds' ] -> (
+          match
+            ( int_of_string_opt ys
+            , int_of_string_opt ms'
+            , int_of_string_opt ds' )
+          with
+          | Some y, Some m, Some d when m >= 1 && m <= 12 && d >= 1 && d <= 31 ->
+              ymd m d y
+          | _ -> None)
+      | _ -> (
+          (* "Sep 30, 2026" / "Sep 30th, 2026" *)
+          match String.index_opt s ' ' with
+          | Some sp when sp = 3 -> (
+              match String.index_opt s ',' with
+              | Some comma when comma > sp + 1 -> (
+                  let mon = String.sub s 0 sp in
+                  let rest = String.sub s (sp + 1) (comma - sp - 1) in
+                  let digits =
+                    String.sub rest 0
+                      (String.length rest
+                       - (if String.length rest > 2
+                             && Char.code rest.[String.length rest - 1] > 57
+                          then 2
+                          else 0))
+                  in
+                  match
+                    ( List.find_index
+                        (fun m -> m = mon)
+                        month_of_abbr
+                    , int_of_string_opt digits
+                    , int_of_string_opt
+                        (String.sub s (comma + 2)
+                           (String.length s - comma - 2)) )
+                  with
+                  | Some mi, Some d, Some y -> ymd (mi + 1) d y
+                  | _ -> None)
+              | _ -> None)
+          | _ -> None))
+
 let install_ui_services ~assert_owner ~request_flush =
   Ui_services.install
     { storage =
@@ -348,5 +434,18 @@ let install_ui_services ~assert_owner ~request_flush =
         ; rm_data = body_rm_data
         ; reload = doc_reload
         }
+    ; time =
+        { now = (fun () -> Unix.gettimeofday () *. 1000.)
+        ; local_fields
+        ; of_fields
+        ; parse = date_parse
+        }
     };
+  (* platform-owned singletons: bundled icon table, app icon aliases and
+     the build revision (LOGSEQ_REVISION baked by the app launcher) *)
+  Icon_data.install ();
+  Icons.set_app_aliases [ ("new-page", "file-plus") ];
+  (match Sys.getenv_opt "LOGSEQ_REVISION" with
+   | Some r -> Version.set_revision r
+   | None -> ());
   Ui_task.install { enqueue = Host.enqueue; assert_owner }

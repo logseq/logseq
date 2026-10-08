@@ -6,3 +6,24 @@
  (modes byte native melange)
  (libraries lui logseq_ui_contracts)
  (preprocess (pps lui.ppx)))
+
+; The package metadata lives outside this Dune project. Re-read it on
+; every build so changing the release version cannot leave stale
+; metadata. Single generation shared by all runtimes.
+(rule
+ (target version_gen.ml)
+ (deps (universe))
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../../tools/version_gen.exe} \"$DUNE_SOURCEROOT/../../resources/package.json\" %{target}")))
+
+; Icon-name table for the icon picker — assets/icon-names.json is
+; inside this project so it stays a tracked dep. Single generation
+; shared by all runtimes.
+(rule
+ (target icon_names_data.ml)
+ (deps ../../assets/icon-names.json)
+ (action
+  (run %{exe:../../tools/icon_names_gen.exe} %{deps} %{target})))
