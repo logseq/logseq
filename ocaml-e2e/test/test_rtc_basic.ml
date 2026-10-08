@@ -21,6 +21,14 @@ let () =
       Js.Promise.all2
         (Util.login_test_account env1, Util.login_test_account env2)
     in
+    (* the remote-graphs section (and its Refresh button) only renders
+       when the account already has remote graphs — on a fresh local
+       sync server there are none, so create the rtc graph first *)
+    let* () =
+      Graph.new_graph env1 graph_name ~enable_sync:true ~graph_e2ee:false
+        ()
+    in
+    let* () = Graph.wait_for_remote_graph env2 graph_name in
     (* remote graph refresh waits until the button is enabled *)
     let* () =
       let page = Env.page env2 in
@@ -48,10 +56,6 @@ let () =
       Js.Promise.resolve ()
     in
     let* () =
-      Graph.new_graph env1 graph_name ~enable_sync:true ~graph_e2ee:false ()
-    in
-    let* () =
-      let* () = Graph.wait_for_remote_graph env2 graph_name in
       let* _v =
         Graph.switch_graph env2 graph_name ~wait_sync:true
           ~need_input_password:true

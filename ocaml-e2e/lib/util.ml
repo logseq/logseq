@@ -758,10 +758,40 @@ let input_command env command =
          else Pw.wait_for ~timeout:60000. env ".ui__popover-content")
   in
   let* () = open_palette 3 in
-  let* () = Keyboard.type_in_editor env ~delay:20. command in
   let command_item = Pw.q env "a.menu-link.chosen" in
-  (* the filtered item lags behind the palette under remote-apply churn *)
-  let* _ = E2e_assert.is_visible_l ~timeout:15000. command_item in
+  (* the filtered item lags behind the palette under remote-apply churn —
+     and keystrokes can be eaten mid-typing so the filter never matches;
+     re-type the command until the chosen item shows up *)
+  let rec type_until_chosen tries =
+    let* () = Keyboard.type_in_editor env ~delay:20. command in
+    let* ok =
+      Pw.catch_timeout
+        (Js.Promise.then_
+           (fun () -> Js.Promise.resolve true)
+           (E2e_assert.is_visible_l ~timeout:15000. command_item))
+        (fun () -> Js.Promise.resolve false)
+    in
+    if ok then Js.Promise.resolve ()
+    else if tries <= 1 then
+      (* give the slow case one final long window *)
+      E2e_assert.is_visible_l ~timeout:45000. command_item
+    else begin
+      (* partial input makes the filter match nothing forever — clear
+         the block before retyping or the commands concatenate *)
+      let* () =
+        Js.Promise.catch
+          (fun _ -> Js.Promise.resolve ())
+          (let* () =
+             Keyboard.press_in_editor env "ControlOrMeta+a"
+           in
+           Keyboard.press_in_editor env "Backspace")
+      in
+      let* () = wait_timeout env 150. in
+      let* () = Keyboard.type_in_editor env ~delay:20. "/" in
+      type_until_chosen (tries - 1)
+    end
+  in
+  let* () = type_until_chosen 2 in
   Pw.click_l command_item
 
 let set_tag ?(hidden = false) env tag =

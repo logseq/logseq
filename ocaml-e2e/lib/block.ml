@@ -832,25 +832,55 @@ let indent_outdent env ~indent =
   let* editor = Util.get_editor env in
   match editor with
   | None -> Js.Promise.reject (Failure "indent_outdent: no editor")
-  | Some e ->
-      let* x1, _y = Pw.bounding_xy_l e in
+  | Some _ ->
       let moved = if indent then ( < ) else ( > ) in
       (* the tx→render roundtrip remounts the editor mid-wait and eats
-         keypresses (frequent under live rtc); refocus and retry a few
-         times before giving up *)
-      let rec press_and_wait tries =
+         keypresses (frequent under live rtc); a page-level Tab on <body>
+         just moves focus, so target the live editor and re-read the
+         baseline each retry — the remount can also shift x without any
+         indent, so a stale x1 gives a false negative *)
+      let rec press_and_wait tries x1 =
         let* () =
-          if indent then Keyboard.tab env else Keyboard.shift_tab env
+          if indent
+          then Keyboard.press_in_editor env "Tab"
+          else Keyboard.press_in_editor env "Shift+Tab"
         in
         let* x2 = wait_for_editor_x_change env x1 moved in
-        if moved x1 x2 || tries <= 1 then Js.Promise.resolve x2
-        else
-          let* () = Pw.click env Util.editor_q_first in
-          press_and_wait (tries - 1)
+        if moved x1 x2 then Js.Promise.resolve (Some (x1, x2))
+        else if tries <= 1 then Js.Promise.resolve None
+        else begin
+          let* () =
+            Js.Promise.catch
+              (fun _ -> Js.Promise.resolve ())
+              (Pw.click env Util.editor_q_first)
+          in
+          (* fresh baseline: the current editor may sit at a different x
+             after remount churn — measure it, don't reuse x1 *)
+          let* cur = Util.get_editor env in
+          match cur with
+          | Some ce ->
+              let* nx, _ = Pw.bounding_xy_l ce in
+              press_and_wait (tries - 1) nx
+          | None -> press_and_wait (tries - 1) x1
+        end
       in
-      let* x2 = press_and_wait 3 in
-      if indent then Fest.ok (x1 < x2) Fest.expect else Fest.ok (x1 > x2) Fest.expect;
-      Js.Promise.resolve ()
+      let* x1 =
+        let* cur = Util.get_editor env in
+        match cur with
+        | Some ce -> Pw.bounding_xy_l ce
+        | None -> Js.Promise.resolve (0., 0.)
+      in
+      let* res = press_and_wait 4 (fst x1) in
+      (match res with
+       | Some (bx, x2) ->
+           if indent then Fest.ok (bx < x2) Fest.expect
+           else Fest.ok (bx > x2) Fest.expect;
+           Js.Promise.resolve ()
+       | None ->
+           Js.Promise.reject
+             (Failure
+                (Printf.sprintf "%s never moved x after 4 presses"
+                   (if indent then "indent" else "outdent"))))
 
 let indent env = indent_outdent env ~indent:true
 let outdent env = indent_outdent env ~indent:false
