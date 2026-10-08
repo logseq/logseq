@@ -125,7 +125,7 @@ let save_text_value ctx row new_title =
         D.save_block ~uuid ~title |> ignore
     | None ->
         D.create_property_text_block ~block_uuid:ctx.block_uuid ~ident
-          ~title ~new_block_id:(Platform.random_uuid ()) ()
+          ~title ~new_block_id:(Properties_services.random_uuid ()) ()
         |> ignore;
         S.refresh_all ()
 
@@ -151,10 +151,8 @@ let parse_date s =
   | _ -> None
 
 let today_day () =
-  let d = Js.Date.make () in
-  (int_of_float (Js.Date.getFullYear d) * 10000)
-  + ((int_of_float (Js.Date.getMonth d) + 1) * 100)
-  + int_of_float (Js.Date.getDate d)
+  let y, m, d = Properties_services.local_ymd_now () in
+  (y * 10000) + (m * 100) + d
 
 let set_date ctx ident day =
   (let* w = D.journal_page_by_day day in
@@ -196,16 +194,14 @@ let parse_ms (s : string) : float option =
         else (0, 0, 0)
       in
       Some
-        (Js.Date.valueOf
-           (Js.Date.make ~year:(float y) ~month:(float (m - 1))
-              ~date:(float d) ~hours:(float hh) ~minutes:(float mm)
-              ~seconds:(float ss) ()))
+        (Properties_services.local_ms_of_fields ~year:y ~month:(m - 1)
+           ~date:d ~hours:hh ~minutes:mm ~seconds:ss)
   | _ -> None
 
 let commit_date_text ctx ident ~is_datetime v =
   let v = String.trim v in
   if is_datetime then
-    match if v = "" then Some (Js.Date.now ()) else parse_ms v with
+    match if v = "" then Some (Properties_services.now_ms ()) else parse_ms v with
     | Some ms -> set_scalar ctx ~ident ~value:(W.Float ms)
     | None -> ()
   else
@@ -216,11 +212,7 @@ let commit_date_text ctx ident ~is_datetime v =
     if day > 0 then set_date ctx ident day
 
 (* ms epoch -> (y, m, d) *)
-let ymd_of_ms ms =
-  let d = Js.Date.fromFloat ms in
-  ( int_of_float (Js.Date.getFullYear d)
-  , int_of_float (Js.Date.getMonth d) + 1
-  , int_of_float (Js.Date.getDate d) )
+let ymd_of_ms ms = Properties_services.local_ymd_of_ms ms
 
 let ms_of_value = function
   | W.Float f -> Some f
@@ -559,7 +551,7 @@ let date_view ctx row : t =
                link ~style_class:"page-ref"
                  ~url:
                    ("#/page/"
-                   ^ Platform.encode_uri_component
+                   ^ Properties_services.encode_uri_component
                        (Dates.journal_title_ymd ~y ~m ~d))
                  ~target:`self_
                  ~text:(date_display (D.row_type row) value) []
@@ -854,7 +846,7 @@ let rec view ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
   let ident = D.row_ident row' |> Option.value ~default:"" in
-  if Platform.publishing () then
+  if Properties_services.publishing () then
     let rec display value =
       match value with
       | W.Set values | W.List values | W.Array values ->
