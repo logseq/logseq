@@ -31,6 +31,7 @@
  *       --include-slow    also run SLOW_TESTS (skipped by default)
  *       --exclude SUB     skip files containing SUB (repeatable)
  *       --no-rtc          skip RTC files entirely
+ *       --no-plan-check   skip the shard-plan coverage check
  *       --list            print the run plan and exit
  *       --log-dir DIR     per-file log dir (default: .parallel-logs/<ts>)
  *
@@ -111,6 +112,7 @@ const opt = {
   // verbatim instead of re-binning by timings (which drifts every run).
   plan: path.join(HERE, "shard-plan.json"),
   regenPlan: false,
+  noPlanCheck: false,
 };
 const filters = [];
 for (let i = 0; i < args.length; i++) {
@@ -132,6 +134,7 @@ for (let i = 0; i < args.length; i++) {
     opt.plan = p === "none" ? null : p;
   }
   else if (a === "--regen-plan") opt.regenPlan = true;
+  else if (a === "--no-plan-check") opt.noPlanCheck = true;
   else if (a === "--no-rtc") opt.noRtc = true;
   else if (a === "--include-slow") opt.includeSlow = true;
   else if (a === "--list") opt.listOnly = true;
@@ -437,6 +440,26 @@ function loadPlan(file) {
   return tasks.filter(taskAllowed);
 }
 
+// Sources under test/test_*.ml each compile to test/test_node/test/test_*.js.
+// When a pinned plan exists, a new source file that never made the plan
+// would silently never run — fail loudly instead.
+function missingPlanSources(planFile) {
+  const SRC_DIR = path.join(HERE, "test");
+  const srcs = [];
+  if (fs.existsSync(SRC_DIR)) {
+    for (const f of fs.readdirSync(SRC_DIR, { recursive: true })) {
+      const rel = f.toString();
+      if (/^test_.*\.ml$/.test(path.basename(rel))) {
+        srcs.push(path.basename(rel, ".ml") + ".js");
+      }
+    }
+  }
+  const planned = new Set(
+    (JSON.parse(fs.readFileSync(planFile, "utf8")).tasks ?? []).map((t) => t.file),
+  );
+  return srcs.filter((f) => !planned.has(f)).sort();
+}
+
 function savePlan(file, tasks) {
   const data = {
     tasks: tasks.map((t) => ({
@@ -459,6 +482,18 @@ async function main() {
   let allTasks;
   if (opt.plan && !opt.regenPlan && fs.existsSync(opt.plan)) {
     allTasks = loadPlan(opt.plan);
+    if (!opt.noPlanCheck) {
+      const missing = missingPlanSources(opt.plan);
+      if (missing.length) {
+        console.error(
+          `parallel-runner: ${missing.length} test source(s) under ocaml-e2e/test ` +
+            `missing from ${opt.plan}:\n` +
+            missing.map((f) => `  - ${f}`).join("\n") +
+            `\nrun with --regen-plan to rebuild the plan (or --no-plan-check to skip)`,
+        );
+        process.exit(2);
+      }
+    }
     console.log(`parallel-runner: pinned shard plan ${opt.plan}`);
   } else {
     allTasks = discover();
