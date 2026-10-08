@@ -289,8 +289,19 @@ let rec search ?(tries = 3) env text =
       let* () = double_esc env in
       let* () = wait_overlays_closed env in
       (* under rtc-parallel load the toolbar itself can lag tens of
-         seconds after the page shell mounts *)
-      let* () = Pw.wait_for env ~timeout:45000. "#search-button" in
+         seconds after the page shell mounts; if it never mounts the app
+         wedged during boot — reload once for a clean start *)
+      let* () =
+        Pw.catch_timeout
+          (Pw.wait_for env ~timeout:45000. "#search-button")
+          (fun () ->
+            let* () = Pw.refresh env in
+            let* _ =
+              E2e_assert.is_visible ~timeout:60000. env
+                "[data-testid='page title']"
+            in
+            Pw.wait_for env ~timeout:45000. "#search-button")
+      in
       let* _ = E2e_assert.in_normal_mode env in
       let* () = Pw.click env "#search-button" in
       Pw.wait_for env ".cp__cmdk-search-input"

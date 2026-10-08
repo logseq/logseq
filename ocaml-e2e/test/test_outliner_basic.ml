@@ -853,6 +853,102 @@ let () =
     let* () = delete_test_with_children env in
     Fixtures.validate_graph env)
 
+(* Forward-delete on an empty block merges the next block's text into
+   the editing block. Under load the Delete keypress can be eaten by a
+   remount before the tx is sent — verify the merge via the db title of
+   the live editing block (the DOM textarea read races the remount) and
+   re-press only while that title stays empty: re-pressing Delete on a
+   still-empty block is idempotent, so this converges to the merge or
+   fails honestly. *)
+let delete_merge_wait env expected =
+  let probe_js =
+    "(async () => { const st = \
+     logseq.api.get_state_from_store('editor/block'); const u = st && \
+     st.uuid; if (!u) return JSON.stringify({t:null}); const b = await \
+     logseq.api.get_block(u); const t = b ? (b.title || b.content || '') \
+     : null; return JSON.stringify({t: t}); })()"
+  in
+  let decode j =
+    match Js.Json.decodeString j with
+    | Some s -> (
+        match
+          try Js.Json.decodeObject (Js.Json.parseExn s) with _ -> None
+        with
+        | Some o -> (
+            match Js.Dict.get o "t" with
+            | Some v -> Js.Json.decodeString v
+            | None -> None)
+        | None -> None)
+    | None -> None
+  in
+  let rec go tries =
+    let* () = K.delete env in
+    let deadline = Js.Date.now () +. 6000. in
+    let rec poll () =
+      let* t =
+        Js.Promise.catch
+          (fun _ -> Js.Promise.resolve None)
+          (Js.Promise.then_
+             (fun j -> Js.Promise.resolve (decode j))
+             (Pw.eval_js env probe_js))
+      in
+      if t = Some expected then Js.Promise.resolve (true, t)
+      else if Js.Date.now () > deadline then
+        Js.Promise.resolve (false, t)
+      else
+        let* () = Util.wait_timeout env 120. in
+        poll ()
+    in
+    let* ok, t = poll () in
+    if ok then Js.Promise.resolve ()
+    else if tries <= 1 || (t <> None && t <> Some "") then
+      (* a non-empty wrong title means the delete landed on the wrong
+         block — re-pressing would corrupt it, so fail here *)
+      Js.Promise.reject
+        (Failure
+           (Printf.sprintf
+              "delete-merge never produced %S (title=%s)" expected
+              (Option.value ~default:"null" t)))
+    else go (tries - 1)
+  in
+  go 4
+
+(* ArrowUp onto the empty parent, verified: the press can be eaten by a
+   remount just like the Delete that follows, and deleting inside "b2"
+   would eat a character instead of merging. Re-presses immediately when
+   the editor lands on a stable non-empty block, so multi-hop moves
+   (b3 -> b2 -> empty) converge quickly. *)
+let arrow_up_to_empty env =
+  let rec go tries =
+    let* () = K.arrow_up env in
+    let deadline = Js.Date.now () +. 4000. in
+    let rec poll last_nonempty =
+      let* content = Util.get_edit_content env in
+      match content with
+      | Some "" -> Js.Promise.resolve true
+      | Some s ->
+          if last_nonempty = Some s then
+            (* landed stably on a non-empty block — need another hop *)
+            Js.Promise.resolve false
+          else
+            let* () = Util.wait_timeout env 150. in
+            poll (Some s)
+      | None ->
+          if Js.Date.now () > deadline then Js.Promise.resolve false
+          else
+            let* () = Util.wait_timeout env 120. in
+            poll last_nonempty
+    in
+    let* ok = poll None in
+    if ok then Js.Promise.resolve ()
+    else if tries <= 1 then
+      let* content = Util.edit_content env in
+      Js.Promise.reject
+        (Failure ("arrow_up never reached empty block, editing=" ^ content))
+    else go (tries - 1)
+  in
+  go 6
+
 let () =
   if Util.is_main "test_outliner_basic.js" then
   Fest.Promise.test "delete-concat-test-2-blocks" (fun () ->
@@ -860,9 +956,8 @@ let () =
     let* () = Fixtures.new_logseq_page env in
     let* () = B.new_blocks env [ ""; "b2" ] in
     let* () = B.indent env in
-    let* () = K.arrow_up env in
-    let* () = K.delete env in
-    let* _ = Util.wait_edit_content env "b2" in
+    let* () = arrow_up_to_empty env in
+    let* () = delete_merge_wait env "b2" in
     let* () = Util.exit_edit env in
     let* contents = Util.get_page_blocks_contents env in
     Fest.deep_equal (Array.to_list contents) [ "b2" ] Fest.expect;
@@ -875,10 +970,8 @@ let () =
     let* () = Fixtures.new_logseq_page env in
     let* () = B.new_blocks env [ ""; "b2"; "b3" ] in
     let* () = B.indent env in
-    let* () = K.arrow_up env in
-    let* () = K.arrow_up env in
-    let* () = K.delete env in
-    let* _ = Util.wait_edit_content env "b2" in
+    let* () = arrow_up_to_empty env in
+    let* () = delete_merge_wait env "b2" in
     let* () = Util.exit_edit env in
     let* contents = Util.get_page_blocks_contents env in
     Fest.deep_equal (Array.to_list contents) [ "b2"; "b3" ] Fest.expect;
@@ -908,9 +1001,8 @@ let () =
     let* () = B.new_blocks env [ ""; "b2" ] in
     let* () = B.indent env in
     let* () = Util.set_tag env "tag1" in
-    let* () = K.arrow_up env in
-    let* () = K.delete env in
-    let* _ = Util.wait_edit_content env "b2" in
+    let* () = arrow_up_to_empty env in
+    let* () = delete_merge_wait env "b2" in
     let* () = Util.exit_edit env in
     let* _ =
       Assert.is_visible env ".ls-block a.tag:has-text('tag1')"
