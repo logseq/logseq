@@ -588,7 +588,11 @@ let strip_datom_tx (item : Wire.t) : Wire.t =
       | _ -> item)
   | _ -> item
 
-type server_tx = { srv_t : int; srv_tx : Wire.t list }
+type server_tx =
+  { srv_t : int
+  ; srv_tx : Wire.t list
+  ; srv_tx_id : Wire.t option
+  ; srv_outliner_op : Wire.t option }
 
 type server =
   { mutable srv_counter : int
@@ -604,6 +608,17 @@ let server_pull (server : server) (since : int) : Wire.t list list =
        if stx.srv_t > since then
          Some (List.map strip_datom_tx stx.srv_tx)
        else None)
+    server.srv_txs
+
+let server_pull_entries (server : server) (since : int) : Wire.t list =
+  List.filter_map
+    (fun stx ->
+       if stx.srv_t <= since then None
+       else Some (Wire.Map
+           ([ kw "t", Wire.Int stx.srv_t
+            ; kw "tx-data", Wire.List (List.map strip_datom_tx stx.srv_tx) ]
+            @ (match stx.srv_tx_id with Some id -> [ kw "tx-id", id ] | None -> [])
+            @ (match stx.srv_outliner_op with Some op -> [ kw "outliner-op", op ] | None -> []))))
     server.srv_txs
 
 (* cljs server-upload! — returns {:accepted? :t} *)
@@ -703,7 +718,10 @@ let server_upload_bang (server : server) (t_before : int)
         in
         let next_t = server.srv_counter + 1 in
         server.srv_counter <- next_t;
-        server.srv_txs <- server.srv_txs @ [ { srv_t = next_t; srv_tx = normalized } ])
+        server.srv_txs <- server.srv_txs @
+          [ { srv_t = next_t; srv_tx = normalized
+            ; srv_tx_id = Wire.get "tx-id" tx_entry
+            ; srv_outliner_op = Wire.get "outliner-op" tx_entry } ])
       tx_entries
   end;
   (!accepted, server.srv_counter)
@@ -3842,40 +3860,45 @@ type upload_outcome =
    cljs apply-tx-entry! runs tx-sanitize with flags keyed on the entry's
    outliner-op before transacting *)
 let chaos_apply_entry (server : server) (tx_entry : Wire.t) : unit =
-  let tx_data =
-    match Wire.get "tx-data" tx_entry with
-    | Some w -> tx_items_of w
-    | None -> []
-  in
-  let op =
-    match Wire.get "outliner-op" tx_entry with
-    | Some (Wire.Keyword s) -> s
-    | _ -> ""
-  in
-  let delete_op = op = "delete-blocks" || op = "delete-page" in
-  let tx_data =
-    List.map strip_datom_tx tx_data
-    |> List.map Ds_wire.value_of_transit
-    |> Db_sync_tx_sanitize.sanitize_tx (Conn.db server.srv_conn)
-         ~drop_missing_retract_ops:(delete_op || op = "fix")
-         ~drop_ops_targeting_retracted_entities:delete_op
-         ~retract_touched_descendants:delete_op
-    |> List.map Ds_wire.transit_of_value
-  in
-  let report =
-    Db_transact.transact server.srv_conn tx_data
-      [ "op", Keyword "apply-client-tx" ]
-  in
-  let normalized =
-    match report with
-    | Some r ->
-        Sync_apply.normalize_tx_data r.db_after r.db_before r.tx_data
-    | None -> []
-  in
-  server.srv_counter <- server.srv_counter + 1;
-  server.srv_txs <-
-    server.srv_txs
-    @ [ { srv_t = server.srv_counter; srv_tx = normalized } ]
+  let tx_id = Wire.get "tx-id" tx_entry in
+  if tx_id <> None && List.exists (fun row -> row.srv_tx_id = tx_id) server.srv_txs then ()
+  else begin
+    let tx_data =
+      match Wire.get "tx-data" tx_entry with
+      | Some w -> tx_items_of w
+      | None -> []
+    in
+    let op =
+      match Wire.get "outliner-op" tx_entry with
+      | Some (Wire.Keyword s) -> s
+      | _ -> ""
+    in
+    let delete_op = op = "delete-blocks" || op = "delete-page" in
+    let tx_data =
+      List.map strip_datom_tx tx_data
+      |> List.map Ds_wire.value_of_transit
+      |> Db_sync_tx_sanitize.sanitize_tx (Conn.db server.srv_conn)
+           ~drop_missing_retract_ops:(delete_op || op = "fix")
+           ~drop_ops_targeting_retracted_entities:delete_op
+           ~retract_touched_descendants:delete_op
+      |> List.map Ds_wire.transit_of_value
+    in
+    let report =
+      Db_transact.transact server.srv_conn tx_data
+        [ "op", Keyword "apply-client-tx" ]
+    in
+    let normalized =
+      match report with
+      | Some r ->
+          Sync_apply.normalize_tx_data r.db_after r.db_before r.tx_data
+      | None -> []
+    in
+    server.srv_counter <- server.srv_counter + 1;
+    server.srv_txs <-
+      server.srv_txs
+      @ [ { srv_t = server.srv_counter; srv_tx = normalized
+          ; srv_tx_id = tx_id; srv_outliner_op = Wire.get "outliner-op" tx_entry } ]
+  end
 
 let chaos_upload_bang (rng : unit -> float) (server : server)
     (tx_entries : Wire.t list) : upload_outcome =
@@ -3973,13 +3996,7 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
     in
     let server_t = server.srv_counter in
     (if local_tx < server_t then begin
-       let txs = server_pull server local_tx in
-       let remote_txs =
-         List.map
-           (fun tx_data ->
-              Wire.Map [ kw "tx-data", Wire.List tx_data ])
-           txs
-       in
+       let remote_txs = server_pull_entries server local_tx in
        await_unit (Sync_replay.apply_remote_txs repo c.c_client remote_txs);
        Sync_client_op.update_local_tx repo server_t;
        progress := true
@@ -4004,9 +4021,8 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
           if res.u_applied <> [] && rand_int_bang rng 16 = 0 then begin
             (* lost response: the server committed the prefix but the
                upload reply never reached the client — pending rows stay
-               queued verbatim and will be re-uploaded (and re-applied
-               server-side) once the client is back, so the server must
-               be idempotent on replay. The client may also die (conn
+               queued until a journal echo confirms their tx ids. The
+               server deduplicates any retransmission. The client may die (conn
                close+reopen, queue persisted) or drop offline here. *)
             progress := true;
             (if rand_int_bang rng 2 = 0 then
@@ -4016,37 +4032,13 @@ let chaos_sync_client_bang (rng : unit -> float) (server : server)
           end
           else if not res.u_stale then begin
              (if res.u_applied <> [] then begin
-                (* journal truth: own txs reach the server conn only via
-                   the journal echo — un-pend the applied ids first so
-                   they leave the projection overlay before the echo
-                   lands (single rebuild, no double-apply) *)
-                ignore
-                  (Sync_apply.mark_pending_txs_false ~rebuild:false repo
-                     res.u_applied);
-                let own_txs =
-                  server_pull server local_tx'
-                  |> List.filteri (fun i _ ->
-                         i < List.length res.u_applied)
-                in
-                let own_remote =
-                  List.map
-                    (fun tx_data ->
-                       Wire.Map [ kw "tx-data", Wire.List tx_data ])
-                    own_txs
-                in
+                (* Confirm only through a successfully applied journal echo,
+                   including empty entries and duplicate upload acknowledgements. *)
+                let own_remote = server_pull_entries server local_tx' in
                 await_unit
                   (Sync_replay.apply_remote_txs repo c.c_client
                      own_remote);
-                (* advance local_tx only over the window this batch's
-                   applied entries actually occupy: the applied prefix
-                   journaled contiguously from local_tx'+1 — other
-                   clients' entries in the same window sit before or
-                   after it, not inside. Using server.srv_counter would
-                   skip remote txs journaled after our prefix — they
-                   must stay above the watermark so the next pull
-                   delivers them *)
-                Sync_client_op.update_local_tx repo
-                  (local_tx' + List.length res.u_applied);
+                Sync_client_op.update_local_tx repo server.srv_counter;
                 progress := true
               end);
              (match res.u_failed with
@@ -4096,6 +4088,9 @@ let chaos_run_seed (repos : string list) (seed : int) : unit =
          repo, { conn; ops_conn = Some ops_db })
        (List.combine repos (List.combine conns ops)))
     (fun () ->
+      (* These fresh server images contain no pending overlay to unapply.
+         Production initial split records this before subsequent restarts. *)
+      List.iter Sync_client_op.mark_pending_unapply_done repos;
       let { repro; restore } = install_invalid_tx_repro_bang seed history in
       Fun.protect ~finally:restore (fun () ->
           let clients =
@@ -4200,22 +4195,10 @@ let chaos_run_seed (repos : string list) (seed : int) : unit =
              | None -> ());
             chaos_sync_loop_bang rng server clients
           done;
-          (* drain: everyone online, then a plain pass to settle the
-             remainder and run the shared convergence asserts *)
+          (* Settle through the same journal path, with draws that disable
+             injected failures, partial acceptance, and lost responses. *)
           List.iter (fun c -> c.c_online <- true) clients;
-          chaos_sync_loop_bang rng server clients;
-          (* the chaos uploader may re-mark a client offline mid-drain
-             (lost-upload-response fault injection) — force them back
-             online for the deterministic settle *)
-          List.iter (fun c -> c.c_online <- true) clients;
-          let sims =
-            List.map
-              (fun c ->
-                { repo = c.c_repo; conn = c.c_conn; client = c.c_client
-                ; online = c.c_online; gen_uuid = c.c_gen })
-              clients
-          in
-          sync_loop_bang server sims;
+          chaos_sync_loop_bang (fun () -> 0.99) server clients;
           assert_no_invalid_tx_bang seed history repro;
           List.iter
             (fun c ->
@@ -4313,6 +4296,9 @@ let test_three_clients_chaos_property_sim () =
     Printf.eprintf "[chaos3] running seed=%d\n%!" seed;
     chaos_run_seed [ repo_a; repo_b; repo_c ] seed
   done
+
+let test_three_clients_missing_reference_seeds () =
+  List.iter (chaos_run_seed [ repo_a; repo_b; repo_c ]) [ 159717; 175555 ]
 
 (* ---------- tests (cljs deftest order) ---------- *)
 
@@ -7112,4 +7098,6 @@ let () =
         ; Alcotest.test_case "pending-chaos-property-sim-test" `Quick
             test_pending_chaos_property_sim
         ; Alcotest.test_case "three-clients-chaos-property-sim-test" `Quick
-            test_three_clients_chaos_property_sim ] ) ]
+            test_three_clients_chaos_property_sim
+        ; Alcotest.test_case "three-clients-missing-reference-seeds" `Quick
+            test_three_clients_missing_reference_seeds ] ) ]

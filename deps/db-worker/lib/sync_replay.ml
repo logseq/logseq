@@ -1429,9 +1429,9 @@ let rebase_pending_entry (repo : string) (conn : conn)
                ops)
        with e ->
          (match e with
-          | Dispatcher.Exn_info ("invalid rebase op", _) ->
-              (* the ops can't produce a tx on the new base at all —
-                 drop the entry for good *)
+          | e when expected_stale_rebase_error e ->
+              (* Keep the original payload for the strict upload pass
+                 to mark failed; independent entries can still upload. *)
               invalid_op := true
           | _ -> raise e));
       if !invalid_op then false

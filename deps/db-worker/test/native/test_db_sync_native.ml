@@ -15229,7 +15229,55 @@ let test_cleanup_keeps_unsynced_failed_edits () =
                      | None -> false))
                 ~finally:(fun () ->
                   Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
-                  Sqlite.close reopened)) ~finally:(fun () -> Sys.remove path)))
+                Sqlite.close reopened)) ~finally:(fun () -> Sys.remove path)))
+
+let test_upload_rebase_missing_property_ref_keeps_content_and_tail () =
+  preserve_state (fun () ->
+      let conn, ops, parent, child, _, _ = setup_parent_child () in
+      let property_id = "user.property/UploadNode" in
+      ignore (Outliner_property.upsert_property conn (Some property_id)
+                (wire_map [ "logseq.property/type", kw "node"
+                          ; "db/cardinality", kw "db.cardinality/one" ])
+                ~property_name:(Some "Upload Node") ~properties:[]);
+      let missing_uuid = fresh_uuid () and inserted_uuid = fresh_uuid () in
+      let failed_id = fresh_uuid () and tail_id = fresh_uuid () in
+      let missing_ref = block_uuid_lookup (Wire.Uuid missing_uuid) in
+      let forward_ops =
+        [ Wire.Array [ kw "insert-blocks"; Wire.Array
+            [ Wire.Array [ wire_map [ "block/uuid", Wire.Uuid inserted_uuid
+                                    ; "block/title", Wire.String "unsynced user content"
+                                    ; property_id, missing_ref ] ]
+            ; entity_block_uuid parent
+            ; wire_map [ "sibling?", Wire.Bool false; "keep-uuid?", Wire.Bool true ] ] ] ]
+      in
+      let original_tx = Wire.Array
+          [ db_add (Wire.String inserted_uuid) "block/uuid" (Wire.Uuid inserted_uuid)
+          ; db_add (Wire.String inserted_uuid) "block/title" (Wire.String "unsynced user content")
+          ; db_add (Wire.String inserted_uuid) property_id missing_ref ]
+      in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"insert-blocks"
+                ~forward_ops ~tx_data_v:original_tx failed_id
+            ; seed_tx ~created_at:2 ~outliner_op:"save-block"
+                ~tx_data_v:(Wire.Array
+                    [ db_add (block_uuid_lookup (entity_block_uuid child))
+                        "block/title" (Wire.String "independent tail") ]) tail_id ];
+          let entries, _, drops = Sync_apply.prepare_upload_tx_entries
+              ~repo:test_repo ~server_db:(Conn.db conn) (Some conn)
+              (Sync_apply.pending_tx_rows test_repo ()) in
+          check "independent tail is uploadable"
+            (List.map (wire_get_str "tx-id") entries = [ Some tail_id ]);
+          check "stale reference marks the whole entry failed"
+            (List.exists (fun d -> Wire.get "reason" d = Some (kw "missing-block-entity")
+                         && wire_get_str "tx-id" d = Some failed_id) drops);
+          ignore (Sync_apply.mark_failed_txs test_repo [ failed_id ]);
+          let retained = Option.get (Sync_client_op.get_local_tx_entry test_repo failed_id) in
+          check "original user content is retained" (wire_equal retained.tx original_tx);
+          check "semantic operation is retained" (retained.forward_outliner_ops = forward_ops);
+          check "failed entry no longer blocks the queue"
+            (List.map (fun (e : Sync_client_op.local_tx_entry) -> e.tx_id)
+               (Sync_apply.pending_txs test_repo ()) = [ tail_id ])))
 
 let test_repeated_rejections_preserve_reconnect_backoff () =
   with_large_upload (fun client _sent tx_id child ->
@@ -16154,6 +16202,8 @@ let () =
             test_hello_clears_pending_pull_marker
         ; Alcotest.test_case "tx-item-ref-block-uuids-short-ops-test"
             `Quick test_tx_item_ref_block_uuids_short_ops
+        ; Alcotest.test_case "upload-rebase-missing-property-ref-keeps-content-and-tail" `Quick
+            test_upload_rebase_missing_property_ref_keeps_content_and_tail
         ; Alcotest.test_case "prepare-upload-drops-deep-missing-refs-test"
             `Quick test_prepare_upload_drops_deep_missing_refs
         ; Alcotest.test_case
