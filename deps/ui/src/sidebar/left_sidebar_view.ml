@@ -678,14 +678,27 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
               (* cljs repo.cljs graphs-selector: repos dropdown flush
                  under the trigger, 4px left of its left edge (measured
                  on the cljs popover) *)
-              match Web_dom.query_selector ".cp__graphs-selector .item"
-              with
-              | Some el ->
-                  let r = Web_dom.el_bounding_rect el in
-                  Sidebar_state.open_repos_menu st
-                    ~x:(Web_dom.rect_left r -. 4.)
-                    ~y:(Web_dom.rect_bottom r)
-              | None -> ())
+              (* native bounding_rect fires a measure-node dom-op whose
+                 node-rect reply lands a tick later — retry while the
+                 rect is still empty instead of opening at (0,0);
+                 falls back to the raw rect if it never resolves *)
+              let rec open_at_rect tries =
+                match
+                  Web_dom.query_selector ".cp__graphs-selector .item"
+                with
+                | Some el ->
+                    let r = Web_dom.el_bounding_rect el in
+                    if Web_dom.rect_width r > 0. || tries <= 0 then
+                      Sidebar_state.open_repos_menu st
+                        ~x:(Web_dom.rect_left r -. 4.)
+                        ~y:(Web_dom.rect_bottom r)
+                    else
+                      Web_dom.set_timeout
+                        (fun () -> open_at_rect (tries - 1))
+                        32
+                | None -> ()
+              in
+              open_at_rect 4)
             (row ~key:"gsel-a" ~cross:`center ~grow:1. ~style_class:"item"
                [ row ~key:"gsel-l" ~cross:`center ~gap:4 ~grow:1.
                    [ box ~key:"gsel-th" ~style_class:"thumb"
