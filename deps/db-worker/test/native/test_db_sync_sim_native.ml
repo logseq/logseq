@@ -6237,8 +6237,13 @@ let test_pending_replay_deleted_target_fallbacks () =
             | [| Sqlite.Integer n |] :: _ -> Int64.to_int n
             | _ -> -1
           in
-          check "move + entity-position-ref txs marked failed"
-            (failed_count = 2);
+          (* the move op's forward outliner ops rebase at upload time —
+             the semantic re-derive lands mv at the page root like the
+             insert fallbacks above, so only the raw entity-position-ref
+             tx (no forward ops to re-derive) is marked failed *)
+          check "move op rebased to page root"
+            (parent_uuid_of uuid_mv = Some base_uuid);
+          check "entity-position-ref tx marked failed" (failed_count = 1);
           check "pending queue drained"
             (Sync_apply.pending_txs repo_b () = [])))
 

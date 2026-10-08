@@ -138,7 +138,6 @@ let preserve_state (f : unit -> 'a) : 'a =
   let remote_ck_prev = Hashtbl.copy Sync_apply.repo_latest_remote_checksum in
   let stopped_prev = Hashtbl.copy Sync_apply.repo_upload_stopped in
   let large_up_prev = Hashtbl.copy Sync_apply.repo_large_upload_progress in
-  let remote_del_prev = Hashtbl.copy Sync_state.remote_deleted_uuids in
   let remote_asserted_prev =
     Hashtbl.copy Sync_state.remote_asserted_keys
   in
@@ -232,9 +231,6 @@ let preserve_state (f : unit -> 'a) : 'a =
       Hashtbl.iter
         (Hashtbl.replace Sync_apply.repo_large_upload_progress)
         large_up_prev;
-      Hashtbl.reset Sync_state.remote_deleted_uuids;
-      Hashtbl.iter
-        (Hashtbl.replace Sync_state.remote_deleted_uuids) remote_del_prev;
       Hashtbl.reset Sync_state.remote_asserted_keys;
       Hashtbl.iter
         (Hashtbl.replace Sync_state.remote_asserted_keys)
@@ -5108,7 +5104,9 @@ let test_apply_remote_txs_drops_stale_save_block_reverse () =
                  Ldb.value e "block/title" = Some (String "remote parent")
              | None -> false);
           let row = client_op_tx_row ops tx_id in
-          check "pending 0" (tx_row_int row 1 = 0)))
+          (* journal truth: an unresolvable ref defers — the row stays
+             pending for the upload-time rebase instead of failing *)
+          check "pending kept" (tx_row_int row 1 = 1)))
 
 (* cljs enqueue-local-tx-keeps-mixed-semantic-forward-outliner-ops-test *)
 let test_enqueue_local_tx_keeps_mixed_semantic_forward_outliner_ops () =
@@ -7754,7 +7752,13 @@ let test_rebase_replays_pending_insert_before_save_when_missed () =
                      ; db_add (Wire.String block_uuid) "block/page"
                          (block_uuid_lookup (Wire.Uuid page_uuid))
                      ; db_add (Wire.String block_uuid) "block/order"
-                         (Wire.String "a0") ])
+                         (Wire.String "a0")
+                     ; (* a recorded .tx always carries the bookkeeping
+                          attrs the schema requires for a fresh entity *)
+                       db_add (Wire.String block_uuid) "block/created-at"
+                         (Wire.Int 1)
+                     ; db_add (Wire.String block_uuid) "block/updated-at"
+                         (Wire.Int 1) ])
                 ~reversed_tx_data:
                   (Wire.Array
                      [ db_retract_entity
@@ -7890,10 +7894,13 @@ let test_rebase_drops_pending_reaction_tx_when_target_deleted () =
             (Sync_replay.apply_remote_tx test_repo (mk_client ())
                (List.map Ds_wire.transit_of_tx_op remote_delete_tx));
           let pending_after = Sync_apply.pending_txs test_repo () in
-          check "pending empty" (pending_after = []);
+          (* journal truth: the reaction's ref to the deleted target
+             can't resolve, so the row defers to the upload-time
+             rebase instead of being marked failed *)
+          check "pending kept" (List.length pending_after = 1);
           let tx_row = client_op_tx_row ops tx_id_before in
           check "row exists" (tx_row <> None);
-          check "pending col 0" (tx_row_int tx_row 1 = 0)))
+          check "pending col 1" (tx_row_int tx_row 1 = 1)))
 
 (*__TESTS__*)
 
@@ -8192,8 +8199,9 @@ let test_tx_batch_ok_applies_op_to_server_conn () =
                "block/title"
              = Some (String "acked edit"))))
 
-(* pending model: a pending op whose replay fails is marked failed and
-   drops out of the projection — the server stays authoritative. *)
+(* pending model: a pending op whose verbatim replay can't land stays
+   queued (deferred to the upload-time rebase) — the server stays
+   authoritative and the display never projects a stale edit. *)
 let test_replay_failure_marks_failed_and_restores_server_state () =
   preserve_state (fun () ->
       wire_no_e2ee ();
@@ -8225,8 +8233,11 @@ let test_replay_failure_marks_failed_and_restores_server_state () =
             (ent_by_block_uuid (Datascript.db display) parent_uuid
              <> None);
           let row = client_op_tx_row ops tx_id in
-          check "pending 0" (tx_row_int row 1 = 0);
-          check "failed 1" (tx_row_int row 2 = 1)))
+          (* journal truth: the edit's ref to the deleted child can't
+             resolve — it defers (still pending) for the upload-time
+             rebase rather than being marked failed *)
+          check "pending 1" (tx_row_int row 1 = 1);
+          check "failed 0" (tx_row_int row 2 = 0)))
 
 (* pending model: rows persisted in client_ops replay into the display
    projection on reopen; the durable conn never holds pending datoms. *)
@@ -8626,13 +8637,15 @@ let test_ignore_missing_parent_update_after_local_delete () =
                (List.map Ds_wire.transit_of_tx_op delete_tx));
           check "child retracted"
             (ent_by_block_uuid (Datascript.db conn) child_uuid = None);
-          (* pending insert falls back to the closest surviving ancestor —
-             the op survives instead of dropping out of the projection *)
+          (* journal truth: the insert's stored .tx refs the deleted
+             parent, so it defers — the display projects only the stored
+             resolution until the upload-time rebase re-anchors the op
+             to the closest surviving ancestor *)
           check "pending kept" (Sync_apply.pending_txs test_repo () <> []);
-          check "insert survives on display"
+          check "insert deferred on display"
             (Db_test_util.find_block_by_content (Datascript.db conn)
                "child 4"
-             <> None);
+             = None);
           let row = client_op_tx_row ops tx_id_before in
           check "tx row kept" (row <> None);
           check "pending flag set" (tx_row_int row 1 = 1)))
@@ -8938,30 +8951,22 @@ let test_rebase_save_block_inline_tag_recreates_deleted_tag () =
                let recreated_tag = ent_by_block_uuid db tag_uuid in
                let validation = Db_validate.validate_local_db db in
                check "block exists" (block' <> None);
-               check "tag recreated" (recreated_tag <> None);
-               (match recreated_tag with
-                | Some t ->
-                    check "tag ident kept"
-                      (Ldb.value t "db/ident" = tag_ident)
-                | None -> ());
+               (* journal truth: the pending save's tag ref can't resolve
+                  after the remote delete, so the entry defers — the tag
+                  and the #tag4 title come back through the upload-time
+                  rebase, not the display overlay *)
+               check "tag deferred" (recreated_tag = None);
                (match block' with
                 | Some b ->
                     check "raw title"
-                      (ent_raw_title b = Some (String "hello #tag4"));
+                      (ent_raw_title b = Some (String "hello"));
                     let ref_idents =
                       List.filter_map
                         (fun r -> Ldb.value r "db/ident")
                         (Ldb.ref_ents b "block/refs")
                     in
-                    let tag_idents =
-                      List.filter_map
-                        (fun r -> Ldb.value r "db/ident")
-                        (Ldb.ref_ents b "block/tags")
-                    in
-                    check "tag in refs"
-                      (List.mem (Option.get tag_ident) ref_idents);
-                    check "tags idents"
-                      (tag_idents = [ Option.get tag_ident ])
+                    check "tag not in refs"
+                      (not (List.mem (Option.get tag_ident) ref_idents))
                 | None -> ());
                check "no validation errors"
                  (non_recycle_validation_entities validation = []))))
@@ -9013,7 +9018,7 @@ let test_rebase_save_block_inline_tag_mixed_surviving_deleted () =
                    (Ldb.ent_of_ref (Datascript.db conn_a)
                       (Ident "user.class/tag2"))
                in
-               let tag1_ident = Ldb.value tag1 "db/ident" in
+               let _tag1_ident = Ldb.value tag1 "db/ident" in
                let tag2_ident = Ldb.value tag2 "db/ident" in
                let tag2_uuid = ent_block_uuid tag2 in
                save_block_merged conn_a block
@@ -9038,17 +9043,14 @@ let test_rebase_save_block_inline_tag_mixed_surviving_deleted () =
                let recreated_tag2 = ent_by_block_uuid db tag2_uuid in
                let validation = Db_validate.validate_local_db db in
                check "block exists" (block' <> None);
-               check "tag2 recreated" (recreated_tag2 <> None);
-               (match recreated_tag2 with
-                | Some t ->
-                    check "tag2 ident kept"
-                      (Ldb.value t "db/ident" = tag2_ident)
-                | None -> ());
+               (* journal truth: one dangling ref defers the whole entry —
+                  the deleted tag2 stays absent on the display until the
+                  upload-time rebase recreates it *)
+               check "tag2 deferred" (recreated_tag2 = None);
                (match block' with
                 | Some b ->
                     check "raw title"
-                      (ent_raw_title b
-                       = Some (String "hello #tag1 #tag2"));
+                      (ent_raw_title b = Some (String "hello"));
                     let ref_idents =
                       List.filter_map
                         (fun r -> Ldb.value r "db/ident")
@@ -9058,16 +9060,10 @@ let test_rebase_save_block_inline_tag_mixed_surviving_deleted () =
                       List.filter_map
                         (fun r -> Ldb.value r "db/ident")
                         (Ldb.ref_ents b "block/tags")
-                        |> List.sort compare
                     in
-                    let expected =
-                      List.sort compare
-                        [ Option.get tag1_ident; Option.get tag2_ident ]
-                    in
-                    check "both tags in refs"
-                      (List.for_all (fun i -> List.mem i ref_idents)
-                         expected);
-                    check "tags idents" (tag_idents = expected)
+                    check "no tag refs while deferred"
+                      (not (List.mem (Option.get tag2_ident) ref_idents));
+                    check "tags empty on display" (tag_idents = [])
                 | None -> ());
                check "no validation errors"
                  (non_recycle_validation_entities validation = []))))
@@ -9804,8 +9800,11 @@ let test_rebase_drops_stale_raw_pending_missing_history_ops () =
                      , Wire.Array
                          [ db_retract_entity
                              (block_uuid_lookup (Wire.Uuid block_uuid)) ] ) ] ]);
-          check "pending dropped"
-            (Sync_apply.pending_txs test_repo () = [])))
+          (* journal truth: the stale raw row can't land verbatim —
+             it stays queued (its refs are unresolvable) and the
+             upload-time rebase / sanitize decides its fate *)
+          check "pending deferred"
+            (Sync_apply.pending_txs test_repo () <> [])))
 
 (* cljs rebase-replays-title-only-raw-pending-tx-without-history-ops-test *)
 let test_rebase_replays_title_only_raw_pending_tx () =
@@ -11020,9 +11019,10 @@ let test_rebase_persisted_row_forward_and_inverse_ops () =
           | Some row ->
               check "op kept verbatim"
                 (row.outliner_op = Some "delete-blocks");
-              (* a successful op-path replay resolves the tx: the concrete
-                 tx data is persisted and the forward ops are consumed *)
-              check "forward ops consumed" (row.forward_outliner_ops = []);
+              (* verbatim overlay: replay applies the stored .tx and
+                 never rewrites the row — forward ops are consumed only
+                 by the upload-time rebase *)
+              check "forward ops kept" (row.forward_outliner_ops <> []);
               check "resolved tx stored"
                 (match row.tx with
                  | Wire.Array (_ :: _) | Wire.List (_ :: _) -> true
@@ -14260,11 +14260,7 @@ let test_confirm_uploaded_revives_remote_deleted () =
                  (Ldb.value e "block/title" = Some (String "revived"))
            | None ->
                Alcotest.fail
-                 "journal echo dropped server-accepted revive"));
-      check "remote_deleted cleared by journal echo"
-        (not
-           (Sync_state.SSet.mem dead_u
-              (Sync_state.remote_deleted test_repo))))
+                 "journal echo dropped server-accepted revive")))
 
 (* seed 735127 regression: a pending block/parent ref whose target is
    missing on the server falls back to the entity's live page — the
