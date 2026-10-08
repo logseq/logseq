@@ -62,6 +62,14 @@ let sync_layers (d : t) =
         || List.mem id d.dialogs)
       !layer_order
 
+(* radix FocusScope restores focus to the element that held it before
+   the modal opened when the last layer unmounts *)
+let return_focus : Web_dom.el option ref = ref None
+
+let has_layer (d : t) =
+  d.dialogs <> [] || Option.is_some d.confirm
+  || Option.is_some d.prompt || Option.is_some d.ui_request
+
 let set f =
   let s = state () in
   (* cljs settings-effect cleanup: body[data-settings-tab] is removed
@@ -69,13 +77,25 @@ let set f =
      value, so capture the next state inside the update fn. *)
   let had = List.mem "settings" (Runtime.signal_get s).dialogs in
   let removed = ref false in
+  let opened = ref false in
+  let emptied = ref false in
   Signal.update s (fun d ->
       let d' = f d in
       removed := had && not (List.mem "settings" d'.dialogs);
+      opened := (not (has_layer d)) && has_layer d';
+      emptied := has_layer d && not (has_layer d');
       sync_layers d';
       d');
   if !removed then Settings_state.deactivate ();
-  Runtime.flush ()
+  if !opened then return_focus := Web_dom.active_element ();
+  Runtime.flush ();
+  if !emptied then (
+    (match !return_focus with
+     | Some el when Web_dom.el_is_connected el ->
+         ignore
+           (Web_dom.set_timeout (fun () -> Web_dom.el_focus el) 0)
+     | _ -> ());
+    return_focus := None)
 
 let is_open name = List.mem name (value ()).dialogs
 

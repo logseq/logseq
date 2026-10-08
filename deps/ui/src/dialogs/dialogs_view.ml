@@ -77,6 +77,13 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
       | _ -> ())
     [ column ~key:("dlg-c-" ^ name)
         ~style_class:(content_cls ^ " ls-dialog-" ^ name)
+        (* base-ui DialogContent carries role=dialog + aria-modal and is
+           named by its DialogTitle (aria-labelledby); the title element
+           below carries the matching id *)
+        ~data_attrs:
+          [ ("role", "dialog")
+          ; ("aria-modal", "true")
+          ; ("aria-labelledby", "ls-dialog-title-" ^ name) ]
         (* cljs shui dialog/core: h2.ui__dialog-title (only when the
            dialog has a title) then .ui__dialog-main-content > body *)
         [ (let title = title_of name in
@@ -84,10 +91,12 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
              (* cljs renders a visually-hidden h2.ui__dialog-title (radix
                 needs a title); display:none keeps it out of the content
                 grid so it adds no 16px gap before .ui__dialog-main-content *)
-             box ~key:("dlg-t-" ^ name) ~style_class:"ui__dialog-title-empty" []
+             box ~key:("dlg-t-" ^ name) ~style_class:"ui__dialog-title-empty"
+               ~accessibility_identifier:("ls-dialog-title-" ^ name) []
            else
              heading ~key:("dlg-t-" ^ name) ~level:2
-               ~style_class:"ui__dialog-title" ~value:title [])
+               ~style_class:"ui__dialog-title" ~value:title
+               ~accessibility_identifier:("ls-dialog-title-" ^ name) [])
         ; (* scroll kind so native backends map it to their scroll view;
              the class carries overflow-y:auto on web *)
           scroll ~key:("dlg-m-" ^ name)
@@ -118,7 +127,10 @@ let confirm_view (c : Dialogs_state.confirm) =
         (* cljs ui__alert-dialog-content renders
            div[role='alertdialog'][aria-modal] — e2e confirms via
            `div[role='alertdialog'] button:text('Confirm')` *)
-        ~data_attrs:[ ("role", "alertdialog"); ("aria-modal", "true") ]
+        ~data_attrs:
+          ([ ("role", "alertdialog"); ("aria-modal", "true") ]
+           @ if c.title = "" then []
+               else [ ("aria-labelledby", "ls-confirm-title") ])
         (* cljs dialog/alert-inner: a confirm! with plain content
            renders ui__alert-dialog-main-content only — no header *)
         ( (if c.title = "" then
@@ -129,7 +141,8 @@ let confirm_view (c : Dialogs_state.confirm) =
                  ~style_class:"ui__alert-dialog-header"
                  [ heading ~key:"cfrm-t" ~level:2
                      ~style_class:"ui__alert-dialog-title"
-                     ~value:c.title [] ] ] )
+                     ~value:c.title
+                     ~accessibility_identifier:"ls-confirm-title" [] ] ] )
         (* cljs dialog-confirm! puts the description in :content, wrapped
            in div.ui__alert-dialog-main-content — a grid sibling of the
            header, not AlertDialogDescription inside it *)
@@ -141,8 +154,12 @@ let confirm_view (c : Dialogs_state.confirm) =
         @ [ row ~key:"cfrm-f" ~style_class:"ui__alert-dialog-footer"
               [ btn "cfrm-cancel" I18n.cancel `outline
                   Dialogs_state.close_confirm
-              ; btn "cfrm-ok" I18n.confirm `primary
-                  Dialogs_state.confirm
+              ; (* cljs alert dialog focuses the confirm action on open *)
+                button ~key:"cfrm-ok" ~variant:`primary ~size:`sm
+                  ~style_class:btn_style ~text:I18n.confirm
+                  ~autofocus:true
+                  ~on_press:(fun _ -> Dialogs_state.confirm ())
+                  []
               ]
           ] )
     ]
@@ -162,16 +179,22 @@ let prompt_view (p : Dialogs_state.prompt) : t =
               Dialogs_state.close_top ()
         | _ -> ())
       [ column ~key:"prmt-c" ~style_class:content_cls
+          ~data_attrs:
+            [ ("role", "dialog")
+            ; ("aria-modal", "true")
+            ; ("aria-labelledby", "ls-prompt-title") ]
           [ column ~key:"prmt-box" 
               ( (if p.desc = "" then
                    [ heading ~key:"prmt-h" ~level:3
-                       ~style_class:"ls-prompt-headline" ~value:p.title []
+                       ~style_class:"ls-prompt-headline" ~value:p.title
+                       ~accessibility_identifier:"ls-prompt-title" []
                    ]
                  else
                    (* cljs pdf-password-input: title + desc headline *)
                    [ text ~key:"prmt-t" ~value:p.title []
                    ; heading ~key:"prmt-h" ~level:3
-                       ~style_class:"ls-prompt-headline" ~value:p.desc []
+                       ~style_class:"ls-prompt-headline" ~value:p.desc
+                       ~accessibility_identifier:"ls-prompt-title" []
                    ])
               @ [ input ~key:"prmt-in"
                     ~style_class:"form-input ls-prompt-input"
