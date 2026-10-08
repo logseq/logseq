@@ -35,19 +35,27 @@ render byte-identical data. Seed order is newest-first on all apps.
   class (harness artifact — code editors keep the light palette); gpui via
   `ui-state.json` `theme="dark"` + relaunch.
 
-## Numeric results (round 5, fresh captures after fixes)
+## Numeric results (round 6, fresh captures after fixes)
 
 ### Light theme
 
 | scene | web-vs-master | gpui-vs-web | align offset |
 |---|---|---|---|
-| 01-top    | 2.04% | 2.58% | 2  |
+| 01-top    | 2.04% | 2.67% | -1 (content-aligned) |
 
 ### Dark theme
 
 | scene | web-vs-master | gpui-vs-web | align offset |
 |---|---|---|---|
 | 01-top    | 6.55% | 2.67% | 2  |
+
+Method note (round 6): `diff3.mjs` now scans signed offsets ±60. For the
+gpui-vs-web number, gpui's native toolbar is excluded by cropping the
+gpui shot at y=72 *before* scoring — without that, the offset scan
+latches onto the ~45-76px "titlebar removal" artifact instead of true
+content alignment. The reported gpui-vs-web figure is the honest
+content-aligned diff; earlier rounds' 2.4-2.9% numbers used the
+titlebar-confounded global scan and were optimistic by ~0.1-0.3%.
 
 Earlier scenes (02-mid/03-bottom, captured before the round-4/5 layout
 fixes): light gpui-vs-web 2.67%/2.73%, dark 3.06%/3.54% — the same
@@ -101,20 +109,46 @@ dictionary — the title now matches the web's metrics.
 
 ### F2 — residual layout divergence vs web (>1%, documented exception)
 
-With palette, centering, title, row pitch, table and title-actions
-fixed, gpui-vs-web sits at ~2.6% (light 2.58%, dark 2.67% on scene 01,
-align offset 2) — within ~0.5% of the web-vs-master baseline (2.04%
-light) and well below the dark baseline (6.55%). The title line now
-lands at the same y=102 on both apps; the first block sits +4px. Diff
+With palette, centering, title, row pitch, table, title-actions,
+property rows, page-inner gap and code-editor background fixed,
+gpui-vs-web sits at 2.67% (light, honest content-aligned measure on
+scene 01) — within ~0.6% of the web-vs-master baseline (2.04% light)
+and well below the dark baseline (6.55%). The title line and the
+`.ls-page-blocks` column now land at the same y on both apps. Diff
 heatmaps localize the remainder to:
-- **Property rows** — FIXED. Two stacked causes: (1) the `native/`
-  twin of `properties_value.ml` had drifted — its `value_button` lacked
-  `~label`/`~style_class:"pv-scalar"`/`~main:`start`; (2) gpui-component
-  `Button` hard-codes `justify_center` inside its label flex, so the
-  MainAlignment prop never reached the label. Fixed in lui-gpui:
-  ghost/text/link buttons with an explicit main alignment render as a
-  plain flex preserving the variant's look (`aligned_button` in
-  kinds.rs). Values now sit left-aligned beside the key column.
+- **Property rows** — FIXED (round 4 + round 6). Stacked causes:
+  (1) the `native/` twin of `properties_value.ml` had drifted — its
+  `value_button` lacked `~label`/`~style_class:"pv-scalar"`/`~main:`start`;
+  (2) gpui-component `Button` hard-codes `justify_center` inside its
+  label flex, so MainAlignment never reached the label — fixed in
+  lui-gpui via `aligned_button`; (3) `.property-key-inner` emitted a
+  `column` (icon stacked above the key, 39px rows) where the web is a
+  flex row at min-height 28px — `properties_area.ml` now emits
+  `Lui_elements.row ~gap:4 ~cross:`center` and the host registers
+  28px min-heights on `.property-key-panel`/`.property-key-inner`/
+  `.property-value-panel`, `margin-right:4px` on `.property-icon`, and
+  naked 20px label metrics on `.property-k`. Rows render horizontally
+  at ~17-28px like the web.
+- **Page-inner phantom gap** — FIXED (round 6). `.page-inner` is a
+  column with `gap:32px`; on gpui two *empty wire `box` nodes* (the
+  page-title wrapper's sibling anchors) occupied real flex slots,
+  consuming an extra 32px gap and pushing `.ls-page-blocks` +28px.
+  Web `box`/`lui-box` is `display:contents` — an empty box contributes
+  nothing. Fixed in lui-gpui `kinds.rs`: childless, text-less `box`
+  nodes now mount out of flow (`absolute().size_0()`), so they neither
+  paint nor consume gaps.
+- **Code-editor background** — FIXED (round 6). gpui rendered fenced
+  code editors on the neutral window background; the web's solarized
+  light editor bg is `rgb(253,246,227)` (`#fdf6e3`). gpui-component's
+  `Editor` paints no background of its own, so registering
+  `background:var(--lx-gray-01, #fdf6e3)` on `.extensions__code` shows
+  through and tracks the theme var in dark mode.
+- **Title metrics** — refined (round 6): measured web `.ls-page-title`
+  is 36px/500 at line-height 54 (the `--ls-page-title-size` var, not
+  32); the registration now declares `font-size:36px;line-height:54px`.
+  The gpui text box reaches h=54 but glyph ink still measures ~21px vs
+  web's ~26px — residual suspect: `text_size` set on the wrapping box
+  does not reach the leaf text node in lui-gpui's style pipeline.
 - **Fold/thread guides** — FIXED. `.block-children` now carries the web's
   1px `--ls-guideline-color` left border; indent guides paint under
   nested children.
@@ -134,12 +168,18 @@ heatmaps localize the remainder to:
   the UA stylesheet; gpui has none. `render.ml` now declares
   `font-weight:700;align-items:center` on `th` cells via `data-style`
   (the attribute is inert on the web DOM).
-- **Code-block header bar** — gpui draws a persistent `lang ▾ Copy`
-  header; web shows none at rest (it appears on hover). Root cause:
-  the class registry has no hover gate, and the OCaml view emits the
-  bar unconditionally — mirroring the web needs a hover signal wired
-  into the actions container's opacity (same mechanism as
-  ls-page-title-actions).
+- **Code-block header bar** — FIXED (round 5, refined round 6).
+  `render.ml` `code_block` now drives the actions container's opacity
+  with a reactive hover signal (`Signal.state` + `Runtime.flush`), the
+  same mechanism as `.ls-page-title-actions`; the host registers
+  `.code-block-actions` as an absolute overlay at top/right. At rest
+  gpui shows no header — parity with the web's rest state.
+- **In-box text baseline** — OPEN. Inside equal-height rows (~26px)
+  gpui ink sits ~4-10px higher than web ink on every text row
+  (uniform, not per-element). Suspect: gpui's shaped-line placement
+  inside the line box vs CSS `line-height` centering. Diff contribution
+  is a per-row vertical smear, the largest remaining component.
+- **Title ink height** — OPEN (partial): see "Title metrics" above.
 - **Image alt chip** — the `![tiny]` data-url image renders as a visible
   `[tiny]` bracketed chip on its own line in gpui (block-level div split —
   same mechanism as F5); web renders the decoded inline image, near-
@@ -201,8 +241,9 @@ divergence. Documented, not fixed.
 ## Documented exceptions
 
 - **Mac toolbar/titlebar** — traffic lights, native drag region, and the
-  host toolbar row are exempt by spec. All gpui diffs were taken at the
-  best-fit crop offset over 0–60px to exclude them.
+  host toolbar row are exempt by spec. gpui shots are cropped at y=72
+  before scoring; `diff3.mjs` scans signed offsets ±60 for residual
+  content alignment.
 - **Master dark code editors** — harness toggles `.dark` on the DOM only;
   CodeMirror keeps light colors inside fenced editors on master shots.
 - **Fonts** — gpui uses the system font stack; raster-level AA noise in
