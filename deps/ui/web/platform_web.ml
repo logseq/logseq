@@ -92,6 +92,43 @@ let local_ymd d =
   , int_of_float (Js.Date.getMonth d) + 1
   , int_of_float (Js.Date.getDate d) )
 
+(* JS Date wall-clock — local_fields/of_fields mirror the host's Date
+   getters/constructor (month is 1-12 at this boundary, JS-side 0-11) *)
+let local_fields ms : Ui_services.date_fields =
+  let d = Js.Date.fromFloat ms in
+  { year = int_of_float (Js.Date.getFullYear d)
+  ; month = int_of_float (Js.Date.getMonth d) + 1
+  ; day = int_of_float (Js.Date.getDate d)
+  ; wday = int_of_float (Js.Date.getDay d)
+  ; hours = int_of_float (Js.Date.getHours d)
+  ; minutes = int_of_float (Js.Date.getMinutes d)
+  ; seconds = int_of_float (Js.Date.getSeconds d)
+  ; ms = int_of_float (Js.Date.getMilliseconds d)
+  }
+
+let of_fields (f : Ui_services.date_fields) =
+  (* setMilliseconds returns the adjusted epoch ms; Date.make has no
+     milliseconds parameter in the binding *)
+  Js.Date.setMilliseconds ~milliseconds:(float_of_int f.ms)
+    (Js.Date.make ~year:(float_of_int f.year)
+       ~month:(float_of_int (f.month - 1)) ~date:(float_of_int f.day)
+       ~hours:(float_of_int f.hours) ~minutes:(float_of_int f.minutes)
+       ~seconds:(float_of_int f.seconds) ())
+
+let date_parse s =
+  let ms = Js.Date.getTime (Js.Date.fromString s) in
+  if Float.is_nan ms then None else Some ms
+
+(* window.__tablerChildren — resources/js/icon-data.js keeps the icon
+   children table out of main.js; the closures read the live global so
+   test fixtures that set it after install still resolve *)
+external children_table_u : Js.Json.t Js.Dict.t Js.Undefined.t
+  = "__tablerChildren"
+  [@@mel.scope "window"]
+
+external global : < logseq_revision : string Js.Undefined.t > Js.t
+  = "globalThis"
+
 let install ~request_flush =
   if Platform.local_storage_obj = None then
     invalid_arg "Browser local storage is unavailable";
@@ -135,6 +172,28 @@ let install ~request_flush =
         ; rm_data = body_rm_data
         ; reload = Platform.location_reload
         }
+    ; time =
+        { now = Js.Date.now
+        ; local_fields
+        ; of_fields
+        ; parse = date_parse
+        }
+    };
+  Version.set_revision
+    (match Js.Undefined.toOption global##logseq_revision with
+     | Some r -> r
+     | None -> "");
+  Icon_tabler_data.install
+    { get =
+        (fun name ->
+          match Js.Undefined.toOption children_table_u with
+          | Some dict -> Option.map Sdk_json.of_js (Js.Dict.get dict name)
+          | None -> None)
+    ; keys =
+        (fun () ->
+          match Js.Undefined.toOption children_table_u with
+          | Some dict -> Js.Dict.keys dict
+          | None -> [||])
     };
   Ui_task.install
     { enqueue

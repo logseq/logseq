@@ -1,9 +1,10 @@
-external json_obj : 'a Js.Dict.t -> Js.Json.t = "%identity"
-
-(* JS <-> Wire converters for the window.logseq api surface.
+(* Json <-> Wire converters for the window.logseq api surface.
    Result side mirrors logseq.sdk.utils/normalize-keyword-for-json:
    keyword -> camelCase name when ns in {block,db,file} or unqualified,
-   otherwise ":ns/name"; uuid -> string; sets -> arrays. *)
+   otherwise ":ns/name"; uuid -> string; sets -> arrays.
+
+   The output is the portable Json.t — each runtime's sdk_json adapter
+   converts it to its host JSON value at the boundary. *)
 
 let is_ns_kept ns = not (ns = "block" || ns = "db" || ns = "file")
 
@@ -45,51 +46,57 @@ let hidden_key = function
       | _ -> false)
   | _ -> false
 
+(* insert-or-replace preserving JS object semantics: an existing key
+   keeps its position, a new key appends *)
+let rec obj_set k v = function
+  | [] -> [ (k, v) ]
+  | (k', _) :: tl when k' = k -> (k, v) :: tl
+  | kv :: tl -> kv :: obj_set k v tl
+
 let rec map_key_json ?(camel = true) = function
   | Wire.Keyword s -> json_name_of_keyword ~camel s
   | Wire.String s -> s
   | Wire.Symbol s -> s
   | Wire.Uuid s -> s
-  | other -> Js.Json.stringify (json_of_wire ~camel other)
+  | other -> Json.stringify (json_of_wire ~camel other)
 
 (* entity map with uuid+title also exposes content/fullTitle *)
-and with_content_alias (w : Wire.t) (obj : Js.Json.t Js.Dict.t) =
+and with_content_alias (w : Wire.t) kvs =
   match Wire.get w "block/uuid", Wire.get w "block/title" with
-  | Some _, Some (Wire.String t) ->
-      Js.Dict.set obj "content" (Js.Json.string t);
-      if Js.Dict.get obj "fullTitle" = None then
-        Js.Dict.set obj "fullTitle" (Js.Json.string t)
-  | _ -> ()
+  | Some _, Some (Wire.String t) -> (
+      let kvs = obj_set "content" (Json.String t) kvs in
+      match List.assoc_opt "fullTitle" kvs with
+      | Some _ -> kvs
+      | None -> kvs @ [ ("fullTitle", Json.String t) ])
+  | _ -> kvs
 
-and json_of_wire ?(camel = true) (w : Wire.t) : Js.Json.t =
+and json_of_wire ?(camel = true) (w : Wire.t) : Json.t =
   match w with
-  | Wire.Nil -> Js.Json.null
-  | Wire.Bool b -> Js.Json.boolean b
-  | Wire.Int n -> Js.Json.number (float_of_int n)
-  | Wire.Int64 n -> Js.Json.number (Int64.to_float n)
-  | Wire.Float f -> Js.Json.number f
-  | Wire.String s -> Js.Json.string s
-  | Wire.Binary s -> Js.Json.string s
-  | Wire.Date_ms n -> Js.Json.number (Int64.to_float n)
-  | Wire.Uuid s | Wire.Uri s -> Js.Json.string s
+  | Wire.Nil -> Json.Null
+  | Wire.Bool b -> Json.Bool b
+  | Wire.Int n -> Json.Number (float_of_int n)
+  | Wire.Int64 n -> Json.Number (Int64.to_float n)
+  | Wire.Float f -> Json.Number f
+  | Wire.String s -> Json.String s
+  | Wire.Binary s -> Json.String s
+  | Wire.Date_ms n -> Json.Number (Int64.to_float n)
+  | Wire.Uuid s | Wire.Uri s -> Json.String s
   | Wire.Big_decimal s | Wire.Big_int s -> (
       match float_of_string_opt s with
-      | Some f -> Js.Json.number f
-      | None -> Js.Json.string s)
-  | Wire.Keyword s -> Js.Json.string (json_name_of_keyword ~camel s)
-  | Wire.Symbol s -> Js.Json.string s
+      | Some f -> Json.Number f
+      | None -> Json.String s)
+  | Wire.Keyword s -> Json.String (json_name_of_keyword ~camel s)
+  | Wire.Symbol s -> Json.String s
   | Wire.Tagged (_, v) -> json_of_wire ~camel v
   | Wire.Array xs | Wire.List xs | Wire.Set xs ->
-      Js.Json.array (Array.of_list (List.map (json_of_wire ~camel) xs))
+      Json.Array (Array.of_list (List.map (json_of_wire ~camel) xs))
   | Wire.Map kvs ->
-      let obj = Js.Dict.empty () in
-      List.iter
-        (fun (k, v) ->
-          if not (hidden_key k) then
-            Js.Dict.set obj (map_key_json ~camel k) (json_of_wire ~camel v))
-        kvs;
-      with_content_alias w obj;
-      Js.Json.object_ obj
+      kvs
+      |> List.filter_map (fun (k, v) ->
+             if hidden_key k then None
+             else Some (map_key_json ~camel k, json_of_wire ~camel v))
+      |> with_content_alias w
+      |> fun kvs -> Json.Object kvs
 
 (* sdk-utils/property-refs->ids: on every map node, values under keys
    that are :block/tags or keep-json-keyword? (ns not in {block,db,file},
@@ -141,24 +148,22 @@ let rec property_refs_to_ids (w : Wire.t) : Wire.t =
 
 let result_json_of_wire w = json_of_wire (property_refs_to_ids w)
 
-let rec wire_of_json (j : Js.Json.t) : Wire.t =
-  (* sdk handlers receive fixed arity — absent args arrive as undefined,
-     which classify mis-tags as JSONObject *)
-  if Js.typeof j = "undefined" then Wire.Nil
-  else
-    match Js.Json.classify j with
-    | Js.Json.JSONFalse -> Wire.Bool false
-    | Js.Json.JSONTrue -> Wire.Bool true
-    | Js.Json.JSONNull -> Wire.Nil
-    | Js.Json.JSONString s -> Wire.String s
-    | Js.Json.JSONNumber f ->
-        if Float.is_integer f then Wire.Int (int_of_float f)
-        else Wire.Float f
-    | Js.Json.JSONArray xs ->
-        Wire.Array (List.map wire_of_json (Array.to_list xs))
-    | Js.Json.JSONObject obj ->
-        Wire.Map
-          (List.map
-             (fun k ->
-               (Wire.String k, wire_of_json (Js.Dict.unsafeGet obj k)))
-             (Array.to_list (Js.Dict.keys obj)))
+let wire_to_string w = Json.stringify (json_of_wire w)
+
+(* host-JSON -> Wire. Object keys arrive as plain strings (they were
+   stringified on the way out); arrays arrive as Wire.Array. The
+   `undefined` slot check happens in the adapters (portable Json.t has
+   no undefined constructor). *)
+let rec wire_of_json (j : Json.t) : Wire.t =
+  match j with
+  | Json.Null -> Wire.Nil
+  | Json.Bool b -> Wire.Bool b
+  | Json.String s -> Wire.String s
+  | Json.Number f ->
+      if Float.is_integer f then Wire.Int (int_of_float f)
+      else Wire.Float f
+  | Json.Array xs ->
+      Wire.Array (List.map wire_of_json (Array.to_list xs))
+  | Json.Object kvs ->
+      Wire.Map
+        (List.map (fun (k, v) -> (Wire.String k, wire_of_json v)) kvs)

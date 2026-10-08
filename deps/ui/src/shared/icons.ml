@@ -4,11 +4,17 @@
    names in the LUI builtin set emit `~name:`x` directly; every other
    (kebab-cased) name goes through the `app:` icon registry
    (`app_icons ()` below feeds the web renderer's map, built from the
-   tabler-children table plus the `window.tablerIcons` extension pack).
-   Names found nowhere render the host's missing-glyph fallback —
-   the old `ti ti-*`/`tie tie-*` font-glyph fallback is gone (font
-   glyphs can't ride the icon kind; they'd double-render under its
-   svg mask). *)
+   tabler-children table plus the extension pack). Names found nowhere
+   render the host's missing-glyph fallback — the old `ti ti-*`/`tie
+   tie-*` font-glyph fallback is gone (font glyphs can't ride the icon
+   kind; they'd double-render under its svg mask).
+
+   Platform-owned: the extension pack (the web's `window.tablerIcons`
+   react-element bundle — absent on native hosts) is enumerated by the
+   runtime's adapter and passed to [app_icons] as `~ext`; the one
+   alias the native registry needs (its bundle lacks the extension
+   pack's "new-page" glyph) is declared via [set_app_aliases] at
+   bootstrap. *)
 
 (* builtin name -> `name (the 45-name builtin set of Lui_elements.icon) *)
 let builtin_of_name (name : string) : Lui_elements.icon option =
@@ -87,13 +93,23 @@ let kebab name =
   Buffer.contents b
 ;;
 
+(* tabler-extension (tie) names resolve through the extension pack on
+   the web; a host whose icon registry lacks those entries declares an
+   alias to the closest bundled tabler equivalent *)
+let app_aliases : (string * string) list ref = ref []
+
+let set_app_aliases aliases = app_aliases := aliases
+
 (* resolve a cljs icon name (camelCase or spaced ok) to an icon value:
    builtin names emit the builtin, everything else the app: registry *)
 let name_ref name : Lui_elements.icon =
   let n = kebab name in
   match builtin_of_name n with
   | Some b -> b
-  | None -> `app n
+  | None -> (
+      match List.assoc_opt n !app_aliases with
+      | Some a -> `app a
+      | None -> `app n)
 ;;
 
 (* extension-pack icon names — the imperative icon path in web_dom.ml
@@ -107,42 +123,6 @@ let tie_names =
   ; "open-as-page"; "page"; "page-search"; "references-hide"
   ; "references-show"; "select-cursor"; "text"; "ungroup"; "whiteboard"
   ; "whiteboard-element"; "whiteboard-search" ]
-;;
-
-external tabler_icons_u : (Js.Json.t -> Js.Json.t) Js.Dict.t Js.Undefined.t
-  = "tablerIcons"
-  [@@mel.scope "window"]
-
-let tabler_icons () =
-  Js.Undefined.toOption tabler_icons_u
-;;
-
-let string_of_prop v =
-  match Js.Json.decodeString v with
-  | Some s -> Some s
-  | None -> (
-      match Js.Json.decodeNumber v with
-      | Some n -> Some (Printf.sprintf "%g" n)
-      | None -> None)
-;;
-
-let attr_of (k, v) =
-  if k = "children" || k = "key" || k = "ref" then None
-  else
-    (* SVG attrs are case-sensitive: viewBox stays verbatim *)
-    let name =
-      match k with
-      | "className" -> "class"
-      | "viewBox" -> "viewBox"
-      | _ -> kebab k
-    in
-    Option.map (fun s -> (name, s)) (string_of_prop v)
-;;
-
-let icon_props size =
-  let d = Js.Dict.empty () in
-  Js.Dict.set d "size" (Js.Json.number size);
-  Js.Json.object_ d
 ;;
 
 (* @tabler/icons-react svg attrs (size -> width/height) *)
@@ -161,16 +141,12 @@ let tabler_svg_attrs ~size ~filled name cls : (string * string) list =
   ; ("width", Printf.sprintf "%g" size)
   ; ("height", Printf.sprintf "%g" size)
   ; ("viewBox", "0 0 24 24") ]
-  @ base @ [ ("class", "tabler-icon tabler-icon-" ^ name ^ cls) ]
+  @ base
+  @ [ ( "class"
+      , "tabler-icon tabler-icon-" ^ name
+        ^ (if cls = "" then "" else " " ^ cls) ) ]
 
 let is_filled name = String.ends_with ~suffix:"-filled" name
-
-(* `app:` icon registry for the web `icon` kind — name -> data URI of the
-   svg markup. Merges the tabler-children table with the custom
-   `window.tablerIcons` extension pack, mirroring `icon`'s lookup order
-   (ext pack wins on a name clash). *)
-external encode_uri_component : string -> string = "encodeURIComponent"
-[@@mel.scope "window"]
 
 let svg_of_children ~size name kids =
   let attrs =
@@ -191,46 +167,35 @@ let svg_of_children ~size name kids =
     (String.concat "" child_markup)
 ;;
 
-let data_uri_of_svg svg =
-  "data:image/svg+xml," ^ encode_uri_component svg
+(* encodeURIComponent — the data URIs in app_icons are consumed by the
+   icon kind verbatim on both targets, so the escaping must match the
+   JS builtin byte for byte: unreserved set is
+   A-Z a-z 0-9 - _ . ! ~ * ' ( ), everything else percent-encodes its
+   UTF-8 bytes with uppercase hex. *)
+let encode_uri_component s =
+  let unreserved c =
+    match c with
+    | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9'
+    | '-' | '_' | '.' | '!' | '~' | '*' | '\'' | '(' | ')' -> true
+    | _ -> false
+  in
+  let hexdig = "0123456789ABCDEF" in
+  let b = Buffer.create (String.length s + 16) in
+  String.iter
+    (fun c ->
+      if unreserved c then Buffer.add_char b c
+      else begin
+        let v = Char.code c in
+        Buffer.add_char b '%';
+        Buffer.add_char b hexdig.[v lsr 4];
+        Buffer.add_char b hexdig.[v land 0xF]
+      end)
+    s;
+  Buffer.contents b
 ;;
 
-(* Serialize a `window.tablerIcons` react-element tree back to svg
-   markup — same walk as `els_of_react` but producing a string. *)
-let rec markup_of_react (v : Js.Json.t) : string =
-  match Js.Json.decodeObject v with
-  | Some obj -> element_markup obj
-  | None -> (
-      match Js.Json.decodeArray v with
-      | Some arr -> String.concat "" (List.map markup_of_react (Array.to_list arr))
-      | None -> (
-          match Js.Json.decodeString v with
-          | Some s -> s
-          | None -> ""))
-
-and element_markup obj : string =
-  let tag =
-    match Option.bind (Js.Dict.get obj "type") Js.Json.decodeString with
-    | Some t -> t
-    | None -> ""
-  in
-  let props =
-    match Option.bind (Js.Dict.get obj "props") Js.Json.decodeObject with
-    | Some p -> p
-    | None -> Js.Dict.empty ()
-  in
-  let attrs =
-    List.filter_map attr_of (Array.to_list (Js.Dict.entries props))
-    |> List.map (fun (k, v) -> Printf.sprintf " %s=\"%s\"" k v)
-    |> String.concat ""
-  in
-  let children =
-    match Js.Dict.get props "children" with
-    | Some c -> markup_of_react c
-    | None -> ""
-  in
-  if tag = "" then children
-  else Printf.sprintf "<%s%s>%s</%s>" tag attrs children tag
+let data_uri_of_svg svg =
+  "data:image/svg+xml," ^ encode_uri_component svg
 ;;
 
 (* custom svgs with no tabler counterpart — registered so `app:`
@@ -272,7 +237,12 @@ let custom_icons : (string * string) list =
        14.72)\" rx=\"7.78547\" ry=\"6.13006\"/></svg>" ) ]
 ;;
 
-let app_icons () : string Lui_protocol.String_map.t =
+(* `app:` icon registry — name -> data URI of the svg markup. The base
+   is the tabler-children table; `~ext` merges the runtime's extension
+   pack (the web's window.tablerIcons walked by js_app/icons_ext.ml);
+   custom app icons come last. Later entries win on a clash, mirroring
+   the web lookup order (ext pack over the table, custom over both). *)
+let app_icons ?(ext = []) () : string Lui_protocol.String_map.t =
   let base =
     Icon_tabler_data.tabler_names ()
     |> List.filter_map (fun name ->
@@ -281,25 +251,9 @@ let app_icons () : string Lui_protocol.String_map.t =
            | kids ->
                Some (name, data_uri_of_svg (svg_of_children ~size:24. name kids)))
   in
-  let ext =
-    match tabler_icons () with
-    | None -> []
-    | Some dict ->
-        Array.to_list (Js.Dict.keys dict)
-        |> List.filter_map (fun key ->
-               if String.starts_with ~prefix:"Icon" key then
-                 match Js.Dict.get dict key with
-                 | Some f ->
-                     let name = kebab (String.sub key 4 (String.length key - 4)) in
-                     Some (name, data_uri_of_svg (markup_of_react (f (icon_props 24.))))
-                 | None -> None
-               else None)
-  in
   let custom =
     List.map (fun (k, svg) -> (k, data_uri_of_svg svg)) custom_icons
   in
-  (* later entries win on a clash: ext pack over the tabler table,
-     custom app icons over both *)
   List.fold_left
     (fun m (k, v) -> Lui_protocol.String_map.add k v m)
     Lui_protocol.String_map.empty (base @ ext @ custom)

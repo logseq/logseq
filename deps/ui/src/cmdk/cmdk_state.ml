@@ -240,7 +240,7 @@ let invoke_counts () : (string, int) Hashtbl.t =
   h
 
 let record_invoke (c : Commands_data.cmd) =
-  let ts = int_of_float (Js.Date.now ()) in
+  let ts = int_of_float (Dates.date_now ()) in
   let entry =
     Js.Json.object_
       (Js.Dict.fromList
@@ -805,7 +805,7 @@ let save_last_search (v : view) =
            , (match Option.bind v.filter filter_name with
               | Some s -> Js.Json.string s
               | None -> Js.Json.null) )
-         ; ("updated-at", Js.Json.number (Js.Date.now ())) ])
+         ; ("updated-at", Js.Json.number (Dates.date_now ())) ])
   in
   let map =
     match Platform.local_storage_get last_search_key with
@@ -1410,9 +1410,9 @@ and run_command st repo (cid : string) =
                  from the title) *)
               let title =
                 Dates.journal_title_of
-                  (Js.Date.make ~year:(float_of_int (day / 10000))
-                     ~month:(float_of_int (day / 100 mod 100 - 1))
-                     ~date:(float_of_int (day mod 100)) ())
+                  (Dates.make ~year:(day / 10000)
+                     ~month:(day / 100 mod 100)
+                     ~day:(day mod 100) ())
               in
               create_page title;
               (* cljs :journal/insert-today -> today-journal-created *)

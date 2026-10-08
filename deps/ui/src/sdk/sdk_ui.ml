@@ -13,7 +13,7 @@ let detail_obj pairs =
 let push_state a b _c _d =
   match arg_string a with
   | Some "page" -> (
-      let name = Wire.map_get_string (Sdk_convert.wire_of_json b) "name" in
+      let name = Wire.map_get_string (Sdk_convert.wire_of_json (Sdk_json.of_js b)) "name" in
       match name with
       | Some n ->
           Runtime.mark_nav ();
@@ -51,7 +51,7 @@ let show_msg a b c _d =
   in
   let key =
     match
-      Js.Json.decodeObject (Sdk_convert.json_of_wire (arg_wire c))
+      Js.Json.decodeObject (Sdk_json.to_js (Sdk_convert.json_of_wire (arg_wire c)))
     with
     | Some o -> (
         match Js.Dict.get o "key" with
@@ -133,7 +133,7 @@ let get_selected_blocks _a _b _c _d =
       in
       Js.Promise.resolve
         (Js.Json.array
-           (Array.map Sdk_convert.json_of_wire entities))
+           (Array.map (fun w -> Sdk_json.to_js (Sdk_convert.json_of_wire w)) entities))
 
 (* cljs get-current-graph -> {url, name, path}; a db graph's "path" is
    its repo id — there is no filesystem dir on the web runtime *)
@@ -162,7 +162,7 @@ let set_current_graph_configs a b c d = Sdk_config.set_configs a b c d
 let replace_state a b _c _d =
   match arg_string a with
   | Some "page" -> (
-      let name = Wire.map_get_string (Sdk_convert.wire_of_json b) "name" in
+      let name = Wire.map_get_string (Sdk_convert.wire_of_json (Sdk_json.of_js b)) "name" in
       match name with
       | Some n ->
           Runtime.mark_nav ();

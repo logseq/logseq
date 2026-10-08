@@ -11,7 +11,7 @@ let as_undefined (j : Js.Json.t) : Js.Json.t Js.Undefined.t =
 let arg_is_nil j =
   Js.Undefined.toOption (as_undefined j) = None || j == Js.Json.null
 
-let arg_wire j = if arg_is_nil j then Wire.Nil else Sdk_convert.wire_of_json j
+let arg_wire j = if arg_is_nil j then Wire.Nil else Sdk_convert.wire_of_json (Sdk_json.of_js j)
 
 let arg_string j =
   if arg_is_nil j then None else Js.Json.decodeString j
@@ -19,8 +19,8 @@ let arg_string j =
 let arg_map j = if arg_is_nil j then Wire.Map [] else arg_wire j
 
 let resolved j = Js.Promise.resolve j
-let resolved_wire w = resolved (Sdk_convert.json_of_wire w)
-let resolved_result w = resolved (Sdk_convert.result_json_of_wire w)
+let resolved_wire w = resolved (Sdk_json.to_js (Sdk_convert.json_of_wire w))
+let resolved_result w = resolved (Sdk_json.to_js (Sdk_convert.result_json_of_wire w))
 let resolved_nil = resolved Js.Json.null
 
 (* worker invoke + result->js (property-refs->ids) — every read API
@@ -28,7 +28,7 @@ let resolved_nil = resolved Js.Json.null
    compact-normalized-refs semantics) *)
 let call name args =
   let* w = Runtime.invoke name args in
-  resolved (Sdk_convert.result_json_of_wire w)
+  resolved (Sdk_json.to_js (Sdk_convert.result_json_of_wire w))
 
 
 let trim_leading s =

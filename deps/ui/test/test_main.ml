@@ -502,7 +502,7 @@ let test_dates () =
   eqs "ordinal 31" "st" (Dates.ordinal_suffix 31);
   (* 2026-09-27T12:00Z — noon UTC lands on the same calendar day in all
      real timezones *)
-  let d = Js.Date.fromFloat 1790510400000. in
+  let d = Dates.of_ms 1790510400000. in
   eqs "journal title" "Sep 27th, 2026" (Dates.journal_title_of d);
   eqi "journal day" 20260927 (Dates.journal_day_of d);
   eqi "add_days +1" 20260928
@@ -1798,13 +1798,13 @@ let test_sdk_convert () =
   (* json_of_wire: hidden keys stripped, uuid+title maps get
      content/fullTitle aliases, kept-ns keywords keep ':', sets->arrays *)
   let j =
-    Sdk_convert.json_of_wire
+    Sdk_json.to_js (Sdk_convert.json_of_wire
       (wmap
          [ "block/uuid", Wire.Uuid "u1"
          ; "block/title", Wire.String "T"
          ; "block/tx-id", Wire.Int 9
          ; "logseq.property/kind", Wire.Keyword "logseq.property.type/number"
-         ; "block.temp/x", Wire.String "tmp" ])
+         ; "block.temp/x", Wire.String "tmp" ]))
   in
   eqs "json uuid" "u1" (Option.value (json_str j "uuid") ~default:"-");
   eqs "json content alias" "T"
@@ -1816,8 +1816,8 @@ let test_sdk_convert () =
     (Option.value (json_str j ":logseq.property/kind") ~default:"-");
   (match
      json_get
-       (Sdk_convert.json_of_wire
-          (wmap [ "s", Wire.Set [ Wire.Int 1; Wire.Int 2 ] ]))
+       (Sdk_json.to_js (Sdk_convert.json_of_wire
+          (wmap [ "s", Wire.Set [ Wire.Int 1; Wire.Int 2 ] ])))
        "s"
    with
    | Some a -> (
@@ -1826,21 +1826,22 @@ let test_sdk_convert () =
        | None -> check "json set->array" false)
    | None -> check "json set->array" false);
   (* wire_of_json *)
-  check "wire undefined" (Sdk_convert.wire_of_json undefined_json = Wire.Nil);
-  check "wire int" (Sdk_convert.wire_of_json (Js.Json.number 3.0) = Wire.Int 3);
+  check "wire undefined" (Sdk_convert.wire_of_json (Sdk_json.of_js undefined_json) = Wire.Nil);
+  check "wire int" (Sdk_convert.wire_of_json (Sdk_json.of_js (Js.Json.number 3.0)) = Wire.Int 3);
   check "wire float"
-    (Sdk_convert.wire_of_json (Js.Json.number 1.5) = Wire.Float 1.5);
+    (Sdk_convert.wire_of_json (Sdk_json.of_js (Js.Json.number 1.5)) = Wire.Float 1.5);
   check "wire bool"
-    (Sdk_convert.wire_of_json (Js.Json.boolean true) = Wire.Bool true);
-  check "wire null" (Sdk_convert.wire_of_json Js.Json.null = Wire.Nil);
+    (Sdk_convert.wire_of_json (Sdk_json.of_js (Js.Json.boolean true)) = Wire.Bool true);
+  check "wire null" (Sdk_convert.wire_of_json (Sdk_json.of_js Js.Json.null) = Wire.Nil);
   check "wire string"
-    (Sdk_convert.wire_of_json (Js.Json.string "s") = Wire.String "s");
+    (Sdk_convert.wire_of_json (Sdk_json.of_js (Js.Json.string "s")) = Wire.String "s");
   check "wire obj string keys"
     (Sdk_convert.wire_of_json
-       (Js.Json.object_ (Js.Dict.fromList [ "k", Js.Json.number 1.0 ]))
+       (Sdk_json.of_js
+          (Js.Json.object_ (Js.Dict.fromList [ "k", Js.Json.number 1.0 ])))
      = Wire.Map [ (Wire.String "k", Wire.Int 1) ]);
   check "wire array"
-    (Sdk_convert.wire_of_json (Js.Json.array [| Js.Json.number 1.0 |])
+    (Sdk_convert.wire_of_json (Sdk_json.of_js (Js.Json.array [| Js.Json.number 1.0 |]))
      = Wire.Array [ Wire.Int 1 ]);
   (* key_reduces *)
   check "reduces block/tags" (Sdk_convert.key_reduces (Wire.kw "block/tags"));
@@ -2671,21 +2672,18 @@ let test_popups_state () =
     (List.length Popups_state.nlp_en_names = 10
     && List.mem "Tomorrow" Popups_state.nlp_en_names);
   let now = Dates.date_now () in
-  let ms_diff en =
-    Js.Date.getTime (Popups_state.nlp_date_of en)
-    -. Js.Date.getTime now
-  in
+  let ms_diff en = Popups_state.nlp_date_of en -. now in
   check "nlp tomorrow" (ms_diff "Tomorrow" > 86000000. && ms_diff "Tomorrow" < 87000000.);
   check "nlp yesterday" (ms_diff "Yesterday" < -86000000.);
   check "nlp next week" (ms_diff "Next week" > 604700000.);
   check "nlp today" (abs_float (ms_diff "Today") < 5000.);
   check "nlp unknown" (abs_float (ms_diff "Bogus") < 5000.);
   check "nlp next month"
-    (Js.Date.getMonth (Popups_state.nlp_date_of "Next month")
-     = mod_float (Js.Date.getMonth now +. 1.) 12.);
+    ((Dates.fields (Popups_state.nlp_date_of "Next month")).month
+     = ((Dates.fields now).month mod 12) + 1);
   check "nlp next year"
-    (Js.Date.getFullYear (Popups_state.nlp_date_of "Next year")
-     = Js.Date.getFullYear now +. 1.);
+    ((Dates.fields (Popups_state.nlp_date_of "Next year")).year
+     = (Dates.fields now).year + 1);
   (* kind mappings *)
   eqs "ac class slash" "cp__commands-slash"
     (Popups_state.ac_class_of_kind Popups_state.Slash);
@@ -3398,34 +3396,34 @@ let json_obj kvs =
 let test_sdk_convert2 () =
   (* entity maps with uuid+title gain content/fullTitle aliases *)
   let j =
-    Sdk_convert.json_of_wire
+    Sdk_json.to_js (Sdk_convert.json_of_wire
       (wmap
-         [ ("block/uuid", Wire.Uuid "u"); ("block/title", Wire.String "t") ])
+         [ ("block/uuid", Wire.Uuid "u"); ("block/title", Wire.String "t") ]))
   in
   eqs "content alias" "{\"uuid\":\"u\",\"title\":\"t\",\"content\":\"t\",\"fullTitle\":\"t\"}"
     (Js.Json.stringify j);
   (* result side: hidden keys out, tag refs reduced *)
   let rj =
-    Sdk_convert.result_json_of_wire
+    Sdk_json.to_js (Sdk_convert.result_json_of_wire
       (wmap
          [ ("block/tx-id", Wire.Int 9)
-         ; ("block/tags", Wire.Set [ wmap [ ("db/id", Wire.Int 4) ] ]) ])
+         ; ("block/tags", Wire.Set [ wmap [ ("db/id", Wire.Int 4) ] ]) ]))
   in
   eqs "result hides + reduces" "{\"tags\":[4]}"
     (Js.Json.stringify rj);
   (* wire_of_json direction *)
   let jn = Js.Json.number 3.5 in
   check "wire_of_json float"
-    (Sdk_convert.wire_of_json jn = Wire.Float 3.5);
+    (Sdk_convert.wire_of_json (Sdk_json.of_js jn) = Wire.Float 3.5);
   check "wire_of_json int"
-    (Sdk_convert.wire_of_json (Js.Json.number 4.) = Wire.Int 4);
+    (Sdk_convert.wire_of_json (Sdk_json.of_js (Js.Json.number 4.)) = Wire.Int 4);
   check "wire_of_json bool"
-    (Sdk_convert.wire_of_json (Js.Json.boolean true) = Wire.Bool true);
+    (Sdk_convert.wire_of_json (Sdk_json.of_js (Js.Json.boolean true)) = Wire.Bool true);
   check "wire_of_json null"
-    (Sdk_convert.wire_of_json Js.Json.null = Wire.Nil);
+    (Sdk_convert.wire_of_json (Sdk_json.of_js Js.Json.null) = Wire.Nil);
   check "wire_of_json string"
-    (Sdk_convert.wire_of_json (Js.Json.string "x") = Wire.String "x");
-  let jo = json_obj [ ("k", Js.Json.string "v"); ("n", Js.Json.number 2.) ] in
+    (Sdk_convert.wire_of_json (Sdk_json.of_js (Js.Json.string "x")) = Wire.String "x");
+  let jo = Sdk_json.of_js (json_obj [ ("k", Js.Json.string "v"); ("n", Js.Json.number 2.) ]) in
   check "wire_of_json object"
     (Sdk_convert.wire_of_json jo
      = Wire.Map
@@ -4125,7 +4123,144 @@ let test_scan_gate () =
   check "gate stale gen + old time"
     (Runtime.scan_gate_should g ~gen:7 ~now:1000.)
 
+(* ---- shared pure helpers (batch 3a): Unicode/date/format/conversion/
+   ordering invariants — the same assertions run natively via
+   test/contracts/helper_scenarios.ml ---- *)
+
+let test_pure_helpers () =
+  (* Fuzzy: Unicode normalization on the shared path *)
+  check "fuzzy nfkc fullwidth"
+    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "full-width"; "x" ]
+       "ＦＵＬＬ"
+     = [ "full-width" ]);
+  check "fuzzy accent fold nfc->nfd text"
+    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "cafe\xCC\x81 menu"; "x" ]
+       "café"
+     = [ "cafe\xCC\x81 menu" ]);
+  check "fuzzy accent fold nfd query"
+    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "café menu"; "x" ]
+       "cafe\xCC\x81"
+     = [ "café menu" ]);
+  eqs "fuzzy lowercase dotted-i" "i\xCC\x87" (Fuzzy.lowercase "İ");
+  eqs "fuzzy lowercase sigma final" "ας" (Fuzzy.lowercase "ΑΣ");
+  eqs "fuzzy clean_str unicode" "abcé" (Fuzzy.clean_str "A[B]C é");
+  eqs "fuzzy search_normalize folds accent" "cafe"
+    (Fuzzy.search_normalize "café");
+  eqs "fuzzy search_normalize fullwidth" "ABC"
+    (Fuzzy.search_normalize "ＡＢＣ");
+
+  (* Dates: journal title/day invariants (pure — no clock) *)
+  eqs "journal ymd" "Sep 27th, 2026" (Dates.journal_title_ymd ~y:2026 ~m:9 ~d:27);
+  eqs "journal ymd 1st" "Jan 1st, 2026" (Dates.journal_title_ymd ~y:2026 ~m:1 ~d:1);
+  eqs "journal ymd 2nd" "Jan 2nd, 2026" (Dates.journal_title_ymd ~y:2026 ~m:1 ~d:2);
+  eqs "journal ymd 3rd" "Jan 3rd, 2026" (Dates.journal_title_ymd ~y:2026 ~m:1 ~d:3);
+  eqs "journal ymd 4th" "Jan 4th, 2026" (Dates.journal_title_ymd ~y:2026 ~m:1 ~d:4);
+  eqs "journal ymd 11th" "Mar 11th, 2026" (Dates.journal_title_ymd ~y:2026 ~m:3 ~d:11);
+  eqs "journal ymd 12th" "Mar 12th, 2026" (Dates.journal_title_ymd ~y:2026 ~m:3 ~d:12);
+  eqs "journal ymd 13th" "Mar 13th, 2026" (Dates.journal_title_ymd ~y:2026 ~m:3 ~d:13);
+  eqs "journal ymd 21st" "Mar 21st, 2026" (Dates.journal_title_ymd ~y:2026 ~m:3 ~d:21);
+  eqs "journal ymd 22nd" "Mar 22nd, 2026" (Dates.journal_title_ymd ~y:2026 ~m:3 ~d:22);
+  eqs "journal ymd 23rd" "Mar 23rd, 2026" (Dates.journal_title_ymd ~y:2026 ~m:3 ~d:23);
+  check "journal parts roundtrip"
+    (Dates.journal_title_parts "Sep 27th, 2026" = Some (27, 9, 2026));
+  check "journal parts rejects bad month"
+    (Dates.journal_title_parts "Foo 1st, 2026" = None);
+  check "journal parts rejects bad suffix"
+    (Dates.journal_title_parts "Sep 27xx, 2026" = None);
+  check "is_journal_title" (Dates.is_journal_title "Sep 27th, 2026");
+  check "is_journal_title rejects plain" (not (Dates.is_journal_title "notes"));
+
+  (* Sprintf: formatting invariants + fail-fast on unsupported directives *)
+  eqs "sprintf basic" "a-1" (Sprintf.sprintf "%s-%d" "a" 1);
+  eqs "sprintf width" "    7" (Sprintf.sprintf "%5d" 7);
+  eqs "sprintf left" "7    " (Sprintf.sprintf "%-5d" 7);
+  eqs "sprintf zero-pad" "00007" (Sprintf.sprintf "%05d" 7);
+  eqs "sprintf hex" "ff" (Sprintf.sprintf "%x" 255);
+  eqs "sprintf HEX" "FF" (Sprintf.sprintf "%X" 255);
+  eqs "sprintf float" "3.14" (Sprintf.sprintf "%.2f" 3.14159);
+  eqs "sprintf pct" "%" (Sprintf.sprintf "%%");
+  eqs "sprintf arg-width" "   42" (Sprintf.sprintf "%*d" 5 42);
+  check "sprintf unsupported fails"
+    (try ignore (Sprintf.sprintf "%t" (fun _ -> "")); false
+     with Invalid_argument _ -> true);
+
+  (* Icons: kebab, builtin/app resolution, svg + data-uri encoding *)
+  eqs "kebab camel" "arrow-right" (Icons.kebab "arrowRight");
+  eqs "kebab space" "arrow-right" (Icons.kebab "arrow right");
+  eqs "kebab leading" "x" (Icons.kebab "-x");
+  check "builtin check" (Icons.name_ref "check" = `check);
+  check "app name kebabed"
+    (Icons.name_ref "arrowRightCircle" = `app "arrow-right-circle");
+  check "is_filled" (Icons.is_filled "star-filled");
+  check "is_filled neg" (not (Icons.is_filled "star"));
+  eqs "svg children"
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" \
+     height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" \
+     stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" \
+     stroke-linejoin=\"round\" class=\"tabler-icon tabler-icon-x\"><path \
+     d=\"M0 0\"></path></svg>"
+    (Icons.svg_of_children ~size:24. "x" [ ("path", [ ("d", "M0 0") ]) ]);
+  check "data uri encodes svg"
+    (Icons.data_uri_of_svg "<svg a=\"b\">"
+     = "data:image/svg+xml,%3Csvg%20a%3D%22b%22%3E");
+  check "data uri utf8 + unreserved"
+    (Icons.encode_uri_component "é!~*'()"
+     = "%C3%A9!~*'()");
+
+  (* Sdk_convert: object ordering + content/fullTitle aliasing *)
+  let wj w = Sdk_convert.wire_to_string w in
+  eqs "json order + alias appended"
+    "{\"uuid\":\"u\",\"title\":\"T\",\"content\":\"T\",\"fullTitle\":\"T\"}"
+    (wj
+       (wmap
+          [ "block/uuid", Wire.String "u"
+          ; "block/title", Wire.String "T" ]));
+  eqs "json existing content keeps slot"
+    "{\"title\":\"T\",\"uuid\":\"u\",\"content\":\"T\",\"fullTitle\":\"T\"}"
+    (wj
+       (wmap
+          [ "block/title", Wire.String "T"
+          ; "block/uuid", Wire.String "u"
+          ; "block/content", Wire.String "OLD" ]));
+  eqs "json user fullTitle wins"
+    "{\"uuid\":\"u\",\"title\":\"T\",\"fullTitle\":\"mine\",\"content\":\"T\"}"
+    (wj
+       (wmap
+          [ "block/uuid", Wire.String "u"
+          ; "block/title", Wire.String "T"
+          ; "block/fullTitle", Wire.String "mine" ]));
+  (* ref reduction: maps with db/id collapse under kept-ns + tags keys *)
+  let refw =
+    wmap
+      [ "block/tags", Wire.Map [ Wire.kw "db/id", Wire.Int 7 ]
+      ; "block/other", Wire.Map [ Wire.kw "db/id", Wire.Int 8 ]
+      ; "logseq.property/x", Wire.Map [ Wire.kw "db/id", Wire.Int 9 ] ]
+  in
+  let j = Sdk_convert.result_json_of_wire refw in
+  check "tags ref collapses"
+    ((match Json.get "tags" j with Some v -> Json.as_number v = Some 7. | None -> false));
+  (* block/other is a qualified block-ns key -> not reduced; the inner
+     map's db ns is unkept so the id key is json-named *)
+  check "qualified block-ns ref stays map"
+    (match Json.get "other" j with
+        Some o -> Json.get "id" o |> Option.map Json.as_number = Some (Some 8.)
+      | None -> false);
+  check "kept-ns ref collapses"
+    ((match Json.get ":logseq.property/x" j with Some v -> Json.as_number v = Some 9. | None -> false));
+
+  (* Icon_picker_names: the compiled-in table is populated *)
+  check "icon names populated"
+    (Array.length Icon_picker_names.items > 1000);
+  check "icon names are (display, kebab) pairs"
+    (let d, k = Icon_picker_names.items.(0) in
+     String.length d > 0 && String.length k > 0);
+
+  (* Version: generated once, populated *)
+  check "version app set" (String.length Version.app > 0);
+  ()
+
 let () =
+  test_pure_helpers ();
   Edit_model_test.run ();
   Edit_view_web_test.run ();
   test_move ();

@@ -204,7 +204,7 @@ let sdk_debug_methods : (string * api_fn) list =
 let dict_of methods =
   let d = Js.Dict.empty () in
   List.iter (fun (name, f) -> Js.Dict.set d name f) methods;
-  Sdk_convert.json_obj d
+  Sdk_json.json_obj d
 
 let jobj kv =
   let d = Js.Dict.fromList kv in
@@ -223,6 +223,6 @@ let install () =
     (jobj
        [ ("version", Js.Json.string "20230330")
        ]);
-  Js.Dict.set logseq "sdk" (Sdk_convert.json_obj sdk);
-  Worker_client.set_global "logseq" (Sdk_convert.json_obj logseq);
+  Js.Dict.set logseq "sdk" (Sdk_json.json_obj sdk);
+  Worker_client.set_global "logseq" (Sdk_json.json_obj logseq);
   if not (Platform.publishing ()) then Plugin_host.setup ()

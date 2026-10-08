@@ -746,14 +746,14 @@ let fire_db_hooks (payload : Wire.t) =
       if blocks <> [] && List.length blocks <= 1000 then (
         let tx_meta_j =
           Option.value
-            (Option.map (Sdk_convert.json_of_wire ~camel:true) tx_meta)
+            (Option.map (fun w -> Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:true w)) tx_meta)
             ~default:(Js.Json.object_ (Js.Dict.empty ()))
         in
         let blocks_j =
           Js.Json.array
             (Array.of_list
                (List.map
-                  (fun (_, b) -> Sdk_convert.json_of_wire ~camel:true b)
+                  (fun (_, b) -> Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:true b))
                   blocks))
         in
         let deleted =
@@ -778,7 +778,7 @@ let fire_db_hooks (payload : Wire.t) =
             | Wire.Uuid u when block_hook_installed u ->
                 let bp = Js.Dict.empty () in
                 Js.Dict.set bp "block"
-                  (Sdk_convert.json_of_wire ~camel:true b);
+                  (Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:true b));
                 Js.Dict.set bp "txData" (Js.Json.array [||]);
                 Js.Dict.set bp "txMeta" tx_meta_j;
                 hook_db ("block:" ^ u) (Js.Json.object_ bp) Js.Json.null

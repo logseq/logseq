@@ -2,4 +2,4 @@
  (name logseq_ui_native_services)
  (wrapped false)
  (modes byte native)
- (libraries logseq_ui_contracts threads.posix unix yojson uri))
+ (libraries logseq_ui_contracts logseq_ui_shared threads.posix unix yojson uri ptime))

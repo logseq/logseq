@@ -50,7 +50,7 @@ let get_configs a b c d =
   let keys =
     List.concat_map
       (fun arg ->
-        match Sdk_convert.wire_of_json arg with
+        match Sdk_convert.wire_of_json (Sdk_json.of_js arg) with
         | Wire.String s -> [ s ]
         | Wire.Array xs | Wire.List xs -> List.filter_map Wire.as_string xs
         | _ -> [])
@@ -65,12 +65,12 @@ let get_configs a b c d =
         | None -> Wire.Nil)
       cfg keys
   in
-  resolved (Sdk_convert.json_of_wire v)
+  resolved (Sdk_json.to_js (Sdk_convert.json_of_wire v))
 
 (* :app.setCurrentGraphConfigs {k v...} -> merge into config.edn *)
 let set_configs a _b _c _d =
   let repo = repo () in
-  match Sdk_convert.wire_of_json a with
+  match Sdk_convert.wire_of_json (Sdk_json.of_js a) with
   | Wire.Map entries ->
       let* cfg = read_config repo in
       let base =
