@@ -736,6 +736,10 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
             [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
               ~estimate_size:(fun _ -> 32.) ~initial_rows:48
+              (* cljs virtuoso overscan 254px + increase-viewport-by
+                 254px ≈ 16 rows at the 32px estimate — keeps a
+                 comparable render buffer so fast scrolls don't gap *)
+              ~overscan:16
               ~data_sig:(fun ctx ->
                 Some
                   (Signal.value
@@ -1263,8 +1267,10 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
         [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
       [ Virt_list.rows_sig ~key:Tree.block_key ~cmp:String.compare
           ~mount:(Tree.block_row_sig ~library ~scope ~virtualize:true)
-          ~initial_rows:48
-          ~estimate_size:(fun _ -> 32.) blocks_sig ]
+          ~initial_rows:48 ~estimate_size:(fun _ -> 32.)
+          (* cljs virtuoso overscan 254px + increase-viewport-by
+             254px ≈ 16 rows at the 32px estimate *)
+          ~overscan:16 blocks_sig ]
   in
   (* if_/reactive branches must mount a node — the keyed/virt choice can't be
      a dynamic child, so pick once per region mount; either renderer is

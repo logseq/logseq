@@ -369,7 +369,11 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
           | _ -> rows
         in
         Signal.set st { v_rows = rows; v_total = V.get_total_size v };
-        Runtime.flush ();
+        (* scroll-driven republishes must commit inside this task — the
+           deferred flush leaves the freshly scrolled viewport empty for
+           whole frames (white gaps); flush_now is re-entrancy-guarded
+           so a publish fired mid-flush just marks the pass dirty *)
+        Runtime.flush_now ();
         (* the last data row rendered — ask the owner for the next page
            (journals scroll-back pagination; a no-op hook on fixed-size
            lists) *)
@@ -417,6 +421,15 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
             rect_height (bounding_rect el))
           ()
       in
+      (* seed the item array with the items signal's current value before
+         the virtualizer's first window is computed — the subscription
+         below only delivers later emissions, so anything the signal
+         already holds (a splice that landed between mount and this
+         deferred attach, or an already-loaded page) would otherwise
+         leave count=0 and the spacer blank until the next publish *)
+      (match data_sig with
+       | Some s -> data := Signal.sample s
+       | None -> ());
       let v = V.make (options ()) in
       Hashtbl.replace instances list_id v;
       Hashtbl.replace key_scrollers list_id (fun key ->

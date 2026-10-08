@@ -304,8 +304,11 @@ let load_more_journals () : unit Js.Promise.t =
      let* arr =
        Js.Promise.all (Array.of_list (List.map collect_journal pages))
      in
-     (match !Runtime.current_route with
-      | Some (Model.Journals | Model.Home) ->
+     (* the model route — !Runtime.current_route is None until a
+        Navigate_to action, so on the boot journals route every load
+        would be dropped here (infinite scroll dead on first load) *)
+     (match Runtime.route () with
+      | Model.Journals | Model.Home ->
           let known =
             List.fold_left
               (fun s (p : Model.page) ->
