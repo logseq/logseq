@@ -35,23 +35,24 @@ render byte-identical data. Seed order is newest-first on all apps.
   class (harness artifact — code editors keep the light palette); gpui via
   `ui-state.json` `theme="dark"` + relaunch.
 
-## Numeric results (round 2, fresh captures after fixes)
+## Numeric results (round 5, fresh captures after fixes)
 
 ### Light theme
 
 | scene | web-vs-master | gpui-vs-web | align offset |
 |---|---|---|---|
-| 01-top    | 2.04% | 2.52% | 6  |
-| 02-mid    | 2.37% | 2.67% | 56 |
-| 03-bottom | 2.23% | 2.73% | 0  |
+| 01-top    | 2.04% | 2.58% | 2  |
 
 ### Dark theme
 
 | scene | web-vs-master | gpui-vs-web | align offset |
 |---|---|---|---|
-| 01-top    | 6.55% | 2.42% | 6  |
-| 02-mid    | 2.94% | 3.06% | 26 |
-| 03-bottom | 2.68% | 3.54% | 42 |
+| 01-top    | 6.55% | 2.67% | 2  |
+
+Earlier scenes (02-mid/03-bottom, captured before the round-4/5 layout
+fixes): light gpui-vs-web 2.67%/2.73%, dark 3.06%/3.54% — the same
+class registrations apply to them and should be re-measured when the
+fixture is re-captured.
 
 Round-1 baselines for comparison: dark gpui-vs-web was ~90% before the
 palette fix (F1); light was 2.2–2.9%.
@@ -100,9 +101,12 @@ dictionary — the title now matches the web's metrics.
 
 ### F2 — residual layout divergence vs web (>1%, documented exception)
 
-With palette, centering and title fixed, gpui-vs-web sits at ~2.3% (light 2.30%, dark 2.34% on scene 01) —
-just above the web-vs-master baseline (2.0–2.4% light). Diff heatmaps
-localize the remainder to:
+With palette, centering, title, row pitch, table and title-actions
+fixed, gpui-vs-web sits at ~2.6% (light 2.58%, dark 2.67% on scene 01,
+align offset 2) — within ~0.5% of the web-vs-master baseline (2.04%
+light) and well below the dark baseline (6.55%). The title line now
+lands at the same y=102 on both apps; the first block sits +4px. Diff
+heatmaps localize the remainder to:
 - **Property rows** — FIXED. Two stacked causes: (1) the `native/`
   twin of `properties_value.ml` had drifted — its `value_button` lacked
   `~label`/`~style_class:"pv-scalar"`/`~main:`start`; (2) gpui-component
@@ -118,8 +122,24 @@ localize the remainder to:
   content; registered `width:100%` (plus the web's 8px vertical margins).
   Cell borders/padding and the header fill already flowed through the
   `data-style` channel.
+- **Row pitch** — FIXED. gpui's text line box is ~26px where the web's
+  is 24px (16px/1.5); `.ls-block` now carries 1px vertical padding so
+  block rows pitch at the web's 28px.
+- **Title-actions strip** — FIXED. `.ls-page-title-actions` is
+  `position:absolute;top:-1.25rem` on web (no layout space, revealed on
+  hover). gpui cannot take the row out of flow inside the scroll clip,
+  so it renders at `height:0` — invisible at rest (opacity is already
+  hover-driven), buttons overhang the title on hover.
+- **Table header cells** — FIXED. Web `<th>` bold + center come from
+  the UA stylesheet; gpui has none. `render.ml` now declares
+  `font-weight:700;align-items:center` on `th` cells via `data-style`
+  (the attribute is inert on the web DOM).
 - **Code-block header bar** — gpui draws a persistent `lang ▾ Copy`
-  header; web shows none at rest (it appears on hover).
+  header; web shows none at rest (it appears on hover). Root cause:
+  the class registry has no hover gate, and the OCaml view emits the
+  bar unconditionally — mirroring the web needs a hover signal wired
+  into the actions container's opacity (same mechanism as
+  ls-page-title-actions).
 - **Image alt chip** — the `![tiny]` data-url image renders as a visible
   `[tiny]` bracketed chip on its own line in gpui (block-level div split —
   same mechanism as F5); web renders the decoded inline image, near-
