@@ -32,10 +32,30 @@ fn main() {
     }
 
     let object = object.canonicalize().unwrap();
-    println!("cargo:rustc-link-arg={}", object.display());
-    // OCaml runtime's external C deps on macOS/Linux.
-    println!("cargo:rustc-link-lib=pthread");
-    println!("cargo:rustc-link-lib=m");
+    // MSVC link.exe treats a bare `.o` path as an option; give it the
+    // explicit object argument form. Unix linkers take the path as-is.
+    if cfg!(target_os = "windows") {
+        // Each rustc-link-arg maps to exactly one linker argument — the
+        // /INCLUDE symbol and the object path must be separate args, or
+        // link.exe merges them into a bogus symbol name.
+        println!("cargo:rustc-link-arg-bins=/INCLUDE:lui_ocaml_start");
+        println!("cargo:rustc-link-arg-bins={}", object.display());
+        // flexlink-produced objects need mingw runtime archives MSVC
+        // doesn't ship (libpthread, libmingwex, libgcc, libmsvcrt import
+        // stubs, flexdll glue). `LOGSEQ_OCAML_EXTRA_LINK_ARGS` is a
+        // `;`-separated list of additional linker arguments.
+        if let Ok(extra) = env::var("LOGSEQ_OCAML_EXTRA_LINK_ARGS") {
+            for arg in extra.split(';').filter(|s| !s.is_empty()) {
+                println!("cargo:rustc-link-arg-bins={arg}");
+            }
+        }
+        println!("cargo:rerun-if-env-changed=LOGSEQ_OCAML_EXTRA_LINK_ARGS");
+    } else {
+        println!("cargo:rustc-link-arg={}", object.display());
+        // OCaml runtime's external C deps on macOS/Linux.
+        println!("cargo:rustc-link-lib=pthread");
+        println!("cargo:rustc-link-lib=m");
+    }
     println!("cargo:rerun-if-changed={}", object.display());
     println!("cargo:rerun-if-env-changed=LOGSEQ_OCAML_OBJECT");
 }

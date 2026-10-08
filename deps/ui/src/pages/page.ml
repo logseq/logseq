@@ -297,12 +297,12 @@ let title_tag_chips (page : Model.page) : t list =
     | None -> ""
   in
   let visible =
-    List.filter_mapi
-      (fun i tag ->
+    List.filter_map
+      (fun (i, tag) ->
         if Tree.hidden_tag_ident (opt_at page.Model.page_tag_idents i) then
           None
         else Some (i, tag))
-      page.Model.page_tags
+      (List.mapi (fun i tag -> (i, tag)) page.Model.page_tags)
   in
   [ row ~key:"pt-right" ~gap:4 ~cross:`center
       ~style_class:"ls-block-right"

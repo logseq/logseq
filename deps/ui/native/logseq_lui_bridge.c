@@ -72,9 +72,16 @@ LUI_EXPORT int32_t lui_ocaml_start(lui_patch_callback callback,
        (snapshot rebuilds, JSON) and stall the main thread. 16MB moves
        collection pressure off the interaction path. Only set when the
        user hasn't provided their own OCAMLRUNPARAM. */
+#if defined(_WIN32)
+    if (getenv("OCAMLRUNPARAM") == NULL) _putenv_s("OCAMLRUNPARAM", "s=16M");
+    /* The Windows OCaml runtime takes UTF-16 argv (char_os = wchar_t). */
+    wchar_t *warguments[] = {L"logseq_lui_ocaml", NULL};
+    caml_startup((char_os **)warguments);
+#else
     setenv("OCAMLRUNPARAM", "s=16M", 0);
     char *arguments[] = {"logseq_lui_ocaml", NULL};
     caml_startup(arguments);
+#endif
     runtime_started = 1;
   } else {
     caml_leave_blocking_section();

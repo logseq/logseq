@@ -399,7 +399,9 @@ fn drain_requests(
 }
 
 // Debug: print a backtrace on SIGSEGV/SIGBUS so crashes outside lldb are
-// diagnosable. backtrace_symbols_fd is provided by libSystem on macOS.
+// diagnosable. backtrace_symbols_fd is provided by libSystem/libc on
+// macOS/Linux; Windows has neither the symbols nor SIGBUS — skip it there.
+#[cfg(unix)]
 extern "C" {
     fn backtrace_symbols_fd(
         buffer: *const *const libc::c_void,
@@ -409,6 +411,7 @@ extern "C" {
     fn backtrace(buffer: *mut *mut libc::c_void, size: libc::c_int) -> libc::c_int;
 }
 
+#[cfg(unix)]
 unsafe extern "C" fn crash_handler(_sig: libc::c_int) {
     let mut frames: [*mut libc::c_void; 128] = [std::ptr::null_mut(); 128];
     let n = unsafe { backtrace(frames.as_mut_ptr(), frames.len() as libc::c_int) };
@@ -420,6 +423,7 @@ unsafe extern "C" fn crash_handler(_sig: libc::c_int) {
 
 fn main() {
     boot_ms();
+    #[cfg(unix)]
     unsafe {
         libc::signal(libc::SIGSEGV, crash_handler as libc::sighandler_t);
         libc::signal(libc::SIGBUS, crash_handler as libc::sighandler_t);
