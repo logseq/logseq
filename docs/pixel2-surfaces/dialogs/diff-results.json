@@ -1,0 +1,142 @@
+[
+ {
+  "stem": "32-dark-settings",
+  "diff": 1.3038085937500001,
+  "pixels": 13351
+ },
+ {
+  "stem": "03-settings-advanced",
+  "diff": 1.23505859375,
+  "pixels": 12647
+ },
+ {
+  "stem": "03-settings-keymap",
+  "diff": 1.21572265625,
+  "pixels": 12449
+ },
+ {
+  "stem": "02-settings-general",
+  "diff": 1.2134765625,
+  "pixels": 12426
+ },
+ {
+  "stem": "10-appearance",
+  "diff": 1.19169921875,
+  "pixels": 12203
+ },
+ {
+  "stem": "03-settings-editor",
+  "diff": 0.9450195312499999,
+  "pixels": 9677
+ },
+ {
+  "stem": "11-export-page",
+  "diff": 0.8972656250000001,
+  "pixels": 9188
+ },
+ {
+  "stem": "34-dark-right-sidebar",
+  "diff": 0.86171875,
+  "pixels": 8824
+ },
+ {
+  "stem": "18-block-ctx",
+  "diff": 0.8560546875,
+  "pixels": 8766
+ },
+ {
+  "stem": "01-dots-menu",
+  "diff": 0.82529296875,
+  "pixels": 8451
+ },
+ {
+  "stem": "33-dark-block-ctx",
+  "diff": 0.798046875,
+  "pixels": 8172
+ },
+ {
+  "stem": "31-dark-dots-menu",
+  "diff": 0.7867187499999999,
+  "pixels": 8056
+ },
+ {
+  "stem": "19-set-property",
+  "diff": 0.7042968749999999,
+  "pixels": 7212
+ },
+ {
+  "stem": "23-sidebar-help",
+  "diff": 0.6189453125,
+  "pixels": 6338
+ },
+ {
+  "stem": "13-plugins",
+  "diff": 0.5796875,
+  "pixels": 5936
+ },
+ {
+  "stem": "14-login",
+  "diff": 0.54482421875,
+  "pixels": 5579
+ },
+ {
+  "stem": "22-sidebar-contents",
+  "diff": 0.52685546875,
+  "pixels": 5395
+ },
+ {
+  "stem": "21-right-sidebar",
+  "diff": 0.5237304687500001,
+  "pixels": 5363
+ },
+ {
+  "stem": "03-settings-features",
+  "diff": 0.4767578125,
+  "pixels": 4882
+ },
+ {
+  "stem": "25-recycle",
+  "diff": 0.3935546875,
+  "pixels": 4030
+ },
+ {
+  "stem": "15-parity-page",
+  "diff": 0.36689453125,
+  "pixels": 3757
+ },
+ {
+  "stem": "20-help-menu",
+  "diff": 0.36689453125,
+  "pixels": 3757
+ },
+ {
+  "stem": "24-sidebar-closed",
+  "diff": 0.36689453125,
+  "pixels": 3757
+ },
+ {
+  "stem": "00-home",
+  "diff": 0.36533203125,
+  "pixels": 3741
+ },
+ {
+  "stem": "30-dark-home",
+  "diff": 0.33642578125,
+  "pixels": 3445
+ },
+ {
+  "stem": "16-title-ctx",
+  "diff": 0.2736328125,
+  "pixels": 2802
+ },
+ {
+  "stem": "12-import",
+  "diff": 0.0287109375,
+  "pixels": 294
+ },
+ {
+  "stem": "17-delete-confirm",
+  "diff": 0.014160156249999998,
+  "pixels": 145
+ }
+]
