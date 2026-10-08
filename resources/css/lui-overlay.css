@@ -2900,11 +2900,19 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- settings modal ----------------------------------------------------- */
 
+/* cljs settings.css: flex-col below md — the nav aside stacks over the
+   article on narrow widths instead of crushing it into a ~96px column */
 .cp__settings-inner {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   min-height: 55dvh;
   max-height: 75dvh;
+}
+
+@media (min-width: 768px) {
+  .cp__settings-inner {
+    flex-direction: row;
+  }
 }
 
 /* the cljs selectors below targeted real <header>/<aside>/<ul>/<li>
@@ -2922,13 +2930,13 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0;
 }
 
+/* cljs settings.css aside: @apply bg-gray-03-alpha p-4 — natural width,
+   no fixed column (stretches full-width in the below-md column layout) */
 .cp__settings-inner > .settings-aside,
 .cp__settings-inner aside {
   background: var(--lx-gray-03-alpha,
       var(--ls-secondary-background-color, hsl(var(--muted))));
   padding: 1rem;
-  width: 16rem;
-  flex-shrink: 0;
 }
 
 .cp__settings-inner .settings-menu > .settings-menu-item {
@@ -2941,15 +2949,24 @@ div[data-keep-selection].menu-links-wrapper {
   font-weight: 400;
 }
 
+/* cljs settings.css article: w-screen + min-h-[12rem] below md;
+   fixed h-[70vh] w-[44rem] >=md */
 .cp__settings-inner > .settings-article,
 .cp__settings-inner > article {
   padding: 1rem;
   flex: 1;
   min-height: 12rem;
-  width: 44rem;
-  max-width: calc(100vw - 24rem);
-  height: 70vh;
+  width: 100vw;
   overflow-y: auto;
+}
+
+@media (min-width: 768px) {
+  .cp__settings-inner > .settings-article,
+  .cp__settings-inner > article {
+    width: 44rem;
+    max-width: calc(100vw - 24rem);
+    height: 70vh;
+  }
 }
 
 .cp__settings-inner > .settings-aside > .cp__settings-header,
@@ -3017,6 +3034,16 @@ div[data-keep-selection].menu-links-wrapper {
   padding: 0;
   margin: 0;
   border-radius: 0.25rem;
+
+  /* cljs settings.css &[data-id=keymap] — keymap editing is
+     pointer-based; hidden on narrow screens */
+  &[data-id="keymap"] {
+    display: none;
+
+    @media (min-width: 640px) {
+      display: block;
+    }
+  }
 }
 
 /* the item is the button itself in the LUI tree (cljs wraps a
@@ -3093,24 +3120,40 @@ div[data-keep-selection].menu-links-wrapper {
   padding-left: 0;
 }
 
+/* cljs settings.css .panel-wrap: no width below sm (stretches inside
+   the column-stacked .cp__settings-inner); fixed 600px >=sm */
 .panel-wrap {
   padding: 0.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  width: 600px;
-  max-width: calc(100vw - 20rem);
+}
+
+@media (min-width: 640px) {
+  .panel-wrap {
+    width: 600px;
+    max-width: calc(100vw - 20rem);
+  }
 }
 
 /* cljs .it rows carry sm:grid sm:grid-cols-3 sm:gap-4 on the element
-   itself — the grid applies in every settings container, including the
-   appearance popup */
+   itself — below sm the row is a plain block so label and control
+   stack; the grid applies in every settings container >=sm, including
+   the appearance popup */
 .panel-wrap .it,
 .cp__settings-inner .it,
 #appearance_settings .it {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+  display: block;
+}
+
+@media (min-width: 640px) {
+  .panel-wrap .it,
+  .cp__settings-inner .it,
+  #appearance_settings .it {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
 }
 
 /* direct child like cljs .panel-wrap>.it:first-of-type — the accent
@@ -4500,11 +4543,6 @@ select.form-select {
   position: fixed;
   inset: 0;
   z-index: 40;
-}
-
-.settings-aside {
-  width: 16rem;
-  min-width: 10rem;
 }
 
 /* switch + checkbox (shui Switch/Checkbox, size sm) */
