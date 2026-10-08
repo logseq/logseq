@@ -723,7 +723,7 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
   let collected : datom list list ref = ref [] in
   let key =
     listen temp "temp-conn-batch-tx" (fun (r : tx_report) ->
-        collected := !collected @ [ r.tx_data ])
+        collected := r.tx_data :: !collected)
   in
   let tx_data =
     Db_tx.with_temp_conn_cleanup temp key (fun () ->
@@ -769,7 +769,7 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
                 in
                 match op_entry' with
                 | Some e when List.mem op semantic_outliner_op_names ->
-                    semantic_ops := !semantic_ops @ [ e ]
+                    semantic_ops := e :: !semantic_ops
                 | _ -> ())
             | None -> ())
           raw_entries;
@@ -784,7 +784,7 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
              in
              ignore (Db_tx.transact temp tx_ops)
          | _ -> ());
-        List.concat !collected)
+        List.concat (List.rev !collected))
   in
   if tx_data <> [] then
     ignore
@@ -792,7 +792,7 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
          ~tx_meta:
            (Outliner_tx_meta.tx_meta_put tx_meta "outliner-ops"
               (Vector
-                 (List.map Ds_wire.value_of_transit !semantic_ops)))
+                 (List.rev_map Ds_wire.value_of_transit !semantic_ops)))
          conn
          (List.map (fun d -> Raw_datom d) tx_data));
   !result_ref

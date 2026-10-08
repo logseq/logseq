@@ -803,11 +803,12 @@ let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
   let collected = ref [] in
   let listener_id =
     listen temp_conn "temp-conn-batch-tx"
-      (fun report -> collected := !collected @ report.tx_data)
+      (fun report -> collected := List.rev_append report.tx_data !collected)
   in
   Db_tx.with_temp_conn_cleanup temp_conn listener_id
     (fun () -> f temp_conn);
-  (match !collected with
+  (* collected is reversed chunk-wise; one final rev keeps it linear *)
+  (match List.rev !collected with
    | [] -> None
    | datoms ->
        let items =
