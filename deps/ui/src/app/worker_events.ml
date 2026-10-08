@@ -191,23 +191,26 @@ let init () =
         (fun () -> ignore (Outliner_ops.resync_open_editor ()))
     ; refetch_page =
         (fun p ->
-          match !Runtime.current_repo with
-          | None -> Js.Promise.resolve None
-          | Some repo -> (
-              let* blocks =
-                match !Runtime.current_route with
-                | Some (Model.Block_zoom uuid) ->
-                    let* v =
-                      Outliner_ops.fetch_zoom_blocks repo uuid
-                    in
-                    Outliner_ops.blocks_of_tree_wire repo p v
-                | _ -> Outliner_ops.fetch_page_blocks repo p
-              in
-              let* p' =
-                Outliner_ops.resolve_page_tags repo
-                  { p with Model.page_blocks = blocks }
-              in
-              Js.Promise.resolve (Some p')))
+          (* the subs pipeline works in Ui_task — adapt at the boundary
+             where the fetch goes through the worker's promise API *)
+          Subs_state.task_of_promise
+            (match !Runtime.current_repo with
+             | None -> Js.Promise.resolve None
+             | Some repo -> (
+                 let* blocks =
+                   match !Runtime.current_route with
+                   | Some (Model.Block_zoom uuid) ->
+                       let* v =
+                         Outliner_ops.fetch_zoom_blocks repo uuid
+                       in
+                       Outliner_ops.blocks_of_tree_wire repo p v
+                   | _ -> Outliner_ops.fetch_page_blocks repo p
+                 in
+                 let* p' =
+                   Outliner_ops.resolve_page_tags repo
+                     { p with Model.page_blocks = blocks }
+                 in
+                 Js.Promise.resolve (Some p'))))
     };
   (* the worker's search-index build reports progress through this
      remoteInvoke; without a handler the worker->main comlink call hangs

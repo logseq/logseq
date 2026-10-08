@@ -9,7 +9,7 @@
    the model, the enrichment helpers the splice needs, and the
    invalidation/plugin side-effects the app wires in at init. *)
 
-open Promise_ext
+let ( let* ) = Ui_task.( let* )
 
 type hooks =
   { reload : unit -> unit
@@ -36,7 +36,7 @@ type hooks =
       (** commit a merged page — Runtime.send Page_loaded *)
   ; publish_journals : Model.page list -> unit
       (** commit a merged journals list — Runtime.send Journals_loaded *)
-  ; refetch_page : Model.page -> Model.page option Js.Promise.t
+  ; refetch_page : Model.page -> Model.page option Ui_task.t
       (** block-level fallback: a delta that can't splice refetches only
           the affected page/day's blocks — never the whole route *)
   ; resync_editing : unit -> unit
@@ -109,7 +109,7 @@ let perf_time_p name p =
     let* r = p in
     Printf.eprintf "[perf] subs.%s %.1fms\n%!" name
       (Platform.date_now_ms () -. t0);
-    Js.Promise.resolve r
+    Ui_task.resolve r
   end
   else p
 
@@ -143,7 +143,7 @@ and fire_reload gen =
    to the full route reload when a broadcast carried no delta, the
    stash isn't contiguous with the materialized rev, or there's no
    route page to patch *)
-and apply_pending () : unit Js.Promise.t =
+and apply_pending () : unit Ui_task.t =
   let h = hooks_or_fail () in
   (* deferred op deltas are older revs — merge them first so the
      strict broadcast splices build on the right basis *)
@@ -183,17 +183,12 @@ and apply_pending () : unit Js.Promise.t =
          replace block fields wholesale, so a stale arm publishing last
          would blank rows the newer model already advanced *)
       let* merged =
-        Js.Promise.catch
-          (fun _ ->
-            (* a rejected fold (enrichment/refetch helpers can reject)
-               must not swallow the batch — treat it as an unspliceable
-               delta so the refetch/reload fallback still runs *)
-            Js.Promise.resolve Page_delta.Failed)
+        Ui_task.catch
           (Page_delta.with_apply_queue (fun () ->
               match !Subs_state.current_page with
               | Some base -> (
                   let rec fold (p : Model.page) = function
-                    | [] -> Js.Promise.resolve (Page_delta.Applied p)
+                    | [] -> Ui_task.resolve (Page_delta.Applied p)
                     | d :: rest -> (
                         let* applied =
                           perf_time_p "apply_to_page"
@@ -203,7 +198,7 @@ and apply_pending () : unit Js.Promise.t =
                         match applied with
                         | Page_delta.Applied p' -> fold p' rest
                         | Page_delta.Unchanged -> fold p rest
-                        | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
+                        | Page_delta.Failed -> Ui_task.resolve Page_delta.Failed)
                   in
                   let* m = fold base deltas in
                   (match m with
@@ -217,8 +212,13 @@ and apply_pending () : unit Js.Promise.t =
                        perf_time "refresh_side" (fun () ->
                            h.refresh_page_side p')
                    | _ -> ());
-                  Js.Promise.resolve m)
-              | None -> Js.Promise.resolve Page_delta.Failed))
+                  Ui_task.resolve m)
+              | None -> Ui_task.resolve Page_delta.Failed))
+          (fun _ ->
+            (* a rejected fold (enrichment/refetch helpers can reject)
+               must not swallow the batch — treat it as an unspliceable
+               delta so the refetch/reload fallback still runs *)
+            Ui_task.resolve Page_delta.Failed)
       in
       (* a broadcast carrying only deltas we already spliced from our
          own op response has nothing new to publish — skip the subs
@@ -230,19 +230,18 @@ and apply_pending () : unit Js.Promise.t =
              touched — drop only those title overrides, keep in-flight
              commits *)
           if not all_dup then prune ();
-          Js.Promise.resolve ()
+          Ui_task.resolve ()
       | Page_delta.Unchanged ->
           (* irrelevant — nothing to republish, nothing to prune *)
-          Js.Promise.resolve ()
+          Ui_task.resolve ()
       | Page_delta.Failed -> (
           (* relevant but unspliceable — refetch only this page's
              blocks, never the whole route *)
           match !Subs_state.current_page with
           | Some p -> (
               let* fresh =
-                Js.Promise.catch
-                  (fun _ -> Js.Promise.resolve None)
-                  (h.refetch_page p)
+                Ui_task.catch (h.refetch_page p)
+                  (fun _ -> Ui_task.resolve None)
               in
               match fresh with
               | Some p' ->
@@ -264,11 +263,11 @@ and apply_pending () : unit Js.Promise.t =
                           that the fresh tree is in *)
                        h.resync_editing ()
                    | _ -> ());
-                  Js.Promise.resolve ()
+                  Ui_task.resolve ()
               | None ->
                   h.reload ();
-                  Js.Promise.resolve ())
-          | None -> Js.Promise.resolve ())))
+                  Ui_task.resolve ())
+          | None -> Ui_task.resolve ())))
   | _ ->
       (* journals route keeps its pages in current_journals — splice
          the queued deltas into the touched day(s) like the op path *)
@@ -281,11 +280,10 @@ and apply_pending () : unit Js.Promise.t =
           && List.for_all Page_delta.delta_already_applied deltas
         in
         let* merged =
-          Js.Promise.catch
-            (fun _ -> Js.Promise.resolve Page_delta.Failed)
+          Ui_task.catch
             (Page_delta.with_apply_queue (fun () ->
                 let rec go js = function
-                  | [] -> Js.Promise.resolve (Page_delta.Applied js)
+                  | [] -> Ui_task.resolve (Page_delta.Applied js)
                   | d :: rest -> (
                       let* applied =
                         Page_delta.apply_to_journals ~strict:true
@@ -294,9 +292,10 @@ and apply_pending () : unit Js.Promise.t =
                       match applied with
                       | Page_delta.Applied js' -> go js' rest
                       | Page_delta.Unchanged -> go js rest
-                      | Page_delta.Failed -> Js.Promise.resolve Page_delta.Failed)
+                      | Page_delta.Failed -> Ui_task.resolve Page_delta.Failed)
                 in
                 go start_js deltas))
+            (fun _ -> Ui_task.resolve Page_delta.Failed)
         in
         (match merged with
          | Page_delta.Applied js' when js' != start_js
@@ -307,10 +306,10 @@ and apply_pending () : unit Js.Promise.t =
                h.prune_overrides
                  (List.concat_map Page_delta.delta_uuids deltas)
              end;
-             Js.Promise.resolve ()
+             Ui_task.resolve ()
          | Page_delta.Applied _ | Page_delta.Unchanged ->
              if not all_dup then finish ();
-             Js.Promise.resolve ()
+             Ui_task.resolve ()
          | Page_delta.Failed -> (
              (* relevant but unspliceable — refetch only the days the
                 deltas touched, never the whole journals route *)
@@ -320,18 +319,17 @@ and apply_pending () : unit Js.Promise.t =
                  deltas
              in
              let rec refetch acc = function
-               | [] -> Js.Promise.resolve (Some (List.rev acc))
+               | [] -> Ui_task.resolve (Some (List.rev acc))
                | (p : Model.page) :: rest ->
                    if not (touched p) then refetch (p :: acc) rest
                    else
                      let* fresh =
-                       Js.Promise.catch
-                         (fun _ -> Js.Promise.resolve None)
-                         (h.refetch_page p)
+                       Ui_task.catch (h.refetch_page p)
+                         (fun _ -> Ui_task.resolve None)
                      in
                      (match fresh with
                       | Some p' -> refetch (p' :: acc) rest
-                      | None -> Js.Promise.resolve None)
+                      | None -> Ui_task.resolve None)
              in
              let* js' = refetch [] start_js in
              match js' with
@@ -346,15 +344,15 @@ and apply_pending () : unit Js.Promise.t =
                    h.prune_overrides
                      (List.concat_map Page_delta.delta_uuids deltas)
                  end;
-                 Js.Promise.resolve ()
-             | Some _ -> Js.Promise.resolve ()
+                 Ui_task.resolve ()
+             | Some _ -> Ui_task.resolve ()
              | None ->
                  h.reload ();
-                 Js.Promise.resolve ()))
+                 Ui_task.resolve ()))
       else (
         h.reload ();
         finish ();
-        Js.Promise.resolve ())
+        Ui_task.resolve ())
 
 (* "sync-db-changes" entry point — the worker broadcast lands here from
    Worker_events.dispatch with the whole tx report *)

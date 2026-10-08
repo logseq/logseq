@@ -5,10 +5,11 @@
    reorder / move children. Untouched subtrees keep their identity so
    the keyed reconcile only repaints the changed rows. *)
 
-open Promise_ext
 module SMap = Stdlib.Map.Make (String)
 module SSet = Stdlib.Set.Make (String)
 module ISet = Stdlib.Set.Make (Int)
+
+let ( let* ) = Ui_task.( let* )
 
 type patch =
   { base_rev : int
@@ -139,20 +140,24 @@ let already_applied rev = ISet.mem rev !applied
    an older rev's apply finish last and publish its stale canon over a
    newer title. The already-applied check happens before async enrichment,
    so it cannot dedupe that race — serialize every apply instead. *)
-let apply_queue : unit Js.Promise.t ref = ref (Js.Promise.resolve ())
+(* [None] until the first arm — a [Ui_task.resolve ()] seed would run
+   at module init, before any runtime installs the scheduler *)
+let apply_queue : unit Ui_task.t option ref = ref None
 
-let with_apply_queue (f : unit -> 'a Js.Promise.t) : 'a Js.Promise.t =
+let with_apply_queue (f : unit -> 'a Ui_task.t) : 'a Ui_task.t =
   let p =
-    let* () = !apply_queue in
-    f ()
+    match !apply_queue with
+    | Some q -> Ui_task.bind q (fun () -> f ())
+    | None -> f ()
   in
-  (* the queued successor must resolve on EITHER outcome — a then_-only
-     chain stays rejected after the first failed apply and every later
+  (* the queued successor must resolve on EITHER outcome — a bind-only
+     tail stays rejected after the first failed apply and every later
      enqueue binds onto that rejection and never runs *)
   apply_queue :=
-    Js.Promise.catch
-      (fun _ -> Js.Promise.resolve ())
-      (Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p);
+    Some
+      (Ui_task.catch
+         (Ui_task.bind p (fun _ -> Ui_task.resolve ()))
+         (fun _ -> Ui_task.resolve ()));
   p
 
 
@@ -188,13 +193,13 @@ let map_share (f : 'a -> 'a) (xs : 'a list) : 'a list =
 (* helpers the applier needs from the editor layer, injected so this
    module stays below outliner_ops *)
 type helpers =
-  { resolve : Model.block list -> Model.block list Js.Promise.t
+  { resolve : Model.block list -> Model.block list Ui_task.t
       (** batch tag title/ident resolution (Outliner_ops.resolve_block_tags) *)
-  ; fill_embeds : Model.block list -> Model.block list Js.Promise.t
+  ; fill_embeds : Model.block list -> Model.block list Ui_task.t
       (** block_embed_children fetch for :block/link nodes *)
   ; merge_collapsed : SSet.t -> SSet.t -> unit
       (** (added, removed) :block/collapsed? uuids into editor state *)
-  ; refresh_page_fields : Model.page -> Model.page Js.Promise.t
+  ; refresh_page_fields : Model.page -> Model.page Ui_task.t
       (** re-resolve the page entity's own fields (tag chips live on the
           page row, outside page_blocks) when its canon row changed *)
   }
@@ -492,13 +497,13 @@ let delta_keys (delta : Wire.t) : string list =
    ~strict:false — its patches are absolute set-ops from a tx we just
    ran, and a non-contiguous base self-heals through the next broadcast *)
 let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
-    (delta : Wire.t) : Model.page splice Js.Promise.t =
+    (delta : Wire.t) : Model.page splice Ui_task.t =
   match parse delta with
-  | None -> Js.Promise.resolve Failed
+  | None -> Ui_task.resolve Failed
   | Some p -> (
-      if already_applied p.rev then Js.Promise.resolve Unchanged
+      if already_applied p.rev then Ui_task.resolve Unchanged
       else if not (delta_touches_parsed p page) then
-        Js.Promise.resolve Unchanged
+        Ui_task.resolve Unchanged
       else if strict && !basis <> None && not (structural_ok p) then
         (* [basis] is unset only right after a full fetch, which
            already contains every committed tx — trust it and let the
@@ -509,7 +514,7 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
            intermediate broadcast is the only residual risk and is
            still caught by the per-delta already_applied checks on
            later folds. *)
-        Js.Promise.resolve Failed
+        Ui_task.resolve Failed
       else
         (* decode + enrich the canonical rows up front — tag titles and
            embed children need worker roundtrips *)
@@ -523,7 +528,7 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           h.resolve (List.map snd decoded)
         in
         let* filled = h.fill_embeds filled in
-        if already_applied p.rev then Js.Promise.resolve Unchanged
+        if already_applied p.rev then Ui_task.resolve Unchanged
         else
         let canon_nodes = Hashtbl.create (List.length filled) in
         List.iter2
@@ -567,7 +572,7 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
               && not (Hashtbl.mem env.consumed k))
             p.patches
         in
-        if env.failed || unconsumed then Js.Promise.resolve Failed
+        if env.failed || unconsumed then Ui_task.resolve Failed
         else (
           let add_c, rem_c = collapsed_sets p in
           if not (SSet.is_empty add_c && SSet.is_empty rem_c) then
@@ -578,10 +583,10 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
             match page.Model.page_uuid with
             | Some u when SMap.mem u p.canon ->
                 h.refresh_page_fields page'
-            | _ -> Js.Promise.resolve page'
+            | _ -> Ui_task.resolve page'
           in
           own_commit := Some page';
-          Js.Promise.resolve (Applied page')))
+          Ui_task.resolve (Applied page')))
 
 (* fold [delta] onto the journal page(s) it touches — same tri-state as
    [apply_to_page]: [Unchanged] when no loaded day is touched (delta
@@ -590,14 +595,14 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
    (caller refetches just that day) *)
 let apply_to_journals ?(strict = true) (mk_helpers : Model.page -> helpers)
     (journals : Model.page list) (delta : Wire.t)
-    : Model.page list splice Js.Promise.t =
+    : Model.page list splice Ui_task.t =
   match parse delta with
-  | None -> Js.Promise.resolve Failed
+  | None -> Ui_task.resolve Failed
   | Some p ->
-      if already_applied p.rev then Js.Promise.resolve Unchanged
+      if already_applied p.rev then Ui_task.resolve Unchanged
       else
         let rec go acc = function
-          | [] -> Js.Promise.resolve (Applied (List.rev acc))
+          | [] -> Ui_task.resolve (Applied (List.rev acc))
           | page :: rest ->
               if not (delta_touches_parsed p page) then
                 go (page :: acc) rest
@@ -608,8 +613,8 @@ let apply_to_journals ?(strict = true) (mk_helpers : Model.page -> helpers)
                 (match applied with
                  | Applied p' -> go (p' :: acc) rest
                  | Unchanged -> go (page :: acc) rest
-                 | Failed -> Js.Promise.resolve Failed)
+                 | Failed -> Ui_task.resolve Failed)
         in
         if List.exists (delta_touches_parsed p) journals then
           go [] journals
-        else Js.Promise.resolve Unchanged
+        else Ui_task.resolve Unchanged

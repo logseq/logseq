@@ -358,7 +358,9 @@ let refresh_all_now () =
 
 (* sdk apply_ops awaits this before resolving — avoids a
    properties->sdk dependency cycle *)
-let () = Runtime.hooks.refresh_property_areas <- refresh_all_now
+let () =
+  Runtime.hooks.refresh_property_areas <-
+    (fun () -> Subs_state.task_of_promise (refresh_all_now ()))
 
 (* Immediate refresh for flows that must render before the next user
    action (e.g. a pending inline editor must mount before the user can

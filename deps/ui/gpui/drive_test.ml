@@ -220,6 +220,9 @@ let rec settle_lazy depth =
   end
 
 let flush () =
+  (* drain the Ui_task mailbox before the render flush, like
+     native_embed's pump *)
+  Host.drain ();
   Runtime.flush ();
   settle_lazy 0
 
@@ -989,6 +992,9 @@ let worker_handler name args : W.t =
 let rec after n f =
   ignore
     (Js.Promise.(resolve () |> then_ (fun () ->
+         (* Ui_task completions post to the host mailbox like the real
+            pump — drain it between async steps *)
+         Host.drain ();
          if n <= 0 then (f (); Js.Promise.resolve ())
          else (after (n - 1) f; Js.Promise.resolve ()))))
 
@@ -1624,6 +1630,189 @@ let test_editor_cmds () =
   Runtime.read_model := prev_model;
   ignore (Fake_worker.install worker_handler)
 
+(* ---------------- subs async pipeline (Ui_task boundary) ----------------
+
+   The subscription pipeline's async work runs on Ui_task in both
+   runtimes: broadcasts stash through on_db_changes, splice arms
+   serialize through Page_delta.with_apply_queue, and a page store
+   that moves on mid-splice must never see the late completion
+   publish over the new route. *)
+
+let subs_publishes : Model.page list ref = ref []
+let subs_held_gate = ref false
+let subs_held_release : (unit -> unit) ref = ref (fun () -> ())
+let subs_refetch : Model.page option ref = ref None
+(* signal resolved by the stub once a held arm reaches helpers.resolve —
+   stages fence on it so the graph switch provably lands while the arm
+   is parked, never by a hop-count guess *)
+let subs_parked : unit Ui_task.t option ref = ref None
+let subs_parked_resolve : (unit -> unit) ref = ref (fun () -> ())
+(* the apply_pending task of the last armed delta — stages fence on the
+   pipeline's own completion instead of fixed hop counts, since every
+   Ui_task hop drains through the runtime's own deferred queue *)
+let subs_pipeline_t : unit Ui_task.t option ref = ref None
+
+let when_done (t : unit Ui_task.t option) (f : unit -> unit) : unit =
+  match t with
+  | Some t -> ignore (Ui_task.bind t (fun () -> f (); Ui_task.resolve ()))
+  | None -> f ()
+
+let install_subs_stubs () =
+  let parked_t, parked_res, _ = Ui_task.pending () in
+  subs_parked := Some parked_t;
+  subs_parked_resolve := parked_res;
+  Subs.install_hooks
+    { Subs.reload = (fun () -> ())
+    ; refresh_page_side = (fun _ -> ())
+    ; prune_overrides = (fun _ -> ())
+    ; invalidate_pull_uuids = (fun _ -> ())
+    ; invalidate_pull_caches = (fun () -> ())
+    ; fire_db_hooks = (fun _ -> ())
+    ; helpers_of = (fun _ ->
+        { Page_delta.resolve =
+            (fun bs ->
+              if !subs_held_gate
+              then begin
+                let t, complete, _ = Ui_task.pending () in
+                subs_held_release := (fun () -> complete bs);
+                parked_res ();
+                t
+              end
+              else Ui_task.resolve bs)
+        ; fill_embeds = (fun bs -> Ui_task.resolve bs)
+        ; merge_collapsed = (fun _ _ -> ())
+        ; refresh_page_fields = (fun p -> Ui_task.resolve p) })
+    ; ui_busy = (fun ~now:_ ~last_fire:_ -> false)
+    ; (* the debounce timer is wall-clock — the test invokes
+         apply_pending directly, so the armed fire_reload is dropped *)
+      schedule = (fun _ -> ())
+    ; publish_page = (fun p -> subs_publishes := !subs_publishes @ [ p ])
+    ; publish_journals = (fun _ -> ())
+    ; refetch_page = (fun _ -> Ui_task.resolve !subs_refetch)
+    ; resync_editing = (fun () -> ()) }
+
+let subs_canon uuid title =
+  ( W.Uuid uuid
+  , W.Map
+      [ W.Keyword "block/uuid", W.Uuid uuid
+      ; W.Keyword "block/title", W.String title ] )
+
+let subs_delta ?(children = W.Map []) rev canon =
+  W.Map
+    [ W.Keyword "rev", W.Int rev
+    ; W.Keyword "blocks", W.Map canon
+    ; W.Keyword "deleted", W.Map []
+    ; W.Keyword "children", children ]
+
+let subs_crossed : int list ref = ref []
+let subs_order : [ `First | `Second | `Third | `Fourth ] list ref =
+  ref []
+
+let test_subs_pipeline_setup () =
+  subs_publishes := [];
+  install_subs_stubs ();
+  (* task/promise adapters: each direction completes inside the other
+     runtime's deferred queue *)
+  subs_crossed := [];
+  ignore
+    (Js.Promise.then_
+       (fun v ->
+         subs_crossed := !subs_crossed @ [ v ];
+         Js.Promise.resolve ())
+       (Subs_state.promise_of_task (Ui_task.resolve 7)));
+  ignore
+    (Ui_task.catch
+       (Subs_state.task_of_promise
+          (Js.Promise.reject (Failure "bridge rejected")))
+       (fun _ ->
+         subs_crossed := !subs_crossed @ [ 9 ];
+         Ui_task.resolve ()));
+  (* the apply queue serializes Ui_task arms in submission order, and a
+     rejected arm still releases its queued successor *)
+  subs_order := [];
+  let gate, release_gate, _ = Ui_task.pending () in
+  ignore
+    (Page_delta.with_apply_queue (fun () ->
+         Ui_task.bind gate (fun () ->
+             subs_order := !subs_order @ [ `First ];
+             Ui_task.resolve ())));
+  ignore
+    (Page_delta.with_apply_queue (fun () ->
+         subs_order := !subs_order @ [ `Second ];
+         Ui_task.resolve ()));
+  ignore
+    (Page_delta.with_apply_queue (fun () ->
+         subs_order := !subs_order @ [ `Third ];
+         Ui_task.reject (Failure "arm failed")));
+  ignore
+    (Page_delta.with_apply_queue (fun () ->
+         subs_order := !subs_order @ [ `Fourth ];
+         Ui_task.resolve ()));
+  release_gate ();
+  (* a canon broadcast splices into the subscribed page and republishes
+     the merged store through the installed hooks *)
+  Subs_state.current_page :=
+    Some (page [ block "d1" "first"; block "d2" "second" ]);
+  Subs.on_db_changes
+    (W.Map
+       [ W.Keyword "delta", subs_delta 1 [ subs_canon "d1" "first EDITED" ] ]);
+  subs_pipeline_t := Some (Subs.apply_pending ())
+
+let subs_stage_a () =
+  check "task/promise bridge settles inside each runtime"
+    (!subs_crossed = [ 7; 9 ]);
+  check "apply queue orders Ui_task arms past a rejection"
+    (!subs_order = [ `First; `Second; `Third; `Fourth ]);
+  (match !subs_publishes with
+   | [ p ] ->
+       eq "spliced delta republished the merged page"
+         [ "first EDITED"; "second" ] (titles p)
+         (fun l -> String.concat "," l)
+   | _ -> check "spliced delta republished exactly one page" false);
+  (* the second delta parks inside helpers.resolve — the store moves on
+     before its completion lands *)
+  subs_held_gate := true;
+  install_subs_stubs ();
+  Subs.on_db_changes
+    (W.Map
+       [ W.Keyword "delta", subs_delta 2 [ subs_canon "d2" "second EDITED" ] ]);
+  subs_pipeline_t := Some (Subs.apply_pending ())
+
+let subs_stage_b () =
+  Subs_state.current_page := None;
+  !subs_held_release ()
+
+let subs_stage_c () =
+  eqi "late splice completion never published" 1
+    (List.length !subs_publishes);
+  (* an unspliceable delta falls back to the per-page refetch and
+     publishes the refetched page *)
+  subs_held_gate := false;
+  subs_refetch := Some (page [ block "r1" "refetched" ]);
+  install_subs_stubs ();
+  Subs_state.current_page :=
+    Some (page [ block "d1" "first EDITED"; block "d2" "second" ]);
+  Subs.on_db_changes
+    (W.Map
+       [ ( W.Keyword "delta"
+         , subs_delta 3 []
+             ~children:
+               (W.Map
+                  [ ( W.Uuid "p"
+                    , W.Map
+                        [ W.Keyword "base-rev", W.Int 999
+                        ; W.Keyword "remove", W.List []
+                        ; W.Keyword "upsert", W.List [] ] ) ]) ) ]);
+  subs_pipeline_t := Some (Subs.apply_pending ())
+
+let subs_stage_d () =
+  match !subs_publishes with
+  | _ :: p :: _ ->
+      eq "failed splice republished the refetched page" [ "refetched" ]
+        (titles p)
+        (fun l -> String.concat "," l)
+  | _ -> check "failed splice republished the refetched page" false
+
 (* ---------------- runner ---------------- *)
 
 let run ~finish =
@@ -1653,12 +1842,27 @@ let run ~finish =
   test_custom_macro_page ();
   Shared_scenarios_props.all (props_host ());
   test_editor_cmds ();
+  test_subs_pipeline_setup ();
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)
   after 30 (fun () ->
       async_checks ();
-      Shared_scenarios_views.run (vws_host ()) ~finish)
+      Shared_scenarios_views.run (vws_host ()) ~finish:(fun () ->
+          (* each subs stage fences on the pipeline's own task — a fixed
+             hop count can't reach past a parked arm or a queued splice *)
+          when_done !subs_pipeline_t (fun () ->
+              subs_stage_a ();
+              when_done !subs_parked (fun () ->
+                  subs_stage_b ();
+                  when_done !subs_pipeline_t (fun () ->
+                      subs_stage_c ();
+                      when_done !subs_pipeline_t (fun () ->
+                          subs_stage_d ();
+                          finish ()))));
+          (* the task-fenced callbacks post to the host mailbox like
+             every Ui_task continuation — one drain cascades the chain *)
+          Host.drain ()))
 
 let () =
   let owner = Thread.id (Thread.self ()) in
