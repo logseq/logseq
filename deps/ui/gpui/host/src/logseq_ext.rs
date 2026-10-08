@@ -188,6 +188,15 @@ pub fn register(shared: &Shared) {
         "border-left:1px solid var(--lx-gray-04-alpha, var(--ls-guideline-color))",
         "",
     );
+    // .table-wrapper.markdown-table — the pipe-table wrapper must stretch
+    // the content column (web: table width:100% inside .classic-table,
+    // .markdown-table itself carries width:98%). Without this the gpui
+    // table sizes to its content and stops mid-column.
+    lui_gpui::style::register_class_style(
+        "markdown-table",
+        "width:100%;margin-top:8px;margin-bottom:8px",
+        "",
+    );
     // .ls-block .ls-properties-area.ls-block-properties { margin-top:2px;
     //   margin-left:7px }
     lui_gpui::style::register_class_style(

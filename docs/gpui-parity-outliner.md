@@ -100,7 +100,7 @@ dictionary — the title now matches the web's metrics.
 
 ### F2 — residual layout divergence vs web (>1%, documented exception)
 
-With palette, centering and title fixed, gpui-vs-web sits at ~2.5% —
+With palette, centering and title fixed, gpui-vs-web sits at ~2.3% —
 just above the web-vs-master baseline (2.0–2.4% light). Diff heatmaps
 localize the remainder to:
 - **Property rows** — FIXED. Two stacked causes: (1) the `native/`
@@ -111,11 +111,13 @@ localize the remainder to:
   ghost/text/link buttons with an explicit main alignment render as a
   plain flex preserving the variant's look (`aligned_button` in
   kinds.rs). Values now sit left-aligned beside the key column.
-- **Fold/thread guides** — web draws vertical indent guide lines through
-  nested children; gpui draws none (bullet column only).
-- **Table geometry** — web table spans the content column with a filled
-  header row and an empty trailing column; gpui sizes to content with a
-  transparent header.
+- **Fold/thread guides** — FIXED. `.block-children` now carries the web's
+  1px `--ls-guideline-color` left border; indent guides paint under
+  nested children.
+- **Table geometry** — FIXED. The `.markdown-table` wrapper was sized to
+  content; registered `width:100%` (plus the web's 8px vertical margins).
+  Cell borders/padding and the header fill already flowed through the
+  `data-style` channel.
 - **Code-block header bar** — gpui draws a persistent `lang ▾ Copy`
   header; web shows none at rest (it appears on hover).
 - **Image alt chip** — the `![tiny]` data-url image renders as a visible
