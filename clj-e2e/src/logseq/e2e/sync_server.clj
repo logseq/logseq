@@ -11,8 +11,7 @@
   which is non-recoverable), so auth falls back to unverified claims. The
   token's `iss`/`aud` must still match the server's COGNITO_ISSUER /
   COGNITO_CLIENT_ID env, which are fixed constants shared with `test-login`."
-  (:require [clojure.java.shell :as shell]
-            [jsonista.core :as json])
+  (:require [jsonista.core :as json])
   (:import [java.net ServerSocket]
            [java.nio.charset StandardCharsets]
            [java.nio.file Files]
@@ -49,9 +48,13 @@
   []
   (str (Files/createTempDirectory "logseq-e2e-db-sync-" (into-array java.nio.file.attribute.FileAttribute []))))
 
-(defn- stop-server!
-  [pid-file]
-  (shell/sh "python3" (db-sync-script) "stop" "--pid-file" pid-file))
+(defn- run-process!
+  "Run a command synchronously and return its exit code. Used instead of
+  clojure.java.shell/sh because the shutdown hook runs after the agent pool
+  backing shell/sh's future is already terminated."
+  [& cmd]
+  (let [process (.start (ProcessBuilder. ^"[Ljava.lang.String;" (into-array String cmd)))]
+    (.waitFor process)))
 
 (defn ensure-started!
   "Start the shared local db-sync server (once per test JVM).
@@ -67,26 +70,28 @@
               pid-file (str dir "/db-sync-server.pid")
               log-file (str dir "/db-sync-server.log")
               data-dir (str dir "/db-sync-server-data")
-              {:keys [exit] :as result}
-              (shell/sh "python3" (db-sync-script) "start"
-                        "--repo-root" (repo-root)
-                        "--pid-file" pid-file
-                        "--log-file" log-file
-                        "--data-dir" data-dir
-                        "--host" "127.0.0.1"
-                        "--port" (str port)
-                        "--startup-timeout-s" "60"
-                        ;; no auth.json on e2e machines; issuer/client-id/jwks
-                        ;; come from the explicit flags below
-                        "--auth-path" ""
-                        "--cognito-issuer" cognito-issuer
-                        "--cognito-client-id" cognito-client-id
-                        "--cognito-jwks-url" (str "http://127.0.0.1:" port "/jwks.json"))]
+              exit (run-process!
+                    "python3" (db-sync-script) "start"
+                    "--repo-root" (repo-root)
+                    "--pid-file" pid-file
+                    "--log-file" log-file
+                    "--data-dir" data-dir
+                    "--host" "127.0.0.1"
+                    "--port" (str port)
+                    "--startup-timeout-s" "60"
+                    ;; no auth.json on e2e machines; issuer/client-id/jwks
+                    ;; come from the explicit flags below
+                    "--auth-path" ""
+                    "--cognito-issuer" cognito-issuer
+                    "--cognito-client-id" cognito-client-id
+                    "--cognito-jwks-url" (str "http://127.0.0.1:" port "/jwks.json"))]
           (when-not (zero? exit)
             (throw (ex-info "local db-sync server failed to start"
-                            {:result result :log-file log-file})))
+                            {:exit exit :log-file log-file})))
           (.addShutdownHook (Runtime/getRuntime)
-                            (Thread. ^Runnable (fn [] (stop-server! pid-file))))
+                            (Thread. ^Runnable
+                                     (fn [] (run-process! "python3" (db-sync-script) "stop"
+                                                          "--pid-file" pid-file))))
           (reset! *server
                   {:port port
                    :http-base (str "http://127.0.0.1:" port)
@@ -129,3 +134,34 @@
      :id-token jwt
      :access-token jwt
      :refresh-token "e2e-refresh-token"}))
+
+(defn- post-json!
+  [url token payload]
+  (let [request (-> (java.net.http.HttpRequest/newBuilder (java.net.URI/create url))
+                    (.header "authorization" (str "Bearer " token))
+                    (.header "content-type" "application/json")
+                    (.POST (java.net.http.HttpRequest$BodyPublishers/ofString
+                            (json/write-value-as-string payload)))
+                    (.build))
+        ;; HTTP/1.1 explicitly: the default HTTP_2 client sends an h2c upgrade
+        ;; that the node adapter resets
+        client (-> (java.net.http.HttpClient/newBuilder)
+                   (.version java.net.http.HttpClient$Version/HTTP_1_1)
+                   (.build))
+        response (.send client request
+                        (java.net.http.HttpResponse$BodyHandlers/ofString))]
+    (when-not (<= 200 (.statusCode response) 299)
+      (throw (ex-info "POST failed"
+                      {:url url :status (.statusCode response) :body (.body response)})))))
+
+(defn seed-remote-graph!
+  "Create one remote graph owned by the test user. The all-graphs page only
+  renders its Refresh button when the account already has remote graphs, and
+  tests wait on that button — the prod e2etest account always had some. `sync`
+  is the map from `test-login`."
+  [{:keys [http-base id-token]}]
+  (post-json! (str http-base "/graphs") id-token
+              {"graph-name" "e2e-seed-graph"
+               "schema-version" "65.34"
+               "graph-e2ee?" false
+               "graph-ready-for-use?" true}))

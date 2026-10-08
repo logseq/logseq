@@ -64,6 +64,7 @@
                    :persistent false
                    :slow-mo @config/*slow-mo}
         sync (sync-server/test-login)
+        _ (sync-server/seed-remote-graph! sync)
         p1 (w/make-page page-opts)
         p2 (w/make-page page-opts)]
     (run! #(settings/install-init-script! (.context @%) sync) [p1 p2])
@@ -78,6 +79,10 @@
           (open-app! (or port @config/*port))
           (settings/developer-mode)
           (settings/refresh-test-env!)
+          ;; The first page sets the account's remote-graphs password; the
+          ;; second then finds RSA keys already on the server and goes straight
+          ;; to the loaded remote list.
+          (graph/ensure-remote-graphs-loaded)
           (let [p (w/get-page)]
             (.onConsoleMessage
              p
