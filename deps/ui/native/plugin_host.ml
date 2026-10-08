@@ -18,6 +18,12 @@ let jbool o k = Option.value ~default:false (Js.Json.decodeBoolean (getf o k))
 
 let dirty : int Signal.signal option ref = ref None
 
+let dirty_signal (owner : Signal.scheduler) : int Signal.signal =
+  let st = Signal.state owner 0 in
+  let s = Signal.value st in
+  dirty := Some s;
+  s
+
 let dirty_value (owner : Signal.scheduler) : int Signal.signal =
   match !dirty with
   | Some s -> s
@@ -45,3 +51,18 @@ let setup () = ()
 let palette_commands () : Commands_data.cmd list = []
 
 let exec_palette_command (_cid : string) : unit = ()
+
+let open_settings_pid : string option ref = ref None
+let pending_dialog_tab : string option ref = ref None
+let hook_app (_ : string) (_ : Js.Json.t) (_ : Js.Json.t) = ()
+let fire_theme_mode_changed (_ : string) = ()
+let fire_sidebar_visible_changed (_ : bool) = ()
+let fire_current_graph_changed () = ()
+let simple_commands_of_type (_ : string) : (string * string * string) list = []
+let exec_simple_command ?args:_ ?ctx:_ (_ : string) (_ : string) = ()
+let item_slot (_ : ui_item) : string = ""
+let ui_items_of_type (_ : string) : ui_item list = []
+let make_asset_url (_ : Js.Json.t) (_ : Js.Json.t) (_ : Js.Json.t)
+    (_ : Js.Json.t) : Js.Json.t Js.Promise.t = Js.Promise.resolve Js.Json.null
+let open_pdf_viewer (_ : Js.Json.t) (_ : Js.Json.t) (_ : Js.Json.t)
+    (_ : Js.Json.t) : Js.Json.t Js.Promise.t = Js.Promise.resolve Js.Json.null

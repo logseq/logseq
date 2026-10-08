@@ -87,6 +87,20 @@ let bump () =
   | Some s -> Runtime.signal_set s (Runtime.signal_get s + 1)
   | None -> ()
 
+(* core-side bridge: LSPluginCore.hook{App,Editor,Db}(type, payload, pid?) —
+   Json.null pid broadcasts (each plugin gated by should_exec_plugin_hook),
+   a pid string targets that plugin directly *)
+let hook_call : string -> string -> Js.Json.t -> Js.Json.t -> unit =
+  [%mel.raw
+    "function (m, t, p, pid) { \
+       var c = window.LSPluginCore; \
+       if (c && typeof c[m] === 'function') c[m](t, p, pid); \
+     }"]
+
+let hook_app t p pid = hook_call "hookApp" t p pid
+let hook_editor t p pid = hook_call "hookEditor" t p pid
+let hook_db t p pid = hook_call "hookDb" t p pid
+
 (* ---------- injected ui (toolbar slots) ---------- *)
 
 let toolbar_items () =
@@ -100,10 +114,18 @@ let toolbar_items () =
    show an empty item list like the e2e plugins contract expects *)
 let has_installed_plugins () = Array.length (Js.Dict.keys installed) > 0
 
+let ui_visible_last = ref false
+
 let slot_id it =
   "pl-injected-ui-item-pl-" ^ jstr it.it_opts "key" ^ "-" ^ it.it_pid
 
-let inject_toolbar_ui () =
+(* provideUI items targeting a host slot (page-head-actions-slotted etc)
+   carry the div id in opts.slot; static items use the generated id *)
+let item_slot it =
+  let s = jstr it.it_opts "slot" in
+  if s <> "" then s else slot_id it
+
+let inject_ui () =
   let setup =
     match Js.Json.classify (lsplugin ()) with
     | Js.Json.JSONObject _ ->
@@ -114,19 +136,33 @@ let inject_toolbar_ui () =
     (fun it ->
       match
         ( Js.Dict.get installed it.it_pid
-        , Web_dom.get_element_by_id (slot_id it) )
+        , Web_dom.get_element_by_id (item_slot it) )
       with
       | Some pl, Some _ ->
           let opts =
             jobj
-              [ ("slot", jstr_ (slot_id it))
+              [ ("slot", jstr_ (item_slot it))
               ; ("key", jstr_ ("pl-" ^ jstr it.it_opts "key"))
               ; ("template", getf it.it_opts "template")
               ]
           in
           ignore (meth setup "call" [| pl; opts; jobj [] |])
       | _ -> ())
-    (toolbar_items ())
+    !items;
+  (* cljs hook-ui-items emits ui:visible:changed on transitions *)
+  let vis = !items <> [] in
+  if vis <> !ui_visible_last then (
+    ui_visible_last := vis;
+    hook_app
+      "ui:visible:changed"
+      (jobj [ ("visible", Js.Json.boolean vis) ])
+      Js.Json.null)
+
+let inject_toolbar_ui () = inject_ui ()
+
+(* ui items grouped by registered type — toolbar/pagebar/etc *)
+let ui_items_of_type ty =
+  List.filter (fun it -> it.it_type = ty) !items
 
 (* after a dirty bump re-renders the open menu, slots are recreated
    empty — re-inject on the next tick *)
@@ -413,6 +449,8 @@ type simple_cmd =
   { sc_cmd : Js.Json.t (* {key, label, type, desc, keybinding, extras} *)
   ; sc_event : string (* editor/hook event key, e.g. SimpleCommandHookX1 *)
   ; sc_palette : bool
+  ; sc_type : string (* registration type: $palette$, $commands$,
+                        block-context-menu-item, page-menu-item, ... *)
   }
 
 let plugin_hooks : (string, (string, unit) Hashtbl.t) Hashtbl.t =
@@ -434,6 +472,10 @@ let selected_theme : string option ref = ref None
    :open-pid; plugins_view reads and clears it when the dialog opens *)
 let open_settings_pid : string option ref = ref None
 
+(* pending category tab for the next plugins-dialog open — cljs
+   :plugin/show-themes; plugins_view reads and clears it *)
+let pending_dialog_tab : string option ref = ref None
+
 let tbl_for t k =
   match Hashtbl.find_opt t k with
   | Some m -> m
@@ -441,20 +483,6 @@ let tbl_for t k =
       let m = Hashtbl.create 8 in
       Hashtbl.replace t k m;
       m
-
-(* core-side bridge: LSPluginCore.hook{App,Editor,Db}(type, payload, pid?) —
-   Json.null pid broadcasts (each plugin gated by should_exec_plugin_hook),
-   a pid string targets that plugin directly *)
-let hook_call : string -> string -> Js.Json.t -> Js.Json.t -> unit =
-  [%mel.raw
-    "function (m, t, p, pid) { \
-       var c = window.LSPluginCore; \
-       if (c && typeof c[m] === 'function') c[m](t, p, pid); \
-     }"]
-
-let hook_app t p pid = hook_call "hookApp" t p pid
-let hook_editor t p pid = hook_call "hookEditor" t p pid
-let hook_db t p pid = hook_call "hookDb" t p pid
 
 (* LSPluginCore.hostMounted() — resolves the deferred every plugin's
    provideUI/ready handshake waits on; cljs calls it once the page mounts *)
@@ -540,6 +568,22 @@ let clear_plugin_resources pid =
   Hashtbl.remove global_keybinding_cmds pid;
   installed_themes :=
     List.filter (fun th -> jstr th "pid" <> pid) !installed_themes;
+  (* cljs persist-cursor! clears pid:* keys out of pinnedToolbarItems *)
+  let prefs = read_dict prefs_key in
+  (match Js.Dict.get prefs "pinnedToolbarItems" with
+   | Some v -> (
+       match Js.Json.decodeObject v with
+       | Some pins ->
+           let kept = Js.Dict.empty () in
+           Array.iter
+             (fun (k, v) ->
+               if not (String.starts_with ~prefix:(pid ^ ":") k) then
+                 Js.Dict.set kept k v)
+             (Js.Dict.entries pins);
+           Js.Dict.set prefs "pinnedToolbarItems" (Js.Json.object_ kept);
+           write_dict prefs_key prefs
+       | None -> ())
+   | None -> ());
   clear_pid pid
 
 let hook_installed pid key =
@@ -561,7 +605,7 @@ let block_hook_installed u =
 (* exec-plugin-simple-command! — cljs merges {:args, :pid} into the cmd,
    adds {:format :uuid} from the current edit block, then fires
    LSPluginCore.hookEditor(eventKey, payload, pid) *)
-let exec_simple_command ?args pid key =
+let exec_simple_command ?args ?ctx pid key =
   match Hashtbl.find_opt simple_commands pid with
   | None -> ()
   | Some t -> (
@@ -583,6 +627,14 @@ let exec_simple_command ?args pid key =
                | Some u ->
                    Js.Dict.set payload "uuid" (jstr_ u);
                    Js.Dict.set payload "format" (jstr_ "markdown")
+               | None -> ());
+              (* ctx menu invocations pass the clicked block uuid /
+                 page name — explicit ctx wins over editing fallback *)
+              (match ctx with
+               | Some d ->
+                   Array.iter
+                     (fun (k, v) -> Js.Dict.set payload k v)
+                     (Js.Dict.entries d)
                | None -> ());
               hook_editor sc.sc_event (Js.Json.object_ payload) (jstr_ pid)))
 
@@ -766,6 +818,68 @@ let apply_theme_mode (theme : Js.Json.t) =
    | Some u -> selected_theme := Some u
    | None -> ());
   hook_app "theme-changed" theme Js.Json.null
+
+(* cljs :plugin/reset-custom-theme — drop custom theme, restore the
+   persisted ui/theme mode on <html data-theme> *)
+let reset_custom_theme () =
+  Platform.local_storage_remove "ui/custom-theme";
+  (match Platform.local_storage_get "ui/theme" with
+   | Some s -> (
+       try
+         match Js.Json.decodeString (Js.Json.parseExn s) with
+         | Some m -> Web_dom.doc_set_data "theme" m
+         | None -> ()
+       with _ -> ())
+   | None -> ())
+
+(* cljs frontend/modules/layout/core.cljs — LSPlugin.core.ts:1229 reads
+   window.frontend.modules.layout.core for drag/resize of plugin main-ui *)
+let layout_core_install : unit -> unit =
+  [%mel.raw
+       "function () { \
+          var f = window.frontend = window.frontend || {}; \
+          var m = f.modules = f.modules || {}; \
+          var l = m.layout = m.layout || {}; \
+          if (l.core) return l.core; \
+          l.core = { \
+            move_container_to_top: function (c) { \
+              var tops = [].slice.call( \
+                document.querySelectorAll('[id$=_lsp_main]')) \
+                .map(function (e) { return +(getComputedStyle(e).zIndex || 0); }); \
+              var z = Math.max.apply(null, tops.concat([0])); \
+              c.style.zIndex = (z + 1); \
+            }, \
+            setup_draggable_container_BANG_: function (c, onChange) { \
+              if (!window.interact) return; \
+              window.interact(c).draggable({ \
+                listeners: { \
+                  move: function (e) { \
+                    var x = (parseFloat(c.getAttribute('data-x')) || 0) + e.dx; \
+                    var y = (parseFloat(c.getAttribute('data-y')) || 0) + e.dy; \
+                    c.style.transform = 'translate(' + x + 'px,' + y + 'px)'; \
+                    c.setAttribute('data-x', x); c.setAttribute('data-y', y); \
+                    if (onChange) onChange({x: x, y: y}); \
+                  } \
+                } \
+              }); \
+            }, \
+            setup_resizable_container_BANG_: function (c, attrs, onChange) { \
+              if (!window.interact) return; \
+              window.interact(c).resizable({ \
+                edges: {left: true, right: true, bottom: true, top: true}, \
+                listeners: { \
+                  move: function (e) { \
+                    c.style.width = e.rect.width + 'px'; \
+                    c.style.height = e.rect.height + 'px'; \
+                    if (onChange) onChange({width: e.rect.width, height: e.rect.height}); \
+                  } \
+                } \
+              }); \
+            } \
+          }; \
+        }"]
+
+let setup_layout_core () = layout_core_install ()
 
 (* cljs select-a-plugin-theme: first theme of the pid -> selectTheme *)
 let select_plugin_theme pid =
@@ -1131,6 +1245,7 @@ let register_plugin_simple_command_fn a b c _d =
                     (match Js.Json.decodeBoolean c with
                      | Some v -> v
                      | None -> false)
+                ; sc_type = jstr cmd "type"
                 };
               bump ();
               true)
@@ -1378,6 +1493,8 @@ let core_listeners (core : Js.Json.t) =
          | None -> []);
       bump ());
   on "theme-selected" (fun theme _b -> apply_theme_mode theme);
+  (* cljs :plugin/reset-custom-theme *)
+  on "reset-custom-theme" (fun _p _b -> reset_custom_theme ());
   (* the core's settings EE already persisted via
      save_plugin_user_settings — bump so an open settings view
      re-renders *)
@@ -1413,7 +1530,209 @@ let setup () =
     (Web_dom.js_call2 (getf window_ "apis") "addListener"
        (jstr_ "lsp-updates") on_lsp_update);
   boot_register ();
+  (* cljs frontend/modules/layout/core.cljs — interact.js drag/resize
+     helpers the LSPlugin user class pulls off window.frontend.modules
+     .layout.core for its main UI window *)
+  setup_layout_core ();
+  (* reducer-side effects (graph ready/closed, sidebar toggles) can't
+     import this module — they fire through the app_hooks indirection *)
+  Subs_state.app_hooks.plugin_event <-
+    (fun t p -> hook_app t p Js.Json.null);
   host_mounted ()
+
+(* ---- phase-2 gap fills ---- *)
+
+(* cljs :plugin/simple-commands grouped by type — feeds ctx/page menus *)
+let simple_commands_of_type ty =
+  Hashtbl.fold
+    (fun pid cs acc ->
+      Hashtbl.fold
+        (fun key c acc ->
+          if c.sc_type = ty then
+            (pid, key, jstr c.sc_cmd "label") :: acc
+          else acc)
+        cs acc)
+    simple_commands []
+
+(* cljs get-state-from-store: keyed app-state reads. LUI keeps the small
+   persisted slice in localStorage (ui/theme & friends) *)
+let get_state_from_store a _b _c _d =
+  match arg_string a with
+  | None -> resolved_nil
+  | Some key -> (
+      match Platform.local_storage_get key with
+      | Some s -> (
+          try resolved (Js.Json.parseExn s)
+          with _ -> resolved (jstr_ s))
+      | None -> resolved_nil)
+
+let make_asset_url a _b _c _d =
+  match arg_string a with
+  | None -> resolved_nil
+  | Some p ->
+      if
+        String.starts_with ~prefix:"http" p
+        || String.starts_with ~prefix:"asset:" p
+        || String.starts_with ~prefix:"file:" p
+      then resolved (jstr_ p)
+      else
+        resolved
+          (jstr_
+             ("asset://"
+              ^
+              match String.split_on_char '/' p with
+              | _ :: _ as segs -> List.nth segs (List.length segs - 1)
+              | _ -> p))
+
+(* exposed hook firings for app-level effects that can't reach this
+   module's internals — reducer-side call sites use these *)
+let fire_theme_mode_changed m =
+  hook_app "theme-mode-changed" (jobj [ ("mode", jstr_ m) ]) Js.Json.null
+
+let fire_sidebar_visible_changed visible =
+  hook_app
+    "sidebar-visible-changed"
+    (jobj [ ("visible", Js.Json.boolean visible) ])
+    Js.Json.null
+
+let fire_current_graph_changed () =
+  hook_app "current-graph-changed" (jobj []) Js.Json.null
+
+(* cljs goto-plugins-dashboard! {:open-pid} — set the pending target and
+   open the plugins dialog *)
+let set_focused_settings a _b _c _d =
+  (match arg_string a with
+   | Some pid when pid <> "" ->
+       open_settings_pid := Some pid;
+       ignore
+         (Web_dom.dispatch_custom "ls:open-dialog"
+            (jobj [ ("name", jstr_ "plugins") ]))
+   | _ -> ());
+  resolved_nil
+
+(* cljs open_pdf_viewer: url string -> inflate, block uuid -> entity ->
+   ../assets/<uuid>.pdf *)
+let open_pdf_viewer a _b _c _d =
+  (match arg_string a with
+   | None -> ()
+   | Some s ->
+       let is_uuid =
+         String.length s = 36 && String.contains s '-'
+         && not (String.contains s '/')
+       in
+       let asset =
+         if is_uuid then
+           Pdf_assets.inflate_asset
+             ~original_path:("../assets/" ^ s ^ ".pdf")
+             ~href:("../assets/" ^ s ^ ".pdf")
+             ~block_uuid:(Some s) ~block_db_id:None
+             ~block_external_url:None
+         else
+           Pdf_assets.inflate_asset ~original_path:s ~href:s
+             ~block_uuid:None ~block_db_id:None
+             ~block_external_url:None
+       in
+       (match asset with
+        | Some pa -> Pdf_state.set_current (Some pa)
+        | None -> ()));
+  resolved_nil
+
+(* cljs :plugin/switch-loading-indicator + script injection *
+   exper_load_scripts loads plugin-provided scripts into <head> *)
+let load_plugin_script : string -> unit Js.Promise.t =
+  [%mel.raw
+    "function (src) { \
+       return new Promise(function (res) { \
+         var s = document.createElement('script'); \
+         s.src = src; \
+         s.onload = function () { res(true); }; \
+         s.onerror = function () { res(false); }; \
+         document.head.appendChild(s); \
+       }); \
+     }"]
+
+let exper_load_scripts a b _c _d =
+  let pid = arg_string a |> Option.value ~default:"" in
+  let urls =
+    match Js.Json.decodeArray b with
+    | Some xs ->
+        Array.to_list xs
+        |> List.filter_map Js.Json.decodeString
+    | None -> []
+  in
+  let* _ =
+    Js.Promise.(
+      all
+        (Array.of_list
+           (List.map
+              (fun u ->
+                (* relative -> plugin asset url *)
+                let src =
+                  if String.contains u ':' then u
+                  else "asset://" ^ pid ^ "/" ^ u
+                in
+                load_plugin_script src)
+              urls)))
+  in
+  Js.Promise.resolve (Js.Json.boolean true)
+
+(* cljs :plugin/request — fetch + #lsp#request#callback back to the
+   caller's user model *)
+let request_serial = ref 0
+let request_controllers : (string, Js.Json.t) Hashtbl.t =
+  Hashtbl.create 4
+
+external new_abort_controller : unit -> Js.Json.t = "AbortController"
+  [@@mel.new]
+
+external fetch_with : string -> Js.Json.t -> Js.Json.t Js.Promise.t
+  = "fetch" [@@mel.scope "window"]
+
+let call_caller : Js.Json.t -> string -> Js.Json.t -> unit =
+  [%mel.raw "function (c, k, p) { c.call(k, p); }"]
+
+let exper_request a b _c _d =
+  let pid = arg_string a |> Option.value ~default:"" in
+  (match arg_string b, caller_of_pid pid with
+   | Some url, Some c ->
+       incr request_serial;
+       let rid = "req_" ^ string_of_int !request_serial in
+       let ctrl = new_abort_controller () in
+       Hashtbl.replace request_controllers rid ctrl;
+       let opts = jobj [ ("signal", getf ctrl "signal") ] in
+       let* resp = fetch_with url opts in
+       let* text = meth_promise resp "text" [||] in
+       Hashtbl.remove request_controllers rid;
+       call_caller c "#lsp#request#callback"
+         (jobj
+            [ ("requestId", jstr_ rid)
+            ; ("payload",
+                jobj
+                  [ ("status", getf resp "status")
+                  ; ("body", text)
+                  ])
+            ]);
+       resolved (Js.Json.boolean true)
+   | _ -> resolved_nil)
+
+let http_request_abort a _b _c _d =
+  (match arg_string a with
+   | Some rid -> (
+       match Hashtbl.find_opt request_controllers rid with
+       | Some c ->
+           ignore (meth c "abort" [||]);
+           Hashtbl.remove request_controllers rid
+       | None -> ())
+   | None -> ());
+  resolved_nil
+
+let write_assetsdir_file _a _b _c _d =
+  (* electron-only fs write; web runtime has no assets dir *)
+  resolved_nil
+
+let relaunch _a _b _c _d = resolved_nil
+
+let quit _a _b _c _d = resolved_nil
 
 (* kept annotation-free to avoid a Plugin_host <-> Sdk_api module
    cycle; the shape must match Sdk_api.api_fn *)
@@ -1461,6 +1780,16 @@ let api_methods =
   ; "get_external_plugin", get_external_plugin
   ; "invoke_external_plugin_cmd", invoke_external_plugin_cmd_fn
   ; "validate_external_plugins", false_fn
+  ; "set_focused_settings", set_focused_settings
+  ; "get_state_from_store", get_state_from_store
+  ; "open_pdf_viewer", open_pdf_viewer
+  ; "make_asset_url", make_asset_url
+  ; "write_assetsdir_file", write_assetsdir_file
+  ; "exper_load_scripts", exper_load_scripts
+  ; "exper_request", exper_request
+  ; "http_request_abort", http_request_abort
+  ; "relaunch", relaunch
+  ; "quit", quit
   ; "__install_plugin", __install_plugin_fn
   ; "get_caller_plugin_id", get_caller_plugin_id
   ; "should_exec_plugin_hook", should_exec_plugin_hook_fn
@@ -1476,3 +1805,4 @@ let api_methods =
   ; "set_main_ui_inline_style", nil_fn
   ; "set_main_ui_attrs", nil_fn
   ]
+

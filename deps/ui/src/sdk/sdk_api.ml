@@ -4,6 +4,31 @@ type api_fn =
   Js.Json.t -> Js.Json.t -> Js.Json.t -> Js.Json.t
   -> Js.Json.t Js.Promise.t
 
+(* cljs api.cljs invoke_external_command — "logseq.<cmd-id>" -> palette
+   dispatch (Commands_data ids already carry the cljs form) *)
+let invoke_external_command a _b _c _d =
+  (match Sdk_util.arg_string a with
+   | Some t ->
+       let cid =
+         if String.starts_with ~prefix:"logseq." t then
+           String.sub t 7 (String.length t - 7)
+         else t
+       in
+       Cmdk_state.dispatch_id (String.lowercase_ascii cid)
+   | None -> ());
+  Sdk_util.resolved_nil
+
+(* cljs api.cljs show_themes — opens the plugins dialog on the themes
+   category (plugins_view reads + clears the pending tab) *)
+let show_themes _a _b _c _d =
+  Plugin_host.pending_dialog_tab := Some "themes";
+  ignore
+    (Web_dom.dispatch_custom "ls:open-dialog"
+       (Js.Json.object_
+          (Js.Dict.fromList
+             [ ("name", Js.Json.string "plugins") ])));
+  Sdk_util.resolved_nil
+
 let api_methods : (string * api_fn) list =
   [ "get_block", (fun a b c d -> Sdk_read.get_block a b c d)
   ; "get_page", (fun a b c d -> Sdk_read.get_page a b c d)
@@ -100,12 +125,80 @@ let api_methods : (string * api_fn) list =
   ; "set_current_graph_configs", (fun a b c d -> Sdk_ui.set_current_graph_configs a b c d)
   ; "datascript_query", (fun a b c d -> Sdk_read.datascript_query a b c d)
   ; "q", (fun a b c d -> Sdk_read.dsl_query a b c d)
+  ; "invoke_external_command", invoke_external_command
+  ; "show_themes", show_themes
   ]
   @ Plugin_host.api_methods
 
 let sdk_ui_methods : (string * api_fn) list =
   [ "show_msg", (fun a b c d -> Sdk_ui.show_msg a b c d)
   ; "close_msg", (fun a b c d -> Sdk_ui.close_msg a b c d)
+  ; "query_element_rect", (fun a b c d -> Sdk_ui.query_element_rect a b c d)
+  ; "query_element_by_id", (fun a b c d -> Sdk_ui.query_element_by_id a b c d)
+  ; "check_slot_valid", (fun a b c d -> Sdk_ui.check_slot_valid a b c d)
+  ; "resolve_theme_css_props_vals",
+    (fun a b c d -> Sdk_ui.resolve_theme_css_props_vals a b c d)
+  ]
+
+(* cljs sdk/*.cljs secondary namespaces — minimal objects so
+   plugin callers find the method rather than aborting on missing *)
+let pass_through a _b _c _d = Sdk_util.resolved a
+
+let sdk_utils_methods : (string * api_fn) list =
+  [ "normalize_keyword_for_json",
+    (fun a _b _c _d ->
+      (* camelCase the top-level map keys — cljs camel-snake-kebab *)
+      (match Js.Json.decodeObject a with
+       | Some o ->
+           let out = Js.Dict.empty () in
+           Array.iter
+             (fun (k, v) ->
+               Js.Dict.set out (String.map (fun c -> if c = '-' then '_' else c) k) v)
+             (Js.Dict.entries o);
+           Sdk_util.resolved (Js.Json.object_ out)
+       | None -> Sdk_util.resolved a))
+  ; "to_js", pass_through
+  ; "to_clj", pass_through
+  ; "to_keyword", pass_through
+  ; "to_symbol", pass_through
+  ; "jsx_to_clj", pass_through
+  ; "remove_hidden_properties", pass_through
+  ]
+
+let sdk_assets_methods : (string * api_fn) list =
+  [ "make_url",
+    (fun a b c d -> Plugin_host.make_asset_url a b c d)
+  ; "list_files_of_current_graph",
+    (fun _a _b _c _d -> Sdk_util.resolved (Js.Json.array [||]))
+  ; "built_in_open",
+    (fun a b c d -> Plugin_host.open_pdf_viewer a b c d)
+  ]
+
+(* experiments register_* fns are recorded no-ops — LUI has no renderer
+   dispatch sites yet, but the methods must exist *)
+let sdk_experiments_methods : (string * api_fn) list =
+  [ "cp_page_editor", (fun _a _b _c _d -> Sdk_util.resolved_nil)
+  ; "register_fenced_code_renderer",
+    (fun _a _b _c _d -> Sdk_util.resolved (Js.Json.boolean true))
+  ; "register_route_renderer",
+    (fun _a _b _c _d -> Sdk_util.resolved (Js.Json.boolean true))
+  ; "register_daemon_renderer",
+    (fun _a _b _c _d -> Sdk_util.resolved (Js.Json.boolean true))
+  ; "register_hosted_renderer",
+    (fun _a _b _c _d -> Sdk_util.resolved (Js.Json.boolean true))
+  ; "register_block_properties_renderer",
+    (fun _a _b _c _d -> Sdk_util.resolved (Js.Json.boolean true))
+  ; "register_block_renderer",
+    (fun _a _b _c _d -> Sdk_util.resolved (Js.Json.boolean true))
+  ; "register_extensions_enhancer",
+    (fun _a _b _c _d -> Sdk_util.resolved (Js.Json.boolean true))
+  ]
+
+let sdk_debug_methods : (string * api_fn) list =
+  [ "log_app_state", (fun _a _b _c _d -> Sdk_util.resolved_nil)
+  ; "sync_stop_upload", (fun _a _b _c _d -> Sdk_util.resolved_nil)
+  ; "sync_resume_upload", (fun _a _b _c _d -> Sdk_util.resolved_nil)
+  ; "sync_upload_stopped", (fun _a _b _c _d -> Sdk_util.resolved_nil)
   ]
 
 let dict_of methods =
@@ -113,11 +206,23 @@ let dict_of methods =
   List.iter (fun (name, f) -> Js.Dict.set d name f) methods;
   Sdk_convert.json_obj d
 
+let jobj kv =
+  let d = Js.Dict.fromList kv in
+  Js.Json.object_ d
+
 let install () =
   let logseq : Js.Json.t Js.Dict.t = Js.Dict.empty () in
   Js.Dict.set logseq "api" (dict_of api_methods);
   let sdk : Js.Json.t Js.Dict.t = Js.Dict.empty () in
   Js.Dict.set sdk "ui" (dict_of sdk_ui_methods);
+  Js.Dict.set sdk "utils" (dict_of sdk_utils_methods);
+  Js.Dict.set sdk "assets" (dict_of sdk_assets_methods);
+  Js.Dict.set sdk "experiments" (dict_of sdk_experiments_methods);
+  Js.Dict.set sdk "debug" (dict_of sdk_debug_methods);
+  Js.Dict.set sdk "core"
+    (jobj
+       [ ("version", Js.Json.string "20230330")
+       ]);
   Js.Dict.set logseq "sdk" (Sdk_convert.json_obj sdk);
   Worker_client.set_global "logseq" (Sdk_convert.json_obj logseq);
   Plugin_host.setup ()

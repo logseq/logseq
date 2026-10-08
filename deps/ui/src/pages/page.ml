@@ -397,6 +397,39 @@ let title_content (page : Model.page) : t =
         ]
     ]
 
+(* plugin page-head injections — cljs plugin.cljs hook-ui-items :pagebar
+   renders slotted divs in the title-actions area, and hook-ui-slot
+   :page-head-actions emits :page-head-actions-slotted once per mount with
+   the slot id so plugins can provideUI({slot: <id>, ...}) *)
+let head_slot_fired : string ref = ref ""
+
+let page_plugin_slots ctx (page : Model.page) : t list =
+  let slot = "lsp-page-head-actions" in
+  if !head_slot_fired <> page.Model.page_title then (
+    head_slot_fired := page.Model.page_title;
+    Signal.enqueue_effect ctx.Lui_ui.ui_scheduler (fun () ->
+        Plugin_host.hook_app
+          "page-head-actions-slotted"
+          (Js.Json.object_
+             (Js.Dict.fromList
+                [ ("type", Js.Json.string "slotted")
+                ; ("slot", Js.Json.string slot)
+                ; ( "payload"
+                  , Js.Json.object_
+                      (Js.Dict.fromList
+                         [ ("page", Js.Json.string page.Model.page_title)
+                         ]) ) ]))
+          Js.Json.null;
+        Plugin_host.inject_toolbar_ui ()));
+  box ~key:"lsp-slot" ~accessibility_identifier:slot
+    ~style_class:"pl-injected-ui-item-pagebar" []
+  :: List.map
+       (fun it ->
+         box ~key:("pb-" ^ Plugin_host.item_slot it)
+           ~accessibility_identifier:(Plugin_host.item_slot it)
+           ~style_class:"pl-injected-ui-item-pagebar" [])
+       (Plugin_host.ui_items_of_type "pagebar")
+
 let page_title_el (m : Model.t) (page : Model.page) : t =
  fun ctx parent ->
   (* title rows also render in the journals list before any block row
@@ -562,8 +595,10 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                  ((if m.editing_title then
                                                     []
                                                   else
-                                                    [ Properties_area.title_actions
-                                                        page ])
+                                                    Properties_area.title_actions
+                                                        page
+                                                    :: page_plugin_slots ctx
+                                                         page)
                                                 @ [ (if m.editing_title then
                                                        title_editor page
                                                      else

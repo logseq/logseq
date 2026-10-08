@@ -407,7 +407,13 @@ let body (_ms : Model.t Signal.signal) : t =
   let mkt_search = Signal.state owner "" in
   let mkt_cat = Signal.state owner "plugins" in
   let inst_search = Signal.state owner "" in
-  let inst_cat = Signal.state owner "plugins" in
+  (* cljs show_themes/:open-pid preselects the dialog's starting tab *)
+  let start_cat =
+    match !Plugin_host.pending_dialog_tab with
+    | Some t -> Plugin_host.pending_dialog_tab := None; t
+    | None -> "plugins"
+  in
+  let inst_cat = Signal.state owner start_cat in
   let pkgs = Signal.state owner ([] : Js.Json.t list) in
   let stats = Signal.state owner Js.Json.null in
   let loading = Signal.state owner true in

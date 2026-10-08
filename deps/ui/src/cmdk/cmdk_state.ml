@@ -1352,7 +1352,7 @@ let rec run_item st it =
         | Some el -> Web_dom.el_set_value el ""
         | None -> ());
        refresh st
-   | Run cid -> run_command st repo cid
+   | Run cid -> run_with_lifecycle st repo cid
    | Open_file _ ->
        (* cljs file rows open the file editor — no such route here;
           just close *)
@@ -1410,6 +1410,14 @@ and run_command st repo (cid : string) =
                      ~date:(float_of_int (day mod 100)) ())
               in
               create_page title;
+              (* cljs :journal/insert-today -> today-journal-created *)
+              if
+                day
+                = Dates.journal_day_of (Dates.date_now ())
+              then
+                Plugin_host.hook_app "today-journal-created"
+                  (Js.Json.object_ (Js.Dict.empty ()))
+                  Js.Json.null;
               Js.Promise.resolve ())
     | None -> ()
   in
@@ -1557,6 +1565,16 @@ and run_command st repo (cid : string) =
       close st (* no local equivalent / editing-context commands *))
 
 
+(* cljs hook-lifecycle-fn! — before/after-command-invoked:<cid> wraps
+   every command dispatch (palette pick, shortcut, invoke_external_ *)
+and run_with_lifecycle st repo (cid : string) =
+  Plugin_host.hook_app ("before-command-invoked:" ^ cid) Js.Json.null
+    Js.Json.null;
+  run_command st repo cid;
+  Plugin_host.hook_app ("after-command-invoked:" ^ cid) Js.Json.null
+    Js.Json.null
+
+
 let run_highlighted st =
   let v = get st in
   match item_at v v.hl with Some it -> run_item st it | None -> ()
@@ -1578,8 +1596,8 @@ let dispatch_id (cid : string) =
           end
       | "go/search-in-page" | "editor/move-blocks" | "go/search-themes" ->
           if not (get st).open_ then open_palette st;
-          run_command st (Runtime.model ()).Model.repo cid
-      | _ -> run_command st (Runtime.model ()).Model.repo cid)
+          run_with_lifecycle st (Runtime.model ()).Model.repo cid
+      | _ -> run_with_lifecycle st (Runtime.model ()).Model.repo cid)
   | None -> ()
 
 (* shift+enter opens the highlighted page/block in the right sidebar
