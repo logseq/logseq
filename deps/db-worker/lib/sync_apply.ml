@@ -1633,6 +1633,43 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
          in
          match tx_data with
          | Some items ->
+             (* per-item drops are intentional (missing refs, parent
+                cycles) but were invisible — surface them so a vanished
+                op is diagnosable against its tx-id *)
+             (let before = tx_items_of e.tx in
+              if before <> items then begin
+                (* multiset difference: a kept occurrence removes one
+                   matching item — the rest was dropped or rewritten *)
+                let kept = ref items in
+                let dropped =
+                  List.filter
+                    (fun item ->
+                       let rec without seen = function
+                         | k :: rest when k = item ->
+                             List.rev_append seen rest
+                         | k :: rest -> without (k :: seen) rest
+                         | [] -> []
+                       in
+                       let rest = without [] !kept in
+                       if List.length rest < List.length !kept then
+                         (kept := rest; false)
+                       else true)
+                    before
+                in
+                if dropped <> [] then
+                  Worker_log.warn "db-sync/upload-item-dropped"
+                    [ "repo", Option.value repo ~default:"-"
+                    ; "tx-id", e.tx_id
+                    ; "dropped", string_of_int (List.length dropped)
+                    ; ( "items"
+                      , dropped
+                        |> List.map Ds_wire.edn_of_transit
+                        |> List.map (fun s ->
+                             if String.length s > 160 then
+                               String.sub s 0 160 ^ "…"
+                             else s)
+                        |> String.concat " | " ) ]
+              end);
              (match srv_db with
               | Some _ when items <> [] ->
                   (* availability must track what actually uploads — the
