@@ -38,17 +38,33 @@ let publish_open () =
   | Some st -> Runtime.signal_set st (!open_popups <> [])
   | None -> ()
 
+(* last hover-highlighted menu row — gpui synthesizes document
+   mousemove only (no per-element mouseenter or :hover paint), so
+   hovered rows get the radix-equivalent data-highlighted attr plus
+   the `chosen` class that paints the menu-hover background *)
+let hover_row : D.el option ref = ref None
+
+let same_el (a : D.el) (b : D.el) : bool =
+  match (Imperative_dom.id_of a, Imperative_dom.id_of b) with
+  | Some i, Some j -> i = j
+  | _ -> false
+
+let row_classes r =
+  Option.value (Dom_ext.str_prop "class" r) ~default:""
+
 let close_top () =
   match !open_popups with
   | [] -> ()
   | p :: rest ->
       open_popups := rest;
       D.el_remove p;
+      hover_row := None;
       publish_open ()
 
 let close_all () =
   List.iter D.el_remove !open_popups;
   open_popups := [];
+  hover_row := None;
   publish_open ()
 
 let on_doc_keydown ev =
@@ -60,6 +76,45 @@ let on_doc_keydown ev =
 
 let listeners_installed = ref false
 
+let on_doc_mousemove (ev : Dom_ext.event) =
+  (* hover only matters while a menu surface is up; closest() walks the
+     event-target snapshot chain, so any ui__dropdown-menu surface
+     (views menus, the dots/context menus) joins the same treatment *)
+  let row =
+    match Editor_dom.ev_target ev with
+    | Some el -> (
+        match
+          Editor_dom.el_closest el
+            ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content"
+        with
+        | None -> None (* outside every dropdown surface *)
+        | Some _ ->
+            Editor_dom.el_closest el
+              "[role=menuitem], [role=menuitemcheckbox]")
+    | None -> None
+  in
+  (match (!hover_row, row) with
+   | Some a, Some b when same_el a b -> ()
+   | prev, cur ->
+       (match prev with
+        | Some r ->
+            D.el_remove_attr r "data-highlighted";
+            D.el_class_remove r "chosen"
+        | None -> ());
+       (match cur with
+        | Some r ->
+            D.el_set_attr r "data-highlighted" "";
+            D.el_class_add r "chosen";
+            (* sub-triggers cascade on hover; open_sub is idempotent,
+               and its own click listener would run the same path *)
+            if
+              String.length (row_classes r) > 0
+              && List.exists (fun t -> t = "ui__dropdown-menu-sub-trigger")
+                   (String.split_on_char ' ' (row_classes r))
+            then D.el_click r
+        | None -> ());
+       hover_row := cur)
+
 let install_listeners () =
   if not !listeners_installed then begin
     listeners_installed := true;
@@ -70,7 +125,8 @@ let install_listeners () =
       ~on_hit:(function
         | None -> close_all ()
         | Some _ -> ());
-    Editor_dom.document_add_listener "keydown" on_doc_keydown true
+    Editor_dom.document_add_listener "keydown" on_doc_keydown true;
+    Dom_ext.add_document_listener "mousemove" on_doc_mousemove false
   end
 
 let push_popup el =
@@ -176,12 +232,16 @@ let focus_item (items : D.el array) idx =
     Array.iter
       (fun el ->
         D.el_set_attr el "tabindex" "-1";
-        D.el_remove_attr el "data-highlighted")
+        D.el_remove_attr el "data-highlighted";
+        D.el_class_remove el "chosen")
       items;
     let el = items.(idx) in
     D.el_set_attr el "tabindex" "0";
     D.el_focus el;
-    D.el_set_attr el "data-highlighted" ""
+    D.el_set_attr el "data-highlighted" "";
+    (* data-highlighted has no gpui paint rule — the chosen class
+       carries the menu-hover background *)
+    D.el_class_add el "chosen"
   end
 
 let focusable_items content : D.el array =

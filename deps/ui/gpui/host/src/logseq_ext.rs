@@ -388,8 +388,38 @@ fn register_class_styles() {
          border-radius:6px;background:background",
         "pointer-events-auto",
     );
-    class("ui__popover-content", "", "pointer-events-auto");
-    class("ui__dropdown-menu-content", "", "pointer-events-auto");
+    // ---- body-mounted popup chrome (resources/css/lui-overlay.css
+    // .ui__popover-content et al. base rule): on web the stylesheet
+    // paints the card — without it these surfaces render as bare text.
+    let popup_chrome =
+        "min-width:8rem;border:1px solid border;border-radius:6px;\
+         background:popover";
+    class(
+        "ui__popover-content",
+        popup_chrome,
+        "pointer-events-auto overflow-y-auto overflow-x-hidden",
+    );
+    let menu_chrome = &format!("{popup_chrome};padding:4px");
+    class(
+        "ui__dropdown-menu-content",
+        menu_chrome,
+        "pointer-events-auto overflow-y-auto overflow-x-hidden",
+    );
+    class(
+        "ui__dropdown-menu-sub-content",
+        menu_chrome,
+        "pointer-events-auto overflow-y-auto overflow-x-hidden",
+    );
+    class(
+        "ui__context-menu-content",
+        menu_chrome,
+        "pointer-events-auto overflow-y-auto overflow-x-hidden",
+    );
+    class(
+        "ui__select-content",
+        menu_chrome,
+        "pointer-events-auto overflow-y-auto overflow-x-hidden",
+    );
     class("ls-property-dialog", "", "pointer-events-auto");
 
     // ---- app shell (web .cp__header + groups) ----
