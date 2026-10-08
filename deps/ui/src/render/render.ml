@@ -435,12 +435,28 @@ let table_sep_row cells =
 let table_el ~self lines : t =
   let cell_el tag cell =
     (* cljs tr: every cell carries scope=col + .org-left; contents are
-       map-inline parsed *)
-    D.el ~tag ~attrs:[ ("scope", "col"); ("class", "org-left") ]
+       map-inline parsed. data-style is the gpui backend's inline-style
+       channel (the web DOM ignores the attribute): the lui-core.css
+       .classic-table cell border/padding + header fill are stylesheet
+       rules gpui cannot see *)
+    D.el ~tag
+      ~attrs:
+        [ ("scope", "col"); ("class", "org-left")
+        ; ( "data-style"
+          , "border:1px solid var(--ls-border-color);padding:6px;\
+             min-width:0;flex:1"
+            ^ (if tag = "th" then
+                 ";background:var(--lx-gray-03,\
+                  var(--ls-tertiary-background-color));\
+                  white-space:nowrap"
+               else "") )
+        ]
       (Render_inline.parse ~self cell)
   in
   let row_el tag cells =
-    D.el ~tag:"tr" (List.map (cell_el tag) cells)
+    D.el ~tag:"tr"
+      ~attrs:[ ("data-style", "display:flex;flex-direction:row;width:100%") ]
+      (List.map (cell_el tag) cells)
   in
   let rows = List.map table_cells lines in
   let header, body =
@@ -610,8 +626,20 @@ let table_parts s =
 
 let table_el ~self (header, rows) : t =
   let cell tag c =
+    (* data-style: gpui inline-style channel — cell border/padding +
+       header fill live in lui-core.css rules gpui cannot see *)
     D.el ~tag ~style_class:"org-left"
-      ~attrs:[ ("scope", "col") ]
+      ~attrs:
+        [ ("scope", "col")
+        ; ( "data-style"
+          , "border:1px solid var(--ls-border-color);padding:6px;\
+             min-width:0;flex:1"
+            ^ (if tag = "th" then
+                 ";background:var(--lx-gray-03,\
+                  var(--ls-tertiary-background-color));\
+                  white-space:nowrap"
+               else "") )
+        ]
       (Render_inline.parse ~self c)
   in
   D.el ~key:("tbody-" ^ self) ~tag:"div" ~style_class:"block-body"
@@ -621,16 +649,29 @@ let table_el ~self (header, rows) : t =
         [ D.el ~tag:"table" ~style_class:"table-auto"
             ~attrs:
               [ ("border", "2"); ("cellspacing", "0"); ("cellpadding", "6")
-              ; ("rules", "groups"); ("frame", "hsides") ]
+              ; ("rules", "groups"); ("frame", "hsides")
+              ; ("data-style", "width:98%") ]
             [ D.el ~tag:"colgroup"
                 (List.map
                    (fun _ -> D.el ~tag:"col" ~style_class:"org-left" [])
                    header)
             ; D.el ~tag:"thead"
-                [ D.el ~tag:"tr" (List.map (cell "th") header) ]
+                [ D.el ~tag:"tr"
+                    ~attrs:
+                      [ ( "data-style"
+                        , "display:flex;flex-direction:row;width:100%" )
+                      ]
+                    (List.map (cell "th") header) ]
             ; D.el ~tag:"tbody"
                 (List.map
-                   (fun r -> D.el ~tag:"tr" (List.map (cell "td") r))
+                   (fun r ->
+                     D.el ~tag:"tr"
+                       ~attrs:
+                         [ ( "data-style"
+                           , "display:flex;flex-direction:row;width:100%"
+                           )
+                         ]
+                       (List.map (cell "td") r))
                    rows) ] ] ]
 
 let body_el ~self s : t option =
