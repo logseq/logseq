@@ -15,6 +15,336 @@ This document was updated on 2026-10-09 after read-only editor research. The use
 Before implementation, reread applicable AGENTS.md files and @.agents/skills/logseq-lui/SKILL.md, @.agents/skills/logseq-i18n/SKILL.md, @/Users/tiensonqin/.codex/skills/ocaml-development/SKILL.md, and @/Users/tiensonqin/.codex/skills/test-driven-development/SKILL.md.
 Current AGENTS.md and the LUI skill take precedence over older architecture examples using direct `dyn`, generic DOM extensions, or utility classes.
 
+## Paused implementation handoff (2026-10-09)
+
+The user paused implementation and will assign the continuation to another model.
+The active goal is paused, not complete.
+This section is the current handoff; later execution entries retain historical evidence and older dependency revisions.
+Resume implementation only in the continuation task.
+The original Tasks 1–7 below remain the detailed design and deletion gates.
+
+### Checkout and delivered work
+
+Repository: `/Users/tiensonqin/Codes/projects/logseq`.
+Branch: `refactor/lui`.
+Last pushed implementation HEAD at pause: `8f373d1b46c14097a341017e1e2b035222602e77`.
+After writing this handoff, the user requested committing and pushing the plan and the tested extraction as checkpoints.
+Inspect commits after that baseline and the current Git status before assuming the listed extraction remains uncommitted.
+The extraction checkpoint is now committed as `ad675c389f` (`refactor: isolate UI platform services`).
+The plan is committed separately after that checkpoint; only unrelated work remains outside these commits.
+Use ordinary merges and additive commits; the user explicitly rejected rebasing.
+
+| Commit or resource | Delivered result | State |
+| --- | --- | --- |
+| `a995252bd8` | LUI publishing, memory Datascript, datom search, legacy frontend cleanup | Pushed |
+| `cf4f0195cb` | Shared production-view baselines, isolated native storage, modern host ABI, UTF-16 fix | Pushed |
+| `1b2e5f0bff` | Portable task/service contracts and shared settings controls; standard UI command runs contract tests | Pushed |
+| `f6051920e0`, `128ff91302` | Concurrent worker build cleanup and verified SQLite amalgamation download | Integrated from remote |
+| `8f373d1b46` | Normal merge of remote worker build updates into the shared branch | Pushed |
+| [LUI PR 162](https://github.com/logseq/lui/pull/162) | Resync ordinary parentless trees and detached extensions | Merged after all CI checks passed |
+| `ad675c389f` | Theme/route baselines and browser/native platform source extraction, compiled and tested in both runtimes | Checkpoint committed after pause at the user's request |
+
+The user authorized necessary LUI repository changes, PR creation, and merging after CI passes.
+That authorization does not resume this paused task.
+The user ended the earlier open-ended performance work.
+Preserve responsiveness while migrating; do not reopen a rope, incremental-parser, or 120fps optimization campaign.
+
+### Preserve the working tree
+
+Unrelated files must retain both content and staging state:
+
+```text
+ M AGENTS.md
+A  docs/agent-guide/001-master-outliner_report.md
+?? docs/ocaml-gpui-architecture.html
+```
+
+The master outliner report is deliberately staged.
+Never use blanket staging, reset, clean, or stash restoration.
+Do not include these files in a migration commit.
+The handoff and tested extraction were uncommitted at pause; the user subsequently authorized checkpoint commits for both.
+
+Migration files that were uncommitted at pause:
+
+```text
+ M deps/ui/gpui/drive_test.ml
+ M deps/ui/gpui/dune
+ M deps/ui/native/dune
+ D deps/ui/native/host.ml
+ M deps/ui/native/platform.ml
+ M deps/ui/subs/dune
+ D deps/ui/subs/platform.ml
+ M deps/ui/test/shared/shared_scenarios.ml
+ M deps/ui/test/test_drive.ml
+ M deps/ui/web/dune
+ M deps/ui/web/platform_web.ml
+?? deps/ui/native/services/dune
+?? deps/ui/native/services/host.ml
+?? deps/ui/native/services/platform_native.ml
+?? deps/ui/web/platform.ml
+```
+
+### Current architecture and extraction
+
+During checkpoint preparation, origin advanced to `74183c02df` through three non-overlapping commits.
+The checkout fast-forwarded normally, retaining the report's exact staged blob.
+`b90e4520ec` changes GPUI's Taffy patch from vendored source to the pinned `logseq/taffy` tag; `3936bec9da` and `74183c02df` remove old screenshot archives, audit reports, and capture scripts.
+Do not restore those obsolete files from historical audit references in this plan.
+The Web suite again passed 1,605 checks; native again passed 147 checks and both process tests; `bb lint:dev` also passed at checkpoint preparation.
+After the remote Taffy update, `cargo test --locked` rebuilt the changed dependencies and passed all 12 tests; its isolated worker was stopped.
+This document passes its focused `spec-dev-tool check`.
+The repository-wide document check reports the unrelated staged `001-master-outliner_report.md` naming violation; leave that report unchanged.
+
+`deps/ui/src/contracts/` owns `Wire`, `State_cell`, `Ui_services`, and `Ui_task` in byte/native/Melange modes.
+`deps/ui/src/shared/` owns `Ui_parts` and `Settings_controls` in both actual runtimes.
+These portable libraries have no `Js`, `Web_dom`, or `Platform` references.
+`Ui_services` currently exposes raw preference storage, literal-text conversion, flush, and owner assertions.
+`Ui_task` provides deferred completion/observation, rejection propagation, cancellation, ordered `all`, and late-completion suppression.
+No production business flow has yet migrated to `Ui_task`.
+
+```text
+Shared controls / State_cell
+          |
+          v
+Ui_services + Ui_task
+      /          \
+Web adapters      Native services
+browser globals   persistence / mailbox / host
+```
+
+The extracted native service library is `deps/ui/native/services/dune`.
+`native/services/host.ml` is a byte-identical move of `native/host.ml`.
+`native/services/platform_native.ml` extracts host/persistence/document-state, hash/history/query, and service-installation sections.
+`native/platform.ml` includes that module and retains the remaining emulation helpers.
+The include preserves the existing mutable state and callbacks; do not recreate them in another adapter.
+`native/dune` and `gpui/dune` depend on the new library, and the GPUI Host copy rule is removed.
+
+`deps/ui/web/platform.ml` is the moved browser implementation formerly in `subs/platform.ml`.
+Its only functional-source adjustment replaces `open Promise_ext` with the equivalent local `let*` operator to avoid a library dependency cycle.
+`subs/dune` now depends on `logseq_ui_web_services`.
+`web/platform_web.ml` installs services using existing Platform storage access and literal-text conversion rather than duplicate FFI.
+Browser storage getters still access the current `globalThis.localStorage` on every call, which is required when test fixtures replace browser globals.
+
+Theme and route baselines use the same production view scenarios in `test/shared/shared_scenarios.ml`, with runtime-specific host operations at the two entries.
+Theme scenarios drive real Dark/Light/System controls, inspect effective host classes and raw persisted values, and verify remount retention.
+Route scenarios verify encoded page/graph destinations, observer ordering, and restoration.
+The browser stub explicitly fires `hashchange`; native hash observers already notify synchronously.
+These baselines prove existing behavior before extraction; they do not complete neutral theme/navigation contracts.
+
+### Verification at pause
+
+| Verification | Latest result | Limit |
+| --- | --- | --- |
+| OCaml Web/test/native embed/GPUI embed/GPUI Drive build | Passed after current extraction | Compilation alone does not establish host interaction parity |
+| Web application test artifact | 1,605 checks, zero failures | In-process browser fixture |
+| Native production Drive entry | 147 checks, zero failures | Isolated native process |
+| Native process-isolation integration | Two tests passed | Isolated startup/storage contract |
+| GPUI Cargo | 12 tests passed after current extraction | Includes real bridge/palette/resync/disposal, not actual OS input |
+| `pnpm ui:build` | Passed after current extraction | Existing Transit eval warnings remain |
+| `bb lint:dev` | Passed before current extraction | Rerun before the next implementation commit |
+| Nine read-only review passes | No confirmed new findings for extraction | Thread/lifecycle questions below remain future integration work |
+| Headless production Web boot | Demo/Journals loaded; no page errors | Theme/route browser interaction was not run before pause |
+| Full actual Web editor baseline | One continuous Delete case failed | Expected `["first", "C", "D"]`; observed `["firstC", "D"]` |
+| `git diff --check` | Passed before adding this handoff | Rerun for the document and next source batch |
+
+The four page errors in the full editor baseline were deliberate rejection injections, not independently confirmed runtime errors.
+Do not report the full editor suite as green while the continuous Delete failure remains.
+Actual native window interaction, OS IME, soft-wrap navigation, and caret geometry remain unverified.
+No working Logseq SwiftUI application/editor host was found; LUI Apple galleries are not evidence of Logseq parity.
+
+### Tools, dependency state, and screen constraint
+
+The physical display was put to sleep and must remain asleep.
+Do not focus applications, open foreground browser tabs, or launch GUI verification that wakes it.
+Only use a demonstrably headless method while that constraint applies.
+The scoped HTTP test server and headless browser were stopped during pause cleanup.
+
+Installed Playwright's default Chromium binary was unavailable.
+Headless boot succeeded using `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` as Playwright's explicit executable.
+Use a disposable origin, browser context, graph, and storage directory.
+Do not treat a successful page load as interaction verification.
+
+The sibling LUI checkout is `/Users/tiensonqin/Codes/projects/lui`, clean at `1ca2b862687bc525ffc2623410719db09e0cd926` on `fix/resync-live-trees`.
+PR 162 merged as `91aecb52a1cba2faaf23aac1d64a0bd1cb6549e7` after six CI jobs and WIP all passed.
+Opam is configured for `git+https://github.com/logseq/lui.git#main`, but its cached installed pin revision at pause is `1ca2b862687bc525ffc2623410719db09e0cd926`.
+The fix is present; do not claim that the installed package is exactly the merge SHA.
+Recheck `opam pin list` and sibling source before another dependency update.
+`drive` is `1e1653d5bdd0810e89d9e3a32b2e0ea2811c1cf5`; `ocaml-signal` is `868c1459f865b4ba3b227eb440dba40f1c812899`.
+
+All shell commands must use `rtk`, with `rtk proxy` when raw output is required.
+Serialize Dune commands in this checkout, including commands started indirectly by package scripts.
+`spec-dev-tool` is not on PATH; use `/Users/tiensonqin/Codes/projects/spec_dev_tool/_build/default/bin/main.exe`.
+Keep this document proposed until the entire migration and its acceptance criteria are complete.
+
+### Immediate continuation: finish Task 2
+
+1. Read root and directory-specific AGENTS.md, the matching repo-local skills, `prompts/review.md`, and this complete plan.
+2. Confirm the branch, HEAD, remote changes, dependency pins, and exact staged/unstaged files.
+3. Inspect the tested uncommitted platform moves; retain them unless new evidence requires a correction.
+4. Run the focused baseline commands below against the current tree.
+5. Verify the existing extraction checkpoint `ad675c389f`; do not recommit or recreate the source moves.
+6. Trace theme reads/writes and side effects in `src/settings/settings_view.ml`, `src/settings/settings_page.ml`, native counterparts, app boot, and plugin hooks.
+7. Trace routing in `src/routing/router.ml`, `src/app/runtime.ml`, `web/platform.ml`, and `native/services/platform_native.ml`, verifying actual current paths with `rg --files`.
+8. Add behavior tests for system appearance changes, effective preference persistence, and plugin notifications exactly once when a user changes theme.
+9. Add behavior tests for history back/forward, quiet fragment replacement, listener cleanup, graph-qualified routes, and late notifications after disposal.
+10. Run the new behavior regressions before implementation and confirm a meaningful failure for the behavior being changed.
+11. Extend `src/contracts/ui_services.ml` and `.mli` only with the semantic theme/navigation operations those production callers require.
+12. Implement browser globals/FFI in Web adapters and native host state in Native services, preserving raw storage formats.
+13. Migrate the actual shared state/view consumers to those contracts in both runtimes.
+14. Preserve theme side-effect ordering; the current implementation updates the dataset, notifies hooks, and then updates classes.
+15. Preserve encoded page names, graph query context, and hashchange/custom-navigation event semantics without duplicate route notifications.
+16. Remove obsolete operations and copy rules in the same owning batch after all callers have migrated.
+17. Run shared behavior tests, production headless Web theme/route interaction, and affected host checks.
+18. Update this plan with results, audit only the intended staged files, and commit/push the completed batch.
+
+Task 2 exits only when an actual feature's portable state/view and required services compile and behave in both runtimes, with explicit ownership and no duplicated implementation of that feature.
+Moving platform source files alone does not meet that gate.
+
+### Remaining ordered migration batches
+
+Run each row as a separate reviewable batch using the detailed Tasks 3–7 below.
+Before changing behavior, add all necessary regressions and observe their failures.
+For an unchanged source move, record passing production baselines before and after the move.
+
+| Batch | Production paths to inspect/change | Required observable tests | Completion/deletion gate |
+| --- | --- | --- | --- |
+| 3a: Pure helpers | `src/core/`, `src/sdk/sdk_convert.ml`, matching `native/*.ml` helpers | Unicode, date/format behavior, conversion/order invariants in both runtimes | One portable owner; matching native business/helper copies removed |
+| 3b: Settings/sidebar | `src/settings/`, `src/sidebar/`, `native/settings_page.ml`, `native/sidebar_state.ml` | Restart persistence, theme/language, sidebar reopen/context retention | Same real state/view in both runtimes; only genuine host services remain |
+| 3c: Palette | `src/cmdk/cmdk_state.ml`, `cmdk_view.ml`, native counterparts | Query/results order, selection, Enter, Escape, close/focus restoration | Shared production palette behavior; native business/view copies removed |
+| 3d: Properties | `src/properties/properties_data.ml`, `properties_value.ml`, native counterparts | Property edits/rejections, sorting/filtering, graph switch and stale response | Shared data/value behavior; DOM control separated into typed boundary |
+| 4: Async/transport | `subs/`, `src/core/worker_client.ml`, `daemon_client.ml`, native counterparts/entry | Success/rejection/disconnect, ordered pushes, graph-switch cancellation, late replies, disposal | Portable task/state ownership; I/O threads only enqueue; migrated business flows no longer use native JS-promise emulation |
+| 5: Remaining features | `src/views/`, `src/pages/`, render/assets/export/SDK and native counterparts | Query/table results, rendering, cancellation/content, plugin hooks | One business implementation per feature; genuine widgets/services retained |
+| 5a–5f: Editor | Detailed editor tasks below; shared model/view and actual input hosts | Master parity, save ordering, revisioned geometry, Unicode, host input/IME/layout | Typed portable controller with host-specific input/rendering; no fabricated parity claim |
+| 6: Structural cleanup | Shared Dune libraries, `native/dune`, `gpui/dune`, emulation modules | Complete affected suites and dependency/ownership scans | Delete unused copies/emulation after callers migrate; no new source-copy or module-override mechanism |
+| 7: Final verification | Production entries, architecture docs, plan evidence | Full supported Web/native/GPUI checks, publishing, architecture audit | Acceptance criteria below met, actual gaps documented, plan lifecycle updated accurately |
+
+Temporary `src/contracts/` and `src/shared/` slices may be consolidated into the final shared structure in Task 6.
+Do not delete real clipboard, filesystem, host mailbox, rendering, or system-input adapters merely because they are platform-specific.
+Do not make compilation pass through `Obj.magic`, identity casts, warning suppression, silent defaults, or new compatibility emulation.
+
+### Async and lifecycle integration questions
+
+Native service assertions currently enforce ownership of a serialized application entry through a mutex and thread ID.
+Input entry and mailbox pump can still run on different threads.
+Task 4 must choose and implement final ownership using actual host constraints rather than relabeling this as a single application thread.
+I/O callbacks may enqueue completions but must not mutate application state directly.
+Do not block on the UI thread while holding an OCaml entry/runtime lock that the UI thread may need.
+
+The bridge disposal smoke verifies current teardown, an empty root/tree, and no remount after a late pump.
+Disposal itself remains unlocked, so concurrent teardown and transport retirement require explicit Task 4 tests.
+Add restart behavior only if an actual host requires it; installation currently assumes one application.
+
+`Ui_task` listener removal uses list filtering.
+Repeated observation of one pending task inside `all` has quadratic cancellation; 8,000 repeated references measured about 500 ms.
+No current production flow consumes this kernel, so this is an integration question rather than a demonstrated application regression.
+Assess actual request-deduplication fan-out before integration, then use constant-time unlink only if that production behavior requires it.
+
+### Editor continuation and user-required behavior
+
+Keep the existing shared editor model, view, save queue, structural actions, and worker truth.
+Use `docs/agent-guide/001-master-outliner_report.md`, current master source, and the behavior tables below rather than designing replacement semantics.
+Inspect the staged report read-only; it is not part of the migration commit.
+
+| Requirement | Behavior to preserve/prove |
+| --- | --- |
+| Configurable outdent | Both existing modes remain controlled by `editor/logical-outdenting?`; trace propagation through actions and worker options |
+| Merge at reference/tag/URL boundary | Backspace and Delete insert the existing separating space when required instead of joining unrelated text |
+| Raw HTTP link | Backspace removes text normally; the entire URL is not an atomic token |
+| Page reference | Editing displays editable `[[...]]` source delimiters |
+| Block reference | Display only its first line, render math as LaTeX, treat content as immutable/atomic during navigation, and save `[[block UUID]]` identity |
+| Autopair | Match master insertion, skip, and paired deletion, including the caret inside `[[|]]` and all other supported delimiters |
+| Click positioning | Enter editing at the clicked position without an intermediate jump to the block end |
+| Arrow movement | Visible responsive caret with master/native textarea behavior while moving; preserve idle blink |
+| Multiline movement | Navigate visual lines and block boundaries consistently with master, including wrapping |
+| Structural input | Enter, indent/outdent, repeated Enter/Delete preserve ordering, focus, caret, and surrounding block rendering |
+| Startup | Editing becomes ready without an added complex or slower initialization path |
+| Save/undo/redo | Flush pending saves before structural operations and undo/redo; preserve worker truth and dirty local input |
+| Composition | Preedit is not committed; commit once; cancel/blur preserve the expected source and selection |
+
+The full browser baseline already exposes a continuous Delete ordering failure.
+First reproduce it on a disposable graph and add a regression around the production structural input/save queue.
+Do not make expected results agree with a bug to obtain a passing suite.
+
+Editor Task 5a records supported units, lifecycle, geometry revisions, and baseline behavior.
+Task 5b merges command dispatch while exposing actual host capabilities for clipboard/files/export/plugins.
+Task 5c returns current valid layout synchronously when safely available and reports pending layout explicitly otherwise.
+Prefer a revisioned host-published layout snapshot or safe same-thread read; reject stale text/layout/session replies.
+Remove timer retries and input replay workarounds only after the replacement contract is proven.
+Task 5d replaces selector/document-event/JSON DOM control with typed inputs while preserving focus, autocomplete, pointers, and clipboard behavior.
+Task 5e separates pure inline parsing from rendering without changing markup, references, URLs, Unicode, or source identity.
+Task 5f retains the delivered Rust UTF-16 correction and verifies replacement ranges, scratch selection, wrapping, and actual OS IME.
+Simulated composition and bridge smoke are not sufficient evidence for Task 5f.
+
+### Publishing and deletion guardrails
+
+LUI publishing already uses memory Datascript through the existing worker-shaped API without a separate-worker messaging requirement.
+Publishing search reads Datascript datoms.
+Unpersisted default views must render because view entities are only created when a page is opened.
+Root `src/`, Shadow CLJS configuration, and obsolete `deps/publishing` have already been removed.
+`deps/ui/src/` is the active OCaml application source and must not be confused with the removed root `src/`.
+`deps/publish` is the backend service and must remain.
+Rerun publishing when shared rendering, bootstrap, routing, or API contracts change.
+
+```sh
+# Repository root; GRAPH-DIR and OUTPUT-DIR are explicit disposable test paths.
+rtk proxy bb dev:publishing GRAPH-DIR OUTPUT-DIR
+rtk proxy node scripts/publishing.mjs static GRAPH-DIR OUTPUT-DIR --dev
+```
+
+### Verification commands for the continuation
+
+Run from the repository root unless a working directory is shown.
+Inspect package scripts if they change; the commands below describe the pause snapshot.
+
+```sh
+rtk git status --short
+rtk proxy git log -4 --oneline
+rtk proxy opam pin list
+rtk proxy pnpm test:ui
+rtk proxy pnpm ui:build
+rtk proxy bb lint:dev
+rtk proxy pnpm test:publishing
+rtk git diff --check
+rtk proxy /Users/tiensonqin/Codes/projects/spec_dev_tool/_build/default/bin/main.exe check docs/agent-guide/proposed/architecture/2026-10-08-002-ui-shared-implementation.md
+```
+
+```sh
+# Working directory: deps/ui; serialize these with all other Dune/package builds.
+rtk proxy opam exec -- dune build js_app test native/native_embed.exe.o gpui/native_embed.exe.o gpui/drive_test.exe
+rtk proxy opam exec -- dune runtest gpui test/contracts
+rtk proxy node _build/default/test/ui_test/test/test_main.js
+rtk proxy node test/native_process_test.mjs
+```
+
+For `deps/ui/gpui/host`, run `rtk cargo test` with fresh `LOGSEQ_UI_STATE_DIR`, `LOGSEQ_ROOT_DIR`, and the actual `LOGSEQ_DB_WORKER_BIN`; set `LOGSEQ_NO_LOGIN_DAEMON=1`.
+Record and clean up only daemon PIDs matching the exact disposable graph root.
+The no-login flag does not guarantee that Cargo integration creates no worker daemon.
+Do not broadly kill unrelated application processes.
+
+For app integration, use `ocaml-e2e/` and its existing parallel runner with a built app served at port 3002 and an isolated graph/origin.
+CLI integration is a separate `cli-e2e/` target and should be run when a shared contract affects it.
+Before final completion, run `rtk proxy bb dev:lint-and-test` and the document tool's `check --all`, plus affected publishing/app/CLI suites.
+Do not repeat broader checks without a changed dependency or unresolved failure.
+
+### Final acceptance and continuation prompt
+
+The migration is complete only when supported hosts compile from shared business/view sources, each duplicate has one authoritative owner, migrated callers use explicit services, and obsolete copy/emulation rules are removed.
+Existing editor and publishing behavior must remain correct, with the known Delete failure resolved and verified.
+Report actual supported host capabilities and validation gaps accurately.
+Update architecture documentation and this plan with final evidence before moving it to implemented.
+
+Suggested prompt for the next model:
+
+> Continue the shared UI and business-logic migration on `refactor/lui`.
+> Read the paused handoff and complete Tasks 2–7 in `docs/agent-guide/proposed/architecture/2026-10-08-002-ui-shared-implementation.md`.
+> Reuse checkpoint `ad675c389f` for the tested theme/route baselines and platform extraction; preserve unrelated content and staging.
+> Finish Task 2 first, then migrate features in tested batches and delete obsolete copies in their owning batch.
+> Keep the display asleep and use headless verification.
+> Preserve master editor behavior, block-reference UUID identity, autopair, outdent modes, and structural save/input ordering.
+> Do not rebase or commit generated/unrelated files.
+> Necessary LUI changes may use a PR and merge after CI passes.
+
+
 ## Problem
 
 ### Source inventory
@@ -599,7 +929,7 @@ If execution requires changing product behavior or modifying external LUI code, 
 The implementation baseline is `a995252bd8` on `refactor/lui`, pushed to origin after publishing and legacy frontend cleanup.
 Unrelated work preserved at this baseline: root `AGENTS.md`, `docs/agent-guide/001-master-outliner_report.md`, and `docs/ocaml-gpui-architecture.html`. The existing staged version and working edits of this plan are preserved; execution adds evidence to the same decision. No Git merge is active.
 
-Status: Task 1 baseline and inventory batch committed and pushed as cf4f0195cb; Task 2 in progress; Tasks 3–7 pending. Actual OS input and layout checks remain explicit validation gaps for the editor migration. Task 1 adds shared behavior scenarios before any business migration. For every implementation batch: write all relevant failing regressions, establish the failure, implement the minimal change, rerun behavior checks, then simplify while retaining passing checks.
+Status: Paused at the user's request for handoff to another model. Task 1 is committed and pushed as cf4f0195cb; the first Task 2 slice is committed and pushed as 1b2e5f0bff. Tested theme/route baselines and platform extraction were uncommitted at pause and are now checkpointed as ad675c389f at the user's request. HEAD 8f373d1b46 included a normal merge of remote worker build updates; checkpoint preparation also fast-forwarded the later non-overlapping remote updates. Task 2 remains incomplete; Tasks 3–7 are pending. Actual OS input and layout checks remain explicit validation gaps. Resume from the current handoff section above rather than older revisions recorded below.
 
 The repeated inventory is 71 native `.ml` files, 56 matching names, zero byte-identical pairs, and 109 shared source-copy rules in `native/dune`. Shared source uses `Js.*` in 106/160 files and `Web_dom.*` in 76/160; subscriptions use `Js.*` in 6/10. Name matches remain investigation candidates rather than deletion decisions.
 
@@ -702,7 +1032,7 @@ The task contract supports deferred observers, first-completion ordering, reject
 
 The production settings controls compile directly from the shared library. Boolean preference reads/writes and state-cell flushes use neutral services. Sidebar/settings scenarios read persisted values through the same service contract. The initial Web adapter captured a stale storage object: two existing sidebar persistence assertions failed when the browser test fixture refreshed its globals. Reading the current browser storage at the boundary restores the existing access behavior; all 1,589 Web checks pass again. Native reports 131 checks / zero failures and both isolated-process checks pass.
 
-Task 2 is not complete: theme/route boundary scenarios and extraction of their actual browser/native service operations remain pending, as does narrowing the remaining monolithic platform adapters. Existing shared promises outside this first slice remain unchanged until their owning migration batches.
+At this committed slice, theme/route baselines and platform extraction remained pending. They have since been added, verified, and checkpointed as ad675c389f as described in the handoff above. Neutral theme/navigation contracts, actual shared-consumer migration, and narrowing the remaining monolithic platform adapters are still pending. Task 2 is not complete. Existing shared promises outside this first slice remain unchanged until their owning migration batches.
 
 All nine independent review passes completed for this slice. Review found that the new contract scenarios were built but omitted from the standard UI test command. A Web `runtest` rule and the existing native test now run through `pnpm test:ui`; the command passes 1,589 application checks, and a forced contract alias runs all nine scenarios in both runtimes, both service checks, and the actual native I/O-thread check. No graph schema or persistence representation changed, so no migration or schema bump is required.
 
