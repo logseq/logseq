@@ -588,6 +588,49 @@ async function main() {
       console.error("local db-sync server failed health check; see db-sync.log");
       process.exit(2);
     }
+    // Seed the e2etest user's rsa key pair (same forged claims the init
+    // script injects). Without it ensure-user-rsa-keys prompts for an
+    // e2ee password mid-test; every rtc test uses non-e2ee graphs so the
+    // stored pair only needs to exist.
+    const b64 = (o) =>
+      Buffer.from(JSON.stringify(o))
+        .toString("base64")
+        .replace(/=/g, "")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_");
+    const now = Math.floor(Date.now() / 1000);
+    const token =
+      b64({ alg: "RS256", typ: "JWT", kid: "e2e" }) +
+      "." +
+      b64({
+        sub: "302246b1-72ed-4d45-b531-e5f2e119dd75",
+        "cognito:username": "e2etest",
+        email: "e2etest@example.com",
+        iss: "https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM",
+        aud: "1qi1uijg8b6ra70nejvbptis0q",
+        token_use: "id",
+        iat: now,
+        exp: now + 86400 * 30,
+      }) +
+      ".ZmFrZXNpZw";
+    const seeded = await fetch("http://127.0.0.1:8787/e2ee/user-keys", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        "public-key": "e2e-local-public-key",
+        "encrypted-private-key": "e2e-local-encrypted-private-key",
+      }),
+    })
+      .then((r) => r.ok)
+      .catch(() => false);
+    if (!seeded) {
+      syncServer.kill();
+      console.error("seeding e2etest user rsa keys failed; see db-sync.log");
+      process.exit(2);
+    }
     process.env.E2E_LOCAL_SYNC = "1";
     console.log(`local db-sync server on :8787 (data ${dataDir})`);
     process.on("exit", () => {
