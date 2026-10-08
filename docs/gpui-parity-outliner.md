@@ -103,15 +103,14 @@ dictionary — the title now matches the web's metrics.
 With palette, centering and title fixed, gpui-vs-web sits at ~2.5% —
 just above the web-vs-master baseline (2.0–2.4% light). Diff heatmaps
 localize the remainder to:
-- **Property rows** — `source-url`/`rating` render as name+value columns
-  on web (name left, value mid-column); gpui spreads them name-left /
-  value-centered-far-right. Root cause: web relies on the CSS override
-  `.property-value-panel .lui-button { justify-content:flex-start }`;
-  the OCaml view already emits `~main:`start`/`~text_alignment:`start`
-  on the value button, but gpui-component's `Button` hard-codes
-  `justify_center` in its internal flex, so the property never reaches
-  the label. Needs a lui-gpui Button fix (honor MainAlignment, or render
-  ghost buttons as plain flex) — deferred: it lives in the lui repo.
+- **Property rows** — FIXED. Two stacked causes: (1) the `native/`
+  twin of `properties_value.ml` had drifted — its `value_button` lacked
+  `~label`/`~style_class:"pv-scalar"`/`~main:`start`; (2) gpui-component
+  `Button` hard-codes `justify_center` inside its label flex, so the
+  MainAlignment prop never reached the label. Fixed in lui-gpui:
+  ghost/text/link buttons with an explicit main alignment render as a
+  plain flex preserving the variant's look (`aligned_button` in
+  kinds.rs). Values now sit left-aligned beside the key column.
 - **Fold/thread guides** — web draws vertical indent guide lines through
   nested children; gpui draws none (bullet column only).
 - **Table geometry** — web table spans the content column with a filled

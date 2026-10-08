@@ -447,8 +447,12 @@ let picker_dropdown ~open_ ~placeholder ~new_option ~initial ~on_search
 
 (* helper: ghost-button value cell — [text] = display label *)
 let value_button ~text ~on_press : t =
-  button ~variant:`ghost ~grow:1.0 ~text_alignment:`start ~text
-    ~on_press []
+  (* an empty value yields text:"" — a button with neither text nor
+     accessibility label is rejected by the store and kills the mount
+     batch, so keep a label plus the cljs "Empty" placeholder *)
+  let text = if text = "" then I18n.t "ui/empty" else text in
+  button ~variant:`ghost ~grow:1.0 ~main:`start ~text_alignment:`start
+    ~label:text ~text ~style_class:"pv-scalar" ~on_press []
 
 (* text/number cell: ghost button <-> autofocused text_field *)
 let scalar_edit_cell ctx row : t =
