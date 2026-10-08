@@ -1900,7 +1900,7 @@ let () =
           if n = tries then Js.Promise.resolve ()
           else B.undo env
         in
-        let* () = iter_seq (K.press env) keys in
+        let* () = iter_seq (K.press_in_editor env) keys in
         let deadline = Js.Date.now () +. 2500. in
         let rec poll () =
           let* c = Util.edit_content env in
