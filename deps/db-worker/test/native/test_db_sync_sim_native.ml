@@ -2853,6 +2853,159 @@ let op_redo _rng (repo : string option) : op_result option =
       else None
   | None -> None
 
+
+(* uuids of entities currently in the recycle bin (deleted-at set) *)
+let recycled_uuids (db : db) : string list =
+  List.of_seq
+    (Datascript.datoms db Datascript.Avet ~a:"logseq.property/deleted-at" ())
+  |> List.filter_map (fun (d : Datascript.datom) ->
+       match Ldb.ent_of_id db d.e with
+       | Some ent -> ent_uuid ent
+       | None -> None)
+  |> List.sort_uniq compare
+
+let op_restore_recycled rng conn _state : op_result option =
+  let db = db_of_conn conn in
+  match rand_nth_bang rng (recycled_uuids db) with
+  | Some u -> (
+      try
+        ignore
+          (apply_ops_bang conn
+             (edn_wire
+                (Printf.sprintf "[[:restore-recycled [%s]]]" (uuid_lit u)))
+             (Wire.Map []));
+        Some [ "op", kw "restore-recycled"; "uuid", Wire.Uuid u ]
+      with _ -> None)
+  | None -> None
+
+let op_recycle_delete_permanently rng conn state : op_result option =
+  let db = db_of_conn conn in
+  match rand_nth_bang rng (recycled_uuids db) with
+  | Some u -> (
+      try
+        ignore
+          (apply_ops_bang conn
+             (edn_wire
+                (Printf.sprintf "[[:recycle-delete-permanently [%s]]]"
+                   (uuid_lit u)))
+             (Wire.Map []));
+        state.pages <- set_remove state.pages u;
+        state.blocks <- set_remove state.blocks u;
+        Some [ "op", kw "recycle-delete-permanently"; "uuid", Wire.Uuid u ]
+      with _ -> None)
+  | None -> None
+
+let op_apply_template rng conn state (base_uuid : string option) gen_uuid
+    : op_result option =
+  let tpl_uuid =
+    match gen_uuid with Some f -> f () | None -> Uuid_gen.uuid ()
+  in
+  let child_uuid =
+    match gen_uuid with Some f -> f () | None -> Uuid_gen.uuid ()
+  in
+  match ensure_random_block rng conn state base_uuid gen_uuid with
+  | Some target -> (
+      match ent_uuid target with
+      | Some target_u -> (
+          let parent_u =
+            match rand_nth_bang rng state.pages with
+            | Some p -> p
+            | None -> target_u
+          in
+          try
+            ignore
+              (apply_ops_bang conn
+                 (edn_wire
+                    (Printf.sprintf
+                       "[[:insert-blocks [[{:block/uuid %s :block/title                         \"tpl-%s\" :block/tags #{:logseq.class/Template}}                         {:block/uuid %s :block/title \"tc\" :block/parent                         [:block/uuid %s]}] %s {:sibling? false                         :keep-uuid? true}]]]"
+                       (uuid_lit tpl_uuid)
+                       (String.sub tpl_uuid 0 8)
+                       (uuid_lit child_uuid)
+                       (uuid_lit tpl_uuid)
+                       (uuid_lit parent_u)))
+                 (Wire.Map []));
+            let sibling = rand_int_bang rng 2 = 0 in
+            ignore
+              (apply_ops_bang conn
+                 (edn_wire
+                    (Printf.sprintf "[[:apply-template [%s %s {:sibling? %s}]]]"
+                       (uuid_lit tpl_uuid)
+                       (uuid_lit target_u)
+                       (if sibling then "true" else "false")))
+                 (Wire.Map []));
+            state.blocks <- set_add state.blocks tpl_uuid;
+            state.blocks <- set_add state.blocks child_uuid;
+            Some
+              [ "op", kw "apply-template"
+              ; "template", Wire.Uuid tpl_uuid
+              ; "target", Wire.Uuid target_u ]
+          with _ -> None)
+      | None -> None)
+  | None -> None
+
+let op_collapse_expand_block_property rng conn state
+    (base_uuid : string option) gen_uuid : op_result option =
+  let db = db_of_conn conn in
+  let props =
+    List.filter_map
+      (fun spec -> find_property_by_title db spec.sp_title)
+      sim_property_specs
+  in
+  match ensure_random_block rng conn state base_uuid gen_uuid with
+  | Some block -> (
+      match rand_nth_bang rng props, ent_uuid block with
+      | Some property, Some u -> (
+          match Ldb.ident_of property with
+          | Some ident ->
+              let collapsed = rand_int_bang rng 2 = 0 in
+              (try
+                 ignore
+                   (apply_ops_bang conn
+                      (edn_wire
+                         (Printf.sprintf
+                            "[[:collapse-expand-block-property [%s :%s %s]]]"
+                            (uuid_lit u) ident
+                            (if collapsed then "true" else "false")))
+                      (Wire.Map []));
+                 Some
+                   [ "op", kw "collapse-expand-block-property"
+                   ; "uuid", Wire.Uuid u
+                   ; "property", kw ident ]
+               with _ -> None)
+          | None -> None)
+      | _ -> None)
+  | None -> None
+
+let op_batch_import_edn rng conn state gen_uuid : op_result option =
+  (* force Endpoint_export module init: it installs
+     Sync_deps.batch_import_edn_fn at startup *)
+  ignore Endpoint_export.export_get_debug_datoms;
+  let page_u =
+    match gen_uuid with Some f -> f () | None -> Uuid_gen.uuid ()
+  in
+  let block_u =
+    match gen_uuid with Some f -> f () | None -> Uuid_gen.uuid ()
+  in
+  let title = Printf.sprintf "import-%d" (rand_int_bang rng 1000000) in
+  (match
+     apply_ops_bang conn
+       (edn_wire
+          (Printf.sprintf
+             "[[:batch-import-edn [{:pages-and-blocks [{:page {:block/uuid               %s :block/title \"%s\" :build/keep-uuid? true} :blocks               [{:block/uuid %s :block/title \"ib\" :block/parent               {:block/uuid %s} :block/page {:block/uuid %s}}]}]} nil]]]"
+             (uuid_lit page_u) title (uuid_lit block_u) (uuid_lit page_u)
+             (uuid_lit page_u)))
+       (Wire.Map [])
+   with
+   | Wire.Map kvs
+     when List.exists
+            (fun (k, _) -> match k with Wire.Keyword "error" -> true | _ -> false)
+            kvs ->
+       ()
+   | _ ->
+       state.pages <- set_add state.pages page_u;
+       state.blocks <- set_add state.blocks block_u);
+  Some [ "op", kw "batch-import-edn"; "title", Wire.String title ]
+
 (* ---------- cljs op-table / weighted pick ---------- *)
 
 type op_entry = { op_name : string; op_weight : int }
@@ -2894,7 +3047,12 @@ let op_table : op_entry list =
   ; { op_name = "tag-add"; op_weight = 3 }
   ; { op_name = "tag-remove"; op_weight = 2 }
   ; { op_name = "collapse-expand-blocks"; op_weight = 2 }
-  ; { op_name = "create-journal-page"; op_weight = 2 } ]
+  ; { op_name = "create-journal-page"; op_weight = 2 }
+  ; { op_name = "apply-template"; op_weight = 2 }
+  ; { op_name = "collapse-expand-block-property"; op_weight = 2 }
+  ; { op_name = "batch-import-edn"; op_weight = 1 }
+  ; { op_name = "restore-recycled"; op_weight = 3 }
+  ; { op_name = "recycle-delete-permanently"; op_weight = 1 } ]
 
 let required_core_outliner_op_names =
   [ "save-block"
@@ -3146,6 +3304,15 @@ let run_ops_bang (rng : unit -> float) (ctx : run_ctx) (steps : int)
       | "collapse-expand-blocks" ->
           op_collapse_expand rng ctx.conn ctx.state ctx.base_uuid ctx.gen_uuid
       | "create-journal-page" -> op_create_journal_page rng ctx.conn ctx.state
+      | "apply-template" ->
+          op_apply_template rng ctx.conn ctx.state ctx.base_uuid ctx.gen_uuid
+      | "collapse-expand-block-property" ->
+          op_collapse_expand_block_property rng ctx.conn ctx.state
+            ctx.base_uuid ctx.gen_uuid
+      | "batch-import-edn" -> op_batch_import_edn rng ctx.conn ctx.state ctx.gen_uuid
+      | "restore-recycled" -> op_restore_recycled rng ctx.conn ctx.state
+      | "recycle-delete-permanently" ->
+          op_recycle_delete_permanently rng ctx.conn ctx.state
       | _ -> None
     in
     match result with
