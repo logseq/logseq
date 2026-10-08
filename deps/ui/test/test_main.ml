@@ -1314,6 +1314,7 @@ let cmdk_group gid items : Cmdk_state.group =
   ; glimit = 0; gexpanded = false; gfilter_active = false }
 
 let test_cmdk_items () =
+  Cmdk_state.install (Cmdk_host.services ());
   eqi "nodes_limit default" 10 (Cmdk_state.nodes_limit false []);
   eqi "nodes_limit move" 20 (Cmdk_state.nodes_limit true []);
   eqi "nodes_limit expanded" 100
@@ -1518,14 +1519,14 @@ let test_cmdk_groups () =
   (* command table: no dev entries w/o developer-mode, sorted desc by id *)
   let tbl = Cmdk_state.command_table () in
   check "command_table filters dev"
-    (List.for_all (fun (c : Commands_data.cmd) -> not c.dev) tbl);
-  let ids = List.map (fun (c : Commands_data.cmd) -> c.id) tbl in
+    (List.for_all (fun (c : Cmdk_services.cmd) -> not c.dev) tbl);
+  let ids = List.map (fun (c : Cmdk_services.cmd) -> c.id) tbl in
   check "command_table sorted desc"
     (ids = List.stable_sort (fun a b -> compare b a) ids);
   check "commands_matched blank = all" (Cmdk_state.commands_matched "" = tbl);
   check "commands_matched fuzzy"
     (List.exists
-       (fun (c : Commands_data.cmd) -> c.id = "editor/move-blocks")
+       (fun (c : Cmdk_services.cmd) -> c.id = "editor/move-blocks")
        (Cmdk_state.commands_matched "move blocks"))
 
 (* ---- Model.indent_blocks / outdent_blocks ---- *)

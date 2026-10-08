@@ -336,7 +336,7 @@ let overlays (ms : Model.t Signal.signal) =
     [ (* popover takes only standard-kind children — the logseq-*
          extension fragments some views emit mount inside a plain box *)
       box ~key:"overlays-wrap" ~grow:1.
-        [ Cmdk_view.render ms
+        [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
     ; Dialogs_view.render ms

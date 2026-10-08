@@ -804,10 +804,10 @@ let main_content (ms : Model.t Signal.signal) =
    are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
   if Platform.publishing () then
-    box ~style_class:"cp__overlays" [ Cmdk_view.render ms; Toasts_view.render ms ]
+    box ~style_class:"cp__overlays" [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms; Toasts_view.render ms ]
   else
   box ~key:"overlays" ~style_class:"cp__overlays"
-    [ Cmdk_view.render ms
+    [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
     ; Dialogs_view.render ms

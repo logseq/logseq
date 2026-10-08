@@ -413,7 +413,9 @@ let test_block_edit () =
 
 let cmdk_items () = find_attr "data-cmdk-item" "true"
 
-let test_cmdk () = Shared_scenarios.palette (shared_host ())
+let test_cmdk () =
+  Shared_scenarios.palette (shared_host ());
+  Shared_scenarios_cmdk.run (shared_host ())
 
 (* ---------------- left sidebar (state-driven) ---------------- *)
 
