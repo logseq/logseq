@@ -309,32 +309,7 @@ let event_str ev key =
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 
-let uuid_seeded = ref false
-
-let random_uuid () =
-  (* Random starts from a fixed seed without self_init — every run would
-     regenerate the same uuid sequence and collide with persisted block
-     uuids (e.g. the first split-block after boot reusing the uuid the
-     previous boot assigned) *)
-  if not !uuid_seeded then (
-    Random.self_init ();
-    uuid_seeded := true);
-  let b = Bytes.create 16 in
-  for i = 0 to 15 do
-    Bytes.set b i (Char.chr (Random.int 256))
-  done;
-  Bytes.set b 6 (Char.chr ((Char.code (Bytes.get b 6) land 0x0f) lor 0x40));
-  Bytes.set b 8 (Char.chr ((Char.code (Bytes.get b 8) land 0x3f) lor 0x80));
-  Printf.sprintf
-    "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"
-    (Char.code (Bytes.get b 0)) (Char.code (Bytes.get b 1))
-    (Char.code (Bytes.get b 2)) (Char.code (Bytes.get b 3))
-    (Char.code (Bytes.get b 4)) (Char.code (Bytes.get b 5))
-    (Char.code (Bytes.get b 6)) (Char.code (Bytes.get b 7))
-    (Char.code (Bytes.get b 8)) (Char.code (Bytes.get b 9))
-    (Char.code (Bytes.get b 10)) (Char.code (Bytes.get b 11))
-    (Char.code (Bytes.get b 12)) (Char.code (Bytes.get b 13))
-    (Char.code (Bytes.get b 14)) (Char.code (Bytes.get b 15))
+let random_uuid = Host.random_uuid
 
 (* ---------- file access (pfs equivalent: real FS) ---------- *)
 
