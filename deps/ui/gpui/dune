@@ -28,9 +28,7 @@
 (rule
  (copy ../native/chrome.ml chrome.ml))
 (rule
- (copy ../native/cmdk_state.ml cmdk_state.ml))
-(rule
- (copy ../native/cmdk_view.ml cmdk_view.ml))
+ (copy ../native/cmdk_host.ml cmdk_host.ml))
 (rule
  (copy ../native/code_mirror.ml code_mirror.ml))
 (rule

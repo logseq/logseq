@@ -426,7 +426,7 @@ let item_body st idx (it : Sidebar_state.item) =
            ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
         [ box ~key:("cmdkb-" ^ it.key)
             ~style_class:"cp__cmdk__block rounded-md"
-            [ Cmdk_view.sidebar ~query:it.title ]
+            [ Cmdk_view.sidebar ~services:(Cmdk_host.services ()) ~query:it.title ]
         ]
   | "help" ->
       (* cljs :help items mount onboarding/help directly in

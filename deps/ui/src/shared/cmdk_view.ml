@@ -1,28 +1,26 @@
 (* Command palette overlay — mirrors components/cmdk/{core,list_item}.cljs.
 
+   Portable owner for both runtimes: platform access goes through
+   Cmdk_state's services record (installed per runtime by cmdk_host.ml)
+   and Ui_services.
+
    DOM contract (e2e):
      .cp__cmdk__modal > .cp__cmdk >
        .cp__cmdk-input-row > input.cp__cmdk-search-input
-       .w-full.flex-1.overflow-y-auto (scroller) >
-         per group: .border-b.border-gray-06[.pb-1] >
-           header (.text-xs... .bg-gray-02.h-8) + .search-results >
-             div[data-item-index] > div[data-cmdk-item].transition-colors
-             [.cursor-pointer only in mouse mode] [data-highlighted]
+       .cp__cmdk-scroller >
+         per group: .cp__cmdk-group[data-cmdk-group-kind] >
+           .cp__cmdk-group-header + .search-results >
+             [data-item-index] > [data-cmdk-item][data-highlighted]
              [data-kb-highlighted]
-       .hints
-
-   Uses the LUI `dialog` primitive for the modal shell (backdrop,
-   Esc-dismiss, focus trap); the inner palette rows are logseq-*
-   extension elements because LUI menu primitives render <button>
-   items, not the contracted DOM. *)
+       .hints *)
 
 open Lui_elements
-
 
 let if_ = Lui_elements.if_
 let keyed = Lui_elements.keyed
 
 module S = Cmdk_state
+module Svs = Cmdk_services
 
 let scroller_class = "cp__cmdk-scroller"
 
@@ -31,96 +29,70 @@ let scroller_class = "cp__cmdk-scroller"
 
 (* -- shui shortcut port (deps/shui/src/logseq/shui/shortcut.cljs) ---- *)
 
-let gph = Platform.utf8
-let g_cmd = gph "\xe2\x8c\x98"
-let g_win = gph "\xe2\x8a\x9e"
-let g_ret = gph "\xe2\x8f\x8e"
-let g_shift = gph "\xe2\x87\xa7"
-let g_opt = gph "\xe2\x8c\xa5"
-let g_ctrl = gph "\xe2\x8c\x83"
-let g_up = gph "\xe2\x86\x91"
-let g_down = gph "\xe2\x86\x93"
-let g_left = gph "\xe2\x86\x90"
-let g_right = gph "\xe2\x86\x92"
-let g_bs = gph "\xe2\x8c\xab"
-let g_caps = gph "\xe2\x87\xaa"
+let gph = Ui_services.literal_text
+let g_cmd () = gph "\xe2\x8c\x98"
+let g_win () = gph "\xe2\x8a\x9e"
+let g_ret () = gph "\xe2\x8f\x8e"
+let g_shift () = gph "\xe2\x87\xa7"
+let g_opt () = gph "\xe2\x8c\xa5"
+let g_ctrl () = gph "\xe2\x8c\x83"
+let g_up () = gph "\xe2\x86\x91"
+let g_down () = gph "\xe2\x86\x93"
+let g_left () = gph "\xe2\x86\x90"
+let g_right () = gph "\xe2\x86\x92"
+let g_bs () = gph "\xe2\x8c\xab"
+let g_caps () = gph "\xe2\x87\xaa"
 
 (* cljs print-shortcut-key — logical key -> display glyph/text *)
-let print_shortcut_key key =
+let print_shortcut_key (svs : Svs.t) key =
   let lower = String.lowercase_ascii key in
-  let mac = Platform.is_mac () in
+  let mac = svs.Svs.is_mac () in
   let result =
-    if lower = "cmd" || lower = "command" || lower = "mod" || lower = g_cmd
-    then (if mac then g_cmd else "Ctrl")
-    else if lower = "meta" then (if mac then g_cmd else g_win)
-    else if lower = "return" || lower = "enter" || lower = g_ret then g_ret
-    else if lower = "shift" || lower = g_shift then g_shift
+    if lower = "cmd" || lower = "command" || lower = "mod" || lower = g_cmd ()
+    then (if mac then g_cmd () else "Ctrl")
+    else if lower = "meta" then (if mac then g_cmd () else g_win ())
+    else if lower = "return" || lower = "enter" || lower = g_ret () then g_ret ()
+    else if lower = "shift" || lower = g_shift () then g_shift ()
     else if
-      lower = "alt" || lower = "option" || lower = "opt" || lower = g_opt
-    then (if mac then g_opt else "Alt")
-    else if lower = "ctrl" || lower = "control" || lower = g_ctrl then "Ctrl"
-    else if lower = "space" || lower = " " then "Space"
-    else if lower = "up" || lower = g_up then g_up
-    else if lower = "down" || lower = g_down then g_down
-    else if lower = "left" || lower = g_left then g_left
-    else if lower = "right" || lower = g_right then g_right
+      lower = "alt" || lower = "option" || lower = "opt" || lower = g_opt ()
+    then (if mac then g_opt () else "Alt")
+    else if lower = "ctrl" || lower = "control" || lower = g_ctrl ()
+    then (if mac then g_ctrl () else "Ctrl")
+    else if lower = "backspace" || lower = "delete" then g_bs ()
+    else if lower = "up" then g_up ()
+    else if lower = "down" then g_down ()
+    else if lower = "left" then g_left ()
+    else if lower = "right" then g_right ()
+    else if lower = "capslock" then g_caps ()
+    else if lower = "space" then "Space"
     else if lower = "tab" then "Tab"
-    else if lower = "open-square-bracket" then "["
-    else if lower = "close-square-bracket" then "]"
-    else if lower = "dash" then "-"
-    else if lower = "semicolon" then ";"
-    else if lower = "equals" then "="
-    else if lower = "single-quote" then "'"
-    else if lower = "backslash" then "\\"
-    else if lower = "comma" then ","
-    else if lower = "period" then "."
-    else if lower = "slash" then "/"
-    else if lower = "grave-accent" then "`"
-    else if lower = "page-up" then "PgUp"
-    else if lower = "page-down" then "PgDn"
     else if lower = "esc" || lower = "escape" then "Esc"
-    else if lower = "backspace" then g_bs
-    else if lower = "delete" then "Delete"
-    else if lower = "caps-lock" || lower = "capslock" then g_caps
-    else key
+    else if String.length lower = 1 then String.uppercase_ascii lower
+    else lower
   in
-  if String.length result = 1 then
-    if result.[0] >= 'a' && result.[0] <= 'z' then
-      String.uppercase_ascii result
-    else result
-  else String.capitalize_ascii result
+  result
 
-(* split on a literal separator (clojure string/split on string) *)
-let split_str sep s =
-  let n = String.length s and m = String.length sep in
-  let rec go i j acc =
-    if j + m > n then List.rev (String.sub s i (n - i) :: acc)
-    else if String.sub s j m = sep then
-      go (j + m) (j + m) (String.sub s i (j - i) :: acc)
-    else go i (j + 1) acc
-  in
-  go 0 0 []
-
-(* cljs parse-shortcuts: "a+b c" -> [Combo [a;b]; Single c] *)
-type sc_group =
-  | Sc_single of string
-  | Sc_combo of string list
+(* shortcut data: "mod shift+k" -> Sc_combo [mod;shift;k]; "g h" ->
+   Sc_single g :: Sc_single h *)
+type sc_group = Sc_combo of string list | Sc_single of string
 
 let parse_binding b =
-  split_str " " (String.trim b)
-  |> List.filter (fun t -> t <> "")
-  |> List.map (fun t ->
-         if String.index_opt t '+' <> None then
-           Sc_combo (split_str "+" t)
-         else Sc_single t)
+  String.split_on_char ' ' b
+  |> List.filter (fun s -> s <> "")
+  |> List.map (fun grp ->
+         match String.split_on_char '+' grp with
+         | [ k ] -> Sc_single k
+         | ks -> Sc_combo ks)
 
+(* shui-shortcut: bindings like ["mod+shift+k","g h"]; combos join keys
+   with no separator, sequential keys sit apart *)
 let is_combo = function Sc_combo _ -> true | Sc_single _ -> false
 
 let kbd_el key txt =
   kbd ~key ~style_class:"shui-shortcut-key" ~value:txt []
 
 (* combo: one shared keycap, separator spans between keys *)
-let combo_el key keys =
+let combo_el svs key keys =
   let sep i =
     box ~key:(Printf.sprintf "sep%d" i)
       ~style_class:"shui-shortcut-separator" []
@@ -131,30 +103,30 @@ let combo_el key keys =
        (List.mapi
           (fun i k ->
             (if i > 0 then [ sep i ] else [])
-            @ [ kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k) ])
+            @ [ kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key svs k) ])
           keys))
 
 (* separate: sequential keys, 4px gap, no separators. `shui-key-boxed`
    mirrors the native twin's class (inert here — web CSS boxes keys via
    the `.shui-shortcut-separate kbd` descendant rule). *)
-let separate_el key keys =
+let separate_el svs key keys =
   row ~key
     ~style_class:"shui-shortcut-separate shui-shortcut-glow"
     (List.mapi
        (fun i k ->
          kbd ~key:(Printf.sprintf "k%d" i)
            ~style_class:"shui-shortcut-key shui-key-boxed"
-           ~value:(print_shortcut_key k) [])
+           ~value:(print_shortcut_key svs k) [])
        keys)
 
 (* chord: space-separated groups each rendered as a combo with a
    "then" separator *)
-let chord_el key groups =
+let chord_el svs key groups =
   let group_el gi grp =
     let keys =
       match grp with Sc_combo ks -> ks | Sc_single k -> [ k ]
     in
-    row ~key:(Printf.sprintf "grp%d" gi)
+    row ~key:(Printf.sprintf "g%d" gi)
       ~style_class:"shui-shortcut-combo shui-shortcut-glow"
       (List.concat
          (List.mapi
@@ -163,10 +135,12 @@ let chord_el key groups =
                  [ box ~key:(Printf.sprintf "gs%d" ki)
                      ~style_class:"shui-shortcut-separator" [] ]
                else [])
-              @ [ kbd_el (Printf.sprintf "ck%d" ki) (print_shortcut_key k) ])
+              @ [ kbd ~key:(Printf.sprintf "ck%d" ki)
+                    ~style_class:"shui-shortcut-key"
+                    ~value:(print_shortcut_key svs k) [] ])
             keys))
   in
-  let then_sep gi =
+  let then_el gi =
     text ~key:(Printf.sprintf "then%d" gi)
       ~style_class:"shui-shortcut-chord-sep" ~value:"then" []
   in
@@ -174,88 +148,77 @@ let chord_el key groups =
     (List.concat
        (List.mapi
           (fun gi grp ->
-            (if gi > 0 then [ then_sep gi ] else []) @ [ group_el gi grp ])
+            (if gi > 0 then [ then_el gi ] else []) @ [ group_el gi grp ])
           groups))
 
 (* cljs compact: text-only spans for the show-more/less header link *)
-let compact_el key keys =
+let compact_el svs key keys =
   box ~key ~style_class:"shui-shortcut-compact"
     (List.mapi
        (fun i k ->
          text ~key:(Printf.sprintf "c%d" i)
-           ~value:(print_shortcut_key k) [])
+           ~style_class:"shui-shortcut-key"
+           ~value:(print_shortcut_key svs k) [])
        keys)
 
-(* cljs shui/shortcut :auto over a display string: " | " splits multiple
-   bindings; each binding renders combo (single token with +), chord
-   (multiple combos) or separate (flat tokens) *)
-let shui_shortcut display =
+let shui_shortcut svs (binding : string) =
   let bindings =
-    split_str " | " display
+    String.split_on_char ',' binding
     |> List.map String.trim
     |> List.filter (fun b -> b <> "")
   in
-  List.concat
-    (List.mapi
-       (fun bi b ->
-         let groups = parse_binding b in
-         let body =
-           if List.length groups > 1 && List.for_all is_combo groups then
-             [ chord_el "chord" groups ]
-           else
-             let keys =
-               List.concat_map
-                 (fun g ->
-                   match g with Sc_combo ks -> ks | Sc_single k -> [ k ])
-                 groups
-             in
-             (match groups with
-              | Sc_combo _ :: _ -> [ combo_el "combo" keys ]
-              | _ -> [ separate_el "sep" keys ])
-         in
-         [ row ~key:(Printf.sprintf "b%d" bi)
-             ~style_class:"shui-shortcut-b"
-             ((if bi > 0 then
-                 [ text ~key:"bsep"
-                     ~style_class:"shui-shortcut-bsep"
-                     ~value:"|" [] ]
-               else [])
-              @ body) ]
-         )
-       bindings)
+  column ~key:"sc" ~style_class:"shui-shortcut"
+    (List.concat
+       (List.mapi
+          (fun bi b ->
+            let groups = parse_binding b in
+            let body =
+              if List.length groups > 1 && List.for_all is_combo groups then
+                [ chord_el svs "chord" groups ]
+              else
+                let keys =
+                  List.concat_map
+                    (fun g ->
+                      match g with Sc_combo ks -> ks | Sc_single k -> [ k ])
+                    groups
+                in
+                (match groups with
+                 | Sc_combo _ :: _ -> [ combo_el svs "combo" keys ]
+                 | _ -> [ separate_el svs "sep" keys ])
+            in
+            [ row ~key:(Printf.sprintf "b%d" bi)
+                ~style_class:"shui-shortcut-b"
+                body ])
+          bindings))
 
-(* cljs hint-button shortcut pick: :combo when len>1 and any modifier,
-   else :auto *)
-let hint_shortcut keys =
-  let modifiers =
-    [ "shift"; "ctrl"; "alt"; "cmd"; "mod"; g_cmd; g_opt; g_ctrl ]
-  in
+let hint_shortcut svs keys =
+  let modifiers = [ "ctrl"; "cmd"; "meta"; "mod"; "shift"; "alt"; "option" ] in
   let has_mod =
     List.exists
       (fun k ->
         List.mem (String.lowercase_ascii k) modifiers)
       keys
   in
-  if List.length keys > 1 && has_mod then combo_el "hc" keys
-  else separate_el "hs" keys
+  if List.length keys > 1 && has_mod then combo_el svs "hc" keys
+  else separate_el svs "hs" keys
 
 (* cljs group-header link: (shui/shortcut "mod down" {:style :compact}) *)
-let compact_shortcut s =
+let compact_shortcut svs s =
   let groups = parse_binding s in
   let keys =
     List.concat_map
       (fun g -> match g with Sc_combo ks -> ks | Sc_single k -> [ k ])
       groups
   in
-  compact_el "cmp" keys
+  compact_el svs "cmp" keys
 
 (* -- query highlight (list_item.cljs highlight-query) ----------------- *)
 
-external str_normalize : string -> string = "normalize" [@@mel.send]
+let str_normalize svs (s : string) = svs.Svs.normalize s
 
 (* case-insensitive index of `sub` in `low` from `start`; -1 if none *)
 let find_sub_ci sub low start =
-  let n = String.length low and m = String.length sub in
+  let m = String.length sub and n = String.length low in
   let rec go i =
     if i + m > n then -1
     else if String.sub low i m = sub then i
@@ -289,40 +252,42 @@ let hl_segments ~query ~text : (bool * string) list =
   else
     (* indices must stay byte-aligned with [text]: cljs highlights via a
        case-insensitive regex on the raw title, so lowercase the original
-       rather than the normalized form (which can change byte lengths) *)
+       and compare normalized low with a normalized query *)
     let low = String.lowercase_ascii text in
     let terms =
-      String.split_on_char ' '
-        (String.lowercase_ascii (str_normalize query))
-      |> List.filter (fun t -> t <> "")
+      String.split_on_char ' ' (String.trim (String.lowercase_ascii query))
+      |> List.filter (fun s -> s <> "")
     in
-    if terms = [] then [ (false, text) ]
-    else
-      let match_at pos =
+    let matches =
+      List.filter_map
+        (fun t ->
+          let i = find_sub_ci t low 0 in
+          if i < 0 then None else Some (i, i + String.length t))
         terms
-        |> List.filter_map (fun t ->
-               let i = find_sub_ci t low pos in
-               if i < 0 then None else Some (i, t))
+    in
+    if matches = [] then [ (false, text) ]
+    else
+      (* merge overlapping match ranges, keep leftmost-first *)
+      let ranges =
+        List.sort (fun (a, _) (b, _) -> compare a b) matches
         |> List.fold_left
-             (fun best (i, t) ->
-               match best with
-               | None -> Some (i, t)
-               | Some (bi, _) when i < bi -> Some (i, t)
-               | _ -> best)
-             None
+             (fun acc (s, e) ->
+               match acc with
+               | (s', e') :: tl when s <= e' ->
+                   (s', max e e') :: tl
+               | _ -> (s, e) :: acc)
+             []
+        |> List.rev
       in
-      let rec go pos acc =
-        match match_at pos with
-        | None ->
-            List.rev
-              ((false, String.sub text pos (String.length text - pos))
-               :: acc)
-        | Some (i, t) ->
-            go (i + String.length t)
-              ((true, String.sub text i (String.length t))
-               :: (false, String.sub text pos (i - pos)) :: acc)
+      let rec emit pos = function
+        | [] ->
+            if pos < String.length text then [ (false, String.sub text pos (String.length text - pos)) ]
+            else []
+        | (s, e) :: tl ->
+            (if s > pos then [ (false, String.sub text pos (s - pos)) ] else [])
+            @ (true, String.sub text s (e - s)) :: emit e tl
       in
-      go 0 []
+      emit 0 ranges
 
 (* cljs [:span {:data-testid text} seg/span ... seg/mark] — mark gets
    padding 0 border-radius 0; data-testid is the original (unmarked)
@@ -358,32 +323,28 @@ let hl_span key (item_sig : S.item Signal.signal)
             seg)
     ]
 
-let badge_el key =
+let badge_el svs key =
   text ~key ~style_class:"cp__cmdk-current-page-badge"
-    ~value:(I18n.t "cmdk.group/current-page") []
+    ~value:(svs.Svs.i18n "cmdk.group/current-page") []
 
 (* -- item row -------------------------------------------------------- *)
 
-(* wrapper attrs: data-item-index for highlight; data-item-key gives a
-   stable identity — idx is -1 on the optimistically-inserted create row
-   until renumbering lands, so click dispatch resolves by key *)
-let wrapper_attrs it =
+let wrapper_attrs (it : S.item) =
   [ ("data-item-index", string_of_int it.S.idx)
-  ; ("data-item-key", it.S.ikey)
-  ]
+  ; ("data-item-key", it.S.ikey) ]
 
 let row_data_attrs (it : S.item) =
-  let hoverable = it.S.imouse in
-  let highlighted = it.S.ihl in
-  ("data-cmdk-item", "true")
-  :: (if hoverable then [ ("data-hoverable", "true") ] else [])
-  @ (if highlighted then [ ("data-highlighted", "true") ] else [])
-  @ (if highlighted && not hoverable then [ ("data-kb-highlighted", "true") ]
+  [ ("data-cmdk-item", "true")
+  ; ("data-item-index", string_of_int it.S.idx)
+  ; ( "data-highlighted"
+    , (if it.S.ihl && not it.S.imouse then "true" else "false") ) ]
+  @ (if it.S.imouse then [ ("data-hoverable", "true") ] else [])
+  @ (if it.S.ihl && not it.S.imouse then [ ("data-kb-highlighted", "true") ]
      else [])
 
 (* isc parses to kbd cells inside a reactive slot remounting only on
    isc change *)
-let shortcut_slot (item_sig : S.item Signal.signal) : t =
+let shortcut_slot svs (item_sig : S.item Signal.signal) : t =
   if_
     ~test:(Signal.map (fun (it : S.item) -> it.S.isc <> "") item_sig)
     (box ~key:"sc-row" ~style_class:"shui-shortcut-row"
@@ -393,7 +354,7 @@ let shortcut_slot (item_sig : S.item Signal.signal) : t =
             item_sig)
        [ reactive
            ~equal:(fun (a : S.item) b -> a.S.isc = b.S.isc)
-           (fun it -> box ~key:"sc-cells" (shui_shortcut it.S.isc))
+           (fun it -> box ~key:"sc-cells" [ shui_shortcut svs it.S.isc ])
            item_sig
        ])
 
@@ -401,7 +362,7 @@ let shortcut_slot (item_sig : S.item Signal.signal) : t =
    mousemove dispatch; [data-cmdk-item][data-hoverable][data-highlighted]
    [data-kb-highlighted] is the lui-overlay.css row contract (and the
    e2e locator) *)
-let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
+let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
   box ~key:"item-wrap"
     ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
     [ (* pressable: the delegated document click can't see inside the
@@ -424,7 +385,7 @@ let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
                         (fun (it : S.item) ->
                           it.S.ibadge = S.Header_badge)
                         item_sig)
-                   (badge_el "hb")
+                   (badge_el svs "hb")
                ])
         ; row ~key:"main" ~style_class:"cmdk-item-main" ~cross:`start
             [ box ~key:"icon" ~style_class:"cmdk-item-icon"
@@ -450,7 +411,7 @@ let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
                              (fun (it : S.item) ->
                                it.S.ibadge = S.Text_badge)
                              item_sig)
-                        (badge_el "tb")
+                        (badge_el svs "tb")
                     ; if_
                         ~test:
                           (Signal.map
@@ -459,14 +420,14 @@ let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
                         (text ~key:"info"
                            ~style_class:"cp__cmdk-item-info"
                            [ text ~key:"dash"
-                               ~value:(Platform.utf8 " — ") []
+                               ~value:(gph " — ") []
                            ; hl_span "info-hl" item_sig
                                (fun it ->
                                  Option.value ~default:"" it.S.info)
                            ])
                     ]
                 ]
-            ; shortcut_slot item_sig
+            ; shortcut_slot svs item_sig
             ]
         ])
     ]
@@ -484,20 +445,20 @@ let gid_name = function
   | S.G_codes -> "codes"
   | S.G_themes -> "themes"
 
-let gid_label = function
-  | S.G_nodes -> I18n.t "cmdk.group/nodes"
-  | S.G_commands -> I18n.t "cmdk.group/commands"
-  | S.G_filters -> I18n.t "cmdk.group/filters"
-  | S.G_create -> I18n.t "cmdk.group/create"
-  | S.G_current_page -> I18n.t "cmdk.group/current-page"
-  | S.G_recently_updated -> I18n.t "cmdk.group/recently-updated"
-  | S.G_files -> I18n.t "cmdk.group/files"
-  | S.G_codes -> I18n.t "cmdk.group/codes"
-  | S.G_themes -> I18n.t "cmdk.group/themes"
+let gid_label svs = function
+  | S.G_create -> svs.Svs.i18n "cmdk.group/create"
+  | S.G_current_page -> svs.Svs.i18n "cmdk.group/current-page"
+  | S.G_nodes -> svs.Svs.i18n "cmdk.group/nodes"
+  | S.G_recently_updated -> svs.Svs.i18n "cmdk.group/recents"
+  | S.G_commands -> svs.Svs.i18n "cmdk.group/commands"
+  | S.G_files -> svs.Svs.i18n "cmdk.group/files"
+  | S.G_filters -> svs.Svs.i18n "cmdk.group/filters"
+  | S.G_codes -> svs.Svs.i18n "cmdk.group/codes"
+  | S.G_themes -> svs.Svs.i18n "cmdk.group/themes"
 
 (* cljs group header: title click toggles more/less; the trailing link
    (hidden while a filter is active) shows a compact mod+down/up hint *)
-let group_header (st : S.t) (g : S.group) : t =
+let group_header svs (st : S.t) (g : S.group) : t =
   let toggle _ =
     S.toggle_expand st g.S.gid (not g.S.gexpanded)
   in
@@ -526,17 +487,17 @@ let group_header (st : S.t) (g : S.group) : t =
                   ~style_class:"cp__cmdk-group-more-inner"
                   [ text ~key:"lbl"
                       ~value:
-                        (if g.S.gexpanded then I18n.t "ui/show-less"
-                         else I18n.t "ui/show-more")
+                        (if g.S.gexpanded then svs.Svs.i18n "ui/show-less"
+                         else svs.Svs.i18n "ui/show-more")
                       []
-                  ; compact_shortcut
+                  ; compact_shortcut svs
                       (if g.S.gexpanded then "mod up" else "mod down")
                   ]
               ])
        else spacer ~key:"gmore" [])
     ]
 
-let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
+let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
   let items_sig =
     Signal.map (fun (g : S.group) -> g.S.gitems) group_sig
   in
@@ -555,45 +516,46 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
           && a.S.gfilter_active = b.S.gfilter_active)
         (fun g ->
           if g.S.gid = S.G_create then spacer ~key:"gheader" []
-          else group_header st g)
+          else group_header svs st g)
         group_sig
     ; column ~key:"results" ~style_class:"search-results"
         [ keyed ~source:items_sig ~key:S.item_dom_key
             ~cmp:Stdlib.compare
-            ~mount:(fun item_sig -> item_row st item_sig)
+            ~mount:(fun item_sig -> item_row svs st item_sig)
         ]
     ]
 
 (* -- palette body ---------------------------------------------------- *)
 
-let groups_body st : t =
+let groups_body svs st : t =
  fun ctx parent ->
   let groups_sig =
-    Signal.map (fun (v : S.view) -> v.S.groups) st.S.vs.Signal.state_signal
+    Signal.map (fun (v : S.view) -> v.S.groups)
+      st.S.vs.Signal.state_signal
   in
   (keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
      ~cmp:Stdlib.compare
-     ~mount:(fun group_sig -> group_el st group_sig))
+     ~mount:(fun g -> group_el svs st g))
     ctx parent
 
-let search_only_chip st (gid : S.group_id) =
+let search_only_chip svs st (gid : S.group_id) =
   column ~key:"search-only" ~style_class:"cp__cmdk-search-only"
     [ row ~key:"row" ~style_class:"cp__cmdk-search-only-row"
         ~cross:`center
         [ text ~key:"lbl"
-            ~value:(I18n.t "cmdk.filter/only-label") []
+            ~value:(svs.Svs.i18n "cmdk.filter/only-label") []
         ; text ~key:"grp"
             ~style_class:"cp__cmdk-search-only-name"
-            ~value:(gid_label gid) []
+            ~value:(gid_label svs gid) []
         ; button ~key:"clr" ~icon:`x ~size:`icon
-            ~label:I18n.close
+            ~label:(svs.Svs.i18n "ui/close")
             ~style_class:"cp__cmdk-search-only-clear"
             ~on_press:(fun _ -> S.clear_filter st)
             []
         ]
     ]
 
-let scroller st : t =
+let scroller svs st : t =
  fun ctx parent ->
   let has_items_sig =
     Signal.map
@@ -607,29 +569,31 @@ let scroller st : t =
   in
   (* scroll children overlay each other (lui-scroll > * is grid 1/1) —
      the results stack inside a single column instead *)
-  scroll ~key:"scroller" ~orientation:`vertical
+  (scroll ~key:"scroller" ~orientation:`vertical
     ~style_class:scroller_class
     [ column ~key:"scroller-body" ~grow:1.
         [ reactive
             (fun (v : S.view) ->
               match v.S.filter with
-              | Some gid -> search_only_chip st gid
+              | Some gid -> search_only_chip svs st gid
               | None -> spacer ~key:"chip" [])
             st.S.vs.Signal.state_signal
-        ; groups_body st
+        ; groups_body svs st
         ; if_
             ~test:
               (Signal.map2
                  (fun (q : string) has -> q <> "" && not has)
                  input_sig has_items_sig)
             (box ~key:"empty" ~style_class:"cp__cmdk-empty"
-               [ text ~key:"empty-t" ~value:(I18n.t "search/no-result") [] ])
+               [ text ~key:"empty-t"
+                   ~value:(svs.Svs.i18n "search/no-result") [] ])
         ]
-    ]
+    ])
     ctx parent
 
-let input_row st : t =
- fun ctx parent ->
+(* -- input row -------------------------------------------------------- *)
+
+let input_row svs st : t =
   let move_sig =
     Signal.map (fun (v : S.view) -> v.S.move_mode)
       st.S.vs.Signal.state_signal
@@ -649,8 +613,8 @@ let input_row st : t =
             ~text:(S.get st).S.input
             ~placeholder:
               (if move_mode then
-                 I18n.t "cmdk.input/move-blocks-placeholder"
-               else I18n.t "cmdk.input/default-placeholder")
+                 svs.Svs.i18n "cmdk.input/move-blocks-placeholder"
+               else svs.Svs.i18n "cmdk.input/default-placeholder")
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, q) -> S.on_input st q
@@ -658,24 +622,10 @@ let input_row st : t =
             [])
         move_sig
     ]
-    ctx parent
 
-(* shui shortcut: combo container + kbd.shui-shortcut-key cells *)
-let key_glyph = function
-  | "return" | "enter" -> Platform.utf8 "\xe2\x8f\x8e"
-  | "shift" -> Platform.utf8 "\xe2\x87\xa7"
-  | "cmd" | "mod" -> Platform.utf8 "\xe2\x8c\x98"
-  | "esc" -> "Esc"
-  | s -> s
+(* -- hints ------------------------------------------------------------- *)
 
-let shortcut_el keys =
-  let kids =
-    List.mapi
-      (fun i k ->
-        kbd ~key:(Printf.sprintf "k%d" i)
-          ~style_class:"shui-shortcut-key" ~value:(key_glyph k) [])
-      keys
-  in
+let hint_shortcut_combo kids =
   let rec interleave = function
     | [] -> []
     | [ x ] -> [ x ]
@@ -688,41 +638,38 @@ let shortcut_el keys =
   row ~key:"sc" ~style_class:"shui-shortcut-combo"
     (interleave kids)
 
-let hint_button label keys =
+let hint_button svs label keys =
   button ~key:("hb-" ^ label) ~label
     ~style_class:"cp__cmdk-hint"
     [ text ~key:"t" ~style_class:"cp__cmdk-hint-label" ~value:label []
-    ; hint_shortcut keys ]
+    ; hint_shortcut_combo
+        (List.map (fun k -> kbd_el "k" (print_shortcut_key svs k)) keys) ]
 
 (* cljs tip: random per mount between "Press / to filter search
    results" and "Press ⌘⏎ to open search in the sidebar"; clear-filter
    tip while a filter is active. The {1} slot renders as a kbd
    shortcut. *)
-
-
-(* cljs tip: random per mount between "Press / to filter search
-   results" and "Press ⌘⏎ to open search in the sidebar"; clear-filter
-   tip while a filter is active. The {1} slot renders as a kbd
-   shortcut. *)
-let tip_el (filtered, tip) =
+let tip_el svs (filtered, tip) =
   let key, keys, combo =
     if filtered then ("cmdk.tip/clear-filter", [ "esc" ], false)
-    else if tip = 1 then
-      ("cmdk.tip/open-sidebar", [ "mod"; "enter" ], true)
-    else ("cmdk.tip/filter-results", [ "/" ], false)
+    else if tip = 0 then ("cmdk.tip/filter-results", [ "/" ], false)
+    else ("cmdk.tip/open-sidebar", [ "mod"; "return" ], true)
   in
-  let parts =
-    I18n.replace_all (I18n.t key) "{1}" "\x00"
-  in
+  let text_ = svs.Svs.i18n key in
+  let parts = String.split_on_char '{' text_ in
   let pre, post =
-    match String.split_on_char '\x00' parts with
-    | [ a; b ] -> (a, b)
-    | _ -> (parts, "")
+    match parts with
+    | [ a; b ] ->
+        ( a
+        , (match String.split_on_char '}' b with
+           | [ _; c ] -> c
+           | _ -> "") )
+    | _ -> (parts |> String.concat "{", "")
   in
   row ~key:"tip" ~style_class:"cp__cmdk-tip" ~cross:`center
     [ text ~key:"pre" ~value:pre []
-    ; (if combo then combo_el "tipsc" keys
-       else separate_el "tipsc" keys)
+    ; (if combo then combo_el svs "tipsc" keys
+       else separate_el svs "tipsc" keys)
     ; text ~key:"post" ~value:post [] ]
 
 let hint_action_of (it : S.item) =
@@ -730,7 +677,7 @@ let hint_action_of (it : S.item) =
   | S.Create_page _ | S.Create_tag _ -> (`create, false)
   | S.Set_filter _ -> (`filter, false)
   | S.Run _ -> (`trigger, false)
-  | S.Open_page _ -> (`open_, true)
+  | S.Open_page _ -> (`open_, false)
   | S.Open_block _ -> (`open_, true)
   | S.Open_file _ -> (`open_, false)
 
@@ -744,33 +691,33 @@ let hint_variant (it : S.item option) : int =
       | `filter, _ -> 4
       | `trigger, _ -> 5)
 
-let action_hints (it : S.item option) =
+let action_hints svs (it : S.item option) =
   match it with
   | None -> spacer ~key:"actions" []
   | Some it ->
       let btns =
         match hint_action_of it with
         | `open_, has_block ->
-            [ hint_button (I18n.t "cmdk.action/open") [ "return" ]
-            ; hint_button
-                (I18n.t "cmdk.action/open-in-sidebar")
+            [ hint_button svs (svs.Svs.i18n "cmdk.action/open") [ "return" ]
+            ; hint_button svs
+                (svs.Svs.i18n "cmdk.action/open-in-sidebar")
                 [ "shift"; "return" ]
             ]
             @ (if has_block then
-                 [ hint_button (I18n.t "cmdk.action/copy-ref")
+                 [ hint_button svs (svs.Svs.i18n "cmdk.action/copy-ref")
                      [ "cmd"; "c" ] ]
                else [])
         | `create, _ ->
-            [ hint_button (I18n.t "cmdk.action/create") [ "return" ] ]
+            [ hint_button svs (svs.Svs.i18n "cmdk.action/create") [ "return" ] ]
         | `filter, _ ->
-            [ hint_button (I18n.t "cmdk.action/filter") [ "return" ] ]
+            [ hint_button svs (svs.Svs.i18n "cmdk.action/filter") [ "return" ] ]
         | `trigger, _ ->
-            [ hint_button (I18n.t "cmdk.action/trigger") [ "return" ] ]
+            [ hint_button svs (svs.Svs.i18n "cmdk.action/trigger") [ "return" ] ]
       in
       row ~key:"actions" ~style_class:"cp__cmdk-hints" ~cross:`center
         btns
 
-let hints st : t =
+let hints svs st : t =
  fun ctx parent ->
   (row ~key:"hints" ~style_class:"hints" ~main:`space_between
     [ box ~key:"hints-inner" ~style_class:"cp__cmdk-hints-inner"
@@ -778,12 +725,11 @@ let hints st : t =
             ~style_class:"cp__cmdk-hints-row" ~cross:`center
             [ text ~key:"hint-label"
                 ~style_class:"cp__cmdk-hints-label"
-                ~value:(I18n.t "cmdk.tip/label") []
-            ; reactive tip_el
-                (Logseq_el.own ctx
-                   (Signal.map
-                      (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
-                      st.S.vs.Signal.state_signal))
+                ~value:(svs.Svs.i18n "cmdk.tip/label") []
+            ; reactive (tip_el svs)
+                (Signal.map
+                   (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
+                   st.S.vs.Signal.state_signal)
             ]
         ]
     ; (* the hint bar's shape is the action variant, not the item's
@@ -791,149 +737,115 @@ let hints st : t =
       reactive
         ~equal:(fun (a : S.item option) b ->
           hint_variant a = hint_variant b)
-        action_hints
-        (Logseq_el.own ctx
-           (Signal.map
-              (fun (v : S.view) -> S.item_at v v.S.hl)
-              st.S.vs.Signal.state_signal))
+        (action_hints svs)
+        (Signal.map
+           (fun (v : S.view) -> S.item_at v v.S.hl)
+           st.S.vs.Signal.state_signal)
     ])
     ctx parent
 
-let palette st : t =
+let palette svs st : t =
   (* data-keep-selection is a closest() contract (container.cljs +
      selection_bar.ml) *)
   box ~key:"cmdk"
     ~style_class:"cp__cmdk"
     ~data_attrs:[ ("data-keep-selection", "true") ]
-    [ input_row st; scroller st; hints st ]
+    [ input_row svs st; scroller svs st; hints svs st ]
 
 (* cljs cmdk-block: the :sidebar? variant renders the same cp__cmdk body
    inside .cp__cmdk__block, without the modal shell and without the hints
    row ((when-not sidebar? (hints))) *)
-let sidebar ~query : t =
+let sidebar ~(services : Svs.t) ~query : t =
  fun ctx parent ->
-  let st = S.make_sidebar ctx.Lui_ui.ui_scheduler query in
+  let st = S.make_sidebar ctx.Lui_ui.ui_scheduler services query in
   (box ~key:("cmdk-sb-" ^ query)
      ~style_class:"cp__cmdk"
      ~data_attrs:[ ("data-keep-selection", "true") ]
-     [ input_row st; scroller st ])
+     [ input_row services st; scroller services st ])
     ctx parent
 
-(* -- delegated event listeners (installed once per mount) ------------ *)
+(* -- delegated event handlers -------------------------------------------- *)
 
-let int_of_string_opt s =
-  try Some (int_of_string s) with _ -> None
-
-let handle_keydown st (ev : Web_dom.ev) =
+let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
   let v = S.get st in
+  let no = { Svs.prevent = false; stop = false } in
   if v.S.open_ then
-    match Web_dom.ev_key ev with
+    match ev.Svs.key with
     | "Escape" ->
-        if S.clear_or_close st then (
-          Web_dom.ev_prevent_default ev;
-          Web_dom.ev_stop_propagation ev)
+        if S.clear_or_close st then { Svs.prevent = true; stop = true }
+        else no
     | "ArrowDown" ->
-        Web_dom.ev_prevent_default ev;
-        if Web_dom.ev_meta ev || Web_dom.ev_ctrl ev then
+        if ev.Svs.meta || ev.Svs.ctrl then
           Option.iter (fun gid -> S.toggle_expand st gid true) (S.hl_group st)
-        else S.move_hl st 1
+        else S.move_hl st 1;
+        { Svs.prevent = true; stop = false }
     | "ArrowUp" ->
-        Web_dom.ev_prevent_default ev;
-        if Web_dom.ev_meta ev || Web_dom.ev_ctrl ev then
+        if ev.Svs.meta || ev.Svs.ctrl then
           Option.iter (fun gid -> S.toggle_expand st gid false) (S.hl_group st)
-        else S.move_hl st (-1)
-    | "n" when Web_dom.ev_ctrl ev ->
-        Web_dom.ev_prevent_default ev;
-        S.move_hl st 1
-    | "p" when Web_dom.ev_ctrl ev ->
-        Web_dom.ev_prevent_default ev;
-        S.move_hl st (-1)
+        else S.move_hl st (-1);
+        { Svs.prevent = true; stop = false }
+    | "n" when ev.Svs.ctrl ->
+        S.move_hl st 1;
+        { Svs.prevent = true; stop = false }
+    | "p" when ev.Svs.ctrl ->
+        S.move_hl st (-1);
+        { Svs.prevent = true; stop = false }
     | "Enter" ->
-        Web_dom.ev_prevent_default ev;
-        Web_dom.ev_stop_propagation ev;
         (* cljs consume-open-search-sidebar-keydown! binds mod+enter
            before the highlighted-item action *)
-        if Web_dom.ev_meta ev || Web_dom.ev_ctrl ev then
+        if ev.Svs.meta || ev.Svs.ctrl then
           S.open_search_sidebar st
-        else if Web_dom.ev_shift ev then S.run_highlighted_sidebar st
-        else S.run_highlighted st
-    | "k" when Web_dom.ev_meta ev || Web_dom.ev_ctrl ev ->
-        Web_dom.ev_prevent_default ev;
-        S.close st
-    | _ -> ()
+        else if ev.Svs.shift then S.run_highlighted_sidebar st
+        else S.run_highlighted st;
+        { Svs.prevent = true; stop = true }
+    | "k" when ev.Svs.meta || ev.Svs.ctrl ->
+        S.close st;
+        { Svs.prevent = true; stop = false }
+    | _ -> no
   else
-    match Web_dom.ev_key ev with
+    match ev.Svs.key with
     | "k"
-      when (Web_dom.ev_meta ev || Web_dom.ev_ctrl ev)
-           && not (Web_dom.ev_shift ev || Web_dom.ev_alt ev) ->
-        Web_dom.ev_prevent_default ev;
-        S.open_palette st
+      when (ev.Svs.meta || ev.Svs.ctrl)
+           && not (ev.Svs.shift || ev.Svs.alt) ->
+        S.open_palette st;
+        { Svs.prevent = true; stop = false }
     | "m"
-      when (Web_dom.ev_meta ev || Web_dom.ev_ctrl ev)
-           && Web_dom.ev_shift ev ->
+      when (ev.Svs.meta || ev.Svs.ctrl)
+           && ev.Svs.shift ->
         (* cljs mod+shift+m -> editor/move-blocks -> cmdk move mode *)
-        Web_dom.ev_prevent_default ev;
-        S.open_palette ~move:true st
-    | _ -> ()
+        S.open_palette ~move:true st;
+        { Svs.prevent = true; stop = false }
+    | _ -> no
 
-let handle_click st (ev : Web_dom.ev) =
-  match Web_dom.ev_target ev with
-  | None -> ()
-  | Some el ->
-      (match Web_dom.el_closest el "#search-button" with
-       | Some _ -> S.open_palette st
-       | None ->
-           (* outside click closes: the (unstyled) LUI backdrop does not
-              cover the page, so dismiss here too *)
-           if (S.get st).S.open_
-              && Web_dom.el_closest el ".cp__cmdk__modal" = None
-           then S.close st);
-      (match Web_dom.el_closest el ".cp__cmdk [data-item-key]" with
-       | Some wrap -> (
-           match Web_dom.el_get_attr wrap "data-item-key" with
-           | Some key ->
-               let v = S.get st in
-               (match
-                  List.find_opt
-                    (fun (it : S.item) -> it.S.ikey = key)
-                    (Array.to_list (S.flat_items v))
-                with
-                | Some it -> S.run_item st it
-                | None -> ())
-           | None -> ())
-       | None -> ())
+let handle_click st (ev : Svs.click_ev) =
+  if ev.Svs.search_button then S.open_palette st
+  else (
+    (* outside click closes: the (unstyled) LUI backdrop does not
+       cover the page, so dismiss here too *)
+    if (S.get st).S.open_ && not ev.Svs.inside_modal then S.close st;
+    match ev.Svs.item_key with
+    | Some key ->
+        let v = S.get st in
+        (match
+           List.find_opt
+             (fun (it : S.item) -> it.S.ikey = key)
+             (Array.to_list (S.flat_items v))
+         with
+         | Some it -> S.run_item st it
+         | None -> ())
+    | None -> ())
 
-let handle_mousemove st (ev : Web_dom.ev) =
+let handle_mousemove st (ev : Svs.move_ev) =
   let v = S.get st in
-  if v.S.open_ && (Web_dom.ev_movement_x ev <> 0.0 || Web_dom.ev_movement_y ev <> 0.0)
-  then
-    match Web_dom.ev_target ev with
-    | Some el -> (
-        match Web_dom.el_closest el ".cp__cmdk" with
-        | Some _ -> (
-            let idx =
-              Option.bind
-                (Web_dom.el_closest el ".cp__cmdk [data-item-index]")
-                (fun wrap ->
-                  Option.bind
-                    (Web_dom.el_get_attr wrap "data-item-index")
-                    int_of_string_opt)
-            in
-            match idx with
-            | Some i when i <> v.S.hl -> S.set_hl st i true
-            | Some _ -> S.set_hl st v.S.hl true
-            | None -> ())
-        | None -> ())
+  if v.S.open_ && ev.Svs.moved && ev.Svs.inside_cmdk then
+    match ev.Svs.item_index with
+    | Some i when i <> v.S.hl -> S.set_hl st i true
+    | Some _ -> S.set_hl st v.S.hl true
     | None -> ()
-
-let install_listeners st =
-  Web_dom.add_document_listener "keydown" (handle_keydown st) true;
-  Web_dom.add_document_listener "click" (handle_click st) true;
-  Web_dom.add_document_listener "mousemove" (handle_mousemove st) true
 
 (* modal shell mirrors shui dialog markup: overlay + centered
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
-let modal_shell st =
+let modal_shell svs st =
   (* cp__overlay-layer/cp__dialog-shell are inert on web (no rule targets
      them); on gpui the registered class dictionary makes each link a
      window-sized layer and centers the abspos content by flex
@@ -962,15 +874,18 @@ let modal_shell st =
         ; box ~key:"main" ~style_class:"ui__dialog-main-content"
             [ column ~key:"modal"
                 ~style_class:"cp__cmdk__modal"
-                [ palette st ]
+                [ palette svs st ]
             ]
         ]
     ]
 
-let render (_ms : Model.t Signal.signal) : t =
+let render ~(services : Svs.t) (_ms : 'a Signal.signal) : t =
  fun context parent ->
-  let st = S.make context.Lui_ui.ui_scheduler in
-  install_listeners st;
+  let st = S.make context.Lui_ui.ui_scheduler services in
+  services.Svs.install_listeners
+    { Svs.key = handle_keydown st
+    ; click = handle_click st
+    ; mousemove = handle_mousemove st };
   let open_sig =
     Signal.map (fun (v : S.view) -> v.S.open_) st.S.vs.Signal.state_signal
   in
@@ -978,5 +893,5 @@ let render (_ms : Model.t Signal.signal) : t =
      spliced directly under #app-container its dynamic segment goes stale
      after navigation and later mounts emit an inconsistent op batch *)
   box ~key:"cmdk_view" ~style_class:"cp__overlay-layer"
-    [ if_ ~test:open_sig (modal_shell st) ]
+    [ if_ ~test:open_sig (modal_shell services st) ]
     context parent
