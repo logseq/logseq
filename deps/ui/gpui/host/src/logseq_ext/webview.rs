@@ -60,14 +60,14 @@ mod embed {
     #[cfg(not(target_os = "linux"))]
     use wry::dpi::{LogicalPosition, LogicalSize};
 
-    /// Stock Chrome UA: provider embeds (YouTube Error 153) reject the
-    /// webview's default agent.
-    #[cfg(target_os = "macos")]
-    const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+    /// Mobile-Safari UA on WebKit engines: a desktop UA makes YouTube
+    /// serve DASH/VP9/AV1 streams WebKit can't decode (player loads,
+    /// then "Playback ID" errors) — iOS Safari gets H264 instead.
+    /// WebView2 is real Chromium, so it keeps a desktop Chrome UA.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    const USER_AGENT: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
     #[cfg(target_os = "windows")]
     const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-    #[cfg(target_os = "linux")]
-    const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
     /// The last state pushed to the native view. Platform calls
     /// (`set_bounds` / `set_visible` / `zoom`) only fire when the desired
@@ -97,7 +97,8 @@ mod embed {
         static SLOTS: RefCell<HashMap<i64, Slot>> = RefCell::new(HashMap::new());
         /// Node id → src for every logseq-iframe rendered this epoch.
         /// Written by `render`, consumed by `sync`.
-        static WANTED: RefCell<HashMap<i64, String>> = RefCell::new(HashMap::new());
+        static WANTED: RefCell<HashMap<i64, (String, Option<String>)>> =
+            RefCell::new(HashMap::new());
         /// `overlay_active` result keyed by the store generation it was
         /// computed against — the DFS is only re-run after a batch lands.
         static OVERLAY_CACHE: RefCell<(i64, bool)> = const { RefCell::new((-1, false)) };
@@ -119,16 +120,21 @@ mod embed {
         true
     }
 
-    /// YouTube embeds loaded as a top-level document 403/Error-153
-    /// without a Referer — send the provider's origin.
-    fn provider_headers(url: &str) -> wry::http::HeaderMap {
+    /// Embeds loaded as a top-level document 403/Error-15x without a
+    /// Referer. A DOM iframe sends the embedding page's origin — the
+    /// node's own `referer` attr is the same hint (cljs sets
+    /// `https://logseq.com`); providers without it fall back to their
+    /// own origin.
+    fn provider_headers(url: &str, referer: Option<&str>) -> wry::http::HeaderMap {
         let mut headers = wry::http::HeaderMap::new();
-        if let Some(host) = url
-            .split("://")
-            .nth(1)
-            .and_then(|rest| rest.split('/').next())
-        {
-            if let Ok(value) = wry::http::HeaderValue::from_str(&format!("https://{host}/")) {
+        let origin = referer.map(str::to_string).or_else(|| {
+            url.split("://")
+                .nth(1)
+                .and_then(|rest| rest.split('/').next())
+                .map(|host| format!("https://{host}/"))
+        });
+        if let Some(origin) = origin {
+            if let Ok(value) = wry::http::HeaderValue::from_str(&origin) {
                 headers.insert(wry::http::header::REFERER, value);
             }
         }
@@ -231,26 +237,26 @@ mod embed {
 
     /// Create the child webview for `node_id`'s slot.
     #[cfg(target_os = "linux")]
-    fn create_webview(window: &Window, url: &str) -> wry::Result<wry::WebView> {
+    fn create_webview(window: &Window, url: &str, referer: Option<&str>) -> wry::Result<wry::WebView> {
         ensure_gtk()?;
         let parent = X11Parent::new(window)?;
         wry::WebViewBuilder::new()
             .with_user_agent(USER_AGENT)
-            .with_url_and_headers(url, provider_headers(url))
+            .with_url_and_headers(url, provider_headers(url, referer))
             .build_as_child(&parent)
     }
 
     #[cfg(not(target_os = "linux"))]
-    fn create_webview(window: &Window, url: &str) -> wry::Result<wry::WebView> {
+    fn create_webview(window: &Window, url: &str, referer: Option<&str>) -> wry::Result<wry::WebView> {
         wry::WebViewBuilder::new()
             .with_user_agent(USER_AGENT)
-            .with_url_and_headers(url, provider_headers(url))
+            .with_url_and_headers(url, provider_headers(url, referer))
             .build_as_child(window)
     }
 
     /// Create or refresh the overlay for `node_id`; (re)loads the request
     /// when the url changed.
-    fn ensure_slot(node_id: i64, url: &str, window: &Window) {
+    fn ensure_slot(node_id: i64, url: &str, referer: Option<&str>, window: &Window) {
         SLOTS.with(|cell| {
             let mut slots = cell.borrow_mut();
             let mut needs_load = false;
@@ -261,7 +267,7 @@ mod embed {
                         needs_load = true;
                     }
                 }
-                None => match create_webview(window, url) {
+                None => match create_webview(window, url, referer) {
                     Ok(webview) => {
                         eprintln!("webview: create #{node_id} {url}");
                         slots.insert(
@@ -282,7 +288,7 @@ mod embed {
                     eprintln!("webview: load #{node_id} {url}");
                     let _ = slot
                         .webview
-                        .load_url_with_headers(url, provider_headers(url));
+                        .load_url_with_headers(url, provider_headers(url, referer));
                 }
             }
         });
@@ -420,6 +426,7 @@ mod embed {
         window: &Window,
         node_id: i64,
         url: &str,
+        referer: Option<&str>,
         overlays_up: bool,
         scale: f64,
         viewport: (f64, f64),
@@ -471,7 +478,7 @@ mod embed {
             f64::from(bounds.size.width),
             f64::from(bounds.size.height),
         );
-        ensure_slot(node_id, url, window);
+        ensure_slot(node_id, url, referer, window);
         SLOTS.with(|cell| {
             let mut slots = cell.borrow_mut();
             let Some(slot) = slots.get_mut(&node_id) else {
@@ -531,12 +538,13 @@ mod embed {
                     .as_ref()
                     .expect("bounds snapshot cloned when wanted is non-empty");
                 let wanted = wanted_cell.borrow();
-                for (&node_id, url) in wanted.iter() {
+                for (&node_id, (url, referer)) in wanted.iter() {
                     sync_slot(
                         shared,
                         window,
                         node_id,
                         url,
+                        referer.as_deref(),
                         overlays_up,
                         scale,
                         viewport,
@@ -579,7 +587,8 @@ mod embed {
             return chip(node, cx);
         }
         WANTED.with(|cell| {
-            cell.borrow_mut().insert(node.id, url);
+            cell.borrow_mut()
+                .insert(node.id, (url, attr(node, "referer")));
         });
         // A styled div filling its aspect-ratio shell: the node's inline
         // styles give it real bounds, recorded into node_bounds by the
