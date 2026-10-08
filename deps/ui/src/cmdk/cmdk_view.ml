@@ -951,9 +951,14 @@ let modal_shell st =
       box ~key:"content"
         ~style_class:"ui__dialog-content ls-dialog-cmdk"
         ~grow:1. ~main:`center ~cross:`center
-        ~data_attrs:[ ("role", "dialog"); ("data-state", "open") ]
+        ~data_attrs:
+          [ ("role", "dialog")
+          ; ("aria-modal", "true")
+          ; ("aria-labelledby", "ls-cmdk-title")
+          ; ("data-state", "open") ]
         [ heading ~key:"title" ~level:2
-            ~style_class:"ui__dialog-title hidden" ~value:"" []
+            ~style_class:"ui__dialog-title hidden" ~value:""
+            ~accessibility_identifier:"ls-cmdk-title" []
         ; box ~key:"main" ~style_class:"ui__dialog-main-content"
             [ column ~key:"modal"
                 ~style_class:"cp__cmdk__modal"

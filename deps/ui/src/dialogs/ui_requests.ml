@@ -117,8 +117,13 @@ let view (r : Dialogs_state.ui_request) : t =
         ~style_class:
           ("e2ee-password-modal-content ui__dialog-content"
           ^ extra)
+        ~data_attrs:
+          [ ("role", "dialog")
+          ; ("aria-modal", "true")
+          ; ("aria-labelledby", "ls-e2ee-title") ]
         ~gap:32
-        [ text ~key:"t" ~style_class:"ls-e2ee-title" ~value:title []
+        [ text ~key:"t" ~style_class:"ls-e2ee-title" ~value:title
+            ~accessibility_identifier:"ls-e2ee-title" []
         ; column ~key:"f" ~style_class:"ls-e2ee-form" ~gap:16
             ( [ pw_input ctx ~key:"p1" ~value:pw1 ~autofocus:true
                   ~placeholder:I18n.e2ee_password_ph
