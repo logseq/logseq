@@ -155,9 +155,11 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
    is what keeps outliner ops cheap on huge pages (a single-block edit
    must not re-emit the whole stream). *)
 let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
-    ?(initial_rows = -1) ~estimate_size
+    ?(initial_rows = -1) ?overscan ~estimate_size
     (source : 'a list Signal.signal) : t =
  fun ctx parent ->
+  (* rows are real children on this backend; overscan is a windowing concept *)
+  ignore overscan;
   let sched = ctx.Lui_ui.ui_scheduler in
   let count_sig = Signal.map List.length source in
   let attrs_sig =
