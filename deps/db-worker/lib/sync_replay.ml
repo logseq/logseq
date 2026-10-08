@@ -2353,6 +2353,15 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
         Option.value (Sync_state.server_conn repo) ~default:display_conn
       in
       let local_txs = pending_tx_rows repo () in
+      let pending_ids = Sync_state.SSet.of_list
+          (List.map (fun (row : Sync_client_op.pending_tx_row) -> row.tx_id) local_txs) in
+      let confirmed_ids =
+        List.filter_map (fun tx ->
+            match Wire.get "tx-id" tx with
+            | Some (Wire.Uuid id | Wire.String id) when Sync_state.SSet.mem id pending_ids -> Some id
+            | _ -> None) remote_txs
+        |> List.sort_uniq String.compare
+      in
       let db_migrate = remote_txs_db_migrate remote_txs in
       let tx_meta =
         [ "rtc-tx?", Bool true ]
@@ -2439,6 +2448,9 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
                  transact_remote_txs ~repo c remote_txs ())
             ()
         in
+        (* A journal echo is durable confirmation even when the upload
+           response was lost. Remove its overlay before replaying the tail. *)
+        ignore (Sync_apply.mark_pending_txs_false ~rebuild:false repo confirmed_ids);
         rebuild_display repo
           ~jump_tx_data:
             (match tx_report with
@@ -2494,4 +2506,3 @@ let apply_remote_txs repo (client : Sync_state.client)
 let apply_remote_tx repo client (tx_data : Wire.t list) =
   apply_remote_txs repo client
     [ Wire.Map [ (Wire.keyword "tx-data", Wire.Array tx_data) ] ]
-

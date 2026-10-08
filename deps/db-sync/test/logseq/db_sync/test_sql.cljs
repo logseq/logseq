@@ -19,17 +19,24 @@
 (defn make-sql []
   (let [state (atom {:tx-log {}
                      :meta {}})]
-    #js {:exec (fn [sql & args]
+    #js {:transaction (fn [f]
+                        (let [before @state]
+                          (try (f)
+                               (catch :default error
+                                 (reset! state before)
+                                 (throw error)))))
+         :exec (fn [sql & args]
                  (cond
                    (string/includes? sql "insert into tx_log")
-                   (let [[t tx created-at outliner-op] args]
+                   (let [[t tx created-at outliner-op tx-id] args]
                      (swap! state update :tx-log assoc t {:t t
                                                           :tx tx
                                                           :created-at created-at
-                                                          :outliner-op outliner-op})
+                                                          :outliner-op outliner-op
+                                                          :tx-id tx-id})
                      nil)
 
-                   (string/includes? sql "select t, tx, outliner_op from tx_log")
+                   (string/includes? sql "select t, tx, outliner_op, tx_id from tx_log")
                    (let [since (first args)
                          rows (->> (:tx-log @state)
                                    vals
@@ -37,6 +44,7 @@
                                    (sort-by :t)
                                    (map (fn [row] {:t (:t row)
                                                    :tx (:tx row)
+                                                   :tx-id (:tx-id row)
                                                    :outliner-op (:outliner-op row)})))]
                      (js-rows rows))
 

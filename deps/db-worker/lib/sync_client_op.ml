@@ -775,7 +775,7 @@ let cleanup_finished_history_ops repo (protected_tx_ids : string list) : int =
   let protected_set = protected_tx_ids in
   let ids =
     rows st
-      "select tx_id from client_ops where kind = 'tx' and pending = 0 and tx_id is not null"
+      "select tx_id from client_ops where kind = 'tx' and pending = 0 and failed = 0 and tx_id is not null"
       []
     |> List.filter_map (fun r ->
            match col_text_opt r 0 with

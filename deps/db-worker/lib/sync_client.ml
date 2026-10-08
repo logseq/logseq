@@ -412,7 +412,6 @@ and connect repo (client : Sync_state.client) (url : string)
            if !(updated.conn_gen) = gen then
              match event with
            | Web_socket.Open ->
-               reset_reconnect updated;
                touch_last_ws_message updated;
                set_ws_state updated "open";
                Sync_util.clear_last_sync_error updated;
@@ -434,7 +433,14 @@ and connect repo (client : Sync_state.client) (url : string)
                touch_last_ws_message updated;
                enqueue_receive_message updated (fun () ->
                     Sync_handle_message.handle_message_effect repo updated
-                      data)
+                      data
+                    >>= fun () ->
+                    (* A successful socket open does not mean writes work.
+                       Reset backoff only after the graph and outbox catch up. *)
+                    if Sync_client_op.get_pending_local_tx_count repo = 0
+                       && Sync_client_op.get_local_tx repo = Sync_apply.latest_remote_tx repo
+                    then reset_reconnect updated;
+                    Db_worker_effect.pure ())
            | Web_socket.Binary _ -> ()
            | Web_socket.Error e ->
                Worker_log.error "db-sync/ws-error" [ "error", e ]

@@ -228,7 +228,12 @@ let start_upload_response_timeout (client : Sync_state.client)
            | Some current when request_equal { current with timer = None }
                                     { request with timer = None } ->
                client.upload_request := None;
-               report_upload_response_timeout client request
+               report_upload_response_timeout client request;
+               (* The response may have been lost after commit. Reconnect
+                  and pull the journal before retrying the durable outbox. *)
+               (match client.ws with
+                | Some ws -> Db_worker_effect.async (fun () -> Sync_state.ws_endpoint_close ws)
+                | None -> ())
            | _ -> ())
     in
     request.timer <- Some timer;
