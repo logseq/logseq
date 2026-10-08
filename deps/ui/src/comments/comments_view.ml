@@ -58,6 +58,16 @@ let submit_comment area_uuid (text : string) =
         ]
     in
     clear_draft area_uuid;
+    (* the keyed textarea node is reused across re-renders, so its DOM
+       value has to be cleared explicitly or the submitted text sticks *)
+    (match
+       Web_dom.query_selector
+         ("#area-" ^ area_uuid ^ " .ls-comment-add textarea")
+     with
+     | Some ta ->
+         D.el_set_value ta "";
+         D.el_set_text_content ta ""
+     | None -> ());
     ignore
       (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
          [ Ops.insert_blocks [ block ] area_uuid ~sibling:false ]))
@@ -101,12 +111,17 @@ let fetch_target_titles (ids : int list) =
       Js.Promise.resolve
         (List.filter_map
            (fun b ->
-             match
-               ( Wire.map_get_uuid b "block/uuid"
-               , Wire.map_get_string b "block/title" )
-             with
-             | Some u, Some t -> Some (u, t)
-             | _ -> None)
+             (* get-blocks returns [{id, block}] wrappers — the entity
+                map lives under "block", not at the top level *)
+             match Wire.map_get b "block" with
+             | None -> None
+             | Some blk -> (
+                 match
+                   ( Wire.map_get_uuid blk "block/uuid"
+                   , Wire.map_get_string blk "block/title" )
+                 with
+                 | Some u, Some t -> Some (u, t)
+                 | _ -> None))
            (Wire.elems w))
 
 let toggle_reaction uuid emoji_id =
@@ -298,7 +313,10 @@ let header st (area_uuid : string) (count : int) (target_ids : int list)
       ]
     else [] )
 
-let area_el (b : Model.block) : t =
+(* The area must stay live against the row's block signal — comment
+   children arrive via insert-blocks (own submit) and remote RTC txs; a
+   static record froze the count at mount and never showed new rows. *)
+let area_el (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   let st =
     Signal.state ctx.Lui_ui.ui_scheduler
@@ -308,12 +326,13 @@ let area_el (b : Model.block) : t =
       ; target_titles = []
       }
   in
-  let area_uuid = Option.value b.Model.block_uuid ~default:"" in
-  let comments =
-    List.filter (fun c -> c.Model.block_is_comment) b.Model.block_children
-  in
   (reactive
-     (fun _st ->
+     (fun ((b : Model.block), (_local : area_st)) ->
+       let area_uuid = Option.value b.Model.block_uuid ~default:"" in
+       let comments =
+         List.filter (fun c -> c.Model.block_is_comment)
+           b.Model.block_children
+       in
        column ~key:("area-" ^ area_uuid)
          ~style_class:"ls-comments-area"
          ~accessibility_identifier:("area-" ^ area_uuid)
@@ -339,5 +358,11 @@ let area_el (b : Model.block) : t =
                   (List.map (comment_row st) comments))
          ; add_box st area_uuid
          ])
-     (Signal.value st))
+     (Signal.map2 (fun b local -> (b, local)) bs (Signal.value st)))
     ctx parent
+
+(* static-record variant for the non-signal render path (row_el): the
+   constant signal never republishes, matching the previous frozen view *)
+let area_el_static (b : Model.block) : t =
+ fun ctx parent ->
+  area_el (Signal.constant ctx.Lui_ui.ui_scheduler b) ctx parent
