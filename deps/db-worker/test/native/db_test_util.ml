@@ -366,6 +366,8 @@ let schema_edn =
     :logseq.property.asset/type {:db/index true}
     :block/tx-id {}
     :block/closed-value-property {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+    :logseq.property/default-value {:db/valueType :db.type/ref}
+    :logseq.property/scalar-default-value {}
     :file/path {:db/unique :db.unique/identity}
     :file/content {}
     :file/created-at {}
@@ -635,6 +637,7 @@ let initial_data_edn =
      :block/uuid #uuid \"00000003-0000-4000-8000-0000000003a0\"
      :block/title \"Backlog\"
      :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true
      :block/closed-value-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :logseq.property/created-from-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :block/page [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
@@ -645,6 +648,7 @@ let initial_data_edn =
      :block/uuid #uuid \"00000003-0000-4000-8000-0000000003a1\"
      :block/title \"Todo\"
      :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true
      :block/closed-value-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :logseq.property/created-from-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :block/page [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
@@ -655,6 +659,7 @@ let initial_data_edn =
      :block/uuid #uuid \"00000003-0000-4000-8000-0000000003a2\"
      :block/title \"Doing\"
      :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true
      :block/closed-value-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :logseq.property/created-from-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :block/page [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
@@ -665,6 +670,7 @@ let initial_data_edn =
      :block/uuid #uuid \"00000003-0000-4000-8000-0000000003a3\"
      :block/title \"In Review\"
      :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true
      :block/closed-value-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :logseq.property/created-from-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :block/page [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
@@ -675,6 +681,7 @@ let initial_data_edn =
      :block/uuid #uuid \"00000003-0000-4000-8000-0000000003a4\"
      :block/title \"Done\"
      :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true
      :block/closed-value-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :logseq.property/created-from-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :block/page [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
@@ -685,6 +692,7 @@ let initial_data_edn =
      :block/uuid #uuid \"00000003-0000-4000-8000-0000000003a5\"
      :block/title \"Canceled\"
      :block/created-at 0 :block/updated-at 0
+     :logseq.property/built-in? true
      :block/closed-value-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :logseq.property/created-from-property [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]
      :block/page [:block/uuid #uuid \"00000003-0000-4000-8000-000000000312\"]

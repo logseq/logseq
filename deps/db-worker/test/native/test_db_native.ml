@@ -3960,6 +3960,7 @@ let () =
     ; "shared-service", Test_shared_service_native.cases
     ; "node-sync", Test_node_sync_native.cases
     ; "pipeline", Test_pipeline_native.cases
+    ; "query-dsl", Test_query_dsl_native.cases
     ; "markdown-mirror", Test_markdown_mirror_native.cases
     ; "graph-view", Test_graph_view_native.cases
     ; "db-core", Test_db_core_native.cases
