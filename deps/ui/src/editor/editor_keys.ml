@@ -1281,7 +1281,14 @@ let on_click ev =
                            entry, leaving history.back() stuck on the
                            zoom route *)
                         D.ev_prevent_default ev;
-                        A.zoom_to u
+                        if D.ev_shift ev then
+                          (* cljs bullet-on-click shiftKey: opens the
+                             block in the right sidebar *)
+                          Web_dom.dispatch_custom "ls:open-right-sidebar"
+                            (Js.Json.object_
+                               (Js.Dict.fromList
+                                  [ "uuid", Js.Json.string u ]))
+                        else A.zoom_to u
                     | None -> ())
                 | None -> (
                     (* capture listener fires before the query shell's own

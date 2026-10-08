@@ -29,6 +29,64 @@ let set_anchor uuid =
      the IO callback must see it, so take the flushing path *)
   S.set (fun st -> { st with S.anchor = Some uuid })
 
+(* cljs block-content mousedown modifiers run block-selection ops
+   instead of arming the range drag or starting an edit; returns true
+   when a modifier handled the press (the follow-up click must be
+   suppressed so the row never opens its editor) *)
+let modifier_select ev uuid =
+  let shift = Web_dom.ev_shift ev in
+  let meta = Web_dom.ev_meta ev || Web_dom.ev_ctrl ev in
+  if not (shift || meta) then false
+  else begin
+    suppress_click := true;
+    Web_dom.ev_prevent_default ev;
+    if shift && meta then
+      (* meta+shift: append the anchor..clicked range *)
+      (match S.anchor () with
+       | Some anchor ->
+           let range = Editor_actions.range_between anchor uuid in
+           if range <> [] then
+             S.set (fun st ->
+                 { st with
+                   S.selected =
+                     List.fold_left
+                       (fun s u -> S.String_set.add u s)
+                       st.S.selected range
+                 ; action_bar = true
+                 })
+       | None -> ())
+    else if meta then (
+      (* meta: toggle the clicked block in the selection *)
+      S.set (fun st ->
+          let sel =
+            if S.String_set.mem uuid st.S.selected then
+              S.String_set.remove uuid st.S.selected
+            else S.String_set.add uuid st.S.selected
+          in
+          { st with
+            S.selected = sel
+          ; anchor = Some uuid
+          ; action_bar = true
+          }))
+    else
+      (* shift: range-select anchor..clicked; with no stored anchor the
+         press only records one, like a plain click *)
+      (match S.anchor () with
+       | Some anchor when anchor <> uuid -> (
+           let range = Editor_actions.range_between anchor uuid in
+           if range <> [] then
+             S.set (fun st ->
+                 { st with
+                   S.selected = S.String_set.of_list range
+                 ; action_bar = true
+                 })
+           (* a stale/off-screen anchor yields no range — fall back to
+              recording the clicked block as the new anchor *)
+           else set_anchor uuid)
+       | _ -> set_anchor uuid);
+    true
+  end
+
 let pointerdown ev =
   if
     Web_dom.ev_buttons ev = 1
@@ -40,9 +98,18 @@ let pointerdown ev =
     | Some block_el -> (
         match Web_dom.el_get_attr block_el "data-blockid" with
         | Some uuid ->
-            down := true;
-            dragged := false;
-            set_anchor uuid
+            (* the row's control band (collapse arrow, bullet) runs its
+               own shift-click behaviors — the selection modifiers only
+               apply to the content area *)
+            if
+              Web_dom.closest_sel ".block-control-wrap"
+                (Web_dom.ev_target ev)
+              <> None
+              || not (modifier_select ev uuid)
+            then (
+              down := true;
+              dragged := false;
+              set_anchor uuid)
         | None -> ())
     | None -> ()
 

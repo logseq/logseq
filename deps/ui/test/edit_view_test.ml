@@ -346,7 +346,10 @@ let test_input_mapping () =
   let mb = h mb E.Blur in
   check "blur ends comp" (not (M.composing mb));
   check "blur routed" (List.hd !routed = "blur");
-  (* vertical arrows resolve through the conduit *)
+  (* vertical arrows resolve through the line table: interior moves
+     hit-test the adjacent line's midpoint; on the first/last line the
+     model is left unchanged so the caller can cross into the
+     neighbouring block *)
   let conduit =
     { E.no_conduit with
       caret_rect = (fun _ -> Some { E.x = 4; y = 2; w = 0; h = 8 })
@@ -354,13 +357,18 @@ let test_input_mapping () =
     }
   in
   let mv = E.handle ~route ~conduit m (E.Key (M.key_ev "ArrowUp", false)) in
-  eqi "arrow-up hit-tests" 0 mv.M.caret;
+  eqi "arrow-up first line no-op" 2 mv.M.caret;
+  let mw = M.set_lines (M.create "abcdef") [ (0, 3); (3, 6) ] in
+  let mw = { mw with M.caret = 4 } in
+  let mv = E.handle ~route ~conduit mw (E.Key (M.key_ev "ArrowUp", false)) in
+  eqi "arrow-up hit-tests" 2 mv.M.caret;
   let mv2 =
-    E.handle ~route ~conduit m (E.Key (M.key_ev ~shift:true "ArrowDown", false))
+    E.handle ~route ~conduit { mw with M.caret = 1 }
+      (E.Key (M.key_ev ~shift:true "ArrowDown", false))
   in
-  (* caret was 2: extending down sets anchor at the old caret *)
+  (* caret was 1: extending down sets anchor at the old caret *)
   check "shift-down extends"
-    (mv2.M.caret = 2 && mv2.M.anchor = Some 2)
+    (mv2.M.caret = 2 && mv2.M.anchor = Some 1)
 
 (* ---------- U16 unit mode ---------- *)
 
