@@ -56,9 +56,9 @@ backend (`api.logseq.io`), compared surface-by-surface with master
   `e2etest 7:08 PM`; LUI's `.ls-comment-meta` renders empty. `Model.block`
   carries no `created-at`/author fields — adding them means extending the
   worker block pull, so left as a documented gap.
-- **No E2EE lock icon in the remote graph list**: master marks encrypted
-  remote graphs with a lock glyph; LUI's All-graphs list shows the name
-  only. `all-graphs-lui` vs `all-graphs-master`
+- ~~No E2EE lock icon in the remote graph list~~ **FIXED**: remote rows
+  now render the cljs `strong.px-1 > ui/icon` — `lock` for `graph-e2ee?`
+  graphs, `cloud` for the rest (`graphs_view.ml` remote_row).
 - **No "Log out" affordance**: LUI's dots menu shows the logged-in
   identity (`e2etest`, masked email) but no logout action.
 - Minor layout deltas: LUI's `Comments` label and count are two sibling
