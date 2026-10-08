@@ -47,6 +47,7 @@ let unescape_published s =
 
 let main root =
   Platform_web.install ~request_flush:Runtime.flush;
+  Ui_dom_web.install ();
   install_error_reporting ();
   let registry = Lui_extension.registry () in
   Logseq_emoji.register registry;
