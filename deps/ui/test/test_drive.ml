@@ -205,6 +205,8 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
   ; flush
   }
 
+(* ---------------- edit-flow host ---------------- *)
+
 (* ---------------- shell + header ---------------- *)
 
 let test_shell () =
@@ -1431,6 +1433,38 @@ let test_sdk_api () =
 
 (* ---------------- runner ---------------- *)
 
+let edit_flow_host () : Edit_flow_test.host =
+  { repo = "logseq_db_test"
+  ; stage =
+      (fun rp ->
+        drive_model :=
+          { !drive_model with
+            Model.route_page = rp
+          ; repo = Some "logseq_db_test"
+          ; route = Model.Page "p"
+          })
+  ; sync_page =
+      (fun () ->
+        drive_model :=
+          { !drive_model with Model.route_page = !Runtime.current_page })
+  ; wait_ms =
+      (fun ms ->
+        Js.Promise.make (fun ~resolve ~reject:_ ->
+            Web_dom.set_timeout (fun () ->
+                let v = () in
+                resolve v [@u])
+              ms))
+  ; reject_promise =
+      (fun why ->
+        Js.Promise.then_
+          (fun () -> failwith why)
+          (Js.Promise.resolve ()))
+  ; base_handler = worker_handler
+  ; snapshot = (fun () -> !drive_model)
+  ; restore = (fun m -> drive_model := m)
+  ; native = false
+  }
+
 let run ~finish =
   ignore (Fake_worker.install worker_handler);
   ignore (mount ());
@@ -1461,4 +1495,10 @@ let run ~finish =
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)
-  after 30 (fun () -> async_checks (); finish ())
+  Edit_flow_test.run (edit_flow_host ());
+  after 30 (fun () ->
+      async_checks ();
+      ignore
+        (Js.Promise.then_
+           (fun () -> finish (); Js.Promise.resolve ())
+           (Edit_flow_test.async_stage (edit_flow_host ()))))

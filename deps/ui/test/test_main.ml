@@ -4017,7 +4017,7 @@ let test_scan_gate () =
 
 let () =
   Edit_model_test.run ();
-  Edit_view_test.run ();
+  Edit_view_web_test.run ();
   test_move ();
   test_update ();
   test_decode ();
@@ -4112,5 +4112,7 @@ let () =
      the summary + exit must wait for that stage *)
   Test_drive.run ~finish:(fun () ->
       Js.log
-        (Printf.sprintf "%d checks, %d failures" !checks !failures);
+        (Printf.sprintf
+          "%d checks, %d failures, %d expected-failures, %d unexpected-passes"
+          !checks !failures !expected_failures !unexpected_passes);
       if !failures > 0 then exit 1)
