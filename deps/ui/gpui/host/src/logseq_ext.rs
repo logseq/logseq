@@ -137,7 +137,24 @@ pub fn register(shared: &Shared) {
     //                    border-radius:0.25rem }
     lui_gpui::style::register_class_style(
         "extensions__code",
-        "width:100%; overflow:hidden; border-radius:4px",
+        "width:100%; overflow:hidden; border-radius:4px;\
+         background:var(--lx-gray-01, #fdf6e3)",
+        "",
+    );
+    // .ls-code-editor-wrap > .code-block-actions — web: absolute overlay
+    // at top/right .25rem, opacity 0 until wrap:hover (the hover signal
+    // now drives opacity on the node itself; here the overlay must sit
+    // out of flow so the bar doesn't push the editor down). The wrap is
+    // the positioning context.
+    lui_gpui::style::register_class_style(
+        "ls-code-editor-wrap",
+        "position:relative",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "code-block-actions",
+        "position:absolute;top:4px;right:4px;font-size:12px;\
+         background:var(--lx-gray-01, var(--ls-primary-background-color))",
         "",
     );
     // .page-reference .bracket { opacity: 0.3; display: inline-flex }
@@ -198,11 +215,12 @@ pub fn register(shared: &Shared) {
         "",
     );
     // .ls-block { padding:0.125rem 0 } — the web row pitch is 28px
-    // (24px line-height + 2+2 padding); gpui's text line box is ~26px,
-    // so 1px edges land on the same pitch.
+    // (24px line-height + 2+2 padding); gpui's text line box is ~26px
+    // and rows measured 29px with symmetric 1px padding (taffy rounds
+    // the line box up), so a single 1px top edge lands on the pitch.
     lui_gpui::style::register_class_style(
         "ls-block",
-        "padding-top:1px;padding-bottom:1px",
+        "padding-top:1px;padding-bottom:0px",
         "",
     );
     // .ls-block .ls-properties-area.ls-block-properties { margin-top:2px;
@@ -212,11 +230,51 @@ pub fn register(shared: &Shared) {
         "margin-top:2px; margin-left:7px",
         "",
     );
+    // .property-value-panel .lui-button.pv-scalar { height:auto;
+    //   min-height:0; padding:0; line-height:20px } — the value cell is
+    //   a naked text label on the web, not a 32px button chrome.
+    lui_gpui::style::register_class_style(
+        "pv-scalar",
+        "height:20px;padding-top:0px;padding-bottom:0px;\
+         padding-left:0px;padding-right:0px;line-height:20px",
+        "",
+    );
     // .ls-properties-area .properties-panel { border-radius:6px;
     //   overflow:hidden }
     lui_gpui::style::register_class_style(
         "properties-panel",
         "border-radius:6px; overflow:hidden",
+        "",
+    );
+    // Property row min-heights (28px web) — .property-key-panel,
+    // .property-key-inner and .property-value-panel all declare
+    // min-height:28px; .property-icon adds margin-right:4px beside the
+    // key (web: flex gap 4px + margin 4px); .property-k is a naked
+    // 20px label like .pv-scalar.
+    lui_gpui::style::register_class_style(
+        "property-key-panel",
+        "min-height:28px",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "property-key-inner",
+        "min-height:28px",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "property-value-panel",
+        "min-height:28px",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "property-icon",
+        "margin-right:4px",
+        "",
+    );
+    lui_gpui::style::register_class_style(
+        "property-k",
+        "height:20px;padding-top:0px;padding-bottom:0px;\
+         padding-left:0px;padding-right:0px;line-height:20px",
         "",
     );
     // resources/css/lui-overlay.css — modal scrim + dialog surface.
@@ -878,12 +936,14 @@ fn register_class_styles() {
     // (children aren't clipped when no overflow rule applies).
     class("ls-page-title-actions", "height:0px", "");
     class("control-hide", "display:none", "");
-    // .ls-page-title-container — lui-core.css: the page title renders at
-    // 32px/500 (var(--ls-page-title-size)); the generic `title` utility
-    // on the outer logseq-div only reaches text_xl+semibold.
+    // .ls-page-title-container — measured on the LUI web app: computed
+    // font-size 36px (var(--ls-page-title-size)), line-height 54px,
+    // weight 500; the generic `title` utility on the outer logseq-div
+    // only reaches text_xl+semibold.
     class(
         "ls-page-title-container",
-        "font-size:32px;font-weight:500;color:var(--lx-gray-12, var(--ls-title-text-color))",
+        "font-size:36px;line-height:54px;font-weight:500;\
+         color:var(--lx-gray-12, var(--ls-title-text-color))",
         "",
     );
 

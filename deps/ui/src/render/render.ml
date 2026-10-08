@@ -200,10 +200,15 @@ let calc_results_el code =
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
    with a language picker button + copy button. Handlers live in
    Code_mirror (open_lang_picker/copy_button). *)
-let code_block_actions ~self lang =
+let code_block_actions ~self ~hover lang =
   (* the language picker is anchored by the .select-language query in
-     Code_mirror — the class stays *)
+     Code_mirror — the class stays. Web hides the bar via
+     .ls-code-editor-wrap:hover > .code-block-actions{opacity:1}; the
+     same reveal is driven here by the wrap's pointer-enter/leave so
+     non-stylesheet backends match (at rest the row is invisible, and
+     on gpui the host renders it out of flow) *)
   row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
+    ~opacity:(reactive (fun h -> if h then 1. else 0.) (Signal.value hover))
     [ button ~key:"sl" ~variant:`ghost ~size:`sm
         ~style_class:"select-language"
         ~text:
@@ -227,7 +232,7 @@ let code_block_actions ~self lang =
    codemirror@5) —
    DOM structure matches cljs so both display and edit look identical.
    ~extra appends inside .extensions__code (the src-eval .results div). *)
-let code_block ?(self = "") ?(extra = []) lang code =
+let code_block ?(self = "") ?(extra = []) lang code : t =
   let lang =
     (* cljs src-cp aliases the fence's stored lang to clojure *)
     match lang with
@@ -235,11 +240,19 @@ let code_block ?(self = "") ?(extra = []) lang code =
     | l -> l
   in
   let calc = lang = "calc" in
-  row ~key:("fcb-" ^ self) ~grow:1.0
+ fun context parent ->
+  let hover = Signal.state context.Lui_ui.ui_scheduler false in
+  (row ~key:("fcb-" ^ self) ~grow:1.0
     ~style_class:"ui-fenced-code-editor"
     [ box ~key:"wrap" ~grow:1.0 ~style_class:"ls-code-editor-wrap"
-        [ code_block_actions ~self lang
-        ; row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"
+        ~on_pointer_enter:(fun _ ->
+          Signal.set hover true;
+          Runtime.flush ())
+        ~on_pointer_leave:(fun _ ->
+          if Runtime.signal_get hover then (
+            Signal.set hover false;
+            Runtime.flush ()))
+        [ row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"
             ([ (if lang <> "" && not calc then
                  text ~key:"lang"
                    ~style_class:"extensions__code-lang"
@@ -265,8 +278,13 @@ let code_block ?(self = "") ?(extra = []) lang code =
                  ]
              ]
             @ extra)
+        ; (* last child so the overlay paints above the editor on
+             stacking contexts without z-index (gpui); web keeps
+             position:absolute + z-index from the stylesheet *)
+          code_block_actions ~self ~hover lang
         ]
-    ]
+    ])
+    context parent
 
 let has_sub hay needle =
   let n = String.length hay and m = String.length needle in

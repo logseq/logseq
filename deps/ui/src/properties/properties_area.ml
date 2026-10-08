@@ -68,7 +68,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let menu_open = Signal.state sched false in
-  (column ~gap:0 ~style_class:"property-key-inner"
+  (Lui_elements.row ~gap:4 ~cross:`center ~style_class:"property-key-inner"
      [ (if icon then property_icon row else Logseq_el.nothing)
      ; button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~style_class:"property-k flex select-none jtrigger w-full"
@@ -96,7 +96,7 @@ let value_cell ctx row : t =
   let entity_value =
     match D.row_value row with W.Map _ -> true | _ -> false
   in
-  Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0 ~main:`start
+  Lui_elements.row ~gap:4 ~cross:`start ~grow:1.0 ~main:`start
     ~style_class:"ls-block property-value-container property-value-panel"
     ((if show_panel_bullet row || entity_value then
         [ box ~key:"vpb" ~style_class:"property-panel-bullet"
