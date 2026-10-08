@@ -3,4 +3,5 @@ val env_opt : Js.Dict.key -> string option
 val port : int
 val headless : bool
 val slow_mo : float
+val local_sync : bool
 val mac : bool

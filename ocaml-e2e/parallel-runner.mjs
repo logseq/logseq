@@ -529,6 +529,74 @@ async function main() {
     process.exit(2);
   }
 
+  // Local db-sync server for rtc tests: the node-adapter with unverified
+  // JWT claims, so tests seed an e2etest user without Cognito. Opt out
+  // with E2E_LOCAL_SYNC=0 (falls back to the real backend login).
+  let syncServer = null;
+  const wantsLocalSync =
+    tasks.some((t) => t.rtc) && process.env.E2E_LOCAL_SYNC !== "0";
+  if (wantsLocalSync) {
+    const adapter = path.join(
+      REPO_ROOT,
+      "deps/db-sync/worker/dist/node-adapter.js",
+    );
+    if (!fs.existsSync(adapter)) {
+      console.error(
+        `db-sync node adapter missing: ${adapter}\n` +
+          `build it: pnpm --dir deps/db-sync build:node-adapter`,
+      );
+      process.exit(2);
+    }
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "db-sync-e2e-"));
+    syncServer = spawn("node", [adapter], {
+      env: {
+        ...process.env,
+        NODE_PATH:
+          path.join(REPO_ROOT, "deps/db-sync/node_modules") +
+          (process.env.NODE_PATH ? `:${process.env.NODE_PATH}` : ""),
+        DB_SYNC_PORT: "8787",
+        DB_SYNC_DATA_DIR: dataDir,
+        COGNITO_ISSUER:
+          "https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM",
+        COGNITO_CLIENT_ID: "1qi1uijg8b6ra70nejvbptis0q",
+        // unreachable JWKS: verification fails on fetch so forged
+        // e2etest claims are used (DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS)
+        COGNITO_JWKS_URL: "http://127.0.0.1:9/jwks.json",
+        DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS: "true",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const syncLog = fs.createWriteStream(path.join(logDir, "db-sync.log"));
+    syncServer.stdout.pipe(syncLog);
+    syncServer.stderr.pipe(syncLog);
+    const health = await new Promise((resolve) => {
+      const started = Date.now();
+      const tick = () =>
+        http
+          .get("http://127.0.0.1:8787/health", (res) => {
+            res.resume();
+            resolve(res.statusCode === 200);
+          })
+          .on("error", () => {
+            if (Date.now() - started > 15000) resolve(false);
+            else setTimeout(tick, 250);
+          });
+      tick();
+    });
+    if (!health) {
+      syncServer.kill();
+      console.error("local db-sync server failed health check; see db-sync.log");
+      process.exit(2);
+    }
+    process.env.E2E_LOCAL_SYNC = "1";
+    console.log(`local db-sync server on :8787 (data ${dataDir})`);
+    process.on("exit", () => {
+      try {
+        syncServer.kill();
+      } catch {}
+    });
+  }
+
   const queue = [...tasks];
   const results = [];
   let rtcRunning = 0;

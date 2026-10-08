@@ -2,9 +2,32 @@
 
 open Fest.Promise
 
+(* Local-sync mode (E2E_LOCAL_SYNC=1, set by parallel-runner for rtc tests
+   when it spawns the db-sync node-adapter): point the app at the local
+   server and inject a forged e2etest id-token — the adapter runs with
+   DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS, so no Cognito login is needed. *)
+let local_sync_init_script =
+  if Config.local_sync then
+      "localStorage.setItem('sync-server-url', \
+       'http://127.0.0.1:8787'); \
+       (() => { const b64 = (o) => \
+       btoa(JSON.stringify(o)).replace(/=/g,'').replace(/\\+/g,'-').replace(/\\//g,'_'); \
+       const now = Math.floor(Date.now()/1000); \
+       const tok = b64({alg:'RS256',typ:'JWT',kid:'e2e'}) + '.' + b64({ \
+       sub:'302246b1-72ed-4d45-b531-e5f2e119dd75', \
+       'cognito:username':'e2etest', email:'e2etest@example.com', \
+       iss:'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM', \
+       aud:'1qi1uijg8b6ra70nejvbptis0q', token_use:'id', iat:now, \
+       exp:now+86400*30 }) + '.ZmFrZXNpZw'; \
+       localStorage.setItem('id-token', tok); \
+       localStorage.setItem('access-token', tok); \
+       localStorage.setItem('refresh-token', 'e2e-local-refresh-token'); })();"
+  else ""
+
 let e2e_init_script =
   "localStorage.setItem('preferred-language', '\"en\"'); \
    localStorage.setItem('developer-mode', '\"true\"');"
+  ^ local_sync_init_script
 
 let refresh_ready_script =
   "(() => document.documentElement.lang === 'en' \

@@ -657,43 +657,52 @@ let settled_page_blocks_contents env =
   go [||] 0
 
 let login_test_account ?(username = "e2etest") ?(password = "Logseq-e2e") env =
-  let* () = Pw.eval_js env "localStorage.setItem(\"login-enabled\",true);" in
-  (* under parallel load the toolbar/dots menu can mount long after the
-     page shell, or the first menu open can be eaten by a remount —
-     verify the Login item actually shows before clicking it. When the
-     tries run out the app likely wedged during boot: reload once and
-     make one last attempt. *)
-  let rec open_login tries reloaded =
-    let* opened =
-      Pw.catch_timeout
-        (let* () = Pw.wait_for ~timeout:45000. env ".toolbar-dots-btn" in
-         let* () = Pw.click env ".toolbar-dots-btn" in
-         Js.Promise.then_
-           (fun _ -> Js.Promise.resolve true)
-           (Pw.wait_for ~timeout:8000. env "div:text(\"Login\")"))
-        (fun () -> Js.Promise.resolve false)
+  if Config.local_sync then
+    (* local sync server accepts the forged id-token injected by the init
+       script — refresh so restore-tokens-from-localstorage picks it up
+       instead of driving the Cognito login modal *)
+    let* () = Pw.eval_js env "localStorage.setItem(\"login-enabled\",true);" in
+    let* () = Pw.refresh env in
+    Pw.wait_for env "#search-button"
+  else begin
+    let* () = Pw.eval_js env "localStorage.setItem(\"login-enabled\",true);" in
+    (* under parallel load the toolbar/dots menu can mount long after the
+       page shell, or the first menu open can be eaten by a remount —
+       verify the Login item actually shows before clicking it. When the
+       tries run out the app likely wedged during boot: reload once and
+       make one last attempt. *)
+    let rec open_login tries reloaded =
+      let* opened =
+        Pw.catch_timeout
+          (let* () = Pw.wait_for ~timeout:45000. env ".toolbar-dots-btn" in
+           let* () = Pw.click env ".toolbar-dots-btn" in
+           Js.Promise.then_
+             (fun _ -> Js.Promise.resolve true)
+             (Pw.wait_for ~timeout:8000. env "div:text(\"Login\")"))
+          (fun () -> Js.Promise.resolve false)
+      in
+      if opened then Js.Promise.resolve ()
+      else if tries <= 1 then
+        if reloaded then
+          Js.Promise.reject
+            (Failure "login_test_account: Login menu never opened")
+        else
+          let* () = Pw.refresh env in
+          let* _ =
+            E2e_assert.is_visible ~timeout:60000. env
+              "[data-testid='page title']"
+          in
+          open_login 1 true
+      else open_login (tries - 1) reloaded
     in
-    if opened then Js.Promise.resolve ()
-    else if tries <= 1 then
-      if reloaded then
-        Js.Promise.reject
-          (Failure "login_test_account: Login menu never opened")
-      else
-        let* () = Pw.refresh env in
-        let* _ =
-          E2e_assert.is_visible ~timeout:60000. env
-            "[data-testid='page title']"
-        in
-        open_login 1 true
-    else open_login (tries - 1) reloaded
-  in
-  let* () = open_login 3 false in
-  let* () = Pw.click env "div:text(\"Login\")" in
-  let* () = input env username in
-  let* () = Keyboard.tab env in
-  let* () = input env password in
-  let* () = Pw.click env ".cp__user-login button[type=\"submit\"]" in
-  Pw.wait_for_hidden env ".cp__user-login"
+    let* () = open_login 3 false in
+    let* () = Pw.click env "div:text(\"Login\")" in
+    let* () = input env username in
+    let* () = Keyboard.tab env in
+    let* () = input env password in
+    let* () = Pw.click env ".cp__user-login button[type=\"submit\"]" in
+    Pw.wait_for_hidden env ".cp__user-login"
+  end
 
 let goto_journals env = search_and_click env "Go to journals"
 

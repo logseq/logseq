@@ -31,7 +31,10 @@ let with_page env p f =
          Playwright.throw_error e)
 
 let record_console env msg =
-  Queue.add (Playwright.console_text msg) env.console_logs
+  let text = Playwright.console_text msg in
+  Queue.add text env.console_logs;
+  if Config.env_opt "LOG_CONSOLE" <> None then
+    Js.log ("[console] " ^ text)
 
 let console_logs env =
   let q =

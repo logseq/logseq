@@ -17,4 +17,9 @@ let slow_mo =
   | Some v -> v
   | None -> 30.
 
+let local_sync =
+  match env_opt "E2E_LOCAL_SYNC" with
+  | Some ("1" | "true") -> true
+  | _ -> false
+
 let mac = false

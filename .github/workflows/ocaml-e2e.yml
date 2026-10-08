@@ -118,6 +118,10 @@ jobs:
         run: |
           pnpm gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && pnpm db-worker:build
 
+      # rtc tests run against a local db-sync node-adapter, not the real backend
+      - name: Build db-sync node adapter
+        run: pnpm --dir deps/db-sync build:node-adapter
+
       - name: Build ocaml-e2e tests
         working-directory: ocaml-e2e
         run: opam exec -- dune build
@@ -134,6 +138,13 @@ jobs:
         with:
           name: ocaml-e2e-build
           path: ocaml-e2e/_build/default/test/test_node/
+          retention-days: 1
+
+      - name: Upload db-sync node adapter
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-sync-node-adapter
+          path: deps/db-sync/worker/dist/
           retention-days: 1
 
   test:
@@ -196,6 +207,20 @@ jobs:
         with:
           name: ocaml-e2e-build
           path: ocaml-e2e/_build/default/test/test_node
+
+      - name: Download db-sync node adapter
+        if: matrix.shard == 'rtc'
+        uses: actions/download-artifact@v4
+        with:
+          name: db-sync-node-adapter
+          path: deps/db-sync/worker/dist
+
+      # deps/db-sync is a standalone pnpm package (own lockfile), not a
+      # workspace member — the rtc shard's local server needs its deps
+      - name: Install db-sync deps
+        if: matrix.shard == 'rtc'
+        working-directory: deps/db-sync
+        run: pnpm install --ignore-workspace --frozen-lockfile
 
       - name: Serve app build
         run: |
