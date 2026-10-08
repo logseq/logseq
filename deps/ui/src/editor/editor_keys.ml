@@ -297,7 +297,8 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
   let defer () =
     Edit_input.handle ~route ~conduit m (Edit_input.Key (kev, repeat))
   in
-  if ac_popup_open () && ac_owned_key key then m
+  if Edit_model.composing m then m
+  else if ac_popup_open () && ac_owned_key key then m
   else
     match key with
     | "Enter" when (meta || ctrl) && not shift ->
@@ -783,7 +784,18 @@ let rec retry_vertical uuid ev armed_caret mine_ms attempts =
    Logseq keymap owns the commands first, Edit_input handles the rest,
    and buffer changes schedule the debounced save plus popup matching *)
 and apply_input ?frame uuid ev =
-  match S.editing () with
+  if !S.structure_pending
+     && (match ev with Edit_input.Focus | Edit_input.Blur -> false | _ -> true)
+  then (
+    let context = Runtime.repo (), Runtime.route () in
+    Queue.add
+      (fun () ->
+        if context = (Runtime.repo (), Runtime.route ()) then
+          match S.editing () with
+          | Some e -> apply_input ?frame:!S.active_frame e.S.uuid ev
+          | None -> ())
+      S.pending_edit_actions)
+  else match S.editing () with
   | Some e when e.S.uuid = uuid -> (
       (* Focus/Blur/Menu are lifecycle emits, not input — counting them
          makes last_edit_input_ms jump past every request_focus arm, so
@@ -794,7 +806,16 @@ and apply_input ?frame uuid ev =
        | _ -> S.note_input ());
       let route = A.route_of uuid in
       let conduit = A.conduit_of uuid in
-      let m0 = e.S.model in
+      (* Visual-line hit testing is needed for line navigation, not for
+         every inserted character. On web it reads the already rendered
+         surface; the host paints the caret after the content flush. *)
+      let m0 =
+        match ev with
+        | Edit_input.Key ({ Edit_model.key = "ArrowUp" | "ArrowDown" | "Home" | "End"; _ }, _)
+          when not (Edit_model.composing e.S.model) ->
+            A.refresh_lines e.S.model conduit
+        | _ -> e.S.model
+      in
       let m' =
         match ev with
         | Edit_input.Key (kev, repeat) ->
@@ -806,18 +827,17 @@ and apply_input ?frame uuid ev =
                to use [[ — block-ref search never opens *)
             let src = m0.Edit_model.source in
             let prev =
-              if m0.Edit_model.caret = 0 then ' '
+              if m0.Edit_model.caret = 0 then Char.code ' '
               else
-                Char.chr
-                  (Edit_model.decode_cp m0.Edit_model.units src
+                  Edit_model.decode_cp m0.Edit_model.units src
                      (Edit_model.prev_cp m0.Edit_model.units src
-                        m0.Edit_model.caret))
+                        m0.Edit_model.caret)
             in
             if
               m0.Edit_model.anchor = None
-              && (prev = ' ' || prev = '\n' || prev = ']' || prev = '(')
+              && List.mem prev (List.map Char.code [ ' '; '\n'; ']'; '(' ])
             then (
-              if prev = '(' then
+              if prev = Char.code '(' then
                 Toast.warning
                   (I18n.t "editor/reference-node-use-page-ref");
               let mo = Edit_model.insert_text m0 "()" in
@@ -848,9 +868,11 @@ and apply_input ?frame uuid ev =
           uuid
       end;
       match frame with
-      | Some fr -> (
-          (* the publish above flushed — the sink just painted the new
-             runs, so measured line ranges and caret rects are fresh *)
+      | Some fr when Platform.edit_units = `Bytes -> (
+          (* State publication schedules a flush. Apply the content and
+             run spans before reading geometry, then paint the overlay
+             in this same input task. *)
+          Runtime.flush_now ();
           let conduit' = A.conduit_of uuid in
           let m2 = A.refresh_lines m' conduit' in
           if m2 != m' then
@@ -863,7 +885,10 @@ and apply_input ?frame uuid ev =
           let m_now =
             match A.edit_model uuid with Some m -> m | None -> m2
           in
-          Signal.update fr (fun _ -> Edit_input.measure conduit' m_now);
+          let measured = Edit_input.measure conduit' m_now in
+          if Option.is_some measured.Edit_input.caret then
+            Signal.update fr (fun _ -> measured);
+          Runtime.flush_now ();
           (* a measure taken mid-layout/remount can come back with no
              caret rect — iOS taps reorder focus/scroll work around the
              event — leaving the caret invisible until the next input.
@@ -888,7 +913,7 @@ and apply_input ?frame uuid ev =
             in
             retry_caret 12
           end)
-      | None -> ())
+      | _ -> ())
   | _ -> ()
 
 (* translate a DOM keydown into the Edit_input event the conduit would
@@ -918,6 +943,7 @@ let pending_event ev : Edit_input.event option =
    model directly; the surface repaints when the sink remounts *)
 let on_pending_focus_key ev e =
   D.ev_prevent_default ev;
+  D.ev_stop_propagation ev;
   (match pending_event ev with
    | Some ev' -> apply_input e.S.uuid ev'
    | None -> ());
@@ -951,6 +977,7 @@ let racing_edit_uuid () =
    never enters edit lets the window expire and the key is dropped
    like a normal-mode shortcut miss. *)
 let queue_racing_key ev uuid =
+  D.ev_stop_propagation ev;
   let (_, _, stale) = !last_block_mousedown in
   let replay e =
     if
@@ -1379,15 +1406,7 @@ let on_click ev =
                                                    main and the sidebar; only
                                                    the tree where the click
                                                    landed mounts the editor *)
-                                                let scope =
-                                                  match
-                                                    D.closest_sel
-                                                      ".cp__right-sidebar"
-                                                      target
-                                                  with
-                                                  | Some _ -> "sidebar"
-                                                  | None -> "main"
-                                                in
+                                                let scope = A.scope_of_el el in
                                                 A.enter_edit ~scope u
                                                   (String.length
                                                      (A.model_title u))
@@ -1424,16 +1443,7 @@ let on_click ev =
                                                         "data-blockid"
                                                     with
                                                     | Some u ->
-                                                        let scope =
-                                                          match
-                                                            D.closest_sel
-                                                              ".cp__right-sidebar"
-                                                              target
-                                                          with
-                                                          | Some _ ->
-                                                              "sidebar"
-                                                          | None -> "main"
-                                                        in
+                                                        let scope = A.scope_of_el el in
                                                         A.enter_edit ~scope
                                                           u
                                                           (String.length

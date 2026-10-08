@@ -515,7 +515,9 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
        | [] -> ()
        | _ ->
            Outliner_core.indent_outdent_blocks_conn conn blocks indent
-             ?parent_original (block_map_of_wire opts'));
+             ?parent_original
+             ~logical_outdenting:(opt_bool opts' "logical-outdenting?")
+             (block_map_of_wire opts'));
       None
   | "collapse-expand-blocks", [ blocks; opts ] ->
       let tx_ops =
@@ -955,7 +957,9 @@ let () =
                   resolve_indent_outdent_opts db opts_wire
                 in
                 Outliner_core.indent_outdent_blocks_conn conn blocks indent
-                  ?parent_original (block_map_of_wire opts')));
+                  ?parent_original
+                  ~logical_outdenting:(opt_bool opts' "logical-outdenting?")
+                  (block_map_of_wire opts')));
   (* outliner-core/delete-blocks! conn block-ids opts *)
   Sync_deps.outliner_delete_blocks :=
     Some

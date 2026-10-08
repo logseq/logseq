@@ -40,6 +40,8 @@
 open Lui_protocol
 module W = Webapi.Dom
 
+external el_json : W.Element.t -> Js.Json.t = "%identity"
+
 let identifier = Editor_sink.identifier
 
 let web_profile =
@@ -260,6 +262,7 @@ type ed_state =
   ; mutable on_mousemove : (Js.Json.t -> unit) option
   ; mutable on_mouseup : (Js.Json.t -> unit) option
   ; mutable drag_off : int
+  ; mutable input_rect : Edit_input.rect option
   }
 
 external state_get : W.Element.t -> ed_state Js.Undefined.t = "__lsEd"
@@ -275,10 +278,16 @@ let state_of el =
       { block_id = ""; runs = [||]; caret_off = 0; composing = false
       ; on_mousedown = None; dragging = false; on_mousemove = None
       ; on_mouseup = None; drag_off = -1
+      ; input_rect = None
       }
 
 (* block-id -> input element; commands resolve through this *)
 let by_block : (string, W.Element.t) Hashtbl.t = Hashtbl.create 8
+
+let unregister_input block_id el =
+  match Hashtbl.find_opt by_block block_id with
+  | Some current when current == el -> Hashtbl.remove by_block block_id
+  | _ -> ()
 
 let container_of el : W.Element.t option =
   match Js.Nullable.toOption (closest_el el ".block-editor") with
@@ -294,10 +303,11 @@ let run_els el =
 
 let parse_runs (s : string) : run_span array =
   s
-  |> String.split_on_char ';'
+  |> Js.String.split ~sep:";"
+  |> Array.to_list
   |> List.filter_map (fun p ->
-      match String.split_on_char ',' p with
-      | [ a; b; k ] -> Some (int_of_string a, int_of_string b, k)
+      match Js.String.split ~sep:"," p with
+      | [| a; b; k |] -> Some (int_of_string a, int_of_string b, k)
       | _ -> None)
   |> Array.of_list
 
@@ -339,16 +349,18 @@ let frag_rect fel u16 =
     range_set_start rng tn u16;
     range_set_end rng tn u16;
     let rl = range_rects rng in
+    (* A collapsed range on an empty line has no rect in Chromium.
+       Its following newline still carries that line's font box. *)
+    let rl =
+      if rl_len rl = 0 && u16 < String.length (j_text_content fel) then begin
+        range_set_end rng tn (u16 + 1);
+        range_rects rng
+      end else rl
+    in
     if rl_len rl > 0 then
       let r = rl_at rl 0 in
       Some { fx = rect_left r; fy = rect_top r; fh = rect_height r }
-    else
-      (* a zero-width text node (the ZWSP pad — the only frag of an empty
-         block/line) yields no client rects, leaving an empty block with
-         no measurable caret spot at all: fall back to the frag element's
-         own box — its left edge is the caret position *)
-      let r = j_brect fel in
-      Some { fx = rect_left r; fy = rect_top r; fh = rect_height r })
+    else None)
 
 let caret_rect_el el (off : int) : frect option =
   let st = state_of el in
@@ -373,7 +385,13 @@ let caret_rect_el el (off : int) : frect option =
           if tag = "z" then 0
           else min (off - a) (String.length (j_text_content fel))
         in
-        frag_rect fel u16
+        match frag_rect fel u16 with
+        | None when tag = "z" ->
+            (* The final landing pad also measures an empty buffer or
+               trailing newline without using a multiline span's box. *)
+            let r = j_brect fel in
+            Some { fx = rect_left r; fy = rect_top r; fh = rect_height r }
+        | rect -> rect
   in
   let rec first_ok = function
     | [] -> None
@@ -480,22 +498,29 @@ let line_ranges_el el : (int * int) list =
 (* keep the hidden input parked at the caret so the IME candidate
    window opens at the right spot — px are relative to the block editor *)
 let base_style =
-  "position:absolute;left:0;top:0;width:1px;height:1em;opacity:0;pointer-events:none"
+  "position:absolute;left:0;top:0;width:1px;height:1em;opacity:0;pointer-events:none;scroll-margin:48px"
 
-let reanchor el =
-  let st = state_of el in
-  match caret_rect_el el st.caret_off with
-  | Some r -> (
-      match container_of el with
-      | Some c ->
-          let cr = el_rect c in
-          set_attr el "style"
-            (Printf.sprintf "%s;transform:translate(%dpx,%dpx);height:%dpx"
-               base_style
-               (int_of_float (r.fx -. rect_left cr))
-               (int_of_float (r.fy -. rect_top cr))
-               (max (int_of_float r.fh) 1))
-      | None -> ())
+let nearest_scroll = Js.Json.parseExn {|{"block":"nearest","inline":"nearest"}|}
+
+let position_input block_id (r : Edit_input.rect) =
+  match Hashtbl.find_opt by_block block_id with
+  | Some el ->
+      let st = state_of el in
+      let previous = st.input_rect in
+      if st.input_rect <> Some r then begin
+        st.input_rect <- Some r;
+        set_attr el "style"
+          (Printf.sprintf "%s;transform:translate(%dpx,%dpx);height:%dpx"
+             base_style r.x r.y (max r.h 1));
+        (* The native input normally scrolls its caret into view. Its
+           scratch value cannot do that for the source model, so use
+           the measured anchor while this editor owns focus. *)
+        match Web_dom.active_element () with
+        | Some active when active == el_json el
+            && (match previous with None -> true | Some old -> old.y <> r.y) ->
+            Web_dom.el_scroll_into_view_opts active nearest_scroll
+        | _ -> ()
+      end
   | None -> ()
 
 (* --- listeners ---------------------------------------------------------------- *)
@@ -511,7 +536,7 @@ let on_keydown el ev =
   let st = state_of el in
   let key = Option.value (jstr ev "key") ~default:"" in
   let meta = jbool ev "metaKey" and ctrl = jbool ev "ctrlKey" in
-  emit_now el "key"
+  if not (st.composing || jbool ev "isComposing") then emit_now el "key"
     (String_map.empty
     |> String_map.add "key" (StringValue key)
     |> String_map.add "shift" (BoolValue (jbool ev "shiftKey"))
@@ -520,7 +545,11 @@ let on_keydown el ev =
     |> String_map.add "ctrl" (BoolValue ctrl)
     |> String_map.add "repeat" (BoolValue (jbool ev "repeat")));
   (* while a composition is live the IME owns the keys *)
-  if (not st.composing) && (List.mem key command_keys || meta || ctrl)
+  let clipboard_key =
+    (meta || ctrl) && List.mem (String.lowercase_ascii key) [ "c"; "x"; "v" ]
+  in
+  if (not st.composing) && not clipboard_key
+     && (List.mem key command_keys || meta || ctrl)
   then prevent_default ev
 
 let on_beforeinput el ev =
@@ -666,7 +695,9 @@ let create _id document emit =
   add_listener el "compositionstart" (on_composition "start" el);
   add_listener el "compositionupdate" (on_composition "update" el);
   add_listener el "compositionend" (on_composition "end" el);
-  add_listener el "focus" (fun _ -> emit_now el "focus" String_map.empty);
+  add_listener el "focus" (fun _ ->
+      (state_of el).input_rect <- None;
+      emit_now el "focus" String_map.empty);
   add_listener el "blur" (fun _ ->
       (state_of el).composing <- false;
       emit_now el "blur" String_map.empty);
@@ -676,7 +707,7 @@ let set_property el name v =
   let st = state_of el in
   match name, v with
   | "block-id", StringValue s ->
-      if st.block_id <> "" then Hashtbl.remove by_block st.block_id;
+      if st.block_id <> "" then unregister_input st.block_id el;
       st.block_id <- s;
       Hashtbl.replace by_block s el;
       (* mirrored as a DOM attr so document-level dispatch
@@ -685,8 +716,7 @@ let set_property el name v =
       set_attr el "data-block-id" s;
       set_attr el "id" ("edit-block-" ^ s)
   | "caret", IntValue n ->
-      st.caret_off <- n;
-      reanchor el
+      st.caret_off <- n
   | "runs", StringValue s -> st.runs <- parse_runs s
   | _ -> ()
 
@@ -694,14 +724,14 @@ let remove_property el name =
   let st = state_of el in
   match name with
   | "block-id" ->
-      if st.block_id <> "" then Hashtbl.remove by_block st.block_id;
+      if st.block_id <> "" then unregister_input st.block_id el;
       st.block_id <- "";
       set_attr el "data-block-id" ""
   | _ -> ()
 
 let cleanup el =
   let st = state_of el in
-  if st.block_id <> "" then Hashtbl.remove by_block st.block_id;
+  if st.block_id <> "" then unregister_input st.block_id el;
   let doc = owner_document el in
   (match st.on_mousedown with
    | Some f -> remove_doc_listener doc "mousedown" f
@@ -758,8 +788,6 @@ let conduit block_id : Edit_input.conduit option =
    The editor machinery (pending focus, popup anchors, document key
    dispatch) resolves blocks through by_block — the hidden input is the
    focus target; the .block-editor container anchors popup placement. *)
-
-external el_json : W.Element.t -> Js.Json.t = "%identity"
 
 let input_el block_id = Hashtbl.find_opt by_block block_id
 

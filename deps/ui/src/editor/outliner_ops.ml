@@ -236,17 +236,17 @@ let move_blocks_top uuids target_uuid =
 let move_up_down uuids up =
   op "move-blocks-up-down" [ uuids_list uuids; Wire.Bool up ]
 
-let indent_outdent ?parent_original uuids indent =
+let indent_outdent ?parent_original ~logical uuids indent =
   (* cljs indent-outdent-blocks! passes :parent-original = the embed block
      when the moved block is rendered inside a page embed — outdent then
      targets the linking block, not the embedded child's data parent *)
-  let opts =
-    match parent_original with
-    | Some u ->
-        Wire.Map
-          [ kw "parent-original"
-              (Wire.Map [ kw "block/uuid" (Wire.Uuid u) ]) ]
-    | None -> Wire.Map []
+  let opts = Wire.Map
+    (kw "logical-outdenting?" (Wire.Bool logical) ::
+     match parent_original with
+     | Some u ->
+         [ kw "parent-original"
+             (Wire.Map [ kw "block/uuid" (Wire.Uuid u) ]) ]
+     | None -> [])
   in
   op "indent-outdent-blocks" [ uuids_list uuids; Wire.Bool indent; opts ]
 
@@ -834,7 +834,7 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
                 Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
             | _ -> opts
           in
-          (let* r =
+          let p = (let* r =
             Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
               (Wire.Array ops) opts
           in
@@ -844,12 +844,12 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
           (match Wire.get r "delta" with
            | Some d -> Page_delta.stash_deferred d
            | None -> ());
-          Js.Promise.resolve (Some r))
-          |> Js.Promise.catch (fun e ->
+          Js.Promise.resolve (Some r)) in
+          p |> Js.Promise.catch (fun e ->
                  Platform.console_error
                    ("apply-outliner-ops failed", op_names ops, e);
                  Toast.error (I18n.t "ui/save-changes-error");
-                 Js.Promise.resolve None))
+                 p))
 
 let apply ?opts ops =
   let* _ = apply_result ?opts ops in
@@ -1376,11 +1376,19 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
           S.set (fun st -> { st with S.editing = None });
           Js.Promise.resolve ())
 
+let flush_pending_save () =
+  match !pending_save with
+  | None -> Js.Promise.resolve ()
+  | Some (uuid, title) ->
+      cancel_pending_save ();
+      let* sop = save_block_parsed uuid title in
+      apply [ sop ]
+
 let undo () =
-  cancel_pending_save ();
   match (Runtime.model ()).Model.repo with
   | Some repo ->
-      (let* _ = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
+      (let* () = flush_pending_save () in
+      let* _ = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
       let* () = refresh_page () in
       resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
@@ -1390,10 +1398,10 @@ let undo () =
   | None -> Js.Promise.resolve ()
 
 let redo () =
-  cancel_pending_save ();
   match (Runtime.model ()).Model.repo with
   | Some repo ->
-      (let* _ = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
+      (let* () = flush_pending_save () in
+      let* _ = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
       let* () = refresh_page () in
       resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->

@@ -27,6 +27,12 @@ let mount ?(cls = "") uuid scope : t =
      re-measure the overlay too *)
   let frame = Signal.state ctx.Lui_ui.ui_scheduler Edit_input.empty_frame in
   S.active_frame := Some frame;
+  let alive = ref true in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+      alive := false;
+      match !S.active_frame with
+      | Some current when current == frame -> S.active_frame := None
+      | _ -> ());
   (* the conduit input mounts asynchronously (extension node) and its
      runs prop lands a patch or two later — a frame created after
      apply_focus's refresh already ran would otherwise stay empty until
@@ -38,19 +44,20 @@ let mount ?(cls = "") uuid scope : t =
         (fun () ->
           match (S.editing (), Editor_sink.conduit uuid) with
           | Some e, Some conduit
-            when e.S.uuid = uuid && e.S.scope = scope ->
+            when !alive && e.S.uuid = uuid && e.S.scope = scope ->
               Signal.update frame (fun _ ->
-                  Edit_input.measure conduit e.S.model)
+                  Edit_input.measure conduit e.S.model);
+              Runtime.flush ()
           | _ -> ())
         ms)
     [ 0; 40; 120; 300 ];
   let model_sig =
-    Signal.map
+    Edit_view.own ctx (Signal.map
       (fun e ->
         match e with
         | Some e when e.S.uuid = uuid && e.S.scope = scope -> e.S.model
         | _ -> Edit_model.create ~units:S.edit_units "")
-      (S.editing_sig ())
+      (S.editing_sig ()))
   in
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)

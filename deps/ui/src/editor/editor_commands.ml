@@ -60,7 +60,7 @@ let clear_range uuid from to_ = snd (replace_range uuid from to_ "")
    in edit mode and the caret at [caret] after the refresh *)
 let prop_batch ~caret uuid ops =
   let buf = A.live_buffer uuid in
-  A.with_focus_after uuid caret
+  A.with_focus_after ~restore:(S.editing ()) uuid caret
     (let* sop = Ops.save_block_parsed uuid buf in
      Ops.apply_and_refresh_deferred (sop :: ops))
 
@@ -70,8 +70,9 @@ let prop_batch ~caret uuid ops =
    short-circuits the hidden-input path) *)
 let exit_to_props uuid ops =
   let buf = A.live_buffer uuid in
+  let restore = S.editing () in
   S.set (fun st -> { st with S.editing = None });
-  A.with_focus_after uuid 0
+  A.with_focus_after ~restore uuid 0
     (let* sop = Ops.save_block_parsed uuid buf in
      Ops.apply_and_refresh (sop :: ops))
 
@@ -1314,7 +1315,7 @@ let toggle_children_list uuid caret =
            cosmetic write — refresh inline so the numbered bullets
            repaint now (the deferred path waits ~8s while editing) *)
         if ops <> [] then
-          A.with_focus_after uuid caret
+          A.with_focus_after ~restore:(S.editing ()) uuid caret
             (let* sop =
                Ops.save_block_parsed uuid (A.live_buffer uuid)
              in

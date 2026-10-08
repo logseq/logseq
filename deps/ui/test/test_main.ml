@@ -16,6 +16,34 @@ let set_journals js =
 
 let set_route r = model_stub := { !model_stub with Model.route = r }
 
+let test_editor_wire_runs () =
+  check "editor run wire preserves source spans, kinds and line pads"
+    (Logseq_editor.parse_runs "0,4,p;4,6,d;6,18,a;18,29,r;29,29,z;" =
+     [| (0, 4, "p"); (4, 6, "d"); (6, 18, "a"); (18, 29, "r"); (29, 29, "z") |]);
+  check "empty editor run wire" (Logseq_editor.parse_runs "" = [||]);
+  let entries = Array.init 1800 (fun i ->
+    Printf.sprintf "%d,%d,p" (i * 12) (i * 12 + 12)) in
+  let parsed = Logseq_editor.parse_runs (String.concat ";" (Array.to_list entries)) in
+  check "long editor wire retains every source span"
+    (Array.length parsed = 1800 && parsed.(1799) = (21588, 21600, "p"))
+
+let test_merge_source () =
+  List.iter (fun left ->
+    let merged, caret = Editor_actions.merge_source left "suffix" in
+    check ("merge token separator " ^ left)
+      (merged = left ^ " suffix" && caret = String.length left + 1)
+  ) [ "[[node]]"; "#tag"; "#[[tag name]]"; "https://example.test/path"
+    ; "[label](https://example.test)"; "**[[node]]**" ];
+  List.iter (fun (left, right, expected) ->
+    check ("merge literal boundary " ^ left ^ right)
+      (fst (Editor_actions.merge_source left right) = expected)
+  ) [ "plain", "suffix", "plainsuffix"
+    ; "[[node]] ", "suffix", "[[node]] suffix"
+    ; "[[node]]", " suffix", "[[node]] suffix"
+    ; "[[node]]", "", "[[node]]"
+    ; "", "suffix", "suffix"
+    ; "`#tag`", "suffix", "`#tag`suffix" ]
+
 (* ---- Model.move_selected_top_blocks ---- *)
 
 let test_move () =
@@ -1076,7 +1104,7 @@ let test_outliner_ops3 () =
   check "indent_outdent parent-original"
     (match
        op_name_args
-         (Outliner_ops.indent_outdent ~parent_original:"po" [ "a" ] true)
+         (Outliner_ops.indent_outdent ~logical:false ~parent_original:"po" [ "a" ] true)
      with
      | Some ("indent-outdent-blocks", [ _; Wire.Bool true; Wire.Map _ as m ]) ->
          Option.is_some (Wire.get m "parent-original")
@@ -1510,7 +1538,7 @@ let test_model_outdent () =
   in
   let p = page [ pb ] in
   (* middle child outdents; its right siblings move under it *)
-  (match Model.outdent_blocks p [ "b" ] with
+  (match Model.outdent_blocks ~logical:false p [ "b" ] with
    | Some p' -> (
        check "outdent mid: order" (uus p'.Model.page_blocks = [ "p"; "b" ]);
        match p'.Model.page_blocks with
@@ -1521,8 +1549,15 @@ let test_model_outdent () =
              (uus b'.Model.block_children = [ "c" ])
        | _ -> check "outdent mid" false)
    | None -> check "outdent mid" false);
+  (* Logical mode lifts the run without adopting following siblings. *)
+  (match Model.outdent_blocks ~logical:true p [ "a"; "b" ] with
+   | Some { Model.page_blocks = [ pr; a'; b' ]; _ } ->
+       check "logical outdent retains later siblings under parent"
+         (uus pr.Model.block_children = [ "c" ]
+          && a'.Model.block_children = [] && b'.Model.block_children = [])
+   | _ -> check "logical outdent shape" false);
   (* contiguous run at tail: no suffix *)
-  (match Model.outdent_blocks p [ "b"; "c" ] with
+  (match Model.outdent_blocks ~logical:false p [ "b"; "c" ] with
    | Some p' -> (
        match p'.Model.page_blocks with
        | [ pr; b'; c' ] ->
@@ -1534,7 +1569,7 @@ let test_model_outdent () =
        | _ -> check "outdent tail run" false)
    | None -> check "outdent tail run" false);
   (* head run: empty prefix, suffix under last selected *)
-  (match Model.outdent_blocks p [ "a"; "b" ] with
+  (match Model.outdent_blocks ~logical:false p [ "a"; "b" ] with
    | Some p' -> (
        match p'.Model.page_blocks with
        | [ pr; _; b' ] ->
@@ -1545,7 +1580,7 @@ let test_model_outdent () =
    | None -> check "outdent head" false);
   (* non-contiguous: only the first selected run outdents; later
      selected blocks land inside it as children *)
-  (match Model.outdent_blocks p [ "a"; "c" ] with
+  (match Model.outdent_blocks ~logical:false p [ "a"; "c" ] with
    | Some p' -> (
        match p'.Model.page_blocks with
        | [ _; a' ] ->
@@ -1553,8 +1588,8 @@ let test_model_outdent () =
              (uus a'.Model.block_children = [ "b"; "c" ])
        | _ -> check "outdent non-contig" false)
    | None -> check "outdent non-contig" false);
-  check "outdent top-level no-op" (Model.outdent_blocks p [ "p" ] = None);
-  check "outdent unknown no-op" (Model.outdent_blocks p [ "z" ] = None);
+  check "outdent top-level no-op" (Model.outdent_blocks ~logical:false p [ "p" ] = None);
+  check "outdent unknown no-op" (Model.outdent_blocks ~logical:false p [ "z" ] = None);
   (* selected block keeps own children; suffix appended after them *)
   let pb2 =
     block
@@ -1564,7 +1599,7 @@ let test_model_outdent () =
         ; block "x" "X" ]
       "p" "P"
   in
-  (match Model.outdent_blocks (page [ pb2 ]) [ "b" ] with
+  (match Model.outdent_blocks ~logical:false (page [ pb2 ]) [ "b" ] with
    | Some p' -> (
        match p'.Model.page_blocks with
        | [ _; b' ] ->
@@ -1572,13 +1607,19 @@ let test_model_outdent () =
              (uus b'.Model.block_children = [ "g"; "x" ])
        | _ -> check "outdent keeps children" false)
    | None -> check "outdent keeps children" false);
+  (match Model.outdent_blocks ~logical:true (page [ pb2 ]) [ "b" ] with
+   | Some { Model.page_blocks = [ pr; b' ]; _ } ->
+       check "logical outdent preserves both existing subtrees"
+         (uus pr.Model.block_children = [ "x" ]
+          && uus b'.Model.block_children = [ "g" ])
+   | _ -> check "logical outdent subtrees" false);
   (* several parents in one pass *)
   let p2 =
     page
       [ block ~children:[ block "a" "A"; block "b" "B" ] "p1" "P1"
       ; block ~children:[ block "c" "C"; block "d" "D" ] "p2" "P2" ]
   in
-  (match Model.outdent_blocks p2 [ "b"; "d" ] with
+  (match Model.outdent_blocks ~logical:false p2 [ "b"; "d" ] with
    | Some p' ->
        check "outdent multi-parent"
          (uus p'.Model.page_blocks = [ "p1"; "b"; "p2"; "d" ])
@@ -1590,7 +1631,7 @@ let test_model_outdent () =
           ~children:[ block ~children:[ block "x" "X"; block "y" "Y" ] "m" "M" ]
           "p" "P" ]
   in
-  (match Model.outdent_blocks pd [ "y" ] with
+  (match Model.outdent_blocks ~logical:false pd [ "y" ] with
    | Some p' -> (
        match p'.Model.page_blocks with
        | [ pr ] -> (
@@ -4011,6 +4052,8 @@ let () =
   test_cmdk_groups ();
   test_model_indent ();
   test_model_outdent ();
+  test_editor_wire_runs ();
+  test_merge_source ();
   test_sdk_convert ();
   test_sdk_util ();
   test_views_builder ();

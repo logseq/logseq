@@ -368,8 +368,9 @@
     let get s i = String.get s i
     let charAt i s = String.make 1 (String.get s i)
 
-    let slice ~from:lo ?end_:hi s =
+    let slice ?(start = 0) ?end_:hi s =
       let n = String.length s in
+      let lo = start in
       let lo = if lo < 0 then n + lo else lo in
       let hi = match hi with None -> n | Some h -> if h < 0 then n + h else h in
       String.sub s lo (max 0 (min n hi - lo))
@@ -477,4 +478,3 @@
   let typeof _ = "object"
   let unsafe_eq (a : 'a) (b : 'a) = a == b
   let log s = print_endline s
-

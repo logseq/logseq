@@ -1,8 +1,8 @@
 (* Edit_view — renders an Edit_model.t as a Lui_elements tree.
 
      block-editor (column)
-       ed-line (row) x n          one row per model line (m.lines; '\n'
-                                  bytes are never inside a range)
+       ed-line (row)              bounded multiline flows on Web; native
+                                  keeps one row per logical line
          ed-r run fragment        keyed; Plain -> text, Delim -> text
                                   with ed-delim (+ed-hidden when the
                                   caret is outside the construct's
@@ -309,6 +309,27 @@ let lines_step cache (m : Edit_model.t) : line list =
   cache.lc_lines <- ls;
   ls
 
+(* Keep browser text reflow local without emitting one row per source
+   line. Newlines within each flow remain literal source; the row break
+   represents the separator between flows, as it does on native. *)
+let web_flow_ranges (m : Edit_model.t) =
+  let rec group first last count runs acc = function
+    | [] -> List.rev ((first, last) :: acc)
+    | (lo, hi) :: rest ->
+        let _, runs = runs_at_offset 0 runs lo in
+        let inside_atomic =
+          match runs with
+          | r :: _ -> r.Edit_runs.kind = Atomic && r.start_off < lo
+          | [] -> false
+        in
+        if count >= 32 && not inside_atomic then
+          group lo hi 1 runs ((first, last) :: acc) rest
+        else group first hi (count + 1) runs acc rest
+  in
+  match Edit_model.lines_of_source m.source with
+  | [] -> assert false
+  | (lo, hi) :: rest -> group lo hi 1 m.runs [] rest
+
 (* decimal write without Printf — the prop is re-serialized per emit *)
 let rec add_uint b n =
   if n >= 10 then add_uint b (n / 10);
@@ -351,7 +372,7 @@ let composition_prop (m : Edit_model.t) : wire_value =
 (* kinds take only a static ~style_class at this LUI rev — reactive
    class toggles go through Ui_parts.class_signal (binds StyleClass on
    the mounted node) *)
-let frag_view ~on_input (frag_s : frag Signal.signal) : t =
+let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
   match (Signal.sample frag_s).kind with
   | Frag_pad ->
       text ~value:(reactive (fun f -> f.text) frag_s)
@@ -383,15 +404,36 @@ let frag_view ~on_input (frag_s : frag Signal.signal) : t =
            ~on_press:(fun _ ->
              on_input
                (Edit_input.Pointer
-                  ((Signal.sample frag_s).start_off + 1, false)))
+                  (start_off_of (Signal.sample frag_s).idx + 1, false)))
            [])
+
+let same_rendered_frags before after =
+  let rec equal a b =
+    match a, b with
+    | [], [] -> true
+    | f :: fs, g :: gs ->
+        f.idx = g.idx && f.kind = g.kind && f.cls = g.cls
+        && f.text = g.text && f.display = g.display && f.shown = g.shown
+        && equal fs gs
+    | _ -> false
+  in
+  equal before after
 
 let line_view ~on_input (line_s : line Signal.signal) : t =
  fun context parent ->
-  let frags_s = own context (Signal.map (fun l -> l.frags) line_s) in
+  (* Offset shifts update the sink's source spans, but unchanged text
+     must not reconcile every following line's fragment subtree. *)
+  let frags_s =
+    own context
+      (Signal.cutoff same_rendered_frags (Signal.map (fun l -> l.frags) line_s))
+  in
+  let start_off_of idx =
+    let f = List.find (fun f -> f.idx = idx) (Signal.sample line_s).frags in
+    f.start_off
+  in
   (row ~style_class:"ed-line"
      [ keyed ~source:frags_s ~key:frag_key ~cmp:Stdlib.compare
-         ~mount:(frag_view ~on_input) ])
+         ~mount:(frag_view ~on_input ~start_off_of) ])
     context parent
 
 (* --- selection overlay + caret -------------------------------------------------
@@ -525,12 +567,25 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
 
 let view ~model ~frame ~block_id ~on_input ~cls : t =
  fun context parent ->
+  let model = own context (Signal.map Edit_model.display_model model) in
   let cache = line_cache () in
   (* [lines_step] returns the previous list untouched when nothing a
      line depends on changed; the cutoff then keeps the whole line
      subtree idle on caret/IME flushes *)
   let mapped =
-    own context (Signal.map (fun m -> lines_step cache m) model)
+    own context
+      (Signal.map
+         (fun m ->
+           match m.Edit_model.units with
+           | U16 ->
+               let lines =
+                 match cache.lc_model with
+                 | Some previous when previous.source == m.source -> previous.lines
+                 | _ -> web_flow_ranges m
+               in
+               lines_step cache { m with lines }
+           | Bytes -> lines_step cache m)
+         model)
   in
   let lines_s = own context (Signal.cutoff ( == ) mapped) in
   let runs_s =

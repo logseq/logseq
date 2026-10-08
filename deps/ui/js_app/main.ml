@@ -64,17 +64,55 @@ let main root =
     { Lui_protocol.backend_profile = base_backend.backend_profile
     ; apply_batch =
         (fun batch ->
+          let focused =
+            if Editor_state.ready () then
+              match Editor_state.editing () with
+              | Some e when Editor_sink.is_focused e.Editor_state.uuid ->
+                  Some e.Editor_state.uuid
+              | _ -> None
+            else None
+          in
           let r, ms =
             Interaction_perf.time (fun () -> base_backend.apply_batch batch)
           in
           Interaction_perf.note_apply ms
             (List.length batch.Lui_protocol.ops);
+          (* DOM reparenting can blur the active textarea. Preserve focus
+             across this patch only when the editor owned it beforehand. *)
+          let focus_lost = match Web_dom.active_element () with
+            | None -> true
+            | Some el -> el == Web_dom.document_body
+          in
+          (match focused with
+           | Some uuid when focus_lost && Editor_state.editing_uuid () = Some uuid
+               && Editor_sink.can_focus uuid && not (Editor_sink.is_focused uuid) ->
+               Editor_sink.focus_input uuid
+           | _ -> ());
           r)
     }
   in
   let app =
     Lui_app.create_with_extensions backend registry
       Model.initial Update.apply View.view
+  in
+  (* Event callbacks run during signal stabilization. Measure only after
+     the host has applied the content patch, then paint the overlay in
+     the same task so input never waits for a timer or a second frame. *)
+  let flush () =
+    let flushed = Platform.perf_time "editor-content" (fun () -> Lui_app.flush app) in
+    (match Editor_state.editing () with
+     | Some e ->
+         ignore (Platform.perf_time "editor-measure" (fun () ->
+           Editor_actions.refresh_overlay e.Editor_state.uuid));
+         ignore (Platform.perf_time "editor-overlay" (fun () -> Lui_app.flush app));
+         (match !Editor_state.active_frame with
+          | Some frame ->
+              (match (Signal.get_state frame).Edit_input.caret with
+               | Some rect -> Logseq_editor.position_input e.Editor_state.uuid rect
+               | None -> ())
+          | None -> ())
+     | None -> ());
+    flushed
   in
   let finish_sample () = Interaction_perf.finish () in
   Runtime.read_model := (fun () -> Lui_app.model app);
@@ -88,7 +126,7 @@ let main root =
       let _, fms =
         Interaction_perf.time (fun () ->
             Platform.perf_time "flush" (fun () ->
-                ignore (Lui_app.flush app)))
+                ignore (flush ())))
       in
       Interaction_perf.note_flush fms
         (Lui_runtime.diagnostics (Lui_app.runtime app));
@@ -104,7 +142,7 @@ let main root =
       let _, fms =
         Interaction_perf.time (fun () ->
             Platform.perf_time "flush" (fun () ->
-                ignore (Lui_app.flush app)))
+                ignore (flush ())))
       in
       Interaction_perf.note_flush fms
         (Lui_runtime.diagnostics (Lui_app.runtime app));
@@ -133,7 +171,7 @@ let main root =
                in
                Interaction_perf.note_dispatch dms;
                let flushed, fms =
-                 Interaction_perf.time (fun () -> Lui_app.flush app)
+                 Interaction_perf.time (fun () -> flush ())
                in
                Interaction_perf.note_flush fms
                  (Lui_runtime.diagnostics (Lui_app.runtime app));
@@ -146,7 +184,7 @@ let main root =
          finish_sample ();
          flushed));
   ignore (Lui_app.start app);
-  ignore (Lui_app.flush app);
+  ignore (flush ());
   Lui_web.mount renderer (Lui_app.root_node app) root;
   Logseq_virt.sync ();
   Sdk_api.install ();
