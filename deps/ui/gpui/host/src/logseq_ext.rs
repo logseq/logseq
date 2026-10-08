@@ -304,6 +304,30 @@ fn register_class_styles() {
         "position:absolute;width:100%;max-width:32rem",
         "pointer-events-auto",
     );
+    // cljs dialog-confirm chrome (lui-overlay.css ~:1550): header/title/
+    // main-content/footer rules the web twin carries. The gpui title is
+    // an icon+heading row, so it joins flex here instead of block.
+    class(
+        "ui__alert-dialog-header",
+        "display:flex;flex-direction:column;gap:8px;text-align:left",
+        "",
+    );
+    class(
+        "ui__alert-dialog-title",
+        "display:flex;flex-direction:row;align-items:center;gap:8px;\
+         font-size:18px;font-weight:600;line-height:28px",
+        "",
+    );
+    class(
+        "ui__alert-dialog-main-content",
+        "padding-top:8px;padding-bottom:8px",
+        "",
+    );
+    class(
+        "ui__alert-dialog-footer",
+        "display:flex;flex-direction:row;justify-content:flex-end;gap:8px",
+        "",
+    );
     // cljs ui/tooltip: dark floating bubble anchored under the trigger;
     // the inline style sets position:fixed + left/top + z-index (el attrs
     // win over class declarations, so only the paint rules live here).

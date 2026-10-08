@@ -326,7 +326,12 @@ let confirm_view (c : Model.confirm) =
                row ~key:"adlg-tw" ~gap:8 ~cross:`center
                  ~style_class:"ls-alert-title"
                  [ i
-                 ; heading ~key:"adlg-t" ~level:2 ~as_:`H2
+                 ; (* grow + min_width:0 so a long title shrinks inside
+                      the row and wraps instead of overflowing the
+                      dialog's overflow:hidden edge (taffy does not
+                      model text min-content shrink) *)
+                   heading ~key:"adlg-t" ~level:2 ~as_:`H2 ~grow:1.
+                     ~min_width:0
                      ~style_class:"ui__alert-dialog-title" ~value:title []
                  ]
            | None ->
