@@ -20,81 +20,57 @@ let languages =
   ; ("sk", "Slovenčina"); ("fa", "فارسی"); ("id", "Bahasa Indonesia")
   ; ("cs", "Čeština"); ("ar", "العربية") ]
 
-(* cljs :ui/system-theme? default is (or util/mac? util/win32?) *)
-let current_mode () =
-  let system =
-    match Platform.local_storage_get "system-theme?" with
-    | Some v -> Platform.storage_unquote v = "true"
-    | None -> Platform.desktop_os ()
-  in
-  if system then "system"
-  else
-    match Platform.local_storage_get "theme" with
-    | Some v -> (
-        match Platform.storage_unquote v with
-        | "dark" -> "dark"
-        | _ -> "light")
-    | None -> "light"
+(* cljs :ui/system-theme? default is (or util/mac? util/win32?) — the
+   service resolves the raw preference including the host default *)
+let current_mode () = Ui_services.theme_mode ()
 
 (* theme.cljs container effect: dataset.theme + .dark class on
    documentElement, dark-theme vs white-theme light-theme on body *)
 let last_theme_mode = ref ""
 
 (* cljs theme.cljs :theme-mode-changed — fires on effective-mode
-   transitions (user toggle or system-follow), not on boot apply *)
+   transitions (user toggle or system-follow), not on boot apply.
+   Ordering is semantic: dataset -> plugin hook -> classes. *)
 let apply_theme_dom effective =
-  Web_dom.doc_set_data "theme" effective;
+  Ui_services.theme_apply_dataset effective;
   if effective <> !last_theme_mode then (
     let first_apply = !last_theme_mode = "" in
     last_theme_mode := effective;
     if not first_apply then Plugin_host.fire_theme_mode_changed effective);
-  if effective = "dark" then (
-    Web_dom.doc_add_class "dark";
-    Web_dom.body_add_class "dark-theme";
-    Web_dom.body_rm_class "light-theme";
-    Web_dom.body_rm_class "white-theme")
-  else (
-    Web_dom.doc_rm_class "dark";
-    Web_dom.body_rm_class "dark-theme";
-    Web_dom.body_add_class "white-theme";
-    Web_dom.body_add_class "light-theme")
+  Ui_services.theme_apply_classes effective
 
 (* state/use-theme-mode!: set dataset.theme + storage; system follows
    prefers-color-scheme *)
 let use_mode mode =
   let effective =
     if mode = "system" then (
-      Platform.local_storage_set "system-theme?" "true";
-      if Web_dom.prefers_dark () then "dark" else "light")
+      Ui_services.theme_set_system_pref true;
+      if Ui_services.theme_prefers_dark () then "dark" else "light")
     else (
-      Platform.local_storage_set "system-theme?" "false";
+      Ui_services.theme_set_system_pref false;
       mode)
   in
   (* cljs stores the *effective* mode in :ui/theme even under system *)
   apply_theme_dom effective;
-  Platform.local_storage_set "theme" (Platform.storage_quote effective)
+  Ui_services.theme_set_pref effective
 
-let current_lang () =
-  match Platform.local_storage_get "preferred-language" with
-  | Some v -> Platform.storage_unquote v
-  | None -> "en"
+let current_lang () = Ui_services.doc_preferred_lang ()
 
 let set_language code =
-  Platform.local_storage_set "preferred-language"
-    (Platform.storage_quote code);
-  Web_dom.doc_set_lang code;
+  Ui_services.doc_set_lang_pref code;
+  Ui_services.doc_set_lang code;
   (* fetch the new locale first so the reload boots straight into it;
      `let x = t "..."` bindings freeze at module load so a full reload is
      the honest swap — same as before lazy dicts *)
   ignore
     (I18n.load code
      |> Js.Promise.then_ (fun () ->
-            Platform.location_reload ();
+            Ui_services.doc_reload ();
             Js.Promise.resolve ()))
 
 let lang_label_for code =
   match List.find_opt (fun (k, _) -> k = code) languages with
-  | Some (_, l) -> Platform.utf8 l
+  | Some (_, l) -> Ui_services.literal_text l
   | None -> code
 
 (* language dropdown — LUI select + anchored dropdown_menu (mounted =
@@ -120,7 +96,7 @@ let lang_menu ~key st mst =
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
     (List.mapi
        (fun i (code, label) ->
-         let label = Platform.utf8 label in
+         let label = Ui_services.literal_text label in
          Lui_elements.menu_item
            ~key:(Printf.sprintf "lmi-%s-%d" key i)
            ~text:label
@@ -222,7 +198,7 @@ let toggle_theme () =
   let cur =
     match current_mode () with
     | "system" ->
-        if Web_dom.prefers_dark () then "dark" else "light"
+        if Ui_services.theme_prefers_dark () then "dark" else "light"
     | m -> m
   in
   use_mode (if cur = "dark" then "light" else "dark")

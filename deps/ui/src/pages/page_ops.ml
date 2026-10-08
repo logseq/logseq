@@ -19,10 +19,10 @@ let delete uuid =
   (* bounce to Home after deleting, but only when the route still
      points where it did at click time — a navigation that already
      happened (e.g. to Recycle) must not be stomped *)
-  let from = Platform.location_hash () in
+  let from = Ui_services.nav_hash () in
   let* _ = Sdk_util.apply_op "delete-page" [ Wire.Uuid uuid; Wire.Map [] ] in
-  if Platform.location_hash () = from then
-    Platform.set_location_hash (Runtime.nav_hash "/");
+  if Ui_services.nav_hash () = from then
+    Ui_services.nav_set_hash (Runtime.nav_hash "/");
   Js.Promise.resolve ()
 
 let convert_to_tag db_id =

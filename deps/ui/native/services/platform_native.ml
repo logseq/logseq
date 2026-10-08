@@ -250,6 +250,63 @@ let history_forward () =
       hash_ref := h;
       notify_hash ()
 
+(* ---------- semantic theme/nav/doc service impls ---------- *)
+
+(* imperative "ls:navigate" navigation: dispatched through the event
+   emulation (native/platform.ml emit_event) and mirrored here so service
+   observers see the same two channels the browser exposes. *)
+let navigate_fns : (unit -> unit) list ref = ref []
+let notify_navigate () = List.iter (fun f -> f ()) !navigate_fns
+
+let on_navigate f =
+  hash_change_fns := f :: !hash_change_fns;
+  navigate_fns := f :: !navigate_fns
+
+let theme_mode () =
+  let system =
+    match local_storage_get "system-theme?" with
+    | Some v -> storage_unquote v = "true"
+    | None -> true (* native host is a desktop app — follows system *)
+  in
+  if system then "system"
+  else
+    match local_storage_get "theme" with
+    | Some v -> (match storage_unquote v with "dark" -> "dark" | _ -> "light")
+    | None -> "light"
+
+let theme_set_system_pref v =
+  local_storage_set "system-theme?" (if v then "true" else "false")
+
+let theme_set_pref v = local_storage_set "theme" (storage_quote v)
+
+let theme_apply_dataset effective = document_set_data "theme" effective
+
+let theme_apply_classes effective =
+  if effective = "dark" then begin
+    root_add_class "dark";
+    body_add_class "dark-theme";
+    body_rm_class "light-theme";
+    body_rm_class "white-theme"
+  end
+  else begin
+    root_rm_class "dark";
+    body_rm_class "dark-theme";
+    body_add_class "white-theme";
+    body_add_class "light-theme"
+  end
+
+let preferred_lang () =
+  match local_storage_get "preferred-language" with
+  | Some v -> storage_unquote v
+  | None -> "en"
+
+let set_lang_pref code =
+  local_storage_set "preferred-language" (storage_quote code)
+
+(* native has no page reload — a language swap needs a host restart the
+   same way reload_page() is a no-op today *)
+let doc_reload () = ()
+
 let install_ui_services ~assert_owner ~request_flush =
   Ui_services.install
     { storage =
@@ -260,5 +317,36 @@ let install_ui_services ~assert_owner ~request_flush =
     ; literal_text = Fun.id
     ; request_flush
     ; assert_owner
+    ; theme =
+        { mode = theme_mode
+        ; system_default = (fun () -> true)
+        ; prefers_dark = Host.prefers_dark
+        ; set_system_pref = theme_set_system_pref
+        ; set_theme_pref = theme_set_pref
+        ; apply_dataset = theme_apply_dataset
+        ; apply_classes = theme_apply_classes
+        }
+    ; nav =
+        { hash = location_hash
+        ; set_hash = set_location_hash
+        ; replace_hash = replace_url_fragment
+        ; back = history_back
+        ; forward = history_forward
+        ; on_change = on_hash_change
+        ; on_navigate
+        ; search = location_search
+        ; query_param
+        ; hash_query_param
+        ; decode_uri = Uri.pct_decode
+        ; reload = doc_reload
+        }
+    ; doc =
+        { set_lang = document_set_lang
+        ; preferred_lang
+        ; set_lang_pref
+        ; set_data = document_set_data
+        ; rm_data = body_rm_data
+        ; reload = doc_reload
+        }
     };
   Ui_task.install { enqueue = Host.enqueue; assert_owner }

@@ -518,7 +518,7 @@ let menu_body ~with_title ~more_options m =
          (match prop_uuid m with
           | Some u ->
               Runtime.mark_nav ();
-              Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ u))
+              Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ u))
           | None -> ());
          S.close_overlays ()));
   el_append_child body
@@ -937,7 +937,7 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
             (match prop_uuid m with
              | Some u ->
                  Runtime.mark_nav ();
-                 Platform.set_location_hash
+                 Ui_services.nav_set_hash
                    (Runtime.nav_hash ("#/page/" ^ u))
              | None -> ());
             close ())

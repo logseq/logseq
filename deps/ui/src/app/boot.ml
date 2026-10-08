@@ -9,24 +9,12 @@ let demo_graph = "Demo"
    Theme/accent/font/wide-mode mirror cljs theme.cljs container effects;
    storage keys use cljs `(name key)` semantics (namespace stripped). *)
 let apply_storage_env () =
-  let lang =
-    match Platform.local_storage_get "preferred-language" with
-    | Some v -> Platform.storage_unquote v
-    | None -> "en"
-  in
-  Web_dom.doc_set_lang lang;
-  let system =
-    (* cljs state.cljs :ui/system-theme? defaults to true *)
-    match Platform.local_storage_get "system-theme?" with
-    | Some v -> Platform.storage_unquote v = "true"
-    | None -> true
-  in
+  let lang = Ui_services.doc_preferred_lang () in
+  Ui_services.doc_set_lang lang;
   let theme =
-    if system then if Web_dom.prefers_dark () then "dark" else "light"
-    else
-      match Platform.local_storage_get "theme" with
-      | Some v -> Platform.storage_unquote v
-      | None -> "light"
+    match Ui_services.theme_mode () with
+    | "system" -> if Ui_services.theme_prefers_dark () then "dark" else "light"
+    | mode -> mode
   in
   Settings_view.apply_theme_dom theme;
   let accent =
@@ -39,18 +27,18 @@ let apply_storage_env () =
         else v)
     | None -> "logseq"
   in
-  Web_dom.doc_set_data "color" accent;
+  Ui_services.doc_set_data "color" accent;
   (match Platform.local_storage_get "editor-font" with
    | Some v -> (
        match Edn.parse (Platform.storage_unquote v) with
        | Wire.Map kvs ->
            let m = Wire.Map kvs in
            (match Wire.get m "type" with
-            | Some (Wire.String t) -> Web_dom.doc_set_data "font" t
+            | Some (Wire.String t) -> Ui_services.doc_set_data "font" t
             | _ -> ());
            (match Wire.get m "global" with
             | Some (Wire.Bool g) ->
-                Web_dom.doc_set_data "font-global"
+                Ui_services.doc_set_data "font-global"
                   (if g then "true" else "false")
             | _ -> ())
        | _ -> ())
@@ -71,7 +59,7 @@ let apply_storage_env () =
    ls-tab-graph-id), else the first existing repo, else create Demo. *)
 let pick_graph repos =
   let url_target =
-    match Platform.hash_query_param "graph-id" with
+    match Ui_services.nav_hash_query_param "graph-id" with
     | Some gid -> Graphs_meta.repo_of_uuid gid
     | None -> None
   in
@@ -143,8 +131,8 @@ let run () =
      set_location_hash refuses to push "" onto the back stack — so the
      very first in-app nav was un-undoable. Seed the home hash so the
      first nav can go back. *)
-  if Platform.location_hash () = "" then
-    Platform.replace_url_fragment "#/";
+  if Ui_services.nav_hash () = "" then
+    Ui_services.nav_replace_hash "#/";
   Js.Promise.resolve ()))
   |> Js.Promise.catch (fun err ->
          Platform.console_error ("boot failed", err);

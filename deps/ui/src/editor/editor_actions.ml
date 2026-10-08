@@ -2216,7 +2216,7 @@ let zoom_to uuid =
   (* the zoomed block is the zoom container's root — it expands there
      while its page-level collapse stays *)
   S.expand_root ~scope:(zoom_container uuid) uuid;
-  Platform.set_location_hash (Runtime.nav_hash ("#/block/" ^ uuid))
+  Ui_services.nav_set_hash (Runtime.nav_hash ("#/block/" ^ uuid))
 
 let consume_pending_zoom () =
   let z = !pending_zoom in
@@ -2246,12 +2246,12 @@ let zoom_out () =
                    | Some _ -> "page"
                    | None -> "block"
                  in
-                 Platform.set_location_hash
+                 Ui_services.nav_set_hash
                    (Runtime.nav_hash ("#/" ^ seg ^ "/" ^ pu))
              | None -> ());
             Js.Promise.resolve ())
       | _ -> ())
-  | None -> Platform.history_back ()
+  | None -> Ui_services.nav_back ()
 
 (* -- /query (cljs commands.cljs db-based-query -> editor.cljs
    run-query-command!): create the logseq.property/query value block

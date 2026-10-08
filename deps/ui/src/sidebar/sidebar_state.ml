@@ -546,7 +546,7 @@ let push_page_route target =
     else encode_uri_component target
   in
   Runtime.mark_nav ();
-  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
+  Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ target));
   Web_dom.dispatch_custom "ls:navigate" Js.Json.null
 
 (* cljs redirect-to-page!: route-info first — hidden and

@@ -117,7 +117,7 @@ let export_html () =
    if repo = "" then failwith "Publishing requires an open graph";
    let* config = Sdk_config.read_config repo in
    let theme = match Settings_view.current_mode () with
-     | "system" -> if Web_dom.prefers_dark () then "dark" else "light"
+     | "system" -> if Ui_services.theme_prefers_dark () then "dark" else "light"
      | mode -> mode in
    let* w = Runtime.invoke2 "thread-api/build-publishing-html" (Wire.String repo)
      (Wire.Map

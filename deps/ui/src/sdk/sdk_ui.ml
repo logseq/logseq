@@ -17,13 +17,13 @@ let push_state a b _c _d =
       match name with
       | Some n ->
           Runtime.mark_nav ();
-          Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ n));
+          Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ n));
           Web_dom.dispatch_custom "ls:navigate"
             (detail_obj [ ("name", Js.Json.string n) ]);
           resolved_nil
       | None -> resolved_nil)
   | Some route ->
-      Platform.set_location_hash (Runtime.nav_hash ("#/" ^ route));
+      Ui_services.nav_set_hash (Runtime.nav_hash ("#/" ^ route));
       resolved_nil
   | None -> resolved_nil
 
@@ -79,7 +79,7 @@ let close_msg a _b _c _d =
 let set_theme_mode a _b _c _d =
   (match arg_string a with
    | Some mode ->
-       Web_dom.doc_set_data "theme" mode;
+       Ui_services.theme_apply_dataset mode;
        Platform.local_storage_set "ui/theme" ("\"" ^ mode ^ "\"")
    | None -> ());
   resolved_nil
@@ -103,7 +103,7 @@ let set_state_from_store a b _c _d =
          | Some s -> s
          | None -> "logseq"
        in
-       Web_dom.doc_set_data "color" color;
+       Ui_services.doc_set_data "color" color;
        Platform.local_storage_set "radix-color" ("\"" ^ color ^ "\"")
    | "ui/system-theme?" ->
        let enabled =
@@ -114,8 +114,8 @@ let set_state_from_store a b _c _d =
        Platform.local_storage_set "system-theme?"
          (if enabled then "true" else "false");
        if enabled then
-         Web_dom.doc_set_data "theme"
-           (if Web_dom.prefers_dark () then "dark" else "light")
+         Ui_services.theme_apply_dataset
+           (if Ui_services.theme_prefers_dark () then "dark" else "light")
    | _ -> ());
   resolved_nil
 
@@ -166,13 +166,13 @@ let replace_state a b _c _d =
       match name with
       | Some n ->
           Runtime.mark_nav ();
-          Platform.replace_url_fragment (Runtime.nav_hash ("#/page/" ^ n));
+          Ui_services.nav_replace_hash (Runtime.nav_hash ("#/page/" ^ n));
           Web_dom.dispatch_custom "ls:navigate"
             (detail_obj [ ("name", Js.Json.string n) ]);
           resolved_nil
       | None -> resolved_nil)
   | Some route ->
-      Platform.replace_url_fragment (Runtime.nav_hash ("#/" ^ route));
+      Ui_services.nav_replace_hash (Runtime.nav_hash ("#/" ^ route));
       resolved_nil
   | None -> resolved_nil
 

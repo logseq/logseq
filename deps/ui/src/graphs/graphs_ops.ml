@@ -140,7 +140,7 @@ let navigate_journal repo =
     Worker_events.reset_rtc ();
     Runtime.send (Action.Boot_graph_ready repo);
     Graph.build_search_index repo;
-    Platform.set_location_hash (Runtime.nav_hash "#/");
+    Ui_services.nav_set_hash (Runtime.nav_hash "/");
     Router.resolve ()
   end;
   Js.Promise.resolve ()

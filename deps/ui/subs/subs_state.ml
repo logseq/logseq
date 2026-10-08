@@ -223,12 +223,12 @@ let nav_hash route =
 let sync_hash_graph_id () =
   match !current_graph_uuid with
   | Some u when u <> "" -> (
-      match Platform.location_hash () with
+      match Ui_services.nav_hash () with
       | "" | "#" | "#/" ->
-          Platform.replace_url_fragment ("#/?graph-id=" ^ u)
+          Ui_services.nav_replace_hash ("#/?graph-id=" ^ u)
       | h ->
           if String.index_opt h '?' = None then
-            Platform.replace_url_fragment (h ^ "?graph-id=" ^ u))
+            Ui_services.nav_replace_hash (h ^ "?graph-id=" ^ u))
   | _ -> ()
 
 (* cljs add-page-to-recent! fires only inside redirect-to-page! — i.e.

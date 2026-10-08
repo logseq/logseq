@@ -226,7 +226,11 @@ let emit_event name payload =
   (try !post_dispatch_hook name payload
    with e ->
      Printf.eprintf "[emit_event] post hook threw ev=%s: %s\n%!" name
-       (Printexc.to_string e))
+       (Printexc.to_string e));
+  (* imperative navigation also reaches Ui_services.nav_on_navigate
+     observers — the same second channel the browser's "ls:navigate"
+     document listener provides *)
+  if name = "ls:navigate" then notify_navigate ()
   end
 
 (* ---------- clipboard ---------- *)

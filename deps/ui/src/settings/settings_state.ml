@@ -120,7 +120,7 @@ let activate () =
   Web_dom.body_set_data "settingsTab" tab;
   if ready () then (Signal.set (state ()) { (value ()) with tab }; load ())
 
-let deactivate () = Web_dom.body_rm_data "settingsTab"
+let deactivate () = Ui_services.doc_rm_data "settingsTab"
 
 (* ---- config.edn accessors ---- *)
 
@@ -255,7 +255,7 @@ let current_accent () =
 
 let set_accent name =
   Platform.local_storage_set "radix-color" (Platform.storage_quote (":" ^ name));
-  Web_dom.doc_set_data "color" name;
+  Ui_services.doc_set_data "color" name;
   poke ()
 
 (* ---- editor font (state/set-editor-font! + theme.cljs effect) ---- *)
@@ -293,8 +293,8 @@ let write_editor_font cfg =
              [ (Wire.Keyword "type", Wire.String cfg.ftype)
              ; (Wire.Keyword "global", Wire.Bool cfg.fglobal)
              ])));
-  Web_dom.doc_set_data "font" cfg.ftype;
-  Web_dom.doc_set_data "font-global"
+  Ui_services.doc_set_data "font" cfg.ftype;
+  Ui_services.doc_set_data "font-global"
     (if cfg.fglobal then "true" else "false");
   poke ()
 

@@ -922,16 +922,9 @@ let tweet_id_of arg =
    settings_view current_mode: system-theme? (default desktop OS) then
    prefers-dark, else the stored "theme" *)
 let dark_theme () =
-  let system =
-    match Platform.local_storage_get "system-theme?" with
-    | Some v -> Platform.storage_unquote v = "true"
-    | None -> Platform.desktop_os ()
-  in
-  if system then Web_dom.prefers_dark ()
-  else
-    match Platform.local_storage_get "theme" with
-    | Some v -> Platform.storage_unquote v = "dark"
-    | None -> false
+  match Ui_services.theme_mode () with
+  | "system" -> Ui_services.theme_prefers_dark ()
+  | mode -> mode = "dark"
 
 let tweet_iframe id =
   let dark = dark_theme () in

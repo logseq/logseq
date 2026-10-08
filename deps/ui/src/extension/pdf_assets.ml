@@ -389,7 +389,7 @@ let goto_block_ref (hl : Model.hl) =
            | Some asset -> ensure_ref_block asset hl
            | None -> Js.Promise.resolve ()
          in
-         Platform.set_location_hash
+         Ui_services.nav_set_hash
            (Runtime.nav_hash ("#/page/" ^ id));
          Js.Promise.resolve ())
   | None -> ()
@@ -404,7 +404,7 @@ let goto_annotations_page ?id (asset : Model.pdf_asset) =
         | Some id -> "?anchor=block-content-" ^ id
         | None -> ""
       in
-      Platform.set_location_hash
+      Ui_services.nav_set_hash
         (Runtime.nav_hash ("#/page/" ^ u ^ anchor))
   | None -> ()
 
@@ -487,7 +487,7 @@ let hl_image_block (b : Model.block)
 
 (* cljs goto the hl-image asset block (asset-action-bar ref button) *)
 let goto_asset_block uuid =
-  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ uuid))
+  Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ uuid))
 
 (* ---------- area image capture + persist ---------- *)
 

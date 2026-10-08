@@ -6,11 +6,11 @@
 open Promise_ext
 module SSet = Stdlib.Set.Make (String)
 
-let decode s = try Platform.decode_uri s with _ -> s
+let decode s = try Ui_services.nav_decode_uri s with _ -> s
 
 (* strip "#" and "?graph-id=..." — hash may carry query params *)
 let route_path () =
-  let h = Platform.location_hash () in
+  let h = Ui_services.nav_hash () in
   let h =
     if String.length h > 0 && String.get h 0 = '#' then
       String.sub h 1 (String.length h - 1)
@@ -70,15 +70,7 @@ let repo = Runtime.repo
 
 (* cljs set-route-match!: the hash can carry query params —
    ?anchor=ls-block-<uuid> on block-ref/backlink navigation *)
-let route_anchor () =
-  let h = Platform.location_hash () in
-  match String.index_opt h '?' with
-  | None -> None
-  | Some i ->
-      Platform.search_params_get
-        (Platform.new_url_search_params
-           (String.sub h (i + 1) (String.length h - i - 1)))
-        "anchor"
+let route_anchor () = Ui_services.nav_hash_query_param "anchor"
 
 (* cljs ui-handler/highlight-element!: a "ls-block-<uuid>" anchor
    scrolls the row into view and selects the block; other fragment ids
@@ -402,7 +394,7 @@ let rec load_page_ref for_route ref_v =
   with
   | Some src, cur when cur <> Some src ->
       if not (is_stale ()) then
-        Platform.set_location_hash
+        Ui_services.nav_set_hash
           (Runtime.nav_hash ("#/page/" ^ src));
       Js.Promise.resolve ()
   | _ -> (
@@ -804,8 +796,7 @@ let init () =
           | _ -> ())
       | _ -> ())
     true;
-  Platform.on_hash_change resolve;
-  Web_dom.on_document_event "ls:navigate" (fun _ -> resolve ());
+  Ui_services.nav_on_navigate resolve;
   Web_dom.on_document_event "keydown" (fun ev ->
       if Platform.event_str ev "key" = "Escape" then (
         Runtime.send Action.Dismiss_all;

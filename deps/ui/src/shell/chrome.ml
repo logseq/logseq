@@ -592,7 +592,7 @@ let home_button ms =
           icon_btn ~key:"home-btn" ~id:"" ~cls:(ghost_btn_cls ())
             ~icon:"home" ~tip:(I18n.t "nav/home")
             ~on_click:(fun _ ->
-              Platform.set_location_hash "#/";
+              Ui_services.nav_set_hash "#/";
               Web_dom.dispatch_custom "ls:navigate" Js.Json.null)
             ())
     ms
@@ -952,7 +952,7 @@ let not_found_page : t =
         ~padding_horizontal:16 ~padding_vertical:8
         ~style_class:"ui__button as-outline" ~icon:(`app "home")
         ~icon_placement:`leading ~text:(I18n.t "page/go-back-home")
-        ~on_press:(fun _ -> Platform.set_location_hash "#/") []
+        ~on_press:(fun _ -> Ui_services.nav_set_hash "#/") []
     ]
 
 (* cljs container.cljs: the wrapper's state classes all have CSS

@@ -225,7 +225,7 @@ let main root =
     Option.iter Settings_view.apply_theme_dom (Wire.map_get_string state "ui/theme");
     (match Wire.get state "ui/radix-color" with
      | Some (Wire.Keyword color) | Some (Wire.String color) ->
-         Web_dom.doc_set_data "color" color
+         Ui_services.doc_set_data "color" color
      | _ -> ());
     Runtime.send (Action.Repos_loaded [repo]);
     Runtime.send (Action.Boot_graph_ready repo);

@@ -186,7 +186,7 @@ let nav r =
   in
   if h <> "" then (
     Runtime.mark_nav ();
-    Platform.set_location_hash (Runtime.nav_hash h);
+    Ui_services.nav_set_hash (Runtime.nav_hash h);
     (* an identical hash fires no hashchange — still let resolve run so
        the same-route refresh path loads data *)
     Web_dom.dispatch_custom "ls:navigate" Js.Json.null);

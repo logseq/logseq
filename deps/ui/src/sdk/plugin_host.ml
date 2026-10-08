@@ -804,7 +804,7 @@ let fire_route_changed (route : Model.route) =
   in
   let p = Js.Dict.empty () in
   Js.Dict.set p "template" (jstr_ template);
-  Js.Dict.set p "path" (jstr_ (Platform.location_hash ()));
+  Js.Dict.set p "path" (jstr_ (Ui_services.nav_hash ()));
   Js.Dict.set p "parameters" (Js.Json.object_ (Js.Dict.empty ()));
   hook_app "route-changed" (Js.Json.object_ p) Js.Json.null
 
@@ -814,7 +814,7 @@ let fire_route_changed (route : Model.route) =
 let apply_theme_mode (theme : Js.Json.t) =
   (match Js.Json.decodeString (getf theme "mode") with
    | Some m when m <> "" ->
-       Web_dom.doc_set_data "theme" m;
+       Ui_services.theme_apply_dataset m;
        Platform.local_storage_set "ui/theme" ("\"" ^ m ^ "\"");
        (* cljs state/set-custom-theme! — mode -> theme under one key *)
        Platform.local_storage_set "ui/custom-theme"
@@ -833,7 +833,7 @@ let reset_custom_theme () =
    | Some s -> (
        try
          match Js.Json.decodeString (Js.Json.parseExn s) with
-         | Some m -> Web_dom.doc_set_data "theme" m
+         | Some m -> Ui_services.theme_apply_dataset m
          | None -> ()
        with _ -> ())
    | None -> ())

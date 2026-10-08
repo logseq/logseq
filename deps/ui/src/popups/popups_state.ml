@@ -1924,7 +1924,7 @@ let run_cm_item t label =
        | Some (tuuid, tid, _) -> (
            match label with
            | "go-to-tag" ->
-               Platform.set_location_hash
+               Ui_services.nav_set_hash
                  (Runtime.nav_hash ("#/page/" ^ tuuid))
            | "open-tag-sidebar" ->
                Web_dom.dispatch_custom "ls:open-right-sidebar"

@@ -286,9 +286,9 @@ let repos_menu st =
             [ action "qa-new" I18n.create_db_graph "database-plus"
                 (fun () -> Dialogs_state.open_ "new-graph")
             ; action "qa-imp" I18n.import_existing_notes "database-import"
-                (fun () -> Platform.set_location_hash "#/import")
+                (fun () -> Ui_services.nav_set_hash "#/import")
             ; action "qa-all" I18n.all_graphs "layout-2" (fun () ->
-                  Platform.set_location_hash
+                  Ui_services.nav_set_hash
                     (Runtime.nav_hash "#/graphs")) ] ] ]
 
 let menu_host st =
@@ -351,7 +351,7 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
 let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
   nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name ?shortcut
     ~on_click:(fun () ->
-      Platform.set_location_hash (Runtime.nav_hash hash);
+      Ui_services.nav_set_hash (Runtime.nav_hash hash);
       Web_dom.dispatch_custom "ls:navigate" Js.Json.null)
     ()
 
@@ -458,7 +458,7 @@ let nav_group ms st =
                          ignore
                            (Js.Promise.then_
                               (fun (h, _) ->
-                                Platform.set_location_hash
+                                Ui_services.nav_set_hash
                                   (Runtime.nav_hash h);
                                 Web_dom.dispatch_custom "ls:navigate"
                                   Js.Json.null;

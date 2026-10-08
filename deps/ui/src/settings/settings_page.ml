@@ -85,7 +85,7 @@ let theme_row ctx =
                  (fun m ->
                    let effective =
                      if m = "system" then
-                       if Web_dom.prefers_dark () then "dark"
+                       if Ui_services.theme_prefers_dark () then "dark"
                        else "light"
                      else m
                    in

@@ -353,7 +353,7 @@ let title_content (page : Model.page) : t =
               | Some uuid when not shift && not interactive ->
                   Editor_actions.exit_edit ~select:false;
                   Runtime.mark_nav ();
-                  Platform.set_location_hash
+                  Ui_services.nav_set_hash
                     (Runtime.nav_hash ("#/page/" ^ uuid))
               | _ -> ()) )
     | None ->

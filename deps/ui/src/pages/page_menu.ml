@@ -228,13 +228,13 @@ let global_items () =
   ; icon_item "recycle" I18n.recycle "trash" (fun () ->
         close ();
         Runtime.mark_nav ();
-        Platform.set_location_hash "#/page/Recycle")
+        Ui_services.nav_set_hash "#/page/Recycle")
   ; icon_item "export" I18n.export_graph "database-export" (fun () ->
         close ();
         Sidebar_state.open_dialog "export-graph")
   ; icon_item "import" I18n.import_ "file-upload" (fun () ->
         close ();
-        Platform.set_location_hash "#/import")
+        Ui_services.nav_set_hash "#/import")
   ]
   @
   if Rtc_flows.logged_in () then
