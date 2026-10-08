@@ -2,4 +2,4 @@
  (name logseq_ui_scenarios)
  (wrapped false)
  (modes byte native melange)
- (libraries lui))
+ (libraries lui logseq_ui_contracts))
