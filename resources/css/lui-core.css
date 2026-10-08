@@ -2727,6 +2727,10 @@ a.page-title {
   color: var(--ls-secondary-text-color);
 }
 
+.ed-comp {
+  text-decoration: underline;
+}
+
 .ed-hidden {
   /* reveal-on-caret delimiters collapse to zero width until shown */
   display: none;
@@ -3444,6 +3448,18 @@ a.close {
   height: 100%;
   border: 0;
   margin: 0;
+}
+
+/* right-edge drag grip — cljs video-resize-handle; keeps the shell's
+   relative positioning contract for the handle anchor */
+.video-embed-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 1;
 }
 
 .tweet-embed {

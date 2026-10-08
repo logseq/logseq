@@ -21,6 +21,51 @@ let document_add_listener (name : string) (f : ev -> unit)
    queries for the same DOM id must return the same allocation *)
 let el_cache : (string, el) Hashtbl.t = Hashtbl.create 64
 
+(* identity key for an element JSON: the DOM id when it carries one,
+   else the ref-id, else the node-<n> handle every element registers
+   under. Matches Vdom.ref_json's choice of "#ref". *)
+let el_key (el : el) : string option =
+  match Dom_ext.str_prop "#ref" el with
+  | Some s when s <> "" -> Some s
+  | _ -> (
+      match Dom_ext.str_prop "ref-id" el with
+      | Some s when s <> "" -> Some s
+      | _ -> (
+          match Dom_ext.str_prop "id" el with
+          | Some s when s <> "" -> Some s
+          | _ -> (
+              match Dom_ext.num_prop "node-id" el with
+              | Some n -> Some (Printf.sprintf "node-%d" (int_of_float n))
+              | None -> (
+                  match Dom_ext.num_prop "#new" el with
+                  | Some n ->
+                      Some (Printf.sprintf "#new-%d" (int_of_float n))
+                  | None -> None))))
+
+(* canonicalize: fold every element through el_cache so `==` holds
+   between the query paths (get_element_by_id, query_selector*,
+   el_query_all). A richer incoming snapshot replaces a bare
+   {#ref,ref-id} stub — never the other way around. *)
+let canonical (el : el) : el =
+  match el_key el with
+  | None -> el
+  | Some k -> (
+      match Hashtbl.find_opt el_cache k with
+      | None ->
+          Hashtbl.replace el_cache k el;
+          el
+      | Some cached -> (
+          let fields_of (e : el) =
+            match e with
+            | Js.Json.JObject kvs -> List.length kvs
+            | _ -> 0
+          in
+          match (fields_of cached <= 2, fields_of el > fields_of cached) with
+          | true, true ->
+              Hashtbl.replace el_cache k el;
+              el
+          | _ -> cached))
+
 (* document_element / document.body are {#ref:0}/{#ref:-1} placeholder
    refs — the host key classification turns them into scope/body roots *)
 let document_element : el = Js.Json.JObject [("#ref", Js.Json.JNumber 0.)]
@@ -57,11 +102,12 @@ let ref_pairs (el : el) : (string * Js.Json.t) list =
   else ("ref", el) :: Imperative_dom.shadow_field el
 
 let get_element_by_id (id : string) : el option =
-  if not (Hashtbl.mem live_ids id) then
+  if id = "0" then Some document_element
+  else if not (Hashtbl.mem live_ids id) then
     (* vdom els materialize into live LUI nodes — resolve their DOM id
        even when live_ids hasn't seen the mount event yet *)
     match Vdom.node_of_dom_id id with
-    | Some node -> Some (!Vdom.snapshot_of_node node)
+    | Some node -> Some (canonical (!Vdom.snapshot_of_node node))
     | None -> None
   else
     Some
@@ -159,7 +205,7 @@ let query_in_roots (roots : el list) (sel : string) : el list =
         && Dom_ext.selector_matches sel el (Dom_ext.ancestors_of el))
       (!Dom_ext.doc_elements_provider ())
   in
-  lui_hits @ shadow_query scope sel
+  List.map canonical (lui_hits @ shadow_query scope sel)
 
 let query_selector (sel : string) : el option =
   (* no BODY element exists in the LUI tree — body queries get the
@@ -670,7 +716,8 @@ let el_query (root : el) (sel : string) : el option =
 
 let el_query_all (root : el) (sel : string) : node_list =
   if is_vdom_el root then
-    Js.Json.JArray (Array.of_list (Vdom.query_all root sel))
+    Js.Json.JArray
+      (Array.of_list (List.map canonical (Vdom.query_all root sel)))
   else Js.Json.JArray (Array.of_list (query_in_roots [ root ] sel))
 
 let node_list_length (nl : node_list) : int =
@@ -775,7 +822,18 @@ let () =
     (fun ev ->
       last_active_id :=
         (match Dom_ext.prop "target" ev with
-         | Js.Json.JObject _ as t -> Dom_ext.str_prop "ref-id" t
+         | Js.Json.JObject _ as t -> (
+             match Dom_ext.str_prop "ref-id" t with
+             | Some s when s <> "" -> Some s
+             | _ -> (
+                 (* id-less elements register as node-<n> — focusable
+                    buttons/links without a DOM id still resolve *)
+                 match Dom_ext.str_prop "#ref" t with
+                 | Some s when s <> "" -> Some s
+                 | _ -> (
+                     match Dom_ext.str_prop "id" t with
+                     | Some s when s <> "" -> Some s
+                     | _ -> None)))
          | _ -> None);
       prerr_endline
         ("PERF focus-evt t="
@@ -785,6 +843,23 @@ let () =
       flush stderr)
     true;
   document_add_listener "blur" (fun _ -> last_active_id := None) true;
+  (* Chrome parity: mousedown on a focusable element moves focus to it.
+     The gpui host only focuses inputs itself, so dialog buttons etc.
+     are driven through the same el_focus -> dom-op channel the trap
+     uses *)
+  document_add_listener "mousedown"
+    (fun ev ->
+      match Dom_ext.prop "target" ev with
+      | Js.Json.JObject _ as t ->
+          if
+            Dom_ext.selector_matches
+              "a[href],button:not([disabled]),input:not([disabled])\
+              ,textarea:not([disabled]),select:not([disabled])\
+              ,[tabindex]:not([tabindex='-1'])"
+              t (Dom_ext.ancestors_of t)
+          then el_focus t
+      | _ -> ())
+    true;
   (* the host coalesces lifecycle emits per tick into one dom-event
      carrying {ids:[...]} — a per-node emit costs a full dispatch+flush
      on the main thread each, which starved the attach pass on remounts *)

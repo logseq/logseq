@@ -821,25 +821,31 @@ let provider_iframe src =
 
 (* cljs block/video-inline-segments-cp .video-embed-block +
    video-embed-cp .video-embed-shell > .video-embed-frame[width,
-   aspect-ratio] (embed-block kept for the e2e contract). The cljs
-   resize handle rewrites , w=N in the block source — deferred: LUI has
-   no editing-surface write path for it yet *)
-let video_embed_shell ~macro_name ~macro_id ?width inner =
+   aspect-ratio] (embed-block kept for the e2e contract). The
+   .video-embed-resize-handle is cljs video-resize-handle — a
+   document-level gesture in editor/video_resize.ml drags it and
+   rewrites w=N in the block's macro source on release *)
+let video_embed_shell ~macro_name ~macro_id ?width ~self inner =
   let w = max 160 (Option.value ~default:560 width) in
   D.el ~tag:"div" ~style_class:"video-embed-block embed-block"
     ~attrs:
-      [ ("data-video-macro-name", macro_name)
-      ; ("data-video-macro-id", macro_id) ]
+      ([ ("data-video-macro-name", macro_name)
+       ; ("data-video-macro-id", macro_id) ]
+       @ if self = "" then [] else [ ("data-block-uuid", self) ])
     [ D.el ~tag:"div" ~style_class:"video-embed-shell"
         [ D.el ~tag:"div" ~style_class:"video-embed-frame"
             ~attrs:
               [ ( "style"
                 , "width:" ^ string_of_int w ^ "px;aspect-ratio:16 / 9" ) ]
-            [ inner ] ] ]
+            [ inner ]
+        ; D.el ~tag:"div" ~style_class:"video-embed-resize-handle"
+            ~attrs:
+              [ ("role", "separator"); ("aria-orientation", "vertical") ]
+            [] ] ]
 
 (* cljs macro-video-cp: provider-hint names accept bare ids; {{video}}
    requires a real URL — the warning text is literally "{{video …}}" *)
-let macro_video_el name arguments hint =
+let macro_video_el ~self name arguments hint =
   match arguments with
   | url_or_id :: _ ->
       if hint <> None || looks_like_url url_or_id then
@@ -847,10 +853,10 @@ let macro_video_el name arguments hint =
         match input_video url_or_id hint with
         | Some (Ve_youtube (id, start)) ->
             video_embed_shell ~macro_name:name ~macro_id:url_or_id ?width
-              (youtube_iframe id start)
+              ~self (youtube_iframe id start)
         | Some (Ve_iframe src) ->
             video_embed_shell ~macro_name:name ~macro_id:url_or_id ?width
-              (provider_iframe src)
+              ~self (provider_iframe src)
         | None -> D.txt ""
       else
         D.el ~tag:"span" ~style_class:"warning mr-1"
@@ -1391,11 +1397,11 @@ and macro_el ~refs ~self body =
       (* cljs: {{embed}} is deprecated — renders a warning, not an embed *)
       box ~style_class:"warning"
         [ text ~value:(U.t "block.macro/embed-deprecated") [] ]
-  | "youtube" -> macro_video_el name arguments (Some `youtube)
-  | "vimeo" -> macro_video_el name arguments (Some `vimeo)
-  | "bilibili" -> macro_video_el name arguments (Some `bilibili)
-  | "loom" -> macro_video_el name arguments (Some `loom)
-  | "video" -> macro_video_el name arguments None
+  | "youtube" -> macro_video_el ~self name arguments (Some `youtube)
+  | "vimeo" -> macro_video_el ~self name arguments (Some `vimeo)
+  | "bilibili" -> macro_video_el ~self name arguments (Some `bilibili)
+  | "loom" -> macro_video_el ~self name arguments (Some `loom)
+  | "video" -> macro_video_el ~self name arguments None
   | "youtube-timestamp" -> (
       (* cljs: parse failure renders nothing *)
       match arguments with

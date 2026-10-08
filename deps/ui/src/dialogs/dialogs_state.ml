@@ -188,6 +188,16 @@ let top_content () =
   if Array.length els = 0 then None
   else Some els.(Array.length els - 1)
 
+(* index of `a` inside `fs` by physical equality — elements are
+   canonicalized per identity (see Editor_dom.el_cache) so the same DOM
+   node compares == across query paths *)
+let focus_index (fs : Web_dom.el list) (a : Web_dom.el) : int =
+  let rec go i = function
+    | [] -> -1
+    | h :: t -> if h == a then i else go (i + 1) t
+  in
+  go 0 fs
+
 let trap_tab ev =
   match top_content () with
   | None -> ()
@@ -195,26 +205,35 @@ let trap_tab ev =
       let fs =
         Array.to_list (Web_dom.el_query_all_arr content focusable_sel)
       in
+      let shift = Web_dom.ev_shift ev in
       match fs with
       | [] ->
           Web_dom.ev_prevent_default ev;
           Web_dom.el_focus content
       | first :: _ ->
-          let last = List.nth fs (List.length fs - 1) in
+          let n = List.length fs in
+          let last = List.nth fs (n - 1) in
           (match Web_dom.active_element () with
            | Some a when Web_dom.el_contains content a ->
-               (* inside the dialog: wrap at both ends; the container
-                  itself (tabindex -1) counts as before-first *)
+               (* inside the dialog: move to the next focusable in DOM
+                  order, wrapping at both ends — Radix keeps the
+                  browser default for mid-list moves, but the native
+                  hosts have no default, so the trap drives every move
+                  itself (and preventDefaults, matching Radix's wraps).
+                  The container itself (tabindex -1) counts as
+                  before-first *)
                if a == content then (
                  Web_dom.ev_prevent_default ev;
-                 Web_dom.el_focus
-                   (if Web_dom.ev_shift ev then last else first))
-               else if a == last && not (Web_dom.ev_shift ev) then (
+                 Web_dom.el_focus (if shift then last else first))
+               else
+                 let i = focus_index fs a in
+                 let i' =
+                   if i < 0 then if shift then n - 1 else 0
+                   else if shift then (i - 1 + n) mod n
+                   else (i + 1) mod n
+                 in
                  Web_dom.ev_prevent_default ev;
-                 Web_dom.el_focus first)
-               else if a == first && Web_dom.ev_shift ev then (
-                 Web_dom.ev_prevent_default ev;
-                 Web_dom.el_focus last)
+                 Web_dom.el_focus (List.nth fs i')
            | Some a -> (
                (* focus outside the dialog but inside a higher layer
                   (open menu/popup) belongs to that layer's own trap —
@@ -222,8 +241,7 @@ let trap_tab ev =
                match Web_dom.query_selector "body" with
                | Some body when a == body ->
                    Web_dom.ev_prevent_default ev;
-                   Web_dom.el_focus
-                     (if Web_dom.ev_shift ev then last else first)
+                   Web_dom.el_focus (if shift then last else first)
                | _ -> ())
            | None ->
                Web_dom.ev_prevent_default ev;

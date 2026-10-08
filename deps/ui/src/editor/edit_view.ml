@@ -51,6 +51,7 @@ type frag_kind =
   | Frag_delim
   | Frag_pill (* collapsed atomic *)
   | Frag_raw (* expanded atomic — caret inside reveal *)
+  | Frag_marked (* IME marked text — zero-width in source coords *)
   | Frag_pad
 
 type frag =
@@ -70,6 +71,7 @@ let frag_tag = function
   | Frag_delim -> "d"
   | Frag_pill -> "a"
   | Frag_raw -> "r"
+  | Frag_marked -> "c"
   | Frag_pad -> "z"
 
 let frag_key f = (f.idx, frag_tag f.kind)
@@ -145,6 +147,47 @@ let rec runs_at_offset idx rs lo =
       runs_at_offset (idx + 1) tl lo
   | _ -> (idx, rs)
 
+(* IME marked text rides a zero-width frag at the composition start —
+   inserted before the frag it precedes, splitting a frag it lands
+   inside (textarea semantics: marked text pushes following content
+   right). Negative [idx] keys never collide with run indices; the
+   split's right half takes [-(idx + 3)]. *)
+let marked_frag start text =
+  { idx = -2
+  ; start_off = start
+  ; end_off = start
+  ; kind = Frag_marked
+  ; cls = ""
+  ; text
+  ; display = ""
+  ; shown = false
+  }
+
+let inject_marked sb start text frags =
+  let mf = marked_frag start text in
+  let rec go acc = function
+    | [] -> List.rev (mf :: acc)
+    | f :: tl ->
+        if start <= f.start_off then
+          List.rev_append acc (mf :: f :: tl)
+        else if start < f.end_off then
+          let left =
+            { f with
+              end_off = start
+            ; text = sub_of sb f.start_off (start - f.start_off)
+            }
+          and right =
+            { f with
+              idx = -(f.idx + 3)
+            ; start_off = start
+            ; text = sub_of sb start (f.end_off - start)
+            }
+          in
+          List.rev_append acc (left :: mf :: right :: tl)
+        else go (f :: acc) tl
+  in
+  go [] frags
+
 (* frags for one line: iteration starts at run index [idx0] and stops at
    the first run at/past [hi], so per-line work is O(overlapping runs),
    not O(all runs); frag [idx] is the run's global index — the keyed
@@ -158,7 +201,12 @@ let line_frags m sb idx0 rs lo hi : frag list =
         | None -> go (idx + 1) tl acc)
     | _ -> List.rev (pad_frag hi :: acc)
   in
-  go idx0 rs []
+  let frags = go idx0 rs [] in
+  match m.Edit_model.composition with
+  | Some (start, _, text)
+    when text <> "" && lo <= start && start <= hi ->
+      inject_marked sb start text frags
+  | _ -> frags
 
 let line_at m sb lidx (lo, hi) : line =
   let idx, rs = runs_at_offset 0 m.Edit_model.runs lo in
@@ -343,7 +391,7 @@ let caret_prop (m : Edit_model.t) : wire_value =
 
 let composition_prop (m : Edit_model.t) : wire_value =
   match m.Edit_model.composition with
-  | Some (a, b) -> StringValue (Printf.sprintf "%d,%d" a b)
+  | Some (a, b, _) -> StringValue (Printf.sprintf "%d,%d" a b)
   | None -> StringValue ""
 
 (* --- run fragments ------------------------------------------------------------ *)
@@ -372,6 +420,9 @@ let frag_view ~on_input (frag_s : frag Signal.signal) : t =
         (fun f -> "ed-r ed-raw" ^ cls_suffix f)
         (text ~value:(reactive (fun f -> f.text) frag_s)
            ~style_class:"ed-r ed-raw" [])
+  | Frag_marked ->
+      text ~value:(reactive (fun f -> f.text) frag_s)
+        ~style_class:"ed-r ed-comp" []
   | Frag_pill ->
       (* click reveals the raw source: dropping the caret inside the
          atomic's strict interior expands it via the model *)

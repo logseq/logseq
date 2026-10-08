@@ -1598,6 +1598,339 @@ let on_file_drop ev =
     Asset_dom.upload_files files
   end
 
+(* ---------- video-embed width resize (cljs components/block.cljs
+   video-resize-handle + extensions/video write-back) ----------
+   A document-level gesture: mousedown on .video-embed-resize-handle
+   starts a drag, mousemove resizes the .video-embed-frame
+   imperatively, mouseup commits the new width by rewriting w=N in the
+   block's {{name url, w=N}} macro source (video.cljs
+   update-video-macro-width-in-content), dblclick resets to the
+   default 560. Lives inside a module here — native/gpui builds copy
+   src files individually, so a new src file would never reach them. *)
+module Video_resize = struct
+  let min_width = 160.0
+  let default_width = 560.0
+
+  (* names the cljs video-macro-pattern matches:
+     (\{\{(youtube|vimeo|bilibili|video)(?:\s+([^{}]*?))?\}\}) *)
+  let macro_names = [ "video"; "youtube"; "vimeo"; "bilibili" ]
+
+  let is_ws c = c = ' ' || c = '\t' || c = '\n' || c = '\r'
+
+  (* scan [content] for {{name args}} macros with name in
+     [macro_names], args free of braces, preceded by start-of-string or
+     whitespace (the cljs pattern's (^|[\s]) prefix) *)
+  let each_video_macro content f =
+    let n = String.length content in
+    let rec scan i =
+      if i + 1 < n then begin
+        if
+          content.[i] = '{'
+          && content.[i + 1] = '{'
+          && (i = 0 || is_ws content.[i - 1])
+        then begin
+          let rec close j =
+            if j + 1 >= n then -1
+            else if content.[j] = '}' && content.[j + 1] = '}' then j
+            else if content.[j] = '{' || content.[j] = '}' then -1
+            else close (j + 1)
+          in
+          let cend = close (i + 2) in
+          if cend < 0 then scan (i + 1)
+          else begin
+            let inner = String.sub content (i + 2) (cend - i - 2) in
+            let nlen =
+              let k = ref 0 in
+              while
+                !k < String.length inner
+                && (not (is_ws inner.[!k])) && inner.[!k] <> '}'
+              do
+                incr k
+              done;
+              !k
+            in
+            let name = String.sub inner 0 nlen in
+            if List.mem name macro_names then begin
+              let args =
+                String.sub inner nlen (String.length inner - nlen)
+                |> String.split_on_char ' '
+                |> List.concat_map (fun s -> String.split_on_char '\t' s)
+                |> List.filter (fun s -> String.trim s <> "")
+              in
+              f i (cend + 2) name args
+            end;
+            scan (cend + 2)
+          end
+        end
+        else scan (i + 1)
+      end
+    in
+    scan 0
+
+  (* cljs set-video-width-argument: drop existing w= args, insert
+     w=round(width) right after the url-or-id first arg *)
+  let set_video_width_argument args width =
+    let args =
+      List.filter
+        (fun a ->
+          not
+            (String.length a >= 2
+            && (a.[0] = 'w' || a.[0] = 'W')
+            && a.[1] = '='))
+        args
+    in
+    let w = "w=" ^ string_of_int (int_of_float (Float.round width)) in
+    match args with
+    | a :: rest -> a :: w :: rest
+    | [] -> [ w ]
+
+  (* cljs update-video-macro-width-in-content: among macros whose name
+     and first argument (the url-or-id) match, rewrite the
+     [occurrence]-th (0-based — the DOM index cljs takes). Returns the
+     new content plus the replaced byte span for edit-position remapping. *)
+  let update_video_macro_width_in_content content ~name ~id ~occurrence
+      ~width : (string * int * int) option =
+    let result = ref None in
+    let seen = ref 0 in
+    each_video_macro content (fun mstart mend mname args ->
+        match mname = name, args with
+        | true, a :: _ when a = id ->
+            if !result = None && !seen = occurrence then begin
+              let new_args = set_video_width_argument args width in
+              let macro =
+                "{{" ^ name ^ " " ^ String.concat " " new_args ^ "}}"
+              in
+              result :=
+                Some
+                  ( String.sub content 0 mstart
+                    ^ macro
+                    ^ String.sub content mend
+                        (String.length content - mend)
+                  , mstart
+                  , mend )
+            end;
+            incr seen
+        | _ -> ());
+    !result
+
+  type drag =
+    { frame : D.el
+    ; uuid : string
+    ; name : string
+    ; id : string
+    ; occurrence : int
+    ; start_x : float
+    ; start_w : float
+    ; max_w : float
+    ; mutable cur_w : float
+    ; mutable moved : bool
+    }
+
+  let active : drag option ref = ref None
+
+  let same_el (a : D.el) (b : D.el) : bool =
+    a == b
+    ||
+    match (D.el_dom_id a, D.el_dom_id b) with
+    | Some x, Some y -> x = y
+    | _ -> false
+
+  (* index of [veb] among same (name, macro-id) embeds in its block —
+     cljs video-macro-dom-occurrence *)
+  let occurrence_of veb =
+    let name =
+      Option.value (D.el_get_attr veb "data-video-macro-name") ~default:""
+    and id =
+      Option.value (D.el_get_attr veb "data-video-macro-id") ~default:""
+    in
+    match D.el_closest veb ".ls-block, [blockid]" with
+    | None -> 0
+    | Some block_el ->
+        let embeds = D.el_query_all_arr block_el ".video-embed-block" in
+        let rec go i acc =
+          if i >= Array.length embeds then acc
+          else
+            let e = embeds.(i) in
+            if
+              D.el_get_attr e "data-video-macro-name" = Some name
+              && D.el_get_attr e "data-video-macro-id" = Some id
+            then if same_el e veb then acc else go (i + 1) (acc + 1)
+            else go (i + 1) acc
+        in
+        go 0 0
+
+  let commit (d : drag) =
+    let content =
+      match S.editing () with
+      | Some e when e.S.uuid = d.uuid -> e.S.buffer
+      | _ -> (
+          (* non-edit path: the raw title rides on the row's
+             data-block-title attr (blocks/tree.ml) *)
+          match D.el_closest d.frame ".ls-block, [blockid]" with
+          | Some block_el ->
+              Option.value
+                (D.el_get_attr block_el "data-block-title")
+                ~default:""
+          | None -> "")
+    in
+    if content = "" || d.uuid = "" then ()
+    else
+      match
+        update_video_macro_width_in_content content ~name:d.name ~id:d.id
+          ~occurrence:d.occurrence ~width:d.cur_w
+      with
+      | None -> ()
+      | Some (new_content, mstart, mend) ->
+          if new_content <> content then
+            (match S.editing () with
+             | Some e when e.S.uuid = d.uuid ->
+                 (* cljs remap-video-edit-position: positions inside
+                    the replaced macro clamp to its start; later
+                    positions shift by the length delta *)
+                 let delta =
+                   String.length new_content - String.length content
+                 in
+                 let remap pos =
+                   if pos <= mstart then pos
+                   else if pos <= mend then mstart
+                   else pos + delta
+                 in
+                 A.update_model d.uuid (fun m ->
+                     Edit_model.rebuild m new_content
+                       ~caret:(remap m.Edit_model.caret)
+                       ~anchor:(Option.map remap m.Edit_model.anchor)
+                       ~dirty:None);
+                 Outliner_ops.schedule_save d.uuid new_content
+             | _ -> ignore (Outliner_ops.save_block_parsed d.uuid new_content))
+
+  let on_mousedown ev =
+    if S.ready () then
+      match D.ev_target ev with
+      | Some t -> (
+          match D.closest_sel ".video-embed-resize-handle" (Some t) with
+          | None -> ()
+          | Some _handle -> (
+              match D.closest_sel ".video-embed-block" (Some t) with
+              | None -> ()
+              | Some veb -> (
+                  let uuid =
+                    Option.value
+                      (D.el_get_attr veb "data-block-uuid")
+                      ~default:""
+                  in
+                  let name =
+                    Option.value
+                      (D.el_get_attr veb "data-video-macro-name")
+                      ~default:""
+                  and id =
+                    Option.value
+                      (D.el_get_attr veb "data-video-macro-id")
+                      ~default:""
+                  in
+                  match uuid <> "", D.el_query veb ".video-embed-frame" with
+                  | true, Some frame ->
+                      let start_w =
+                        D.rect_width (D.el_bounding_rect frame)
+                      in
+                      let max_w =
+                        (* cljs video-embed-parent-width: the embed
+                           block's parent width *)
+                        match D.el_closest veb ".ls-block, [blockid]" with
+                        | Some block_el ->
+                            D.rect_width (D.el_bounding_rect block_el)
+                        | None -> start_w
+                      in
+                      D.ev_prevent_default ev;
+                      D.doc_add_class "is-resizing-video";
+                      active :=
+                        Some
+                          { frame
+                          ; uuid
+                          ; name
+                          ; id
+                          ; occurrence = occurrence_of veb
+                          ; start_x = D.ev_client_x ev
+                          ; start_w
+                          ; max_w
+                          ; cur_w = start_w
+                          ; moved = false
+                          }
+                  | _ -> ())))
+      | None -> ()
+
+  let on_mousemove ev =
+    match !active with
+    | None -> ()
+    | Some d ->
+        let dx = D.ev_client_x ev -. d.start_x in
+        let w =
+          Float.min d.max_w (Float.max min_width (d.start_w +. dx))
+        in
+        d.cur_w <- w;
+        d.moved <- true;
+        D.el_style_set_property d.frame "width"
+          (string_of_int (int_of_float w) ^ "px")
+
+  let end_drag () =
+    match !active with
+    | None -> ()
+    | Some d ->
+        active := None;
+        D.doc_rm_class "is-resizing-video";
+        if d.moved then commit d
+
+  (* cljs on-double-click: reset to the default width and commit *)
+  let on_dblclick ev =
+    if S.ready () then
+      match D.ev_target ev with
+      | Some t -> (
+          match D.closest_sel ".video-embed-resize-handle" (Some t) with
+          | None -> ()
+          | Some _ -> (
+              match D.closest_sel ".video-embed-block" (Some t) with
+              | None -> ()
+              | Some veb -> (
+                  match D.el_query veb ".video-embed-frame" with
+                  | None -> ()
+                  | Some frame ->
+                      let uuid =
+                        Option.value
+                          (D.el_get_attr veb "data-block-uuid")
+                          ~default:""
+                      in
+                      D.ev_prevent_default ev;
+                      D.el_style_set_property frame "width"
+                        (string_of_int (int_of_float default_width)
+                         ^ "px");
+                      commit
+                        { frame
+                        ; uuid
+                        ; name =
+                            Option.value
+                              (D.el_get_attr veb "data-video-macro-name")
+                              ~default:""
+                        ; id =
+                            Option.value
+                              (D.el_get_attr veb "data-video-macro-id")
+                              ~default:""
+                        ; occurrence = occurrence_of veb
+                        ; start_x = 0.
+                        ; start_w = default_width
+                        ; max_w = default_width
+                        ; cur_w = default_width
+                        ; moved = true
+                        })))
+      | None -> ()
+
+  let init () =
+    D.add_document_listener "mousedown" on_mousedown true;
+    D.add_document_listener "mousemove" on_mousemove true;
+    D.add_document_listener "mouseup" (fun _ -> end_drag ()) true;
+    (* no pointercancel channel on native — a click still ends the drag *)
+    D.add_document_listener "click" (fun _ -> end_drag ()) true;
+    D.add_document_listener "dblclick" on_dblclick true
+end
+
 let installed = State_cell.Once.make ()
 
 let install_once () =
@@ -1616,6 +1949,7 @@ let install_once () =
     D.add_document_listener "dragover" on_file_dragover true;
     D.add_document_listener "drop" on_file_drop true;
     Block_dnd.install ();
+    Video_resize.init ();
     (* pointer-driven range selection (cljs block/selection.cljs) *)
     D.add_document_listener "pointerdown"
       (fun ev ->

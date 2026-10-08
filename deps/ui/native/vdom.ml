@@ -108,21 +108,32 @@ let ref_json el =
 let node_of_dom_id (id : string) : int option =
   if id = "" then None
   else
-    List.fold_left
-      (fun acc el ->
-        match acc with
-        | Some _ -> acc
-        | None -> (
-            match
-              ( Dom_ext.str_prop "#ref" el
-              , Dom_ext.str_prop "ref-id" el
-              , Dom_ext.num_prop "node-id" el )
-            with
-            | Some r, _, Some n when r = id -> Some (int_of_float n)
-            | _, Some r, Some n when r = id -> Some (int_of_float n)
-            | _ -> None))
-      None
-      (!Dom_ext.doc_elements_provider ())
+    (* the host registers id-less elements under a node-<n> handle —
+       accept the literal before scanning snapshots *)
+    let literal =
+      if String.length id > 5 && String.sub id 0 5 = "node-" then
+        try Some (int_of_string (String.sub id 5 (String.length id - 5)))
+        with _ -> None
+      else None
+    in
+    match literal with
+    | Some n -> Some n
+    | None ->
+        List.fold_left
+          (fun acc el ->
+            match acc with
+            | Some _ -> acc
+            | None -> (
+                match
+                  ( Dom_ext.str_prop "#ref" el
+                  , Dom_ext.str_prop "ref-id" el
+                  , Dom_ext.num_prop "node-id" el )
+                with
+                | Some r, _, Some n when r = id -> Some (int_of_float n)
+                | _, Some r, Some n when r = id -> Some (int_of_float n)
+                | _ -> None))
+          None
+          (!Dom_ext.doc_elements_provider ())
 
 let node_of_el (el : el) : int option =
   match vrec_of_el el with

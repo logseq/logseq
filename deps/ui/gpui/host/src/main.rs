@@ -14,6 +14,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 mod editor;
+mod focus;
 mod logseq_ext;
 mod menu;
 
@@ -134,6 +135,17 @@ unsafe extern "C" fn wakeup_cb() {
 /// open-url, ui-state, …). Drained on the UI thread by `pump_tick`.
 static PENDING_REQUESTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
+/// Completed `http-get` replies — written by curl worker threads,
+/// drained on the UI thread by `pump_tick` into
+/// `lui_ocaml_platform_event` (same path the synchronous request
+/// replies take, one vsync of extra latency).
+static HTTP_RESULTS: Mutex<std::collections::VecDeque<String>> =
+    Mutex::new(std::collections::VecDeque::new());
+
+fn http_results() -> &'static Mutex<std::collections::VecDeque<String>> {
+    &HTTP_RESULTS
+}
+
 unsafe extern "C" fn platform_request_cb(data: *const c_char, length: c_int) {
     if data.is_null() || length <= 0 {
         return;
@@ -172,7 +184,8 @@ fn handle_platform_request(
                 // dom-op handler. The live window is passed down: during
                 // this frame callback `cx.windows()` handles cannot be
                 // re-entered, so ops needing a Window must use this one.
-                let replies = editor::handle_dom_op(op, body, shared, window, cx)
+                let replies = focus::handle_dom_op(op, body, shared, window, cx)
+                    .or_else(|| editor::handle_dom_op(op, body, shared, window, cx))
                     .unwrap_or_else(|| {
                         lui_gpui::domops::handle_dom_op(shared, op, body, window, cx)
                     });
@@ -211,6 +224,55 @@ fn handle_platform_request(
             };
         }
         "open-url" => cx.open_url(payload),
+        "http-get" => {
+            // OCaml Fetch routes every http(s) request here — the host
+            // owns TLS via curl in a worker thread; replies land in
+            // HTTP_RESULTS and pump_tick emits them as "http-get"
+            // platform events {id,status,body}.
+            if let Ok(req) =
+                serde_json::from_str::<serde_json::Value>(payload)
+            {
+                let id = req.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+                if let Some(url) = req.get("url").and_then(|v| v.as_str()) {
+                    let url = url.to_owned();
+                    std::thread::spawn(move || {
+                        let out = std::process::Command::new("curl")
+                            .args([
+                                "-sS",
+                                "-L",
+                                "--max-time",
+                                "20",
+                                "-w",
+                                "\u{1f}{%{http_code}}",
+                                &url,
+                            ])
+                            .output();
+                        let (status, body) = match out {
+                            Ok(o) => {
+                                let raw = String::from_utf8_lossy(&o.stdout);
+                                match raw.rfind('\u{1f}') {
+                                    Some(i) => (
+                                        raw[i + 1..]
+                                            .trim()
+                                            .parse::<u32>()
+                                            .unwrap_or(0),
+                                        raw[..i].to_string(),
+                                    ),
+                                    None => (0, String::new()),
+                                }
+                            }
+                            Err(_) => (0, String::new()),
+                        };
+                        let reply = serde_json::json!({
+                            "id": id, "status": status, "body": body,
+                        });
+                        if let Ok(mut q) = http_results().lock() {
+                            q.push_back(format!("http-get\n{}", reply));
+                        }
+                    });
+                }
+            }
+        }
         "ui-state" => {
             // {"lang","root-classes","body-classes","data":{"theme":..}}
             // — the host-facing bit is the app-chosen light/dark mode:
@@ -337,7 +399,25 @@ fn pump_tick(shared: &Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui
     push_window_env(window);
     drain_patches(shared, cx);
     drain_requests(shared, window, cx);
+    {
+        let mut drained = Vec::new();
+        if let Ok(mut q) = HTTP_RESULTS.lock() {
+            while let Some(reply) = q.pop_front() {
+                drained.push(reply);
+            }
+        }
+        for reply in drained {
+            unsafe {
+                lui_ocaml_platform_event(
+                    reply.as_ptr().cast::<c_char>(),
+                    reply.len() as c_int,
+                )
+            };
+        }
+    }
     editor::reconcile_stale_focus(shared, window, cx);
+    focus::flush_pending(shared, window, cx);
+    focus::reconcile(shared, window, cx);
     push_window_size(window);
     lui_gpui::dom::fire_viewport_events(shared, window, cx);
     // Imperative overlay bounds feed — OCaml's imperative_dom reads

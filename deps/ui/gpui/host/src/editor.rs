@@ -288,8 +288,11 @@ fn offset_in_run(
     window: &mut Window,
 ) -> i64 {
     match run.tag {
-        // Pads hit the line-end offset; pill interiors expand.
+        // Pads hit the line-end offset; pill interiors expand;
+        // marked (IME composition) text is zero-width in model coords —
+        // a click anywhere inside it lands on the composition start.
         b'z' => run.lo,
+        b'c' => run.lo,
         b'a' => run.lo + 1,
         _ => {
             let text = run_text(&shared.borrow().store, run.node);

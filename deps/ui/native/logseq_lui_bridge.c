@@ -144,6 +144,29 @@ LUI_EXPORT int32_t lui_ocaml_press(int64_t node) {
   return dispatch_long("lui_ocaml_press", node);
 }
 
+/* Press carrying the host's modifier state at tap time. `modifiers` is a
+   bitmask: 1=ctrl, 2=shift, 4=command/meta, 8=secondary (right click).
+   Falls back to the plain press callback when the OCaml side registers
+   no modifier-aware handler — mirrors upstream
+   platform/native/lui_ocaml_bridge.c. */
+LUI_EXPORT int32_t lui_ocaml_press_ex(int64_t node, int32_t modifiers) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_press_ex");
+  if (dispatch != NULL) {
+    result = emit_patch("lui_ocaml_press_ex",
+                        caml_callback2_exn(*dispatch, Val_long(node),
+                                           Val_long(modifiers)));
+  } else {
+    dispatch = caml_named_value("lui_ocaml_press");
+    if (dispatch != NULL)
+      result = emit_patch("lui_ocaml_press",
+                          caml_callback_exn(*dispatch, Val_long(node)));
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
 LUI_EXPORT int32_t lui_ocaml_long_press(int64_t node) {
   return dispatch_long("lui_ocaml_long_press", node);
 }
@@ -169,6 +192,32 @@ static int dispatch_string(const char *name, int64_t node,
 LUI_EXPORT int32_t lui_ocaml_text_changed(int64_t node,
                                           const char *text) {
   return dispatch_string("lui_ocaml_text_changed", node, text);
+}
+
+/* Bounded-copy variant of dispatch_string: lui-gpui's *_utf8 entries pass
+   (ptr, len) pairs that are not NUL-terminated. */
+static int dispatch_bytes(const char *name, int64_t node, const char *data,
+                          int32_t length) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value(name);
+  if (dispatch != NULL && data != NULL) {
+    CAMLparam0();
+    CAMLlocal2(text_value, callback_result);
+    text_value = copy_bytes(data, length);
+    callback_result =
+        caml_callback2_exn(*dispatch, Val_long(node), text_value);
+    result = emit_patch(name, callback_result);
+    CAMLdrop;
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
+LUI_EXPORT int32_t lui_ocaml_text_changed_utf8(int64_t node,
+                                               const char *text,
+                                               int32_t length) {
+  return dispatch_bytes("lui_ocaml_text_changed", node, text, length);
 }
 
 LUI_EXPORT int32_t lui_ocaml_submit(int64_t node) {
@@ -296,6 +345,11 @@ LUI_EXPORT int32_t lui_ocaml_picked(int64_t node, const char *payload) {
   return dispatch_string("lui_ocaml_picked", node, payload);
 }
 
+LUI_EXPORT int32_t lui_ocaml_picked_utf8(int64_t node, const char *payload,
+                                         int32_t length) {
+  return dispatch_bytes("lui_ocaml_picked", node, payload, length);
+}
+
 static int dispatch_three_strings(const char *name, int64_t node,
                                   const char *a, const char *b) {
   int result = 0;
@@ -327,6 +381,35 @@ LUI_EXPORT int32_t lui_ocaml_extension_event(int64_t node,
                                 values);
 }
 
+/* Bounded-copy variant used by lui-gpui — its (ptr, len) strings are not
+   NUL-terminated. Mirrors upstream lui_ocaml_extension_event_utf8. */
+LUI_EXPORT int32_t lui_ocaml_extension_event_utf8(
+    int64_t node, const char *identifier, int32_t identifier_len,
+    const char *name, int32_t name_len, const char *values,
+    int32_t values_len) {
+  int result = 0;
+  if (identifier == NULL || name == NULL || identifier_len < 0 ||
+      name_len < 0)
+    return 0;
+  (void)identifier;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_extension_event");
+  if (dispatch != NULL) {
+    CAMLparam0();
+    CAMLlocal3(name_value, values_value, callback_result);
+    name_value = copy_bytes(name, name_len);
+    values_value =
+        copy_bytes(values != NULL ? values : "",
+                   values != NULL && values_len >= 0 ? values_len : 0);
+    callback_result = caml_callback3_exn(*dispatch, Val_long(node),
+                                         name_value, values_value);
+    result = emit_patch("lui_ocaml_extension_event", callback_result);
+    CAMLdrop;
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
 LUI_EXPORT int32_t lui_ocaml_pump(void) {
   int result = 0;
   caml_leave_blocking_section();
@@ -352,6 +435,20 @@ LUI_EXPORT int32_t lui_ocaml_platform_event(const char *data,
     result = 1;
     CAMLdrop;
   }
+  caml_enter_blocking_section();
+  return result;
+}
+
+/* Host recovery: the OCaml callback returns a full-tree batch at the
+   runtime's current generation; the host clears its mirror and applies
+   it. Mirrors upstream lui_ocaml_resync. */
+LUI_EXPORT int32_t lui_ocaml_resync(void) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *resync = caml_named_value("lui_ocaml_resync");
+  if (resync != NULL)
+    result = emit_patch("lui_ocaml_resync",
+                        caml_callback_exn(*resync, Val_unit));
   caml_enter_blocking_section();
   return result;
 }

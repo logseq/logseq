@@ -88,6 +88,15 @@ let clipboard_write (s : string) = !host_op "clipboard" s
 let clipboard_read () = !host_op "clipboard-read" ""
 let dom_op (name : string) (payload : string) = !host_op "dom-op" (name ^ "\n" ^ payload)
 
+(* http GET with an id-tagged reply — the host owns TLS (gpui: curl in
+   a worker thread); replies arrive as "http-get" platform events *)
+let http_get (id : int) (url : string) =
+  !host_op "http-get"
+    (Js.Json.stringify
+       (Js.Json.object_list
+          [ ("id", Js.Json.JNumber (float_of_int id))
+          ; ("url", Js.Json.JString url) ]))
+
 (* appearance: Swift pushes it via platform_event "appearance" *)
 let dark_ref = ref false
 

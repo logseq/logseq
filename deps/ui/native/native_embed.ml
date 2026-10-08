@@ -697,6 +697,7 @@ let platform_event payload =
                  Js.Json.decodeString
               |> Option.value ~default:"")
         | _ -> Platform.note_clipboard_text "")
+      else if name = "http-get" then Fetch.note_http_result json
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 
@@ -715,6 +716,15 @@ let root_node () =
   match !current_app with
   | Some app -> Lui_app.root_node app
   | None -> 0
+
+(* Full-tree batch for a host that rejected a delta and rolled its mirror
+   back — the string travels out through the patch callback. *)
+let resync () =
+  match !current_app with
+  | Some app ->
+      Lui_wire.encode_batch
+        (Lui_runtime.resync_batch (Lui_app.runtime app))
+  | None -> ""
 
 let () =
   Callback.register "lui_ocaml_init" initialize;
@@ -741,4 +751,5 @@ let () =
   Callback.register "lui_ocaml_pump" pump;
   Callback.register "lui_ocaml_platform_event" platform_event;
   Callback.register "lui_ocaml_dispose" dispose;
-  Callback.register "lui_ocaml_root_node" root_node
+  Callback.register "lui_ocaml_root_node" root_node;
+  Callback.register "lui_ocaml_resync" resync

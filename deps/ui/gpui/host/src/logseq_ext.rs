@@ -316,6 +316,14 @@ fn register_class_styles() {
         "pointer-events-none",
     );
     class("cp__cmdk-dismiss", "position:absolute;inset:0", "pointer-events-auto");
+    // cljs lui-core.css: shell is a positioned inline-flex so the
+    // resize handle can anchor to its right edge
+    class("video-embed-shell", "position:relative;display:flex", "");
+    class(
+        "video-embed-resize-handle",
+        "position:absolute;top:0;right:0;bottom:0;width:8px",
+        "",
+    );
     class(
         "ui__dialog-overlay",
         "position:absolute;inset:0;display:flex;flex-direction:column;\
@@ -851,6 +859,9 @@ fn register_class_styles() {
         "cursor-pointer",
     );
     class("ed-raw", "background:var(--ls-tertiary-background-color)", "");
+    // IME marked text — the underline is what the platform draws inside
+    // a real text field during composition.
+    class("ed-comp", "text-decoration:underline", "");
     class("ed-overlay", "position:absolute;inset:0", "pointer-events-none");
     class("ed-pos", "position:absolute;left:0;top:0", "");
     class(

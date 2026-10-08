@@ -214,9 +214,10 @@ type t =
   ; units : units             (* what offsets count — see above *)
   ; caret : int               (* focus end; unit offset, codepoint-aligned *)
   ; anchor : int option       (* selection anchor; None = collapsed *)
-  ; composition : (int * int) option
-      (* IME marked range. Contract: composing text is NOT in [source];
-         (start, stop) tracks where the marked text would sit so the
+  ; composition : (int * int * string) option
+      (* IME marked range + marked text. Contract: composing text is
+         NOT in [source]; (start, stop, text) tracks where the marked
+         text would sit so the view can draw the composition underline.
          view can underline it. Cleared on commit/cancel and on any
          buffer mutation. *)
   ; lines : (int * int) list
@@ -492,16 +493,18 @@ let composition_begin m off =
     | Some (lo, hi) -> (splice m lo hi "", lo)
     | None -> (m, clamp_caret m.units m.source off)
   in
-  { m with composition = Some (off, off); caret = off; anchor = None }
+  { m with composition = Some (off, off, ""); caret = off; anchor = None }
 
-let composition_update m ~len =
+let composition_update m ~text =
   match m.composition with
-  | Some (start, _) -> { m with composition = Some (start, start + len) }
+  | Some (start, _, _) ->
+      { m with
+        composition = Some (start, start + String.length text, text) }
   | None -> m
 
 let composition_commit m text =
   match m.composition with
-  | Some (start, _) -> splice m start start text
+  | Some (start, _, _) -> splice m start start text
   | None -> insert_text m text
 
 let composition_cancel m = { m with composition = None }
