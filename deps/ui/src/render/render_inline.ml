@@ -325,6 +325,17 @@ let image_el ~src ~alt =
           ; ("referrerpolicy", "no-referrer") ]
         [] ]
 
+(* cljs asset-link pdf branch: a ![alt](x.pdf) embed renders
+   a.asset-ref.is-pdf whose click opens the in-app pdf viewer — an
+   <img> cannot show a pdf. The opener is registered by the pdf
+   extension at boot (Pdf.install): render_inline sits below the
+   extension layer in the dep graph *)
+let pdf_link_press : (src:string -> unit) ref = ref (fun ~src:_ -> ())
+
+let pdf_link_el ~src ~alt : t =
+  Ui_parts.pressable ~on_press:(fun _ -> !pdf_link_press ~src)
+    (text ~style_class:"asset-ref is-pdf" ~value:alt [])
+
 (* inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/<sub>/<sup>/
    <strong>/<kbd> styling comes from element-selector CSS
    (:not(pre) > code, mark {…}) — ~as_ retags the text kind *)
@@ -1514,7 +1525,14 @@ and try_image s i =
         | k when k > j + 2 ->
             let alt = String.sub s (i + 2) (j - i - 2) in
             let src = String.sub s (j + 2) (k - j - 2) in
-            Some (image_el ~src ~alt, k + 1 - i, Rs_atomic (alt, "ed-image"))
+            let el =
+              if
+                Str_util.ends_with
+                  (String.lowercase_ascii src) ".pdf"
+              then pdf_link_el ~src ~alt
+              else image_el ~src ~alt
+            in
+            Some (el, k + 1 - i, Rs_atomic (alt, "ed-image"))
         | _ -> None)
     | _ -> None
   else None

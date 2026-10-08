@@ -137,6 +137,18 @@ let open_pdf_file ~(original_path : string) ~(href : string)
   | None ->
       Platform.console_error ("pdf inflate failed", original_path)
 
+(* cljs asset-link pdf branch — ![alt](x.pdf) embeds in plain block text
+   carry no asset entity (:asset-block config = nil), so the pdf record
+   opens with no block identity *)
+let open_pdf_link ~original_path ~href =
+  match
+    inflate_asset ~original_path ~href ~block_uuid:None ~block_db_id:None
+      ~block_external_url:None
+  with
+  | Some asset -> Pdf_state.set_current (Some asset)
+  | None ->
+      Platform.console_error ("pdf inflate failed", original_path)
+
 (* ---------- hl <-> wire ---------- *)
 
 let sc_rect_wire (r : Model.hl_rect) : W.t =
