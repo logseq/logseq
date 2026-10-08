@@ -181,6 +181,13 @@ pub fn register(shared: &Shared) {
         "padding-left:45px",
         "",
     );
+    // .block-children { border-left:1px solid --ls-guideline-color } —
+    // the vertical indent/thread guide through nested children.
+    lui_gpui::style::register_class_style(
+        "block-children",
+        "border-left:1px solid var(--lx-gray-04-alpha, var(--ls-guideline-color))",
+        "",
+    );
     // .ls-block .ls-properties-area.ls-block-properties { margin-top:2px;
     //   margin-left:7px }
     lui_gpui::style::register_class_style(
