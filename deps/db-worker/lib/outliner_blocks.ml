@@ -74,10 +74,8 @@ let sort_page_random_blocks (_db : db) (blocks : entity list) : entity list =
   List.stable_sort
     (fun (p1, _) (p2, _) -> compare_order_paths p1 p2)
     with_paths
-  |> List.fold_left
-       (fun acc (_, b) ->
-          if List.exists (fun x -> x.id = b.id) acc then acc else acc @ [ b ])
-       []
+  |> Common_util.distinct_by (fun (_, b) -> b.id)
+  |> List.map snd
 
 (* db.cljs last-child-block? *)
 let rec last_child_block db (parent_id : entity_id) (child_id : entity_id) : bool =
@@ -115,12 +113,12 @@ let get_non_consecutive_blocks db (blocks : entity list) : entity list =
   let rec go acc = function
     | b1 :: (b2 :: _ as rest) ->
         let acc =
-          if not (consecutive_block db b1 b2) then acc @ [ b1 ] else acc
+          if not (consecutive_block db b1 b2) then b1 :: acc else acc
         in
         go acc rest
     | _ -> acc
   in
-  go [] blocks
+  List.rev (go [] blocks)
 
 (* outliner-core/delete-covers-selected-ancestor? — a selected ancestor
    covers a block for delete when it is the direct parent (a page parent

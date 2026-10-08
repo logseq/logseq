@@ -576,17 +576,13 @@ type db_result =
 let validate_db_result (db : db) : db_result =
   let r = Db_validate.validate_db db in
   let ids =
-    List.fold_left
-      (fun acc (ge : Db_validate.grouped_error) ->
+    r.errors
+    |> List.filter_map (fun (ge : Db_validate.grouped_error) ->
         match Malli.map_get "db/id" ge.ge_entity with
-        | Some (Ref id) ->
-            if List.mem id acc then acc else acc @ [ id ]
-        | Some (Int64 id) -> (
-            match Datascript.Util.int64_to_int id with
-            | Some id -> if List.mem id acc then acc else acc @ [ id ]
-            | None -> acc)
-        | _ -> acc)
-      [] r.errors
+        | Some (Ref id) -> Some id
+        | Some (Int64 id) -> Datascript.Util.int64_to_int id
+        | _ -> None)
+    |> Common_util.distinct_by Fun.id
   in
   { dr_errors = r.errors
   ; dr_datom_count = r.datom_count

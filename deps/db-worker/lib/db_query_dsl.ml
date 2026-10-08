@@ -82,10 +82,20 @@ let rec form_equal a b =
            x y
   | _ -> false
 
-let distinct_preserve_order xs =
-  List.fold_left
-    (fun acc x -> if List.exists (form_equal x) acc then acc else acc @ [ x ])
-    [] xs
+(* Canonical form for dedup: cljs `distinct` compares with sequential
+   equality (vectors and lists equal, set members unordered), which a
+   plain structural key would miss. *)
+let rec canon_form = function
+  | QueryFormVector xs | QueryFormList xs ->
+      QueryFormList (List.map canon_form xs)
+  | QueryFormSet xs ->
+      QueryFormSet (List.sort_uniq compare (List.map canon_form xs))
+  | QueryFormMap kvs ->
+      QueryFormMap (List.map (fun (k, v) -> (canon_form k, canon_form v)) kvs)
+  | QueryFormTagged (t, x) -> QueryFormTagged (t, canon_form x)
+  | x -> x
+
+let distinct_preserve_order xs = Common_util.distinct_by canon_form xs
 
 (* cljs flatten — recursively yield non-coll leaves (maps flatten to their
    k/v pairs). *)
@@ -451,7 +461,7 @@ let find_rules_in_where (where : query_form list) (valid : string list) : string
   |> List.filter_map (function
          | QueryFormSymbol s when List.mem s valid -> Some s
          | _ -> None)
-  |> List.fold_left (fun acc x -> if List.mem x acc then acc else acc @ [ x ]) []
+  |> Common_util.distinct_by Fun.id
 
 (* query-vec->map — ordered assoc map: key = section keyword name (or ""
    for the leading group), value = that section's forms. *)
@@ -1462,9 +1472,7 @@ and build_and_or_not (env : env) (level : int) (e : query_form) (fe : string)
       Some
         { bquery = query;
           brules =
-            List.fold_left
-              (fun acc x -> if List.mem x acc then acc else acc @ [ x ])
-              []
+            Common_util.distinct_by Fun.id
               (List.concat_map (fun b -> b.brules) raw_clauses) }
 
 (* ============ parse ============ *)
