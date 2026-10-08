@@ -127,7 +127,7 @@ let theme_item ~st mode label =
            (fun active ->
              "mode-" ^ mode
              ^ (if active = mode then " mode-active" else "")
-             ^ (if Platform.local_storage_get "radix-color" <> None
+             ^ (if Ui_services.storage_get "radix-color" <> None
                 then " radix"
                 else ""))
            (box ~key:("tmi-" ^ mode) ~width:92 [])
