@@ -572,13 +572,17 @@ fn register_class_styles() {
         "",
     );
     // ---- page/main-content column (lui-core.css .cp__sidebar-main-content
-    // + .cp__content-wrap) — without the max-width + auto inline margins
-    // the page column bleeds full-width and the -20px .ls-page-blocks
-    // gutter clips text at the window edge.
+    // + .cp__content-wrap) — without the max-width the page column bleeds
+    // full-width and the -20px .ls-page-blocks gutter clips text at the
+    // window edge. Centering comes from the OCaml chrome's
+    // `row ~main:`center` wrapper (native/chrome.ml main_content) — do
+    // NOT add margin-*:auto here: taffy hands every auto margin on the
+    // main axis the full free space, so margin-left:auto would push the
+    // column hard right and the row's justify-center then has nothing
+    // left to distribute.
     class(
         "cp__sidebar-main-content",
-        "width:100%;max-width:var(--ls-main-content-max-width,960px);\
-         margin-left:auto;margin-right:auto;flex-grow:1",
+        "width:100%;max-width:var(--ls-main-content-max-width,960px);flex-grow:1",
         "",
     );
     // .cp__content-wrap { margin:0 auto; width:100%; padding-bottom:6rem }
@@ -839,6 +843,14 @@ fn register_class_styles() {
     // the web overlay covers.
     class("ls-page-title-actions", "", "");
     class("control-hide", "display:none", "");
+    // .ls-page-title-container — lui-core.css: the page title renders at
+    // 32px/500 (var(--ls-page-title-size)); the generic `title` utility
+    // on the outer logseq-div only reaches text_xl+semibold.
+    class(
+        "ls-page-title-container",
+        "font-size:32px;font-weight:500;color:var(--lx-gray-12, var(--ls-title-text-color))",
+        "",
+    );
 
     // ---- shared-OCaml block editor (resources/css/lui-core.css .ed-*) ----
     // The overlay paints the selection rects and caret bar over the
