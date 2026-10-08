@@ -404,6 +404,23 @@ let on_current_change (asset : Model.pdf_asset option) : unit =
 
 let install () : unit =
   S.open_request := on_current_change;
+  (* ![alt](x.pdf) embeds in block text: resolve the pfs asset to an
+     object URL, then open it in this viewer *)
+  Render_inline.pdf_link_press :=
+    (fun ~src ->
+      let name =
+        match Str_util.index_of "/assets/" src with
+        | Some i -> String.sub src (i + 8) (String.length src - i - 8)
+        | None -> src
+      in
+      ignore
+        ((let* url =
+            Asset_store.object_url ~repo:(Runtime.repo ()) ~name
+              ~mime:"application/pdf"
+          in
+          Pdf_assets.open_pdf_link ~original_path:src ~href:url;
+          Js.Promise.resolve ())
+         |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())));
   S.create_today_journal :=
     (fun () ->
       let* _ = Graph.create_today_journal (Runtime.repo ()) in

@@ -2934,8 +2934,7 @@ div[data-keep-selection].menu-links-wrapper {
    no fixed column (stretches full-width in the below-md column layout) */
 .cp__settings-inner > .settings-aside,
 .cp__settings-inner aside {
-  background: var(--lx-gray-03-alpha,
-      var(--ls-secondary-background-color, hsl(var(--muted))));
+  background: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha));
   padding: 1rem;
 }
 
@@ -3072,26 +3071,12 @@ div[data-keep-selection].menu-links-wrapper {
   background: rgb(0 0 0 / 0.1);
 }
 
-.dark .settings-menu-item.lui-list-item.active,
-.dark .settings-menu-item.lui-list-item.active[data-selected],
-.dark .settings-menu-item.lui-list-item.active[data-selected]:hover {
-  background: rgb(255 255 255 / 0.08);
-}
-
 .settings-menu-item:hover {
   background: rgb(0 0 0 / 0.1);
 }
 
 .settings-menu-item.lui-list-item:hover {
   background: rgb(0 0 0 / 0.1);
-}
-
-.dark .settings-menu-item:hover {
-  background: rgb(255 255 255 / 0.08);
-}
-
-.dark .settings-menu-item.lui-list-item:hover {
-  background: rgb(255 255 255 / 0.08);
 }
 
 .settings-menu-item.active {
@@ -6116,7 +6101,7 @@ select.form-select {
   display: flex;
   align-items: center;
   margin: 0.5rem;
-  background-color: var(--lx-gray-06, var(--ls-page-inline-code-bg-color));
+  background-color: var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)));
   height: 68px;
   width: 100%;
   opacity: 0.8;

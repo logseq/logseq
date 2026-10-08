@@ -1295,37 +1295,42 @@ let render_list inst s : t =
                ~body:(list_stream inst g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
-      (* cljs list-view partitions: a plain breadcrumb header
-         (.ml-6.text-sm.opacity-70) above each parent group's rows —
-         no foldable caret. The groups wrapper draws master's
-         .border-t.pt-2.gap-2 above the partition list *)
+      (* cljs renders each partition as a foldable whose title carries
+         the page-ref link (caret + page name); the groups wrapper draws
+         master's .border-t.pt-2.gap-2 above the partition list *)
       box ~style_class:"ls-view-groups"
-        (List.concat_map
-           (fun g ->
-             List.mapi
-               (fun j (buuid, rows) ->
-                 (* cljs partition header = breadcrumb of the first row
-                    block with show-page? false — the parent chain minus
-                    the block itself, i.e. its containing page name *)
-                 let pname =
-                   match rows with
-                   | u :: _ -> (
-                       match Hashtbl.find_opt s.V.blocks u with
-                       | Some blk ->
-                           Option.value
-                             (Decode.block_of_wire blk).Model.block_page_name
-                             ~default:(row_title s buuid)
-                       | None -> row_title s buuid)
-                   | [] -> row_title s buuid
-                 in
-                 box ~key:("part-" ^ string_of_int j)
-                   [ box ~style_class:"ls-view-partition-title"
-                       [ link ~url:("#/page/" ^ Platform.encode_uri_component pname)
+        (List.concat
+           (List.mapi
+              (fun i g ->
+                List.mapi
+                  (fun j (buuid, rows) ->
+                    (* partition header = breadcrumb of the first row
+                       block with show-page? false — the parent chain
+                       minus the block itself, i.e. its containing page
+                       name *)
+                    let pname =
+                      match rows with
+                      | u :: _ -> (
+                          match Hashtbl.find_opt s.V.blocks u with
+                          | Some blk ->
+                              Option.value
+                                (Decode.block_of_wire blk).Model.block_page_name
+                                ~default:(row_title s buuid)
+                          | None -> row_title s buuid)
+                      | [] -> row_title s buuid
+                    in
+                    foldable inst
+                      ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
+                      ~title:
+                        (link
+                           ~url:
+                             ("#/page/"
+                              ^ Platform.encode_uri_component pname)
                            ~target:`self_ ~style_class:"page-ref"
-                           ~text:pname [] ]
-                   ; list_stream inst rows ])
-               g.Wr.glparts)
-           gs)
+                           ~text:pname [])
+                      ~body:(list_stream inst rows))
+                  g.Wr.glparts)
+              gs))
   | _ -> list_stream inst (all_row_uuids s)
 
 let render_gallery inst _s : t =
