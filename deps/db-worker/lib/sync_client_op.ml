@@ -276,7 +276,9 @@ type local_tx_entry =
 
 let int_to_bool i = i <> 0
 
-let row_to_pending_local_tx (r : Sqlite.row) : local_tx_entry option =
+(* A kind='tx' row with NULL tx_id is corruption — get_pending_local_tx_count
+   counts it while a silent drop would leave a phantom-pending entry. *)
+let row_to_pending_local_tx (r : Sqlite.row) : local_tx_entry =
   match col_text_opt r 0 with
   | Some tx_id ->
       let ops i =
@@ -284,18 +286,17 @@ let row_to_pending_local_tx (r : Sqlite.row) : local_tx_entry option =
         | Some s -> normalize_op_entries (read_transit s)
         | None -> []
       in
-      Some
-        { tx_id
-        ; outliner_op = col_text_opt r 1
-        ; undo_redo = col_text_opt r 2
-        ; forward_outliner_ops = ops 3
-        ; inverse_outliner_ops = ops 4
-        ; inferred_outliner_ops = int_to_bool (col_int r 5)
-        ; tx = (match col_text_opt r 6 with Some s -> read_transit s | None -> Wire.Array [])
-        ; reversed_tx =
-            (match col_text_opt r 7 with Some s -> read_transit s | None -> Wire.Array [])
-        }
-  | None -> None
+      { tx_id
+      ; outliner_op = col_text_opt r 1
+      ; undo_redo = col_text_opt r 2
+      ; forward_outliner_ops = ops 3
+      ; inverse_outliner_ops = ops 4
+      ; inferred_outliner_ops = int_to_bool (col_int r 5)
+      ; tx = (match col_text_opt r 6 with Some s -> read_transit s | None -> Wire.Array [])
+      ; reversed_tx =
+          (match col_text_opt r 7 with Some s -> read_transit s | None -> Wire.Array [])
+      }
+  | None -> invalid_arg "client_ops tx row missing tx_id"
 
 let pending_tx_select =
   "select tx_id, outliner_op, undo_redo, forward_outliner_ops, inverse_outliner_ops, inferred_outliner_ops, normalized_tx_data, reversed_tx_data from client_ops where kind = 'tx'"
@@ -371,7 +372,7 @@ let get_local_tx_entry repo (tx_id : string) : local_tx_entry option =
         (pending_tx_select ^ " and tx_id = ? limit 1")
         [ text tx_id ]
     with
-    | Some r -> row_to_pending_local_tx r
+    | Some r -> Some (row_to_pending_local_tx r)
     | None -> None
 
 let get_pending_local_txs repo ?(limit : int option) () : local_tx_entry list =
@@ -382,7 +383,7 @@ let get_pending_local_txs repo ?(limit : int option) () : local_tx_entry list =
   in
   let params = match limit with Some n -> [ int n ] | None -> [] in
   rows (store repo) sql params
-  |> List.filter_map row_to_pending_local_tx
+  |> List.map row_to_pending_local_tx
 
 (* rows whose forward datoms may still be persisted on the conn under
    the old single-conn model: pending (awaiting server) and failed
@@ -395,7 +396,7 @@ let get_unconfirmed_local_txs repo : local_tx_entry list =
     (pending_tx_select
      ^ " and (pending = 1 or failed = 1) order by created_at asc, id asc")
     []
-  |> List.filter_map row_to_pending_local_tx
+  |> List.map row_to_pending_local_tx
 
 (* lean variant for the un-apply pass: only the columns it reads —
    skips the per-row transit decode of the outliner-op blobs *)
@@ -412,21 +413,23 @@ let get_unconfirmed_tx_data repo : unconfirmed_tx_row list =
      ^ " where kind = 'tx' and (pending = 1 or failed = 1)"
      ^ " order by created_at asc, id asc")
     []
-  |> List.filter_map (fun r ->
+  |> List.map (fun r ->
          match col_text_opt r 0 with
          | Some tx_id ->
-             Some
-               { un_tx_id = tx_id
-               ; un_failed = int_to_bool (col_int r 1)
-               ; un_normalized_tx_data = col_text_opt r 2
-               ; un_reversed_tx_data = col_text_opt r 3 }
-         | None -> None)
+             { un_tx_id = tx_id
+             ; un_failed = int_to_bool (col_int r 1)
+             ; un_normalized_tx_data = col_text_opt r 2
+             ; un_reversed_tx_data = col_text_opt r 3 }
+         | None -> invalid_arg "client_ops tx row missing tx_id")
 
 let get_pending_local_tx_ids repo : string list =
   rows (store repo)
     "select tx_id from client_ops where kind = 'tx' and pending = 1 order by created_at asc, id asc"
     []
-  |> List.filter_map (fun r -> col_text_opt r 0)
+  |> List.map (fun r ->
+         match col_text_opt r 0 with
+         | Some tx_id -> tx_id
+         | None -> invalid_arg "client_ops tx row missing tx_id")
 
 (* queue-ordered pending rows for a known id set — confirm/reject paths
    only need the rows the server named, not a decode of the whole queue *)
@@ -455,7 +458,7 @@ let get_pending_local_txs_in repo (tx_ids : string list) : local_tx_entry list =
               ^ " and pending = 1 and tx_id in (" ^ ph
               ^ ") order by created_at asc, id asc")
              (List.map text ids)
-           |> List.filter_map row_to_pending_local_tx)
+           |> List.map row_to_pending_local_tx)
     (chunks [] tx_ids)
 
 (* ---- sync_conflicts ---- *)
