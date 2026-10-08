@@ -100,7 +100,7 @@ dictionary — the title now matches the web's metrics.
 
 ### F2 — residual layout divergence vs web (>1%, documented exception)
 
-With palette, centering and title fixed, gpui-vs-web sits at ~2.3% —
+With palette, centering and title fixed, gpui-vs-web sits at ~2.3% (light 2.30%, dark 2.34% on scene 01) —
 just above the web-vs-master baseline (2.0–2.4% light). Diff heatmaps
 localize the remainder to:
 - **Property rows** — FIXED. Two stacked causes: (1) the `native/`
