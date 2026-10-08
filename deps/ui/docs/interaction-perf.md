@@ -152,9 +152,9 @@ Results (median, 200-block BenchBig in rtc-test):
 Total CPU is unchanged (~435ms of emit spread over ~12 tasks), but no
 single task exceeds ~60ms and the page paints + accepts input after
 the first chunk. `send:navigate-to` (old-page teardown + shell +
-first chunk, ~3.9K ops) measures 56–80ms across runs — the remaining
-single-emit outlier; shrinking it needs subtree-level detach ops in
-`Lui_runtime`, not done here.
+first chunk, ~3.9K ops) measured 56–80ms across runs — the remaining
+single-emit outlier at the time; Round 4's detach-subtree op cut it
+to ~15–27ms.
 
 Outliner ops after both changes (median of 5, rtc-test): click-to-edit
 18.3, type-char 3.5, enter-new-block 30.2, escape 6.1, indent 5.3*,
@@ -164,9 +164,9 @@ already-indented block and emits nothing.)
 
 ## What is still slow (evidence)
 
-- **`send:navigate-to` teardown emit** (~3.9K ops, 56–80ms): the
-  old-page unmount + shell emit is still a single pass. Needs
-  subtree-level detach ops at the `Lui_runtime` layer to bound it.
+- **`send:navigate-to` teardown emit** (~3.9K ops, 56–80ms →
+  ~17ms): fixed in Round 4 by a subtree-level detach op at the
+  `Lui_runtime` layer.
 - **Worker tail after nav/edit** (~180–340ms off the measured path):
   unlinked-refs fetch (`favorited-page?`/`get-recent-pages`/`get-blocks`)
   and the post-edit `Page_loaded` double-fire (optimistic + authoritative
@@ -234,7 +234,37 @@ Results (median, same fixture):
 | per-chunk flush        | ~41–53   | ~7–17    |
 | first content flush    | ~66–68   | ~10      |
 
-Still open: `send:navigate-to` teardown (~5K ops, ~88ms) still needs
-the subtree-detach op in `Lui_runtime` + every backend's store (web
-store currently rejects drops on non-leaf/attached nodes). cmdk-pick
-(134ms) is the same teardown shape.
+Still open at end of round 3: `send:navigate-to` teardown (~5K ops,
+~88ms) still needed the subtree-detach op in `Lui_runtime` + every
+backend's store (web store rejected drops on non-leaf/attached nodes).
+cmdk-pick (134ms) was the same teardown shape. Fixed in Round 4 below.
+
+## Round 4 — detach-subtree op
+
+Lui's `Lui_runtime` now emits one `detach-subtree` wire op per removed
+retained subtree instead of a `remove-child` + `drop-node` pair per
+member. The web store unlinks the subtree root from its retained parent
+and drops the whole subtree recursively (props, handlers, extension
+registrations); DOM apply detaches the root element once. `drop-node`
+stays strict (leaf + already-detached only). The gpui host, drive model,
+Android/Kotlin and Apple/Swift stores treat it as a recursive drop —
+nodes created inside the same batch keep the per-node path so emit-time
+elision can still prune the op group.
+
+Same fixture, same harness, `Lui_runtime` pinned to the detach-subtree
+branch:
+
+| metric                    | round-3 | round-4 |
+|---------------------------|--------:|--------:|
+| nav teardown flush        |    ~88  | **~17** |
+| nav total flush           |   ~316  | ~143    |
+| nav ops                   | ~28.6K  | ~24.4K  |
+| nav raf                   |   ~165  | ~80     |
+| cmdk-pick teardown flush  |    ~60  | **~16** |
+| cmdk-pick ops             |   ~4849 | ~279    |
+
+Teardown runs: nav [122.4, 74.0, 62.5, 124.2, 87.0] →
+[14.2, 16.9, 22.1, 17.3, 26.9]; cmdk [55.4, 56.3, 63.3, 81.6] →
+[23.4, 15.3, 14.6, 15.9]. Fixture seeder:
+`node docs/seed-interaction-perf.mjs` (idempotent; seeds BenchSmall +
+BenchBig in the auto-created Demo graph).

@@ -396,7 +396,8 @@ let initialize platform_code host_code (_payload : string) : string =
             List.exists
               (function
                 | Lui_protocol.CreateNode _ | CreateExtension _
-                | DropNode _ | InsertChild _ | RemoveChild _
+                | DropNode _ | DetachSubtree _
+                | InsertChild _ | RemoveChild _
                 | MoveChild _ -> true
                 | SetProp _ | RemoveProp _ | SetExtensionProp _
                 | RemoveExtensionProp _ -> false)

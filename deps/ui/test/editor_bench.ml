@@ -69,7 +69,7 @@ let op_bytes = function
   | CreateNode _ -> 12
   | CreateExtension (_, ident, fp) ->
       20 + String.length ident + String.length fp
-  | DropNode _ -> 9
+  | DropNode _ | DetachSubtree _ -> 9
   | SetProp (_, p, v) ->
       16 + String.length (Lui_wire_schema.property_name p) + wire_bytes v
   | RemoveProp (_, p) ->
@@ -80,7 +80,8 @@ let op_bytes = function
   | InsertChild _ | RemoveChild _ | MoveChild _ -> 15
 
 let op_nodes = function
-  | CreateNode (a, _) | CreateExtension (a, _, _) | DropNode a -> [ a ]
+  | CreateNode (a, _) | CreateExtension (a, _, _) | DropNode a
+  | DetachSubtree a -> [ a ]
   | SetProp (a, _, _) | RemoveProp (a, _) -> [ a ]
   | SetExtensionProp (a, _, _) | RemoveExtensionProp (a, _) -> [ a ]
   | InsertChild (p, c, _) | RemoveChild (p, c) | MoveChild (p, c, _) ->
@@ -94,7 +95,7 @@ let record st (b : patch_batch) =
       st.bytes <- st.bytes + op_bytes op;
       (match op with
        | CreateNode _ | CreateExtension _ -> st.creates <- st.creates + 1
-       | DropNode _ -> st.drops <- st.drops + 1
+       | DropNode _ | DetachSubtree _ -> st.drops <- st.drops + 1
        | SetProp _ | SetExtensionProp _ -> st.sets <- st.sets + 1
        | _ -> ());
       List.iter (fun id -> Hashtbl.replace st.touched id ()) (op_nodes op))

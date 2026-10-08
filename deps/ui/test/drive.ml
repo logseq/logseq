@@ -67,6 +67,7 @@ module Model = struct
     | CreateExtension (id, identifier, _fp) ->
       Hashtbl.replace t.nodes id (new_node id ("extension:" ^ identifier))
     | DropNode id -> drop t id
+    | DetachSubtree id -> drop t id
     | SetProp (id, p, v) -> (
       match Hashtbl.find_opt t.nodes id with
       | Some n -> Hashtbl.replace n.props (Lui_wire_schema.property_name p) v
