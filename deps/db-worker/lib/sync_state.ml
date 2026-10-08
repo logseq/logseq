@@ -278,6 +278,39 @@ let pending_replay : bool ref = ref false
    display projection (server state + pending ops replayed forward). *)
 let server_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
 
+(* last display db before the latest server-state rebind — the
+   pre-delete local view the upload-time rebase climbs ancestor chains
+   on (a remotely deleted target's parent refs survive there) *)
+let rebase_base_dbs : (string, Datascript.db) Hashtbl.t = Hashtbl.create 7
+
+let set_rebase_base_db repo (db : Datascript.db) : unit =
+  Hashtbl.replace rebase_base_dbs repo db
+
+let rebase_base_db repo : Datascript.db option =
+  Hashtbl.find_opt rebase_base_dbs repo
+
+(* uuid -> parent-uuid ledger captured as each remote retractEntity
+   lands: a deleted entity's direct parent as of the pre-apply view.
+   The upload-time rebase climbs this chain when the stashed base db is
+   too stale to contain the ancestor — the ledger only ever grows, so
+   deletions spanning multiple remote batches never lose links *)
+let remote_deleted_parents : (string, (string, string) Hashtbl.t) Hashtbl.t =
+  Hashtbl.create 7
+
+let add_remote_deleted_parent repo ~(uuid : string) ~(parent_uuid : string)
+    : unit =
+  (match Hashtbl.find_opt remote_deleted_parents repo with
+   | Some m -> Hashtbl.replace m uuid parent_uuid
+   | None ->
+       let m = Hashtbl.create 7 in
+       Hashtbl.replace m uuid parent_uuid;
+       Hashtbl.replace remote_deleted_parents repo m)
+
+let remote_deleted_parent repo (uuid : string) : string option =
+  match Hashtbl.find_opt remote_deleted_parents repo with
+  | Some m -> Hashtbl.find_opt m uuid
+  | None -> None
+
 (* uuids a remote delete/fix entry retracted, as of the latest applied
    remote-tx batch. A verbatim confirm that re-adds one of them would
    resurrect an entity the server deleted — confirms must skip those
@@ -289,8 +322,13 @@ let remote_deleted repo : SSet.t =
   | Some s -> s
   | None -> SSet.empty
 
-let set_remote_deleted repo (uuids : SSet.t) : unit =
-  Hashtbl.replace remote_deleted_uuids repo uuids
+(* journal-derived delete ledger: subjects of confirmed retractEntity
+   items. Not a pull/confirm gate — unapply reads it to keep remotely
+   deleted entities absent and the phantom sweep honest *)
+let add_remote_deleted repo (u : string) : unit =
+  match Hashtbl.find_opt remote_deleted_uuids repo with
+  | Some s -> Hashtbl.replace remote_deleted_uuids repo (SSet.add u s)
+  | None -> Hashtbl.replace remote_deleted_uuids repo (SSet.singleton u)
 
 (* (subject, attr, value) keys a confirmed write asserted on the server
    conn — remote-tx applies and own confirms record them. Unapplying a
@@ -351,6 +389,8 @@ let drop_server_conn repo =
   | Some conn ->
       Hashtbl.remove server_conns repo;
       Hashtbl.remove remote_deleted_uuids repo;
+      Hashtbl.remove remote_deleted_parents repo;
+      Hashtbl.remove rebase_base_dbs repo;
       Db_tx.release_flags conn
 
 (* Writes of confirmed state (remote txs, acked local txs, sync

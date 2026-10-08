@@ -619,7 +619,13 @@ let record_remote_asserted (db : db) (repo : string) (items : Wire.t list)
          when op = Wire.keyword "db/retractEntity"
               || op = Wire.keyword "db.fn/retractEntity" ->
            let pref = asserted_e_key_of_wire db e ^ "" in
-           keys := SSet.filter (fun k -> not (add_e_prefix k pref)) !keys
+           keys := SSet.filter (fun k -> not (add_e_prefix k pref)) !keys;
+           (* journal-derived delete ledger for unapply: the subject
+              uuid of a confirmed retractEntity is remotely deleted —
+              the phantom sweep must not exempt it as "server-known" *)
+           (match tx_item_block_uuid db e with
+            | Some u -> Sync_state.add_remote_deleted repo u
+            | None -> ())
        | Wire.Array (op :: e :: a_w :: v_w :: _)
        | Wire.List (op :: e :: a_w :: v_w :: _)
          when op = Wire.keyword "db/add" || op = Wire.keyword "db/retract"
@@ -1061,14 +1067,6 @@ let pending_tx_uuid_delta (items : Wire.t list) : SSet.t * SSet.t =
        match item with
        | (Wire.Array l | Wire.List l)
          when List.length l >= 4 && List.nth l 0 = Wire.keyword "db/add" -> (
-           (* an e-position [:block/uuid u] upserts u on the server even
-              when the tx doesn't assert block/uuid explicitly *)
-           let created =
-             match List.nth l 1 with
-             | Wire.Array [ a; Wire.Uuid u ] | Wire.List [ a; Wire.Uuid u ]
-               when a = Wire.keyword "block/uuid" -> SSet.add u created
-             | _ -> created
-           in
            match List.nth l 2 = Wire.keyword "block/uuid", List.nth l 3 with
            | true, Wire.Uuid u -> (SSet.add u created, retracted)
            | _ -> (created, retracted))
@@ -1098,7 +1096,9 @@ let attr_resolves (d : db) (a : Wire.t) : bool =
   | _ -> true
 
 let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
-    (db : db) (tx_data : Wire.t list) : Wire.t list =
+    ?(ref_live = fun _ -> true) ?(strict_refs = false)
+    ?(drop_e_lookup = true) (db : db) (tx_data : Wire.t list)
+    : Wire.t list =
   let entity_exists =
     match uuid_exists with
     | Some f -> f
@@ -1147,6 +1147,24 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
               kvs
         | Wire.Tagged (_, v) -> missing_refs_deep v
         | _ -> [])
+  in
+  (* the wire decodes any [keyword v] 2-vector as a lookup-ref
+     (Ds_wire.value_of_transit is schema-agnostic) — a [:block/uuid u]
+     in a value position resolves strictly during transact and raises
+     Unresolved_lookup_ref when absent, under ref and non-ref attrs alike *)
+  let rec missing_lookup_refs (w : Wire.t) : string list =
+    match w with
+    | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ]
+    | Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid u ] ->
+        if missing u then [ u ] else []
+    | Wire.Array xs | Wire.List xs | Wire.Set xs ->
+        List.concat_map missing_lookup_refs xs
+    | Wire.Map kvs ->
+        List.concat_map
+          (fun (k, v) -> missing_lookup_refs k @ missing_lookup_refs v)
+          kvs
+    | Wire.Tagged (_, v) -> missing_lookup_refs v
+    | _ -> []
   in
   (* drop only the missing elements of a coll value rather than the whole
      item — a cardinality-many ref attr keeps its resolvable refs. None =
@@ -1254,14 +1272,34 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
              if is_retract_op then
                (match e with
                 | Wire.String _ | Wire.Uuid _ -> None
-                | _ -> Some item)
+                | _ ->
+                    if
+                      drop_e_lookup
+                      && List.length l >= 4
+                      && missing_lookup_refs (List.nth l 3) <> []
+                    then None
+                    else Some item)
              else
-               match missing_uuid_of e with
-               | Some u ->
-                   failwith ("pending tx references missing block " ^ u)
-               | None ->
-                 if List.length l < 4 then Some item
-                 else
+               let e_lookup_missing =
+                 match e with
+                 | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid _ ]
+                 | Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid _ ] ->
+                     missing_uuid_of e <> None
+                 | _ -> false
+               in
+               (* without a server-backed existence oracle the local view
+                  cannot tell "deleted locally, still on the server" from
+                  "deleted on the server" — keep an e-position lookup-ref
+                  and let the server resolve it (drop_e_lookup=false);
+                  a bare uuid String/Uuid e-position still fails below *)
+               if e_lookup_missing && not drop_e_lookup then Some item
+               else
+                 match missing_uuid_of e with
+                 | Some u ->
+                     failwith ("pending tx references missing block " ^ u)
+                 | None ->
+                     if List.length l < 4 then Some item
+                     else
                    let op = List.nth l 0 and a = List.nth l 2
                    and v = List.nth l 3 in
                    (* property-pair drop: a user/logseq property attr that
@@ -1296,11 +1334,23 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                             (fun x -> missing_refs_deep x <> [])
                             (List.filteri (fun i _ -> i >= 4) l)
                      in
-                     if extras_missing then None
+                     if extras_missing then
+                       if strict_refs then
+                         failwith "pending tx references missing ref"
+                       else None
+                     else if
+                       strict_refs
+                       && (missing_refs_deep v <> []
+                           || missing_lookup_refs v <> [])
+                     then
+                       failwith "pending tx references missing ref"
                      else (
                        match a with
                        | Wire.Keyword "block/parent"
-                         when missing_refs_deep v <> [] -> (
+                         when missing_refs_deep v <> [] ->
+                           if strict_refs then
+                             failwith "pending tx references missing ref"
+                           else (
                            match op with
                            | Wire.Keyword "db/retract" ->
                                (* retracting an unresolvable parent value
@@ -1319,13 +1369,20 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                                        Hashtbl.replace parent_edge_dropped
                                          (Transit_codec.to_string e) ();
                                        None)))
-                       | Wire.Keyword a' when ref_attr db a' -> (
+                       | Wire.Keyword a' when ref_live a' -> (
                            if missing_refs_deep v = [] then Some item
+                           else if strict_refs then
+                             failwith "pending tx references missing ref"
                            else
                              match filter_missing_deep v with
                              | Some v' -> rewrite_v_at3 item v'
                              | None -> None)
-                       | _ -> Some item))
+                       | _ ->
+                           if
+                             drop_e_lookup
+                             && missing_lookup_refs v <> []
+                           then None
+                           else Some item))
          | Wire.Map kvs ->
              (* map-form entries: a db/id lookup-ref the server cannot
                 resolve is the e-position of the entry — drop it whole *)
@@ -1346,11 +1403,21 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                  (fun (k, v) ->
                     match k with
                     | Wire.Keyword a' | Wire.String a' ->
-                        (not (ref_attr db a')) || missing_refs_deep v = []
+                        (not (ref_live a')) || missing_refs_deep v = []
                     | _ -> true)
                  kvs
              in
-             if id_missing then None
+             if strict_refs
+                && (id_missing
+                    || List.exists
+                         (fun (k, v) ->
+                            match k with
+                            | Wire.Keyword a' | Wire.String a' ->
+                                ref_live a' && missing_refs_deep v <> []
+                            | _ -> false)
+                         kvs)
+             then failwith "pending tx references missing ref"
+             else if id_missing then None
              else if kept = kvs then Some item
              else if kept = [] then None
              else Some (Wire.Map kept)
@@ -1543,6 +1610,10 @@ let drop_cycle_parent_edges
               | _ -> Some item)
     |> List.filter_map Fun.id
 
+let rebase_pending_entry_fn
+    : (string -> conn -> Sync_client_op.pending_tx_row -> bool) ref =
+  ref (fun _ _ _ -> false)
+
 let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     (pending : Sync_client_op.pending_tx_row list) :
     Wire.t list * string list * Wire.t list =
@@ -1596,7 +1667,23 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     | None, Some c -> fun a -> attr_resolves (Conn.db c) a
     | _, None -> fun _ -> true
   in
-  let entries =
+  let ref_live =
+    match srv_db, conn with
+    | Some srv, Some c ->
+        fun a -> ref_attr srv a || ref_attr (Conn.db c) a
+    | None, Some c -> fun a -> ref_attr (Conn.db c) a
+    | _, None -> fun _ -> true
+  in
+  (* each pass recomputes the batch-level deltas from scratch — a
+     rebase rewrites the stored .tx, so a second pass must not inherit
+     the first pass's created/retracted/cycle state *)
+  let run_pass
+      ~(strict : bool)
+      (pending : Sync_client_op.pending_tx_row list) =
+    created_delta := SSet.empty;
+    retracted_delta := SSet.empty;
+    Hashtbl.reset cycle_kept;
+    missing_entity_tx_ids := [];
     List.filter_map
       (fun (e : Sync_client_op.pending_tx_row) ->
          let tx_data =
@@ -1612,6 +1699,10 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
                try
                  Some
                    (sanitize_pending_tx_refs ~uuid_exists ~attr_live
+                      ~ref_live
+                      ~strict_refs:
+                        (strict && Lazy.force e.forward_outliner_ops <> [])
+                      ~drop_e_lookup:(srv_db <> None)
                       (Conn.db c) (tx_items_of e.tx)
                     |>
                     match srv_db with
@@ -1655,6 +1746,60 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
              missing_entity_tx_ids := e.tx_id :: !missing_entity_tx_ids;
              None)
       pending
+  in
+  (* pass 1 runs strict on ops-bearing entries so a stale target
+     reference surfaces as a rebase candidate instead of being
+     item-dropped; entries whose rebase then fails fall back to the
+     non-strict partial upload on pass 2 — the salvageable datoms are
+     exactly what the local display still shows *)
+  let entries = run_pass ~strict:true pending in
+  (* upload-time rebase: a dropped entry that still carries its
+     outliner ops gets one semantic re-derive against the freshest
+     base (the pre-rebind display db carries the ancestors a remotely
+     deleted target pointed at); it is dropped for good only when it
+     can't produce a wire tx at all *)
+  let entries =
+    let _ =
+      match repo, conn with
+      | Some r, Some c ->
+          (* every missing entry gets its own rebase attempt — fold, not
+             exists: one success must not skip the rest *)
+          List.fold_left
+            (fun any id ->
+               match
+                 List.find_opt
+                   (fun (e : Sync_client_op.pending_tx_row) ->
+                      e.tx_id = id && Lazy.force e.forward_outliner_ops <> [])
+                   pending
+               with
+               | Some entry -> !rebase_pending_entry_fn r c entry || any
+               | None -> any)
+            false !missing_entity_tx_ids
+      | _ -> false
+    in
+    if !missing_entity_tx_ids <> [] && conn <> None then
+      (* the rebase rewrote stored .tx rows — re-read them; keep the
+         caller's batch boundary. Entries whose rebase failed keep
+         their stale .tx: this pass is non-strict, so they degrade to
+         the item-drop upload the pre-rebase code produced *)
+      let batch_ids =
+        List.fold_left
+          (fun s (e : Sync_client_op.pending_tx_row) ->
+             SSet.add e.tx_id s)
+          SSet.empty pending
+      in
+      (* with a server-backed oracle a strict entry that failed rebase
+         stays failed — its missing refs are genuinely gone on the
+         server; only the local-only fallback degrades to item-drop *)
+      run_pass ~strict:(srv_db <> None)
+        (match repo with
+         | Some r ->
+             List.filter
+               (fun (e : Sync_client_op.pending_tx_row) ->
+                  SSet.mem e.tx_id batch_ids)
+               (Sync_client_op.get_pending_tx_rows r ())
+         | None -> pending)
+    else entries
   in
   let missing_entity_drops =
     List.map
@@ -1749,6 +1894,9 @@ let pending_tx_by_id repo tx_id : Sync_client_op.local_tx_entry option =
    entries must re-project the display conn *)
 let rebuild_display_fn : (string -> unit) ref = ref (fun _ -> ())
 
+(* forward-ref to Sync_replay.rebase_pending_entry — a dropped pending
+   entry carrying outliner ops gets one semantic re-derive on the
+   freshest base before being declared unsalvageable *)
 let mark_failed_txs ?(rebuild = true) repo (tx_ids : string list) : int =
   match tx_ids with
   | [] -> 0
