@@ -920,15 +920,17 @@ let merge_upload_tx_ranges (ranges : (int * int) list) : (int * int) list =
 let upload_group_range_by_start (db : db) (tx_data : Wire.t list)
     : (int, int) Hashtbl.t =
   let replaced = upload_replaced_values db tx_data in
+  (* fold instead of List.concat_map: melange concat_map recurses per
+     element and RangeErrors on bootstrap-size txs (>= ~8k items) *)
   let linked =
-    List.concat_map
-      (fun item ->
+    List.fold_left
+      (fun acc item ->
          match item with
          | Wire.Array (_ :: _ :: Wire.Keyword a :: v :: _)
          | Wire.List (_ :: _ :: Wire.Keyword a :: v :: _)
-           when ref_attr db a && lookup_ref_wire v -> [ v ]
-         | _ -> [])
-      tx_data
+           when ref_attr db a && lookup_ref_wire v -> v :: acc
+         | _ -> acc)
+      [] tx_data
   in
   let by_key : (string, int * int) Hashtbl.t = Hashtbl.create 17 in
   List.iteri
@@ -1145,11 +1147,15 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
     | None -> (
         match w with
         | Wire.Array xs | Wire.List xs | Wire.Set xs ->
-            List.concat_map missing_refs_deep xs
+            List.fold_left
+              (fun acc x -> List.rev_append (missing_refs_deep x) acc)
+              [] xs
         | Wire.Map kvs ->
-            List.concat_map
-              (fun (k, v) -> missing_refs_deep k @ missing_refs_deep v)
-              kvs
+            List.fold_left
+              (fun acc (k, v) ->
+                List.rev_append (missing_refs_deep v)
+                  (List.rev_append (missing_refs_deep k) acc))
+              [] kvs
         | Wire.Tagged (_, v) -> missing_refs_deep v
         | _ -> [])
   in
@@ -1163,11 +1169,15 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
     | Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid u ] ->
         if missing u then [ u ] else []
     | Wire.Array xs | Wire.List xs | Wire.Set xs ->
-        List.concat_map missing_lookup_refs xs
+        List.fold_left
+          (fun acc x -> List.rev_append (missing_lookup_refs x) acc)
+          [] xs
     | Wire.Map kvs ->
-        List.concat_map
-          (fun (k, v) -> missing_lookup_refs k @ missing_lookup_refs v)
-          kvs
+        List.fold_left
+          (fun acc (k, v) ->
+            List.rev_append (missing_lookup_refs v)
+              (List.rev_append (missing_lookup_refs k) acc))
+          [] kvs
     | Wire.Tagged (_, v) -> missing_lookup_refs v
     | _ -> []
   in
@@ -1337,7 +1347,8 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                        missing_lookup_refs value <> []
                        || (match a with
                            | Wire.Keyword attr | Wire.String attr
-                             when ref_live attr -> missing_refs_deep value <> []
+                             when ref_live attr ->
+                               missing_refs_deep value <> []
                            | _ -> false)
                      in
                      (* cas/fn slots past position 3 escape pos-3-only
@@ -1350,18 +1361,27 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                      in
                      if extras_missing then
                        if strict_refs then
-                         failwith "pending tx references missing ref"
+                         failwith
+                           ("pending tx references missing ref "
+                           ^ String.concat ","
+                               (List.concat_map missing_lookup_refs
+                                  (List.filteri (fun i _ -> i >= 4) l)))
                        else None
                      else if
                        strict_refs && value_ref_missing v
                      then
-                       failwith "pending tx references missing ref"
+                       failwith
+                         ("pending tx references missing ref "
+                         ^ String.concat ","
+                             (missing_lookup_refs v @ missing_refs_deep v))
                      else (
                        match a with
                        | Wire.Keyword "block/parent"
                          when missing_refs_deep v <> [] ->
                            if strict_refs then
-                             failwith "pending tx references missing ref"
+                             failwith
+                               ("pending tx references missing ref "
+                               ^ String.concat "," (missing_refs_deep v))
                            else (
                            match op with
                            | Wire.Keyword "db/retract" ->
@@ -1384,15 +1404,15 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                        | Wire.Keyword a' when ref_live a' -> (
                            if missing_refs_deep v = [] then Some item
                            else if strict_refs then
-                             failwith "pending tx references missing ref"
+                             failwith
+                               ("pending tx references missing ref "
+                               ^ String.concat "," (missing_refs_deep v))
                            else
                              match filter_missing_deep v with
                              | Some v' -> rewrite_v_at3 item v'
                              | None -> None)
                        | _ ->
-                           if
-                             drop_e_lookup
-                             && missing_lookup_refs v <> []
+                           if drop_e_lookup && missing_lookup_refs v <> []
                            then None
                            else Some item))
          | Wire.Map kvs ->
@@ -1428,7 +1448,22 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                                 ref_live a' && missing_refs_deep v <> []
                             | _ -> false)
                          kvs)
-             then failwith "pending tx references missing ref"
+             then
+               failwith
+                 ("pending tx references missing ref "
+                 ^ String.concat ","
+                     (List.concat_map
+                        (fun (k, v) ->
+                           match k with
+                           | Wire.Keyword "db/id" | Wire.String "db/id" -> (
+                               match missing_uuid_of v with
+                               | Some u -> [ u ]
+                               | None -> [])
+                           | Wire.Keyword a' | Wire.String a'
+                             when ref_live a' ->
+                               missing_refs_deep v
+                           | _ -> [])
+                        kvs))
              else if id_missing then None
              else if kept = kvs then Some item
              else if kept = [] then None
@@ -1626,6 +1661,99 @@ let rebase_pending_entry_fn
     : (string -> conn -> Sync_client_op.pending_tx_row -> bool) ref =
   ref (fun _ _ _ -> false)
 
+(* server-managed entities: the display db can hold entities — the login
+   user's entity behind created-by-ref/deleted-by-ref — that were
+   written by non-queued local writes, so the pending queue carries a
+   bare [:block/uuid u] ref with no matching creation item and the
+   server rejects entity-id/missing. Materialize the entity as `db/add`
+   items at the head of the tx so the ref resolves in-tx. Scalar values
+   upload verbatim; entity values (block/tags → the Page class) upload
+   as [:block/uuid _] lookup refs — builtins the server has *)
+let materialize_server_managed_entities (db : db)
+    (uuid_available : string -> bool) (items : Wire.t list) : Wire.t list =
+  let uuid_of_managed_ref (item : Wire.t) : string option =
+    match item with
+    | Wire.Array l | Wire.List l
+      when List.length l >= 4
+           && List.nth l 0 = Wire.keyword "db/add" -> (
+        (match List.nth l 2 with
+         | Wire.Keyword a | Wire.String a ->
+             a = "logseq.property/created-by-ref"
+             || a = "logseq.property/deleted-by-ref"
+         | _ -> false)
+        |> fun managed ->
+        if not managed then None
+        else
+          match List.nth l 3 with
+          | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ]
+          | Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid u ] -> Some u
+          | _ -> None)
+    | _ -> None
+  in
+  let in_tx_created = fst (pending_tx_uuid_delta items) in
+  let wanted =
+    List.fold_left
+      (fun s u ->
+         if SSet.mem u s || SSet.mem u in_tx_created || uuid_available u
+         then s
+         else SSet.add u s)
+      SSet.empty
+      (List.filter_map uuid_of_managed_ref items)
+  in
+  if SSet.is_empty wanted then items
+  else
+    let tx_el =
+      match items with
+      | Wire.Array l :: _ when List.length l >= 5 -> List.nth l 4
+      | Wire.List l :: _ when List.length l >= 5 -> List.nth l 4
+      | _ -> Wire.Int64 0L
+    in
+    (* same shape as worker_pipeline's gen_created_by_block — a
+       Page-tagged user entity; block/tags hardcodes the builtin Page
+       class uuid because the display entity's own tag set may point at
+       entities the server validates differently *)
+    let user_entity_attrs =
+      [ "block/uuid"; "block/name"; "block/title"; "block/tags"
+      ; "block/created-at"; "block/updated-at"
+      ; "logseq.property.user/name"; "logseq.property.user/email" ]
+    in
+    let create_items =
+      SSet.fold
+        (fun u acc ->
+           match Outliner_op.entity_of_uuid db u with
+           | None -> acc
+           | Some ent ->
+               let tempid = Wire.String ("created-by-" ^ u) in
+               let add_item a v =
+                 Wire.Array
+                   [ Wire.keyword "db/add"; tempid; Wire.keyword a; v
+                   ; tx_el ]
+               in
+               let ent_attrs = Datascript.entity_attrs ent in
+               let attr_of a =
+                 match List.assoc_opt a ent_attrs with
+                 | Some (One_value v) -> Some (Ds_wire.transit_of_value v)
+                 | _ -> None
+               in
+               List.fold_left
+                 (fun acc a ->
+                    if a = "block/uuid" then add_item a (Wire.Uuid u) :: acc
+                    else if a = "block/tags" then
+                      add_item a
+                        (Wire.Array
+                           [ Wire.keyword "block/uuid"
+                           ; Wire.Uuid "00000002-1979-7410-8100-000000000000" ])
+                        :: acc
+                    else
+                      match attr_of a with
+                      | Some v -> add_item a v :: acc
+                      | None -> acc)
+                 acc user_entity_attrs
+               |> List.rev)
+        wanted []
+    in
+    create_items @ items
+
 let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     (pending : Sync_client_op.pending_tx_row list) :
     Wire.t list * string list * Wire.t list =
@@ -1715,7 +1843,9 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
                       ~strict_refs:
                         (strict && Lazy.force e.forward_outliner_ops <> [])
                       ~drop_e_lookup:(srv_db <> None)
-                      (Conn.db c) (tx_items_of e.tx)
+                      (Conn.db c)
+                      (materialize_server_managed_entities (Conn.db c)
+                         uuid_available (tx_items_of e.tx))
                     |>
                     match srv_db with
                     | Some d ->
@@ -1727,10 +1857,15 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
                             items
                     | None -> Fun.id)
                with ex ->
+                 let items_str =
+                   String.concat ","
+                     (List.map Transit_codec.to_string (tx_items_of e.tx))
+                 in
                  Worker_log.warn "db-sync/upload-sanitize-failed"
                    [ ( "repo", Option.value repo ~default:"-" )
                    ; "tx-id", e.tx_id
-                   ; "error", Printexc.to_string ex ];
+                   ; "error", Printexc.to_string ex
+                   ; "tx-items", String.sub items_str 0 (min 4096 (String.length items_str)) ];
                  None)
            | None -> Some (tx_items_of e.tx)
          in
@@ -1740,26 +1875,32 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
                 cycles) but were invisible — surface them so a vanished
                 op is diagnosable against its tx-id *)
              (let before = tx_items_of e.tx in
-              if before <> items then begin
-                (* multiset difference: a kept occurrence removes one
-                   matching item — the rest was dropped or rewritten *)
-                let kept = ref items in
-                let dropped =
-                  List.filter
-                    (fun item ->
-                       let rec without seen = function
-                         | k :: rest when k = item ->
-                             List.rev_append seen rest
-                         | k :: rest -> without (k :: seen) rest
-                         | [] -> []
-                       in
-                       let rest = without [] !kept in
-                       if List.length rest < List.length !kept then
-                         (kept := rest; false)
-                       else true)
-                    before
-                in
-                if dropped <> [] then
+              (* multiset difference keyed by transit encoding: a kept
+                 occurrence removes one matching item — the rest was
+                 dropped or rewritten. Structural list compare (`<>`)
+                 recurses per element in JS and RangeErrors on
+                 bootstrap-size txs, so count occurrences instead *)
+              let kept_counts = Hashtbl.create 64 in
+              List.iter
+                (fun item ->
+                   let k = Transit_codec.to_string item in
+                   Hashtbl.replace kept_counts k
+                     (1
+                     + Option.value (Hashtbl.find_opt kept_counts k)
+                         ~default:0))
+                items;
+              let dropped =
+                List.filter
+                  (fun item ->
+                     let k = Transit_codec.to_string item in
+                     match Hashtbl.find_opt kept_counts k with
+                     | Some n when n > 0 ->
+                         Hashtbl.replace kept_counts k (n - 1);
+                         false
+                     | _ -> true)
+                  before
+              in
+              if dropped <> [] then
                   Worker_log.warn "db-sync/upload-item-dropped"
                     [ "repo", Option.value repo ~default:"-"
                     ; "tx-id", e.tx_id
@@ -1771,8 +1912,7 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
                              if String.length s > 160 then
                                String.sub s 0 160 ^ "…"
                              else s)
-                        |> String.concat " | " ) ]
-              end);
+                        |> String.concat " | " ) ]);
              (match srv_db with
               | Some _ when items <> [] ->
                   (* availability must track what actually uploads — the
@@ -2202,8 +2342,13 @@ let enqueue_flush_pending repo (client : Sync_state.client) : unit =
   Sync_state.enqueue_catching client.send_queue
     (fun () -> !flush_pending_fn repo client)
     ~on_error:(fun e ->
+       let stack =
+         match Js.Exn.asJsExn e with
+         | Some je -> Option.value (Js.Exn.stack je) ~default:""
+         | None -> ""
+       in
        Worker_log.error "db-sync/flush-pending-queue-failed"
-         [ "repo", repo; "error", Printexc.to_string e ];
+         [ "repo", repo; "error", Printexc.to_string e; "stack", stack ];
        Db_worker_effect.pure ())
 
 (* ---- enqueue-local-tx! ---- *)

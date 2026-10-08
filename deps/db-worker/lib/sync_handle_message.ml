@@ -339,7 +339,34 @@ let handle_hello repo (client : Sync_state.client) local_tx remote_tx
     ; ("pending-txs-count"
       , string_of_int
           (List.length
-             (Sync_client_op.get_pending_local_tx_ids repo ~limit:50 ()))) ];
+             (Sync_client_op.get_pending_local_tx_ids repo ~limit:50 ())))
+    ; ("pending-ops"
+      , String.concat ","
+          (List.map
+             (fun (r : Sync_client_op.pending_tx_row) ->
+                let items =
+                  Transit_codec.to_string r.tx
+                in
+                let contains pat =
+                  let n = String.length items and m = String.length pat in
+                  let rec loop i =
+                    i + m <= n
+                    && (String.sub items i m = pat || loop (i + 1))
+                  in
+                  loop 0
+                in
+                Printf.sprintf "%s:%s:%s:%d%s" r.tx_id
+                  (Option.value r.outliner_op ~default:"-")
+                  (String.concat "+"
+                     (List.filter_map Fun.id
+                        [ (if contains "302246b1" then Some "UUID" else None)
+                        ; (if contains "user/name" then Some "UNAME" else None)
+                        ; (if contains "created-by" then Some "CBR" else None) ]))
+                  (String.length items)
+                  (if String.length items <= 2000
+                   then "|" ^ items
+                   else ""))
+             (Sync_client_op.get_pending_tx_rows repo ~limit:50 ()))) ];
   Sync_apply.enqueue_flush_pending repo client
 
 let handle_online_users repo (client : Sync_state.client) (message : Wire.t) =
