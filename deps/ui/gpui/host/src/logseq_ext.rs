@@ -421,6 +421,14 @@ fn register_class_styles() {
         "pointer-events-auto overflow-y-auto overflow-x-hidden",
     );
     class("ls-property-dialog", "", "pointer-events-auto");
+    // ---- transparent popup backdrop (web .ls-popup-backdrop
+    // position:fixed;inset:0): fills the window so outside presses
+    // hit it and dismiss the anchored popup (appearance panel) ----
+    class(
+        "ls-popup-backdrop",
+        "position:fixed;inset:0",
+        "pointer-events-auto",
+    );
 
     // ---- app shell (web .cp__header + groups) ----
     // macOS merges the header into a transparent titlebar, so the left
