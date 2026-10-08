@@ -2260,7 +2260,7 @@ let upload_pending_batch repo (client : Sync_state.client) (conn : conn)
   match pending_tx_rows repo ~limit:50 () with
   | [] -> Db_worker_effect.pure ()
   | batch ->
-      let t0 = Js.Date.now () in
+      let t0 = Time.monotonic_now () in
       Worker_log.info "db-sync/upload-batch-prepare"
         [ "repo", repo
         ; "pending", string_of_int (List.length batch) ];
@@ -2271,7 +2271,8 @@ let upload_pending_batch repo (client : Sync_state.client) (conn : conn)
       in
       Worker_log.info "db-sync/upload-batch-prepared"
         [ "repo", repo
-        ; "ms", string_of_int (int_of_float (Js.Date.now () -. t0))
+        ; "ms", string_of_int
+            (int_of_float (Time.diff_monotonic_ms t0 (Time.monotonic_now ())))
         ; "entries", string_of_int (List.length tx_entries)
         ; "drops", string_of_int (List.length drop_tx_ids) ];
       if drop_tx_ids <> [] then begin
