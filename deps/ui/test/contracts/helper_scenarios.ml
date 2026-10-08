@@ -50,10 +50,12 @@ let fake_time : Ui_services.time =
   ; local_fields
   ; of_fields =
       (fun f ->
-        float_of_int
-          ((days_from_civil f.year f.month f.day * 86400000)
-          + (f.hours * 3600000) + (f.minutes * 60000) + (f.seconds * 1000)
-          + f.ms))
+        (* float math — the day*86400000 product overflows melange's
+           32-bit int *)
+        (float_of_int (days_from_civil f.year f.month f.day) *. 86400000.)
+        +. float_of_int
+             ((f.hours * 3600000) + (f.minutes * 60000) + (f.seconds * 1000)
+             + f.ms))
   ; parse =
       (fun s ->
         match String.split_on_char '-' s with
@@ -62,7 +64,7 @@ let fake_time : Ui_services.time =
               (int_of_string_opt ys, int_of_string_opt ms', int_of_string_opt ds')
             with
             | Some y, Some m, Some d when m >= 1 && m <= 12 && d >= 1 && d <= 31
-              -> Some (float_of_int (days_from_civil y m d * 86400000))
+              -> Some (float_of_int (days_from_civil y m d) *. 86400000.)
             | _ -> None)
         | _ -> None)
   }
