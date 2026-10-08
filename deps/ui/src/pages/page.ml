@@ -1041,11 +1041,11 @@ let journal_item_sig (ms : Model.t Signal.signal)
 
 (* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:
    #journals > div > div > div[data-testid=virtuoso-item-list] > div >
-   journal-item. We keep the same scaffolding, but the item list is a
-   keyed collection rather than a virtualized one: virtual rows only
-   re-render whole items, while keyed items repaint their internals
-   through per-item signals — that's what keeps an outliner op from
-   tearing down every mounted block row. *)
+   journal-item. We keep the same scaffolding and virtualize the outer
+   day list through Virt_list — a changed day row remounts on splice
+   (virtual rows re-render whole items); each day's inner block list
+   stays the keyed Lazy_children collection, so an outliner op only
+   repaints the touched day. *)
 let journals_view_ms (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let journals_sig =
@@ -1065,12 +1065,17 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
                          (Signal.map (fun js -> js = []) journals_sig))
                     (box ~key:"jp" ~padding:24
                        ~style_class:"journal-item-placeholder animate-pulse" [])
-                ; Lui_elements.keyed ~source:journals_sig
+                ; Virt_list.rows_sig
                     ~key:(fun (p : Model.page) ->
                       Option.value p.Model.page_uuid
                         ~default:p.Model.page_title)
                     ~cmp:String.compare
                     ~mount:(journal_item_sig ms)
+                    ~initial_rows:4
+                    ~estimate_size:(fun _ -> 800.)
+                    ~on_end:(fun () ->
+                      ignore (!Runtime.journals_load_more ()))
+                    journals_sig
                 ]
             ]
         ]

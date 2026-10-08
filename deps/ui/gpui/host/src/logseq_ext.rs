@@ -560,6 +560,39 @@ fn register_class_styles() {
          font-size:14px;opacity:0.8;border-radius:6px",
         "",
     );
+    // ---- page/main-content column (lui-core.css .cp__sidebar-main-content
+    // + .cp__content-wrap) — without the max-width + auto inline margins
+    // the page column bleeds full-width and the -20px .ls-page-blocks
+    // gutter clips text at the window edge.
+    class(
+        "cp__sidebar-main-content",
+        "width:100%;max-width:var(--ls-main-content-max-width,960px);\
+         margin-left:auto;margin-right:auto;flex-grow:1",
+        "",
+    );
+    // .cp__content-wrap { margin:0 auto; width:100%; padding-bottom:6rem }
+    class(
+        "cp__content-wrap",
+        "margin-left:auto;margin-right:auto;width:100%;\
+         padding-bottom:96px",
+        "",
+    );
+    // .page-inner > .ls-page-blocks hangs the block control column 20px
+    // into the left gutter (cljs page.cljs margin-left:-20 inline).
+    class("ls-page-blocks", "margin-left:-20px;min-height:60px", "");
+    // .cp__page-inner-wrap > .page-inner { padding-bottom:4rem }
+    class("page-inner", "padding-bottom:64px", "");
+    // #journals .journal-item — day separators + bottom breathing room.
+    class(
+        "journal-item",
+        "min-height:250px;padding-bottom:102px;\
+         border-bottom:1px solid var(--lx-gray-04, var(--ls-border-color))",
+        "",
+    );
+    // .journal-last-item { border-style: none } — drops the separator on
+    // the final day; registered after journal-item so it wins (0px,
+    // `none` parses as no declaration).
+    class("journal-last-item", "border-bottom:0px", "");
     // Block bullets (web resources/css/lui-core.css .bullet-*).
     class(
         "bullet-link-wrap",
