@@ -243,25 +243,27 @@
   raw URL pathname, absolute paths pass through, and `./`/`../`/bare
   relative paths resolve against the graph dir.
 
-  The result is decoded once here: `%20` (or other %XX) left by a stripped
-  file:// link or carried in a URL pathname becomes the real character, so
-  later assets:// encoding produces %20 rather than %2520.  See
+  Decoding applies only to the supplied path/URL portion: `%20` (or other
+  %XX) left by a stripped file:// link or carried in a URL pathname
+  becomes the real character, so later assets:// encoding produces %20
+  rather than %2520.  The repo/home prefixes are native paths and are not
+  decoded — a literal % in them must stay literal.  See
   decode-percent-encoded-file-path for how literal % is preserved."
   [file-path repo-dir]
-  (decode-percent-encoded-file-path
-   (cond
-     (string/starts-with? file-path "~")
-     (path/path-join (get-in (state/get-state) [:system/info :home-dir])
-                     (string/replace-first file-path #"^~[/\\]*" ""))
+  (cond
+    (string/starts-with? file-path "~")
+    (path/path-join (get-in (state/get-state) [:system/info :home-dir])
+                    (decode-percent-encoded-file-path
+                     (string/replace-first file-path #"^~[/\\]*" "")))
 
-     (path/is-file-url? file-path)
-     (file-url->encoded-path file-path)
+    (path/is-file-url? file-path)
+    (decode-percent-encoded-file-path (file-url->encoded-path file-path))
 
-     (path/absolute? file-path)
-     (path/file-url-or-path->path file-path)
+    (path/absolute? file-path)
+    (decode-percent-encoded-file-path (path/file-url-or-path->path file-path))
 
-     :else
-     (path/path-join repo-dir file-path))))
+    :else
+    (path/path-join repo-dir (decode-percent-encoded-file-path file-path))))
 
 (defn file-path->assets-url
   "Resolve a local filesystem path to an Electron assets:// URL.
