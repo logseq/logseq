@@ -96,6 +96,10 @@ type inst =
   ; feature : feature
   ; owner : W.t (* [:views] resource owner lookup *)
   ; st : vstate Signal.state
+  ; data_gen : int ref
+        (* bumped at every data fetch issue — a response resolving
+           under an older generation is stale (the view already moved
+           to a newer context) and must not paint *)
   }
 
 let empty_vstate () : vstate =
@@ -149,7 +153,16 @@ let make ~sched ~kind ~feature ~owner : inst =
   ; feature
   ; owner
   ; st = Signal.state sched (empty_vstate ())
+  ; data_gen = ref 0
   }
+
+(* issue a new fetch generation — responses resolving under an older
+   one are dropped *)
+let new_fetch inst : int =
+  incr inst.data_gen;
+  !(inst.data_gen)
+
+let fetch_fresh inst gen = !(inst.data_gen) = gen
 
 let get inst : vstate = Runtime.signal_get inst.st
 

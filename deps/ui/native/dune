@@ -243,6 +243,12 @@
  (copy ../src/views/views_db.ml views_db.ml))
 (rule
  (copy ../src/views/views_head.ml views_head.ml))
+
+(rule
+ (copy ../src/views/views_query.ml views_query.ml))
+
+(rule
+ (copy ../src/views/views_table.ml views_table.ml))
 (rule
  (copy ../src/views/views_state.ml views_state.ml))
 (rule

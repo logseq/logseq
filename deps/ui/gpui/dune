@@ -140,10 +140,6 @@
 (rule
  (copy ../native/views_popup.ml views_popup.ml))
 (rule
- (copy ../native/views_query.ml views_query.ml))
-(rule
- (copy ../native/views_table.ml views_table.ml))
-(rule
  (copy ../native/views_virt.ml views_virt.ml))
 (rule
  (copy ../native/virt_list.ml virt_list.ml))
@@ -394,6 +390,10 @@
  (copy ../src/views/views_db.ml views_db.ml))
 (rule
  (copy ../src/views/views_head.ml views_head.ml))
+(rule
+ (copy ../src/views/views_query.ml views_query.ml))
+(rule
+ (copy ../src/views/views_table.ml views_table.ml))
 (rule
  (copy ../src/views/views_state.ml views_state.ml))
 (rule
