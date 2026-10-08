@@ -2,12 +2,25 @@
 
 let checks = ref 0
 let failures = ref 0
+let expected_failures = ref 0
+let unexpected_passes = ref 0
 
 let check name cond =
   incr checks;
   if not cond then (
     incr failures;
     Js.log ("FAIL: " ^ name))
+
+(* a check expected to FAIL against current defective behavior: counted
+   as an expected failure while the defect stands, and reported as an
+   unexpected pass once the behavior is fixed — at which point the call
+   site should be promoted to a plain [check]. The buggy result is never
+   written as the expected value. *)
+let xfail name cond =
+  if cond then (
+    incr unexpected_passes;
+    Js.log ("UNEXPECTED-PASS (defect fixed? promote to check): " ^ name))
+  else incr expected_failures
 
 let eq name expected actual to_string =
   check

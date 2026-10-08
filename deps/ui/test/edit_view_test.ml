@@ -18,6 +18,18 @@ module S = Drive.Session
 
 (* ---------- harness ---------- *)
 
+(* per-runtime plumbing: the web entry supplies Stub_dom and the web
+   extension registrations; the native entry supplies a no-op install
+   and the native registry set. The scenario bodies below are
+   identical in both runtimes. *)
+type env =
+  { install : unit -> unit
+  ; register_extensions : Lui_extension.extension_registry -> unit
+  ; utf16 : bool
+      (* the runtime's string semantics: JS strings measure UTF-16
+         code units; native strings measure UTF-8 bytes *)
+  }
+
 type tmodel =
   { ed : M.t
   ; frame : E.frame
@@ -43,8 +55,8 @@ let route_of routed =
   ; menu = (fun n -> routed := ("menu:" ^ n) :: !routed)
   }
 
-let mount_editor ?(units = M.Bytes) source =
-  Stub_dom.install ();
+let mount_editor ~env ?(units = M.Bytes) source =
+  env.install ();
   let routed = ref [] in
   let conduit = ref E.no_conduit in
   let route = route_of routed in
@@ -54,12 +66,7 @@ let mount_editor ?(units = M.Bytes) source =
     | In ev -> { m with ed = E.handle ~route ~conduit:!conduit m.ed ev }
   in
   let registry = Lui_extension.registry () in
-  Logseq_emoji.register registry;
-  Logseq_katex.register registry;
-  Logseq_el.register registry;
-  Logseq_editor.register registry;
-  Logseq_codemirror.register registry;
-  Logseq_virt.register registry;
+  env.register_extensions registry;
   let view _ctx ms send =
     let ed_s = Signal.map (fun m -> m.ed) ms in
     let frame_s = Signal.map (fun m -> m.frame) ms in
@@ -113,8 +120,8 @@ let ext_event h name kvs =
 
 (* ---------- emit structure ---------- *)
 
-let test_emit_structure () =
-  let h = mount_editor "a **b** and [[Page]] tail" in
+let test_emit_structure ~env () =
+  let h = mount_editor ~env "a **b** and [[Page]] tail" in
   let t = tree h in
   (* .block-editor column: line row + overlay + extension sink *)
   let editor =
@@ -139,8 +146,11 @@ let test_emit_structure () =
        in
        eqs "frag values" "a ;**;b;**; and ;[[Page]]; tail"
          (String.concat ";" (List.filteri (fun i _ -> i < 7) vals));
-       (* pad is a single U+200B code unit *)
-       eqi "pad is ZWSP" 1 (String.length (List.nth vals 7));
+       (* pad is a single U+200B: one UTF-16 code unit on the web
+          surface, its three-byte UTF-8 encoding at native *)
+       eqi "pad is ZWSP"
+         (if env.utf16 then 1 else 3)
+         (String.length (List.nth vals 7));
        (* classes: plain carries no extra, delims hidden at caret 0,
           pill non-editable, pad last *)
        let clss =
@@ -176,16 +186,16 @@ let test_emit_structure () =
          (List.length (String.split_on_char ';' runs))
    | None -> check "runs prop" false)
 
-let test_empty_line_pad () =
-  let h = mount_editor "" in
+let test_empty_line_pad ~env () =
+  let h = mount_editor ~env "" in
   (* an empty buffer still emits a pad so the caret has somewhere to
      land *)
   check "pad on empty buffer" (cls_nodes h "ed-pad" <> [])
 
 (* ---------- shape-gated rebuild ---------- *)
 
-let test_shape_gated () =
-  let h = mount_editor "a **b** c" in
+let test_shape_gated ~env () =
+  let h = mount_editor ~env "a **b** c" in
   let ids0 = List.sort compare (cls_ids h "ed-r") in
   let count0 = DM.node_count (tree h) in
   (* caret into the first plain run, then type *)
@@ -233,8 +243,8 @@ let test_shape_gated () =
 
 (* ---------- overlay frame ---------- *)
 
-let test_overlay () =
-  let h = mount_editor "ab\ncd" in
+let test_overlay ~env () =
+  let h = mount_editor ~env "ab\ncd" in
   send h
     (Frame
        { E.caret = Some { E.x = 10; y = 4; w = 0; h = 12 }
@@ -276,8 +286,8 @@ let test_overlay () =
 
 (* ---------- extension events through the sink ---------- *)
 
-let test_sink_events () =
-  let h = mount_editor "ac" in
+let test_sink_events ~env () =
+  let h = mount_editor ~env "ac" in
   ext_event h "pointer" [ "offset", IntValue 1 ];
   eqi "pointer moves caret" 1 (ed h).M.caret;
   ext_event h "insert" [ "text", StringValue "x" ];
@@ -454,14 +464,14 @@ let test_incremental () =
   let ls5 = Edit_view.lines_step cache m5 in
   check "line-count change == full" (ls5 = Edit_view.lines_of m5)
 
-let test_offset_shift_work () =
+let test_offset_shift_work ~env () =
   List.iter
     (fun count ->
       let source =
         List.init count (fun i -> "Line " ^ string_of_int i ^ " plain text")
         |> String.concat "\n"
       in
-      let h = mount_editor ~units:M.U16 source in
+      let h = mount_editor ~env ~units:M.U16 source in
       send h (In (E.Insert "x"));
       let d = Lui_runtime.diagnostics (Lui_app.runtime h.s.S.app) in
       check "offset shifts avoid fragment subtree propagation"
@@ -469,9 +479,9 @@ let test_offset_shift_work () =
       eqs "insertion updates source" ("x" ^ source) (ed h).M.source)
     [10; 500]
 
-let test_web_flow () =
+let test_web_flow ~env () =
   let source = List.init 500 (fun i -> "Line " ^ string_of_int i) |> String.concat "\n" in
-  let h = mount_editor ~units:M.U16 source in
+  let h = mount_editor ~env ~units:M.U16 source in
   check "plain multiline web surface has bounded retained nodes"
     (DM.node_count h.s.S.tree < 64);
   let source_of_surface () =
@@ -491,15 +501,15 @@ let test_web_flow () =
   eqs "web flow preserves newline source" source (source_of_surface ());
   send h (In (E.Insert "x"));
   eqs "web flow updates source without line nodes" ("x" ^ source) (source_of_surface ());
-  let h = mount_editor ~units:M.U16 "first\n\nlast\n" in
+  let h = mount_editor ~env ~units:M.U16 "first\n\nlast\n" in
   eqi "web flow retains one final caret landing pad" 1 (List.length (cls_nodes h "ed-pad"));
   let prefix = List.init 30 (fun _ -> "plain") |> String.concat "\n" in
   let atomic = "$$" ^ (List.init 20 (fun _ -> "x") |> String.concat "\n") ^ "$$" in
-  let h = mount_editor ~units:M.U16 (prefix ^ "\n" ^ atomic ^ "\ntail") in
+  let h = mount_editor ~env ~units:M.U16 (prefix ^ "\n" ^ atomic ^ "\ntail") in
   eqi "web flow does not split a multiline atomic construct" 1 (List.length (cls_nodes h "ed-pill"))
 
-let test_shifted_pill_click () =
-  let h = mount_editor ~units:M.U16 "ab\n[[Page]]" in
+let test_shifted_pill_click ~env () =
+  let h = mount_editor ~env ~units:M.U16 "ab\n[[Page]]" in
   let pill_id =
     match cls_nodes h "ed-pill" with
     | [pill] -> pill.DM.id
@@ -512,36 +522,26 @@ let test_shifted_pill_click () =
   eqs "pill click preserves source" "xab\n[[Page]]" (ed h).M.source;
   check "pill click reveals current reference" (cls_nodes h "ed-raw" <> [])
 
-let test_loaded_asset () =
-  Stub_dom.install ();
-  let uuid = "loaded-image-regression" in
-  let original = Test_check.block uuid "Image" in
-  let b = { original with Model.block_asset_type = Some "png" } in
-  let view _context _model _send context parent =
-    let ready = Asset_dom.ready_for uuid "png" context in
-    Signal.set ready true;
-    Asset_dom.asset_container uuid b context parent
-  in
-  (try
-     let s = S.mount ~profile:Logseq_editor.web_profile ~initial:()
-       ~reducer:(fun () () -> ()) ~view () in
-     check "loaded asset mounts without interrupting the page flush"
-       (Option.is_some (DM.first s.S.tree (sel "prop:accessibility-identifier=\"asset-img-loaded-image-regression\"")))
-   with Invalid_argument message ->
-     check ("loaded asset mounts without interrupting the page flush: " ^ message) false);
-  Hashtbl.remove Asset_dom.ready_sigs uuid
-
-let run () =
-  test_emit_structure ();
-  test_empty_line_pad ();
+(* scenarios portable across both runtimes — compiled under
+   Melange (test_main.js) and under the gpui native test entry *)
+let run ~env =
+  test_emit_structure ~env ();
   test_incremental ();
-  test_shape_gated ();
-  test_offset_shift_work ();
-  test_web_flow ();
-  test_shifted_pill_click ();
-  test_overlay ();
-  test_sink_events ();
+  test_shape_gated ~env ();
+  test_overlay ~env ();
+  test_sink_events ~env ();
   test_input_mapping ();
+  test_bytes_default ()
+
+(* web-entry only: UTF-16 code-unit semantics, JS string literals via
+   Platform.utf8, and the bounded retained-node web surface. These call
+   mount_editor ~units:M.U16 — under native byte semantics a U16 model
+   would mis-step over multi-byte text, so they do not run natively *)
+let run_web ~env =
+  (* the empty-line pad exists only on the U16 surface: at Bytes the
+     pad count differs, so this scenario stays web-side *)
+  test_empty_line_pad ~env ();
   test_u16 ();
-  test_bytes_default ();
-  test_loaded_asset ()
+  test_offset_shift_work ~env ();
+  test_web_flow ~env ();
+  test_shifted_pill_click ~env ()

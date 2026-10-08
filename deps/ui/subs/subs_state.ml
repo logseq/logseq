@@ -293,19 +293,20 @@ let app_hooks =
    it crosses as a labeled failure rather than a fabricated exn *)
 let task_of_promise (p : 'a Js.Promise.t) : 'a Ui_task.t =
   Ui_task.create (fun ~resolve ~reject ->
-      ignore
-        (Js.Promise.then_
-           (fun v ->
-             resolve v;
-             Js.Promise.resolve ())
-           p);
+      (* one then/catch chain — a rejection propagates through `then`
+         into `catch`, which resolves the chain so nothing escapes as an
+         unhandled rejection *)
       ignore
         (Js.Promise.catch
            (fun _ ->
              let e = Failure "promise rejected" in
              reject e;
-             Js.Promise.reject e)
-           p))
+             Js.Promise.resolve ())
+           (Js.Promise.then_
+              (fun v ->
+                resolve v;
+                Js.Promise.resolve ())
+              p)))
 
 let promise_of_task (t : 'a Ui_task.t) : 'a Js.Promise.t =
   Js.Promise.make (fun ~resolve ~reject ->

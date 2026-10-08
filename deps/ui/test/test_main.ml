@@ -105,7 +105,9 @@ let test_editor_cmds () =
               Runtime.read_model := prev_model;
               ignore (Fake_worker.install Test_drive.worker_handler);
               Js.log
-                (Printf.sprintf "%d checks, %d failures" !checks !failures);
+                (Printf.sprintf
+                   "%d checks, %d failures, %d expected-failures, %d unexpected-passes"
+                   !checks !failures !expected_failures !unexpected_passes);
               if !failures > 0 then exit 1))
     ; install = (fun () -> ())
     ; set_editing = (fun u ->
@@ -4125,7 +4127,7 @@ let test_scan_gate () =
 
 let () =
   Edit_model_test.run ();
-  Edit_view_test.run ();
+  Edit_view_web_test.run ();
   test_move ();
   test_update ();
   test_decode ();
