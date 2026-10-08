@@ -213,7 +213,7 @@ let display_opts ~page_title ~tag_dialog ~sidebar =
     ; (W.Keyword "page-title?", W.Bool page_title)
     ; (W.Keyword "sidebar-properties?", W.Bool sidebar)
     ; (W.Keyword "tag-dialog?", W.Bool tag_dialog)
-    ; (W.Keyword "publishing?", W.Bool (Platform.publishing ()))
+    ; (W.Keyword "publishing?", W.Bool (Properties_services.publishing ()))
     ; (W.Keyword "state-hide-empty-properties?", W.Bool false)
     ]
 
@@ -358,8 +358,6 @@ let entity_by_uuid uuid = entity (uuid_ref uuid)
    block.temp/positioned-properties. Every mounted .ls-block properties
    area calls this — batching callers in the same task into ONE request
    turns a page load's N+1 roundtrip storm into a single call. *)
-external rd_set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
-
 let rd_pending : (string * (W.t -> unit)) list ref = ref []
 let rd_scheduled = ref false
 
@@ -413,13 +411,13 @@ let rd_flush () =
              (Option.value (List.assoc_opt uuid results) ~default:W.Nil))
          pending;
        Js.Promise.resolve ())
-       |> Js.Promise.catch (fun e ->
-              Platform.console_error ("render-data batch failed", e);
+       |> Js.Promise.catch (fun _ ->
+              Properties_services.report_error "render-data batch failed";
               List.iter (fun (_, resolve) -> resolve W.Nil) pending;
               Js.Promise.resolve ())
        |> ignore
-      with e ->
-        Platform.console_error ("render-data batch failed", e);
+      with _ ->
+        Properties_services.report_error "render-data batch failed";
         List.iter (fun (_, resolve) -> resolve W.Nil) pending)
 
 let block_render_data uuid =
@@ -427,7 +425,13 @@ let block_render_data uuid =
       rd_pending := (uuid, (fun w -> resolve w [@u])) :: !rd_pending;
       if not !rd_scheduled then (
         rd_scheduled := true;
-        rd_set_timeout rd_flush 0))
+        Properties_services.schedule rd_flush 0))
+
+(* exported flush for hosts that drive scheduling deterministically
+   (production callers reach it through the deferred schedule above) *)
+let flush_render_data () =
+  rd_scheduled := false;
+  rd_flush ()
 
 (* ---------- ops ---------- *)
 

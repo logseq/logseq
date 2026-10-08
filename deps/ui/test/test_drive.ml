@@ -743,6 +743,39 @@ let sdk_ent_for uuid : W.t option =
 let sdk_ops_log : W.t list ref = ref []
 let sdk_tx_log : W.t list ref = ref []
 
+(* ---------- properties scenario wiring ----------
+   Mirrors the gpui host: Shared_scenarios_props drives the real
+   properties modules; writes land on the recorded apply-outliner-ops
+   payloads and every worker invoke is logged with its repo arg. *)
+
+let props_ops_log : W.t list ref = ref []
+let props_invoke_log : string list ref = ref []
+let props_resolved : (string * W.t) list ref = ref []
+let props_repo = ref ""
+let props_repo_hooked = ref false
+
+let rec props_after n f =
+  ignore
+    (Js.Promise.(resolve () |> then_ (fun () ->
+         if n <= 0 then (f (); Js.Promise.resolve ())
+         else (props_after (n - 1) f; Js.Promise.resolve ()))))
+
+let props_w_str (w : W.t) : string =
+  match w with
+  | W.Uuid s | W.String s | W.Keyword s | W.Symbol s -> s
+  | W.Int i -> string_of_int i
+  | W.Int64 i -> Int64.to_string i
+  | W.Float f -> Printf.sprintf "%g" f
+  | W.Bool b -> string_of_bool b
+  | W.Nil -> "nil"
+  | _ -> "?"
+
+let props_op_str (op : W.t) : string =
+  match W.elems op with
+  | [ W.Keyword name; W.Array args ] ->
+      name ^ "|" ^ String.concat "|" (List.map props_w_str args)
+  | _ -> "op?"
+
 let sdk_op_args name =
   List.concat_map
     (fun op ->
@@ -789,6 +822,12 @@ let blocks_response = function
   | _ -> W.List []
 
 let worker_handler name args : W.t =
+  props_invoke_log :=
+    (name ^ "@"
+    ^ (match List.nth_opt args 0 with
+       | Some (W.String r) -> r
+       | _ -> "?"))
+    :: !props_invoke_log;
   match name with
   | "thread-api/get-favorite-pages" -> W.List [ page_summary "Fav Page" ]
   | "thread-api/get-recent-pages" -> W.List [ page_summary "Recent Page" ]
@@ -820,9 +859,15 @@ let worker_handler name args : W.t =
       snapshot_response (List.nth_opt args 1)
   | "thread-api/apply-outliner-ops" -> (
       (match List.nth_opt args 1 with
-       | Some (W.Array ops) -> sdk_ops_log := !sdk_ops_log @ ops
+       | Some (W.Array ops) ->
+           sdk_ops_log := !sdk_ops_log @ ops;
+           props_ops_log := !props_ops_log @ ops
        | _ -> ());
       W.Map [ W.Keyword "result", W.Nil ])
+  | "thread-api/get-journal-page-by-day" ->
+      W.Map
+        [ W.Keyword "db/id", W.Int 66
+        ; W.Keyword "block/title", W.String "Oct 8th, 2026" ]
   | "thread-api/validate-block-tag" -> (
       match List.nth_opt args 2 with
       | Some (W.Int 33) ->
@@ -1429,6 +1474,85 @@ let test_sdk_api () =
     (Sdk_read.get_page_linked_references (jstr sdk_page_u) null null null)
     (fun _ -> true)
 
+let props_mount_cell ~block_uuid ~row =
+  let s_ref = ref None in
+  let ctx : Properties_value.ctx =
+    { block_uuid
+    ; block_id = None
+    ; refresh =
+        (fun () ->
+          match !s_ref with Some s -> S.poll s | None -> ())
+    ; is_page = false
+    ; class_schema = false
+    }
+  in
+  let registry = Lui_extension.registry () in
+  Logseq_emoji.register registry;
+  Logseq_katex.register registry;
+  Logseq_el.register registry;
+  Logseq_editor.register registry;
+  Logseq_codemirror.register registry;
+  Logseq_virt.register registry;
+  let s =
+    S.mount ~registry ~profile:Logseq_el.web_profile ~initial:Model.initial
+      ~reducer:Update.apply
+      ~view:(fun _ctx _ms _send -> Properties_value.view ctx row)
+      ()
+  in
+  s_ref := Some s;
+  s
+
+let props_host () : (Model.t, Action.t) Shared_scenarios_props.host =
+  if not !props_repo_hooked then (
+    props_repo_hooked := true;
+    let base = !Runtime.read_model in
+    Runtime.read_model :=
+      (fun () ->
+        match !props_repo with
+        | "" -> base ()
+        | r -> { (base ()) with Model.repo = Some r }));
+  { Shared_scenarios_props.session = s ()
+  ; check
+  ; mount_cell = props_mount_cell
+  ; commit_date =
+      (fun ~ident ~is_datetime ~text ->
+        Properties_value.commit_date_text
+          { Properties_value.block_uuid = "b1"
+          ; block_id = None
+          ; refresh = (fun () -> ())
+          ; is_page = false
+          ; class_schema = false
+          }
+          ident ~is_datetime text)
+  ; ops_log = (fun () -> List.map props_op_str !props_ops_log)
+  ; invoke_log = (fun () -> List.rev !props_invoke_log)
+  ; clear_logs =
+      (fun () -> props_ops_log := []; props_invoke_log := [])
+  ; after = props_after
+  ; set_repo = (fun r -> props_repo := r)
+  ; request_block_data =
+      (fun ~uuid ->
+        ignore
+          (Js.Promise.then_
+             (fun w ->
+               props_resolved := (uuid, w) :: !props_resolved;
+               Js.Promise.resolve ())
+             (Properties_data.block_render_data uuid)))
+  ; flush_pending = Properties_data.flush_render_data
+  ; positioned_rows = Properties_data.positioned_rows
+  ; split_display = Properties_data.split_display
+  ; filter_items =
+      (fun items filter ->
+        List.map
+          (fun (it : Properties_select.item) -> it.it_title)
+          (Properties_select.visible_items
+             ~items:
+               (List.map
+                  (fun (_id, t) -> Properties_select.item t (fun () -> ()))
+                  items)
+             ~filter ~searched:None ~new_option:None))
+  }
+
 (* ---------------- runner ---------------- *)
 
 let run ~finish =
@@ -1458,6 +1582,7 @@ let run ~finish =
   test_journal_reorder_move_collapse ();
   test_custom_macro_page ();
   test_sdk_api ();
+  Shared_scenarios_props.all (props_host ());
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)

@@ -110,11 +110,11 @@
 (rule
  (copy ../native/plugins_view.ml plugins_view.ml))
 (rule
- (copy ../native/properties_data.ml properties_data.ml))
+ (copy ../src/properties/properties_data.ml properties_data.ml))
 (rule
  (copy ../native/properties_dom.ml properties_dom.ml))
 (rule
- (copy ../native/properties_value.ml properties_value.ml))
+ (copy ../src/properties/properties_value.ml properties_value.ml))
 (rule
  (copy ../native/render_libs.ml render_libs.ml))
 (rule
