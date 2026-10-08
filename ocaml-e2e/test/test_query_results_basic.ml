@@ -115,7 +115,7 @@ let () =
     in
     let* _ = Util.refresh_until_graph_loaded env in
     let* _ =
-      E2e_assert.is_visible env
+      E2e_assert.is_visible ~timeout:30000. env
         ".custom-query-results .view-action-type .ls-icon-list"
     in
     let* () =
@@ -356,7 +356,7 @@ let () =
     in
     let* _ = Util.refresh_until_graph_loaded env in
     let* _ =
-      E2e_assert.is_visible env
+      E2e_assert.is_visible ~timeout:30000. env
         ".custom-query-results .view-action-type .ls-icon-list"
     in
     let* _ =

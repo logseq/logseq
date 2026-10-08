@@ -323,7 +323,7 @@ let expand_delete_blocks_tx db (txs : Wire.t list) (tx_meta : tx_meta)
      already baked into tx-data — the server ingests those items
      verbatim (its transact carries no outliner-op meta). Re-expanding
      on the pull path against this conn's tree state would append
-     retractEntitys the journal never carried whenever the puller's
+     retractEntities the journal never carried whenever the puller's
      view of the subtree differs (e.g. it created a descendant early
      via its own upload) *)
   let remote_apply =
