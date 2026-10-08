@@ -134,7 +134,10 @@
                (assets/file-path->assets-url "file:///tmp/a%2520b.png"))))
       (testing "an undecodable filename does not block escapes in other segments"
         (is (= "assets:///tmp/my%20photos/50%25ba.png"
-               (assets/file-path->assets-url "/tmp/my%20photos/50%ba.png")))))))
+               (assets/file-path->assets-url "/tmp/my%20photos/50%ba.png"))))
+      (testing "file URL with an encoded Windows drive colon resolves to a drive path"
+        (is (= "assets:///C/logseq__colon/Users/a%20b.png"
+               (assets/file-path->assets-url "file:///C%3A/Users/a%20b.png")))))))
 
 (deftest make-asset-url-electron-test
   (async done
