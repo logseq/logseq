@@ -62,39 +62,21 @@ let hook_installed = State_cell.Once.make ()
 let loaded_repo : string option ref = ref None
 let last_page_key : string option ref = ref None
 
-(* ---------- json event helpers ---------- *)
+(* ---------- dom event helpers (host ops via Ui_dom) ---------- *)
 
+let jbool (name : string) (ev : Ui_dom.ev) =
+  match name with
+  | "shiftKey" -> ev.Ui_dom.shift
+  | "metaKey" -> ev.Ui_dom.meta
+  | "ctrlKey" -> ev.Ui_dom.ctrl
+  | _ -> false
 
-let jbool name j =
-  match Worker_client.json_field name j with
-  | Some v -> (
-      match Js.Json.classify v with
-      | Js.Json.JSONTrue -> true
-      | _ -> false)
-  | None -> false
+let closest (target : Ui_dom.el) sel = target.Ui_dom.closest sel
 
-external closest_raw :
-  Js.Json.t -> string -> Js.Json.t option
-  = "closest" [@@mel.send] [@@mel.return nullable]
+let prevent_default (ev : Ui_dom.ev) = ev.Ui_dom.prevent_default ()
 
-(* event targets can be document/window — .closest exists on Elements
-   (nodeType 1) only *)
-let closest target sel =
-  match Worker_client.json_field "nodeType" target with
-  | Some nt -> (
-      match Js.Json.classify nt with
-      | Js.Json.JSONNumber 1. -> closest_raw target sel
-      | _ -> None)
-  | None -> None
-
-external prevent_default : Js.Json.t -> unit = "preventDefault"
-  [@@mel.send]
-
-external ev_client_x : Js.Json.t -> float = "clientX" [@@mel.get]
-external ev_client_y : Js.Json.t -> float = "clientY" [@@mel.get]
-
-external bounding_rect_json : Js.Json.t -> Js.Json.t =
-  "getBoundingClientRect" [@@mel.send]
+let ev_client_x (ev : Ui_dom.ev) = ev.Ui_dom.x
+let ev_client_y (ev : Ui_dom.ev) = ev.Ui_dom.y
 
 (* open state for the left-sidebar link-item menu: (page ref, is-recent,
    anchor cx, anchor top, anchor bottom). open_menu carries "lp-<ref>"
@@ -105,54 +87,40 @@ let lp_ctx : (string * bool * float * float * float) option ref =
 (* cljs popup-show!: pointer-opened dropdowns re-anchor to the event
    target element's rect — (center-x, top, bottom); falls back to a 1px
    point at the pointer when no element resolves *)
-let anchor_of_raw_target ev =
-  match Worker_client.json_field "target" ev with
+let anchor_of_raw_target (ev : Ui_dom.ev) =
+  match ev.Ui_dom.target with
   | Some tgt ->
-      let r = bounding_rect_json tgt in
-      let num name =
-        match Worker_client.json_field name r with
-        | Some v -> (
-            match Js.Json.classify v with
-            | Js.Json.JSONNumber n -> n
-            | _ -> 0.)
-        | None -> 0.
-      in
-      let x = num "x" and y = num "y" in
-      ( x +. (num "width" /. 2.)
-      , y
-      , y +. num "height" )
-  | None -> (ev_client_x ev, ev_client_y ev, ev_client_y ev)
+      let x, y, w, h = tgt.Ui_dom.rect () in
+      if x = 0. && y = 0. && w = 0. && h = 0. then
+        (* hosts without element geometry anchor at the pointer *)
+        (ev.x, ev.y, ev.y)
+      else (x +. (w /. 2.), y, y +. h)
+  | None -> (ev.x, ev.y, ev.y)
 
 let open_lp_menu st ~target ~recent ~ax ~atop ~abot =
   lp_ctx := Some (target, recent, ax, atop, abot);
   Runtime.signal_set st.open_menu ("lp-" ^ target)
 ;;
 
-let click_target sel ev =
-  match Worker_client.json_field "target" ev with
-  | Some tgt -> closest tgt sel
+let click_target sel (ev : Ui_dom.ev) =
+  match ev.Ui_dom.target with
+  | Some tgt -> tgt.Ui_dom.closest sel
   | None -> None
 
-let detail_string name ev =
-  match Worker_client.json_field "detail" ev with
-  | Some d -> (
-      match Worker_client.json_field name d with
-      | Some v -> Worker_client.json_string v
-      | None -> None)
-  | None -> None
+let detail_string name (ev : Ui_dom.ev) = ev.Ui_dom.detail name
 
 (* #right-sidebar is chrome.ml's wrapper and carries no width; the
    resizer writes the persisted width inline, so we mirror that for
    .cp__right-sidebar.open to have a visible box. *)
 let sync_right_sidebar_width () =
-  match Web_dom.get_element_by_id "right-sidebar" with
+  match Ui_dom.query "#right-sidebar" with
   | Some el ->
       let width =
-        match Platform.local_storage_get "ls-right-sidebar-width" with
+        match Ui_services.storage_get "ls-right-sidebar-width" with
         | Some w -> w
         | None -> "40%"
       in
-      Web_dom.el_style_set_property el "width"
+      el.Ui_dom.set_style "width"
         (if (model ()).Model.right_sidebar_open then width else "0px")
   | None -> ()
 
@@ -165,40 +133,48 @@ let sync_right_sidebar_width () =
    "ls-right-sidebar-width"). Raw mousedown/move/up tracking here (no
    interact.js in LUI). *)
 
-external doc_root : Js.Json.t = "document.documentElement"
+let doc_root () = Ui_dom.doc_root ()
 
-external style_set_prop :
-  Js.Json.t -> string -> string -> unit
-  = "setProperty" [@@mel.scope "style"] [@@mel.send]
+let set_style_prop (el : Ui_dom.el) name v = el.Ui_dom.set_style name v
+let set_el_width (el : Ui_dom.el) v = el.Ui_dom.set_style "width" v
+let class_add (el : Ui_dom.el) c = el.Ui_dom.add_class c
+let class_rm (el : Ui_dom.el) c = el.Ui_dom.remove_class c
 
-external style_set_width_j : Js.Json.t -> string -> unit = "width"
-  [@@mel.scope "style"] [@@mel.set]
-
-external class_add : Js.Json.t -> string -> unit = "add"
-  [@@mel.scope "classList"] [@@mel.send]
-
-external class_rm : Js.Json.t -> string -> unit = "remove"
-  [@@mel.scope "classList"] [@@mel.send]
-
-
-let left_resizing : Js.Json.t option ref = ref None
+let left_resizing : Ui_dom.el option ref = ref None
 let right_resizing = ref false
 
 let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
 
-(* cljs restores the persisted left width on mount *)
+(* parse a stored CSS px value ("440px" / "440.5px") *)
+let px_int_of_string s =
+  let n = String.length s in
+  let v =
+    if n > 2 && String.sub s (n - 2) 2 = "px" then
+      String.sub s 0 (n - 2)
+    else s
+  in
+  match Float.of_string_opt v with
+  | Some f -> Some (int_of_float (Float.round f))
+  | None -> None
+
+(* cljs restores the persisted left width on mount; the host op applies
+   it through whichever channel the runtime binds (CSS var on web, the
+   model-bound dock width on native) *)
 let sync_left_sidebar_width () =
-  match Platform.local_storage_get "ls-left-sidebar-width" with
-  | Some w -> style_set_prop doc_root "--ls-left-sidebar-width" w
+  match Ui_services.storage_get "ls-left-sidebar-width" with
+  | Some w -> (
+      match px_int_of_string w with
+      | Some px -> Ui_dom.apply_left_sidebar_width px
+      | None -> ())
   | None -> ()
 
 let set_right_width width =
-  Platform.local_storage_set "ls-right-sidebar-width" width;
+  Ui_services.storage_set "ls-right-sidebar-width" width;
   (* cljs persist-right-sidebar-width! also feeds :ui/sidebar-width;
      the inline write keeps the panel at the dragged size without
      waiting for the next model publish *)
-  match Web_dom.query_selector "#right-sidebar" with
-  | Some el -> style_set_width_j el width
+  match Ui_dom.query "#right-sidebar" with
+  | Some el -> set_el_width el width
   | None -> ()
 
 let on_resizer_mousedown ev =
@@ -206,7 +182,7 @@ let on_resizer_mousedown ev =
   | Some el -> (
       prevent_default ev;
       left_resizing := Some el;
-      class_add doc_root "is-resizing-buf";
+      class_add (doc_root ()) "is-resizing-buf";
       class_add el "is-active";
       match closest el "#left-sidebar" with
       | Some sb -> class_add sb "is-resizing"
@@ -216,20 +192,21 @@ let on_resizer_mousedown ev =
       | Some _ ->
           prevent_default ev;
           right_resizing := true;
-          class_add doc_root "is-resizing-buf"
+          class_add (doc_root ()) "is-resizing-buf"
       | None -> ())
 
 let on_resizer_mousemove ev =
   (match !left_resizing with
    | Some _ ->
        let w = clampf 240. 460. (ev_client_x ev) in
-       let s = Printf.sprintf "%.2fpx" w in
-       style_set_prop doc_root "--ls-left-sidebar-width" s;
-       Platform.local_storage_set "ls-left-sidebar-width" s
+       let px = int_of_float (Float.round w) in
+       Ui_dom.apply_left_sidebar_width px;
+       Ui_services.storage_set "ls-left-sidebar-width"
+         (Printf.sprintf "%dpx" px)
    | None -> ()
   );
   if !right_resizing then begin
-    let vw = Web_dom.win_inner_width in
+    let vw = Ui_dom.viewport_width () in
     let lo = max 0.1 (320. /. vw) in
     let ratio = clampf lo 0.7 ((vw -. ev_client_x ev) /. vw) in
     set_right_width (Printf.sprintf "%g%%" (ratio *. 100.))
@@ -244,36 +221,29 @@ let on_resizer_mousemove ev =
    shade-mask opacity tracks the drag ratio. Below 640px taps on
    navigation targets inside the sidebar also close it. *)
 
-external touch_item :
-  Js.Json.t -> int -> Js.Json.t = "item" [@@mel.scope "touches"] [@@mel.send]
-
-external touches_length :
-  Js.Json.t -> int = "length" [@@mel.scope "touches"] [@@mel.get]
-
-external el_offset_width : Js.Json.t -> float = "offsetWidth" [@@mel.get]
-
-(* cljs util/sm-breakpoint? — document.documentElement.offsetWidth < 640 *)
-let sm_breakpoint () = el_offset_width doc_root < 640.
+(* cljs util/sm-breakpoint? — viewport width < 640 *)
+let sm_breakpoint () = Ui_dom.viewport_width () < 640.
 
 let touch_before : (float * float) option ref = ref None
 let touch_dx = ref 0.
 let touch_pending = ref false
 
+let touch_coord (ev : Ui_dom.ev) i =
+  List.nth_opt ev.Ui_dom.touches i
+
 let left_touch_x ev i =
-  if touches_length ev > i then Some (ev_client_x (touch_item ev i))
-  else None
+  match touch_coord ev i with Some (x, _) -> Some x | None -> None
 
 let left_touch_y ev i =
-  if touches_length ev > i then Some (ev_client_y (touch_item ev i))
-  else None
+  match touch_coord ev i with Some (_, y) -> Some y | None -> None
 
-let set_el_style el name v = style_set_prop el name v
+let set_el_style (el : Ui_dom.el) name v = el.Ui_dom.set_style name v
 
 let apply_touch_drag sb dx =
   let open_ = (model ()).Model.left_sidebar_open in
-  (match Web_dom.query_selector "#left-sidebar .left-sidebar-inner" with
+  (match Ui_dom.query "#left-sidebar .left-sidebar-inner" with
    | Some inner ->
-       let w = el_offset_width inner in
+       let w = inner.Ui_dom.offset_width () in
        let tx =
          if dx > 0. then
            (* opening drag: reveal from -100% toward 0 *)
@@ -287,7 +257,7 @@ let apply_touch_drag sb dx =
            Printf.sprintf "translate3d(%.0fpx, 0, 0)" dx
        in
        set_el_style inner "transform" tx;
-       (match Web_dom.query_selector "#left-sidebar > .shade-mask" with
+       (match Ui_dom.query "#left-sidebar > .shade-mask" with
         | Some mask ->
             let ratio =
               if dx > 0. then clampf 0. 1. (dx /. w)
@@ -308,13 +278,13 @@ let clear_touch_drag () =
   touch_before := None;
   touch_dx := 0.;
   touch_pending := false;
-  (match Web_dom.query_selector "#left-sidebar" with
+  (match Ui_dom.query "#left-sidebar" with
    | Some sb -> class_rm sb "is-touching"
    | None -> ());
-  (match Web_dom.query_selector "#left-sidebar .left-sidebar-inner" with
+  (match Ui_dom.query "#left-sidebar .left-sidebar-inner" with
    | Some inner -> set_el_style inner "transform" ""
    | None -> ());
-  match Web_dom.query_selector "#left-sidebar > .shade-mask" with
+  match Ui_dom.query "#left-sidebar > .shade-mask" with
   | Some mask -> set_el_style mask "opacity" ""
   | None -> ()
 
@@ -334,7 +304,7 @@ let on_doc_touchmove ev =
           let dx = ax -. bx in
           touch_dx := dx;
           if Float.abs dx > 20. then
-            (match Web_dom.query_selector "#left-sidebar" with
+            (match Ui_dom.query "#left-sidebar" with
              | Some sb -> apply_touch_drag sb dx
              | None -> ())
       | None -> ())
@@ -355,7 +325,7 @@ let on_resizer_mouseup _ev =
   (match !left_resizing with
    | Some el -> (
        left_resizing := None;
-       class_rm doc_root "is-resizing-buf";
+       class_rm (doc_root ()) "is-resizing-buf";
        class_rm el "is-active";
        match closest el "#left-sidebar" with
        | Some sb -> class_rm sb "is-resizing"
@@ -364,13 +334,13 @@ let on_resizer_mouseup _ev =
   );
   if !right_resizing then begin
     right_resizing := false;
-    class_rm doc_root "is-resizing-buf"
+    class_rm (doc_root ()) "is-resizing-buf"
   end
 
 (* ---------- storage ---------- *)
 
 let nav_checked_of_storage () =
-  match Platform.local_storage_get "ls-sidebar-navigations" with
+  match Ui_services.storage_get "ls-sidebar-navigations" with
   | Some s -> (
       try
         match Edn.parse s with
@@ -381,7 +351,7 @@ let nav_checked_of_storage () =
   | None -> default_navs
 
 let persist_nav_checked xs =
-  Platform.local_storage_set "ls-sidebar-navigations"
+  Ui_services.storage_set "ls-sidebar-navigations"
     (Edn.to_string (Wire.List (List.map (fun n -> Wire.Keyword n) xs)))
 
 let rec take n xs =
@@ -390,7 +360,7 @@ let rec take n xs =
   | n, x :: tl -> x :: take (n - 1) tl
 
 let recent_ids_of_storage repo =
-  match Platform.local_storage_get "recent-pages" with
+  match Ui_services.storage_get "recent-pages" with
   | Some s -> (
       try
         match Edn.parse s with
@@ -417,7 +387,7 @@ let push_recent repo id =
   (* merge into the stored per-graph map — rewriting the whole value
      would drop every other repo's recents on each visit *)
   let kvs =
-    match Platform.local_storage_get "recent-pages" with
+    match Ui_services.storage_get "recent-pages" with
     | Some s -> (
         try
           match Edn.parse s with
@@ -433,7 +403,7 @@ let push_recent repo id =
         with _ -> [])
     | None -> []
   in
-  Platform.local_storage_set "recent-pages"
+  Ui_services.storage_set "recent-pages"
     (Edn.to_string
        (Wire.Map
           ((Wire.String repo, Wire.Array (List.map (fun i -> Wire.Int i) ids))
@@ -451,8 +421,8 @@ let then_keep p k =
     ((let* w = p in
      k w;
      Js.Promise.resolve ())
-     |> Js.Promise.catch (fun e ->
-            Platform.console_error ("sidebar loader failed", e);
+     |> Js.Promise.catch (fun _ ->
+            Ui_dom.log_error "sidebar loader failed";
             Js.Promise.resolve ()))
 
 (* loads race with writes (push_recent/set-page-favorite) and with each
@@ -530,8 +500,6 @@ let refresh_favorited repo st =
 
 (* ---------- navigation ---------- *)
 
-external encode_uri_component : string -> string = "encodeURIComponent"
-
 (* Ref value for get-page-route-info / get-page-blocks-tree: a bare uuid
    or page-name string. The [:block/uuid u] lookup-ref ARRAY that
    Router.page_ref builds decodes to a Vector that the endpoints'
@@ -543,11 +511,11 @@ let route_ref s =
 let push_page_route target =
   let target =
     if Wire.is_uuid_string target then target
-    else encode_uri_component target
+    else Ui_dom.encode_uri target
   in
   Runtime.mark_nav ();
-  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
-  Web_dom.dispatch_custom "ls:navigate" Js.Json.null
+  Ui_dom.navigate_hash (Runtime.nav_hash ("#/page/" ^ target));
+  Ui_dom.dispatch "ls:navigate"
 
 (* cljs redirect-to-page!: route-info first — hidden and
    private-built-in pages warn instead of navigating, and alias pages
@@ -567,7 +535,7 @@ let navigate_to_page target =
      let blocked =
        (* cljs gates this on (not config/dev?) — our bundle is
           the dev build — and exempts the Recycle page *)
-       (not Platform.dev_build)
+       (not (Ui_dom.dev_build ()))
        && Wire.map_get_string info "block/title" <> Some "Recycle"
        && ((flag "hidden?" && not (flag "property?"))
            || (flag "built-in?" && flag "private-built-in?"))
@@ -588,12 +556,9 @@ let navigate_to_page target =
 let fetch_blocks (p : Model.page) =
   let* blocks = Outliner_ops.fetch_page_blocks ~plain:true (Runtime.repo ()) p in
   Js.Promise.resolve { p with Model.page_blocks = blocks }
-let open_dialog name =
-  let o = Js.Dict.empty () in
-  Js.Dict.set o "name" (Js.Json.string name);
-  Web_dom.dispatch_custom "ls:open-dialog" (Js.Json.object_ o)
+let open_dialog name = Ui_dom.open_dialog name
 
-let open_cards () = Web_dom.dispatch_custom "ls:open-cards" Js.Json.null
+let open_cards () = Ui_dom.dispatch "ls:open-cards"
 
 let ensure_right_open () =
   if not (model ()).Model.right_sidebar_open then
@@ -963,8 +928,8 @@ let refresh_items repo st =
       ((let* arr = Js.Promise.all (Array.of_list (List.map (refresh_item repo) items)) in
        Runtime.signal_set st.items (Array.to_list arr);
        Js.Promise.resolve ())
-       |> Js.Promise.catch (fun e ->
-              Platform.console_error ("sidebar refresh failed", e);
+       |> Js.Promise.catch (fun _ ->
+              Ui_dom.log_error "sidebar refresh failed";
               Js.Promise.resolve ()))
 
 (* ---------- favorites ---------- *)
@@ -1112,11 +1077,11 @@ let on_doc_contextmenu st ev =
   match click_target "#left-sidebar a.link-item" ev with
   | Some el -> (
       prevent_default ev;
-      match Web_dom.el_get_attr el "data-lp-ref" with
+      match el.Ui_dom.attr "data-lp-ref" with
       | Some target ->
           let ax, atop, abot = anchor_of_raw_target ev in
           open_lp_menu st ~target
-            ~recent:(Web_dom.el_get_attr el "data-lp-recent" = Some "1")
+            ~recent:(el.Ui_dom.attr "data-lp-recent" = Some "1")
             ~ax ~atop ~abot
       | None -> ())
   | None -> (
@@ -1129,7 +1094,7 @@ let on_doc_contextmenu st ev =
           match closest hdr ".sidebar-item" with
           | Some it -> (
               prevent_default ev;
-              match Web_dom.el_get_attr it "id" with
+              match it.Ui_dom.attr "id" with
               | Some id
                 when String.length id > 4
                      && String.sub id 0 4 = "sbi-" ->
@@ -1168,15 +1133,15 @@ let on_doc_click st ev =
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
            resolved title, which drifts out of sync on rename. tag chips
            keep the uuid on the .block-tag wrapper *)
-        (match Web_dom.el_get_attr el "data-uuid" with
+        (match el.Ui_dom.attr "data-uuid" with
          | Some u when u <> "" -> Some u
          | _ -> (
              match
                Option.bind (closest el ".block-tag[data-tag-uuid]")
-                 (fun chip -> Web_dom.el_get_attr chip "data-tag-uuid")
+                 (fun chip -> chip.Ui_dom.attr "data-tag-uuid")
              with
              | Some u when u <> "" -> Some u
-             | _ -> Web_dom.el_get_attr el "data-ref"))
+             | _ -> el.Ui_dom.attr "data-ref"))
       with
       | Some ref_ ->
           (* cljs open-page-ref: shift+click opens in the sidebar, any other
@@ -1221,17 +1186,17 @@ let on_doc_click st ev =
             | None -> ())
         | None -> ()
 
-let on_doc_keydown st ev =
-  match Worker_client.json_field "key" ev with
+let on_doc_keydown st (ev : Ui_dom.ev) =
+  match ev.Ui_dom.key with
   | Some k -> (
-      match Worker_client.json_string k with
-      | Some "Escape" ->
+      match k with
+      | "Escape" ->
           if Runtime.signal_get st.open_menu <> "" then close_menu st
           else if (model ()).Model.appearance <> None then
             Runtime.send (Action.Appearance_set None)
 
       (* mod+shift+f = :page/toggle-favorite (cljs shortcut config) *)
-      | Some ("f" | "F")
+      | "f" | "F"
         when jbool "shiftKey" ev && (jbool "metaKey" ev || jbool "ctrlKey" ev) ->
           toggle_favorite st
       | _ -> ())
@@ -1262,19 +1227,19 @@ let init (ms : Model.t Signal.signal) : t =
             (fun (it : item) -> Editor_state.find_in it.blocks uuid)
             (Runtime.signal_get st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
-      Web_dom.on_document_event "ls:open-right-sidebar" (fun ev ->
+      Ui_dom.on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with
           | Some u -> open_uuid st u
           | None -> ());
-      Web_dom.on_document_event "click" (on_doc_click st);
-      Web_dom.on_document_event "contextmenu" (on_doc_contextmenu st);
-      Web_dom.on_document_event "keydown" (on_doc_keydown st);
-      Web_dom.on_document_event "mousedown" on_resizer_mousedown;
-      Web_dom.on_document_event "mousemove" on_resizer_mousemove;
-      Web_dom.on_document_event "mouseup" on_resizer_mouseup;
-      Web_dom.on_document_event "touchstart" on_doc_touchstart;
-      Web_dom.on_document_event "touchmove" on_doc_touchmove;
-      Web_dom.on_document_event "touchend" on_doc_touchend;
+      Ui_dom.on_document_event "click" (on_doc_click st);
+      Ui_dom.on_document_event "contextmenu" (on_doc_contextmenu st);
+      Ui_dom.on_document_event "keydown" (on_doc_keydown st);
+      Ui_dom.on_document_event "mousedown" on_resizer_mousedown;
+      Ui_dom.on_document_event "mousemove" on_resizer_mousemove;
+      Ui_dom.on_document_event "mouseup" on_resizer_mouseup;
+      Ui_dom.on_document_event "touchstart" on_doc_touchstart;
+      Ui_dom.on_document_event "touchmove" on_doc_touchmove;
+      Ui_dom.on_document_event "touchend" on_doc_touchend;
       sync_left_sidebar_width ();
       st
 

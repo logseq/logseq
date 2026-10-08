@@ -85,7 +85,7 @@ let theme_row ctx =
                  (fun m ->
                    let effective =
                      if m = "system" then
-                       if Web_dom.prefers_dark () then "dark"
+                       if Ui_dom.prefers_dark () then "dark"
                        else "light"
                      else m
                    in
@@ -240,7 +240,7 @@ let journal_formatters =
   ; "yyyy\xe5\xb9\xb4MM\xe6\x9c\x88dd\xe6\x97\xa5" ]
 
 (* option text reaches js as raw utf8 bytes from Melange literals *)
-let date_option_text fmt = Platform.utf8 fmt
+let date_option_text fmt = Ui_services.literal_text fmt
 
 (* the cljs native <select> becomes a LUI select + anchored
    dropdown_menu, same shape as Settings_view.lang_trigger *)
@@ -346,7 +346,7 @@ let keymap_pill ~key ~title ~count ~active =
     [ text ~key:(key ^ "t") 
         ~value:title []
     ; text ~key:(key ^ "c") 
-        ~value:(Platform.utf8 "\xc2\xb7 " ^ count) []
+        ~value:(Ui_services.literal_text "\xc2\xb7 " ^ count) []
     ]
 
 let keymap_controls () =
@@ -405,8 +405,11 @@ let keymap_binding ~key (b : Keymap_data.binding) =
                   else [])
                  @ [ kbd
                        ~key:(key ^ "k" ^ string_of_int i)
-                       ~style_class:"shui-shortcut-key"
-                       ~value:(Platform.utf8 k) []
+                       ~style_class:
+                         (if b.kind = "separate" then
+                            "shui-shortcut-key shui-key-boxed"
+                          else "shui-shortcut-key")
+                       ~value:(Ui_services.literal_text k) []
                    ])
                b.keys)
         ]
@@ -493,10 +496,17 @@ let url_button ~key ~label ~on_open =
     ~icon:`edit ~icon_placement:`trailing ~text:label
     ~on_press:(fun _ -> on_open ()) []
 
+(* cljs storage values are pr-str quoted — strip one pair of quotes *)
+let storage_unquote v =
+  let n = String.length v in
+  if n >= 2 && v.[0] = '"' && v.[n - 1] = '"' then
+    String.sub v 1 (n - 2)
+  else v
+
 let storage_url key default =
-  match Platform.local_storage_get key with
+  match Ui_services.storage_get key with
   | Some v ->
-      let v = Platform.storage_unquote v in
+      let v = storage_unquote v in
       if String.trim v = "" then default else v
   | None -> default
 
@@ -689,8 +699,6 @@ let modal_body (_ms : Model.t Signal.signal) : t =
     in
     node ctx parent
 
-external inner_width : float = "innerWidth" [@@mel.scope "window"]
-
 (* cljs settings.cljs appearance(): the header dots "Appearance" item opens
    a compact popup (id appearance_settings) anchored under
    .toolbar-dots-btn — five rows sharing the settings renderers, wrapped
@@ -718,7 +726,7 @@ let appearance_body (_x, y) : t =
         (* cljs PopupContent right-anchors the appearance panel:
            ~620px wide, right edge ~32px from the viewport edge *)
       ; popover ~key:"appearance-wrap"
-          ~at:(inner_width -. 32. -. 624., y) ~width:624
+          ~at:(Ui_dom.viewport_width () -. 32. -. 624., y) ~width:624
           ~on_dismiss:(fun _ ->
             Runtime.send (Action.Appearance_set None))
           ~style_class:"ui__dropdown-menu-content appearance-popup"

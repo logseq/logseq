@@ -272,6 +272,46 @@ let shared_host () : (Model.t, Action.t) Shared_scenarios.host =
   ; flush
   }
 
+let sidebar_push_item key title : Sidebar_state.item =
+  { Sidebar_state.key
+  ; kind = "page"
+  ; uuid = None
+  ; title
+  ; icon = None
+  ; breadcrumb = []
+  ; blocks = []
+  ; linked_refs = []
+  ; page_ref = Some title
+  ; page = None
+  ; props_collapsed = true
+  ; collapsed = false
+  }
+
+let sidebar_host () : (Model.t, Action.t) Shared_scenarios_sidebar.host =
+  { base = shared_host ()
+  ; storage_set = Ui_services.storage_set
+  ; toggle_right_sidebar = (fun () -> send Action.Toggle_right_sidebar)
+  ; push_right_item =
+      (fun key title ->
+        match Sidebar_state.current () with
+        | Some st -> Sidebar_state.push_item st (sidebar_push_item key title)
+        | None -> check "sidebar state mounted" false)
+  ; toggle_nav =
+      (fun nav checked ->
+        match Sidebar_state.current () with
+        | Some st -> Sidebar_state.toggle_nav st nav checked
+        | None -> check "sidebar state mounted" false)
+  ; set_theme = (fun m -> Settings_view.use_mode m)
+  ; set_language =
+      (fun m ->
+        (* same lazy-assets boundary as the web host: the persisted
+           language write lands before the chunk loader raises *)
+        try Settings_view.set_language m with _ -> ())
+  }
+
+let test_shared_sidebar () =
+  Shared_scenarios_sidebar.all (sidebar_host ())
+
 (* ---------------- shell + header ---------------- *)
 
 let test_shell () =
@@ -438,6 +478,7 @@ let test_dialogs () =
   Shared_scenarios.settings (shared_host ());
   Shared_scenarios.themes (shared_host ());
   Shared_scenarios.routes (shared_host ());
+  test_shared_sidebar ();
   (* confirm layer: div[role=alertdialog] *)
   Dialogs_state.ask ~title:"Delete it?" ~desc:"no undo" ~on_confirm:(fun () ->
       Js.log "confirm-firing")
@@ -1147,6 +1188,7 @@ let () =
     ~assert_owner:(fun () ->
       if Thread.id (Thread.self ()) <> owner then invalid_arg "UI scenario requires its application thread")
     ~request_flush:Runtime.flush;
+  Ui_dom_native.install ();
   run ~finish:(fun () ->
       Js.log
         (Printf.sprintf "%d checks, %d failures" !checks !failures);

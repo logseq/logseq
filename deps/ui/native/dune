@@ -224,6 +224,8 @@
 (rule
  (copy ../src/settings/keymap_data.ml keymap_data.ml))
 (rule
+ (copy ../src/settings/settings_page.ml settings_page.ml))
+(rule
  (copy ../src/settings/settings_state.ml settings_state.ml))
 (rule
  (copy ../src/settings/settings_url_view.ml settings_url_view.ml))
@@ -233,6 +235,8 @@
  (copy ../src/sidebar/left_sidebar_view.ml left_sidebar_view.ml))
 (rule
  (copy ../src/sidebar/right_sidebar_view.ml right_sidebar_view.ml))
+(rule
+ (copy ../src/sidebar/sidebar_state.ml sidebar_state.ml))
 (rule
  (copy ../src/toasts/toast.ml toast.ml))
 (rule
