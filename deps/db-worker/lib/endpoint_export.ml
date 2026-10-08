@@ -29,7 +29,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let arg args i = List.nth_opt args i
 
@@ -212,13 +211,7 @@ let import_db_binary args =
        tolerate vectors of ints too (import-file-payload convention). *)
     match Ds_wire.value_of_transit (Option.value ~default:Wire.Nil (arg args 1)) with
     | String s -> s
-    | Vector vs | List vs | Set vs ->
-        String.init (List.length vs) (fun i ->
-            Char.chr
-              (match List.nth_opt vs i with
-               | Some (Int64 n) -> Int64.to_int (Int64.logand n 255L)
-               | Some (Float f) -> int_of_float f land 0xff
-               | _ -> 0))
+    | Vector vs | List vs | Set vs -> Ds_wire.bytes_of_values vs
     | _ -> invalid_arg "import-db-binary: missing data arg"
   in
   if Unicode.trim repo = "" then Db_worker_effect.pure Wire.Nil
@@ -248,10 +241,10 @@ let post_export_error_notification () : unit =
     ~transit_payload:
       (Transit_codec.to_string
          (Wire.Array
-            [ kw "notification"
+            [ Wire.keyword "notification"
             ; Wire.Array
-                [ Wire.Nil; kw "error"; Wire.Nil; Wire.Nil; Wire.Nil
-                ; Wire.Map [ kw "i18n-key", kw "export/error-unexpected" ] ] ]))
+                [ Wire.Nil; Wire.keyword "error"; Wire.Nil; Wire.Nil; Wire.Nil
+                ; Wire.Map [ Wire.keyword "i18n-key", Wire.keyword "export/error-unexpected" ] ] ]))
 
 (* :thread-api/export-edn [repo options] *)
 let export_edn_endpoint args =
@@ -269,7 +262,7 @@ let export_edn_endpoint args =
     post_export_error_notification ();
     Db_worker_effect.pure
       (Wire.Map
-         [ kw "export-edn-error", Wire.String (Printexc.to_string e) ])
+         [ Wire.keyword "export-edn-error", Wire.String (Printexc.to_string e) ])
 
 let () = Dispatcher.register "thread-api/export-edn" export_edn_endpoint
 
@@ -283,12 +276,12 @@ let import_edn_endpoint args =
       let export_edn_v = value_arg args 1 in
       match Sqlite_export.build_import export_edn_v db None with
       | Error e ->
-          Db_worker_effect.pure (Wire.Map [ kw "error", Wire.String e ])
+          Db_worker_effect.pure (Wire.Map [ Wire.keyword "error", Wire.String e ])
       | Ok _ as txs_r -> (
           let validation = Sqlite_export.validate_import_txs txs_r db in
           match validation.error with
           | Some e ->
-              Db_worker_effect.pure (Wire.Map [ kw "error", Wire.String e ])
+              Db_worker_effect.pure (Wire.Map [ Wire.keyword "error", Wire.String e ])
           | None ->
               let tx_ops =
                 Sqlite_build.tx_ops_of_values db validation.valid_tx_data
@@ -300,7 +293,7 @@ let import_edn_endpoint args =
                    conn tx_ops);
               Db_worker_effect.pure
                 (Wire.Map
-                   [ ( kw "tx-count"
+                   [ ( Wire.keyword "tx-count"
                      , Wire.Int (List.length validation.valid_tx_data) ) ])))
 
 let () = Dispatcher.register "thread-api/import-edn" import_edn_endpoint
@@ -315,7 +308,7 @@ let import_edn_data (conn : conn) (export_map_w : Wire.t)
   let tx_meta_v = Sqlite_build.bm_get import_options_m "tx-meta" in
   let db = Datascript.db conn in
   let error_result msg =
-    Some (Wire.Map [ kw "error", Wire.String msg ])
+    Some (Wire.Map [ Wire.keyword "error", Wire.String msg ])
   in
   match
     (try Sqlite_export.build_import export_map db None

@@ -237,11 +237,10 @@ let page_name_string_to_map (original_page_name : string) db
     | Some _, Some e -> Option.value (Ldb.string_value e "block/name") ~default:page_name
     | _ -> page_name
   in
-  let kw s = Wire.Keyword s in
-  let base =
+    let base =
     Wire.Map
-      [ (kw "block/name", Wire.String page_name')
-      ; (kw "block/title", Wire.String original_page_name') ]
+      [ (Wire.keyword "block/name", Wire.String page_name')
+      ; (Wire.keyword "block/title", Wire.String original_page_name') ]
   in
   let base =
     (* :block.temp/original-page-name *)
@@ -273,7 +272,7 @@ let page_name_string_to_map (original_page_name : string) db
       if Unicode.trim namespace' <> "" then
         Cljs_map.assoc base "block/namespace"
           (Wire.Map
-             [ (kw "block/name",
+             [ (Wire.keyword "block/name",
                 Wire.String
                   (Unicode.trim (page_name_sanity_lc namespace'))) ])
       else base
@@ -704,9 +703,8 @@ let restore_tx_data db (root : entity) : Wire.t list =
         else Outliner_blocks.block_subtree_ids db root
             |> List.filter_map (Ldb.ent_of_id db)
       in
-      let kw s = Wire.Keyword s in
-      let retract a =
-        Wire.Array [ kw "db/retract"; Wire.Int root.id; kw a ]
+            let retract a =
+        Wire.Array [ Wire.keyword "db/retract"; Wire.Int root.id; Wire.keyword a ]
       in
       let clear_structure =
         [ retract "block/parent"; retract "block/order" ]
@@ -720,7 +718,7 @@ let restore_tx_data db (root : entity) : Wire.t list =
         ; retract "logseq.property.recycle/original-order" ]
       in
       let root_tx =
-        let m = Wire.Map [ (kw "db/id", Wire.Int root.id) ] in
+        let m = Wire.Map [ (Wire.keyword "db/id", Wire.Int root.id) ] in
         let m =
           match target.parent with
           | Some p -> Cljs_map.assoc m "block/parent" (Wire.Int p.id)
@@ -738,8 +736,8 @@ let restore_tx_data db (root : entity) : Wire.t list =
         List.map
           (fun node ->
              Wire.Map
-               [ (kw "db/id", Wire.Int node.id)
-               ; (kw "block/page", Wire.Int target.page.id) ])
+               [ (Wire.keyword "db/id", Wire.Int node.id)
+               ; (Wire.keyword "block/page", Wire.Int target.page.id) ])
           subtree
       in
       clear_structure @ [ root_tx ] @ subtree_page_tx @ clear_meta

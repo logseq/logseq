@@ -20,3 +20,7 @@ let uuid () =
   let b = set_byte b 0 4 in
   let c = set_byte c 0 (8 + Stdlib.Random.int 4) in
   String.concat "-" [ a; b; c; d; e ]
+
+(* test hook: seeds the Stdlib.Random draws; Js.Math.random_int draws
+   stay unseeded — full determinism is only available on native *)
+let seed_for_test (seed : int) = Stdlib.Random.init seed

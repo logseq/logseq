@@ -9,6 +9,7 @@
   datascript-ocaml-native
   datascript-ocaml-native.sqlite
   melange-transit-core
+  melange-transit-native
   rrbvec
   sqlite3
   unix

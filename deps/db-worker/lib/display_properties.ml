@@ -9,8 +9,7 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
-let field k v = (kw k, v)
+let field k v = (Wire.keyword k, v)
 
 (* entity-tagged-with? — match cljs by-ident lookup, not deep
    class-instance resolution *)
@@ -57,14 +56,14 @@ let entity_ref_value (v : Wire.t) : bool =
   match v with
   | Wire.Map kvs ->
       List.exists
-        (fun (k, _) -> k = kw "db/id" || k = kw "block/uuid")
+        (fun (k, _) -> k = Wire.keyword "db/id" || k = Wire.keyword "block/uuid")
         kvs
   | _ -> false
 
 let entity_of_ref_wire db (v : Wire.t) : entity option =
   match v with
   | Wire.Map kvs -> (
-      let get k = List.assoc_opt (kw k) kvs in
+      let get k = List.assoc_opt (Wire.keyword k) kvs in
       match get "db/id" with
       | Some (Wire.Int id) -> Ldb.ent_of_id db id
       | _ -> (
@@ -143,7 +142,7 @@ let display_property_row db (property_id : string) (value : Wire.t) :
   | Some property ->
       Some
         (Wire.Map
-           [ field "property-id" (kw property_id)
+           [ field "property-id" (Wire.keyword property_id)
            ; field "property" property
            ; field "value" value ])
   | None -> None
@@ -264,6 +263,7 @@ let display_properties db (block : entity) ~(gallery_view : bool)
   let empty_property_value (v : Wire.t) : bool =
     match v with
     | Wire.Nil -> true
+    | Wire.Keyword "logseq.property/empty-placeholder" -> true
     | Wire.String s -> String.trim s = ""
     | Wire.Set [] | Wire.Array [] | Wire.List [] -> true
     | _ when entity_ref_value v -> (
@@ -335,40 +335,11 @@ let display_properties db (block : entity) ~(gallery_view : bool)
       true
     |> List.filter (fun (id, _) -> id <> "logseq.property/query")
   in
-  (* cljs get-block-positioned-properties — block.temp/positioned-properties
-     groups positioned property rows by position; each entry uses the same
-     {property-id property value} row shape as full/hidden lists *)
-  let positioned_properties =
-    let cache = Render_snapshot.new_batch_cache () in
-    let tag_ids =
-      List.map (fun (t : entity) -> t.id)
-        (Ldb.ref_ents block "block/tags")
-    in
-    let own_property_ids =
-      List.filter_map
-        (fun (k, _) ->
-          let id = prop_ident_of_key k in
-          if Db_property.property id then Some id else None)
-        properties_kvs
-    in
-    Wire.Map
-      (List.map
-         (fun (position, idents) ->
-           ( kw position
-           , Wire.Array
-               (List.filter_map
-                  (fun id -> display_property_row db id (get_prop id))
-                  idents) ))
-         (Render_snapshot.block_positioned_property_idents_by_position
-            ~cache ~tag_ids ~own_property_ids
-            ~direct_value:(Ldb.value block) db block.id))
-  in
   Wire.Map
     [ field "full-properties"
         (Wire.Array (sort_display_property_pairs db full_properties))
     ; field "hidden-properties"
         (Wire.Array (sort_display_property_pairs db hidden_properties))
-    ; field "positioned-properties" positioned_properties
     ; field "description-property"
         (match display_property_map db "logseq.property/description" with
          | Some m -> m

@@ -9,7 +9,6 @@ let init () =
     ignore Endpoint_state.cancel_ui_requests;
     ignore Endpoint_import.import_file_graph;
     ignore Endpoint_markdown.set_enabled;
-    ignore Endpoint_markdown.flush;
     ignore Endpoint_markdown.regenerate;
     ignore Endpoint_read.get_journal_page_by_day;
     ignore Endpoint_read.get_block_source;
@@ -19,7 +18,6 @@ let init () =
     ignore Endpoint_read.get_block_refs;
     ignore Endpoint_read.get_page_blocks_tree;
     ignore Endpoint_comment.get_comment_threads_for_block;
-    ignore Endpoint_comment.get_comment_thread_block_uuids;
     ignore Endpoint_cli.cli_list_properties;
     ignore Endpoint_cli.api_get_page_data;
     ignore Endpoint_view.get_view_filter_data;
@@ -150,27 +148,17 @@ let on_become_master (repo : string) (start_opts : Wire.t) : unit E.t =
   Worker_log.info "db-worker/on-become-master-start"
     [ "repo", repo
     ; "import-type", edn_of_opt (Wire.get "import-type" start_opts) ];
-  E.catch
-    (E.bind (Sqlite.init ()) (fun () ->
-         match Wire.get "import-type" start_opts with
-         | Some w when w <> Wire.Nil -> E.pure ()
-         | _ ->
-             E.bind
-               (Endpoint_lifecycle.create_or_open_db
-                  [ Wire.String repo; start_opts ])
-               (fun _ ->
-                  (* cljs asserts the datascript conn opened *)
-                  assert (Worker_state.datascript_conn repo <> None);
-                  E.pure ())))
-    (fun exn ->
-       let detail =
-         match exn with
-         | Dispatcher.Exn_info (msg, _) -> "Exn_info: " ^ msg
-         | exn -> Printexc.to_string exn
-       in
-       Worker_log.error "db-worker/on-become-master-failed"
-         [ "exn", detail; "bt", Printexc.get_backtrace () ];
-       E.error exn)
+  E.bind (Sqlite.init ()) (fun () ->
+      match Wire.get "import-type" start_opts with
+      | Some w when w <> Wire.Nil -> E.pure ()
+      | _ ->
+          E.bind
+            (Endpoint_lifecycle.create_or_open_db
+               [ Wire.String repo; start_opts ])
+            (fun _ ->
+               (* cljs asserts the datascript conn opened *)
+               assert (Worker_state.datascript_conn repo <> None);
+               E.pure ()))
 
 (* cljs <init-service! — per-graph shared-service creation. *)
 let init_service (graph : string option) (start_opts : Wire.t)

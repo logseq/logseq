@@ -14,11 +14,7 @@ let () =
    <graphs-dir>/<encoded-graph>/db.sqlite (platform/node.cljs repo-dir),
    where <encoded-graph> is graph-dir/repo->encoded-graph-dir-name. *)
 let db_dir repo =
-  let base =
-    match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-    | Some dir -> dir
-    | None -> "."
-  in
+  let base = Root_dir.worker_db_dir () in
   match Graph_dir.repo_to_encoded_graph_dir_name repo with
   | Some dir -> Filename.concat base dir
   | None -> base
@@ -316,14 +312,6 @@ let open_states : (string, open_state) Hashtbl.t = Hashtbl.create 7
 let initialize_db ~ensure_open args =
   match args with
   | Wire.String repo :: opts_rest ->
-      let open_t0 = Date_time_util.time_ms () in
-      let open_phase name =
-        Worker_log.info "open-db-phase"
-          [ "p", name
-          ; "ms"
-          , Int64.to_string
-              (Int64.sub (Date_time_util.time_ms ()) open_t0) ]
-      in
       let opts = match opts_rest with t :: _ -> t | [] -> Wire.Nil in
       let creating_remote_graph = opt_bool "creating-remote-graph?" false opts in
            if opt_bool "close-other-db?" true opts then
@@ -369,7 +357,6 @@ let initialize_db ~ensure_open args =
               enable-sqlite-wal-mode! pragmas run inside open_search_db
               before its tables are created. *)
            ignore (Endpoint_search.get_search_db repo);
-           open_phase "sqlite+search-db";
            let finish () : Wire.t Db_worker_effect.t =
              Graph_store.create_kvs_table db;
              let storage = Graph_store.storage db in
@@ -377,16 +364,25 @@ let initialize_db ~ensure_open args =
              let conn =
                Common_sqlite.get_storage_conn storage (Db_schema.schema ())
              in
-             open_phase "restore-conn";
              (* cljs <create-or-open-db!: the datascript conn is registered
                 before the initial transact so sync bookkeeping (local-tx
                 seed, handle-local-tx!) can see it. *)
              Worker_state.set_datascript_conn repo conn;
+             let sync_download = opt_bool "sync-download-graph?" false opts in
              (* cljs db-fix/check-and-fix-schema! right after
-                get-storage-conn, before datoms/initial-data *)
-             Worker_db_fix.check_and_fix_schema conn;
-             Worker_db_fix.heal_instant_values conn;
-             open_phase "schema-fix";
+                get-storage-conn, before datoms/initial-data. Skipped on
+                sync-download opens: the conn is empty so there is nothing
+                to fix, and any entity allocated here (e.g. the
+                instant-values-healed marker at eid 1) would collide with
+                the verbatim server eids the snapshot import writes — its
+                datoms assert a new :db/ident on the colliding entity while
+                leaving the marker's :kv/value residue behind.
+                heal_instant_values runs again post-import in
+                sync_download. *)
+             (if not sync_download then begin
+                Worker_db_fix.check_and_fix_schema conn;
+                Worker_db_fix.heal_instant_values conn
+              end);
              (* cljs bootstrap-transact! on the :datoms/:debug-transit-raw
                 open-opts (CLI/node import path). *)
              let datoms =
@@ -409,7 +405,6 @@ let initialize_db ~ensure_open args =
              (* cljs <create-or-open-db!: on a fresh graph (no initial data,
                 not a sync-download, no imported datoms) transact
                 build-db-initial-data; run db-migrate on every open. *)
-             let sync_download = opt_bool "sync-download-graph?" false opts in
              let initial_data_exists =
                match datoms with
                | Some _ -> false
@@ -422,7 +417,6 @@ let initialize_db ~ensure_open args =
                        | Some e -> Ldb.value e "kv/value" = Some (Datascript.String "db")
                        | None -> false)
              in
-             open_phase "initial-check";
              let initial_tx_report =
                if not
                    (initial_data_exists || Option.is_some datoms
@@ -463,7 +457,6 @@ let initialize_db ~ensure_open args =
                 gated: a sync-download open hands an empty conn to the
                 importer, and the recycle-gc upsert would allocate eid 1
                 before the imported datoms arrive. *)
-             open_phase "initial-tx";
              (if not sync_download then begin
                 (match Db_migrate.migrate conn with
                  | Some result ->
@@ -471,18 +464,36 @@ let initialize_db ~ensure_open args =
                  | None ->
                      maybe_enqueue_built_in_sync_repair repo conn None
                        initial_data_exists);
-                Endpoint_transaction.maybe_run_recycle_gc conn
+                ()
               end);
-             open_phase "migrate+gc";
              (* cljs (when initial-tx-report (db-sync/handle-local-tx! repo
                 initial-tx-report)). *)
              (match initial_tx_report with
               | Some report -> Sync_apply.handle_local_tx repo report
               | None -> ());
-             (* cljs (db-sync/reconcile-local-checksum! repo conn) *)
+             (* cljs (db-sync/reconcile-local-checksum! repo conn) — conn
+                stays the server conn for remote graphs (checksums track
+                confirmed state) *)
              Sync_client.reconcile_local_checksum repo conn;
-             Db_listener.listen_db_changes repo conn;
-             open_phase "open-done";
+             (* remote graphs split here: conn becomes the server conn
+                (confirmed state only); datascript_conn becomes the
+                storage-less display projection replaying pending ops. *)
+             Sync_replay.split_off_server_if_remote repo;
+             (if not sync_download then
+                (* gc must run after the split attached the checksum
+                   listener — an exempt purge fired earlier would leave
+                   covered_tx behind and trigger a heal that overwrites
+                   the stored server-image checksum with a local one.
+                   Rebuild the projection when it purged so recycled
+                   entities don't ghost on the display conn *)
+                (if Endpoint_transaction.maybe_run_recycle_gc repo
+                   && Sync_state.server_conn repo <> None
+                 then Sync_replay.rebuild_display repo ~jump_tx_data:[]));
+             (* the split helper already moved the listener onto the
+                display conn when it swapped; only a non-remote conn
+                still needs it attached here *)
+             (if Sync_state.server_conn repo = None then
+                Db_listener.listen_db_changes repo conn);
              match Worker_state.datascript_conn repo with
              | Some conn ->
                  Db_worker_effect.pure
@@ -575,9 +586,20 @@ let close_db_aux repo =
     (fun (kind, _) -> Worker_state.drop_sqlite_conn_of repo kind) conns;
   Worker_state.drop_vector_index repo;
   attempt (fun () -> Worker_state.drop_datascript_conn repo);
+  attempt (fun () -> Sync_state.drop_server_conn repo);
   Worker_state.drop_pending_local_tx_count repo;
   Endpoint_search.clear_search_index_builds repo;
-  List.iter (fun (_, db) -> attempt (fun () -> Sqlite.close db)) conns;
+  List.iter
+    (fun (_, db) ->
+       attempt (fun () ->
+           try Sqlite.close db
+           with exn ->
+             Pending_closes.note repo db;
+             raise exn))
+    conns;
+  List.iter
+    (fun db -> attempt (fun () -> Sqlite.close db))
+    (Pending_closes.take repo);
   attempt (fun () -> Sync_state.close_client_ops_conn repo);
   if Sqlite.pooled_runtime () then begin
     (* cljs attempt!s .pauseVfs and forgets the pool unconditionally *)
@@ -772,16 +794,26 @@ let () =
                 in
                 let new_db = Datascript.from_serializable sdb in
                 (* cljs swaps the old conn's eavt storage onto the new db so
-                   kvs persistence keeps writing to the same sqlite file. *)
-                let new_db' =
-                  match Datascript.storage (Datascript.db conn) with
-                  | Some st -> { new_db with storage_ref = Some st }
-                  | None -> new_db
+                   kvs persistence keeps writing to the same sqlite file. On
+                   remote graphs the durable base is the server conn — reset
+                   it first, then the display (its own storage wrapper keeps
+                   it non-persistent), so the reset can't be silently
+                   reverted by the next rebuild. *)
+                let reset_to (conn' : Datascript.conn) : unit =
+                  let new_db' =
+                    match Datascript.storage (Datascript.db conn') with
+                    | Some st -> { new_db with storage_ref = Some st }
+                    | None -> new_db
+                  in
+                  ignore
+                    (Datascript.reset_conn
+                       ~tx_meta:[ "reset-conn!", Bool true ]
+                       conn' new_db')
                 in
-                ignore
-                  (Datascript.reset_conn
-                     ~tx_meta:[ "reset-conn!", Bool true ]
-                     conn new_db');
+                (match Sync_state.server_conn repo with
+                 | Some server_conn -> reset_to server_conn
+                 | None -> ());
+                reset_to conn;
                 Db_worker_effect.pure Wire.nil
             | None -> Db_worker_effect.pure Wire.nil)))
 
@@ -802,7 +834,9 @@ let () =
            Graph_gc.gc_kvs_table ~full_gc:true db;
            Sqlite.exec db ~sql:"VACUUM" ~bind:[||];
            ignore
-             (Db_transact.transact conn
+             (Db_transact.transact
+                (Option.value (Sync_state.confirmed_conn repo)
+                   ~default:conn)
                 [ Wire.Map
                     [ ( Wire.Keyword "db/ident"
                       , Wire.Keyword "logseq.kv/graph-last-gc-at" )

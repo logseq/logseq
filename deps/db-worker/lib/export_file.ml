@@ -41,10 +41,6 @@ let default_tree_opts =
   ; heading_to_list = false
   ; include_properties = true }
 
-let str_contains s sub =
-  let n = String.length s and m = String.length sub in
-  let rec loop i = i + m <= n && (String.sub s i m = sub || loop (i + 1)) in
-  m = 0 || loop 0
 
 let split_lines s = if s = "" then [] else String.split_on_char '\n' s
 
@@ -66,7 +62,7 @@ let is_property_attr (a : attr) : bool =
   | Some i ->
       let ns = String.sub a 0 i in
       List.mem ns logseq_property_namespaces
-      || str_contains ns ".property"
+      || Ns_util.str_contains ns ".property"
       || List.mem a Plain_value.public_db_attribute_properties
   | None -> List.mem a Plain_value.public_db_attribute_properties
 
@@ -527,8 +523,10 @@ and node_children ~open_blocks_only (e : entity) : entity list =
 (* cljs page? in tree->file-content: node has no :block/page. *)
 and is_page_node (e : entity) : bool = Option.is_none (Ldb.value e "block/page")
 
+(* visited guards :block/parent cycles — a malformed cyclic chain must
+   not hang the tree render. *)
 and node_to_lines db (e : entity) level ~(opts : tree_opts) ~(ctx : context)
-    : string list =
+    ~(visited : (entity_id, unit) Hashtbl.t) : string list =
   let page = is_page_node e in
   let content =
     if page && not opts.link && opts.include_page_properties then
@@ -539,7 +537,13 @@ and node_to_lines db (e : entity) level ~(opts : tree_opts) ~(ctx : context)
         (transform_content db e level ~heading_to_list:opts.heading_to_list
            ~include_properties:opts.include_properties ctx)
   in
-  let children = node_children ~open_blocks_only:opts.open_blocks_only e in
+  let children =
+    if Hashtbl.mem visited e.id then []
+    else begin
+      Hashtbl.add visited e.id ();
+      node_children ~open_blocks_only:opts.open_blocks_only e
+    end
+  in
   (* cljs recurses with literal {:init-level (inc level)} — heading-to-
      list?, link, include-page-properties? reset for descendants;
      include-properties? picks its :or default true. open_blocks_only
@@ -557,14 +561,16 @@ and node_to_lines db (e : entity) level ~(opts : tree_opts) ~(ctx : context)
   in
   (match content with Some c -> [ c ] | None -> [])
   @ List.concat_map
-      (fun c -> node_to_lines db c (level + 1) ~opts:child_opts ~ctx)
+      (fun c ->
+         node_to_lines db c (level + 1) ~opts:child_opts ~ctx ~visited)
       children
 
 and tree_to_file_content db (root : entity) ~(opts : tree_opts) ~(ctx : context)
     : string =
   let level = Option.value opts.init_level ~default:1 in
   (* cljs (remove nil?) — keeps "" and whitespace lines *)
-  node_to_lines db root level ~opts ~ctx |> String.concat "\n"
+  node_to_lines db root level ~opts ~ctx ~visited:(Hashtbl.create 16)
+  |> String.concat "\n"
 
 (* block->content — entity's subtree rendered as markdown. *)
 and block_to_content db ~block_uuid ~(opts : tree_opts) ~(ctx : context) : string =

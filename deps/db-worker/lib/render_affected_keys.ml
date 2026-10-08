@@ -7,7 +7,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 (* ---------- attribute sets (cljs #{}) ---------- *)
 
@@ -166,8 +165,8 @@ let entity_datoms (datoms : datom list) : datom list =
 
 (* ---------- key constructors (cljs [:tag ...] vectors) ---------- *)
 
-let k tag = Wire.Array [ kw tag ]
-let kv tag v = Wire.Array [ kw tag; v ]
+let k tag = Wire.Array [ Wire.keyword tag ]
+let kv tag v = Wire.Array [ Wire.keyword tag; v ]
 
 (* ---------- per-family keys ---------- *)
 
@@ -232,7 +231,7 @@ let entity_keys db_before db_after entity_ids : Wire.t list =
 
 let attribute_keys datoms : Wire.t list =
   List.concat_map
-    (fun (d : datom) -> [ kv "attr" (kw d.a); kv "property-membership" (kw d.a) ])
+    (fun (d : datom) -> [ kv "attr" (Wire.keyword d.a); kv "property-membership" (Wire.keyword d.a) ])
     datoms
 
 let page_lookup_keys datoms : Wire.t list =
@@ -470,7 +469,7 @@ let task_attribute_keys db_before db_after datoms : Wire.t list =
           if
             task_entity db_before entity_id
             || task_entity db_after entity_id
-          then List.map (fun (d : datom) -> kv "task-attr" (kw d.a)) ds
+          then List.map (fun (d : datom) -> kv "task-attr" (Wire.keyword d.a)) ds
           else [])
 
 let display_property_keys db_before db_after datoms : Wire.t list =
@@ -638,7 +637,7 @@ let view_key_at (db : db) (entity_id : entity_id) : Wire.t option =
           | Some (Uuid u) ->
               Some
                 (Wire.Array
-                   [ kw "views"; Wire.Uuid u; kw feature_type ])
+                   [ Wire.keyword "views"; Wire.Uuid u; Wire.keyword feature_type ])
           | _ -> None)
       | _ -> None)
   | None -> None

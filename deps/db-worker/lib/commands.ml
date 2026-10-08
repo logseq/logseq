@@ -1,21 +1,33 @@
 (* frontend.worker.commands — invoke commands based on user settings.
-   cljs-time arithmetic is UTC: civil math runs through Time.civil at
-   Time.utc (no timezone offset). *)
+   Civil math runs through Time.civil under a timezone: :date repeats step
+   whole UTC days, instants (Deadline, Scheduled) step in the local
+   calendar — cljs get-next-time's `local?` mode. *)
 
 open Datascript
 
-(* ---------- UTC civil arithmetic (cljs-time.core on UTC instants) -- *)
+(* ---------- civil arithmetic (cljs-time/goog.date under a tz) ------- *)
 
-let utc_ms (c : Time.civil) : int64 =
-  Time.epoch_ms_to_int64 (Time.epoch_ms_of_civil Time.utc c)
+let civil_ms (tz : Time.tz) (c : Time.civil) : int64 =
+  Time.epoch_ms_to_int64 (Time.epoch_ms_of_civil tz c)
 
-let utc_civil (ms : int64) : Time.civil =
-  Time.civil_of_epoch_ms Time.utc (Time.epoch_ms ms)
+let civil_of_ms (tz : Time.tz) (ms : int64) : Time.civil =
+  Time.civil_of_epoch_ms tz (Time.epoch_ms ms)
+
+let utc_ms (c : Time.civil) : int64 = civil_ms Time.utc c
+
+let utc_civil (ms : int64) : Time.civil = civil_of_ms Time.utc ms
+
+let local_civil (ms : int64) : Time.civil =
+  civil_of_ms (Time.local_tz ()) ms
 
 type recur_unit = Minute | Hour | Day | Week | Month | Year
 
-(* cljs-time t/plus with joda month/year clamping semantics *)
-let add_units (c : Time.civil) (u : recur_unit) (n : int) : Time.civil =
+(* cljs-time t/plus / goog.date add: month and year clamp the day into
+   the target month; smaller units roll their field like Date setters and
+   renormalize through epoch_ms_of_civil, which keeps the local wall time
+   across a clock change (identical to a whole-ms add under UTC). *)
+let add_units ?(tz : Time.tz = Time.utc) (c : Time.civil) (u : recur_unit)
+    (n : int) : Time.civil =
   let y, mo, d, h, mi, s, ms = Time.civil_fields c in
   match u with
   | Month | Year ->
@@ -27,19 +39,24 @@ let add_units (c : Time.civil) (u : recur_unit) (n : int) : Time.civil =
       Time.civil ~year:y' ~month:mo' ~day:d' ~hour:h ~minute:mi ~second:s
         ~ms
   | _ ->
-      let delta =
+      let d', h', mi' =
         match u with
-        | Minute -> Int64.mul (Int64.of_int n) 60000L
-        | Hour -> Int64.mul (Int64.of_int n) 3600000L
-        | Day -> Int64.mul (Int64.of_int n) 86400000L
-        | Week -> Int64.mul (Int64.of_int n) 604800000L
+        | Minute -> (d, h, mi + n)
+        | Hour -> (d, h + n, mi)
+        | Day -> (d + n, h, mi)
+        | Week -> (d + (7 * n), h, mi)
         | Month | Year -> invalid_arg "unreachable"
       in
-      utc_civil (Int64.add (utc_ms c) delta)
+      civil_of_ms tz
+        (civil_ms tz
+           (Time.civil ~year:y ~month:mo ~day:d' ~hour:h' ~minute:mi'
+              ~second:s ~ms))
 
-(* cljs-time t/in-* — whole units between two instants *)
-let in_units (a : Time.civil) (b : Time.civil) (u : recur_unit) : int =
-  let ms_a = utc_ms a and ms_b = utc_ms b in
+(* cljs-time t/in-* — whole units between two instants; civil fields
+   are read under [tz] (local for local-calendar stepping). *)
+let in_units ?(tz : Time.tz = Time.utc) (a : Time.civil) (b : Time.civil)
+    (u : recur_unit) : int =
+  let ms_a = civil_ms tz a and ms_b = civil_ms tz b in
   match u with
   | Minute -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 60000L)
   | Hour -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 3600000L)
@@ -71,8 +88,11 @@ let now_fn : (unit -> Time.epoch_ms) ref = ref Time.now
 let utc_now () : Time.civil =
   Time.civil_of_epoch_ms Time.utc (!now_fn ())
 
-let utc_civil_after (a : Time.civil) (b : Time.civil) : bool =
-  Int64.compare (utc_ms a) (utc_ms b) > 0
+let local_now () : Time.civil =
+  Time.civil_of_epoch_ms (Time.local_tz ()) (!now_fn ())
+
+let civil_after ~(tz : Time.tz) (a : Time.civil) (b : Time.civil) : bool =
+  Int64.compare (civil_ms tz a) (civil_ms tz b) > 0
 
 (* date-time-util/journal-day->ms — yyyymmdd int parsed as UTC date *)
 let journal_day_to_ms (day : int) : int64 =
@@ -244,52 +264,65 @@ let commands : command list =
     ; actions = [ [ "record-property-history" ] ] } ]
 
 (* cljs advance-from-completion — `.+` *)
-let advance_from_completion (now : Time.civil) (u : recur_unit)
-    (frequency : int) : Time.civil =
-  add_units now u frequency
+let advance_from_completion ~(tz : Time.tz) (now : Time.civil)
+    (u : recur_unit) (frequency : int) : Time.civil =
+  add_units ~tz now u frequency
 
 (* cljs advance-from-scheduled — `+` *)
-let advance_from_scheduled (datetime : Time.civil) (u : recur_unit)
-    (frequency : int) : Time.civil =
-  add_units datetime u frequency
+let advance_from_scheduled ~(tz : Time.tz) (datetime : Time.civil)
+    (u : recur_unit) (frequency : int) : Time.civil =
+  add_units ~tz datetime u frequency
 
 (* cljs advance-until-future — `++`. Every step counts from the original
    datetime — datetime + n*step — rather than from the previous step's
    result, so t/plus month-end clamping doesn't drift the day (Jan 31 + 6
-   months lands on Jul 31, not Jun 30 + 1 month = Jul 30). cljs-time
-   arithmetic is UTC, so adding whole weeks preserves day-of-week by
-   construction — no fix-up needed *)
-let advance_until_future (now : Time.civil) (datetime : Time.civil)
-    (u : recur_unit) (frequency : int) : Time.civil =
+   months lands on Jul 31, not Jun 30 + 1 month = Jul 30). *)
+let advance_until_future ~(tz : Time.tz) (now : Time.civil)
+    (datetime : Time.civil) (u : recur_unit) (frequency : int) : Time.civil =
   let periods =
     max 1
-      (if utc_civil_after datetime now then 1
-       else in_units datetime now u)
+      (if civil_after ~tz datetime now then 1
+       else in_units ~tz datetime now u)
   in
   (* periods >= 1; (p - 1) / f + 1 avoids overflowing p + f - 1 *)
   let steps = max 1 ((periods - 1) / frequency + 1) in
   let rec loop n =
-    let cand = add_units datetime u (n * frequency) in
-    if utc_civil_after cand now then cand else loop (n + 1)
+    let cand = add_units ~tz datetime u (n * frequency) in
+    if civil_after ~tz cand now then cand else loop (n + 1)
   in
   loop steps
 
-let repeat_next_timestamp ?(now : Time.civil = utc_now ())
-    (datetime : Time.civil) (u : recur_unit) (frequency : int)
-    (repeat_type : string) : Time.civil =
+let repeat_next_timestamp ?(tz : Time.tz = Time.utc)
+    ?(now : Time.civil option) (datetime : Time.civil) (u : recur_unit)
+    (frequency : int) (repeat_type : string) : Time.civil =
+  let now =
+    match now with
+    | Some n -> n
+    | None -> civil_of_ms tz (Time.epoch_ms_to_int64 (!now_fn ()))
+  in
   match repeat_type with
   | "logseq.property.repeat/repeat-type.dotted-plus" ->
-      advance_from_completion now u frequency
+      advance_from_completion ~tz now u frequency
   | "logseq.property.repeat/repeat-type.plus" ->
-      advance_from_scheduled datetime u frequency
-  | _ -> advance_until_future now datetime u frequency
+      advance_from_scheduled ~tz datetime u frequency
+  | _ -> advance_until_future ~tz now datetime u frequency
 
 (* cljs get-next-time — the next occurrence, in milliseconds, of a repeat
    whose current value is current-value (milliseconds). now defaults to the
-   current time; a date repeat passes today's UTC midnight so that it
-   computes in whole UTC days. *)
-let get_next_time ?(now : Time.civil = utc_now ()) (current_value : int64)
-    (unit : entity) (frequency : int) (repeat_type : string) : int64 option =
+   current time; a date repeat passes today's UTC midnight and local? false
+   so that it computes in whole UTC days, while an instant steps in the
+   local calendar: a date picked without a time is local midnight, and
+   stepping months or years in UTC moved local midnight of the 1st east of
+   UTC to the end of the same month. *)
+let get_next_time ?(now : Time.civil option) ?(local : bool = true)
+    (current_value : int64) (unit : entity) (frequency : int)
+    (repeat_type : string) : int64 option =
+  let tz = if local then Time.local_tz () else Time.utc in
+  let now =
+    match now with
+    | Some n -> n
+    | None -> civil_of_ms tz (Time.epoch_ms_to_int64 (!now_fn ()))
+  in
   let recur_unit =
     match Ldb.ident_of unit with
     | Some "logseq.property.repeat/recur-unit.minute" -> Some Minute
@@ -303,8 +336,8 @@ let get_next_time ?(now : Time.civil = utc_now ()) (current_value : int64)
   match recur_unit with
   | Some u when frequency > 0 ->
       Some
-        (utc_ms
-           (repeat_next_timestamp ~now (utc_civil current_value) u
+        (civil_ms tz
+           (repeat_next_timestamp ~tz ~now (civil_of_ms tz current_value) u
               frequency repeat_type))
   | _ -> None
 
@@ -395,11 +428,13 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
       utc_civil
         (journal_day_to_ms
            (Date_time_util.ms_to_journal_day (utc_ms (utc_now ()))))
-    else utc_now ()
+    else local_now ()
   in
   match frequency > 0, unit, current_value with
   | true, Some u, Some cv ->
-      (match get_next_time ~now cv u frequency repeat_type with
+      (match
+         get_next_time ~now ~local:(not date_) cv u frequency repeat_type
+       with
        | None -> []
        | Some next_time_long ->
            let next_day =

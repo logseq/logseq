@@ -1,0 +1,17 @@
+(library
+ (name logseq_db_worker_sqlite_vendored)
+ (wrapped false)
+ (modules ())
+ ;; depend on ocaml-sqlite3 so this archive is scanned while the
+ ;; stubs' sqlite3_* refs are still pending, before -lsqlite3's
+ ;; sysroot import lib is reached (mingw) — the import lib then
+ ;; contributes nothing and no sqlite DLL is needed at runtime
+ (libraries sqlite3)
+ (foreign_stubs
+  (language c)
+  (names sqlite3)
+  (flags
+   (:standard -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_RTREE
+    -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_COLUMN_METADATA
+    -DSQLITE_THREADSAFE=1))))
+

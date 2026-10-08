@@ -115,7 +115,7 @@ let apply_history_action_adapter repo tx_id_opt undo pairs =
       pairs
   in
   (match
-     Sync_apply.apply_history_action repo
+     Sync_replay.apply_history_action repo
        (Option.value ~default:"" tx_id_opt)
        undo tx_meta
    with
@@ -1868,7 +1868,7 @@ let test_undo_move_of_block_and_its_grandchild_restores_both () =
               (uuid_lit page_2_uuid)));
       check "moved to page 2"
         (outline "outline 2"
-        = "(\"outline 2\" (\"a\" (\"b\" \"b1\")) \"b2\" \"d\")");
+        = "(\"outline 2\" (\"a\" (\"b\" \"b1\" \"b2\")) \"d\")");
       check "2 undos" (List.length (undo_all ()) = 2);
       check "outline 1 restored"
         (outline "outline 1" = outline_1_start);
@@ -2207,7 +2207,7 @@ let test_replay_create_page_titled_like_property_creates_page () =
            "[[:upsert-property [:user.property/undo-replay-rating {:logseq.property/type :number} {:property-name \"undo replay rating\"}]]]");
       let page_uuid = Uuid_gen.uuid () in
       let result =
-        Sync_apply.replay_canonical_outliner_op conn
+        Sync_replay.replay_canonical_outliner_op conn
           (Wire.Array
              [ Wire.Keyword "create-page"
              ; Wire.Array

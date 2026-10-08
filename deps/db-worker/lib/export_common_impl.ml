@@ -393,8 +393,7 @@ let update_level_in_block_ast_coll (block_asts : block_ast list)
       else block_ast)
     block_asts
 
-(* the embed argument forms: "[[page-name]]" or the deprecated
-   "((block-uuid))" form *)
+(* the embed argument forms: "((block-uuid))" or "[[page-name]]" *)
 type embed_target =
   | Embed_block of string
   | Embed_page of string

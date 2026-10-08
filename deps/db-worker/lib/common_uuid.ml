@@ -191,11 +191,18 @@ let gen_uuid_keyword (kind : string) (seed : string) : string =
   | "view-block-uuid" -> gen_block_uuid "00000006" (hash_keyword seed)
   | _ -> invalid_arg ("unknown gen-uuid kind " ^ kind)
 
+(* test hook — sim installs a deterministic generator so seeded runs are
+   reproducible; production stays datascript squuid (wall-clock + random) *)
+let new_block_id_override : (unit -> string) option ref = ref None
+
 (* ldb/new-block-id / common-uuid/gen-uuid () — datascript squuid. *)
 let new_block_id () : string =
-  match Datascript.squuid () with
-  | Datascript.Uuid u -> u
-  | _ -> invalid_arg "squuid did not return a uuid"
+  match !new_block_id_override with
+  | Some f -> f ()
+  | None -> (
+      match Datascript.squuid () with
+      | Datascript.Uuid u -> u
+      | _ -> invalid_arg "squuid did not return a uuid")
 
 (* common-uuid/gen-journal-template-block — persistent uuid for a
    journal's template block. *)

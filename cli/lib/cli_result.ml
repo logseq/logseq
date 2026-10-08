@@ -41,7 +41,9 @@ let strip_leading_colon value =
 
 let field_label key =
   key |> Edn_util.as_string_like
-  |> Option.value ~default:(Melange_edn_melange.to_edn_string key)
+  |> Option.value
+       ~default:
+         (Melange_edn_melange.to_edn_string (Edn_util.normalize_strings key))
   |> strip_leading_colon
 
 let value_text value =
@@ -57,7 +59,8 @@ let value_text value =
   | _, _, Some value, _, _ -> string_of_int value
   | _, _, _, Some value, _ -> string_of_bool value
   | _, _, _, _, Some value -> string_of_float value
-  | _ -> Melange_edn_melange.to_edn_string value
+  | _ ->
+      Melange_edn_melange.to_edn_string (Edn_util.normalize_strings value)
 
 let has_suffix ~suffix value =
   let suffix_len = String.length suffix in

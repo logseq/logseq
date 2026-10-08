@@ -1,20 +1,24 @@
 let random_state =
-  let seed =
-    try
-      let ic = open_in_bin "/dev/urandom" in
-      let b = Bytes.create 8 in
-      really_input ic b 0 8;
-      close_in ic;
-      Bytes.get_int64_le b 0 |> Int64.to_int
-    with _ -> int_of_float (Unix.gettimeofday () *. 1e6)
-  in
-  Stdlib.Random.State.make [| seed |]
+  ref
+    (let seed =
+       try
+         let ic = open_in_bin "/dev/urandom" in
+         let b = Bytes.create 8 in
+         really_input ic b 0 8;
+         close_in ic;
+         Bytes.get_int64_le b 0 |> Int64.to_int
+       with _ -> int_of_float (Unix.gettimeofday () *. 1e6)
+     in
+     Stdlib.Random.State.make [| seed |])
+
+(* test hook: reseeding makes uuid streams reproducible per sim seed *)
+let seed_for_test seed = random_state := Stdlib.Random.State.make [| seed |]
 
 (* bound must be < 2^30 for Random.State.int *)
-let random_int () = Stdlib.Random.State.int random_state 0x3FFFFFFF
+let random_int () = Stdlib.Random.State.int !random_state 0x3FFFFFFF
 
 let random_bytes n =
-  Bytes.init n (fun _ -> Char.chr (Stdlib.Random.State.int random_state 256)) |> Bytes.to_string
+  Bytes.init n (fun _ -> Char.chr (Stdlib.Random.State.int !random_state 256)) |> Bytes.to_string
 
 let uuid () =
   let hexn len =
@@ -26,5 +30,5 @@ let uuid () =
   in
   let a = hexn 8 and b = hexn 4 and c = hexn 4 and d = hexn 4 and e = hexn 12 in
   let b = Printf.sprintf "4%s" (String.sub b 1 3) in
-  let c = Printf.sprintf "%x%s" (8 + Stdlib.Random.State.int random_state 4) (String.sub c 1 3) in
+  let c = Printf.sprintf "%x%s" (8 + Stdlib.Random.State.int !random_state 4) (String.sub c 1 3) in
   String.concat "-" [ a; b; c; d; e ]

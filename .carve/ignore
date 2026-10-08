@@ -30,23 +30,8 @@ frontend.modules.outliner.tree/filter-top-level-blocks
 frontend.db.model/get-all-classes
 ;; Initial loaded
 frontend.ui/_emoji-init-data
-;; Shortcut-dispatched handler (:ui/clear-all-notifications)
-frontend.handler.notification/clear-all!
-;; Mobile bridge API surface kept in shared cljs; callers deleted with the mobile end
-frontend.mobile.audio-recorder/start-recording!
-frontend.mobile.camera/embed-photo
-frontend.mobile.flows/*network
-frontend.mobile.intent/handle-payload
-frontend.mobile.intent/handle-received
-frontend.mobile.util/native-top-bar
-frontend.mobile.util/native-bottom-sheet
-frontend.mobile.util/native-editor-toolbar
-frontend.mobile.util/native-selection-action-bar
-frontend.mobile.util/sync-ios-content-size!
-frontend.mobile.util/check-ios-zoomed-display
-frontend.mobile.util/alert
-frontend.mobile.util/hide-alert
-frontend.util.url/get-logseq-graph-uuid-url
+;; defonce
+mobile.bottom-tabs/add-tab-listeners!
 ;; Callers were the deleted cljs db-worker; kept as host-side/daemon API surface
 frontend.common.crypt/<export-public-key
 frontend.common.crypt/<import-public-key
@@ -70,6 +55,3 @@ logseq.db-worker.log/log-path
 logseq.db-worker.log/install!
 frontend.test.helper/with-config
 frontend.test.noise/mute-console-fixture
-;; defonce
-mobile.bottom-tabs/add-tab-listeners!
-mobile.components.popup/native-sheet-listener

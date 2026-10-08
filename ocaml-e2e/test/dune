@@ -1,0 +1,22 @@
+(melange.emit
+ (target test_node)
+ (alias test_node)
+ (module_systems commonjs)
+ (modules (:standard))
+ (libraries
+  logseq_e2e
+  melange-fest
+  melange.node
+  melange.js)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias test_node)
+  (:left ./test_node/test/test_left_sidebar_basic.js)
+  (:graph ./test_node/test/test_graph.js)
+  (:undo ./test_node/test/test_undo_redo.js))
+ (action
+  (run node --test %{left} %{graph} %{undo})))

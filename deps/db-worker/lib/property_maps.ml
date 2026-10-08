@@ -6,7 +6,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let select_keys_wire (keys : string list) (m : Wire.t) : Wire.t =
   match m with
@@ -14,8 +13,8 @@ let select_keys_wire (keys : string list) (m : Wire.t) : Wire.t =
       Wire.Map
         (List.filter_map
            (fun k ->
-              match List.assoc_opt (kw k) pairs with
-              | Some v -> Some (kw k, v)
+              match List.assoc_opt (Wire.keyword k) pairs with
+              | Some v -> Some (Wire.keyword k, v)
               | None -> None)
            keys)
   | _ -> m
@@ -23,7 +22,7 @@ let select_keys_wire (keys : string list) (m : Wire.t) : Wire.t =
 let wire_assoc (k : string) (v : Wire.t) (m : Wire.t) : Wire.t =
   match m with
   | Wire.Map pairs ->
-      Wire.Map ((kw k, v) :: List.remove_assoc (kw k) pairs)
+      Wire.Map ((Wire.keyword k, v) :: List.remove_assoc (Wire.keyword k) pairs)
   | _ -> m
 
 (* handler entity-direct-map: select-keys of entity-forward-map *)

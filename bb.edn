@@ -136,17 +136,6 @@
   dev:lint-test-deps
   logseq.tasks.dev.lint-test-deps/run
 
-  dev:e2e-basic-test
-  logseq.tasks.dev/e2e-basic-test
-
-  dev:e2e-rtc-extra-test
-  {:doc "Run e2e rtc extra tests. HTTP server should be available at localhost:3001"
-   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-test")}
-
-  dev:e2e-rtc-extra-part2-test
-  {:doc "Run e2e rtc extra part2 tests. HTTP server should be available at localhost:3001"
-   :task (clojure {:dir "clj-e2e"} "-X:dev-run-rtc-extra-part2-test")}
-
   dev:db-sync-test
   {:doc "Run db-sync server unit tests"
    :task (do (shell {:dir "deps/db-sync"} "clojure -M:cljs compile db-sync-test")

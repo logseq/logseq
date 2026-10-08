@@ -22,7 +22,6 @@ let update_checksum : (string -> tx_report -> unit) ref =
 let persist_local_tx : (string -> tx_report -> unit) ref =
   ref (fun _ _ -> ())
 
-let kw s = Wire.Keyword s
 
 (* perf-time-ms — float ms *)
 let perf_time_ms () = Int64.to_float (Date_time_util.time_ms ())
@@ -75,41 +74,34 @@ let take_outliner_op_perf perf_id =
 
 (* cljs transaction.cljs log-outliner-op-perf! — the endpoint-level perf
    log emitted by :thread-api/apply-outliner-ops. dev (goog.DEBUG) logs
-   every op; OUTLINER-PERF-LOGGING (e2e builds) logs only op-names +
-   worker-apply-ms for the three e2e op sets. *)
-let e2e_perf_op_names =
-  [ [ "insert-blocks" ]; [ "save-block"; "insert-blocks" ]; [ "delete-blocks" ] ]
-
-let op_names_of (data : Wire.t) : string list =
-  match Wire.get "op-names" data with
-  | Some (Wire.Array xs) | Some (Wire.List xs) ->
-      List.filter_map (function Wire.Keyword s -> Some s | _ -> None) xs
-  | _ -> []
-
+   every op; OUTLINER-PERF-LOGGING (e2e builds) logs every op's slim
+   [:op-names :worker-apply-ms] projection. *)
 let log_tx_outliner_op_perf (data : Wire.t) =
-  match Wire.get "perf-id" data with
-  | Some (Wire.String _) | Some (Wire.Uuid _) ->
-      let data' =
-        match Wire.get "apply-ms" data with
-        | Some am -> Cljs_map.assoc data "worker-apply-ms" am
-        | None -> data
-      in
-      if !Sync_state.dev_or_test then
-        Worker_log.info ":db-worker/outliner-op-perf"
-          [ ("data", Ds_wire.edn_of_transit data') ]
-      else if !Sync_state.outliner_perf_logging
-              && List.mem (op_names_of data') e2e_perf_op_names then
-        (* cljs select-keys [:op-names :worker-apply-ms] *)
-        let slim =
-          Wire.Map
-            (List.filter
-               (fun (k, _) ->
-                 k = kw "op-names" || k = kw "worker-apply-ms")
-               (Wire.as_map data'))
-        in
-        Worker_log.info ":db-worker/outliner-op-perf"
-          [ ("data", Ds_wire.edn_of_transit slim) ]
-  | _ -> ()
+  (* perf-id is informational for this endpoint-level line: callers that
+     forgot :ui/perf-id must not lose their whole log entry — the e2e
+     suite counts one line per apply-outliner-ops call. *)
+  let data' =
+    match Wire.get "apply-ms" data with
+    | Some am -> Cljs_map.assoc data "worker-apply-ms" am
+    | None -> data
+  in
+  if !Sync_state.dev_or_test then
+    Worker_log.info ":db-worker/outliner-op-perf"
+      [ ("data", Ds_wire.edn_of_transit data') ]
+  else if !Sync_state.outliner_perf_logging then
+    (* cljs logs every op under goog.DEBUG; restricting to
+       e2e_perf_op_names silently drops ops whose names merged
+       (e.g. [:insert-blocks :delete-blocks]) under load.
+       select-keys [:op-names :worker-apply-ms] *)
+    let slim =
+      Wire.Map
+        (List.filter
+           (fun (k, _) ->
+             k = Wire.keyword "op-names" || k = Wire.keyword "worker-apply-ms")
+           (Wire.as_map data'))
+    in
+    Worker_log.info ":db-worker/outliner-op-perf"
+      [ ("data", Ds_wire.edn_of_transit slim) ]
 
 (* cljs log-outliner-op-perf! — recorded only in dev (goog.DEBUG) *)
 let log_outliner_op_perf (data : Wire.t) =
@@ -130,7 +122,7 @@ let log_outliner_op_perf (data : Wire.t) =
   else ()
 
 let perf_wire (data : (string * Wire.t) list) : Wire.t =
-  Wire.Map (List.map (fun (k, v) -> (kw k, v)) data)
+  Wire.Map (List.map (fun (k, v) -> (Wire.keyword k, v)) data)
 
 let ms_wire (ms : float) : Wire.t = Wire.Float ms
 
@@ -151,7 +143,7 @@ let renderer_tx_meta (tx_meta : tx_meta) : Wire.t =
     (List.filter_map
        (fun (a, v) ->
           if List.mem a renderer_tx_meta_keys then
-            Some (kw a, Ds_wire.transit_of_value v)
+            Some (Wire.keyword a, Ds_wire.transit_of_value v)
           else None)
        tx_meta)
 
@@ -241,12 +233,12 @@ let renderer_route_candidates (_db : db) (blocks : entity list)
     (List.filter_map Fun.id
        [ (if task_ids <> [] then
             Some
-              ( kw "task-route-candidate-ids"
+              ( Wire.keyword "task-route-candidate-ids"
               , Wire.Array (List.map (fun i -> Wire.Int i) task_ids) )
           else None)
        ; (if comment_ids <> [] then
             Some
-              ( kw "comment-route-candidate-ids"
+              ( Wire.keyword "comment-route-candidate-ids"
               , Wire.Array (List.map (fun i -> Wire.Int i) comment_ids) )
           else None) ])
 
@@ -305,9 +297,9 @@ let main_thread_sync_result (repo : string) (conn : conn)
     in
     let payload =
       Wire.Map
-        ([ kw "repo", Wire.String repo
-         ; kw "tx-meta", renderer_tx_meta r.tx_meta
-         ; kw "delta", delta ]
+        ([ Wire.keyword "repo", Wire.String repo
+         ; Wire.keyword "tx-meta", renderer_tx_meta r.tx_meta
+         ; Wire.keyword "delta", delta ]
          @ Wire.as_map route)
     in
     (match tx_meta_string r "ui/perf-id" with
@@ -329,7 +321,7 @@ let broadcast_main_thread_sync (r : tx_report) (s : sync_result) : unit =
   Broadcast.to_clients ~kind:"sync-db-changes"
     ~transit_payload:
       (Transit_codec.to_string
-         (Wire.Array [ kw "sync-db-changes"; s.sync_payload ]));
+         (Wire.Array [ Wire.keyword "sync-db-changes"; s.sync_payload ]));
   let perf_id =
     match tx_meta_v r "ui/perf-id" with
     | Some v -> Ds_wire.transit_of_value v
@@ -337,11 +329,11 @@ let broadcast_main_thread_sync (r : tx_report) (s : sync_result) : unit =
   in
   log_outliner_op_perf
     (perf_wire
-       [ "stage", kw "sync-db-to-main-thread"
+       [ "stage", Wire.keyword "sync-db-to-main-thread"
        ; "perf-id", perf_id
        ; ( "outliner-op"
          , match outliner_op_of r.tx_meta with
-           | Some o -> kw o
+           | Some o -> Wire.keyword o
            | None -> Wire.Nil )
        ; "tx-count", Wire.Int (List.length s.sync_tx_report.tx_data)
        ; "pipeline-ms", ms_wire (elapsed_ms s.sync_pipeline_at s.sync_started_at)
@@ -359,18 +351,18 @@ let report_post_commit_error repo (tx_meta : tx_meta) stage exn =
        ~transit_payload:
          (Transit_codec.to_string
             (Wire.Array
-               [ kw "capture-error"
+               [ Wire.keyword "capture-error"
                ; Wire.Map
-                   [ kw "error"
+                   [ Wire.keyword "error"
                    , Wire.String (Printexc.to_string exn)
-                   ; ( kw "payload"
+                   ; ( Wire.keyword "payload"
                      , Wire.Map
                          (List.filter_map Fun.id
-                            [ Some (kw "repo", Wire.String repo)
-                            ; Some (kw "stage", kw stage)
+                            [ Some (Wire.keyword "repo", Wire.String repo)
+                            ; Some (Wire.keyword "stage", Wire.keyword stage)
                             ; (match outliner_op_of tx_meta with
                                | Some o ->
-                                   Some (kw "outliner-op", kw o)
+                                   Some (Wire.keyword "outliner-op", Wire.keyword o)
                                | None -> None) ]) ) ] ]))
    with report_error ->
      Worker_log.error "db-worker/report-post-commit-handler-failed"
@@ -389,10 +381,11 @@ let invoke_listener_handler (timings : (string * float) list ref) k
   timings := !timings @ [ (k, perf_time_ms () -. started_at) ];
   result
 
-let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
+let process_committed_tx ~persist_enabled ~checksum_enabled
+    ~sync_db_to_main_thread
     ~(deferred : (string * handler) list) repo conn (r : tx_report) =
   let started_at = perf_time_ms () in
-  (* one sqlite txn around the two client-ops db writes — each separate
+  (* one sqlite txn around the client-ops db writes — each separate
      txn costs a real OPFS write batch, unlike cljs sql.js's in-memory
      commits *)
   let with_client_ops_tx f =
@@ -400,19 +393,24 @@ let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
       Sqlite.transaction (Sync_state.client_ops_conn repo) f
     else f ()
   in
-  with_client_ops_tx (fun () ->
-      run_post_commit repo r.tx_meta "update-checksum" (fun () ->
-          !update_checksum repo r));
-  let checksum_at = perf_time_ms () in
   let handler_timings = ref [] in
-  (if persist_enabled then
-     with_client_ops_tx (fun () ->
-         run_post_commit repo r.tx_meta "persist-local-tx" (fun () ->
-             invoke_listener_handler handler_timings "db-sync"
-               !persist_local_tx repo r)));
+  let checksum_at = ref (perf_time_ms ()) in
+  with_client_ops_tx (fun () ->
+      if checksum_enabled && not !Sync_state.pending_replay then
+        run_post_commit repo r.tx_meta "update-checksum" (fun () ->
+            !update_checksum repo r);
+      checksum_at := perf_time_ms ();
+      if persist_enabled then
+        run_post_commit repo r.tx_meta "persist-local-tx" (fun () ->
+            invoke_listener_handler handler_timings "db-sync"
+              !persist_local_tx repo r));
+  let checksum_at = !checksum_at in
   let persist_at = perf_time_ms () in
   let sync_result =
-    if sync_db_to_main_thread then
+    (* during pending replay each entry's per-report main-thread delta
+       would duplicate work — commit_synthesized_report emits the one
+       combined delta for the whole rebuild *)
+    if sync_db_to_main_thread && not !Sync_state.pending_replay then
       main_thread_sync_result repo conn r
     else None
   in
@@ -438,11 +436,11 @@ let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
   in
   log_outliner_op_perf
     (perf_wire
-       [ "stage", kw "db-listener-complete"
+       [ "stage", Wire.keyword "db-listener-complete"
        ; "perf-id", perf_id
        ; ( "outliner-op"
          , match outliner_op_of r.tx_meta with
-           | Some o -> kw o
+           | Some o -> Wire.keyword o
            | None -> Wire.Nil )
        ; "tx-count", Wire.Int (List.length r.tx_data)
        ; "checksum-ms", ms_wire (checksum_at -. started_at)
@@ -452,7 +450,7 @@ let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
          , Wire.Array
              (List.map
                 (fun (k, ms) ->
-                   Wire.Array [ kw k; ms_wire ms ])
+                   Wire.Array [ Wire.keyword k; ms_wire ms ])
                 !handler_timings) )
        ; "total-ms", ms_wire (perf_time_ms () -. started_at) ])
 
@@ -486,7 +484,43 @@ let listen_db_changes ?(handler_keys : string list option) repo conn =
                || not (tx_meta_bool r "batch-tx-report?"))
          then
            process_committed_tx ~persist_enabled
+             ~checksum_enabled:
+               (* a graph with a server conn updates the stored checksum
+                  only through the server conn's dedicated checksum
+                  listener — running it here too would double-count
+                  every server-conn tx once this conn is the server
+                  conn itself *)
+               (Sync_state.server_conn repo = None)
              ~sync_db_to_main_thread ~deferred:selected repo conn r))
+
+(* Runs the commit pipeline on a hand-built report (server-state rebind on
+   the display conn — no real transact produced one). Persist and checksum
+   stay off: the jump carries no local op and the stored checksum tracks
+   the server conn's own transacts. *)
+let commit_synthesized_report repo conn (r : tx_report) =
+  let all_handlers =
+    Hashtbl.fold (fun k f acc -> (k, f) :: acc) deferred_handlers []
+  in
+  process_committed_tx ~persist_enabled:false ~checksum_enabled:false
+    ~sync_db_to_main_thread:true ~deferred:all_handlers repo conn r
+
+(* Server-conn checksum tracking: remote applies and confirms transact on
+   the server conn, which has no listen-db-changes! listener — a checksum-only
+   listener keeps the stored checksum aligned with the server conn. *)
+let listen_db_checksum repo conn =
+  ignore
+    (Datascript.listen conn "listen-db-sync-checksum"
+       (fun (r : tx_report) ->
+          if
+            r.tx_data <> []
+            && (tx_meta_bool r "batch-final-tx-report?"
+                || not (tx_meta_bool r "batch-tx-report?"))
+          then
+            (* wrap like process_committed_tx — a checksum failure must
+               not escape notify_listeners and report a committed tx
+               as failed *)
+            run_post_commit repo r.tx_meta "update-checksum" (fun () ->
+                !update_checksum repo r)))
 
 (* built-in deferred listeners — mirror queues jobs with debounce *)
 let () =
@@ -503,11 +537,11 @@ let capture_error (api : string) (payload : Wire.t) (extra : Wire.t) : unit =
     ~transit_payload:
       (Transit_codec.to_string
          (Wire.Array
-            [ kw "capture-error"
+            [ Wire.keyword "capture-error"
             ; Wire.Map
-                [ kw "error", Wire.String api
-                ; kw "payload", payload
-                ; kw "extra", extra ] ]))
+                [ Wire.keyword "error", Wire.String api
+                ; Wire.keyword "payload", payload
+                ; Wire.keyword "extra", extra ] ]))
 
 (* sync-deps: capture-error reporting *)
 let () = Sync_deps.capture_error := Some capture_error

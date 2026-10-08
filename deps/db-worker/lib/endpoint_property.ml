@@ -1,29 +1,7 @@
-(* Property endpoints (frontend/worker/handler/property.cljs).
-   Wiring note for worker_core.ml — add:
-
-     ignore Endpoint_property.get_all_classes;
-     ignore Endpoint_property.get_structured_children;
-     ignore Endpoint_property.get_class_extends_children_tree;
-     ignore Endpoint_property.get_block_class_default_properties;
-     ignore Endpoint_property.get_class_properties;
-     ignore Endpoint_property.get_property_closed_values;
-     ignore Endpoint_property.get_property_node_selector_data;
-     ignore Endpoint_property.get_class_objects;
-     ignore Endpoint_property.validate_block_tag;
-     ignore Endpoint_property.get_property_values;
-     ignore Endpoint_property.get_all_properties;
-     ignore Endpoint_property.validate_property_value;
-     ignore Endpoint_property.get_first_url_property_value;
-     ignore Endpoint_property.convert_tag_to_page;
-     ignore Endpoint_property.convert_page_to_tag;
-     ignore Endpoint_property.get_date_scheduled_or_deadlines_endpoint;
-     ignore Endpoint_property.get_display_properties_endpoint;
-     ignore Endpoint_property.reorder_display_property;
-*)
+(* Property endpoints (frontend/worker/handler/property.cljs). *)
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let repo_arg args =
   match List.nth_opt args 0 with
@@ -242,9 +220,9 @@ let get_block_class_default_properties args =
                      | Some (Ref id) ->
                          (match Ldb.ent_of_id db id with
                           | Some dv ->
-                              Some (kw (ident_of p), Ds_wire.entity_map_wire dv)
+                              Some (Wire.keyword (ident_of p), Ds_wire.entity_map_wire dv)
                           | None -> None)
-                     | Some v -> Some (kw (ident_of p), Ds_wire.transit_of_value v)
+                     | Some v -> Some (Wire.keyword (ident_of p), Ds_wire.transit_of_value v)
                      | None -> None)
                   r.classes_properties))))
 
@@ -537,14 +515,14 @@ let property_node_selector_data db (option : Wire.t) : Wire.t =
              class_ids)
       in
       Wire.Map
-        [ ( kw "all-classes"
+        [ ( Wire.keyword "all-classes"
           , Wire.Array (List.map Ds_wire.entity_map_wire all_classes) )
-        ; (kw "class-options", Wire.Array class_options)
-        ; (kw "extends-class-options", Wire.Array extends_class_options)
-        ; ( kw "structured-children-by-class-id"
+        ; (Wire.keyword "class-options", Wire.Array class_options)
+        ; (Wire.keyword "extends-class-options", Wire.Array extends_class_options)
+        ; ( Wire.keyword "structured-children-by-class-id"
           , structured_children_by_class_id )
-        ; (kw "extends-by-class-id", extends_by_class_id)
-        ; ( kw "initial-choices"
+        ; (Wire.keyword "extends-by-class-id", extends_by_class_id)
+        ; ( Wire.keyword "initial-choices"
           , property_node_selector_initial_choices db property
               non_root_classes option ) ]
 
@@ -594,12 +572,12 @@ let validate_block_tag args =
       pure
         (try
            Outliner_validate.validate_unique_by_name_and_tags db title block tag;
-           Wire.Map [ (kw "valid?", Wire.Bool true) ]
+           Wire.Map [ (Wire.keyword "valid?", Wire.Bool true) ]
          with
          | Outliner_validate.Notification w ->
              Wire.Map
-               [ (kw "valid?", Wire.Bool false)
-               ; ( kw "payload"
+               [ (Wire.keyword "valid?", Wire.Bool false)
+               ; ( Wire.keyword "payload"
                  , match Wire.get "payload" w with
                    | Some p -> p
                    | None -> w ) ]))
@@ -694,15 +672,17 @@ let get_all_properties db (opts : Wire.t) : Wire.t =
   List.of_seq (datoms db Avet ~a:"block/tags" ~v:(Ref property_tag) ())
   |> List.filter_map (fun (d : datom) -> Ldb.ent_of_id db d.e)
   |> List.filter (fun (p : entity) -> not (Ldb.recycled p))
-  |> List.stable_sort (fun (a : entity) (b : entity) ->
-         let triple e =
-           ( (match Ldb.ident_of e with
+  (* sort key computed once per property — the comparator would otherwise
+     re-read idents/attrs per comparison (O(n log n) seeks) *)
+  |> List.map (fun (p : entity) ->
+         ( p
+         , ( (match Ldb.ident_of p with
               | Some i -> Ldb.plugin_property i
               | None -> false)
-           , Ldb.built_in e
-           , Ldb.string_value e "block/title" )
-         in
-         compare (triple a) (triple b))
+           , Ldb.built_in p
+           , Ldb.string_value p "block/title" ) ))
+  |> List.stable_sort (fun (_, key_a) (_, key_b) -> compare key_a key_b)
+  |> List.map fst
   |> List.filter (fun (p : entity) ->
          (not remove_built_in)
          || not
@@ -774,19 +754,19 @@ let () =
 let convert_tag_to_page_tx db (class_id : entity_id) : Wire.t list =
   let objects = Db_class.get_class_objects db class_id in
   let page_txs =
-    [ Wire.Array [ kw "db/retract"; Wire.Int class_id; kw "db/ident" ]
+    [ Wire.Array [ Wire.keyword "db/retract"; Wire.Int class_id; Wire.keyword "db/ident" ]
     ; Wire.Array
-        [ kw "db/retract"; Wire.Int class_id; kw "block/tags"
-        ; kw "logseq.class/Tag" ]
+        [ Wire.keyword "db/retract"; Wire.Int class_id; Wire.keyword "block/tags"
+        ; Wire.keyword "logseq.class/Tag" ]
     ; Wire.Array
-        [ kw "db/retract"; Wire.Int class_id
-        ; kw "logseq.property.class/extends" ]
+        [ Wire.keyword "db/retract"; Wire.Int class_id
+        ; Wire.keyword "logseq.property.class/extends" ]
     ; Wire.Array
-        [ kw "db/retract"; Wire.Int class_id
-        ; kw "logseq.property.class/properties" ]
+        [ Wire.keyword "db/retract"; Wire.Int class_id
+        ; Wire.keyword "logseq.property.class/properties" ]
     ; Wire.Array
-        [ kw "db/add"; Wire.Int class_id; kw "block/tags"
-        ; kw "logseq.class/Page" ] ]
+        [ Wire.keyword "db/add"; Wire.Int class_id; Wire.keyword "block/tags"
+        ; Wire.keyword "logseq.class/Page" ] ]
   in
   let object_txs =
     List.concat_map
@@ -799,10 +779,10 @@ let convert_tag_to_page_tx db (class_id : entity_id) : Wire.t list =
           | None -> invalid_arg "class object missing :block/title"
         in
         [ Wire.Map
-            [ (kw "db/id", Wire.Int obj.id)
-            ; (kw "block/title", Wire.String title) ]
+            [ (Wire.keyword "db/id", Wire.Int obj.id)
+            ; (Wire.keyword "block/title", Wire.String title) ]
         ; Wire.Array
-            [ kw "db/retract"; Wire.Int obj.id; kw "block/tags"
+            [ Wire.keyword "db/retract"; Wire.Int obj.id; Wire.keyword "block/tags"
             ; Wire.Int class_id ] ])
       objects
   in
@@ -845,14 +825,14 @@ let convert_page_to_tag_tx db (page_id : entity_id) : Wire.t list =
   in
   let page_m =
     Wire.Map
-      [ (kw "block/uuid", value_of "block/uuid")
-      ; (kw "block/title", value_of "block/title")
-      ; (kw "block/created-at", value_of "block/created-at") ]
+      [ (Wire.keyword "block/uuid", value_of "block/uuid")
+      ; (Wire.keyword "block/title", value_of "block/title")
+      ; (Wire.keyword "block/created-at", value_of "block/created-at") ]
   in
   [ Db_class.build_new_class db page_m
   ; Wire.Array
-      [ kw "db/retract"; Wire.Int page_id; kw "block/tags"
-      ; kw "logseq.class/Page" ] ]
+      [ Wire.keyword "db/retract"; Wire.Int page_id; Wire.keyword "block/tags"
+      ; Wire.keyword "logseq.class/Page" ] ]
 
 (* :thread-api/convert-page-to-tag [repo page-id] *)
 let convert_page_to_tag args =
@@ -913,17 +893,17 @@ let sort_by_order_recursive (form : Wire.t) : Wire.t =
   let value v =
     match v with
     | Wire.Map pairs ->
-        (match List.assoc_opt (kw "block/_parent") pairs with
+        (match List.assoc_opt (Wire.keyword "block/_parent") pairs with
          | Some (Wire.Set children | Wire.Array children | Wire.List children) ->
              let pairs' =
-               List.filter (fun (k, _) -> k <> kw "block/_parent") pairs
+               List.filter (fun (k, _) -> k <> Wire.keyword "block/_parent") pairs
              in
-             Wire.Map (pairs' @ [ (kw "block/children", Wire.Array (sort_children children)) ])
+             Wire.Map (pairs' @ [ (Wire.keyword "block/children", Wire.Array (sort_children children)) ])
          | Some _ ->
              let pairs' =
-               List.filter (fun (k, _) -> k <> kw "block/_parent") pairs
+               List.filter (fun (k, _) -> k <> Wire.keyword "block/_parent") pairs
              in
-             Wire.Map (pairs' @ [ (kw "block/children", Wire.Array []) ])
+             Wire.Map (pairs' @ [ (Wire.keyword "block/children", Wire.Array []) ])
          | None -> Wire.Map pairs)
     | v -> v
   in
@@ -1115,10 +1095,10 @@ let reorder_display_property args =
   let tx_data =
     normalize_tx_data
     @ [ Wire.Map
-          [ kw "block/uuid", active_uuid
-          ; kw "block/order", Wire.String new_order ]
+          [ Wire.keyword "block/uuid", active_uuid
+          ; Wire.keyword "block/order", Wire.String new_order ]
       ; Outliner_blocks.block_with_updated_at
-          (Wire.Map [ kw "db/id", Wire.Int block_id ]) ]
+          (Wire.Map [ Wire.keyword "db/id", Wire.Int block_id ]) ]
   in
   Worker_state.set_db_latest_tx_time repo;
   ignore

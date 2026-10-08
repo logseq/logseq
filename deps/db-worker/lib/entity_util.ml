@@ -27,29 +27,13 @@ let asset (e : entity) : bool =
 
 let recycled (e : entity) = Ldb.recycled e
 
-let hidden (e : entity) : bool =
-  let rec hidden_parent (p : entity) (seen : int list) : bool =
-    if List.mem p.id seen then false
-    else
-      (Clj_value.truthy (Option.value ~default:Nil (Ldb.value p "logseq.property/hide?"))
-       || Ldb.value p "logseq.property/deleted-at" <> None)
-      ||
-      (match Ldb.ref_ent p "block/parent" with
-       | Some pp -> hidden_parent pp (p.id :: seen)
-       | None -> false)
-  in
-  Clj_value.truthy (Option.value ~default:Nil (Ldb.value e "logseq.property/hide?"))
-  || Ldb.value e "logseq.property/deleted-at" <> None
-  ||
-  (match Ldb.ref_ent e "block/parent" with
-   | Some p -> hidden_parent p []
-   | None -> false)
+let hidden (e : entity) : bool = Ldb.hidden e
+
+let some_parent (e : entity) (f : entity -> 'a option) : 'a option =
+  Ldb.some_parent e f
 
 let object_ (e : entity) : bool =
   not (internal_page e || journal e || is_class e || is_property e)
   && Ldb.value e "block/parent" <> None
 
 let built_in (e : entity) = Ldb.built_in e
-
-let get_pages_by_name (db : db) (page_name : string) : datom list =
-  Ldb.pages_by_name db page_name

@@ -1029,7 +1029,7 @@ let test_code_block_tag_addition_preserves_explicit_code_lang_test () =
                   ; "block/page", ref_ent_attr (Entity_id page.id)
                   ; "block/parent", ref_ent_attr (Entity_id page.id)
                   ; "block/order",
-                    ov (String (Db_order.gen_key None None))
+                    ov (String (Db_order.gen_key_from_max ()))
                   ; "block/tags",
                     Many_entities
                       [ { db_id = Some (Ident "logseq.class/Code-block")
@@ -1061,7 +1061,7 @@ let test_code_block_tag_addition_preserves_explicit_code_lang_test () =
                   ; "block/page", ref_ent_attr (Entity_id page.id)
                   ; "block/parent", ref_ent_attr (Entity_id page.id)
                   ; "block/order",
-                    ov (String (Db_order.gen_key None None))
+                    ov (String (Db_order.gen_key_from_max ()))
                   ; "block/tags",
                     Many_entities
                       [ { db_id = Some (Ident "logseq.class/Code-block")
@@ -1458,7 +1458,7 @@ let test_built_in_tag_must_not_convert_page_child_block_to_class_test () =
                   ; "block/page", ref_ent_attr (Entity_id page1.id)
                   ; "block/parent", ref_ent_attr (Entity_id page1.id)
                   ; "block/order",
-                    ov (String (Db_order.gen_key None None))
+                    ov (String (Db_order.gen_key_from_max ()))
                   ; "block/tags",
                     Many_entities
                       [ { db_id = Some (Ident "logseq.class/Tag")

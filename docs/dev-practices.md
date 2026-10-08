@@ -185,7 +185,7 @@ We have unit, performance and end to end tests.
 
 Even though we have a nightly release channel, it's hard for testing users (thanks to the brave users!) to notice all issues in a limited time, as Logseq is covering so many features.
 
-To run end to end tests, see [clj-e2e tests](/clj-e2e/README.md).
+To run end to end tests, see the `ocaml-e2e/` suite (`cd ocaml-e2e && opam exec -- dune build && node parallel-runner.mjs`; serve the built app on :3002 first).
 
 ### Unit Testing
 

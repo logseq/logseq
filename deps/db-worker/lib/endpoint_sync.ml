@@ -17,7 +17,6 @@
 
 open Db_worker_effect.Infix
 
-let kw s = Wire.Keyword s
 
 let pure_nil = Db_worker_effect.pure Wire.Nil
 
@@ -129,13 +128,13 @@ let () =
 
 let conflict_wire_of (c : Sync_client_op.sync_conflict) : Wire.t =
   Wire.Map
-    [ kw "id", Wire.Int c.id
-    ; kw "block-uuid", Wire.Uuid c.block_uuid
-    ; kw "attr", Wire.Keyword c.attr
-    ; kw "value", Wire.String c.value
-    ; ( kw "remote-t"
+    [ Wire.keyword "id", Wire.Int c.id
+    ; Wire.keyword "block-uuid", Wire.Uuid c.block_uuid
+    ; Wire.keyword "attr", Wire.Keyword c.attr
+    ; Wire.keyword "value", Wire.String c.value
+    ; ( Wire.keyword "remote-t"
       , match c.remote_t with Some t -> Wire.Int t | None -> Wire.Nil )
-    ; kw "created-at", Ds_wire.wire_int64 (Time.epoch_ms_to_int64 c.created_at) ]
+    ; Wire.keyword "created-at", Ds_wire.wire_int64 (Time.epoch_ms_to_int64 c.created_at) ]
 
 let () =
   Dispatcher.register "thread-api/db-sync-get-all-block-conflicts"
@@ -159,8 +158,8 @@ let () =
             if not (Sync_state.uuid_string block_uuid) then
               raise
                 (Sync_util.ex_info "Expected sync conflict block UUID"
-                   [ kw "repo", Wire.String repo
-                   ; kw "block-uuid", Wire.String block_uuid ]))
+                   [ Wire.keyword "repo", Wire.String repo
+                   ; Wire.keyword "block-uuid", Wire.String block_uuid ]))
          grouped;
        Db_worker_effect.pure
          (Wire.Map
@@ -180,11 +179,11 @@ let () =
          ~transit_payload:
            (Transit_codec.to_string
               (Wire.Array
-                 [ kw "sync-conflicts-updated"
+                 [ Wire.keyword "sync-conflicts-updated"
                  ; Wire.Map
-                     [ kw "repo", Wire.String repo
-                     ; kw "block-uuid", Wire.Uuid block_uuid
-                     ; kw "conflicts", Wire.Array [] ] ]));
+                     [ Wire.keyword "repo", Wire.String repo
+                     ; Wire.keyword "block-uuid", Wire.Uuid block_uuid
+                     ; Wire.keyword "conflicts", Wire.Array [] ] ]));
        pure_nil)
 
 (* ---- download ---- *)
@@ -255,7 +254,7 @@ let () =
        | Wire.String repo ->
            Endpoint_lifecycle.create_or_open_db
              [ Wire.String repo
-             ; Wire.Map [ (kw "close-other-db?", Wire.Bool false) ] ]
+             ; Wire.Map [ (Wire.keyword "close-other-db?", Wire.Bool false) ] ]
            >>= fun _ -> Sync_client.start repo >>= fun () -> pure_nil
        | _ ->
            raise

@@ -100,7 +100,10 @@ let url_entity_val (ctx : vctx) (opts : vopts) (v : value) : bool =
          | Some (String title) ->
              if opts.skip_strict_url then true
              else blank_str title || url_str title || macro_str title
-         | _ -> false)
+         (* cljs: [string/blank?] on a nil title is true — a URL
+            property created without a value has no title yet and is
+            valid; skip-strict still requires a string title *)
+         | _ -> not opts.skip_strict_url)
     | None -> false
 
 (* db-property-type/text-entity? *)
@@ -369,6 +372,20 @@ type ent_map = (attr * value) list
 
 let datoms_to_entity_maps ?(entity_fn : (attr -> ent_map option) option)
     (datoms : datom list) : (entity_id * ent_map) list =
+  (* upstream d/datoms surfaces each (e a v) fact once (sorted-set
+     membership ignores tx); our index keeps re-added facts as
+     duplicate_datoms differing only by tx, so the same fact can arrive
+     twice. Collapse by (e a v) — otherwise a card-one attr folds into a
+     #{v} set and entity-dispatch-key sees e.g. a set at block/uuid. *)
+  let seen = Hashtbl.create (List.length datoms) in
+  let datoms =
+    List.filter
+      (fun (d : datom) ->
+        let key = (d.e, d.a, d.v) in
+        if Hashtbl.mem seen key then false
+        else begin Hashtbl.add seen key (); true end)
+      datoms
+  in
   let tbl : (entity_id, ent_map) Hashtbl.t = Hashtbl.create 256 in
   let order = ref [] in
   List.iter

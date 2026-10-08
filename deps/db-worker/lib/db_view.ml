@@ -1312,13 +1312,32 @@ let sort_key_eq (a : value option) (b : value option) : bool =
 let sort_by_single_property db (s : sorting_item) (entities : entity list)
     ~(partition : bool) : entity list list =
   let property = Ldb.ent_of_ref db (Ident s.s_id) in
-  let get_value_fn = sort_key_fn db s in
+  let get_value_fn =
+    if s.s_id = "block.temp/refs-count" then begin
+      (* each refs-count is an index walk + seeks — memoize per entity so
+         the sort pays O(n) walks, not O(n log n). Shared with the
+         partition keys below. *)
+      let counts : (entity_id, int) Hashtbl.t =
+        Hashtbl.create (List.length entities)
+      in
+      fun (e : entity) ->
+        Some
+          (Int64
+             (Int64.of_int
+                (match Hashtbl.find_opt counts e.id with
+                 | Some n -> n
+                 | None ->
+                     let n = get_block_refs_count db e.id in
+                     Hashtbl.replace counts e.id n;
+                     n)))
+    end
+    else sort_key_fn db s
+  in
   let sorted =
     if s.s_id = "block.temp/refs-count" then
       let r =
         List.stable_sort
-          (fun a b ->
-             compare (get_block_refs_count db a.id) (get_block_refs_count db b.id))
+          (fun a b -> compare_opt_nil_first (get_value_fn a) (get_value_fn b))
           entities
       in
       if s.s_asc then r else List.rev r
@@ -1921,7 +1940,7 @@ let sort_eids_from_avet db (match_ : entity_id -> bool) (sorting : sorting_item 
        | None ->
            let ds =
              if s_asc then datoms db Avet ~a:s_id ()
-             else List.to_seq (List.rev (List.of_seq (datoms db Avet ~a:s_id ())))
+             else rseek_datoms db Avet ~a:s_id ()
            in
            let matched = avet_take_eids ~scan_attr:s_id ds match_ None offset in
            (match leftover with

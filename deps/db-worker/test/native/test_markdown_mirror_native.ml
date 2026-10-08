@@ -116,9 +116,12 @@ let mirror_root () =
 
 let run (t : 'a Db_worker_effect.t) : 'a =
   let result = ref None in
-  Db_worker_effect.on_any t (fun v -> result := Some v) (fun e -> raise e);
+  Db_worker_effect.on_any t
+    (fun v -> result := Some (Ok v))
+    (fun e -> result := Some (Error e));
   match !result with
-  | Some v -> v
+  | Some (Ok v) -> v
+  | Some (Error e) -> raise e
   | None -> failwith "effect still pending"
 
 let run_catching (t : 'a Db_worker_effect.t) : ('a, exn) result =
@@ -224,14 +227,13 @@ let hidden_built_in_property_pre_txs =
    here. *)
 let resolved_status_ident db (block : entity) =
   match Ldb.ref_ent block "logseq.property/status" with
-  | Some s -> Ldb.string_value s "db/ident"
+  | Some s -> Ldb.ident_of s
   | None ->
       (match Datascript.entity db (Ident "logseq.property/status") with
        | Some prop ->
            (match Ldb.value prop "logseq.property/default-value" with
             | Some (Ref id) ->
-                Option.bind (Ldb.ent_of_id db id)
-                  (fun dv -> Ldb.string_value dv "db/ident")
+                Option.bind (Ldb.ent_of_id db id) Ldb.ident_of
             | Some (Keyword k) -> Some k
             | _ -> None)
        | None -> None)

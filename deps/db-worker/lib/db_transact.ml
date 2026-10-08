@@ -319,7 +319,17 @@ let expand_delete_blocks_tx db (txs : Wire.t list) (tx_meta : tx_meta)
     | Some (Keyword k) -> Some k
     | _ -> None
   in
-  if outliner_op = Some "delete-blocks" then
+  (* remote txs arrive with the authoring client's subtree expansion
+     already baked into tx-data — the server ingests those items
+     verbatim (its transact carries no outliner-op meta). Re-expanding
+     on the pull path against this conn's tree state would append
+     retractEntities the journal never carried whenever the puller's
+     view of the subtree differs (e.g. it created a descendant early
+     via its own upload) *)
+  let remote_apply =
+    List.assoc_opt "transact-remote?" tx_meta = Some (Bool true)
+  in
+  if outliner_op = Some "delete-blocks" && not remote_apply then
     let subtree_tx =
       retracted_entities db txs
       |> List.filter block_entity
@@ -618,14 +628,61 @@ let datom_form_tx_ops (op : Wire.t) (e : Wire.t) (a : Wire.t) (v : Wire.t)
       let added = op = kw "db/add" in
       let attr = match a with Wire.Keyword s -> s | _ -> "" in
       match e with
-      | Wire.Int _ | Wire.Int64 _ -> None
+      | Wire.Int i ->
+          (* bare eids keep the same pipeline: without this branch the
+             whole item fell through to the string parser, which stored a
+             lookup-ref v (e.g. [:block/uuid u] on block/tags) as a raw
+             vector value instead of resolving it to a ref *)
+          Some
+            [ Call
+                (fun db ->
+                   let v' =
+                     match v with
+                     | Wire.Array _ | Wire.List _ | Wire.Keyword _
+                     | Wire.Uuid _
+                       when tx_ref_attr db attr ->
+                         Ref (entid_strict db v)
+                     | _ -> Ds_wire.value_of_transit v
+                   in
+                   [ Raw_datom
+                       (Datascript.datom ~tx ~added ~e:i ~a:attr ~v:v'
+                          ()) ]) ]
+      | Wire.Int64 i ->
+          Some
+            [ Call
+                (fun db ->
+                   let eid = Int64.to_int i in
+                   let v' =
+                     match v with
+                     | Wire.Array _ | Wire.List _ | Wire.Keyword _
+                     | Wire.Uuid _
+                       when tx_ref_attr db attr ->
+                         Ref (entid_strict db v)
+                     | _ -> Ds_wire.value_of_transit v
+                   in
+                   [ Raw_datom
+                       (Datascript.datom ~tx ~added ~e:eid ~a:attr ~v:v'
+                          ()) ]) ]
       | Wire.String s ->
           Some
-            [ (if added
-               then Add (Temp_id s, attr, Ds_wire.value_of_transit v)
-               else
-                 Retract (Temp_id s, attr, Some (Ds_wire.value_of_transit v)))
-            ]
+            [ Call
+                (fun db ->
+                   (* a string e is a tempid, but v still needs the same
+                      ref resolution the resolved-eid branch performs:
+                      [:db/add <tempid> a [:block/uuid u]] on a ref attr
+                      must resolve the lookup ref, not store the raw
+                      vector as a value *)
+                   let v' =
+                     match v with
+                     | Wire.Array _ | Wire.List _ | Wire.Keyword _
+                     | Wire.Uuid _
+                       when tx_ref_attr db attr ->
+                         Ref (entid_strict db v)
+                     | _ -> Ds_wire.value_of_transit v
+                   in
+                   [ (if added
+                      then Add (Temp_id s, attr, v')
+                      else Retract (Temp_id s, attr, Some v')) ]) ]
       | _ ->
           Some
             [ Call
@@ -746,11 +803,12 @@ let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
   let collected = ref [] in
   let listener_id =
     listen temp_conn "temp-conn-batch-tx"
-      (fun report -> collected := !collected @ report.tx_data)
+      (fun report -> collected := List.rev_append report.tx_data !collected)
   in
   Db_tx.with_temp_conn_cleanup temp_conn listener_id
     (fun () -> f temp_conn);
-  (match !collected with
+  (* collected is reversed chunk-wise; one final rev keeps it linear *)
+  (match List.rev !collected with
    | [] -> None
    | datoms ->
        let items =

@@ -1,0 +1,601 @@
+{
+  "tasks": [
+    {
+      "file": "test_rtc_extra_part2.js",
+      "shard": "slow:online-two-clients-u",
+      "shardNames": [
+        "online-two-clients-undo-redo-stress-test"
+      ],
+      "namePattern": "^online-two-clients-undo-redo-stress-test$",
+      "slow": true,
+      "estSecs": 271.093390725
+    },
+    {
+      "file": "test_rtc_extra.js",
+      "shard": "slow:rtc-task-blocks-test",
+      "shardNames": [
+        "rtc-task-blocks-test"
+      ],
+      "namePattern": "^rtc-task-blocks-test$",
+      "slow": true,
+      "estSecs": 195.642422962
+    },
+    {
+      "file": "test_rtc_basic.js",
+      "slow": false,
+      "estSecs": 67.038257835
+    },
+    {
+      "file": "test_rtc_extra.js",
+      "shard": "6/6",
+      "shardNames": [
+        "rtc-outliner-test"
+      ],
+      "namePattern": "^(rtc-outliner-test)$",
+      "slow": false,
+      "estSecs": 50.910726916685796
+    },
+    {
+      "file": "test_rtc_extra.js",
+      "shard": "5/6",
+      "shardNames": [
+        "rtc-property-test"
+      ],
+      "namePattern": "^(rtc-property-test)$",
+      "slow": false,
+      "estSecs": 50.56892063029555
+    },
+    {
+      "file": "test_multi_tabs.js",
+      "slow": false,
+      "estSecs": 50.212405428
+    },
+    {
+      "file": "test_rtc_extra.js",
+      "shard": "4/6",
+      "shardNames": [
+        "rtc-page-test"
+      ],
+      "namePattern": "^(rtc-page-test)$",
+      "slow": false,
+      "estSecs": 46.42827561091214
+    },
+    {
+      "file": "test_editor_basic.js",
+      "shard": "1/7",
+      "shardNames": [
+        "recycle-delete-removes-row-and-recent-entry-test",
+        "notification-appears-at-top-right-test",
+        "page-context-menu-tab-closes-without-stack-overflow-test",
+        "mixed-height-virtual-page-keeps-blocks-separated-test",
+        "toggle-between-page-and-block-for-selected-blocks",
+        "comments-update-and-title-edit",
+        "consecutive-enter-keeps-text-and-cursor-on-the-new-block",
+        "heading-editor-shows-every-row-test",
+        "block-context-menu-color-hover-shows-ring-test",
+        "operation-completion-restores-mounted-focus-test",
+        "main-scrollbar-track-uses-main-background-test"
+      ],
+      "namePattern": "^(recycle-delete-removes-row-and-recent-entry-test|notification-appears-at-top-right-test|page-context-menu-tab-closes-without-stack-overflow-test|mixed-height-virtual-page-keeps-blocks-separated-test|toggle-between-page-and-block-for-selected-blocks|comments-update-and-title-edit|consecutive-enter-keeps-text-and-cursor-on-the-new-block|heading-editor-shows-every-row-test|block-context-menu-color-hover-shows-ring-test|operation-completion-restores-mounted-focus-test|main-scrollbar-track-uses-main-background-test)$",
+      "slow": false,
+      "estSecs": 44.09749325300001
+    },
+    {
+      "file": "test_editor_basic.js",
+      "shard": "7/7",
+      "shardNames": [
+        "recycle-restore-removes-row-immediately-test",
+        "virtualized-late-editor-and-code-editor-test",
+        "page-icon-in-library",
+        "favorite-menu-and-sidebar-follow-page-updates-test",
+        "plain-multiline-and-html-paste-test",
+        "text-format-shortcuts-and-source-roundtrip-test",
+        "selection-direction-and-hierarchical-select-all-test",
+        "shift-click-page-title-opens-in-sidebar",
+        "external-property-update-preserves-edit-buffer-test",
+        "shift-arrow-up-selects-inside-a-block-test",
+        "click-rendered-block-focuses-editor"
+      ],
+      "namePattern": "^(recycle-restore-removes-row-immediately-test|virtualized-late-editor-and-code-editor-test|page-icon-in-library|favorite-menu-and-sidebar-follow-page-updates-test|plain-multiline-and-html-paste-test|text-format-shortcuts-and-source-roundtrip-test|selection-direction-and-hierarchical-select-all-test|shift-click-page-title-opens-in-sidebar|external-property-update-preserves-edit-buffer-test|shift-arrow-up-selects-inside-a-block-test|click-rendered-block-focuses-editor)$",
+      "slow": false,
+      "estSecs": 44.07810647300002
+    },
+    {
+      "file": "test_editor_basic.js",
+      "shard": "6/7",
+      "shardNames": [
+        "page-alias-can-be-added-and-removed-from-the-property-picker-test",
+        "page-ref-navigate-persists-unsaved-edit-buffer-test",
+        "editor-exit-and-unicode-persistence-test",
+        "move-blocks-mod+shift+m",
+        "shift-open-page-in-sidebar",
+        "multi-selection-indent-roundtrip-test",
+        "first-comment-actions-stay-inside-scroll-container",
+        "toggle-between-page-and-block",
+        "enter-splits-block-at-cursor-test",
+        "slash-menu-filter-scroll-and-cleanup-test",
+        "drag-and-drop-asset-does-not-create-blank-asset"
+      ],
+      "namePattern": "^(page-alias-can-be-added-and-removed-from-the-property-picker-test|page-ref-navigate-persists-unsaved-edit-buffer-test|editor-exit-and-unicode-persistence-test|move-blocks-mod\\+shift\\+m|shift-open-page-in-sidebar|multi-selection-indent-roundtrip-test|first-comment-actions-stay-inside-scroll-container|toggle-between-page-and-block|enter-splits-block-at-cursor-test|slash-menu-filter-scroll-and-cleanup-test|drag-and-drop-asset-does-not-create-blank-asset)$",
+      "slow": false,
+      "estSecs": 44.02171527700001
+    },
+    {
+      "file": "test_editor_basic.js",
+      "shard": "5/7",
+      "shardNames": [
+        "page-ref-navigate-persists-edit-buffer-with-open-popup-test",
+        "page-and-tag-autocomplete-test",
+        "move-editing-block-cmdk",
+        "page-context-menu-shift-tab-closes-without-stack-overflow-test",
+        "page-level-node-reference-renders-linked-references",
+        "disallow-adding-page-tag-to-normal-pages",
+        "shift-click-select-persists-unsaved-edit-buffer-test",
+        "enter-delete-keeps-text-and-cursor-on-the-previous-block",
+        "new-page-reference-renders-on-the-first-frame-after-save-test",
+        "backspace-at-start-removes-pending-block-dom-test",
+        "worker-missing-read-is-recoverable-test"
+      ],
+      "namePattern": "^(page-ref-navigate-persists-edit-buffer-with-open-popup-test|page-and-tag-autocomplete-test|move-editing-block-cmdk|page-context-menu-shift-tab-closes-without-stack-overflow-test|page-level-node-reference-renders-linked-references|disallow-adding-page-tag-to-normal-pages|shift-click-select-persists-unsaved-edit-buffer-test|enter-delete-keeps-text-and-cursor-on-the-previous-block|new-page-reference-renders-on-the-first-frame-after-save-test|backspace-at-start-removes-pending-block-dom-test|worker-missing-read-is-recoverable-test)$",
+      "slow": false,
+      "estSecs": 44.003536546
+    },
+    {
+      "file": "test_editor_basic.js",
+      "shard": "4/7",
+      "shardNames": [
+        "journals-list-does-not-nest-virtualized-scrollers-in-long-journal",
+        "move-blocks-cmdk",
+        "favorites-and-recents-load-after-refresh-test",
+        "copy-blocks-selected-after-fast-scroll-virtualized-list",
+        "multiline-heading-keeps-bullet-on-first-line",
+        "node-reference-autocomplete-test",
+        "journals-consecutive-input-test",
+        "today-queries-render-without-resource-errors",
+        "block-context-menu-clickable-controls-use-pointer-test",
+        "theme-preview-images-load-test",
+        "collapsed-subtree-stays-collapsed-after-bullet-zoom-back-test"
+      ],
+      "namePattern": "^(journals-list-does-not-nest-virtualized-scrollers-in-long-journal|move-blocks-cmdk|favorites-and-recents-load-after-refresh-test|copy-blocks-selected-after-fast-scroll-virtualized-list|multiline-heading-keeps-bullet-on-first-line|node-reference-autocomplete-test|journals-consecutive-input-test|today-queries-render-without-resource-errors|block-context-menu-clickable-controls-use-pointer-test|theme-preview-images-load-test|collapsed-subtree-stays-collapsed-after-bullet-zoom-back-test)$",
+      "slow": false,
+      "estSecs": 43.98838190800001
+    },
+    {
+      "file": "test_editor_basic.js",
+      "shard": "3/7",
+      "shardNames": [
+        "move-pages-to-library",
+        "cursor-boundaries-word-motion-and-kill-test",
+        "task-date-and-priority-slash-lifecycle-test",
+        "journals-list-remounts-complete-long-journal-with-one-scroller",
+        "create-nested-pages-in-library",
+        "empty-enter-and-soft-line-break-test",
+        "quick-add-moves-all-blocks-to-today-test",
+        "cmdk-block-results-render-breadcrumbs-test",
+        "escape-save-never-paints-stale-block-content-test",
+        "block-context-menu-tab-does-not-overflow-test",
+        "saved-page-reference-reopens-with-page-title-test"
+      ],
+      "namePattern": "^(move-pages-to-library|cursor-boundaries-word-motion-and-kill-test|task-date-and-priority-slash-lifecycle-test|journals-list-remounts-complete-long-journal-with-one-scroller|create-nested-pages-in-library|empty-enter-and-soft-line-break-test|quick-add-moves-all-blocks-to-today-test|cmdk-block-results-render-breadcrumbs-test|escape-save-never-paints-stale-block-content-test|block-context-menu-tab-does-not-overflow-test|saved-page-reference-reopens-with-page-title-test)$",
+      "slow": false,
+      "estSecs": 43.981135831
+    },
+    {
+      "file": "test_view_basic.js",
+      "slow": false,
+      "estSecs": 43.016901319
+    },
+    {
+      "file": "test_editor_basic.js",
+      "shard": "2/7",
+      "shardNames": [
+        "journals-list-rows-hold-no-pin-once-content-is-in",
+        "structured-and-plain-text-copy-test",
+        "consecutive-enter-and-delete-ops-complete-without-worker-errors",
+        "collapse-single-multiple-and-sidebar-test",
+        "parent-and-child-rapid-edits-keep-the-latest-child-title",
+        "journals-linked-refs-remain-visible",
+        "journals-list-uses-measured-spacing-without-item-margins",
+        "arrow-up-down-move-the-caret-inside-a-block-test",
+        "language-select-shows-dropdown-indicator-test"
+      ],
+      "namePattern": "^(journals-list-rows-hold-no-pin-once-content-is-in|structured-and-plain-text-copy-test|consecutive-enter-and-delete-ops-complete-without-worker-errors|collapse-single-multiple-and-sidebar-test|parent-and-child-rapid-edits-keep-the-latest-child-title|journals-linked-refs-remain-visible|journals-list-uses-measured-spacing-without-item-margins|arrow-up-down-move-the-caret-inside-a-block-test|language-select-shows-dropdown-indicator-test)$",
+      "slow": false,
+      "estSecs": 42.385557354
+    },
+    {
+      "file": "test_outliner_basic.js",
+      "shard": "1/4",
+      "shardNames": [
+        "drag-rejects-parent-into-descendant-test",
+        "enter-then-tab-on-collapsed-block-expands-it-test",
+        "delete-concat-test-with-tag",
+        "delete-concat-test-2-blocks"
+      ],
+      "namePattern": "^(drag-rejects-parent-into-descendant-test|enter-then-tab-on-collapsed-block-expands-it-test|delete-concat-test-with-tag|delete-concat-test-2-blocks)$",
+      "slow": false,
+      "estSecs": 41.78009205900002
+    },
+    {
+      "file": "test_outliner_basic.js",
+      "shard": "4/4",
+      "shardNames": [
+        "indent-outdent-embed-page-test",
+        "indent-selected-block-into-collapsed-block-expands-it-test",
+        "drag-reorders-once-and-is-undoable-test",
+        "backspace-at-parent-start-keeps-children-test",
+        "move-up-down-test",
+        "focused-root-block-cannot-indent-or-move-test",
+        "delete-concat-test-3-blocks",
+        "delete-end-test"
+      ],
+      "namePattern": "^(indent-outdent-embed-page-test|indent-selected-block-into-collapsed-block-expands-it-test|drag-reorders-once-and-is-undoable-test|backspace-at-parent-start-keeps-children-test|move-up-down-test|focused-root-block-cannot-indent-or-move-test|delete-concat-test-3-blocks|delete-end-test)$",
+      "slow": false,
+      "estSecs": 41.307527288
+    },
+    {
+      "file": "test_outliner_basic.js",
+      "shard": "3/4",
+      "shardNames": [
+        "undo-history-is-scoped-to-current-graph-test",
+        "held-backspace-does-not-duplicate-merged-content-test",
+        "drag-indents-and-outdents-test",
+        "indent-and-outdent-test",
+        "rapid-retype-before-enter-keeps-the-edit-test",
+        "indent-into-collapsed-block-expands-it-test",
+        "delete-test",
+        "delete-concat-test-with-children"
+      ],
+      "namePattern": "^(undo-history-is-scoped-to-current-graph-test|held-backspace-does-not-duplicate-merged-content-test|drag-indents-and-outdents-test|indent-and-outdent-test|rapid-retype-before-enter-keeps-the-edit-test|indent-into-collapsed-block-expands-it-test|delete-test|delete-concat-test-with-children)$",
+      "slow": false,
+      "estSecs": 41.29761759900001
+    },
+    {
+      "file": "test_outliner_basic.js",
+      "shard": "2/4",
+      "shardNames": [
+        "boundary-delete-and-backspace-merge-contract-test",
+        "create-test-page-and-insert-blocks-test",
+        "indent-into-collapsed-block-on-journals-expands-it-test",
+        "consecutive-backspace-does-not-restore-deleted-blocks-test",
+        "delete-test-with-children-test",
+        "backspace-empty-first-child-keeps-empty-parent-subtree-test"
+      ],
+      "namePattern": "^(boundary-delete-and-backspace-merge-contract-test|create-test-page-and-insert-blocks-test|indent-into-collapsed-block-on-journals-expands-it-test|consecutive-backspace-does-not-restore-deleted-blocks-test|delete-test-with-children-test|backspace-empty-first-child-keeps-empty-parent-subtree-test)$",
+      "slow": false,
+      "estSecs": 41.00184829500001
+    },
+    {
+      "file": "test_commands_basic.js",
+      "shard": "1/4",
+      "shardNames": [
+        "headings-test",
+        "date-command-keyboard-navigation-test",
+        "quote-heading-test",
+        "advanced-query-test",
+        "query-test",
+        "embed-video-test",
+        "math-block-test",
+        "quote-test"
+      ],
+      "namePattern": "^(headings-test|date-command-keyboard-navigation-test|quote-heading-test|advanced-query-test|query-test|embed-video-test|math-block-test|quote-test)$",
+      "slow": false,
+      "estSecs": 40.093417134
+    },
+    {
+      "file": "test_commands_basic.js",
+      "shard": "4/4",
+      "shardNames": [
+        "status-test",
+        "priority-test",
+        "date-time-test",
+        "clear-heading-test",
+        "block-reference-test",
+        "code-block-test",
+        "calculator-test",
+        "underline-test"
+      ],
+      "namePattern": "^(status-test|priority-test|date-time-test|clear-heading-test|block-reference-test|code-block-test|calculator-test|underline-test)$",
+      "slow": false,
+      "estSecs": 39.588936110000006
+    },
+    {
+      "file": "test_commands_basic.js",
+      "shard": "3/4",
+      "shardNames": [
+        "page-reference-test",
+        "command-trigger-test",
+        "template-test",
+        "slash-command-arrow-scroll-test",
+        "number-list-test",
+        "embed-tweet-test",
+        "link-image-test",
+        "cloze-test"
+      ],
+      "namePattern": "^(page-reference-test|command-trigger-test|template-test|slash-command-arrow-scroll-test|number-list-test|embed-tweet-test|link-image-test|cloze-test)$",
+      "slow": false,
+      "estSecs": 39.524941823000006
+    },
+    {
+      "file": "test_commands_basic.js",
+      "shard": "2/4",
+      "shardNames": [
+        "link-test",
+        "query-view-membership-updates-live",
+        "scheduled-deadline-test",
+        "number-children-test",
+        "date-picker-month-select-test",
+        "embed-html-test",
+        "slash-command-group-headings-test"
+      ],
+      "namePattern": "^(link-test|query-view-membership-updates-live|scheduled-deadline-test|number-children-test|date-picker-month-select-test|embed-html-test|slash-command-group-headings-test)$",
+      "slow": false,
+      "estSecs": 39.273568231999995
+    },
+    {
+      "file": "test_plugins_basic.js",
+      "slow": false,
+      "estSecs": 38.968136097
+    },
+    {
+      "file": "test_property_config_basic.js",
+      "slow": false,
+      "estSecs": 38.102684292
+    },
+    {
+      "file": "test_block_property_basic.js",
+      "shard": "1/2",
+      "shardNames": [
+        "references-embeds-and-mounted-instance-refresh-test",
+        "unlinked-reference-filter-and-breadcrumb-test",
+        "block-and-comment-reaction-toggle-test",
+        "tag-inheritance-schema-and-object-view-test",
+        "property-default-description-position-and-hidden-state-test",
+        "checkbox-property-toggle-persists-test",
+        "flashcard-rating-advances-once-test"
+      ],
+      "namePattern": "^(references-embeds-and-mounted-instance-refresh-test|unlinked-reference-filter-and-breadcrumb-test|block-and-comment-reaction-toggle-test|tag-inheritance-schema-and-object-view-test|property-default-description-position-and-hidden-state-test|checkbox-property-toggle-persists-test|flashcard-rating-advances-once-test)$",
+      "slow": false,
+      "estSecs": 37.72808581899999
+    },
+    {
+      "file": "test_rtc_extra.js",
+      "shard": "3/6",
+      "shardNames": [
+        "rtc-outliner-conflict-update-test"
+      ],
+      "namePattern": "^(rtc-outliner-conflict-update-test)$",
+      "slow": false,
+      "estSecs": 37.292907379146946
+    },
+    {
+      "file": "test_block_property_basic.js",
+      "shard": "2/2",
+      "shardNames": [
+        "property-create-and-name-validation-test",
+        "tag-template-dynamic-values-test",
+        "icon-and-structural-tag-visibility-test",
+        "scalar-property-value-validation-test",
+        "property-type-cardinality-and-checkbox-choice-test",
+        "multi-target-comment-draft-edit-delete-test",
+        "property-delete-and-bidirectional-refresh-test"
+      ],
+      "namePattern": "^(property-create-and-name-validation-test|tag-template-dynamic-values-test|icon-and-structural-tag-visibility-test|scalar-property-value-validation-test|property-type-cardinality-and-checkbox-choice-test|multi-target-comment-draft-edit-delete-test|property-delete-and-bidirectional-refresh-test)$",
+      "slow": false,
+      "estSecs": 36.96990416
+    },
+    {
+      "file": "test_graph_navigation_basic.js",
+      "shard": "2/2",
+      "shardNames": [
+        "graph-empty-state-and-name-validation-test",
+        "graph-view-mode-settings-test",
+        "local-graph-delete-and-list-metadata-test",
+        "graph-refresh-and-browser-history-test"
+      ],
+      "namePattern": "^(graph-empty-state-and-name-validation-test|graph-view-mode-settings-test|local-graph-delete-and-list-metadata-test|graph-refresh-and-browser-history-test)$",
+      "slow": false,
+      "estSecs": 36.691712239000005
+    },
+    {
+      "file": "test_property_basic.js",
+      "slow": false,
+      "estSecs": 36.112974636
+    },
+    {
+      "file": "test_graph_navigation_basic.js",
+      "shard": "1/2",
+      "shardNames": [
+        "direct-page-and-block-route-test",
+        "default-home-route-test",
+        "graph-time-travel-playback-test",
+        "restoring-graph-gates-and-recovers-interaction-test"
+      ],
+      "namePattern": "^(direct-page-and-block-route-test|default-home-route-test|graph-time-travel-playback-test|restoring-graph-gates-and-recovers-interaction-test)$",
+      "slow": false,
+      "estSecs": 35.55074410200001
+    },
+    {
+      "file": "test_cmdk_scroll_basic.js",
+      "shard": "2/2",
+      "shardNames": [
+        "cmdk-lazy-visible-keyboard-scroll"
+      ],
+      "namePattern": "^(cmdk-lazy-visible-keyboard-scroll)$",
+      "slow": false,
+      "estSecs": 31.062900589
+    },
+    {
+      "file": "test_property_scoped_choices.js",
+      "slow": false,
+      "estSecs": 30.154202941
+    },
+    {
+      "file": "test_query_results_basic.js",
+      "shard": "2/2",
+      "shardNames": [
+        "simple-query-builder-views-and-live-results-test",
+        "scalar-and-multiple-column-query-results-test",
+        "partial-query-uses-requested-columns-test",
+        "partial-query-result-transform-test"
+      ],
+      "namePattern": "^(simple-query-builder-views-and-live-results-test|scalar-and-multiple-column-query-results-test|partial-query-uses-requested-columns-test|partial-query-result-transform-test)$",
+      "slow": false,
+      "estSecs": 29.179079806999994
+    },
+    {
+      "file": "test_query_results_basic.js",
+      "shard": "1/2",
+      "shardNames": [
+        "partial-query-edit-empty-and-live-update-test",
+        "partial-journal-query-table-list-and-reload-test",
+        "query-set-literals-do-not-create-tags-test",
+        "advanced-query-relative-journal-inputs-test"
+      ],
+      "namePattern": "^(partial-query-edit-empty-and-live-update-test|partial-journal-query-table-list-and-reload-test|query-set-literals-do-not-create-tags-test|advanced-query-relative-journal-inputs-test)$",
+      "slow": false,
+      "estSecs": 29.05495756299999
+    },
+    {
+      "file": "test_rtc_extra.js",
+      "shard": "2/6",
+      "shardNames": [
+        "rtc-property-update-rerenders-mounted-block"
+      ],
+      "namePattern": "^(rtc-property-update-rerenders-mounted-block)$",
+      "slow": false,
+      "estSecs": 25.18370057658543
+    },
+    {
+      "file": "test_rtc_extra.js",
+      "shard": "1/6",
+      "shardNames": [
+        "long-block-title-test"
+      ],
+      "namePattern": "^(long-block-title-test)$",
+      "slow": false,
+      "estSecs": 24.115654721428964
+    },
+    {
+      "file": "test_rtc_extra_part2.js",
+      "shard": "4/4",
+      "shardNames": [
+        "asset-blocks-validate-after-init-downloaded-test"
+      ],
+      "namePattern": "^(asset-blocks-validate-after-init-downloaded-test)$",
+      "slow": false,
+      "estSecs": 23.20690464090514
+    },
+    {
+      "file": "test_reference_basic.js",
+      "slow": false,
+      "estSecs": 23.110594358000004
+    },
+    {
+      "file": "test_rtc_extra_part2.js",
+      "shard": "3/4",
+      "shardNames": [
+        "issue-651-block-title-double-transit-encoded-test"
+      ],
+      "namePattern": "^(issue-651-block-title-double-transit-encoded-test)$",
+      "slow": false,
+      "estSecs": 20.41928757228703
+    },
+    {
+      "file": "test_tag_basic.js",
+      "slow": false,
+      "estSecs": 19.78431643
+    },
+    {
+      "file": "test_plugins_marketplace.js",
+      "slow": false,
+      "estSecs": 19.075388618999998
+    },
+    {
+      "file": "test_undo_redo.js",
+      "slow": false,
+      "estSecs": 18.513546393000002
+    },
+    {
+      "file": "test_cmdk_scroll_basic.js",
+      "shard": "1/2",
+      "shardNames": [
+        "cmdk-highlight-mode-switching",
+        "cmdk-keeps-results-visible-while-searching"
+      ],
+      "namePattern": "^(cmdk-highlight-mode-switching|cmdk-keeps-results-visible-while-searching)$",
+      "slow": false,
+      "estSecs": 17.794098507000005
+    },
+    {
+      "file": "test_rtc_extra_part2.js",
+      "shard": "2/4",
+      "shardNames": [
+        "paste-multiple-blocks-test"
+      ],
+      "namePattern": "^(paste-multiple-blocks-test)$",
+      "slow": false,
+      "estSecs": 16.97809278944577
+    },
+    {
+      "file": "test_rtc_extra_part2.js",
+      "shard": "1/4",
+      "shardNames": [
+        "issue-683-paste-large-block-test"
+      ],
+      "namePattern": "^(issue-683-paste-large-block-test)$",
+      "slow": false,
+      "estSecs": 16.49013194947343
+    },
+    {
+      "file": "test_left_sidebar_basic.js",
+      "slow": false,
+      "estSecs": 13.905534173
+    },
+    {
+      "file": "test_assets_basic.js",
+      "slow": false,
+      "estSecs": 13.745692477
+    },
+    {
+      "file": "test_library_basic.js",
+      "slow": false,
+      "estSecs": 13.428286611999999
+    },
+    {
+      "file": "test_query_builder_basic.js",
+      "slow": false,
+      "estSecs": 13.383719050000002
+    },
+    {
+      "file": "test_right_sidebar.js",
+      "slow": false,
+      "estSecs": 10.856416891
+    },
+    {
+      "file": "test_flashcards_basic.js",
+      "slow": false,
+      "estSecs": 8.656045681
+    },
+    {
+      "file": "test_export_basic.js",
+      "slow": false,
+      "estSecs": 6.6614328800000004
+    },
+    {
+      "file": "test_import_basic.js",
+      "slow": false,
+      "estSecs": 6.006323672000001
+    },
+    {
+      "file": "test_bidirectional_properties.js",
+      "slow": false,
+      "estSecs": 5.57631092
+    },
+    {
+      "file": "test_graph.js",
+      "slow": false,
+      "estSecs": 0.0010247980000000002
+    }
+  ]
+}

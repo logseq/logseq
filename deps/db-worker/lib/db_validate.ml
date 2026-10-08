@@ -34,6 +34,47 @@ type tx_entity_error =
   { entity_map : value (* :entity-map — Map value *)
   ; errors_humanized : value (* me/humanize result *) }
 
+(* cljs bookkeeping-attrs (validate.cljs) — timestamp attrs that don't
+   mark an entity as semantically changed *)
+let validate_bookkeeping_attrs = [ "block/created-at"; "block/updated-at" ]
+
+(* cljs changed-entity-ids — entities with a semantic change in tx-data.
+   An entity whose only changed attrs are bookkeeping timestamps didn't
+   change semantically — validating it would let latent invalid state
+   block unrelated writes (e.g. every tx that stamps :block/updated-at).
+   Touches that leave a timestamp missing or non-integer still count. *)
+let changed_entity_ids (db_after : db) (tx_data : datom list)
+    : entity_id list =
+  let groups = Hashtbl.create 16 in
+  let order = ref [] in
+  List.iter
+    (fun (d : datom) ->
+       if Hashtbl.mem groups d.e then
+         Hashtbl.replace groups d.e (d :: Hashtbl.find groups d.e)
+       else (Hashtbl.add groups d.e [ d ]; order := d.e :: !order))
+    tx_data;
+  List.filter
+    (fun e ->
+       let datoms = Hashtbl.find groups e in
+       let has_semantic =
+         List.exists
+           (fun (d : datom) -> not (List.mem d.a validate_bookkeeping_attrs))
+           datoms
+       in
+       let stamp_missing_or_non_int =
+         List.exists
+           (fun (d : datom) ->
+              match Ldb.ent_of_id db_after e with
+              | Some ent ->
+                  (match Ldb.value ent d.a with
+                   | Some (Int64 _) -> false
+                   | _ -> true)
+              | None -> true)
+           datoms
+       in
+       has_semantic || stamp_missing_or_non_int)
+    (List.rev !order)
+
 (* validate-tx-report — returns (valid?, errors) *)
 let validate_tx_report ~(closed_schema : bool) (db_after : db)
     (tx_data : datom list) : bool * tx_entity_error list =
@@ -41,15 +82,7 @@ let validate_tx_report ~(closed_schema : bool) (db_after : db)
   Common_util.protect
     ~finally:(fun () -> Db_malli_schema.skip_strict_url_validate := false)
     (fun () ->
-      let seen = Hashtbl.create 16 in
-      let changed_ids =
-        List.filter
-          (fun (d : datom) ->
-            if Hashtbl.mem seen d.e then false
-            else (Hashtbl.add seen d.e (); true))
-          tx_data
-        |> List.map (fun (d : datom) -> d.e)
-      in
+      let changed_ids = changed_entity_ids db_after tx_data in
       let tx_datoms =
         List.concat_map
           (fun id -> List.of_seq (datoms db_after Eavt ~e:id ()))

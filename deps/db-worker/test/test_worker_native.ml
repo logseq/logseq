@@ -402,6 +402,7 @@ let () =
 
   (* --- dispatcher --- *)
   Worker_core.init ();
+  let _worker_db_dir = setup () in
   graph_store_durability_tests ();
   graph_close_recovery_tests ();
   service_retry_tests ();
@@ -420,7 +421,6 @@ let () =
     (string_contains err "not found thread-api");
 
   (* A failed first open must not make the next open skip initialization. *)
-  let _retry_dir = setup () in
   let retry_repo = "logseq_db_failed-open-retry" in
   let open_retry opts =
     Worker_core.invoke "thread-api/create-or-open-db"

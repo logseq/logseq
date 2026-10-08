@@ -149,36 +149,24 @@ let rec ensure_pfs_dir pfs dir =
         Db_worker_effect.bind (ensure_pfs_dir pfs (pfs_parent dir))
           (fun () -> task_of_promise (pfs_mkdir pfs dir)))
 
-let u8_of_string s =
-  let n = String.length s in
-  let a = Js.Typed_array.Uint8Array.fromLength n in
-  for i = 0 to n - 1 do
-    Js.Typed_array.Uint8Array.unsafe_set a i (Char.code (String.unsafe_get s i))
-  done;
-  a
-
-let string_of_u8 a =
-  let n = Js.Typed_array.Uint8Array.length a in
-  String.init n (fun i -> Char.chr (Js.Typed_array.Uint8Array.unsafe_get a i))
-
 let read_bytes ~repo ~name =
   if is_browser () then
     Db_worker_effect.bind (browser_pfs ()) (fun pfs ->
-        Db_worker_effect.map string_of_u8
+        Db_worker_effect.map U8a.to_string
           (task_of_promise (pfs_read pfs (browser_path ~repo ~name))))
   else File_sys.read_binary (path ~repo ~name)
 
-let write_bytes ~repo ~name bytes =
+let write_bytes ~repo ~name payload =
   if is_browser () then
     Db_worker_effect.bind (browser_pfs ()) (fun pfs ->
         let file_path = browser_path ~repo ~name in
         Db_worker_effect.bind
           (ensure_pfs_dir pfs (pfs_parent file_path))
-          (fun () -> task_of_promise (pfs_write pfs file_path (u8_of_string bytes))))
+          (fun () -> task_of_promise (pfs_write pfs file_path (U8a.of_string payload))))
   else begin
     let p = path ~repo ~name in
     Db_worker_effect.bind (File_sys.mkdir_p (Filename.dirname p)) (fun () ->
-        File_sys.write_binary p bytes)
+        File_sys.write_binary p payload)
   end
 
 let exists ~repo ~name =

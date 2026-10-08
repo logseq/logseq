@@ -459,4 +459,4 @@ let () =
           Db_tx.release_flags conn))
     [ "db-tx", (fun conn f -> ignore (Db_tx.batch_transact_with_temp_conn conn f))
     ; "db-transact", (fun conn f -> ignore (Db_transact.batch_transact_with_temp_conn conn [] f))
-    ; "sync-apply", (fun conn f -> ignore (Sync_apply.batch_transact_with_temp_conn_impl conn [] f ())) ]
+    ; "sync-apply", (fun conn f -> ignore (Sync_replay.batch_transact_with_temp_conn_impl conn [] f ())) ]

@@ -19,12 +19,21 @@ let wait () =
   let task = { state = Pending; callbacks = Rrbvec.empty } in
   (task, task)
 
+(* JS .then isolates each listener: a raising callback must not drop
+   the remaining listeners nor propagate into whatever settled the task
+   (ws onmessage / timer / IDB). Log and continue instead. *)
+let run_callback callback state =
+  try callback state
+  with exn ->
+    Worker_log.error "effect/callback-raised"
+      [ ("error", Printexc.to_string exn) ]
+
 let notify task state =
   if is_pending task then begin
     task.state <- state;
     let callbacks = Rrbvec.rev task.callbacks in
     task.callbacks <- Rrbvec.empty;
-    Rrbvec.iter (fun callback -> callback state) callbacks
+    Rrbvec.iter (fun callback -> run_callback callback state) callbacks
   end
 
 let wakeup resolver value = notify resolver (Resolved value)
@@ -33,7 +42,7 @@ let reject resolver exn = notify resolver (Rejected exn)
 let on_state task callback =
   match task.state with
   | Pending -> task.callbacks <- Rrbvec.push_front task.callbacks callback
-  | state -> callback state
+  | state -> run_callback callback state
 
 let bind task f =
   let result, resolver = wait () in
@@ -112,7 +121,17 @@ let finally value f =
   on_state value finish;
   result
 
-let async f = ignore (catch (f ()) (fun _ -> pure ()) : unit t)
+(* Fire-and-forget like an unobserved promise: log the rejection instead
+   of silently swallowing it (worse than cljs unhandledrejection). A
+   synchronous raise in the thunk still propagates to the caller. *)
+let async f =
+  ignore
+    (catch (f ())
+       (fun exn ->
+          Worker_log.error "effect/async-rejected"
+            [ ("error", Printexc.to_string exn) ];
+          pure ())
+      : unit t)
 
 let on_any task on_ok on_error =
   on_state task (function

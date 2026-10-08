@@ -25,7 +25,7 @@ module E = Db_worker_effect
 
 (* ---- constants (cljs defs at top of handler/search.cljs) ---- *)
 
-let search_db_version = 5
+let search_db_version = 6
 
 (* fts-id-keyed-search-db-version — the last version whose blocks_fts
    rows have rowids unrelated to their blocks rows. Such an index moves
@@ -65,11 +65,7 @@ let sanitize_repo_name repo =
   String.map (fun c -> match c with '/' | '\\' | ':' -> '-' | c -> c) repo
 
 let search_db_path repo =
-  let base =
-    match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-    | Some dir -> dir
-    | None -> "."
-  in
+  let base = Root_dir.worker_db_dir () in
   Filename.concat base (sanitize_repo_name repo ^ "-search.sqlite")
 
 (* cljs get-dbs/resolve-db-path: the search sqlite lives inside the
@@ -105,6 +101,7 @@ let open_search_db_file repo : Sqlite.db =
         Sqlite.close db;
         exn
       with close_exn ->
+        Pending_closes.note repo db;
         Failure
           (Printf.sprintf "Search initialization failed: %s; close failed: %s"
              (Printexc.to_string exn) (Printexc.to_string close_exn))
@@ -876,7 +873,10 @@ let invalidate_search_db args : Wire.t E.t =
                  with exn ->
                    Worker_log.error "search/invalidate-search-db-failed"
                      [ ("repo", repo); ("error", Printexc.to_string exn) ]);
-                Sqlite.close db;
+                (try Sqlite.close db
+                 with exn ->
+                   Pending_closes.note repo db;
+                   raise exn);
                 E.pure Wire.nil))
   | _ -> invalid_arg "db-sync-invalidate-search-db expects (repo)"
 

@@ -4,14 +4,6 @@
 
 module U8 = Js.Typed_array.Uint8Array
 
-let u8_of_bytes s =
-  let a = U8.fromLength (String.length s) in
-  String.iteri (fun i c -> U8.unsafe_set a i (Char.code c)) s;
-  a
-
-let bytes_of_u8 a =
-  String.init (U8.length a) (fun i -> Char.chr (U8.unsafe_get a i))
-
 type js_stream
 type js_blob
 type js_response
@@ -60,14 +52,14 @@ let task_of_promise promise =
 
 let supported () = Js.typeof cs_ctor = "function"
 
-let run ctor bytes =
-  let u8 = u8_of_bytes bytes in
+let run ctor payload =
+  let u8 = U8a.of_string payload in
   let blob = blob_of_u8s [| u8 |] in
   let out = pipe_through (blob_stream blob) (ctor "gzip") in
   task_of_promise
     (Js.Promise.then_
-       (fun buf -> Js.Promise.resolve (bytes_of_u8 (U8.fromBuffer buf ())))
+       (fun buf -> Js.Promise.resolve (U8a.to_string (U8.fromBuffer buf ())))
        (resp_array_buffer (response_of_stream out)))
 
-let gzip_encode bytes = run compression_stream bytes
-let gzip_decode bytes = run decompression_stream bytes
+let gzip_encode payload = run compression_stream payload
+let gzip_decode payload = run decompression_stream payload

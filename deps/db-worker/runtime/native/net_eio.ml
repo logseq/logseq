@@ -45,7 +45,7 @@ let io_of_flow (flow : _ Eio.Flow.two_way) : io =
 (* Gluten-style IO pump (cf. gluten-eio [IO_loop.start]), but typed on
    [io] so it also drives [Tls_eio.t] flows, which lack the stream-socket
    tags that [Gluten_eio.Client.create] requires. *)
-let pump (module R : RUNTIME) t (flow : io) =
+let pump (type a) (module R : RUNTIME with type t = a) (t : a) (flow : io) =
   let open Eio in
   let read_buffer = Bigstringaf.create 0x4000 in
   let pending_off = ref 0 in

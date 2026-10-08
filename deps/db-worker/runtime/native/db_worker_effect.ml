@@ -26,6 +26,15 @@ let wait () =
   let task = make Pending in
   (task, task)
 
+(* JS .then isolates each listener: a raising callback must not drop
+   the remaining listeners nor propagate into whatever settled the task
+   (ws onmessage / timer / IDB). Log and continue instead. *)
+let run_callback callback state =
+  try callback state
+  with exn ->
+    Worker_log.error "effect/callback-raised"
+      [ ("error", Printexc.to_string exn) ]
+
 let notify task state =
   Mutex.lock task.mutex;
   let callbacks =
@@ -38,7 +47,7 @@ let notify task state =
     | _ -> Rrbvec.empty
   in
   Mutex.unlock task.mutex;
-  Rrbvec.iter (fun callback -> callback state) callbacks
+  Rrbvec.iter (fun callback -> run_callback callback state) callbacks
 
 let wakeup resolver value = notify resolver (Resolved value)
 let reject resolver exn = notify resolver (Rejected exn)
@@ -53,7 +62,7 @@ let on_state task callback =
     | _ -> true
   in
   Mutex.unlock task.mutex;
-  if run_now then callback task.state
+  if run_now then run_callback callback task.state
 
 let bind task f =
   let result, resolver = wait () in
@@ -141,7 +150,17 @@ let finally value f =
   on_state value finish;
   result
 
-let async f = ignore (catch (f ()) (fun _ -> pure ()) : unit t)
+(* Fire-and-forget like an unobserved promise: log the rejection instead
+   of silently swallowing it (worse than cljs unhandledrejection). A
+   synchronous raise in the thunk still propagates to the caller. *)
+let async f =
+  ignore
+    (catch (f ())
+       (fun exn ->
+          Worker_log.error "effect/async-rejected"
+            [ ("error", Printexc.to_string exn) ];
+          pure ())
+      : unit t)
 
 let on_any task on_ok on_error =
   on_state task (function

@@ -1,0 +1,10 @@
+(library
+ (name logseq_e2e)
+ (wrapped false)
+ (modes melange)
+ (preprocess
+  (pps melange.ppx))
+ (libraries
+  melange-fest
+  melange.js
+  melange.node))

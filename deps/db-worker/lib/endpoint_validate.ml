@@ -8,7 +8,6 @@
      Endpoint_validate.validate_db_endpoint
      Endpoint_validate.recompute_checksum_diagnostics *)
 
-let kw s = Wire.Keyword s
 
 let arg args i = List.nth_opt args i
 
@@ -27,7 +26,7 @@ let validate_db_endpoint args =
       let fix =
         match arg args 1 with
         | Some (Wire.Map kvs) ->
-            (match List.assoc_opt (kw "fix") kvs with
+            (match List.assoc_opt (Wire.keyword "fix") kvs with
              | Some (Wire.Bool b) -> b
              | _ -> true)
         | _ -> true
@@ -44,7 +43,7 @@ let checksum_diagnostics repo =
     | None -> Wire.Nil
   in
   let remote =
-    match Hashtbl.find_opt Sync_apply.repo_latest_remote_checksum repo with
+    match Sync_apply.latest_remote_checksum repo with
     | Some s -> Wire.String s
     | None -> Wire.Nil
   in
@@ -55,7 +54,12 @@ let recompute_checksum_diagnostics args =
   let repo = repo_of args in
   match Worker_state.datascript_conn repo with
   | None -> Db_worker_effect.pure Wire.Nil
-  | Some conn ->
+  | Some _ ->
+      (* the stored checksum is computed over the confirmed conn — on a
+         remote graph datascript_conn is the display projection, whose
+         pending-inclusive db and display-domain max_tx would corrupt
+         the stored checksum and covered_tx *)
+      let conn = Option.get (Sync_state.confirmed_conn repo) in
       let local, remote = checksum_diagnostics repo in
       let result =
         Worker_db_validate.recompute_checksum_diagnostics repo conn
@@ -64,11 +68,15 @@ let recompute_checksum_diagnostics args =
       in
       let recomputed =
         match result with
-        | Wire.Map kvs -> List.assoc_opt (kw "recomputed-checksum") kvs
+        | Wire.Map kvs -> List.assoc_opt (Wire.keyword "recomputed-checksum") kvs
         | _ -> None
       in
       (match recomputed with
-       | Some (Wire.String checksum) ->
+       | Some (Wire.String checksum)
+         when not (Sync_client_op.checksum_exempted repo) ->
+           (* skip the write-back once exempt writes exist: the stored
+              checksum is a server image (gc'd ghosts stay counted) that
+              a local recompute cannot reproduce *)
            (match Sync_state.client_ops_conn_opt repo with
             | Some _client_ops_conn ->
                 Sync_client_op.update_local_checksum repo checksum
@@ -83,7 +91,7 @@ let recompute_checksum_diagnostics args =
                  Wire.Map
                    (List.map
                       (fun (k, v) ->
-                        if k = kw "local-checksum" then
+                        if k = Wire.keyword "local-checksum" then
                           (k, Option.get recomputed)
                         else (k, v))
                       kvs)

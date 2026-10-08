@@ -82,10 +82,20 @@ let rec form_equal a b =
            x y
   | _ -> false
 
-let distinct_preserve_order xs =
-  List.fold_left
-    (fun acc x -> if List.exists (form_equal x) acc then acc else acc @ [ x ])
-    [] xs
+(* Canonical form for dedup: cljs `distinct` compares with sequential
+   equality (vectors and lists equal, set members unordered), which a
+   plain structural key would miss. *)
+let rec canon_form = function
+  | QueryFormVector xs | QueryFormList xs ->
+      QueryFormList (List.map canon_form xs)
+  | QueryFormSet xs ->
+      QueryFormSet (List.sort_uniq compare (List.map canon_form xs))
+  | QueryFormMap kvs ->
+      QueryFormMap (List.map (fun (k, v) -> (canon_form k, canon_form v)) kvs)
+  | QueryFormTagged (t, x) -> QueryFormTagged (t, canon_form x)
+  | x -> x
+
+let distinct_preserve_order xs = Common_util.distinct_by canon_form xs
 
 (* cljs flatten — recursively yield non-coll leaves (maps flatten to their
    k/v pairs). *)
@@ -451,7 +461,7 @@ let find_rules_in_where (where : query_form list) (valid : string list) : string
   |> List.filter_map (function
          | QueryFormSymbol s when List.mem s valid -> Some s
          | _ -> None)
-  |> List.fold_left (fun acc x -> if List.mem x acc then acc else acc @ [ x ]) []
+  |> Common_util.distinct_by Fun.id
 
 (* query-vec->map — ordered assoc map: key = section keyword name (or ""
    for the leading group), value = that section's forms. *)
@@ -774,19 +784,38 @@ let current_time () : string =
   Printf.sprintf "%d:%02d %s" h12 minute (if hour < 12 then "AM" else "PM")
 
 let variable_rules ~current_page_title ~today_day =
-  let today_date =
+  (* An explicit today_day is a calendar day in its own tz; resolving the
+     journal title through the host-local tz would shift it a day west of
+     the date line.  Do the day arithmetic on civil fields in the date's
+     own tz — out-of-range days roll over on epoch_ms_of_civil. *)
+  let day_fields, tz =
     match today_day with
-    | Some day -> Date_time_util.local_date_start_ms day
-    | None -> Date_time_util.today_ms ()
+    | Some d -> Time.local_date_fields d, Time.local_date_tz d
+    | None ->
+      let year, month, day, _, _, _, _ =
+        Time.civil_fields
+          (Time.civil_of_epoch_ms (Time.local_tz ()) (Time.now ()))
+      in
+      (year, month, day), Time.local_tz ()
   in
-  let today = journal_name today_date in
+  let year, month, day = day_fields in
+  let journal_title year month day =
+    let ms =
+      Time.epoch_ms_of_civil tz
+        (Time.civil ~year ~month ~day ~hour:0 ~minute:0 ~second:0 ~ms:0)
+    in
+    let year, month, day, _, _, _, _ =
+      Time.civil_fields (Time.civil_of_epoch_ms tz ms)
+    in
+    Ldb.journal_title_of_day ((year * 10000) + (month * 100) + day)
+      "MMM do, yyyy"
+  in
+  let today = journal_title year month day in
   [ ("today", Page_ref.to_page_ref today);
     ("yesterday",
-     Page_ref.to_page_ref
-       (journal_name (Date_time_util.minus Days 1 today_date)));
+     Page_ref.to_page_ref (journal_title year month (day - 1)));
     ("tomorrow",
-     Page_ref.to_page_ref
-       (journal_name (Date_time_util.plus Days 1 today_date)));
+     Page_ref.to_page_ref (journal_title year month (day + 1)));
     ("time", current_time ());
     ( "current page",
       Page_ref.to_page_ref
@@ -1462,9 +1491,7 @@ and build_and_or_not (env : env) (level : int) (e : query_form) (fe : string)
       Some
         { bquery = query;
           brules =
-            List.fold_left
-              (fun acc x -> if List.mem x acc then acc else acc @ [ x ])
-              []
+            Common_util.distinct_by Fun.id
               (List.concat_map (fun b -> b.brules) raw_clauses) }
 
 (* ============ parse ============ *)
@@ -1665,17 +1692,25 @@ let execute_query (db : db) (query_string : string) (opts : exec_opts) : query_r
     | Some { pquery = Some query_star; prules; psample; _ } ->
         let query_star =
           if opts.opt_cards then
-            let card_id =
+            (* cljs card-class-ids: Card + every structured child (tags that
+               extend Card), matched via a contains? set predicate *)
+            let card_ids =
               match entity db (Ident "logseq.class/Card") with
-              | Some e -> int e.id
-              | None -> QueryFormNil
+              | Some e -> e.id :: Db_class.get_structured_children db e.id
+              | None -> []
             in
             let clauses =
               match query_star with
               | first :: _ when is_coll first -> query_star
               | _ -> [ list_ query_star ]
             in
-            vec_ [ sym "?b"; kw "block/tags"; card_id ] :: clauses
+            vec_ [ sym "?b"; kw "block/tags"; sym "?t" ]
+            :: vec_
+                 [ list_
+                     [ sym "contains?"
+                     ; QueryFormSet (List.map int card_ids)
+                     ; sym "?t" ] ]
+            :: clauses
           else query_star
         in
         let q' = query_wrapper query_star ~blocks:true ~block_attrs_edn:opts.opt_block_attrs in

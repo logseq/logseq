@@ -10,12 +10,15 @@ type reconnect_state =
   ; mutable timer : Timers.timer option
   }
 
+module SSet = Set.Make (String)
+
 (* in-flight upload batch tracked for response timeout reporting *)
 type upload_request =
   { tx_ids : string list
   ; outliner_ops : string list
   ; large_upload_progress : Wire.t list
   ; t_before : int option
+  ; tx_datas : (string * Wire.t) list
   ; mutable sent_at : Time.monotonic_ms
   ; mutable timer : Timers.timer option
   }
@@ -132,10 +135,7 @@ let enqueue_catching queue task ~on_error =
    is opened lazily beside the graph db file. *)
 let client_ops_conns : (string, Sqlite.db) Hashtbl.t = Hashtbl.create 7
 
-let db_dir () =
-  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-  | Some dir -> dir
-  | None -> "."
+let db_dir = Root_dir.worker_db_dir
 
 let sanitize_repo_name repo =
   String.map (fun c -> match c with '/' | '\\' | ':' -> '-' | c -> c) repo
@@ -178,6 +178,7 @@ let client_ops_conn repo : Sqlite.db =
              Sqlite.close db;
              exn
            with close_exn ->
+             Pending_closes.note repo db;
              Failure
                (Printf.sprintf "Client ops initialization failed: %s; close failed: %s"
                   (Printexc.to_string exn) (Printexc.to_string close_exn))
@@ -188,23 +189,18 @@ let has_client_ops_conn repo = Hashtbl.mem client_ops_conns repo
 
 let close_client_ops_conn repo =
   match Hashtbl.find_opt client_ops_conns repo with
-  | Some db -> Hashtbl.remove client_ops_conns repo; Sqlite.close db
+  | Some db ->
+      Hashtbl.remove client_ops_conns repo;
+      (try Sqlite.close db
+       with exn ->
+         Pending_closes.note repo db;
+         raise exn)
   | None -> ()
 
 (* cljs get-client-ops-conn returns the open conn (if any) without
    creating one — used by recompute-checksum-diagnostics. *)
 let client_ops_conn_opt repo : Sqlite.db option =
   Hashtbl.find_opt client_ops_conns repo
-
-(* worker-state/get-sqlite-conn [repo which-db] — :db main graph sqlite,
-   :search the vector/search index db (search package owns the schema). *)
-let search_conns : (string, Sqlite.db) Hashtbl.t = Hashtbl.create 7
-
-let search_conn repo : Sqlite.db option =
-  Hashtbl.find_opt search_conns repo
-
-let set_search_conn repo db = Hashtbl.replace search_conns repo db
-let drop_search_conn repo = Hashtbl.remove search_conns repo
 
 (* worker-state/get-id-token — :auth/id-token in app state *)
 let id_token () : string option =
@@ -270,3 +266,137 @@ let dev_or_test : bool ref = ref false
    e2e app builds. The runtime signal for the same "e2e build" here is the
    :dev? flag the app sends in its transact context (DEV-RELEASE). *)
 let outliner_perf_logging : bool ref = ref false
+
+(* Set while pending ops are forward-replayed onto the display conn after a
+   server-state rebind. Gates client-ops persistence (handle-local-tx!) and
+   checksum updates: replayed reports must neither re-queue nor advance the
+   stored checksum past confirmed state. *)
+let pending_replay : bool ref = ref false
+
+(* RTC graph server conn: storage-backed, confirmed state only. The
+   registered Worker_state.datascript_conn on a remote graph is the
+   display projection (server state + pending ops replayed forward). *)
+let server_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
+
+(* last display db before the latest server-state rebind — the
+   pre-delete local view the upload-time rebase climbs ancestor chains
+   on (a remotely deleted target's parent refs survive there) *)
+let rebase_base_dbs : (string, Datascript.db) Hashtbl.t = Hashtbl.create 7
+
+let set_rebase_base_db repo (db : Datascript.db) : unit =
+  Hashtbl.replace rebase_base_dbs repo db
+
+let rebase_base_db repo : Datascript.db option =
+  Hashtbl.find_opt rebase_base_dbs repo
+
+(* uuid -> parent-uuid ledger captured as each remote retractEntity
+   lands: a deleted entity's direct parent as of the pre-apply view.
+   The upload-time rebase climbs this chain when the stashed base db is
+   too stale to contain the ancestor — the ledger only ever grows, so
+   deletions spanning multiple remote batches never lose links *)
+let remote_deleted_parents : (string, (string, string) Hashtbl.t) Hashtbl.t =
+  Hashtbl.create 7
+
+let add_remote_deleted_parent repo ~(uuid : string) ~(parent_uuid : string)
+    : unit =
+  (match Hashtbl.find_opt remote_deleted_parents repo with
+   | Some m -> Hashtbl.replace m uuid parent_uuid
+   | None ->
+       let m = Hashtbl.create 7 in
+       Hashtbl.replace m uuid parent_uuid;
+       Hashtbl.replace remote_deleted_parents repo m)
+
+let remote_deleted_parent repo (uuid : string) : string option =
+  match Hashtbl.find_opt remote_deleted_parents repo with
+  | Some m -> Hashtbl.find_opt m uuid
+  | None -> None
+
+(* uuids a remote delete/fix entry retracted, as of the latest applied
+   remote-tx batch. A verbatim confirm that re-adds one of them would
+   resurrect an entity the server deleted — confirms must skip those
+   items the same way the pull path already does. *)
+let remote_deleted_uuids : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+let remote_deleted repo : SSet.t =
+  match Hashtbl.find_opt remote_deleted_uuids repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+(* journal-derived delete ledger: subjects of confirmed retractEntity
+   items. Not a pull/confirm gate — unapply reads it to keep remotely
+   deleted entities absent and the phantom sweep honest *)
+let add_remote_deleted repo (u : string) : unit =
+  match Hashtbl.find_opt remote_deleted_uuids repo with
+  | Some s -> Hashtbl.replace remote_deleted_uuids repo (SSet.add u s)
+  | None -> Hashtbl.replace remote_deleted_uuids repo (SSet.singleton u)
+
+(* (subject, attr, value) keys a confirmed write asserted on the server
+   conn — remote-tx applies and own confirms record them. Unapplying a
+   pending row must not retract one of these: re-asserting an identical
+   (e,a,v) is a datascript no-op, so the live datom keeps its
+   unconfirmed stamp even though confirmed state shares it, and a blind
+   reversed retract would strip confirmed state down to a shell. *)
+let remote_asserted_keys : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+let remote_asserted repo : SSet.t =
+  match Hashtbl.find_opt remote_asserted_keys repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let set_remote_asserted repo (keys : SSet.t) : unit =
+  Hashtbl.replace remote_asserted_keys repo keys
+
+(* (subject, attr, value) keys a confirmed write RETRACTED — needed for
+   the mirror-image case: a pending row's reversed add restores a
+   pre-op value only while confirmed state still holds it. When a
+   remote tx retracted the same (e,a,v), restoring it resurrects a
+   value the server explicitly dropped. Cardinality-one attrs also
+   gate on remote_asserted carrying a different live value *)
+let remote_retracted_keys : (string, SSet.t) Hashtbl.t = Hashtbl.create 7
+
+(* accumulate-only: uuids ever written at e-position by an applied
+   confirmed tx. remote_asserted/retracted keys come and go as values
+   are re-asserted and rescinded — this set answers a different
+   question ("did confirmed state ever reach this entity") for the
+   unapply phantom sweep, which must never retractEntity a
+   server-known uuid just because its datoms kept an unconfirmed stamp
+   across a no-op re-assert *)
+let remote_touched_entities : (string, SSet.t) Hashtbl.t =
+  Hashtbl.create 7
+
+let remote_touched repo : SSet.t =
+  match Hashtbl.find_opt remote_touched_entities repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let add_remote_touched repo (u : string) : unit =
+  Hashtbl.replace remote_touched_entities repo
+    (SSet.add u (remote_touched repo))
+
+let remote_retracted repo : SSet.t =
+  match Hashtbl.find_opt remote_retracted_keys repo with
+  | Some s -> s
+  | None -> SSet.empty
+
+let set_remote_retracted repo (keys : SSet.t) : unit =
+  Hashtbl.replace remote_retracted_keys repo keys
+
+let server_conn repo = Hashtbl.find_opt server_conns repo
+let set_server_conn repo conn = Hashtbl.replace server_conns repo conn
+let drop_server_conn repo =
+  match Hashtbl.find_opt server_conns repo with
+  | None -> ()
+  | Some conn ->
+      Hashtbl.remove server_conns repo;
+      Hashtbl.remove remote_deleted_uuids repo;
+      Hashtbl.remove remote_deleted_parents repo;
+      Hashtbl.remove rebase_base_dbs repo;
+      Db_tx.release_flags conn
+
+(* Writes of confirmed state (remote txs, acked local txs, sync
+   bookkeeping) go to the server conn; falls back to the display conn on
+   local graphs and pre-split download opens. *)
+let confirmed_conn repo =
+  match server_conn repo with
+  | Some c -> Some c
+  | None -> Worker_state.datascript_conn repo

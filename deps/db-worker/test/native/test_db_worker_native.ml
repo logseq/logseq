@@ -764,7 +764,7 @@ let expected_db_core_thread_apis =
   ; "thread-api/search-build-blocks-indice-in-worker"
   ; "thread-api/search-build-pages-indice"; "thread-api/apply-outliner-ops"
   ; "thread-api/sync-app-state"; "thread-api/markdown-mirror-set-enabled"
-  ; "thread-api/markdown-mirror-flush"; "thread-api/markdown-mirror-regenerate"
+  ; "thread-api/markdown-mirror-regenerate"
   ; "thread-api/export-get-debug-datoms"
   ; "thread-api/export-get-all-page->content"; "thread-api/validate-db"
   ; "thread-api/recompute-checksum-diagnostics"; "thread-api/export-edn"

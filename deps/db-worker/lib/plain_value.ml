@@ -5,15 +5,26 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
-let field k v = (kw k, v)
+let field k v = (Wire.keyword k, v)
 
 let map_get (k : string) (pairs : (Wire.t * Wire.t) list) : Wire.t option =
-  List.assoc_opt (kw k) pairs
+  List.assoc_opt (Wire.keyword k) pairs
 
 let has_key k pairs = Option.is_some (map_get k pairs)
 
-let assoc k v pairs = (kw k, v) :: List.remove_assoc (kw k) pairs
+let assoc k v pairs = (Wire.keyword k, v) :: List.remove_assoc (Wire.keyword k) pairs
+
+(* class-extends-summaries — ancestor class idents for renderer card
+   detection (Card + structured children) *)
+let class_extends_summaries (e : entity) : Wire.t list =
+  if not (Ldb.is_class e) then []
+  else
+    List.filter_map
+      (fun parent ->
+        match Ldb.ident_of parent with
+        | Some ident -> Some (Wire.Map [ field "db/ident" (Wire.keyword ident) ])
+        | None -> None)
+      (Db_class.get_class_extends e)
 
 (* ref-value->summary *)
 let ref_value_summary db (eid : entity_id) : Wire.t =
@@ -33,14 +44,14 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
         List.filter_map
           (fun id ->
             match Ldb.ent_of_id db id with
-            | Some t -> (match Ldb.ident_of t with Some i -> Some (kw i) | None -> None)
+            | Some t -> (match Ldb.ident_of t with Some i -> Some (Wire.keyword i) | None -> None)
             | None -> None)
           (Ldb.ref_ids e "block/tags")
       in
       let m = [ field "db/id" (Wire.Int e.id) ] in
       let m =
         match Ldb.ident_of e with
-        | Some i -> assoc "db/ident" (kw i) m
+        | Some i -> assoc "db/ident" (Wire.keyword i) m
         | None -> m
       in
       let m =
@@ -55,7 +66,7 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
       in
       let m =
         match Ldb.ident_of e with
-        | Some i -> assoc "db/ident" (kw i) m
+        | Some i -> assoc "db/ident" (Wire.keyword i) m
         | None -> m
       in
       let m =
@@ -133,6 +144,11 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
         match Ldb.value e "db/ident" with
         | Some v -> assoc "db/ident" (Ds_wire.transit_of_value v) m
         | None -> m
+      in
+      let m =
+        match class_extends_summaries e with
+        | [] -> m
+        | xs -> assoc "logseq.property.class/extends" (Wire.Array xs) m
       in
       Wire.Map (List.rev m)
 
@@ -267,11 +283,16 @@ let order_list_index (block : entity) (target_type : string) : Wire.t option =
     else
       []
   in
+  (* visited guards :block/parent cycles — a malformed cyclic chain must
+     not hang the index walk. *)
+  let visited = Hashtbl.create 8 in
   let rec order_parent_list b =
-    if order_block b then
+    if order_block b && not (Hashtbl.mem visited b.id) then begin
+      Hashtbl.add visited b.id ();
       match Ldb.ref_ent b "block/parent" with
       | Some p -> b :: order_parent_list p
       | None -> [ b ]
+    end
     else
       []
   in
@@ -375,7 +396,7 @@ let entity_forward_map ?(properties : attr list option)
         |> List.map (fun (d : datom) -> d.a)
         |> List.sort_uniq compare
         |> List.filter db_property_pred
-        |> List.map kw
+        |> List.map Wire.keyword
       in
       field "block.temp/property-keys" (Wire.Array own_property_keys) :: m
     else
@@ -423,7 +444,7 @@ let opt_fields pairs f = List.filter_map f pairs
 let with_explicit_ref_fields (pairs : (Wire.t * Wire.t) list)
     : (Wire.t * Wire.t) list =
   let m = ref pairs in
-  let add k v = m := (kw k, v) :: !m in
+  let add k v = m := (Wire.keyword k, v) :: !m in
   (* cljs assoc's these keys unconditionally — nil values are emitted *)
   let add_opt k v = add k (Option.value ~default:Wire.Nil v) in
   let alias_source =
@@ -478,8 +499,8 @@ let with_explicit_ref_fields (pairs : (Wire.t * Wire.t) list)
       match alias_source with
       | Some (Wire.Map sm) ->
           (match map_get "block/tags" sm with
-           | Some (Wire.Array ts) -> List.mem (kw "logseq.class/Tag") ts
-           | Some (Wire.List ts) -> List.mem (kw "logseq.class/Tag") ts
+           | Some (Wire.Array ts) -> List.mem (Wire.keyword "logseq.class/Tag") ts
+           | Some (Wire.List ts) -> List.mem (Wire.keyword "logseq.class/Tag") ts
            | _ -> false)
       | _ -> false
     in
@@ -540,4 +561,4 @@ let worker_plain_entity ?properties ?exclude_attrs ?include_derived db e =
     (with_explicit_ref_fields
        (match entity_forward_map ?properties ?exclude_attrs ?include_derived db e with
         | Wire.Map pairs -> pairs
-        | t -> [ (kw "value", t) ]))
+        | t -> [ (Wire.keyword "value", t) ]))

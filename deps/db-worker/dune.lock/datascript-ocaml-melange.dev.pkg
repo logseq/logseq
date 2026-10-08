@@ -14,6 +14,6 @@
 (source
  (fetch
   (url
-   git+https://github.com/logseq/datascript-ocaml.git#48cf9c7aa7cae837d142777477049a0e18e6065c)))
+   git+https://github.com/logseq/datascript-ocaml.git#0561660e4894faee250d551ab2a32a6b5c25a5fb)))
 
 (dev)

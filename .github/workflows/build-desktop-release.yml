@@ -257,6 +257,7 @@ jobs:
           path: |
             static
             deps/graph-lifecycle
+            sidecar
           include-hidden-files: true
 
   build-db-worker-native:
@@ -369,6 +370,9 @@ jobs:
         run: pnpm install --frozen-lockfile && pnpm electron:make
         working-directory: ./static
 
+      - name: Verify packaged embedding sidecar
+        run: test -f static/dist/linux-unpacked/resources/sidecar/embedding_server.py
+
       - name: Save artifacts
         run: |
           mkdir -p builds
@@ -435,6 +439,9 @@ jobs:
       - name: Build/Release Electron App
         run: pnpm electron:make-linux-arm64
         working-directory: ./static
+
+      - name: Verify packaged embedding sidecar
+        run: test -f static/dist/linux-arm64-unpacked/resources/sidecar/embedding_server.py
 
       - name: Save artifacts
         run: |
@@ -522,6 +529,10 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
 
+      - name: Verify packaged embedding sidecar
+        run: |
+          if (-not (Test-Path "static/dist/win-unpacked/resources/sidecar/embedding_server.py")) { exit 1 }
+
       - name: Save Artifact
         run: |
           mkdir builds
@@ -605,6 +616,10 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Verify packaged embedding sidecar
+        run: |
+          if (-not (Test-Path "static/dist/win-arm64-unpacked/resources/sidecar/embedding_server.py")) { exit 1 }
 
       - name: Save Artifact
         run: |
@@ -696,6 +711,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify packaged embedding sidecar
+        run: test -f static/dist/mac/Logseq.app/Contents/Resources/sidecar/embedding_server.py
 
       - name: Save x64 artifacts
         run: |
@@ -789,6 +807,9 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify packaged embedding sidecar
+        run: test -f static/dist/mac-arm64/Logseq.app/Contents/Resources/sidecar/embedding_server.py
 
       - name: Save arm64 artifacts
         run: |

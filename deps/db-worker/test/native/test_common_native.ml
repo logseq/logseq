@@ -32,8 +32,13 @@ open Test_shared
 (* await for non-Wire effects (File_sys calls). *)
 let run_fx (t : 'a Db_worker_effect.t) : 'a =
   let result = ref None in
-  Db_worker_effect.on_any t (fun v -> result := Some v) (fun e -> raise e);
-  match !result with Some v -> v | None -> failwith "effect not resolved"
+  Db_worker_effect.on_any t
+    (fun v -> result := Some (Ok v))
+    (fun e -> result := Some (Error e));
+  match !result with
+  | Some (Ok v) -> v
+  | Some (Error e) -> raise e
+  | None -> failwith "effect not resolved"
 
 let opt_eq name (a : string option) (b : string option) = check name (a = b)
 

@@ -7,7 +7,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let arg args i = List.nth_opt args i
 
@@ -49,25 +48,25 @@ let ident_wire s = Wire.Keyword s
 
 let minimal_list_item (e : entity) : (Wire.t * Wire.t) list =
   let m =
-    [ (kw "db/id", Wire.Int e.id)
-    ; ( kw "block/title",
+    [ (Wire.keyword "db/id", Wire.Int e.id)
+    ; ( Wire.keyword "block/title",
         Ds_wire.transit_of_value
           (Option.value (Ldb.value e "block/title") ~default:Nil) )
-    ; ( kw "block/created-at",
+    ; ( Wire.keyword "block/created-at",
         Ds_wire.transit_of_value
           (Option.value (Ldb.value e "block/created-at") ~default:Nil) )
-    ; ( kw "block/updated-at",
+    ; ( Wire.keyword "block/updated-at",
         Ds_wire.transit_of_value
           (Option.value (Ldb.value e "block/updated-at") ~default:Nil) )
     ]
   in
   let m =
     match Ldb.ident_of e with
-    | Some ident -> (kw "db/ident", ident_wire ident) :: m
+    | Some ident -> (Wire.keyword "db/ident", ident_wire ident) :: m
     | None -> m
   in
   match Ldb.value e "logseq.property/type" with
-  | Some (Keyword t) -> (kw "logseq.property/type", ident_wire t) :: m
+  | Some (Keyword t) -> (Wire.keyword "logseq.property/type", ident_wire t) :: m
   | _ -> m
 
 let uuid_str e =
@@ -90,7 +89,7 @@ let class_entities db : entity list =
   | None -> []
 
 let map_drop_keys drop (pairs : (Wire.t * Wire.t) list) =
-  List.filter (fun (k, _) -> not (List.mem k (List.map kw drop))) pairs
+  List.filter (fun (k, _) -> not (List.mem k (List.map Wire.keyword drop))) pairs
 
 let set_uuid_string (pairs : (Wire.t * Wire.t) list) =
   List.map
@@ -111,26 +110,26 @@ let entity_expand_pairs (e : entity) ~dissoc_attrs
   let pairs = set_uuid_string pairs in
   List.fold_left
     (fun acc attr ->
-      if List.exists (fun (k, _) -> k = kw attr) acc then
+      if List.exists (fun (k, _) -> k = Wire.keyword attr) acc then
         let idents =
           Ldb.ref_ents e attr
           |> List.filter_map Ldb.ident_of
           |> List.map ident_wire
         in
         List.map
-          (fun (k, v) -> if k = kw attr then (k, Wire.List idents) else (k, v))
+          (fun (k, v) -> if k = Wire.keyword attr then (k, Wire.List idents) else (k, v))
           acc
       else acc)
     pairs ref_idents
   |> fun pairs ->
   List.fold_left
     (fun acc attr ->
-      if List.exists (fun (k, _) -> k = kw attr) acc then
+      if List.exists (fun (k, _) -> k = Wire.keyword attr) acc then
         match Ldb.ref_ent e attr with
         | Some v ->
             List.map
               (fun (k, v') ->
-                if k = kw attr then
+                if k = Wire.keyword attr then
                   (k,
                    match Ldb.property_value_content v with
                    | Some s -> Wire.String s
@@ -168,7 +167,7 @@ let cli_list_properties db (opts : Wire.t option) : Wire.t =
                    ~contents:[ "logseq.property/description" ])
             else
               Wire.Map
-                (( kw "db/cardinality",
+                (( Wire.keyword "db/cardinality",
                    (match Ldb.value e "db/cardinality" with
                     | Some (Keyword c) -> ident_wire c
                     | _ -> ident_wire "db.cardinality/one") )
@@ -207,7 +206,7 @@ let cli_list_tags db (opts : Wire.t option) : Wire.t =
                 | Some vt ->
                     List.map
                       (fun (k, v) ->
-                        if k = kw "logseq.property.view/type" then
+                        if k = Wire.keyword "logseq.property.view/type" then
                           (k,
                            match Ldb.ident_of vt with
                            | Some i -> ident_wire i
@@ -240,22 +239,22 @@ let minimal_task_item (e : entity) : (Wire.t * Wire.t) list =
   let m = minimal_list_item e in
   let m =
     match ref_to_ident e "logseq.property/status" with
-    | Some v -> (kw "logseq.property/status", v) :: m
-    | None -> (kw "logseq.property/status", Wire.Nil) :: m
+    | Some v -> (Wire.keyword "logseq.property/status", v) :: m
+    | None -> (Wire.keyword "logseq.property/status", Wire.Nil) :: m
   in
   let m =
     match ref_to_ident e "logseq.property/priority" with
-    | Some v -> (kw "logseq.property/priority", v) :: m
-    | None -> (kw "logseq.property/priority", Wire.Nil) :: m
+    | Some v -> (Wire.keyword "logseq.property/priority", v) :: m
+    | None -> (Wire.keyword "logseq.property/priority", Wire.Nil) :: m
   in
   let m =
-    ( kw "logseq.property/scheduled",
+    ( Wire.keyword "logseq.property/scheduled",
       Ds_wire.transit_of_value
         (Option.value (Ldb.value e "logseq.property/scheduled")
            ~default:Nil) )
     :: m
   in
-  ( kw "logseq.property/deadline",
+  ( Wire.keyword "logseq.property/deadline",
     Ds_wire.transit_of_value
       (Option.value (Ldb.value e "logseq.property/deadline") ~default:Nil) )
   :: m
@@ -349,8 +348,8 @@ let minimal_node_item (e : entity) : (Wire.t * Wire.t) list =
   let m =
     minimal_list_item e
     |> fun m ->
-    ( kw "node/type", Wire.String (if is_block then "block" else "page") )
-    :: ( kw "block/uuid",
+    ( Wire.keyword "node/type", Wire.String (if is_block then "block" else "page") )
+    :: ( Wire.keyword "block/uuid",
          match Ldb.value e "block/uuid" with
          | Some (Uuid u) -> Wire.Uuid u
          | _ -> Wire.Nil )
@@ -358,14 +357,14 @@ let minimal_node_item (e : entity) : (Wire.t * Wire.t) list =
   in
   let m =
     match Ldb.ident_of e with
-    | Some i -> (kw "db/ident", ident_wire i) :: List.remove_assoc (kw "db/ident") m
+    | Some i -> (Wire.keyword "db/ident", ident_wire i) :: List.remove_assoc (Wire.keyword "db/ident") m
     | None -> m
   in
   let m =
     match page with
     | Some p ->
-        (kw "block/page-id", Wire.Int p.id)
-        :: ( kw "block/page-title",
+        (Wire.keyword "block/page-id", Wire.Int p.id)
+        :: ( Wire.keyword "block/page-title",
              Ds_wire.transit_of_value
                (Option.value (Ldb.value p "block/title") ~default:Nil) )
         :: m
@@ -373,11 +372,11 @@ let minimal_node_item (e : entity) : (Wire.t * Wire.t) list =
   in
   let m =
     match Ldb.value e "logseq.property.asset/type" with
-    | Some v -> (kw "logseq.property.asset/type", Ds_wire.transit_of_value v) :: m
+    | Some v -> (Wire.keyword "logseq.property.asset/type", Ds_wire.transit_of_value v) :: m
     | None -> m
   in
   match Ldb.value e "logseq.property.asset/size" with
-  | Some v -> (kw "logseq.property.asset/size", Ds_wire.transit_of_value v) :: m
+  | Some v -> (Wire.keyword "logseq.property.asset/size", Ds_wire.transit_of_value v) :: m
   | None -> m
 
 let cli_list_nodes db (opts : Wire.t option) : Wire.t =
@@ -464,22 +463,22 @@ let cli_list_pages db (opts : Wire.t option) : Wire.t =
        (fun e ->
          if expand then
            Wire.Map
-             ((kw "db/id", Wire.Int e.id)
+             ((Wire.keyword "db/id", Wire.Int e.id)
               :: (match Ldb.ident_of e with
-                  | Some i -> [ (kw "db/ident", ident_wire i) ]
+                  | Some i -> [ (Wire.keyword "db/ident", ident_wire i) ]
                   | None -> [])
-              @ [ ( kw "block/uuid",
+              @ [ ( Wire.keyword "block/uuid",
                     match uuid_str e with
                     | Some u -> Wire.String u
                     | None -> Wire.Nil )
-                ; ( kw "block/title",
+                ; ( Wire.keyword "block/title",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/title") ~default:Nil) )
-                ; ( kw "block/created-at",
+                ; ( Wire.keyword "block/created-at",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/created-at")
                          ~default:Nil) )
-                ; ( kw "block/updated-at",
+                ; ( Wire.keyword "block/updated-at",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/updated-at")
                          ~default:Nil) )
@@ -509,10 +508,10 @@ let api_list_properties db (opts : Wire.t option) : Wire.t =
                    ~contents:[ "logseq.property/description" ])
             else
               Wire.Map
-                [ ( kw "block/title",
+                [ ( Wire.keyword "block/title",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/title") ~default:Nil) )
-                ; ( kw "block/uuid",
+                ; ( Wire.keyword "block/uuid",
                     match uuid_str e with
                     | Some u -> Wire.String u
                     | None -> Wire.Nil )
@@ -542,7 +541,7 @@ let api_list_tags db (opts : Wire.t option) : Wire.t =
                 | Some vt ->
                     List.map
                       (fun (k, v) ->
-                        if k = kw "logseq.property.view/type" then
+                        if k = Wire.keyword "logseq.property.view/type" then
                           (k,
                            match Ldb.ident_of vt with
                            | Some i -> ident_wire i
@@ -554,10 +553,10 @@ let api_list_tags db (opts : Wire.t option) : Wire.t =
               Wire.Map pairs
             else
               Wire.Map
-                [ ( kw "block/title",
+                [ ( Wire.keyword "block/title",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/title") ~default:Nil) )
-                ; ( kw "block/uuid",
+                ; ( Wire.keyword "block/uuid",
                     match uuid_str e with
                     | Some u -> Wire.String u
                     | None -> Wire.Nil )
@@ -576,28 +575,28 @@ let api_list_pages db (opts : Wire.t option) : Wire.t =
      |> List.map (fun e ->
             if expand then
               Wire.Map
-                [ ( kw "block/uuid",
+                [ ( Wire.keyword "block/uuid",
                     match uuid_str e with
                     | Some u -> Wire.String u
                     | None -> Wire.Nil )
-                ; ( kw "block/title",
+                ; ( Wire.keyword "block/title",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/title") ~default:Nil) )
-                ; ( kw "block/created-at",
+                ; ( Wire.keyword "block/created-at",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/created-at")
                          ~default:Nil) )
-                ; ( kw "block/updated-at",
+                ; ( Wire.keyword "block/updated-at",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/updated-at")
                          ~default:Nil) )
                 ]
             else
               Wire.Map
-                [ ( kw "block/title",
+                [ ( Wire.keyword "block/title",
                     Ds_wire.transit_of_value
                       (Option.value (Ldb.value e "block/title") ~default:Nil) )
-                ; ( kw "block/uuid",
+                ; ( Wire.keyword "block/uuid",
                     match uuid_str e with
                     | Some u -> Wire.String u
                     | None -> Wire.Nil )
@@ -657,8 +656,8 @@ let api_get_page_data db (title : string) : Wire.t =
           blocks
       in
       Wire.Map
-        [ (kw "entity", Wire.Map entity_pairs)
-        ; (kw "blocks", Wire.List blocks')
+        [ (Wire.keyword "entity", Wire.Map entity_pairs)
+        ; (Wire.keyword "blocks", Wire.List blocks')
         ]
   | None -> Wire.nil
 

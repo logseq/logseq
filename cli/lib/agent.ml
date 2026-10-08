@@ -1607,7 +1607,7 @@ let bridge_lock_owner_pid lock_dir =
   try
     let owner =
       Cli_unix.read_text_file (bridge_lock_owner_path lock_dir)
-      |> Melange_edn_melange.of_edn_string
+      |> Edn_util.of_edn_string
     in
     Edn_util.get_int owner "pid"
   with _ -> None

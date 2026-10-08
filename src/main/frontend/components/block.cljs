@@ -1492,10 +1492,15 @@
                 (not html-export?)
                 (not (= (:id config) "contents")))
        [:span.text-gray-500 page-ref/left-brackets])
-     (let [page-name (subs content 2 (- (count content) 2))]
-       (page-cp (assoc config
-                       :children children
-                       :nested-link? true) {:block/name page-name}))
+     (let [page-name (subs content 2 (- (count content) 2))
+           page-uuid (when-not (string/blank? page-name)
+                       (db-hooks/use-resource [:page-identity page-name]))]
+       (if page-uuid
+         (page-cp (assoc config :nested-link? true)
+                  {:block/uuid page-uuid})
+         (page-cp (assoc config
+                         :children children
+                         :nested-link? true) {:block/name page-name})))
      (when (and show-brackets?
                 (not html-export?)
                 (not (= (:id config) "contents")))
@@ -2908,9 +2913,16 @@
           {:client-x (.-clientX e)
            :client-y (.-clientY e)}))
 
+(defn- touch-scroll-pointer-down?
+  "A pointerdown during a scroll is the touch that scrolls on mobile, not a
+  tap. On desktop it is a click: the page also scrolls by itself (moving a
+  block scrolls it into view) and the click must still edit."
+  []
+  (boolean (and (util/mobile?) (state/get-state :ui/scrolling?))))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
-  (when-not (state/get-state :ui/scrolling?)
+  (when-not (touch-scroll-pointer-down?)
     (let [target (.-target e)
           selection-blocks (state/get-selection-blocks)
           starting-block (state/get-selection-start-block-or-first)

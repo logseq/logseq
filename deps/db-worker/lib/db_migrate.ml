@@ -8,19 +8,18 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let wire_map (kvs : (attr * value) list) : Wire.t =
-  Wire.Map (List.map (fun (a, v) -> (kw a, Ds_wire.transit_of_value v)) kvs)
+  Wire.Map (List.map (fun (a, v) -> (Wire.keyword a, Ds_wire.transit_of_value v)) kvs)
 
 let add_ident (e : entity_id) (a : attr) (ident : string) : Wire.t =
-  Wire.Array [ kw "db/add"; Wire.Int e; kw a; kw ident ]
+  Wire.Array [ Wire.keyword "db/add"; Wire.Int e; Wire.keyword a; Wire.keyword ident ]
 
 let retract (e : entity_id) (a : attr) : Wire.t =
-  Wire.Array [ kw "db/retract"; Wire.Int e; kw a ]
+  Wire.Array [ Wire.keyword "db/retract"; Wire.Int e; Wire.keyword a ]
 
 let retract_v (e : entity_id) (a : attr) (v : value) : Wire.t =
-  Wire.Array [ kw "db/retract"; Wire.Int e; kw a; Ds_wire.transit_of_value v ]
+  Wire.Array [ Wire.keyword "db/retract"; Wire.Int e; Wire.keyword a; Ds_wire.transit_of_value v ]
 
 (* db-migrate/delete-property *)
 let delete_property (db : db) (property_key : attr) : Wire.t list =
@@ -130,8 +129,8 @@ let add_single_block_comment_targets (db : db) : Wire.t list =
                        | [] ->
                            Some
                              (Wire.Array
-                                [ kw "db/add"; Wire.Int ca
-                                ; kw "logseq.property.comments/blocks"
+                                [ Wire.keyword "db/add"; Wire.Int ca
+                                ; Wire.keyword "logseq.property.comments/blocks"
                                 ; Wire.Int parent ])
                        | _ -> None)
                   | None -> None)
@@ -157,8 +156,8 @@ let repair_comment_classes_and_targets (db : db) : Wire.t list =
             (match root_id, missing_extends with
              | Some rid, true ->
                  [ Wire.Array
-                     [ kw "db/add"; Wire.Int class_.id
-                     ; kw "logseq.property.class/extends"; Wire.Int rid ] ]
+                     [ Wire.keyword "db/add"; Wire.Int class_.id
+                     ; Wire.keyword "logseq.property.class/extends"; Wire.Int rid ] ]
              | _ -> [])
             @ (match Ldb.value class_ "block/order" with
                | Some o -> [ retract_v class_.id "block/order" o ]
@@ -634,13 +633,13 @@ let migrate ?(target_version = Db_schema.version) (conn : conn) :
        ~transit_payload:
          (Transit_codec.to_string
             (Wire.Array
-               [ kw "notification"
+               [ Wire.keyword "notification"
                ; Wire.Array
                    [ Wire.String
                        "Your app is using an outdated version that is \
                         incompatible with your current graph. Please update \
                         your app before editing this graph."
-                   ; kw "error"; Wire.Bool false ] ]));
+                   ; Wire.keyword "error"; Wire.Bool false ] ]));
      None)
   else (
     let updates =

@@ -6,10 +6,7 @@
    worker search path never calls them.
 *)
 (* transcribed verbatim from node_modules remove-accents@0.5.0 index.js characterMap *)
-(* array, not a list literal: Melange emits list literals as nested
-   {hd,tl} objects, and ~460 levels of nesting overflows JavaScriptCore's
-   parser when the worker bundle is compiled in a worker context *)
-let accent_map = [|
+let accent_map = [
   ("À", "A");
   ("Á", "A");
   ("Â", "A");
@@ -469,7 +466,7 @@ let accent_map = [|
   ("Й", "И");
   ("ё", "е");
   ("Ё", "Е");
-|]
+]
 
 (* cljs search-fuzzy remove-accents — npm remove-accents@0.5.0 builds
    one regex from the characterMap keys in map order and replaces
@@ -485,14 +482,13 @@ let remove_accents (s : string) : string =
         let rec eq j = j = klen || (s.[i + j] = k.[j] && eq (j + 1)) in
         i + klen <= len && eq 0
       in
-      let rec try_keys i' =
-        if i' >= Array.length accent_map then None
-        else
-          let k, rep = accent_map.(i') in
-          if matches_at k then Some (String.length k, rep)
-          else try_keys (i' + 1)
+      let rec try_keys = function
+        | [] -> None
+        | (k, rep) :: rest ->
+            if matches_at k then Some (String.length k, rep)
+            else try_keys rest
       in
-      match try_keys 0 with
+      match try_keys accent_map with
       | Some (klen, rep) ->
           Buffer.add_string buf rep;
           scan (i + klen)

@@ -681,10 +681,6 @@ let get_match_input (q : string) : string =
         || not (List.exists (Ns_util.str_contains match_input) [ "AND"; "OR"; "NOT" ])
         || Ns_util.str_contains q "/")
   then fts_phrase_input match_input
-  else if Regexp.test non_word_re q then
-    (* non-word input that also carries boolean words (e.g. "[[x]] and y"
-       -> "[[x]] AND y") still can't form a valid fts5 expression *)
-    fts_phrase_input match_input
   else if q <> match_input then
     str_replace_literal match_input ~pattern:"," ~replacement:""
   else match_input
@@ -965,6 +961,21 @@ let node_ref_title_entry ~replace_block_refs (r : Ev.node) =
       Some (Unicode.lowercase u, t)
   | _ -> None
 
+(* title-embedded [[uuid]] refs resolve directly from the db — they are
+   not covered by :block/refs. Pulled nodes skip (no db access; callers
+   resolve to the entity first). *)
+let node_title_ref_nodes (ent : Ev.node) : Ev.node list =
+  match ent, Ev.title ent with
+  | Ev.E e, Some t ->
+      List.filter_map
+        (fun u ->
+          match Datascript.entity e.db (Lookup_ref ("block/uuid", Uuid u))
+          with
+          | Some re -> Some (Ev.of_entity re)
+          | None -> None)
+        (Db_content.get_matched_ids t)
+  | _ -> []
+
 let node_block_ref_id_to_title (ent : Ev.node) max_depth replace_block_refs =
   let seen = Hashtbl.create 64 in
   let rec loop frontier acc_rev depth =
@@ -990,11 +1001,15 @@ let node_block_ref_id_to_title (ent : Ev.node) max_depth replace_block_refs =
           acc_rev
           (List.filter_map (node_ref_title_entry ~replace_block_refs) new_refs)
       in
-      let next = List.concat_map (fun n -> Ev.ref_nodes n "block/refs") new_refs in
+      let next =
+        List.concat_map
+          (fun n -> Ev.ref_nodes n "block/refs" @ node_title_ref_nodes n)
+          new_refs
+      in
       loop next acc_rev (depth + 1)
     end
   in
-  loop (Ev.ref_nodes ent "block/refs") [] 0
+  loop (Ev.ref_nodes ent "block/refs" @ node_title_ref_nodes ent) [] 0
 
 let recur_replace_title ?(max_depth = 10) ?(replace_block_refs = true)
     (block : Ev.node) (title : string) : string =
@@ -1372,33 +1387,30 @@ let search_result_to_block_result ~(conn : conn) ~(q : string)
         in
         let alias_match = matched_alias q block in
         let page_or_obj = page_or_object block in
-        let result_title =
-          if page_or_obj then block_result_title block
-          else match r.title with Some t -> Some t | None -> Ev.title block
+        (* pulled maps lack :block/refs, so ref titles resolve via entity *)
+        let result_title_block =
+          match block with
+          | Ev.P _ ->
+              (match Ev.title block with
+               | Some t when Db_content.title_has_id_ref (Some t) -> (
+                   match Ev.uuid block with
+                   | Some u -> (
+                       match
+                         Datascript.entity db
+                           (Lookup_ref ("block/uuid", Uuid u))
+                       with
+                       | Some e -> Ev.of_entity e
+                       | None -> block)
+                   | None -> block)
+               | _ -> block)
+          | _ -> block
         in
+        let result_title = block_result_title result_title_block in
         let display_title =
           if opts.opt_enable_snippet then
             ensure_highlighted_snippet r.snippet result_title q
           else if page_or_obj then result_title
           else match r.snippet with Some s -> Some s | None -> result_title
-        in
-        let display_title =
-          (* stored titles carry [[uuid]] refs; consumers render the
-             title verbatim (cmdk, electron), so resolve page refs to
-             [[title]] here like cljs's display title *)
-          match display_title with
-          | Some t ->
-              (* block is a pulled stub — materialize the entity to
-                 reach its block/refs *)
-              let ref_ents =
-                match
-                  Option.bind (Ev.db_id block) (Ldb.ent_of_id db)
-                with
-                | Some e -> Ldb.ref_ents e "block/refs"
-                | None -> []
-              in
-              Some (Db_content.id_ref_to_title_ref t ref_ents)
-          | None -> None
         in
         let block_page =
           match Ev.ref_node block "block/page" with
@@ -1438,6 +1450,10 @@ let search_result_to_block_result ~(conn : conn) ~(q : string)
             ?display_title:display_title
             (Some db) block
         in
+        let breadcrumb_ancestors =
+          if opts.opt_include_breadcrumb then Bb.block_breadcrumb db block
+          else []
+        in
         let base =
           [ ("db/id", Int64 (Int64.of_int (Option.value (Ev.db_id block) ~default:0)))
           ; ("block/uuid",
@@ -1458,7 +1474,13 @@ let search_result_to_block_result ~(conn : conn) ~(q : string)
                   (List.map
                      (fun crumbs ->
                         Map (List.map (fun (a, v) -> (Keyword a, v)) crumbs))
-                     (Bb.block_breadcrumb db block))) ]
+                     breadcrumb_ancestors))
+             ; ( "block.temp/breadcrumb-ref-titles"
+               , Map
+                   (List.map
+                      (fun (u, t) -> (Uuid u, String t))
+                      (Bb.breadcrumb_ref_titles db ~nodes:[ block ]
+                         ~crumbs:breadcrumb_ancestors)) ) ]
            else [])
         @ (match block_page with Some p -> [ ("block/page", Uuid p) ] | None -> [])
         @ (match parent_id with Some i -> [ ("block/parent", Int64 (Int64.of_int i)) ] | None -> [])
@@ -1561,18 +1583,89 @@ let truncate_vector_index (vector_index : Vector_index.index option) =
 
 (* ---- build index ---- *)
 
-let get_all_blocks ?(on_hidden = fun (_ : entity) -> ()) (db : db)
-    : entity list =
+(* Datom-level mirror of hidden_entity for the index-build scan. On an
+   E node each ref-attr read (block/tags, block/page, and the
+   block/parent ancestor chain) materializes the full attr map of every
+   ref target via materialize_ref_values — whole-entity maps per block
+   per ancestor. The predicate only touches a handful of scalar flags
+   and ref ids, so read them as constrained datoms instead. Keep this
+   aligned with hidden_entity/hidden_search_node/Ev.hidden above. *)
+
+let ref_ids_datom (db : db) (e : entity_id) (a : attr) : entity_id list =
+  (* Ldb.ref_ids without ref-target materialization; drops dangling
+     refs like entity_visible_attr_values. *)
+  datoms db Eavt ~e ~a ()
+  |> Seq.filter_map (fun (d : datom) ->
+         match d.v with
+         | Ref id -> Some id
+         | Int64 i -> Datascript.Util.int64_to_int i
+         | _ -> None)
+  |> List.of_seq
+  |> List.filter (fun id ->
+         Option.is_some (Seq.uncons (datoms db Eavt ~e:id ())))
+
+let truthy_datom (db : db) (e : entity_id) (a : attr) : bool =
+  match find_datom db Eavt ~e ~a () with
+  | Some d -> Ldb.truthy (Some d.v)
+  | None -> false
+
+(* Ev.hidden: own hide?/deleted-at or any block/parent ancestor's *)
+let hidden_datom (db : db) (e : entity_id) : bool =
+  let flags id =
+    truthy_datom db id "logseq.property/hide?"
+    || truthy_datom db id "logseq.property/deleted-at"
+  in
+  let parent_of id =
+    match ref_ids_datom db id "block/parent" with
+    | p :: _ -> Some p
+    | [] -> None
+  in
+  let rec hidden_parent (parent : entity_id option) (seen : entity_id list) : bool =
+    match parent with
+    | Some id when not (List.mem id seen) ->
+        flags id || hidden_parent (parent_of id) (id :: seen)
+    | _ -> false
+  in
+  flags e || hidden_parent (parent_of e) []
+
+(* Ev.has_tag via block/tags ref ids *)
+let has_tag_datom (db : db) (e : entity_id) (tag_ident : string) : bool =
+  List.exists
+    (fun tag ->
+       match find_datom db Eavt ~e:tag ~a:"db/ident" () with
+       | Some d -> d.v = Keyword tag_ident
+       | None -> false)
+    (ref_ids_datom db e "block/tags")
+
+(* hidden_entity: is_property entities check deleted-at or private
+   built-in (property: built-in? && not public?); others take the
+   hidden walk; plus the block/page hidden-unless-"Quick add" rule. *)
+let hidden_entity_datom (db : db) (e : entity_id) : bool =
+  (if has_tag_datom db e "logseq.class/Property" then
+     (* hidden_search_node treats deleted-at by presence, not truthy *)
+     Option.is_some
+       (find_datom db Eavt ~e ~a:"logseq.property/deleted-at" ())
+     || (truthy_datom db e "logseq.property/built-in?"
+         && not (truthy_datom db e "logseq.property/public?"))
+   else hidden_datom db e)
+  ||
+  (match ref_ids_datom db e "block/page" with
+   | page :: _ ->
+       hidden_datom db page
+       && (match find_datom db Eavt ~e:page ~a:"block/title" () with
+            | Some d -> d.v <> String "Quick add"
+            | None -> true)
+   | [] -> false)
+
+let get_all_blocks (db : db) : entity list =
   datoms db Avet ~a:"block/uuid" ()
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
-         | Uuid _ -> Ldb.ent_of_id db d.e
+         | Uuid _ ->
+             if hidden_entity_datom db d.e then None
+             else Ldb.ent_of_id db d.e
          | _ -> None)
   |> List.of_seq
-  |> List.filter (fun e ->
-         let hidden = hidden_entity (Ev.of_entity e) in
-         if hidden then on_hidden e;
-         not hidden)
 
 let build_blocks_indice ?(include_vector_title = false) (db : db) : index_item list =
   List.filter_map
@@ -1901,9 +1994,9 @@ let search_blocks ~(conn : conn) ~(search_db : Sqlite.db option)
             ~query_embedding:opts.opt_query_embedding
       | _ -> []
     in
-    let raw = exact_title_result @ fuzzy_result @ matched_result @ non_match_result in
     let combined =
-      combine_results ~vector_results:vector_result ~q db_ctx raw
+      combine_results ~vector_results:vector_result ~q db_ctx
+        (exact_title_result @ fuzzy_result @ matched_result @ non_match_result)
     in
     let code_class =
       if opts.opt_code_only then

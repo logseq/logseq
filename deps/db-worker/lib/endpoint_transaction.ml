@@ -3,7 +3,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let wire_truthy = function
   | Wire.Nil | Wire.Bool false -> false
@@ -18,7 +17,7 @@ let require_repo (args : Wire.t list) : string =
 let missing_connection repo =
   Dispatcher.Exn_info
     ( "Missing worker graph connection",
-      [ (kw "type", kw "db/missing-connection"); (kw "repo", Wire.String repo) ] )
+      [ (Wire.keyword "type", Wire.keyword "db/missing-connection"); (Wire.keyword "repo", Wire.String repo) ] )
 
 let require_conn repo : conn =
   match Worker_state.datascript_conn repo with
@@ -28,7 +27,15 @@ let require_conn repo : conn =
 (* maybe-run-recycle-gc! *)
 let recycle_gc_kv = "logseq.kv/recycle-last-gc-at"
 
-let maybe_run_recycle_gc (conn : conn) : unit =
+(* GC bookkeeping writes are system writes — on remote graphs they
+   belong to the confirmed base (server conn), not the projection.
+   Returns true when it transacted so callers can rebuild the display
+   projection — a server-conn purge otherwise leaves recycled entities
+   visible as ghosts until the next remote tx. *)
+let maybe_run_recycle_gc repo : bool =
+  match Sync_state.confirmed_conn repo with
+  | None -> false
+  | Some conn ->
   let now = Time.now () in
   let last_gc_at =
     match entity (Conn.db conn) (Ident recycle_gc_kv) with
@@ -42,7 +49,7 @@ let maybe_run_recycle_gc (conn : conn) : unit =
   (match last_gc_at with
    | Some l
      when Time.epoch_ms_to_float now -. Time.epoch_ms_to_float l
-          <= Outliner_recycle.gc_interval_ms -> ()
+          <= Outliner_recycle.gc_interval_ms -> false
    | _ ->
        ignore (Outliner_recycle.gc conn ~now_ms:now ());
        ignore
@@ -53,7 +60,8 @@ let maybe_run_recycle_gc (conn : conn) : unit =
                     [ ("db/ident", One_value (Keyword recycle_gc_kv))
                     ; ("kv/value", One_value (Float (Time.epoch_ms_to_float now))) ] } ]
             ~tx_meta:
-              [ ("persist-op?", Bool false); ("skip-validate-db?", Bool true) ] ))
+              [ ("persist-op?", Bool false); ("skip-validate-db?", Bool true) ] );
+       true)
 
 (* :thread-api/transact [repo tx-data tx-meta context] *)
 let transact args : Wire.t Db_worker_effect.t =
@@ -90,7 +98,7 @@ let transact args : Wire.t Db_worker_effect.t =
                   | Some Wire.Nil | None -> true
                   | Some _ -> false) ->
               Cljs_map.assoc tx "block/order"
-                (Wire.String (Db_order.gen_key None None))
+                (Wire.String (Db_order.gen_key_from_max ()))
           | t -> t)
         tx_data
     else tx_data
@@ -130,7 +138,11 @@ let transact args : Wire.t Db_worker_effect.t =
        ignore
          (Db_transact.transact conn tx_data'
             (Ds_wire.tx_meta_of_transit tx_meta'));
-     maybe_run_recycle_gc conn;
+     (if maybe_run_recycle_gc repo && Sync_state.server_conn repo <> None
+      then
+        (* the purge transacted on the server conn — rebuild the
+           display projection so recycled entities don't ghost *)
+        Sync_replay.rebuild_display repo ~jump_tx_data:[]);
      Db_worker_effect.pure Wire.Nil
    with e ->
      (* cljs (log/error ::worker-transact-failed {...}) then rethrow *)
@@ -157,7 +169,7 @@ let broadcast_notification (payload : Wire.t) =
   in
   let msg =
     Wire.Array
-      [ kw "notification"
+      [ Wire.keyword "notification"
       ; Wire.Array
           [ get "message"; get "type"; get "clear?"; get "uid"; get "timeout"
           ; Wire.Map i18n ] ]
@@ -265,7 +277,7 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
                  (* {:blocks {uuid row}} -> rows for the requested uuids *)
                  match
                    List.find_opt
-                     (fun (k, _) -> k = kw "blocks")
+                     (fun (k, _) -> k = Wire.keyword "blocks")
                      kvs
                  with
                  | Some (_, Wire.Map rows) ->
@@ -281,16 +293,16 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
          | None -> Wire.Map []
      in
      let response =
-       [ (kw "result", operation_result) ]
+       [ (Wire.keyword "result", operation_result) ]
        |> (fun m ->
           match delta with
-          | Some d -> m @ [ (kw "delta", d) ]
+          | Some d -> m @ [ (Wire.keyword "delta", d) ]
           | None -> m)
        |> fun m ->
        if editor_row_uuids <> [] then
          m
-         @ [ (kw "editor-row-uuids", Wire.Array editor_row_uuids)
-           ; (kw "editor-rows", editor_rows) ]
+         @ [ (Wire.keyword "editor-row-uuids", Wire.Array editor_row_uuids)
+           ; (Wire.keyword "editor-rows", editor_rows) ]
        else m
      in
      let plain_at = perf_time_ms () in
@@ -310,14 +322,14 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
      Db_listener.log_tx_outliner_op_perf
        (Wire.Map
           ((List.filter (fun (k, _) -> k <> "listener") perf_data
-            |> List.map (fun (k, v) -> (kw k, v)))
-           @ [ kw "perf-id"
+            |> List.map (fun (k, v) -> (Wire.keyword k, v)))
+           @ [ Wire.keyword "perf-id"
              , (match perf_id_w with Some w -> w | None -> Wire.Nil)
-             ; kw "op-names", op_names
-             ; kw "op-count", Wire.Int (List.length op_list) ]));
+             ; Wire.keyword "op-names", op_names
+             ; Wire.keyword "op-count", Wire.Int (List.length op_list) ]));
      let response =
        if !Sync_state.dev_or_test then
-         response @ [ (kw "perf", Wire.Map (List.map (fun (k, v) -> (kw k, v)) perf_data)) ]
+         response @ [ (Wire.keyword "perf", Wire.Map (List.map (fun (k, v) -> (Wire.keyword k, v)) perf_data)) ]
        else response
      in
      Db_worker_effect.pure (Wire.Map response)

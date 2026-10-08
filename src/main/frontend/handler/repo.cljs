@@ -169,7 +169,14 @@
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
            _ (state/pub-event! [:init/commands])
-           _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
+           _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))
+           ;; A reload opens the graph the tab remembers before the last
+           ;; current graph; remember the new one as a switch does, or a
+           ;; reload reopens the graph opened before it (db-test #1361)
+           _ (when-not file-graph-import?
+               (p/do!
+                (graph-handler/<upsert-current-graph-registry!)
+                (graph-handler/remember-current-graph-id-in-tab!)))]
      (state/pub-event! [:shortcut/refresh])
      (when-not file-graph-import?
        (route-handler/redirect-to-home!)

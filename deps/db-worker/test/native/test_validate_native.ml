@@ -312,6 +312,60 @@ let test_instant_scalar_attrs_validate_as_int () =
   check "title updated"
     (Ldb.string_value e "block/title" = Some "b1'")
 
+(* datascript-ocaml keeps re-added (e a v) facts as duplicate datoms at
+   different txs (tx-report fidelity; init_db also preserves them), so
+   `datoms db :eavt e` can return the same fact twice where upstream
+   cljs returns one. A tx touching such an entity folds card-one attrs
+   into #{v} sets in datoms->entity-maps; entity-dispatch-key then sees
+   e.g. a set at block/uuid -> "invalid dispatch value" on every write.
+   First seen as an RTC regression: a pending-created page carried dup
+   datoms and its :delete-page tx failed validation. *)
+let test_validate_tolerates_duplicate_fact_datoms () =
+  let open Db_test_util in
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page 1" };
+            blocks = [ { default_block with b_title = Some "b1" } ] } ]
+      ()
+  in
+  let block = Option.get (find_block_by_content (db_of conn) "b1") in
+  let uuid =
+    match Ldb.value block "block/uuid" with
+    | Some (Uuid u) -> Uuid u
+    | _ -> failwith "block missing block/uuid"
+  in
+  let uuid = Datascript.Uuid (match uuid with Uuid s -> s | _ -> assert false) in
+  (* rebuild the db with the same (e a v) fact present at two txs — the
+     state init_db/snapshot-restore produces (tracked in
+     duplicate_datoms and surfaced by datoms :eavt e) *)
+  let db = db_of conn in
+  let all = List.of_seq (datoms db Eavt ()) in
+  let dup =
+    Datascript.datom ~e:block.id ~a:"block/uuid" ~v:uuid
+      ~tx:(db.max_tx + 1) ()
+  in
+  let conn =
+    Datascript.conn_from_db
+      (Datascript.init_db ~schema:db.schema (all @ [ dup ]))
+  in
+  let dup_count =
+    List.length
+      (List.of_seq
+         (datoms (db_of conn) Eavt ~e:block.id ~a:"block/uuid" ()))
+  in
+  check "duplicate uuid datom surfaced" (dup_count = 2);
+  with_validate_tx_report (fun () ->
+      (* any tx touching the entity validates its whole ent-map —
+         without the dedup this raises Invalid_tx with "invalid
+         dispatch value" *)
+      ignore
+        (Db_tx.transact conn
+           [ Add (Entity_id block.id, "block/updated-at", Int64 1791097664708L) ]));
+  let e = Option.get (Ldb.ent_of_id (db_of conn) block.id) in
+  check "block still intact"
+    (Ldb.string_value e "block/title" = Some "b1")
+
 let () =
   Alcotest.run "db-validate-test"
     [ ( "db_validate_test",
@@ -327,4 +381,6 @@ let () =
             "validate-db-repairs-set-wrapped-single-property-values"
             `Quick test_repairs_set_wrapped_single_property_values
         ; Alcotest.test_case "instant-scalar-attrs-validate-as-int"
-            `Quick test_instant_scalar_attrs_validate_as_int ] ) ]
+            `Quick test_instant_scalar_attrs_validate_as_int
+        ; Alcotest.test_case "validate-tolerates-duplicate-fact-datoms"
+            `Quick test_validate_tolerates_duplicate_fact_datoms ] ) ]

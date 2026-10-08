@@ -152,6 +152,12 @@ let rec value_of_transit (t : Wire.t) : value =
      values *)
   | Wire.Int64 n -> Int64 n
   | Wire.Float f -> Float f
+  (* ~b Binary decodes to String deliberately: datascript values have no
+     binary type, and live paths rely on it — import-file-graph sends
+     :asset/payload as Uint8Array (~b) and read_import_asset_payload reads
+     it back as String. Re-encoding flips ~b to ~s; every Binary producer
+     in sync_crypt/endpoint_* matches on Wire.Binary directly and never
+     routes through here. *)
   | Wire.Binary s -> String s
   | Wire.Keyword s -> Keyword s
   | Wire.Symbol s -> Symbol s
@@ -166,6 +172,23 @@ let rec value_of_transit (t : Wire.t) : value =
   | Wire.Map kvs -> Map (List.map (fun (k, v) -> (value_of_transit k, value_of_transit v)) kvs)
   | Wire.Tagged ("datascript/Datom", rep) -> Vector [ Symbol "datascript/Datom"; value_of_transit rep ]
   | Wire.Tagged (tag, rep) -> Vector [ String ("#" ^ tag); value_of_transit rep ]
+
+(* byte payload decode: a vector of ints arrives as a value list; each
+   element must be Int64 (or Float for cljs number payloads). O(n) via
+   Bytes — a String.init + List.nth decode is O(n^2) on import-sized
+   payloads. Malformed elements fail instead of decoding to NULs. *)
+let bytes_of_values (vs : value list) : string =
+  let b = Bytes.create (List.length vs) in
+  List.iteri
+    (fun i v ->
+      Bytes.set b i
+        (Char.chr
+           (match v with
+            | Int64 n -> Int64.to_int (Int64.logand n 255L)
+            | Float f -> int_of_float f land 0xff
+            | _ -> invalid_arg "bytes_of_values: non-byte element")))
+    vs;
+  Bytes.unsafe_to_string b
 
 let entity_ref_of_transit (t : Wire.t) : entity_ref =
   match t with
@@ -249,17 +272,9 @@ let entity_map_wire (e : entity) : Wire.t =
       | One_value v -> transit_of_value v
       | Many_values vs -> Wire.Set (List.map transit_of_value vs) )
   in
-  let ident_pair =
-    (* entity_attrs excludes the :db/ident system attr; cljs entity maps
-       still surface it, and callers branch on it (e.g. tag-on-chosen) *)
-    match Ldb.ident_of e with
-    | Some i -> [ (Wire.Keyword "db/ident", Wire.Keyword i) ]
-    | None -> []
-  in
   Wire.Map
     ((Wire.Keyword "db/id", Wire.Int e.id)
-     :: ident_pair
-     @ List.map pair_of (Datascript.entity_attrs e))
+     :: List.map pair_of (Datascript.entity_attrs e))
 
 let rec transit_of_query_result (r : query_result) : Wire.t =
   match r with
@@ -279,17 +294,16 @@ and transit_of_serializable_db (db : serializable_db) : Wire.t =
         ] )
 
 and transit_of_schema (schema : schema) : Wire.t =
-  let kw s = Wire.Keyword s in
-  Wire.Map
+    Wire.Map
     (List.map
        (fun (a, sa) ->
           let fields =
             [
-              ( if sa.cardinality = Many then Some ("db/cardinality", kw "db.cardinality/many")
+              ( if sa.cardinality = Many then Some ("db/cardinality", Wire.keyword "db.cardinality/many")
                 else None );
               ( match sa.unique with
-              | Some Value -> Some ("db/unique", kw "db.unique/value")
-              | Some Identity -> Some ("db/unique", kw "db.unique/identity")
+              | Some Value -> Some ("db/unique", Wire.keyword "db.unique/value")
+              | Some Identity -> Some ("db/unique", Wire.keyword "db.unique/identity")
               | None -> None );
               (if sa.indexed then Some ("db/index", Wire.Bool true) else None);
               (if sa.is_component then Some ("db/isComponent", Wire.Bool true) else None);
@@ -298,17 +312,17 @@ and transit_of_schema (schema : schema) : Wire.t =
               | Some doc -> Some ("db/doc", Wire.String doc)
               | None -> None );
               ( match sa.value_type with
-              | Some RefType -> Some ("db/valueType", kw "db.type/ref")
-              | Some TupleType -> Some ("db/valueType", kw "db.type/tuple")
-              | Some StringType -> Some ("db/valueType", kw "db.type/string")
-              | Some KeywordType -> Some ("db/valueType", kw "db.type/keyword")
-              | Some NumberType -> Some ("db/valueType", kw "db.type/number")
-              | Some UuidType -> Some ("db/valueType", kw "db.type/uuid")
-              | Some InstantType -> Some ("db/valueType", kw "db.type/instant")
+              | Some RefType -> Some ("db/valueType", Wire.keyword "db.type/ref")
+              | Some TupleType -> Some ("db/valueType", Wire.keyword "db.type/tuple")
+              | Some StringType -> Some ("db/valueType", Wire.keyword "db.type/string")
+              | Some KeywordType -> Some ("db/valueType", Wire.keyword "db.type/keyword")
+              | Some NumberType -> Some ("db/valueType", Wire.keyword "db.type/number")
+              | Some UuidType -> Some ("db/valueType", Wire.keyword "db.type/uuid")
+              | Some InstantType -> Some ("db/valueType", Wire.keyword "db.type/instant")
               | None -> None );
               ( match sa.tuple_attrs with
               | Some attrs ->
-                  Some ("db/tupleAttrs", Wire.Array (List.map kw attrs))
+                  Some ("db/tupleAttrs", Wire.Array (List.map Wire.keyword attrs))
               | None -> None );
               ( match sa.tuple_types with
               | Some types ->
@@ -321,7 +335,7 @@ and transit_of_schema (schema : schema) : Wire.t =
                     | UuidType -> "db.type/uuid"
                     | InstantType -> "db.type/instant"
                   in
-                  Some ("db/tupleTypes", Wire.Array (List.map (fun t -> kw (type_kw t)) types))
+                  Some ("db/tupleTypes", Wire.Array (List.map (fun t -> Wire.keyword (type_kw t)) types))
               | None -> None );
             ]
           in
@@ -355,21 +369,6 @@ let wire_of_query_output (output : query_output) : Wire.t =
   | Query_relation_maps rows -> Wire.Set (List.map wire_map_of_pairs rows)
   | Query_tuple_map (Some pairs) -> wire_map_of_pairs pairs
   | Query_tuple_map None -> Wire.nil
-
-(* ---- tx_report -> transit ---- *)
-
-let transit_of_tx_report (r : tx_report) : Wire.t =
-  Wire.Map
-    [
-      (Wire.Keyword "db-before", transit_of_serializable_db (Datascript.serializable r.db_before));
-      (Wire.Keyword "db-after", transit_of_serializable_db (Datascript.serializable r.db_after));
-      ( Wire.Keyword "tx-data",
-        Wire.Array (List.map (fun d -> Wire.Tagged ("datascript/Datom", transit_of_datom d)) r.tx_data) );
-      ( Wire.Keyword "tempids",
-        Wire.Map (List.map (fun (t, e) -> (Wire.String t, Wire.Int e)) r.tempids) );
-      ( Wire.Keyword "tx-meta",
-        Wire.Map (List.map (fun (a, v) -> (Wire.Keyword a, transit_of_value v)) r.tx_meta) );
-    ]
 
 (* ---- query inputs ---- *)
 
@@ -411,11 +410,6 @@ let rec edn_of_query_form (f : query_form) : string =
   | QueryFormMap kvs ->
       let pair (k, v) = edn_of_query_form k ^ " " ^ edn_of_query_form v in
       "{" ^ String.concat " " (List.map pair kvs) ^ "}"
-
-let query_result_of_transit (t : Wire.t) : query_result =
-  match value_of_transit t with
-  | Keyword s -> Result_attr s
-  | v -> Result_value v
 
 (* Canonical string key for a wire scalar (ui-request ids, state keys). *)
 let wire_key (t : Wire.t) : string =
@@ -567,8 +561,3 @@ let transit_of_tx_op (op : tx_op) : Wire.t =
 let transit_of_tx_meta (meta : tx_meta) : Wire.t =
   Wire.Map
     (List.map (fun (a, v) -> (Wire.Keyword a, transit_of_value v)) meta)
-
-let transit_of_tx_result (tx_data : tx_op list) (tx_meta : tx_meta) : Wire.t =
-  Wire.Map
-    [ (Wire.Keyword "tx-data", Wire.Array (List.map transit_of_tx_op tx_data))
-    ; (Wire.Keyword "tx-meta", transit_of_tx_meta tx_meta) ]

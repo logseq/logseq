@@ -240,11 +240,12 @@ let snapshot_datoms_in_import_order (conn : conn) : datom list =
       Int_set.empty
       (datoms db Aevt ~a:"db/ident" ())
   in
-  let ordered pred =
-    datoms db Eavt () |> Seq.filter pred |> List.of_seq
+  let schema_datoms, rest =
+    datoms db Eavt ()
+    |> List.of_seq
+    |> List.partition (schema_datom ident_eids schema_version_eid)
   in
-  ordered (schema_datom ident_eids schema_version_eid)
-  @ ordered (fun d -> not (schema_datom ident_eids schema_version_eid d))
+  schema_datoms @ rest
 
 let log_import_progress (state : import_state) datoms_count =
   if datoms_count > 0 then begin
@@ -491,6 +492,20 @@ let kv_row ident v : Wire.t =
     ; Wire.Keyword "kv/value", v ]
 
 let set_graph_sync_metadata conn graph_id graph_e2ee =
+  let db0 = Conn.db conn in
+  Worker_log.error "db-sync/set-kvs-pre"
+    [ "max-eid", string_of_int db0.Datascript.max_eid
+    ; "resolved"
+    , String.concat ","
+        (List.map
+           (fun ident ->
+             match
+               Datascript.entid db0 "db/ident" (Datascript.Keyword ident)
+             with
+             | Some e -> ident ^ "=" ^ string_of_int e
+             | None -> ident ^ "=NONE")
+           [ "logseq.kv/graph-uuid"; "logseq.kv/graph-remote?"
+           ; "logseq.kv/graph-rtc-e2ee?" ]) ];
   ignore
     (Db_transact.transact conn
        [ kv_row "logseq.kv/graph-uuid" (Uuid graph_id)
@@ -711,14 +726,11 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
                               [ Wire.Keyword "repo", Wire.String repo ]))
               in
               stage := "stream-snapshot";
-              let row_count = ref 0 in
               stream_snapshot_row_batches ~gzip_encoded read 25000
                 (fun rows ->
-                   row_count := !row_count + List.length rows;
                    ensure_import () >>= fun import_id ->
                    import_rows_chunk rows graph_id import_id >>= fun _ ->
-                   Db_worker_effect.pure ())
-              >>= fun () -> Db_worker_effect.pure ())
+                   Db_worker_effect.pure ()))
          >>= fun () ->
          rtc_download_log
            (Wire.Map
@@ -732,9 +744,19 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
               finalize_import repo graph_id remote_tx import_id
           | None -> Db_worker_effect.pure ())
          >>= fun () ->
-         (match Worker_state.datascript_conn repo with
+         (* clear before the fresh-image anchor lands: dying in between
+            leaves flag=0 + the old checksum, which reconcile-on-open
+            recomputes into the right value — clearing after would pin
+            flag=1 to a fresh image and silence heal/drift forever *)
+         Sync_client_op.clear_checksum_exempted repo;
+         (match Sync_state.confirmed_conn repo with
           | Some conn -> set_graph_sync_metadata conn graph_id graph_e2ee
-          | None -> ());
+          | None ->
+              Worker_log.error "db-sync/set-kvs-skipped-no-confirmed-conn"
+                [ "repo", repo ]);
+         (* the graph-remote marker just landed: split server/display
+            conns now so subsequent remote writes go to the base *)
+         Sync_replay.split_off_server_if_remote repo;
          Db_worker_effect.pure
            (Wire.Map
               [ Wire.Keyword "repo", Wire.String repo

@@ -131,6 +131,9 @@ const prepareElectronMaker = async () => {
   cp.execSync('pnpm db-worker:build', {
     stdio: 'inherit',
   })
+  cp.execSync('pnpm db-worker:build', {
+    stdio: 'inherit',
+  })
   cp.execSync('pnpm db-worker-node:bundle', {
     stdio: 'inherit',
   })

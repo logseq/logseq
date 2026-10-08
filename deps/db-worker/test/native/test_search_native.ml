@@ -670,19 +670,6 @@ let test_search_blocks_escapes_quotes_for_fts () =
          (Search_index.get_match_input q))
     cases
 
-let test_search_blocks_non_word_with_boolean () =
-  let cases =
-    [ "x and [[", "\"x AND [[\"*"
-    ; "block [[y]] or z", "\"block [[y]] OR z\"*"
-    ; "a/b and c", "\"a/b AND c\"*"
-    ; "foo and bar", "foo AND bar" ]
-  in
-  List.iteri
-    (fun i (q, expected) ->
-       check_eq (Printf.sprintf "non-word + boolean [%d]" i) expected
-         (Search_index.get_match_input q))
-    cases
-
 let test_search_blocks_dangling_boolean () =
   let cases =
     [ "xxx and ", "\"xxx AND \"*"
@@ -1929,6 +1916,44 @@ let test_search_result_keeps_valid_page_snippet () =
         (Option.value (br_string br "block/title") ~default:"");
       check "no alias [valid]" (br_get br "alias" = None)
 
+(* search-result-resolves-node-ref-uuids-test — the index stores the
+   resolved title and result conversion resolves [[uuid]] even from a
+   stale index entry (refs resolved via db, not :block/refs). *)
+let test_search_result_resolves_node_ref_uuids () =
+  let page_uuid = test_uuid_string 777 in
+  let target_uuid = test_uuid_string 888 in
+  let ref_uuid = test_uuid_string 999 in
+  let conn = T.create_conn () in
+  ignore
+    (transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/id -1 :block/name \"p1\" :block/title \"p1\" :block/uuid #uuid \"%s\"}
+            {:db/id -2 :block/title \"Target block\" :block/uuid #uuid \"%s\" :block/page -1 :block/parent -1 :block/order \"a\"}
+            {:db/id -3 :block/title \"see [[%s]]\" :block/uuid #uuid \"%s\" :block/page -1 :block/parent -1 :block/order \"b\"}]"
+          page_uuid target_uuid target_uuid ref_uuid));
+  let db = Datascript.db conn in
+  match T.find_block_by_content db (Printf.sprintf "see [[%s]]" target_uuid)
+  with
+  | None -> check "ref block exists" false
+  | Some ref_block ->
+      (match Search_index.block_to_index (Ev.of_entity ref_block) with
+       | None -> check "index item produced" false
+       | Some it ->
+           check_eq "index stores resolved title"
+             "see [[Target block]]" it.item_title);
+      let r =
+        Search_index.result_of_row ~id:ref_uuid ~page:page_uuid
+          ~title:(Printf.sprintf "see [[%s]]" target_uuid)
+          ()
+      in
+      (match call_result_to_block conn "see" (opts ~enable_snippet:false ()) r
+       with
+       | None -> check "result produced" false
+       | Some br ->
+           check_eq "display title resolves stale index entry"
+             "see [[Target block]]"
+             (Option.value (br_string br "block/title") ~default:""))
+
 let test_search_result_includes_block_unique_title () =
   let conn =
     T.create_conn_with_blocks
@@ -2227,7 +2252,6 @@ let () =
   test_search_indexes_hide_by_default_properties ();
   test_search_blocks_aux_bind_count ();
   test_search_blocks_escapes_quotes_for_fts ();
-  test_search_blocks_non_word_with_boolean ();
   test_search_blocks_dangling_boolean ();
   test_search_blocks_large_graph_no_rank_scan ();
   test_search_blocks_fuzzy_matches_from_search_db ();
@@ -2269,6 +2293,7 @@ let () =
   test_search_result_detects_alias_from_pulled_map ();
   test_search_result_keeps_page_title_when_canonical_matches ();
   test_search_result_replaces_page_title_uuid_refs ();
+  test_search_result_resolves_node_ref_uuids ();
   test_search_result_snippet_uses_canonical_page_title ();
   test_search_result_keeps_valid_page_snippet ();
   test_search_result_includes_block_unique_title ();

@@ -12,26 +12,18 @@ let upload_temp_path () =
 
 (* <create-temp-sqlite-db! *)
 let create_temp_sqlite_db () : Sqlite.db Db_worker_effect.t =
-  (if Sqlite.pooled_runtime () then
-     (* browser: the upload-temp pool owns its OPFS dir — no real fs ops.
-        Delete rows left by an interrupted upload instead of recreating
-        the file *)
-     Db_worker_effect.pure ()
-   else
-     File_sys.mkdir_p (upload_temp_dir ()) >>= fun () ->
-     let path = upload_temp_path () in
-     File_sys.exists path >>= fun exists ->
-     if exists then File_sys.remove path else Db_worker_effect.pure ())
+  File_sys.mkdir_p (upload_temp_dir ()) >>= fun () ->
+  let path = upload_temp_path () in
+  File_sys.exists path >>= fun exists ->
+  (if exists then File_sys.remove path else Db_worker_effect.pure ())
   >>= fun () ->
   Sqlite.prepare_pool ~name:(Graph_dir.pool_name "upload-temp")
   >>= fun () ->
   let db =
     Sqlite.open_db_pool ~name:(Graph_dir.pool_name "upload-temp")
-      ~path:(if Sqlite.pooled_runtime () then "/upload.sqlite" else upload_temp_path ())
+      ~path:(if Sqlite.pooled_runtime () then "/upload.sqlite" else path)
   in
   Graph_store.create_kvs_table db;
-  if Sqlite.pooled_runtime () then
-    Sqlite.exec db ~sql:"delete from kvs" ~bind:[||];
   Db_worker_effect.pure db
 
 (* <create-temp-sqlite-conn *)
@@ -45,11 +37,6 @@ let create_temp_sqlite_conn (schema : Datascript.schema)
 
 let cleanup_temp_sqlite db : unit Db_worker_effect.t =
   Sqlite.close db;
-  if Sqlite.pooled_runtime () then
-    (* free the whole temp pool — the snapshot copy can be large *)
-    Sqlite.remove_vfs ~repo:"upload-temp"
-  else begin
-    let path = upload_temp_path () in
-    File_sys.exists path >>= fun exists ->
-    if exists then File_sys.remove path else Db_worker_effect.pure ()
-  end
+  let path = upload_temp_path () in
+  File_sys.exists path >>= fun exists ->
+  if exists then File_sys.remove path else Db_worker_effect.pure ()

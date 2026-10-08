@@ -856,6 +856,100 @@ let test_get_block_and_children_has_children_flag () =
           gb_children_false)
      = Some (Wire.Bool false))
 
+(* cljs get-block-tag-summary-exposes-card-extends-for-renderer
+   (worker/handler/flashcard_test.cljs) — tag ref summaries include
+   :logseq.property.class/extends idents so the renderer can detect Card. *)
+let test_get_block_tag_summary_exposes_card_extends () =
+  let open Db_test_util in
+  let gb_children_false =
+    { Endpoint_block.gb_all = false
+    ; Endpoint_block.gb_children = false
+    ; Endpoint_block.gb_properties = []
+    ; Endpoint_block.gb_render_data = None
+    ; Endpoint_block.gb_root_render_data = false
+    ; Endpoint_block.gb_include_collapsed_children = false
+    ; Endpoint_block.gb_include_property_block = false }
+  in
+  let conn =
+    create_conn_with_blocks
+      ~classes:
+        [ "Work",
+          { default_class with
+            c_title = Some "Work"; c_extends = [ "logseq.class/Card" ] };
+          "Milestone",
+          { default_class with
+            c_title = Some "Milestone"; c_extends = [ "Work" ] };
+          "Project",
+          { default_class with
+            c_title = Some "Project"; c_extends = [ "Milestone" ] } ]
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page" };
+            blocks =
+              [ { default_block with
+                  b_title = Some "project card"; b_tags = [ "Project" ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let card = Option.get (find_block_by_content db "project card") in
+  let card_uuid =
+    match Ldb.value card "block/uuid" with
+    | Some (Uuid u) -> u
+    | _ -> ""
+  in
+  let idents =
+    match
+      Endpoint_block.get_block_and_children db (Uuid card_uuid) gb_children_false
+    with
+    | Wire.Map m -> (
+        match Plain_value.map_get "block" m with
+        | Some b -> (
+            match Plain_value.map_get "block/tags" (Wire.as_map b) with
+            | Some tags ->
+                List.filter_map
+                  (fun tag ->
+                     match Wire.as_map tag |> Plain_value.map_get "db/ident" with
+                     | Some (Wire.Keyword k) -> Some k
+                     | _ -> None)
+                  (Wire.as_seq tags)
+            | _ -> [])
+        | _ -> [])
+    | _ -> []
+  in
+  check "tag summary is user.class/Project"
+    (idents = [ "user.class/Project" ]);
+  let extends_idents =
+    match
+      Endpoint_block.get_block_and_children db (Uuid card_uuid) gb_children_false
+    with
+    | Wire.Map m -> (
+        match Plain_value.map_get "block" m with
+        | Some b -> (
+            match Plain_value.map_get "block/tags" (Wire.as_map b) with
+            | Some tags ->
+                List.concat_map
+                  (fun tag ->
+                     match
+                       Wire.as_map tag
+                       |> Plain_value.map_get "logseq.property.class/extends"
+                     with
+                     | Some xs ->
+                         List.filter_map
+                           (fun m' ->
+                              match
+                                Wire.as_map m' |> Plain_value.map_get "db/ident"
+                              with
+                              | Some (Wire.Keyword k) -> Some k
+                              | _ -> None)
+                           (Wire.as_seq xs)
+                     | _ -> [])
+                  (Wire.as_seq tags)
+            | _ -> [])
+        | _ -> [])
+    | _ -> []
+  in
+  check "tag summary includes the Card ancestor"
+    (List.mem "logseq.class/Card" extends_idents)
+
 (* ---------- initial_data_test.cljs (sqlite storage) ---------- *)
 
 (* cljs use-fixtures :each — fresh tmp/graphs dir per test. *)
@@ -1117,6 +1211,7 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "token-cache-exp-seconds" `Quick test_token_cache_exp_seconds;
     Alcotest.test_case "mldoc-schema-validate" `Quick test_mldoc_schema;
     Alcotest.test_case "get-block-and-children-has-children-flag" `Quick test_get_block_and_children_has_children_flag;
+    Alcotest.test_case "get-block-tag-summary-exposes-card-extends" `Quick test_get_block_tag_summary_exposes_card_extends;
     Alcotest.test_case "get-initial-data" `Quick test_get_initial_data;
     Alcotest.test_case "get-initial-data-includes-property-description-datoms" `Quick test_get_initial_data_includes_property_description_datoms;
     Alcotest.test_case "restore-initial-data" `Quick test_restore_initial_data;

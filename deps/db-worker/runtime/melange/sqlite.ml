@@ -113,6 +113,7 @@ type db =
   ; filename : string
   ; mutable tx_depth : int
   ; mutable savepoint_seq : int
+  ; mutable closed : bool
   }
 
 type bind =
@@ -165,7 +166,7 @@ let pools : (string, Opfs.pool) Hashtbl.t = Hashtbl.create 8
 let dropped_pools : (string, Opfs.pool) Hashtbl.t = Hashtbl.create 4
 let sqlite3_ref : Opfs.sqlite3 option ref = ref None
 
-external promise_error_message : Js.Promise.error -> string option = "message" [@@mel.get]
+external promise_error_message : Js.Promise.error -> string option = "message"
 
 let task_of_promise promise =
   let task, resolver = Db_worker_effect.wait () in
@@ -216,6 +217,7 @@ let open_db ~path =
       ; filename = path
       ; tx_depth = 0
       ; savepoint_seq = 0
+      ; closed = false
       }
     with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e))
   else
@@ -231,6 +233,7 @@ let open_db ~path =
            ; filename = path
            ; tx_depth = 0
            ; savepoint_seq = 0
+           ; closed = false
            }
          with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
     | None -> raise (Sqlite_error "sqlite-wasm module not initialized")
@@ -287,11 +290,13 @@ let open_db_pool ~name ~path =
            ; filename = path
            ; tx_depth = 0
            ; savepoint_seq = 0
+           ; closed = false
            }
          with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
     | None -> raise (Sqlite_error ("opfs pool not prepared: " ^ name))
 
 let close t =
+  t.closed <- true;
   match t.handle with
   | Node_db d -> Database.close d
   | Opfs_db d -> Opfs.close d
@@ -390,7 +395,13 @@ let transaction t f =
          end);
         raise exn)
 
-let checkpoint t = exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
+(* cljs close-db-aux! clears the pending idle-checkpoint timer; the
+   OCaml timer lives in the storage closure and still fires after the
+   db closes, so the flag makes a scheduled post-close checkpoint a
+   no-op like the cljs cancel. *)
+let checkpoint t =
+  if t.closed then ()
+  else exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
 
 let backup t ~dst_path =
   let escaped = String.concat "''" (String.split_on_char '\'' dst_path) in
@@ -401,20 +412,6 @@ let filename t = t.filename
 let pooled_runtime () = not (is_node ())
 
 (* --- raw db-file ops (cljs storage :export-file/:import-db) --- *)
-
-module U8 = Js.Typed_array.Uint8Array
-
-external u8a_get : U8.t -> int -> int = "" [@@mel.get_index]
-external u8a_set : U8.t -> int -> int -> unit = "" [@@mel.set_index]
-external u8a_length : U8.t -> int = "length" [@@mel.get]
-external new_u8a : int -> U8.t = "Uint8Array" [@@mel.new]
-
-let string_of_u8a a = String.init (u8a_length a) (fun i -> Char.chr (u8a_get a i))
-
-let u8a_of_string s =
-  let a = new_u8a (String.length s) in
-  String.iteri (fun i c -> u8a_set a i (Char.code c)) s;
-  a
 
 (* node fs binary helpers — latin1 encoding keeps the byte string 1:1
    (Buffer.from/toString default to utf8, which would corrupt bytes). *)
@@ -446,7 +443,7 @@ let export_file ~name ~dir ~path =
   else
     match Hashtbl.find_opt pools name with
     | Some pool ->
-        (try Db_worker_effect.pure (string_of_u8a (Opfs.export_file pool path))
+        (try Db_worker_effect.pure (U8a.to_string (Opfs.export_file pool path))
          with Js.Exn.Error e ->
            Db_worker_effect.error (Failure (js_error_message e)))
     | None ->
@@ -466,7 +463,7 @@ let import_db ~name ~dir ~path contents =
     match Hashtbl.find_opt pools name with
     | Some pool ->
         (try
-           ignore (Opfs.import_db pool path (u8a_of_string contents));
+           ignore (Opfs.import_db pool path (U8a.of_string contents));
            Db_worker_effect.pure ()
          with Js.Exn.Error e ->
            Db_worker_effect.error (Failure (js_error_message e)))

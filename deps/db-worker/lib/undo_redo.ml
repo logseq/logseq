@@ -4,7 +4,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 (* op items: [tag payload] pairs from the cljs ops *)
 type undo_item =
@@ -113,16 +112,16 @@ let undo_redo_action_meta (data : (string * Wire.t) list) ~undo : (string * Wire
       tx_meta
   in
   let meta_pairs =
-    [ ( kw "gen-undo-ops?", Wire.Bool false )
-    ; ( kw "persist-op?", Wire.Bool true )
-    ; ( kw "undo?", Wire.Bool undo )
-    ; ( kw "redo?", Wire.Bool (not undo) )
+    [ ( Wire.keyword "gen-undo-ops?", Wire.Bool false )
+    ; ( Wire.keyword "persist-op?", Wire.Bool true )
+    ; ( Wire.keyword "undo?", Wire.Bool undo )
+    ; ( Wire.keyword "redo?", Wire.Bool (not undo) )
     ]
     @ meta_pairs
   in
   let meta_pairs =
     match source_tx_id with
-    | Some v -> (kw "db-sync/source-tx-id", v) :: meta_pairs
+    | Some v -> (Wire.keyword "db-sync/source-tx-id", v) :: meta_pairs
     | None -> meta_pairs
   in
   [ ("tx-meta", Wire.Map meta_pairs) ]
@@ -170,13 +169,13 @@ let empty_stack_result ~undo =
 let wire_of_op_item = function
   | Db_transact data ->
       Wire.List
-        [ kw "frontend.worker.undo-redo/db-transact"
-        ; Wire.Map (List.map (fun (k, v) -> (kw k, v)) data) ]
+        [ Wire.keyword "frontend.worker.undo-redo/db-transact"
+        ; Wire.Map (List.map (fun (k, v) -> (Wire.keyword k, v)) data) ]
   | Record_editor_info info ->
       Wire.List
-        [ kw "frontend.worker.undo-redo/record-editor-info"; info ]
+        [ Wire.keyword "frontend.worker.undo-redo/record-editor-info"; info ]
   | Ui_state s ->
-      Wire.List [ kw "frontend.worker.undo-redo/ui-state"; s ]
+      Wire.List [ Wire.keyword "frontend.worker.undo-redo/ui-state"; s ]
 
 let wire_of_op (op : undo_op) = Wire.List (List.map wire_of_op_item op)
 
@@ -192,7 +191,7 @@ let cursor_block_uuid (info : Wire.t) : string option =
        | _ -> None)
   | _ -> None
 
-(* worker-result helpers: {:applied? bool :reason kw :history-tx-id uuid} *)
+(* worker-result helpers: {:applied? bool :reason Wire.keyword :history-tx-id uuid} *)
 let result_applied (r : (string * Wire.t) list) =
   get_wire_bool "applied?" r = Some true
 
@@ -233,8 +232,8 @@ let rec undo_redo_aux repo ~undo : Wire.t =
        | Ui_state s :: _ ->
            push_opposite_op repo ~undo op;
            Wire.Map
-             [ (kw "undo?", Wire.Bool undo)
-             ; (kw "ui-state-str", s) ]
+             [ (Wire.keyword "undo?", Wire.Bool undo)
+             ; (Wire.keyword "ui-state-str", s) ]
        | _ -> process_db_op repo ~undo op)
   | _ ->
       if empty_stack (if undo then undo_ops else redo_ops) repo then
@@ -266,7 +265,7 @@ and process_db_op repo ~undo (op : undo_op) : Wire.t =
         @ List.filter_map
             (fun k ->
               match data_get k data with
-              | Some v -> Some (kw k, v)
+              | Some v -> Some (Wire.keyword k, v)
               | None -> None)
             [ "db-sync/forward-outliner-ops"; "db-sync/inverse-outliner-ops" ]
       in
@@ -311,10 +310,10 @@ and apply_history_action_ repo ~undo (op : undo_op) (tx_meta : (Wire.t * Wire.t)
              | None -> None
            in
            Wire.Map
-             ((kw "undo?", Wire.Bool undo)
-              :: (kw "editor-cursors", Wire.List cursors)
+             ((Wire.keyword "undo?", Wire.Bool undo)
+              :: (Wire.keyword "editor-cursors", Wire.List cursors)
               :: (match block_content with
-                  | Some c -> [ (kw "block-content", Wire.String c) ]
+                  | Some c -> [ (Wire.keyword "block-content", Wire.String c) ]
                   | None -> []))
          else if skippable_worker_result ~undo worker_result then
            undo_redo_aux repo ~undo
@@ -372,15 +371,15 @@ let record_ui_state repo (ui_state_str : Wire.t) =
 
 let get_debug_state repo : Wire.t =
   Wire.Map
-    [ ( kw "undo-ops",
+    [ ( Wire.keyword "undo-ops",
         Wire.List
           (List.map wire_of_op
              (Option.value (Hashtbl.find_opt undo_ops repo) ~default:[])) )
-    ; ( kw "redo-ops",
+    ; ( Wire.keyword "redo-ops",
         Wire.List
           (List.map wire_of_op
              (Option.value (Hashtbl.find_opt redo_ops repo) ~default:[])) )
-    ; ( kw "pending-editor-info",
+    ; ( Wire.keyword "pending-editor-info",
         Option.value
           (Hashtbl.find_opt pending_editor_info repo)
           ~default:Wire.Nil )
@@ -457,7 +456,7 @@ let gen_undo_ops repo ~(tx_data : datom list) ~(tx_meta : (string * Wire.t) list
       ; ( "tx-meta",
           Wire.Map
             (List.map
-               (fun (k, v) -> (kw k, v))
+               (fun (k, v) -> (Wire.keyword k, v))
                (List.filter
                   (fun (k, _) -> k <> "outliner-ops")
                   tx_meta)) )

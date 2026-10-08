@@ -57,11 +57,11 @@ let alphabet =
 
 (* db-ident/nano-id *)
 let nano_id ?(size = 21) () : string =
-  let bytes = Crypto.random_bytes size in
+  let raw = Crypto.random_bytes size in
   let buf = Buffer.create size in
   String.iter
     (fun c -> Buffer.add_char buf alphabet.[Char.code c land 0x3f])
-    bytes;
+    raw;
   Buffer.contents buf
 
 (* db-ident/normalize-ident-name-part *)

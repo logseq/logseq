@@ -317,6 +317,43 @@
         (is (nil? (:block/parent page2')))
         (is (nil? (:block/order page2')))))))
 
+(defn- child-titles
+  [conn parent]
+  (->> (:block/_parent (d/entity @conn (:db/id parent)))
+       ldb/sort-by-order
+       (mapv :block/title)))
+
+(defn- nested-outline-conn
+  "Page with a (children a1; a2 with child a2x), b, c."
+  []
+  (db-test/create-conn-with-blocks
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "a"
+               :build/children [{:block/title "a1"}
+                                {:block/title "a2"
+                                 :build/children [{:block/title "a2x"}]}]}
+              {:block/title "b"}
+              {:block/title "c"}]}]))
+
+(deftest delete-blocks-deletes-grandchild-when-selected-page-ancestor-does-not-retract-it
+  (testing "Page A contains page B contains X; deleting A+X still deletes X"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page-a"}
+                  :blocks [{:block/title "a-child"}]}
+                 {:page {:block/title "page-b"}
+                  :blocks [{:block/title "x"}]}])
+          page-a (ldb/get-page @conn "page-a")
+          page-b (ldb/get-page @conn "page-b")
+          _ (d/transact! conn [{:db/id (:db/id page-b)
+                                :block/order "a1"
+                                :block/parent (:db/id page-a)}])
+          x (db-test/find-block-by-content @conn "x")]
+      (outliner-core/delete-blocks! conn [page-a x] {})
+      (is (nil? (db-test/find-block-by-content @conn "x")))
+      (is (some? (ldb/get-page @conn "page-a")))
+      (is (nil? (:block/parent (ldb/get-page @conn "page-a"))))
+      (is (some? (ldb/get-page @conn "page-b"))))))
+
 (deftest delete-blocks-hard-retracts-subtree
   (let [user-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
@@ -450,6 +487,28 @@
     (is (thrown-with-msg? js/Error #"Built-in.*can't be modified"
           (db-test/silence-stderr
             (outliner-core/move-blocks! conn [placeholder] target {:sibling? true}))))))
+
+(deftest moves-keep-selected-descendants-under-their-ancestor
+  (doseq [[operation reversed? expected-order]
+          [[:move false ["b" "a" "c"]]
+           [:move true ["b" "a" "c"]]
+           [:up false ["a" "b" "c"]]
+           [:down false ["b" "a" "c"]]]]
+    (testing (str operation ", reversed selection: " reversed?)
+      (let [conn (nested-outline-conn)
+            page (db-test/find-page-by-title @conn "page1")
+            a (db-test/find-block-by-content @conn "a")
+            a2 (db-test/find-block-by-content @conn "a2")
+            a2x (db-test/find-block-by-content @conn "a2x")
+            b (db-test/find-block-by-content @conn "b")
+            selection (if reversed? [a2x a] [a a2x])]
+        (case operation
+          :move (outliner-core/move-blocks! conn selection b {:sibling? true})
+          :up (outliner-core/move-blocks-up-down! conn selection true)
+          :down (outliner-core/move-blocks-up-down! conn selection false))
+        (is (= expected-order (child-titles conn page)))
+        (is (= ["a1" "a2"] (child-titles conn a)))
+        (is (= ["a2x"] (child-titles conn a2)))))))
 
 (deftest move-blocks-protects-comment-blocks
   (let [conn (db-test/create-conn-with-blocks

@@ -8,7 +8,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 (* cljs fail!/handler fail — Dispatcher.Exn_info carries (message, data) *)
 let fail msg data = raise (Dispatcher.Exn_info (msg, data))
@@ -24,9 +23,9 @@ type watch =
   | Watch_keys of Wire.t list
 
 let wkey (parts : Wire.t list) : Wire.t = Wire.Array parts
-let wk1 (tag : string) (a : Wire.t) : Wire.t = wkey [ kw tag; a ]
+let wk1 (tag : string) (a : Wire.t) : Wire.t = wkey [ Wire.keyword tag; a ]
 let watch_entity (u : string) : Wire.t = wk1 "entity" (Wire.Uuid u)
-let watch_attr (a : string) : Wire.t = wk1 "attr" (kw a)
+let watch_attr (a : string) : Wire.t = wk1 "attr" (Wire.keyword a)
 let watch_union (a : watch) (b : watch) : watch =
   match a, b with
   | Watch_all, _ | _, Watch_all -> Watch_all
@@ -42,7 +41,7 @@ let watch_of_ents (uuids : string list) : watch =
    arrive as the datascript/Entity tag used elsewhere in this lib. *)
 let rec invalid_resource_key_value (v : Wire.t) : Wire.t option =
   match v with
-  | Wire.Tagged ("datascript/Entity", _) -> Some (kw "entity")
+  | Wire.Tagged ("datascript/Entity", _) -> Some (Wire.keyword "entity")
   | Wire.Map kvs ->
       List.find_map
         (fun (k, x) ->
@@ -59,31 +58,31 @@ let require_shape ~(shape : string) ~(size : int) (key : Wire.t list) : unit =
   | Wire.Keyword tag :: _ when tag = shape && List.length key = size -> ()
   | _ ->
       fail "Invalid renderer resource key"
-        [ (kw "resource-key", Wire.Array key)
-        ; (kw "expected-tag", kw shape)
-        ; (kw "expected-size", Wire.Int size) ]
+        [ (Wire.keyword "resource-key", Wire.Array key)
+        ; (Wire.keyword "expected-tag", Wire.keyword shape)
+        ; (Wire.keyword "expected-size", Wire.Int size) ]
 
 let require_uuid (label : string) (v : Wire.t) : string =
   match v with
   | Wire.Uuid u -> u
-  | _ -> fail "Invalid renderer resource UUID" [ (kw label, v) ]
+  | _ -> fail "Invalid renderer resource UUID" [ (Wire.keyword label, v) ]
 
 let entity_by_uuid db (label : string) (uuid : string) : entity =
   match entity db (Lookup_ref ("block/uuid", Uuid uuid)) with
   | Some e -> e
-  | None -> fail "Missing renderer resource entity" [ (kw label, Wire.Uuid uuid) ]
+  | None -> fail "Missing renderer resource entity" [ (Wire.keyword label, Wire.Uuid uuid) ]
 
 let entity_uuid db (eid : entity_id) : string =
   match Render_snapshot.eavt_scalar db eid "block/uuid" with
   | Some (Uuid u) -> u
-  | _ -> fail "Renderer resource row has no UUID" [ (kw "db-id", Wire.Int eid) ]
+  | _ -> fail "Renderer resource row has no UUID" [ (Wire.keyword "db-id", Wire.Int eid) ]
 
 let basis_rev db = Render_snapshot.render_basis_rev db
 
 (* {uuid -> block-wire} -> {[:block uuid] {:value block}} *)
 let block_slots (blocks : (Wire.t * Wire.t) list) : (Wire.t * Wire.t) list =
   List.map
-    (fun (u, b) -> (wkey [ kw "block"; u ], Wire.Map [ (kw "value", b) ]))
+    (fun (u, b) -> (wkey [ Wire.keyword "block"; u ], Wire.Map [ (Wire.keyword "value", b) ]))
     blocks
 
 let items_wire (rows : Endpoint_block.membership_child list) : Wire.t =
@@ -100,8 +99,8 @@ let children_slots
     : (Wire.t * Wire.t) list =
   List.map
     (fun (u, (tx_id, rows)) ->
-      ( wkey [ kw "children"; Wire.Uuid u ]
-      , Wire.Map [ (kw "tx-id", Wire.Int tx_id); (kw "items", items_wire rows) ]
+      ( wkey [ Wire.keyword "children"; Wire.Uuid u ]
+      , Wire.Map [ (Wire.keyword "tx-id", Wire.Int tx_id); (Wire.keyword "items", items_wire rows) ]
       ))
     children
 
@@ -129,12 +128,12 @@ let sidebar_page_summary (page : entity) : Wire.t =
     List.filter_map
       (fun a ->
         match get a with
-        | Some v -> Some (kw a, Ds_wire.transit_of_value v)
+        | Some v -> Some (Wire.keyword a, Ds_wire.transit_of_value v)
         | None -> None)
       [ "block/uuid"; "block/title"; "block/raw-title"; "block/name"
       ; "block/journal-day"; "logseq.property/icon"; "logseq.property.asset/type" ]
   in
-  let pairs = (kw "db/id", Wire.Int page.id) :: pairs in
+  let pairs = (Wire.keyword "db/id", Wire.Int page.id) :: pairs in
   let tags =
     Ldb.ref_ents page "block/tags"
     |> List.map (fun (tag : entity) ->
@@ -142,15 +141,15 @@ let sidebar_page_summary (page : entity) : Wire.t =
              (List.filter_map
                 (fun a ->
                   match a with
-                  | "db/id" -> Some (kw a, Wire.Int tag.id)
+                  | "db/id" -> Some (Wire.keyword a, Wire.Int tag.id)
                   | _ -> (
                       match Ldb.value tag a with
-                      | Some v -> Some (kw a, Ds_wire.transit_of_value v)
+                      | Some v -> Some (Wire.keyword a, Ds_wire.transit_of_value v)
                       | None -> None))
                 [ "db/id"; "db/ident"; "logseq.property/icon" ]))
   in
   Wire.Map
-    (if tags = [] then pairs else pairs @ [ (kw "block/tags", Wire.Array tags) ])
+    (if tags = [] then pairs else pairs @ [ (Wire.keyword "block/tags", Wire.Array tags) ])
 
 let favorites_page_name = "$$$favorites"
 
@@ -203,7 +202,7 @@ let render_recent_pages db key _runtime =
     | Wire.Array ids
       when List.for_all (function Wire.Int _ -> true | _ -> false) ids ->
         List.map (function Wire.Int i -> i | _ -> 0) ids
-    | v -> fail "Invalid recent page IDs" [ (kw "page-ids", v) ]
+    | v -> fail "Invalid recent page IDs" [ (Wire.keyword "page-ids", v) ]
   in
   let pages =
     page_ids
@@ -228,7 +227,7 @@ let render_page_identity db key _runtime =
     match List.nth key 1 with
     | (Wire.Uuid _) as v -> v
     | Wire.String s when Unicode.trim s <> "" -> Wire.String s
-    | v -> fail "Invalid page identity lookup" [ (kw "lookup", v) ]
+    | v -> fail "Invalid page identity lookup" [ (Wire.keyword "lookup", v) ]
   in
   let watch_lookup =
     match lookup with
@@ -251,7 +250,7 @@ let wire_qualified_keyword = function
 let render_entity_title db key _runtime =
   let ident = List.nth key 1 in
   if not (wire_qualified_keyword ident) then
-    fail "Invalid entity title lookup" [ (kw "ident", ident) ];
+    fail "Invalid entity title lookup" [ (Wire.keyword "ident", ident) ];
   let entity =
     match ident with
     | Wire.Keyword s -> Ldb.ent_of_ref db (Ident s)
@@ -259,8 +258,8 @@ let render_entity_title db key _runtime =
   in
   let watch =
     match Option.bind entity (fun e -> Ldb.value e "block/uuid") with
-    | Some (Uuid u) -> [ wk1 "attr" (kw "db/ident"); watch_entity u ]
-    | _ -> [ wk1 "attr" (kw "db/ident") ]
+    | Some (Uuid u) -> [ wk1 "attr" (Wire.keyword "db/ident"); watch_entity u ]
+    | _ -> [ wk1 "attr" (Wire.keyword "db/ident") ]
   in
   let value =
     match Option.bind entity (fun e -> Ldb.value e "block/title") with
@@ -280,59 +279,21 @@ let render_page_preview_source db key _runtime =
   ( Watch_keys [ watch_entity page_uuid; watch_attr "block/alias" ]
   , Wire.Uuid (entity_uuid db source.id) )
 
-(* breadcrumb-ref-titles — refs of the block plus each crumb map. *)
-let breadcrumb_ref_titles (block : entity)
-    (crumbs : (attr * value) list list) : (Wire.t * Wire.t) list =
-  let titles = Hashtbl.create 17 in
-  let add_ref (uuid_v, title_v) =
-    match uuid_v with
-    | Some (Uuid u) -> (
-        match title_v with
-        | Some (String t) -> Hashtbl.replace titles u t
-        | _ ->
-            fail "Invalid breadcrumb reference title"
-              [ (kw "ref-uuid", Wire.Uuid u)
-              ; ( kw "title"
-                , match title_v with
-                  | Some v -> Ds_wire.transit_of_value v
-                  | None -> Wire.Nil ) ])
-    | _ -> ()
-  in
-  (* entity block refs *)
-  List.iter
-    (fun (r : entity) ->
-      add_ref (Ldb.value r "block/uuid", Ldb.value r "block/title"))
-    (Ldb.ref_ents block "block/refs");
-  (* crumb map refs: :block/refs -> Vector of Map values *)
-  List.iter
-    (fun (crumb : (attr * value) list) ->
-      match List.assoc_opt "block/refs" crumb with
-      | Some (Vector refs) | Some (List refs) | Some (Set refs) ->
-          List.iter
-            (fun rv ->
-              match rv with
-              | Map kvs ->
-                  add_ref
-                    ( List.assoc_opt (Keyword "block/uuid") kvs
-                    , List.assoc_opt (Keyword "block/title") kvs )
-              | _ -> ())
-            refs
-      | _ -> ())
-    crumbs;
-  Hashtbl.fold (fun u t acc -> (Wire.Uuid u, Wire.String t) :: acc) titles []
+(* breadcrumb-ref-titles — moved to Block_breadcrumb (cljs handler
+   move); covers title-embedded [[uuid]] refs transitively. *)
 
 let empty_block_breadcrumb block_uuid =
   Wire.Map
-    [ (kw "target-uuid", Wire.Uuid block_uuid)
-    ; (kw "ancestor-uuids", Wire.Array [])
-    ; (kw "ancestors", Wire.Array [])
-    ; (kw "ref-titles", Wire.Map []) ]
+    [ (Wire.keyword "target-uuid", Wire.Uuid block_uuid)
+    ; (Wire.keyword "ancestor-uuids", Wire.Array [])
+    ; (Wire.keyword "ancestors", Wire.Array [])
+    ; (Wire.keyword "ref-titles", Wire.Map []) ]
 
 let render_block_breadcrumb db key _runtime =
   let block_uuid = require_uuid "block-uuid" (List.nth key 1) in
   (match List.nth key 2 with
    | Wire.Int n when n > 0 -> ()
-   | v -> fail "Invalid breadcrumb load depth" [ (kw "load-depth", v) ]);
+   | v -> fail "Invalid breadcrumb load depth" [ (Wire.keyword "load-depth", v) ]);
   let load_depth =
     match List.nth key 2 with Wire.Int n -> n | _ -> 0
   in
@@ -350,34 +311,42 @@ let render_block_breadcrumb db key _runtime =
         | Some (Uuid u) -> u
         | _ ->
             fail "Invalid breadcrumb ancestor UUID"
-              [ (kw "block-uuid", Wire.Uuid block_uuid) ]
+              [ (Wire.keyword "block-uuid", Wire.Uuid block_uuid) ]
       in
       let ancestor_uuids = List.map crumb_uuid crumbs in
-      let ref_titles = breadcrumb_ref_titles block crumbs in
+      let ref_titles =
+        Block_breadcrumb.breadcrumb_ref_titles db
+          ~nodes:[ Entity_view.of_entity block ]
+          ~crumbs
+      in
       let watch_uuids =
         block_uuid :: ancestor_uuids
-        @ List.map (fun (k, _) -> match k with Wire.Uuid u -> u | _ -> "") ref_titles
+        @ List.map fst ref_titles
         |> List.filter (fun u -> u <> "")
       in
       ( Watch_keys
           (List.map watch_entity (List.sort_uniq String.compare watch_uuids))
       , Wire.Map
-          [ (kw "target-uuid", Wire.Uuid block_uuid)
-          ; ( kw "ancestor-uuids"
+          [ (Wire.keyword "target-uuid", Wire.Uuid block_uuid)
+          ; ( Wire.keyword "ancestor-uuids"
             , Wire.Array (List.map (fun u -> Wire.Uuid u) ancestor_uuids) )
-          ; ( kw "ancestors"
+          ; ( Wire.keyword "ancestors"
             , Wire.Array
                 (List.map
                    (fun (crumb : (attr * value) list) ->
                      Wire.Map
                        (List.map
-                          (fun (a, v) -> (kw a, Ds_wire.transit_of_value v))
+                          (fun (a, v) -> (Wire.keyword a, Ds_wire.transit_of_value v))
                           crumb))
                    crumbs) )
-          ; (kw "ref-titles", Wire.Map ref_titles) ] )
+          ; ( Wire.keyword "ref-titles"
+            , Wire.Map
+                (List.map
+                   (fun (u, t) -> (Wire.Uuid u, Wire.String t))
+                   ref_titles) ) ] )
 
 let render_journals db _key _runtime =
-  ( Watch_keys [ wkey [ kw "journals" ] ]
+  ( Watch_keys [ wkey [ Wire.keyword "journals" ] ]
   , Wire.Array
       (List.map (fun (j : entity) -> Wire.Uuid (uuid_of j))
          (List.of_seq (Ldb.get_latest_journals db))) )
@@ -412,7 +381,7 @@ let render_recycle_roots db _key _runtime =
         | _ -> [])
     | _ -> []
   in
-  ( Watch_keys [ wkey [ kw "recycle-roots" ] ]
+  ( Watch_keys [ wkey [ Wire.keyword "recycle-roots" ] ]
   , Wire.Array
       (List.map
          (fun u ->
@@ -447,7 +416,7 @@ let render_property_choices db key _runtime =
   in
   ( Watch_keys
       ([ watch_entity property_uuid
-       ; wk1 "property-membership" (kw "block/closed-value-property") ]
+       ; wk1 "property-membership" (Wire.keyword "block/closed-value-property") ]
        @ List.map (fun c -> watch_entity (choice_uuid c)) choices)
   , Wire.Array choices )
 
@@ -520,10 +489,10 @@ let summarize_reactions (reactions : Wire.t list) (current_user_uuid : string op
     (List.map
        (fun (emoji, count, reacted, usernames) ->
          Wire.Map
-           [ (kw "emoji-id", Wire.String emoji)
-           ; (kw "count", Wire.Int count)
-           ; (kw "reacted-by-me?", Wire.Bool reacted)
-           ; ( kw "usernames"
+           [ (Wire.keyword "emoji-id", Wire.String emoji)
+           ; (Wire.keyword "count", Wire.Int count)
+           ; (Wire.keyword "reacted-by-me?", Wire.Bool reacted)
+           ; ( Wire.keyword "usernames"
              , if usernames = [] then Wire.Nil
                else Wire.Array (List.map (fun u -> Wire.String u) usernames) )
            ])
@@ -535,7 +504,7 @@ let render_block_reactions db key _runtime =
     match List.nth key 2 with
     | Wire.Uuid u -> Some u
     | Wire.Nil -> None
-    | v -> fail "Invalid reaction user UUID" [ (kw "current-user-uuid", v) ]
+    | v -> fail "Invalid reaction user UUID" [ (Wire.keyword "current-user-uuid", v) ]
   in
   let target = entity_by_uuid db "target-uuid" target_uuid in
   let reactions = Endpoint_block.block_reactions db target.id in
@@ -662,9 +631,9 @@ let render_block_comment_threads db key _runtime =
                match Plain_value.map_get "block/uuid" kvs with
                | Some (Wire.Uuid u) -> Wire.Uuid u
                | _ -> fail "Invalid renderer resource UUID"
-                        [ (kw "comment-thread-uuid", Wire.Nil) ])
+                        [ (Wire.keyword "comment-thread-uuid", Wire.Nil) ])
            | _ -> fail "Invalid renderer resource UUID"
-                    [ (kw "comment-thread-uuid", m) ])
+                    [ (Wire.keyword "comment-thread-uuid", m) ])
   in
   ( Watch_keys [ wk1 "comments" (Wire.Uuid block_uuid) ]
   , Wire.Array threads )
@@ -679,7 +648,7 @@ let direct_child_entities db (uuid : string) : entity list =
             (fun item ->
               match item with
               | Wire.Array (Wire.Uuid u :: _) -> entity_by_uuid db "child-uuid" u
-              | _ -> fail "Invalid renderer resource UUID" [ (kw "child-uuid", item) ])
+              | _ -> fail "Invalid renderer resource UUID" [ (Wire.keyword "child-uuid", item) ])
             items
       | _ -> [])
   | _ -> []
@@ -707,7 +676,7 @@ let render_block_comment_summary db key _runtime =
   let thread = entity_by_uuid db "thread-uuid" thread_uuid in
   if not (comment_thread thread) then
     fail "Renderer resource entity is not a comment thread"
-      [ (kw "thread-uuid", Wire.Uuid thread_uuid) ];
+      [ (Wire.keyword "thread-uuid", Wire.Uuid thread_uuid) ];
   let comments = direct_child_entities db thread_uuid in
   (* epoch-ms reads back as Int64/Float; Instant only for legacy
      ~t-decoded data *)
@@ -719,14 +688,14 @@ let render_block_comment_summary db key _runtime =
     | None -> None
     | Some v ->
         fail "Invalid comment creation time"
-          [ ( kw "comment-uuid"
+          [ ( Wire.keyword "comment-uuid"
             , Option.value
                 (Option.map (fun u -> Wire.Uuid u)
                    (match Ldb.value e "block/uuid" with
                     | Some (Uuid u) -> Some u
                     | _ -> None))
                 ~default:Wire.Nil )
-          ; (kw "created-at", Ds_wire.transit_of_value v) ]
+          ; (Wire.keyword "created-at", Ds_wire.transit_of_value v) ]
   in
   List.iter (fun c -> ignore (created_at_ms c)) comments;
   let sorted =
@@ -747,12 +716,12 @@ let render_block_comment_summary db key _runtime =
       (wk1 "children" (Wire.Uuid thread_uuid)
        :: List.map watch_entity (List.sort_uniq String.compare watch_uuids))
   , Wire.Map
-      [ (kw "count", Wire.Int (List.length comments))
-      ; ( kw "latest-author"
+      [ (Wire.keyword "count", Wire.Int (List.length comments))
+      ; ( Wire.keyword "latest-author"
         , match latest with
           | Some l -> comment_author_title l
           | None -> Wire.Nil )
-      ; ( kw "latest-created-at"
+      ; ( Wire.keyword "latest-created-at"
         , match latest with
           | Some l -> (
               match Ldb.value l "block/created-at" with
@@ -771,18 +740,18 @@ let render_block_task_time db key _runtime =
   in
   ( Watch_keys [ wk1 "task-time" (Wire.Uuid block_uuid) ]
   , Wire.Map
-      [ ( kw "history"
+      [ ( Wire.keyword "history"
         , Wire.Array
             (List.map
                (fun item ->
                  match item with
                  | Wire.Map kvs ->
                      Wire.Map
-                       [ ( kw "created-at"
+                       [ ( Wire.keyword "created-at"
                          , Option.value
                              (Plain_value.map_get "block/created-at" kvs)
                              ~default:Wire.Nil )
-                       ; ( kw "status-uuid"
+                       ; ( Wire.keyword "status-uuid"
                          , Wire.Uuid
                              (require_uuid "status-uuid"
                                 (Option.value
@@ -792,18 +761,18 @@ let render_block_task_time db key _runtime =
                                    ~default:Wire.Nil)) ) ]
                  | _ -> item)
                history_items) )
-      ; (kw "seconds", Wire.Int seconds) ] )
+      ; (Wire.keyword "seconds", Wire.Int seconds) ] )
 
 let render_route_block db key _runtime =
   let page_lookup =
     match List.nth key 1 with
     | Wire.String s when Unicode.trim s <> "" -> s
-    | v -> fail "Invalid route page lookup" [ (kw "page-lookup", v) ]
+    | v -> fail "Invalid route page lookup" [ (Wire.keyword "page-lookup", v) ]
   in
   let route_name =
     match List.nth key 2 with
     | Wire.String s when Unicode.trim s <> "" -> s
-    | v -> fail "Invalid block route name" [ (kw "route-name", v) ]
+    | v -> fail "Invalid block route name" [ (Wire.keyword "route-name", v) ]
   in
   let normalized = Ldb.page_name_sanity_lc page_lookup in
   let resolution = Db_content.block_route_resolution db (String page_lookup) route_name in
@@ -861,16 +830,16 @@ let render_page_membership db key _runtime =
       require_shape ~shape:"page-membership" ~size:3 key;
       if not (Ldb.is_property page) then
         fail "Page membership target is not a property"
-          [ (kw "page-uuid", Wire.Uuid page_uuid) ];
+          [ (Wire.keyword "page-uuid", Wire.Uuid page_uuid) ];
       let property_ident =
         match Ldb.ident_of page with
         | Some i -> i
-        | None -> fail "Invalid view" [ (kw "page-uuid", Wire.Uuid page_uuid) ]
+        | None -> fail "Invalid view" [ (Wire.keyword "page-uuid", Wire.Uuid page_uuid) ]
       in
       ( Watch_keys
           [ watch_entity page_uuid
           ; wk1 "children" (Wire.Uuid page_uuid)
-          ; wk1 "property-membership" (kw property_ident) ]
+          ; wk1 "property-membership" (Wire.keyword property_ident) ]
       , Wire.Array
           (List.filter_map
              (fun (c : entity) ->
@@ -884,7 +853,7 @@ let render_page_membership db key _runtime =
        | Some t when t = Ldb.quick_add_page_name -> ()
        | _ ->
            fail "Page membership target is not quick add"
-             [ (kw "page-uuid", Wire.Uuid page_uuid) ]);
+             [ (Wire.keyword "page-uuid", Wire.Uuid page_uuid) ]);
       let current_user_uuid = require_uuid "current-user-uuid" (List.nth key 3) in
       let current_user = entity_by_uuid db "current-user-uuid" current_user_uuid in
       ( Watch_keys
@@ -910,7 +879,7 @@ let render_page_membership db key _runtime =
              children) )
   | k ->
       fail "Unsupported page membership kind"
-        [ (kw "membership-kind", k); (kw "resource-key", Wire.Array key) ]
+        [ (Wire.keyword "membership-kind", k); (Wire.keyword "resource-key", Wire.Array key) ]
 
 (* ==================== property.cljs ==================== *)
 
@@ -936,7 +905,7 @@ let require_display_context (context : Wire.t) : (string * bool) list =
           | _ -> assert false)
         kvs
   | _ ->
-      fail "Invalid block display properties context" [ (kw "context", context) ]
+      fail "Invalid block display properties context" [ (Wire.keyword "context", context) ]
 
 (* normalize-entity-value — returns (normalized wire, uuid list) *)
 let rec normalize_entity_value (v : Wire.t) : Wire.t * string list =
@@ -945,7 +914,7 @@ let rec normalize_entity_value (v : Wire.t) : Wire.t * string list =
       match Plain_value.map_get "block/uuid" kvs with
       | Some (Wire.Uuid u) -> (Wire.Uuid u, [ u ])
       | _ ->
-          fail "Renderer property value has no UUID" [ (kw "value", v) ])
+          fail "Renderer property value has no UUID" [ (Wire.keyword "value", v) ])
   | Wire.Set xs ->
       let items, uuids = normalize_coll xs in
       (Wire.Set items, uuids)
@@ -983,10 +952,10 @@ let normalize_display_property_row (row : Wire.t) : Wire.t * Wire.t list =
             | Some (Wire.Keyword _ as i) -> i
             | _ ->
                 fail "Renderer property has no ident"
-                  [ (kw "property-uuid", Wire.Uuid property_uuid) ])
+                  [ (Wire.keyword "property-uuid", Wire.Uuid property_uuid) ])
         | _ ->
             fail "Renderer property has no ident"
-              [ (kw "property-uuid", Wire.Uuid property_uuid) ]
+              [ (Wire.keyword "property-uuid", Wire.Uuid property_uuid) ]
       in
       let closed_value_uuids =
         match property with
@@ -1012,11 +981,11 @@ let normalize_display_property_row (row : Wire.t) : Wire.t * Wire.t list =
       let normalized_value, value_uuids = normalize_entity_value value in
       let row' =
         Wire.Map
-          ([ (kw "property-uuid", Wire.Uuid property_uuid)
-           ; (kw "property-ident", property_ident)
-           ; (kw "value", normalized_value) ]
+          ([ (Wire.keyword "property-uuid", Wire.Uuid property_uuid)
+           ; (Wire.keyword "property-ident", property_ident)
+           ; (Wire.keyword "value", normalized_value) ]
            @ if closed_value_uuids = [] then []
-             else [ (kw "closed-value-uuids", Wire.Array closed_value_uuids) ])
+             else [ (Wire.keyword "closed-value-uuids", Wire.Array closed_value_uuids) ])
       in
       let watch =
         watch_entity property_uuid
@@ -1025,7 +994,7 @@ let normalize_display_property_row (row : Wire.t) : Wire.t * Wire.t list =
               @ List.map (function Wire.Uuid u -> u | _ -> "") closed_value_uuids)
       in
       (row', watch)
-  | _ -> fail "Invalid display property row" [ (kw "row", row) ]
+  | _ -> fail "Invalid display property row" [ (Wire.keyword "row", row) ]
 
 let normalize_display_property_rows (rows : Wire.t list) : Wire.t list * Wire.t list =
   List.fold_left
@@ -1078,17 +1047,17 @@ let render_block_display_properties db key _runtime =
   in
   ( Watch_keys
       (wk1 "display-properties" (Wire.Uuid block_uuid)
-       :: wkey [ kw "class-tree" ]
-       :: wkey [ kw "property-config" ]
-       :: wk1 "property-membership" (kw "block/closed-value-property")
+       :: wkey [ Wire.keyword "class-tree" ]
+       :: wkey [ Wire.keyword "property-config" ]
+       :: wk1 "property-membership" (Wire.keyword "block/closed-value-property")
        :: (full_watch @ hidden_watch))
   , Wire.Map
-      [ (kw "full-properties", Wire.Array full_properties)
-      ; (kw "hidden-properties", Wire.Array hidden_properties)
-      ; ( kw "description-property-uuid"
+      [ (Wire.keyword "full-properties", Wire.Array full_properties)
+      ; (Wire.keyword "hidden-properties", Wire.Array hidden_properties)
+      ; ( Wire.keyword "description-property-uuid"
         , optional_entity_uuid "description-property-uuid"
             (result_get "description-property") )
-      ; ( kw "class-properties-property-uuid"
+      ; ( Wire.keyword "class-properties-property-uuid"
         , optional_entity_uuid "class-properties-property-uuid"
             (result_get "class-properties-property") ) ] )
 
@@ -1101,8 +1070,9 @@ let render_block_bidirectional_properties db key _runtime =
       (List.map
          (fun (g : Ldb.bidirectional_group) ->
            Wire.Map
-             [ (kw "class-uuid", Wire.Uuid (entity_uuid db g.class_.id))
-             ; ( kw "entity-uuids"
+             [ (Wire.keyword "class-uuid", Wire.Uuid (entity_uuid db g.class_.id))
+             ; (Wire.keyword "title", Wire.String g.title)
+             ; ( Wire.keyword "entity-uuids"
                , Wire.Array
                    (List.map (fun (e : entity) -> Wire.Uuid (entity_uuid db e.id))
                       g.entities) ) ])
@@ -1268,7 +1238,7 @@ let resolve_custom_query_input (db : db) (input : Wire.t)
          raise
            (Dispatcher.Exn_info
               ( "Query block input requires :current-block-uuid"
-              , [ (kw "input", Ds_wire.transit_of_value resolved_input) ] ))
+              , [ (Wire.keyword "input", Ds_wire.transit_of_value resolved_input) ] ))
    | _ -> ());
   match resolved_input, today_day with
   | Keyword "today", Some day ->
@@ -1472,8 +1442,8 @@ type dep_watch =
 let dependency_watch (d : dep_watch) : watch =
   let keys =
     List.map watch_attr d.dw_attrs
-    @ List.map (fun a -> wk1 "task-attr" (kw a)) d.dw_task_attrs
-    @ (if d.dw_tasks then [ wkey [ kw "tasks" ] ] else [])
+    @ List.map (fun a -> wk1 "task-attr" (Wire.keyword a)) d.dw_task_attrs
+    @ (if d.dw_tasks then [ wkey [ Wire.keyword "tasks" ] ] else [])
   in
   if d.dw_opaque || keys = [] then Watch_all else Watch_keys keys
 
@@ -1488,11 +1458,11 @@ let query_watch_keys db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
       { dw_attrs = attrs; dw_task_attrs = task_attrs; dw_tasks = tasks; dw_opaque = opaque }
     else
       let title =
-        match List.assoc_opt (kw "current-page-title") spec_kvs with
+        match List.assoc_opt (Wire.keyword "current-page-title") spec_kvs with
         | Some (Wire.String s) -> Some s
         | _ -> None
       and day =
-        match List.assoc_opt (kw "today-day") spec_kvs with
+        match List.assoc_opt (Wire.keyword "today-day") spec_kvs with
         | Some (Wire.Int n) ->
             Time.local_date_of_journal_day (Time.local_tz ()) n
         | _ -> None
@@ -1525,7 +1495,7 @@ let require_query_spec (spec : Wire.t) : string * (Wire.t * Wire.t) list =
   match spec with
   | Wire.Map kvs -> (
       let kind =
-        match List.assoc_opt (kw "kind") kvs with
+        match List.assoc_opt (Wire.keyword "kind") kvs with
         | Some (Wire.Keyword k) -> k
         | _ -> ""
       in
@@ -1545,8 +1515,8 @@ let require_query_spec (spec : Wire.t) : string * (Wire.t * Wire.t) list =
               kvs
         | None -> false
       in
-      let get k = List.assoc_opt (kw k) kvs in
-      let present k = List.mem_assoc (kw k) kvs in
+      let get k = List.assoc_opt (Wire.keyword k) kvs in
+      let present k = List.mem_assoc (Wire.keyword k) kvs in
       let opt_ok k check = (not (present k)) || check (get k) in
       let ok =
         Option.is_some allowed && keys_ok
@@ -1583,9 +1553,9 @@ let require_query_spec (spec : Wire.t) : string * (Wire.t * Wire.t) list =
         | _ -> false
       in
       if not ok then
-        fail "Invalid renderer query resource" [ (kw "query-spec", spec) ]
+        fail "Invalid renderer query resource" [ (Wire.keyword "query-spec", spec) ]
       else (kind, kvs))
-  | _ -> fail "Invalid renderer query resource" [ (kw "query-spec", spec) ]
+  | _ -> fail "Invalid renderer query resource" [ (Wire.keyword "query-spec", spec) ]
 
 (* quoted-query-text — "\"...\"" -> inner string *)
 let quoted_query_text (s : string) : string option =
@@ -1646,11 +1616,11 @@ let rec normalize_query_cell (w : Wire.t) db : Wire.t =
           | Some (Uuid u) -> Wire.Uuid u
           | _ ->
               Wire.Map
-                ([ (kw "db/id", Wire.Int eid) ]
+                ([ (Wire.keyword "db/id", Wire.Int eid) ]
                  @ (match Ldb.ident_of e with
-                    | Some i -> [ (kw "db/ident", kw i) ]
+                    | Some i -> [ (Wire.keyword "db/ident", Wire.keyword i) ]
                     | None -> [])))
-      | None -> Wire.Map [ (kw "db/id", Wire.Int eid) ])
+      | None -> Wire.Map [ (Wire.keyword "db/id", Wire.Int eid) ])
   | Wire.Map kvs -> (
       match Plain_value.map_get "block/uuid" kvs with
       | Some (Wire.Uuid u) -> Wire.Uuid u
@@ -1784,12 +1754,12 @@ let query_error_value ?data (msg : string) : Wire.t =
   let error_kvs =
     match data with
     | Some d ->
-        [ (kw "message", Wire.String msg); (kw "data", d) ]
-    | None -> [ (kw "message", Wire.String msg) ]
+        [ (Wire.keyword "message", Wire.String msg); (Wire.keyword "data", d) ]
+    | None -> [ (Wire.keyword "message", Wire.String msg) ]
   in
   Wire.Map
-    [ (kw "rows", Wire.Array [])
-    ; (kw "error", Wire.Map error_kvs) ]
+    [ (Wire.keyword "rows", Wire.Array [])
+    ; (Wire.keyword "error", Wire.Map error_kvs) ]
 
 (* cljs (or (ex-message error) (str error)) and (ex-data error) *)
 let query_exn_message_data = function
@@ -1803,7 +1773,7 @@ let query_exn_message_data = function
 let execute_query_spec db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
     (query_forms : query_form list) (rules_forms : query_form list)
     (query_string : string option) (runtime : runtime) : query_result list list =
-  let get k = List.assoc_opt (kw k) spec_kvs in
+  let get k = List.assoc_opt (Wire.keyword k) spec_kvs in
   match kind with
   | "dsl" -> (
       let qs = Option.value query_string ~default:"" in
@@ -1844,13 +1814,13 @@ let execute_query_spec db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
         | Some (Wire.Array xs) -> xs
         | _ -> []
       in
-      let ctx = spec_kvs @ [ (kw "require-today-day?", Wire.Bool true) ] in
+      let ctx = spec_kvs @ [ (Wire.keyword "require-today-day?", Wire.Bool true) ] in
       execute_custom_query_typed db query_forms inputs rules_forms ctx
   | _ -> []
 
 let query_result_rows db (rows : query_result list list)
     (spec_kvs : (Wire.t * Wire.t) list) : Wire.t list * Wire.t option =
-  let get k = List.assoc_opt (kw k) spec_kvs in
+  let get k = List.assoc_opt (Wire.keyword k) spec_kvs in
   let rows' =
     if block_query_result db rows then
       filter_block_query_result db (List.map (fun r -> List.hd r) rows)
@@ -1886,7 +1856,7 @@ let query_result_rows db (rows : query_result list list)
         let out = Render_deps.apply_result_transform ~entity_attr edn encoded in
         (match out with
          | Wire.Array rs | Wire.List rs | Wire.Set rs -> rs
-         | _ -> fail "Query result transform must return rows" [ (kw "result", out) ])
+         | _ -> fail "Query result transform must return rows" [ (Wire.keyword "result", out) ])
     | _ -> List.map (fun row -> Wire.Array (List.map wire_cell_of_query_result row)) rows'
   in
   (* :view — cljs evals view-f over the post-transform result seq inside
@@ -1913,7 +1883,7 @@ let render_query db key runtime =
   let spec_wire = List.nth key 1 in
   let kind_str, spec_kvs = require_query_spec spec_wire in
   let query_forms =
-    match List.assoc_opt (kw "query") spec_kvs with
+    match List.assoc_opt (Wire.keyword "query") spec_kvs with
     | Some (Wire.Array xs) -> List.map form_of_wire xs
     | _ -> []
   in
@@ -1922,12 +1892,12 @@ let render_query db key runtime =
     else query_forms
   in
   let rules_forms =
-    match List.assoc_opt (kw "rules") spec_kvs with
+    match List.assoc_opt (Wire.keyword "rules") spec_kvs with
     | Some (Wire.Array xs) -> List.map form_of_wire xs
     | _ -> []
   in
   let query_string =
-    match List.assoc_opt (kw "query") spec_kvs with
+    match List.assoc_opt (Wire.keyword "query") spec_kvs with
     | Some (Wire.String s) -> Some s
     | _ -> None
   in
@@ -1950,8 +1920,8 @@ let render_query db key runtime =
     let rows_wire, view = query_result_rows db rows spec_kvs in
     ( watch
     , Wire.Map
-        ([ (kw "rows", Wire.Array rows_wire) ]
-         @ (match view with Some v -> [ (kw "view", v) ] | None -> [])) )
+        ([ (Wire.keyword "rows", Wire.Array rows_wire) ]
+         @ (match view with Some v -> [ (Wire.keyword "view", v) ] | None -> [])) )
   with e -> (
     (* A user-supplied query can fail in many ways: reader errors on
        incomplete syntax while editing, invalid regex, malformed datalog,
@@ -1978,8 +1948,8 @@ let view_owner db (owner_lookup : Wire.t) : entity =
   | Wire.String s when Unicode.trim s <> "" -> (
       match Ldb.get_page db (String s) with
       | Some p -> p
-      | None -> fail "Missing view owner page" [ (kw "owner-lookup", owner_lookup) ])
-  | _ -> fail "Invalid view owner" [ (kw "owner-lookup", owner_lookup) ]
+      | None -> fail "Missing view owner page" [ (Wire.keyword "owner-lookup", owner_lookup) ])
+  | _ -> fail "Invalid view owner" [ (Wire.keyword "owner-lookup", owner_lookup) ]
 
 let render_views db key _runtime =
   let owner_lookup = List.nth key 1 in
@@ -1988,7 +1958,7 @@ let render_views db key _runtime =
   let feature_type =
     match List.nth key 2 with
     | Wire.Keyword f -> f
-    | v -> fail "Invalid view feature type" [ (kw "feature-type", v) ]
+    | v -> fail "Invalid view feature type" [ (Wire.keyword "feature-type", v) ]
   in
   let views_eids =
     q_string db
@@ -2005,7 +1975,7 @@ let render_views db key _runtime =
            | _ -> None)
     |> Ldb.sort_by_order
   in
-  ( Watch_keys [ wkey [ kw "views"; Wire.Uuid owner_uuid; kw feature_type ] ]
+  ( Watch_keys [ wkey [ Wire.keyword "views"; Wire.Uuid owner_uuid; Wire.keyword feature_type ] ]
   , Wire.Array (List.map (fun (v : entity) -> Wire.Uuid (entity_uuid db v.id)) views_eids) )
 
 let valid_sorting (v : Wire.t) : bool =
@@ -2016,10 +1986,10 @@ let valid_sorting (v : Wire.t) : bool =
           match item with
           | Wire.Map kvs ->
               List.length kvs = 2
-              && (match List.assoc_opt (kw "id") kvs with
+              && (match List.assoc_opt (Wire.keyword "id") kvs with
                   | Some (Wire.Keyword _) -> true
                   | _ -> false)
-              && (match List.assoc_opt (kw "asc?") kvs with
+              && (match List.assoc_opt (Wire.keyword "asc?") kvs with
                   | Some (Wire.Bool _) -> true
                   | _ -> false)
           | _ -> false)
@@ -2030,12 +2000,12 @@ let valid_filters (v : Wire.t) : bool =
   match v with
   | Wire.Map kvs ->
       List.for_all
-        (fun (k, _) -> k = kw "or?" || k = kw "filters")
+        (fun (k, _) -> k = Wire.keyword "or?" || k = Wire.keyword "filters")
         kvs
-      && (match List.assoc_opt (kw "or?") kvs with
+      && (match List.assoc_opt (Wire.keyword "or?") kvs with
           | Some (Wire.Bool _) | None -> true
           | _ -> false)
-      && (match List.assoc_opt (kw "filters") kvs with
+      && (match List.assoc_opt (Wire.keyword "filters") kvs with
           | Some (Wire.Array clauses) ->
               List.for_all
                 (fun c ->
@@ -2057,46 +2027,46 @@ let require_view_context (context : Wire.t) : (Wire.t * Wire.t) list =
       let valid =
         List.for_all (fun k -> List.mem k view_context_keys) keys
         && List.mem "feature-type" keys
-        && (match List.assoc_opt (kw "feature-type") kvs with
+        && (match List.assoc_opt (Wire.keyword "feature-type") kvs with
             | Some (Wire.Keyword f) -> List.mem f view_feature_types
             | _ -> false)
-        && (match List.assoc_opt (kw "sorting") kvs with
+        && (match List.assoc_opt (Wire.keyword "sorting") kvs with
             | Some v -> valid_sorting v
             | None -> true)
-        && (match List.assoc_opt (kw "filters") kvs with
+        && (match List.assoc_opt (Wire.keyword "filters") kvs with
             | Some v -> valid_filters v
             | None -> true)
-        && (match List.assoc_opt (kw "input") kvs with
+        && (match List.assoc_opt (Wire.keyword "input") kvs with
             | Some (Wire.String _) | None -> true
             | _ -> false)
-        && (match List.assoc_opt (kw "group-by-property-ident") kvs with
+        && (match List.assoc_opt (Wire.keyword "group-by-property-ident") kvs with
             | Some (Wire.Keyword _) | None -> true
             | _ -> false)
-        && (match List.assoc_opt (kw "initial-row-count") kvs with
+        && (match List.assoc_opt (Wire.keyword "initial-row-count") kvs with
             | Some (Wire.Int n) ->
                 let ft =
-                  match List.assoc_opt (kw "feature-type") kvs with
+                  match List.assoc_opt (Wire.keyword "feature-type") kvs with
                   | Some (Wire.Keyword f) -> f
                   | _ -> ""
                 in
                 List.mem ft [ "all-pages"; "class-objects" ] && n > 0 && n <= 1000
             | None -> true
             | _ -> false)
-        && (match List.assoc_opt (kw "row-offset") kvs with
+        && (match List.assoc_opt (Wire.keyword "row-offset") kvs with
             | Some (Wire.Int n) ->
-                List.mem_assoc (kw "initial-row-count") kvs && n >= 0
+                List.mem_assoc (Wire.keyword "initial-row-count") kvs && n >= 0
             | None -> true
             | _ -> false)
-        && (match List.assoc_opt (kw "query-row-uuids") kvs with
+        && (match List.assoc_opt (Wire.keyword "query-row-uuids") kvs with
             | Some (Wire.Array us) ->
                 List.for_all (function Wire.Uuid _ -> true | _ -> false) us
             | None -> true
             | _ -> false)
       in
       if not valid then
-        fail "Invalid view resource context" [ (kw "context", context) ]
+        fail "Invalid view resource context" [ (Wire.keyword "context", context) ]
       else kvs
-  | _ -> fail "Invalid view resource context" [ (kw "context", context) ]
+  | _ -> fail "Invalid view resource context" [ (Wire.keyword "context", context) ]
 
 let require_view_owner feature_type (owner : entity option) (view_uuid : string) : entity option =
   if List.mem feature_type
@@ -2104,8 +2074,8 @@ let require_view_owner feature_type (owner : entity option) (view_uuid : string)
      && Option.is_none owner
   then
     fail "View resource has no owner"
-      [ (kw "view-uuid", Wire.Uuid view_uuid)
-      ; (kw "feature-type", kw feature_type) ]
+      [ (Wire.keyword "view-uuid", Wire.Uuid view_uuid)
+      ; (Wire.keyword "feature-type", Wire.keyword feature_type) ]
   else owner
 
 let scope_uuids db (eids : entity_id list) : string list =
@@ -2132,7 +2102,7 @@ let ident_of_value db (v : value option) : string option =
   | _ -> None
 
 let effective_view_config db (view : entity) (ctx : (Wire.t * Wire.t) list) : view_config =
-  let get k = List.assoc_opt (kw k) ctx in
+  let get k = List.assoc_opt (Wire.keyword k) ctx in
   let persisted_sorting = Ldb.value view "logseq.property.table/sorting" in
   let empty_sorting =
     match persisted_sorting with
@@ -2149,7 +2119,7 @@ let effective_view_config db (view : entity) (ctx : (Wire.t * Wire.t) list) : vi
       | None ->
           Some
             (Wire.Array
-               [ Wire.Map [ (kw "id", kw "block/updated-at"); (kw "asc?", Wire.Bool false) ] ])
+               [ Wire.Map [ (Wire.keyword "id", Wire.keyword "block/updated-at"); (Wire.keyword "asc?", Wire.Bool false) ] ])
     else Option.map Ds_wire.transit_of_value persisted_sorting
   in
   let filters =
@@ -2245,7 +2215,7 @@ let view_watch_keys db (view_uuid : string) (owner : entity option)
       @ (match owner_uuid with Some u -> [ watch_entity u ] | None -> [])
     in
     match feature_type with
-    | "all-pages" -> Watch_keys (base @ [ wkey [ kw "page-membership" ] ])
+    | "all-pages" -> Watch_keys (base @ [ wkey [ Wire.keyword "page-membership" ] ])
     | "class-objects" -> (
         match owner with
         | Some o ->
@@ -2254,16 +2224,16 @@ let view_watch_keys db (view_uuid : string) (owner : entity option)
                 (o.id :: Db_class.get_structured_children db o.id)
             in
             Watch_keys
-              (base @ [ wkey [ kw "class-tree" ] ]
+              (base @ [ wkey [ Wire.keyword "class-tree" ] ]
                @ List.map (fun cu -> wk1 "class-membership" (Wire.Uuid cu)) classes)
         | None -> Watch_keys base)
     | "property-objects" -> (
         match Option.bind owner Ldb.ident_of with
         | Some ident ->
-            Watch_keys (base @ [ wk1 "property-membership" (kw ident) ])
+            Watch_keys (base @ [ wk1 "property-membership" (Wire.keyword ident) ])
         | None ->
             fail "View property owner has no ident"
-              [ ( kw "owner-uuid"
+              [ ( Wire.keyword "owner-uuid"
                 , match owner_uuid with Some u -> Wire.Uuid u | None -> Wire.Nil ) ])
     | "linked-references" -> (
         match owner with
@@ -2275,7 +2245,7 @@ let view_watch_keys db (view_uuid : string) (owner : entity option)
               scope_uuids db (o.id :: Db_view.get_block_alias db o.id @ class_children)
             in
             Watch_keys
-              (base @ [ wkey [ kw "ref-scope" ] ]
+              (base @ [ wkey [ Wire.keyword "ref-scope" ] ]
                @ List.map (fun tu -> wk1 "refs" (Wire.Uuid tu)) refs_scope)
         | None -> Watch_keys base)
     | _ -> Watch_keys base
@@ -2289,24 +2259,24 @@ let normalize_view_row db (row : Wire.t) : Wire.t =
       | _ -> (
           match Plain_value.map_get "db/id" kvs with
           | Some (Wire.Int id) -> Wire.Uuid (entity_uuid db id)
-          | _ -> fail "Unsupported view resource row" [ (kw "row", row) ]))
+          | _ -> fail "Unsupported view resource row" [ (Wire.keyword "row", row) ]))
   | Wire.Tagged ("datascript/Entity", Wire.Int id) -> Wire.Uuid (entity_uuid db id)
-  | _ -> fail "Unsupported view resource row" [ (kw "row", row) ]
+  | _ -> fail "Unsupported view resource row" [ (Wire.keyword "row", row) ]
 
 let normalize_view_rows db (rows : Wire.t list) : Wire.t =
   Wire.Array (List.map (normalize_view_row db) rows)
 
 let normalize_group_value (v : Wire.t) : Wire.t =
   match v with
-  | Wire.Nil -> Wire.Map [ (kw "kind", kw "empty") ]
+  | Wire.Nil -> Wire.Map [ (Wire.keyword "kind", Wire.keyword "empty") ]
   | Wire.Map kvs -> (
       match Plain_value.map_get "block/uuid" kvs with
       | Some (Wire.Uuid u) ->
-          Wire.Map [ (kw "kind", kw "entity"); (kw "uuid", Wire.Uuid u) ]
-      | _ -> Wire.Map [ (kw "kind", kw "scalar"); (kw "value", v) ])
+          Wire.Map [ (Wire.keyword "kind", Wire.keyword "entity"); (Wire.keyword "uuid", Wire.Uuid u) ]
+      | _ -> Wire.Map [ (Wire.keyword "kind", Wire.keyword "scalar"); (Wire.keyword "value", v) ])
   | Wire.Array _ | Wire.List _ | Wire.Set _ ->
-      fail "Unsupported view group value" [ (kw "value", v) ]
-  | _ -> Wire.Map [ (kw "kind", kw "scalar"); (kw "value", v) ]
+      fail "Unsupported view group value" [ (Wire.keyword "value", v) ]
+  | _ -> Wire.Map [ (Wire.keyword "kind", Wire.keyword "scalar"); (Wire.keyword "value", v) ]
 
 let wire_rows (v : Wire.t) : Wire.t list =
   match v with
@@ -2340,12 +2310,12 @@ let normalize_grouped_view_data db (count : Wire.t) (data : Wire.t) : (Wire.t * 
         match g with
         | Wire.Array [ v; rows ] | Wire.List [ v; rows ] ->
             Wire.Map
-              [ (kw "value", normalize_group_value v)
-              ; (kw "rows", normalize_view_rows db (wire_rows rows)) ]
+              [ (Wire.keyword "value", normalize_group_value v)
+              ; (Wire.keyword "rows", normalize_view_rows db (wire_rows rows)) ]
         | _ -> g)
       (wire_rows data)
   in
-  [ (kw "partition", kw "grouped"); (kw "count", count); (kw "groups", Wire.Array groups) ]
+  [ (Wire.keyword "partition", Wire.keyword "grouped"); (Wire.keyword "count", count); (Wire.keyword "groups", Wire.Array groups) ]
 
 let normalize_grouped_list_view_data db (count : Wire.t) (data : Wire.t)
     : (Wire.t * Wire.t) list =
@@ -2355,8 +2325,8 @@ let normalize_grouped_list_view_data db (count : Wire.t) (data : Wire.t)
         match g with
         | Wire.Array [ v; partitions ] | Wire.List [ v; partitions ] ->
             Wire.Map
-              [ (kw "value", normalize_group_value v)
-              ; ( kw "partitions"
+              [ (Wire.keyword "value", normalize_group_value v)
+              ; ( Wire.keyword "partitions"
                 , Wire.Array
                     (List.map
                        (fun p ->
@@ -2364,14 +2334,14 @@ let normalize_grouped_list_view_data db (count : Wire.t) (data : Wire.t)
                          | Wire.Array [ Wire.Uuid u; rows ]
                          | Wire.List [ Wire.Uuid u; rows ] ->
                              Wire.Map
-                               [ (kw "breadcrumb-uuid", Wire.Uuid u)
-                               ; (kw "rows", normalize_view_rows db (wire_rows rows)) ]
+                               [ (Wire.keyword "breadcrumb-uuid", Wire.Uuid u)
+                               ; (Wire.keyword "rows", normalize_view_rows db (wire_rows rows)) ]
                          | _ -> p)
                        (wire_rows partitions)) ) ]
         | _ -> g)
       (wire_rows data)
   in
-  [ (kw "partition", kw "grouped-list"); (kw "count", count); (kw "groups", Wire.Array groups) ]
+  [ (Wire.keyword "partition", Wire.keyword "grouped-list"); (Wire.keyword "count", count); (Wire.keyword "groups", Wire.Array groups) ]
 
 let query_property_maps db (idents : Wire.t) : Wire.t =
   let items =
@@ -2401,18 +2371,18 @@ let normalize_view_data db (result : Wire.t) (grouped : bool) : Wire.t =
         else if grouped then
           normalize_grouped_view_data db count data
         else
-          [ (kw "partition", kw "flat"); (kw "count", count)
-          ; (kw "rows", normalize_view_rows db (wire_rows data)) ]
+          [ (Wire.keyword "partition", Wire.keyword "flat"); (Wire.keyword "count", count)
+          ; (Wire.keyword "rows", normalize_view_rows db (wire_rows data)) ]
       in
       let base =
         match Plain_value.map_get "ref-pages-count" kvs with
-        | Some v -> base @ [ (kw "ref-pages-count", v) ]
+        | Some v -> base @ [ (Wire.keyword "ref-pages-count", v) ]
         | None -> base
       in
       let base =
-        if List.mem_assoc (kw "ref-matched-children-ids") kvs then
+        if List.mem_assoc (Wire.keyword "ref-matched-children-ids") kvs then
           base
-          @ [ ( kw "matched-child-uuids"
+          @ [ ( Wire.keyword "matched-child-uuids"
               , match Plain_value.map_get "ref-matched-children-ids" kvs with
                 | Some (Wire.Set ids) | Some (Wire.Array ids) | Some (Wire.List ids) ->
                     Wire.Set
@@ -2426,16 +2396,16 @@ let normalize_view_data db (result : Wire.t) (grouped : bool) : Wire.t =
         else base
       in
       let base =
-        if List.mem_assoc (kw "properties") kvs then
+        if List.mem_assoc (Wire.keyword "properties") kvs then
           base
-          @ [ ( kw "properties"
+          @ [ ( Wire.keyword "properties"
               , query_property_maps db
                   (Option.value (Plain_value.map_get "properties" kvs)
                      ~default:(Wire.Array [])) ) ]
         else base
       in
       Wire.Map base
-  | _ -> fail "Invalid view resource result" [ (kw "result", result) ]
+  | _ -> fail "Invalid view resource result" [ (Wire.keyword "result", result) ]
 
 let first_window_row_preview db (block_uuid : string) : (Wire.t * Wire.t) option =
   match entity db (Lookup_ref ("block/uuid", Uuid block_uuid)) with
@@ -2443,16 +2413,16 @@ let first_window_row_preview db (block_uuid : string) : (Wire.t * Wire.t) option
       Some
         ( Wire.Uuid block_uuid
         , Wire.Map
-            [ (kw "block/uuid", Wire.Uuid block_uuid)
-            ; (kw "db/id", Wire.Int e.id)
-            ; ( kw "block/title"
+            [ (Wire.keyword "block/uuid", Wire.Uuid block_uuid)
+            ; (Wire.keyword "db/id", Wire.Int e.id)
+            ; ( Wire.keyword "block/title"
               , match
                   Render_snapshot.renderer_display_title db
                     (Ldb.value e "block/title") e.id
                 with
                 | Some t -> Wire.String t
                 | None -> Wire.Nil )
-            ; (kw "block.temp/first-window-preview?", Wire.Bool true) ] )
+            ; (Wire.keyword "block.temp/first-window-preview?", Wire.Bool true) ] )
   | None -> None
 
 let first_window_row_previews db (rows : Wire.t) : Wire.t =
@@ -2467,12 +2437,12 @@ let first_window_row_previews db (rows : Wire.t) : Wire.t =
 let missing_view_data view_uuid : watch * Wire.t =
   ( Watch_keys [ watch_entity view_uuid ]
   , Wire.Map
-      [ (kw "partition", kw "flat"); (kw "count", Wire.Int 0); (kw "rows", Wire.Array []) ] )
+      [ (Wire.keyword "partition", Wire.keyword "flat"); (Wire.keyword "count", Wire.Int 0); (Wire.keyword "rows", Wire.Array []) ] )
 
 let render_view_data db key _runtime =
   let view_uuid = require_uuid "view-uuid" (List.nth key 1) in
   let ctx = require_view_context (List.nth key 2) in
-  let get k = List.assoc_opt (kw k) ctx in
+  let get k = List.assoc_opt (Wire.keyword k) ctx in
   let feature_type =
     match get "feature-type" with
     | Some (Wire.Keyword f) -> f
@@ -2492,15 +2462,15 @@ let render_view_data db key _runtime =
       (match stored_feature_type with
        | Some s when s <> feature_type ->
            fail "View resource feature does not match its definition"
-             [ (kw "view-uuid", Wire.Uuid view_uuid)
-             ; (kw "feature-type", kw feature_type)
-             ; (kw "stored-feature-type", kw s) ]
+             [ (Wire.keyword "view-uuid", Wire.Uuid view_uuid)
+             ; (Wire.keyword "feature-type", Wire.keyword feature_type)
+             ; (Wire.keyword "stored-feature-type", Wire.keyword s) ]
        | _ -> ());
       let query_row_uuids = get "query-row-uuids" in
       (if (feature_type = "query-result") <> Option.is_some query_row_uuids then
          fail "Invalid query-result view rows"
-           [ (kw "feature-type", kw feature_type)
-           ; ( kw "query-row-uuids"
+           [ (Wire.keyword "feature-type", Wire.keyword feature_type)
+           ; ( Wire.keyword "query-row-uuids"
              , Option.value query_row_uuids ~default:Wire.Nil ) ]);
       let config = effective_view_config db view ctx in
       let query_block =
@@ -2550,18 +2520,18 @@ let render_view_data db key _runtime =
                           | "row-offset") -> false
             | _ -> true)
           ctx
-        @ [ (kw "view-feature-type", kw feature_type) ]
-        @ (match owner with Some o -> [ (kw "view-for-id", Wire.Int o.id) ] | None -> [])
+        @ [ (Wire.keyword "view-feature-type", Wire.keyword feature_type) ]
+        @ (match owner with Some o -> [ (Wire.keyword "view-for-id", Wire.Int o.id) ] | None -> [])
         @ (if feature_type = "query-result" then
-             [ ( kw "query-entity-ids"
+             [ ( Wire.keyword "query-entity-ids"
                , Wire.Array (List.map (fun i -> Wire.Int i) query_entity_ids) ) ]
-             @ (match query_wire with Some q -> [ (kw "query", q) ] | None -> [])
+             @ (match query_wire with Some q -> [ (Wire.keyword "query", q) ] | None -> [])
            else [])
         @ (match get "initial-row-count" with
-           | Some n -> [ (kw "row-limit", n) ]
+           | Some n -> [ (Wire.keyword "row-limit", n) ]
            | None -> [])
         @ (match get "row-offset" with
-           | Some o -> [ (kw "row-offset", o) ]
+           | Some o -> [ (Wire.keyword "row-offset", o) ]
            | None -> [])
       in
       let result = Db_view.get_view_data db (Some view.id) (Wire.Map opt_pairs) in
@@ -2572,7 +2542,7 @@ let render_view_data db key _runtime =
         Option.is_some (get "initial-row-count")
         && (match value with
             | Wire.Map kvs ->
-                Plain_value.map_get "partition" kvs = Some (kw "flat")
+                Plain_value.map_get "partition" kvs = Some (Wire.keyword "flat")
             | _ -> false)
       in
       let value =
@@ -2581,7 +2551,7 @@ let render_view_data db key _runtime =
             match Plain_value.map_get "rows" kvs with
             | Some rows ->
                 Wire.Map
-                  (kvs @ [ (kw "row-previews", first_window_row_previews db rows) ])
+                  (kvs @ [ (Wire.keyword "row-previews", first_window_row_previews db rows) ])
             | None -> value)
         | _ -> value
       in
@@ -2651,8 +2621,8 @@ let resource_renderers : (string * renderer) list =
     , rr None
         (fun _db key _runtime ->
           fail "Renderer resource belongs to a non-DB provider"
-            [ (kw "provider", kw "sync-state")
-            ; (kw "resource-key", Wire.Array key) ]) )
+            [ (Wire.keyword "provider", Wire.keyword "sync-state")
+            ; (Wire.keyword "resource-key", Wire.Array key) ]) )
   ]
 
 let resource_value db (resource_key : Wire.t list) (runtime : runtime) : render_result =
@@ -2660,14 +2630,14 @@ let resource_value db (resource_key : Wire.t list) (runtime : runtime) : render_
    | _ :: _ -> ()
    | _ ->
        fail "Invalid renderer resource key"
-         [ (kw "resource-key", Wire.Array resource_key) ]);
+         [ (Wire.keyword "resource-key", Wire.Array resource_key) ]);
   match invalid_resource_key_value (Wire.Array resource_key) with
   | Some (Wire.Keyword "entity") ->
       fail "Renderer resource keys cannot contain graph entities"
-        [ (kw "resource-key", Wire.Array resource_key) ]
+        [ (Wire.keyword "resource-key", Wire.Array resource_key) ]
   | Some _ ->
       fail "Renderer resource keys cannot contain functions"
-        [ (kw "resource-key", Wire.Array resource_key) ]
+        [ (Wire.keyword "resource-key", Wire.Array resource_key) ]
   | None -> (
       match resource_key with
       | Wire.Keyword kind :: _ -> (
@@ -2679,10 +2649,10 @@ let resource_value db (resource_key : Wire.t list) (runtime : runtime) : render_
               renderer.render db resource_key runtime
           | None ->
               fail "Unknown renderer resource key"
-                [ (kw "resource-key", Wire.Array resource_key) ])
+                [ (Wire.keyword "resource-key", Wire.Array resource_key) ])
       | _ ->
           fail "Unknown renderer resource key"
-            [ (kw "resource-key", Wire.Array resource_key) ])
+            [ (Wire.keyword "resource-key", Wire.Array resource_key) ])
 
 type resource_entry =
   { watch_keys : Wire.t list
@@ -2699,7 +2669,8 @@ let resource_entry db (resource_key : Wire.t list) (runtime : runtime) : resourc
   | Watch_keys ks ->
       { watch_keys = ks; watch_all = false; value = res.value; slots = res.slots }
 
-let snapshot_request_limits = [ ("blocks", 1000); ("children", 25); ("resources", 25) ]
+let snapshot_request_limits =
+  [ ("blocks", 1000); ("children", 50); ("resources", 25) ]
 
 let wire_dedup (xs : Wire.t list) : Wire.t list =
   let rec go acc = function
@@ -2711,11 +2682,11 @@ let wire_dedup (xs : Wire.t list) : Wire.t list =
 let require_snapshot_request (request : Wire.t) : (Wire.t list * Wire.t list * Wire.t list) =
   match request with
   | Wire.Map kvs -> (
-      let get k = List.assoc_opt (kw k) kvs in
+      let get k = List.assoc_opt (Wire.keyword k) kvs in
       let ok_keys =
         List.length kvs = 3
         && List.for_all
-             (fun (k, _) -> List.mem k [ kw "blocks"; kw "children"; kw "resources" ])
+             (fun (k, _) -> List.mem k [ Wire.keyword "blocks"; Wire.keyword "children"; Wire.keyword "resources" ])
              kvs
       in
       let non_empty (v : Wire.t option) =
@@ -2738,14 +2709,14 @@ let require_snapshot_request (request : Wire.t) : (Wire.t list * Wire.t list * W
       then
         match get "blocks", get "children", get "resources" with
         | Some (Wire.Array b), Some (Wire.Array c), Some (Wire.Array r) -> (b, c, r)
-        | _ -> fail "Invalid renderer snapshot request" [ (kw "request", request) ]
+        | _ -> fail "Invalid renderer snapshot request" [ (Wire.keyword "request", request) ]
       else
         fail "Invalid renderer snapshot request"
-          [ (kw "request", request)
-          ; ( kw "limits"
+          [ (Wire.keyword "request", request)
+          ; ( Wire.keyword "limits"
             , Wire.Map
-                (List.map (fun (k, n) -> (kw k, Wire.Int n)) snapshot_request_limits) ) ])
-  | _ -> fail "Invalid renderer snapshot request" [ (kw "request", request) ]
+                (List.map (fun (k, n) -> (Wire.keyword k, Wire.Int n)) snapshot_request_limits) ) ])
+  | _ -> fail "Invalid renderer snapshot request" [ (Wire.keyword "request", request) ]
 
 (* merge-slots — conflict on same key with different value *)
 let merge_slots (left : (Wire.t * Wire.t) list) (right : (Wire.t * Wire.t) list)
@@ -2764,7 +2735,7 @@ let merge_slots (left : (Wire.t * Wire.t) list) (right : (Wire.t * Wire.t) list)
       (fun slots (k, v) ->
         match Hashtbl.find_opt index k with
         | Some existing when existing <> v ->
-            fail "Conflicting renderer snapshot slots" [ (kw "slot-key", k) ]
+            fail "Conflicting renderer snapshot slots" [ (Wire.keyword "slot-key", k) ]
         | Some _ -> slots
         | None ->
             Hashtbl.replace index k v;
@@ -2797,8 +2768,8 @@ let block_snapshot_slots db (block_uuids : Wire.t list)
          (fun slots buuid ->
            if Hashtbl.mem blocks_tbl buuid then slots
            else
-             ( wkey [ kw "block"; buuid ]
-             , Wire.Map [ (kw "missing?", Wire.Bool true) ] )
+             ( wkey [ Wire.keyword "block"; buuid ]
+             , Wire.Map [ (Wire.keyword "missing?", Wire.Bool true) ] )
              :: slots)
          (List.rev (block_slots blocks)) block_uuids)
   in
@@ -2816,10 +2787,10 @@ let block_snapshot_slots db (block_uuids : Wire.t list)
           match Hashtbl.find_opt groups_tbl buuid with
           | Some (Wire.Array dep_uuids) | Some (Wire.List dep_uuids)
           | Some (Wire.Set dep_uuids) ->
-              List.map (fun d -> wkey [ kw "block"; d ]) dep_uuids
-          | _ -> [ wkey [ kw "block"; buuid ] ]
+              List.map (fun d -> wkey [ Wire.keyword "block"; d ]) dep_uuids
+          | _ -> [ wkey [ Wire.keyword "block"; buuid ] ]
         in
-        (wkey [ kw "block"; buuid ], Wire.Set deps))
+        (wkey [ Wire.keyword "block"; buuid ], Wire.Set deps))
       block_uuids
   in
   (slots, groups')
@@ -2856,7 +2827,7 @@ let children_snapshot_groups db (parent_uuids : Wire.t list)
                 | _ -> [])
             | _ -> []
           in
-          ( wkey [ kw "children"; Wire.Uuid pu ]
+          ( wkey [ Wire.keyword "children"; Wire.Uuid pu ]
           , children_slots children @ block_slots blocks )
       | _ -> (parent, []))
     parent_uuids
@@ -2866,9 +2837,41 @@ let render_snapshots db (request : Wire.t) (runtime : runtime) : Wire.t =
   let resource_entries =
     List.map
       (fun rk ->
-        match rk with
-        | Wire.Array key -> (rk, resource_entry db key runtime)
-        | _ -> (rk, resource_entry db [ rk ] runtime))
+        let key =
+          match rk with
+          | Wire.Array key -> key
+          | _ -> [ rk ]
+        in
+        match resource_entry db key runtime with
+        | entry -> (rk, entry)
+        | exception e -> (
+            (* A resource request can outlive its entity on the display
+               conn: mark_failed rebinds and deferred/pending replays
+               drop entities for a window, and a permanently dropped
+               entity's slot is torn down by the next delta anyway. A
+               :error slot throws inside render → error boundary → dead
+               page, so a uuid-keyed entry degrades to a watched empty
+               value; the slot reloads when the entity materializes. *)
+            let uuid_opt =
+              match key with
+              | [ _; Wire.Uuid u; _ ] | [ _; Wire.Uuid u ] -> Some u
+              | _ -> None
+            in
+            match e, uuid_opt with
+            | Dispatcher.Exn_info ("Missing renderer resource entity", _),
+              Some u ->
+                Worker_log.warn "render/resource-entry-missing"
+                  [ "key", Transit_codec.to_string (Wire.Array key) ];
+                ( rk
+                , { watch_keys = [ watch_entity u ]
+                  ; watch_all = false
+                  ; value = Wire.Map []
+                  ; slots = [] } )
+            | _ ->
+                Worker_log.warn "render/resource-entry-failed"
+                  [ "key", Transit_codec.to_string (Wire.Array key)
+                  ; "error", Printexc.to_string e ];
+                raise e))
       resources_req
   in
   let block_slots', block_groups = block_snapshot_slots db blocks_req in
@@ -2881,21 +2884,21 @@ let render_snapshots db (request : Wire.t) (runtime : runtime) : Wire.t =
       (fun slots (rk, entry) ->
         let slots = merge_slots slots entry.slots in
         merge_slots slots
-          [ ( wkey [ kw "resource"; rk ]
+          [ ( wkey [ Wire.keyword "resource"; rk ]
             , Wire.Map
-                [ ( kw "watch"
+                [ ( Wire.keyword "watch"
                   , Wire.Map
-                      [ ( kw "keys"
+                      [ ( Wire.keyword "keys"
                         , Wire.Set (List.sort_uniq compare entry.watch_keys) )
-                      ; (kw "all?", Wire.Bool entry.watch_all) ] )
-                ; (kw "value", entry.value) ] ) ])
+                      ; (Wire.keyword "all?", Wire.Bool entry.watch_all) ] )
+                ; (Wire.keyword "value", entry.value) ] ) ])
       base_slots resource_entries
   in
   let groups =
     block_groups
     @ List.map
         (fun parent ->
-          let key = wkey [ kw "children"; parent ] in
+          let key = wkey [ Wire.keyword "children"; parent ] in
           match List.find_opt (fun (k, _) -> k = key) children_groups with
           | Some (_, slot_map) ->
               ( key, Wire.Set (List.map fst slot_map |> List.sort_uniq compare) )
@@ -2903,16 +2906,16 @@ let render_snapshots db (request : Wire.t) (runtime : runtime) : Wire.t =
         children_req
     @ List.map
         (fun (rk, entry) ->
-          ( wkey [ kw "resource"; rk ]
+          ( wkey [ Wire.keyword "resource"; rk ]
           , Wire.Set
               (List.sort_uniq compare
-                 (List.map fst entry.slots @ [ wkey [ kw "resource"; rk ] ])) ))
+                 (List.map fst entry.slots @ [ wkey [ Wire.keyword "resource"; rk ] ])) ))
         resource_entries
   in
   Wire.Map
-    [ (kw "basis-rev", Wire.Int (basis_rev db))
-    ; (kw "slots", Wire.Map slots)
-    ; (kw "groups", Wire.Map groups) ]
+    [ (Wire.keyword "basis-rev", Wire.Int (basis_rev db))
+    ; (Wire.keyword "slots", Wire.Map slots)
+    ; (Wire.keyword "groups", Wire.Map groups) ]
 
 (* :thread-api/get-render-snapshots [repo request] *)
 let get_render_snapshots args =
@@ -2930,6 +2933,6 @@ let get_render_snapshots args =
   | None ->
       Db_worker_effect.error
         (Dispatcher.Exn_info
-           ("Missing renderer snapshot database", [ (kw "repo", Wire.String repo) ]))
+           ("Missing renderer snapshot database", [ (Wire.keyword "repo", Wire.String repo) ]))
 
 let () = Dispatcher.register "thread-api/get-render-snapshots" get_render_snapshots

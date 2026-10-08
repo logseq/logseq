@@ -152,31 +152,39 @@ let asset (e : entity) = Option.is_some (value e "logseq.property.asset/type")
 let is_page (e : entity) =
   internal_page e || is_journal e || is_class e || is_property e
 
+(* entity-util/some-parent — first Some (f parent) walking the
+   :block/parent chain, closest parent first; stops on a parentless
+   entity or a cycle. *)
+let some_parent (e : entity) (f : entity -> 'a option) : 'a option =
+  let rec loop (parent : entity option) seen =
+    match parent with
+    | Some p when not (List.mem p.id seen) -> (
+        match f p with
+        | Some _ as r -> r
+        | None -> loop (ref_ent p "block/parent") (p.id :: seen))
+    | _ -> None
+  in
+  loop (ref_ent e "block/parent") []
+
 (* entity-util/hidden? — own flags or any ancestor's, cycle-safe. *)
 let hidden (page : entity) : bool =
-  let rec hidden_parent (parent : entity option) seen =
-    match parent with
-    | Some e when not (List.mem e.id seen) ->
-        truthy (value e "logseq.property/hide?")
-        || truthy (value e "logseq.property/deleted-at")
-        || hidden_parent (ref_ent e "block/parent") (e.id :: seen)
-    | _ -> false
-  in
   truthy (value page "logseq.property/hide?")
   || truthy (value page "logseq.property/deleted-at")
-  || hidden_parent (ref_ent page "block/parent") []
+  || Option.is_some
+       (some_parent page (fun parent ->
+            if
+              truthy (value parent "logseq.property/hide?")
+              || truthy (value parent "logseq.property/deleted-at")
+            then Some ()
+            else None))
 
 (* entity-util/recycled? *)
 let recycled (e : entity) : bool =
-  let rec recycled_parent (parent : entity option) seen =
-    match parent with
-    | Some p when not (List.mem p.id seen) ->
-        truthy (value p "logseq.property/deleted-at")
-        || recycled_parent (ref_ent p "block/parent") (p.id :: seen)
-    | _ -> false
-  in
   truthy (value e "logseq.property/deleted-at")
-  || recycled_parent (ref_ent e "block/parent") []
+  || Option.is_some
+       (some_parent e (fun parent ->
+            if truthy (value parent "logseq.property/deleted-at") then Some ()
+            else None))
 
 let built_in (e : entity) = truthy (value e "logseq.property/built-in?")
 
@@ -328,18 +336,31 @@ let get_journal_page_by_day db (journal_day : int) : entity option =
   | Some (d, _) -> ent_of_id db d.e
   | None -> None
 
-(* ldb/sort-by-order — cljs sort-by :block/order; nil sorts first. *)
+(* ldb/sort-by-order — cljs sort-by :block/order; nil sorts first. Ties
+   break on :block/uuid: equal orders (fractional-key collisions between
+   concurrent clients) must render in the same sibling order on every
+   conn — the input sequence is conn-local eid order, which differs
+   between the owner's replayed display conn and remote clients' server
+   conns and silently diverges the rendered order until the duplicate
+   fix lands. *)
 let sort_by_order (ents : entity list) : entity list =
   let order_of (e : entity) =
     match value e "block/order" with Some (String s) -> Some s | _ -> None
   in
+  let uuid_of (e : entity) =
+    match value e "block/uuid" with
+    | Some (Uuid u) | Some (String u) -> u
+    | _ -> ""
+  in
   List.stable_sort
     (fun a b ->
-      match (order_of a, order_of b) with
-      | None, None -> 0
-      | None, Some _ -> -1
-      | Some _, None -> 1
-      | Some x, Some y -> String.compare x y)
+       match (order_of a, order_of b) with
+       | None, None -> String.compare (uuid_of a) (uuid_of b)
+       | None, Some _ -> -1
+       | Some _, None -> 1
+       | Some x, Some y ->
+           let c = String.compare x y in
+           if c <> 0 then c else String.compare (uuid_of a) (uuid_of b))
     ents
 
 
@@ -543,20 +564,27 @@ let get_built_in_page db (title : string) : entity option =
   let u = Common_uuid.gen_uuid "builtin-block-uuid" title in
   counted_entity db (Lookup_ref ("block/uuid", Uuid u))
 
-(* common-initial-data/get-block-full-children-ids — the recursive
-   :parent rule, as in cljs. *)
+(* common-initial-data/get-block-full-children-ids — transitive children,
+   like the cljs (parent ?p ?c) recursive rule. Direct :block/parent
+   descent with a visited set instead of a per-call rules parse + datalog
+   eval; visited guards parent cycles. *)
 let get_block_full_children_ids db (block_eid : entity_id) : entity_id list =
-  let rules_edn =
-    "[[(parent ?p ?c) [?c :block/parent ?p]] \
-      [(parent ?p ?c) [?t :block/parent ?p] (parent ?t ?c)]]"
+  let child_ids (eid : entity_id) : entity_id list =
+    List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref eid) ())
+    |> List.map (fun (d : datom) -> d.e)
   in
-  q_string db
-    "[:find [?c ...] :in $ ?id % :where (parent ?id ?c)]"
-    ~inputs:
-      [ Arg_scalar (Result_entity block_eid);
-        Arg_rules (Parser.parse_rules (Parser.read_edn rules_edn)) ]
-  |> List.filter_map
-       (fun row -> match row with [ Result_entity c ] -> Some c | _ -> None)
+  let visited = Hashtbl.create 16 in
+  let rec descendants (eid : entity_id) : entity_id list =
+    List.concat_map
+      (fun cid ->
+        if Hashtbl.mem visited cid then []
+        else begin
+          Hashtbl.add visited cid ();
+          cid :: descendants cid
+        end)
+      (child_ids eid)
+  in
+  descendants block_eid
 
 let page_exists_ids db (page_name : string) (tag_idents : string list) : entity_id list =
   let tag_set = tag_idents in
@@ -1126,8 +1154,7 @@ let consecutive_block db (b1 : entity) (b2 : entity) : bool =
     &&
     (match get_left_sibling y with
      | Some ls -> ls.id = x.id
-     | None -> false
-     | exception _ -> false)
+     | None -> false)
     || (match get_left_sibling y with
         | Some prev_sibling -> last_child_block db prev_sibling.id x.id
         | None -> false)

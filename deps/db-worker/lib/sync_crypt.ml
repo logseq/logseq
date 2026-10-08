@@ -17,6 +17,7 @@
    [reset_hooks] restores all defaults. *)
 
 open Db_worker_effect
+open Sync_platform
 
 (* ---------- atoms ---------- *)
 
@@ -31,13 +32,11 @@ let ensure_user_rsa_key_pair_inflight
 
 let node_default_auth_file = "~/logseq/auth.json"
 let e2ee_password_secret_key = "logseq-encrypted-password"
-let default_ui_timeout_ms = 60000
 let pbkdf2_version = "20251210"
 let encrypt_attr_set = [ "block/title"; "block/name" ]
 
 (* ---------- wire helpers ---------- *)
 
-let kw s = Wire.Keyword s
 let str s = Wire.String s
 let wire_opt f = function Some x -> f x | None -> Wire.Nil
 
@@ -49,8 +48,8 @@ let kw_name s =
 let wire_assoc key v m =
   match m with
   | Wire.Map kvs ->
-      Wire.Map ((kw key, v) :: List.filter (fun (k, _) -> not (Wire.key_matches key k)) kvs)
-  | _ -> Wire.Map [ (kw key, v) ]
+      Wire.Map ((Wire.keyword key, v) :: List.filter (fun (k, _) -> not (Wire.key_matches key k)) kvs)
+  | _ -> Wire.Map [ (Wire.keyword key, v) ]
 
 let seq_ = function
   | Some s -> String.length (Unicode.trim s) > 0
@@ -99,15 +98,15 @@ let missing_e2ee_password_exn data =
   ex_info "missing-e2ee-password"
     (Wire.as_map
        (Wire.kw_map
-          ([ ("code", kw "db-sync/missing-e2ee-password");
-             ("field", kw "e2ee-password") ]
+          ([ ("code", Wire.keyword "db-sync/missing-e2ee-password");
+             ("field", Wire.keyword "e2ee-password") ]
            @ data)))
 
 let fail_missing_e2ee_password_impl data : unit =
   fail_fast "db-sync/missing-e2ee-password"
     (Wire.kw_map
-       ([ ("code", kw "db-sync/missing-e2ee-password");
-          ("field", kw "e2ee-password") ]
+       ([ ("code", Wire.keyword "db-sync/missing-e2ee-password");
+          ("field", Wire.keyword "e2ee-password") ]
         @ data))
 
 let fail_missing_e2ee_password_fn : ((string * Wire.t) list -> unit) ref =
@@ -116,7 +115,7 @@ let fail_missing_e2ee_password_fn : ((string * Wire.t) list -> unit) ref =
 let ensure_refresh_token refresh_token =
   if not (seq_ refresh_token) then
     !fail_missing_e2ee_password_fn
-      [ ("reason", kw "missing-refresh-token");
+      [ ("reason", Wire.keyword "missing-refresh-token");
         ("hint", str "Run logseq login first.") ]
 
 let non_retriable_user_rsa_key_error_codes =
@@ -128,80 +127,6 @@ let user_rsa_key_cache_retryable_error error =
   | Some c -> not (List.mem c non_retriable_user_rsa_key_error_codes)
   | None -> true
 
-(* ---------- base64 ---------- *)
-
-let decode_base64 s =
-  let tbl = Array.make 256 (-1) in
-  String.iteri
-    (fun i c -> tbl.(Char.code c) <- i)
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let out = Buffer.create (String.length s) in
-  let i = ref 0 in
-  while !i < String.length s && s.[!i] <> '=' do
-    let read_v k =
-      if !i + k < String.length s && s.[!i + k] <> '=' then
-        let v = tbl.(Char.code s.[!i + k]) in
-        if v >= 0 then Some v else None
-      else None
-    in
-    match read_v 0, read_v 1, read_v 2, read_v 3 with
-    | Some a, Some b, Some c, Some d ->
-        Buffer.add_char out (Char.chr ((a lsl 2) lor (b lsr 4)));
-        Buffer.add_char out (Char.chr (((b lsl 4) lor (c lsr 2)) land 0xFF));
-        Buffer.add_char out (Char.chr (((c lsl 6) lor d) land 0xFF));
-        i := !i + 4
-    | Some a, Some b, Some c, None ->
-        Buffer.add_char out (Char.chr ((a lsl 2) lor (b lsr 4)));
-        Buffer.add_char out (Char.chr (((b lsl 4) lor (c lsr 2)) land 0xFF));
-        i := !i + 4
-    | Some a, Some b, None, _ ->
-        Buffer.add_char out (Char.chr ((a lsl 2) lor (b lsr 4)));
-        i := !i + 4
-    | _ -> i := !i + 4
-  done;
-  Buffer.contents out
-
-let decode_base64url s =
-  let buf = Buffer.create (String.length s) in
-  String.iter
-    (fun c -> Buffer.add_char buf (match c with '-' -> '+' | '_' -> '/' | c -> c))
-    s;
-  decode_base64 (Buffer.contents buf)
-
-(* cljs decode-username: read UTF-16 code units, keep the low byte of
-   each, then UTF-8 decode the resulting bytes (identity for ASCII). *)
-let decode_username s =
-  let low = Buffer.create (String.length s) in
-  let i = ref 0 in
-  while !i < String.length s do
-    let dec = String.get_utf_8_uchar s !i in
-    if Uchar.utf_decode_is_valid dec then begin
-      let cp = Uchar.to_int (Uchar.utf_decode_uchar dec) in
-      i := !i + Uchar.utf_decode_length dec;
-      if cp <= 0xFFFF then Buffer.add_char low (Char.chr (cp land 0xFF))
-      else begin
-        let v = cp - 0x10000 in
-        let hi = 0xD800 lor (v lsr 10) and lo = 0xDC00 lor (v land 0x3FF) in
-        Buffer.add_char low (Char.chr (hi land 0xFF));
-        Buffer.add_char low (Char.chr (lo land 0xFF))
-      end
-    end else i := !i + 1
-  done;
-  let src = Buffer.contents low in
-  let buf = Buffer.create (String.length src) in
-  let j = ref 0 in
-  while !j < String.length src do
-    let dec = String.get_utf_8_uchar src !j in
-    if Uchar.utf_decode_is_valid dec then begin
-      Buffer.add_utf_8_uchar buf (Uchar.utf_decode_uchar dec);
-      j := !j + Uchar.utf_decode_length dec
-    end else begin
-      Buffer.add_utf_8_uchar buf Uchar.rep;
-      j := !j + 1
-    end
-  done;
-  Buffer.contents buf
-
 let urlencode s =
   let buf = Buffer.create (String.length s) in
   String.iter
@@ -211,115 +136,6 @@ let urlencode s =
       | c -> Buffer.add_string buf (Printf.sprintf "%%%02X" (Char.code c)))
     s;
   Buffer.contents buf
-
-let urlencoded params =
-  String.concat "&" (List.map (fun (k, v) -> urlencode k ^ "=" ^ urlencode v) params)
-
-(* ---------- platform env (cljs platform/current :env) ---------- *)
-
-type platform_env =
-  { runtime : string  (* "browser" | "node" *)
-  ; owner_source : string
-  }
-
-let platform_env_impl () : platform_env =
-  match Runtime_env.kind () with
-  | Runtime_env.Browser_worker ->
-      { runtime = "browser"; owner_source = Runtime_env.owner_source () }
-  | Runtime_env.Node | Runtime_env.Native ->
-      { runtime = "node"; owner_source = Runtime_env.owner_source () }
-
-let platform_env_fn : (unit -> platform_env) ref = ref platform_env_impl
-let platform_env () = !platform_env_fn ()
-
-let browser_runtime () = String.equal (platform_env ()).runtime "browser"
-let owner_source () = (platform_env ()).owner_source
-
-let capacitor_runtime () =
-  browser_runtime () && String.equal (owner_source ()) "capacitor"
-
-let interactive_runtime () =
-  let env = platform_env () in
-  String.equal env.runtime "browser"
-  || (String.equal env.runtime "node" && String.equal env.owner_source "electron")
-
-let cli_node_owner () =
-  try
-    let env = platform_env () in
-    String.equal env.runtime "node" && String.equal env.owner_source "cli"
-  with _ -> false
-
-(* ---------- hooks: ldb / worker-state ---------- *)
-
-let transit_read_fn : (string -> Wire.t) ref = ref Transit_codec.of_string
-let transit_write_fn : (Wire.t -> string) ref = ref (fun w -> Transit_codec.to_string w)
-let transit_read s = !transit_read_fn s
-let transit_write w = !transit_write_fn w
-
-exception Invalid_transit
-
-let transit_read_safe value = try Some (!transit_read_fn value) with _ -> None
-
-let read_transit_exn v =
-  match transit_read_safe v with
-  | Some w -> w
-  | None -> raise Invalid_transit
-
-(* cljs read-transit-str over a kv value (nil parses to nil). *)
-let transit_read_value = function
-  | Wire.String s -> !transit_read_fn s
-  | Wire.Nil -> Wire.Nil
-  | _ -> invalid_arg "transit_read_value: expected string or nil"
-
-let ldb_graph_rtc_e2ee_fn : (Datascript.db -> Datascript.value option) ref =
-  ref Ldb.get_graph_rtc_e2ee
-
-let ldb_graph_rtc_uuid_fn : (Datascript.db -> Datascript.value option) ref =
-  ref Ldb.get_graph_rtc_uuid
-
-let datascript_conn_fn : (string -> Datascript.conn option) ref =
-  ref Worker_state.datascript_conn
-
-let state_get_fn : (string -> Wire.t option) ref = ref Worker_state.state_get
-let merge_state_fn : (Wire.t -> unit) ref = ref Worker_state.merge_state
-let db_sync_config_fn : (unit -> Wire.t) ref = ref Worker_state.db_sync_config
-
-(* ---------- hooks: kv (platform/kv-get, kv-set!) ---------- *)
-
-(* cljs stores typed values in IDB; our kv is string-based, so binary
-   payloads use a "b64:"-prefixed string (Idb.{get,set}_binary). *)
-let kv_get_impl (_platform : platform_env) (k : string) : Wire.t t =
-  map
-    (function
-      | Some s when String.length s >= 4 && String.sub s 0 4 = "b64:" ->
-          Wire.Binary (decode_base64 (String.sub s 4 (String.length s - 4)))
-      | Some s -> Wire.String s
-      | None -> Wire.Nil)
-    (Idb.get k)
-
-let kv_set_impl (_platform : platform_env) k (v : Wire.t) : unit t =
-  match v with
-  | Wire.Nil -> Idb.delete k
-  | Wire.Binary b -> Idb.set_binary k b
-  | Wire.String s -> Idb.set k s
-  | v -> Idb.set k (transit_write v)
-
-let kv_get_fn : (platform_env -> string -> Wire.t t) ref = ref kv_get_impl
-let kv_set_fn : (platform_env -> string -> Wire.t -> unit t) ref = ref kv_set_impl
-
-(* ---------- hooks: secret store / file / http / comm ---------- *)
-
-let secret_save_fn : (key:string -> string -> unit t) ref = ref Secret_store.save
-let secret_read_fn : (key:string -> string option t) ref = ref Secret_store.read
-let secret_delete_fn : (key:string -> unit t) ref = ref Secret_store.delete
-let read_text_fn : (string -> string t) ref = ref File_sys.read_text
-let http_send_fn : (Http.request -> Http.response t) ref = ref Http.send
-(* cljs platform/post-message! — browser posts on self; node routes to the
-   embedder's broadcast fn via Broadcast.to_clients *)
-let post_message_fn : (string -> unit) ref =
-  ref (fun payload -> Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload)
-let now_ms_fn : (unit -> float) ref =
-  ref (fun () -> Time.epoch_ms_to_float (Time.now ()))
 
 (* ---------- hooks: crypt helpers (frontend.common.crypt) ---------- *)
 
@@ -389,7 +205,7 @@ let decrypt_private_key_crypt_impl (password : string) (encrypted_key_data : Wir
             Worker_log.error "decrypt-private-key" [ ("error", exn_message e) ];
           error
             (ex_info "decrypt-private-key"
-               (if invalid_password then [ (kw "invalid-password?", Wire.Bool true) ] else []))))
+               (if invalid_password then [ (Wire.keyword "invalid-password?", Wire.Bool true) ] else []))))
 
 let encrypt_private_key_fn : (string -> Wire.t -> Wire.t t) ref = ref encrypt_private_key_impl
 let decrypt_private_key_crypt_fn : (string -> Wire.t -> Wire.t t) ref =
@@ -507,132 +323,16 @@ let encrypt_text_by_text_password_fn : (string -> string -> Wire.t t) ref =
 let decrypt_text_by_text_password_fn : (string -> Wire.t -> string t) ref =
   ref decrypt_text_by_text_password_impl
 
-(* ---------- auth (sync.util/auth-token, sync.auth/<resolve-ws-token, parse-jwt) ---------- *)
-
-let parse_jwt_impl (jwt : string) : Wire.t =
-  match String.split_on_char '.' jwt with
-  | [ _; payload; _ ] ->
-      let json = Json.parse (decode_base64url payload) in
-      (match Wire.get "cognito:username" json with
-       | Some (Wire.String u) -> wire_assoc "cognito:username" (str (decode_username u)) json
-       | _ -> json)
-  | _ -> raise (Failure "parse-jwt: invalid token")
-
-let parse_jwt_fn : (string -> Wire.t) ref = ref parse_jwt_impl
-
-let auth_token_impl () : string option =
-  match !state_get_fn "auth/id-token" with
-  | Some (Wire.String s) when seq_ (Some s) -> Some s
-  | _ ->
-      (match !state_get_fn "auth/access-token" with
-       | Some (Wire.String s) when seq_ (Some s) -> Some s
-       | _ -> None)
-
-let auth_token_fn : (unit -> string option) ref = ref auth_token_impl
-let auth_token () = !auth_token_fn ()
+(* ---------- auth ----------
+   Canonical implementations live in Sync_util (auth_token, parse_jwt,
+   jwt_payload_field) and Sync_auth (resolve_ws_token); only the
+   refresh-token state read stays local since it goes through the
+   state_get_fn seam tests rebind. *)
 
 let refresh_token_from_state () =
   match !state_get_fn "auth/refresh-token" with
   | Some (Wire.String s) -> Some s
   | _ -> None
-
-let id_token_expired token =
-  match token with
-  | Some s when seq_ (Some s) ->
-      (try
-         match !parse_jwt_fn s |> Wire.get "exp" with
-         | Some w ->
-             (match Wire.as_int64 w with
-              | Some exp -> Int64.to_float exp *. 1000. <= !now_ms_fn ()
-              | None -> true)
-         | None -> true
-       with _ -> true)
-  | _ -> true
-
-let oauth_token_url () =
-  match !state_get_fn "auth/oauth-token-url" with
-  | Some (Wire.String s) when seq_ (Some s) -> Some s
-  | _ ->
-      (match !state_get_fn "auth/oauth-domain" with
-       | Some (Wire.String d) when seq_ (Some d) -> Some ("https://" ^ d ^ "/oauth2/token")
-       | _ -> None)
-
-let refresh_id_access_token () =
-  let refresh_token = refresh_token_from_state () in
-  let token_url = oauth_token_url () in
-  let client_id =
-    match !state_get_fn "auth/oauth-client-id" with
-    | Some (Wire.String s) -> Some s
-    | _ -> None
-  in
-  if not (seq_ refresh_token) then
-    error
-      (ex_info "worker auth refresh requires refresh token"
-         [ (kw "code", kw "missing-refresh-token") ])
-  else
-    match token_url, client_id with
-    | Some token_url, Some client_id when seq_ (Some client_id) ->
-        let body =
-          urlencoded
-            [ ("grant_type", "refresh_token");
-              ("client_id", client_id);
-              ("refresh_token", Option.get refresh_token) ]
-        in
-        bind
-          (!http_send_fn
-             { Http.url = token_url; method_ = "POST";
-               headers = [ ("content-type", "application/x-www-form-urlencoded") ];
-               body = Some body })
-          (fun resp ->
-            let data =
-              match resp.body with
-              | "" -> Wire.Nil
-              | b -> Json.parse b
-            in
-            if resp.status >= 200 && resp.status < 300 then
-              pure
-                ( Wire.as_string (Option.value (Wire.get "id_token" data) ~default:Wire.Nil)
-                , Wire.as_string (Option.value (Wire.get "access_token" data) ~default:Wire.Nil)
-                )
-            else
-              error
-                (ex_info "worker auth refresh failed"
-                   [ (kw "code", kw "auth-refresh-failed");
-                     (kw "status", Wire.Int resp.status);
-                     (kw "token-url", str token_url);
-                     (kw "body", data) ]))
-    | _ ->
-        (match token_url with
-         | None ->
-             error
-               (ex_info "worker auth refresh requires oauth token url"
-                  [ (kw "code", kw "missing-oauth-token-url") ])
-         | Some _ ->
-             error
-               (ex_info "worker auth refresh requires oauth client id"
-                  [ (kw "code", kw "missing-oauth-client-id") ]))
-
-let resolve_ws_token_impl () : string option t =
-  let token = auth_token () in
-  if (not (cli_node_owner ())) && id_token_expired token then
-    bind (refresh_id_access_token ()) (fun (id_token, access_token) ->
-        match id_token with
-        | Some id_token when seq_ (Some id_token) ->
-            !merge_state_fn
-              (Wire.kw_map
-                 ([ ("auth/id-token", str id_token) ]
-                  @
-                  match access_token with
-                  | Some a when seq_ (Some a) -> [ ("auth/access-token", str a) ]
-                  | _ -> []));
-            pure (Some id_token)
-        | _ ->
-            error
-              (ex_info "worker auth refresh returned empty id-token"
-                 [ (kw "code", kw "auth-refresh-empty-id-token") ]))
-  else pure token
-
-let resolve_ws_token_fn : (unit -> string option t) ref = ref resolve_ws_token_impl
 
 (* ---------- malli coercion (e2ee schemas only) ---------- *)
 
@@ -681,7 +381,7 @@ let coerce_http_response_fn : (string -> Wire.t -> Wire.t option) ref =
 let fetch_json_impl url ?(method_ = "GET") ?(headers = []) ?body ?response_schema
     ?(error_schema = "error") () =
   run (fun () ->
-      match auth_token () with
+      match Sync_util.auth_token () with
       | None -> error (ex_info "Empty token" [])
       | Some token ->
           let headers = headers @ [ ("authorization", "Bearer " ^ token) ] in
@@ -702,9 +402,9 @@ let fetch_json_impl url ?(method_ = "GET") ?(headers = []) ?body ?response_schem
                      | None ->
                          error
                            (ex_info "db-sync invalid response"
-                              [ (kw "status", Wire.Int resp.status);
-                                (kw "url", str url);
-                                (kw "body", Wire.Nil) ]))
+                              [ (Wire.keyword "status", Wire.Int resp.status);
+                                (Wire.keyword "url", str url);
+                                (Wire.keyword "body", Wire.Nil) ]))
               else
                 let body =
                   match data with
@@ -716,132 +416,11 @@ let fetch_json_impl url ?(method_ = "GET") ?(headers = []) ?body ?response_schem
                 in
                 error
                   (ex_info "db-sync request failed"
-                     [ (kw "status", Wire.Int resp.status);
-                       (kw "url", str url);
-                       (kw "body", body) ])))
+                     [ (Wire.keyword "status", Wire.Int resp.status);
+                       (Wire.keyword "url", str url);
+                       (Wire.keyword "body", body) ])))
 
 let fetch_json_fn = ref fetch_json_impl
-
-(* ---------- ui-request client (frontend.worker.ui-request) ---------- *)
-
-let ui_interaction_required_error action hint =
-  ex_info "ui-interaction-required"
-    ([ (kw "code", kw "ui-interaction-required"); (kw "action", action) ]
-     @
-     match hint with
-     | Some h when seq_ (Some h) -> [ (kw "hint", str h) ]
-     | _ -> [])
-
-(* cljs ui-request/->rejectable-error — an Error-map's fields become
-   ex-data; code defaults to :ui-request-rejected. *)
-let rejectable_exn_of_wire request_id action (m : Wire.t) =
-  let entries = Wire.as_map m in
-  let code =
-    match Wire.get "code" m with
-    | Some (Wire.Keyword s) | Some (Wire.String s) -> s
-    | _ -> "ui-request-rejected"
-  in
-  let message =
-    match Wire.get "message" m with
-    | Some (Wire.String s) -> s
-    | _ -> code
-  in
-  let entries =
-    entries
-    @ (match Wire.get "code" m with
-       | Some _ -> []
-       | None -> [ (kw "code", kw "ui-request-rejected") ])
-    @ (match Wire.get "request-id" m with
-       | Some _ -> []
-       | None -> [ (kw "request-id", str request_id) ])
-    @ (match Wire.get "action" m with
-       | Some _ -> []
-       | None -> [ (kw "action", action) ])
-  in
-  ex_info message entries
-
-let ui_request_impl (action : Wire.t) (payload : Wire.t) ?hint ?timeout_ms () : Wire.t t =
-  run (fun () ->
-      if not (interactive_runtime ()) then
-        error (ui_interaction_required_error action hint)
-      else begin
-        let request_id = Uuid_gen.uuid () in
-        let timeout_ms =
-          match timeout_ms with
-          | Some t when t > 0 -> t
-          | _ -> default_ui_timeout_ms
-        in
-        let task, resolver = wait () in
-        Worker_state.ui_request_put request_id resolver action;
-        let timer =
-          Timers.set_timeout timeout_ms (fun () ->
-              match Worker_state.ui_request_take request_id with
-              | Some (r, _) ->
-                  wakeup r
-                    (Error
-                       (Wire.kw_map
-                          [ ("code", kw "ui-request-timeout");
-                            ("request-id", str request_id);
-                            ("action", action);
-                            ("timeout-ms", Wire.Int timeout_ms) ]))
-              | None -> ())
-        in
-        (try
-           !post_message_fn
-             (transit_write
-                (Wire.Array
-                   [ kw "db-worker/ui-request";
-                     Wire.kw_map
-                       [ ("request-id", str request_id);
-                         ("action", action);
-                         ("payload", payload);
-                         ("timeout-ms", Wire.Int timeout_ms) ] ]))
-         with e ->
-           (match Worker_state.ui_request_take request_id with
-            | Some (r, _) ->
-                Timers.clear timer;
-                wakeup r
-                  (Error
-                     (Wire.kw_map
-                        [ ("code", kw "ui-request-rejected");
-                          ("request-id", str request_id);
-                          ("action", action);
-                          ("data", Wire.Map (exn_data e)) ]))
-            | None -> ()));
-        bind task (function
-          | Ok v ->
-              Timers.clear timer;
-              pure v
-          | Error m ->
-              Timers.clear timer;
-              error (rejectable_exn_of_wire request_id action m))
-      end)
-
-let ui_request_fn :
-    (Wire.t -> Wire.t -> ?hint:string -> ?timeout_ms:int -> unit -> Wire.t t) ref =
-  ref ui_request_impl
-
-let request_ui action payload ?hint ?timeout_ms () =
-  !ui_request_fn action payload ?hint ?timeout_ms ()
-
-(* cljs ui-request/cancel-all! — resolve/reject endpoints already live
-   in endpoint_state.ml. *)
-let cancel_all_ui_requests context =
-  let ids = Worker_state.ui_request_ids () in
-  List.iter
-    (fun id ->
-      match Worker_state.ui_request_take id with
-      | Some (r, action) ->
-          wakeup r
-            (Error
-               (Wire.kw_map
-                  [ ("code", kw "ui-request-cancelled");
-                    ("request-id", str id);
-                    ("action", action);
-                    ("context", context) ]))
-      | None -> ())
-    ids;
-  Wire.kw_map [ ("ok", Wire.Bool true); ("cancelled", Wire.Int (List.length ids)) ]
 
 (* ---------- small pieces ---------- *)
 
@@ -902,59 +481,17 @@ let get_graph_id_impl repo : string option =
 let get_graph_id_fn : (string -> string option) ref = ref get_graph_id_impl
 
 let get_user_uuid_impl () : string option =
-  match auth_token () with
-  | Some t ->
-      (try
-         match !parse_jwt_fn t |> Wire.get "sub" with
-         | Some (Wire.String s) -> Some s
-         | _ -> None
-       with _ -> None)
-  | None -> None
+  Sync_auth.get_user_uuid (Sync_util.auth_token ())
 
 let get_user_uuid_fn : (unit -> string option) ref = ref get_user_uuid_impl
 let get_user_uuid () = !get_user_uuid_fn ()
 
-let token_to_user_uuid token =
-  match token with
-  | Some t ->
-      (try
-         match !parse_jwt_fn t |> Wire.get "sub" with
-         | Some (Wire.String s) -> Some s
-         | _ -> None
-       with _ -> None)
-  | None -> None
-
 let resolve_user_uuid_impl () : string option t =
   match get_user_uuid () with
   | Some id when seq_ (Some id) -> pure (Some id)
-  | _ -> catch (map token_to_user_uuid (!resolve_ws_token_fn ())) (fun _ -> pure None)
+  | _ -> catch (map Sync_auth.get_user_uuid (Sync_auth.resolve_ws_token ())) (fun _ -> pure None)
 
 let resolve_user_uuid_fn : (unit -> string option t) ref = ref resolve_user_uuid_impl
-
-(* ---------- idb item wrappers ---------- *)
-
-let get_item_impl k =
-  assert (seq_ (Some k));
-  !kv_get_fn (platform_env ()) k
-
-let set_item_impl k v =
-  assert (seq_ (Some k));
-  !kv_set_fn (platform_env ()) k v
-
-let clear_item_impl k =
-  assert (seq_ (Some k));
-  !kv_set_fn (platform_env ()) k Wire.Nil
-
-let get_item_fn : (string -> Wire.t t) ref = ref get_item_impl
-let set_item_fn : (string -> Wire.t -> unit t) ref = ref set_item_impl
-let clear_item_fn : (string -> unit t) ref = ref clear_item_impl
-
-let get_item k = !get_item_fn k
-let set_item k v = !set_item_fn k v
-let clear_item k = !clear_item_fn k
-
-let graph_encrypted_aes_key_idb_key graph_id = "rtc-encrypted-aes-key###" ^ graph_id
-let user_rsa_key_pair_idb_key base user_id = "rtc-user-rsa-key-pair###" ^ base ^ "###" ^ user_id
 
 (* ---------- user rsa key pair ---------- *)
 
@@ -1015,7 +552,7 @@ let get_user_rsa_key_pair_raw_impl base : Wire.t t =
                  (Wire.kw_map
                     [ ("base", wire_opt str base);
                       ("user-id", wire_opt str user_id);
-                      ("field", kw "user-rsa-key-pair") ]));
+                      ("field", Wire.keyword "user-rsa-key-pair") ]));
           let b = Option.get base and u = Option.get user_id in
           let k = (b, u) in
           match Hashtbl.find_opt user_rsa_key_pair_inflight k with
@@ -1053,7 +590,7 @@ let upload_user_rsa_key_pair_impl base public_key encrypted_private_key =
       (match body with
        | None ->
            fail_fast "db-sync/invalid-field"
-             (Wire.kw_map [ ("type", kw "e2ee/user-keys"); ("body", Wire.Nil) ])
+             (Wire.kw_map [ ("type", Wire.keyword "e2ee/user-keys"); ("body", Wire.Nil) ])
        | Some _ -> ());
       bind
         (!fetch_json_fn (base ^ "/e2ee/user-keys") ~method_:"POST"
@@ -1076,7 +613,7 @@ let read_refresh_token_from_auth_file () : string option t =
       (match parse_auth_file (Some text) with
        | `Invalid ->
            !fail_missing_e2ee_password_fn
-             [ ("reason", kw "invalid-auth-file");
+             [ ("reason", Wire.keyword "invalid-auth-file");
                ("hint", str "Run logseq login first.") ]
        | `Empty | `Parsed _ -> ());
       let refresh_token =
@@ -1101,7 +638,7 @@ let save_e2ee_password_impl (password : string) : unit t =
           if capacitor_runtime () then
             catch
               (bind
-                 (request_ui (kw "native-save-e2ee-password")
+                 (Sync_ui_request.request_ui (Wire.keyword "native-save-e2ee-password")
                     (Wire.kw_map
                        [ ("key", str e2ee_password_secret_key);
                          ("encrypted-text", str text) ])
@@ -1132,7 +669,7 @@ let read_e2ee_password_text_impl (refresh_token : string option) : string option
       if capacitor_runtime () then
         bind
           (catch
-             (request_ui (kw "native-get-e2ee-password")
+             (Sync_ui_request.request_ui (Wire.keyword "native-get-e2ee-password")
                 (Wire.kw_map [ ("key", str e2ee_password_secret_key) ])
                 ())
              (fun e ->
@@ -1157,15 +694,15 @@ let decrypt_e2ee_password_text refresh_token text : string t =
       | false ->
           error
             (missing_e2ee_password_exn
-               [ ("reason", kw "missing-persisted-password");
+               [ ("reason", Wire.keyword "missing-persisted-password");
                  ("hint", str "Provide --e2ee-password to persist it.") ])
       | true ->
           (match transit_read_safe (Option.get text) with
            | None ->
                fail_fast "db-sync/invalid-e2ee-password-payload"
                  (Wire.kw_map
-                    [ ("field", kw "e2ee-password");
-                      ("reason", kw "invalid-transit-payload") ])
+                    [ ("field", Wire.keyword "e2ee-password");
+                      ("reason", Wire.keyword "invalid-transit-payload") ])
            | Some data ->
                !decrypt_text_by_text_password_fn (Option.get refresh_token) data))
 
@@ -1182,7 +719,7 @@ let clear_e2ee_password_impl () : unit t =
   if capacitor_runtime () then
     bind
       (catch
-         (request_ui (kw "native-delete-e2ee-password")
+         (Sync_ui_request.request_ui (Wire.keyword "native-delete-e2ee-password")
             (Wire.kw_map [ ("key", str e2ee_password_secret_key) ])
             ())
          (fun e ->
@@ -1209,7 +746,7 @@ let clear_e2ee_password_fn : (unit -> unit t) ref = ref clear_e2ee_password_impl
 
 let request_e2ee_password_from_ui_impl payload : string t =
   bind
-    (request_ui (kw "request-e2ee-password") payload
+    (Sync_ui_request.request_ui (Wire.keyword "request-e2ee-password") payload
        ~hint:"Provide e2ee-password to continue." ())
     (fun resp ->
       match Wire.get "password" resp with
@@ -1217,7 +754,7 @@ let request_e2ee_password_from_ui_impl payload : string t =
       | _ ->
           fail_fast "db-sync/missing-e2ee-password"
             (Wire.kw_map
-               [ ("field", kw "e2ee-password"); ("reason", kw "empty-ui-password") ]))
+               [ ("field", Wire.keyword "e2ee-password"); ("reason", Wire.keyword "empty-ui-password") ]))
 
 let request_e2ee_password_from_ui_fn : (Wire.t -> string t) ref =
   ref request_e2ee_password_from_ui_impl
@@ -1225,7 +762,7 @@ let request_e2ee_password_from_ui_fn : (Wire.t -> string t) ref =
 let verify_e2ee_password_impl password encrypted_private_key_or_str : Wire.t t =
   run (fun () ->
       if not (seq_ (Some password)) then
-        !fail_missing_e2ee_password_fn [ ("reason", kw "empty-password") ];
+        !fail_missing_e2ee_password_fn [ ("reason", Wire.keyword "empty-password") ];
       let encrypted_private_key =
         match encrypted_private_key_or_str with
         | Wire.String s -> transit_read s
@@ -1235,7 +772,7 @@ let verify_e2ee_password_impl password encrypted_private_key_or_str : Wire.t t =
           if exn_field_true "invalid-password?" e then
             error
               (ex_info "invalid-e2ee-password"
-                 [ (kw "code", kw "db-sync/invalid-e2ee-password") ])
+                 [ (Wire.keyword "code", Wire.keyword "db-sync/invalid-e2ee-password") ])
           else error e))
 
 let verify_e2ee_password_fn : (string -> Wire.t -> Wire.t t) ref =
@@ -1253,7 +790,7 @@ let verify_and_save_e2ee_password_from_server_impl (password : string) : Wire.t 
       match e2ee_base () with
       | None ->
           fail_fast "db-sync/missing-field"
-            (Wire.kw_map [ ("base", Wire.Nil); ("field", kw "e2ee-base") ])
+            (Wire.kw_map [ ("base", Wire.Nil); ("field", Wire.keyword "e2ee-base") ])
       | Some base ->
           bind (!fetch_user_rsa_key_pair_raw_fn base) (fun pair ->
               match Wire.get "encrypted-private-key" pair with
@@ -1262,7 +799,7 @@ let verify_and_save_e2ee_password_from_server_impl (password : string) : Wire.t 
               | _ ->
                   fail_fast "db-sync/missing-field"
                     (Wire.kw_map
-                       [ ("base", str base); ("field", kw "encrypted-private-key") ])))
+                       [ ("base", str base); ("field", Wire.keyword "encrypted-private-key") ])))
 
 let verify_and_save_e2ee_password_from_server_fn : (string -> Wire.t t) ref =
   ref verify_and_save_e2ee_password_from_server_impl
@@ -1281,10 +818,10 @@ let generate_and_upload_user_rsa_key_pair_impl base (opts : Wire.t) : Wire.t t =
                 | Some p -> pure p
                 | None when interactive_runtime () ->
                     !request_e2ee_password_from_ui_fn
-                      (Wire.kw_map [ ("reason", kw "generate-user-rsa-key-pair") ])
+                      (Wire.kw_map [ ("reason", Wire.keyword "generate-user-rsa-key-pair") ])
              | None ->
                  !fail_missing_e2ee_password_fn
-                   [ ("reason", kw "missing-password-for-generate-user-rsa-key-pair");
+                   [ ("reason", Wire.keyword "missing-password-for-generate-user-rsa-key-pair");
                      ( "hint"
                      , str
                          "Provide --e2ee-password when running sync ensure-keys --upload-keys."
@@ -1383,7 +920,7 @@ let ensure_user_rsa_key_pair_impl base (opts : Wire.t) : Wire.t t =
                      (Wire.kw_map
                         [ ("base", str base);
                           ("user-id", Wire.Nil);
-                          ("field", kw "user-rsa-key-pair") ]));
+                          ("field", Wire.keyword "user-rsa-key-pair") ]));
               let u = Option.get user_id in
               let ensure_server =
                 match Wire.get "ensure-server?" opts with
@@ -1442,7 +979,7 @@ let decrypt_private_key_impl (opts : decrypt_private_key_opts)
        | Some p when seq_ (Some p) -> pure p
        | _ ->
            !request_e2ee_password_from_ui_fn
-             (Wire.kw_map [ ("reason", kw "decrypt-user-rsa-private-key") ]))
+             (Wire.kw_map [ ("reason", Wire.keyword "decrypt-user-rsa-private-key") ]))
       (fun password ->
         ui_password_ref := Some password;
         bind (!verify_e2ee_password_fn password enc) (fun priv ->
@@ -1458,13 +995,13 @@ let decrypt_private_key_impl (opts : decrypt_private_key_opts)
             bind (!decrypt_e2ee_password_text_fn refresh_token text) (fun password ->
                 if not (seq_ (Some password)) then
                   !fail_missing_e2ee_password_fn
-                    [ ("reason", kw "headless-empty-password");
+                    [ ("reason", Wire.keyword "headless-empty-password");
                       ("hint", str "Provide --e2ee-password to persist it.") ];
                 !verify_e2ee_password_fn password enc)
         | false ->
             error
               (missing_e2ee_password_exn
-                 [ ("reason", kw "missing-persisted-password");
+                 [ ("reason", Wire.keyword "missing-persisted-password");
                    ("hint", str "Provide --e2ee-password to persist it.") ]))
   in
   run (fun () ->
@@ -1533,7 +1070,7 @@ let upsert_graph_encrypted_aes_key_impl base graph_id encrypted_aes_key_str =
        | Some _ -> ()
        | None ->
            fail_fast "db-sync/invalid-field"
-             (Wire.kw_map [ ("type", kw "e2ee/graph-aes-key"); ("body", Wire.Nil) ]));
+             (Wire.kw_map [ ("type", Wire.keyword "e2ee/graph-aes-key"); ("body", Wire.Nil) ]));
       !fetch_json_fn (base ^ "/e2ee/graphs/" ^ graph_id ^ "/aes-key")
         ~method_:"POST" ~headers:[ ("content-type", "application/json") ]
         ~body:(Json.stringify (Option.get body))
@@ -1556,7 +1093,7 @@ let load_user_rsa_key_material_impl base (user_id : string) (graph_id : string o
                (Wire.kw_map
                   [ ("base", str base); ("user-id", str user_id);
                     ("graph-id", wire_opt str graph_id);
-                    ("field", kw "user-rsa-key-pair") ]));
+                    ("field", Wire.keyword "user-rsa-key-pair") ]));
         let public_key =
           match Wire.get "public-key" pair with
           | Some (Wire.String s) -> s
@@ -1612,7 +1149,7 @@ let preflight_upload_e2ee_impl repo encrypted_graph : unit t =
                         [ ("repo", str repo);
                           ("base", wire_opt str base);
                           ("user-id", wire_opt str user_id);
-                          ("field", kw "user-rsa-key-pair") ]));
+                          ("field", Wire.keyword "user-rsa-key-pair") ]));
               map ignore
                 (!load_user_rsa_key_material_fn (Option.get base) (Option.get user_id) None)))
   | false -> pure ()
@@ -1751,7 +1288,7 @@ let fetch_graph_aes_key_for_download_impl (graph_id : string option) : Wire.t t 
                  fail_fast "db-sync/missing-field"
                    (Wire.kw_map
                       [ ("graph-id", wire_opt str graph_id);
-                        ("field", kw "user-rsa-key-pair") ]));
+                        ("field", Wire.keyword "user-rsa-key-pair") ]));
             let enc_priv =
               match Wire.get "encrypted-private-key" pair with
               | Some (Wire.String s) -> s
@@ -1774,7 +1311,7 @@ let fetch_graph_aes_key_for_download_impl (graph_id : string option) : Wire.t t 
                          fail_fast "db-sync/missing-field"
                            (Wire.kw_map
                               [ ("graph-id", wire_opt str graph_id);
-                                ("field", kw "encrypted-aes-key") ]));
+                                ("field", Wire.keyword "encrypted-aes-key") ]));
                     let enc = Option.get encrypted_aes_key in
                     bind (!set_item_fn aes_key_k enc) (fun () ->
                         bind (!decrypt_aes_key_fn private_key enc) (fun aes_key ->
@@ -1822,7 +1359,7 @@ let grant_graph_access_impl repo graph_id target_email : unit t =
              | Some _ -> ()
              | None ->
                  fail_fast "db-sync/missing-field"
-                   (Wire.kw_map [ ("repo", str repo); ("field", kw "aes-key") ]));
+                   (Wire.kw_map [ ("repo", str repo); ("field", Wire.keyword "aes-key") ]));
             let aes_key = Option.get aes_key in
             bind
               (!fetch_user_public_key_by_email_fn base target_email)
@@ -1847,7 +1384,7 @@ let grant_graph_access_impl repo graph_id target_email : unit t =
                              | None ->
                                  fail_fast "db-sync/invalid-field"
                                    (Wire.kw_map
-                                      [ ("type", kw "e2ee/grant-access");
+                                      [ ("type", Wire.keyword "e2ee/grant-access");
                                         ("body", Wire.Nil) ]));
                             map
                               (fun _ -> ())
@@ -1861,7 +1398,7 @@ let grant_graph_access_impl repo graph_id target_email : unit t =
                 | _ ->
                     fail_fast "db-sync/missing-field"
                       (Wire.kw_map
-                         [ ("repo", str repo); ("field", kw "public-key");
+                         [ ("repo", str repo); ("field", Wire.keyword "public-key");
                            ("email", str target_email) ]))))
 
 let grant_graph_access_fn : (string -> string option -> string -> unit t) ref =
@@ -2118,7 +1655,7 @@ let change_e2ee_password_impl _refresh_token user_uuid old_password new_password
                fail_fast "db-sync/missing-field"
                  (Wire.kw_map
                     [ ("base", str base); ("user-uuid", wire_opt str user_uuid);
-                      ("field", kw "user-rsa-key-pair") ]));
+                      ("field", Wire.keyword "user-rsa-key-pair") ]));
           let public_key =
             match Wire.get "public-key" pair with
             | Some (Wire.String s) -> s | _ -> assert false
@@ -2135,7 +1672,7 @@ let change_e2ee_password_fn :
     (string option -> string option -> string -> string -> unit t) ref =
   ref change_e2ee_password_impl
 
-let cancel_ui_requests context = cancel_all_ui_requests context
+let cancel_ui_requests context = Sync_ui_request.cancel_all_ui_requests context
 
 (* ---------- init + hook reset ---------- *)
 
@@ -2229,7 +1766,6 @@ let reset_hooks () =
   ldb_graph_rtc_uuid_fn := Ldb.get_graph_rtc_uuid;
   datascript_conn_fn := Worker_state.datascript_conn;
   state_get_fn := Worker_state.state_get;
-  merge_state_fn := Worker_state.merge_state;
   db_sync_config_fn := Worker_state.db_sync_config;
   kv_get_fn := kv_get_impl;
   kv_set_fn := kv_set_impl;
@@ -2241,7 +1777,6 @@ let reset_hooks () =
   post_message_fn :=
     (fun payload ->
       Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload);
-  now_ms_fn := (fun () -> Time.epoch_ms_to_float (Time.now ()));
   generate_rsa_key_pair_fn := generate_rsa_key_pair_impl;
   encrypt_private_key_fn := encrypt_private_key_impl;
   decrypt_private_key_crypt_fn := decrypt_private_key_crypt_impl;
@@ -2258,12 +1793,13 @@ let reset_hooks () =
   decrypt_text_if_encrypted_fn := decrypt_text_if_encrypted_impl;
   encrypt_text_by_text_password_fn := encrypt_text_by_text_password_impl;
   decrypt_text_by_text_password_fn := decrypt_text_by_text_password_impl;
-  parse_jwt_fn := parse_jwt_impl;
-  auth_token_fn := auth_token_impl;
-  resolve_ws_token_fn := resolve_ws_token_impl;
+  Sync_util.parse_jwt_fn := Sync_util.parse_jwt;
+  Sync_util.auth_token_fn := Sync_util.auth_token_impl;
+  Sync_auth.id_token_expired_fn := Sync_auth.id_token_expired_impl;
+  Sync_auth.resolve_ws_token_fn := Sync_auth.resolve_ws_token_impl;
   coerce_http_request_fn := coerce_http_request_impl;
   fetch_json_fn := fetch_json_impl;
-  ui_request_fn := ui_request_impl;
+  Sync_ui_request.ui_request_fn := Sync_ui_request.ui_request_impl;
   e2ee_base_fn := e2ee_base_impl;
   graph_e2ee_fn := graph_e2ee_impl;
   get_graph_id_fn := get_graph_id_impl;

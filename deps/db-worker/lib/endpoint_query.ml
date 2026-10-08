@@ -18,7 +18,6 @@ let require_repo args =
   | _ -> "" (* cljs: conn lookup misses on any non-string arg *)
 
 let arg args i = List.nth_opt args i
-let kw s = Wire.Keyword s
 
 (* cljs fail! throws synchronously; inside an E.bind continuation the
    raise is captured into a rejection, so either context matches cljs
@@ -225,7 +224,7 @@ let resolve_custom_query_input (db : db) (input : Wire.t)
          raise
            (Dispatcher.Exn_info
               ( "Query block input requires :current-block-uuid",
-                [ (kw "input", Ds_wire.transit_of_value resolved_input) ] ))
+                [ (Wire.keyword "input", Ds_wire.transit_of_value resolved_input) ] ))
    | _ -> ());
   match resolved_input, today_day with
   | Keyword "today", Some day ->
@@ -292,7 +291,7 @@ let execute_custom_query (db : db) (query_m : Wire.t)
     | _ -> false
   in
   if not valid then
-    fail "Invalid custom query" [ (kw "query", query_m) ]
+    fail "Invalid custom query" [ (Wire.keyword "query", query_m) ]
   else
     let query_forms =
       match Wire.get "query" query_m with
@@ -531,20 +530,20 @@ let task_spent_time_impl (db : db) (block_id : int) (now_ms : Time.epoch_ms)
       let time = loop status_history 0. in
       let item_wire (it : history_item) =
         Wire.Map
-          [ (kw "db/id", Wire.Int it.history_id)
-          ; ( kw "block/created-at"
+          [ (Wire.keyword "db/id", Wire.Int it.history_id)
+          ; ( Wire.keyword "block/created-at"
             , Ds_wire.wire_int64 (Time.epoch_ms_to_int64 it.created_at) )
-          ; ( kw "logseq.property.history/property-ident",
-              kw "logseq.property/status" )
-          ; ( kw "logseq.property.history/ref-value-ident",
+          ; ( Wire.keyword "logseq.property.history/property-ident",
+              Wire.keyword "logseq.property/status" )
+          ; ( Wire.keyword "logseq.property.history/ref-value-ident",
               match it.status_ident with
-              | Some s -> kw s
+              | Some s -> Wire.keyword s
               | None -> Wire.Nil )
-          ; ( kw "logseq.property.history/ref-value-uuid",
+          ; ( Wire.keyword "logseq.property.history/ref-value-uuid",
               match it.status_uuid with
               | Some v -> Ds_wire.transit_of_value v
               | None -> Wire.Nil )
-          ; ( kw "logseq.property.history/ref-value-title",
+          ; ( Wire.keyword "logseq.property.history/ref-value-title",
               match it.status_title with
               | Some v -> Ds_wire.transit_of_value v
               | None -> Wire.Nil )
@@ -622,50 +621,13 @@ let query_custom args =
   let repo = require_repo args in
   let context = Option.value (arg args 2) ~default:Wire.nil in
   match require_query_context context with
-  | None -> fail "Invalid custom query context" [ (kw "context", context) ]
+  | None -> fail "Invalid custom query context" [ (Wire.keyword "context", context) ]
   | Some ctx ->
       (match Worker_state.datascript_conn repo with
        | None ->
-           fail "Missing custom query database" [ (kw "repo", Wire.String repo) ]
+           fail "Missing custom query database" [ (Wire.keyword "repo", Wire.String repo) ]
        | Some conn ->
            let query_m = Option.value (arg args 1) ~default:Wire.nil in
            execute_custom_query (Datascript.db conn) query_m ctx)
 
 let () = Dispatcher.register "thread-api/query-custom" query_custom
-
-(* frontend.extensions.sci/eval-string — evaluates user EDN source through
-   Edn_eval. 'block binds the src block's entity when a uuid arg is given
-   (cljs {:bindings {'block block}}). Errors swallow to nil like cljs
-   sci/eval-string's try/catch. *)
-let eval_string args =
-  let repo = require_repo args in
-  let code = match arg args 1 with Some (Wire.String s) -> s | _ -> "" in
-  let block_uuid =
-    match arg args 2 with Some (Wire.String s) -> s | _ -> ""
-  in
-  match Worker_state.datascript_conn repo with
-  | None -> fail "Missing eval database" [ (kw "repo", Wire.String repo) ]
-  | Some conn ->
-      let db = Datascript.db conn in
-      let bindings =
-        match block_uuid with
-        | "" -> []
-        | u -> (
-            match entity db (Lookup_ref ("block/uuid", Uuid u)) with
-            | Some e -> [ ("block", Edn_eval.Ent e.id) ]
-            | None -> [])
-      in
-      let entity_attr eid attr =
-        match Ldb.ent_of_id db eid with
-        | Some e -> (match Ldb.value e attr with Some v -> v | None -> Nil)
-        | None -> Nil
-      in
-      let r =
-        try Edn_eval.wire_of_rt (Edn_eval.eval_code ~entity_attr ~bindings code)
-        with
-        | Edn_eval.Eval_error _ | Edn_eval.Throw_value _ -> Wire.Nil
-        | _ -> Wire.Nil
-      in
-      Db_worker_effect.pure r
-
-let () = Dispatcher.register "thread-api/eval-string" eval_string

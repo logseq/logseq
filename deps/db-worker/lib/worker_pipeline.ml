@@ -531,9 +531,16 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
        ancestor: namespaces created before registration existed can
        have a parentless root higher up. *)
     let move_parent_to_library_tx (block_parent : entity option) =
+      (* visited guards :block/parent cycles — a malformed cyclic chain
+         must not hang the pipeline walk. *)
+      let visited = Hashtbl.create 8 in
       let rec climb (p : entity) =
         match Ldb.ref_ent p "block/parent" with
-        | Some pp when Ldb.is_page p && Ldb.is_page pp -> climb pp
+        | Some pp
+          when Ldb.is_page p && Ldb.is_page pp
+               && not (Hashtbl.mem visited pp.id) ->
+            Hashtbl.add visited pp.id ();
+            climb pp
         | _ -> p
       in
       match block_parent with
@@ -551,7 +558,7 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                    [ "db/id", Int64 (Int64.of_int root.id)
                    ; "block/parent", Int64 (Int64.of_int lp.id)
                    ; "block/order",
-                     String (Db_order.gen_key None None) ] ]
+                     String (Db_order.gen_key_from_max ()) ] ]
            | _ -> [])
     in
     List.concat_map
@@ -669,12 +676,17 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                 (* page->block — cljs uses (:block/parent block-after) *)
                 match Ldb.ref_ent ba "block/parent" with
                 | Some parent ->
+                    (* visited guards :block/parent cycles — a malformed
+                       cyclic chain must not hang the walk. *)
+                    let visited = Hashtbl.create 8 in
                     let rec find_parent_page (p : entity) =
                       if Ldb.is_page p then Some p
                       else
                         match Ldb.ref_ent p "block/parent" with
-                        | Some pp -> find_parent_page pp
-                        | None -> None
+                        | Some pp when not (Hashtbl.mem visited pp.id) ->
+                            Hashtbl.add visited pp.id ();
+                            find_parent_page pp
+                        | _ -> None
                     in
                     (match find_parent_page parent with
                      | Some pp ->
@@ -1134,7 +1146,9 @@ let compute_extra_tx_data (report : tx_report) : tx_op list =
     | None -> db
   in
   let insert_templates_tx =
-    if rtc_tx_or_download_graph tx_meta then []
+    if rtc_tx_or_download_graph tx_meta || flag tx_meta "undo?"
+       || flag tx_meta "db-sync/replayed-tx-data?"
+    then []
     else
       insert_tag_templates
         { report with
@@ -1331,10 +1345,14 @@ let transact_pipeline (tx_report : tx_report) : tx_report =
   let deleted_blocks =
     Outliner_pipeline.filter_deleted_blocks tx_report'.tx_data
   in
-  let deleted_block_ids = List.map fst deleted_blocks in
+  let deleted_block_ids =
+    List.fold_left
+      (fun s (id, _) -> Db_reference.IdSet.add id s)
+      Db_reference.IdSet.empty deleted_blocks
+  in
   let surviving_blocks =
     List.filter
-      (fun (b : entity) -> not (List.mem b.id deleted_block_ids))
+      (fun (b : entity) -> not (Db_reference.IdSet.mem b.id deleted_block_ids))
       blocks
   in
   let block_refs =
@@ -1350,7 +1368,7 @@ let transact_pipeline (tx_report : tx_report) : tx_report =
     List.filter_map
       (fun db_id ->
         if
-          not (List.mem db_id deleted_block_ids)
+          not (Db_reference.IdSet.mem db_id deleted_block_ids)
           && (match entity db_after (Entity_id db_id) with
               | Some e -> Ldb.value e "block/uuid" <> None
               | None -> false)

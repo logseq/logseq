@@ -1,6 +1,4 @@
-(* logseq.common.util.block-ref — helpers for the deprecated `((uuid))`
-   block reference form; block refs are written as `[[uuid]]` and render
-   through the same page-reference path as `[[]]`. *)
+(* logseq.common.util.block-ref — `((uuid))` block reference helpers. *)
 
 let open_char = "(("
 let close_char = "))"

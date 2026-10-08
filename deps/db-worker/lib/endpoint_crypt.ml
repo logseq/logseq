@@ -15,6 +15,7 @@
 
 open Db_worker_effect
 open Sync_crypt
+open Sync_platform
 
 let arg args n = List.nth_opt args n
 
@@ -69,7 +70,7 @@ let () =
                           in
                           bind
                             (!request_e2ee_password_from_ui_fn
-                               (Wire.kw_map [ ("reason", kw "init-user-rsa-key-pair") ]))
+                               (Wire.kw_map [ ("reason", Wire.keyword "init-user-rsa-key-pair") ]))
                             (fun password ->
                               bind
                                 (!encrypt_private_key_fn password (field "privateKey"))

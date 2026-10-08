@@ -878,7 +878,7 @@ let test_sync_temp_batch_connection_lifetime mode () =
   let conn = create_conn () in
   check_connections_released (fun remember ->
       try
-        ignore (Sync_apply.batch_transact_with_temp_conn_impl conn []
+        ignore (Sync_replay.batch_transact_with_temp_conn_impl conn []
                   ?before_commit:(if mode = "before-commit-failure" then
                                     Some (fun () -> raise Batch_lifetime_failure)
                                   else None)
@@ -3957,10 +3957,10 @@ let () =
     ; "db-worker", Test_db_worker_native.cases
     ; "platform", Test_platform_native.cases
     ; "search-benchmark", Test_search_benchmark_native.cases
-    ; "cold-start", Test_cold_start_native.cases
     ; "shared-service", Test_shared_service_native.cases
     ; "node-sync", Test_node_sync_native.cases
     ; "pipeline", Test_pipeline_native.cases
+    ; "query-dsl", Test_query_dsl_native.cases
     ; "markdown-mirror", Test_markdown_mirror_native.cases
     ; "graph-view", Test_graph_view_native.cases
     ; "db-core", Test_db_core_native.cases

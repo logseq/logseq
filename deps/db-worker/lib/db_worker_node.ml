@@ -204,6 +204,10 @@ let sse_handler (req : Http_server.req) (res : Http_server.res) : unit =
       (Timers.set_interval sse_keepalive_ms (fun () ->
            try Http_server.write res ": keepalive\n\n"
            with _ ->
+             (* cljs: (catch :default _ (js/clearInterval @keepalive-id)) —
+                swallow like cljs, but keep a trace of the dropped sink *)
+             Worker_log.error "sse-keepalive-write-failed"
+               [ ("source", "sse-handler") ];
              (match !keepalive_id with
               | Some t -> Timers.clear t
               | None -> ())));
@@ -622,7 +626,13 @@ let handle_request (proxy : proxy) ~(bound_repo : string)
                match !admission with
                | Some rt ->
                    (try Graph_lifecycle.check_admission rt; false
-                    with _ -> true)
+                    with e ->
+                      (* cljs: (catch :default _ true) — a raised admission
+                         check means the runtime is closed; keep the 410
+                         gate but log why it tripped *)
+                      Worker_log.warn "db-worker-node-admission-check-failed"
+                        [ ("error", Printexc.to_string e) ];
+                      true)
                | None -> true )
   then begin
     send_json res 410
@@ -856,14 +866,6 @@ type daemon_opts =
   ; opt_on_stopped : exn option -> unit
   }
 
-let daemon_t0 = Time.monotonic_now ()
-
-let daemon_phase name =
-  Worker_log.info "daemon-phase"
-    [ "p", name
-    ; "ms"
-    , Printf.sprintf "%.1f" (Time.diff_monotonic_ms daemon_t0 (Time.monotonic_now ())) ]
-
 let start_daemon (opts : daemon_opts) : daemon E.t =
   let host = "127.0.0.1" in
   let port = 0 in
@@ -943,7 +945,6 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                     in
                     proxy_cell := Some proxy;
                     E.bind (init_worker proxy) (fun _ ->
-                        daemon_phase "worker-init";
                         E.bind
                           (if owner_source = "cli" then
                              (* The CLI never sends create-or-open-db, so a
@@ -951,7 +952,6 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                              E.pure true
                            else !db_exists_fn ~repo)
                           (fun db_exists ->
-                             daemon_phase "db-exists";
                              (* A not-yet-created graph is initialized by
                                 the first create-or-open-db call's opts
                                 (e.g. import datoms), so only eagerly open
@@ -968,7 +968,6 @@ let start_daemon (opts : daemon_opts) : daemon E.t =
                                             opts.opt_create_empty_db ]
                                 else E.pure "")
                                (fun _ ->
-                                  daemon_phase "open-db";
                                   start_http_server ~proxy ~repo ~host ~port
                                     ~owner_source ~root_dir
                                     ~on_stopped:opts.opt_on_stopped))))

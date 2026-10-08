@@ -251,10 +251,7 @@ let page_relative_path repo db (page : entity) ~(opts : opts) : string option =
    LOGSEQ_WORKER_DB_DIR is the graphs data dir (the env runtime
    sqlite.ml data_dir uses); without it mirror writes landed in the
    worker cwd. *)
-let data_dir () =
-  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-  | Some dir -> dir
-  | None -> "."
+let data_dir = Root_dir.worker_db_dir
 
 let repo_mirror_dir repo =
   (* /-joined like the cljs paths — Filename.concat emits \ on win32 *)
@@ -359,9 +356,9 @@ let is_not_found_exn exn =
     | Failure m -> m
     | _ -> Printexc.to_string exn
   in
-  Export_file.str_contains msg "ENOENT"
-  || Export_file.str_contains msg "No such file"
-  || Export_file.str_contains msg "NotFoundError"
+  Ns_util.str_contains msg "ENOENT"
+  || Ns_util.str_contains msg "No such file"
+  || Ns_util.str_contains msg "NotFoundError"
 
 let read_text_opt path : string option Db_worker_effect.t =
   Db_worker_effect.catch
@@ -570,7 +567,7 @@ let rendered_line_matches_block (info : block_line_info option) (content : strin
       let fragment' = normalize_rendered_match_text info.first_line_fragment in
       if info.code_block then code_fence_block_line content
       else if str_blank fragment' then str_blank content
-      else Export_file.str_contains content' fragment'
+      else Ns_util.str_contains content' fragment'
 
 (* db/class-instance? — class via tags incl. transitive class/extends. *)
 let class_instance (cls : entity) (obj : entity) : bool =
@@ -651,15 +648,24 @@ let outline_children (block : entity) : entity list =
 
 let page_root_blocks (page : entity) : entity list = outline_children page
 
-(* flattened pre-order with sibling ordering numbers *)
+(* flattened pre-order with sibling ordering numbers. visited guards
+   :block/parent cycles — a malformed cyclic chain must not hang the
+   mirror render. *)
 let block_line_infos db (blocks : entity list) : block_line_info list =
+  let visited = Hashtbl.create 16 in
   let rec loop number result = function
     | [] -> List.rev result
     | block :: more ->
         let ordered = order_list_number block in
         let marker = if ordered then string_of_int number ^ "." else "-" in
         let info = block_line_info db block marker in
-        let children = loop 1 [] (outline_children block) in
+        let children =
+          if Hashtbl.mem visited block.id then []
+          else begin
+            Hashtbl.add visited block.id ();
+            loop 1 [] (outline_children block)
+          end
+        in
         loop
           (if ordered then number + 1 else number)
           (List.rev_append (List.rev children) (info :: result))
@@ -814,21 +820,22 @@ let mirrorable_pages db : entity list =
   |> Seq.filter_map (fun (d : datom) -> Ldb.ent_of_id db d.e)
   |> List.of_seq
   |> List.filter mirrorable_page
-  |> List.stable_sort (fun (a : entity) (b : entity) ->
-         let day e =
-           match Ldb.value e "block/journal-day" with
+  (* sort keys computed once per page — the comparator would otherwise
+     re-read attrs per comparison (O(n log n) seeks) *)
+  |> List.map (fun (page : entity) ->
+         let day =
+           match Ldb.value page "block/journal-day" with
            | Some (Int64 n) -> Int64.to_string n
            | _ -> ""
          in
-         let title e =
+         let title =
            Unicode.lowercase
-             (Option.value ~default:"" (Ldb.string_value e "block/title"))
+             (Option.value ~default:"" (Ldb.string_value page "block/title"))
          in
-         compare
-           ( (if Ldb.is_journal a then 0 else 1),
-             day a, title a, uuid_of a )
-           ( (if Ldb.is_journal b then 0 else 1),
-             day b, title b, uuid_of b ))
+         ( page
+         , ( (if Ldb.is_journal page then 0 else 1), day, title, uuid_of page ) ))
+  |> List.stable_sort (fun (_, key_a) (_, key_b) -> compare key_a key_b)
+  |> List.map fst
 
 (* ---------- jobs / writes ---------- *)
 

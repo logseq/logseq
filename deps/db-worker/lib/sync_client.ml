@@ -4,7 +4,6 @@
 open Datascript
 open Db_worker_effect.Infix
 
-let kw s = Wire.Keyword s
 
 let reconnect_base_delay_ms = 1000
 let reconnect_max_delay_ms = 30000
@@ -28,8 +27,18 @@ let graph_remote (db : db) : bool =
 
 (* update-local-sync-checksum! *)
 let update_local_sync_checksum repo (tx_report : tx_report) : unit =
-  if Sync_state.has_client_ops_conn repo && graph_remote tx_report.db_after
+  (* checksum-exempt? marks local-only maintenance writes that never
+     upload (recycle-gc purges): the stored checksum tracks the server
+     image, so their deltas are skipped — the server keeps entities the
+     local gc retracted. The tx still runs through the normal update so
+     covered_tx advances and reopen doesn't trigger a heal recompute. *)
+  let checksum_exempt =
+    Db_tx.tx_meta_flag tx_report.tx_meta "checksum-exempt?"
+  in
+  if
+    Sync_state.has_client_ops_conn repo && graph_remote tx_report.db_after
   then begin
+    if checksum_exempt then Sync_client_op.mark_checksum_exempted repo;
     (* cljs reads the stored checksum only when the graph was already
        remote, so a graph that just became remote anchors on a full
        checksum instead of deltas on an empty base. *)
@@ -39,10 +48,37 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
       else None
     in
     let new_checksum =
-      Db_sync_checksum.update_checksum
-        (Option.value current_checksum ~default:"")
-        ~db_before:tx_report.db_before ~db_after:tx_report.db_after
-        ~tx_data:tx_report.tx_data
+      try
+        if checksum_exempt && current_checksum = None then
+          (* an exempt tx with no stored anchor: the [] delta would
+             short-circuit update_checksum into storing "". Anchor on the
+             pre-tx image instead — same value the anchor branch computes *)
+          Db_sync_checksum.recompute_checksum tx_report.db_before
+        else
+          Db_sync_checksum.update_checksum
+            (Option.value current_checksum ~default:"")
+            ~db_before:tx_report.db_before ~db_after:tx_report.db_after
+            ~tx_data:(if checksum_exempt then [] else tx_report.tx_data)
+      with Invalid_argument _ ->
+        (* the delta path can hit attrs the tx dropped from the schema
+           (an attr-entity churn strips :db/index off its spec, then
+           every ~a/~v index access throws). The checksum is a pure
+           function of the db image, so heal it with the full recompute
+           reconcile uses — except on exempted graphs where the stored
+           value is a server image local state cannot reproduce. *)
+        if Sync_client_op.checksum_exempted repo then begin
+          Worker_log.warn "db-sync/checksum-update-failed-exempt"
+            [ "repo", repo ];
+          Option.value current_checksum ~default:""
+        end else begin
+          let recomputed =
+            Db_sync_checksum.recompute_checksum tx_report.db_after
+          in
+          Worker_log.warn "db-sync/checksum-healed-after-schema-churn"
+            [ "repo", repo
+            ; "tx-count", string_of_int (List.length tx_report.tx_data) ];
+          recomputed
+        end
     in
     (match Runtime_env.env "LOGSEQ_CHECKSUM_ASSERT" with
      | Some "1" ->
@@ -50,22 +86,30 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
            Db_sync_checksum.recompute_checksum tx_report.db_after
          in
          if new_checksum <> recomputed then begin
-           Worker_log.error "db-sync/checksum-incremental-drift"
+           (* exempt writes (gc purges) legitimately diverge the stored
+              server-image checksum from a local recompute — after one,
+              drift here is expected, so demote raise to warn *)
+           let exempted = Sync_client_op.checksum_exempted repo in
+           (if exempted then
+              Worker_log.warn "db-sync/checksum-drift-after-exempt"
+            else
+              Worker_log.error "db-sync/checksum-incremental-drift")
              [ "repo", repo
              ; "current-checksum", Option.value current_checksum ~default:""
              ; "incremental-checksum", new_checksum
              ; "recomputed-checksum", recomputed
              ; "tx-count", string_of_int (List.length tx_report.tx_data) ];
-           raise
-             (Sync_util.ex_info "Incremental checksum drift"
-                [ kw "repo", Wire.String repo
-                ; ( kw "current-checksum"
+           if not exempted then
+             raise
+               (Sync_util.ex_info "Incremental checksum drift"
+                [ Wire.keyword "repo", Wire.String repo
+                ; ( Wire.keyword "current-checksum"
                   , match current_checksum with
                     | Some c -> Wire.String c
                     | None -> Wire.Nil )
-                ; kw "incremental-checksum", Wire.String new_checksum
-                ; kw "recomputed-checksum", Wire.String recomputed
-                ; kw "tx-count", Wire.Int (List.length tx_report.tx_data) ])
+                ; Wire.keyword "incremental-checksum", Wire.String new_checksum
+                ; Wire.keyword "recomputed-checksum", Wire.String recomputed
+                ; Wire.keyword "tx-count", Wire.Int (List.length tx_report.tx_data) ])
          end
      | _ -> ());
     Sync_client_op.update_local_checksum repo new_checksum
@@ -86,21 +130,37 @@ let reconcile_local_checksum repo conn =
     let covered_tx = Sync_client_op.get_local_checksum_covered_tx repo in
     let current_tx = (Datascript.db conn).max_tx in
     (match checksum with
-     | Some _ when covered_tx <> Some current_tx ->
-         let recomputed =
-           Db_sync_checksum.recompute_checksum (Datascript.db conn)
-         in
-         if Some recomputed <> checksum then
-           Worker_log.info "db-sync/checksum-healed-on-open"
-             [ "repo", repo
-             ; "stored-checksum", Option.value checksum ~default:""
-             ; "recomputed-checksum", recomputed
-             ; "covered-tx",
-               (match covered_tx with
-                | Some t -> string_of_int t
-                | None -> "nil")
-             ; "current-tx", string_of_int current_tx ];
-         Sync_client_op.update_local_checksum repo recomputed current_tx
+     | Some stored when covered_tx <> Some current_tx ->
+         if Sync_client_op.checksum_exempted repo then
+           (* the stored value is a server image a local recompute cannot
+              reproduce (gc'd ghosts are absent locally). covered_tx
+              trails because the last commit had no counted deltas —
+              advance it without overwriting the checksum *)
+           begin
+             Worker_log.info "db-sync/checksum-heal-skipped-exempt"
+               [ "repo", repo ; "covered-tx",
+                 (match covered_tx with
+                  | Some t -> string_of_int t
+                  | None -> "nil")
+               ; "current-tx", string_of_int current_tx ];
+             Sync_client_op.update_local_checksum repo stored current_tx
+           end
+         else begin
+           let recomputed =
+             Db_sync_checksum.recompute_checksum (Datascript.db conn)
+           in
+           if Some recomputed <> checksum then
+             Worker_log.info "db-sync/checksum-healed-on-open"
+               [ "repo", repo
+               ; "stored-checksum", Option.value checksum ~default:""
+               ; "recomputed-checksum", recomputed
+               ; "covered-tx",
+                 (match covered_tx with
+                  | Some t -> string_of_int t
+                  | None -> "nil")
+               ; "current-tx", string_of_int current_tx ];
+           Sync_client_op.update_local_checksum repo recomputed current_tx
+         end
      | _ -> ())
   end
 
@@ -198,8 +258,8 @@ let update_presence (editing_block_uuid : Wire.t) : unit =
           Db_worker_effect.async (fun () ->
                send ws
                  (Wire.Map
-                    [ kw "type", Wire.String "presence"
-                    ; kw "editing-block-uuid", editing_block_uuid ]))
+                    [ Wire.keyword "type", Wire.String "presence"
+                    ; Wire.keyword "editing-block-uuid", editing_block_uuid ]))
       | None -> ())
   | None -> ()
 
@@ -305,6 +365,7 @@ and close_stale_ws_loop (client : Sync_state.client)
 and stop_client (client : Sync_state.client) : unit =
   clear_stale_ws_loop_timer client;
   ignore (Sync_apply.clear_upload_response_timeout client);
+  client.pending_pull_since := None;
   clear_reconnect_timer client.reconnect;
   (* cljs detach-ws-handlers! — invalidate this ws's handlers so the close
      event (which still fires, no detach on the OCaml ws surface) can't
@@ -351,7 +412,6 @@ and connect repo (client : Sync_state.client) (url : string)
            if !(updated.conn_gen) = gen then
              match event with
            | Web_socket.Open ->
-               reset_reconnect updated;
                touch_last_ws_message updated;
                set_ws_state updated "open";
                Sync_util.clear_last_sync_error updated;
@@ -360,8 +420,8 @@ and connect repo (client : Sync_state.client) (url : string)
                      | Some ws ->
                          send ws
                            (Wire.Map
-                              [ kw "type", Wire.String "hello"
-                              ; kw "client", Wire.String repo ])
+                              [ Wire.keyword "type", Wire.String "hello"
+                              ; Wire.keyword "client", Wire.String repo ])
                      | None -> Db_worker_effect.pure ())
                     >>= fun () ->
                     Db_worker_effect.pure
@@ -373,14 +433,29 @@ and connect repo (client : Sync_state.client) (url : string)
                touch_last_ws_message updated;
                enqueue_receive_message updated (fun () ->
                     Sync_handle_message.handle_message_effect repo updated
-                      data)
+                      data
+                    >>= fun () ->
+                    (* A successful socket open does not mean writes work.
+                       Reset backoff only after the graph and outbox catch up. *)
+                    if Sync_client_op.get_pending_local_tx_count repo = 0
+                       && Sync_client_op.get_local_tx repo = Sync_apply.latest_remote_tx repo
+                    then reset_reconnect updated;
+                    Db_worker_effect.pure ())
            | Web_socket.Binary _ -> ()
            | Web_socket.Error e ->
                Worker_log.error "db-sync/ws-error" [ "error", e ]
-           | Web_socket.Close (_, _) ->
-               Worker_log.info "db-sync/ws-closed" [ "repo", repo ];
+           | Web_socket.Close (code, reason) ->
+               Worker_log.info "db-sync/ws-closed"
+                 [ "repo", repo
+                 ; "code", string_of_int code
+                 ; "reason", reason ];
                clear_stale_ws_loop_timer updated;
                clear_inflight updated;
+               (* a pull issued on the dead socket can never be answered —
+                  keeping pending_pull_since set permanently suppresses
+                  every later request_pull (since <= pending is deduped),
+                  freezing local_tx advancement after the reconnect *)
+               updated.pending_pull_since := None;
                update_online_users updated [];
                set_ws_state updated "closed";
                schedule_reconnect repo updated url "close")
@@ -584,7 +659,7 @@ let () =
                 pairs
             in
             let result =
-              Sync_apply.apply_history_action repo
+              Sync_replay.apply_history_action repo
                 (Option.value ~default:"" tx_id_opt) undo tx_meta
             in
             (match result with
