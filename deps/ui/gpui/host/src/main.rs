@@ -237,16 +237,18 @@ fn handle_platform_request(
                 if Theme::global(cx).dark_theme.name.is_empty()
                     || Theme::global(cx).light_theme.name.is_empty()
                 {
-                    let (light_cfg, dark_cfg) = {
+                    let (mut light_cfg, mut dark_cfg) = {
                         let registry = ThemeRegistry::global(cx);
                         (
-                            registry.default_light_theme().clone(),
-                            registry.default_dark_theme().clone(),
+                            (**registry.default_light_theme()).clone(),
+                            (**registry.default_dark_theme()).clone(),
                         )
                     };
+                    apply_logseq_palette(&mut light_cfg, false);
+                    apply_logseq_palette(&mut dark_cfg, true);
                     Theme::update(cx, |theme| {
-                        theme.light_theme = light_cfg;
-                        theme.dark_theme = dark_cfg;
+                        theme.light_theme = std::rc::Rc::new(light_cfg);
+                        theme.dark_theme = std::rc::Rc::new(dark_cfg);
                     });
                 }
                 let mode = if dark {
@@ -255,10 +257,132 @@ fn handle_platform_request(
                     gpui_kit::component::theme::ThemeMode::Light
                 };
                 Theme::change(mode, Some(window), cx);
+                // Broken page-ref red (radix red-11) — the web pulls it
+                // from the lx/rx accent scales, which have no gpui
+                // counterpart, so the host writes it per mode.
+                lui_gpui::style::set_css_var(
+                    "--ls-broken-ref-color",
+                    if dark { "#ff6369" } else { "#cd2b31" },
+                );
             }
         }
         other => eprintln!("logseq-gpui: platform request {other}: {payload}"),
     }
+}
+
+/// Apply the Logseq classic palette (src/main/frontend/shui/vars-classic.css)
+/// onto a ThemeConfig cloned from the registry defaults — the generic
+/// gpui-component palettes don't carry Logseq's colors, which every
+/// `--ls-*` semantic var resolves through (see lui-gpui `semantic_var_color`).
+fn apply_logseq_palette(
+    cfg: &mut gpui_kit::component::theme::ThemeConfig,
+    dark: bool,
+) {
+    let c = &mut cfg.colors;
+    macro_rules! set {
+        ($($k:ident = $v:expr),+ $(,)?) => {
+            $(c.$k = Some($v.into());)+
+        };
+    }
+    if dark {
+        set! {
+            background = "#002b36",
+            foreground = "#a4b5b6",
+            secondary = "#023643",
+            secondary_foreground = "#dfdfdf",
+            muted = "#08404f",
+            muted_foreground = "#dfdfdf",
+            primary = "#8abbbb",
+            primary_foreground = "#002b36",
+            accent = "#338fff",
+            accent_foreground = "#ffffff",
+            warning = "#fef3ac",
+            warning_foreground = "#262626",
+            border = "#0e5263",
+            input = "#023643",
+            popover = "#023643",
+            popover_foreground = "#a4b5b6",
+            sidebar = "#023643",
+            sidebar_foreground = "#a4b5b6",
+            sidebar_border = "#0e5263",
+            selection = "#338fff",
+            link = "#8abbbb",
+            link_hover = "#d0e8e8",
+            list = "#002b36",
+            list_hover = "#08404f",
+            table = "#002b36",
+            table_even = "#03333f",
+            table_row_border = "#0e5263",
+            title_bar = "#002b36",
+            title_bar_border = "#0e5263",
+            skeleton = "#08404f",
+            scrollbar_thumb = "#11505f",
+            scrollbar_thumb_hover = "#ffffff33",
+            overlay = "#00000066",
+        }
+    } else {
+        set! {
+            background = "#ffffff",
+            foreground = "#433f38",
+            secondary = "#f7f7f7",
+            secondary_foreground = "#161e2e",
+            muted = "#dcdcdc",
+            muted_foreground = "#161e2e",
+            primary = "#106ba3",
+            primary_foreground = "#ffffff",
+            accent = "#e4f2ff",
+            accent_foreground = "#161e2e",
+            warning = "#fef3ac",
+            warning_foreground = "#262626",
+            border = "#cccccc",
+            input = "#f7f7f7",
+            popover = "#ffffff",
+            popover_foreground = "#433f38",
+            sidebar = "#f7f7f7",
+            sidebar_foreground = "#433f38",
+            sidebar_border = "#cccccc",
+            selection = "#e4f2ff",
+            link = "#106ba3",
+            link_hover = "#1a537c",
+            list = "#ffffff",
+            list_hover = "#f7f7f7",
+            table = "#ffffff",
+            table_even = "#f7f7f7",
+            table_row_border = "#cccccc",
+            title_bar = "#ffffff",
+            title_bar_border = "#cccccc",
+            skeleton = "#dcdcdc",
+            scrollbar_thumb = "#0000001a",
+            scrollbar_thumb_hover = "#00000033",
+            overlay = "#00000066",
+        }
+    }
+
+    // The web code block runs CodeMirror's `solarized <light|dark>` theme —
+    // dark sits on the page teal #002b36, light on cream #fdf6e3. The
+    // bundled highlight themes use unrelated editor backgrounds, so clone
+    // the default syntax style per mode and re-point the editor chrome at
+    // solarized's palette.
+    let mut style = if dark {
+        gpui_kit::component::highlighter::HighlightTheme::default_dark()
+            .style
+            .clone()
+    } else {
+        gpui_kit::component::highlighter::HighlightTheme::default_light()
+            .style
+            .clone()
+    };
+    let (bg, gutter, fg, ln, active) = if dark {
+        (0x002b36u32, 0x002b36u32, 0x839496u32, 0x586e75u32, 0x073642u32)
+    } else {
+        (0xfdf6e3u32, 0xfdf6e3u32, 0x657b83u32, 0x93a1a1u32, 0xeee8d5u32)
+    };
+    style.editor_background = Some(gpui_kit::gpui::rgb(bg).into());
+    style.editor_gutter_background = Some(gpui_kit::gpui::rgb(gutter).into());
+    style.editor_foreground = Some(gpui_kit::gpui::rgb(fg).into());
+    style.editor_line_number = Some(gpui_kit::gpui::rgb(ln).into());
+    style.editor_active_line = Some(gpui_kit::gpui::rgb(active).into());
+    cfg.highlight = Some(style);
 }
 
 /// Last viewport size pushed to OCaml as a `window-size` platform event —

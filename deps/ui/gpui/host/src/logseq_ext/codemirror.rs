@@ -96,7 +96,14 @@ pub fn render(
     let cm = cm_state(view);
     if cm.borrow().editor.is_none() {
         let state = cx.new(|cx| {
-            let mut state = EditorState::new(window, cx).line_number(true);
+            let mut state = EditorState::new(window, cx)
+                .line_number(true)
+                // The wrap sizes the editor to its content, so the code
+                // editor's default "empty rows past the last line" scroll
+                // room must go: it lets wheel deltas park the retained
+                // editor state below its content (blank on remount) and
+                // eats scroll the page should get.
+                .scroll_beyond_last_line(Some(0));
             if !lang.is_empty() {
                 state = state.language(lang.clone());
             }

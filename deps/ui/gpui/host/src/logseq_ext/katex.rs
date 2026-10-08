@@ -215,7 +215,10 @@ pub fn render_slot(
 ) -> AnyElement {
     let tex = slot_tex(view, node);
     let classes = node.extension_string_prop("style-class").unwrap_or("");
-    let display = classes.split_whitespace().any(|c| c == "latex");
+    // The generic-dom slot for inline `$$..$$` carries `latex-inline`
+    // plus a display=true prop; block slots use the `latex` class.
+    let display = prop(node, "display").and_then(Value::as_bool).unwrap_or(false)
+        || classes.split_whitespace().any(|c| c == "latex");
     element(&tex, display, node, window, cx)
 }
 

@@ -148,6 +148,17 @@ pub fn register(shared: &Shared) {
         "color:var(--ls-link-text-color)",
         "",
     );
+    // .broken { color: var(--lx-red-11, var(--rx-red-11));
+    //           text-decoration: underline wavy <red> 1px } — unresolved
+    // [[uuid]] page refs. --ls-broken-ref-color is host-written per mode
+    // (radix red-11) since lx/rx scales have no gpui counterpart; gpui
+    // has no wavy underline, so the mark is a straight underline.
+    lui_gpui::style::register_class_style(
+        "broken",
+        "color:var(--ls-broken-ref-color, var(--rx-red-11)); \
+         text-decoration:underline",
+        "",
+    );
     // lui-core.css blockquote { padding:8px 16px; border-left:4px solid
     //   var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha));
     //   background-color: var(--ls-page-blockquote-bg-color,
