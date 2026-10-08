@@ -28,20 +28,36 @@ await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
 
 const sleep = ms => page.waitForTimeout(ms);
 const shot = async n => page.screenshot({ path: `${OUT}/${tag}-${n}.png` });
+const topsProbe = async () => {
+  if (tag !== 'master') return;
+  try {
+    const t = await page.evaluate(async () => {
+      const t = await window.logseq.api.get_page_blocks_tree('PPFixture');
+      return (Array.isArray(t) ? t : []).length;
+    });
+    console.log(`    [tops=${t}]`);
+  } catch {}
+};
 const step = async (name, fn) => {
   try { await fn(); await shot(name); console.log(`OK  ${name}`); }
   catch (e) {
     console.log(`FAIL ${name} ${String(e).slice(0, 160)}`);
     try { await shot(name + '-state'); } catch {}
   }
+  await topsProbe();
 };
 const evalApi = (fn, arg) => page.evaluate(fn, arg);
 const pageUuid = async name => {
-  const p = await evalApi(async n => {
-    const r = await window.logseq.api.get_page(n);
-    return r && (r.uuid || r['block/uuid']);
-  }, name);
-  return p;
+  // master's get_page name lookup is flaky right after nav — retry
+  for (let i = 0; i < 6; i++) {
+    const p = await evalApi(async n => {
+      const r = await window.logseq.api.get_page(n);
+      return r && (r.uuid || r['block/uuid']);
+    }, name);
+    if (p) return p;
+    await sleep(1200);
+  }
+  return null;
 };
 // hash nav (no reload) + give the view time to settle
 const go = async hash => { await evalApi(h => { location.hash = h; }, hash); await sleep(2600); };
@@ -67,7 +83,37 @@ const clearOverlays = () => page.evaluate(() => {
   document.querySelectorAll('.ui__dialog-overlay, .cp__cmdk, .cp__cmdk-search').forEach(e => e.remove());
 });
 const escape = async () => { await page.keyboard.press('Escape'); await sleep(500); };
-const clearTyped = async n => { for (let i = 0; i < n; i++) { await page.keyboard.press('Backspace'); await sleep(80); } };
+// Master treats Backspace/typing on page-level block selection as destructive
+// (deletes selected blocks / pages). Only send editing keys while a block
+// editor actually holds focus.
+const editorFocused = () => page.evaluate(() => {
+  const ae = document.activeElement;
+  // block-level editors only — the page TITLE field is also an input/
+  // contenteditable; keys landing there rename the page (learned the hard way)
+  return !!ae && !!ae.closest('.block-content, .editor-wrapper, .CodeMirror');
+});
+const ensureEditor = async () => {
+  if (await editorFocused()) return;
+  const blk = page.locator('.ls-block[data-blockid] .block-content, [blockid] .block-content').first();
+  await blk.click(); await sleep(800);
+  if (!(await editorFocused())) throw new Error('editor not focused');
+};
+let AC_UUID = null;
+const onACProbe = () => page.evaluate(() =>
+  /acprobe/i.test((document.querySelector('.cp__sidebar-main-content .title, .cp__sidebar-main-content .ls-page-title, main .title, #main-container .title') || {}).textContent || '') ||
+  /acprobe/i.test(location.href));
+const typeKeys = async s => {
+  if (!(await onACProbe())) throw new Error('not on ACProbe — refusing to type');
+  await ensureEditor();
+  await page.keyboard.type(s, { delay: 60 });
+};
+const clearTyped = async n => {
+  for (let i = 0; i < n; i++) {
+    if (!(await onACProbe())) throw new Error('not on ACProbe — refusing to backspace');
+    await ensureEditor();
+    await page.keyboard.press('Backspace'); await sleep(80);
+  }
+};
 
 await page.goto(url, { waitUntil: 'domcontentloaded' });
 await sleep(tag === 'master' ? 12000 : 18000);
@@ -129,45 +175,72 @@ await step('06-caret', async () => {
   await blk.click(); await sleep(1200);
 });
 await step('07-selected', async () => {
+  await escape(); await sleep(400);
+  // second Escape clears master's block selection — otherwise later
+  // Backspace/keys still target the selected block and DELETE fixture blocks
   await escape(); await sleep(600);
 });
 // ---- block ACs on a scratch page ----
 await step('08-ac-page', async () => {
+  // Never delete pages mid-run — master's delete_page has proven destructive
+  // (it wiped PPFixture). Reuse ACProbe and just make sure it has a block.
   await evalApi(async () => {
-    try { await window.logseq.api.delete_page('ACProbe'); } catch {}
-    await new Promise(r => setTimeout(r, 800));
-    await window.logseq.api.create_page('ACProbe');
+    const api = window.logseq.api;
+    let p = await api.get_page('ACProbe');
+    if (!p) { await api.create_page('ACProbe'); await new Promise(r => setTimeout(r, 800)); p = await api.get_page('ACProbe'); }
+    // a recycled ACProbe renders "Node has been moved to Recycle" (no title,
+    // no blocks) — restore it before navigating
+    if (p && (p[':logseq.property.recycle/original-page'] || p.recycled)) {
+      try { await api.restore_page(String(p.uuid || p['block/uuid'])); } catch {}
+      await new Promise(r => setTimeout(r, 1200));
+    }
+    const t = await api.get_page_blocks_tree('ACProbe').catch(() => null);
+    if (!Array.isArray(t) || !t.length) {
+      try { await api.append_block_in_page('ACProbe', 'scratch'); } catch {}
+      await new Promise(r => setTimeout(r, 800));
+    } else {
+      // reset the scratch block so typed junk doesn't accumulate across runs
+      try { await api.update_block(t[0].uuid || t[0]['block/uuid'], 'scratch'); } catch {}
+    }
   });
   const u = await pageUuid('ACProbe');
+  AC_UUID = u;
+  if (!u) throw new Error('ACProbe uuid unresolved');
   await go('#/page/' + u);
   await sleep(1500);
+  if (!(await onACProbe())) throw new Error('not on ACProbe after nav');
 });
 const intoFirstBlock = async () => {
   // click the (empty) first block to get a caret
-  const blk = page.locator('.ls-block[data-blockid] .block-content, [blockid] .block-content').first();
+  let blk = page.locator('.ls-block[data-blockid] .block-content, [blockid] .block-content').first();
+  if (!(await blk.count())) {
+    await evalApi(async () => { try { await window.logseq.api.append_block_in_page('ACProbe', 'scratch'); } catch {} });
+    await sleep(1200);
+    blk = page.locator('.ls-block[data-blockid] .block-content, [blockid] .block-content').first();
+  }
   await blk.click(); await sleep(1000);
 };
 await step('09-slash', async () => {
   await intoFirstBlock();
-  await page.keyboard.type('/', { delay: 60 }); await sleep(1200);
+  await typeKeys('/'); await sleep(1200);
   await shot('09-slash-open');
   await escape();
 });
 await step('10-dbracket', async () => {
   await clearTyped(1);
-  await page.keyboard.type('[[', { delay: 60 }); await sleep(1200);
+  await typeKeys('[['); await sleep(1200);
   await shot('10-dbracket-open');
   await escape();
 });
 await step('11-parens', async () => {
   await clearTyped(2);
-  await page.keyboard.type('((', { delay: 60 }); await sleep(1200);
+  await typeKeys('(('); await sleep(1200);
   await shot('11-parens-open');
   await escape();
 });
 await step('12-at', async () => {
   await clearTyped(2);
-  await page.keyboard.type('@', { delay: 60 }); await sleep(1200);
+  await typeKeys('@'); await sleep(1200);
 });
 await step('13-all-pages', async () => {
   await escape();
@@ -199,7 +272,13 @@ await step('16-cmdk', async () => {
   await page.keyboard.press('Meta+k'); await sleep(1400);
 });
 await step('17-search', async () => {
-  await page.keyboard.type('quixotic', { delay: 40 }); await sleep(1600);
+  // type only into the cmdk search input — never let keys hit the page
+  const si = page.locator('.cp__cmdk input, .cp__cmdk-search input, [data-modal] input, input[placeholder]').first();
+  if (await si.count()) {
+    const focused = await page.evaluate(() => !!document.activeElement?.closest('input'));
+    if (!focused) { await si.click(); await sleep(400); }
+    await page.keyboard.type('quixotic', { delay: 40 }); await sleep(1600);
+  }
 });
 await step('18-settings', async () => {
   await escape(); await clearOverlays();
