@@ -188,6 +188,8 @@
 (rule
  (copy ../src/properties/properties_calendar.ml properties_calendar.ml))
 (rule
+ (copy ../src/properties/properties_data.ml properties_data.ml))
+(rule
  (copy ../src/properties/properties_dialog.ml properties_dialog.ml))
 (rule
  (copy ../src/properties/properties_menu.ml properties_menu.ml))
@@ -197,6 +199,8 @@
  (copy ../src/properties/properties_select.ml properties_select.ml))
 (rule
  (copy ../src/properties/properties_state.ml properties_state.ml))
+(rule
+ (copy ../src/properties/properties_value.ml properties_value.ml))
 (rule
  (copy ../src/properties/properties_view.ml properties_view.ml))
 (rule
