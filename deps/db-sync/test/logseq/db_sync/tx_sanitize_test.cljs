@@ -27,6 +27,60 @@
     :else
     #{}))
 
+(defn- hierarchy-conn
+  []
+  (let [conn (d/create-conn {:block/uuid {:db/unique :db.unique/identity}
+                           :block/parent {:db/valueType :db.type/ref}
+                           :block/page {:db/valueType :db.type/ref}})]
+    (d/transact! conn (mapv #(assoc % :block/uuid (random-uuid))
+                     [{:db/id 1 :block/name "p1"}
+                      {:db/id 2 :block/name "p2"}
+                      {:db/id 3 :block/parent 1 :block/page 1}
+                      {:db/id 4 :block/parent 3 :block/page 1}
+                      {:db/id 5 :block/parent 4 :block/page 1}]))
+    conn))
+
+(deftest sanitize-tx-derives-pages-from-final-parents-test
+  (doseq [move [[[:db/add 3 :block/parent 2]]
+                [[:db/add 3 :block/parent 2] [:db/add 3 :block/page 2]]
+                [[:db/retract 3 :block/parent 1] [:db/add 3 :block/parent 2]
+                 [:db/retract 3 :block/page 1] [:db/add 3 :block/page 1]]
+                [[:db/cas 3 :block/parent 1 2]]]]
+    (let [conn (hierarchy-conn)
+          db (:db-after (d/with @conn (tx-sanitize/sanitize-tx @conn move)))]
+      (is (= [2 2 2] (mapv #(-> (d/entity db %) :block/page :db/id) [3 4 5])))
+      (is (= 2 (-> (d/entity db 3) :block/parent :db/id)))
+      (is (nil? (:block/page (d/entity db 2)))))))
+
+(deftest sanitize-tx-corrects-new-child-with-stale-page-test
+  (let [conn (hierarchy-conn)
+        child-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        tx [[:db/add 3 :block/parent 2]
+            {:db/id "child" :block/uuid child-uuid :block/parent 4 :block/page 1}]
+        sanitized (tx-sanitize/sanitize-tx @conn tx)
+        db (:db-after (d/with @conn sanitized))]
+    (is (= 2 (-> (d/entity db [:block/uuid child-uuid]) :block/page :db/id)))
+    (is (= 4 (-> (d/entity db [:block/uuid child-uuid]) :block/parent :db/id)))))
+
+(deftest sanitize-tx-move-then-delete-old-page-test
+  (let [conn (hierarchy-conn)]
+    (d/transact! conn (tx-sanitize/sanitize-tx @conn [[:db/add 3 :block/parent 2]]))
+    (d/transact! conn (tx-sanitize/sanitize-tx @conn [[:db/retractEntity 1]]))
+    (is (= [2 2 2] (mapv #(-> (d/entity @conn %) :block/page :db/id) [3 4 5])))
+    (is (nil? (d/entity @conn 1)))))
+
+(deftest sanitize-tx-preserves-page-anchors-and-retracted-children-test
+  (let [conn (hierarchy-conn)]
+    (d/transact! conn [{:db/id 6 :db/ident :user.property/example :block/parent 3}
+                      {:db/id 7 :block/parent 6 :block/page 6}])
+    (let [tx [[:db/add 3 :block/parent 2] [:db/retractEntity 4]]
+          db (:db-after (d/with @conn (tx-sanitize/sanitize-tx @conn tx)))]
+      (is (= 2 (-> (d/entity db 3) :block/page :db/id)))
+      (is (= 6 (-> (d/entity db 7) :block/page :db/id)))
+      (is (nil? (:block/page (d/entity db 6))))
+      (is (nil? (d/entity db 4)))
+      (is (nil? (d/entity db 5))))))
+
 (deftest sanitize-tx-drops-migration-deleted-attrs-test
   (testing "remote txs from older clients should not reintroduce attrs deleted by client migrations"
     (let [conn (db-test/create-conn)

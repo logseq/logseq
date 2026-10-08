@@ -199,6 +199,62 @@
     :else
     nil))
 
+(defn- hierarchy-op?
+  [item]
+  (or (retract-entity-op? item)
+      (and (map? item)
+           (some #(contains? item %) [:block/parent :block/page]))
+      (and (entity-op? item)
+           (contains? #{:block/parent :block/page} (nth item 2)))))
+
+(defn- page-anchor?
+  [entity]
+  (or (ldb/page? entity) (:block/name entity) (:db/ident entity)))
+
+(defn- derive-block-page-fixups
+  "Derives `:block/page` for changed blocks and their descendants from the
+   final parent hierarchy. The immutable preview resolves tempids and retracts;
+   corrections are appended to the same transaction and journal entry."
+  [db tx-data]
+  (when (some hierarchy-op? tx-data)
+    (let [{:keys [db-after tx-data]} (d/with db tx-data)
+          roots (into #{} (keep #(when (contains? #{:block/parent :block/page} (:a %))
+                                  (:e %))) tx-data)
+          affected (loop [todo (vec roots) seen #{}]
+                     (if-let [eid (peek todo)]
+                       (let [entity (d/entity db-after eid)]
+                         (if (or (contains? seen eid) (nil? entity) (page-anchor? entity))
+                           (recur (pop todo) seen)
+                           (recur (into (pop todo)
+                                        (map :e (d/datoms db-after :avet :block/parent eid)))
+                                  (conj seen eid))))
+                       seen))
+          pages (atom {})
+          entity-ref (fn [eid]
+                       (if-let [uuid (:block/uuid (d/entity db-after eid))]
+                         [:block/uuid uuid]
+                         eid))]
+      (letfn [(derive [eid visiting]
+                (if (contains? @pages eid)
+                  (get @pages eid)
+                  (when-not (contains? visiting eid)
+                    (let [parent (:block/parent (d/entity db-after eid))
+                          page (when parent
+                                 (if (page-anchor? parent)
+                                   (:db/id parent)
+                                   (or (when (contains? affected (:db/id parent))
+                                         (derive (:db/id parent) (conj visiting eid)))
+                                       (some-> parent :block/page :db/id)
+                                       (:db/id parent))))]
+                      (swap! pages assoc eid page)
+                      page))))]
+        (into []
+              (keep (fn [eid]
+                      (when-let [page (derive eid #{})]
+                        (when (not= page (some-> (d/entity db-after eid) :block/page :db/id))
+                          [:db/add (entity-ref eid) :block/page (entity-ref page)]))))
+              (sort affected))))))
+
 (defn sanitize-tx
   ([db tx-data]
    (sanitize-tx db tx-data nil))
@@ -239,7 +295,6 @@
          preserved-eids (cond-> retract-eids
                           (not retract-touched-descendants?)
                           (set/union touched-eids))
-         missing-retract-eids (sort (set/difference descendant-retract-eids preserved-eids))]
-     (cond-> tx-data*
-       (seq missing-retract-eids)
-       (into (map (fn [eid] [:db/retractEntity eid]) missing-retract-eids))))))
+         missing-retract-eids (sort (set/difference descendant-retract-eids preserved-eids))
+         tx-data* (into tx-data* (map (fn [eid] [:db/retractEntity eid]) missing-retract-eids))]
+     (into tx-data* (derive-block-page-fixups db tx-data*)))))

@@ -592,10 +592,10 @@
    (apply-tx-entry! nil conn tx-entry nil))
   ([self conn {:keys [outliner-op] :as tx-entry} request-context]
    (let [db-before @conn
-         {:keys [input-tx-data tx-data]} (sanitize-tx-entry db-before tx-entry)
          sql (when self (.-sql ^js self))
          apply-entry (fn []
-                       (let [t-before (when sql (storage/get-t sql))
+                       (let [{:keys [input-tx-data tx-data]} (sanitize-tx-entry db-before tx-entry)
+                             t-before (when sql (storage/get-t sql))
                              applied? (if (seq tx-data)
                                         (if (and (not= outliner-op :db-migrate)
                                                  (large-tx? tx-data))
@@ -624,7 +624,7 @@
                   (= :entity-id/missing (:error (ex-data e))))
            (do
              (log/warn :db-sync/drop-stale-rebase-tx
-                       {:outliner-op outliner-op :tx-data tx-data :error (str e)})
+                       {:outliner-op outliner-op :tx (:tx tx-entry) :error (str e)})
              (if sql
                (boolean (storage/with-sql-transaction! sql #(confirm-empty-tx! sql tx-entry)))
                false))
