@@ -126,11 +126,17 @@ let item_slot it =
   if s <> "" then s else slot_id it
 
 let inject_ui () =
+  (* Js.Json.test keeps undefined/null out — classify maps undefined to
+     JSONObject which would crash the property reads on hosts without the
+     plugin runtime (tests, gpui). *)
   let setup =
-    match Js.Json.classify (lsplugin ()) with
-    | Js.Json.JSONObject _ ->
-        getf (getf (lsplugin ()) "pluginHelpers") "setupInjectedUI"
-    | _ -> Js.Json.null
+    match Js.Json.test (lsplugin ()) Js.Json.Object with
+    | true ->
+        let helpers = getf (lsplugin ()) "pluginHelpers" in
+        (match Js.Json.test helpers Js.Json.Object with
+         | true -> getf helpers "setupInjectedUI"
+         | false -> Js.Json.null)
+    | false -> Js.Json.null
   in
   List.iter
     (fun it ->
@@ -138,7 +144,7 @@ let inject_ui () =
         ( Js.Dict.get installed it.it_pid
         , Web_dom.get_element_by_id (item_slot it) )
       with
-      | Some pl, Some _ ->
+      | Some pl, Some _ when Js.typeof setup = "function" ->
           let opts =
             jobj
               [ ("slot", jstr_ (item_slot it))
