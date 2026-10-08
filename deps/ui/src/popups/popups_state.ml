@@ -1058,7 +1058,9 @@ let open_ac t kind =
   (* base-ui avoidCollisions: the popup mounts below the caret, then
      flips above when it overflows the viewport and there is more room
      above — measure once mounted and record (top, avail). Items can
-     resolve after the mount, so retry while the popup is up (~480ms).
+     resolve well after the mount (first query after a cold load), so
+     retry while the popup is up (~2s) to match base-ui's continuous
+     collision re-check.
      The popover's --available-height clamp already bounds the rendered
      rect, so lift it briefly to learn the real height (CSS caps such
      as the commands list's own max-height still apply — matching what
@@ -1129,7 +1131,7 @@ let open_ac t kind =
     if tries > 0 then
       Web_dom.set_timeout (fun () -> measure (tries - 1)) 16
   in
-  measure 30;
+  measure 120;
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
