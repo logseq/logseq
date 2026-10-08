@@ -283,7 +283,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                          else
                            icon ~key:("arw-" ^ uuid)
                              ~name:(`app "rotating-arrow-down")
-                             ~point_size:16 [])
+                             ~point_size:13 [])
                        cs ])
             ])
         ]

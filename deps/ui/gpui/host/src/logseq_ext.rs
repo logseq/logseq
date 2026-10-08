@@ -148,6 +148,42 @@ pub fn register(shared: &Shared) {
         "color:var(--ls-link-text-color)",
         "",
     );
+    // lui-core.css blockquote { padding:8px 16px; border-left:4px solid
+    //   var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha));
+    //   background-color: var(--ls-page-blockquote-bg-color,
+    //   var(--lx-gray-04)); margin:1rem 0 } — block-body first-child
+    // trims the margins to 8px. The --lx-gray fallbacks don't resolve
+    // on gpui (dark + alpha steps are unset by design), so the bar/bg
+    // bind to the theme-aware --ls-* semantic vars instead.
+    lui_gpui::style::register_class_style(
+        "ls-blockquote",
+        "padding:8px 16px; \
+         border-left:4px solid var(--ls-border-color); \
+         background-color:var(--ls-tertiary-background-color); \
+         margin-top:8px; margin-bottom:8px; width:100%",
+        "",
+    );
+    // .ls-block-content-indent { padding-left:45px } — block properties
+    // and other indented chrome under the block content row.
+    lui_gpui::style::register_class_style(
+        "ls-block-content-indent",
+        "padding-left:45px",
+        "",
+    );
+    // .ls-block .ls-properties-area.ls-block-properties { margin-top:2px;
+    //   margin-left:7px }
+    lui_gpui::style::register_class_style(
+        "ls-block-properties",
+        "margin-top:2px; margin-left:7px",
+        "",
+    );
+    // .ls-properties-area .properties-panel { border-radius:6px;
+    //   overflow:hidden }
+    lui_gpui::style::register_class_style(
+        "properties-panel",
+        "border-radius:6px; overflow:hidden",
+        "",
+    );
     // resources/css/lui-overlay.css — modal scrim + dialog surface.
     // The web scrim is `color-mix(bg 90%, transparent)`; `--lui-c-*`
     // vars have no gpui counterpart, so both layers resolve through the
