@@ -448,9 +448,12 @@
       (let [conn (conn/get-db test-db false)
             page-tx (fn [id order] {:db/id id :block/uuid id :block/name (str "nested " id)
                                     :block/title (str "nested " id)
+                                    :block/tags [:logseq.class/Page]
                                     :block/parent [:block/uuid 1] :block/order order})
             order-41 (:block/order (get-block 41))]
-        (d/transact! conn [(page-tx 60 (str order-41 "1")) (page-tx 70 (str order-41 "2"))
+        (d/transact! conn [{:db/ident :logseq.class/Page}
+                           {:db/id 1 :block/tags [:logseq.class/Page]}
+                           (page-tx 60 (str order-41 "1")) (page-tx 70 (str order-41 "2"))
                            {:block/uuid 44 :block/title "x" :block/page [:block/uuid 1]
                             :block/parent [:block/uuid 1] :block/order (str order-41 "3")}]
                      {:outliner-op :insert-blocks})
