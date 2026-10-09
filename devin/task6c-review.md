@@ -375,3 +375,20 @@ Branch devin/SHAREDUI-task6c. Files changed so far (uncommitted):
   can't finish, add_button if no LUI row exists; native/code_mirror
   lang picker (small, waits m3/m6 menu mechanism); native_embed wiring;
   module deletion + trims.
+
+## STATE UPDATE 5
+- m3 merged (2 files: views_query debounce, properties_view ev API +
+  removed module-bottom install() — module-init trap noted).
+- m3's 15 skips triaged: most are DOM-construction (LUI-port) or
+  Web_dom.el in public signatures (o_rename_box chain, open_for_anchor_el,
+  popups_state inside/ac_keydown/ac_mousemove consumed by assigned files).
+- Dispatched: m7 editor cluster (capture+repeat/button now in contract),
+  m8 editor_commands date-picker LUI port, m9 add_button doc-scan→LUI
+  row, m10 (0a93da42) properties cluster (state/area/dialog/menu/select/
+  popup — incl. signature flips to Ui_services.el).
+- QUEUED (needs SWE-2 slot): m11 popups cluster (popups_state API flip +
+  popups_view ~100 mechanical sites + tooltip port); m12+ views cluster
+  (views_state/views_view o_rename_box + head/builder/table — deep LUI
+  port, decide after m6 views_popup outcome).
+- Remaining mine: native_embed wiring, code_mirror lang picker (needs
+  m10's open_anchored Ui_services.el signature), merge + delete + verify.
