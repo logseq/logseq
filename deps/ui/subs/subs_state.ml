@@ -270,7 +270,7 @@ type app_hooks =
     mutable refresh_property_areas : unit -> unit Ui_task.t
   ; (* plugin_host — broadcast app hook firings to LSPluginCore
        (sidebar-visible-changed, current-graph-changed, ...) *)
-    mutable plugin_event : string -> Js.Json.t -> unit
+    mutable plugin_event : string -> Json.t -> unit
   }
 
 (* i18n lookup for document titles — installed by src at init (I18n

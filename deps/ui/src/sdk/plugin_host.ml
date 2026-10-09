@@ -39,6 +39,16 @@ let lsplugin () = getf window_ "LSPlugin"
 let core () = getf window_ "LSPluginCore"
 
 let jobj pairs = Js.Json.object_ (Js.Dict.fromList pairs)
+
+(* boundary conversion: shared code builds portable Json.t payloads,
+   plugin hooks need host Js.Json values *)
+let rec json_to_js : Json.t -> Js.Json.t = function
+  | Json.Null -> Js.Json.null
+  | Json.Bool b -> Js.Json.boolean b
+  | Json.Number n -> Js.Json.number n
+  | Json.String s -> Js.Json.string s
+  | Json.Array a -> Js.Json.array (Array.map json_to_js a)
+  | Json.Object kvs -> jobj (List.map (fun (k, v) -> (k, json_to_js v)) kvs)
 let jstr_ s = Js.Json.string s
 
 (* ---------- persistent stores (localStorage mirrors cljs idb) *)
@@ -1543,7 +1553,7 @@ let setup () =
   (* reducer-side effects (graph ready/closed, sidebar toggles) can't
      import this module — they fire through the app_hooks indirection *)
   Subs_state.app_hooks.plugin_event <-
-    (fun t p -> hook_app t p Js.Json.null);
+    (fun t p -> hook_app t (json_to_js p) Js.Json.null);
   host_mounted ()
 
 (* ---- phase-2 gap fills ---- *)

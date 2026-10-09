@@ -15,12 +15,12 @@ let effects (action : Action.t) : unit =
       Subs_state.app_hooks.rtc_graph_ready repo;
       (* cljs theme.cljs :current-graph-changed *)
       Subs_state.app_hooks.plugin_event "current-graph-changed"
-        (Js.Json.object_ (Js.Dict.empty ()))
+        (Json.Object [])
   | Action.Graph_closed ->
       Subs_state.current_repo := None;
       Subs_state.current_page := None;
       Subs_state.app_hooks.plugin_event "current-graph-changed"
-        (Js.Json.object_ (Js.Dict.empty ()));
+        (Json.Object []);
       Subs_state.current_route := None
   | Action.Page_loaded page ->
       Subs_state.app_hooks.nav_load_done ();
@@ -172,18 +172,14 @@ let update (model : t) (action : Action.t) : t =
       Ui_services.storage_set "ls-left-sidebar-open?"
         (if open_ then "true" else "false");
       Subs_state.app_hooks.plugin_event "sidebar-visible-changed"
-        (Js.Json.object_
-           (Js.Dict.fromList
-              [ ("visible", Js.Json.boolean open_) ]));
+        (Json.Object [ ("visible", Json.Bool open_) ]);
       { model with left_sidebar_open = open_ }
   | Set_left_sidebar_width w ->
       { model with left_sidebar_width = w }
   | Toggle_right_sidebar ->
       let open_ = not model.right_sidebar_open in
       Subs_state.app_hooks.plugin_event "sidebar-visible-changed"
-        (Js.Json.object_
-           (Js.Dict.fromList
-              [ ("visible", Js.Json.boolean open_) ]));
+        (Json.Object [ ("visible", Json.Bool open_) ]);
       { model with right_sidebar_open = open_ }
   | Toast_push t ->
       { model with
