@@ -1,116 +1,43 @@
-(* Page-level .block-add-button. pages/page.ml is owned by another area and
-   renders only .page-blocks-inner, so the trailing "click to add block" row
-   (cljs components/page.cljs add-button-inner) is injected imperatively:
-   a MutationObserver appends it to .page-blocks-inner whenever the page
-   subtree mounts/remounts and it's missing. Clicks are delegated to
-   Editor_keys' document-level listener (closest .block-add-button). *)
+(* Page-level .block-add-button — the trailing "click to add block" row
+   (cljs components/page.cljs add-button-inner), emitted declaratively as
+   the last child of every .page-blocks-inner region (page routes, block
+   routes, journal items, sidebar items, previews, quick-add). Clicks
+   reach Editor_actions.append_block via Editor_keys' document-level
+   listeners matching closest ".block-add-button" and reading
+   data-parentblockid. *)
 
-open Web_dom
+open Lui_elements
 
-(* attr writes queue a mutation record even when the value is unchanged;
-   the sync doc scan revisits this button on every flush, so only write
-   when the value differs or the observer would spin forever *)
-let set_parent_attr btn puuid =
-  match el_get_attr btn "data-parentblockid" with
-  | Some v when String.equal v puuid -> ()
-  | _ -> el_set_attr btn "data-parentblockid" puuid
-
-(* cljs page.cljs add-button-inner: block routes carry
-   .ls-block-content-indent + margin-left 6, page routes margin-left 22 *)
-let build_el ?puuid ?(indented = false) () =
-  let btn = create_element "div" in
-  el_set_class btn
-    ("ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
-      transition-opacity ease-in duration-100 !py-0 opacity-0"
-    ^ if indented then " ls-block-content-indent" else "");
-  el_set_attr btn "tabindex" "0";
-  (match puuid with Some u -> set_parent_attr btn u | None -> ());
-  let row = create_element "div" in
-  el_set_class row "flex flex-row";
-  let bullet_wrap = create_element "div" in
-  el_set_class bullet_wrap "flex items-center";
-  el_set_attr bullet_wrap "style"
-    (if indented then "height: 28px; margin-left: 6px;"
-     else "height: 28px; margin-left: 22px;");
-  let container = create_element "span" in
-  el_set_class container "bullet-container";
-  let bullet = create_element "span" in
-  el_set_class bullet "bullet";
-  el_append_child container bullet;
-  el_append_child bullet_wrap container;
-  el_append_child row bullet_wrap;
-  el_append_child btn row;
-  btn
-
-(* opacity matches cljs: hidden while a block on this page is being
-   edited or when the owner entity has children — counted from the DOM
-   (cljs child-uuids includes the unsaved blank block, which is not in
-   the page model) *)
-let refresh_opacity ?puuid ~has_children ~indented btn =
-  let cls =
-    "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
-     transition-opacity ease-in duration-100 !py-0 "
-    ^ (if
-         (Editor_state.ready () && Editor_state.editing () <> None)
-         || has_children
-       then
-         "opacity-0"
-       else "opacity-50")
-    ^ if indented then " ls-block-content-indent" else ""
-  in
-  (match el_get_attr btn "class" with
-   | Some c when String.equal c cls -> ()
-   | _ -> el_set_class btn cls);
-  match puuid with
-  | Some u -> set_parent_attr btn u
-  | None -> ()
-
-let ensure_all roots =
-  for_each_touched roots ".page-blocks-inner" (fun parent ->
-      let puuid =
-        match el_get_attr parent "data-pu" with
-        | Some u -> Some u
-        | None -> (
-            match (Runtime.model ()).Model.route_page with
-            | Some p -> p.Model.page_uuid
-            | None -> None)
-      in
-      (* cljs block-route-root: the add-button's owner is the route block
-         itself — its child-uuids are the children inside .block-children,
-         not the top-level .ls-block (which is the route block). Page
-         routes count the page's top-level rows instead. *)
-      let indented =
-        match puuid with
-        | Some u -> (
-            match
-              el_query parent ".ls-block:not(.block-add-button)"
-            with
-            | Some el ->
-                el_get_attr el "id" = Some ("ls-block-" ^ u)
-            | None -> false)
-        | None -> false
-      in
-      let has_children =
-        match
-          (if indented then
-             el_query parent ".block-children .ls-block"
-           else el_query parent ".ls-block:not(.block-add-button)")
-        with
-        | Some _ -> true
-        | None -> false
-      in
-      match el_query parent ".block-add-button" with
-      | Some existing ->
-          refresh_opacity ?puuid ~has_children ~indented existing
-      | None ->
-          el_append_child parent (build_el ?puuid ~indented ()))
-
-let installed = State_cell.Once.make ()
-
-let install () =
-  State_cell.Once.run installed (fun () ->
-      (* sync: cljs renders add-button-inner inside the page component, so
-         the row exists atomically with the blocks. Debounced injection
-         leaves the row absent for ~60ms after a (re)mount — visible as a
-         shorter journal item on remount *)
-      register_doc_scan ~sync:true ensure_all)
+(* cljs page.cljs opacity-class: on desktop opacity-0 only when the
+   owner entity has children (visible-uuids / the route block's
+   children), opacity-50 otherwise; the row carries
+   .ls-block-content-indent when the owner is a block (block routes and
+   sidebar block items). Callers supply both flags per region —
+   constant for snapshot-backed lists, derived signals for live ones. *)
+let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
+ fun context parent ->
+  if Ui_services.env_publishing () then Logseq_el.nothing context parent
+  else
+    let fs = flags context in
+    (* the doc-level click/Enter listener matches closest
+       ".block-add-button" and reads data-parentblockid *)
+    (Ui_parts.class_signal fs
+       (fun (has, indented) ->
+         "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
+         ^ (if has then "opacity-0" else "opacity-50")
+         ^ (if indented then " ls-block-content-indent" else ""))
+       (column ~key:"bab"
+          ~data_attrs:
+            (("tabindex", "0")
+             :: (match puuid with
+                 | Some u -> [ ("data-parentblockid", u) ]
+                 | None -> []))
+          [ row ~key:"bab-row"
+              [ (* margin-left lives in lui-core.css (.bab-inner): 22px
+                   on page routes, 6px under .ls-block-content-indent *)
+                row ~key:"bab-inner" ~cross:`center ~height:28
+                  ~style_class:"bab-inner"
+                  [ box ~key:"bab-bc" ~style_class:"bullet-container"
+                      [ box ~key:"bab-b" ~style_class:"bullet" [] ]
+                  ] ] ]))
+      context parent

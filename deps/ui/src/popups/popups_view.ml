@@ -875,7 +875,18 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                     ~style_class:"page-blocks-inner"
                     (List.map
                        (Tree.block_row ~scope:"preview" ~editable:false)
-                       p.S.pv_blocks)
+                       p.S.pv_blocks
+                     @ [ (* cljs page-preview-content mounts the real
+                            page-cp, which carries add-button *)
+                         Add_button.el
+                           ?puuid:
+                             (match p.S.pv_page with
+                              | Some pg -> pg.Model.page_uuid
+                              | None -> None)
+                           ~flags:(fun ctx ->
+                             Signal.constant ctx.Lui_ui.ui_scheduler
+                               (p.S.pv_blocks <> [], false))
+                       ])
                 ]
             ]
         ]

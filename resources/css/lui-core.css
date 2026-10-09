@@ -1956,9 +1956,13 @@ a.page-title {
   word-break: break-all;
 }
 
-/* cljs page.cljs add-block row: the inner flex row carries
-   margin-left:6px past the .ls-block-content-indent padding */
+/* cljs page.cljs add-block row: margin-left 22px on page routes,
+   6px when the owner is a block (.ls-block-content-indent marks it) */
 .block-add-button .bab-inner {
+  margin-left: 22px;
+}
+
+.block-add-button.ls-block-content-indent .bab-inner {
   margin-left: 6px;
 }
 
