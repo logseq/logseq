@@ -1993,6 +1993,7 @@ let () =
       if Thread.id (Thread.self ()) <> owner then invalid_arg "UI scenario requires its application thread")
     ~request_flush:Runtime.flush
     ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  Editor_keys.install_once ();
   run ~finish:(fun () ->
       Js.log
         (Printf.sprintf

@@ -159,7 +159,17 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; detail =
       (fun name ->
         match jfield "detail" e with
-        | Some d -> jstr name d
+        | Some d -> (
+            match jfield name d with
+            | Some v -> (
+                match Js.Json.classify v with
+                | Js.Json.JSONString s -> Some s
+                (* primitive detail fields surface as their JS string
+                   form — numbers/booleans decode from the repr *)
+                | Js.Json.JSONNumber _ | Js.Json.JSONTrue | Js.Json.JSONFalse ->
+                    Some (Js.Json.stringify v)
+                | _ -> None)
+            | None -> None)
         | None -> None)
   ; clipboard_get =
       (fun _mime ->

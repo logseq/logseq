@@ -209,6 +209,7 @@ let main root =
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
+  Editor_keys.install_once ();
   (* views mount declaratively at their host sites — no
      Views_mount observer *)
   Router.init ();

@@ -9,6 +9,9 @@
 
 module S = Editor_state
 
+let closest sel t =
+  match t with Some el -> el.Ui_services.closest sel | None -> None
+
 let down = ref false
 
 let is_down () = !down
@@ -34,12 +37,12 @@ let set_anchor uuid =
    when a modifier handled the press (the follow-up click must be
    suppressed so the row never opens its editor) *)
 let modifier_select ev uuid =
-  let shift = Web_dom.ev_shift ev in
-  let meta = Web_dom.ev_meta ev || Web_dom.ev_ctrl ev in
+  let shift = ev.Ui_services.shift in
+  let meta = ev.Ui_services.meta || ev.Ui_services.ctrl in
   if not (shift || meta) then false
   else begin
     suppress_click := true;
-    Web_dom.ev_prevent_default ev;
+    ev.Ui_services.prevent_default ();
     if shift && meta then
       (* meta+shift: append the anchor..clicked range *)
       (match S.anchor () with
@@ -89,21 +92,21 @@ let modifier_select ev uuid =
 
 let pointerdown ev =
   if
-    Web_dom.ev_buttons ev = 1
+    ev.Ui_services.buttons = 1
     (* a press inside the editing surface is a text-selection gesture,
        not a block-range one *)
-    && Web_dom.closest_sel ".block-editor" (Web_dom.ev_target ev) = None
+    && closest ".block-editor" (ev.Ui_services.target) = None
   then
-    match Web_dom.closest_sel ".ls-block" (Web_dom.ev_target ev) with
+    match closest ".ls-block" (ev.Ui_services.target) with
     | Some block_el -> (
-        match Web_dom.el_get_attr block_el "data-blockid" with
+        match block_el.Ui_services.attr "data-blockid" with
         | Some uuid ->
             (* the row's control band (collapse arrow, bullet) runs its
                own shift-click behaviors — the selection modifiers only
                apply to the content area *)
             if
-              Web_dom.closest_sel ".block-control-wrap"
-                (Web_dom.ev_target ev)
+              closest ".block-control-wrap"
+                (ev.Ui_services.target)
               <> None
               || not (modifier_select ev uuid)
             then (
@@ -114,14 +117,14 @@ let pointerdown ev =
     | None -> ()
 
 let pointermove ev =
-  if !down && Web_dom.ev_buttons ev land 1 = 1 then
+  if !down && ev.Ui_services.buttons land 1 = 1 then
     match S.anchor () with
     | Some anchor -> (
         match
-          Web_dom.closest_sel ".ls-block" (Web_dom.ev_target ev)
+          closest ".ls-block" (ev.Ui_services.target)
         with
         | Some block_el -> (
-            match Web_dom.el_get_attr block_el "blockid" with
+            match block_el.Ui_services.attr "blockid" with
             | Some uuid when uuid <> anchor || !dragged ->
                 let range = Editor_actions.range_between anchor uuid in
                 if range <> [] then (

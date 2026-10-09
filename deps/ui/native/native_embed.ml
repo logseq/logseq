@@ -494,6 +494,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
+  Editor_keys.install_once ();
   Menu_bar.install ();
   Asset_dom.install ();
   Router.init ();

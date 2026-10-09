@@ -345,6 +345,10 @@ let detail_field name ev =
       | Some v -> (
           match Js.Json.classify v with
           | Js.Json.JSONString s -> Some s
+          (* primitive detail fields surface as their JS string form so
+             consumers decode numbers/booleans without a JSON escape *)
+          | Js.Json.JSONNumber _ | Js.Json.JSONTrue | Js.Json.JSONFalse ->
+              Some (Js.Json.stringify v)
           | _ -> None)
       | None -> None)
   | None -> None

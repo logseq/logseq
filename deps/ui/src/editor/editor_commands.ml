@@ -1081,30 +1081,37 @@ let submit_link p =
 
 (* ---------- popup key router (runs before editor_keys) ---------- *)
 
-let popup_key ev =
+(* caller-migrated boundary: editor_keys hands this a Ui_services.ev, so
+   only the ev reads here moved to the services record — the rest of the
+   file stays on the raw DOM layer until its own migration *)
+let popup_key (ev : Ui_services.ev) =
+  let key = Option.value ~default:"" ev.Ui_services.key in
   match !active with
   | None -> false
   | Some p -> (
-      match (p.kind, D.ev_key ev) with
+      match (p.kind, key) with
       | (Cal_insert | Cal_prop _), "ArrowRight" -> cal_move p 1; true
       | (Cal_insert | Cal_prop _), "ArrowLeft" -> cal_move p (-1); true
       | (Cal_insert | Cal_prop _), "ArrowDown" -> cal_move p 7; true
       | (Cal_insert | Cal_prop _), "ArrowUp" -> cal_move p (-7); true
       | (Cal_insert | Cal_prop _), "Enter" ->
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           commit_cal p; true
       | Link_form _, "Enter" ->
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           submit_link p; true
       | _, "Escape" ->
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           close_popup p ~focus_caret:p.from; true
       | Link_form _, _ -> false (* inputs handle their own keys *)
       | (Cal_insert | Cal_prop _), _ -> (
           (* swallow keys aimed at the calendar so e.g. typing does not
              reach the textarea while a day button is focused *)
-          match D.closest_sel "#date-time-picker" (D.ev_target ev) with
-          | Some _ -> D.ev_prevent_default ev; true
+          match
+            Option.bind ev.Ui_services.target
+              (fun el -> el.Ui_services.closest "#date-time-picker")
+          with
+          | Some _ -> ev.Ui_services.prevent_default (); true
           | None -> false))
 
 (* click_guard: true -> mousedown inside a popup, suppress blur-commit.

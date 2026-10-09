@@ -5,6 +5,10 @@ open Test_check
 
 let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~timers:Ui_dom_web.timers ~files:Ui_dom_web.files
 
+(* document listeners attach through the services dom channel, so they
+   can only go up after Platform_web.install *)
+let () = Editor_keys.install_once ()
+
 (* tests exercising model-derived readers stub the live model through
    Runtime.read_model *)
 let model_stub = ref Model.initial
