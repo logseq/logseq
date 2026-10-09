@@ -79,6 +79,27 @@ let emoji_char (id : string) : string option =
       | None -> None)
   | None -> None
 
+(* (id, name) pairs for every emoji in the dataset — the picker's
+   all-emojis section; the native twin reads its generated table *)
+let all_emojis () : (string * string) list =
+  match Js.Json.decodeObject (Lazy.force mart_emojis) with
+  | Some d ->
+      Array.to_list (Js.Dict.keys d)
+      |> List.filter_map (fun id ->
+             match Js.Dict.get d id with
+             | Some j ->
+                 Some
+                   ( id
+                   , Option.value ~default:id
+                       (Js.Json.decodeString (Web_dom.js_get j "name")) )
+             | None -> None)
+  | None -> []
+
+let emoji_count () =
+  match Js.Json.decodeObject (Lazy.force mart_emojis) with
+  | Some d -> Array.length (Js.Dict.keys d)
+  | None -> 0
+
 (* frontend.reaction/emoji-id-valid? *)
 let emoji_id_valid (id : string) : bool =
   id <> ""

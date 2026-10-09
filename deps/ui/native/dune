@@ -157,6 +157,8 @@
 (rule
  (copy ../src/graphs/exporter.ml exporter.ml))
 (rule
+ (copy ../src/icon/icon_picker.ml icon_picker.ml))
+(rule
  (copy ../src/popups/tooltip.ml tooltip.ml))
 (rule
  (copy ../src/pages/page.ml page.ml))

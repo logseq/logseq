@@ -42,7 +42,7 @@
 (rule
  (copy ../native/html_to_md.ml html_to_md.ml))
 (rule
- (copy ../native/icon_picker.ml icon_picker.ml))
+ (copy ../src/icon/icon_picker.ml icon_picker.ml))
 (rule
  (copy ../native/imperative_dom.ml imperative_dom.ml))
 (rule

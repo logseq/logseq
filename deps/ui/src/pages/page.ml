@@ -187,7 +187,7 @@ let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
   | Some u -> set_icon u c
 
 let page_icon_picker (page : Model.page) (anchor : string) =
-  match Web_dom.query_selector anchor with
+  match Ui_services.dom_query anchor with
   | None -> ()
   | Some anchor ->
       Icon_picker.open_picker ~anchor

@@ -226,9 +226,12 @@ let ac_open () =
    context menus, page menu) or registers a body-level root it owns
    (Properties_state overlays, Editor_commands inline popups) *)
 let inside el =
+  (* Properties_state.overlay_contains is not hit-tested here: the
+     imperative overlay stack is empty (view overlays already mount
+     under .cp__overlays/.lui-popup-portal above), and this helper's
+     callers hold raw elements it no longer accepts *)
   Web_dom.el_closest el ".cp__overlays" <> None
   || Web_dom.el_closest el ".lui-popup-portal" <> None
-  || Properties_state.overlay_contains el
   ||
   (match !Runtime.editor_popup_root with
    | Some root -> Web_dom.el_contains root el
