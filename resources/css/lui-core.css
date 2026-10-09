@@ -2868,6 +2868,11 @@ a.page-title {
 
 .ed-caret {
   background: var(--ls-caret-color, var(--ls-primary-text-color));
+  /* text is z-index:1 over the overlay so .ed-sel paints under the
+     glyphs — but the caret must stay visible, including inside
+     backgrounded pills (.ed-hl/.ed-code) that would hide it */
+  position: relative;
+  z-index: 2;
   animation: ed-caret-blink 1s step-end infinite;
 }
 
