@@ -2843,8 +2843,13 @@
               new-properties)
         page-tx-for-new-property?
         (fn [page]
-          (let [property-name (keyword (:block/name page))]
+          (let [property-name (keyword (:block/name page))
+                title (:block/title page)]
             (and (contains? new-properties property-name)
+                 ;; A property needs a title to derive its ident; keep malformed
+                 ;; pages as ordinary pages instead of crashing on lower-case
+                 (string? title)
+                 (not (string/blank? title))
                  (not (contains? class-occupied-property-names property-name))
                  (not (existing-named-page-is-class? import-state (:block/uuid page))))))
         [properties-tx pages-tx'] ((juxt filter remove) page-tx-for-new-property? pages-tx)
@@ -3229,7 +3234,10 @@
         ;; returning val results in smoother ui updates
         m)
       (p/catch (fn [error]
-                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
+                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n"
+                                         (or (ex-message error)
+                                             (some-> error .-message)
+                                             (str error)))
                                :level :error
                                :ex-data {:path path :error error}})
                  (when-let [ignored-files (get-in options [:import-state :ignored-files])]
