@@ -5,7 +5,6 @@
    (.ls-query-setting → fake CodeMirror editing). *)
 
 module D = Logseq_el
-module E = Web_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
@@ -380,7 +379,7 @@ let cm_host inst : Lui_elements.t =
       (* cljs's CodeMirror editor evaluates as you type — fire the query
          eval immediately on input (the spec carries the source; it does
          not wait for the save to land) and persist on a debounce *)
-      let autosave = E.debounce 300 in
+      let autosave = Ui_services.timers_debounce 300 in
       Logseq_codemirror.cm ~key:"cm" ~source_role:"query" ~value:cur
         ~style_class:"CodeMirror"
         ~on_event:(fun ~name ~value ~key ->
