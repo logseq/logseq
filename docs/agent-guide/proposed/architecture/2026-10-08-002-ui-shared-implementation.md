@@ -15,13 +15,16 @@ This document was updated on 2026-10-09 after read-only editor research. The use
 Before implementation, reread applicable AGENTS.md files and @.agents/skills/logseq-lui/SKILL.md, @.agents/skills/logseq-i18n/SKILL.md, @/Users/tiensonqin/.codex/skills/ocaml-development/SKILL.md, and @/Users/tiensonqin/.codex/skills/test-driven-development/SKILL.md.
 Current AGENTS.md and the LUI skill take precedence over older architecture examples using direct `dyn`, generic DOM extensions, or utility classes.
 
-## Paused implementation handoff (2026-10-09)
+## Implementation handoff (2026-10-09, resumed)
 
-The user paused implementation and will assign the continuation to another model.
-The active goal is paused, not complete.
-This section is the current handoff; later execution entries retain historical evidence and older dependency revisions.
-Resume implementation only in the continuation task.
-The original Tasks 1–7 below remain the detailed design and deletion gates.
+Execution resumed and ran to near-completion across parallel batches (see the
+integration-progress sections below). Remaining open work: Task 6's last piece —
+the native DOM-simulation cluster deletion — is blocked on migrating ~71 `src/`
+files off `Web_dom`/`Vdom`/`Imperative_dom`/`Editor_dom`/`Properties_dom`/`Views_dom`
+(batch 6c in flight on `devin/SHAREDUI-task6c`); Task 7 documentation is otherwise
+landed (architecture.md shared-runtime section + `check-shared-boundaries.sh`
+gate wired into `dune runtest test/contracts`). The original Tasks 1–7 below
+remain the detailed design and deletion gates.
 
 ### Checkout and delivered work
 
