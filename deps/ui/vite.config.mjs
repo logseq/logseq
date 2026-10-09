@@ -14,6 +14,7 @@ import { execSync } from "node:child_process";
 import { builtinModules, createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { defineConfig } from "vite";
+import { browserVectorBackend } from "../db-worker/browser-platform.mjs";
 
 const entry = resolve(
   import.meta.dirname,
@@ -51,6 +52,7 @@ function cliMode() {
 export default defineConfig(() => {
   const production = cliMode() === "production";
   return {
+    plugins: [browserVectorBackend()],
     resolve: {
       alias: [
         { find: new RegExp(`^(node:)?(${builtinModules.join("|")})$`),

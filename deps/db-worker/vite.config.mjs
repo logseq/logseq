@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import { builtinModules } from "node:module";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
+import { browserVectorBackend } from "./browser-platform.mjs";
 
 const browserEntry = resolve(
   import.meta.dirname,
@@ -137,9 +138,9 @@ export default defineConfig(({ mode }) => {
         minify: true,
         sourcemap: false,
         rollupOptions: {
-          // node:sqlite stays a runtime require; keytar is resolved
-          // lazily by runtime/melange/secret_store.ml at runtime.
-          external: (id) => id === "keytar" || nodeBuiltins.includes(id),
+          // Native modules stay runtime requires. Zvec and keytar load
+          // lazily only when the corresponding capability is used.
+          external: (id) => id === "keytar" || id.startsWith("@zvec/") || nodeBuiltins.includes(id),
           output: {
             exports: "auto",
             codeSplitting: false,
@@ -184,6 +185,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      browserVectorBackend(),
       {
         name: "worker-url-base",
         // With base './' the URL rewriter emits
