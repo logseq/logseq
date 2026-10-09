@@ -219,7 +219,6 @@ let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   Dialogs_state.ensure ctx;
   Dialogs_state.init ();
-  Graphs_mount.init ms;
   let ds = Dialogs_state.signal () in
   let dialogs_sig = Signal.map (fun (d : Dialogs_state.t) -> d.dialogs) ds in
   let confirm_sig =

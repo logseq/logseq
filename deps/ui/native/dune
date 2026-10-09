@@ -133,8 +133,6 @@
 (rule
  (copy ../src/graphs/graphs_meta.ml graphs_meta.ml))
 (rule
- (copy ../src/graphs/graphs_mount.ml graphs_mount.ml))
-(rule
  (copy ../src/graphs/graphs_ops.ml graphs_ops.ml))
 (rule
  (copy ../src/graphs/graphs_view.ml graphs_view.ml))
