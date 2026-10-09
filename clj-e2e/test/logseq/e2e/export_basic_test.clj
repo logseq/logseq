@@ -103,10 +103,10 @@
     (open-block-export!)
     (let [page-ref (export-option-checkbox "[[text]] -> text")
           emphasis (export-option-checkbox "remove emphasis")
-          newline (export-option-checkbox "newline after block")]
+          newline-after-block (export-option-checkbox "newline after block")]
       (is (false? (.isChecked page-ref)))
       (is (false? (.isChecked emphasis)))
-      (is (false? (.isChecked newline)))
+      (is (false? (.isChecked newline-after-block)))
       (is (string/includes? (export-preview) "[[Foo]]"))
       (is (string/includes? (export-preview) "**bold**"))
 
@@ -129,10 +129,10 @@
       (wait-preview! #(string/includes? % "**bold**")
                      "unchecking emphasis should restore markers")
 
-      (toggle-export-option! newline 0.5 0.5 true)
-      (is (true? (.isChecked newline)))
-      (toggle-export-option! newline 0.5 0.5 false)
-      (is (false? (.isChecked newline))))))
+      (toggle-export-option! newline-after-block 0.5 0.5 true)
+      (is (true? (.isChecked newline-after-block)))
+      (toggle-export-option! newline-after-block 0.5 0.5 false)
+      (is (false? (.isChecked newline-after-block))))))
 
 (deftest graph-export-downloads-browser-artifacts-test
   (testing "browser graph export produces nonempty DB, zip, EDN, Markdown and transit files"
