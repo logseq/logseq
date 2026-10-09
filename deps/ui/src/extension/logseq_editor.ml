@@ -103,6 +103,8 @@ let schema =
         ; Lui_extension.event_field "extend" Lui_extension.BoolScalar
             false
         ]
+    ; Lui_extension.event "dblclick"
+        [ Lui_extension.event_field "offset" Lui_extension.IntScalar true ]
     ]
 
 let register registry =
@@ -703,6 +705,24 @@ let on_mouseup el _ev =
   let st = state_of el in
   st.dragging <- false
 
+(* double-click inside the editor = select the word under the point *)
+let on_dblclick el ev =
+  match Js.Undefined.toOption (prop_undef ev "target") with
+  | Some target -> (
+      match container_of el with
+      | Some c when j_contains c target -> (
+          match
+            offset_at_el el ~x:(jnum ev "clientX") ~y:(jnum ev "clientY")
+          with
+          | Some off ->
+              prevent_default ev;
+              emit_now el "dblclick"
+                (String_map.empty
+                |> String_map.add "offset" (IntValue off))
+          | None -> ())
+      | _ -> ())
+  | None -> ()
+
 (* --- adapter + conduit --------------------------------------------------------- *)
 
 let create _id document emit =
@@ -723,6 +743,7 @@ let create _id document emit =
   let on_md ev = on_mousedown el ev in
   let on_mm ev = on_mousemove el ev in
   let on_mu ev = on_mouseup el ev in
+  let on_dc ev = on_dblclick el ev in
   let st = state_of el in
   st.on_mousedown <- Some on_md;
   st.on_mousemove <- Some on_mm;
@@ -731,6 +752,7 @@ let create _id document emit =
   add_doc_listener document "mousedown" on_md;
   add_doc_listener document "mousemove" on_mm;
   add_doc_listener document "mouseup" on_mu;
+  add_doc_listener document "dblclick" on_dc;
   add_listener el "keydown" (on_keydown el);
   add_listener el "beforeinput" (on_beforeinput el);
   add_listener el "paste" (on_paste el);
