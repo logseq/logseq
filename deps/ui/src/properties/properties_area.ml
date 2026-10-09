@@ -439,7 +439,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
        ([ add_btn
            (I18n.t "command.editor/add-property-icon")
            (fun _ ->
-             match Web_dom.doc_query ("#" ^ anchor_id) with
+             match Ui_services.dom_query ("#" ^ anchor_id) with
              | Some anchor ->
                  Icon_picker.open_picker ~anchor
                    ~del:(p.Model.page_icon <> None)
@@ -479,7 +479,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
        ; (if p.Model.page_is_tag then
             add_btn ~a11y:(anchor_id ^ "-prop")
               (I18n.t "class/add-property") (fun _ ->
-                match Web_dom.doc_query ("#" ^ anchor_id ^ "-prop") with
+                match Ui_services.dom_query ("#" ^ anchor_id ^ "-prop") with
                 | Some anchor ->
                     Properties_dialog.open_for_anchor_el anchor
                       { Properties_dialog.uuid
@@ -492,7 +492,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
           else
             add_btn ~a11y:(anchor_id ^ "-prop")
               (I18n.t "property/set-property") (fun _ ->
-                match Web_dom.doc_query ("#" ^ anchor_id ^ "-prop") with
+                match Ui_services.dom_query ("#" ^ anchor_id ^ "-prop") with
                 | Some anchor ->
                     Properties_dialog.open_for_anchor_el anchor
                       { Properties_dialog.uuid

@@ -4,24 +4,31 @@
    toggle. *)
 
 open Promise_ext
-open Web_dom
 module D = Properties_data
 module W = Wire
 
-(* ---------- overlay stack ---------- *)
+(* ---------- tracked popup surfaces ---------- *)
 
+(* Popup surfaces that live outside the view-overlay stack — foreign
+   pickers and portals the owner mounted itself and wants tracked for
+   outside-press dismissal, Escape popping and inside-hit-testing.
+   [el] is a service handle to the owner's mounted root (els arrive
+   via queries/events, so a tracked node is always already mounted);
+   [on_escape] is the owner's teardown hook — there is no node-removal
+   op in the services layer, so every dismissal path (outside-press
+   drop, Escape pop, programmatic close) runs it and the owner
+   unmounts its own node. *)
 type overlay =
-  { el : Web_dom.el
+  { el : Ui_services.el
   ; on_escape : unit -> unit
   }
 
 let overlays : overlay list ref = ref []
 
-(* NOTE: overlays must NOT mount inside .cp__overlays — that container is
-   LUI-managed, so any model flush reconciles its children and wipes
-   foreign nodes (dialogs vanished mid-interaction). Body-level mount is
-   safe; e2e locators are class-scoped. *)
-let overlays_root () = query_selector "body"
+(* the services layer offers no element-identity op: two els bound to
+   the same host element contain each other, and nothing else does *)
+let same_el (a : Ui_services.el) (b : Ui_services.el) =
+  a.Ui_services.contains b && b.Ui_services.contains a
 
 (* cljs shui popups dismiss on window mousedown outside their root: a
    click drops every overlay stacked above the innermost overlay that
@@ -31,49 +38,40 @@ let install_outside_close =
   fun () ->
     if not !installed then (
       installed := true;
-      Overlay.on_document_press "mousedown"
-        ~els:(fun () -> List.map (fun o -> o.el) !overlays)
-        ~on_hit:(function
-          | None ->
-              List.iter (fun o -> el_remove o.el) !overlays;
-              overlays := []
-          | Some i ->
-              List.iteri (fun n o -> if n < i then el_remove o.el) !overlays;
-              overlays := List.filteri (fun n _ -> n >= i) !overlays))
+      Ui_services.dom_on_document_event ~capture:true "mousedown"
+        (fun ev ->
+          match ev.Ui_services.target with
+          | None -> ()
+          | Some target -> (
+              match !overlays with
+              | [] -> ()
+              | os -> (
+                  match
+                    List.find_index
+                      (fun o -> o.el.Ui_services.contains target)
+                      os
+                  with
+                  | Some i ->
+                      List.iteri
+                        (fun n o -> if n < i then o.on_escape ())
+                        os;
+                      overlays := List.filteri (fun n _ -> n >= i) os
+                  | None ->
+                      List.iter (fun o -> o.on_escape ()) os;
+                      overlays := []))))
 
-let push_overlay el ~on_escape =
+let push_overlay (el : Ui_services.el) ~on_escape =
   install_outside_close ();
-  (match overlays_root () with
-   | Some root -> Web_dom.el_append_child root el
-   | None -> ());
   overlays := { el; on_escape } :: !overlays
 
-let remove_overlay_el el =
-  List.iter (fun o -> if o.el == el then el_remove o.el) !overlays;
-  overlays := List.filter (fun o -> o.el != el) !overlays
+let remove_overlay_el (el : Ui_services.el) =
+  List.iter (fun o -> if same_el o.el el then o.on_escape ()) !overlays;
+  overlays := List.filter (fun o -> not (same_el o.el el)) !overlays
 
-let pop_overlay () =
-  match !overlays with
-  | top :: rest ->
-      overlays := rest;
-      el_remove top.el;
-      top.on_escape ()
-  | [] -> ()
-
-let close_overlays () =
-  List.iter (fun o -> el_remove o.el) !overlays;
-  overlays := []
-
-let overlay_open () = !overlays <> []
-
-(* hit-test against mounted overlay roots — registered state, no
+(* hit-test against registered overlay roots — registered state, no
    selector list *)
-let overlay_contains el =
-  List.exists (fun o -> el_contains o.el el) !overlays
-
-(* Escape pops the top overlay; the global keydown handler installs this. *)
-let handle_escape () =
-  if overlay_open () then (pop_overlay (); true) else false
+let overlay_contains (el : Ui_services.el) =
+  List.exists (fun o -> o.el.Ui_services.contains el) !overlays
 
 (* ---------- toasts (through the existing toasts view) ---------- *)
 
@@ -145,6 +143,26 @@ let view_overlay_open () =
   | Some s -> Runtime.signal_get s <> []
   | None -> false
 
+(* context-free push/remove for imperative openers (click handlers have
+   no ui_context): the state exists once the .cp__overlays chrome has
+   mounted, which always precedes the first user interaction *)
+let push_view_overlay_ctxfree ~key ~view ~on_escape =
+  match !view_overlays_state with
+  | Some s ->
+      let cur = Runtime.signal_get s in
+      let cur = List.filter (fun o -> o.vo_key <> key) cur in
+      Runtime.signal_set s
+        (cur @ [ { vo_key = key; vo_view = view; vo_on_escape = on_escape } ]);
+      true
+  | None -> false
+
+let remove_view_overlay key =
+  match !view_overlays_state with
+  | Some s ->
+      Runtime.signal_set s
+        (List.filter (fun o -> o.vo_key <> key) (Runtime.signal_get s))
+  | None -> ()
+
 (* Escape pops the top view overlay — context-free for the document
    keydown handler *)
 let handle_view_escape () =
@@ -157,6 +175,43 @@ let handle_view_escape () =
           true
       | [] -> false)
   | None -> false
+
+(* ---------- pop/close across both stacks ---------- *)
+
+(* "close the top popup" for imperative callers: popovers live on the
+   view-overlay stack, tracked surfaces on the overlay stack — the
+   view stack holds the most recently opened surface in practice *)
+let pop_overlay () =
+  match !view_overlays_state with
+  | Some s when Runtime.signal_get s <> [] -> (
+      match List.rev (Runtime.signal_get s) with
+      | top :: rest ->
+          Runtime.signal_set s (List.rev rest);
+          top.vo_on_escape ()
+      | [] -> ())
+  | _ -> (
+      match !overlays with
+      | top :: rest ->
+          overlays := rest;
+          top.on_escape ()
+      | [] -> ())
+
+let close_overlays () =
+  List.iter (fun o -> o.on_escape ()) !overlays;
+  overlays := [];
+  close_all_view_overlays ()
+
+let overlay_open () = !overlays <> [] || view_overlay_open ()
+
+(* Escape pops the top tracked overlay; view overlays and the property
+   dialog have their own handlers the keydown dispatcher tries first *)
+let handle_escape () =
+  match !overlays with
+  | top :: rest ->
+      overlays := rest;
+      top.on_escape ();
+      true
+  | [] -> false
 
 (* ---------- show hidden properties toggle (`p a`) ---------- *)
 
@@ -324,10 +379,11 @@ let refresh_all () =
   if !refresh_pending then ()
   else (
     refresh_pending := true;
-    Web_dom.set_timeout (fun () ->
-        refresh_pending := false;
-        List.iter (fun a -> ignore (guarded a.a_fetch)) (live_areas ()))
-      150)
+    ignore
+      (Ui_services.timers_timeout (fun () ->
+           refresh_pending := false;
+           List.iter (fun a -> ignore (guarded a.a_fetch)) (live_areas ()))
+         150))
 
 (* sync-sub entry: same debounce, but only refetches areas whose key
    the delta actually touched *)
@@ -336,15 +392,16 @@ let refresh_affected affected =
   else if affected = [] then refresh_all ()
   else (
     refresh_pending := true;
-    Web_dom.set_timeout (fun () ->
-        refresh_pending := false;
-        (* prunes dead areas as a side effect, like refresh_all *)
-        ignore (live_areas ());
-        Hashtbl.iter
-          (fun key a ->
-            if area_hit affected key then ignore (guarded a.a_fetch))
-          areas)
-      150)
+    ignore
+      (Ui_services.timers_timeout (fun () ->
+           refresh_pending := false;
+           (* prunes dead areas as a side effect, like refresh_all *)
+           ignore (live_areas ());
+           Hashtbl.iter
+             (fun key a ->
+               if area_hit affected key then ignore (guarded a.a_fetch))
+             areas)
+         150))
 
 (* immediate rebuild for commit paths (sdk writes) — skips the 150ms
    debounce so callers observe applied property changes *)
