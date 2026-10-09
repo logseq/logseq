@@ -1005,6 +1005,72 @@ let worker_handler name args : W.t =
       snapshot_response (List.nth_opt args 1)
   | _ -> W.Nil
 
+let test_clipboard_paste () =
+  let read_model = !Runtime.read_model in
+  Runtime.read_model := (fun () -> Lui_app.model (s ()).S.app);
+  let saved_title = ref None in
+  ignore (Fake_worker.install (fun name args ->
+    if name = "thread-api/apply-outliner-ops" then begin
+      (match List.nth_opt args 1 with
+       | Some (W.Array ops) ->
+           List.iter (function
+             | W.Array [W.Keyword "save-block"; W.Array [block; _]] ->
+                 check "clipboard saves the editing block"
+                   (W.get block "block/uuid" = Some (W.Uuid "b1"));
+                 saved_title := W.map_get_string block "block/title"
+             | _ -> failwith "Expected a clipboard save operation") ops
+       | _ -> failwith "Expected clipboard save operations");
+      W.Nil
+    end else worker_handler name args));
+  let scenario label ~meta ~ctrl ~lo ~hi replies expected caret =
+    Outliner_ops.cancel_pending_save ();
+    saved_title := None;
+    let source = "left old right" in
+    let editing = Editor_state.mk_editing ~uuid:"b1" ~buffer:source
+      ~scope:"main" ~base:source () in
+    let model = Edit_model.select editing.model ~anchor:lo ~focus:hi in
+    Editor_state.set (fun st ->
+      { st with Editor_state.editing = Some (Editor_state.with_model editing model) });
+    List.iter (fun _ ->
+      Editor_keys.apply_input "b1"
+        (Edit_input.Key (Edit_model.key_ev ~meta ~ctrl ~shift:true "v", false))) replies;
+    List.iter (fun text ->
+      let host_reply = Thread.create Platform.note_clipboard_text text in
+      Thread.join host_reply) replies;
+    eqs (label ^ ": host replies do not edit outside the application entry")
+      source (Editor_actions.live_buffer "b1");
+    check (label ^ ": save waits for the application entry")
+      (!(Outliner_ops.pending_save) = None);
+    Host.drain ();
+    flush ();
+    eqs (label ^ ": clipboard text reaches the editing model")
+      expected (Editor_actions.live_buffer "b1");
+    check (label ^ ": selection collapses after the inserted text")
+      (Editor_actions.sel_span "b1" = (caret, caret));
+    check (label ^ ": rendered editor receives the caret")
+      (List.exists (fun n ->
+        n.M.kind = "extension:logseq-editor"
+        && M.string_prop n "block-id" = Some "b1"
+        && Hashtbl.find_opt n.M.props "caret" = Some (Wv.IntValue caret))
+        (M.all_nodes (tree ())));
+    check (label ^ ": clipboard edit schedules its save")
+      (!(Outliner_ops.pending_save) = Some ("b1", expected));
+    ignore (Outliner_ops.flush_pending_save ());
+    check (label ^ ": worker receives the edited title")
+      (!saved_title = Some expected)
+  in
+  scenario "Cmd+Shift+V Unicode replacement" ~meta:true ~ctrl:false
+    ~lo:5 ~hi:8 ["snow 雪😀\nline"] "left snow 雪😀\nline right"
+    (5 + String.length "snow 雪😀\nline");
+  scenario "Ctrl+Shift+V empty replacement" ~meta:false ~ctrl:true
+    ~lo:5 ~hi:8 [""] "left  right" 5;
+  scenario "successive clipboard replies" ~meta:true ~ctrl:false
+    ~lo:5 ~hi:5 ["A"; "B"] "left ABold right" 7;
+  Outliner_ops.cancel_pending_save ();
+  Editor_state.set (fun st -> { st with Editor_state.editing = None });
+  Runtime.read_model := read_model;
+  ignore (Fake_worker.install worker_handler)
+
 let rec after n f =
   ignore
     (Js.Promise.(resolve () |> then_ (fun () ->
@@ -1869,6 +1935,7 @@ let run ~finish =
   test_left_menu_dispatch ();
   test_block_tree ();
   test_block_edit ();
+  test_clipboard_paste ();
   test_cmdk ();
   test_left_sidebar ();
   test_right_sidebar ();

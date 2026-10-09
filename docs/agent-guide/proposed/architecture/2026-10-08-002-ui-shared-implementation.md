@@ -63,6 +63,25 @@ Still open for Task 2's full exit gate: one feature's portable state/view merged
 
 Parallel execution: up to 9 child sessions on `devin/SHAREDUI-*` branches covering batches 3a–3d, 4 (subs Ui_task), 5a editor regressions, 5b editor commands, views, and the Task 6 emulation inventory (read-only). Children write tests in dedicated `shared_scenarios_*.ml` files; the coordinator owns `shared_scenarios.ml`, `test_drive.ml`, contracts, and integration merges into `refactor/lui`.
 
+### Native clipboard review repair (2026-10-09)
+
+The user authorized a targeted repair after reviewing the extraction checkpoints.
+This repair does not resume the broader migration in the original task.
+The original native clipboard reply settled a legacy promise outside the application entry, updating the editing buffer before the owner assertion interrupted save scheduling.
+While preparing the repair, the checkout fast-forwarded to `9171b0296b`, preserving unrelated files and their staging state.
+That continuation had moved clipboard reads to `Ui_task` in `Platform_native`, but `Platform.note_clipboard_text` still shadowed the service with a separate legacy resolver queue.
+Remove the unused native clipboard promise implementation so host replies reach the same service that owns clipboard reads.
+Enqueue resolver lookup and settlement through `Host.enqueue`; both queue access and editing callbacks then execute under the application entry owner.
+
+The GPUI production-view driver covers Cmd/Ctrl+Shift+V with selected Unicode and multiline text, empty replacement, and consecutive replies.
+It checks deferred editing, collapsed selection, rendered caret, pending save, and the edited title delivered to the worker boundary.
+Before the repair on the updated checkout, these scenarios produced 15 failures; afterward the native driver passed 602 checks with zero failures and five pre-existing expected failures.
+Both isolated native process tests passed.
+An isolated probe using the exact production native entry reported `buffer="base", pending_save=NONE` immediately after the host reply and `buffer="base-paste", pending_save=base-paste` after the application pump.
+The Web suite passed 1,881 checks with zero failures and one pre-existing expected failure; native and Web task/service contracts and the shared-boundary gate passed.
+Both native embed objects, the Web app, and test artifacts compiled; GPUI Cargo passed all 12 tests, and `bb lint:dev` passed.
+Verification used isolated headless processes and did not wake the display or exercise the actual OS clipboard.
+
 ### Preserve the working tree
 
 Unrelated files must retain both content and staging state:
