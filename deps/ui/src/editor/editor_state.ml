@@ -28,7 +28,12 @@ let edit_units : Edit_model.units =
 
 type editing =
   { uuid : string; buffer : string; scope : string; base : string
-  ; model : Edit_model.t }
+  ; model : Edit_model.t
+  ; epoch : int ref
+      (* identity for one edit session: shared through {e with} rebuilds,
+         fresh per mk_editing — lets queued input shadows tell "already
+         applied to this session" from "a different record was restored" *)
+  }
 
 let mk_editing ?(caret = 0) ~uuid ~buffer ~scope ~base () =
   Editor_sink.invalidate uuid;
@@ -36,7 +41,7 @@ let mk_editing ?(caret = 0) ~uuid ~buffer ~scope ~base () =
     Edit_model.select (Edit_model.create ~units:edit_units buffer)
       ~anchor:caret ~focus:caret
   in
-  { uuid; buffer; scope; base; model }
+  { uuid; buffer; scope; base; model; epoch = ref 0 }
 
 (* republish with a new model — keeps buffer mirroring model.source *)
 let with_model e model =
@@ -113,6 +118,20 @@ let pending_focus_actions : (unit -> unit) list ref = ref []
    editing session, including keystrokes aimed at a retired sink. *)
 let structure_pending = ref false
 let pending_edit_actions : (unit -> unit) Queue.t = Queue.create ()
+
+(* count of real (non-shadow) items still sitting in
+   [pending_edit_actions] — text input during the gate paints live and
+   leaves a shadow that only replays onto a restored record, so a
+   shadow alone must not defer the next keystroke *)
+let pending_edit_real : int ref = ref 0
+
+let enqueue_edit_action ~real f =
+  if real then incr pending_edit_real;
+  Queue.add
+    (fun () ->
+      if real then decr pending_edit_real;
+      f ())
+    pending_edit_actions
 
 let drain_edit_actions () =
   while not !structure_pending && not (Queue.is_empty pending_edit_actions) do

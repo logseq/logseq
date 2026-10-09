@@ -402,4 +402,8 @@ let () =
     ; popup_pos
     ; container_rect
     ; invalidate
+    ; (* the gpui surface mirrors the model selection itself — there is
+         no DOM selection to write, and its context menu is the LUI
+         menu rather than an OS menu *)
+      select_range = (fun _ _ _ -> ())
     }

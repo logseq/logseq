@@ -30,6 +30,7 @@ type impl =
   ; popup_pos : string -> (float * float * float) option
   ; container_rect : string -> (float * float * float * float) option
   ; invalidate : string -> unit
+  ; select_range : string -> int -> int -> unit
   }
 
 let no_impl =
@@ -40,6 +41,7 @@ let no_impl =
   ; popup_pos = (fun _ -> None)
   ; container_rect = (fun _ -> None)
   ; invalidate = (fun _ -> ())
+  ; select_range = (fun _ _ _ -> ())
   }
 
 let current = ref no_impl
@@ -66,3 +68,8 @@ let container_rect block_id = (!current).container_rect block_id
    native surfaces reject them by epoch, synchronous surfaces treat
    it as a no-op *)
 let invalidate block_id = (!current).invalidate block_id
+
+(* mirror a model text selection into the host surface's native
+   selection so the OS context menu offers real text items (web DOM
+   selection; native hosts keep their own surface selection) *)
+let select_range block_id lo hi = (!current).select_range block_id lo hi

@@ -849,17 +849,39 @@ let rec retry_vertical uuid ev armed_caret mine_ms attempts =
    Logseq keymap owns the commands first, Edit_input handles the rest,
    and buffer changes schedule the debounced save plus popup matching *)
 and apply_input ?frame uuid ev =
-  if !S.structure_pending
-     && (match ev with Edit_input.Focus | Edit_input.Blur -> false | _ -> true)
-  then (
-    let context = Runtime.repo (), Runtime.route () in
-    Queue.add
-      (fun () ->
+  (* Text-level input only touches the open editor's model (display
+     side), so it paints live even while a structure tx is in flight —
+     typing right after Enter must show immediately. A shadow also
+     stays queued: if the tx settles onto a different editing record
+     (failed-tx restore), the input replays into it; on the happy path
+     the epoch match skips it. Structural intents (Delete/Key) always
+     queue behind the tx to keep canonical op order, and once anything
+     is queued later input queues in order too. *)
+  let context = Runtime.repo (), Runtime.route () in
+  let enqueue ~real f =
+    S.enqueue_edit_action ~real (fun () ->
         if context = (Runtime.repo (), Runtime.route ()) then
           match S.editing () with
-          | Some e -> apply_input ?frame:!S.active_frame e.S.uuid ev
+          | Some e -> f e
           | None -> ())
-      S.pending_edit_actions)
+  in
+  let must_wait ev =
+    match ev with
+    | Edit_input.Focus | Edit_input.Blur -> false
+    | (Edit_input.Insert _ | Edit_input.Composition _
+      | Edit_input.Pointer _ | Edit_input.Dblclick _) as ev' -> (
+        match S.editing () with
+        | Some e when !S.pending_edit_real = 0 ->
+            let epoch = e.S.epoch in
+            enqueue ~real:false (fun e2 ->
+                if not (e2.S.epoch == epoch) then
+                  apply_input ?frame:!S.active_frame e2.S.uuid ev');
+            false
+        | _ -> true)
+    | _ -> true
+  in
+  if !S.structure_pending && must_wait ev
+  then enqueue ~real:true (fun e -> apply_input ?frame:!S.active_frame e.S.uuid ev)
   else match S.editing () with
   | Some e when e.S.uuid = uuid -> (
       (* Focus/Blur/Menu are lifecycle emits, not input — counting them
@@ -970,7 +992,18 @@ and apply_input ?frame uuid ev =
             retry_caret 12
           end)
       | _ -> ())
-  | _ -> ()
+  | _ -> (
+      (* a pre-remount surface can outlive its editing record by a flush:
+         the Enter that created the new block unmounts the old sink, but
+         a fast keypress still lands on it and arrives tagged with the
+         old uuid. Text-level input belongs to the live record —
+         retargeting keeps the first typed char from dying here. *)
+      match S.editing (), ev with
+      | Some e,
+        (Edit_input.Insert _ | Edit_input.Composition _
+        | Edit_input.Delete _ | Edit_input.Key _) ->
+          apply_input ?frame e.S.uuid ev
+      | _ -> ())
 
 (* translate a DOM keydown into the Edit_input event the conduit would
    have emitted for it *)

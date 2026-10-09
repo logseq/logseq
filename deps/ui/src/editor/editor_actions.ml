@@ -447,9 +447,9 @@ let rec enter_edit ?scope uuid caret =
   if Ui_services.env_publishing () then () else
   let context = Runtime.repo (), Runtime.route () in
   if !S.structure_pending then
-    Queue.add (fun () ->
+    S.enqueue_edit_action ~real:true (fun () ->
       if context = (Runtime.repo (), Runtime.route ()) then
-        enter_edit ?scope uuid caret) S.pending_edit_actions
+        enter_edit ?scope uuid caret)
   else
   let scope =
     match scope with Some sc -> sc | None -> scope_of_uuid uuid
@@ -504,7 +504,7 @@ let cancel_pending_focus () =
 
 let rec exit_edit ~select =
   if !S.structure_pending then
-    Queue.add (fun () -> exit_edit ~select) S.pending_edit_actions
+    S.enqueue_edit_action ~real:true (fun () -> exit_edit ~select)
   else if S.ready () then
     match S.editing () with
     | None -> ()
@@ -2004,7 +2004,7 @@ let () = S.restore_history := restore_history
 
 let rec run_history operation =
   if !S.structure_pending then
-    Queue.add (fun () -> run_history operation) S.pending_edit_actions
+    S.enqueue_edit_action ~real:true (fun () -> run_history operation)
   else
     run_structure ~restore:(S.editing ()) (operation ()) (fun () -> ())
 
