@@ -4,7 +4,6 @@
 
 open Promise_ext
 
-module D = Web_dom
 module W = Wire
 
 let comment_ident = "logseq.class/Comment"
@@ -22,16 +21,16 @@ let insert_comment_op area_uuid text =
   Outliner_ops.insert_blocks [ blk ] area_uuid ~sibling:false
 
 let add_box_of area_uuid =
-  Web_dom.query_selector
+  Ui_services.dom_query
     ("#ls-block-" ^ area_uuid ^ " .ls-comment-add textarea")
 
 let submit area_uuid =
   match add_box_of area_uuid with
   | Some ta ->
-      let text = String.trim (D.el_value ta) in
+      let text = String.trim (ta.Ui_services.value ()) in
       if text <> "" then (
-        D.el_set_value ta "";
-        D.el_set_text_content ta "";
+        ta.Ui_services.set_value "";
+        ta.Ui_services.set_text "";
         ignore
           (Outliner_ops.apply_and_refresh
              [ insert_comment_op area_uuid text ]))

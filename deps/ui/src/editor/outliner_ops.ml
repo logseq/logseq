@@ -797,7 +797,7 @@ let save_timer = ref 0
 let pending_save : (string * string) option ref = ref None
 
 let cancel_pending_save () =
-  Web_dom.clear_timeout !save_timer;
+  Ui_services.timers_clear_timeout !save_timer;
   pending_save := None
 
 (* op names for error logging — nested op payloads are
@@ -825,7 +825,7 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
       let* _ = apply_result [ sop ] in
       apply_result ~opts ops
   | None -> (
-      Web_dom.clear_timeout !save_timer;
+      Ui_services.timers_clear_timeout !save_timer;
       match (Runtime.model ()).Model.repo with
       | None -> Js.Promise.resolve None
       | Some repo ->
@@ -1248,7 +1248,7 @@ let schedule_save uuid title =
   cancel_pending_save ();
   pending_save := Some (uuid, title);
   save_timer :=
-    Web_dom.set_timeout_id
+    Ui_services.timers_timeout
       (fun () ->
         pending_save := None;
         ignore
