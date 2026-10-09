@@ -357,3 +357,21 @@ Branch devin/SHAREDUI-task6c. Files changed so far (uncommitted):
   install, Vdom.init, Vdom.snapshot_of_node, Imperative_dom.lui_index/
   snapshot_of_id in Platform.event_target_of), module deletion + copy
   rule trims + dom_ext trims, final verify + report.
+
+## STATE UPDATE 4
+- Merged origin/refactor/lui (6752d9b35d) — 6 upstream commits incl.
+  popup-lifecycle requirements (imperative APIs are product-required;
+  relayed to m5/m6), clipboard fix, boundaries gate in dune runtest.
+- m2 done + merged (cfffe5c120, 4 files: comments_ops/tree/
+  editor_surface/outliner_ops). m2 slept to free SWE-2 slot.
+- Contract additions ea256612dc: ev.repeat + ev.button (for editor_keys
+  + selection_bar capture/blocker skips).
+- New children: m7 (3b62132e) editor cluster — editor_keys capture
+  listeners + editor_actions/block_selection ev-typed APIs +
+  selection_bar + query_builder; m8 (e666574b) editor_commands
+  date-picker/repeat-panel LUI port; m9 (cbd218d9) add_button
+  register_doc_scan → LUI block-row.
+- Still open skips needing post-m3 resolution: editor_commands if m8
+  can't finish, add_button if no LUI row exists; native/code_mirror
+  lang picker (small, waits m3/m6 menu mechanism); native_embed wiring;
+  module deletion + trims.
