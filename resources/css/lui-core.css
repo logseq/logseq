@@ -2720,6 +2720,10 @@ a.page-title {
   display: block;
   white-space: pre-wrap;
   min-height: 1.5em;
+  /* text paints above the .ed-overlay selection/caret layer — the
+     absolute .ed-pos wrappers would otherwise cover the glyphs */
+  position: relative;
+  z-index: 1;
 }
 
 .ed-r {
@@ -3511,4 +3515,15 @@ a.close {
 .ls-page-title .ls-page-icon svg {
   width: 22px;
   height: 22px;
+}
+
+/* cljs common.css .dnd-separator: 3px line marking the drop slot while
+   dragging a block. Fixed overlay positioned by block_dnd.ml. */
+.dnd-separator.ls-dnd-drop-indicator {
+  position: fixed;
+  height: 0;
+  border-bottom: 3px solid #ccc;
+  z-index: 3;
+  pointer-events: none;
+  display: none;
 }

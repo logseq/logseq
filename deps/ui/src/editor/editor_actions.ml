@@ -458,6 +458,13 @@ let rec enter_edit ?scope uuid caret =
   (* single editing surface (cljs): a block editor opening commits any
      open property-value editor first *)
   !(S.close_property_editor) ();
+  (* clicking the block already under edit (e.g. the click that follows
+     a text-selection drag) must not rebuild the record — the pointer
+     emit already landed the caret, and a rebuild would wipe the live
+     selection and the uncommitted buffer *)
+  match S.editing () with
+  | Some e when e.uuid = uuid && e.scope = scope -> ()
+  | _ ->
   (match S.editing () with
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
   | _ -> ());

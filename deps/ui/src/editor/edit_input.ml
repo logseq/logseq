@@ -88,6 +88,7 @@ type event =
   | Focus
   | Blur
   | Pointer of int * bool (* byte off hit-tested host-side, extend *)
+  | Dblclick of int (* byte off — select the word under the point *)
   | Menu of string
 
 let delete_kind_of_string = function
@@ -158,6 +159,10 @@ let decode name fields : event option =
   | "pointer" -> (
       match int_field fields "offset" with
       | Some off -> Some (Pointer (off, bool_field fields "extend"))
+      | None -> None)
+  | "dblclick" -> (
+      match int_field fields "offset" with
+      | Some off -> Some (Dblclick off)
       | None -> None)
   | "menu" -> Option.map (fun n -> Menu n) (str_field fields "name")
   | _ -> None
@@ -254,6 +259,10 @@ let handle ~route ~conduit m (ev : event) : Edit_model.t =
         else off
       in
       Edit_model.select m ~anchor ~focus:off
+  | Dblclick off ->
+      Edit_model.select m
+        ~anchor:(Edit_model.word_left m.Edit_model.units m.Edit_model.source off)
+        ~focus:(Edit_model.word_right m.Edit_model.units m.Edit_model.source off)
   | Menu name -> route.menu name; m
 
 (* fold the conduit's measurements into the frame the overlay draws:
