@@ -330,3 +330,30 @@ Branch devin/SHAREDUI-task6c. Files changed so far (uncommitted):
   task6c, grep-verify zero src callers, delete native/{web_dom,vdom,
   imperative_dom,editor_dom,properties_dom,views_dom}.ml + copy rules,
   trim dom_ext, full verify, push, report.
+
+## STATE UPDATE 3
+- Committed fcac7021af: native/cmdk_host+comments+logseq_editor migrated
+  to Ui_services/Dom_ext; asset_dom dead file_cell deleted. Build+suites
+  +boundaries green. Pushed (base for children still f8310e479f; they
+  merge back onto fcac7021af+).
+- Contract follow-ups on same commit: ev.movement_x/movement_y,
+  on_document_event ?capture (both impls + test stub).
+- Twin structure discovered: several "src callers" have a web-only src
+  twin AND a native handwritten twin. src/icon/icon_picker.ml,
+  src/views/views_popup.ml, src/cmdk/cmdk_host.ml, src/blocks/comments.ml,
+  plus native/code_mirror.ml use `module D = Web_dom`/includes and are
+  web-only (not in copy list) — they do NOT exercise emulation, but
+  their NATIVE twins do: native/icon_picker.ml (include Editor_dom +
+  include Properties_dom), native/views_popup.ml (module D = Views_dom,
+  644 ln), native/code_mirror.ml (include Editor_dom + include
+  Properties_dom, lang picker menu ~5 sites).
+- Children: m1..m4 as before; m5 (10c405aa) icon_picker src LUI port +
+  copy-list add + delete native/icon_picker.ml + fix cmdk_host anchors;
+  m6 (12927381) views_popup src LUI port + copy-list add + delete
+  native/views_popup.ml.
+- Still mine at merge time: native/code_mirror.ml lang picker menu port
+  (needs the menu mechanism m3/m6 land — small), native/native_embed.ml
+  emulation wiring removal (Editor_dom.run_doc_scans, Imperative_dom.
+  install, Vdom.init, Vdom.snapshot_of_node, Imperative_dom.lui_index/
+  snapshot_of_id in Platform.event_target_of), module deletion + copy
+  rule trims + dom_ext trims, final verify + report.
