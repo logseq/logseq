@@ -552,8 +552,10 @@ let tags_el uuid (b : Model.block) : t =
    the document listeners and the add-button observer even for pages with
    zero blocks, where block_row is never mounted *)
 let () =
-  Editor_keys.install_once ();
-  (* module init — before services install; raw host facts *)
+  (* module init — before services install; raw host facts. The document
+     listeners live in Editor_keys.install_once, which the entry points
+     call right after Ui_services install (Ui_services.* is unavailable
+     at module-init time) *)
   if not (Platform.publishing ()) then Add_button.install ();
   Asset_dom.install ()
 
