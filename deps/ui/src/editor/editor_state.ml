@@ -19,6 +19,8 @@ module String_set = Stdlib.Set.Make (String)
    (UTF-16 code units under Melange — DOM offsets count code units —
    UTF-8 bytes on native) *)
 
+(* module-init constant: the runtime's unit kind is a host fact read
+   before services install — keep the raw platform value here *)
 let edit_units : Edit_model.units =
   match Platform.edit_units with
   | `Bytes -> Edit_model.Bytes
@@ -120,7 +122,7 @@ let drain_edit_actions () =
    so an idle-but-editing page does not starve remote updates *)
 let last_edit_input_ms : float ref = ref 0.0
 
-let note_input () = last_edit_input_ms := Platform.date_now_ms ()
+let note_input () = last_edit_input_ms := Ui_services.time_now ()
 
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
 let clipboard : Model.block list ref = ref []

@@ -83,6 +83,8 @@ let cls_suffix f = if f.cls = "" then "" else " " ^ f.cls
 
 (* the zero-width space the caret lands on at line end — decoded to a
    real U+200B codepoint so the DOM side carries one code unit *)
+(* module-init constant — evaluated before services install, so the raw
+   platform utf8 op rather than Ui_services.literal_text *)
 let pad_text = Platform.utf8 "\xe2\x80\x8b"
 
 let pad_frag hi =
@@ -554,13 +556,10 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
           in
           match field "name" with
           | Some name ->
-              let payload =
-                match field "payload" with
-                | Some p -> (
-                    try Js.Json.parseExn p with _ -> Js.Json.null)
-                | None -> Js.Json.null
-              in
-              Platform.emit_event name payload
+              Ui_services.dom_emit_json name
+                (match field "payload" with
+                 | Some p -> p
+                 | None -> "null")
           | None -> ())
       | ExtensionEvent (_, ident, name, fields)
         when ident = Editor_sink.identifier -> (

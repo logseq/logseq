@@ -58,13 +58,13 @@ let last_color = ref "yellow"
 (* ---- storage-backed flags (cljs ls-* keys) ---- *)
 
 let storage_bool key ~default =
-  match Platform.local_storage_get key with
+  match Ui_services.storage_get key with
   | Some "false" | Some "0" -> false
   | Some _ -> true
   | None -> default
 
 let storage_set key v =
-  Platform.local_storage_set key (if v then "true" else "false")
+  Ui_services.storage_set key (if v then "true" else "false")
 
 let area_dashed () = storage_bool "ls-pdf-area-is-dashed" ~default:false
 
@@ -91,11 +91,11 @@ let set_auto_open_ctx v = storage_set "ls-pdf-auto-open-ctx-menu" v
 
 (* cljs storage key "ls-pdf-viewer-theme" — "" | "light" | "warm" | "dark" *)
 let viewer_theme () =
-  Option.value (Platform.local_storage_get "ls-pdf-viewer-theme")
+  Option.value (Ui_services.storage_get "ls-pdf-viewer-theme")
     ~default:""
 
 let set_viewer_theme t =
-  Platform.local_storage_set "ls-pdf-viewer-theme" t;
+  Ui_services.storage_set "ls-pdf-viewer-theme" t;
   match !current with
   | Some a -> (
       match
@@ -110,11 +110,11 @@ let last_scale_key db_id = "pdf-last-visit-scale/" ^ string_of_int db_id
 
 let stored_scale db_id =
   Option.value
-    (Platform.local_storage_get (last_scale_key db_id))
+    (Ui_services.storage_get (last_scale_key db_id))
     ~default:"auto"
 
 let set_stored_scale db_id s =
-  Platform.local_storage_set (last_scale_key db_id)
+  Ui_services.storage_set (last_scale_key db_id)
     (if s = "" then "auto" else s)
 
 (* interact.js handles live on hls-region elements inside removed

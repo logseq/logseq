@@ -5,7 +5,7 @@
 let key = "ls-graphs-metadata"
 
 let read () =
-  match Platform.local_storage_get key with
+  match Ui_services.storage_get key with
   | Some s -> (
       try
         match Edn.parse s with
@@ -15,7 +15,7 @@ let read () =
   | None -> []
 
 let write pairs =
-  Platform.local_storage_set key (Edn.to_string (Wire.Map pairs))
+  Ui_services.storage_set key (Edn.to_string (Wire.Map pairs))
 
 let key_is_repo k repo =
   k = Wire.String repo || k = Wire.Keyword repo
@@ -55,7 +55,7 @@ let upsert repo fields =
 
 (* merge {:last-seen-at now :_v now} (+ :created-at on first sight) *)
 let touch repo =
-  let now = Int64.of_float (Platform.date_now_ms ()) in
+  let now = Int64.of_float (Ui_services.time_now ()) in
   let fields =
     [ (Wire.kw "last-seen-at", Wire.Int64 now)
     ; (Wire.kw "_v", Wire.Int64 now) ]

@@ -4,7 +4,7 @@
    list/record literals emitted a cons skeleton ~30x the size of the
    data itself. Wire shape:
      [ ["c", label] | ["s", label, title, unset, [[kind, data, [keys..]]..]] ]
-   Non-ASCII label/key text is raw UTF-8; render through Platform.utf8
+   Non-ASCII label/key text is raw UTF-8; render through Ui_services.literal_text
    like other i18n literals. *)
 
 type binding =

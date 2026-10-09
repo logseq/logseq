@@ -196,7 +196,7 @@ let body (_ms : Model.t Signal.signal) : t =
          ~events:"click"
          ~on_dom_event:(fun name payload ->
            if name = "click" then
-          let href = Platform.payload_str payload "href" in
+          let href = Json_payload.str payload "href" in
           if String.trim href <> "" then Web_dom.win_open href)
          [ (if t.repository = "" then spacer ~key:"rd-none" []
             else

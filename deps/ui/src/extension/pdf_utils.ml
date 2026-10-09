@@ -492,7 +492,7 @@ let calc_delta_rect_offset (target : D.rect) (scroller : D.el)
   , if dy < 0. then dy +. 5. else 0. )
 
 (* gen-uuid *)
-let gen_uuid () = Platform.random_uuid ()
+let gen_uuid () = Ui_services.env_random_uuid ()
 
 (* ---------- imperative element helpers (Js.Json.t based) ---------- *)
 

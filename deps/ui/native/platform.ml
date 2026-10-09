@@ -305,11 +305,6 @@ let payload_num json key =
       | None -> 0.)
   | None -> 0.
 
-let event_str ev key =
-  match Js.Json.decodeString (json_prop ev key) with
-  | Some s -> s
-  | None -> ""
-
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 
@@ -322,7 +317,8 @@ type pfs = string (* graphs-dir-relative base path *)
 
 let pfs_root = ref ""
 
-let set_pfs_root p = pfs_root := p
+(* nothing in-tree assigns a pfs root today — pfs_handle reports None
+   until a host does *)
 let pfs_handle () = if !pfs_root = "" then None else Some !pfs_root
 
 let pfs_ensure_dir (_pfs : pfs) (path : string) =
@@ -366,8 +362,6 @@ let dispatch name detail =
   emit_event name (Js.Json.JObject [ ("detail", detail) ])
 
 let selected_block_uuids () = []
-
-let get_element_by_id (_id : string) : Webapi.Dom.Element.t option = None
 
 (* native elements are Json snapshots — attrs ride the "attrs" object the
    native host attaches, same decode as Dom_ext.el_attr *)

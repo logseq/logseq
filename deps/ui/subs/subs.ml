@@ -94,10 +94,10 @@ let perf_enabled =
 let perf_time name f =
   if Lazy.force perf_enabled
   then begin
-    let t0 = Platform.date_now_ms () in
+    let t0 = Ui_services.time_now () in
     let r = f () in
     Printf.eprintf "[perf] subs.%s %.1fms\n%!" name
-      (Platform.date_now_ms () -. t0);
+      (Ui_services.time_now () -. t0);
     r
   end
   else f ()
@@ -105,16 +105,16 @@ let perf_time name f =
 let perf_time_p name p =
   if Lazy.force perf_enabled
   then begin
-    let t0 = Platform.date_now_ms () in
+    let t0 = Ui_services.time_now () in
     let* r = p in
     Printf.eprintf "[perf] subs.%s %.1fms\n%!" name
-      (Platform.date_now_ms () -. t0);
+      (Ui_services.time_now () -. t0);
     Ui_task.resolve r
   end
   else p
 
 let rec schedule_reload () =
-  reload_last_ms := Platform.date_now_ms ();
+  reload_last_ms := Ui_services.time_now ();
   if !reload_first_ms = 0.0 then reload_first_ms := !reload_last_ms;
   if not !reload_pending then (
     reload_pending := true;
@@ -125,7 +125,7 @@ and fire_reload gen =
   if gen <> !reload_gen then ()
   else
     let h = hooks_or_fail () in
-    let now = Platform.date_now_ms () in
+    let now = Ui_services.time_now () in
     let flood_active =
       now -. !reload_last_ms < reload_debounce_ms
       && now -. !reload_first_ms < reload_max_wait_ms
@@ -136,7 +136,7 @@ and fire_reload gen =
       reload_pending := false;
       reload_first_ms := 0.0;
       reload_last_fire_ms := now;
-      Platform.perf_mark "reload:fire";
+      Ui_services.perf_mark "reload:fire";
       ignore (apply_pending ()))
 
 (* splice the stashed tx deltas into the subscribed stores; fall back
@@ -357,7 +357,7 @@ and apply_pending () : unit Ui_task.t =
 (* "sync-db-changes" entry point — the worker broadcast lands here from
    Worker_events.dispatch with the whole tx report *)
 let on_db_changes (payload : Wire.t) =
-  Platform.perf_mark "worker:sync-db-changes";
+  Ui_services.perf_mark "worker:sync-db-changes";
   let h = hooks_or_fail () in
   (match Wire.get payload "delta" with
    | Some delta ->

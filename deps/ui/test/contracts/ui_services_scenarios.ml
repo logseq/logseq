@@ -11,6 +11,15 @@ let run () =
   let nav_fns : (unit -> unit) list ref = ref [] in
   let classes : (string, unit) Hashtbl.t = Hashtbl.create 8 in
   let datasets : (string, string) Hashtbl.t = Hashtbl.create 8 in
+  let last_title = ref "" and reloads = ref 0 in
+  let errors = ref 0 and infos = ref 0 and marks : string list ref = ref [] in
+  let copied = ref "" and clip = ref "clip-0" and read_count = ref 0 in
+  let session_tbl : (string, string) Hashtbl.t = Hashtbl.create 4 in
+  let publishing_ref = ref true and online_ref = ref true in
+  let uuid_seq = ref 0 and opened_urls : string list ref = ref [] in
+  let prevented = ref 0 and sidebar_w = ref 0 in
+  let uuids = ref [ "u1"; "u2" ] in
+  let emitted : (string * string) list ref = ref [] in
   let set_hash s =
     if s <> !hash_ref then begin
       if !hash_ref <> "" then hist := !hash_ref :: !hist;
@@ -107,6 +116,8 @@ let run () =
                        (String.split_on_char '&' q)))
         ; decode_uri = (fun s -> s)
         ; reload = (fun () -> ())
+        ; origin = (fun () -> "")
+        ; pathname = (fun () -> "")
         }
     ; doc =
         { set_lang = (fun l -> Hashtbl.replace datasets "lang" l)
@@ -123,9 +134,107 @@ let run () =
             (fun v -> Hashtbl.replace values "preferred-language" ("\"" ^ v ^ "\""))
         ; set_data = (fun name v -> Hashtbl.replace datasets name v)
         ; rm_data = (fun name -> Hashtbl.remove datasets name)
-        ; reload = (fun () -> ())
+        ; set_title = (fun t -> last_title := t)
+        ; reload = (fun () -> incr reloads)
         }
     ; time = Helper_scenarios.fake_time
+    ; log = { error = (fun _ -> incr errors); info = (fun _ -> incr infos) }
+    ; perf = { mark = (fun name -> marks := name :: !marks) }
+    ; uri =
+        { encode_component =
+            (fun s ->
+              let buf = Buffer.create (String.length s) in
+              String.iter
+                (fun c ->
+                  match c with
+                  | 'A' .. 'Z' | 'a' .. 'z' | '0' .. '9' | '-' | '_' | '.'
+                    | '!' | '~' | '*' | '\'' | '(' | ')' -> Buffer.add_char buf c
+                  | _ ->
+                      Buffer.add_string buf
+                        (Printf.sprintf "%%%02X" (Char.code c)))
+                s;
+              Buffer.contents buf)
+        }
+    ; clipboard =
+        { copy = (fun s -> copied := s)
+        ; write_text = (fun s -> copied := s; Ui_task.resolve ())
+        ; read_text = (fun () -> incr read_count; Ui_task.resolve !clip)
+        }
+    ; session =
+        { get = (fun k -> Hashtbl.find_opt session_tbl k)
+        ; set = (fun k v -> Hashtbl.replace session_tbl k v)
+        }
+    ; env =
+        { publishing = (fun () -> !publishing_ref)
+        ; dev_build = (fun () -> true)
+        ; rtc_test_mode = (fun () -> false)
+        ; online = (fun () -> !online_ref)
+        ; is_mac = (fun () -> true)
+        ; native_drag = (fun () -> false)
+        ; native_block_controls = (fun () -> false)
+        ; css_transform_icons = (fun () -> true)
+        ; edit_units = (fun () -> `U16)
+        ; random_uuid = (fun () -> incr uuid_seq; Printf.sprintf "uuid-%d" !uuid_seq)
+        ; open_url = (fun u -> opened_urls := u :: !opened_urls)
+        }
+    ; dom =
+        (let listeners : (string, Ui_services.ev -> unit) Hashtbl.t =
+           Hashtbl.create 8 in
+         let fake_el () : Ui_services.el =
+           { Ui_services.closest = (fun _ -> None)
+           ; attr = (fun _ -> None)
+           ; rect = (fun () -> (0., 0., 0., 0.))
+           ; set_style = (fun _ _ -> ())
+           ; add_class = (fun _ -> ())
+           ; remove_class = (fun _ -> ())
+           ; offset_width = (fun () -> 0.)
+           }
+         in
+         { on_document_event = (fun name f -> Hashtbl.replace listeners name f)
+         ; query = (fun _ -> None)
+         ; doc_root = fake_el
+         ; viewport_width = (fun () -> 1024.)
+         ; dispatch =
+             (fun name ->
+               match Hashtbl.find_opt listeners name with
+               | Some f ->
+                   f
+                     { Ui_services.x = 0.
+                     ; y = 0.
+                     ; shift = false
+                     ; meta = false
+                     ; ctrl = false
+                     ; composing = false
+                     ; key = None
+                     ; target = None
+                     ; touches = []
+                     ; detail = (fun _ -> None)
+                     ; prevent_default = (fun () -> incr prevented)
+                     }
+               | None -> ())
+         ; emit_json = (fun n p -> emitted := (n, p) :: !emitted)
+         ; open_dialog =
+             (fun name ->
+               match Hashtbl.find_opt listeners "ls:open-dialog" with
+               | Some f ->
+                   f
+                     { Ui_services.x = 0.
+                     ; y = 0.
+                     ; shift = false
+                     ; meta = false
+                     ; ctrl = false
+                     ; composing = false
+                     ; key = None
+                     ; target = None
+                     ; touches = []
+                     ; detail =
+                         (fun k -> if k = "dialog" then Some name else None)
+                     ; prevent_default = (fun () -> ())
+                     }
+               | None -> ())
+         ; apply_left_sidebar_width = (fun px -> sidebar_w := px)
+         ; selected_block_uuids = (fun () -> !uuids)
+         })
     }
   in
   Ui_services.install services;
@@ -194,4 +303,90 @@ let run () =
   check "lang pref reads back" (Ui_services.doc_preferred_lang () = "fr");
   Ui_services.doc_set_lang "fr";
   check "doc lang applied" (Hashtbl.find_opt datasets "lang" = Some "fr");
-  print_endline "PASS services: installation, storage, theme, navigation, document"
+  Ui_services.doc_set_title "My Page";
+  check "doc title reaches the host" (!last_title = "My Page");
+
+  (* storage quoting is a pure boundary helper *)
+  check "unquote strips one layer"
+    (Ui_services.storage_unquote "\"dark\"" = "dark"
+     && Ui_services.storage_unquote "plain" = "plain"
+     && Ui_services.storage_quote "dark" = "\"dark\"");
+
+  (* literal_text identity on the fake; real impls decode UTF-8 *)
+  check "literal_text dispatches" (Ui_services.literal_text "abc" = "abc");
+
+  (* log/perf: calls reach the host sinks *)
+  Ui_services.log_error ("boom", 1);
+  Ui_services.log_error "plain";
+  Ui_services.log_info "note";
+  check "log sinks receive values" (!errors = 2 && !infos = 1);
+  Ui_services.perf_mark "p1";
+  check "perf mark recorded" (!marks = [ "p1" ]);
+
+  (* uri encode *)
+  check "encode_component escapes"
+    (Ui_services.uri_encode_component "a b&c" = "a%20b%26c");
+
+  (* clipboard: sync copy + task-returning write/read (Ui_task semantics
+     are covered by ui_task_scenarios; here we assert dispatch + that the
+     ops yield tasks) *)
+  Ui_services.clipboard_copy "c1";
+  check "clipboard copy stores" (!copied = "c1");
+  let _t : unit Ui_task.t = Ui_services.clipboard_write_text "c2" in
+  check "clipboard write_text dispatches" (!copied = "c2");
+  let _t : string Ui_task.t = Ui_services.clipboard_read_text () in
+  check "clipboard read_text dispatches" (!read_count = 1);
+
+  (* session storage is separate from local storage *)
+  Ui_services.session_set "k" "sv";
+  check "session roundtrip"
+    (Ui_services.session_get "k" = Some "sv"
+     && Ui_services.storage_get "k" = None);
+
+  (* env facts *)
+  check "env publishing" (Ui_services.env_publishing ());
+  check "env online" (Ui_services.env_online ());
+  check "env is_mac" (Ui_services.env_is_mac ());
+  check "env dev_build" (Ui_services.env_dev_build ());
+  check "env edit_units" (Ui_services.env_edit_units () = `U16);
+  check "env flags off" (not (Ui_services.env_rtc_test_mode ())
+                         && not (Ui_services.env_native_drag ())
+                         && not (Ui_services.env_native_block_controls ()));
+  check "env css icons" (Ui_services.env_css_transform_icons ());
+  let u1 = Ui_services.env_random_uuid () and u2 = Ui_services.env_random_uuid () in
+  check "random_uuid distinct" (u1 <> u2 && String.length u1 > 0);
+  Ui_services.env_open_url "https://x";
+  check "open_url reaches host" (!opened_urls = [ "https://x" ]);
+
+  (* nav origin/pathname *)
+  check "nav origin/path" (Ui_services.nav_origin () = ""
+                           && Ui_services.nav_pathname () = "");
+
+  (* time fmt_date *)
+  check "fmt_date short form"
+    (Ui_services.time_fmt_date 0. = "Jan 1, 1970");
+
+  (* dom: typed event delivery + element/document ops *)
+  let got : Ui_services.ev option ref = ref None in
+  Ui_services.dom_on_document_event "ls:test" (fun ev -> got := Some ev);
+  Ui_services.dom_dispatch "ls:test";
+  check "dom dispatch delivers typed ev"
+    (match !got with Some ev -> ev.Ui_services.x = 0. | None -> false);
+  Ui_services.dom_on_document_event "ls:open-dialog"
+    (fun ev -> match ev.Ui_services.detail "dialog" with
+      | Some d -> opened_urls := ("dlg:" ^ d) :: !opened_urls
+      | None -> ());
+  Ui_services.dom_open_dialog "settings";
+  check "open_dialog delivers detail"
+    (List.hd !opened_urls = "dlg:settings");
+  Ui_services.dom_emit_json "ls:host-evt" "{\"a\":1}";
+  check "emit_json forwards name + raw payload"
+    (!emitted = [ ("ls:host-evt", "{\"a\":1}") ]);
+  check "dom metrics"
+    (Ui_services.dom_viewport_width () = 1024.
+     && Ui_services.dom_query "body" = None);
+  Ui_services.dom_apply_left_sidebar_width 260;
+  check "sidebar width applied" (!sidebar_w = 260);
+  check "selected uuids"
+    (Ui_services.dom_selected_block_uuids () = [ "u1"; "u2" ]);
+  print_endline "PASS services: installation, storage, theme, navigation, document, ops"

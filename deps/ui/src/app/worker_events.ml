@@ -184,7 +184,7 @@ let init () =
     ; ui_busy
     ; schedule = (fun f -> Web_dom.set_timeout f 150)
     ; publish_page =
-        (fun p -> (let _ = Platform.perf_mark "worker_events:page-loaded" in Runtime.send (Action.Page_loaded p)))
+        (fun p -> (let _ = Ui_services.perf_mark "worker_events:page-loaded" in Runtime.send (Action.Page_loaded p)))
     ; publish_journals =
         (fun js -> Runtime.send (Action.Journals_loaded js))
     ; resync_editing =
@@ -231,10 +231,10 @@ let init () =
       Editor_actions.cancel_pending_focus ();
       if Editor_state.ready () then Editor_actions.clear_selection ());
   Web_dom.add_document_listener "pointerdown"
-    (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
+    (fun _ -> last_ui_input_ms := Ui_services.time_now ())
     true;
   Web_dom.add_document_listener "keydown"
-    (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
+    (fun _ -> last_ui_input_ms := Ui_services.time_now ())
     true;
   Web_dom.on_document_event "ls:toast" (fun ev ->
       let d = detail_json ev in

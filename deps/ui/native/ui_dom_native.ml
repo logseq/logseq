@@ -1,4 +1,4 @@
-(* Native implementation of the Ui_dom boundary: host-emitted event
+(* Native implementation of the dom service group: host-emitted event
    payloads over the native element snapshots. No document query engine
    exists on this host — element resolution only reaches through event
    targets (same reach the former native twin had). *)
@@ -23,8 +23,8 @@ let jstr name j =
   | Some v -> Js.Json.decodeString v
   | None -> None
 
-let rec el_of (e : Js.Json.t) : Ui_dom.el =
-  { closest = (fun sel -> Option.map el_of (Dom_ext.closest e sel))
+let rec el_of (e : Js.Json.t) : Ui_services.el =
+  { Ui_services.closest = (fun sel -> Option.map el_of (Dom_ext.closest e sel))
   ; attr = (fun name -> Platform.get_attribute e name)
   ; rect = (fun () -> (0., 0., 0., 0.))
       (* no host geometry on native — the shared anchor falls back to
@@ -39,12 +39,13 @@ let rec el_of (e : Js.Json.t) : Ui_dom.el =
          touch/right-resize paths that never fire here *)
   }
 
-let ev_of (e : Js.Json.t) : Ui_dom.ev =
-  { x = jnum "clientX" e
+let ev_of (e : Js.Json.t) : Ui_services.ev =
+  { Ui_services.x = jnum "clientX" e
   ; y = jnum "clientY" e
   ; shift = jbool "shiftKey" e
   ; meta = jbool "metaKey" e
   ; ctrl = jbool "ctrlKey" e
+  ; composing = jbool "isComposing" e
   ; key = jstr "key" e
   ; target = (match jfield "target" e with Some t -> Some (el_of t) | None -> None)
   ; touches = []
@@ -58,27 +59,24 @@ let ev_of (e : Js.Json.t) : Ui_dom.ev =
   ; prevent_default = (fun () -> ())
   }
 
-let ops : Ui_dom.ops =
-  { on_document_event =
+let ops : Ui_services.dom =
+  { Ui_services.on_document_event =
       (fun name f ->
         Platform.on_document_event name (fun payload -> f (ev_of payload)))
   ; query = (fun _ -> None)
   ; doc_root = (fun () -> el_of Editor_dom.document_element)
   ; viewport_width = Host.inner_width
-  ; prefers_dark = (fun () -> Hashtbl.mem Platform.root_classes "dark")
-  ; navigate_hash = Platform.set_location_hash
   ; dispatch = (fun name -> Platform.dispatch name Js.Json.null)
+  ; emit_json =
+      (fun name p ->
+        Platform.emit_event name
+          (try Js.Json.parseExn p with _ -> Js.Json.null))
   ; open_dialog =
       (fun name ->
         Platform.dispatch "ls:open-dialog"
           (Js.Json.object_list [ ("name", Js.Json.string name) ]))
-  ; encode_uri = (fun s -> Uri.pct_encode ~component:`Query_value s)
-  ; dev_build = (fun () -> Platform.dev_build)
-  ; log_error = (fun msg -> Printf.eprintf "%s\n%!" msg)
   ; apply_left_sidebar_width =
       (fun px -> Runtime.send (Action.Set_left_sidebar_width px))
       (* dock column width is model-bound on native (no CSS var) *)
+  ; selected_block_uuids = Platform.selected_block_uuids
   }
-
-let install () =
-  if not (Ui_dom.ready ()) then Ui_dom.install ops

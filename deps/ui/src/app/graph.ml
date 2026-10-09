@@ -16,7 +16,7 @@ let init_worker () =
   let* _ =
     Runtime.invoke1 "thread-api/set-context"
       (Wire.Map
-         [ (Wire.kw "dev?", Wire.Bool Platform.dev_build) ])
+         [ (Wire.kw "dev?", Wire.Bool (Ui_services.env_dev_build ())) ])
   in
   (* single-arg map like cljs state/set-db-sync-config *)
   let* _ =
@@ -30,7 +30,7 @@ let init_worker () =
             (DEV-RELEASE); e2e builds compile that flag in, which turns
             on the worker's :db-worker/outliner-op-perf logging *)
   let* _ =
-    if Platform.rtc_test_mode () then
+    if Ui_services.env_rtc_test_mode () then
       Runtime.invoke1 "thread-api/set-context"
         (Wire.Map [ (Wire.kw "dev?", Wire.Bool true) ])
     else Js.Promise.resolve Wire.Nil
@@ -58,7 +58,7 @@ let build_search_index repo =
   in
   Js.Promise.resolve ())
   |> Js.Promise.catch (fun e ->
-         Platform.console_error ("search-build-blocks-indice failed", e);
+         Ui_services.log_error ("search-build-blocks-indice failed", e);
          Js.Promise.resolve ())
   |> ignore
 

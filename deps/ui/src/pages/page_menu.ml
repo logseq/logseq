@@ -106,7 +106,7 @@ let page_items (p : Model.page) =
   (* cljs page_menu.cljs: "(Dev) Show page data" in developer-mode *)
   let dev =
     match
-      Platform.local_storage_get "developer-mode"
+      Ui_services.storage_get "developer-mode"
     with
     | Some "true" | Some "\"true\"" ->
         [ item "dev-page-data" "(Dev) Show page data" (fun () ->

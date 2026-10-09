@@ -77,7 +77,10 @@ let language_row ctx =
 
 let theme_row ctx =
   let mode = Signal.state ctx.Lui_ui.ui_scheduler (V.current_mode ()) in
-  row ~key:"theme" ~style_class:"it ls-it-top"
+  (* ~gap:16 inline = the web .it stylesheet's gap:1rem exactly, so web
+     rendering is unchanged; native has no stylesheet, so the gap must
+     live on the row itself (the deleted native twin used ~gap:24) *)
+  row ~key:"theme" ~style_class:"it ls-it-top" ~gap:16
     [ column ~key:"theme-lc" ~style_class:"ls-it-label-col"
         [ label ~key:"theme-l" ~style_class:"ls-label"
             ~value:
@@ -282,7 +285,7 @@ let date_format_row ctx =
   let mst = dfmt_menu_state ctx in
   (* cljs date-format-row carries a duplicated hiccup class shorthand;
      reproduced verbatim for DOM parity *)
-  row ~key:"dfmt"
+  row ~key:"dfmt" ~gap:16
     ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
     [ C.label_el ~key:"dfmt-l" ~for_:"custom_date_format"
         ~text:T.custom_date_format []
@@ -726,7 +729,7 @@ let appearance_body (_x, y) : t =
         (* cljs PopupContent right-anchors the appearance panel:
            ~620px wide, right edge ~32px from the viewport edge *)
       ; popover ~key:"appearance-wrap"
-          ~at:(Ui_dom.viewport_width () -. 32. -. 624., y) ~width:624
+          ~at:(Ui_services.dom_viewport_width () -. 32. -. 624., y) ~width:624
           ~on_dismiss:(fun _ ->
             Runtime.send (Action.Appearance_set None))
           ~style_class:"ui__dropdown-menu-content appearance-popup"

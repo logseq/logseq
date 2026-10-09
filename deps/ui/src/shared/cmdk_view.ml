@@ -29,7 +29,7 @@ let scroller_class = "cp__cmdk-scroller"
 
 (* -- shui shortcut port (deps/shui/src/logseq/shui/shortcut.cljs) ---- *)
 
-let gph = Ui_services.literal_text
+let gph = (fun s -> Ui_services.literal_text s)
 let g_cmd () = gph "\xe2\x8c\x98"
 let g_win () = gph "\xe2\x8a\x9e"
 let g_ret () = gph "\xe2\x8f\x8e"

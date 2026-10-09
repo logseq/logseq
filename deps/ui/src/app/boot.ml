@@ -19,18 +19,18 @@ let apply_storage_env () =
   Settings_view.apply_theme_dom theme;
   let accent =
     (* cljs storage key is (name :ui/radix-color) = "radix-color" *)
-    match Platform.local_storage_get "radix-color" with
+    match Ui_services.storage_get "radix-color" with
     | Some v -> (
-        let v = Platform.storage_unquote v in
+        let v = Ui_services.storage_unquote v in
         if String.length v > 0 && String.get v 0 = ':' then
           String.sub v 1 (String.length v - 1)
         else v)
     | None -> "logseq"
   in
   Ui_services.doc_set_data "color" accent;
-  (match Platform.local_storage_get "editor-font" with
+  (match Ui_services.storage_get "editor-font" with
    | Some v -> (
-       match Edn.parse (Platform.storage_unquote v) with
+       match Edn.parse (Ui_services.storage_unquote v) with
        | Wire.Map kvs ->
            let m = Wire.Map kvs in
            (match Wire.get m "type" with
@@ -44,8 +44,8 @@ let apply_storage_env () =
        | _ -> ())
    | None -> ());
   let wide =
-    match Platform.local_storage_get "wide-mode" with
-    | Some v -> Platform.storage_unquote v = "true" || v = "true"
+    match Ui_services.storage_get "wide-mode" with
+    | Some v -> Ui_services.storage_unquote v = "true" || v = "true"
     | None -> false
   in
   if wide then
@@ -64,10 +64,10 @@ let pick_graph repos =
     | None -> None
   in
   let tab_target =
-    match Platform.session_storage_get "ls-tab-repo" with
+    match Ui_services.session_get "ls-tab-repo" with
     | Some repo when repo <> "" && List.mem repo repos -> Some repo
     | _ -> (
-        match Platform.session_storage_get "ls-tab-graph-id" with
+        match Ui_services.session_get "ls-tab-graph-id" with
         | Some gid when gid <> "" -> Graphs_meta.repo_of_uuid gid
         | _ -> None)
   in
@@ -106,7 +106,7 @@ let run () =
   w.on_message <- Worker_events.dispatch;
   Worker_events.init ();
   Runtime.worker := Some w;
-  (if Platform.publishing () then !published_boot () else
+  (if Ui_services.env_publishing () then !published_boot () else
   (let* () = Graph.init_worker () in
   let* repos = Graph.list_graphs () in
   let* repo =
@@ -135,6 +135,6 @@ let run () =
     Ui_services.nav_replace_hash "#/";
   Js.Promise.resolve ()))
   |> Js.Promise.catch (fun err ->
-         Platform.console_error ("boot failed", err);
+         Ui_services.log_error ("boot failed", err);
          Toast.error (I18n.t "graph/load-error");
          Js.Promise.resolve ())

@@ -18,7 +18,7 @@ let oauth_token_url =
 (* cljs config.cljs custom-url->ws-url: https->wss else ws, strip scheme +
    trailing slashes, append /sync/%s *)
 let ws_url () =
-  match Platform.local_storage_get "sync-server-url" with
+  match Ui_services.storage_get "sync-server-url" with
   | Some custom when String.length custom > 0 -> (
       let scheme =
         if String.length custom >= 5 && String.sub custom 0 5 = "https"
@@ -40,7 +40,7 @@ let ws_url () =
 
 (* cljs custom-url->http-base: strip trailing slashes *)
 let http_base () =
-  match Platform.local_storage_get "sync-server-url" with
+  match Ui_services.storage_get "sync-server-url" with
   | Some custom when String.length custom > 0 ->
       Str_util.strip_trailing_slashes custom
   | _ -> "https://api.logseq.io"
@@ -69,15 +69,15 @@ let sync_app_state repo =
     (Wire.Map
        (repo_pair
        @ [ ( Wire.Keyword "auth/id-token"
-           , match Platform.local_storage_get "id-token" with
+           , match Ui_services.storage_get "id-token" with
              | Some s -> Wire.String s
              | None -> Wire.Nil )
          ; ( Wire.Keyword "auth/access-token"
-           , match Platform.local_storage_get "access-token" with
+           , match Ui_services.storage_get "access-token" with
              | Some s -> Wire.String s
              | None -> Wire.Nil )
          ; ( Wire.Keyword "auth/refresh-token"
-           , match Platform.local_storage_get "refresh-token" with
+           , match Ui_services.storage_get "refresh-token" with
              | Some s -> Wire.String s
              | None -> Wire.Nil )
          ; (Wire.Keyword "auth/oauth-client-id", Wire.String client_id)
@@ -90,7 +90,7 @@ let start repo =
   (* db-sync-start fails missing-field on list-remote-graphs without an
      auth token — emit! gates on login too, so do the same here for the
      direct callers that bypass it *)
-  if Platform.local_storage_get "id-token" <> None then
+  if Ui_services.storage_get "id-token" <> None then
     (* cljs p/let awaits sync-auth-state + config before db-sync-start:
        on the daemon transport each invoke is its own POST, so an
        un-awaited pair can be dispatched to the worker out of order and
@@ -106,7 +106,7 @@ let start repo =
         Rtc_error.report_outcome "db-sync-start" w;
         Js.Promise.resolve ())
        |> Js.Promise.catch (fun e ->
-              Platform.console_error ("db-sync-start failed", e);
+              Ui_services.log_error ("db-sync-start failed", e);
               Js.Promise.resolve ()))
 
 (* cljs <rtc-stop! => invoke :thread-api/db-sync-stop (no args) *)
@@ -114,7 +114,7 @@ let stop () =
   ignore
     (Runtime.invoke "thread-api/db-sync-stop" []
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("db-sync-stop failed", e);
+            Ui_services.log_error ("db-sync-stop failed", e);
             Js.Promise.resolve Wire.Nil))
 
 (* cljs ensure-e2ee-rsa-key-for-cloud! *)
@@ -130,7 +130,7 @@ let ensure_rsa_keys () =
    end
    else Js.Promise.resolve true)
   |> Js.Promise.catch (fun e ->
-         Platform.console_error ("ensure-user-rsa-keys failed", e);
+         Ui_services.log_error ("ensure-user-rsa-keys failed", e);
          Js.Promise.resolve false)
 
 (* cljs <rtc-download-graph! — resolves false on failure so callers
@@ -151,10 +151,10 @@ let download repo uuid e2ee =
    in
    if Rtc_error.is_error w then begin
      if not (Rtc_error.report w) then
-       Platform.console_error ("download-graph-by-id failed", w);
+       Ui_services.log_error ("download-graph-by-id failed", w);
      Js.Promise.resolve false
    end
    else Js.Promise.resolve true)
   |> Js.Promise.catch (fun e ->
-         Platform.console_error ("download-graph-by-id failed", e);
+         Ui_services.log_error ("download-graph-by-id failed", e);
          Js.Promise.resolve false)

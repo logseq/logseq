@@ -28,8 +28,8 @@ type t =
   ; png_transparent : bool
   }
 
-let get = Platform.local_storage_get
-let set = Platform.local_storage_set
+let get = (fun k -> Ui_services.storage_get k)
+let set = (fun k v -> Ui_services.storage_set k v)
 
 let stored_or key dflt =
   match get key with Some v when v <> "" -> v | _ -> dflt

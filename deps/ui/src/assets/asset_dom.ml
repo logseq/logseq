@@ -151,7 +151,7 @@ let asset_of_file ~idx ~edit_uuid ~empty_target f =
           let block_id =
             match idx = 0, empty_target, edit_uuid with
             | true, true, Some u -> u
-            | _ -> Platform.random_uuid ()
+            | _ -> Ui_services.env_random_uuid ()
           in
           let* () =
             A.write_asset ~repo:(repo ())
@@ -490,7 +490,7 @@ let retry_pending () =
 
 (* record asset/width+height once the img decodes — cljs measure-image! *)
 let measure_on_load uuid (b : Model.block) =
-  if Platform.publishing () then () else
+  if Ui_services.env_publishing () then () else
   match b.Model.block_asset_width, b.Model.block_asset_height with
   | Some _, Some _ -> ()
   | _ -> (
@@ -554,7 +554,7 @@ let asset_container uuid (b : Model.block) : t =
                  (row ~key:("asset-press-" ^ uuid) [ asset_img uuid b file ])
              else asset_placeholder)
            ready.Signal.state_signal
-       ] @ (if Platform.publishing () then [] else [ action_bar uuid b ])))
+       ] @ (if Ui_services.env_publishing () then [] else [ action_bar uuid b ])))
       context parent
 
 (* pointerdown -> window pointermove/pointerup drag — the window
@@ -581,7 +581,7 @@ let image_block uuid (b : Model.block) : t =
       box ~key:("rim-" ^ uuid) ~corner_radius:6
         ~style_class:"ls-resize-image"
         (asset_container uuid b ::
-         if Platform.publishing () then []
+         if Ui_services.env_publishing () then []
          else [ resize_handle uuid `Left; resize_handle uuid `Right ]) ]
 
 (* resolved object URL for assets/<file> — shared by the pdf/media/

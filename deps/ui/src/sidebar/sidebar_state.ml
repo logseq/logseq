@@ -62,21 +62,21 @@ let hook_installed = State_cell.Once.make ()
 let loaded_repo : string option ref = ref None
 let last_page_key : string option ref = ref None
 
-(* ---------- dom event helpers (host ops via Ui_dom) ---------- *)
+(* ---------- dom event helpers (host ops via the Ui_services dom group) ---------- *)
 
-let jbool (name : string) (ev : Ui_dom.ev) =
+let jbool (name : string) (ev : Ui_services.ev) =
   match name with
-  | "shiftKey" -> ev.Ui_dom.shift
-  | "metaKey" -> ev.Ui_dom.meta
-  | "ctrlKey" -> ev.Ui_dom.ctrl
+  | "shiftKey" -> ev.Ui_services.shift
+  | "metaKey" -> ev.Ui_services.meta
+  | "ctrlKey" -> ev.Ui_services.ctrl
   | _ -> false
 
-let closest (target : Ui_dom.el) sel = target.Ui_dom.closest sel
+let closest (target : Ui_services.el) sel = target.Ui_services.closest sel
 
-let prevent_default (ev : Ui_dom.ev) = ev.Ui_dom.prevent_default ()
+let prevent_default (ev : Ui_services.ev) = ev.Ui_services.prevent_default ()
 
-let ev_client_x (ev : Ui_dom.ev) = ev.Ui_dom.x
-let ev_client_y (ev : Ui_dom.ev) = ev.Ui_dom.y
+let ev_client_x (ev : Ui_services.ev) = ev.Ui_services.x
+let ev_client_y (ev : Ui_services.ev) = ev.Ui_services.y
 
 (* open state for the left-sidebar link-item menu: (page ref, is-recent,
    anchor cx, anchor top, anchor bottom). open_menu carries "lp-<ref>"
@@ -87,10 +87,10 @@ let lp_ctx : (string * bool * float * float * float) option ref =
 (* cljs popup-show!: pointer-opened dropdowns re-anchor to the event
    target element's rect — (center-x, top, bottom); falls back to a 1px
    point at the pointer when no element resolves *)
-let anchor_of_raw_target (ev : Ui_dom.ev) =
-  match ev.Ui_dom.target with
+let anchor_of_raw_target (ev : Ui_services.ev) =
+  match ev.Ui_services.target with
   | Some tgt ->
-      let x, y, w, h = tgt.Ui_dom.rect () in
+      let x, y, w, h = tgt.Ui_services.rect () in
       if x = 0. && y = 0. && w = 0. && h = 0. then
         (* hosts without element geometry anchor at the pointer *)
         (ev.x, ev.y, ev.y)
@@ -102,25 +102,25 @@ let open_lp_menu st ~target ~recent ~ax ~atop ~abot =
   Runtime.signal_set st.open_menu ("lp-" ^ target)
 ;;
 
-let click_target sel (ev : Ui_dom.ev) =
-  match ev.Ui_dom.target with
-  | Some tgt -> tgt.Ui_dom.closest sel
+let click_target sel (ev : Ui_services.ev) =
+  match ev.Ui_services.target with
+  | Some tgt -> tgt.Ui_services.closest sel
   | None -> None
 
-let detail_string name (ev : Ui_dom.ev) = ev.Ui_dom.detail name
+let detail_string name (ev : Ui_services.ev) = ev.Ui_services.detail name
 
 (* #right-sidebar is chrome.ml's wrapper and carries no width; the
    resizer writes the persisted width inline, so we mirror that for
    .cp__right-sidebar.open to have a visible box. *)
 let sync_right_sidebar_width () =
-  match Ui_dom.query "#right-sidebar" with
+  match Ui_services.dom_query "#right-sidebar" with
   | Some el ->
       let width =
         match Ui_services.storage_get "ls-right-sidebar-width" with
         | Some w -> w
         | None -> "40%"
       in
-      el.Ui_dom.set_style "width"
+      el.Ui_services.set_style "width"
         (if (model ()).Model.right_sidebar_open then width else "0px")
   | None -> ()
 
@@ -133,14 +133,14 @@ let sync_right_sidebar_width () =
    "ls-right-sidebar-width"). Raw mousedown/move/up tracking here (no
    interact.js in LUI). *)
 
-let doc_root () = Ui_dom.doc_root ()
+let doc_root () = Ui_services.dom_root ()
 
-let set_style_prop (el : Ui_dom.el) name v = el.Ui_dom.set_style name v
-let set_el_width (el : Ui_dom.el) v = el.Ui_dom.set_style "width" v
-let class_add (el : Ui_dom.el) c = el.Ui_dom.add_class c
-let class_rm (el : Ui_dom.el) c = el.Ui_dom.remove_class c
+let set_style_prop (el : Ui_services.el) name v = el.Ui_services.set_style name v
+let set_el_width (el : Ui_services.el) v = el.Ui_services.set_style "width" v
+let class_add (el : Ui_services.el) c = el.Ui_services.add_class c
+let class_rm (el : Ui_services.el) c = el.Ui_services.remove_class c
 
-let left_resizing : Ui_dom.el option ref = ref None
+let left_resizing : Ui_services.el option ref = ref None
 let right_resizing = ref false
 
 let clampf lo hi x = if x < lo then lo else if x > hi then hi else x
@@ -164,7 +164,7 @@ let sync_left_sidebar_width () =
   match Ui_services.storage_get "ls-left-sidebar-width" with
   | Some w -> (
       match px_int_of_string w with
-      | Some px -> Ui_dom.apply_left_sidebar_width px
+      | Some px -> Ui_services.dom_apply_left_sidebar_width px
       | None -> ())
   | None -> ()
 
@@ -173,7 +173,7 @@ let set_right_width width =
   (* cljs persist-right-sidebar-width! also feeds :ui/sidebar-width;
      the inline write keeps the panel at the dragged size without
      waiting for the next model publish *)
-  match Ui_dom.query "#right-sidebar" with
+  match Ui_services.dom_query "#right-sidebar" with
   | Some el -> set_el_width el width
   | None -> ()
 
@@ -200,13 +200,13 @@ let on_resizer_mousemove ev =
    | Some _ ->
        let w = clampf 240. 460. (ev_client_x ev) in
        let px = int_of_float (Float.round w) in
-       Ui_dom.apply_left_sidebar_width px;
+       Ui_services.dom_apply_left_sidebar_width px;
        Ui_services.storage_set "ls-left-sidebar-width"
          (Printf.sprintf "%dpx" px)
    | None -> ()
   );
   if !right_resizing then begin
-    let vw = Ui_dom.viewport_width () in
+    let vw = Ui_services.dom_viewport_width () in
     let lo = max 0.1 (320. /. vw) in
     let ratio = clampf lo 0.7 ((vw -. ev_client_x ev) /. vw) in
     set_right_width (Printf.sprintf "%g%%" (ratio *. 100.))
@@ -222,14 +222,14 @@ let on_resizer_mousemove ev =
    navigation targets inside the sidebar also close it. *)
 
 (* cljs util/sm-breakpoint? — viewport width < 640 *)
-let sm_breakpoint () = Ui_dom.viewport_width () < 640.
+let sm_breakpoint () = Ui_services.dom_viewport_width () < 640.
 
 let touch_before : (float * float) option ref = ref None
 let touch_dx = ref 0.
 let touch_pending = ref false
 
-let touch_coord (ev : Ui_dom.ev) i =
-  List.nth_opt ev.Ui_dom.touches i
+let touch_coord (ev : Ui_services.ev) i =
+  List.nth_opt ev.Ui_services.touches i
 
 let left_touch_x ev i =
   match touch_coord ev i with Some (x, _) -> Some x | None -> None
@@ -237,13 +237,13 @@ let left_touch_x ev i =
 let left_touch_y ev i =
   match touch_coord ev i with Some (_, y) -> Some y | None -> None
 
-let set_el_style (el : Ui_dom.el) name v = el.Ui_dom.set_style name v
+let set_el_style (el : Ui_services.el) name v = el.Ui_services.set_style name v
 
 let apply_touch_drag sb dx =
   let open_ = (model ()).Model.left_sidebar_open in
-  (match Ui_dom.query "#left-sidebar .left-sidebar-inner" with
+  (match Ui_services.dom_query "#left-sidebar .left-sidebar-inner" with
    | Some inner ->
-       let w = inner.Ui_dom.offset_width () in
+       let w = inner.Ui_services.offset_width () in
        let tx =
          if dx > 0. then
            (* opening drag: reveal from -100% toward 0 *)
@@ -257,7 +257,7 @@ let apply_touch_drag sb dx =
            Printf.sprintf "translate3d(%.0fpx, 0, 0)" dx
        in
        set_el_style inner "transform" tx;
-       (match Ui_dom.query "#left-sidebar > .shade-mask" with
+       (match Ui_services.dom_query "#left-sidebar > .shade-mask" with
         | Some mask ->
             let ratio =
               if dx > 0. then clampf 0. 1. (dx /. w)
@@ -278,13 +278,13 @@ let clear_touch_drag () =
   touch_before := None;
   touch_dx := 0.;
   touch_pending := false;
-  (match Ui_dom.query "#left-sidebar" with
+  (match Ui_services.dom_query "#left-sidebar" with
    | Some sb -> class_rm sb "is-touching"
    | None -> ());
-  (match Ui_dom.query "#left-sidebar .left-sidebar-inner" with
+  (match Ui_services.dom_query "#left-sidebar .left-sidebar-inner" with
    | Some inner -> set_el_style inner "transform" ""
    | None -> ());
-  match Ui_dom.query "#left-sidebar > .shade-mask" with
+  match Ui_services.dom_query "#left-sidebar > .shade-mask" with
   | Some mask -> set_el_style mask "opacity" ""
   | None -> ()
 
@@ -304,7 +304,7 @@ let on_doc_touchmove ev =
           let dx = ax -. bx in
           touch_dx := dx;
           if Float.abs dx > 20. then
-            (match Ui_dom.query "#left-sidebar" with
+            (match Ui_services.dom_query "#left-sidebar" with
              | Some sb -> apply_touch_drag sb dx
              | None -> ())
       | None -> ())
@@ -422,7 +422,7 @@ let then_keep p k =
      k w;
      Js.Promise.resolve ())
      |> Js.Promise.catch (fun _ ->
-            Ui_dom.log_error "sidebar loader failed";
+            Ui_services.log_error "sidebar loader failed";
             Js.Promise.resolve ()))
 
 (* loads race with writes (push_recent/set-page-favorite) and with each
@@ -511,11 +511,11 @@ let route_ref s =
 let push_page_route target =
   let target =
     if Wire.is_uuid_string target then target
-    else Ui_dom.encode_uri target
+    else Ui_services.uri_encode_component target
   in
   Runtime.mark_nav ();
   Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ target));
-  Ui_dom.dispatch "ls:navigate"
+  Ui_services.dom_dispatch "ls:navigate"
 
 (* cljs redirect-to-page!: route-info first — hidden and
    private-built-in pages warn instead of navigating, and alias pages
@@ -535,7 +535,7 @@ let navigate_to_page target =
      let blocked =
        (* cljs gates this on (not config/dev?) — our bundle is
           the dev build — and exempts the Recycle page *)
-       (not (Ui_dom.dev_build ()))
+       (not (Ui_services.env_dev_build ()))
        && Wire.map_get_string info "block/title" <> Some "Recycle"
        && ((flag "hidden?" && not (flag "property?"))
            || (flag "built-in?" && flag "private-built-in?"))
@@ -556,9 +556,9 @@ let navigate_to_page target =
 let fetch_blocks (p : Model.page) =
   let* blocks = Outliner_ops.fetch_page_blocks ~plain:true (Runtime.repo ()) p in
   Js.Promise.resolve { p with Model.page_blocks = blocks }
-let open_dialog name = Ui_dom.open_dialog name
+let open_dialog name = Ui_services.dom_open_dialog name
 
-let open_cards () = Ui_dom.dispatch "ls:open-cards"
+let open_cards () = Ui_services.dom_dispatch "ls:open-cards"
 
 let ensure_right_open () =
   if not (model ()).Model.right_sidebar_open then
@@ -929,7 +929,7 @@ let refresh_items repo st =
        Runtime.signal_set st.items (Array.to_list arr);
        Js.Promise.resolve ())
        |> Js.Promise.catch (fun _ ->
-              Ui_dom.log_error "sidebar refresh failed";
+              Ui_services.log_error "sidebar refresh failed";
               Js.Promise.resolve ()))
 
 (* ---------- favorites ---------- *)
@@ -1077,11 +1077,11 @@ let on_doc_contextmenu st ev =
   match click_target "#left-sidebar a.link-item" ev with
   | Some el -> (
       prevent_default ev;
-      match el.Ui_dom.attr "data-lp-ref" with
+      match el.Ui_services.attr "data-lp-ref" with
       | Some target ->
           let ax, atop, abot = anchor_of_raw_target ev in
           open_lp_menu st ~target
-            ~recent:(el.Ui_dom.attr "data-lp-recent" = Some "1")
+            ~recent:(el.Ui_services.attr "data-lp-recent" = Some "1")
             ~ax ~atop ~abot
       | None -> ())
   | None -> (
@@ -1094,7 +1094,7 @@ let on_doc_contextmenu st ev =
           match closest hdr ".sidebar-item" with
           | Some it -> (
               prevent_default ev;
-              match it.Ui_dom.attr "id" with
+              match it.Ui_services.attr "id" with
               | Some id
                 when String.length id > 4
                      && String.sub id 0 4 = "sbi-" ->
@@ -1133,15 +1133,15 @@ let on_doc_click st ev =
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
            resolved title, which drifts out of sync on rename. tag chips
            keep the uuid on the .block-tag wrapper *)
-        (match el.Ui_dom.attr "data-uuid" with
+        (match el.Ui_services.attr "data-uuid" with
          | Some u when u <> "" -> Some u
          | _ -> (
              match
                Option.bind (closest el ".block-tag[data-tag-uuid]")
-                 (fun chip -> chip.Ui_dom.attr "data-tag-uuid")
+                 (fun chip -> chip.Ui_services.attr "data-tag-uuid")
              with
              | Some u when u <> "" -> Some u
-             | _ -> el.Ui_dom.attr "data-ref"))
+             | _ -> el.Ui_services.attr "data-ref"))
       with
       | Some ref_ ->
           (* cljs open-page-ref: shift+click opens in the sidebar, any other
@@ -1186,8 +1186,8 @@ let on_doc_click st ev =
             | None -> ())
         | None -> ()
 
-let on_doc_keydown st (ev : Ui_dom.ev) =
-  match ev.Ui_dom.key with
+let on_doc_keydown st (ev : Ui_services.ev) =
+  match ev.Ui_services.key with
   | Some k -> (
       match k with
       | "Escape" ->
@@ -1227,19 +1227,19 @@ let init (ms : Model.t Signal.signal) : t =
             (fun (it : item) -> Editor_state.find_in it.blocks uuid)
             (Runtime.signal_get st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
-      Ui_dom.on_document_event "ls:open-right-sidebar" (fun ev ->
+      Ui_services.dom_on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with
           | Some u -> open_uuid st u
           | None -> ());
-      Ui_dom.on_document_event "click" (on_doc_click st);
-      Ui_dom.on_document_event "contextmenu" (on_doc_contextmenu st);
-      Ui_dom.on_document_event "keydown" (on_doc_keydown st);
-      Ui_dom.on_document_event "mousedown" on_resizer_mousedown;
-      Ui_dom.on_document_event "mousemove" on_resizer_mousemove;
-      Ui_dom.on_document_event "mouseup" on_resizer_mouseup;
-      Ui_dom.on_document_event "touchstart" on_doc_touchstart;
-      Ui_dom.on_document_event "touchmove" on_doc_touchmove;
-      Ui_dom.on_document_event "touchend" on_doc_touchend;
+      Ui_services.dom_on_document_event "click" (on_doc_click st);
+      Ui_services.dom_on_document_event "contextmenu" (on_doc_contextmenu st);
+      Ui_services.dom_on_document_event "keydown" (on_doc_keydown st);
+      Ui_services.dom_on_document_event "mousedown" on_resizer_mousedown;
+      Ui_services.dom_on_document_event "mousemove" on_resizer_mousemove;
+      Ui_services.dom_on_document_event "mouseup" on_resizer_mouseup;
+      Ui_services.dom_on_document_event "touchstart" on_doc_touchstart;
+      Ui_services.dom_on_document_event "touchmove" on_doc_touchmove;
+      Ui_services.dom_on_document_event "touchend" on_doc_touchend;
       sync_left_sidebar_width ();
       st
 

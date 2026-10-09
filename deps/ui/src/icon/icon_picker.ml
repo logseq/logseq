@@ -70,7 +70,7 @@ let search_icons q =
 
 let used_items () : (string * string * string) list =
   (* (type, id, name) *)
-  match Platform.local_storage_get "ls-icons-used" with
+  match Ui_services.storage_get "ls-icons-used" with
   | None -> []
   | Some s -> (
       try
@@ -110,7 +110,7 @@ let add_used_item (typ, id, name) =
     :: take 24
          (List.filter (fun (t, i, _) -> not (t = typ && i = id)) (used_items ()))
   in
-  Platform.local_storage_set "ls-icons-used"
+  Ui_services.storage_set "ls-icons-used"
     (Edn.to_string
        (Wire.List
           (List.map
@@ -173,7 +173,7 @@ let all_emojis () : (string * string) list =
 
 let close () = Properties_state.pop_overlay ()
 
-let preset_color () = Platform.local_storage_get "ls-icon-color-preset"
+let preset_color () = Ui_services.storage_get "ls-icon-color-preset"
 
 let choose (p : picker) (c : choice) =
   close ();
@@ -459,8 +459,8 @@ let presets_popover (p : picker) (anchor_btn : D.el) : D.el =
                  (Option.value c ~default:"inherit")
            | None -> ());
           (match c with
-           | Some c -> Platform.local_storage_set "ls-icon-color-preset" c
-           | None -> Platform.local_storage_remove "ls-icon-color-preset");
+           | Some c -> Ui_services.storage_set "ls-icon-color-preset" c
+           | None -> Ui_services.storage_remove "ls-icon-color-preset");
           D.el_remove pop);
       D.el_append_child pop b)
     preset_colors;

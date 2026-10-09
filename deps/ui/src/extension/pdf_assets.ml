@@ -135,7 +135,7 @@ let open_pdf_file ~(original_path : string) ~(href : string)
   with
   | Some asset -> Pdf_state.set_current (Some asset)
   | None ->
-      Platform.console_error ("pdf inflate failed", original_path)
+      Ui_services.log_error ("pdf inflate failed", original_path)
 
 (* cljs asset-link pdf branch — ![alt](x.pdf) embeds in plain block text
    carry no asset entity (:asset-block config = nil), so the pdf record
@@ -147,7 +147,7 @@ let open_pdf_link ~original_path ~href =
   with
   | Some asset -> Pdf_state.set_current (Some asset)
   | None ->
-      Platform.console_error ("pdf inflate failed", original_path)
+      Ui_services.log_error ("pdf inflate failed", original_path)
 
 (* ---------- hl <-> wire ---------- *)
 
@@ -264,7 +264,7 @@ let load_hls_data (asset : Model.pdf_asset)
          in
          Js.Promise.resolve hls)
         |> Js.Promise.catch (fun e ->
-               Platform.console_error ("pdf hls load failed", e);
+               Ui_services.log_error ("pdf hls load failed", e);
                Js.Promise.resolve [])
       in
       let* hls, page = Js.Promise.all2 (hls_p, last_visit_page asset) in
@@ -375,7 +375,7 @@ let copy_hl_ref (hl : Model.hl) =
   | Some asset, Some id ->
       ignore
         (let* () = ensure_ref_block asset hl in
-         Platform.copy_to_clipboard ("((" ^ id ^ "))");
+         Ui_services.clipboard_copy ("((" ^ id ^ "))");
          Js.Promise.resolve ())
   | _ -> ()
 
@@ -451,7 +451,7 @@ let open_block_ref (b : Model.block) =
             with
             | Some a -> Pdf_state.set_current (Some a)
             | None ->
-                Platform.console_error ("pdf inflate failed", file_path));
+                Ui_services.log_error ("pdf inflate failed", file_path));
            Js.Promise.resolve ())
   | _ -> ()
 
@@ -526,7 +526,7 @@ external u8_from_buffer :
 (* cljs editor-assets db-based-save-assets! {:pdf-area? true} — write
    assets/<uuid>.png to pfs, insert an asset block into today's journal *)
 let save_area_png (png : Js.Json.t) : int option Js.Promise.t =
-  let uuid = Platform.random_uuid () in
+  let uuid = Ui_services.env_random_uuid () in
   let* buf = blob_array_buffer png in
   let u8 = u8_from_buffer buf in
   let* checksum = Asset_store.sha256_hex u8 in
@@ -594,7 +594,7 @@ let persist_hl_area_image ~(viewer : Pdf_state.viewer)
               resolve (Option.map Int64.of_int id) [@u];
               Js.Promise.resolve ())
              |> Js.Promise.catch (fun e ->
-                    Platform.console_error
+                    Ui_services.log_error
                       ("[write area image Error]", e);
                     resolve None [@u];
                     Js.Promise.resolve ()))))

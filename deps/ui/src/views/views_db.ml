@@ -8,7 +8,7 @@ let repo = Runtime.repo
 let catch_quiet (p : unit Js.Promise.t) =
   Js.Promise.catch
     (fun e ->
-      Platform.console_error ("views worker call failed", e);
+      Ui_services.log_error ("views worker call failed", e);
       Js.Promise.resolve ())
     p
 
@@ -16,7 +16,7 @@ let catch_quiet (p : unit Js.Promise.t) =
 let catch_write (p : unit Js.Promise.t) =
   Js.Promise.catch
     (fun e ->
-      Platform.console_error ("views write failed", e);
+      Ui_services.log_error ("views write failed", e);
       Toast.error (I18n.t "ui/save-changes-error");
       Js.Promise.resolve ())
     p
@@ -36,7 +36,7 @@ let snapshots ?(f = fun _ -> ()) (resources : W.t list) =
   in
   f w; Js.Promise.resolve ())
   |> Js.Promise.catch (fun e ->
-      Platform.console_error ("views worker call failed", e);
+      Ui_services.log_error ("views worker call failed", e);
       (try f W.Nil with _ -> ());
       Js.Promise.resolve ())
   |> ignore

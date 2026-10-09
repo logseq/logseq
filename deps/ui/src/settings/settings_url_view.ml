@@ -13,7 +13,7 @@ let default_sync_ws = "wss://api.logseq.io/sync/%s"
 let default_publish_base = "https://logseq.io"
 
 let get_url key =
-  match Platform.local_storage_get key with
+  match Ui_services.storage_get key with
   | Some v when String.trim v <> "" -> Some (String.trim v)
   | _ -> None
 
@@ -56,7 +56,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
   let url = Signal.state ctx.ui_scheduler (Option.value (get_url storage_key) ~default:"") in
   let read_input () = Runtime.signal_get url in
   let reset () =
-    Platform.local_storage_remove storage_key;
+    Ui_services.storage_remove storage_key;
     on_saved ();
     Runtime.signal_set url "";
     Toast.success cleared_msg;
@@ -67,7 +67,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
     if trimmed = "" then reset ()
     else if not (valid_url trimmed) then Toast.error T.url_invalid
     else (
-      Platform.local_storage_set storage_key trimmed;
+      Ui_services.storage_set storage_key trimmed;
       on_saved ();
       Toast.success saved_msg;
       Dialogs_state.close_top ())

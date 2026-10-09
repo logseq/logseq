@@ -75,7 +75,7 @@ let op_opts name = Wire.Map [ kw "outliner-op" (Wire.Keyword name) ]
 (* cljs apply-outliner-ops generates a fresh :ui/perf-id per call; the
    worker requires it before emitting the :db-worker/outliner-op-perf
    console line that e2e counts per op *)
-let perf_id () = Wire.Uuid (Platform.random_uuid ())
+let perf_id () = Wire.Uuid (Ui_services.env_random_uuid ())
 
 (* cljs wrap-parse-block: a leading "#"+ whitespace normalizes into
    logseq.property/heading and is stripped from block/title (skipped for
@@ -728,7 +728,7 @@ let fetch_unlinked_exists ~stale:(is_stale : unit -> bool)
                 Runtime.send (Action.Unlinked_exists b)
             | _ -> ()))
          |> Js.Promise.catch (fun e ->
-                Platform.console_error
+                Ui_services.log_error
                   ("block-unlinked-ref-exists failed", e);
                 Js.Promise.resolve ()))
   | _ -> ()
@@ -780,10 +780,10 @@ let refresh_page () : unit Js.Promise.t =
            refetch was in-flight — never
            overwrite the new route's page *)
         if Runtime.route () = route_at_start then
-          (let _ = Platform.perf_mark "refresh:page-loaded" in Runtime.send (Action.Page_loaded page));
+          (let _ = Ui_services.perf_mark "refresh:page-loaded" in Runtime.send (Action.Page_loaded page));
         Js.Promise.resolve ())
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("refresh_page failed", e);
+             Ui_services.log_error ("refresh_page failed", e);
              Js.Promise.resolve ()))
   | Some _, None ->
       (* journals / other non-page views reload through the router hook *)
@@ -847,7 +847,7 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
            | None -> ());
           Js.Promise.resolve (Some r)) in
           p |> Js.Promise.catch (fun e ->
-                 Platform.console_error
+                 Ui_services.log_error
                    ("apply-outliner-ops failed", op_names ops, e);
                  Toast.error (I18n.t "ui/save-changes-error");
                  p))
@@ -935,7 +935,7 @@ let apply_queued _page delta =
   let perf =
     match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false
   in
-  let ms () = Platform.date_now_ms () in
+  let ms () = Ui_services.time_now () in
   (* fold and publish inside the apply queue so a racing arm can't
      interleave between our splice and our publish — canon rows replace
      block fields wholesale, so a stale arm publishing last would blank
@@ -971,7 +971,7 @@ let apply_queued _page delta =
                       | Some c -> c == base
                       | None -> false) ->
                   let t0 = ms () in
-                  (let _ = Platform.perf_mark "splice:page-loaded" in Runtime.send (Action.Page_loaded p'));
+                  (let _ = Ui_services.perf_mark "splice:page-loaded" in Runtime.send (Action.Page_loaded p'));
                   if perf then
                     Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
               | _ -> ());
@@ -1403,7 +1403,7 @@ let undo () =
       let* () = refresh_page () in
       resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("undo failed", e);
+             Ui_services.log_error ("undo failed", e);
              Toast.error (I18n.t "editor/undo-error");
              Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
@@ -1416,7 +1416,7 @@ let redo () =
       let* () = refresh_page () in
       resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("redo failed", e);
+             Ui_services.log_error ("redo failed", e);
              Toast.error (I18n.t "editor/redo-error");
              Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()

@@ -31,7 +31,7 @@ let enabled_min ~virtualize ~min count =
      scrollers inside the outer journals scroller) *)
   virtualize
   && (force || count >= min)
-  && not (Platform.rtc_test_mode () && not force)
+  && not (Ui_services.env_rtc_test_mode () && not force)
 
 let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 

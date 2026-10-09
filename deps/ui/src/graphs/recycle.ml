@@ -103,7 +103,7 @@ and root_header root host =
   Web_dom.el_set_class txt "truncate";
   Web_dom.el_set_text_content txt
     ((if page then T.recycle_page_deleted else T.recycle_block_deleted)
-       (Platform.fmt_time (deleted_at root)));
+       (Ui_services.time_fmt_date (deleted_at root)));
   Web_dom.el_append_child truncw txt;
   Web_dom.el_append_child left truncw;
   let btns = Web_dom.create_element "div" in

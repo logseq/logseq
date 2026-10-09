@@ -588,7 +588,7 @@ let item_input pid key s cur =
           ~events:"change"
           ~on_dom_event:(fun n p ->
             if n = "change" then
-              on_change (Platform.payload_str p "value"))
+              on_change (Json_payload.str p "value"))
           []
     | _ ->
         input ~key:"in" ~style_class:"form-input" ~text:v

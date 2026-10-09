@@ -173,9 +173,9 @@ let scan_gate_mark g ~gen ~now =
    dispatch so there is a single dispatch path *)
 let send action =
   (match action with
-   | Action.Navigate_to _ -> Platform.perf_mark "action:navigate"
-   | Action.Page_loaded _ -> Platform.perf_mark "action:page-loaded"
-   | Action.Boot_graph_ready _ -> Platform.perf_mark "action:boot-ready"
+   | Action.Navigate_to _ -> Ui_services.perf_mark "action:navigate"
+   | Action.Page_loaded _ -> Ui_services.perf_mark "action:page-loaded"
+   | Action.Boot_graph_ready _ -> Ui_services.perf_mark "action:boot-ready"
    | _ -> ());
   ignore (!app_send action);
   flush_now ()
@@ -192,12 +192,12 @@ let worker_or_fail () =
   | None -> failwith "db-worker not started"
 
 let invoke name args =
-  Platform.perf_mark ("invoke:" ^ name);
+  Ui_services.perf_mark ("invoke:" ^ name);
   let p = Worker_client.invoke (worker_or_fail ()) name args in
   ignore
     (Js.Promise.then_
        (fun r ->
-         Platform.perf_mark ("done:" ^ name);
+         Ui_services.perf_mark ("done:" ^ name);
          Js.Promise.resolve r)
        p
      |> Js.Promise.catch (fun _ ->

@@ -219,7 +219,7 @@ let node_live app node =
 let guarded (refresh : unit -> unit Js.Promise.t) =
   Js.Promise.catch
     (fun e ->
-      Platform.console_error ("property area refresh failed", e);
+      Ui_services.log_error ("property area refresh failed", e);
       Js.Promise.resolve ())
     (refresh ())
 

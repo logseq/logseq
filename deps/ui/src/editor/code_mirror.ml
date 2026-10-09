@@ -61,7 +61,7 @@ let ensure_mode file : unit Js.Promise.t =
         |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
         |> Js.Promise.catch (fun e ->
                Hashtbl.remove mode_loads file;
-               Platform.console_error
+               Ui_services.log_error
                  ("codemirror mode load failed", file, e);
                Js.Promise.resolve ())
       in
@@ -560,7 +560,7 @@ let copy_button uuid =
   match instance uuid with
   | Some c ->
       ignore
-        (let* () = Platform.clipboard_write_text (get_value c) in
+        (Ui_task.bind (Ui_services.clipboard_write_text (get_value c)) (fun () ->
          Runtime.send
            (Action.Toast_push
               { Model.toast_id = 0
@@ -568,7 +568,7 @@ let copy_button uuid =
               ; toast_text = I18n.t "notification/copied"
               ; toast_kind = "success"
               });
-         Js.Promise.resolve ())
+         Ui_task.resolve ()))
   | None -> ()
 
 let installed = ref false

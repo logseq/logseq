@@ -14,7 +14,7 @@ let comment_ident = "logseq.class/Comment"
 let insert_comment_op area_uuid text =
   let blk =
     W.Map
-      [ (W.String "block/uuid", W.Uuid (Platform.random_uuid ()))
+      [ (W.String "block/uuid", W.Uuid (Ui_services.env_random_uuid ()))
       ; (W.String "block/title", W.String text)
       ; (W.Keyword "block/tags", W.Set [ W.Keyword comment_ident ])
       ]

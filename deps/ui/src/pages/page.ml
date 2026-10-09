@@ -130,7 +130,7 @@ let open_menu (page : Model.page) name payload =
      block-tag popup) — only the bare title opens the page menu. Refs
      and other anchors inside the title still open the page menu *)
   let on_tag_chip =
-    I18n.contains (Platform.payload_str payload "targetClass") "block-tag"
+    I18n.contains (Json_payload.str payload "targetClass") "block-tag"
   in
   if name = "contextmenu" && not on_tag_chip then (
     (* cljs popup-show! anchors the menu to the event target element,
@@ -138,14 +138,14 @@ let open_menu (page : Model.page) name payload =
     let ax, atop, abot =
       match
         Web_dom.element_at
-          (Platform.payload_num payload "clientX")
-          (Platform.payload_num payload "clientY")
+          (Json_payload.num payload "clientX")
+          (Json_payload.num payload "clientY")
       with
       | Some el -> Popups_state.anchor_of_el el
       | None ->
           Popups_state.anchor_at_point
-            ~x:(Platform.payload_num payload "clientX")
-            ~y:(Platform.payload_num payload "clientY")
+            ~x:(Json_payload.num payload "clientX")
+            ~y:(Json_payload.num payload "clientY")
     in
     Runtime.send
       (Action.Page_menu_set
@@ -346,8 +346,8 @@ let title_content (page : Model.page) : t =
         , Some
             (fun _name payload ->
               let shift, interactive =
-                ( Platform.payload_bool payload "shiftKey"
-                , Platform.payload_bool payload "interactive" )
+                ( Json_payload.bool payload "shiftKey"
+                , Json_payload.bool payload "interactive" )
               in
               match page.page_uuid with
               | Some uuid when not shift && not interactive ->
@@ -361,8 +361,8 @@ let title_content (page : Model.page) : t =
         , Some
             (fun _name payload ->
               let shift, interactive =
-                ( Platform.payload_bool payload "shiftKey"
-                , Platform.payload_bool payload "interactive" )
+                ( Json_payload.bool payload "shiftKey"
+                , Json_payload.bool payload "interactive" )
               in
               (* shift+click opens the page in the right sidebar (handled by
                  the document-level listener); starting title edit would
@@ -432,7 +432,7 @@ let page_plugin_slots ctx (page : Model.page) : t list =
 
 let page_title_el (m : Model.t) (page : Model.page) : t =
  fun ctx parent ->
-  if Platform.publishing () then
+  if Ui_services.env_publishing () then
     column ~style_class:"ls-page-title title"
       [ heading ~level:1 ~value:page.page_title []
       ; Properties_area.page_area page ] ctx parent
@@ -670,11 +670,11 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
           (* icon buttons live inside #page-title; skip title-edit when
              they (or their children) are the click target *)
           let target, interactive =
-            ( Platform.payload_str payload "targetId"
-            , Platform.payload_bool payload "interactive" )
+            ( Json_payload.str payload "targetId"
+            , Json_payload.bool payload "interactive" )
           in
           let shift =
-            Platform.payload_bool payload "shiftKey"
+            Json_payload.bool payload "shiftKey"
           in
           if
             page.page_uuid <> None && page.page_journal_day = None
@@ -705,7 +705,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
 let add_button_el ?puuid
     ~(flags : 'a -> (bool * bool) Signal.signal) : t =
  fun context parent ->
-  if Platform.publishing () then Logseq_el.nothing context parent else
+  if Ui_services.env_publishing () then Logseq_el.nothing context parent else
   let fs = flags context in
   (* TODO(component): the doc-level click listener matches closest
      ".block-add-button" and reads parentblockid — imperative contract *)

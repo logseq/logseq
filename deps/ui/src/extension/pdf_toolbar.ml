@@ -516,7 +516,7 @@ and load_outlines (t : t) : unit =
      render_panel t;
      Js.Promise.resolve ()
     |> Js.Promise.catch (fun e ->
-           Platform.console_error ("[Load outline Error]", e);
+           Ui_services.log_error ("[Load outline Error]", e);
            Js.Promise.resolve ()))
 
 (* ---------- finder ---------- *)
@@ -880,7 +880,7 @@ and open_docinfo (t : t) : unit =
      show_docinfo_modal t info;
      Js.Promise.resolve ()
     |> Js.Promise.catch (fun e ->
-           Platform.console_error ("pdf metadata", e);
+           Ui_services.log_error ("pdf metadata", e);
            Js.Promise.resolve ()))
 
 and show_docinfo_modal (t : t) (info : Js.Json.t) : unit =
@@ -934,7 +934,7 @@ and show_docinfo_modal (t : t) (info : Js.Json.t) : unit =
   Web_dom.el_set_text_content copy (I18n.t "ui/copy-all");
   let close_all () = Web_dom.el_remove ov in
   Web_dom.el_on copy "click" (fun _ ->
-      Platform.copy_to_clipboard (Web_dom.el_inner_text inner_text);
+      Ui_services.clipboard_copy (Web_dom.el_inner_text inner_text);
       Toast.success (I18n.t "notification/copied");
       close_all ());
   Web_dom.el_append_child foot copy;
@@ -1130,7 +1130,7 @@ and mount_buttons (t : t) (buttons : D.el) : unit =
   let area_title =
     I18n.sub
       (I18n.t "pdf/area-highlight-shortcut")
-      [ if Platform.is_mac () then "⌘" else "Shift" ]
+      [ if Ui_services.env_is_mac () then "⌘" else "Shift" ]
   in
   let area_btn_ref = ref None in
   let area_btn =

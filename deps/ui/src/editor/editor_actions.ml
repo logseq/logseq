@@ -62,7 +62,7 @@ let sel_span uuid =
 let click_offset uuid =
   match !S.click_point with
   | Some (u, ms, x, y)
-    when u = uuid && Platform.date_now_ms () -. ms < 1500. -> (
+    when u = uuid && Ui_services.time_now () -. ms < 1500. -> (
       match
         ( Editor_sink.conduit uuid
         , D.get_element_by_id ("edit-block-" ^ uuid) )
@@ -174,7 +174,7 @@ let drain_pending_focus_actions () =
         S.pending_focus_actions := List.rev rest;
         (try f ()
          with e ->
-           Platform.console_error ("queued key replay failed", e));
+           Ui_services.log_error ("queued key replay failed", e));
         drain_gate := false
 
 (* the arm the focus op was last emitted for — re-emitting every retry
@@ -279,7 +279,7 @@ let rec apply_focus () =
         else (
           if Lazy.force perf_keys then
             Printf.eprintf "PERF focus-retry t=%f uuid=%s\n%!"
-              (Platform.date_now_ms () /. 1000.) uuid;
+              (Ui_services.time_now () /. 1000.) uuid;
           retry_focus ()))
 
 and retry_focus () =
@@ -312,7 +312,7 @@ and retry_focus () =
     last_focus_emitted := None;
     (* one line per exhausted arm — never mounting is a bug worth
        seeing, just not 50 PERF lines per click *)
-    Platform.console_error
+    Ui_services.log_error
       "focus retry budget exhausted — editor sink never mounted";
     drain_pending_focus_actions ())
 
@@ -418,7 +418,7 @@ let scope_of_uuid uuid =
   | None -> "main"
 
 let rec enter_edit ?scope uuid caret =
-  if Platform.publishing () then () else
+  if Ui_services.env_publishing () then () else
   let context = Runtime.repo (), Runtime.route () in
   if !S.structure_pending then
     Queue.add (fun () ->
@@ -575,7 +575,7 @@ let optimistic_edit (f : Model.page -> Model.page option) =
       match f page with
       | Some page' ->
           Page_delta.mark_own_commit page';
-          (let _ = Platform.perf_mark "optimistic:page-loaded" in Runtime.send (Action.Page_loaded page'))
+          (let _ = Ui_services.perf_mark "optimistic:page-loaded" in Runtime.send (Action.Page_loaded page'))
       | None -> ())
   | None -> (
       let rec loop acc = function
@@ -639,10 +639,10 @@ let split_at_cursor uuid =
       ()
   | Some e, Some b when e.uuid = uuid ->
       let perf = Sys.getenv_opt "LOGSEQ_PERF" <> None in
-      let t_last = ref (Platform.date_now_ms ()) in
+      let t_last = ref (Ui_services.time_now ()) in
       let mark name =
         if perf then (
-          let now = Platform.date_now_ms () in
+          let now = Ui_services.time_now () in
           Printf.eprintf "[perf] split.%s %.1fms\n%!" name
             (now -. !t_last);
           t_last := now)
@@ -672,7 +672,7 @@ let split_at_cursor uuid =
           if above then (if selection_end <> pos then suffix else buf)
           else prefix in
         let after = if above then "" else suffix in
-        let new_uuid = Platform.random_uuid () in
+        let new_uuid = Ui_services.env_random_uuid () in
         let library = library_context () in
         let sibling =
           not focused_root
@@ -727,7 +727,7 @@ let insert_sibling_after uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid ->
       let buf = live_buffer uuid in
-      let new_uuid = Platform.random_uuid () in
+      let new_uuid = Ui_services.env_random_uuid () in
       let library = library_context () in
       let sibling =
         library || S.is_collapsed_in ~scope:e.S.scope uuid
@@ -1378,7 +1378,7 @@ let copy_selection_text () =
       in
       let blocks = List.filter_map S.find roots in
       S.clipboard := blocks;
-      Platform.copy_to_clipboard
+      Ui_services.clipboard_copy
         (String.concat "\n"
            (List.map (fun b -> b.Model.block_title) blocks))
 
@@ -1557,7 +1557,7 @@ let paste_lines lines =
   let library = library_context () in
   let blocks =
     List.map
-      (fun l -> Ops.block_map ~title:l ~page:library (Platform.random_uuid ()))
+      (fun l -> Ops.block_map ~title:l ~page:library (Ui_services.env_random_uuid ()))
       lines
   in
   match selected_uuids () with
@@ -1755,7 +1755,7 @@ let toggle_collapse ?(scope = "main") uuid =
       else
         let now = not (S.effective_collapsed ~scope b) in
         S.set_collapsed ~scope uuid now;
-        if not (Platform.publishing ()) then
+        if not (Ui_services.env_publishing ()) then
           ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
   | _ -> ()
 
@@ -1763,7 +1763,7 @@ let set_collapsed ?(scope = "main") uuid collapsed =
   match S.find uuid with
   | Some b when S.children_of b <> [] ->
       S.set_collapsed ~scope uuid collapsed;
-      if not (Platform.publishing ()) then
+      if not (Ui_services.env_publishing ()) then
         ignore (Ops.apply [ Ops.collapse_expand [ (uuid, collapsed) ] ])
   | _ -> ()
 
@@ -2037,7 +2037,7 @@ let append_block ?for_page ?(scope = "main") () =
       match p.Model.page_uuid with
       | None -> ()
       | Some puuid ->
-          let new_uuid = Platform.random_uuid () in
+          let new_uuid = Ui_services.env_random_uuid () in
           let target, sibling =
             match List.rev p.Model.page_blocks with
             | last :: _ -> (
@@ -2128,7 +2128,7 @@ let open_quick_add () =
                     quick_add_open_dialog puuid blocks;
                     Js.Promise.resolve ()
                 | [] ->
-                    let nu = Platform.random_uuid () in
+                    let nu = Ui_services.env_random_uuid () in
                     let* () =
                       Ops.apply
                         ~opts:(Ops.op_opts "insert-blocks")
@@ -2266,7 +2266,7 @@ let run_query_command ~advanced =
          pin it so the exit-edit repaint doesn't flash the old title *)
       S.override_title e.uuid "";
       S.set (fun st -> { st with S.editing = None });
-      let quuid = Platform.random_uuid () in
+      let quuid = Ui_services.env_random_uuid () in
       let extra =
         (* advanced-query-steps: display-type :code + code/lang clojure
            on the query value block (pre-named via new-block-id) *)
@@ -2344,7 +2344,7 @@ let save_one_asset repo pfs target_uuid ~empty_target ~first
   let uuid =
     match (first, empty_target) with
     | true, true -> target_uuid
-    | _ -> Platform.random_uuid ()
+    | _ -> Ui_services.env_random_uuid ()
   in
   ignore
     (let* buf = Web_dom.file_buffer f in

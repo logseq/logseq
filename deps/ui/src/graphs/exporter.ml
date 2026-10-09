@@ -18,7 +18,7 @@ let short_repo () =
     String.sub r (String.length p) (String.length r - String.length p)
   else r
 
-let secs () = int_of_float (Platform.date_now_ms () /. 1000.)
+let secs () = int_of_float (Ui_services.time_now () /. 1000.)
 
 let export_binary () =
   let* w = Runtime.invoke1 "thread-api/export-db-binary" (Wire.String (repo ())) in
@@ -135,7 +135,7 @@ let export_html () =
      | _ -> failwith "Publishing assets missing" in
    !save_publishing repo html assets)
   |> Js.Promise.catch (fun error ->
-       Platform.console_error ("Publishing export failed", error);
+       Ui_services.log_error ("Publishing export failed", error);
        Toast.error (T.t "export/public-pages-failed-error");
        Js.Promise.resolve ())
 
@@ -225,7 +225,7 @@ let backup_now () =
            else (
              (if Web_dom.file_size f > 0. then
                 Web_dom.fh_move fh backups
-                  (Printf.sprintf "%.0f.db.sqlite" (Platform.date_now_ms ()))
+                  (Printf.sprintf "%.0f.db.sqlite" (Ui_services.time_now ()))
               else Js.Promise.resolve ())
              |> Js.Promise.then_ (fun () ->
                     let* _ = Web_dom.truncate_old_versions backups in

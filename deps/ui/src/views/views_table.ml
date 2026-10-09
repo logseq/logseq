@@ -281,7 +281,7 @@ let visible_columns (s : V.vstate) =
   let cols =
     List.filter
       (fun c ->
-        c.V.c_id <> "id" && (not (Platform.publishing ()) || c.V.c_id <> "select") && not (V.Sset.mem c.V.c_id s.V.hidden))
+        c.V.c_id <> "id" && (not (Ui_services.env_publishing ()) || c.V.c_id <> "select") && not (V.Sset.mem c.V.c_id s.V.hidden))
       s.V.columns
   in
   match s.V.ordered with
@@ -687,7 +687,7 @@ let header_cell_id inst (c : V.column) =
   "vhc-" ^ string_of_int inst.V.id ^ "-" ^ c.V.c_id
 
 let header_cell inst (c : V.column) : t =
-  if Platform.publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
+  if Ui_services.env_publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
   let cls =
     "ls-table-header-cell"
     ^ if c.V.c_id = "select" then " !border-0" else ""
@@ -790,7 +790,7 @@ let copy_selected inst () =
       (selected_uuids inst)
   in
   if titles <> [] then begin
-    Platform.copy_to_clipboard (String.concat "\n" titles);
+    Ui_services.clipboard_copy (String.concat "\n" titles);
     V.update inst (fun s -> { s with V.selected = V.Sset.empty })
   end
 
@@ -905,7 +905,7 @@ let keyed_row_key (u, blk) =
    stop(e) half is adapter-side and not portable. *)
 let table_row_keydown inst ~row_uuid name payload =
   if name = "keydown" && V.Sset.mem row_uuid (V.get inst).V.selected then
-    match Platform.payload_str payload "key" with
+    match Json_payload.str payload "key" with
     | "Enter" ->
         open_row_sidebar row_uuid;
         V.update inst (fun s -> { s with V.selected = V.Sset.empty })
@@ -968,7 +968,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
         (List.map cell_wrap pinned)
     ; row
         (List.map cell_wrap free
-         @ (match (if Platform.publishing () then None else show_add_property inst) with
+         @ (match (if Ui_services.env_publishing () then None else show_add_property inst) with
             | Some _ ->
                 [ box
                     [ box ~style_class:"ls-table-cell"
@@ -1033,7 +1033,7 @@ let table_header inst cols : t =
         (List.map cell_item pinned @ [ dnd_described "0"; dnd_live "0" ])
     ; row
         (List.map cell_item free
-         @ (match (if Platform.publishing () then None else show_add_property inst) with
+         @ (match (if Ui_services.env_publishing () then None else show_add_property inst) with
             | Some p ->
                 (* cljs add-property-button: trailing "New property"
                    header cell on class-objects tables only *)
@@ -1060,7 +1060,7 @@ let table_header inst cols : t =
 (* footer add-new-row (cljs: property-objects always; class-objects for
    non-private classes; all-pages/query never) *)
 let add_row_footer inst : t =
-  if Platform.publishing () then Logseq_el.nothing else
+  if Ui_services.env_publishing () then Logseq_el.nothing else
   let has_add_object =
     match inst.V.kind with
     | V.KPropertyPage _ -> true
@@ -1335,7 +1335,7 @@ let render_list inst s : t =
                         (link
                            ~url:
                              ("#/page/"
-                              ^ Platform.encode_uri_component pname)
+                              ^ Ui_services.uri_encode_component pname)
                            ~target:`self_ ~style_class:"page-ref"
                            ~text:pname [])
                       ~body:
@@ -1390,7 +1390,7 @@ let render_table inst s : t =
            gs)
   | _ ->
       (* cljs view-table wraps the table in a random-uuid div *)
-      box ~accessibility_identifier:(Platform.random_uuid ())
+      box ~accessibility_identifier:(Ui_services.env_random_uuid ())
         [ table_el inst s ]
 
 let body_el inst (s : V.vstate) ~(filters : t) : t =

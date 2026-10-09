@@ -323,11 +323,7 @@ let sidebar_host () : (Model.t, Action.t) Shared_scenarios_sidebar.host =
         | Some st -> Sidebar_state.toggle_nav st nav checked
         | None -> check "sidebar state mounted" false)
   ; set_theme = (fun m -> Settings_view.use_mode m)
-  ; set_language =
-      (fun m ->
-        (* same lazy-assets boundary as the web host: the persisted
-           language write lands before the chunk loader raises *)
-        try Settings_view.set_language m with _ -> ())
+  ; set_language = (fun m -> Settings_view.set_language m)
   }
 
 let test_shared_sidebar () =
@@ -1928,8 +1924,8 @@ let () =
   Platform.install_ui_services
     ~assert_owner:(fun () ->
       if Thread.id (Thread.self ()) <> owner then invalid_arg "UI scenario requires its application thread")
-    ~request_flush:Runtime.flush;
-  Ui_dom_native.install ();
+    ~request_flush:Runtime.flush
+    ~dom:Ui_dom_native.ops;
   run ~finish:(fun () ->
       Js.log
         (Printf.sprintf

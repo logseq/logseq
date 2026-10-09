@@ -88,7 +88,7 @@ let handle_frame (sink : sink) data =
         let frame =
           try Some (Transit.of_string transit_text)
           with _ ->
-            Platform.console_error
+            Ui_services.log_error
               ("db-worker frame decode failed", transit_text);
             None
         in
@@ -149,7 +149,7 @@ let memory_invoke name args =
   publishing_invoke (load_publishing_api "lui-shims/publishing-db") name args
 
 let create () =
-  if Platform.publishing () then
+  if Ui_services.env_publishing () then
     { invoke_fn = (fun name args ->
         let* result = memory_invoke name (Transit.to_string (Wire.Array args)) in
         Js.Promise.resolve (Transit.of_string result))
@@ -196,11 +196,11 @@ let create () =
     sink.emit <- (fun kind payload -> t.on_message kind payload);
     Comlink.set_onmessage worker (fun event -> onmessage sink worker event);
     Comlink.set_onerror worker (fun err ->
-        Platform.console_error ("db-worker error", err);
+        Ui_services.log_error ("db-worker error", err);
         !notify_worker_failure ();
         !kill (Failure "db-worker crashed"));
     Comlink.set_onmessageerror worker (fun err ->
-        Platform.console_error ("db-worker messageerror", err);
+        Ui_services.log_error ("db-worker messageerror", err);
         !notify_worker_failure ());
     install_remote_invoke worker;
     t

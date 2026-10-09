@@ -247,10 +247,10 @@ let init () =
     Web_dom.on_document_event "ls:close-dialog" (fun _ -> close_top ());
     Web_dom.on_document_event "keydown" (fun ev ->
         if
-          Platform.event_str ev "key" = "Tab" && ready ()
+          Web_dom.event_str ev "key" = "Tab" && ready ()
           && not (Web_dom.ev_composing ev)
         then trap_tab ev;
-        if Platform.event_str ev "key" = "Escape" && ready () then
+        if Web_dom.event_str ev "key" = "Escape" && ready () then
           (* defer past every same-event listener: a popup layer or
              overlay stacked ABOVE the top dialog consumes the Escape
              itself (preventDefault) — only close our top layer when the

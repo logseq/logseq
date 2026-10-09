@@ -245,16 +245,16 @@ let toggle_plugin_system () =
 let current_accent () =
   (* cljs storage key is (name :ui/radix-color) = "radix-color";
      unset = no active swatch *)
-  match Platform.local_storage_get "radix-color" with
+  match Ui_services.storage_get "radix-color" with
   | Some v -> (
-      let v = Platform.storage_unquote v in
+      let v = Ui_services.storage_unquote v in
       if String.length v > 0 && v.[0] = ':' then
         String.sub v 1 (String.length v - 1)
       else v)
   | None -> ""
 
 let set_accent name =
-  Platform.local_storage_set "radix-color" (Platform.storage_quote (":" ^ name));
+  Ui_services.storage_set "radix-color" (Ui_services.storage_quote (":" ^ name));
   Ui_services.doc_set_data "color" name;
   poke ()
 
@@ -268,9 +268,9 @@ type font_cfg =
 let default_font_cfg = { ftype = "default"; fglobal = false }
 
 let current_editor_font () =
-  match Platform.local_storage_get "editor-font" with
+  match Ui_services.storage_get "editor-font" with
   | Some v -> (
-      match Edn.parse (Platform.storage_unquote v) with
+      match Edn.parse (Ui_services.storage_unquote v) with
       | Wire.Map kvs ->
           let m = Wire.Map kvs in
           { ftype =
@@ -286,8 +286,8 @@ let current_editor_font () =
   | None -> default_font_cfg
 
 let write_editor_font cfg =
-  Platform.local_storage_set "editor-font"
-    (Platform.storage_quote
+  Ui_services.storage_set "editor-font"
+    (Ui_services.storage_quote
        (Edn.to_string
           (Wire.Map
              [ (Wire.Keyword "type", Wire.String cfg.ftype)

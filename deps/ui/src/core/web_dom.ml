@@ -255,6 +255,12 @@ let ev_target_title (e : ev) : string option =
   | Some t -> Js.Json.decodeString (js_get t "title")
   | None -> None
 
+(* raw event field as a string, e.g. keydown "key" *)
+let event_str (e : ev) key =
+  match Js.Json.decodeString (js_get e key) with
+  | Some s -> s
+  | None -> ""
+
 (* CustomEvent.detail for the ls:* document-event channel *)
 external ev_detail : ev -> Js.Json.t option = "detail"
   [@@mel.get] [@@mel.return nullable]

@@ -230,7 +230,7 @@ let load_current st repo =
                :logseq.property.fsrs/due]")
            (Wire.Int eid)
        in
-       let now = Int64.of_float (Platform.date_now_ms ()) in
+       let now = Int64.of_float (Ui_services.time_now ()) in
        let card =
          Fsrs_sched.card_of_property_wire
            (match Wire.get w "logseq.property.fsrs/state" with
@@ -285,7 +285,7 @@ let rate st rating =
                       :logseq.property.fsrs/due]")
                   (Wire.Int eid)
               in
-              let now = Int64.of_float (Platform.date_now_ms ()) in
+              let now = Int64.of_float (Ui_services.time_now ()) in
               (match
                  Fsrs_sched.card_of_property_wire
                    (match Wire.get w "logseq.property.fsrs/state" with
@@ -360,7 +360,7 @@ let add_cards_block st =
        match Wire.map_get_uuid page "block/uuid" with
        | None -> Js.Promise.resolve ()
        | Some puuid ->
-           let uuid = Platform.random_uuid () in
+           let uuid = Ui_services.env_random_uuid () in
            let* _ =
              Outliner_ops.apply
                ~opts:(Outliner_ops.op_opts "insert-blocks")
@@ -472,7 +472,7 @@ let advance_phase st =
    rating buttons (visible when next-phase = :init) *)
 let on_keydown ev st =
   if Runtime.signal_get st.open_ then
-    match Platform.event_str ev "key" with
+    match Web_dom.event_str ev "key" with
     | "Escape" -> close st
     | "s" -> advance_phase st
     | k ->

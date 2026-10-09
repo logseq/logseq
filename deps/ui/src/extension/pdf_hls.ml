@@ -175,7 +175,7 @@ and action_fn (t : t) (c : ctx) ~(action : string) ~(clear : bool) :
                    U.fix_selection_text_breakline (U.sel_to_string s)
                | None -> hl.hl_text
            in
-           Platform.copy_to_clipboard text;
+           Ui_services.clipboard_copy text;
            U.clear_all_selection ()
        | "link" -> ignore (A.goto_block_ref hl)
        | "del" -> (
@@ -197,7 +197,7 @@ and action_fn (t : t) (c : ctx) ~(action : string) ~(clear : bool) :
                    A.copy_hl_ref hl';
                    Js.Promise.resolve ())
                   |> Js.Promise.catch (fun e ->
-                         Platform.console_error ("pdf hl add failed", e);
+                         Ui_services.log_error ("pdf hl add failed", e);
                          Js.Promise.resolve ()))
            | Some _ -> upd_hl t { hl with hl_color = Some color });
            S.last_color := color
@@ -230,7 +230,7 @@ and add_hl (t : t) (hl : Model.hl) : Model.hl Js.Promise.t =
                 Js.Promise.resolve hl'
             | None -> Js.Promise.resolve hl))
           |> Js.Promise.catch (fun e ->
-                 Platform.console_error ("pdf hl persist failed", e);
+                 Ui_services.log_error ("pdf hl persist failed", e);
                  Js.Promise.resolve hl)
       | None -> Js.Promise.resolve hl)
   | None -> Js.Promise.resolve hl

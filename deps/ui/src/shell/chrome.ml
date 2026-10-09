@@ -247,7 +247,7 @@ let open_rtc_details () =
   let r = !last_rtc in
   let open_ =
     match r with
-    | Some r -> Platform.online () && r.rtc_lock
+    | Some r -> Ui_services.env_online () && r.rtc_lock
     | None -> false
   in
   let menu = Wd.create_element "div" in
@@ -267,7 +267,7 @@ let open_rtc_details () =
   let info = el_ ~cls:"flex flex-col gap-1 p-2 text-gray-11" () in
   Wd.el_append_child info
     (el_ ~cls:"font-medium mb-2"
-       ~text:(I18n.t (if Platform.online () then "sync/online" else "sync/offline"))
+       ~text:(I18n.t (if Ui_services.env_online () then "sync/online" else "sync/offline"))
        ());
   let p_local =
     match r with Some r -> r.rtc_pending_local | None -> 0
@@ -361,7 +361,7 @@ let open_rtc_details () =
          (el_ ~cls:"text-sm"
             ~text:
               (I18n.t1 "sync/last-synced-time-label"
-                 (Platform.fmt_time (Int64.to_float ms)))
+                 (Ui_services.time_fmt_date (Int64.to_float ms)))
             ())
    | None -> ());
   (* More debug info toggle *)
@@ -418,13 +418,13 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
         Rtc_flows.logged_in ()
         && ((Rtc_flows.rtc_group () && repo <> None
              && (!Rtc_flows.db_rtc_uuid <> None || r <> None))
-            || (Platform.rtc_test_mode () && repo <> None))
+            || (Ui_services.env_rtc_test_mode () && repo <> None))
       in
       if not visible then
         spacer ~key:"rtc-off" ~style_class:"hidden" []
       else (
         let open_ =
-          Platform.online ()
+          Ui_services.env_online ()
           && (match r with Some r -> r.rtc_lock | None -> false)
         in
         let syncing =
@@ -610,7 +610,7 @@ let right_toggle_button ms =
     ()
 
 let header (ms : Model.t Signal.signal) =
-  if Platform.publishing () then
+  if Ui_services.env_publishing () then
     row ~accessibility_identifier:"head" ~style_class:"cp__header"
       ~gap:12 ~cross:`center
       [ link ~url:"#/" ~target:`self_ ~text:(I18n.t "nav/home") []
@@ -736,7 +736,7 @@ let main_content (ms : Model.t Signal.signal) =
       ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
        ~grow:1. 
-       [ (if Platform.publishing () then Logseq_el.nothing else left_sidebar ms)
+       [ (if Ui_services.env_publishing () then Logseq_el.nothing else left_sidebar ms)
        ; (* data-is-margin-less-pages was always emitted "false" and its
             CSS only matches 'true' — dead attr, dropped *)
          scroll ~key:"main-content"
@@ -803,7 +803,7 @@ let main_content (ms : Model.t Signal.signal) =
    mounted overlay mid-batch). cljs mounts them via portals, which
    are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
-  if Platform.publishing () then
+  if Ui_services.env_publishing () then
     box ~style_class:"cp__overlays" [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms; Toasts_view.render ms ]
   else
   box ~key:"overlays" ~style_class:"cp__overlays"
@@ -965,8 +965,8 @@ let shell (ms : Model.t Signal.signal) : t =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       let wide_mode =
-        match Platform.local_storage_get "wide-mode" with
-        | Some v -> Platform.storage_unquote v = "true" || v = "true"
+        match Ui_services.storage_get "wide-mode" with
+        | Some v -> Ui_services.storage_unquote v = "true" || v = "true"
         | None -> false
       in
       "theme-container-inner"
@@ -992,7 +992,7 @@ let shell (ms : Model.t Signal.signal) : t =
             []
         ]
     ; overlays ms
-    ; (if Platform.publishing () then Logseq_el.nothing else help_area ms)
+    ; (if Ui_services.env_publishing () then Logseq_el.nothing else help_area ms)
     ; reactive
             ~equal:(fun (a : Model.t) (b : Model.t) ->
               match a.route, b.route with

@@ -34,7 +34,7 @@ let effects (action : Action.t) : unit =
       Subs_state.push_page_items page;
       (* cljs route.cljs update-page-title!: document.title follows the
          loaded page's title *)
-      Platform.set_document_title page.Model.page_title;
+      Ui_services.doc_set_title page.Model.page_title;
       Subs_state.sync_hash_graph_id ();
       (match !Subs_state.after_page_load, page.Model.page_uuid with
        | Some (want, f), Some u when u = want ->
@@ -69,19 +69,19 @@ let effects (action : Action.t) : unit =
       (* cljs route.cljs static-title for non-page routes (page routes
          get their title when Page_loaded lands) *)
       (match r with
-       | Model.Home -> Platform.set_document_title "Logseq"
+       | Model.Home -> Ui_services.doc_set_title "Logseq"
        | Model.Journals ->
-           Platform.set_document_title ((!Subs_state.i18n) "nav/all-journals")
+           Ui_services.doc_set_title ((!Subs_state.i18n) "nav/all-journals")
        | Model.All_pages ->
-           Platform.set_document_title ((!Subs_state.i18n) "nav.all-pages/title")
+           Ui_services.doc_set_title ((!Subs_state.i18n) "nav.all-pages/title")
        | Model.All_graphs ->
-           Platform.set_document_title ((!Subs_state.i18n) "mobile.tab/graphs")
+           Ui_services.doc_set_title ((!Subs_state.i18n) "mobile.tab/graphs")
        | Model.Settings ->
-           Platform.set_document_title ((!Subs_state.i18n) "nav/settings")
+           Ui_services.doc_set_title ((!Subs_state.i18n) "nav/settings")
        | Model.Import ->
-           Platform.set_document_title ((!Subs_state.i18n) "import/title")
+           Ui_services.doc_set_title ((!Subs_state.i18n) "import/title")
        | Model.Library | Model.Graph_view | Model.Not_found _ ->
-           Platform.set_document_title "Logseq"
+           Ui_services.doc_set_title "Logseq"
        | Model.Page _ | Model.Block_zoom _ -> ())
   | _ -> ()
 
@@ -169,7 +169,7 @@ let update (model : t) (action : Action.t) : t =
   | Toggle_left_sidebar ->
       (* cljs set-left-sidebar-open! persists to storage *)
       let open_ = not model.left_sidebar_open in
-      Platform.local_storage_set "ls-left-sidebar-open?"
+      Ui_services.storage_set "ls-left-sidebar-open?"
         (if open_ then "true" else "false");
       Subs_state.app_hooks.plugin_event "sidebar-visible-changed"
         (Js.Json.object_
