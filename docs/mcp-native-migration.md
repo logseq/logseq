@@ -9,6 +9,50 @@ authoritative when the prose documentation differs from code.
 
 ## Contract rules
 
+### Post-migration datascriptQuery (2026-10-09)
+
+User-confirmed migration completion is followed by one new tool:
+`datascriptQuery`. The expected native inventory is now 54 tools; historical
+50/51/53-tool reports below describe their recorded builds, not this feature.
+This is a general, read-only last resort, not a query specialized to the
+empty-first-block example. Check dedicated tools first and justify inability
+to answer or significant scan/token cost reduction. The host sends the exact
+query and inputs, question, tools checked, rationale, read scope/no changes and
+expected size to the client's approval form. Every invocation requires explicit
+acceptance with confirmation, including schema probes and retries. Clients
+without form support, declines, cancellations, errors and unchecked forms do
+not authorize execution. No automatic retries or session-wide approval.
+
+Calls use the existing `logseq.DB.datascriptQuery` API unchanged. The host adds
+no query-language restrictions: `pull`, aggregates, rules, map/vector queries
+and inputs retain upstream support and upstream limitations. In particular,
+local rules coverage is not proof that every rules input resolves on a live
+Logseq worker. Positional `inputs` follow Logseq's normal resolution behavior;
+UUID values may require an EDN `#uuid` string rather than a plain UUID string.
+No API implementations, DB schema or mutation routes were changed.
+
+The output envelope is `{result, row_count, truncated, limits}`. Relation and
+collection results retain complete rows up to 1000 rows and 65536 UTF-8 bytes
+of serialized envelope text. Scalars and tuples retain their shape as one row;
+an oversized single row is omitted as `result: null`, `row_count: 0`,
+`truncated: true`. False, zero and untruncated null results are preserved.
+Caps do not bound DB execution, full internal results or transport framing.
+There is no automatic pagination. Writes require existing verified tools and
+separate authorization.
+
+Audit entries in Logseq's file-backed Electron log include an invocation UUID,
+timestamp, exact query/inputs, request context, approval decision and outcome.
+These logs may contain graph data: treat them as private when sharing reports.
+The Claude Desktop stdio extension relays forms and decisions, and refuses
+clients without form support. Rebuild/reinstall the extension and reconnect
+after deploying the new desktop build.
+
+Focused local ClojureScript tests and the bridge test pass; test compilation
+has zero warnings. Live approval UX and graph-worker execution are not yet
+validated. No live queries or graph writes were performed for this feature.
+
+### Retained migration contracts
+
 - Keep tool names, argument names, defaults, nullable values, and response
   fields during the compatibility stage.
 - Preserve validation distinctions: invalid input, not found, ambiguous,

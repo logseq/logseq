@@ -1,8 +1,12 @@
 (ns electron.mcp-compat-test
   (:require [clojure.string :as string]
+            ["@modelcontextprotocol/sdk/client/index.js" :refer [Client]]
+            ["@modelcontextprotocol/sdk/inMemory.js" :refer [InMemoryTransport]]
+            ["@modelcontextprotocol/sdk/types.js" :refer [ElicitRequestSchema]]
             [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
+            [electron.logger :as logger]
             [electron.mcp-compat :as mcp-compat]
             [electron.mcp-server :as mcp-server]
             [frontend.db.async :as db-async]
@@ -18,6 +22,193 @@
   (fn [method args]
     (swap! calls conj [method args])
     result))
+
+(deftest datascript-query-output-limits
+  (let [query "[:find ?x :where [?e :block/title ?x]]"
+        capped (mcp-server/bounded-query-result query (clj->js (mapv vector (range 1001))))
+        oversized (mcp-server/bounded-query-result query #js [#js [(.repeat "\u00e9" 40000)]])]
+    (is (= 1000 (.-row_count capped)))
+    (is (true? (.-truncated capped)))
+    (is (= 0 (.-row_count oversized)))
+    (is (true? (.-truncated oversized)))
+    (is (<= (js/Buffer.byteLength (js/JSON.stringify oversized) "utf8") 65536)))
+  (doseq [[query result] [["[:find ?x . :where [?e :block/title ?x]]" false]
+                          ["[:find (count ?e) . :where [?e :block/title]]" 0]
+                          ["[:find ?x . :where [?e :block/title ?x]]" nil]
+                          ["[:find [?x ?y] :where [?e :block/title ?x] [?e :block/name ?y]]" #js ["a" "b"]]
+                          ["[:find [?x ...] :where [?e :block/title ?x]]" #js ["a" "b"]]]]
+    (let [bounded (mcp-server/bounded-query-result query result)]
+      (is (= (js/JSON.stringify result) (js/JSON.stringify (.-result bounded))))
+      (is (false? (.-truncated bounded))))))
+
+(deftest datascript-query-requires-fresh-approval
+  (async done
+    (let [calls (atom [])
+          prompts (atom [])
+          args #js {:query "[:find ?title :in $ ?title :where [?e :block/title ?title]]"
+                    :inputs #js ["test"] :question "Which pages match?"
+                    :checked_tools #js ["listPages"] :reason "Avoid reading every page"
+                    :reads "Page titles" :expected_size "One small row"}
+          extra #js {:requestId 17 :signal (.-signal (js/AbortController.))}
+          approval (atom #js {:action "accept" :content #js {:approve true}})
+          server #js {:getClientCapabilities (fn [] #js {:elicitation #js {:form #js {}}})
+                      :elicitInput (fn [params _options]
+                                     (swap! prompts conj params)
+                                     (js/Promise.resolve @approval))}
+          api (recording-api calls #js [#js ["test"]])]
+      (-> (p/let [first-result (mcp-server/call-datascript-query api server args extra)
+                  second-result (mcp-server/call-datascript-query api server args extra)
+                  _ (reset! approval #js {:action "decline"})
+                  denied (mcp-server/call-datascript-query api server args extra)
+                  unsupported (mcp-server/call-datascript-query api #js {:getClientCapabilities (fn [] #js {})} args extra)]
+            (is (not (aget first-result "isError")))
+            (is (not (aget second-result "isError")))
+            (is (true? (aget denied "isError")))
+            (is (true? (aget unsupported "isError")))
+            (is (= 3 (count @prompts)))
+            (is (= [["logseq.DB.datascriptQuery" [(.-query args) "test"]]
+                    ["logseq.DB.datascriptQuery" [(.-query args) "test"]]] @calls))
+            (is (string/includes? (.-message (first @prompts)) (.-query args)))
+            (is (string/includes? (.-message (first @prompts)) "[\"test\"]")))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest datascript-query-failures-never-retry
+  (async done
+    (let [calls (atom [])
+          prompts (atom [])
+          events (atom [])
+          args #js {:query "[:find ?x :where [?e :block/title ?x]]"
+                    :question "Audit graph" :checked_tools #js ["listPages"]
+                    :reason "Dedicated tools cannot answer" :reads "Titles" :expected_size "Small"}
+          controller (js/AbortController.)
+          late-controller (js/AbortController.)
+          late-cancel? (atom false)
+          extra #js {:requestId 18 :signal (.-signal controller)}
+          decision (atom #js {:action "accept" :content #js {:approve true}})
+          server #js {:getClientCapabilities (fn [] #js {:elicitation #js {:form #js {}}})
+                      :elicitInput (fn [params _options]
+                                     (swap! prompts conj params)
+                                     (js/Promise.resolve @decision))}
+          api-error (recording-api calls #js {:error "Bad query"})
+          thrown-api (fn [method inputs]
+                       (swap! calls conj [method inputs])
+                       (js/Promise.reject (js/Error. "Worker failed")))
+          original-logger logger/info]
+      (set! logger/info (fn [_ details]
+                         (let [entry (js/JSON.parse details)]
+                           (swap! events conj entry)
+                           (when (and @late-cancel? (= "approval" (aget entry "event")))
+                             (.abort late-controller)))))
+        (-> (p/let [returned-error (mcp-server/call-datascript-query api-error server args extra)
+                    exception (mcp-server/call-datascript-query thrown-api server args extra)
+                    _ (reset! decision #js {:action "accept" :content #js {:approve false}})
+                    unchecked (mcp-server/call-datascript-query api-error server args extra)
+                    _ (reset! decision #js {:action "cancel"})
+                    cancelled (mcp-server/call-datascript-query api-error server args extra)
+                    _ (reset! decision #js {:action "accept" :content #js {:approve true}})
+                    _ (.abort controller)
+                      aborted (mcp-server/call-datascript-query api-error server args extra)
+                      _ (reset! late-cancel? true)
+                      late-aborted (mcp-server/call-datascript-query api-error server args
+                                      #js {:requestId 20 :signal (.-signal late-controller)})]
+                    (doseq [result [returned-error exception unchecked cancelled aborted late-aborted]]
+                (is (true? (aget result "isError"))))
+              (is (= 2 (count @calls)))
+              (is (= 6 (count @prompts)))
+              (is (= 6 (count (filter #(= "requested" (aget % "event")) @events))))
+              (is (= 6 (count (filter #(= "approval" (aget % "event")) @events))))
+              (is (= 2 (count (filter #(= "failed" (aget % "event")) @events))))
+              (is (every? #(= (.-query args) (aget % "query")) @events)))
+            (p/catch (fn [error] (is false (str error))))
+            (p/finally (fn []
+                         (set! logger/info original-logger)
+                         (done)))))))
+
+(deftest datascript-query-general-language-pass-through
+  (async done
+    (let [conn (d/create-conn db-schema/schema)
+          _ (d/transact! conn [{:db/id 1 :block/title "Alpha"}
+                               {:db/id 2 :block/title "Beta"}])
+          before @conn
+          prompts (atom [])
+          calls (atom [])
+          server #js {:getClientCapabilities (fn [] #js {:elicitation #js {:form #js {}}})
+                      :elicitInput (fn [params _options]
+                                     (swap! prompts conj params)
+                                     (js/Promise.resolve #js {:action "accept" :content #js {:approve true}}))}
+          extra #js {:requestId 19 :signal (.-signal (js/AbortController.))}
+          api (fn [method args]
+                (swap! calls conj [method args])
+                (js/Promise.resolve
+                 (clj->js (sdk-utils/normalize-keyword-for-json
+                           (apply d/q (reader/read-string (first args)) @conn
+                                  (map #(if (and (string? %) (string/starts-with? % "[["))
+                                          (reader/read-string %) %) (rest args))) false))))
+          cases [["[:find (count ?e) . :where [?e :block/title]]" #js []]
+                 ["[:find [(pull ?e [:db/id :block/title]) ...] :in $ ?title :where [?e :block/title ?title]]" #js ["Alpha"]]
+                 ["{:find [?title] :in [$ %] :where [(named ?e ?title)]}"
+                  #js ["[[(named ?e ?title) [?e :block/title ?title]]]"]]]]
+      (letfn [(run-cases [remaining]
+                (if-let [[query inputs] (first remaining)]
+                  (p/let [args #js {:query query :inputs inputs :question "General graph question"
+                                   :checked_tools #js ["listPages"] :reason "Avoid a large scan"
+                                   :reads "Titles" :expected_size "At most two rows"}
+                          response (mcp-server/call-datascript-query api server args extra)
+                          data (js/JSON.parse (aget response "content" 0 "text"))]
+                    (is (not (aget response "isError")))
+                    (is (false? (aget data "truncated")))
+                    (is (= query (first (second (last @calls)))))
+                    (is (= (vec (array-seq inputs)) (vec (rest (second (last @calls))))))
+                    (is (string/includes? (.-message (last @prompts)) query))
+                    (if (empty? (array-seq inputs))
+                      (is (= 2 (.-result data)))
+                      (is (pos? (aget data "row_count"))))
+                    (run-cases (rest remaining)))
+                  (p/resolved nil)))]
+        (-> (p/let [_ (run-cases cases)]
+              (is (identical? before @conn))
+              (is (= 3 (count @prompts)))
+              (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls)))
+            (p/catch (fn [error] (is false (str error))))
+            (p/finally done))))))
+
+(deftest datascript-query-registered-protocol-gate
+  (async done
+    (let [calls (atom [])
+          forms (atom [])
+          decision (atom #js {:action "accept" :content #js {:approve true}})
+          server (mcp-server/create-mcp-api-server (recording-api calls #js [#js ["match"]]))
+          client (Client. #js {:name "Query gate test" :version "1"}
+                          #js {:capabilities #js {:elicitation #js {:form #js {}}}})
+          transports (.createLinkedPair InMemoryTransport)
+          args #js {:query "[:find ?x :where [?e :block/title ?x]]"
+                    :question "Graph audit" :checked_tools #js ["pageStats"]
+                    :reason "Existing tools would require reading every page"
+                    :reads "Titles only" :expected_size "One row"}]
+      (.setRequestHandler client ElicitRequestSchema
+                          (fn [request _extra]
+                            (swap! forms conj (aget request "params"))
+                            (js/Promise.resolve @decision)))
+      (-> (p/let [_ (.connect server (aget transports 0))
+                  _ (.connect client (aget transports 1))
+                  inventory (.listTools client)
+                  first-response (.callTool client #js {:name "datascriptQuery" :arguments args})
+                  second-response (.callTool client #js {:name "datascriptQuery" :arguments args})
+                  _ (reset! decision #js {:action "decline"})
+                  refused (.callTool client #js {:name "datascriptQuery" :arguments args})]
+            (is (= 54 (alength (aget inventory "tools"))))
+            (is (= 1 (count (filter #(= "datascriptQuery" (aget % "name")) (array-seq (aget inventory "tools"))))))
+            (is (not (aget first-response "isError")))
+            (is (not (aget second-response "isError")))
+            (is (true? (aget refused "isError")))
+            (is (= 3 (count @forms)))
+            (is (= 2 (count @calls)))
+            (is (every? #(string/includes? (aget % "message") (.-query args)) @forms)))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (-> (p/all [(.close client) (.close server)])
+                           (p/finally done))))))))
 
 (deftest db-api-method-resolution-preserves-uuid-acronym-export
   (is (= "db@get_page_block_uuids"

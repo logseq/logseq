@@ -5,7 +5,9 @@
             ["@modelcontextprotocol/sdk/types.js" :refer [isInitializeRequest]]
             ["zod/v3" :as z] ;; zod 4 doesn't work w/ mcp - https://github.com/modelcontextprotocol/typescript-sdk/issues/925
             [camel-snake-kebab.core :as csk]
+            [cljs.reader :as reader]
             [clojure.string :as string]
+            [electron.logger :as logger]
             [electron.mcp-compat :as mcp-compat]
             [electron.mcp-transport :as mcp-transport]
             [promesa.core :as p]))
@@ -125,6 +127,102 @@
 (defn call-data-tool
   [api-fn data-fn args]
   (api-data-tool api-fn data-fn args))
+
+(def ^:private query-max-rows 1000)
+(def ^:private query-max-bytes 65536)
+
+(defn- query-result-shape [query]
+  (let [parsed (reader/read-string query)
+        find-clause (if (map? parsed)
+                      (:find parsed)
+                      (take-while (complement keyword?) (rest (drop-while #(not= :find %) parsed))))]
+    (cond
+      (= '. (last find-clause)) :scalar
+      (vector? (first find-clause)) (if (= '... (last (first find-clause))) :collection :tuple)
+      :else :relation)))
+
+(defn bounded-query-result [query result]
+  (let [shape (query-result-shape query)
+        multiple? (contains? #{:relation :collection} shape)
+        rows (if multiple? (array-seq result) (when (some? result) [result]))
+        envelope (fn [selected truncated?]
+                   #js {:result (if multiple? (into-array selected) (first selected))
+                        :row_count (count selected)
+                        :truncated truncated?
+                        :limits #js {:max_rows query-max-rows :max_bytes query-max-bytes}})
+        byte-count (fn [value] (js/Buffer.byteLength (js/JSON.stringify value) "utf8"))]
+    (loop [remaining (seq rows)
+           selected []]
+      (if (and remaining (< (count selected) query-max-rows))
+        (let [candidate (conj selected (first remaining))]
+          (if (<= (byte-count (envelope candidate false)) query-max-bytes)
+            (recur (next remaining) candidate)
+            (envelope selected true)))
+        (envelope selected (boolean remaining))))))
+
+(defn call-datascript-query [api-fn ^js server args extra]
+  (let [query (aget args "query")
+        inputs (or (aget args "inputs") #js [])
+        request-id (str (random-uuid))
+        audit (fn [event details]
+                (logger/info "MCP datascriptQuery audit"
+                             (js/JSON.stringify
+                              #js {:id request-id :time (.toISOString (js/Date.))
+                                   :event event :query query :inputs inputs :details details})))
+        signal (.-signal extra)]
+    (-> (p/let [_ (audit "requested" args)
+                capabilities (.getClientCapabilities server)]
+          (if-not (some-> capabilities (aget "elicitation") (aget "form"))
+            (do (audit "blocked" "Client does not support form elicitation")
+                (mcp-error-response "datascriptQuery requires explicit per-query user approval through MCP form elicitation. This client does not support it; nothing was run."))
+            (p/let [approval (.elicitInput
+                             server
+                             #js {:mode "form"
+                                  :message (str "Approve one last-resort read-only datascriptQuery?\n"
+                                                "Question: " (aget args "question") "\n"
+                                                "Tools checked: " (js/JSON.stringify (aget args "checked_tools")) "\n"
+                                                "Why dedicated tools cannot answer economically: " (aget args "reason") "\n"
+                                                "Reads: " (aget args "reads") "; changes nothing.\n"
+                                                "Expected result size: " (aget args "expected_size") "\n"
+                                                "Hard output limits: 1000 rows and 65536 UTF-8 bytes; results may be truncated.\n"
+                                                "Exact query:\n" query "\n"
+                                                "Exact inputs:\n" (js/JSON.stringify inputs) "\n"
+                                                "Approve only if no dedicated tool can answer this question, or answering it would require a significantly more expensive scan. Approval applies to this invocation only; failures and revisions require fresh approval.")
+                                  :requestedSchema #js {:type "object"
+                                                        :properties #js {:approve #js {:type "boolean"
+                                                                                     :title "Approve this exact query once"
+                                                                                     :default false}}
+                                                        :required #js ["approve"]}}
+                             #js {:relatedRequestId (.-requestId extra) :signal signal})
+                    approved? (and (= "accept" (.-action approval))
+                                   (true? (and (.-content approval) (aget approval "content" "approve")))
+                                   (not (some-> signal .-aborted)))
+                    _ (audit "approval" #js {:action (.-action approval) :approved approved?})]
+              (if (or (not approved?) (some-> signal .-aborted))
+                (mcp-error-response "Query not approved or request cancelled; nothing was run.")
+                (p/let [result (api-fn "logseq.DB.datascriptQuery" (into [query] (array-seq inputs)))]
+                  (if-let [error (and result (aget result "error"))]
+                    (do (audit "failed" error)
+                        (mcp-error-response (subs (str "API Error: " error) 0 (min 4096 (count (str "API Error: " error))))))
+                    (let [bounded (bounded-query-result query result)]
+                      (audit "completed" #js {:row_count (.-row_count bounded) :truncated (.-truncated bounded)})
+                      (mcp-success-response bounded))))))))
+        (p/catch (fn [error]
+                   (audit "failed" (.-message error))
+                   (mcp-error-response (str "datascriptQuery failed; no retry was made. Fresh approval is required: "
+                                            (subs (str (.-message error)) 0 (min 4096 (count (str (.-message error))))))))))))
+
+(def datascript-query-config
+  #js {:title "Datascript Query"
+       :description "Last resort only: first check dedicated tools. Use for any read-only graph question they cannot answer, or when a targeted query significantly reduces graph scanning or token cost. Not limited to any example or attribute set. Before EVERY invocation show the exact query and inputs, question, tools checked, why they cannot do the job, what is read (nothing changes), and expected result size, then obtain explicit user approval. The host requires a fresh approval form and logs every request and decision. No silent retries: any failed, revised, or test query needs new approval. Passes unchanged to logseq.DB.datascriptQuery; pull, aggregates, rules, and inputs are not blocked or rewritten. Returns result, row_count, truncated, and host limits (1000 rows, 65536 UTF-8 bytes). Caps bound returned output, not DB execution time. Writes must use verified dedicated tools."
+       :annotations #js {:readOnlyHint true :destructiveHint false :openWorldHint false}
+       :inputSchema #js {:query (-> (z/string) (.min 1))
+                         :inputs (-> (z/array (z/any)) .optional)
+                         :question (-> (z/string) .trim (.min 1))
+                         :checked_tools (-> (z/array (-> (z/string) .trim (.min 1))) (.min 1))
+                         :reason (-> (z/string) .trim (.min 1))
+                         :reads (-> (z/string) .trim (.min 1))
+                         :expected_size (-> (z/string) .trim (.min 1))}})
 
 (def ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
@@ -485,4 +583,7 @@
                      (:config v)
                      (partial call-data-tool api-fn
                               (:fn v))))
+    (.registerTool mcp-server "datascriptQuery" datascript-query-config
+                   (fn [args extra]
+                     (call-datascript-query api-fn (.-server mcp-server) args extra)))
     mcp-server))
