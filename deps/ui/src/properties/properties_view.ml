@@ -18,7 +18,6 @@
        via the ls:editor-command listener in editor/editor_commands.ml. *)
 
 open Lui_elements
-open Web_dom
 module S = Properties_state
 module Dialog = Properties_dialog
 
@@ -26,29 +25,36 @@ module Dialog = Properties_dialog
 
 let last_semi = ref 0.0
 
-let on_keydown ev =
-  if ev_composing ev then ()
+let editable_target (ev : Ui_services.ev) =
+  match ev.Ui_services.target with
+  | Some el -> el.Ui_services.editable ()
+  | None -> false
+
+let on_keydown (ev : Ui_services.ev) =
+  if ev.Ui_services.composing then ()
   else
-    match ev_key ev with
-    | "Escape" ->
+    match ev.Ui_services.key with
+    | Some "Escape" ->
         if
           S.handle_view_escape ()
           || Dialog.handle_escape ()
           || S.handle_escape ()
         then (
-          ev_prevent_default ev;
-          ev_stop_propagation ev)
-    | "p" when (ev_meta ev || ev_ctrl ev) && ev_alt ev ->
-        ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
+          ev.Ui_services.stop_propagation ())
+    | Some "p"
+      when (ev.Ui_services.meta || ev.Ui_services.ctrl)
+           && ev.Ui_services.alt ->
+        ev.Ui_services.prevent_default ();
         Dialog.open_for_current ()
-    | "p" when ev_meta ev || ev_ctrl ev ->
-        ev_prevent_default ev;
+    | Some "p" when ev.Ui_services.meta || ev.Ui_services.ctrl ->
+        ev.Ui_services.prevent_default ();
         Dialog.open_for_current ()
-    | ";" when is_editable_target (ev_target ev) ->
+    | Some ";" when editable_target ev ->
         let t = Js.Date.now () in
         if t -. !last_semi < 500.0 then (
           last_semi := 0.0;
-          ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           Dialog.open_for_current ())
         else last_semi := t
     (* selection-mode `p <key>` sequences are owned by the chord layer in
@@ -87,8 +93,9 @@ let installed = State_cell.Once.make ()
 let install () =
   State_cell.Once.run installed (fun () ->
     S.chain_worker ();
-    add_document_listener "keydown" on_keydown true)
+    Ui_services.dom_on_document_event "keydown" on_keydown)
 
-(* Module init runs at bundle load (every module in the lib is linked
-   into js_app). *)
-let () = install ()
+(* install () runs once per app startup from the entry points
+   (js_app/main.ml, native_embed.ml) — after the host has installed
+   Ui_services. Module init must stay side-effect free: Ui_services is
+   not installed in the node test bundle. *)
