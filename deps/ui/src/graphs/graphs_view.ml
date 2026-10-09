@@ -226,6 +226,14 @@ let view (ms : Model.t Signal.signal) : t =
   ignore (refresh_remote ctx);
   Graphs_ops.on_repos_changed :=
     (fun () -> ignore (refresh_remote ctx));
+  (* own the derived source signals to the view scope: a bare Signal.map
+     stays subscribed upstream after unmount and leaks computations *)
+  let merged_src =
+    Logseq_el.own ctx (Signal.map2 local_repos ms remote_sig)
+  in
+  let remote_non_empty =
+    Logseq_el.own ctx (Signal.map (fun r -> r <> []) remote_sig)
+  in
   column ~key:"graphs-root" ~style_class:"graphs-host"
     [ heading ~key:"title" ~level:1 ~style_class:"title"
         ~value:T.all_graphs []
@@ -239,11 +247,11 @@ let view (ms : Model.t Signal.signal) : t =
         ; column ~key:"local"
             [ heading ~key:"lh" ~level:2 ~style_class:"graphs-h2"
                 ~value:T.local_graphs []
-            ; keyed ~source:(reactive local_repos ms remote_sig) ~key:(fun r -> r)
+            ; keyed ~source:merged_src ~key:(fun r -> r)
                 ~cmp:String.compare
                 ~mount:(fun rs -> graph_row (Signal.get rs))
             ]
-        ; if_ ~test:(reactive (fun r -> r <> []) remote_sig) (remote_section remote_sig)
+        ; if_ ~test:remote_non_empty (remote_section remote_sig)
         ]
     ]
     ctx parent

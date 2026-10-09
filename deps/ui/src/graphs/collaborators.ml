@@ -251,6 +251,11 @@ let body (_ms : Model.t Signal.signal) : t =
   in
   (* mount-time fetch replaces the old 32ms defer-to-DOM timer *)
   refresh ();
+  (* own the derived source to the view scope: a bare Signal.map stays
+     subscribed upstream after unmount and leaks computations *)
+  let members_src =
+    Logseq_el.own ctx (Signal.map fst (Signal.value members_st))
+  in
   column ~key:"collab" ~padding:8 ~style_class:"-mb-8"
     [ heading ~key:"collab-h" ~level:1
         ~style_class:"text-3xl -mt-2 -ml-2"
@@ -261,7 +266,7 @@ let body (_ms : Model.t Signal.signal) : t =
             [ column ~key:"collab-users" ~gap:4
                 ~style_class:"ls-collab-users"
                 [ keyed
-                    ~source:(reactive fst (Signal.value members_st))
+                    ~source:members_src
                     ~key:(fun (m : member) -> m.m_uuid)
                     ~cmp:Stdlib.compare
                     ~mount:(fun msig ->

@@ -77,18 +77,33 @@ let run_views ~registry ~profile ~finish =
         [ Lui_elements.if_ ~test:(Signal.value st)
             (Lui_elements.column [ Graphs_view.view ms; Collaborators.body ms ]) ]
         ctx parent) in
-  let subscriber_count () =
-    let remote = Signal.value (Option.get !Graphs_view.remote_st_ref) in
-    let members = Signal.value (Option.get !Collaborators.members_sig_ref) in
-    List.length !(remote.Signal.subscribers), List.length !(members.Signal.subscribers)
+  (* new Signal.subscribers is an opaque linked registry — probe leaked
+     downstream work instead: publishing to the sources after unmount must
+     perform no more computation than it did before the views mounted *)
+  let sched = (Option.get !visible).Signal.state_signal.Signal.owner in
+  let st r default =
+    match !r with
+    | Some s -> s
+    | None ->
+        let s = Signal.state sched default in
+        r := Some s;
+        s
   in
+  let publish_work () =
+    Signal.set (st Graphs_view.remote_st_ref []) [];
+    Signal.set (st Collaborators.members_sig_ref ([], false)) ([], false);
+    Signal.stabilize sched;
+    let d = Signal.last_stabilization sched in
+    d.Signal.stabilization_rounds + d.Signal.stabilization_dirty_tasks
+  in
+  let baseline = publish_work () in
   for cycle = 1 to 5 do
     Signal.set (Option.get !visible) true;
     S.flush s;
     Signal.set (Option.get !visible) false;
     S.flush s;
     check (Printf.sprintf "unmounted graph and members views release subscriptions (%d)" cycle)
-      (subscriber_count () = (0, 0))
+      (publish_work () = baseline)
   done;
   ignore (Lui_app.dispose s.S.app);
   (* Logged-out graph refreshes resolve on the next web microtask. Let
