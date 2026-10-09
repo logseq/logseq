@@ -2,7 +2,14 @@
 # opam deps for deps/ui (Melange UI app). Run after the logseq blueprint's
 # `install OCaml toolchain` + db-worker's install-opam-deps.sh.
 set -eu
-opam pin add -y -n lui git+https://github.com/logseq/lui.git#main
+# Set LUI_SOURCE to a local Git checkout when validating a LUI update.
+# Commit the source changes first. Git pinning excludes ignored build output;
+# path pinning would copy native and browser build caches into the switch.
+if [ -n "${LUI_SOURCE:-}" ]; then
+  opam pin add --kind=git -y -n lui "$LUI_SOURCE"
+else
+  opam pin add -y -n lui git+https://github.com/logseq/lui.git#main
+fi
 opam pin add -y -n ocaml-signal git+https://github.com/logseq/ocaml-signal.git#main
 opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
 opam pin add -y -n melange-transit-core git+https://github.com/logseq/melange-transit.git#main

@@ -55,7 +55,8 @@ reactive elements_s
 reactive (fun (a, b) -> combined a b) s1 s2
 ```
 
-- `~p:(reactive f s)` expands to `~p_signal:(Signal.map f s)` — never
+- `~p:(reactive f s)` creates its derived signal inside the mounted view
+  scope; the PPX owns that derivation and releases it on disposal. Never
   write `Signal.map` or `~p_signal:` by hand for derived props.
 - Write `~p_signal:s` directly only when you already hold a `Signal.t`
   for that prop.
@@ -93,10 +94,11 @@ keyed ~source:items_s ~key:(fun it -> it.id) ~cmp:Int.compare
   through `reactive` sugar); never read the DOM or shared refs for view
   state.
 - Do not plumb `Signal.value`/manual subscription wiring by hand.
-- `dyn`/`if_`/`keyed` do NOT own the signals they consume: derive
-  signals once at section emit and share them across mounts; a fresh
-  `Signal.map` inside a remounting branch body leaks an upstream
-  subscription on each remount.
+- Caller-provided signals are borrowed by `dyn`/`if_`/`keyed` and property
+  bindings. PPX-created `reactive` derivations are owned per mount, including
+  `if_ ~test` and `keyed ~source`; they are released on scope disposal.
+- Handwritten derivations inside extension adapters need explicit ownership;
+  disposing one consumer must never dispose a caller's shared source.
 - `Logseq_dom.own` exists only for `extension_property_signal` binding;
   it is not for view code.
 
