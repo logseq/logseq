@@ -108,8 +108,8 @@ let on_page_loaded = Subs_state.on_page_loaded
    (whose tail-flush stays synchronous) — measured outliner ops put
    ~20ms of this deferred work off the event path.
    [schedule_flush] is host-wired (setTimeout on web, Host.set_timeout
-   on native) to keep this module free of the dom layer — imperative_dom
-   already depends on Runtime, so a direct Web_dom call would cycle.
+   on native) to keep this module free of the dom layer — the dom impl
+   already depends on Runtime, so a direct dom call would cycle.
    The default runs the callback inline: an unwired scheduler would
    leave [flush_pending] stuck true and silence every later flush. *)
 let schedule_flush : ((unit -> unit) -> unit) ref =

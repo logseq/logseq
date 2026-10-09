@@ -16,6 +16,13 @@ module D = Logseq_el
 
 let t = Sidebar_state.t
 
+(* Ui_services-el twin of Popups_state.anchor_of_el (which is still
+   typed on the old dom element — collapse back once popups_state
+   migrates) *)
+let anchor_of_ui_el (el : Ui_services.el) =
+  let x, y, w, h = el.Ui_services.rect () in
+  (x +. (w /. 2.), y, y +. h)
+
 (* component icon: tabler names go through the `app:` registry (only `x`
    matches a builtin here). `ui__icon` carries over from the cljs span
    wrapper; `ti` font classes are dropped — the kind renders its own svg *)
@@ -99,7 +106,7 @@ let item_menu st (it : Sidebar_state.item) =
   let w = 160. in
   let x =
     Float.max ((w /. 2.) +. 5.)
-      (Float.min ax (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
+      (Float.min ax (Ui_services.dom_viewport_width () -. (w /. 2.) -. 5.))
   in
   popover ~key:("imenu-" ^ it.key)
     ~at:(x, if flip then atop else abot)
@@ -264,9 +271,9 @@ let item_header st idx (it : Sidebar_state.item) =
             ~on_press:(fun _ ->
               let ax, atop, abot =
                 match
-                  Web_dom.get_element_by_id ("sbi-more-" ^ it.key)
+                  Ui_services.dom_by_id ("sbi-more-" ^ it.key)
                 with
-                | Some el -> Popups_state.anchor_of_el el
+                | Some el -> anchor_of_ui_el el
                 | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
               in
               Sidebar_state.open_item_menu st it.key ~ax ~atop ~abot)

@@ -10,6 +10,10 @@ let detail_obj pairs =
   List.iter (fun (k, v) -> Js.Dict.set o k v) pairs;
   Js.Json.object_ o
 
+(* document-event payloads go out as Json.t, not Js.Json.t *)
+let detail_json pairs =
+  Json.Object (List.map (fun (k, v) -> (k, Json.String v)) pairs)
+
 let push_state a b _c _d =
   match arg_string a with
   | Some "page" -> (
@@ -18,8 +22,8 @@ let push_state a b _c _d =
       | Some n ->
           Runtime.mark_nav ();
           Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ n));
-          Web_dom.dispatch_custom "ls:navigate"
-            (detail_obj [ ("name", Js.Json.string n) ]);
+          Ui_services.dom_dispatch_json "ls:navigate"
+            (detail_json [ ("name", n) ]);
           resolved_nil
       | None -> resolved_nil)
   | Some route ->
@@ -28,14 +32,14 @@ let push_state a b _c _d =
   | None -> resolved_nil
 
 let exit_editing_mode _a _b _c _d =
-  Web_dom.dispatch_custom "ls:exit-editing" (detail_obj []);
+  Ui_services.dom_dispatch_json "ls:exit-editing" (Json.Object []);
   resolved_nil
 
 let open_in_right_sidebar a _b _c _d =
   (match arg_string a with
    | Some uuid ->
-       Web_dom.dispatch_custom "ls:open-right-sidebar"
-         (detail_obj [ ("uuid", Js.Json.string uuid) ])
+       Ui_services.dom_dispatch_json "ls:open-right-sidebar"
+         (detail_json [ ("uuid", uuid) ])
    | None -> ());
   resolved_nil
 
@@ -60,19 +64,15 @@ let show_msg a b c _d =
     | None -> None
   in
   let key' = Option.value key ~default:(Ui_services.env_random_uuid ()) in
-  Web_dom.dispatch_custom "ls:toast"
-    (detail_obj
-       [ ("msg", Js.Json.string msg)
-       ; ("cls", Js.Json.string cls)
-       ; ("key", Js.Json.string key')
-       ]);
+  Ui_services.dom_dispatch_json "ls:toast"
+    (detail_json [ ("msg", msg); ("cls", cls); ("key", key') ]);
   resolved (Js.Json.string key')
 
 let close_msg a _b _c _d =
   (match arg_string a with
    | Some key ->
-       Web_dom.dispatch_custom "ls:toast-close"
-         (detail_obj [ ("key", Js.Json.string key) ])
+       Ui_services.dom_dispatch_json "ls:toast-close"
+         (detail_json [ ("key", key) ])
    | None -> ());
   resolved_nil
 
@@ -167,8 +167,8 @@ let replace_state a b _c _d =
       | Some n ->
           Runtime.mark_nav ();
           Ui_services.nav_replace_hash (Runtime.nav_hash ("#/page/" ^ n));
-          Web_dom.dispatch_custom "ls:navigate"
-            (detail_obj [ ("name", Js.Json.string n) ]);
+          Ui_services.dom_dispatch_json "ls:navigate"
+            (detail_json [ ("name", n) ]);
           resolved_nil
       | None -> resolved_nil)
   | Some route ->
@@ -217,20 +217,20 @@ let get_current_route _a _b _c _d =
 let query_element_rect a _b _c _d =
   match arg_string a with
   | Some sel -> (
-      match Web_dom.doc_query sel with
+      match Ui_services.dom_query sel with
       | Some el ->
-          let r = Web_dom.el_bounding_rect el in
-          let f g = Js.Json.number (g r) in
+          let x, y, w, h = el.Ui_services.rect () in
+          let f v = Js.Json.number v in
           resolved
             (detail_obj
-               [ ("x", f Web_dom.rect_left)
-               ; ("y", f Web_dom.rect_top)
-               ; ("width", f Web_dom.rect_width)
-               ; ("height", f Web_dom.rect_height)
-               ; ("top", f Web_dom.rect_top)
-               ; ("right", f Web_dom.rect_right)
-               ; ("bottom", f Web_dom.rect_bottom)
-               ; ("left", f Web_dom.rect_left) ])
+               [ ("x", f x)
+               ; ("y", f y)
+               ; ("width", f w)
+               ; ("height", f h)
+               ; ("top", f y)
+               ; ("right", f (x +. w))
+               ; ("bottom", f (y +. h))
+               ; ("left", f x) ])
       | None -> resolved_nil)
   | None -> resolved_nil
 
@@ -238,10 +238,10 @@ let query_element_rect a _b _c _d =
 let query_element_by_id a _b _c _d =
   match arg_string a with
   | Some id -> (
-      match Web_dom.get_element_by_id id with
+      match Ui_services.dom_by_id id with
       | Some el ->
           resolved
-            (Js.Json.string (Web_dom.el_tag el ^ "#" ^ id))
+            (Js.Json.string (el.Ui_services.tag () ^ "#" ^ id))
       | None -> resolved (Js.Json.boolean false))
   | None -> resolved (Js.Json.boolean false)
 
@@ -414,7 +414,7 @@ let open_external_link a _b _c _d =
      when String.length url > 8
           && (String.sub url 0 7 = "http://"
              || String.sub url 0 8 = "https://") ->
-       Web_dom.win_open url
+       Ui_services.env_open_url url
    | _ -> ());
   resolved_nil
 
@@ -423,7 +423,7 @@ let check_slot_valid a _b _c _d =
   resolved
     (Js.Json.boolean
        (match arg_string a with
-        | Some id -> Web_dom.get_element_by_id id <> None
+        | Some id -> Ui_services.dom_by_id id <> None
         | None -> false))
 
 (* cljs sdk/ui.cljs resolve-theme-css-props-vals — getComputedStyle of
@@ -431,18 +431,16 @@ let check_slot_valid a _b _c _d =
 let resolve_theme_css_props_vals a _b _c _d =
   match Js.Json.decodeObject a with
   | Some o ->
-      let st = Web_dom.el_computed_style Web_dom.document_body in
+      let body = Ui_services.dom_body () in
       let out = Js.Dict.empty () in
       Array.iter
         (fun (k, v) ->
           match Js.Json.decodeString v with
           | Some prop ->
               Js.Dict.set out k
-                (match
-                   Js.Json.decodeString (Web_dom.js_get st prop)
-                 with
-                 | Some s when s <> "" -> Js.Json.string s
-                 | _ -> Js.Json.null)
+                (match body.Ui_services.style_prop prop with
+                 | "" -> Js.Json.null
+                 | s -> Js.Json.string s)
           | None -> ())
         (Js.Dict.entries o);
       resolved (Js.Json.object_ out)
