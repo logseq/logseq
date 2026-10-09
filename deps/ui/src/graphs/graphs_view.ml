@@ -70,7 +70,7 @@ let graph_row repo : t =
         [ row ~key:("grt-" ^ repo) ~gap:4 ~cross:`center
             (* e2e: div[data-testid='logseq_db_<n>'] span:has-text('<n>') *)
             [ text ~key:("grn-" ^ repo) ~style_class:"cursor-pointer"
-                ~data_attrs:[ ("title", "logseq/graphs/" ^ short_name repo) ]
+                ~data_attrs:[ ("aria-label", "logseq/graphs/" ^ short_name repo) ]
                 ~value:(short_name repo)
                 ~on_press:(fun _ ->
                   ignore (Graphs_ops.navigate_journal repo))
