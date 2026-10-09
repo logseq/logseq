@@ -1076,7 +1076,20 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                   S.open_cm st ~ax ~atop ~abot ~block_id:first
                     ~multi:(List.length sel >= 2)
               | Some id, _
-                when not (el.Ui_services.editable ()) ->
+                when Ui_services.env_native_block_controls ()
+                     && el.Ui_services.closest ".block-editor" <> None ->
+                  (* gpui right-click inside the editing surface: the LUI
+                     menu is the native-menu equivalent — open it without
+                     marking the block selected (a text selection may be
+                     live, and a block select would hide it) *)
+                  ev.Ui_services.prevent_default ();
+                  ev.Ui_services.stop_propagation ();
+                  close_cm_picker ();
+                  let ax, atop, abot = S.anchor_of_el el in
+                  S.open_cm st ~ax ~atop ~abot ~block_id:id ~multi:false
+              | Some id, _
+                when Ui_services.env_native_block_controls ()
+                     && not (el.Ui_services.editable ()) ->
                   ev.Ui_services.prevent_default ();
                   ev.Ui_services.stop_propagation ();
                   if not (Editor_state.is_selected id) then

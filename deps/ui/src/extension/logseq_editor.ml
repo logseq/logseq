@@ -663,6 +663,10 @@ let on_composition state_name el ev =
 (* click hit-testing lives on the container (the input is invisible);
    the document-level listener works regardless of attach order *)
 let on_mousedown el ev =
+  (* primary button only: a right-click mousedown must not collapse the
+     model selection (the native context menu acts on it) *)
+  match int_of_float (jnum ev "button") with
+  | 0 -> (
   match Js.Undefined.toOption (prop_undef ev "target") with
   | Some target -> (
       match container_of el with
@@ -682,7 +686,8 @@ let on_mousedown el ev =
                 |> String_map.add "extend" (BoolValue (jbool ev "shiftKey")))
           | None -> ())
       | _ -> ())
-  | None -> ()
+  | None -> ())
+  | _ -> ()
 
 (* press-drag inside the editor = text selection (native textarea
    parity): each move re-hit-tests and extends the model selection

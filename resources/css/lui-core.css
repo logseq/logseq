@@ -2721,6 +2721,10 @@ a.page-title {
   display: block;
   white-space: pre-wrap;
   min-height: 1.5em;
+  /* text paints above the .ed-overlay selection/caret layer — the
+     absolute .ed-pos wrappers would otherwise cover the glyphs */
+  position: relative;
+  z-index: 1;
 }
 
 .ed-r {
