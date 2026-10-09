@@ -1265,6 +1265,7 @@ let render (_ms : Model.t Signal.signal) : t =
       [ if_ ~test:ac_open (ac_popover st)
       ; if_ ~test:cm_open (cm_popover st)
       ; pv_dyn st
-      ; Tooltip.el ]
+      ; Tooltip.el
+      ; Editor_commands.popup_view ]
   in
   body context parent

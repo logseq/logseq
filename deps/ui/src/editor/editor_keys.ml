@@ -1070,17 +1070,13 @@ let drag_reset () =
   drag_phase := None;
   drag_tgt := None
 
-let arm_drag ev =
-  match
-    Web_dom.closest_sel ".bullet-container" (Web_dom.ev_target ev)
-  with
+let arm_drag (ev : Ui_services.ev) =
+  match closest ".bullet-container" ev.Ui_services.target with
   | Some el -> (
-      match Web_dom.el_get_attr el "blockid" with
+      match el.Ui_services.attr "blockid" with
       | Some u ->
           drag_phase :=
-            Some
-              (Drag_armed
-                 (u, Web_dom.ev_client_x ev, Web_dom.ev_client_y ev))
+            Some (Drag_armed (u, ev.Ui_services.x, ev.Ui_services.y))
       | None -> ())
   | None -> ()
 
@@ -1165,7 +1161,11 @@ let on_keydown ev =
        when String.lowercase_ascii (ev_key ev) = "escape" ->
          drag_reset ()
      | _ -> ());
-    if Editor_commands.popup_key ev then
+    if Editor_commands.popup_key ~key:(ev_key ev)
+         ~inside:(fun () ->
+           closest "#date-time-picker" ev.Ui_services.target <> None)
+         ~prevent_default:ev.Ui_services.prevent_default
+    then
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (ev_key ev))
     else
@@ -1556,11 +1556,7 @@ let on_editor_insert ev =
 (* clicking outside the editor commits the buffer; clicks inside the
    autocomplete/context-menu popups keep editing — the apply action
    refocuses the sink input (cljs keeps the block in edit mode) *)
-(* stays on Web_dom.ev: the tail must hand the raw target element to
-   Popups_state.inside / Editor_commands.click_guard, which hit-test it
-   against stored Web_dom.el roots (popup/overlay registries hold
-   DOM-constructed elements — no Ui_services.el exists for them) *)
-let on_mousedown ev =
+let on_mousedown (ev : Ui_services.ev) =
   if Ui_services.env_publishing () then () else begin
   (* a pointer going down ends any stale drag that missed its release
      click (released outside the document) *)
@@ -1578,20 +1574,18 @@ let on_mousedown ev =
     let now = Ui_services.time_now () in
     last_block_mousedown :=
       (match
-         Web_dom.closest_sel
+         closest
            "button, a, input, audio, video, details, summary, \
             sup.fn, [contenteditable=true], .cloze, \
             .cloze-revealed, .query-table, .image-resize, \
             .view-action-type, .ui-fenced-code-editor"
-           (Web_dom.ev_target ev)
+           ev.Ui_services.target
        with
        | Some _ -> ("", now, stale)
        | None -> (
-           match
-               Web_dom.closest_sel ".block-content" (Web_dom.ev_target ev)
-           with
+           match closest ".block-content" ev.Ui_services.target with
            | Some el ->
-               ( Option.value (Web_dom.el_get_attr el "data-blockid")
+               ( Option.value (el.Ui_services.attr "data-blockid")
                    ~default:""
                , now, stale )
            | None -> (
@@ -1599,43 +1593,39 @@ let on_mousedown ev =
                   its uuid doesn't exist yet, so record a wildcard that
                   replays into the next edit landing *)
                match
-                   Web_dom.closest_sel ".block-add-button"
-                     (Web_dom.ev_target ev)
+                   closest ".block-add-button" ev.Ui_services.target
                with
                | Some _ -> ("*", now, stale)
                | None -> (
                    (* row padding lands inside .ls-block but outside
                       .block-content — the block it belongs to is still
                       the edit the click is about to start *)
-                   match
-                       Web_dom.closest_sel ".ls-block" (Web_dom.ev_target ev)
-                   with
+                   match closest ".ls-block" ev.Ui_services.target with
                    | Some el ->
                        ( Option.value
                            (uuid_of_prefixed "ls-block-"
-                              (Web_dom.el_id el))
+                              (el.Ui_services.id ()))
                            ~default:""
                        , now, stale )
                    | None -> ("", now, stale)))));
     (match !last_block_mousedown with
      | u, _, _ when u <> "" && u <> "*" ->
          S.click_point :=
-           Some (u, now, Web_dom.ev_client_x ev, Web_dom.ev_client_y ev)
+           Some (u, now, ev.Ui_services.x, ev.Ui_services.y)
      | _ -> S.click_point := None);
     if S.editing () <> None then
     match
-      Web_dom.closest_sel ".editor-wrapper, .ui-fenced-code-editor"
-        (Web_dom.ev_target ev)
+      closest ".editor-wrapper, .ui-fenced-code-editor"
+        ev.Ui_services.target
     with
     | Some _ -> ()
     | None -> (
         match
-          Ui_services.dom_element_at
-            (Web_dom.ev_client_x ev) (Web_dom.ev_client_y ev)
+          Ui_services.dom_element_at ev.Ui_services.x ev.Ui_services.y
         with
         | Some el when Popups_state.inside el -> ()
         | _ ->
-            if Editor_commands.click_guard (Web_dom.ev_target ev) then ()
+            if Editor_commands.click_guard () then ()
             else A.schedule_blur_commit ())
   end
 
@@ -1665,26 +1655,8 @@ let on_dragstart ev =
 
   end
 
-(* Asset_dom.upload_files consumes raw Js.Json.t File objects; there is no
-   honest Ui_services.file -> File bridge (file_binary is async and asset_dom
-   owns the upload internals), so the drop path stays on Web_dom *)
-let files_of ev =
-  match Web_dom.ev_data_transfer ev with
-  | Some dt -> Web_dom.cd_files dt
-  | None -> [||]
-
 let on_file_dragover (ev : Ui_services.ev) =
   if ev.Ui_services.files <> [] then ev.Ui_services.prevent_default ()
-
-let on_file_drop ev =
-  if Ui_services.env_publishing () then () else begin
-  let files = files_of ev in
-  if Array.length files > 0 then begin
-    Web_dom.ev_prevent_default ev;
-    Asset_dom.upload_files files
-  end
-
-  end
 
 let installed = State_cell.Once.make ()
 
@@ -1696,7 +1668,8 @@ let install_once () =
     Ui_services.dom_on_document_event ~capture:true "copy" on_copy;
     Ui_services.dom_on_document_event ~capture:true "cut" on_cut;
     Ui_services.dom_on_document_event ~capture:true "click" on_click;
-    Web_dom.add_document_listener "mousedown" on_mousedown true;
+    Ui_services.dom_on_document_event ~capture:true "mousedown"
+      on_mousedown;
     if Ui_services.env_native_drag () then
       Ui_services.dom_on_document_event ~capture:true "mousemove"
         on_native_mousemove;
@@ -1705,8 +1678,8 @@ let install_once () =
     Ui_services.dom_on_document_event ~capture:true "dragstart" on_dragstart;
     Ui_services.dom_on_document_event ~capture:true "dragover"
       on_file_dragover;
-    (* drop stays on the raw listener: on_file_drop takes Web_dom.ev *)
-    Web_dom.add_document_listener "drop" on_file_drop true;
+    (* the file-drop listener is web-only (native drops arrive through
+       platform_event "file-drop") — js_app installs it *)
     Block_dnd.install ();
     (* pointer-driven range selection (cljs block/selection.cljs) *)
     Ui_services.dom_on_document_event ~capture:true "pointerdown"

@@ -224,16 +224,12 @@ let ac_open () =
    inside the .cp__overlays chrome container (cmdk, dialogs, toasts) or
    the renderer's body-level .lui-popup-portal (popover kind: ac/cm/pv,
    context menus, page menu) or registers a tracked overlay root
-   (Properties_state). Editor_commands' two imperative inline popups
-   still hold raw host roots in editor_popup_root — the services layer
-   can't contains-check those, so their root classes stand in *)
+   (Properties_state). The editor popup (date picker / link form)
+   mounts as a LUI popover, hit-tested by .lui-popup-portal above *)
 let inside (el : Ui_services.el) =
   el.Ui_services.closest ".cp__overlays" <> None
   || el.Ui_services.closest ".lui-popup-portal" <> None
   || Properties_state.overlay_contains el
-  || el.Ui_services.closest
-       ".ls-editor-date-picker, .ls-editor-link-form"
-     <> None
 
 (* whether any popup layer is up, for code paths that only need the
    boolean (the per-layer popup_signal above drives reactive chrome) *)
@@ -243,7 +239,7 @@ let any_open () =
    | None -> false)
   || Cmdk_state.is_open ()
   || Properties_state.overlay_open ()
-  || !Runtime.editor_popup_root <> None
+  || !Runtime.editor_popup_open
 
 (* popup bound to the block currently being edited (unanchored popups
    like cmdk-spawned search count as attached too) *)

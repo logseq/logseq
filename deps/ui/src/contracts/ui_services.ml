@@ -282,6 +282,7 @@ type ev = {
   target : el option;
   touches : (float * float) list;
   detail : string -> string option;
+  detail_json : string -> Json.t option;
   clipboard_get : string -> string;
   (* clipboardData.getData <mime> — "" without data. *)
   clipboard_set : string -> string -> unit;
