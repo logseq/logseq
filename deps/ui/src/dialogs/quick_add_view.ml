@@ -32,7 +32,16 @@ let body (_ms : Model.t Signal.signal) : t =
               (fun blocks ->
                 column ~key:"qa-list"
                   ~style_class:"page-blocks-inner"
-                  (List.map (Tree.block_row ~scope:"quick-add") blocks))
+                  (List.map (Tree.block_row ~scope:"quick-add") blocks
+                   @ [ (* cljs quick_add page-blocks mounts
+                          page-blocks-cp, which carries add-button *)
+                       Add_button.el
+                         ?puuid:
+                           (Quick_add_state.value ()).Quick_add_state.page_uuid
+                         ~flags:(fun ctx ->
+                           Signal.constant ctx.Lui_ui.ui_scheduler
+                             (blocks <> [], false))
+                     ]))
               blocks_sig ]
       ; row ~key:"qa-btns" ~style_class:"ls-qa-btns"
           ~main:`end_

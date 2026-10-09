@@ -549,12 +549,10 @@ let tags_el uuid (b : Model.block) : t =
 (* -- row -- *)
 
 (* module init runs at app load (page.ml references block_row): install
-   the document listeners and the add-button observer even for pages with
-   zero blocks, where block_row is never mounted *)
+   the document listeners even for pages with zero blocks, where
+   block_row is never mounted *)
 let () =
   Editor_keys.install_once ();
-  (* module init — before services install; raw host facts *)
-  if not (Platform.publishing ()) then Add_button.install ();
   Asset_dom.install ()
 
 let rec block_row

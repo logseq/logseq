@@ -693,41 +693,6 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     body
     ) ctx parent
 
-(* .block-add-button — the imperative Add_button.ensure_all doc-scan can't
-   inject elements natively (no real DOM), so the element is emitted
-   declaratively here with the same shape build_el produces. Clicks reach
-   Editor_actions.append_block via the document-level click listener
-   matching closest ".block-add-button". has_children drives the same
-   opacity class build_el computes. *)
-(* cljs page.cljs opacity-class: opacity-0 only when the last block
-   itself has children (or editing) — otherwise opacity-50; the row
-   carries .ls-block-content-indent when the last entity is a block *)
-let add_button_el ?puuid
-    ~(flags : 'a -> (bool * bool) Signal.signal) : t =
- fun context parent ->
-  if Ui_services.env_publishing () then Logseq_el.nothing context parent else
-  let fs = flags context in
-  (* TODO(component): the doc-level click listener matches closest
-     ".block-add-button" and reads parentblockid — imperative contract *)
-  (Ui_parts.class_signal fs
-     (fun (has, indented) ->
-       "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
-       ^ (if has then "opacity-0" else "opacity-50")
-       ^ (if indented then " ls-block-content-indent" else ""))
-     (column ~key:"bab"
-        ~data_attrs:
-          (("tabindex", "0")
-           :: (match puuid with
-               | Some u -> [ ("data-parentblockid", u) ]
-               | None -> []))
-     [ row ~key:"bab-row"
-         [ row ~key:"bab-inner" ~cross:`center ~height:28
-             ~style_class:"bab-inner"
-             [ box ~key:"bab-bc" ~style_class:"bullet-container"
-                 [ box ~key:"bab-b" ~style_class:"bullet" [] ]
-             ] ] ]))
-    context parent
-
 let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
     ?(scope = "main") ?(container = true) (blocks : Model.block list) : t =
   let inner_attrs =
@@ -792,7 +757,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
     [ box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
         ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
-         @ [ add_button_el ?puuid
+         @ [ Add_button.el ?puuid
                ~flags:(fun ctx ->
                  Signal.constant ctx.Lui_ui.ui_scheduler
                    (blocks <> [], false))
@@ -1053,6 +1018,12 @@ let journal_item_sig (ms : Model.t Signal.signal)
                                  32. +. Tree.estimate_children_height b)
                                ~mount:(Tree.block_row_sig ~scope:"main")
                            ])
+                    ; (* cljs journal-page mounts add-button inside
+                         .page-blocks-inner per day *)
+                      Add_button.el ~puuid:key
+                        ~flags:(fun ectx ->
+                          Logseq_el.own ectx
+                            (Signal.map (fun has -> (has, false)) nonempty))
                     ]
                 ]
             ]
@@ -1318,7 +1289,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                | Some u -> [ ("data-containerid", u) ]
                | None -> [])
             [ Lui_elements.if_ ~test:nonempty list_el ]
-        ; add_button_el ?puuid
+        ; Add_button.el ?puuid
             ~flags:(fun _ ->
               Logseq_el.own ctx
                 (Signal.map
