@@ -525,27 +525,24 @@ let ensure_default_view inst =
    holds a block-container title editor (inline rename). The head mounts
    the returned box as MCustom inside the Rename MSub; the popup layer
    focuses the input when the sub-content opens. *)
-let rename_editor_box inst (v : Wr.view_ent) =
-  let input =
-    E.h ~tag:"input"
-      ~cls:"cp__select-input w-full !p-1.5"
-      ~attrs:[ ("type", "text") ] ()
-  in
-  E.el_set_value input v.Wr.vtitle;
+let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
+  (* the typed value lives in a ref the input's on_input keeps current;
+     submit (Enter) commits, Escape rides the enclosing popover's own
+     dismiss *)
+  let value = ref v.Wr.vtitle in
   let commit () =
-    let t = E.el_value input in
     P.close_all ();
-    Db.save_block_title v.Wr.vu t (fun () ->
+    Db.save_block_title v.Wr.vu !value (fun () ->
         load_views inst ~on_done:(fun () -> refresh inst))
   in
-  E.el_on input "keydown" (fun ev ->
-      match E.ev_key ev with
-      | "Enter" ->
-          E.ev_prevent_default ev;
-          commit ()
-      | "Escape" -> P.close_all ()
-      | _ -> ());
-  E.h ~cls:"block-title-wrap p-2" ~children:[ input ] ()
+  Logseq_el.el ~style_class:"block-title-wrap p-2"
+    [ input ~style_class:"cp__select-input w-full !p-1.5"
+        ~data_attrs:[ ("type", "text") ]
+        ~text:v.Wr.vtitle ~autofocus:true ~submit_on_enter:true
+        ~on_input:(function
+          | Lui_protocol.TextChanged (_, s) -> value := s
+          | _ -> ())
+        ~on_submit:(fun _ -> commit ()) [] ]
 
 let export_edn inst =
   let s =
