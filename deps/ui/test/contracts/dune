@@ -21,3 +21,10 @@
  (deps task_web_test/test/contracts/task_web_test.js)
  (action
   (run node %{dep:task_web_test/test/contracts/task_web_test.js})))
+
+(rule
+ (alias runtest)
+ (enabled_if (= %{os_type} "Unix"))
+ (deps ../../scripts/check-shared-boundaries.sh)
+ (action
+  (system "bash %{dep:../../scripts/check-shared-boundaries.sh}")))

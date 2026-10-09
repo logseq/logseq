@@ -5,7 +5,17 @@
 # Exempt: src/ legacy Melange view code is being migrated feature-by-feature;
 # this check guards the layers that must stay portable.
 set -u
-cd "$(dirname "$0")/.."
+SELF="$(cd "$(dirname "$0")" && pwd)"
+# dune copies this script into _build/default/scripts as a dep; map back
+# to the source tree so the scan runs against real sources, not _build.
+case "$SELF" in
+  */_build/*) SELF="${SELF%%/_build/*}" ;;  # build mirror: SELF is deps/ui
+esac
+# in-place SELF is deps/ui/scripts -> parent; build-mirror SELF is deps/ui
+case "$SELF" in
+  */scripts) cd "$SELF/.." || exit 1 ;;
+  *) cd "$SELF" || exit 1 ;;
+esac
 
 fail=0
 
