@@ -721,10 +721,12 @@
   [db repo id]
   (let [block (d/entity db id)
         title (string/lower-case (:block/title block))
+        page-ids (ldb/page-alias-set db id)
         result (search-handler/search-blocks repo title {:limit 100})]
     (boolean (some (fn [candidate]
                      (let [candidate (d/entity db (:db/id candidate))]
-                       (and (not= id (:db/id candidate))
+                       (and (not (contains? page-ids (:db/id candidate)))
+                            (not (contains? page-ids (:db/id (:block/page candidate))))
                             (not ((set (map :db/id (:block/refs candidate))) id))
                             (string/includes? (string/lower-case (:block/title candidate)) title))))
                    result))))

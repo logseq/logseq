@@ -6,6 +6,8 @@
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
+   [logseq.e2e.locator :as loc]
+   [logseq.e2e.page :as page]
    [logseq.e2e.util :as util]
    [wally.main :as w]))
 
@@ -126,4 +128,41 @@
     (is (no-raw-uuid? (inner-text "#ui__ac-inner"))
         "[[ autocomplete shows resolved title, not raw [[uuid]]")))
 
-;; TODO: page references
+(deftest page-self-mentions-are-excluded-from-references
+  (testing "blocks on a page do not appear in that page's linked or unlinked references"
+    (let [page-name (str "self-ref-page-" (random-uuid))
+          other-name (str "self-ref-other-" (random-uuid))
+          self-linked "self-linked-mention-block"
+          self-unlinked "self-unlinked-mention-block"
+          other-linked "other-linked-mention-block"
+          other-unlinked "other-unlinked-mention-block"]
+      (page/new-page page-name)
+      (b/new-block (str self-linked " [[" page-name "]]"))
+      (b/new-block (str self-unlinked " " page-name))
+      (util/exit-edit)
+      (page/goto-page page-name)
+      (assert/assert-have-count ".references" 0)
+      (assert/assert-have-count ".unlinked-references" 0)
+
+      (page/new-page other-name)
+      (b/new-block (str other-linked " [[" page-name "]]"))
+      (b/new-block (str other-unlinked " " page-name))
+      (util/exit-edit)
+      (page/goto-page page-name)
+
+      (assert/assert-is-visible
+       (loc/filter ".references" :has-text other-name))
+      (assert/assert-is-visible
+       (loc/filter ".references" :has-text other-linked))
+      (assert/assert-have-count
+       (loc/filter ".references" :has-text self-linked)
+       0)
+
+      (w/click ".unlinked-references .ls-foldable-title-control")
+      (assert/assert-is-visible
+       (loc/filter ".unlinked-references" :has-text other-name))
+      (assert/assert-is-visible
+       (loc/filter ".unlinked-references" :has-text other-unlinked))
+      (assert/assert-have-count
+       (loc/filter ".unlinked-references" :has-text self-unlinked)
+       0))))
