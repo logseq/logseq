@@ -469,3 +469,28 @@ Branch devin/SHAREDUI-task6c. Files changed so far (uncommitted):
   raw-ev bridge to popup/overlay registries — waits m11 inside() flip).
 - Children running: m5 icon_picker, m8 editor_commands, m11 popups.
   Done+slept: m1,m2,m3,m4,m6,m7,m9,m10.
+
+## STATE UPDATE 9
+- m5 merged (145a469ff6): icon_picker → LUI view (~anchor : Ui_services.el,
+  popover via open_anchored returning view-overlay key; emoji_mart
+  parity adds; native/icon_picker.ml 634ln DELETED + copy rules added;
+  anchor call sites all flipped: cmdk_host src+native ×4, comments_view,
+  page icon picker, popups_view pickers). It also fixed popups_state.
+  inside + ported properties_calendar — I kept my deletion of the latter
+  (zero callers = dead code; its LUI port in m5 discarded by design).
+- m10 signature fallout resolved: query_builder open_select → LUI
+  Properties_select.view + dom_by_id; views_table anchor → dom_by_id.
+- overlay.ml flipped: on_document_press → dom_on_document_event
+  ~capture + el.contains; properties_state callers already Ui_services.el.
+- native_embed doc-scan plumbing REMOVED: run_doc_scans_after_flush +
+  7 call sites + scan_gate + note_structural — provably dead on native
+  (no copied file can register a doc scan; registrations are web-only).
+- Remaining dual callers (6): editor_commands(m8), popups_state/
+  popups_view(m11), selection_bar(1, waits m11 anchor_of_el), page(1:
+  element_at→anchor_of_el waits m11), editor_keys(24 residual: raw-ev
+  bridge to popups inside()/overlay registries — waits m11 inside flip).
+- native_embed remaining emulation wiring (5): Imperative_dom.install,
+  Vdom.init, Vdom.snapshot_of_node, Imperative_dom.lui_index/
+  snapshot_of_id in event_target_of — clears when m8+m11 land.
+- Children running: m8 editor_commands, m11 popups. Done+slept:
+  m1,m2,m3,m4,m5,m6,m7,m9,m10.
