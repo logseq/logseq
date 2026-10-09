@@ -415,6 +415,8 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; stop_propagation = (fun () -> stop_propagation_js e)
   ; stop_immediate = (fun () -> stop_immediate_js e)
   ; buttons = int_of_float (num e "buttons")
+  ; movement_x = num e "movementX"
+  ; movement_y = num e "movementY"
   ; alt = j_bool e "altKey"
   ; default_prevented = j_bool e "defaultPrevented"
   }
@@ -424,8 +426,10 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
    rects *)
 let ops : Ui_services.dom =
   { Ui_services.on_document_event =
-      (fun name f ->
-        Web_dom.on_document_event name (fun payload -> f (ev_of payload)))
+      (fun ?capture name f ->
+        Web_dom.add_document_listener name
+          (fun payload -> f (ev_of payload))
+          (match capture with Some c -> c | None -> false))
   ; on_window_event =
       (fun name f -> add_window_listener_js name (fun e -> f (ev_of e)))
   ; query_all =

@@ -144,6 +144,8 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; composing = jbool "isComposing" e
   ; key = jstr "key" e
   ; buttons = int_of_float (jnum "buttons" e)
+  ; movement_x = jnum "movementX" e
+  ; movement_y = jnum "movementY" e
   ; default_prevented = jbool "defaultPrevented" e
   ; target =
       (match jfield "target" e with
@@ -193,8 +195,9 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
 
 let ops : Ui_services.dom =
   { Ui_services.on_document_event =
-      (fun name f ->
-        Platform.on_document_event name (fun payload -> f (ev_of payload)))
+      (fun ?capture name f ->
+        Platform.add_event_listener ?capture name
+          (fun payload -> f (ev_of payload)))
   ; on_window_event =
       (fun name f ->
         Platform.add_event_listener name (fun payload -> f (ev_of payload)))

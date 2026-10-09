@@ -204,6 +204,8 @@ type ev = {
   composing : bool;
   key : string option;
   buttons : int;
+  movement_x : float;
+  movement_y : float;
   default_prevented : bool;
   target : el option;
   touches : (float * float) list;
@@ -218,7 +220,7 @@ type ev = {
 }
 
 type dom = {
-  on_document_event : string -> (ev -> unit) -> unit;
+  on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit;
   on_window_event : string -> (ev -> unit) -> unit;
   query : string -> el option;
   query_all : string -> el list;
@@ -332,7 +334,7 @@ val env_edit_units : unit -> edit_units
 val env_random_uuid : unit -> string
 val env_open_url : string -> unit
 
-val dom_on_document_event : string -> (ev -> unit) -> unit
+val dom_on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit
 val dom_on_window_event : string -> (ev -> unit) -> unit
 val dom_query : string -> el option
 val dom_query_all : string -> el list

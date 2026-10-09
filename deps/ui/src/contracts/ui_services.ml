@@ -274,6 +274,8 @@ type ev = {
   composing : bool;
   key : string option;
   buttons : int;
+  movement_x : float;
+  movement_y : float;
   default_prevented : bool;
   target : el option;
   touches : (float * float) list;
@@ -291,7 +293,7 @@ type ev = {
 }
 
 type dom = {
-  on_document_event : string -> (ev -> unit) -> unit;
+  on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit;
   (* Document-level event subscription (custom "ls:*" events and input
      events) — the typed [ev] snapshot replaces raw event access. *)
   on_window_event : string -> (ev -> unit) -> unit;
@@ -439,7 +441,7 @@ let env_edit_units () = (get ()).env.edit_units ()
 let env_random_uuid () = (get ()).env.random_uuid ()
 let env_open_url u = (get ()).env.open_url u
 
-let dom_on_document_event name f = (get ()).dom.on_document_event name f
+let dom_on_document_event ?capture name f = (get ()).dom.on_document_event ?capture name f
 let dom_on_window_event name f = (get ()).dom.on_window_event name f
 let dom_query sel = (get ()).dom.query sel
 let dom_query_all sel = (get ()).dom.query_all sel

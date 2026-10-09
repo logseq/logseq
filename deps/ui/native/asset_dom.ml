@@ -219,16 +219,6 @@ let preview_images (_items : Wire.t list) : unit = ()
 
 (* minimal asset render — the asset extension tag carries the block
    uuid + stored file path so the Swift renderer can resolve it *)
-let file_cell (w : Wire.t) : Views_dom.el =
-  let uuid =
-    Option.value (Wire.map_get_uuid w "block/uuid") ~default:"" in
-  let ext =
-    Option.value
-      (Wire.map_get_string w "logseq.property.asset/type") ~default:"" in
-  Views_dom.h ~tag:"img"
-    ~attrs:[ ("title", uuid ^ "." ^ ext); ("data-asset-file", uuid ^ "." ^ ext) ]
-    ()
-
 let block_view uuid (b : Model.block) : Lui_elements.t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let is_pdf = ext = "pdf" in

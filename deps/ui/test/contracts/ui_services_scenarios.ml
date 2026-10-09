@@ -217,7 +217,7 @@ let run () =
            ; style_prop = (fun _ -> "")
            }
          in
-         { on_document_event = (fun name f -> Hashtbl.replace listeners name f)
+         { on_document_event = (fun ?capture:_ name f -> Hashtbl.replace listeners name f)
          ; on_window_event = (fun _ _ -> ())
          ; query = (fun _ -> None)
          ; query_all = (fun _ -> [])
@@ -243,6 +243,8 @@ let run () =
                      ; composing = false
                      ; key = None
                      ; buttons = 0
+                     ; movement_x = 0.
+                     ; movement_y = 0.
                      ; default_prevented = false
                      ; target = None
                      ; touches = []
@@ -271,6 +273,8 @@ let run () =
                      ; composing = false
                      ; key = None
                      ; buttons = 0
+                     ; movement_x = 0.
+                     ; movement_y = 0.
                      ; default_prevented = false
                      ; target = None
                      ; touches = []

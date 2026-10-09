@@ -4,7 +4,7 @@
    native icon_picker/sidebar_state/plugin_host/fuzzy/dates). *)
 
 module Svs = Cmdk_services
-module D = Web_dom
+module D = Ui_services
 
 let js_random () = Random.float 1.
 
@@ -114,92 +114,98 @@ let services : unit -> Svs.t =
   ; scroll_to_top = Router.scroll_to_top
   ; set_input_value =
       (fun v ->
-        match D.query_selector ".cp__cmdk-search-input" with
-        | Some el -> D.el_set_value el v
+        match Ui_services.dom_query ".cp__cmdk-search-input" with
+        | Some el -> el.Ui_services.set_value v
         | None -> ())
   ; focus_search_input =
       (fun () ->
-        match D.query_selector ".cp__cmdk-search-input" with
-        | Some el -> D.el_focus el
+        match Ui_services.dom_query ".cp__cmdk-search-input" with
+        | Some el -> el.Ui_services.focus ()
         | None -> ())
   ; focus_input_init =
       (fun q ->
         let rec go tries =
-          match D.query_selector ".cp__cmdk-search-input" with
+          match Ui_services.dom_query ".cp__cmdk-search-input" with
           | Some el ->
-              D.el_focus el;
+              el.Ui_services.focus ();
               if q <> "" then (
-                D.el_set_value el q;
-                D.el_set_selection_range el 0 (String.length q))
+                el.Ui_services.set_value q;
+                el.Ui_services.set_selection_range 0 (String.length q))
           | None ->
-              if tries > 0 then D.set_timeout (fun () -> go (tries - 1)) 20
+              if tries > 0 then
+                ignore
+                  (Ui_services.timers_timeout (fun () -> go (tries - 1)) 20)
         in
-        D.set_timeout (fun () -> go 20) 0)
+        ignore (Ui_services.timers_timeout (fun () -> go 20) 0))
   ; scroll_row_index =
       (fun i ->
-        match D.query_selector ".cp__cmdk .cp__cmdk-scroller" with
+        match Ui_services.dom_query ".cp__cmdk .cp__cmdk-scroller" with
         | Some scroller -> (
             match
-              D.el_query scroller
+              scroller.Ui_services.query
                 (Printf.sprintf "[data-item-index=\"%d\"]" i)
             with
-            | Some row -> D.scroll_row_into_view ~scroller ~row
+            | Some row ->
+                Ui_services.dom_scroll_row_into_view ~scroller ~row
             | None -> ())
         | None -> ())
-  ; set_timeout = D.set_timeout
+  ; set_timeout =
+      (fun f ms -> ignore (Ui_services.timers_timeout f ms))
   ; install_listeners =
       (fun h ->
         let open Svs in
-        D.add_document_listener "keydown"
+        Ui_services.dom_on_document_event ~capture:true "keydown"
           (fun ev ->
             let a =
               h.key
-                { key = D.ev_key ev; meta = D.ev_meta ev
-                ; ctrl = D.ev_ctrl ev; shift = D.ev_shift ev
-                ; alt = D.ev_alt ev }
+                { key = (match ev.Ui_services.key with Some k -> k | None -> "")
+                ; meta = ev.Ui_services.meta
+                ; ctrl = ev.Ui_services.ctrl; shift = ev.Ui_services.shift
+                ; alt = ev.Ui_services.alt }
             in
-            if a.prevent then D.ev_prevent_default ev;
-            if a.stop then D.ev_stop_propagation ev)
-          true;
-        D.add_document_listener "click"
+            if a.prevent then ev.Ui_services.prevent_default ();
+            if a.stop then ev.Ui_services.stop_propagation ());
+        Ui_services.dom_on_document_event ~capture:true "click"
           (fun ev ->
-            match D.ev_target ev with
+            match ev.Ui_services.target with
             | Some el ->
                 h.click
-                  { search_button = D.el_closest el "#search-button" <> None
+                  { search_button =
+                      el.Ui_services.closest "#search-button" <> None
                   ; inside_modal =
-                      D.el_closest el ".cp__cmdk__modal" <> None
+                      el.Ui_services.closest ".cp__cmdk__modal" <> None
                   ; item_key =
-                      (match D.el_closest el ".cp__cmdk [data-item-key]" with
-                       | Some wrap -> D.el_get_attr wrap "data-item-key"
+                      (match
+                         el.Ui_services.closest ".cp__cmdk [data-item-key]"
+                       with
+                       | Some wrap -> wrap.Ui_services.attr "data-item-key"
                        | None -> None) }
-            | None -> ())
-          true;
-        D.add_document_listener "mousemove"
+            | None -> ());
+        Ui_services.dom_on_document_event ~capture:true "mousemove"
           (fun ev ->
-            match D.ev_target ev with
+            match ev.Ui_services.target with
             | Some el ->
                 h.mousemove
-                  { inside_cmdk = D.el_closest el ".cp__cmdk" <> None
+                  { inside_cmdk = el.Ui_services.closest ".cp__cmdk" <> None
                   ; item_index =
                       (match
-                         D.el_closest el ".cp__cmdk [data-item-index]"
+                         el.Ui_services.closest
+                           ".cp__cmdk [data-item-index]"
                        with
-                       | Some wrap -> (
-                           match D.el_get_attr wrap "data-item-index" with
-                           | Some s -> int_of_string_opt s
-                           | None -> None)
+                       | Some wrap ->
+                           Option.bind (wrap.Ui_services.attr "data-item-index")
+                             int_of_string_opt
                        | None -> None)
                   ; moved =
-                      D.ev_movement_x ev <> 0. || D.ev_movement_y ev <> 0.
+                      ev.Ui_services.movement_x <> 0.
+                      || ev.Ui_services.movement_y <> 0.
                   }
-            | None -> ())
-          true)
+            | None -> ()))
   ; toast =
       (fun msg cls ->
-        let d = Js.Dict.fromList [
-            "message", Js.Json.string msg; "type", Js.Json.string cls ] in
-        D.dispatch_custom "ls:toast" (Js.Json.object_ d))
+        Ui_services.dom_dispatch_json "ls:toast"
+          (Json.Object
+             [ ("message", Json.String msg); ("type", Json.String cls) ]))
   ; fuzzy_search = Fuzzy.fuzzy_search
   ; fuzzy_search_multi = Fuzzy.fuzzy_search_multi
   ; commands = (fun () -> List.map cmd_of Commands_data.table)
@@ -251,7 +257,7 @@ let services : unit -> Svs.t =
         Properties_state.refresh_all ())
   ; pick_emoji =
       (fun ~block_uuid ~on_chosen ->
-        match D.query_selector ("[data-blockid='" ^ block_uuid ^ "']") with
+        match Dom_ext.doc_query_selector ("[data-blockid='" ^ block_uuid ^ "']") with
         | Some anchor ->
             ignore
               (Icon_picker.open_picker_with_opts ~anchor ~del:false
@@ -261,19 +267,18 @@ let services : unit -> Svs.t =
         | None -> ())
   ; pick_icon =
       (fun ~block_uuid ~del ~on_chosen ->
-        match D.query_selector ("[data-blockid='" ^ block_uuid ^ "']") with
+        match Dom_ext.doc_query_selector ("[data-blockid='" ^ block_uuid ^ "']") with
         | Some anchor ->
             Icon_picker.open_picker ~anchor ~del
               ~on_chosen:(fun c -> on_chosen (icon_choice c))
         | None -> ())
   ; appearance_popup =
       (fun () ->
-        match D.query_selector ".toolbar-dots-btn" with
+        match Ui_services.dom_query ".toolbar-dots-btn" with
         | Some el ->
-            let r = D.el_bounding_rect el in
+            let (x, y, w, h) = el.Ui_services.rect () in
             Runtime.send
-              (Action.Appearance_set
-                 (Some (D.rect_right r, D.rect_bottom r +. 4.)))
+              (Action.Appearance_set (Some (x +. w, y +. h +. 4.)))
         | None -> ())
   ; dialogs_open = Dialogs_state.open_
   ; dialogs_close = Dialogs_state.close_named
