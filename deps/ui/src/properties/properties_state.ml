@@ -375,6 +375,15 @@ let area_hit affected key =
       | _ -> false)
     affected
 
+(* Local editor commands need their own chips immediately. Keep unrelated
+   property panels on the coalesced broadcast refresh. *)
+let refresh_entity uuid =
+  ignore (live_areas ());
+  let affected = [ W.Array [ W.Keyword "entity"; W.Uuid uuid ] ] in
+  Hashtbl.iter
+    (fun key a -> if area_hit affected key then ignore (guarded a.a_fetch))
+    areas
+
 let refresh_all () =
   if !refresh_pending then ()
   else (
@@ -436,5 +445,4 @@ let chain_worker () =
     chained := true;
     ignore (Runtime.on_sync refresh_affected)
   end
-
 

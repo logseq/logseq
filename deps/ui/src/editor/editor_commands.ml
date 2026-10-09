@@ -65,7 +65,10 @@ let prop_batch ~caret uuid ops =
   let buf = A.live_buffer uuid in
   A.with_focus_after ~restore:(S.editing ()) uuid caret
     (let* sop = Ops.save_block_parsed uuid buf in
-     Ops.apply_and_refresh_deferred (sop :: ops))
+     let* () = Ops.apply_and_refresh (sop :: ops) in
+     (* Publish this block's chips as soon as its command commits. *)
+     Properties_state.refresh_entity uuid;
+     Js.Promise.resolve ())
 
 (* same, but drop edit mode first (cljs :editor/exit — code blocks leave
    edit mode while the view re-renders the code surface), then focus

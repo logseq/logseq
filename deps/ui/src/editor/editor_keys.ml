@@ -939,6 +939,14 @@ let rec retry_vertical uuid ev armed_caret mine_ms attempts =
    Logseq keymap owns the commands first, Edit_input handles the rest,
    and buffer changes schedule the debounced save plus popup matching *)
 and apply_input ?frame uuid ev =
+  (* Popup-owned keys must yield before the structure queue. Replaying
+     Enter after autocomplete has closed would split the block even
+     though that physical key already chose a command. *)
+  if (match ev with
+      | Edit_input.Key (key, _) -> ac_popup_open () && ac_owned_key key.Edit_model.key
+      | _ -> false)
+  then ()
+  else
   (* Retarget a retired sink before enqueueing a shadow. Otherwise the
      same event could leave two shadows when it re-enters on the live UUID. *)
   let uuid, frame = match S.editing (), ev with
@@ -1321,7 +1329,10 @@ let on_keydown ev =
        when String.lowercase_ascii (ev_key ev) = "escape" ->
          drag_reset ()
      | _ -> ());
-    if Editor_commands.popup_key ~key:(ev_key ev)
+    (* During a focus handoff, the pending-editor route would stop
+       propagation before autocomplete's document listener sees Enter. *)
+    if ac_popup_open () && ac_owned_key (ev_key ev) then ()
+    else if Editor_commands.popup_key ~key:(ev_key ev)
          ~inside:(fun () ->
            closest "#date-time-picker" ev.Ui_services.target <> None)
          ~prevent_default:ev.Ui_services.prevent_default

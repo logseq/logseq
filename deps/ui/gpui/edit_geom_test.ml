@@ -154,9 +154,117 @@ let test_reply_after_disposal () =
   check "late reply after disposal cannot answer remounted query"
     (c'.EI.caret_rect 3 = None)
 
+(* Exercise the real overlay view with asynchronous native measurements.
+   A prior caret must move when its reply arrives, without another key,
+   timer, or worker save causing an unrelated editor refresh. *)
+let test_reply_updates_mounted_overlay () =
+  install_host_op ();
+  reset_stores ();
+  let module ES = Editor_state in
+  let module DM = Drive.Model in
+  let module DS = Drive.Session in
+  let saved_state = !ES.st and saved_frame = !ES.active_frame in
+  let saved_flush = !Runtime.app_flush in
+  let registry = Lui_extension.registry () in
+  Logseq_editor.register registry;
+  let frame_ref = ref None in
+  let view ctx _ _ =
+    let state = Signal.state ctx.Lui_ui.ui_scheduler
+      { ES.initial with editing = Some
+          (ES.mk_editing ~uuid:"blk-1" ~buffer:"good" ~caret:4
+             ~scope:"main" ~base:"good" ()) } in
+    let frame = Signal.state ctx.Lui_ui.ui_scheduler
+      { EI.empty_frame with caret = Some { EI.x = 0; y = 0; w = 0; h = 16 } } in
+    ES.st := Some state;
+    ES.active_frame := Some frame;
+    frame_ref := Some frame;
+    let model = Edit_view.own ctx
+      (Signal.map (fun st -> match st.ES.editing with
+         | Some e -> e.ES.model
+         | None -> Edit_model.create ~units:Edit_model.Bytes "")
+         state.Signal.state_signal) in
+    Edit_view.view ~model
+      ~frame:frame.Signal.state_signal ~block_id:"blk-1" ~cls:""
+      ~on_input:(fun _ -> ())
+  in
+  let session = DS.mount ~registry ~profile:Logseq_editor.web_profile
+    ~initial:() ~reducer:(fun () () -> ()) ~view () in
+  Runtime.app_flush := (fun () -> ignore (Lui_app.flush session.DS.app));
+  let flush () =
+    Host.drain ();
+    Runtime.flush_now ();
+    DS.poll session
+  in
+  let caret_x name expected =
+    let positions = List.filter (fun n ->
+        DM.string_prop n "style-class" = Some "ed-pos")
+      (DM.all_nodes session.DS.tree) in
+    check name (List.exists (fun n ->
+      DM.prop session.DS.tree n.DM.id "padding-horizontal" =
+        Some (Lui_protocol.IntValue expected)) positions)
+  in
+  let c = conduit () in
+  ignore (c.EI.caret_rect 4);
+  Le.note_measurement "caret-rect" (caret_reply "blk-1" 4 ~x:40 ~y:0 ~h:16);
+  flush ();
+  caret_x "arriving caret reply moves an existing rendered caret" 40;
+  (* Rapid movement leaves replies in flight for superseded offsets. *)
+  Editor_actions.set_caret "blk-1" 3;
+  Editor_actions.set_caret "blk-1" 2;
+  Le.note_measurement "caret-rect" (caret_reply "blk-1" 3 ~x:30 ~y:0 ~h:16);
+  Le.note_measurement "caret-rect" (caret_reply "blk-1" 2 ~x:20 ~y:0 ~h:16);
+  flush ();
+  caret_x "rapid arrow movement paints the current model caret" 20;
+  Le.note_measurement "caret-rect" (caret_reply "blk-1" 3 ~x:30 ~y:0 ~h:16);
+  flush ();
+  caret_x "a superseded reply cannot restore an old caret" 20;
+  (* A refresh may request geometry again. Identical replies must not
+     generate an endless measurement/refresh loop. *)
+  let before = !dom_ops in
+  Le.note_measurement "caret-rect" (caret_reply "blk-1" 2 ~x:20 ~y:0 ~h:16);
+  flush ();
+  check "unchanged measurement does not request another refresh" (!dom_ops = before);
+  (* A reply queued just before disposal must not affect the next editor. *)
+  Le.note_measurement "caret-rect" (caret_reply "blk-1" 2 ~x:22 ~y:0 ~h:16);
+  ES.set_silent (fun st -> { st with editing = None });
+  flush ();
+  check "measurement queued before disposal leaves the old frame unchanged"
+    ((Signal.get_state (Option.get !frame_ref)).EI.caret =
+       Some { EI.x = 20; y = 0; w = 0; h = 16 });
+  ignore (Lui_app.dispose session.DS.app);
+  ES.st := saved_state;
+  ES.active_frame := saved_frame;
+  Runtime.app_flush := saved_flush
+
+let test_gpui_owns_caret_paint () =
+  let module DM = Drive.Model in
+  let module DS = Drive.Session in
+  let registry = Lui_extension.registry () in
+  Logseq_editor.register registry;
+  let view ctx _ _ =
+    let model = Signal.state ctx.Lui_ui.ui_scheduler
+      (Edit_model.create ~units:Edit_model.Bytes "good") in
+    let frame = Signal.state ctx.Lui_ui.ui_scheduler
+      { EI.caret = Some { EI.x = 40; y = 0; w = 0; h = 16 }
+      ; selection = [ { EI.x = 8; y = 0; w = 32; h = 16 } ] } in
+    Edit_view.view ~model:model.Signal.state_signal
+      ~frame:frame.Signal.state_signal ~block_id:"native-caret" ~cls:""
+      ~on_input:(fun _ -> ())
+  in
+  let session = DS.mount ~registry ~profile:Logseq_editor.gpui_profile
+    ~initial:() ~reducer:(fun () () -> ()) ~view () in
+  let nodes = DM.all_nodes session.DS.tree in
+  check "GPUI caret does not mount the asynchronous overlay bar"
+    (not (List.exists (fun n -> DM.string_prop n "style-class" = Some "ed-caret") nodes));
+  check "GPUI retains selection highlight rectangles"
+    (List.exists (fun n -> DM.string_prop n "style-class" = Some "ed-sel") nodes);
+  ignore (Lui_app.dispose session.DS.app)
+
 let run () =
   test_pending_then_complete ();
   test_ignored_replies ();
   test_stale_reply_after_edit ();
   test_stale_line_ranges_after_edit ();
-  test_reply_after_disposal ()
+  test_reply_after_disposal ();
+  test_reply_updates_mounted_overlay ();
+  test_gpui_owns_caret_paint ()

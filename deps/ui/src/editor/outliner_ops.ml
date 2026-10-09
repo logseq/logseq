@@ -1151,7 +1151,17 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
              let idx = ref (build_index base) in
              let owners = ref [] in
              let rec fold_delta ~retried d =
-               if Page_delta.delta_already_applied d then
+               let empty =
+                 match Page_delta.parse d with
+                 | Some p ->
+                     Page_delta.SMap.is_empty p.canon
+                     && Page_delta.SSet.is_empty p.deleted
+                     && Page_delta.SMap.is_empty p.patches
+                 | None -> false
+               in
+               (* Saving an unchanged buffer produces an empty delta.
+                  It has no journal owner and needs no route reload. *)
+               if empty || Page_delta.delta_already_applied d then
                  Ui_task.resolve `Applied
                else
                  let cands =

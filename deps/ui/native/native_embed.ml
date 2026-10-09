@@ -434,6 +434,13 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   Host.set_wakeup (fun () -> wakeup ());
   Host.set_host_op (fun name payload ->
       platform_request (name ^ "\n" ^ payload));
+  if host_kind = Lui_protocol.GPUIHost then
+    platform_request
+      ("app-icons\n"
+       ^ Js.Json.stringify
+           (Js.Json.JObject
+              (List.map (fun (name, svg) -> name, Js.Json.JString svg)
+                 (Icons.custom_icons @ Icons.status_icons @ Icons.priority_icons))));
   (* Platform's request channel ("<op>\n<payload>") shares the same wire
      as Host's — clipboard-write, ui-state, etc. *)
   Platform.host_request := platform_request;

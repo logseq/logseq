@@ -772,6 +772,44 @@ let test_delete_selection_history (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+(* Explicit property commands must publish worker truth while the editor
+   remains open, without waiting for a later autosave or broadcast. *)
+let test_property_command_refresh (h : host) =
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (command, title) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ Test_check.block "b1" title ];
+        set_editing ~uuid:"b1" ~buffer:title ~caret:(String.length title)
+          ~base:title;
+        calls := [];
+        ops := [];
+        Runtime.worker := Some
+          { Worker_client.invoke_fn = (fun name args ->
+              Js.Promise.resolve
+                (if name = "thread-api/get-property-closed-values" then
+                   W.List [ W.Map [ W.Keyword "db/id", W.Int 17;
+                                    W.Keyword "block/title", W.String "Todo" ] ]
+                 else worker_handler h name args))
+          ; on_message = (fun _ _ -> ())
+          ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        Editor_commands.run_editor_cmd "b1" command 0 5;
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check (command ^ " publishes before any broadcast or autosave")
+          (List.mem "thread-api/get-page-blocks-tree" !calls);
+        check (command ^ " keeps the live buffer and caret")
+          ((editing_now ()).S.model.EM.source = String.sub title 5 (String.length title - 5)
+           && (editing_now ()).S.model.EM.caret = 0);
+        check (command ^ " commits the property with the buffer")
+          (List.mem (if command = "status:Todo" then "batch-set-property"
+                     else "set-block-property") (op_names ()));
+        reset_editor ();
+        run rest
+  in
+  run [ "status:Todo", "/todo keep typing";
+        "heading:2", "/head keep typing" ]
+
 (* synchronous stage: pure-model checks that need no app drain *)
 let run (_h : host) =
   test_measure_deferred ();
@@ -796,5 +834,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_exit_after_navigation h in
   let* () = test_history_after_navigation h in
   let* () = test_delete_selection_history h in
+  let* () = test_property_command_refresh h in
   h.restore saved;
   Js.Promise.resolve ()

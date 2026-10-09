@@ -16,6 +16,7 @@ use std::time::Instant;
 mod editor;
 mod logseq_ext;
 mod menu;
+mod perf;
 
 use gpui_kit::component::Root;
 use gpui_kit::gpui::{point, px, size, Bounds, WindowBounds, WindowOptions};
@@ -27,6 +28,27 @@ static BOOT_T0: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
 fn boot_ms() -> f64 {
     BOOT_T0.get_or_init(Instant::now).elapsed().as_secs_f64() * 1000.0
+}
+
+fn init_theme(cx: &mut gpui_kit::gpui::App) {
+    // Register the web font family before any theme change or text layout.
+    cx.text_system()
+        .add_fonts(vec![
+            include_bytes!("../fonts/Inter-Regular.ttf").into(),
+            include_bytes!("../fonts/Inter-Medium.ttf").into(),
+            include_bytes!("../fonts/Inter-SemiBold.ttf").into(),
+            include_bytes!("../fonts/Inter-Bold.ttf").into(),
+            include_bytes!("../fonts/Inter-Italic.ttf").into(),
+            include_bytes!("../fonts/Inter-MediumItalic.ttf").into(),
+            include_bytes!("../fonts/Inter-SemiBoldItalic.ttf").into(),
+            include_bytes!("../fonts/Inter-BoldItalic.ttf").into(),
+        ])
+        .expect("embedded Inter fonts must register");
+    // Initial OCaml patches can change the theme during the first draw.
+    gpui_kit::init(cx);
+    gpui_kit::component::theme::Theme::update(cx, |theme| {
+        theme.font_family = "Inter".into();
+    });
 }
 
 /// The logseq bridge's patch callback emits `[batch, batch, …]` — the
@@ -68,6 +90,14 @@ fn drain_patches(shared: &Shared, cx: &mut gpui_kit::gpui::App) {
                 let message = error.to_string();
                 eprintln!("logseq-gpui: rejected batch: {message}");
                 shared.borrow_mut().last_errors.push(message);
+            }
+            if perf::enabled() {
+                perf::record("patch", serde_json::json!({
+                    "bytes": batch.len(),
+                    "apply_ms": t.elapsed().as_secs_f64() * 1000.,
+                    "nodes": shared.borrow().store.nodes.len(),
+                    "batch": serde_json::from_str::<serde_json::Value>(&batch).ok(),
+                }));
             }
             if std::env::var("LOGSEQ_PERF").is_ok() {
                 eprintln!(
@@ -144,7 +174,6 @@ fn install_ui_updates(
             if handle
                 .update(cx, |_, window, app| {
                     pump_tick(&shared, window, app);
-                    window.refresh();
                 })
                 .is_err()
             {
@@ -201,6 +230,7 @@ fn handle_platform_request(
         return;
     };
     match name {
+        "app-icons" => logseq_ext::install_app_icons(shared, payload),
         "dom-op" => {
             if let Some((op, body)) = payload.split_once('\n') {
                 // The logseq-editor conduit claims its ops first
@@ -522,29 +552,7 @@ fn main() {
     eprintln!("logseq-gpui: app() done t={:.1}ms", boot_ms());
     app.run(move |cx| {
         eprintln!("logseq-gpui: run entry t={:.1}ms", boot_ms());
-        // Web renders everything in Inter (static/css/web/Inter-*.woff2 →
-        // vendored here as TTF). Register the family before Theme::change
-        // runs so `.font_family("Inter")` resolves to the embedded fonts
-        // instead of falling back to the system UI font.
-        cx.text_system()
-            .add_fonts(vec![
-                include_bytes!("../fonts/Inter-Regular.ttf").into(),
-                include_bytes!("../fonts/Inter-Medium.ttf").into(),
-                include_bytes!("../fonts/Inter-SemiBold.ttf").into(),
-                include_bytes!("../fonts/Inter-Bold.ttf").into(),
-                include_bytes!("../fonts/Inter-Italic.ttf").into(),
-                include_bytes!("../fonts/Inter-MediumItalic.ttf").into(),
-                include_bytes!("../fonts/Inter-SemiBoldItalic.ttf").into(),
-                include_bytes!("../fonts/Inter-BoldItalic.ttf").into(),
-            ])
-            .ok();
-        // Initial OCaml patches can change the theme during the first
-        // window draw, so the registry and widgets must already exist.
-        gpui_kit::init(cx);
-        eprintln!("logseq-gpui: kit init done t={:.1}ms", boot_ms());
-        gpui_kit::component::theme::Theme::update(cx, |theme| {
-            theme.font_family = "Inter".into();
-        });
+        init_theme(cx);
         eprintln!("logseq-gpui: theme preset t={:.1}ms", boot_ms());
         let shared = LuiShared::new();
         // The logseq-editor surface (input routing + text measurement)
@@ -589,6 +597,7 @@ fn main() {
                 shared.borrow_mut().store.root = Some(root_id);
             }
             let view = cx.new(|_| LuiRootView::new(shared.clone()));
+            let view = cx.new(|_| perf::TracedView(view));
             cx.new(|cx| Root::new(view, window, cx))
         })
         .expect("Failed to open window");
@@ -625,6 +634,36 @@ mod tests {
     use lui_core::bridge;
     use lui_core::wire_schema::Property;
     use lui_gpui::LuiShared;
+    use gpui_kit::gpui::{
+        div, px, AppContext, Context, Entity, IntoElement, ParentElement, Render, StyleRefinement,
+        Styled, Window,
+    };
+    use std::{cell::Cell, rc::Rc};
+
+    struct RenderCounter(Rc<Cell<usize>>);
+
+    impl Render for RenderCounter {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.0.set(self.0.get() + 1);
+            div().size_full()
+        }
+    }
+
+    struct CachedViews {
+        changed: Entity<RenderCounter>,
+        unchanged: Entity<RenderCounter>,
+    }
+
+    impl Render for CachedViews {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let mut style = StyleRefinement::default();
+            style.size.width = Some(px(100.).into());
+            style.size.height = Some(px(30.).into());
+            div()
+                .child(self.changed.clone().cached(style.clone()))
+                .child(self.unchanged.clone().cached(style))
+        }
+    }
 
     extern "C" {
         fn lui_ocaml_stop() -> i32;
@@ -667,7 +706,14 @@ mod tests {
         // Boot work runs on OCaml worker systhreads; pump until the tree
         // materializes (bounded so a dead boot fails instead of hanging).
         cx.update(gpui_kit::init);
-        let cx = cx.add_empty_window();
+        let changed_renders = Rc::new(Cell::new(0));
+        let unchanged_renders = Rc::new(Cell::new(0));
+        let changed_counter = changed_renders.clone();
+        let unchanged_counter = unchanged_renders.clone();
+        let (views, cx) = cx.add_window_view(move |_, cx| CachedViews {
+            changed: cx.new(|_| RenderCounter(changed_counter)),
+            unchanged: cx.new(|_| RenderCounter(unchanged_counter)),
+        });
         let mut populated = false;
         for _ in 0..500 {
             cx.update(|window, app| {
@@ -697,9 +743,49 @@ mod tests {
             "apply errors: {:?}",
             shared.borrow().last_errors
         );
+        // The native host consumes the same application glyphs as the web
+        // host, including custom task states absent from the Tabler table.
+        let icons = shared.borrow().app_icon_svg.clone()
+            .expect("OCaml startup must register the application icon pack");
+        for name in ["todo", "backlog", "cancelled", "in-progress25",
+                     "in-progress50", "in-progress75", "done", "in-review",
+                     "priority-lvl-low", "priority-lvl-medium", "priority-lvl-high",
+                     "priority-lvl-none", "priority-lvl-urgent"] {
+            let svg = icons(name).unwrap_or_else(|| panic!("missing application glyph: {name}"));
+            cx.update(|_, app| {
+                app.svg_renderer().parse_svg(svg.replace("currentColor", "#858585").as_bytes())
+                    .unwrap_or_else(|error| panic!("invalid application glyph {name}: {error}"));
+            });
+        }
 
         cx.update(|window, app| super::install_ui_updates(shared.clone(), window.window_handle(), app));
         cx.run_until_parked();
+        let changed_before = changed_renders.get();
+        let unchanged_before = unchanged_renders.get();
+        assert!(changed_before > 0 && unchanged_before > 0);
+        // Mailbox-only wakes must not invalidate cached content, even in bursts.
+        for _ in 0..10 {
+            super::request_ui_update();
+        }
+        cx.run_until_parked();
+        assert_eq!(
+            unchanged_renders.get(), unchanged_before,
+            "UI wakeups must preserve unchanged cached views"
+        );
+        cx.update(|_, app| {
+            let changed = views.read(app).changed.clone();
+            changed.update(app, |_, cx| cx.notify());
+            super::request_ui_update();
+        });
+        cx.run_until_parked();
+        assert!(
+            changed_renders.get() > changed_before,
+            "a notified view must still redraw during a UI wakeup"
+        );
+        assert_eq!(
+            unchanged_renders.get(), unchanged_before,
+            "a local update must preserve the sibling's cached view"
+        );
         let settings = "menu-open-settings\n{}";
         cx.update(|_, _| {
             assert_ne!(unsafe {

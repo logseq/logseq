@@ -224,6 +224,21 @@ let jstr (name : string) (j : Js.Json.t) : string option =
 let jnum (name : string) (j : Js.Json.t) : float option =
   Js.Json.decodeNumber (jprop name j)
 
+(* Measurement replies arrive outside the application entry. Publish
+   changed geometry through its mailbox, then measure the CURRENT model:
+   an old in-flight offset must never restore a superseded caret. Equal
+   replies do not schedule another refresh, so the conduit's follow-up
+   query terminates instead of creating a request/reply loop. *)
+let store_measurement block_id tbl key value =
+  if Hashtbl.find_opt tbl key <> Some value then begin
+    Hashtbl.replace tbl key value;
+    Host.enqueue (fun () ->
+        match Editor_state.editing () with
+        | Some e when e.Editor_state.uuid = block_id ->
+            ignore (Editor_actions.refresh_overlay block_id)
+        | _ -> ())
+  end
+
 let note_measurement name (j : Js.Json.t) : unit =
   match jstr "block-id" j with
   | None -> ()
@@ -237,7 +252,7 @@ let note_measurement name (j : Js.Json.t) : unit =
               if reply_fresh block_id name arg then begin
                 Hashtbl.remove pending (block_id, name ^ "|" ^ arg);
                 cap caret_rects;
-                Hashtbl.replace caret_rects (block_id, int_of_float off)
+                store_measurement block_id caret_rects (block_id, int_of_float off)
                   ( { cx = int_of_float x
                     ; cy = int_of_float y
                     ; ch = int_of_float h
@@ -254,7 +269,7 @@ let note_measurement name (j : Js.Json.t) : unit =
               if reply_fresh block_id name arg then begin
                 Hashtbl.remove pending (block_id, name ^ "|" ^ arg);
                 cap offset_ats;
-                Hashtbl.replace offset_ats
+                store_measurement block_id offset_ats
                   (block_id, int_of_float x, int_of_float y)
                   (int_of_float off, ep)
               end
@@ -264,7 +279,7 @@ let note_measurement name (j : Js.Json.t) : unit =
           | Some s ->
               if reply_fresh block_id name "" then begin
                 Hashtbl.remove pending (block_id, name ^ "|");
-                Hashtbl.replace line_ranges_store block_id
+                store_measurement block_id line_ranges_store block_id
                   (parse_ranges s, ep)
               end
           | None -> ())
@@ -273,7 +288,7 @@ let note_measurement name (j : Js.Json.t) : unit =
           | Some h ->
               if reply_fresh block_id name "" then begin
                 Hashtbl.remove pending (block_id, name ^ "|");
-                Hashtbl.replace scroll_heights block_id (int_of_float h, ep)
+                store_measurement block_id scroll_heights block_id (int_of_float h, ep)
               end
           | None -> ())
       | _ -> ())

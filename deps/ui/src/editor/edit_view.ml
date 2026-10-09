@@ -503,15 +503,22 @@ let overlay (frame : frame Signal.signal) : t =
          (fun f -> List.mapi (fun i r -> (i, r)) f.Edit_input.selection)
          frame)
   in
-  (column ~style_class:"ed-overlay"
-     [ keyed ~source:sel_s ~key:fst ~cmp:Int.compare ~mount:sel_rect_view
-     ; if_
+  (* GPUI paints the caret from the current glyph layout alongside the
+     input sink. Other hosts use the measured overlay rectangle. *)
+  let caret =
+    if Lui_ui.host context = GPUIHost then []
+    else
+     [ if_
          ~test:
            (own context
               (Signal.map
                  (fun f -> Option.is_some f.Edit_input.caret) frame))
          (caret_view frame)
-     ])
+     ]
+  in
+  (column ~style_class:"ed-overlay"
+     (keyed ~source:sel_s ~key:fst ~cmp:Int.compare ~mount:sel_rect_view
+      :: caret))
     context parent
 
 (* --- input sink ---------------------------------------------------------------- *)
