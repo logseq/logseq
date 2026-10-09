@@ -1187,12 +1187,49 @@
                                                        (:block/uuid target-block)
                                                        (assoc insert-opts :keep-uuid? true)]]]}})))))))
 
+(defn- outline-order-path
+  "The :block/order keys from a root ancestor down to `block`, root-first.
+   Anchored at the root rather than a :block/page, so entities without
+   :block/page (e.g. nested pages) sort alongside ordinary blocks in outline
+   position. Returns nil for property-created blocks."
+  [block]
+  (loop [block block
+         path ()]
+    (cond
+      (or (:logseq.property/created-from-property block)
+          (:block/closed-value-property block))
+      nil
+
+      (nil? block)
+      (vec path)
+
+      :else
+      (recur (:block/parent block)
+             (cons (:block/order block) path)))))
+
+(defn- compare-order-paths
+  [path-1 path-2]
+  (loop [path-1 (seq path-1)
+         path-2 (seq path-2)]
+    (cond
+      (and (nil? path-1) (nil? path-2)) 0
+      (nil? path-1) -1
+      (nil? path-2) 1
+      :else (let [c (compare (first path-1) (first path-2))]
+              (if (zero? c)
+                (recur (next path-1) (next path-2))
+                c)))))
+
 (defn- sort-non-consecutive-blocks
-  [db blocks]
-  (let [page-blocks (group-by :block/page blocks)]
-    (mapcat (fn [[_page blocks]]
-              (ldb/sort-page-random-blocks db blocks))
-            page-blocks)))
+  [_db blocks]
+  (->> blocks
+       (keep (fn [block]
+               (when-let [path (outline-order-path block)]
+                 [path block])))
+       (sort (fn [[path-1 _] [path-2 _]]
+               (compare-order-paths path-1 path-2)))
+       (map second)
+       (distinct)))
 
 (defn- get-top-level-blocks
   [top-level-blocks non-consecutive?]
