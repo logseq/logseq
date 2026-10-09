@@ -77,10 +77,13 @@ let run_views ~registry ~profile ~finish =
         [ Lui_elements.if_ ~test:(Signal.value st)
             (Lui_elements.column [ Graphs_view.view ms; Collaborators.body ms ]) ]
         ctx parent) in
-  let subscriber_count () =
-    let remote = Signal.value (Option.get !Graphs_view.remote_st_ref) in
-    let members = Signal.value (Option.get !Collaborators.members_sig_ref) in
-    List.length !(remote.Signal.subscribers), List.length !(members.Signal.subscribers)
+  let unmounted_work () =
+    let remote = Option.get !Graphs_view.remote_st_ref in
+    let members = Option.get !Collaborators.members_sig_ref in
+    Signal.set remote (Signal.get_state remote);
+    Signal.set members (Signal.get_state members);
+    Signal.stabilize (Signal.value remote).owner;
+    (Signal.last_stabilization (Signal.value remote).owner).stabilization_dirty_tasks
   in
   for cycle = 1 to 5 do
     Signal.set (Option.get !visible) true;
@@ -88,7 +91,7 @@ let run_views ~registry ~profile ~finish =
     Signal.set (Option.get !visible) false;
     S.flush s;
     check (Printf.sprintf "unmounted graph and members views release subscriptions (%d)" cycle)
-      (subscriber_count () = (0, 0))
+      (unmounted_work () = 2)
   done;
   ignore (Lui_app.dispose s.S.app);
   (* Logged-out graph refreshes resolve on the next web microtask. Let
