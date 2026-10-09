@@ -18,7 +18,6 @@
 
 open Promise_ext
 open Lui_elements
-module D = Web_dom
 module I = I18n
 module Ops = Outliner_ops
 

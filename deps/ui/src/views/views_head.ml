@@ -7,7 +7,6 @@
    imperatively via Views_popup with an id-addressable node as anchor. *)
 
 module D = Logseq_el
-module E = Web_dom
 module I = I18n
 module V = Views_state
 module Wr = Views_wire
@@ -595,7 +594,7 @@ let display_type_el inst : t =
    is open) — e2e clicks it twice, so the button must not disappear *)
 let search_el inst : t =
  fun ctx parent ->
-  let deb = E.debounce 300 in
+  let deb = Ui_services.timers_debounce 300 in
   let input_id = "vsearch-" ^ string_of_int inst.V.id in
   let open_sig =
     Logseq_el.own ctx
@@ -609,12 +608,13 @@ let search_el inst : t =
             ~on_click:(fun () ->
               if not (V.get inst).V.search_open then begin
                 V.update inst (fun s -> { s with V.search_open = true });
-                E.set_timeout
-                  (fun () ->
-                    match E.get_element_by_id input_id with
-                    | Some el -> E.el_focus el
-                    | None -> ())
-                  0
+                ignore
+                  (Ui_services.timers_timeout
+                     (fun () ->
+                       match Ui_services.dom_by_id input_id with
+                       | Some el -> el.Ui_services.focus ()
+                       | None -> ())
+                     0)
               end)
         ; if_ ~test:open_sig
             (row

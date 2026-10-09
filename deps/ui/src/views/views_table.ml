@@ -8,7 +8,6 @@
    dialogs) mount imperatively through Views_popup. *)
 
 module D = Logseq_el
-module E = Web_dom
 module I = I18n
 module V = Views_state
 module Wr = Views_wire

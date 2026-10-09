@@ -386,12 +386,8 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
       Update.apply View.view
   in
   current_app := Some app;
-  Imperative_dom.install app;
   Dom_ext.doc_elements_provider := collect_elements;
   Dom_ext.subtree_elements_provider := collect_subtree;
-  Vdom.init app;
-  Vdom.snapshot_of_node :=
-    (fun node -> ext_snapshot (Lui_app.runtime app) node);
   Platform.dom_parent_of :=
     (fun id ->
       match !current_app with
@@ -401,14 +397,11 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
       | None -> None);
   (* host dom-events carry only nodeId; inject "target" like the Swift
      host's snapshot attachment so document listeners (ev_target/
-     el_closest) work. Imperative nodes keep their registry snapshot *)
+     el_closest) work *)
   Platform.event_target_of :=
     (fun id ->
       match !current_app with
-      | Some app -> (
-          match Hashtbl.find_opt Imperative_dom.lui_index id with
-          | Some sid -> Imperative_dom.snapshot_of_id sid
-          | None -> Some (ext_snapshot (Lui_app.runtime app) id))
+      | Some app -> Some (ext_snapshot (Lui_app.runtime app) id)
       | None -> None);
   (match Sys.getenv_opt "LOGSEQ_DUMP" with
    | Some _ ->

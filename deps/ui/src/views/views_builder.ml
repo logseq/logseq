@@ -8,7 +8,6 @@
    document.body (ephemeral, dismissed by scrim) anchored to the button
    element resolved by id. *)
 
-module E = Web_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
