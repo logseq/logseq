@@ -328,42 +328,15 @@ let take_patches_dbg where =
    | None -> ());
   out
 
-(* The web runtime feeds registered doc scans from a MutationObserver;
-   natively we re-run them after every flush that produced a new tree
-   generation, so views mounts (query shells, object views) see fresh
-   elements. Running every scan on every generation is O(scans x tree)
-   per keystroke — the Runtime.scan_gate policy coalesces prop-only
-   generations (see runtime.ml). *)
-let scan_gate = Runtime.scan_gate ()
-
 let app_flush_checked app =
   try ignore (Lui_app.flush app)
   with e ->
     Printf.eprintf "[flush] FAILED: %s\n%s\n%!" (Printexc.to_string e)
       (Printexc.get_backtrace ())
 
-let run_doc_scans_after_flush () =
-  match !current_app with
-  | Some app ->
-      let gen =
-        !((Lui_app.runtime app).Lui_runtime.runtime_generation)
-      in
-      let now = Unix.gettimeofday () in
-      if Runtime.scan_gate_should scan_gate ~gen ~now
-      then begin
-        Runtime.scan_gate_mark scan_gate ~gen ~now;
-        Editor_dom.run_doc_scans ();
-        (* scans can materialize nodes — flush again so they ship in the
-           same take_patches drain *)
-        app_flush_checked app
-      end
-  | None -> ()
-
 let flush () =
   match !current_app with
-  | Some app ->
-      app_flush_checked app;
-      run_doc_scans_after_flush ()
+  | Some app -> app_flush_checked app
   | None -> ()
 
 let perf_log =
@@ -399,17 +372,6 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
     { Lui_protocol.backend_profile = Lui_protocol.profile os host_kind
     ; apply_batch =
         (fun batch ->
-          if
-            List.exists
-              (function
-                | Lui_protocol.CreateNode _ | CreateExtension _
-                | DropNode _ | DetachSubtree _
-                | InsertChild _ | RemoveChild _
-                | MoveChild _ -> true
-                | SetProp _ | RemoveProp _ | SetExtensionProp _
-                | RemoveExtensionProp _ -> false)
-              batch.Lui_protocol.ops
-          then Runtime.scan_gate_note_structural scan_gate;
           let json = Lui_wire.encode_batch batch in
           Queue.add json pending_batches;
           true)
@@ -465,10 +427,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
              close_out oc
            with _ -> ())
    | _ -> ());
-  let flush_app () =
-    app_flush_checked app;
-    run_doc_scans_after_flush ()
-  in
+  let flush_app () = app_flush_checked app in
   Runtime.app_send :=
     (fun action ->
       let changed = Lui_app.send app action in
@@ -488,7 +447,6 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   let t0 = perf_ms () in
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
-  run_doc_scans_after_flush ();
   perf_mark "init.app" t0;
   let t1 = perf_ms () in
   Sdk_api.install ();
@@ -503,9 +461,6 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   let t2 = perf_ms () in
   ignore (Boot.run ());
   perf_mark "init.boot" t2;
-  let t3 = perf_ms () in
-  run_doc_scans_after_flush ();
-  perf_mark "init.scans" t3;
   take_patches ()
 
 let initialize platform_code host_code payload =
@@ -525,9 +480,6 @@ let dispatch_lui (event : Lui_protocol.event) : string =
            let t1 = perf_ms () in
            ignore (Lui_app.flush app);
            perf_mark "flush" t1;
-           let t2 = perf_ms () in
-           run_doc_scans_after_flush ();
-           perf_mark "scans" t2
        | None -> ());
       let t3 = perf_ms () in
       let out = take_patches_dbg "lui" in
@@ -627,13 +579,7 @@ let extension_event node identifier name values : string =
                perf_mark "ext.dispatch" t0;
                let t1 = perf_ms () in
                ignore (Lui_app.flush app);
-               perf_mark "ext.flush" t1;
-               let t2 = perf_ms () in
-               (* Route through the scan gate: extension events are often
-                  prop-only bursts (visible-range, scroll) and must not pay
-                  a full-doc scan per event *)
-               run_doc_scans_after_flush ();
-               perf_mark "ext.scans" t2
+               perf_mark "ext.flush" t1
            | Some _ -> invalid_arg "Extension identifier does not match the mounted node"
            | None -> ())
        | None -> ());
@@ -655,9 +601,6 @@ let pump () : string =
        | Some app -> ignore (Lui_app.flush app)
        | None -> ());
       perf_mark "pump.flush" t1;
-      let t2 = perf_ms () in
-      run_doc_scans_after_flush ();
-      perf_mark "pump.scans" t2;
       let t3 = perf_ms () in
       let out = take_patches_dbg "pump" in
       perf_mark "pump.take" t3;
