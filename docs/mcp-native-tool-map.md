@@ -1,6 +1,6 @@
 # Native MCP Tool Map
 
-This map separates Python reference behavior, current Logseq API routes, and
+This map records native tool behavior, current Logseq API routes, and
 validation status. All MCP graph operations must call `logseq.DB.*` API
 functions; those APIs may delegate internally to Editor/OG implementations.
 Stage 3 audits and validates write routes rather than replacing them with
@@ -15,10 +15,10 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 
 ## Meta and reads
 
-| Tool | Inputs / key contract | Python reference behavior | Current Logseq API route | Status / next step |
+| Tool | Inputs / key contract | Behavior | Current Logseq API route | Status / next step |
 |---|---|---|---|---|
 | `capabilities` | `include_diagnostics?`, `probe_writes?` | capability probes | existing metadata exports are routed through `logseq.DB.getAppInfo` and `logseq.DB.checkCurrentIsDbGraph`; read-only by default | latest same-graph safe-mode run passed on 2.0.1 after DB namespace routing; 21 reads available, 6 invalid-argument reads unknown but independently live-passed, 23 write-dependent tools skipped, 0 write methods probed; `createPage` remains unprobed |
-| `datascriptQuery` | `query`, optional `inputs`; required `question`, `checked_tools`, `reason`, `reads`, `expected_size` for approval | new post-migration last resort, not in Python reference | unchanged `logseq.DB.datascriptQuery` query and positional inputs, after fresh MCP form approval; Logseq's own read-only behavior | local approval/refusal/no-retry/audit, result-shape/UTF-8 limits, general DataScript and bridge tests pass; client without form support fails closed; 1000-row/65536-byte output envelope, `truncated`; live approval and deployment pending |
+| `datascriptQuery` | `query`, optional `inputs`; required `question`, `checked_tools`, `reason`, `reads`, `expected_size` for approval | gated read-only last resort | unchanged `logseq.DB.datascriptQuery` query and positional inputs, after fresh MCP form approval; Logseq's own read-only behavior | local approval/refusal/no-retry/audit, result-shape/UTF-8 limits, general DataScript and bridge tests pass; client without form support fails closed; 1000-row/65536-byte output envelope, `truncated`; live approval and deployment pending |
 | `getContentCapabilities` | none; DB-only, no graph-type argument | new post-migration read-only discovery | `logseq.DB.getContentCapabilities` uses the application's existing plugin metadata, command and renderer registries; shared API export/standard DB dispatch, not direct App calls from MCP | local API privacy/bounds/no-callback, parser syntax, MCP route/error and actual SDK protocol tests pass; SDK typecheck passes; known built-in formats plus bounded plugin descriptions, status, repository hints, command labels and renderer keys; MCP adds supported/partial/unknown creation guidance; no visual verification, live deployment pending |
 | `getPage` | page name | full page with child blocks | existing `get_page_data` export via `logseq.DB.getPageData`; no duplicate getter | production route switched; local route/capability checks pass; same-graph DB-route recheck passed with the recorded UUID/title and four blocks |
 | `getPageUUID` | title | `getPage`, query | existing `DB.datascriptQuery` compatibility lookup | use existing APIs behind DB aliases; duplicate `getPagesByTitle` implementation removed; same-graph live read passed for both recorded fixture titles |
@@ -28,7 +28,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `pageStats` | page UUID | fixed counts, subtree/alias/reference/property analysis | dedicated `logseq.DB.getPageStats` API owns the read-only DB aggregation and preserves the response/diagnostic contract | production route switched; local tests pass; same-graph live read passed (9 own blocks, 8 with content, no refs/orphans) |
 | `getBlockUUID` | page UUID | flat descendant list with order, parent/page references, and cross-page ancestry | dedicated `logseq.DB.getPageBlockUUIDs` API preserves the parent traversal and output fields | production route switched; acronym dispatch fixed (`UUIDs` now resolves to `uuids`); local tests and same-graph 9-descendant read passed |
 | `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; all eight same-graph cases pass, including collapsed and property-bearing blocks |
-| `searchBlocks` | text, page scope, regex, limit | existing Logseq search API with snippets disabled | same exported `search` function through `logseq.DB.search` standard dispatch; no duplicate search implementation | production route switched; local tests pass; same-graph marker search passed |
+| `searchBlocks` | `searchTerm` | existing Logseq search API with snippets disabled | same exported `search` function through `logseq.DB.search` standard dispatch; preserve native result shape and do not add unsupported filters | production route switched; local tests pass; same-graph marker search passed |
 | `getBlockTree` | block UUID, depth/node caps | expanded tree with bounded depth/node count, page/missing distinction, cycle guard | dedicated `logseq.DB.getBlockTree` owns traversal and bounds while preserving the response envelope | production route switched; local tests pass; same-graph bounded marker read passed |
 | `findBacklinks` | target UUID | separate refs, tag-holder, and property-value groups; counts overlap | dedicated `logseq.DB.getBacklinks` owns the three relation queries and preserves the grouped response/diagnostic | API implemented; local tests pass; same-graph reads returned 0 for fixture page and `testtag`, consistent with inspected graph |
 | `findOrphans` | page UUID | parent ancestry with mismatching stored page; preserves orphan rows | reuses `logseq.DB.getPageBlockUUIDs`; MCP filters by owning page UUID and preserves diagnostic | production route switched; local tests pass; same-graph read and pageStats/getBlockUUID cross-checks found 0 true orphans |
@@ -40,7 +40,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 
 ## Lists
 
-| Tool | Inputs / key contract | Python reference behavior | Current Logseq API route | Validation status |
+| Tool | Inputs / key contract | Behavior | Current Logseq API route | Validation status |
 |---|---|---|---|---|
 | `listPages` | `expand?` | existing DB list API | same exported `list_pages` API via `logseq.DB.listPages`; options and payload unchanged | production route switched; same-graph reads passed; 68 pages before and after |
 | `listJournals` | `with_counts?`, `limit?` | journal-day candidates, descending sort, limit; optional count indexes | `logseq.DB.getJournalCandidates` supplies the same candidate fields; MCP retains sort/limit/count behavior | production route switched for candidates; local tests pass; same-graph Oct 3-5 reads and zero counts passed |
@@ -49,7 +49,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `listClosedValues` | none | property/value pairs from `:block/closed-value-property` | dedicated `logseq.DB.getClosedValues` preserves the two-entity row shape | production route switched; local tests pass; same-graph built-in value sets returned |
 | `listOrphanTags` | none | exact Tag entities with no direct reverse tag holders | dedicated `logseq.DB.getOrphanTags` preserves the entity fields and unused-tag semantics | production route switched; local tests pass; same-graph orphan results cross-checked against holders and backlinks |
 | `listOrphanProperties` | none | qualified property idents with no data holders | dedicated `logseq.DB.getOrphanProperties` combines property inventory and used attribute idents; preserves `{ident, title, type}` | production route switched; local tests pass; same-graph results cross-checked against `getProperyUsers` |
-| `listAssets` | none | replaced the reference's attribute-name probe with asset records | `logseq.DB.listAssets` queries entities tagged with `:logseq.class/Asset`, excludes recycled assets, and returns UUID/title/type/size/checksum/external URL/file name in stable UUID order | local API/MCP metadata, filtering, empty-graph and error tests; live empty inventory and updated schema passed on 2026-10-06; populated inventory verified locally only; database inventory, not filesystem existence or unregistered-file discovery |
+| `listAssets` | none | registered asset metadata records | `logseq.DB.listAssets` queries entities tagged with `:logseq.class/Asset`, excludes recycled assets, and returns UUID/title/type/size/checksum/external URL/file name in stable UUID order | local API/MCP metadata, filtering, empty-graph and error tests; live empty inventory and updated schema passed on 2026-10-06; populated inventory verified locally only; database inventory, not filesystem existence or unregistered-file discovery |
 | `listStatus` | none | entity/status-value pairs | dedicated `logseq.DB.getStatusRows` returns the query rows; MCP tool name and tuple shape stay unchanged | production route switched; local tests pass; same-graph empty result accepted |
 | `listRecycled` | none | all entities with `:logseq.property/deleted-at` | dedicated `logseq.DB.listRecycled` preserves deleted page and block records | production route switched; local tests pass; one recycled outline page unchanged before/after |
 
@@ -59,7 +59,7 @@ Every row below means: validate identifiers, snapshot affected state where
 needed, perform the existing API operation, read back, compare, and preserve
 the full/terse response behavior. Batch writes remain non-atomic.
 
-| Tool | Inputs / key contract | Python reference behavior | Current Logseq API route and local evidence | Remaining gates |
+| Tool | Inputs / key contract | Behavior | Current Logseq API route and local evidence | Remaining gates |
 |---|---|---|---|---|
 | `importPage` | target, markdown/list, replace, dry-run | batch insert + queries | `logseq.DB.createPage` + `insertBatchBlock` (and `removeBlock` for replace); verbatim inventory/read-back, dry-run-no-call, API-error-unverified, and live nested-content/read-back tests pass | keep API routes |
 | `repairLinks` | optional page, creation acknowledgements/caps | update blocks + page/tag creation | `logseq.DB.updateBlock` + `createPage`/`createTag`; relation read-back, ambiguity, idempotency, explicit-creation, dry-run/cap, global-scan, API-error-unverified, live existing/missing-page/tag rewrites pass | generated missing-page target remains active by user decision to preserve existing view references; keep API routes |
@@ -93,8 +93,9 @@ the full/terse response behavior. Batch writes remain non-atomic.
   queries must remain distinct.
 - Properties are keyed by `:db/ident`, not UUID, and writes are restricted to
   the plugin namespace.
-- `searchBlocks` is case-sensitive, substring-based, separately counts matches,
-  and must not retry its DB-worker predicate query.
+- `searchBlocks` accepts `searchTerm` and preserves Logseq's native search
+  response. Do not assume additional filters, count fields or case semantics;
+  do not automatically repeat a timed-out search.
 - `moveBlock` placement distinguishes `child` from `last-child`; order is
   verified because `:block/order` is not a normal direct write.
 - `deletePage`, `deleteTag`, `deleteProperty`, `clearPage`, and `removeBlock`
@@ -102,5 +103,5 @@ the full/terse response behavior. Batch writes remain non-atomic.
 - `listAssets` now returns asset records rather than attribute-name strings.
   It inventories non-recycled Asset-class entities, not files on disk; remote
   or missing local files and null metadata must not be interpreted as verified files.
-- The Python reference intentionally exposes `creatTag` and
-  `getProperyUsers`; the native contract must retain those names initially.
+- The registered native names include `creatTag` and `getProperyUsers`.
+  Preserve these public spellings unless a contract change is explicitly agreed.

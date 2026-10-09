@@ -2,13 +2,12 @@
 
 ## Scope
 
-This document records the Stage 0 architecture for migrating the verified
-`mcp-logseq-db` tool contract into Logseq. The current implementation is an
-Electron desktop MCP endpoint backed by the Logseq API. The migration will
-extend that endpoint with a domain layer and an adapter; it will not introduce
-a second transport or a Python relay.
+The native MCP server runs inside Logseq Desktop and targets Logseq DB graphs.
+Logseq source, its SDK, tests and documented tool contracts are authoritative.
+Current routes are recorded in [the tool map](mcp-native-tool-map.md), and live
+checks in [the native end-to-end checklist](mcp-native-e2e-test.md).
 
-## Current verified path
+## Application path
 
 ```text
 MCP client
@@ -26,7 +25,7 @@ Electron Streamable HTTP /mcp route
 Electron API bridge (`api-fn`)
     |
     v
-Logseq API methods
+`logseq.DB.*` API methods
     |
     +-- `logseq.api.db`: datascript/custom query and DB worker access
     +-- `logseq.api.db-based`: page, block, tag and property API operations
@@ -36,12 +35,11 @@ Logseq API methods
 Graph/database worker
 ```
 
-The existing bridge registers six tools: `listPages`, `getPage`, `upsertNodes`,
-`searchBlocks`, `listTags`, and `listProperties`. It calls API methods through
-the existing desktop server, so it is a transport/API compatibility bridge,
-not yet the Python server's behavioral contract.
+The server registers 55 tools. `upsertNodes` is not an advertised MCP tool.
+Handlers use the existing desktop API bridge; MCP does not open its own
+database connection or implement a separate transaction path.
 
-## Target staged path
+## Tool and API boundaries
 
 ```text
 MCP client
@@ -56,7 +54,7 @@ Native MCP registration and schemas
 MCP domain operations
     |
     v
-Logseq compatibility adapter
+Logseq API adapter (`electron.mcp-compat`)
     |
     v
 `logseq.DB.*` API functions
@@ -68,8 +66,7 @@ Logseq compatibility adapter
 Graph/database worker and editor invariants
 ```
 
-The transport remains `electron.mcp-server` and the adapter is the migration
-seam. Domain handlers own validation, response shaping, acknowledgements,
+The transport is `electron.mcp-server`. Domain handlers own validation, response shaping, acknowledgements,
 read-back verification, and error distinctions. Adapter functions own how a
 page, block, tag, or property is resolved or changed, using `logseq.DB.*` API
 functions. Those APIs remain the mutation boundary; MCP does not call editor
@@ -77,20 +74,20 @@ handlers, graph-worker transactions, or DataScript mutations directly.
 
 ## Ownership boundaries
 
-| Concern | Current owner | Migration owner |
+| Concern | Owner | Responsibility |
 |---|---|---|
-| MCP transport and sessions | `electron.mcp-server` | unchanged |
-| MCP registration and zod schemas | `electron.mcp-server` | native MCP registration namespace |
-| API error envelope | `electron.mcp-server` | domain error serializer, then shared transport envelope |
-| Page/block API operations | `logseq.api.db-based` and handlers | compatibility adapter first |
-| Queries | `logseq.api.db` and `frontend.db.async` | compatibility adapter first; native query layer later |
+| MCP transport and sessions | `electron.mcp-server` | authenticated Streamable HTTP and session handling |
+| MCP registration and zod schemas | `electron.mcp-server` | public tool names and input contracts |
+| API error envelope | `electron.mcp-server` | returned API errors and IPC exceptions become MCP errors |
+| Page/block API operations | `logseq.api.db-based` and handlers | application-owned semantics behind DB API methods |
+| Queries | `logseq.api.db` and `frontend.db.async` | read-only application queries behind the DB API |
 | DB transactions | graph/database worker | existing mutation machinery; no direct arbitrary datom writes |
-| Contract validation | Python boundary helpers | native domain boundary |
-| Write verification | Python content/mutation classes | native domain layer until stronger guarantees are proven |
+| Contract validation | MCP domain handlers and native APIs | identifiers, bounds, acknowledgements and error distinctions |
+| Write verification | MCP domain handlers | read-back and comparison of actual state |
 
-## Initial adapter surface
+## Adapter surface
 
-The first adapter should expose only operations needed by a migrated tool:
+Adapters expose only operations needed by registered tools:
 
 - `get-page`, `list-pages`, `create-page`, `rename-page`, `recycle-page`
 - `get-block`, `search-blocks`, `get-block-tree`, `create-block`, `update-block`
@@ -103,26 +100,33 @@ The first adapter should expose only operations needed by a migrated tool:
 No adapter function should expose raw HTTP, MCP request objects, or low-level
 worker details to the domain layer.
 
-## Migration rules
+## Engineering rules
 
-1. Preserve Python tool names, argument names, defaults, output fields, and
+1. Preserve registered tool names, argument names, defaults, output fields, and
    intentional misspellings (`creatTag`, `getProperyUsers`).
 2. Validate UUIDs and idents before mutations.
 3. Keep write -> read-back -> compare verification, including `verified=false`.
 4. Preserve partial batch behavior and destructive-operation acknowledgements.
 5. Test real graph state in addition to unit tests.
-6. Migrate one read or mutation at a time and compare compatibility/native
-   results before changing the active route.
+6. Change one operation at a time. Verify its native contract, API routing and
+     relevant graph state before changing an active route.
 
-## Stage 0 baseline
+## Discovery and query safeguards
 
-- Python baseline: `Set-Location mcp-logseq-db; python -m pytest -q` passes
-    with 403 tests.
-- Logseq baseline: Babashka `1.13.223`, Clojure CLI `1.12.5.1664`, and
-    OpenJDK `21.0.9` are installed. Lint, carve, translation validation,
-    namespace checks, and ClojureScript compilation pass. The aggregate test task
-    exits nonzero in `logseq.api.plugin-test` with 11 Windows path/fixture
-    assertions; the other selected tests pass.
+- `datascriptQuery` passes through the existing DB query API only after fresh
+    explicit approval of each exact query and inputs. It is a read-only last
+    resort with bounded output, audit logging and no automatic retries.
+- `getContentCapabilities` reads safe, bounded application metadata through
+    its DB API. It distinguishes implementation support, visual verification and
+    MCP creation support; plugin names alone do not establish usable syntax.
+- DB and Editor/App implementations may share existing exports through normal
+    dispatch. MCP callers still use `logseq.DB.*`; do not duplicate application
+    implementations merely to establish that namespace boundary.
 
-The baseline is not clean yet because the Logseq suite has not started. Stage 1
-must not begin until that suite also has a valid recorded result.
+## Validation
+
+Use focused native tests, SDK checks and applicable compilation/lint gates.
+Keep local results, live graph evidence and deployment status separate.
+Run live mutations only with explicit approval on a disposable graph, and
+preserve retained fixtures. Do not restart the app or rebuild watched runtime
+bundles during an active live test. See the checklist for the current workflow.

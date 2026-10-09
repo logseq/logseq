@@ -1,11 +1,13 @@
-# Native MCP Migration Specification
+# Native MCP Specification and Validation
 
-## Reference
+## Source of Truth
 
-The behavioral reference is `mcp-logseq-db`. Its public contract is the 50
-registered tools listed in [mcp-native-tool-map.md](mcp-native-tool-map.md).
-The Python implementation, its tests, and live reliability tests are
-authoritative when the prose documentation differs from code.
+The native Logseq implementation, SDK, tests and current
+[tool map](mcp-native-tool-map.md) are now authoritative. Use the
+[native end-to-end checklist](mcp-native-e2e-test.md) for live validation.
+The dated native validation records below preserve their original coverage
+and limitations; they do not override the current tool contracts or reopen
+completed implementation work.
 
 ## Contract rules
 
@@ -139,15 +141,15 @@ The implementation-level contract is summarized by category here:
 
 ### Stage 0: reconnaissance
 
-Status: documentation created; Python baseline is clean and the Logseq build
-and lint stages pass. The aggregate test task has a pre-existing Windows
+Recorded native baseline: documentation was created, and Logseq build
+and lint stages passed. The aggregate test task had a pre-existing Windows
 failure in `logseq.api.plugin-test`.
 
 Deliverables:
 
 - architecture and ownership map
 - complete tool map
-- reference contract index
+- native contract index
 - baseline test record
 
 Baseline observations:
@@ -167,11 +169,10 @@ translation validation, namespace checks, and ClojureScript compilation pass.
 The exact selected test subset reports 11 failures in `logseq.api.plugin-test`:
 Windows path separators (`\\` versus `/`) and plugin fixture contents. The
 remaining selected tests pass.
-- `Set-Location mcp-logseq-db; python -m pytest -q` passes: 403 tests.
 
 ### Stage 1: compatibility implementation
 
-In progress. The first adapter seam is implemented in
+Native implementation record. The API adapter is implemented in
 `src/electron/electron/mcp_compat.cljs`; the six existing MCP tools now route
 through it without changing their API method names or argument shapes, and
 `getPageUUID` now uses a parameterized DB query to reject ambiguous or
@@ -183,8 +184,7 @@ that rejects page entities. `getTagUsers` now queries all page and block
 holders for an exact tag UUID. `listOrphanTags` uses the Tag class and reverse
 `:block/_tags` relation to list unused tags. `listOrphanProperties` validates
 each property ident before checking whether it has any values. `listAssets`
-now uses `logseq.DB.listAssets` instead of the reference server's attribute-name
-probe. This intentionally changes its output from strings to asset records:
+uses `logseq.DB.listAssets` and returns asset records:
 `uuid`, `title`, `type`, `size` (bytes), `checksum`, `external_url`, and
 `external_file_name`. It inventories non-recycled `:logseq.class/Asset` entities
 in stable UUID order; missing metadata is null. It neither scans the filesystem
@@ -199,7 +199,7 @@ Historical probe validation below refers to the old behavior, not this inventory
 the optional four-query count envelope. `pageStats` now reports bounded page
 counts, nested-page/orphan classification, and alias relations. `inspectPage`
 now supports page, blocks, tags, properties, declared, and all detail levels.
-`upsertNodes` remains excluded from MCP because it is outside the reference
+`upsertNodes` remains excluded from MCP because it is outside the registered
 tool contract and performs unverified batch writes. `findDuplicateTitles` now
 reports and ranks read-only groups, preserving alias protection and recycled-
 page handling. `getProperyUsers` reports literal and resolved property values
@@ -223,10 +223,10 @@ checks cycle safety and verifies parent, page, descendants, and placement.
 UUID is absent afterward. `splitBlock` validates every part and verifies tail
 sibling placement before truncating the original. `moveBlocks` preflights the
 selection, stops on failed verification, and reports best-effort rollback;
-it currently composes `moveBlock`, using more reads than the optimized reference.
+it composes the existing verified `moveBlock` route.
 `migratePage` previews literal top-level selection and reads the source after moving.
-There are 53 unique registered tools: all 50 Python reference names plus the
-retained native `getPage` API route, `createEmbed`, and `listEmbeds` (five API-backed and 48 compatibility data tools).
+The native inventory at this record was 53 unique tools, including `getPage`,
+`createEmbed` and `listEmbeds`. The current inventory is documented above.
 `createEmbed(parent_uuid, target_uuid)` routes through `logseq.DB.createEmbed`
 and the normal editor/outliner insertion path. It supports page and block targets,
 rejects self/ancestor targets, and verifies the persisted UUID, link, derived
@@ -284,26 +284,25 @@ The dependency itself has not been globally patched or upgraded; other throwing
 handlers sharing a promise remain a dependency-level risk for follow-up.
 The user reports the live tools are working. Live verification is performed by
 Claude Desktop separately from this local suite; retain its report and ledger
-as evidence. Passing this gate does not automatically complete the broader
-Stage 1 matrix or advance the migration plan.
+as evidence. Local success does not establish coverage for untested live cases.
 `capabilities` reports inconclusive probes as `unknown`. By default it probes
 read methods only and marks write-dependent methods `unknown` with
 `basis: "not-probed"`; `probe_writes: true` explicitly opts into mutation
 probes on a disposable graph. `createPage` remains unprobed, and `upsertNodes`
 is neither probed nor reported.
-Entry criteria still outstanding:
+Native validation requirements:
 
-1. Both baselines have valid, recorded results.
-2. Native schemas and domain handlers are designed from the tool map.
-3. Compatibility adapter functions have focused tests.
+1. Record relevant native build and test results.
+2. Maintain native schemas and domain contracts in the tool map.
+3. Cover API adapter functions with focused tests.
 
 Exit criteria:
 
-- all 50 tools are registered with matching schemas
-- reads and writes preserve Python behavior
+- all documented tools are registered with their native schemas
+- reads and writes preserve their established native contracts
 - every write is read-back verified
 - native unit and live graph tests pass
-- no Python process or external relay is required
+- tools run within the existing Logseq desktop lifecycle
 
 ### Stage 2: API-backed native reads
 
@@ -451,7 +450,7 @@ A separate MCP-level read-only baseline on 2026-10-06 measured the full local
 Streamable HTTP `getBlock` route on the retained marker UUID: five warmups,
 thirty timed calls, 19.60 ms median, 21.61 ms p95, and a 1,201-byte response.
 This is a single-process local sample, not comparable to the API-only benchmark
-above, a Python baseline, or a production SLA. It establishes no optimization
+above or a production SLA. It establishes no optimization
 target by itself; no writes were made.
 
 The Stage 2 acceptance rules in `plan.md` apply to every read candidate:
