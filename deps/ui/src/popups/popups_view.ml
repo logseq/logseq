@@ -459,15 +459,15 @@ let ac_popover (st : S.t) : t =
    handlers can call them *)
 
 (* the icon/emoji picker mounts as an overlay outside the menu DOM —
-   track it so closing the sub or the whole menu removes it like the
-   base-ui sub-content *)
-let cm_picker_el : Web_dom.el option ref = ref None
+   track its view-overlay key so closing the sub or the whole menu
+   removes it like the base-ui sub-content *)
+let cm_picker_key : string option ref = ref None
 
 let close_cm_picker () =
-  match !cm_picker_el with
-  | Some el ->
-      cm_picker_el := None;
-      Properties_state.remove_overlay_el el
+  match !cm_picker_key with
+  | Some key ->
+      cm_picker_key := None;
+      Properties_state.remove_view_overlay key
   | None -> ()
 
 let run_cm_item st l = close_cm_picker (); S.run_cm_item st l
@@ -1106,11 +1106,11 @@ let handle_click st (ev : Web_dom.ev) =
    into editor_keys) *)
 let open_block_picker uuid emoji_only =
   match
-    Web_dom.query_selector (".ls-block[data-blockid='" ^ uuid ^ "']")
+    Ui_services.dom_query (".ls-block[data-blockid='" ^ uuid ^ "']")
   with
   | Some anchor ->
       let uuids =
-        match Web_dom.selected_block_uuids () with
+        match Ui_services.dom_selected_block_uuids () with
         | [] -> [ uuid ]
         | sel -> sel
       in
@@ -1152,17 +1152,16 @@ let handle_block_picker _st ev =
    right of the menu (base-ui inline-end placement); the choice applies
    to every selected block for the multi-select menu *)
 let open_cm_picker (st : S.t) (pk : S.cm_picker)
-    (anchor : Web_dom.el) (cm : S.cm) =
+    (anchor : Ui_services.el) (cm : S.cm) =
   let uuids =
-    if cm.S.multi && Web_dom.selected_block_uuids () <> [] then
-      Web_dom.selected_block_uuids ()
+    if cm.S.multi && Ui_services.dom_selected_block_uuids () <> [] then
+      Ui_services.dom_selected_block_uuids ()
     else [ cm.S.block_id ]
   in
-  (* el = Js.Json.t — no cast *)
   close_cm_picker ();
   match pk with
   | S.Picker_icon ->
-      cm_picker_el :=
+      cm_picker_key :=
         Some
           (Icon_picker.open_picker_with_opts ~anchor ~del:false
              ~opts:{ Icon_picker.emoji_only = false; sub = true }
@@ -1170,7 +1169,7 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
                List.iter (fun u -> Page.set_icon u c) uuids;
                close_cm st))
   | S.Picker_emoji ->
-      cm_picker_el :=
+      cm_picker_key :=
         Some
           (Icon_picker.open_picker_with_opts ~anchor ~del:false
              ~opts:{ Icon_picker.emoji_only = true; sub = true }
@@ -1199,9 +1198,11 @@ let cm_hover st el =
                   S.open_cm_sub st ~index:idx
                     ~x:(Web_dom.rect_right r -. 4.)
                     ~y:(Web_dom.rect_top r -. 4.)
-              | Some (S.Sub_picker pk) ->
+              | Some (S.Sub_picker pk) -> (
                   S.open_cm_sub st ~index:idx ~x:0. ~y:0.;
-                  open_cm_picker st pk trg cm
+                  match Ui_services.dom_query ("[id='cm-sub-" ^ s ^ "']") with
+                  | Some anchor -> open_cm_picker st pk anchor cm
+                  | None -> ())
               | None -> ())
           | Some _, _ | None, _ -> ())
       | None -> ())
