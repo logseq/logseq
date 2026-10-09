@@ -9,6 +9,26 @@
   [call-api-fn args]
   (call-api-fn "logseq.DB.getPageData" [(aget args "pageName")]))
 
+(defn get-content-capabilities
+  [call-api-fn _args]
+  (p/let [result (call-api-fn "logseq.DB.getContentCapabilities" [])]
+    (cond
+      (and result (aget result "error")) result
+      (not (and result (array? (aget result "formats"))))
+      (p/rejected (js/Error. "getContentCapabilities returned an invalid discovery response"))
+      :else
+      (let [data (js->clj result :keywordize-keys true)
+            creation {"text" {:status "supported" :tools ["createBlock" "updateBlock" "importPage"]}
+                      "inline-latex" {:status "supported" :tools ["createBlock" "updateBlock" "importPage"]
+                                      :instructions "Store the documented formula syntax in block text; rendering has not been visually verified."}
+                      "code-block" {:status "partial" :tools ["createBlock" "getTagUUID" "addTag"]
+                                    :instructions "Create the text, resolve the built-in Code tag and attach it. Setting its built-in language property requires the UI or another suitable API."}
+                      "linked-embed" {:status "supported" :tools ["createEmbed" "listEmbeds"]
+                                      :instructions "Use exact parent and target UUIDs; do not insert Markdown to simulate a native embed."}}
+            formats (mapv #(assoc % :creation (get creation (:id %) {:status "unknown" :tools []})) (:formats data))]
+        (clj->js (assoc data :formats formats
+                       :creationPolicy "Rendering support does not grant write permission. Use the listed verified tools with their normal safeguards. Plugin command labels do not establish content syntax or command argument schemas."))))))
+
 (def ^:private page-title-query
   "[:find [(pull ?page [:block/uuid :block/title :block/name]) ...]
     :in $ ?title
@@ -2528,7 +2548,8 @@
                                                :else nil)})))))))
 
 (def ^:private capability-tool-routes
-  {:listPages ["logseq.DB.listPages"]
+  {:getContentCapabilities ["logseq.DB.getContentCapabilities"]
+   :listPages ["logseq.DB.listPages"]
   :listJournals ["logseq.DB.getJournalCandidates" "logseq.DB.datascriptQuery"]
   :getPage ["logseq.DB.getPageData"]
    :searchBlocks ["logseq.DB.search"]
@@ -2585,7 +2606,8 @@
   :listAssets ["logseq.DB.listAssets"]})
 
 (def ^:private capability-probe-args
-  {"logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
+  {"logseq.DB.getContentCapabilities" []
+   "logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
    "logseq.DB.getBlock" ["__mcp_capability_probe__" #js {:includeChildren false :includePage true}]
   "logseq.DB.listEmbeds" [#js {:limit 1}]
    "logseq.DB.getTag" ["__mcp_capability_probe__"]

@@ -958,6 +958,64 @@ export interface IEditorProxy extends Record<string, any> {
  */
 export interface IDBProxy {
   getAppInfo: () => Promise<{ version: string; supportDb: boolean }>
+  getContentCapabilities: () => Promise<{
+    app: { version: string; pluginsEnabled: boolean }
+    formats: Array<{
+      id: string
+      source: 'built-in'
+      canRender: 'supported' | 'unknown'
+      syntax: string | null
+      example?: string
+      renderVerified: boolean
+      limitations?: string[]
+    }>
+    plugins: {
+      count: number
+      returned: number
+      truncated: boolean
+      entries: Array<{
+        id: string
+        name: string | null
+        title: string | null
+        version: string | null
+        description: string | null
+        repositoryUrl: string | null
+        enabled: boolean
+        loadError: boolean
+        status: 'disabled' | 'load-error' | 'enabled-unverified'
+        canRender: 'unknown'
+        syntax: null
+        evidence: string
+        commands: Array<{
+          kind: 'slash' | 'command'
+          key?: string | null
+          label: string | null
+          description?: string | null
+        }>
+        commandsTruncated: boolean
+        renderers: Array<{
+          kind: 'fenced-code' | 'block' | 'block-properties' | 'hosted'
+          key: string | null
+          title: string | null
+          registered: boolean
+          hasRenderer: boolean
+          canRender: 'unknown'
+          syntax: null
+          evidence: string
+        }>
+        renderersTruncated: boolean
+        textTruncated: boolean
+      }>
+    }
+    limits: {
+      maxPlugins: number
+      maxCommandsPerPlugin: number
+      maxTextCharacters: number
+      maxPluginBytes: number
+      maxRenderersPerPlugin: number
+    }
+    limitations: string[]
+  }>
   checkCurrentIsDbGraph: () => Promise<boolean>
   /**
    * Run a DSL query. https://docs.logseq.com/#/page/queries

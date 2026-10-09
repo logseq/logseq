@@ -9,8 +9,10 @@
             [electron.logger :as logger]
             [electron.mcp-compat :as mcp-compat]
             [electron.mcp-server :as mcp-server]
+            [frontend.config :as config]
             [frontend.db.async :as db-async]
             [frontend.state :as state]
+            [logseq.api.app :as api-app]
             [logseq.api.editor :as api-editor]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.schema :as db-schema]
@@ -197,7 +199,7 @@
                   second-response (.callTool client #js {:name "datascriptQuery" :arguments args})
                   _ (reset! decision #js {:action "decline"})
                   refused (.callTool client #js {:name "datascriptQuery" :arguments args})]
-            (is (= 54 (alength (aget inventory "tools"))))
+            (is (= 55 (alength (aget inventory "tools"))))
             (is (= 1 (count (filter #(= "datascriptQuery" (aget % "name")) (array-seq (aget inventory "tools"))))))
             (is (not (aget first-response "isError")))
             (is (not (aget second-response "isError")))
@@ -209,6 +211,68 @@
           (p/finally (fn []
                        (-> (p/all [(.close client) (.close server)])
                            (p/finally done))))))))
+
+(deftest content-capabilities-registered-protocol-contract
+  (async done
+    (let [calls (atom [])
+          server (mcp-server/create-mcp-api-server
+                  (fn [method args]
+                    (swap! calls conj [method args])
+                    (api-app/get_content_capabilities)))
+          client (Client. #js {:name "Content discovery test" :version "1"})
+          transports (.createLinkedPair InMemoryTransport)]
+      (-> (p/with-redefs [state/get-state (constantly {:plugin/enabled true
+                                                     :plugin/installed-plugins {:drawing {:name "Drawing" :description "Diagram support"}}})
+                          config/db-based-graph? (constantly true)
+                          config/lsp-enabled? true]
+            (p/let [_ (.connect server (aget transports 0))
+                    _ (.connect client (aget transports 1))
+                    inventory (.listTools client)
+                    tool (first (filter #(= "getContentCapabilities" (aget % "name")) (array-seq (aget inventory "tools"))))
+                    response (.callTool client #js {:name "getContentCapabilities" :arguments #js {}})
+                    body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)]
+              (is (= 55 (alength (aget inventory "tools"))))
+              (is (zero? (alength (js/Object.keys (aget tool "inputSchema" "properties")))))
+              (is (true? (aget tool "annotations" "readOnlyHint")))
+              (is (not (aget response "isError")))
+              (is (= [["logseq.DB.getContentCapabilities" []]] @calls))
+              (is (= "Drawing" (get-in body [:plugins :entries 0 :name])))
+              (is (= "unknown" (get-in body [:plugins :entries 0 :canRender])))
+              (is (= "supported" (get-in body [:formats 0 :creation :status])))
+              (is (= "partial" (get-in body [:formats 2 :creation :status])))
+              (is (= "createEmbed" (get-in body [:formats 3 :creation :tools 0])))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (-> (p/all [(.close client) (.close server)])
+                           (p/finally done))))))))
+
+(deftest content-capabilities-db-route-and-errors
+  (async done
+    (let [calls (atom [])
+          payload #js {:formats #js [#js {:id "text" :canRender "supported"}
+                                    #js {:id "code-block" :canRender "supported"}
+                                    #js {:id "linked-embed" :canRender "supported"}]
+                       :plugins #js {:entries #js [#js {:id "diagram" :canRender "unknown" :syntax nil}]}}
+          api (recording-api calls payload)]
+      (-> (p/let [result (mcp-server/call-data-tool api mcp-compat/get-content-capabilities #js {})
+                  body (js/JSON.parse (aget result "content" 0 "text"))
+                  error-result (mcp-server/call-data-tool (recording-api calls #js {:error "DB unavailable"})
+                                                        mcp-compat/get-content-capabilities #js {})
+                  malformed (mcp-server/call-data-tool (recording-api calls nil)
+                                                      mcp-compat/get-content-capabilities #js {})]
+            (is (not (aget result "isError")))
+            (is (= "supported" (aget body "formats" 0 "creation" "status")))
+            (is (= "partial" (aget body "formats" 1 "creation" "status")))
+            (is (= "createEmbed" (aget body "formats" 2 "creation" "tools" 0)))
+            (is (= "unknown" (aget body "plugins" "entries" 0 "canRender")))
+            (is (nil? (aget body "plugins" "entries" 0 "syntax")))
+            (is (true? (aget error-result "isError")))
+            (is (true? (aget malformed "isError")))
+            (is (every? #(= ["logseq.DB.getContentCapabilities" []] %) @calls))
+            (is (= "db@get_content_capabilities"
+                   (mcp-server/resolve-real-api-method "logseq.DB.getContentCapabilities"))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
 
 (deftest db-api-method-resolution-preserves-uuid-acronym-export
   (is (= "db@get_page_block_uuids"
@@ -1739,6 +1803,8 @@
                     (is (some #(= "logseq.DB.getOrphanProperties" (first %)) @calls))
                     (is (some #(= "logseq.DB.getPropertyUsers" (first %)) @calls))
                     (is (some #(= "logseq.DB.listAssets" (first %)) @calls))
+                    (is (some #(= ["logseq.DB.getContentCapabilities" []] %) @calls))
+                    (is (= "available" (get-in result [:tools :getContentCapabilities :state])))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))

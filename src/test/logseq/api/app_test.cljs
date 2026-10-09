@@ -12,6 +12,7 @@
             [logseq.api :as api]
             [logseq.api.app :as api-app]
             [logseq.api.test-helper :as api-test]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
@@ -31,6 +32,96 @@
   (api-app/set_state_from_store #js ["ui" "theme"] "dark")
   (is (= "dark" (api-app/get_state_from_store #js ["ui" "theme"])))
   (is (nil? (api-app/get_state_from_store #js ["@ui" "@theme"]))))
+
+(deftest content-capabilities-safe-db-snapshot
+  (let [snapshot {:plugin/enabled true
+                  :plugin/installed-plugins
+                  {:drawing {:name "Drawing plugin" :version "1.2.3" :description "Draw diagrams"
+                             :repository {:url "git+https://github.com/example/plugin?token=private-query#private-fragment"}
+                             :settings {:disabled false :api-token "private-token"}
+                             :url "private-path" :capabilities {:pretend "supported"}}
+                   :disabled {:name "Disabled plugin" :settings {:disabled true}}
+                   :broken {:name "Broken plugin" :err "private-error-path"}}
+                  :plugin/installed-slash-commands {:drawing {"Draw" [[:private-callback]]}}
+                  :plugin/simple-commands {:drawing [[:command {:key "open" :label "Open drawing"} :private-action :drawing]]}}
+        writes (atom [])]
+    (with-redefs [state/get-state (constantly snapshot)
+                  state/pub-event! (fn [event] (swap! writes conj event))
+                  config/lsp-enabled? true]
+      (let [result (api-test/js->clj-kw (api/get_content_capabilities))
+            plugins (get-in result [:plugins :entries])
+            drawing (first (filter #(= "drawing" (:id %)) plugins))
+            serialized (js/JSON.stringify (api/get_content_capabilities))]
+        (is (= fv/version (get-in result [:app :version])))
+        (is (= 3 (get-in result [:plugins :count])))
+        (is (true? (:enabled drawing)))
+        (is (= "unknown" (:canRender drawing)))
+        (is (nil? (:syntax drawing)))
+        (is (= "https://github.com/example/plugin" (:repositoryUrl drawing)))
+        (is (= "enabled-unverified" (:status drawing)))
+        (is (= ["Draw" "Open drawing"] (mapv :label (:commands drawing))))
+        (is (false? (:enabled (first (filter #(= "disabled" (:id %)) plugins)))))
+        (is (true? (:loadError (first (filter #(= "broken" (:id %)) plugins)))))
+        (doseq [private-value ["private-token" "private-path" "private-error-path" "private-callback" "private-action" "pretend" "private-query" "private-fragment"]]
+          (is (not (.includes serialized private-value))))
+        (is (every? #(= "supported" (:canRender %)) (:formats result)))
+        (is (every? #(false? (:renderVerified %)) (:formats result)))
+        (is (empty? @writes)))))
+  (with-redefs [config/db-based-graph? (constantly false)]
+    (is (thrown-with-msg? js/Error #"requires an open Logseq DB graph" (api-app/get_content_capabilities)))))
+
+(deftest content-capabilities-registered-renderers-are-not-invoked
+  (let [invocations (atom 0)
+        snapshot {:plugin/enabled true :plugin/installed-plugins {:diagram {:name "Diagram"}}
+                  :plugin/installed-resources
+                  {:diagram {:fenced-code-renderers {:mermaid {:title "Mermaid" :render (fn [& _] (swap! invocations inc))
+                                                              :subs {:api-token "private-renderer-settings"}}}
+                             :block-renderers (into {} (map (fn [index] [(keyword (str "block-" index)) {:render (fn [& _] (swap! invocations inc))}]) (range 21)))}}}]
+    (with-redefs [state/get-state (constantly snapshot) config/lsp-enabled? true]
+      (let [response (api-app/get_content_capabilities)
+            result (api-test/js->clj-kw response)
+            plugin (first (get-in result [:plugins :entries]))
+            renderer (first (:renderers plugin))]
+        (is (= 20 (count (:renderers plugin))))
+        (is (true? (:renderersTruncated plugin)))
+        (is (= "fenced-code" (:kind renderer)))
+        (is (= "mermaid" (:key renderer)))
+        (is (true? (:registered renderer)))
+        (is (true? (:hasRenderer renderer)))
+        (is (= "unknown" (:canRender renderer)))
+        (is (nil? (:syntax renderer)))
+        (is (zero? @invocations))
+        (is (not (.includes (js/JSON.stringify response) "private-renderer-settings")))))))
+
+(deftest content-capabilities-bounds-and-disabled-plugins
+  (let [commands (mapv (fn [index] [:command {:key (str index) :label "Action" :desc (.repeat "x" 1100)} nil :large]) (range 21))
+        plugins (into {} (map (fn [index] [(keyword (str "plugin-" index)) {:name (.repeat "x" 1100)}]) (range 51)))
+        snapshot {:plugin/enabled true :plugin/installed-plugins plugins}]
+    (with-redefs [state/get-state (constantly snapshot) config/lsp-enabled? false]
+      (let [result (api-test/js->clj-kw (api-app/get_content_capabilities))]
+        (is (= 51 (get-in result [:plugins :count])))
+        (is (true? (get-in result [:plugins :truncated])))
+        (is (<= (get-in result [:plugins :returned]) 50))
+        (is (every? #(and (= 1000 (count (:name %))) (:textTruncated %) (not (:enabled %)))
+                    (get-in result [:plugins :entries])))
+        (is (<= (alength (.encode (js/TextEncoder.) (js/JSON.stringify (clj->js (get-in result [:plugins :entries]))))) 32768))))
+    (with-redefs [state/get-state (constantly {:plugin/enabled true
+                                              :plugin/installed-plugins {:large {:name "Large" :repository "https://private-user:secret@example.com/repo"}}
+                                              :plugin/simple-commands {:large commands}})
+                  config/lsp-enabled? true]
+      (let [result (api-test/js->clj-kw (api-app/get_content_capabilities))
+            plugin (first (get-in result [:plugins :entries]))]
+        (is (= 20 (count (:commands plugin))))
+        (is (true? (:commandsTruncated plugin)))
+        (is (true? (:textTruncated plugin)))
+        (is (nil? (:repositoryUrl plugin)))))
+    (with-redefs [state/get-state (constantly {:plugin/installed-plugins {}})]
+      (let [result (api-test/js->clj-kw (api-app/get_content_capabilities))
+            formula (first (filter #(= "inline-latex" (:id %)) (:formats result)))
+            parsed (js/JSON.parse (gp-mldoc/inline-parse-json (:example formula) (gp-mldoc/default-config :markdown)))]
+        (is (= 0 (get-in result [:plugins :count])))
+        (is (empty? (get-in result [:plugins :entries])))
+        (is (= "Latex_Fragment" (aget parsed 0 0)))))))
 
 (deftest current-graph-and-db-check
   (let [graph (api-test/js->clj-kw (api-app/get_current_graph))]
