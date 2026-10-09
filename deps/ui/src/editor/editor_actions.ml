@@ -362,10 +362,12 @@ let run_structure ~restore p finish =
       p) in
   ignore
     (let* () = settled in
+     ignore (Ui_services.perf_mark "struct:resolved");
      S.structure_pending := false;
      if current () then finish ();
      Runtime.flush_now ();
      S.drain_edit_actions ();
+     ignore (Ui_services.perf_mark "struct:drained");
      Js.Promise.resolve ())
 
 (* Arm the optimistic editor now and again after canonical rows land. *)
