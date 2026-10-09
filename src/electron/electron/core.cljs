@@ -482,8 +482,13 @@
       (.registerSchemesAsPrivileged
        protocol (bean/->js [{:scheme     LSP_SCHEME
                              :privileges privileges}
+                            ;; the app page and its scripts load from lsp://;
+                            ;; Chromium keeps compiled script code across runs
+                            ;; only for schemes registered with :codeCache, so
+                            ;; without it the 16 MB main.js was compiled anew
+                            ;; at every app open
                             {:scheme     FILE_LSP_SCHEME
-                             :privileges privileges}
+                             :privileges (assoc privileges :codeCache true)}
                             {:scheme     FILE_ASSETS_SCHEME
                              :privileges (assoc privileges :stream true)}]))
 

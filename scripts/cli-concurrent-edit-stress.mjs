@@ -131,6 +131,22 @@ export function parseArgs(argv) {
       case "--e2ee-password":
         opts.e2eePassword = next();
         break;
+      case "--client-worker-script":
+        {
+          const [indexRaw, scriptPath] = next().split("=");
+          const index = Number.parseInt(indexRaw, 10);
+          opts.clientWorkerScripts = opts.clientWorkerScripts || {};
+          opts.clientWorkerScripts[index] = resolve(scriptPath);
+        }
+        break;
+      case "--client-cli":
+        {
+          const [indexRaw, cliPath] = next().split("=");
+          const index = Number.parseInt(indexRaw, 10);
+          opts.clientClis = opts.clientClis || {};
+          opts.clientClis[index] = resolve(cliPath);
+        }
+        break;
       case "--fail-fast":
         opts.failFast = true;
         break;
@@ -415,7 +431,11 @@ function runProcess(command, args, opts) {
 }
 
 async function runCli(opts, args, context = {}) {
-  const command = cliCommand(process.env.LOGSEQ_BIN);
+  const cliBin =
+    opts.clientIndex != null && opts.clientClis?.[opts.clientIndex]
+      ? opts.clientClis[opts.clientIndex]
+      : process.env.LOGSEQ_BIN;
+  const command = cliCommand(cliBin);
   const result = await runProcess(command.command, [...command.args, ...args], opts);
   let parsed = null;
   if (result.stdout) {
@@ -750,6 +770,10 @@ export function clientRuntimeOptions(opts, clientIndex) {
   }
   if (homeDir) {
     env.HOME = homeDir;
+  }
+  const workerScript = opts.clientWorkerScripts?.[clientIndex];
+  if (workerScript) {
+    env.LOGSEQ_DB_WORKER_NODE_SCRIPT = workerScript;
   }
   return {
     ...opts,

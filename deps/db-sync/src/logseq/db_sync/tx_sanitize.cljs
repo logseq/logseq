@@ -97,6 +97,41 @@
                                 (entity-ref->eid db (second item)))))
               tx-data))))
 
+(def ^:private bookkeeping-attrs
+  "Attrs that are safe to drop when their target entity doesn't exist on the
+   server. Stamping them on a retracted eid would resurrect an invalid ghost
+   entity (e.g. only {:block/updated-at}), which then fails validation and
+   rejects the tx."
+  #{:block/created-at :block/updated-at :block/order})
+
+(defn- missing-positive-eid?
+  [db entity-ref]
+  (and (integer? entity-ref)
+       (pos? entity-ref)
+       (nil? (d/entity db entity-ref))))
+
+(defn- drop-stamps-on-missing-entities
+  "Drops stamp ops (`[:db/add e bookkeeping-attr v]` and entity maps carrying
+   only bookkeeping attrs) whose target eid has no entity in db. Synced txs
+   carry raw eids that can go stale when another client deleted the entity;
+   writing them would resurrect a ghost entity that fails validation."
+  [db tx-data]
+  (remove (fn [item]
+            (cond
+              (and (entity-op? item)
+                   (= :db/add (first item))
+                   (contains? bookkeeping-attrs (nth item 2)))
+              (missing-positive-eid? db (second item))
+
+              (and (map? item) (contains? item :db/id))
+              (and (missing-positive-eid? db (:db/id item))
+                   (every? #(contains? (conj bookkeeping-attrs :db/id) %)
+                           (keys item)))
+
+              :else
+              false))
+          tx-data))
+
 (def ^:private migration-deleted-attrs
   #{:block/path-refs
     :block/pre-block?
@@ -174,6 +209,8 @@
                      drop-ops-targeting-retracted-entities? false
                      retract-touched-descendants? false}}]
    (let [tx-data* (cond->> (strip-migration-deleted-attrs tx-data)
+                    true
+                    (drop-stamps-on-missing-entities db)
                     (seq ignored-kv-entities)
                     (strip-ignored-kv-entity-ops db)
                     drop-missing-retract-ops?

@@ -424,6 +424,44 @@
      (outliner-core/move-blocks-up-down! (conn/get-db test-db false) [(get-block 9)] true))
     (is (= [3 9 6] (get-children 2)))))
 
+(deftest test-move-blocks-up-down-click-order
+  (testing "blocks selected bottom first move as when selected top first (db-test #1316)"
+    (doseq [[ids up? expected] [[[43 42] true [42 43 41 44]]
+                                [[43 42] false [41 44 42 43]]
+                                [[42 43] true [42 43 41 44]]
+                                [[42 43] false [41 44 42 43]]]]
+      (transact-tree! [[40 [[41] [42] [43] [44]]]])
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
+                                           (mapv get-block ids) up?))
+      (is (= expected (get-children 40)) (str ids " " (if up? "up" "down"))))))
+
+(deftest test-move-nested-pages-up-down-click-order
+  (testing "nested pages, and a nested page with a block beside it, in either click order"
+    ;; page 1 holds 41, page 60, page 70, 44 as siblings (pages have no :block/page)
+    (doseq [[ids up? expected] [[[70 60] true [60 70 41 44]]
+                                [[70 60] false [41 44 60 70]]
+                                [[60 41] false [70 41 60 44]]
+                                [[60 41] true [41 60 70 44]]]]
+      (transact-tree! [[41]])
+      (let [conn (conn/get-db test-db false)
+            page-tx (fn [id order] {:db/id id :block/uuid id :block/name (str "nested " id)
+                                    :block/title (str "nested " id)
+                                    :block/tags [:logseq.class/Page]
+                                    :block/parent [:block/uuid 1] :block/order order})
+            order-41 (:block/order (get-block 41))]
+        (d/transact! conn [{:db/ident :logseq.class/Page}
+                           {:db/id 1 :block/tags [:logseq.class/Page]}
+                           (page-tx 60 (str order-41 "1")) (page-tx 70 (str order-41 "2"))
+                           {:block/uuid 44 :block/title "x" :block/page [:block/uuid 1]
+                            :block/parent [:block/uuid 1] :block/order (str order-41 "3")}]
+                     {:outliner-op :insert-blocks})
+        (outliner-tx/transact!
+         (transact-opts)
+         (outliner-core/move-blocks-up-down! conn (mapv get-block ids) up?))
+        (is (= expected (get-children 1)) (str ids " " (if up? "up" "down")))))))
+
 (deftest test-insert-blocks
   (testing "
   add [18 [19 20] 21] after 6
@@ -887,6 +925,69 @@
                                    (outliner-core/move-blocks-up-down! (conn/get-db test-db false) blocks (gen/generate gen/boolean)))
             (let [total (get-blocks-count)]
               (is (= total (count @*random-blocks))))))))))
+
+(defn- parent-id
+  [id]
+  (:block/uuid (:block/parent (get-block id))))
+
+(defn- page-order
+  "Every block under page 1 in page order (depth first)."
+  []
+  (letfn [(walk [id] (mapcat (fn [c] (cons c (walk c))) (get-children id)))]
+    (vec (walk 1))))
+
+(defn- consecutive-run
+  "The blocks if they form 1 run of siblings, in page order; else nil."
+  [ids]
+  (let [parents (set (map parent-id ids))]
+    (when (= 1 (count parents))
+      (let [sibs (get-children (first parents))
+            idx (sort (map #(.indexOf (clj->js sibs) %) ids))]
+        (when (= idx (range (first idx) (inc (last idx))))
+          (mapv #(nth sibs %) idx))))))
+
+(deftest ^:long random-move-up-down-keeps-blocks-and-order
+  (testing "a move up or down of a run of siblings, selected in any order,
+  keeps every block, keeps the run together and in order, moves it past
+  exactly its neighbour when it has one, and at most 1 level otherwise"
+    (dotimes [_round 8]
+      (transact-random-tree!)
+      (dotimes [_i 20]
+        (let [all (page-order)]
+          (when (> (count all) 1)
+            (let [start (rand-nth all)
+                  pid (parent-id start)
+                  sibs (get-children pid)
+                  i (.indexOf (clj->js sibs) start)
+                  n (inc (rand-int (min 3 (- (count sibs) i))))
+                  run (subvec sibs i (+ i n))
+                  ;; click order: the run in any order
+                  clicked (shuffle run)
+                  up? (gen/generate gen/boolean)
+                  before (page-order)
+                  neighbour (if up?
+                              (when (pos? i) (nth sibs (dec i)))
+                              (when (< (+ i n) (count sibs)) (nth sibs (+ i n))))]
+              (outliner-tx/transact!
+               (transact-opts)
+               (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
+                                                   (mapv get-block clicked) up?))
+              (let [after (page-order)
+                    where (str "run " run " clicked " clicked (if up? " up" " down"))]
+                (when neighbour
+                  (let [want (vec (concat (subvec sibs 0 (if up? (dec i) i))
+                                          (if up? (concat run [neighbour]) (concat [neighbour] run))
+                                          (subvec sibs (if up? (+ i n) (inc (+ i n))))))]
+                    (is (= want (get-children pid))
+                        (str "did not move past its neighbour " neighbour ": " where))))
+                (is (= (sort before) (sort after)) (str "blocks lost or duplicated: " where))
+                (is (= run (consecutive-run run)) (str "run split or reordered: " where))
+                (let [new-pid (parent-id (first run))]
+                  (is (or (= new-pid pid)
+                          (= new-pid (parent-id pid))
+                          (= pid (parent-id new-pid))
+                          (= (parent-id new-pid) (parent-id pid)))
+                      (str "moved more than 1 level: " where " from parent " pid " to " new-pid)))))))))))
 
 (deftest ^:long random-indent-outdent
   (testing "Random indent and outdent"
