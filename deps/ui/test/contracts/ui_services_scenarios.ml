@@ -251,6 +251,7 @@ let run () =
                      ; target = None
                      ; touches = []
                      ; detail = (fun _ -> None)
+                     ; detail_json = (fun _ -> None)
                      ; clipboard_get = (fun _ -> "")
                      ; clipboard_set = (fun _ _ -> ())
                      ; data_transfer_get = (fun _ -> "")
@@ -284,6 +285,10 @@ let run () =
                      ; touches = []
                      ; detail =
                          (fun k -> if k = "dialog" then Some name else None)
+                     ; detail_json =
+                         (fun k ->
+                           if k = "dialog" then Some (Json.String name)
+                           else None)
                      ; clipboard_get = (fun _ -> "")
                      ; clipboard_set = (fun _ _ -> ())
                      ; data_transfer_get = (fun _ -> "")

@@ -212,6 +212,9 @@ type ev = {
   target : el option;
   touches : (float * float) list;
   detail : string -> string option;
+  (* raw CustomEvent detail field as portable Json — [detail] only
+     covers string fields; numbers/bools/objects need this *)
+  detail_json : string -> Json.t option;
   clipboard_get : string -> string;
   clipboard_set : string -> string -> unit;
   data_transfer_get : string -> string;

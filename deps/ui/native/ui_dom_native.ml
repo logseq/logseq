@@ -51,6 +51,17 @@ let rec js_json_of : Json.t -> Js.Json.t = function
       Js.Json.JObject
         (List.map (fun (k, v) -> (k, js_json_of v)) kvs)
 
+(* host Js.Json.t -> portable Json.t (CustomEvent detail payloads) *)
+let rec json_of_js (v : Js.Json.t) : Json.t =
+  match v with
+  | Js.Json.JNull -> Json.Null
+  | Js.Json.JBoolean b -> Json.Bool b
+  | Js.Json.JNumber n -> Json.Number n
+  | Js.Json.JString s -> Json.String s
+  | Js.Json.JObject kvs ->
+      Json.Object (List.map (fun (k, v) -> (k, json_of_js v)) kvs)
+  | Js.Json.JArray a -> Json.Array (Array.map json_of_js a)
+
 (* Js.Promise -> Ui_task bridge *)
 let task_of (p : 'a Js.Promise.t) : 'a Ui_task.t =
   Ui_task.create (fun ~resolve ~reject ->
@@ -160,6 +171,11 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
       (fun name ->
         match jfield "detail" e with
         | Some d -> jstr name d
+        | None -> None)
+  ; detail_json =
+      (fun name ->
+        match jfield "detail" e with
+        | Some d -> Option.map json_of_js (jfield name d)
         | None -> None)
   ; clipboard_get =
       (fun _mime ->

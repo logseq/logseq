@@ -245,6 +245,21 @@ let rec js_of_json : Json.t -> Js.Json.t = function
         (Js.Dict.fromList
            (List.map (fun (k, v) -> (k, js_of_json v)) kvs))
 
+(* Js.Json.t -> portable Json.t (CustomEvent detail payloads) *)
+let rec json_of_js (v : Js.Json.t) : Json.t =
+  match Js.Json.classify v with
+  | Js.Json.JSONNull -> Json.Null
+  | Js.Json.JSONFalse -> Json.Bool false
+  | Js.Json.JSONTrue -> Json.Bool true
+  | Js.Json.JSONNumber n -> Json.Number n
+  | Js.Json.JSONString s -> Json.String s
+  | Js.Json.JSONObject o ->
+      Json.Object
+        (List.map
+           (fun (k, v) -> (k, json_of_js v))
+           (Array.to_list (Js.Dict.entries o)))
+  | Js.Json.JSONArray a -> Json.Array (Array.map json_of_js a)
+
 let file_of_json (f : Js.Json.t) : Ui_services.file =
   { Ui_services.file_name = Web_dom.file_name f
   ; file_size = Web_dom.file_size f
@@ -349,6 +364,11 @@ let detail_field name ev =
       | None -> None)
   | None -> None
 
+let detail_json_field name ev =
+  match j_field ev "detail" with
+  | Some d -> Option.map json_of_js (j_field d name)
+  | None -> None
+
 let ev_of (e : Js.Json.t) : Ui_services.ev =
   let touches =
     match j_field e "touches" with
@@ -378,6 +398,7 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
        | None -> None)
   ; touches
   ; detail = (fun name -> detail_field name e)
+  ; detail_json = (fun name -> detail_json_field name e)
   ; clipboard_get =
       (fun mime ->
         match clipboard_data_js e with
