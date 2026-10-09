@@ -274,6 +274,8 @@ type ev = {
   composing : bool;
   key : string option;
   buttons : int;
+  button : int;
+  repeat : bool;
   movement_x : float;
   movement_y : float;
   default_prevented : bool;
