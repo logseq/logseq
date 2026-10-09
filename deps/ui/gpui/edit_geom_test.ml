@@ -31,7 +31,9 @@ let reset_stores () =
   Hashtbl.reset Le.caret_rects;
   Hashtbl.reset Le.offset_ats;
   Hashtbl.reset Le.line_ranges_store;
-  Hashtbl.reset Le.scroll_heights
+  Hashtbl.reset Le.scroll_heights;
+  Hashtbl.reset Le.epochs;
+  Hashtbl.reset Le.pending
 
 let num n = Json.JNumber (Float.of_int n)
 
@@ -114,7 +116,7 @@ let test_ignored_replies () =
 (* ---------- known-defect scenarios (expected-failure) ---------- *)
 
 (* a reply for the OLD text answers the identical query after an edit —
-   the store has no text/layout revision. Same block, same offset. *)
+   replies are bound to the block's text epoch. Same block, same offset. *)
 let test_stale_reply_after_edit () =
   install_host_op ();
   reset_stores ();
@@ -123,9 +125,8 @@ let test_stale_reply_after_edit () =
   Le.note_measurement "caret-rect" (caret_reply "blk-1" 2 ~x:20 ~y:8 ~h:16);
   (* user types into the block — the reply above was measured against
      the pre-edit text and must no longer answer *)
-  xfail
-    "same block+offset query after edit rejects stale reply \
-     (Task 5 defect)"
+  Le.invalidate "blk-1";
+  check "same block+offset query after edit rejects stale reply"
     (c.EI.caret_rect 2 = None)
 
 (* line ranges measured for old layout answer post-edit reads *)
@@ -134,23 +135,23 @@ let test_stale_line_ranges_after_edit () =
   reset_stores ();
   let c = conduit () in
   Le.note_measurement "line-ranges" (ranges_reply "blk-1" "0,6");
-  xfail
-    "line ranges after edit reject stale reply (Task 5 defect)"
+  Le.invalidate "blk-1";
+  check "line ranges after edit reject stale reply"
     (c.EI.line_ranges () = [])
 
 (* a reply landing after the surface was disposed still satisfies a
-   fresh conduit for the reused block-id — no session/invalidation key *)
+   fresh conduit for the reused block-id — disposal bumps the epoch so
+   the pending request it was measured under is no longer live *)
 let test_reply_after_disposal () =
   install_host_op ();
   reset_stores ();
   let c = conduit () in
   ignore (c.EI.caret_rect 3);
-  (* surface disposed — no invalidation hook exists on the stores *)
+  (* surface disposed *)
+  Le.invalidate "blk-1";
   Le.note_measurement "caret-rect" (caret_reply "blk-1" 3 ~x:33 ~y:9 ~h:16);
   let c' = Le.conduit "blk-1" |> Option.get in
-  xfail
-    "late reply after disposal cannot answer remounted query \
-     (Task 5 defect)"
+  check "late reply after disposal cannot answer remounted query"
     (c'.EI.caret_rect 3 = None)
 
 let run () =

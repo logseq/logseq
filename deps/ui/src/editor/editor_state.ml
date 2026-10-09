@@ -31,6 +31,7 @@ type editing =
   ; model : Edit_model.t }
 
 let mk_editing ?(caret = 0) ~uuid ~buffer ~scope ~base () =
+  Editor_sink.invalidate uuid;
   let model =
     Edit_model.select (Edit_model.create ~units:edit_units buffer)
       ~anchor:caret ~focus:caret
@@ -38,7 +39,8 @@ let mk_editing ?(caret = 0) ~uuid ~buffer ~scope ~base () =
   { uuid; buffer; scope; base; model }
 
 (* republish with a new model — keeps buffer mirroring model.source *)
-let with_model e model = { e with buffer = model.Edit_model.source; model }
+let with_model e model =
+  { e with buffer = model.Edit_model.source; model }
 
 
 type t =
@@ -122,7 +124,17 @@ let drain_edit_actions () =
    so an idle-but-editing page does not starve remote updates *)
 let last_edit_input_ms : float ref = ref 0.0
 
-let note_input () = last_edit_input_ms := Ui_services.time_now ()
+(* monotone input counter — wall-clock has ms granularity and two rapid
+   keys land in the same tick, so input-quiet checks sequence on this *)
+let edit_input_seq = ref 0
+
+let note_input () =
+  incr edit_input_seq;
+  last_edit_input_ms := Ui_services.time_now ()
+
+(* an armed forward-merge plan holds the input seq it armed under; a
+   later input supersedes it before the deferred commit fires *)
+let merge_plan_seq : int option ref = ref None
 
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
 let clipboard : Model.block list ref = ref []

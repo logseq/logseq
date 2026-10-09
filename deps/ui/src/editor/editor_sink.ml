@@ -29,6 +29,7 @@ type impl =
   ; can_focus : string -> bool
   ; popup_pos : string -> (float * float * float) option
   ; container_rect : string -> (float * float * float * float) option
+  ; invalidate : string -> unit
   }
 
 let no_impl =
@@ -38,6 +39,7 @@ let no_impl =
   ; can_focus = (fun _ -> true)
   ; popup_pos = (fun _ -> None)
   ; container_rect = (fun _ -> None)
+  ; invalidate = (fun _ -> ())
   }
 
 let current = ref no_impl
@@ -58,3 +60,9 @@ let can_focus block_id = (!current).can_focus block_id
 let popup_pos block_id = (!current).popup_pos block_id
 
 let container_rect block_id = (!current).container_rect block_id
+
+(* bump the block's measurement epoch: replies measured against a
+   previous text/layout must not answer queries issued afterwards —
+   native surfaces reject them by epoch, synchronous surfaces treat
+   it as a no-op *)
+let invalidate block_id = (!current).invalidate block_id

@@ -159,15 +159,42 @@ let register registry =
 type caret_rect_reply =
   { cx : int; cy : int; ch : int; ox : int; oy : int }
 
-let caret_rects : (string * int, caret_rect_reply) Hashtbl.t =
+let caret_rects : (string * int, caret_rect_reply * int) Hashtbl.t =
   Hashtbl.create 64
 
-let offset_ats : (string * int * int, int) Hashtbl.t = Hashtbl.create 64
+let offset_ats : (string * int * int, int * int) Hashtbl.t = Hashtbl.create 64
 
-let line_ranges_store : (string, (int * int) list) Hashtbl.t =
+let line_ranges_store : (string, (int * int) list * int) Hashtbl.t =
   Hashtbl.create 8
 
-let scroll_heights : (string, int) Hashtbl.t = Hashtbl.create 8
+let scroll_heights : (string, int * int) Hashtbl.t = Hashtbl.create 8
+
+(* measurement replies are bound to the block's text epoch: an edit,
+   remount or disposal bumps it; a pending request remembers the epoch
+   it was issued under and a reply only lands when that epoch still
+   holds — stored replies older than the current epoch are likewise
+   stale and never answer a query issued after the change *)
+let epochs : (string, int) Hashtbl.t = Hashtbl.create 8
+
+let epoch_of block_id =
+  Option.value (Hashtbl.find_opt epochs block_id) ~default:0
+
+let invalidate block_id =
+  Hashtbl.replace epochs block_id (epoch_of block_id + 1)
+
+(* request keys issued through the conduit and awaiting their host
+   reply, tagged with the epoch they were issued under *)
+let pending : (string * string, int) Hashtbl.t = Hashtbl.create 64
+
+let issue block_id name arg =
+  Hashtbl.replace pending (block_id, name ^ "|" ^ arg) (epoch_of block_id)
+
+(* a reply only lands when a request for it is still live at the
+   current epoch — unsolicited pushes are always fresh *)
+let reply_fresh block_id name arg =
+  match Hashtbl.find_opt pending (block_id, name ^ "|" ^ arg) with
+  | Some ep when ep <> epoch_of block_id -> false
+  | _ -> true
 
 (* replies are ephemeral: reset rather than grow unboundedly — a dropped
    entry just means the next query re-requests *)
@@ -201,37 +228,53 @@ let note_measurement name (j : Js.Json.t) : unit =
   match jstr "block-id" j with
   | None -> ()
   | Some block_id -> (
+      let ep = epoch_of block_id in
       match name with
       | "caret-rect" -> (
           match (jnum "offset" j, jnum "x" j, jnum "y" j, jnum "h" j) with
           | Some off, Some x, Some y, Some h ->
-              cap caret_rects;
-              Hashtbl.replace caret_rects (block_id, int_of_float off)
-                { cx = int_of_float x
-                ; cy = int_of_float y
-                ; ch = int_of_float h
-                ; ox = Option.value ~default:0 (Option.map int_of_float (jnum "ox" j))
-                ; oy = Option.value ~default:0 (Option.map int_of_float (jnum "oy" j))
-                }
+              let arg = string_of_int (int_of_float off) in
+              if reply_fresh block_id name arg then begin
+                Hashtbl.remove pending (block_id, name ^ "|" ^ arg);
+                cap caret_rects;
+                Hashtbl.replace caret_rects (block_id, int_of_float off)
+                  ( { cx = int_of_float x
+                    ; cy = int_of_float y
+                    ; ch = int_of_float h
+                    ; ox = Option.value ~default:0 (Option.map int_of_float (jnum "ox" j))
+                    ; oy = Option.value ~default:0 (Option.map int_of_float (jnum "oy" j))
+                    }
+                  , ep )
+              end
           | _ -> ())
       | "offset-at" -> (
           match (jnum "x" j, jnum "y" j, jnum "offset" j) with
           | Some x, Some y, Some off ->
-              cap offset_ats;
-              Hashtbl.replace offset_ats
-                (block_id, int_of_float x, int_of_float y)
-                (int_of_float off)
+              let arg = Printf.sprintf "%d,%d" (int_of_float x) (int_of_float y) in
+              if reply_fresh block_id name arg then begin
+                Hashtbl.remove pending (block_id, name ^ "|" ^ arg);
+                cap offset_ats;
+                Hashtbl.replace offset_ats
+                  (block_id, int_of_float x, int_of_float y)
+                  (int_of_float off, ep)
+              end
           | _ -> ())
       | "line-ranges" -> (
           match jstr "ranges" j with
           | Some s ->
-              Hashtbl.replace line_ranges_store block_id
-                (parse_ranges s)
+              if reply_fresh block_id name "" then begin
+                Hashtbl.remove pending (block_id, name ^ "|");
+                Hashtbl.replace line_ranges_store block_id
+                  (parse_ranges s, ep)
+              end
           | None -> ())
       | "scroll-height" -> (
           match jnum "height" j with
           | Some h ->
-              Hashtbl.replace scroll_heights block_id (int_of_float h)
+              if reply_fresh block_id name "" then begin
+                Hashtbl.remove pending (block_id, name ^ "|");
+                Hashtbl.replace scroll_heights block_id (int_of_float h, ep)
+              end
           | None -> ())
       | _ -> ())
 
@@ -254,21 +297,27 @@ let conduit block_id : Edit_input.conduit option =
   Some
     { Edit_input.caret_rect =
         (fun off ->
+          issue block_id "caret-rect" (string_of_int off);
           request block_id "caret-rect" [ ("offset", jnum_v off) ];
-          Option.map
-            (fun r ->
-              { Edit_input.x = r.cx; y = r.cy; w = 0; h = r.ch })
-            (Hashtbl.find_opt caret_rects (block_id, off)))
+          match Hashtbl.find_opt caret_rects (block_id, off) with
+          | Some (r, ep) when ep = epoch_of block_id ->
+              Some { Edit_input.x = r.cx; y = r.cy; w = 0; h = r.ch }
+          | _ -> None)
     ; offset_at =
         (fun ~x ~y ->
+          issue block_id "offset-at" (Printf.sprintf "%d,%d" x y);
           request block_id "offset-at"
             [ ("x", jnum_v x); ("y", jnum_v y) ];
-          Hashtbl.find_opt offset_ats (block_id, x, y))
+          match Hashtbl.find_opt offset_ats (block_id, x, y) with
+          | Some (o, ep) when ep = epoch_of block_id -> Some o
+          | _ -> None)
     ; line_ranges =
         (fun () ->
+          issue block_id "line-ranges" "";
           request block_id "line-ranges" [];
-          Option.value
-            (Hashtbl.find_opt line_ranges_store block_id) ~default:[])
+          match Hashtbl.find_opt line_ranges_store block_id with
+          | Some (rs, ep) when ep = epoch_of block_id -> rs
+          | _ -> [])
     ; set_input_focus =
         (fun focused ->
           request block_id "set-input-focus"
@@ -278,8 +327,11 @@ let conduit block_id : Edit_input.conduit option =
 (* host-side content height of the block editor's scrollable text —
    same request/reply pattern as the conduit ops *)
 let scroll_height block_id : int option =
+  issue block_id "scroll-height" "";
   request block_id "scroll-height" [];
-  Hashtbl.find_opt scroll_heights block_id
+  match Hashtbl.find_opt scroll_heights block_id with
+  | Some (h, ep) when ep = epoch_of block_id -> Some h
+  | _ -> None
 
 (* caret anchor for popups — same (x-20, line bottom, line top)
    contract as the web twin. The live caret goes through the
@@ -291,16 +343,17 @@ let popup_pos block_id : (float * float * float) option =
     match Editor_state.editing () with
     | Some e when e.Editor_state.uuid = block_id ->
         let off = e.Editor_state.model.Edit_model.caret in
+        issue block_id "caret-rect" (string_of_int off);
         request block_id "caret-rect" [ ("offset", jnum_v off) ];
         (* reply coords are container-relative — re-anchor into viewport
            space (x-20, line bottom - 3, line top), matching the web
            twin's popup_pos *)
-        Option.map
-          (fun r ->
-            let vx = Float.of_int (r.cx + r.ox)
-            and vy = Float.of_int (r.cy + r.oy) in
-            (vx -. 20., vy +. Float.of_int r.ch -. 3., vy))
-          (Hashtbl.find_opt caret_rects (block_id, off))
+        (match Hashtbl.find_opt caret_rects (block_id, off) with
+         | Some (r, ep) when ep = epoch_of block_id ->
+             let vx = Float.of_int (r.cx + r.ox)
+             and vy = Float.of_int (r.cy + r.oy) in
+             Some (vx -. 20., vy +. Float.of_int r.ch -. 3., vy)
+         | _ -> None)
     | _ -> None
   in
   match live with
@@ -348,4 +401,5 @@ let () =
       can_focus = (fun _ -> true)
     ; popup_pos
     ; container_rect
+    ; invalidate
     }
