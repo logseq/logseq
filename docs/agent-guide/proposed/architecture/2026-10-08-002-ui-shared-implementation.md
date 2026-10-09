@@ -17,14 +17,17 @@ Current AGENTS.md and the LUI skill take precedence over older architecture exam
 
 ## Implementation handoff (2026-10-09, resumed)
 
-Execution resumed and ran to near-completion across parallel batches (see the
-integration-progress sections below). Remaining open work: Task 6's last piece —
-the native DOM-simulation cluster deletion — is blocked on migrating ~71 `src/`
-files off `Web_dom`/`Vdom`/`Imperative_dom`/`Editor_dom`/`Properties_dom`/`Views_dom`
-(batch 6c in flight on `devin/SHAREDUI-task6c`); Task 7 documentation is otherwise
-landed (architecture.md shared-runtime section + `check-shared-boundaries.sh`
-gate wired into `dune runtest test/contracts`). The original Tasks 1–7 below
-remain the detailed design and deletion gates.
+Execution resumed and ran to completion across parallel batches (see the
+integration-progress sections below). Task 6 closed: batch 6c (`e493d1c19f`)
+migrated the ~71 `src/` files off the DOM-simulation cluster and deleted all six
+native emulation modules (`web_dom`/`vdom`/`imperative_dom`/`editor_dom`/
+`properties_dom`/`views_dom`), plus LUI ports of editor_commands popup views and
+the icon picker, popups-cluster migration to `Ui_services`, and a `detail_json`
+accessor for Ui_services events. Task 7 landed: architecture.md shared-runtime
+section, `check-shared-boundaries.sh` wired into `dune runtest test/contracts`
+(Unix), and this status update. Final gates: web 1,893 checks / 0 failures /
+1 expected-failure (decorate-mod pinned to macOS), native+gpui 602 checks /
+5 expected-failures, contract tests green, boundary check green.
 
 ### Checkout and delivered work
 
