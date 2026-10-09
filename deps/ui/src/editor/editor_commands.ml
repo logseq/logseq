@@ -844,7 +844,7 @@ and load_repeat p ident =
           Js.Promise.resolve ()
       | _ -> Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("load_repeat failed", e);
+            Ui_services.log_error ("load_repeat failed", e);
             Js.Promise.resolve ()))
 
 (* cljs base-ui avoidCollisions for the horizontal axis too: the
@@ -1164,11 +1164,11 @@ let set_closed_prop ~caret uuid ident title =
             [ Ops.batch_set_property [ uuid ] ident (W.Int id)
                 ~entity_id:true ]
       | None ->
-          Platform.console_error
+          Ui_services.log_error
             ("no closed value for", title));
      Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("closed-prop failed", e);
+            Ui_services.log_error ("closed-prop failed", e);
             Js.Promise.resolve ()))
 
 (* cljs editor/cycle-todo!: the status closed value cycles by db/ident

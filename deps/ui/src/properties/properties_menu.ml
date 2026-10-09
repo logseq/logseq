@@ -416,7 +416,7 @@ let default_value_pane m =
                       (D.create_property_text_block ~block_uuid:pu
                          ~ident:"logseq.property/default-value"
                          ~title:(el_value ta)
-                         ~new_block_id:(Platform.random_uuid ()) ());
+                         ~new_block_id:(Ui_services.env_random_uuid ()) ());
                     (* show the created value block in the pane *)
                     el_replace_children pane;
                     let b = mk ~cls:"ls-block" "div" in
@@ -865,7 +865,7 @@ let default_value_pane_view m ~close : t =
                     (D.create_property_text_block ~block_uuid:pu
                        ~ident:"logseq.property/default-value"
                        ~title:(Runtime.signal_get buffer)
-                       ~new_block_id:(Platform.random_uuid ()) ());
+                       ~new_block_id:(Ui_services.env_random_uuid ()) ());
                   S.refresh_all ();
                   close ()
               | None -> ())

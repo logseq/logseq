@@ -59,7 +59,7 @@ let show_msg a b c _d =
         | None -> None)
     | None -> None
   in
-  let key' = Option.value key ~default:(Platform.random_uuid ()) in
+  let key' = Option.value key ~default:(Ui_services.env_random_uuid ()) in
   Web_dom.dispatch_custom "ls:toast"
     (detail_obj
        [ ("msg", Js.Json.string msg)
@@ -80,7 +80,7 @@ let set_theme_mode a _b _c _d =
   (match arg_string a with
    | Some mode ->
        Ui_services.theme_apply_dataset mode;
-       Platform.local_storage_set "ui/theme" ("\"" ^ mode ^ "\"")
+       Ui_services.storage_set "ui/theme" ("\"" ^ mode ^ "\"")
    | None -> ());
   resolved_nil
 
@@ -104,14 +104,14 @@ let set_state_from_store a b _c _d =
          | None -> "logseq"
        in
        Ui_services.doc_set_data "color" color;
-       Platform.local_storage_set "radix-color" ("\"" ^ color ^ "\"")
+       Ui_services.storage_set "radix-color" ("\"" ^ color ^ "\"")
    | "ui/system-theme?" ->
        let enabled =
          match arg_wire b with
          | Wire.Bool v -> v
          | _ -> false
        in
-       Platform.local_storage_set "system-theme?"
+       Ui_services.storage_set "system-theme?"
          (if enabled then "true" else "false");
        if enabled then
          Ui_services.theme_apply_dataset

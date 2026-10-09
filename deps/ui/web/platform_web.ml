@@ -129,7 +129,20 @@ external children_table_u : Js.Json.t Js.Dict.t Js.Undefined.t
 external global : < logseq_revision : string Js.Undefined.t > Js.t
   = "globalThis"
 
-let install ~request_flush =
+(* Browser promise -> portable task (same bridge as cmdk_host). *)
+let task_of (p : 'a Js.Promise.t) : 'a Ui_task.t =
+  Ui_task.create (fun ~resolve ~reject ->
+      ignore
+        (Js.Promise.catch
+           (fun e ->
+             reject
+               (Failure
+                  (Option.value (Js.Json.stringifyAny e)
+                     ~default:"clipboard request failed"));
+             Js.Promise.resolve ())
+           (Js.Promise.then_ (fun v -> resolve v; Js.Promise.resolve ()) p)))
+
+let install ~request_flush ~dom =
   if Platform.local_storage_obj = None then
     invalid_arg "Browser local storage is unavailable";
   Ui_services.install
@@ -163,6 +176,8 @@ let install ~request_flush =
         ; hash_query_param = Platform.hash_query_param
         ; decode_uri = Platform.decode_uri
         ; reload = Platform.location_reload
+        ; origin = (fun () -> Platform.location_origin)
+        ; pathname = (fun () -> Platform.location_pathname)
         }
     ; doc =
         { set_lang = doc_set_lang
@@ -170,6 +185,7 @@ let install ~request_flush =
         ; set_lang_pref
         ; set_data = doc_set_data
         ; rm_data = body_rm_data
+        ; set_title = Platform.set_document_title
         ; reload = Platform.location_reload
         }
     ; time =
@@ -177,7 +193,34 @@ let install ~request_flush =
         ; local_fields
         ; of_fields
         ; parse = date_parse
+        ; fmt_date = Platform.fmt_time
         }
+    ; log = { error = Platform.console_error; info = Platform.console_log }
+    ; perf = { mark = Platform.perf_mark }
+    ; uri = { encode_component = Platform.encode_uri_component }
+    ; clipboard =
+        { copy = Platform.copy_to_clipboard
+        ; write_text = (fun s -> task_of (Platform.clipboard_write_text s))
+        ; read_text = (fun () -> task_of (Platform.clipboard_read_text ()))
+        }
+    ; session =
+        { get = Platform.session_storage_get
+        ; set = Platform.session_storage_set
+        }
+    ; env =
+        { publishing = Platform.publishing
+        ; dev_build = (fun () -> Platform.dev_build)
+        ; rtc_test_mode = Platform.rtc_test_mode
+        ; online = Platform.online
+        ; is_mac = Platform.is_mac
+        ; native_drag = Platform.native_drag
+        ; native_block_controls = Platform.native_block_controls
+        ; css_transform_icons = Platform.css_transform_icons
+        ; edit_units = (fun () -> Platform.edit_units)
+        ; random_uuid = Platform.random_uuid
+        ; open_url = Platform.open_url
+        }
+    ; dom
     };
   Version.set_revision
     (match Js.Undefined.toOption global##logseq_revision with

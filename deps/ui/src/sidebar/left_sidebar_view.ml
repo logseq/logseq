@@ -56,7 +56,7 @@ let menu_sc caps =
         (List.mapi
            (fun i cap ->
              kbd ~key:("k" ^ string_of_int i)
-               ~style_class:"shui-shortcut-key" ~value:(Platform.utf8 cap)
+               ~style_class:"shui-shortcut-key" ~value:(Ui_services.literal_text cap)
                [])
            caps) ]
 ;;
@@ -331,7 +331,7 @@ let shortcut_hint binding =
             (List.map
                (fun k ->
                  kbd ~style_class:"shui-shortcut-key shui-key-boxed"
-                   ~value:(Platform.utf8 (String.uppercase_ascii k)) [])
+                   ~value:(Ui_services.literal_text (String.uppercase_ascii k)) [])
                keys) ] ]
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
@@ -581,7 +581,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                            (fun collapsed ->
                              icon_ ~cls:"more" ~size:15
                                (if collapsed
-                                   && not (Platform.css_transform_icons ())
+                                   && not (Ui_services.env_css_transform_icons ())
                                 then "chevron-down"
                                 else "chevron-right"))
                            (Sidebar_state.group_collapsed_sig st class_)

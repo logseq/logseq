@@ -594,7 +594,7 @@ let display_type_el inst : t =
        [ box ~style_class:"property-value-inner"
            [ box ~style_class:"jtrigger"
                ~accessibility_identifier:
-                 ("trigger-" ^ Platform.random_uuid ())
+                 ("trigger-" ^ Ui_services.env_random_uuid ())
                [ box ~style_class:"select-item"
                    [ box ~style_class:"ls-icon-color-wrap"
                        [ Views_table.icon_dyn
@@ -756,7 +756,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
    inside a nonempty set never repainted *)
 let filters_row inst : t =
  fun ctx parent ->
-  if Platform.publishing () then Logseq_el.nothing ctx parent else
+  if Ui_services.env_publishing () then Logseq_el.nothing ctx parent else
   (reactive
      ~equal:
        (fun (a : V.vstate) (b : V.vstate) ->
@@ -992,7 +992,7 @@ let refs_filter_btn inst : t =
    is hovered (opacity-0 via .ls-refs) *)
 let render_head inst : t =
  fun ctx parent ->
-  if Platform.publishing () then
+  if Ui_services.env_publishing () then
     row ~style_class:"ls-view-head" ~gap:8
       [ keyed ~source:(reactive (fun (s : V.vstate) -> s.V.views) (sig_of inst))
           ~key:(fun (v : Wr.view_ent) -> v.Wr.vu) ~cmp:String.compare

@@ -252,7 +252,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
      [data-has-children] rule); hover-less backends keep it visible at
      rest whenever the block can fold *)
   let caret_shown c =
-    c || (Platform.native_block_controls () && has_children)
+    c || (Ui_services.env_native_block_controls () && has_children)
   in
   (* #dot-<uuid> + data-blockid/draggable on the bullet ride data_attrs
      and accessibility-identifier on the box (e2e target + imperative
@@ -289,7 +289,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                         in the pre-rotated svg *)
                      reactive
                        (fun c ->
-                         if c || not (Platform.native_block_controls ())
+                         if c || not (Ui_services.env_native_block_controls ())
                          then Ui_parts.rotating_arrow ("arw-" ^ uuid)
                          else
                            icon ~key:("arw-" ^ uuid)
@@ -304,8 +304,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             (box ~key:("dotw-" ^ uuid)
                ~accessibility_identifier:("dot-" ^ uuid)
                ~data_attrs:
-                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Platform.publishing ()))) ]
-                 @ (if Platform.native_block_controls () then
+                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ]
+                 @ (if Ui_services.env_native_block_controls () then
                       (* the lui-core.css circle is backend styling;
                          native backends get no stylesheet, so the
                          container's intrinsic box + centering is
@@ -374,7 +374,7 @@ let content_el uuid (b : Model.block) : t =
     [ row ~key:("bci-" ^ uuid)
          ~main:`space_between
         [ box ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            (if b.Model.block_is_query && not (Platform.publishing ()) then [ Query_builder.block_el uuid b ]
+            (if b.Model.block_is_query && not (Ui_services.env_publishing ()) then [ Query_builder.block_el uuid b ]
              else
                match Render.title_outer_class b with
                | Some cls ->
@@ -477,7 +477,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
           link ~key:("th-" ^ key)
             ~url:"#" ~target:`self_
             ~style_class:"hash-symbol select-none" ~text:"#" []
-        ; (if priv || Platform.publishing () then Logseq_el.nothing
+        ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing
            else
              (* the 'x' press needs a pressable kind — link is not one,
                 so it renders as text; .block-tag:hover reveals it *)
@@ -500,7 +500,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             ~url:"#" ~target:`self_
             ~style_class:"tag relative"
             ~data_attrs:
-              [ ("tabindex", "0"); ("draggable", string_of_bool (not (Platform.publishing ())))
+              [ ("tabindex", "0"); ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
               ; ("data-uuid", tuuid)
               ; ("data-ref", String.lowercase_ascii tag) ]
             [ text ~key:"ts" ~value:tag [] ]
@@ -553,6 +553,7 @@ let tags_el uuid (b : Model.block) : t =
    zero blocks, where block_row is never mounted *)
 let () =
   Editor_keys.install_once ();
+  (* module init — before services install; raw host facts *)
   if not (Platform.publishing ()) then Add_button.install ();
   Asset_dom.install ();
   Web_dom.ensure_dom_fixups ()
@@ -563,7 +564,7 @@ let rec block_row
 
  fun ctx parent ->
   S.ensure ctx;
-  (row_el ~depth ~editable:(editable && not (Platform.publishing ())) ~library ~virtualize scope b) ctx parent
+  (row_el ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope b) ctx parent
 
 
 (* the .block-main-container subtree — everything inside .ls-block
@@ -767,7 +768,7 @@ and block_row_sig
   S.ensure ctx;
   let b0 = Signal.get bs in
   (if b0.Model.block_is_comments_area then Comments_view.area_el bs
-   else row_sig ~depth ~editable:(editable && not (Platform.publishing ())) ~library ~virtualize scope bs)
+   else row_sig ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope bs)
     ctx parent
 
 (* rough rendered height of an unmounted subtree — cljs
@@ -999,7 +1000,7 @@ let chain_embed_worker () =
                  (fun _ f ->
                    try f ()
                    with e ->
-                     Platform.console_error ("embed refresh failed", e))
+                     Ui_services.log_error ("embed refresh failed", e))
                  embed_refreshes)))
   end
 
@@ -1014,7 +1015,7 @@ let fetch_embed_blocks name st =
          Signal.set st blocks;
          Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
-                Platform.console_error ("embed blocks fetch failed", e);
+                Ui_services.log_error ("embed blocks fetch failed", e);
                 Js.Promise.resolve ())))
 
 (* cheap reactive equality for fetched trees: uuid + title covers structure

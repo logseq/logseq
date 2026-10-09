@@ -441,11 +441,11 @@ let ac_popover (st : S.t) : t =
                        [ box ~key:"sc"
                            ~style_class:"shui-shortcut-combo shui-shortcut-glow"
                            [ kbd ~key:"k0" ~style_class:"shui-shortcut-key"
-                               ~value:(Platform.utf8 "\xe2\x8c\x98") []
+                               ~value:(Ui_services.literal_text "\xe2\x8c\x98") []
                            ; text ~key:"sep1"
                                ~style_class:"shui-shortcut-separator" []
                            ; kbd ~key:"k1" ~style_class:"shui-shortcut-key"
-                               ~value:(Platform.utf8 "\xe2\x8f\x8e") [] ] ]
+                               ~value:(Ui_services.literal_text "\xe2\x8f\x8e") [] ] ]
                    ; text ~key:"ht"
                        ~value:(U.t "editor/display-tag-inline-hint") [] ])
             ])
@@ -545,7 +545,7 @@ let cm_shortcut_el (binding, caps) : t =
       ~style_class:
         (if combo then "shui-shortcut-key"
          else "shui-shortcut-key shui-key-boxed")
-      ~value:(Platform.utf8 cap) []
+      ~value:(Ui_services.literal_text cap) []
   in
   let children =
     List.concat

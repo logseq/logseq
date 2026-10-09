@@ -76,7 +76,7 @@ let list_remote_graphs () =
   Js.Promise.resolve !remote_graphs)
   |> Js.Promise.catch (fun e ->
          (* offline / server errors: keep the previous list *)
-         Platform.console_error ("list-remote-graphs failed", e);
+         Ui_services.log_error ("list-remote-graphs failed", e);
          Js.Promise.resolve !remote_graphs)
   end
 
@@ -196,7 +196,7 @@ let remember_open repo =
    {http-base}/graphs/{graph-uuid} with the Cognito id-token — the worker
    has no thread-api delete endpoint. *)
 let delete_remote_http uuid =
-  match Platform.local_storage_get "id-token" with
+  match Ui_services.storage_get "id-token" with
   | None -> Js.Promise.resolve false
   | Some token ->
       let init =
@@ -213,7 +213,7 @@ let delete_remote_http uuid =
        in
        Js.Promise.resolve true)
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("remote graph delete failed", e);
+             Ui_services.log_error ("remote graph delete failed", e);
              Js.Promise.resolve false)
 
 let delete_graph repo ~remote =
@@ -235,7 +235,7 @@ let delete_graph repo ~remote =
       (let* _w = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
       Js.Promise.resolve true)
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("unlink-db failed " ^ repo, e);
+             Ui_services.log_error ("unlink-db failed " ^ repo, e);
              repos := repo :: !repos;
              Runtime.send (Action.Repos_loaded !repos);
              !on_repos_changed ();
@@ -326,10 +326,10 @@ let () =
       (let* w = Runtime.invoke1 "thread-api/get-graph-uuid" (Wire.String repo) in
       (* cljs graph_tab/set-tab-graph! — sessionStorage keys so a
                  reload reopens this tab's graph *)
-      Platform.session_storage_set "ls-tab-repo" repo;
+      Ui_services.session_set "ls-tab-repo" repo;
       (match Wire.as_uuid w with
        | Some uuid ->
-           Platform.session_storage_set "ls-tab-graph-id" uuid;
+           Ui_services.session_set "ls-tab-graph-id" uuid;
            Runtime.current_graph_uuid := Some uuid;
            Graphs_meta.remember_uuid repo uuid;
            Runtime.sync_hash_graph_id ()

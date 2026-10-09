@@ -99,7 +99,7 @@ let normalize_ident_name_part name =
    nano_id(7); uuid hex chars are a subset of the nano_id alphabet *)
 let user_class_ident name =
   let hex =
-    String.concat "" (String.split_on_char '-' (Platform.random_uuid ()))
+    String.concat "" (String.split_on_char '-' (Ui_services.env_random_uuid ()))
   in
   let first =
     match
@@ -207,7 +207,7 @@ let resolve_names names tags hash =
                   { name; uuid = u; is_tag; is_hash
                   ; fresh = false; entity = w }
               | None ->
-                  { name; uuid = Platform.random_uuid ()
+                  { name; uuid = Ui_services.env_random_uuid ()
                   ; is_tag; is_hash; fresh = true
                   ; entity = Wire.Nil }))
     |> Array.of_list |> Js.Promise.all

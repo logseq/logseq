@@ -125,14 +125,14 @@ let insert_autopair (m : Edit_model.t) text =
    block (cljs editor/paste-text-in-one-block-at-point) *)
 let paste_text_at_caret uuid =
   ignore
-    (let* text = Platform.clipboard_read_text () in
+    (Ui_task.bind (Ui_services.clipboard_read_text ()) (fun text ->
      (match A.edit_model uuid with
       | Some m ->
           let lo, hi = A.sel_span_of m in
           A.splice_range uuid lo hi text;
           Outliner_ops.schedule_save uuid (A.live_buffer uuid)
       | None -> ());
-     Js.Promise.resolve ())
+     Ui_task.resolve ()))
 
 
 (* -- editor-mode keys -- *)
@@ -167,7 +167,7 @@ let shift_held ev =
 (* route through the hash so the router runs its full pipeline —
    Navigate_to + load_route + history. A bare Navigate_to commit skips
    the fetch (empty Journals/All-pages) and loses the history entry *)
-let encode_uri_component = Platform.encode_uri_component
+let encode_uri_component = (fun s -> Ui_services.uri_encode_component s)
 
 let nav r =
   let h =
@@ -284,7 +284,7 @@ let follow_link (m : Edit_model.t) ~sidebar =
         | Some sst -> Sidebar_state.open_uuid sst u
         | None -> ())
       else ignore (nav (Model.Block_zoom u))
-  | Some (`Url u) -> Platform.open_url u
+  | Some (`Url u) -> Ui_services.env_open_url u
   | None -> ()
 
 let perf_keys =
@@ -428,7 +428,7 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
             m
         | "e" when meta && shift ->
             (* editor/copy-embed *)
-            Platform.copy_to_clipboard
+            Ui_services.clipboard_copy
               (Printf.sprintf "{{embed ((%s))}}" uuid);
             m
         | "e" when meta ->
@@ -459,7 +459,7 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
             m
         | "c" when (meta || ctrl) && shift ->
             (* cljs editor/copy-text — the block's text to clipboard *)
-            Platform.copy_to_clipboard m.Edit_model.source;
+            Ui_services.clipboard_copy m.Edit_model.source;
             m
         | "v" when (meta || ctrl) && shift ->
             (* cljs editor/paste-text-in-one-block-at-point *)
@@ -596,7 +596,7 @@ let on_global_key ev =
     | None -> ()
     | Some stroke ->
         if not (List.mem stroke owned_strokes) then begin
-          let now = Platform.date_now_ms () in
+          let now = Ui_services.time_now () in
           let seq =
             if now -. !chord_ms > chord_window_ms then [] else !chord_seq
           in
@@ -885,7 +885,7 @@ and apply_input ?frame uuid ev =
       (* A caret-only move can measure the unchanged runs before flushing.
          Publish model and overlay together instead of two DOM batches. *)
       (match frame with
-       | Some fr when Platform.edit_units = `U16 && m'.source == m0.source
+       | Some fr when Ui_services.env_edit_units () = `U16 && m'.source == m0.source
                       && Edit_view.reveal_dirty m0 m' = [] ->
            let measured = Edit_input.measure conduit m' in
            if Option.is_some measured.Edit_input.caret then
@@ -896,7 +896,7 @@ and apply_input ?frame uuid ev =
        | Edit_input.Key
            ({ Edit_model.key = "ArrowUp" | "ArrowDown"; meta = false
             ; ctrl = false; alt = false; _ }, _)
-         when Platform.edit_units = `Bytes && m'.Edit_model.caret = m0.Edit_model.caret
+         when Ui_services.env_edit_units () = `Bytes && m'.Edit_model.caret = m0.Edit_model.caret
               && m'.Edit_model.anchor = m0.Edit_model.anchor
               && not (S.selection_active ()) ->
            retry_vertical uuid ev m0.Edit_model.caret
@@ -909,7 +909,7 @@ and apply_input ?frame uuid ev =
           uuid
       end;
       match frame with
-      | Some fr when Platform.edit_units = `Bytes -> (
+      | Some fr when Ui_services.env_edit_units () = `Bytes -> (
           (* State publication schedules a flush. Apply the content and
              run spans before reading geometry, then paint the overlay
              in this same input task. *)
@@ -1002,7 +1002,7 @@ let last_block_mousedown : (string * float * string) ref = ref ("", 0.0, "")
 
 let racing_edit_uuid () =
   let (u, t, _) = !last_block_mousedown in
-  if u <> "" && Platform.date_now_ms () -. t < 5000.0 then Some u
+  if u <> "" && Ui_services.time_now () -. t < 5000.0 then Some u
   else None
 
 (* replay [ev] through the remount-window handler once the mousedown's
@@ -1042,7 +1042,7 @@ let queue_racing_key ev uuid =
    the native surface has no HTML5 drag, so the same drop contract is
    driven by document mousedown/mousemove/click on .bullet-container —
    armed on pointer down, activated past the 4px distance constraint the
-   sensors use, committed on the release click. Platform.native_drag
+   sensors use, committed on the release click. Ui_services.env_native_drag
    gates every hook so the web keeps the sensor path alone. *)
 
 type drag_phase =
@@ -1139,7 +1139,7 @@ let drop_active_drag () =
   else false
 
 let on_keydown ev =
-  if Platform.publishing () then ()
+  if Ui_services.env_publishing () then ()
   else begin
   (if Lazy.force perf_keys then
      Printf.eprintf "PERF kdown key=%s editing=%s ac=%b\n%!" (D.ev_key ev)
@@ -1271,7 +1271,7 @@ let on_keydown ev =
   end
 
 let on_paste ev =
-  if Platform.publishing () then () else begin
+  if Ui_services.env_publishing () then () else begin
   if S.ready () then A.paste_blocks ev
 
 (* a clipboard event aimed at the open editor's conduit input *)
@@ -1305,7 +1305,7 @@ let on_copy ev =
     | None -> A.copy_selection ev
 
 let on_cut ev =
-  if Platform.publishing () then () else begin
+  if Ui_services.env_publishing () then () else begin
   if S.ready () then
     match S.editing () with
     | Some e
@@ -1558,11 +1558,11 @@ let on_editor_insert ev =
    autocomplete/context-menu popups keep editing — the apply action
    refocuses the sink input (cljs keeps the block in edit mode) *)
 let on_mousedown ev =
-  if Platform.publishing () then () else begin
+  if Ui_services.env_publishing () then () else begin
   (* a pointer going down ends any stale drag that missed its release
      click (released outside the document) *)
   drag_reset ();
-  if Platform.native_drag () then arm_drag ev;
+  if Ui_services.env_native_drag () then arm_drag ev;
   if S.ready () then begin
     (* record which block's content the pointer went down on — including
        outside any block (clears the record) — and the editing uuid the
@@ -1572,7 +1572,7 @@ let on_mousedown ev =
     let stale =
       match S.editing () with Some e -> e.S.uuid | None -> ""
     in
-    let now = Platform.date_now_ms () in
+    let now = Ui_services.time_now () in
     last_block_mousedown :=
       (match
          D.closest_sel
@@ -1642,7 +1642,7 @@ let on_mousedown ev =
   end
 
 let on_dragstart ev =
-  if Platform.publishing () then () else begin
+  if Ui_services.env_publishing () then () else begin
   match D.closest_sel ".bullet-container" (D.ev_target ev) with
   | Some _ ->
       D.ev_prevent_default ev;
@@ -1660,7 +1660,7 @@ let on_file_dragover ev =
   if Array.length (files_of ev) > 0 then D.ev_prevent_default ev
 
 let on_file_drop ev =
-  if Platform.publishing () then () else begin
+  if Ui_services.env_publishing () then () else begin
   let files = files_of ev in
   if Array.length files > 0 then begin
     D.ev_prevent_default ev;
@@ -1691,7 +1691,7 @@ let install_once () =
     D.add_document_listener "pointerdown"
       (fun ev ->
         if
-          not (Platform.publishing ()) && S.ready ()
+          not (Ui_services.env_publishing ()) && S.ready ()
           (* capture-phase listener fires before the CM wrapper's
              stopPropagation — fenced-code clicks must not start a
              block range selection (cljs clears selection instead) *)
@@ -1700,7 +1700,7 @@ let install_once () =
         then Block_selection.pointerdown ev)
       true;
     D.add_document_listener "pointermove"
-      (fun ev -> if not (Platform.publishing ()) && S.ready () then Block_selection.pointermove ev)
+      (fun ev -> if not (Ui_services.env_publishing ()) && S.ready () then Block_selection.pointermove ev)
       true;
     D.add_document_listener "pointerup"
       (fun _ev -> Block_selection.pointerup ())

@@ -22,13 +22,13 @@
    notify_login. init() installs the DOM listeners; called from
    js_app/main.ml. *)
 
-let logged_in () = Platform.local_storage_get "id-token" <> None
+let logged_in () = Ui_services.storage_get "id-token" <> None
 
 external atob_ : string -> string = "atob" [@@mel.scope "window"]
 
 (* cljs user.cljs parse-jwt — the id-token's middle base64url segment *)
 let jwt_claim claim =
-  match Platform.local_storage_get "id-token" with
+  match Ui_services.storage_get "id-token" with
   | None -> None
   | Some tok -> (
       match String.split_on_char '.' tok with
@@ -55,7 +55,7 @@ let jwt_claim claim =
       | _ -> None)
 
 let jwt_claim_list claim =
-  match Platform.local_storage_get "id-token" with
+  match Ui_services.storage_get "id-token" with
   | None -> []
   | Some tok -> (
       match String.split_on_char '.' tok with
@@ -98,8 +98,8 @@ let user_uuid () = jwt_claim "sub"
 (* cljs user.cljs rtc-group? — dev build, a custom sync server, or a
    cognito group from {team, rtc_2025_07_10} *)
 let rtc_group () =
-  Platform.dev_build
-  || Platform.local_storage_get "sync-server-url" <> None
+  Ui_services.env_dev_build ()
+  || Ui_services.storage_get "sync-server-url" <> None
   || List.exists
        (fun g -> g = "team" || g = "rtc_2025_07_10")
        (jwt_claim_list "cognito:groups")
@@ -240,7 +240,7 @@ let on_visible () =
   if Web_dom.document_visible () then emit None
 
 (* cljs network-online? watch -> :network-online&rtc-not-running *)
-let on_online () = if Platform.online () then emit None
+let on_online () = if Ui_services.env_online () then emit None
 
 (* cljs logout watch -> <rtc-stop! *)
 let notify_logout () = Rtc_ops.stop ()
@@ -248,7 +248,7 @@ let notify_logout () = Rtc_ops.stop ()
 (* cljs user.cljs logout — clear tokens, push the empty auth state to
    the worker and stop sync (<rtc-stop!) *)
 let sign_out () =
-  List.iter Platform.local_storage_remove
+  List.iter Ui_services.storage_remove
     [ "id-token"; "access-token"; "refresh-token" ];
   ignore
     (Runtime.invoke1 "thread-api/sync-app-state"

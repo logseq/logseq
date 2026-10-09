@@ -341,7 +341,7 @@ let load_view_data ?(fetch_limit = 0) inst =
           let d =
             try Wr.decode_view_data v
             with e ->
-              Platform.console_error ("view-data decode failed", e);
+              Ui_services.log_error ("view-data decode failed", e);
               Wr.VEmpty
           in
           V.update inst (fun s ->
@@ -375,7 +375,7 @@ let load_view_data ?(fetch_limit = 0) inst =
           load_blocks inst uuids (fun () ->
               load_props inst (fun () -> build_columns inst))
   in
-  if Platform.publishing () && view_uuid = "" then
+  if Ui_services.env_publishing () && view_uuid = "" then
     let owner_ref = match inst.V.owner with
       | W.String name -> W.Array [ W.kw "block/name"; W.String name ]
       | W.Uuid uuid -> W.Array [ W.kw "block/uuid"; W.Uuid uuid ]
@@ -495,7 +495,7 @@ let create_view ~title ~uuid inst ~after =
 let ensure_default_view inst =
   match (V.get inst).V.views with
   | v :: _ -> select_view inst v
-  | [] when Platform.publishing () -> refresh inst
+  | [] when Ui_services.env_publishing () -> refresh inst
   | [] ->
       owner_uuid inst (function
         | Some ouuid ->
@@ -554,12 +554,12 @@ let export_edn inst =
     |> String.concat "\n"
   in
   ignore
-    (let* () = Platform.clipboard_write_text s in
+    (Ui_task.bind (Ui_services.clipboard_write_text s) (fun () ->
      Runtime.send
        (A.Toast_push
           { M.toast_id = 0; toast_key = None; toast_text = I.copied_view_nodes
           ; toast_kind = "success" });
-     Js.Promise.resolve ())
+     Ui_task.resolve ()))
 
 (* windowed view-data growth — the row stream's virt-end dom-event fires
    when its last child nears the viewport; each bump doubles the fetched
@@ -577,7 +577,7 @@ let load_more_rows inst =
 let add_new_object inst =
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
-      let uuid = Platform.random_uuid () in
+      let uuid = Ui_services.env_random_uuid () in
       Db.insert_object_block ~uuid ~page_uuid:owner_uuid ~title:""
         ~tags:[ owner_uuid ] ~props:[] (fun _ ->
           (* cljs edit-block! on the new page-child: the object mounts in
@@ -608,7 +608,7 @@ let install_ops () =
               if (V.get inst).V.query_rows <> [] then load_view_data inst))
     ; o_create_view =
         (fun inst ->
-          let uuid = Platform.random_uuid () in
+          let uuid = Ui_services.env_random_uuid () in
           create_view ~title:"" ~uuid inst ~after:(fun () ->
               match
                 List.find_opt (fun v -> v.Wr.vu = uuid) (V.get inst).V.views

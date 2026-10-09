@@ -40,7 +40,7 @@ let register registry = Lui_extension.register_component registry schema
 let el ?key ~block ~display ~tex () : Lui_elements.t =
  fun context parent ->
   Render_libs.ensure ();
-  let id = "ls-katex-" ^ Platform.random_uuid () in
+  let id = "ls-katex-" ^ Ui_services.env_random_uuid () in
   Render_libs.katex_register_pending id display;
   let node = Lui_ui.extension context identifier in
   Option.iter (Lui_ui.key context node) key;

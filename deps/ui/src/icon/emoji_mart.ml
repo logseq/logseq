@@ -106,5 +106,5 @@ let search (q : string) (f : (string * string) list -> unit) =
        Js.Promise.resolve
          (f (List.filter_map entry_of_json (Array.to_list arr))))
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("emoji search failed", e);
+             Ui_services.log_error ("emoji search failed", e);
              Js.Promise.resolve (f [])))

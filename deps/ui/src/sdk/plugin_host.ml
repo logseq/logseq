@@ -48,7 +48,7 @@ let settings_key pid = "LSPUserDotRoot/settings/" ^ pid ^ ".json"
 let prefs_key = "LSPUserDotRoot/preferences.json"
 
 let read_json key =
-  match Platform.local_storage_get key with
+  match Ui_services.storage_get key with
   | Some s -> (try Platform.json_parse s with _ -> Js.Json.null)
   | None -> Js.Json.null
 
@@ -58,7 +58,7 @@ let read_dict key =
   | None -> Js.Dict.empty ()
 
 let write_dict key d =
-  Platform.local_storage_set key
+  Ui_services.storage_set key
     (Js.Json.stringify (Js.Json.object_ d))
 
 (* ---------- in-memory host state ---------- *)
@@ -815,9 +815,9 @@ let apply_theme_mode (theme : Js.Json.t) =
   (match Js.Json.decodeString (getf theme "mode") with
    | Some m when m <> "" ->
        Ui_services.theme_apply_dataset m;
-       Platform.local_storage_set "ui/theme" ("\"" ^ m ^ "\"");
+       Ui_services.storage_set "ui/theme" ("\"" ^ m ^ "\"");
        (* cljs state/set-custom-theme! — mode -> theme under one key *)
-       Platform.local_storage_set "ui/custom-theme"
+       Ui_services.storage_set "ui/custom-theme"
          (Js.Json.stringify theme)
    | _ -> ());
   (match Js.Json.decodeString (getf theme "url") with
@@ -828,8 +828,8 @@ let apply_theme_mode (theme : Js.Json.t) =
 (* cljs :plugin/reset-custom-theme — drop custom theme, restore the
    persisted ui/theme mode on <html data-theme> *)
 let reset_custom_theme () =
-  Platform.local_storage_remove "ui/custom-theme";
-  (match Platform.local_storage_get "ui/theme" with
+  Ui_services.storage_remove "ui/custom-theme";
+  (match Ui_services.storage_get "ui/theme" with
    | Some s -> (
        try
          match Js.Json.decodeString (Js.Json.parseExn s) with
@@ -960,21 +960,21 @@ let write_dotdir_file a b c _d =
   (* cljs write_dotdir_file(file, content, sub-root) *)
   match dotdir_norm (arg_string c |> Option.value ~default:"") (arg_string a |> Option.value ~default:"") with
   | Some key ->
-      Platform.local_storage_set key (json_text b);
+      Ui_services.storage_set key (json_text b);
       resolved (jstr_ key)
   | None -> resolved_nil
 
 let write_tmp_file a b _c _d =
   match dotdir_norm "tmp" (arg_string a |> Option.value ~default:"") with
   | Some key ->
-      Platform.local_storage_set key (json_text b);
+      Ui_services.storage_set key (json_text b);
       resolved (jstr_ key)
   | None -> resolved_nil
 
 let read_dotdir_file a b _c _d =
   match dotdir_norm (arg_string b |> Option.value ~default:"") (arg_string a |> Option.value ~default:"") with
   | Some key -> (
-      match Platform.local_storage_get key with
+      match Ui_services.storage_get key with
       | Some s -> resolved (jstr_ s)
       | None -> resolved Js.Json.null)
   | None -> resolved_nil
@@ -985,7 +985,7 @@ let unlink_dotdir_file a b _c _d =
        (arg_string b |> Option.value ~default:"")
        (arg_string a |> Option.value ~default:"")
    with
-   | Some key -> Platform.local_storage_remove key
+   | Some key -> Ui_services.storage_remove key
    | None -> ());
   resolved_nil
 
@@ -1025,7 +1025,7 @@ let exist_dotdir_file a b _c _d =
             (arg_string b |> Option.value ~default:"")
             (arg_string a |> Option.value ~default:"")
         with
-        | Some key -> Option.is_some (Platform.local_storage_get key)
+        | Some key -> Option.is_some (Ui_services.storage_get key)
         | None -> false))
 
 (* cljs plugin-storage-sub-root: "storages" / basename of the plugin id *)
@@ -1044,21 +1044,21 @@ let storage_root a b =
 let write_plugin_storage_file a b c _d =
   match storage_root a b with
   | Some key ->
-      Platform.local_storage_set key (json_text c);
+      Ui_services.storage_set key (json_text c);
       resolved (jstr_ key)
   | None -> resolved_nil
 
 let read_plugin_storage_file a b _c _d =
   match storage_root a b with
   | Some key -> (
-      match Platform.local_storage_get key with
+      match Ui_services.storage_get key with
       | Some s -> resolved (jstr_ s)
       | None -> Js.Promise.reject (Failure "file not existed"))
   | None -> resolved_nil
 
 let unlink_plugin_storage_file a b _c _d =
   (match storage_root a b with
-   | Some key -> Platform.local_storage_remove key
+   | Some key -> Ui_services.storage_remove key
    | None -> ());
   resolved_nil
 
@@ -1066,7 +1066,7 @@ let exist_plugin_storage_file a b _c _d =
   resolved
     (Js.Json.boolean
        (match storage_root a b with
-        | Some key -> Option.is_some (Platform.local_storage_get key)
+        | Some key -> Option.is_some (Ui_services.storage_get key)
         | None -> false))
 
 let ls_prefix_keys prefix f =
@@ -1091,7 +1091,7 @@ let clear_plugin_storage_files a _b _c _d =
    | Some pid ->
        ls_prefix_keys
          ("LSPUserDotRoot/" ^ storage_sub_root pid ^ "/")
-         (List.iter Platform.local_storage_remove)
+         (List.iter Ui_services.storage_remove)
    | None -> ());
   resolved_nil
 
@@ -1386,7 +1386,7 @@ let load_plugin_settings a _b _c _d =
 let save_plugin_settings a b _c _d =
   (match arg_string a with
    | Some pid ->
-       Platform.local_storage_set (settings_key pid)
+       Ui_services.storage_set (settings_key pid)
          (Js.Json.stringify b)
    | None -> ());
   resolved_nil
@@ -1400,7 +1400,7 @@ let unlink_plugin_settings a _b _c _d =
 let load_user_preferences _a _b _c _d = resolved (read_json prefs_key)
 
 let save_user_preferences a _b _c _d =
-  Platform.local_storage_set prefs_key (Js.Json.stringify a);
+  Ui_services.storage_set prefs_key (Js.Json.stringify a);
   resolved_nil
 
 let register_ui_item a b c _d =
@@ -1566,7 +1566,7 @@ let get_state_from_store a _b _c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some key -> (
-      match Platform.local_storage_get key with
+      match Ui_services.storage_get key with
       | Some s -> (
           try resolved (Js.Json.parseExn s)
           with _ -> resolved (jstr_ s))

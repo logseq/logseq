@@ -163,7 +163,7 @@ let fetch_ref_count ~stale:(is_stale : unit -> bool) (p : Model.page) =
               Runtime.send (Action.Ref_count_loaded n)
           | _ -> ()))
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("block-ref-count failed", e);
+             Ui_services.log_error ("block-ref-count failed", e);
              Js.Promise.resolve ())
       |> ignore
   | None -> ()
@@ -201,7 +201,7 @@ let fetch_page_extras ~stale:(is_stale : unit -> bool) (p : Model.page) =
             | _ -> ()
           end))
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("page extras fetch failed", e);
+             Ui_services.log_error ("page extras fetch failed", e);
              Js.Promise.resolve ())
       |> ignore
   | None -> ()
@@ -249,7 +249,7 @@ let maybe_fill_journals () =
        150)
 
 let load_journals () =
-  Platform.perf_mark "nav:journals";
+  Ui_services.perf_mark "nav:journals";
   journals_has_more := true;
   journals_loading_more := false;
   (let* w =
@@ -267,7 +267,7 @@ let load_journals () =
          maybe_fill_journals ()
      | _ -> ()))
   |> Js.Promise.catch (fun e ->
-         Platform.console_error ("load_journals failed", e);
+         Ui_services.log_error ("load_journals failed", e);
          (match Runtime.route () with
           | Model.Journals | Model.Home ->
               Runtime.send Action.Page_load_failed
@@ -326,7 +326,7 @@ let load_more_journals () : unit Js.Promise.t =
      Js.Promise.resolve ())
     |> Js.Promise.catch (fun e ->
            journals_loading_more := false;
-           Platform.console_error ("load_more_journals failed", e);
+           Ui_services.log_error ("load_more_journals failed", e);
            Js.Promise.resolve ()))
 
 (* cljs go-to-journals!: a configured :default-home page takes over the
@@ -384,7 +384,7 @@ let rec load_page_ref for_route ref_v =
     Runtime.invoke2 "thread-api/get-page-route-info"
       (Wire.String (repo ())) ref_v
   in
-  Platform.perf_mark "nav:route-info";
+  Ui_services.perf_mark "nav:route-info";
   (* cljs redirect-to-page!: an alias page's route resolves to
             its source page (self-alias guard: don't loop when the route
             already targets the source uuid) *)
@@ -401,7 +401,7 @@ let rec load_page_ref for_route ref_v =
   match Decode.page_of_summary info with
   | Some p ->
       let* p' = fetch_blocks p in
-      Platform.perf_mark "nav:blocks";
+      Ui_services.perf_mark "nav:blocks";
       let* p'' = Outliner_ops.resolve_page_tags (repo ()) p' in
       (* cljs page-inner renders the :block/parent namespace chain as a
          breadcrumb above the title — same parents endpoint the
@@ -425,7 +425,7 @@ let rec load_page_ref for_route ref_v =
              Js.Promise.resolve { p'' with Model.page_parents })
         | None -> Js.Promise.resolve p''
       in
-      Platform.perf_mark "nav:tags";
+      Ui_services.perf_mark "nav:tags";
       if not (is_stale ()) then (
         (* a fresh page snapshot is authoritative —
            drop pending committed-buffer title paints *)
@@ -434,7 +434,7 @@ let rec load_page_ref for_route ref_v =
         (* cljs update-page-label!: body[data-page] carries the route
            page title (pdf overlay CSS keys off the attribute) *)
         Web_dom.body_set_data "page" p''.Model.page_title;
-        (Platform.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
+        (Ui_services.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
         fetch_page_extras ~stale:is_stale p'';
         (* zoom-out to a page parent keeps the zoomed
            block in edit mode (cljs pending-edit) *)
@@ -454,7 +454,7 @@ let rec load_page_ref for_route ref_v =
          route creates the journal page on the fly; non-journal names
          keep the inline :page/not-found *)
       match ref_v with
-      | Wire.String n when Dates.is_journal_title n && not (Platform.publishing ()) ->
+      | Wire.String n when Dates.is_journal_title n && not (Ui_services.env_publishing ()) ->
           (let* _ = Outliner_ops.apply_create_page n in
            load_page_ref for_route ref_v)
       | _ ->
@@ -491,7 +491,7 @@ let load_home () =
           if not (stale (Model.Page name)) then (
             Editor_state.clear_overrides ();
             loaded_route := Some (Model.Page name);
-            (Platform.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
+            (Ui_services.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
             fetch_ref_count
               ~stale:(fun () ->
                 stale (Model.Page name))
@@ -508,7 +508,7 @@ let load_home () =
       Runtime.journals_load_more := load_more_journals;
       load_journals ())
   |> Js.Promise.catch (fun e ->
-         Platform.console_error ("load_home failed", e);
+         Ui_services.log_error ("load_home failed", e);
          (match Runtime.route () with
           | Model.Home -> Runtime.send Action.Page_load_failed
           | _ -> ());
@@ -587,7 +587,7 @@ let load_block_zoom uuid =
                   Editor_state.clear_overrides ();
                   loaded_route
                   := Some (Model.Block_zoom uuid);
-                  (Platform.perf_mark "router:page-loaded";
+                  (Ui_services.perf_mark "router:page-loaded";
                   Runtime.send
                     (Action.Page_loaded
                        { Model.page_title =
@@ -627,7 +627,7 @@ let load_block_zoom uuid =
                  | _ -> ());
                 Js.Promise.resolve ())
                       |> Js.Promise.catch (fun e ->
-                             Platform.console_error
+                             Ui_services.log_error
                                ("load_block_zoom parents failed", e);
                              if
                                gen = !Runtime.load_gen
@@ -652,7 +652,7 @@ let load_block_zoom uuid =
            && !loaded_route <> Some (Model.Block_zoom uuid)
          then Runtime.send Action.Page_load_failed))
   |> Js.Promise.catch (fun e ->
-         Platform.console_error ("load_block_zoom failed", e);
+         Ui_services.log_error ("load_block_zoom failed", e);
          if
            (not (stale (Model.Block_zoom uuid)))
            && !loaded_route <> Some (Model.Block_zoom uuid)
@@ -696,7 +696,7 @@ let load_route (route : Model.route) =
       ()
 
 let resolve () =
-  Platform.perf_mark "router:resolve";
+  Ui_services.perf_mark "router:resolve";
   let route = parse_hash () in
   (match Runtime.route () with
   | r when r = route ->
@@ -740,7 +740,7 @@ let resolve () =
 let reload_timer = ref 0
 
 let reload () =
-  Platform.perf_mark "router:reload";
+  Ui_services.perf_mark "router:reload";
   Web_dom.clear_timeout !reload_timer;
   reload_timer :=
     Web_dom.set_timeout_id
@@ -776,7 +776,7 @@ let init () =
                          (Runtime.model ()).Model.journals))
              | _ -> ()))
          |> Js.Promise.catch (fun e ->
-                Platform.console_error
+                Ui_services.log_error
                   ("journal refs refresh failed", e);
                 Js.Promise.resolve ())));
   (* cljs all-journals' Virtuoso endReached — scroll doesn't bubble, so a
@@ -798,6 +798,6 @@ let init () =
     true;
   Ui_services.nav_on_navigate resolve;
   Web_dom.on_document_event "keydown" (fun ev ->
-      if Platform.event_str ev "key" = "Escape" then (
+      if Web_dom.event_str ev "key" = "Escape" then (
         Runtime.send Action.Dismiss_all;
         Runtime.flush ()))

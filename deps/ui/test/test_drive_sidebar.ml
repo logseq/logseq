@@ -37,12 +37,7 @@ let host () : (Model.t, Action.t) Shared_scenarios_sidebar.host =
         | Some st -> Sidebar_state.toggle_nav st nav checked
         | None -> check "sidebar state mounted" false)
   ; set_theme = (fun m -> Settings_view.use_mode m)
-  ; set_language =
-      (fun m ->
-        (* the locale chunk loader resolves lui-shims/lazy-assets, which
-           only exists in the app bundle — storage_set/doc_set_lang run
-           before it raises, so the persisted contract is still real *)
-        try Settings_view.set_language m with _ -> ())
+  ; set_language = (fun m -> Settings_view.set_language m)
   }
 
 let run () = Shared_scenarios_sidebar.all (host ())

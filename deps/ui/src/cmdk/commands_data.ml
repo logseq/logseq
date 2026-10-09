@@ -74,19 +74,19 @@ let table : cmd list =
 
 (* cljs shortcut-utils/decorate-binding (literal replace order matters:
    "shift+/" -> "?" before "shift" -> shift glyph); glyph literals go
-   through Platform.utf8 *)
+   through Ui_services.literal_text *)
 let decorate_binding s =
-  let mac = Platform.is_mac () in
+  let mac = Ui_services.env_is_mac () in
   s
-  |> (fun x -> I18n.replace_all x "mod" (if mac then Platform.utf8 "\xe2\x8c\x98" else "ctrl"))
-  |> (fun x -> I18n.replace_all x "meta" (if mac then Platform.utf8 "\xe2\x8c\x98" else Platform.utf8 "\xe2\x8a\x9e win"))
-  |> (fun x -> I18n.replace_all x "alt" (if mac then Platform.utf8 "\xe2\x8c\xa5" else "alt"))
+  |> (fun x -> I18n.replace_all x "mod" (if mac then Ui_services.literal_text "\xe2\x8c\x98" else "ctrl"))
+  |> (fun x -> I18n.replace_all x "meta" (if mac then Ui_services.literal_text "\xe2\x8c\x98" else Ui_services.literal_text "\xe2\x8a\x9e win"))
+  |> (fun x -> I18n.replace_all x "alt" (if mac then Ui_services.literal_text "\xe2\x8c\xa5" else "alt"))
   |> (fun x -> I18n.replace_all x "shift+/" "?")
-  |> (fun x -> I18n.replace_all x "left" (Platform.utf8 "\xe2\x86\x90"))
-  |> (fun x -> I18n.replace_all x "right" (Platform.utf8 "\xe2\x86\x92"))
-  |> (fun x -> I18n.replace_all x "up" (Platform.utf8 "\xe2\x86\x91"))
-  |> (fun x -> I18n.replace_all x "down" (Platform.utf8 "\xe2\x86\x93"))
-  |> (fun x -> I18n.replace_all x "shift" (Platform.utf8 "\xe2\x87\xa7"))
+  |> (fun x -> I18n.replace_all x "left" (Ui_services.literal_text "\xe2\x86\x90"))
+  |> (fun x -> I18n.replace_all x "right" (Ui_services.literal_text "\xe2\x86\x92"))
+  |> (fun x -> I18n.replace_all x "up" (Ui_services.literal_text "\xe2\x86\x91"))
+  |> (fun x -> I18n.replace_all x "down" (Ui_services.literal_text "\xe2\x86\x93"))
+  |> (fun x -> I18n.replace_all x "shift" (Ui_services.literal_text "\xe2\x87\xa7"))
   |> (fun x -> I18n.replace_all x "open-square-bracket" "[")
   |> (fun x -> I18n.replace_all x "close-square-bracket" "]")
   |> (fun x -> I18n.replace_all x "equals" "=")

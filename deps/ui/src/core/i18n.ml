@@ -70,15 +70,21 @@ let sub s args =
     (s, 1) args
   |> fst
 
-(* cljs :preferred-language — an EDN-quoted string in localStorage *)
+(* cljs :preferred-language — an EDN-quoted string in localStorage.
+   Read via the raw storage op, not Ui_services: this module's top-level
+   `let k = t "..."` bindings evaluate during module init, before any
+   runtime installs services. The answer is "en" either way at that
+   point (non-English dicts are never loaded pre-init). *)
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with
-  | Some v -> Platform.storage_unquote v
+  | Some v -> Ui_services.storage_unquote v
   | None -> "en"
 
 (* dict values are OCaml literals — Melange emits them as JS strings
    treating the UTF-8 source bytes as Latin-1, so non-ASCII entries must
-   pass through Platform.utf8 (same convention as keymap_data/settings_view) *)
+   pass through Platform.utf8 (same convention as keymap_data/settings_view);
+   kept on the raw platform op because en_tbl is forced during module
+   init, before services are installed *)
 let tbl_of arr =
   let h = Hashtbl.create (Array.length arr) in
   Array.iter (fun (k, v) -> Hashtbl.replace h k (Platform.utf8 v)) arr;
@@ -107,7 +113,7 @@ let locale_loads : (string, unit Js.Promise.t) Hashtbl.t = Hashtbl.create 4
 
 let locale_tbl loc = Option.join (Hashtbl.find_opt locale_tbls loc)
 
-(* fetched text is already a decoded JS string — no Platform.utf8
+(* fetched text is already a decoded JS string — no Ui_services.literal_text
    pass (that's only for Latin-1-misread OCaml literals). Only
    keyword->string pairs, same filter dict_gen applies *)
 let tbl_of_text file text =
@@ -133,23 +139,30 @@ let load loc : unit Js.Promise.t =
           Hashtbl.replace locale_tbls loc None;
           Js.Promise.resolve ()
       | Some file ->
-          let p =
-                (let* text =
-                   load_dict_chunk
-                     (raw_require "lui-shims/lazy-assets")
-                     file
-                 in
+          (match
+             try Some (raw_require "lui-shims/lazy-assets")
+             with _ -> None
+           with
+           (* non-bundled envs (node test, native) have no lazy-assets
+              shim — same "unavailable" state as a failed fetch: cache
+              None and resolve so callers' continuations still run *)
+           | None ->
+               Hashtbl.replace locale_tbls loc None;
+               Js.Promise.resolve ()
+           | Some lazy_assets ->
+               let p =
+                (let* text = load_dict_chunk lazy_assets file in
                  Hashtbl.replace locale_tbls loc
                    (Some (tbl_of_text file text));
                  Js.Promise.resolve ())
                 |> Js.Promise.catch (fun err ->
-                       Platform.console_error
+                       Ui_services.log_error
                          ("i18n dict load failed", loc, err);
                        Hashtbl.replace locale_tbls loc None;
                        Js.Promise.resolve ())
-              in
-              Hashtbl.replace locale_loads loc p;
-              p)
+               in
+               Hashtbl.replace locale_loads loc p;
+               p))
 
 (* boot gate: main.ml awaits this before first render so a non-English
    locale never paints English first; en is embedded and resolves

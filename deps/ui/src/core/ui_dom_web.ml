@@ -1,6 +1,7 @@
-(* Browser implementation of the Ui_dom boundary: real DOM elements and
-   document events. Installed once per runtime that mounts shared
-   settings/sidebar code (app bootstrap and the in-process test host). *)
+(* Browser implementation of the dom service group: real DOM elements
+   and document events. The ops record is handed to Platform_web.install
+   once per runtime that mounts shared settings/sidebar code (app
+   bootstrap and the in-process test host). *)
 
 external j_bool : Js.Json.t -> string -> bool = "" [@@mel.get_index]
 
@@ -49,8 +50,8 @@ let num j key =
       | _ -> 0.)
   | None -> 0.
 
-let rec el_of (e : Js.Json.t) : Ui_dom.el =
-  { closest =
+let rec el_of (e : Js.Json.t) : Ui_services.el =
+  { Ui_services.closest =
       (fun sel ->
         match closest_js e sel with
         | Some c -> Some (el_of c)
@@ -86,7 +87,7 @@ let detail_field name ev =
       | None -> None)
   | None -> None
 
-let ev_of (e : Js.Json.t) : Ui_dom.ev =
+let ev_of (e : Js.Json.t) : Ui_services.ev =
   let touches =
     match j_field e "touches" with
     | Some _ ->
@@ -96,11 +97,12 @@ let ev_of (e : Js.Json.t) : Ui_dom.ev =
             (num t "clientX", num t "clientY"))
     | None -> []
   in
-  { x = num e "clientX"
+  { Ui_services.x = num e "clientX"
   ; y = num e "clientY"
   ; shift = j_bool e "shiftKey"
   ; meta = j_bool e "metaKey"
   ; ctrl = j_bool e "ctrlKey"
+  ; composing = j_bool e "isComposing"
   ; key =
       (match j_field e "key" with
        | Some v -> (
@@ -117,8 +119,8 @@ let ev_of (e : Js.Json.t) : Ui_dom.ev =
   ; prevent_default = (fun () -> prevent_default e)
   }
 
-let ops : Ui_dom.ops =
-  { on_document_event =
+let ops : Ui_services.dom =
+  { Ui_services.on_document_event =
       (fun name f ->
         Web_dom.on_document_event name (fun payload -> f (ev_of payload)))
   ; query =
@@ -128,22 +130,20 @@ let ops : Ui_dom.ops =
         | None -> None)
   ; doc_root = (fun () -> el_of doc_root_js)
   ; viewport_width = (fun () -> Web_dom.win_inner_width)
-  ; prefers_dark = Web_dom.prefers_dark
-  ; navigate_hash = Platform.set_location_hash
   ; dispatch = (fun name -> Web_dom.dispatch_custom name Js.Json.null)
+  ; emit_json =
+      (fun (_ : string) (_ : string) ->
+        (* hosts never synthesize dom-events on web — the real DOM
+           dispatch already reached document listeners *)
+        ())
   ; open_dialog =
       (fun name ->
         let o = Js.Dict.empty () in
         Js.Dict.set o "name" (Js.Json.string name);
         Web_dom.dispatch_custom "ls:open-dialog" (Js.Json.object_ o))
-  ; encode_uri = Platform.encode_uri_component
-  ; dev_build = (fun () -> Platform.dev_build)
-  ; log_error = (fun msg -> Platform.console_error msg)
   ; apply_left_sidebar_width =
       (fun px ->
         set_style_prop doc_root_js "--ls-left-sidebar-width"
           (Printf.sprintf "%dpx" px))
+  ; selected_block_uuids = Ui_services.dom_selected_block_uuids
   }
-
-let install () =
-  if not (Ui_dom.ready ()) then Ui_dom.install ops

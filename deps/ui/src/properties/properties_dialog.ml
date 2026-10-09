@@ -127,7 +127,7 @@ let add_empty_text_block d prop =
   V.set_pending_edit ~block_uuid:d.d_target.uuid ~ident;
   (let* _ =
     D.create_property_text_block ~block_uuid:d.d_target.uuid ~ident
-      ~title:"" ~new_block_id:(Platform.random_uuid ()) ()
+      ~title:"" ~new_block_id:(Ui_services.env_random_uuid ()) ()
   in
   S.refresh_now ();
   Js.Promise.resolve ())
@@ -471,7 +471,7 @@ let value_edit_view d prop : t =
             (* text value -> create value block *)
             D.create_property_text_block ~block_uuid:d.d_target.uuid
               ~ident:(ident_of prop) ~title:text
-              ~new_block_id:(Platform.random_uuid ()) ()
+              ~new_block_id:(Ui_services.env_random_uuid ()) ()
             |> ignore;
             S.refresh_all ();
             close ())
@@ -587,7 +587,7 @@ let current_target () : target option =
       Some { uuid = u; uuids = []; db_id = None; is_tag = false
            ; title = "" }
   | None -> (
-      match Platform.selected_block_uuids () with
+      match Ui_services.dom_selected_block_uuids () with
       | u :: _ as us ->
           Some { uuid = u; uuids = us; db_id = None; is_tag = false
                ; title = "" }

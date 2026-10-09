@@ -652,7 +652,6 @@ let install () =
   set_field global "requestAnimationFrame"
     (fun cb -> Js.Global.setTimeout ~f:(fun () -> cb 0.) 0);
   set_field global "cancelAnimationFrame" (fun _id -> ());
-  Ui_dom_web.install ();
   ()
 
 (* -- test-side event firing -- *)

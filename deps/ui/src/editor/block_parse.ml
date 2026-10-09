@@ -133,7 +133,7 @@ let parse_title (title : string) :
               match Hashtbl.find_opt seen (lc name) with
               | Some u -> u
               | None ->
-                  let u = Platform.random_uuid () in
+                  let u = Ui_services.env_random_uuid () in
                   Hashtbl.replace seen (lc name) u;
                   refs := ref_map name u :: !refs;
                   created := (name, u) :: !created;
@@ -159,7 +159,7 @@ let parse_title (title : string) :
               match Hashtbl.find_opt seen_tag (lc name) with
               | Some u -> u
               | None ->
-                  let u = Platform.random_uuid () in
+                  let u = Ui_services.env_random_uuid () in
                   Hashtbl.replace seen_tag (lc name) u;
                   refs := ref_map name u :: !refs;
                   tags := tag_map name u :: !tags;
@@ -178,7 +178,7 @@ let parse_title (title : string) :
           (match Hashtbl.find_opt seen_tag (lc name) with
            | Some _ -> ()
            | None ->
-               let u = Platform.random_uuid () in
+               let u = Ui_services.env_random_uuid () in
                Hashtbl.replace seen_tag (lc name) u;
                refs := tag_map name u :: !refs);
           Buffer.add_string buf (S.sub title i (e - i));

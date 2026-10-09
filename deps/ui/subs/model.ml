@@ -264,13 +264,16 @@ let initial =
   ; repos = []
   ; theme_dark = false
   ; left_sidebar_open =
-      (* cljs: (boolean (storage/get :ls-left-sidebar-open?)) — nil -> false *)
+      (* cljs: (boolean (storage/get :ls-left-sidebar-open?)) — nil -> false.
+         Raw platform op: Model.initial evaluates at module init, before
+         Ui_services is installed. *)
       (match Platform.local_storage_get "ls-left-sidebar-open?" with
        | Some "true" -> true
        | _ -> false)
   ; left_sidebar_width =
       (* cljs restores persisted :ls-left-sidebar-width into
-         --ls-left-sidebar-width on mount; default 246px *)
+         --ls-left-sidebar-width on mount; default 246px. Raw platform
+         op — module init, same as left_sidebar_open above. *)
       (match Platform.local_storage_get "ls-left-sidebar-width" with
        | Some w0 ->
            let w0 = String.trim w0 in

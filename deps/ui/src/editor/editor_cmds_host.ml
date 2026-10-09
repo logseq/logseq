@@ -4,7 +4,7 @@
 
 let host () : Editor_cmds.host =
   { Editor_cmds.clipboard_write =
-      (fun s -> ignore (Platform.clipboard_write_text s))
+      (fun s -> ignore (Ui_services.clipboard_write_text s))
   ; open_right_sidebar =
       (fun uuid ->
         Web_dom.dispatch_custom "ls:open-right-sidebar"
@@ -17,5 +17,5 @@ let host () : Editor_cmds.host =
           Plugin_host.exec_simple_command
             ~ctx:(Js.Dict.fromList [ ("uuid", Js.Json.string uuid) ])
             plugin key)
-  ; report_error = (fun label detail -> Platform.console_error (label, detail))
+  ; report_error = (fun label detail -> Ui_services.log_error (label, detail))
   }

@@ -41,5 +41,5 @@ let insert title =
           Ops.apply_and_refresh
             [ Ops.insert_blocks ~replace_empty_target:true
                 [ Ops.block_map ~title ~link:page_id
-                    (Platform.random_uuid ()) ]
+                    (Ui_services.env_random_uuid ()) ]
                 uuid ~sibling:true ])

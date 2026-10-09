@@ -199,7 +199,7 @@ let run_sync_subs (affected : Wire.t list) =
       if affected = [] || hits s.watch then
         try s.run affected
         with e ->
-          Platform.console_error ("sync-db-changes handler failed", e))
+          Ui_services.log_error ("sync-db-changes handler failed", e))
     !sync_subs
 
 (* ---- app-level runtime state + cycle-breaking hooks ----

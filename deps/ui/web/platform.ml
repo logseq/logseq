@@ -320,12 +320,6 @@ let payload_num json key =
       | None -> 0.)
   | None -> 0.
 
-(* raw DOM event field, e.g. keydown "key" *)
-let event_str ev key =
-  match Js.Json.decodeString (js_get ev key) with
-  | Some s -> s
-  | None -> ""
-
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 

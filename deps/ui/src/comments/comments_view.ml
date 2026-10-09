@@ -36,11 +36,11 @@ let draft_key area_uuid = "comments-" ^ area_uuid ^ "-draft"
 
 let load_draft area_uuid =
   Option.value
-    (Platform.local_storage_get (draft_key area_uuid))
+    (Ui_services.storage_get (draft_key area_uuid))
     ~default:""
 
 let save_draft area_uuid (v : string) =
-  Platform.local_storage_set (draft_key area_uuid) v
+  Ui_services.storage_set (draft_key area_uuid) v
 
 let clear_draft area_uuid = save_draft area_uuid ""
 
@@ -48,7 +48,7 @@ let clear_draft area_uuid = save_draft area_uuid ""
 let submit_comment area_uuid (text : string) =
   let title = String.trim text in
   if title <> "" then (
-    let uuid = Platform.random_uuid () in
+    let uuid = Ui_services.env_random_uuid () in
     let block =
       Wire.Map
         [ (Wire.String "block/uuid", Wire.Uuid uuid)

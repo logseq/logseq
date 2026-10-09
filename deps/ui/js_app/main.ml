@@ -46,8 +46,7 @@ let unescape_published s =
     ; "logseq____&quot;", "\""; "logseq____&apos;", "\'" ]
 
 let main root =
-  Platform_web.install ~request_flush:Runtime.flush;
-  Ui_dom_web.install ();
+  Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops;
   install_error_reporting ();
   let registry = Lui_extension.registry () in
   Logseq_emoji.register registry;

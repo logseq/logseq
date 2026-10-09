@@ -104,7 +104,7 @@ let delete_asset ~repo ~name =
       clear_url ~repo ~name;
       pfs_unlink p (asset_path repo name)
       |> Js.Promise.catch (fun e ->
-             Platform.console_error
+             Ui_services.log_error
                ("asset delete failed", asset_path repo name, e);
              Js.Promise.resolve ())
 
@@ -122,8 +122,8 @@ let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) : string Js.Promise.t =
 (* resolved object URL for assets/<uuid>.<ext>; extension drives the Blob
    MIME so <img> can decode it *)
 let object_url ~repo ~name ~mime : string Js.Promise.t =
-  if Platform.publishing () then (
-    let url = "assets/" ^ Platform.encode_uri_component name in
+  if Ui_services.env_publishing () then (
+    let url = "assets/" ^ Ui_services.uri_encode_component name in
     Hashtbl.replace url_cache (cache_key repo name) url;
     Js.Promise.resolve url)
   else

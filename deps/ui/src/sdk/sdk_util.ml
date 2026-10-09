@@ -192,7 +192,7 @@ let fetch_tag_names (names : string list) : string list Js.Promise.t =
       in
       resolved (List.filter_map Wire.as_string (Wire.elems w)))
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("tag-name lookup failed", e);
+             Ui_services.log_error ("tag-name lookup failed", e);
              resolved [])
 
 let fetch_ref_uuids (names : string list)
@@ -223,7 +223,7 @@ let fetch_ref_uuids (names : string list)
              | _ -> None)
            (Wire.elems w)))
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("page-ref uuid lookup failed", e);
+             Ui_services.log_error ("page-ref uuid lookup failed", e);
              resolved [])
 
 (* page-ref stub — resolve-page-refs turns block/type "page" stubs into
@@ -250,7 +250,7 @@ let rec rewrite_title_refs ~(tags : string list)
   let uuid_of inner =
     let lc = page_name_sanity_lc inner in
     (lc, Option.value (List.assoc_opt lc known)
-           ~default:(Platform.random_uuid ()))
+           ~default:(Ui_services.env_random_uuid ()))
   in
   match w with
   | Wire.Map kvs -> (

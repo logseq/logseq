@@ -280,7 +280,7 @@ let parsed_block_map content custom_uuid =
           , Wire.Uuid
               (match custom_uuid with
                | Some u -> u
-               | None -> Platform.random_uuid ()) )
+               | None -> Ui_services.env_random_uuid ()) )
         ]
        @ Title_refs.kvs_of_parsed p))
 
@@ -366,7 +366,7 @@ let rec flatten_batch level parent_uuid acc (w : Wire.t) =
       let uuid =
         match Wire.get w "uuid" with
         | Some (Wire.Uuid u) | Some (Wire.String u) -> u
-        | _ -> Platform.random_uuid ()
+        | _ -> Ui_services.env_random_uuid ()
       in
       let props =
         match Wire.get w "properties" with
@@ -650,7 +650,7 @@ let create_page a b c _d =
       let uuid =
         match opt_string "customUUID" opts with
         | Some u -> u
-        | None -> Platform.random_uuid ()
+        | None -> Ui_services.env_random_uuid ()
       in
       (* properties live in arg b — cljs create_page(name, properties, opts) *)
       let props = properties_of (arg_map b) in
@@ -690,7 +690,7 @@ let create_journal_page a _b _c _d =
       create_page_with_flags
         (Printf.sprintf "%04d-%02d-%02d" y m d)
         true false
-        (Platform.random_uuid ())
+        (Ui_services.env_random_uuid ())
         None [] (Wire.Map [])
 
 (* schema remap — cljs upsert-property-aux: type→logseq.property/type
@@ -785,7 +785,7 @@ let create_tag a b _c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some title ->
-      let uuid = Platform.random_uuid () in
+      let uuid = Ui_services.env_random_uuid () in
       let opts = arg_map b in
       let idents =
         match Wire.get opts "tagProperties" with
@@ -1475,7 +1475,7 @@ let delete_recycled_page_permanently a _b _c _d =
 
 (* cljs new-block-uuid: a fresh block uuid string *)
 let new_block_uuid _a _b _c _d =
-  resolved (Js.Json.string (Platform.random_uuid ()))
+  resolved (Js.Json.string (Ui_services.env_random_uuid ()))
 
 (* cljs force-save-graph — no manual save step exists on the web
    runtime; every write already goes through the worker *)

@@ -31,7 +31,7 @@ let write_config repo (cfg : Wire.t) =
       ; Wire.Array
           [ Wire.Map
               (* file-block schema requires :block/uuid *)
-              [ (Wire.kw "block/uuid", Wire.Uuid (Platform.random_uuid ()))
+              [ (Wire.kw "block/uuid", Wire.Uuid (Ui_services.env_random_uuid ()))
               ; (Wire.kw "file/path", Wire.String config_path)
               ; (Wire.kw "file/content", Wire.String (Edn.to_string cfg))
               ; (Wire.kw "file/created-at", Wire.Date_ms now_ms)

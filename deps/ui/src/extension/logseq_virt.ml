@@ -223,7 +223,7 @@ let fresh_id () =
 (* ?virtualized=true forces windowing — both the Virt_list gate and the
    visibility sync key off it (cljs use-virtual-list-opts) *)
 let force_virtualized () =
-  Platform.query_param "virtualized" = Some "true"
+  Ui_services.nav_query_param "virtualized" = Some "true"
 
 (* -- row visibility contract (moved from pages/virtual_scroll.ml) --
 

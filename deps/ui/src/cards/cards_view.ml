@@ -292,14 +292,14 @@ let modal st =
      Ignore overlay presses for a short grace window after mount. The
      scrim has no children, so every press on it is an overlay press —
      no payload target-class check needed. *)
-  let opened_at = Platform.date_now_ms () in
+  let opened_at = Ui_services.time_now () in
   (* cp__overlay-layer/cp__dialog-shell are inert on web; on gpui the
      registered class dictionary makes the shell a window-sized layer
      and centers the abspos content by flex alignment. *)
   box ~key:"cards-shell" ~style_class:"cp__overlay-layer cp__dialog-shell"
     [ Ui_parts.pressable
         ~on_press:(fun _ ->
-          if Platform.date_now_ms () -. opened_at > 400. then
+          if Ui_services.time_now () -. opened_at > 400. then
             Cards_state.close st)
         (box ~key:"cards-ov" ~style_class:"ui__dialog-overlay" [])
     ; (* label="flashcards__cp" follows the dialogs_view convention:

@@ -86,9 +86,9 @@ let tokens_of resp =
           | _ -> None))
 
 let store_tokens id acc refresh =
-  Platform.local_storage_set "id-token" id;
-  Platform.local_storage_set "access-token" acc;
-  if refresh <> "" then Platform.local_storage_set "refresh-token" refresh;
+  Ui_services.storage_set "id-token" id;
+  Ui_services.storage_set "access-token" acc;
+  if refresh <> "" then Ui_services.storage_set "refresh-token" refresh;
   ignore
     (Runtime.invoke1 "thread-api/sync-app-state"
        (Wire.Map

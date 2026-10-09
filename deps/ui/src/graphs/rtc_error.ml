@@ -100,4 +100,4 @@ let report (w : Wire.t) : bool =
    pass through silently *)
 let report_outcome context (w : Wire.t) =
   if is_error w && not (report w) then
-    Platform.console_error (context ^ " failed", Transit.to_string w)
+    Ui_services.log_error (context ^ " failed", Transit.to_string w)

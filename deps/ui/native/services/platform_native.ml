@@ -101,6 +101,31 @@ let session : (string, string) Hashtbl.t = Hashtbl.create 16
 let session_storage_get k = Hashtbl.find_opt session k
 let session_storage_set k v = Hashtbl.replace session k v
 
+(* ---------- perf marks ---------- *)
+
+let perf_log =
+  lazy (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
+
+let perf_mark name =
+  if Lazy.force perf_log then
+    Printf.eprintf "[mark] %s u=%.3f\n%!" name (Unix.gettimeofday ())
+
+(* ---------- clipboard ---------- *)
+
+(* "clipboard-read" requests are answered by a same-named platform
+   event; one resolver per outstanding read, FIFO *)
+let clipboard_read_resolvers : (string -> unit) Queue.t = Queue.create ()
+
+let clipboard_read_text () : string Ui_task.t =
+  Ui_task.create (fun ~resolve ~reject:_ ->
+      Queue.add resolve clipboard_read_resolvers;
+      Host.clipboard_read ())
+
+let note_clipboard_text s =
+  match Queue.take_opt clipboard_read_resolvers with
+  | Some resolve -> resolve s
+  | None -> ()
+
 (* ---------- host-side document state ---------- *)
 
 (* Classes/data the web build puts on <html>/<body>; the native
@@ -396,7 +421,13 @@ let date_parse s =
               | _ -> None)
           | _ -> None))
 
-let install_ui_services ~assert_owner ~request_flush =
+let fmt_date ms =
+  let f = local_fields ms in
+  Printf.sprintf "%s %d, %d"
+    (List.nth month_of_abbr (f.month - 1))
+    f.day f.year
+
+let install_ui_services ~assert_owner ~request_flush ~dom =
   Ui_services.install
     { storage =
         { get = local_storage_get
@@ -428,6 +459,10 @@ let install_ui_services ~assert_owner ~request_flush =
         ; hash_query_param
         ; decode_uri = Uri.pct_decode
         ; reload = doc_reload
+        (* the native app has no public origin — share URLs degrade to
+           the graph fragment *)
+        ; origin = (fun () -> "")
+        ; pathname = (fun () -> "")
         }
     ; doc =
         { set_lang = document_set_lang
@@ -435,6 +470,7 @@ let install_ui_services ~assert_owner ~request_flush =
         ; set_lang_pref
         ; set_data = document_set_data
         ; rm_data = body_rm_data
+        ; set_title = set_document_title
         ; reload = doc_reload
         }
     ; time =
@@ -442,7 +478,42 @@ let install_ui_services ~assert_owner ~request_flush =
         ; local_fields
         ; of_fields
         ; parse = date_parse
+        ; fmt_date
         }
+    ; log = { error = (fun _ -> ()); info = (fun _ -> ()) }
+    ; perf = { mark = perf_mark }
+    ; uri =
+        { encode_component =
+            (fun s -> Uri.pct_encode ~component:`Query_value s)
+        }
+    ; clipboard =
+        { copy = Host.clipboard_write
+        ; write_text =
+            (fun s -> Host.clipboard_write s; Ui_task.resolve ())
+        ; read_text = clipboard_read_text
+        }
+    ; session =
+        { get = session_storage_get
+        ; set = session_storage_set
+        }
+    ; env =
+        { publishing = (fun () -> false)
+        ; dev_build = (fun () -> true)
+        ; rtc_test_mode =
+            (fun () ->
+              match query_param "rtc-test" with
+              | Some "true" -> true
+              | _ -> false)
+        ; online = (fun () -> true)
+        ; is_mac = (fun () -> true)
+        ; native_drag = (fun () -> true)
+        ; native_block_controls = (fun () -> true)
+        ; css_transform_icons = (fun () -> false)
+        ; edit_units = (fun () -> `Bytes)
+        ; random_uuid = Host.random_uuid
+        ; open_url = Host.open_url
+        }
+    ; dom
     };
   Ui_task.install { enqueue = Host.enqueue; assert_owner };
   Properties_services.install

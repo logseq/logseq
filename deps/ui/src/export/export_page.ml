@@ -299,7 +299,7 @@ let save_to_file (st : S.t Signal.state) =
   | S.Png, _, Some blob ->
       download_blob
         ~filename:
-          (Printf.sprintf "logseq_%s.png" (Platform.fmt_time (Platform.date_now_ms ())))
+          (Printf.sprintf "logseq_%s.png" (Ui_services.time_fmt_date (Ui_services.time_now ())))
         blob
   | S.Png, _, None -> ()
   | _, Some content, _ ->
@@ -321,6 +321,6 @@ let save_to_file (st : S.t Signal.state) =
       in
       Web_dom.download_text
         ~filename:
-          (Printf.sprintf "logseq_%s.%s" (Platform.fmt_time (Platform.date_now_ms ())) ext)
+          (Printf.sprintf "logseq_%s.%s" (Ui_services.time_fmt_date (Ui_services.time_now ())) ext)
         ~mime content
   | _, None, _ -> ()

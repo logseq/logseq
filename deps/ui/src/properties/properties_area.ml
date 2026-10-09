@@ -66,7 +66,7 @@ let property_icon row =
 let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
     row : t =
  fun context parent ->
-  if Platform.publishing () then
+  if Ui_services.env_publishing () then
     text ~style_class:"property-k" ~value:(D.row_title row) [] context parent
   else
   let sched = context.Lui_ui.ui_scheduler in

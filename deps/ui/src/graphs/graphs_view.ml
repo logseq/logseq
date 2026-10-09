@@ -60,7 +60,7 @@ let open_in_another_tab repo =
   match Graphs_meta.uuid_of repo with
   | Some uuid ->
       Web_dom.win_open
-        (Platform.location_origin ^ Platform.location_pathname
+        (Ui_services.nav_origin () ^ Ui_services.nav_pathname ()
        ^ "#/?graph-id=" ^ uuid)
   | None -> ()
 
@@ -130,7 +130,7 @@ let graph_row repo =
   Web_dom.el_set_text_content small
     (T.last_opened_at
        (match Graphs_ops.meta_last_seen repo with
-        | Some ms -> Platform.fmt_time ms
+        | Some ms -> Ui_services.time_fmt_date ms
         | None -> "-"));
   Web_dom.el_append_child left gap;
   Web_dom.el_append_child left small;

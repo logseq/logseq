@@ -35,7 +35,7 @@ let arm uuid db_id = pending := Some (uuid, db_id)
 
 
 (* cljs util/time-ms *)
-let now_ms () = Platform.date_now_ms () |> int_of_float |> string_of_int
+let now_ms () = Ui_services.time_now () |> int_of_float |> string_of_int
 
 let json_str b k v =
   Buffer.add_string b (Printf.sprintf "\"%s\":\"%s\"," k v)
@@ -110,13 +110,13 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
                 , W.Int (String.length body))
               ; (W.kw "owner_sub", W.Nil)
               ; (W.kw "owner_username", W.Nil)
-              ; (W.kw "created_at", W.Int (Platform.date_now_ms () |> int_of_float)) ] ) ])
+              ; (W.kw "created_at", W.Int (Ui_services.time_now () |> int_of_float)) ] ) ])
   in
   let headers =
     [| ("content-type", "application/transit+json")
      ; ("x-publish-meta", meta) |]
     |> (fun a ->
-    match Platform.local_storage_get "id-token" with
+    match Ui_services.storage_get "id-token" with
     | Some t ->
         Array.append a [| ("authorization", "Bearer " ^ t) |]
     | None -> a)

@@ -77,7 +77,7 @@ let body (_ms : Model.t Signal.signal) : t =
            user-handler/rtc-group? (dev build, custom sync server, or a
            cognito rtc group). ?rtc-test=true keeps it reachable in e2e
            without auth *)
-        (if Platform.rtc_test_mode () || Rtc_flows.rtc_group () then
+        (if Ui_services.env_rtc_test_mode () || Rtc_flows.rtc_group () then
            column ~key:"ng-rtc" ~style_class:"ls-ng-rtc"
              [ row ~key:"ng-rtc-row" ~style_class:"ls-ng-row"
                  [ checkbox ~key:"rtc" ~id:"rtc-sync"

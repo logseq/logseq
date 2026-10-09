@@ -231,6 +231,10 @@ let ev_clipboard = Editor_dom.ev_clipboard
 let ev_data_transfer = Editor_dom.ev_data_transfer
 let dt_files = Editor_dom.dt_files
 
+(* raw event field as a string, e.g. keydown "key" *)
+let event_str (e : ev) key =
+  Option.value (Js.Json.decodeString (js_get e key)) ~default:""
+
 (* ---------- clipboard data ---------- *)
 
 let cd_get_data = Editor_dom.clipboard_get_text

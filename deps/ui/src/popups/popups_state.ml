@@ -750,7 +750,7 @@ let run_block_search t ac =
       | _ -> ());
      Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("popups block search failed", e);
+            Ui_services.log_error ("popups block search failed", e);
             Js.Promise.resolve ()))
 ;;
 
@@ -869,7 +869,7 @@ let run_node_search t ac =
       | _ -> ());
      Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("popups node search failed", e);
+            Ui_services.log_error ("popups node search failed", e);
             Js.Promise.resolve ()))
 ;;
 
@@ -897,7 +897,7 @@ let load_titles t =
       | _ -> ());
      Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("popups titles failed", e);
+            Ui_services.log_error ("popups titles failed", e);
             Js.Promise.resolve ()))
 ;;
 
@@ -995,7 +995,7 @@ let load_tag_titles t =
       | _ -> ());
      Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("popups classes failed", e);            Js.Promise.resolve ()))
+            Ui_services.log_error ("popups classes failed", e);            Js.Promise.resolve ()))
 ;;
 
 (* template-search: blocks tagged logseq.class/Template (cljs
@@ -1787,7 +1787,7 @@ let multi_entries () =
 (* cljs state/developer-mode? — storage holds raw "true" (ours) or a
    JSON-quoted "\"true\"" (cljs storage) *)
 let dev_mode () =
-  match Platform.local_storage_get "developer-mode" with
+  match Ui_services.storage_get "developer-mode" with
   | Some "true" | Some "\"true\"" -> true
   | _ -> false
 

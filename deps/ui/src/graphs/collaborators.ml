@@ -29,7 +29,7 @@ type member =
 (* ---------- REST (cljs fetch-json over http-base) ---------- *)
 
 let auth_init ?body ~method_ () =
-  match Platform.local_storage_get "id-token" with
+  match Ui_services.storage_get "id-token" with
   | None -> None
   | Some token ->
       Some

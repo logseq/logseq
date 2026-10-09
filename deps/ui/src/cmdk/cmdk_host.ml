@@ -66,12 +66,12 @@ let with_sidebar f =
 
 let services : unit -> Svs.t =
  fun () ->
-  { Svs.publishing = Platform.publishing
-  ; is_mac = Platform.is_mac
-  ; dev_build = (fun () -> Platform.dev_build)
+  { Svs.publishing = Ui_services.env_publishing
+  ; is_mac = Ui_services.env_is_mac
+  ; dev_build = (fun () -> Ui_services.env_dev_build ())
   ; random = js_random
   ; now_ms = Js.Date.now
-  ; console_error = (fun label e -> Platform.console_error (label, e))
+  ; console_error = (fun label e -> Ui_services.log_error (label, e))
   ; i18n = I18n.t
   ; i18nf = I18n.tf
   ; normalize = str_normalize

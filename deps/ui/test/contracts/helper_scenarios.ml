@@ -67,6 +67,14 @@ let fake_time : Ui_services.time =
               -> Some (float_of_int (days_from_civil y m d) *. 86400000.)
             | _ -> None)
         | _ -> None)
+  ; fmt_date =
+      (fun ms ->
+        let f = local_fields ms in
+        let months =
+          [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep"
+           ; "Oct"; "Nov"; "Dec" |]
+        in
+        Printf.sprintf "%s %d, %d" months.(f.month - 1) f.day f.year)
   }
 
 let run () =
