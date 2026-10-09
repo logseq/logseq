@@ -20,17 +20,12 @@ let checkbox ~key ~id ~checked ~on_toggle =
     ~style_class:"ui__checkbox" ~checked_signal:checked
     ~on_toggle:(fun _ -> on_toggle ()) []
 
-let name_input () =
-  match Web_dom.query_selector ".new-graph input" with
-  | Some el -> Web_dom.el_value el |> String.trim
-  | None -> ""
-
 let invalid_name name = Graphs_ops.invalid_chars name <> []
 
 let already_exists name = Graphs_ops.already_exists name
 
-let submit cloud e2ee creating =
-  let name = name_input () in
+let submit name_st cloud e2ee creating =
+  let name = String.trim (Runtime.signal_get name_st) in
   if String.trim name = "" then
     Toast.warning T.name_reserved_warning
   else if already_exists name then
@@ -65,13 +60,20 @@ let body (_ms : Model.t Signal.signal) : t =
   (* cljs new-db-graph-inner: graph-e2ee? defaults to true *)
   let e2ee = Signal.state ctx.ui_scheduler true in
   let creating = Signal.state ctx.ui_scheduler false in
-  let node =
-    column ~key:"new-graph" ~style_class:"new-graph"
+  let name_st = Signal.state ctx.ui_scheduler "" in
+  column ~key:"new-graph" ~style_class:"new-graph"
       [ (* cljs shui/input is h-10; .ui__input defaults to the 29px
            compact variant *)
         input ~key:"ng-in" ~style_class:"ui__input" ~height:40
           ~placeholder:T.graph_name_placeholder
-          ~on_submit:(fun _ -> submit cloud e2ee creating)
+          ~autofocus:true
+          ~text_signal:(Signal.value name_st)
+          ~on_input:(fun ev ->
+            match ev with
+            | Lui_protocol.TextChanged (_, v) ->
+                Runtime.signal_set name_st v
+            | _ -> ())
+          ~on_submit:(fun _ -> submit name_st cloud e2ee creating)
           []
       ; (* cljs new-db-graph-inner: the sync row shows when
            user-handler/rtc-group? (dev build, custom sync server, or a
@@ -105,15 +107,7 @@ let body (_ms : Model.t Signal.signal) : t =
       ; button ~key:"ng-submit" ~style_class:"ui__button ls-btn-primary"
           ~text:T.submit
           ~disabled_signal:(Signal.value creating)
-          ~on_press:(fun _ -> submit cloud e2ee creating)
+          ~on_press:(fun _ -> submit name_st cloud e2ee creating)
           []
       ]
-  in
-  ignore
-    (Web_dom.set_timeout_id
-       (fun () ->
-         match Web_dom.query_selector ".new-graph input" with
-         | Some el -> Web_dom.el_focus el
-         | None -> ())
-       32);
-  node ctx parent
+    ctx parent

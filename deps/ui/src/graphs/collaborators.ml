@@ -162,165 +162,144 @@ let avatar_of (usig : Model.rtc_user Signal.signal) : t =
 
 (* ---------- members panel (dialog body) ---------- *)
 
-let menu_item ~cls label on_click =
-  let b = Web_dom.create_element "div" in
-  Web_dom.el_set_attr b "role" "menuitem";
-  Web_dom.el_set_class b (Menu_item.graphs_cls ^ " " ^ cls);
-  Web_dom.el_set_text_content b label;
-  Web_dom.el_on b "click" (fun _ ->
-      (match Web_dom.query_selector ".collab-member-menu" with
-       | Some m -> Web_dom.el_remove m
-       | None -> ());
-      on_click ());
-  b
+let member_row ~manager ~uuid (m : member) ~refresh : t =
+  row ~key:("mr-" ^ m.m_uuid) ~cross:`center ~gap:8
+    ([ text ~key:("mrn-" ^ m.m_uuid) ~value:m.m_name [] ]
+    @ (match m.m_email with
+       | Some e ->
+           [ text ~key:("mre-" ^ m.m_uuid) ~as_:`Small
+               ~foreground:"var(--ls-secondary-text-color)"
+               ~value:e []
+           ]
+       | None -> [])
+    @ (if m.m_role <> "" then
+         [ text ~key:("mrr-" ^ m.m_uuid) ~as_:`Small
+             ~foreground:"var(--ls-secondary-text-color)"
+             ~value:m.m_role []
+         ]
+       else [])
+    @
+    (* cljs: remove-access only for managers, and only on member rows *)
+    if manager && m.m_role = "member" then
+      [ Menu_item.dots_menu ~key:("mrm-" ^ m.m_uuid)
+          ~menu_cls:"collab-member-menu"
+          [ ( ""
+            , T.t "collaboration/remove-access"
+            , false
+            , fun () ->
+                ignore
+                  (let* ok = remove_member ~uuid ~member_id:m.m_uuid in
+                   if ok then refresh ()
+                   else Toast.error (T.t "collaboration/remove-access-error");
+                   Js.Promise.resolve ()) )
+          ]
+      ]
+    else [])
 
-let open_member_menu ~uuid ~member_id ~render anchor =
-  (match Web_dom.query_selector ".collab-member-menu" with
-   | Some m -> Web_dom.el_remove m
-   | None -> ());
-  let menu = Web_dom.create_element "div" in
-  Web_dom.el_set_class menu
-    "collab-member-menu ui__dropdown-menu-content z-50 min-w-[8rem] \
-     rounded-md border bg-popover p-1 text-popover-foreground shadow-md";
-  Web_dom.el_set_attr menu "role" "menu";
-  let r = Web_dom.el_bounding_rect anchor in
-  Web_dom.el_set_attr menu "style"
-    (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx"
-       (Web_dom.rect_right r) (Web_dom.rect_top r));
-  Web_dom.el_append_child menu
-    (menu_item ~cls:""
-       (T.t "collaboration/remove-access") (fun () ->
-         ignore
-           (let* ok = remove_member ~uuid ~member_id in
-            if ok then render ()
-            else Toast.error (T.t "collaboration/remove-access-error");
-            Js.Promise.resolve ())));
-  (match Web_dom.query_selector "body" with Some b -> Web_dom.el_append_child b menu | None -> ())
+(* members come from REST (not the model), so the view mirrors them in
+   a signal refreshed on mount and after invite/remove *)
+let members_sig_ref :
+    (member list * bool) Signal.state option ref =
+  ref None
 
-let member_row ~manager ~uuid (m : member) (render : unit -> unit) : Web_dom.el =
-  let row = Web_dom.create_element "div" in
-  Web_dom.el_set_class row "flex flex-row items-center gap-2";
-  let n = Web_dom.create_element "div" in
-  Web_dom.el_set_text_content n m.m_name;
-  Web_dom.el_append_child row n;
-  (match m.m_email with
-   | Some e ->
-       let em = Web_dom.create_element "div" in
-       Web_dom.el_set_class em "opacity-50 text-sm";
-       Web_dom.el_set_text_content em e;
-       Web_dom.el_append_child row em
-   | None -> ());
-  if m.m_role <> "" then begin
-    let ty = Web_dom.create_element "div" in
-    Web_dom.el_set_class ty "opacity-50 text-sm";
-    Web_dom.el_set_text_content ty m.m_role;
-    Web_dom.el_append_child row ty
-  end;
-  (* cljs: remove-access only for managers, and only on member rows *)
-  if manager && m.m_role = "member" then begin
-    let btn = Web_dom.create_element "button" in
-    Web_dom.el_set_class btn
-      "ui__button as-ghost px-1 h-7 inline-flex items-center \
-       justify-center";
-    Web_dom.el_set_attr btn "type" "button";
-    Web_dom.el_set_attr btn "aria-haspopup" "menu";
-    Web_dom.el_set_inner_html btn
-      "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" \
-       height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" \
-       stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" \
-       stroke-linejoin=\"round\" class=\"tabler-icon tabler-icon-dots \">\
-       <path d=\"M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\"/>\
-       <path d=\"M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\"/>\
-       <path d=\"M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\"/></svg>";
-    Web_dom.el_on btn "click" (fun _ ->
-        open_member_menu ~uuid ~member_id:m.m_uuid ~render btn);
-    Web_dom.el_append_child row btn
-  end;
-  row
-
-(* imperative member-list render into .ls-collab-users (membership
-   comes from REST, so rows rebuild like graphs_view does) *)
-let rec render_users ~repo ~uuid host () =
-  ignore
-    (let* ms = fetch_members uuid in
-     Web_dom.el_set_inner_html host "";
-     let manager =
-       match Rtc_flows.user_uuid () with
-       | Some uid ->
-           List.exists
-             (fun (m : member) -> m.m_uuid = uid && m.m_role = "manager")
-             ms
-       | None -> false
-     in
-     List.iter
-       (fun m ->
-         Web_dom.el_append_child host
-           (member_row ~manager ~uuid m
-              (render_users ~repo ~uuid host)))
-       ms;
-     Js.Promise.resolve ())
-
-and submit_invite ~repo ~uuid host () =
-  match Web_dom.query_selector ".ls-collab-invite input" with
-  | Some el ->
-      let email = String.trim (Web_dom.el_value el) in
-      if email <> "" then begin
-        Web_dom.el_set_value el "";
-        ignore
-          (let* () = invite_email ~repo ~uuid ~email in
-           render_users ~repo ~uuid host ();
-           Js.Promise.resolve ())
-      end
-  | None -> ()
+let members_st ctx =
+  match !members_sig_ref with
+  | Some s -> s
+  | None ->
+      let s = Signal.state ctx.Lui_ui.ui_scheduler ([], false) in
+      members_sig_ref := Some s;
+      s
 
 (* dialog body — cljs dialog content: [:div.p-2.-mb-8
    [:h1.text-3xl.-mt-2.-ml-2 "Members:"] (settings-collaboration)] *)
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
-  let start () =
-    match Web_dom.query_selector ".ls-collab-users" with
-    | Some host -> (
-        match (Runtime.model ()).Model.repo, !Rtc_flows.db_rtc_uuid with
-        | Some repo, Some uuid -> render_users ~repo ~uuid host ()
-        | _ -> ())
-    | None -> ()
+  let members_st = members_st ctx in
+  let members_sig =
+    Signal.map fst (Signal.value members_st)
+  in
+  let email_st = Signal.state ctx.Lui_ui.ui_scheduler "" in
+  let graph () =
+    (Runtime.model ()).Model.repo, !Rtc_flows.db_rtc_uuid
+  in
+  let rec refresh () =
+    match graph () with
+    | Some _, Some uuid ->
+        ignore
+          (let* ms = fetch_members uuid in
+           let manager =
+             match Rtc_flows.user_uuid () with
+             | Some uid ->
+                 List.exists
+                   (fun (m : member) ->
+                     m.m_uuid = uid && m.m_role = "manager")
+                   ms
+             | None -> false
+           in
+           Runtime.signal_set members_st (ms, manager);
+           Js.Promise.resolve ())
+    | _ -> ()
   and submit () =
-    match Web_dom.query_selector ".ls-collab-users" with
-    | Some host -> (
-        match (Runtime.model ()).Model.repo, !Rtc_flows.db_rtc_uuid with
-        | Some repo, Some uuid -> submit_invite ~repo ~uuid host ()
-        | _ -> ())
-    | None -> ()
+    match graph () with
+    | Some repo, Some uuid -> (
+        let email = String.trim (Runtime.signal_get email_st) in
+        if email <> "" then begin
+          Runtime.signal_set email_st "";
+          ignore
+            (let* () = invite_email ~repo ~uuid ~email in
+             refresh ();
+             Js.Promise.resolve ())
+        end)
+    | _ -> ()
   in
-  let root =
-    column ~key:"collab" ~padding:8 ~style_class:"-mb-8"
-      [ heading ~key:"collab-h" ~level:1
-          ~style_class:"text-3xl -mt-2 -ml-2"
-          ~value:(T.t "collaboration/members") []
-      ; column ~key:"collab-w"
-          ~style_class:"panel-wrap mb-8"
-          [ column ~key:"collab-m" ~gap:8 ~style_class:"mt-4"
-              [ column ~key:"collab-users" ~gap:4
-                  ~style_class:"ls-collab-users" []
-              ; column ~key:"collab-form" ~gap:16 ~style_class:"mt-4"
-                  [ box ~key:"collab-inv" ~style_class:"ls-collab-invite"
-                      [ input ~key:"collab-in" ~style_class:"ui__input"
-                          ~placeholder:(T.t "collaboration/email-address")
-                          ~on_submit:(fun _ -> submit ())
-                          [] ]
-                  ; button ~key:"collab-invite-btn"
-                      ~style_class:"ui__button ls-btn-primary"
-                      ~text:(T.t "collaboration/invite")
-                      ~on_press:(fun _ -> submit ())
-                      []
-                  ]
-              ]
-          ]
-      ]
-  in
-  (* the dialog is mounted synchronously; fetch after the DOM lands *)
-  ignore (Web_dom.set_timeout start 32);
-  root ctx parent
+  (* mount-time fetch replaces the old 32ms defer-to-DOM timer *)
+  refresh ();
+  column ~key:"collab" ~padding:8 ~style_class:"-mb-8"
+    [ heading ~key:"collab-h" ~level:1
+        ~style_class:"text-3xl -mt-2 -ml-2"
+        ~value:(T.t "collaboration/members") []
+    ; column ~key:"collab-w"
+        ~style_class:"panel-wrap mb-8"
+        [ column ~key:"collab-m" ~gap:8 ~style_class:"mt-4"
+            [ column ~key:"collab-users" ~gap:4
+                ~style_class:"ls-collab-users"
+                [ keyed
+                    ~source:members_sig
+                    ~key:(fun (m : member) -> m.m_uuid)
+                    ~cmp:Stdlib.compare
+                    ~mount:(fun msig ->
+                      let m = Signal.get msig in
+                      let _, manager =
+                        Runtime.signal_get members_st
+                      in
+                      member_row ~manager
+                        ~uuid:
+                          (Option.value !Rtc_flows.db_rtc_uuid
+                             ~default:"")
+                        m ~refresh)
+                ]
+            ; column ~key:"collab-form" ~gap:16 ~style_class:"mt-4"
+                [ box ~key:"collab-inv" ~style_class:"ls-collab-invite"
+                    [ input ~key:"collab-in" ~style_class:"ui__input"
+                        ~text_signal:(Signal.value email_st)
+                        ~placeholder:(T.t "collaboration/email-address")
+                        ~on_input:(fun ev ->
+                          match ev with
+                          | Lui_protocol.TextChanged (_, v) ->
+                              Runtime.signal_set email_st v
+                          | _ -> ())
+                        ~on_submit:(fun _ -> submit ())
+                        [] ]
+                ; button ~key:"collab-invite-btn"
+                    ~style_class:"ui__button ls-btn-primary"
+                    ~text:(T.t "collaboration/invite")
+                    ~on_press:(fun _ -> submit ())
+                    []
+                ]
+            ]
+        ]
+    ]
+    ctx parent
 
 (* ---------- header widget (.rtc-collaborators) ---------- *)
 

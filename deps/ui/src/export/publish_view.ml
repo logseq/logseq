@@ -89,7 +89,7 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
     W.Map items
   in
   let body = Transit.to_string body_wire in
-  let* content_hash = Asset_store.sha256_hex (Web_dom.binary_to_u8 body) in
+  let* content_hash = Asset_store.sha256_hex (Str_util.binary_to_u8 body) in
   let meta =
     meta_json ~graph_uuid ~page_uuid ~block_count ~schema_version
       ~content_hash ~content_len:(String.length body)

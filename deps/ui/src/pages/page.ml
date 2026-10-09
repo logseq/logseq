@@ -1513,7 +1513,9 @@ let region (ms : Model.t Signal.signal) : t =
           column ~key:"graphs-view" ~style_class:"ls-all-pages"
             [ Views_view.view ~kind:Views_state.KAllPages
                 ~owner:(Wire.String "$$$views") ]
-      | Model.Ready, Model.All_graphs -> box ~key:"graphs-view" []      | Model.Ready, Model.Settings -> Settings_page.view m
+      | Model.Ready, Model.All_graphs -> Graphs_view.view ms
+      | Model.Ready, Model.Page "Recycle" -> Recycle.view ms
+      | Model.Ready, Model.Settings -> Settings_page.view m
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, _ -> (
           match m.route_page, m.page_missing with

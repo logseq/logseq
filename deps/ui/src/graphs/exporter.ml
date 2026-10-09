@@ -6,6 +6,13 @@ open Promise_ext
 open Lui_elements
 
 module T = I18n
+
+(* worker invokes here stay Js.Promise while the Ui_services fs ops
+   return Ui_task — task_of_promise bridges at the boundary *)
+let task_of = Subs_state.task_of_promise
+
+let ( let$ ) = Ui_task.bind
+
 let repo () =
   match (Runtime.model ()).Model.repo with
   | Some r -> r
@@ -24,7 +31,7 @@ let export_binary () =
   let* w = Runtime.invoke1 "thread-api/export-db-binary" (Wire.String (repo ())) in
   match w with
   | Wire.Binary data ->
-      Web_dom.download_binary
+      Ui_services.files_download_binary
         ~filename:
           (Printf.sprintf "%s_%d.sqlite" (short_repo ()) (secs ()))
         ~mime:"application/octet-stream" data;
@@ -38,7 +45,7 @@ let export_zip () =
       let z =
         Zip.build [ ("db.sqlite", data) ]
       in
-      Web_dom.download_binary
+      Ui_services.files_download_binary
         ~filename:
           (Printf.sprintf "%s_%d.zip" (short_repo ()) (secs ()))
         ~mime:"application/zip" z;
@@ -57,7 +64,7 @@ let export_edn () =
   let text =
     try Edn.to_string w with _ -> Transit.to_string w
   in
-  Web_dom.download_text
+  Ui_services.files_download_text
     ~filename:(Printf.sprintf "%s_%d.edn" (short_repo ()) (secs ()))
     ~mime:"application/edn" text;
   Js.Promise.resolve ()
@@ -82,7 +89,7 @@ let export_markdown () =
           pairs
       in
       let z = Zip.build files in
-      Web_dom.download_binary
+      Ui_services.files_download_binary
         ~filename:
           (Printf.sprintf "%s_markdown_%d.zip" (short_repo ())
              (secs ()))
@@ -98,7 +105,7 @@ let export_transit () =
   let text =
     try Transit.to_string w with _ -> Edn.to_string w
   in
-  Web_dom.download_text
+  Ui_services.files_download_text
     ~filename:
       (Printf.sprintf "%s-debug-datoms_%d.transit" (short_repo ())
          (secs ()))
@@ -109,7 +116,8 @@ let export_transit () =
    asset-copy bridge at boot. *)
 let save_publishing : (string -> string -> string list -> unit Js.Promise.t) ref =
   ref (fun _repo html _assets ->
-    Web_dom.download_text ~filename:"index.html" ~mime:"text/html" html;
+    Ui_services.files_download_text ~filename:"index.html"
+      ~mime:"text/html" html;
     Js.Promise.resolve ())
 
 let export_html () =
@@ -156,15 +164,9 @@ let link ~key label_ desc on_click =
    hourly writes of <graph-dir>/db.sqlite with the old file rotated into
    <graph-dir>/backups/. *)
 
-let create_opts = Js.Json.object_ (Js.Dict.fromList [ ("create", Js.Json.boolean true) ])
-
-let picker_opts =
-  Js.Json.object_
-    (Js.Dict.fromList [ ("mode", Js.Json.string "readwrite") ])
-
 let backup_folder_key = "logseq.kv/graph-backup-folder"
 
-let handle_ref : Web_dom.dir_handle option ref = ref None
+let handle_ref : Ui_services.fs_dir option ref = ref None
 
 let interval_ref : int option ref = ref None
 
@@ -204,75 +206,78 @@ let backup_notify ok =
   | `written -> Toast.success (T.t "export/backup-successful")
   | `err -> Toast.error (T.t "export/db-backup-error")
 
-let backup_now () =
+let backup_now () : [ `unchanged | `written | `err ] Ui_task.t =
   match !handle_ref with
-  | None -> Js.Promise.resolve `err
+  | None -> Ui_task.resolve `err
   | Some dir ->
       let repo_name = short_repo () in
-      (let* graph_dir = Web_dom.get_dir dir repo_name create_opts in
-       let* backups = Web_dom.get_dir graph_dir "backups" create_opts in
-       let* fh = Web_dom.get_file graph_dir "db.sqlite" create_opts in
-       let* f = Web_dom.fh_get_file fh in
-       let* ftext = Web_dom.file_text f in
-       let* w =
-         Runtime.invoke1 "thread-api/export-db-binary"
-           (Wire.String (repo ()))
-       in
-       match w with
-       | Wire.Binary data ->
-           let* decoded = Web_dom.decode_u8 (Web_dom.str_to_u8 data) in
-           if ftext = decoded then Js.Promise.resolve `unchanged
-           else (
-             (if Web_dom.file_size f > 0. then
-                Web_dom.fh_move fh backups
-                  (Printf.sprintf "%.0f.db.sqlite" (Ui_services.time_now ()))
-              else Js.Promise.resolve ())
-             |> Js.Promise.then_ (fun () ->
-                    let* _ = Web_dom.truncate_old_versions backups in
-                    let* fh2 = Web_dom.get_file graph_dir "db.sqlite" create_opts in
-                    let* wr = Web_dom.fh_writable fh2 in
-                    let* _ = Web_dom.w_write wr (Web_dom.str_to_u8 data) in
-                    Web_dom.w_close wr)
-             |> Js.Promise.then_ (fun () -> Js.Promise.resolve `written))
-       | _ -> Js.Promise.resolve `err)
-      |> Js.Promise.catch (fun _ ->
-             (* access expired — repick like cljs verifyPermission *)
-             Js.Promise.resolve `err)
+      Ui_task.catch
+        (let$ graph_dir = dir.Ui_services.get_dir repo_name in
+         let$ backups = graph_dir.Ui_services.get_dir "backups" in
+         let$ fh = graph_dir.Ui_services.get_file "db.sqlite" in
+         let$ f = fh.Ui_services.fh_file () in
+         let$ fbin = f.Ui_services.file_binary () in
+         let$ w =
+           task_of
+             (Runtime.invoke1 "thread-api/export-db-binary"
+                (Wire.String (repo ())))
+         in
+         match w with
+         | Wire.Binary data ->
+             if fbin = data then Ui_task.resolve `unchanged
+             else
+               let$ () =
+                 if f.Ui_services.file_size > 0. then
+                   fh.Ui_services.fh_move backups
+                     (Printf.sprintf "%.0f.db.sqlite"
+                        (Ui_services.time_now ()))
+                 else Ui_task.resolve ()
+               in
+               let$ () = backups.Ui_services.truncate_old_versions () in
+               let$ fh2 = graph_dir.Ui_services.get_file "db.sqlite" in
+               let$ wr = fh2.Ui_services.fh_writable () in
+               let$ () = wr.Ui_services.w_write data in
+               let$ () = wr.Ui_services.w_close () in
+               Ui_task.resolve `written
+         | _ -> Ui_task.resolve `err)
+        (fun _ ->
+          (* access expired — repick like cljs verifyPermission *)
+          Ui_task.resolve `err)
 
 let auto_backup_interval () =
   (match !interval_ref with
-   | Some i -> Web_dom.clear_interval i
+   | Some i -> Ui_services.timers_clear_interval i
    | None -> ());
   interval_ref :=
     Some
-      (Web_dom.set_interval
+      (Ui_services.timers_interval
          (fun () ->
            ignore
-             (backup_now () |> Js.Promise.then_ (fun r ->
+             (Ui_task.bind (backup_now ()) (fun r ->
                   backup_notify r;
-                  Js.Promise.resolve ())))
+                  Ui_task.resolve ())))
          (60 * 60 * 1000))
 
 let choose_folder ctx =
-  (let* dir = Web_dom.show_dir_picker picker_opts in
-   let name = Web_dom.h_name dir in
-   handle_ref := Some dir;
-   let* _ = write_kv name in
-   set_folder ctx (Some name);
-   auto_backup_interval ();
-   Js.Promise.resolve ())
-  |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-  |> ignore
+  ignore
+    (Ui_task.catch
+       (let$ dir = Ui_services.files_show_dir_picker () in
+        handle_ref := Some dir;
+        let$ _ = task_of (write_kv dir.Ui_services.dir_name) in
+        set_folder ctx (Some dir.Ui_services.dir_name);
+        auto_backup_interval ();
+        Ui_task.resolve ())
+       (fun _ -> Ui_task.resolve ()))
 
 let clear_folder ctx =
   handle_ref := None;
   (match !interval_ref with
-   | Some i -> Web_dom.clear_interval i; interval_ref := None
+   | Some i -> Ui_services.timers_clear_interval i; interval_ref := None
    | None -> ());
   ignore
-    (let* _ = retract_kv () in
-     set_folder ctx None;
-     Js.Promise.resolve ())
+    (Ui_task.bind (task_of (retract_kv ())) (fun _ ->
+         set_folder ctx None;
+         Ui_task.resolve ()))
 
 let load_folder ctx =
   try
@@ -294,7 +299,7 @@ let auto_backup ctx =
   column ~key:"ab" ~gap:16
     [ text ~key:"ab-h" ~style_class:"font-medium opacity-50"
         ~value:(T.t "export.backup/schedule") []
-    ; (if not (Web_dom.picker_supported ()) then
+    ; (if not (Ui_services.files_dir_picker_supported ()) then
          box ~key:"ab-na"
            [ text ~key:"ab-na-s"
                ~value:(T.t "export.backup/unsupported-desc") [] ]
@@ -327,10 +332,9 @@ let auto_backup ctx =
                       ~text:(T.t "export.backup/backup-now")
                       ~on_press:(fun _ ->
                         ignore
-                          (backup_now ()
-                           |> Js.Promise.then_ (fun r ->
-                                  backup_notify r;
-                                  Js.Promise.resolve ()));
+                          (Ui_task.bind (backup_now ()) (fun r ->
+                               backup_notify r;
+                               Ui_task.resolve ()));
                         auto_backup_interval ())
                       [] ])
            ; Lui_elements.if_
