@@ -122,9 +122,10 @@ let clipboard_read_text () : string Ui_task.t =
       Host.clipboard_read ())
 
 let note_clipboard_text s =
-  match Queue.take_opt clipboard_read_resolvers with
-  | Some resolve -> resolve s
-  | None -> ()
+  Host.enqueue (fun () ->
+    match Queue.take_opt clipboard_read_resolvers with
+    | Some resolve -> resolve s
+    | None -> ())
 
 (* ---------- host-side document state ---------- *)
 

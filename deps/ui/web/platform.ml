@@ -180,7 +180,7 @@ external get_attribute : Js.Json.t -> string -> string option
 let selected_block_uuids () =
   qs_all_arr ".ls-block.selected"
   |> Array.to_list
-  |> List.filter_map (fun el -> get_attribute el "blockid")
+  |> List.filter_map (fun el -> get_attribute el "data-blockid")
 
 let on_hash_change f = add_window_listener "hashchange" (fun _ -> f ())
 

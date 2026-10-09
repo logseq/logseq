@@ -15,13 +15,16 @@ This document was updated on 2026-10-09 after read-only editor research. The use
 Before implementation, reread applicable AGENTS.md files and @.agents/skills/logseq-lui/SKILL.md, @.agents/skills/logseq-i18n/SKILL.md, @/Users/tiensonqin/.codex/skills/ocaml-development/SKILL.md, and @/Users/tiensonqin/.codex/skills/test-driven-development/SKILL.md.
 Current AGENTS.md and the LUI skill take precedence over older architecture examples using direct `dyn`, generic DOM extensions, or utility classes.
 
-## Paused implementation handoff (2026-10-09)
+## Implementation handoff (2026-10-09, resumed)
 
-The user paused implementation and will assign the continuation to another model.
-The active goal is paused, not complete.
-This section is the current handoff; later execution entries retain historical evidence and older dependency revisions.
-Resume implementation only in the continuation task.
-The original Tasks 1–7 below remain the detailed design and deletion gates.
+Execution resumed and ran to near-completion across parallel batches (see the
+integration-progress sections below). Remaining open work: Task 6's last piece —
+the native DOM-simulation cluster deletion — is blocked on migrating ~71 `src/`
+files off `Web_dom`/`Vdom`/`Imperative_dom`/`Editor_dom`/`Properties_dom`/`Views_dom`
+(batch 6c in flight on `devin/SHAREDUI-task6c`); Task 7 documentation is otherwise
+landed (architecture.md shared-runtime section + `check-shared-boundaries.sh`
+gate wired into `dune runtest test/contracts`). The original Tasks 1–7 below
+remain the detailed design and deletion gates.
 
 ### Checkout and delivered work
 
@@ -59,6 +62,25 @@ Task 2 contract layer landed in `ef8d49f385` + `287dda11f2`: `ui_services` gaine
 Still open for Task 2's full exit gate: one feature's portable state/view merged end-to-end in both runtimes (settings_page/sidebar_state land in batch 3b below). Platform-level nav/theme ops remain until `cmdk_state.ml` (batch 3c) migrates; Task 6 owns their deletion.
 
 Parallel execution: up to 9 child sessions on `devin/SHAREDUI-*` branches covering batches 3a–3d, 4 (subs Ui_task), 5a editor regressions, 5b editor commands, views, and the Task 6 emulation inventory (read-only). Children write tests in dedicated `shared_scenarios_*.ml` files; the coordinator owns `shared_scenarios.ml`, `test_drive.ml`, contracts, and integration merges into `refactor/lui`.
+
+### Native clipboard review repair (2026-10-09)
+
+The user authorized a targeted repair after reviewing the extraction checkpoints.
+This repair does not resume the broader migration in the original task.
+The original native clipboard reply settled a legacy promise outside the application entry, updating the editing buffer before the owner assertion interrupted save scheduling.
+While preparing the repair, the checkout fast-forwarded to `9171b0296b`, preserving unrelated files and their staging state.
+That continuation had moved clipboard reads to `Ui_task` in `Platform_native`, but `Platform.note_clipboard_text` still shadowed the service with a separate legacy resolver queue.
+Remove the unused native clipboard promise implementation so host replies reach the same service that owns clipboard reads.
+Enqueue resolver lookup and settlement through `Host.enqueue`; both queue access and editing callbacks then execute under the application entry owner.
+
+The GPUI production-view driver covers Cmd/Ctrl+Shift+V with selected Unicode and multiline text, empty replacement, and consecutive replies.
+It checks deferred editing, collapsed selection, rendered caret, pending save, and the edited title delivered to the worker boundary.
+Before the repair on the updated checkout, these scenarios produced 15 failures; afterward the native driver passed 602 checks with zero failures and five pre-existing expected failures.
+Both isolated native process tests passed.
+An isolated probe using the exact production native entry reported `buffer="base", pending_save=NONE` immediately after the host reply and `buffer="base-paste", pending_save=base-paste` after the application pump.
+The Web suite passed 1,881 checks with zero failures and one pre-existing expected failure; native and Web task/service contracts and the shared-boundary gate passed.
+Both native embed objects, the Web app, and test artifacts compiled; GPUI Cargo passed all 12 tests, and `bb lint:dev` passed.
+Verification used isolated headless processes and did not wake the display or exercise the actual OS clipboard.
 
 ### Preserve the working tree
 
@@ -670,7 +692,7 @@ Files: `deps/ui/src/views/`, `src/pages/`, `src/editor/`, `src/blocks/`, `src/re
 
 1. Add or reuse tests in batches ordered as query/table, page/render, assets/export, plugins, and editor.
 2. Share query, sorting, filtering, menus, property editing, downloads, and plugin command control.
-3. Replace generic imperative DOM construction with LUI kinds, typed props, `reactive`, `if_`, and `keyed`; do not move CSS layout into native shims.
+3. Replace generic imperative DOM construction with LUI kinds, typed props, `reactive`, `if_`, and `keyed`; preserve imperative popup/dialog APIs and declarative UI usage, and do not move CSS layout into native shims.
 4. Share typed props, events, and business state for PDF/media/CodeMirror widgets while retaining actual renderer-specific implementations.
 5. Execute the editor batches below, preserving the existing shared model/view and save semantics.
 6. Verify focus, virtual scrolling, and popup placement in actual hosts before deleting feature copies.
@@ -680,6 +702,33 @@ Do not reimplement the browser plugin runtime or replace working features with d
 Represent previously unsupported native capabilities explicitly without adding full feature implementations incidentally.
 
 Exit: Generic views and complex controllers have one source, and specialized widgets retain only necessary platform differences.
+
+#### Popup/dialog API and lifecycle requirements
+
+Supporting both imperative APIs and declarative UI is a product requirement, not evidence of an architectural defect.
+An imperative `open_dialog(...)` or `close(handle)` call may update shared state that LUI renders declaratively.
+Preserve both entry styles; removing imperative DOM construction must not remove the imperative public API.
+Distinct popup, dialog, autocomplete, and editor feature states remain valid and must not be merged into one application-wide state machine.
+
+The current concern is overlapping rendering ownership and coordination mechanisms, not the number of public entry styles.
+`Properties_state` maintains a manually mounted DOM overlay stack and a retained LUI overlay stack; its source explains that foreign DOM nodes inside a LUI-managed container can be removed by reconciliation.
+`Dialogs_state` defers Escape handling until other listeners have run and checks whether they prevented the event before closing a dialog.
+These paths demonstrate coordination cost; they do not establish that all existing nested-popup interactions are defective.
+
+1. Capture existing behavior before changing lifecycle coordination, including a popup opened inside a dialog through either entry style.
+2. Reuse existing LUI popup/dialog lifecycle facilities where possible; add only the missing shared coordination needed for layer ordering, parent-child ownership, dismissal reasons, focus restoration, and cleanup.
+3. Route imperative and declarative entries through the same layer registration and rendering lifecycle.
+   An imperative entry owns its open state and returns a handle and any existing completion result.
+   A declarative entry retains the caller's open signal as the source of truth and reports dismissal through its open-change callback; registration must not introduce an independently writable copy of that state.
+4. Keep popup anchoring, dialog modality, autocomplete keyboard rules, and each feature's business state separate.
+   Shared coordination identifies the active layer and routes events according to those policies instead of relying on document-listener registration order or timer races.
+5. Migrate generic manually mounted DOM surfaces to retained LUI content incrementally, preserving supported API behavior, completion results, and platform-specific measurement/input adapters.
+   Closing or unmounting an owner must release its child layers and layer-owned listeners, timers, subscriptions, and focus references.
+6. Verify the same nested-layer scenarios through imperative calls and declarative state in Web and native hosts before retiring old coordination paths.
+   Cover Escape closing only the intended top layer, outside presses inside the parent but outside its child, modal focus containment, focus return on dismissal, parent unmount with a child open, and reopen without duplicate callbacks or stale layers.
+   Where an imperative API returns a result, verify that completion occurs once for each supported close reason.
+
+Exit: Both API styles remain supported, generic content uses LUI rendering, and overlapping layers share lifecycle coordination without collapsing their feature-specific state or interaction policies.
 
 #### Task 5a: Specify editor contracts and lock down behavior
 
@@ -817,6 +866,8 @@ Files: `deps/ui/test/`, applicable application E2E tests, `deps/ui/docs/architec
 - Supported features and worker/sync/DB/IPC protocols remain stable; unsupported capabilities do not report fake success.
 - Web/native/GPUI builds, relevant tests, and interaction checks in actual renderers pass.
 - Generic views follow current LUI rules: typed layout/events, `reactive`, no direct `dyn`, and no generic DOM extensions.
+- Popup/dialog imperative APIs and declarative UI remain supported and share layer registration and lifecycle coordination.
+- Nested-layer dismissal, focus restoration, owner unmount, and cleanup preserve existing behavior through both entry styles; popup, dialog, and autocomplete policies remain distinct.
 - Sharing introduces no new data classes/properties, parallel i18n system, or application-wide framework.
 - Editor model, selection, composition, shared view, and outliner operations retain one source and their existing committed-text and save-ordering semantics.
 - Editor business commands have one dispatcher, and genuine platform capabilities are explicit.

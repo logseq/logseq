@@ -480,7 +480,7 @@ let ops : Ui_services.dom =
       (fun px ->
         set_style_prop doc_root_js "--ls-left-sidebar-width"
           (Printf.sprintf "%dpx" px))
-  ; selected_block_uuids = Ui_services.dom_selected_block_uuids
+  ; selected_block_uuids = Platform.selected_block_uuids
   }
 
 let timers : Ui_services.timers =
