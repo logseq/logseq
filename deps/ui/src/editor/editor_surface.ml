@@ -58,6 +58,22 @@ let mount ?(cls = "") uuid scope : t =
         | _ -> Edit_model.create ~units:S.edit_units "")
       (S.editing_sig ()))
   in
+  (* keep the model selection mirrored into the host's native selection
+     while this surface is the live editor — the browser computes its
+     context-menu text items (Copy/Look Up) from the DOM selection at
+     hit-test time, so mirroring inside the contextmenu handler lands
+     too late. A collapsed range stands in for "no selection" *)
+  ignore
+    (Signal.subscribe ~emit_initial:true (S.editing_sig ())
+       (fun (e : S.editing option) ->
+          match e with
+          | Some e when e.S.uuid = uuid && e.S.scope = scope -> (
+              match Edit_model.selection_range e.S.model with
+              | Some (lo, hi) -> Editor_sink.select_range uuid lo hi
+              | None ->
+                  Editor_sink.select_range uuid e.S.model.caret
+                    e.S.model.caret)
+          | _ -> ()));
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
     [ Edit_view.view ~model:model_sig
