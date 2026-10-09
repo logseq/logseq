@@ -437,3 +437,35 @@ Branch devin/SHAREDUI-task6c. Files changed so far (uncommitted):
   open_anchored if it takes LUI content, else report signature.
 - Children running: m5 icon_picker, m6 views_popup, m8 editor_commands,
   m10 properties, m11 popups.
+
+## STATE UPDATE 8
+- m6 merged (b5898b4?): views_popup → shared LUI 576ln (menu_item/
+  popover/dialog kinds, popover ~at anchoring, MSub nesting, stack-
+  top keydown router). native/views_popup.ml 644ln DELETED + src copy
+  rules added to native/gpui dune. Callers migrated: views_head/
+  builder/table/view + asset_dom anchors; MCustom/o_rename_box now
+  Lui_elements.t. +828/-1479 across 12 files.
+- m10 merged (+282/-880): properties cluster — properties_state
+  overlay stack = Ui_services.el tracked surfaces; properties_popup
+  open_at/open_anchored mount `popover ~at` on view-overlay stack
+  (return overlay key); properties_menu imperative ~520ln deleted
+  (shared menu_body_view + new open_menu); properties_select create()
+  deleted (LUI view autofocuses); properties_area doc_query→dom_query;
+  properties_dialog open_for_anchor_el → Ui_services.el;
+  native/code_mirror lang picker → dom_query + menu_item + open_
+  anchored (module D gone).
+- Signature flips landed: open_anchored* = Ui_services.el -> t -> key;
+  overlay_contains/remove_overlay_el = Ui_services.el.
+- My post-merge fixes: query_builder open_select → LUI view +
+  dom_by_id; views_table property menu anchor → dom_by_id; views_
+  state win_inner_height → dom_viewport_height; views_view/view_table
+  residual el ops → services; views_view module E removed;
+  debounced_refresh eta-expanded (module-init trap on partial app).
+- Remaining dual callers: editor_commands(m8), popups×2(m11),
+  icon_picker src+native(m5), selection_bar(1, overlay flip),
+  overlay(3, mine — properties_state callers now Ui_services.el so
+  flip is UNBLOCKED), page(3: element_at→anchor_of_el waits m11,
+  query_selector→open_picker waits m5), editor_keys(24 residual:
+  raw-ev bridge to popup/overlay registries — waits m11 inside() flip).
+- Children running: m5 icon_picker, m8 editor_commands, m11 popups.
+  Done+slept: m1,m2,m3,m4,m6,m7,m9,m10.
