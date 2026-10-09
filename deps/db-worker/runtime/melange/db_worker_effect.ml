@@ -28,12 +28,39 @@ let run_callback callback state =
     Worker_log.error "effect/callback-raised"
       [ ("error", Printexc.to_string exn) ]
 
+(* Callbacks dispatch through a shared run-queue instead of nested
+   calls: a wakeup or bind from inside a callback queues the next
+   callbacks ahead of the remaining ones — the same depth-first order
+   a recursive dispatch had, without growing the JS stack. Synchronous
+   bind chains (let* over already-settled tasks) overflowed the small
+   stack of mobile Safari workers (RangeError). *)
+let pending_runs : (unit -> unit) list ref = ref []
+let draining = ref false
+
+let rec drain () =
+  match !pending_runs with
+  | [] -> ()
+  | run :: rest ->
+      pending_runs := rest;
+      run ();
+      drain ()
+
+let schedule_runs runs =
+  pending_runs := runs @ !pending_runs;
+  if not !draining then begin
+    draining := true;
+    Fun.protect ~finally:(fun () -> draining := false) drain
+  end
+
 let notify task state =
   if is_pending task then begin
     task.state <- state;
     let callbacks = Rrbvec.rev task.callbacks in
     task.callbacks <- Rrbvec.empty;
-    Rrbvec.iter (fun callback -> run_callback callback state) callbacks
+    schedule_runs
+      (List.map
+         (fun callback () -> run_callback callback state)
+         (Rrbvec.to_list callbacks))
   end
 
 let wakeup resolver value = notify resolver (Resolved value)
@@ -42,7 +69,7 @@ let reject resolver exn = notify resolver (Rejected exn)
 let on_state task callback =
   match task.state with
   | Pending -> task.callbacks <- Rrbvec.push_front task.callbacks callback
-  | state -> run_callback callback state
+  | state -> schedule_runs [ (fun () -> run_callback callback state) ]
 
 let bind task f =
   let result, resolver = wait () in
