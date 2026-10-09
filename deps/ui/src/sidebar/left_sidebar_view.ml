@@ -15,12 +15,6 @@ module D = Logseq_el
 
 let t = Sidebar_state.t
 
-(* Ui_services-el twin of Popups_state.anchor_of_el (which is still
-   typed on the old dom element — collapse back once popups_state
-   migrates) *)
-let anchor_of_ui_el (el : Ui_services.el) =
-  let x, y, w, h = el.Ui_services.rect () in
-  (x +. (w /. 2.), y, y +. h)
 
 (* component icon: tabler names go through the `app:` registry (the only
    cljs name matching a builtin is chevron-right). The `ui__icon` class
@@ -517,7 +511,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                     | Some btn -> Some btn
                     | None -> Some hit)
               with
-              | Some btn -> anchor_of_ui_el btn
+              | Some btn -> Popups_state.anchor_of_el btn
               | None -> Popups_state.anchor_at_point ~x:d.x ~y:d.y
             in
             Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~ax

@@ -447,7 +447,7 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
             (* cljs :editor/add-property mod+p — the new-property dialog
                on the editing block *)
             Popups_state.emit_cmd "add-property"
-              [ "block", Js.Json.string uuid ];
+              [ "block", Json.String uuid ];
             m
         | "." when meta ->
             (* editor/zoom-in: meta+. and meta+shift+. both zoom *)
@@ -676,7 +676,7 @@ let on_normal_key ev =
       (match A.selected_uuids () with
        | u :: _ ->
            Popups_state.emit_cmd "add-property"
-             [ "block", Js.Json.string u ]
+             [ "block", Json.String u ]
        | [] -> ())
   | "Backspace" | "Delete" when selected () ->
       ev.Ui_services.prevent_default ();
@@ -687,7 +687,7 @@ let on_normal_key ev =
       List.iter
         (fun u ->
           Popups_state.emit_cmd "add-comment"
-            [ "block", Js.Json.string u ])
+            [ "block", Json.String u ])
         (A.selected_uuids ())
   | "ArrowUp" when alt && not shift ->
       (* editor/select-block-up *)
@@ -1629,7 +1629,10 @@ let on_mousedown ev =
     with
     | Some _ -> ()
     | None -> (
-        match Web_dom.ev_target ev with
+        match
+          Ui_services.dom_element_at
+            (Web_dom.ev_client_x ev) (Web_dom.ev_client_y ev)
+        with
         | Some el when Popups_state.inside el -> ()
         | _ ->
             if Editor_commands.click_guard (Web_dom.ev_target ev) then ()

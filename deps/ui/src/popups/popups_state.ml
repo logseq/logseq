@@ -223,16 +223,17 @@ let ac_open () =
    rather than enumerating selector lists: every popup mounts either
    inside the .cp__overlays chrome container (cmdk, dialogs, toasts) or
    the renderer's body-level .lui-popup-portal (popover kind: ac/cm/pv,
-   context menus, page menu) or registers a body-level root it owns
-   (Properties_state overlays, Editor_commands inline popups) *)
-let inside el =
-  Web_dom.el_closest el ".cp__overlays" <> None
-  || Web_dom.el_closest el ".lui-popup-portal" <> None
+   context menus, page menu) or registers a tracked overlay root
+   (Properties_state). Editor_commands' two imperative inline popups
+   still hold raw host roots in editor_popup_root — the services layer
+   can't contains-check those, so their root classes stand in *)
+let inside (el : Ui_services.el) =
+  el.Ui_services.closest ".cp__overlays" <> None
+  || el.Ui_services.closest ".lui-popup-portal" <> None
   || Properties_state.overlay_contains el
-  ||
-  (match !Runtime.editor_popup_root with
-   | Some root -> Web_dom.el_contains root el
-   | None -> false)
+  || el.Ui_services.closest
+       ".ls-editor-date-picker, .ls-editor-link-form"
+     <> None
 
 (* whether any popup layer is up, for code paths that only need the
    boolean (the per-layer popup_signal above drives reactive chrome) *)
@@ -1070,9 +1071,9 @@ let open_ac t kind =
               a'
           | _ -> a
         in
-        match Web_dom.query_selector "#ui__ac-inner" with
+        match Ui_services.dom_query "#ui__ac-inner" with
         | Some inner -> (
-            match Web_dom.el_closest inner ".ui__popover-content" with
+            match inner.Ui_services.closest ".ui__popover-content" with
             | Some pop ->
                 (* --available-height propagates to #ui__ac-inner's own
                    max-height; lift it to read the real rendered height
@@ -1083,23 +1084,24 @@ let open_ac t kind =
                    when the loop ends without a flip. The lifted frame
                    renders clipped at the window edge either way, so it
                    is not visible to the user. *)
-                Web_dom.el_style_set_property pop "--available-height"
+                pop.Ui_services.set_style "--available-height"
                   "2000px";
-                let rect = Web_dom.el_bounding_rect pop in
+                let _rx, _ry, w, h = pop.Ui_services.rect () in
                 (* base-ui flips align start->end when the popup would
                    overflow the right viewport edge — the right edge
                    lands at the caret; clamp to the margin when even
                    that doesn't fit *)
                 let fx =
-                  let w = Web_dom.rect_width rect in
-                  if a.x +. w > Web_dom.win_inner_width -. 5. then
-                    Some (Float.max 8. (a.x -. w))
+                  if a.x +. w > Ui_services.dom_viewport_width () -. 5.
+                  then Some (Float.max 8. (a.x -. w))
                   else None
                 in
                 if fx <> a.flipx then
                   set_ac t (Some { a with flipx = fx });
-                let h = Web_dom.rect_height rect in
-                let below = Web_dom.win_inner_height -. a.y -. 5. in                let above = a.cy -. 5. in
+                let below =
+                  Ui_services.dom_viewport_height () -. a.y -. 5.
+                in
+                let above = a.cy -. 5. in
                 if h > below && above > below then (
                   (* avail is the constraint, h the measured render —
                      the inner's own max-height subtracts chrome from
@@ -1110,7 +1112,7 @@ let open_ac t kind =
                   let top' = Float.max 5.0 (a.cy -. 5. -. h_eff) in
                   set_ac t (Some { a with flip = Some (top', avail) }))
                 else if tries <= 0 then
-                  Web_dom.el_style_set_property pop "--available-height"
+                  pop.Ui_services.set_style "--available-height"
                     (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 5.))
                 else retry tries            | None -> retry tries)
         | None -> retry tries)
@@ -1118,7 +1120,7 @@ let open_ac t kind =
     | _ -> ()
   and retry tries =
     if tries > 0 then
-      Web_dom.set_timeout (fun () -> measure (tries - 1)) 16
+      ignore (Ui_services.timers_timeout (fun () -> measure (tries - 1)) 16)
   in
   measure 120;
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
@@ -1275,11 +1277,7 @@ let on_model_input ~deleted uuid =
 
 (* ---- events ---- *)
 
-let detail_obj pairs =
-  let o = Js.Dict.empty () in
-  List.iter (fun (k, v) -> Js.Dict.set o k v) pairs;
-  Js.Json.object_ o
-;;
+let detail_obj pairs = Json.Object pairs;;
 
 (* replace [tpos, caret) with text in the editing model — equivalent
    to cljs's ls:editor-insert handler *)
@@ -1306,26 +1304,26 @@ let insert_text (ac : ac) text back =
   | None -> ()
 
 let emit ?(exit = false) auuid tpos text =
-  Web_dom.dispatch_custom "ls:editor-insert"
+  Ui_services.dom_dispatch_json "ls:editor-insert"
     (detail_obj
-       [ "text", Js.Json.string text
-       ; "from", Js.Json.number (float_of_int tpos)
+       [ "text", Json.String text
+       ; "from", Json.Number (float_of_int tpos)
        ; "to"
-         , Js.Json.number
+         , Json.Number
              (float_of_int (fst (Editor_actions.sel_span auuid)))
-       ; "exit", Js.Json.boolean exit ]);
+       ; "exit", Json.Bool exit ]);
   (* cljs refocuses the editor input after a chosen item *)
   Editor_sink.focus_input auuid
 ;;
 
 let emit_cmd ?pos command extra =
-  Web_dom.dispatch_custom "ls:editor-command"
+  Ui_services.dom_dispatch_json "ls:editor-command"
     (detail_obj
-       (("command", Js.Json.string command)
+       (("command", Json.String command)
         :: (match pos with
             | Some p ->
-                [ "from", Js.Json.number (float_of_int p)
-                ; "to", Js.Json.number (float_of_int p) ]
+                [ "from", Json.Number (float_of_int p)
+                ; "to", Json.Number (float_of_int p) ]
             | None -> [])
         @ extra))
 ;;
@@ -1608,15 +1606,19 @@ let apply_item t ac ~meta it =
 ;;
 
 let chosen_scroll chosen =
-  Web_dom.set_timeout
-    (fun () ->
-      match Web_dom.query_selector "#ui__ac-inner" with
-      | Some scroller -> (
-          match Web_dom.query_selector ("#ac-" ^ string_of_int chosen) with
-          | Some row -> Web_dom.scroll_row_into_view ~scroller ~row
-          | None -> ())
-      | None -> ())
-    0
+  ignore
+    (Ui_services.timers_timeout
+       (fun () ->
+         match Ui_services.dom_query "#ui__ac-inner" with
+         | Some scroller -> (
+             match
+               Ui_services.dom_query ("#ac-" ^ string_of_int chosen)
+             with
+             | Some row ->
+                 Ui_services.dom_scroll_row_into_view ~scroller ~row
+             | None -> ())
+         | None -> ())
+       0)
 ;;
 
 let move_chosen t dir =
@@ -1692,30 +1694,30 @@ let ac_keydown t ev =
         close_ac t;
         false)
       else (
-        match Web_dom.ev_key ev with
-        | "ArrowDown" -> move_chosen t 1; true
-        | "ArrowUp" -> move_chosen t (-1); true
+        match ev.Ui_services.key with
+        | Some "ArrowDown" -> move_chosen t 1; true
+        | Some "ArrowUp" -> move_chosen t (-1); true
         (* cljs binds ctrl+n/ctrl+p alongside the arrows *)
-        | "n" when Web_dom.ev_ctrl ev -> move_chosen t 1; true
-        | "p" when Web_dom.ev_ctrl ev -> move_chosen t (-1); true
+        | Some "n" when ev.Ui_services.ctrl -> move_chosen t 1; true
+        | Some "p" when ev.Ui_services.ctrl -> move_chosen t (-1); true
         (* cljs enter/meta-complete/shift-complete: apply the chosen
            item — mod+enter inlines a tag — or the kind's on-enter when
            no item matched. shift+enter shares enter: no AC supplies
            on-shift-chosen. Tab is NOT an ac binding on master
            (:editor/indent) — it falls through to the editor keymap *)
-        | "Enter" -> (
+        | Some "Enter" -> (
             (match List.nth_opt ac.items ac.chosen with
-             | Some it -> apply_item t ac ~meta:(Web_dom.ev_meta ev) it
+             | Some it -> apply_item t ac ~meta:ev.Ui_services.meta it
              | None -> ac_on_enter t ac);
             true)
-        | "Escape" -> close_ac t; true
+        | Some "Escape" -> close_ac t; true
         | _ ->
             (if ac_position_closed ac then close_ac t);
             false)
 ;;
 
-let ac_mousemove t el =
-  match Web_dom.el_get_attr el "id" with
+let ac_mousemove t (el : Ui_services.el) =
+  match el.Ui_services.attr "id" with
   | Some id
     when S.length id > 3 && S.sub id 0 3 = "ac-" -> (
       match int_of_string_opt (S.sub id 3 (S.length id - 3)) with
@@ -1816,17 +1818,15 @@ let flashcards_enabled () =
    more than 100px; the flipped menu's top needs the measured popup
    height, applied after mount by flip_cm_if_pending *)
 let anchor_above atop abot =
-  let bh = Web_dom.win_inner_height -. abot in
+  let bh = Ui_services.dom_viewport_height () -. abot in
   bh <= 280. && atop -. bh > 100.
 
 (* cm anchor: (center-x, top, bottom) of the event target element; a
    native host without hit-testing synthesizes a 1px rect at the
    pointer *)
-let anchor_of_el (el : Web_dom.el) =
-  let r = Web_dom.el_bounding_rect el in
-  ( Web_dom.rect_left r +. (Web_dom.rect_width r /. 2.)
-  , Web_dom.rect_top r
-  , Web_dom.rect_bottom r )
+let anchor_of_el (el : Ui_services.el) =
+  let x, y, w, h = el.Ui_services.rect () in
+  (x +. (w /. 2.), y, y +. h)
 
 let anchor_at_point ~x ~y = (x, y, y)
 
@@ -1916,10 +1916,8 @@ let run_cm_item t label =
                Ui_services.nav_set_hash
                  (Runtime.nav_hash ("#/page/" ^ tuuid))
            | "open-tag-sidebar" ->
-               Web_dom.dispatch_custom "ls:open-right-sidebar"
-                 (Js.Json.object_
-                    (Js.Dict.fromList
-                       [ ("uuid", Js.Json.string tuuid) ]))
+               Ui_services.dom_dispatch_json "ls:open-right-sidebar"
+                 (Json.Object [ "uuid", Json.String tuuid ])
            | "remove-tag" ->
                ignore
                  (Outliner_ops.apply_and_refresh
@@ -1928,7 +1926,7 @@ let run_cm_item t label =
                         ; Wire.Keyword "block/tags"
                         ; Wire.Int tid ] ])
            | _ -> ())
-       | None -> emit_cmd label [ "block", Js.Json.string cm.block_id ]);
+       | None -> emit_cmd label [ "block", Json.String cm.block_id ]);
       close_cm t
   | None -> ()
 ;;
@@ -1936,8 +1934,8 @@ let run_cm_item t label =
 let run_cm_color t color =
   match (get t).cm with
   | Some cm ->
-      emit_cmd "set-color"        [ "block", Js.Json.string cm.block_id
-        ; "value", Js.Json.string color ];
+      emit_cmd "set-color"        [ "block", Json.String cm.block_id
+        ; "value", Json.String color ];
       close_cm t
   | None -> ()
 ;;
@@ -1945,8 +1943,8 @@ let run_cm_color t color =
 let run_cm_heading t h =
   match (get t).cm with
   | Some cm ->
-      emit_cmd "set-heading"        [ "block", Js.Json.string cm.block_id
-        ; "value", Js.Json.string h ];
+      emit_cmd "set-heading"        [ "block", Json.String cm.block_id
+        ; "value", Json.String h ];
       close_cm t
   | None -> ()
 ;;

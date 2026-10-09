@@ -591,8 +591,8 @@ let view (p : picker) : D.el =
    `emoji_only` restricts it to the Emojis tab (reaction picker) *)
 type picker_opts = { emoji_only : bool; sub : bool }
 
-let open_picker_with_opts ~(anchor : D.el) ~(del : bool)
-    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : D.el =
+let open_picker_with_opts ~(anchor : Ui_services.el) ~(del : bool)
+    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : unit =
   let emoji_only = opts.emoji_only in
   Emoji_mart.install ();
   let p =
@@ -604,8 +604,19 @@ let open_picker_with_opts ~(anchor : D.el) ~(del : bool)
   let root = view p in
   (* cljs chrome: ui__popover-content > ls-property-dialog >
      ls-property-input > ls-property-add > .flex-row >
-     property-value-inner > picker *)
-  let dlg = D.mk ~cls:"ls-property-dialog" "div" in
+     property-value-inner > picker — the dialog carries the popover
+     classes itself now that it mounts as the positioned root *)
+  let dlg =
+    D.mk ~cls:"ls-property-dialog ui__popover-content ls-icon-picker \
+               rounded-md border bg-popover text-popover-foreground \
+               shadow-md outline-none animate-in \
+               data-[side=bottom]:slide-in-from-top-2 \
+               data-[side=left]:slide-in-from-right-2 \
+               data-[side=right]:slide-in-from-left-2 \
+               data-[side=top]:slide-in-from-bottom-2 \
+               focus:outline-none focus-visible:outline-none z-50"
+      "div"
+  in
   let lpi =
     D.mk ~cls:"ls-property-input flex flex-1 flex-row items-center flex-wrap gap-1" "div"
   in
@@ -621,26 +632,37 @@ let open_picker_with_opts ~(anchor : D.el) ~(del : bool)
   D.el_append_child row pvi;
   D.el_append_child pvi root;
 
-  let open_popup =
-    if opts.sub then Properties_popup.open_anchored_right
-    else Properties_popup.open_anchored
-  in
-  let pop =
-    open_popup
-      ~cls:"ui__popover-content ls-icon-picker rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 focus:outline-none focus-visible:outline-none z-50"
-      anchor dlg
-  in
+  (* the picker view is still imperative DOM — mount it at the anchor's
+     measured rect and register the live root on the overlay stack so
+     outside-press/Escape dismissal reaches it (measure_anchor retries
+     while the backend's async rect is pending) *)
+  Properties_popup.measure_anchor anchor (fun x y w h ->
+      let px, py =
+        if opts.sub then (x +. w -. 4.0, y -. 4.0)
+        else (x, y +. h +. 4.0)
+      in
+      let avail = Ui_services.dom_viewport_height () -. py -. 8. in
+      D.set_style dlg
+        (Printf.sprintf
+           "position:fixed;left:%dpx;top:%dpx;z-index:9999;\
+            max-height:%dpx;overflow-y:auto"
+           (int_of_float px) (int_of_float py)
+           (int_of_float (Float.max avail 120.)));
+      D.el_append_child D.document_body dlg;
+      (match Ui_services.dom_query ".ls-icon-picker" with
+       | Some el ->
+           Properties_state.push_overlay el
+             ~on_escape:(fun () -> D.el_remove dlg)
+       | None -> ()));
   (match p.input with
    | Some i -> D.el_focus i
-   | None -> ());
-  pop
+   | None -> ())
 ;;
 
-let open_picker ~(anchor : D.el) ~(del : bool)
+let open_picker ~(anchor : Ui_services.el) ~(del : bool)
     ~(on_chosen : choice -> unit) : unit =
-  ignore
-    (open_picker_with_opts ~anchor ~del
-       ~opts:{ emoji_only = false; sub = false }
-       ~on_chosen)
+  open_picker_with_opts ~anchor ~del
+    ~opts:{ emoji_only = false; sub = false }
+    ~on_chosen
 ;;
 

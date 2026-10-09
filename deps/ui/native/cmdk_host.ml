@@ -257,17 +257,22 @@ let services : unit -> Svs.t =
         Properties_state.refresh_all ())
   ; pick_emoji =
       (fun ~block_uuid ~on_chosen ->
-        match Dom_ext.doc_query_selector ("[data-blockid='" ^ block_uuid ^ "']") with
+        match
+          Ui_services.dom_query
+            ("[data-blockid='" ^ block_uuid ^ "']")
+        with
         | Some anchor ->
-            ignore
-              (Icon_picker.open_picker_with_opts ~anchor ~del:false
-                 ~opts:{ Icon_picker.emoji_only = true; sub = false }
-                 ~on_chosen:(fun c ->
-                   match c with Icon_picker.Emoji id -> on_chosen id | _ -> ()))
+            Icon_picker.open_picker_with_opts ~anchor ~del:false
+              ~opts:{ Icon_picker.emoji_only = true; sub = false }
+              ~on_chosen:(fun c ->
+                match c with Icon_picker.Emoji id -> on_chosen id | _ -> ())
         | None -> ())
   ; pick_icon =
       (fun ~block_uuid ~del ~on_chosen ->
-        match Dom_ext.doc_query_selector ("[data-blockid='" ^ block_uuid ^ "']") with
+        match
+          Ui_services.dom_query
+            ("[data-blockid='" ^ block_uuid ^ "']")
+        with
         | Some anchor ->
             Icon_picker.open_picker ~anchor ~del
               ~on_chosen:(fun c -> on_chosen (icon_choice c))

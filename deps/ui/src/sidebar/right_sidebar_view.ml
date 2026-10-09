@@ -16,12 +16,6 @@ module D = Logseq_el
 
 let t = Sidebar_state.t
 
-(* Ui_services-el twin of Popups_state.anchor_of_el (which is still
-   typed on the old dom element — collapse back once popups_state
-   migrates) *)
-let anchor_of_ui_el (el : Ui_services.el) =
-  let x, y, w, h = el.Ui_services.rect () in
-  (x +. (w /. 2.), y, y +. h)
 
 (* component icon: tabler names go through the `app:` registry (only `x`
    matches a builtin here). `ui__icon` carries over from the cljs span
@@ -273,7 +267,7 @@ let item_header st idx (it : Sidebar_state.item) =
                 match
                   Ui_services.dom_by_id ("sbi-more-" ^ it.key)
                 with
-                | Some el -> anchor_of_ui_el el
+                | Some el -> Popups_state.anchor_of_el el
                 | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
               in
               Sidebar_state.open_item_menu st it.key ~ax ~atop ~abot)

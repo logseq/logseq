@@ -575,8 +575,8 @@ let view (p : picker) : E.el =
    `emoji_only` restricts it to the Emojis tab (reaction picker) *)
 type picker_opts = { emoji_only : bool; sub : bool }
 
-let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
-    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : E.el =
+let open_picker_with_opts ~(anchor : Ui_services.el) ~(del : bool)
+    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : unit =
   let emoji_only = opts.emoji_only in
   Emoji_mart.install ();
   let p =
@@ -589,7 +589,13 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
   (* cljs chrome: ui__popover-content > ls-property-dialog >
      ls-property-input > ls-property-add > .flex-row >
      property-value-inner > picker *)
-  let dlg = D.mk ~cls:"ls-property-dialog" "div" in
+  let dlg =
+    D.mk
+      ~cls:
+        "ls-property-dialog ui__popover-content ls-icon-picker rounded-md \
+         border bg-popover text-popover-foreground shadow-md outline-none"
+      "div"
+  in
   let lpi =
     D.mk ~cls:"ls-property-input flex flex-1 flex-row items-center flex-wrap gap-1" "div"
   in
@@ -605,30 +611,38 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
   D.el_append_child row pvi;
   D.el_append_child pvi root;
 
-  let open_popup =
-    if opts.sub then Properties_popup.open_anchored_right
-    else Properties_popup.open_anchored
-  in
-  let pop =
-    open_popup
-      ~cls:"ui__popover-content ls-icon-picker rounded-md border bg-popover text-popover-foreground shadow-md outline-none animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 focus:outline-none focus-visible:outline-none z-50"
-      anchor dlg
-  in
-  (match p.input with
-   | Some i -> D.el_focus i
-   | None -> ());
-  pop
+  (* imperative mount: measure the anchor through the platform boundary,
+     position the dlg tree at fixed coords, attach it to the document body
+     and register it on the properties overlay stack so outside presses
+     and Escape route through Popups_state.inside *)
+  Properties_popup.measure_anchor anchor (fun x y w h ->
+      D.set_style dlg
+        (Printf.sprintf
+           "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;\
+            max-height:%.0fpx;overflow-y:auto"
+           (if opts.sub then x +. w else x)
+           (y +. h +. 4.)
+           (Ui_services.dom_viewport_height () -. y -. 8.));
+      (match Web_dom.query_selector "body" with
+       | Some body -> D.el_append_child body dlg
+       | None -> ());
+      (match Ui_services.dom_query ".ls-icon-picker" with
+       | Some el ->
+           Properties_state.push_overlay el
+             ~on_escape:(fun () -> D.el_remove dlg)
+       | None -> ());
+      match p.input with
+      | Some i -> D.el_focus i
+      | None -> ())
 ;;
 
-let open_picker ~(anchor : E.el) ~(del : bool)
+let open_picker ~(anchor : Ui_services.el) ~(del : bool)
     ~(on_chosen : choice -> unit) : unit =
-  ignore
-    (open_picker_with_opts ~anchor ~del
-       ~opts:{ emoji_only = false; sub = false } ~on_chosen)
+  open_picker_with_opts ~anchor ~del
+    ~opts:{ emoji_only = false; sub = false } ~on_chosen
 ;;
 
-let open_emoji_picker ~(anchor : E.el)
+let open_emoji_picker ~(anchor : Ui_services.el)
     ~(on_chosen : choice -> unit) : unit =
-  ignore
-    (open_picker_with_opts ~anchor ~del:false
-       ~opts:{ emoji_only = true; sub = false } ~on_chosen)
+  open_picker_with_opts ~anchor ~del:false
+    ~opts:{ emoji_only = true; sub = false } ~on_chosen

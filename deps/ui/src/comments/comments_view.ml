@@ -150,7 +150,7 @@ let reactions_el uuid (rs : (string * int) list) : t =
            rs)
 
 let open_reaction_picker uuid (btn_id : string) =
-  match D.query_selector ("[id='" ^ btn_id ^ "']") with
+  match Ui_services.dom_query ("[id='" ^ btn_id ^ "']") with
   | None -> ()
   | Some anchor ->
       Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->

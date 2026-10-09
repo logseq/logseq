@@ -55,11 +55,6 @@ let grid ~on_pick =
   done;
   wrap
 
-(* open the calendar anchored under [anchor]; [on_pick] receives the
-   picked journal day (YYYYMMDD) — popup closes after the pick *)
-let open_anchored anchor ~on_pick =
-  ignore
-    (Properties_popup.open_anchored ~cls:"ui__popover-content" anchor
-       (grid ~on_pick:(fun day ->
-            Properties_state.pop_overlay ();
-            on_pick day)))
+(* the anchored-popup entry point was dropped with the view-overlay
+   migration — callers open calendars through Properties_popup/
+   Editor_commands paths directly *)
