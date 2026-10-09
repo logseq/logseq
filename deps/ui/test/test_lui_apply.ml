@@ -87,7 +87,7 @@ let ext_fp registry ident =
 
 (* -- retained <-> DOM invariants -- *)
 
-let platform node = node.T.platform_node
+let platform node = Lazy.force node.T.platform_node
 
 let container_of node =
   match Store.standard_kind node with
@@ -126,7 +126,7 @@ let check_dom_invariants renderer tag =
                     Some (cid, of_json (platform c))
                 | _ -> None)
             | None -> None)
-          node.T.retained_children
+          (Lui_sequence.to_list node.T.retained_children)
       in
       List.iter
         (fun (cid, platform) ->
@@ -279,7 +279,7 @@ let gen_ops renderer fresh n =
         | Some n ->
             let s =
               { s_parent = n.T.retained_parent
-              ; s_children = n.T.retained_children
+              ; s_children = Lui_sequence.to_list n.T.retained_children
               ; s_ext = Store.standard_kind n = None
               ; s_kind = Store.standard_kind n
               ; s_dead = false }
@@ -532,7 +532,7 @@ let test_property ?(verbose = false) seed =
                     | Some _ -> "std"
                     | None -> "ext")
                    (String.concat ";"
-                      (List.map string_of_int n.T.retained_children))
+                      (List.map string_of_int (Lui_sequence.to_list n.T.retained_children)))
                    (String.concat ";" kids)))
             renderer.T.web_store.T.retained_nodes)))
   done
