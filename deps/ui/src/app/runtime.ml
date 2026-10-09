@@ -52,9 +52,10 @@ type hooks = Subs_state.app_hooks
 
 let hooks = Subs_state.app_hooks
 
-(* imperative popup root for dialogs mounted outside the declarative
-   tree (views / property dialogs) *)
-let editor_popup_root : Js.Json.t option ref = ref None
+(* whether an editor popup (date picker / link form) is currently open —
+   the popup itself is a LUI popover in the overlay layer, so no element
+   handle is kept, only the open flag Popups_state.any_open consults *)
+let editor_popup_open = ref false
 
 let on_sync = Subs_state.on_sync
 let run_sync_subs = Subs_state.run_sync_subs

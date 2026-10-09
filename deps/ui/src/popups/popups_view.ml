@@ -1259,6 +1259,7 @@ let render (_ms : Model.t Signal.signal) : t =
     Logseq_el.fragment
       [ if_ ~test:ac_open (ac_popover st)
       ; if_ ~test:cm_open (cm_popover st)
-      ; pv_dyn st ]
+      ; pv_dyn st
+      ; Editor_commands.popup_view ]
   in
   body context parent

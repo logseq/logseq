@@ -229,10 +229,8 @@ let inside el =
   Web_dom.el_closest el ".cp__overlays" <> None
   || Web_dom.el_closest el ".lui-popup-portal" <> None
   || Properties_state.overlay_contains el
-  ||
-  (match !Runtime.editor_popup_root with
-   | Some root -> Web_dom.el_contains root el
-   | None -> false)
+(* the editor popup (date picker / link form) mounts as a LUI popover —
+   the .lui-popup-portal clause above already hit-tests it *)
 
 (* whether any popup layer is up, for code paths that only need the
    boolean (the per-layer popup_signal above drives reactive chrome) *)
@@ -242,7 +240,7 @@ let any_open () =
    | None -> false)
   || Cmdk_state.is_open ()
   || Properties_state.overlay_open ()
-  || !Runtime.editor_popup_root <> None
+  || !Runtime.editor_popup_open
 
 (* popup bound to the block currently being edited (unanchored popups
    like cmdk-spawned search count as attached too) *)

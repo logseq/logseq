@@ -1151,7 +1151,11 @@ let on_keydown ev =
        when String.lowercase_ascii (D.ev_key ev) = "escape" ->
          drag_reset ()
      | _ -> ());
-    if Editor_commands.popup_key ev then
+    if Editor_commands.popup_key ~key:(D.ev_key ev)
+         ~inside:(fun () ->
+           D.closest_sel "#date-time-picker" (D.ev_target ev) <> None)
+         ~prevent_default:(fun () -> D.ev_prevent_default ev)
+    then
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (D.ev_key ev))
     else
@@ -1621,7 +1625,7 @@ let on_mousedown ev =
         match D.ev_target ev with
         | Some el when Popups_state.inside el -> ()
         | _ ->
-            if Editor_commands.click_guard (D.ev_target ev) then ()
+            if Editor_commands.click_guard () then ()
             else A.schedule_blur_commit ())
   end
 
