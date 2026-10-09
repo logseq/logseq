@@ -1071,16 +1071,31 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                 when el.Ui_services.closest ".block-editor" <> None
                      && (match Editor_actions.edit_model id with
                          | Some m -> Edit_model.has_selection m
-                         | None -> false) ->
+                         | None -> false) -> (
                   (* right-click on selected text inside the editing
-                     surface: one LUI edit menu on every host — the
-                     browser's native menu differs per engine and would
-                     not target our model selection anyway *)
-                  ev.Ui_services.prevent_default ();
-                  ev.Ui_services.stop_propagation ();
-                  close_cm_picker ();
-                  let ax, atop, abot = S.anchor_at_point ~x:ev.Ui_services.x ~y:ev.Ui_services.y in
-                  S.open_cm_edit st ~ax ~atop ~abot ~block_id:id
+                     surface *)
+                  if Ui_services.env_native_block_controls () then (
+                    (* gpui: no OS context menu — the LUI edit menu is
+                       its native equivalent *)
+                    ev.Ui_services.prevent_default ();
+                    ev.Ui_services.stop_propagation ();
+                    close_cm_picker ();
+                    let ax, atop, abot =
+                      S.anchor_at_point ~x:ev.Ui_services.x
+                        ~y:ev.Ui_services.y
+                    in
+                    S.open_cm_edit st ~ax ~atop ~abot ~block_id:id)
+                  else
+                    (* web: mirror the model selection into a live DOM
+                       selection so the browser's own menu offers real
+                       text items (Copy, Look Up…), then let it open *)
+                    match Editor_actions.edit_model id with
+                    | Some m -> (
+                        match Edit_model.selection_range m with
+                        | Some (lo, hi) ->
+                            Editor_sink.select_range id lo hi
+                        | None -> ())
+                    | None -> ())
               | Some id, (first :: _ as sel)
                 when List.exists (fun u -> u = id) sel ->
                   ev.Ui_services.prevent_default ();

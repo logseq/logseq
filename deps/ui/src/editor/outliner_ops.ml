@@ -1025,9 +1025,12 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
         let still_current = !Runtime.current_journals == start_js in
         match merged with
         | Page_delta.Applied js' when js' != start_js && still_current ->
+            ignore (Ui_services.perf_mark "jdelta:applied");
             Runtime.send (Action.Journals_loaded js');
             Ui_task.resolve ()
-        | Page_delta.Applied _ | Page_delta.Unchanged -> Ui_task.resolve ()
+        | Page_delta.Applied _ | Page_delta.Unchanged ->
+            ignore (Ui_services.perf_mark "jdelta:unchanged");
+            Ui_task.resolve ()
         | Page_delta.Failed -> (
             (* a touched day couldn't splice — refetch just the days the
                deltas touch, never the whole route *)
@@ -1053,6 +1056,7 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
                           rest
                 in
                 let* js' = refetch [] start_js in
+                ignore (Ui_services.perf_mark "jdelta:refetch");
                 if still_current then (
                   Runtime.send (Action.Journals_loaded js');
                   (* the refetched days already contain these deltas'
@@ -1075,6 +1079,45 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
    are tried in order. Fold + publish inside the apply queue, like
    apply_queued. Returns false when any delta can't splice — the
    caller falls back to a full reload *)
+(* Post-op side refreshes (linked refs, property areas) are eventual-
+   consistency reads on the same comlink channel the next edit op and
+   its canon-row fetch must use. Firing them synchronously per op
+   stalls the edit path on long pages: trailing-debounce so a burst
+   (rapid Enters) only pays one refresh pass at the end. *)
+let side_refresh_pending : Model.page list ref = ref []
+let side_refresh_props = ref false
+let side_refresh_armed = ref false
+
+let request_side_refresh ~props owners =
+  side_refresh_pending :=
+    List.fold_left
+      (fun acc (p : Model.page) ->
+        if
+          List.exists
+            (fun q -> q.Model.page_uuid = p.Model.page_uuid)
+            acc
+        then acc
+        else p :: acc)
+      !side_refresh_pending owners;
+  if props then side_refresh_props := true;
+  if not !side_refresh_armed then begin
+    side_refresh_armed := true;
+    ignore
+      (Ui_services.timers_timeout
+         (fun () ->
+           side_refresh_armed := false;
+           let owners = !side_refresh_pending in
+           side_refresh_pending := [];
+           let props = !side_refresh_props in
+           side_refresh_props := false;
+           if props then
+             ignore (Runtime.hooks.refresh_property_areas ());
+           List.iter
+             (fun p -> Runtime.hooks.refresh_journal_side p)
+             owners)
+         250)
+  end
+
 let splice_journals ?(strict = false) (deltas : Wire.t list) :
     bool Js.Promise.t =
   let deltas = Page_delta.drain_deferred () @ deltas in
@@ -1150,6 +1193,9 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
                    | `Unmatched -> Ui_task.resolve false)
              in
              let* ok = fold deltas in
+             ignore
+               (Ui_services.perf_mark
+                  (if ok then "jdelta:spliced" else "jdelta:unmatched"));
              (if ok then
                 match (Runtime.model ()).Model.journals with
                 | cur when cur == base ->
@@ -1160,9 +1206,7 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
                       Runtime.send
                         (Action.Journals_spliced (Array.to_list arr));
                       S.prune_overrides touched;
-                      List.iter
-                        (fun p -> Runtime.hooks.refresh_journal_side p)
-                        !owners
+                      request_side_refresh ~props:false !owners
                     end
                 | _ -> ());
              Ui_task.resolve ok))
@@ -1181,8 +1225,8 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
           let* ok = splice_journals [ delta ] in
           if ok then (
             (* property areas hold worker data outside the spliced
-               model — refresh them like the page-route path *)
-            ignore (Runtime.hooks.refresh_property_areas ());
+               model — debounced with the journals side refresh *)
+            request_side_refresh ~props:true [];
             Js.Promise.resolve ())
           else refresh_page ())
       | _ -> refresh_journals_via_delta delta)

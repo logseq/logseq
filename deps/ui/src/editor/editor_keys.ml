@@ -876,12 +876,18 @@ let rec retry_vertical uuid ev armed_caret mine_ms attempts =
    Logseq keymap owns the commands first, Edit_input handles the rest,
    and buffer changes schedule the debounced save plus popup matching *)
 and apply_input ?frame uuid ev =
+  (* Retarget a retired sink before enqueueing a shadow. Otherwise the
+     same event could leave two shadows when it re-enters on the live UUID. *)
+  let uuid, frame = match S.editing (), ev with
+    | Some e, (Edit_input.Insert _ | Edit_input.Composition _
+              | Edit_input.Delete _ | Edit_input.Key _) when e.S.uuid <> uuid ->
+        e.S.uuid, !S.active_frame
+    | _ -> uuid, frame in
   let local = !S.structure_pending && !S.optimistic_split_ready
-              && Queue.is_empty S.pending_edit_actions
+              && !S.pending_edit_real = 0
               && local_input_during_split uuid ev in
-  if !S.structure_pending && not local
-     && (match ev with Edit_input.Focus | Edit_input.Blur -> false | _ -> true)
-  then (
+  let context = Runtime.repo (), Runtime.route () in
+  let enqueue ~real f =
     let queued_at = Ui_services.time_now () in
     let kind = match ev with
       | Edit_input.Key (key, _) -> "key-" ^ key.Edit_model.key
@@ -893,18 +899,38 @@ and apply_input ?frame uuid ev =
       | Edit_input.Menu _ -> "menu"
       | Edit_input.Focus -> "focus"
       | Edit_input.Blur -> "blur" in
-    Ui_services.perf_mark (Printf.sprintf "editor:queued kind=%s block=%s depth=%d"
-      kind uuid (Queue.length S.pending_edit_actions + 1));
-    let context = Runtime.repo (), Runtime.route () in
-    Queue.add
-      (fun () ->
-        Ui_services.perf_mark (Printf.sprintf "editor:replay kind=%s block=%s wait=%.1fms"
-          kind uuid (Ui_services.time_now () -. queued_at));
+    if real then
+      Ui_services.perf_mark (Printf.sprintf "editor:queued kind=%s block=%s depth=%d"
+        kind uuid (!S.pending_edit_real + 1));
+    S.enqueue_edit_action ~real (fun () ->
+        if real then
+          Ui_services.perf_mark (Printf.sprintf "editor:replay kind=%s block=%s wait=%.1fms"
+            kind uuid (Ui_services.time_now () -. queued_at));
         if context = (Runtime.repo (), Runtime.route ()) then
           match S.editing () with
-          | Some e -> apply_input ?frame:!S.active_frame e.S.uuid ev
+          | Some e -> f e
           | None -> ())
-      S.pending_edit_actions)
+  in
+  (* Optimistic splits own their recovery log. Other in-flight edits
+     retain the epoch shadow, which replays only onto a restored session. *)
+  let must_wait ev =
+    if local then false else
+    match ev with
+    | Edit_input.Focus | Edit_input.Blur -> false
+    | (Edit_input.Insert _ | Edit_input.Composition _
+      | Edit_input.Pointer _ | Edit_input.Dblclick _) as ev' -> (
+        match S.editing () with
+        | Some e when !S.pending_edit_real = 0 ->
+            let epoch = e.S.epoch in
+            enqueue ~real:false (fun e2 ->
+                if not (e2.S.epoch == epoch) then
+                  apply_input ?frame:!S.active_frame e2.S.uuid ev');
+            false
+        | _ -> true)
+    | _ -> true
+  in
+  if !S.structure_pending && must_wait ev
+  then enqueue ~real:true (fun e -> apply_input ?frame:!S.active_frame e.S.uuid ev)
   else match S.editing () with
   | Some e when e.S.uuid = uuid -> (
       if local then (
@@ -1070,8 +1096,20 @@ let on_pending_focus_key ev e =
 let last_block_mousedown : (string * float * string) ref = ref ("", 0.0, "")
 
 let racing_edit_uuid () =
-  let (u, t, _) = !last_block_mousedown in
-  if u <> "" && Ui_services.time_now () -. t < 5000.0 then Some u
+  let (u, t, stale) = !last_block_mousedown in
+  (* the gap stays open only until the mousedown's own enter_edit
+     resolves: while the replaced record (or no record) is still the
+     editing one, keys belong to the incoming block. Once editing
+     lands on a third uuid — e.g. Enter split the clicked block — the
+     mousedown's intent is spent and queueing for it drops keys. *)
+  let e = S.editing_uuid () in
+  let gap_open =
+    (stale <> "" && e = Some stale)
+    || (stale = "" && e = None)
+    || e = Some u
+  in
+  if u <> "" && gap_open && Ui_services.time_now () -. t < 5000.0
+  then Some u
   else None
 
 (* replay [ev] through the remount-window handler once the mousedown's

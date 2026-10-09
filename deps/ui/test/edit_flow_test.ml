@@ -402,16 +402,30 @@ let test_queued_input (h : host) =
   stage_page h [ Test_check.block "b1" "hello" ];
   set_editing ~uuid:"b1" ~buffer:"hello" ~caret:5 ~base:"hello";
   install_worker ~repo:h.repo h;
-  (* input arriving while a structure op holds the gate is queued, then
-     replayed in order against the editing session *)
+  (* text-level input paints live while a structure op holds the gate;
+     structural intents still queue and replay in order *)
   S.structure_pending := true;
   Editor_keys.apply_input "b1" (EI.Insert "q");
-  check "queued input not applied yet" ((editing_now ()).S.buffer = "hello");
+  check "input paints live" ((editing_now ()).S.buffer = "helloq");
+  Editor_keys.apply_input "b1" (EI.Delete EI.Del_backward);
+  check "structural op still queued" ((editing_now ()).S.buffer = "helloq");
   S.structure_pending := false;
   S.drain_edit_actions ();
-  check "queued input replays" ((editing_now ()).S.buffer = "helloq");
+  check "queued op replays" ((editing_now ()).S.buffer = "hello");
   let* () = Ops.flush_pending_save () in
-  check "replayed input saves" (List.exists (wire_has "helloq") !ops);
+  check "replayed input saves" (List.exists (wire_has "hello") !ops);
+  (* A retired sink must be retargeted before shadow bookkeeping, so a
+     later session restore receives its first character exactly once. *)
+  let restore = editing_now () in
+  set_editing ~uuid:"b1" ~buffer:"hello" ~caret:5 ~base:"hello";
+  S.structure_pending := true;
+  Editor_keys.apply_input "retired-sink" (EI.Insert "r");
+  check "retired sink input paints live" ((editing_now ()).S.buffer = "hellor");
+  S.set (fun st -> { st with S.editing = Some restore });
+  S.structure_pending := false;
+  S.drain_edit_actions ();
+  check "restored session replays retired input once" ((editing_now ()).S.buffer = "hellor");
+  check "replay drains real input count" (!S.pending_edit_real = 0);
   reset_editor ();
   Js.Promise.resolve ()
 

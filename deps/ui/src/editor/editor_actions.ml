@@ -368,11 +368,13 @@ let run_structure ?recover ~restore p finish =
     (let* () = settled in
      Ui_services.perf_mark (Printf.sprintf "editor:structure-settled duration=%.1fms queued=%d"
        (Ui_services.time_now () -. started_at) (Queue.length S.pending_edit_actions));
+     ignore (Ui_services.perf_mark "struct:resolved");
      S.structure_pending := false;
      if current () then finish ();
      Runtime.flush_now ();
      S.drain_edit_actions ();
      Ops.resume_pending_save ();
+     ignore (Ui_services.perf_mark "struct:drained");
      Js.Promise.resolve ())
 
 (* Arm the optimistic editor now and again after canonical rows land. *)
@@ -459,9 +461,9 @@ let rec enter_edit ?scope uuid caret =
   if (match S.editing () with Some e -> e.S.uuid = uuid && e.S.scope = scope | None -> false)
   then clear_pending_blur ()
   else if !S.structure_pending then
-    Queue.add (fun () ->
+    S.enqueue_edit_action ~real:true (fun () ->
       if context = (Runtime.repo (), Runtime.route ()) then
-        enter_edit ~scope uuid caret) S.pending_edit_actions
+        enter_edit ~scope uuid caret)
   else (
   clear_pending_blur ();
   (* single editing surface (cljs): a block editor opening commits any
@@ -506,7 +508,7 @@ let cancel_pending_focus () =
 
 let rec exit_edit ~select =
   if !S.structure_pending then
-    Queue.add (fun () -> exit_edit ~select) S.pending_edit_actions
+    S.enqueue_edit_action ~real:true (fun () -> exit_edit ~select)
   else if S.ready () then
     match S.editing () with
     | None -> ()
@@ -712,7 +714,7 @@ let enqueue_split ~restore persist =
       Queue.clear S.pending_edit_actions;
       List.rev !S.optimistic_input_replay
       |> List.iter (fun (seq, replay) ->
-          if current && seq > !split_replay_after then Queue.add replay S.pending_edit_actions);
+          if current && seq > !split_replay_after then S.enqueue_edit_action ~real:true replay);
       S.optimistic_input_replay := [];
       Queue.iter (fun f -> Queue.add f S.pending_edit_actions) queued;
       !split_restore
@@ -2088,7 +2090,7 @@ let () = S.restore_history := restore_history
 
 let rec run_history operation =
   if !S.structure_pending then
-    Queue.add (fun () -> run_history operation) S.pending_edit_actions
+    S.enqueue_edit_action ~real:true (fun () -> run_history operation)
   else
     run_structure ~restore:(S.editing ()) (operation ()) (fun () -> ())
 
