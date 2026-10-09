@@ -115,3 +115,30 @@ Affected verification passed: all 33 application browser cases, 1,970 Web record
 Actual native window verification still exposes a search rendering problem: the retained input appears in accessibility state, but the popup is absent from the screenshot. Search modal geometry and backdrop styling on Web also remain different from the reference. Do not treat the shared lifecycle change or headless rendering test as proof of actual native search visibility or pixel parity. Custom keymap editing, Search by keys, Refresh all, the recorded task-popup horizontal offset, native motion, and authenticated RTC workflows remain unfinished.
 
 The scoped LUI tests pass, but its broad `dune build @all` encounters an existing native-example build rule referencing a missing lui_caml_dispatch.h. No Dune rules were changed. The local opam pin used a temporary source snapshot for validation; the committed install script uses the dependency revision above.
+
+
+## Web editor latency investigation
+
+Pulled refactor/lui to f762cec5ce before reproducing the reported delayed text and caret. Tests used a disposable browser graph on http://localhost:3001; the user's graph was not edited.
+
+The shared structure_pending gate queued ordinary text insertion and pointer events behind every Enter transaction and its canonical page reconciliation, even though the optimistic next block was already mounted. On a page with 500 sibling fixture blocks, twenty Enter/text pairs at 20 ms intervals accumulated up to 1,070 ms of input queue wait. The last text became visible in the DOM after 1,071.4 ms. The captured UI flushes were substantially shorter, so waiting for asynchronous structure completion was the dominant cause.
+
+Enter now mounts and edits its optimistic block immediately while worker transactions remain ordered. Each split captures its own pending text save and cursor history before the next editor opens. Canonical deltas reconcile once the pending split batch catches up; subscription reloads and autosave respect the same boundary. Other structural operations and cross-block navigation retain ordered replay. A failed insertion restores the appropriate preceding editor and replays subsequent user input; a browser test injects a failure in the second pending insertion and verifies that later text and splits survive.
+
+Same-block clicks no longer enqueue a redundant editor transition or leave an old click coordinate for asynchronous refocus. Completion retains the live caret. Another regression showed that measured Home/End navigation compared the derived model with the original unpublished session model and consequently dropped the caret update; publication now checks the session model that owned the event before measurement.
+
+The same 500-block page was reset to its original fixture and measured again with twenty Enter/text pairs at 20 ms intervals. All twenty inserts were visible synchronously after dispatch, with a DOM visibility median of 2.5 ms and maximum of 4.4 ms. No insert entered the structure input queue. The final persisted tree contained 521 blocks and the expected final row. Twenty alternating pointer moves in the same block completed with a median of 2.8 ms and maximum of 4.3 ms; all offsets were correct and caret geometry differed from the target by at most 0.063 px. These are browser event/DOM measurements, not physical display or native GPU latency measurements.
+
+Enable diagnostic printing in the browser console with:
+
+```javascript
+window.__editorPerf = true;
+window.__navEvents = [];
+window.__uiPerf = [];
+```
+
+Enable the console's Verbose level to see PERF editor and PERF ui messages. The editor messages include structure duration, queued event kind/depth, and replay wait. UI samples include dispatch, signal flush, DOM application, virtualization, focus, patch counts, and mounted nodes. Logs omit block contents. Set window.__editorPerf = false to stop console printing; window.__uiPerf retains its existing bounded sample buffer.
+
+The new production-browser regressions were observed failing before the behavior changes. Coverage includes text and pointer updates while a real worker request is held, ordered persistence, caret preservation after completion, measured line navigation, and a rejected second insertion. Existing undo/redo, merges, Enter repetition, composition, selection, reference and caret-blink cases are included in the browser verification batch. Shared recording tests pass 1,970 Web checks and 679 native checks, with two passing native process tests. The existing native Rust edits in other sessions were preserved.
+
+The completed browser rerun passed all 82 editor cases. The initial full run had one incorrect expected string after simplifying the held-merge fixture; correcting that fixture expectation and rerunning the complete batch established the passing result. Web build, shared-boundary checks, document validation, and diff whitespace checks passed.

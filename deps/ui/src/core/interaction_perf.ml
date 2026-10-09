@@ -115,6 +115,7 @@ let push_raw : js_sample -> unit =
     "function (s) { \
        var a = window.__uiPerf || (window.__uiPerf = []); \
        a.push(s); \
+       if (window.__editorPerf) console.debug('PERF ui', s); \
        if (a.length > 512) a.splice(0, a.length - 512); }"]
 
 let finish () =

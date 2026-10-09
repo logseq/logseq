@@ -111,7 +111,11 @@ external perf_now : unit -> float = "now" [@@mel.scope "performance"]
 
 let perf_mark : string -> unit =
   [%mel.raw
-    "function (n) { if (window.__navEvents) window.__navEvents.push([n, performance.now()]); }"]
+    "function (n) { \
+       var t = performance.now(); \
+       if (window.__navEvents) window.__navEvents.push([n, t]); \
+       if (window.__editorPerf && n.indexOf('editor:') === 0) \
+         console.debug('PERF editor', n, t); }"]
 
 let perf_time (name : string) (f : unit -> 'a) : 'a =
   let t0 = perf_now () in

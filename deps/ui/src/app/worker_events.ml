@@ -159,7 +159,7 @@ let ui_busy ~now ~last_fire =
   let ui_active =
     editing_active && now -. !last_ui_input_ms < edit_input_idle_ms
   in
-  typing_active || edit_throttled || popup_open || ui_active
+  !Editor_state.structure_pending || typing_active || edit_throttled || popup_open || ui_active
 
 let init () =
   (* the subscription pipeline's touch points into the app — one place

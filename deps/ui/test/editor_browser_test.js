@@ -3,6 +3,7 @@
 // Every assertion drives the production editor and worker, not a mock.
 globalThis.runEditorBrowserTests = async function (filter = '') {
   const results = [];
+  globalThis.editorBrowserProgress = {results, done: false};
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   const wait = async predicate => {
     for (let i = 0; i < 200; i++) {
@@ -603,6 +604,15 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
         {targetCalls, content: stored.content});
     } finally { document.body.removeEventListener('keydown', target); }
   });
+  await test('Measured line navigation publishes the new caret', async () => {
+    await fixture(['alpha beta']);
+    key('End', {metaKey: true});
+    assert(input().__lsEd.caret_off === 10, {phase: 'end', caret: input().__lsEd.caret_off});
+    key('Home');
+    assert(input().__lsEd.caret_off === 0, {phase: 'home', caret: input().__lsEd.caret_off});
+    key('End');
+    assert(input().__lsEd.caret_off === 10, {phase: 'end again', caret: input().__lsEd.caret_off});
+  });
   await test('Immediate Undo and Redo preserve typed text', async () => {
     const {blocks} = await fixture(['base']); key('End'); insert('suffix');
     key('z', {metaKey: true}); await pause(600);
@@ -684,7 +694,7 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     });
   }
   await test('Pending merge cannot move queued text across an explicit block click', async () => {
-    const {page, blocks} = await fixture(['prefix [[delayed reference]]', 'suffix', 'other']);
+    const {page, blocks} = await fixture(['prefix', 'suffix', 'other']);
     key('Escape'); await pause(50);
     document.querySelector('#block-content-' + blocks[1].uuid).click();
     await wait(() => input()?.id.includes(blocks[1].uuid) && document.activeElement === input());
@@ -692,8 +702,8 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     const original = Worker.prototype.postMessage;
     let held;
     Worker.prototype.postMessage = function (message, ...rest) {
-      if (!held && message.argumentList?.[0]?.value === 'thread-api/get-case-page'
-        && message.argumentList?.[1]?.value.includes('delayed reference')) {
+      if (!held && message.argumentList?.[0]?.value === 'thread-api/apply-outliner-ops'
+        && message.argumentList?.[1]?.value.includes('delete-blocks')) {
         held = [this, message, rest]; return;
       }
       return Reflect.apply(original, this, [message, ...rest]);
@@ -712,7 +722,7 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
         && document.activeElement === input(), {text: text(), active: document.activeElement?.id});
       key('Escape'); await pause(450);
       const tree = await logseq.api.get_page_blocks_tree(page.uuid);
-      assert(tree.length === 2 && tree[0].content.endsWith(' Xsuffix')
+      assert(tree.length === 2 && tree[0].content === 'prefixXsuffix'
         && tree[1].content === 'otherY', {tree});
     } finally {
       Worker.prototype.postMessage = original;
@@ -738,6 +748,84 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
     await pause(800);
     const tree = await logseq.api.get_page_blocks_tree(page.uuid);
     assert(JSON.stringify(tree.map(b => b.content)) === JSON.stringify(['first', 'C', 'D']), {tree, text: text()});
+  });
+  await test('Rejected optimistic split preserves subsequent input and splits', async () => {
+    const {page} = await fixture(['before']); key('End');
+    const original = Worker.prototype.postMessage;
+    let held, released = false, rejected = false;
+    Worker.prototype.postMessage = function (message, ...rest) {
+      if (message.argumentList?.[0]?.value === 'thread-api/apply-outliner-ops'
+        && message.argumentList?.[1]?.value.includes('insert-blocks')) {
+        if (!held) { held = [this, message, rest]; return; }
+        if (released && !rejected) {
+          rejected = true; throw new Error('Injected second optimistic insertion rejection');
+        }
+      }
+      return Reflect.apply(original, this, [message, ...rest]);
+    };
+    try {
+      key('Enter'); await wait(() => held); insert('A');
+      key('Enter'); insert('B'); key('Enter'); insert('C');
+      released = true; Reflect.apply(original, held[0], [held[1], ...held[2]]);
+      await pause(1500);
+      assert(rejected && text() === 'C' && document.activeElement === input(),
+        {rejected, text: text(), active: document.activeElement?.id});
+      key('Escape'); await pause(450);
+      const tree = await logseq.api.get_page_blocks_tree(page.uuid);
+      assert(JSON.stringify(tree.map(b => b.content)) === JSON.stringify(['before', 'AB', 'C']), {tree});
+    } finally {
+      Worker.prototype.postMessage = original;
+      if (held && !released) Reflect.apply(original, held[0], [held[1], ...held[2]]);
+      await pause(500);
+    }
+  });
+  await test('Optimistic Enter paints text and pointer moves before worker completion', async () => {
+    const {page} = await fixture(['before']); key('End');
+    const original = Worker.prototype.postMessage;
+    let held;
+    Worker.prototype.postMessage = function (message, ...rest) {
+      if (!held && message.argumentList?.[0]?.value === 'thread-api/apply-outliner-ops'
+        && message.argumentList?.[1]?.value.includes('insert-blocks')) {
+        held = [this, message, rest]; return;
+      }
+      return Reflect.apply(original, this, [message, ...rest]);
+    };
+    try {
+      key('Enter'); await wait(() => held);
+      for (let i = 0; i < 6; i++) {
+        if (i) key('Enter');
+        insert('row' + i);
+        await pause(20);
+        assert(text() === 'row' + i && input().__lsEd.caret_off === 4,
+          {phase: 'pending insert', i, text: text(), caret: input().__lsEd.caret_off});
+      }
+      const run = surface().querySelector('.ed-r');
+      const range = document.createRange(); range.setStart(run.firstChild, 1); range.collapse(true);
+      const rect = range.getBoundingClientRect();
+      run.dispatchEvent(new MouseEvent('mousedown', {
+        clientX: rect.x, clientY: rect.y + rect.height / 2,
+        button: 0, buttons: 1, bubbles: true, cancelable: true,
+      }));
+      document.dispatchEvent(new MouseEvent('mouseup', {button: 0, bubbles: true}));
+      assert(input().__lsEd.caret_off === 1,
+        {phase: 'pending pointer', caret: input().__lsEd.caret_off});
+      insert('!');
+      Worker.prototype.postMessage = original;
+      Reflect.apply(original, held[0], [held[1], ...held[2]]); held = undefined;
+      await pause(1500);
+      assert(text() === 'r!ow5' && input().__lsEd.caret_off === 2
+        && document.activeElement === input(),
+        {phase: 'settled caret', text: text(), caret: input().__lsEd.caret_off});
+      key('Escape'); await pause(450);
+      const tree = await logseq.api.get_page_blocks_tree(page.uuid);
+      assert(JSON.stringify(tree.map(b => b.content)) ===
+        JSON.stringify(['before', 'row0', 'row1', 'row2', 'row3', 'row4', 'r!ow5']), {tree});
+      return {count: tree.length, contents: tree.map(b => b.content)};
+    } finally {
+      Worker.prototype.postMessage = original;
+      if (held) Reflect.apply(original, held[0], [held[1], ...held[2]]);
+      await pause(500);
+    }
   });
   await test('Text typed immediately after Enter belongs to the new block', async () => {
     const {page} = await fixture(['before']); key('End'); key('Enter'); insert('after');
@@ -772,6 +860,7 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
       {start, end: animation.currentTime, active: document.activeElement?.id});
   });
   console.table(results);
+  globalThis.editorBrowserProgress.done = true;
   return results;
 };
 

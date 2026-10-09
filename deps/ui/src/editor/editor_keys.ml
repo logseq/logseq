@@ -822,6 +822,33 @@ let is_other_block_editor uuid target =
       | None -> false)
   | _ -> false
 
+(* Only operations on the already mounted buffer may bypass an optimistic
+   split commit. Cross-block navigation, history and other structure edits
+   retain their ordered replay path. *)
+let local_input_during_split uuid ev =
+  match S.editing () with
+  | Some e when e.S.uuid = uuid ->
+      let m = e.S.model in
+      let lo, hi = A.sel_span_of m in
+      let len = String.length m.Edit_model.source in
+      (match ev with
+       | Edit_input.Insert _ | Edit_input.Delete _ | Edit_input.Composition _
+       | Edit_input.Pointer _ | Edit_input.Dblclick _ -> true
+       | Edit_input.Key (k, _) ->
+           (match k.Edit_model.key with
+            | "Enter" -> not (k.meta || k.ctrl) && not (ac_popup_open ())
+                         && (k.shift || A.can_split_optimistically uuid)
+            | "Home" | "End" -> true
+            | "Backspace" -> lo > 0 || hi > lo
+            | "Delete" -> hi < len || hi > lo
+            | "ArrowLeft" -> lo > 0 || hi > lo || k.shift || k.meta || k.ctrl || k.alt
+            | "ArrowRight" -> hi < len || hi > lo || k.shift || k.meta || k.ctrl || k.alt
+            | "a" when k.meta || k.ctrl -> not (whole_selected m)
+            | "b" | "i" when (k.meta || k.ctrl) && not k.shift -> true
+            | key -> String.length key = 1 && not (k.meta || k.ctrl || k.alt))
+       | Edit_input.Focus | Edit_input.Blur | Edit_input.Menu _ -> false)
+  | _ -> false
+
 (* native conduits answer caret-rect/offset-at asynchronously — a
    vertical arrow on a cold cache fires the request and no-ops, so one
    keypress moves nothing (web conduit replies synchronously). Re-fire
@@ -849,12 +876,30 @@ let rec retry_vertical uuid ev armed_caret mine_ms attempts =
    Logseq keymap owns the commands first, Edit_input handles the rest,
    and buffer changes schedule the debounced save plus popup matching *)
 and apply_input ?frame uuid ev =
-  if !S.structure_pending
+  let local = !S.structure_pending && !S.optimistic_split_ready
+              && Queue.is_empty S.pending_edit_actions
+              && local_input_during_split uuid ev in
+  if !S.structure_pending && not local
      && (match ev with Edit_input.Focus | Edit_input.Blur -> false | _ -> true)
   then (
+    let queued_at = Ui_services.time_now () in
+    let kind = match ev with
+      | Edit_input.Key (key, _) -> "key-" ^ key.Edit_model.key
+      | Edit_input.Insert _ -> "insert"
+      | Edit_input.Pointer _ -> "pointer"
+      | Edit_input.Dblclick _ -> "double-click"
+      | Edit_input.Delete _ -> "delete"
+      | Edit_input.Composition _ -> "composition"
+      | Edit_input.Menu _ -> "menu"
+      | Edit_input.Focus -> "focus"
+      | Edit_input.Blur -> "blur" in
+    Ui_services.perf_mark (Printf.sprintf "editor:queued kind=%s block=%s depth=%d"
+      kind uuid (Queue.length S.pending_edit_actions + 1));
     let context = Runtime.repo (), Runtime.route () in
     Queue.add
       (fun () ->
+        Ui_services.perf_mark (Printf.sprintf "editor:replay kind=%s block=%s wait=%.1fms"
+          kind uuid (Ui_services.time_now () -. queued_at));
         if context = (Runtime.repo (), Runtime.route ()) then
           match S.editing () with
           | Some e -> apply_input ?frame:!S.active_frame e.S.uuid ev
@@ -862,6 +907,15 @@ and apply_input ?frame uuid ev =
       S.pending_edit_actions)
   else match S.editing () with
   | Some e when e.S.uuid = uuid -> (
+      if local then (
+        incr S.optimistic_input_seq;
+        let context = Runtime.repo (), Runtime.route () in
+        let replay () =
+          if context = (Runtime.repo (), Runtime.route ()) then
+            match S.editing () with
+            | Some current -> apply_input ?frame:!S.active_frame current.S.uuid ev
+            | None -> () in
+        S.optimistic_input_replay := (!S.optimistic_input_seq, replay) :: !S.optimistic_input_replay);
       (* Focus/Blur/Menu are lifecycle emits, not input — counting them
          makes last_edit_input_ms jump past every request_focus arm, so
          the stale-caret gate in apply_focus would never let the stored
@@ -900,12 +954,12 @@ and apply_input ?frame uuid ev =
            if Option.is_some measured.Edit_input.caret then
              Signal.update fr (fun _ -> measured)
        | _ -> ());
-      (* publish only while the model is still the one this event read:
-         a structural op that settled mid-dispatch (e.g. merge_next on a
+      (* Compare against the session model before line measurement;
+         refresh_lines may have derived m0 without publishing it. A structural op that settled mid-dispatch (e.g. merge_next on a
          synchronously-drained native promise) already wrote a newer
          model — republishing m' here would push the stale buffer back
          over the committed merge *)
-      A.update_model uuid (fun m_cur -> if m_cur == m0 then m' else m_cur);
+      A.update_model uuid (fun m_cur -> if m_cur == e.S.model then m' else m_cur);
       (match ev with
        | Edit_input.Key
            ({ Edit_model.key = "ArrowUp" | "ArrowDown"; meta = false
@@ -1614,7 +1668,8 @@ let on_mousedown (ev : Ui_services.ev) =
                        , now, stale )
                    | None -> ("", now, stale)))));
     (match !last_block_mousedown with
-     | u, _, _ when u <> "" && u <> "*" ->
+     | u, _, stale when u <> "" && u <> "*"
+                        && (u <> stale || closest ".editor-wrapper" ev.Ui_services.target = None) ->
          S.click_point :=
            Some (u, now, ev.Ui_services.x, ev.Ui_services.y)
      | _ -> S.click_point := None);

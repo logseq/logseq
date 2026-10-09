@@ -112,6 +112,12 @@ let pending_focus_actions : (unit -> unit) list ref = ref []
    received while it commits is replayed in order against the resulting
    editing session, including keystrokes aimed at a retired sink. *)
 let structure_pending = ref false
+(* A split has already mounted its next editor. Local input can proceed
+   while its ordered worker commits are pending; other commands still wait. *)
+let optimistic_split_ready = ref false
+let optimistic_input_seq = ref 0
+let optimistic_input_replay : (int * (unit -> unit)) list ref = ref []
+
 let pending_edit_actions : (unit -> unit) Queue.t = Queue.create ()
 
 let drain_edit_actions () =

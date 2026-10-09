@@ -345,11 +345,14 @@ let request_focus uuid caret =
      the arm rides the next flush pass *)
   ignore (Ui_services.timers_timeout apply_focus 0)
 
-let run_structure ~restore p finish =
+let run_structure ?recover ~restore p finish =
   let context = Runtime.repo (), Runtime.route () in
+  let started_at = Ui_services.time_now () in
+  Ui_services.perf_mark "editor:structure-start";
   S.structure_pending := true;
   let current () = context = (Runtime.repo (), Runtime.route ()) in
   let settled = p |> Js.Promise.catch (fun _error ->
+      let restore = match recover with Some f -> f (current ()) | None -> restore in
       let* () = if current () then Ops.refresh_page () else Js.Promise.resolve () in
       if current () then (
         S.set (fun st -> { st with S.editing = restore });
@@ -359,13 +362,17 @@ let run_structure ~restore p finish =
       S.structure_pending := false;
       Runtime.flush_now ();
       S.drain_edit_actions ();
+      Ops.resume_pending_save ();
       p) in
   ignore
     (let* () = settled in
+     Ui_services.perf_mark (Printf.sprintf "editor:structure-settled duration=%.1fms queued=%d"
+       (Ui_services.time_now () -. started_at) (Queue.length S.pending_edit_actions));
      S.structure_pending := false;
      if current () then finish ();
      Runtime.flush_now ();
      S.drain_edit_actions ();
+     Ops.resume_pending_save ();
      Js.Promise.resolve ())
 
 (* Arm the optimistic editor now and again after canonical rows land. *)
@@ -376,7 +383,9 @@ let with_focus_after ~restore uuid caret p =
   focus_attempts := 0;
   ignore (Ui_services.timers_timeout apply_focus 0);
   run_structure ~restore p (fun () ->
-    if S.editing_uuid () = Some uuid then request_focus uuid caret)
+    match S.editing () with
+    | Some e when e.S.uuid = uuid -> request_focus uuid e.S.model.Edit_model.caret
+    | _ -> ())
 
 (* persisted/worker truth; display_title layers committed-but-unrefreshed
    buffers on top so exit-edit paints the saved text on the first frame *)
@@ -446,25 +455,18 @@ let scope_of_uuid uuid =
 let rec enter_edit ?scope uuid caret =
   if Ui_services.env_publishing () then () else
   let context = Runtime.repo (), Runtime.route () in
-  if !S.structure_pending then
+  let scope = match scope with Some sc -> sc | None -> scope_of_uuid uuid in
+  if (match S.editing () with Some e -> e.S.uuid = uuid && e.S.scope = scope | None -> false)
+  then clear_pending_blur ()
+  else if !S.structure_pending then
     Queue.add (fun () ->
       if context = (Runtime.repo (), Runtime.route ()) then
-        enter_edit ?scope uuid caret) S.pending_edit_actions
-  else
-  let scope =
-    match scope with Some sc -> sc | None -> scope_of_uuid uuid
-  in
+        enter_edit ~scope uuid caret) S.pending_edit_actions
+  else (
   clear_pending_blur ();
   (* single editing surface (cljs): a block editor opening commits any
      open property-value editor first *)
   !(S.close_property_editor) ();
-  (* clicking the block already under edit (e.g. the click that follows
-     a text-selection drag) must not rebuild the record — the pointer
-     emit already landed the caret, and a rebuild would wipe the live
-     selection and the uncommitted buffer *)
-  match S.editing () with
-  | Some e when e.uuid = uuid && e.scope = scope -> ()
-  | _ ->
   (match S.editing () with
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
   | _ -> ());
@@ -489,7 +491,7 @@ let rec enter_edit ?scope uuid caret =
             Js.Promise.resolve ()) in
           run_structure ~restore p (fun () -> request_focus uuid caret)
 
-  | None -> ()
+  | None -> ())
 
 (* block that was under edit most recently — cljs keeps state/editing
    until another edit starts; our mousedown-blur commits earlier, so
@@ -668,6 +670,73 @@ let ltrim s =
   in
   String.sub s (go 0) (n - go 0)
 
+(* Keep Enter's optimistic rows mounted until the ordered commit batch
+   catches up. Publishing each intermediate delta would replace future
+   placeholders and move the active sink underneath rapid typing. *)
+type split_commit =
+  { persist : unit -> Wire.t option Js.Promise.t
+  ; restore : S.editing
+  ; replay_after : int
+  }
+
+let split_commits : split_commit Queue.t = Queue.create ()
+let split_restore = ref None
+let split_replay_after = ref 0
+
+let enqueue_split ~restore persist =
+  Queue.add { persist; restore; replay_after = !S.optimistic_input_seq } split_commits;
+  if not !S.optimistic_split_ready then (
+    S.optimistic_split_ready := true;
+    let context = Runtime.repo (), Runtime.route () in
+    let rec drain last_response =
+      if context <> (Runtime.repo (), Runtime.route ()) then (
+        Queue.clear split_commits;
+        S.optimistic_split_ready := false;
+        S.optimistic_input_replay := [];
+        Js.Promise.resolve ())
+      else if Queue.is_empty split_commits then (
+        S.optimistic_split_ready := false;
+        Ops.refresh_via_delta last_response)
+      else (
+        let job = Queue.take split_commits in
+        split_restore := Some job.restore;
+        split_replay_after := job.replay_after;
+        let* response = job.persist () in
+        drain response)
+    in
+    let recover current =
+      S.optimistic_split_ready := false;
+      Queue.clear split_commits;
+      if current then Ops.cancel_pending_save ();
+      let queued = Queue.copy S.pending_edit_actions in
+      Queue.clear S.pending_edit_actions;
+      List.rev !S.optimistic_input_replay
+      |> List.iter (fun (seq, replay) ->
+          if current && seq > !split_replay_after then Queue.add replay S.pending_edit_actions);
+      S.optimistic_input_replay := [];
+      Queue.iter (fun f -> Queue.add f S.pending_edit_actions) queued;
+      !split_restore
+    in
+    let p = drain None in
+    run_structure ~recover ~restore:(Some restore) p (fun () ->
+        S.optimistic_input_replay := [];
+        match S.editing () with
+        | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
+        | None -> ()))
+
+let can_split_optimistically uuid =
+  match S.editing (), S.find uuid with
+  | Some e, Some b when e.S.uuid = uuid ->
+      let empty = String.trim e.S.buffer = "" in
+      let parent_ordered, last_child = match S.find_parent uuid with
+        | Some (Some parent, idx) ->
+            parent.Model.block_order_list <> None,
+            idx = List.length parent.Model.block_children - 1
+        | _ -> false, false in
+      not (empty && last_child)
+      && not (empty && not parent_ordered && b.Model.block_order_list <> None)
+  | _ -> false
+
 let split_at_cursor uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid && outdent_empty_last_child uuid e b ->
@@ -719,16 +788,29 @@ let split_at_cursor uuid =
             ~before:(S.history_editing e)
             ~after:(S.history_editing
               (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope ~base:after ())) () in
-        let p =
-          (let* a =
-            Js.Promise.all
+        (* Capture this block's debounce now, before the next editor can
+           schedule a save for a UUID the worker has not inserted yet. *)
+        let save = Option.map (fun (u, title) -> u, title, !Ops.pending_save_opts) !Ops.pending_save in
+        Ops.cancel_pending_save ();
+        let context = Runtime.repo (), Runtime.route () in
+        let apply opts ops =
+          if context = (Runtime.repo (), Runtime.route ()) then
+            Ops.apply_result ~flush_save:false ~opts ops
+          else Js.Promise.resolve None in
+        let persist () =
+          let* () = match save with
+            | None -> Js.Promise.resolve ()
+            | Some (u, title, opts) ->
+                let* op = Ops.save_block_parsed u title in
+                let* _ = apply opts [ op ] in
+                Js.Promise.resolve () in
+          let* a = Js.Promise.all
               [| Ops.block_map_parsed uuid before
-               ; Ops.block_map_parsed ~page:library new_uuid after |]
-          in
-          Ops.apply_and_refresh ~opts
+               ; Ops.block_map_parsed ~page:library new_uuid after |] in
+          apply opts
             ([ Ops.op "save-block" [ a.(0); Wire.Map [] ]
             ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ]
-            @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else []))
+            @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else [])
         in
         mark "ops";
         (* optimistic insert: mount the new row and retitle the split
@@ -756,7 +838,9 @@ let split_at_cursor uuid =
                   (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope
                      ~base:after ()) });
         mark "editing";
-        with_focus_after ~restore:(Some e) new_uuid 0 p;
+        S.click_point := None;
+        request_focus new_uuid 0;
+        enqueue_split ~restore:e persist;
         mark "focus-arm"
   | _ -> ()
 

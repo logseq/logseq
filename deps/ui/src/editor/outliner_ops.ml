@@ -796,6 +796,7 @@ let refresh_page () : unit Js.Promise.t =
 let save_timer = ref 0
 let pending_save : (string * string) option ref = ref None
 let pending_save_opts = ref (Wire.Map [])
+let pending_save_ready : (unit -> unit) option ref = ref None
 
 let history_opts ?(opts = Wire.Map []) ~before ~after () =
   match opts with
@@ -812,7 +813,8 @@ let current_history_opts opts =
 
 let cancel_pending_save () =
   Ui_services.timers_clear_timeout !save_timer;
-  pending_save := None
+  pending_save := None;
+  pending_save_ready := None
 
 (* op names for error logging — nested op payloads are
    [[op-name ...] ...] arrays or lists wrapping the same *)
@@ -830,9 +832,9 @@ let op_names ops =
 (* cljs saves the editing buffer on keydown before structure ops —
    flush the queued keystroke save instead of dropping it, so ops like
    indent/move don't lose text typed within the debounce window *)
-let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
+let rec apply_result ?(flush_save = true) ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
     =
-  match !pending_save with
+  match (if flush_save then !pending_save else None) with
   | Some (uuid, title) ->
       let save_opts = !pending_save_opts in
       let opts = current_history_opts opts in
@@ -841,7 +843,7 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
       let* _ = apply_result ~opts:save_opts [ sop ] in
       apply_result ~opts ops
   | None -> (
-      Ui_services.timers_clear_timeout !save_timer;
+      if flush_save then Ui_services.timers_clear_timeout !save_timer;
       match (Runtime.model ()).Model.repo with
       | None -> Js.Promise.resolve None
       | Some repo ->
@@ -1272,9 +1274,10 @@ let schedule_save uuid title =
   cancel_pending_save ();
   pending_save := Some (uuid, title);
   pending_save_opts := opts;
-  save_timer :=
-    Ui_services.timers_timeout
-      (fun () ->
+  let rec save_when_ready () =
+    if !S.structure_pending then
+      pending_save_ready := Some save_when_ready
+    else (
         pending_save := None;
         ignore
           (let* _ = apply_parsed ~opts ~rest:[] [ (uuid, title) ] in
@@ -1290,7 +1293,15 @@ let schedule_save uuid title =
                     S.editing = Some { e with S.base = title } }
               | _ -> st);
           Js.Promise.resolve ()))
-      400
+  in
+  save_timer := Ui_services.timers_timeout save_when_ready 400
+
+
+let resume_pending_save () =
+  if not !S.structure_pending then
+    match !pending_save_ready with
+    | Some save -> pending_save_ready := None; save ()
+    | None -> ()
 
 
 (* Rewrite page UUIDs to editable names; block references retain identity.
