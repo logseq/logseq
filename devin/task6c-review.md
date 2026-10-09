@@ -304,3 +304,29 @@ Branch devin/SHAREDUI-task6c. Files changed so far (uncommitted):
   scroll via new ops).
 - Then delete native/{web_dom,vdom,imperative_dom,editor_dom,
   properties_dom,views_dom}.ml + copy rules; trim dom_ext.
+
+## STATE UPDATE 2 (after contract landed)
+- Committed+pushed f8310e479f: contract extension (timers/files groups,
+  el/ev/dom +~35 ops, Json.t/Ui_task.t/fs_* op-records — all portable,
+  no Js types in contracts), ui_dom_web+ui_dom_native impls, dom_ext
+  absorbed el ops (set_attr/class_add/remove/set_class/scroll_*/
+  click/select_text/set_checked/contains/by_id/active_element +
+  focus/blur listener), platform_web/platform_native install signatures
+  gained ~timers ~files, call sites updated. Build + suites + boundaries
+  ALL GREEN at f8310e479f.
+- devin/task6c-migration-map.md committed (accessor table for children).
+- 4 children dispatched on branch devin/SHAREDUI-task6c-m{1,2,3,4} off
+  f8310e479f: m1 app/sdk/misc (107e7611), m2 editor/blocks (4f9620af),
+  m3 views/properties/popups (e9ddb1ea), m4 graphs LUI ports (bc2f4789).
+- My remaining work: native/cmdk_host.ml (D.query_selector/el_focus/
+  set_value/set_selection_range/scroll_row_into_view/add_document_
+  listener/set_timeout/dispatch_custom/el_bounding_rect→services),
+  native/logseq_editor.ml:309-320 (Editor_dom.textarea_of +
+  el_closest→Dom_ext/services), native/views_popup.ml (37 Editor_dom
+  refs — LUI port or remaining-map), native/native_embed.ml
+  (Imperative_dom.install/Vdom.init/run_doc_scans dead → drop),
+  asset_dom file_cell deleted (done), comments.ml done.
+- After children report: merge their branches into devin/SHAREDUI-
+  task6c, grep-verify zero src callers, delete native/{web_dom,vdom,
+  imperative_dom,editor_dom,properties_dom,views_dom}.ml + copy rules,
+  trim dom_ext, full verify, push, report.
