@@ -1049,8 +1049,20 @@ let on_pending_focus_key ev e =
 let last_block_mousedown : (string * float * string) ref = ref ("", 0.0, "")
 
 let racing_edit_uuid () =
-  let (u, t, _) = !last_block_mousedown in
-  if u <> "" && Ui_services.time_now () -. t < 5000.0 then Some u
+  let (u, t, stale) = !last_block_mousedown in
+  (* the gap stays open only until the mousedown's own enter_edit
+     resolves: while the replaced record (or no record) is still the
+     editing one, keys belong to the incoming block. Once editing
+     lands on a third uuid — e.g. Enter split the clicked block — the
+     mousedown's intent is spent and queueing for it drops keys. *)
+  let e = S.editing_uuid () in
+  let gap_open =
+    (stale <> "" && e = Some stale)
+    || (stale = "" && e = None)
+    || e = Some u
+  in
+  if u <> "" && gap_open && Ui_services.time_now () -. t < 5000.0
+  then Some u
   else None
 
 (* replay [ev] through the remount-window handler once the mousedown's
