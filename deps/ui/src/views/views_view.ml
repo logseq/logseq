@@ -8,7 +8,6 @@
 
 open Promise_ext
 module D = Logseq_el
-module E = Web_dom
 module V = Views_state
 module Wr = Views_wire
 module W = Wire
@@ -583,9 +582,12 @@ let add_new_object inst =
           let rec try_edit n =
             if n <= 0 then ()
             else
-              match E.get_element_by_id ("ls-block-" ^ uuid) with
+              match Ui_services.dom_by_id ("ls-block-" ^ uuid) with
               | Some _ -> Editor_actions.enter_edit uuid 0
-              | None -> E.set_timeout (fun () -> try_edit (n - 1)) 100
+              | None ->
+                  ignore
+                    (Ui_services.timers_timeout
+                       (fun () -> try_edit (n - 1)) 100)
           in
           try_edit 20)
   | _ -> ()
@@ -693,7 +695,7 @@ let toggle_query_editor ~block_uuid =
    "sync-db-changes" broadcast (Runtime.on_sync, run by worker_events) so
    result membership updates live; debounced so a burst of tx broadcasts
    coalesces into one refetch *)
-let debounced_refresh = E.debounce 150
+let debounced_refresh f = Ui_services.timers_debounce 150 f
 
 let refresh_live_insts () =
   debounced_refresh (fun () ->

@@ -380,9 +380,8 @@ let select_cell inst ~row_uuid ~blk : t =
     ]
 
 let open_row_sidebar row_uuid =
-  Web_dom.dispatch_custom "ls:open-right-sidebar"
-    (Js.Json.object_
-       (Js.Dict.fromList [ ("uuid", Js.Json.string row_uuid) ]))
+  Ui_services.dom_dispatch_json "ls:open-right-sidebar"
+    (Json.Object [ ("uuid", Json.String row_uuid) ])
 
 let title_cell inst ~row_uuid ~blk (c : V.column) : t =
   let title = Wr.prop_text (cell_value blk c) in
@@ -912,13 +911,12 @@ let table_row_keydown inst ~row_uuid name payload =
         open_row_sidebar row_uuid;
         V.update inst (fun s -> { s with V.selected = V.Sset.empty })
     | "ArrowLeft" | "ArrowRight" as arrow ->
-        (match E.get_element_by_id ("ls-block-" ^ row_uuid) with
+        (match Ui_services.dom_by_id ("ls-block-" ^ row_uuid) with
          | Some row_dom -> (
              let cells =
-               E.el_query_all_arr row_dom ".ls-table-cell"
-               |> Array.to_list
-               |> List.filter (fun cell ->
-                      E.el_query cell ".ui__checkbox" = None)
+               row_dom.Ui_services.query_all ".ls-table-cell"
+               |> List.filter (fun (cell : Ui_services.el) ->
+                      cell.Ui_services.query ".ui__checkbox" = None)
              in
              let pick =
                if arrow = "ArrowLeft" then List.nth_opt cells 0
@@ -930,11 +928,11 @@ let table_row_keydown inst ~row_uuid name payload =
              V.update inst
                (fun s -> { s with V.selected = V.Sset.empty });
              if arrow = "ArrowRight" then
-               E.el_class_remove row_dom "selected";
+               row_dom.Ui_services.remove_class "selected";
              match pick with
              | Some cell ->
-                 E.el_class_add cell "selected";
-                 E.el_focus cell
+                 cell.Ui_services.add_class "selected";
+                 cell.focus ()
              | None -> ())
          | None -> ())
     | "Escape" ->

@@ -269,7 +269,7 @@ let ctx_of inst : W.t =
     match inst.feature, s.group_by with
     | ("all-pages" | "class-objects"), None ->
         let n =
-          Web_dom.win_inner_height /. 33.
+          Ui_services.dom_viewport_height () /. 33.
           |> max 0. |> ceil |> int_of_float |> max 1 |> min 1000
         in
         base @ [ (W.kw "initial-row-count", W.Int (max n s.fetch_limit)) ]
