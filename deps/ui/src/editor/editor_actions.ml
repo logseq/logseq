@@ -35,14 +35,20 @@ let edit_model uuid =
    editing_sig. Guards uuid so ops that swapped the editing block
    mid-event aren't clobbered by a stale publish *)
 let update_model uuid f =
+  let moved = ref false in
   S.set (fun st ->
       match st.S.editing with
       | Some e when e.S.uuid = uuid ->
           let nm = f e.S.model in
-          if nm.Edit_model.source <> e.S.model.Edit_model.source then
-            Editor_sink.invalidate uuid;
+          moved := nm.Edit_model.source = e.S.model.Edit_model.source
+                   && nm.Edit_model.caret <> e.S.model.Edit_model.caret;
+          if nm.Edit_model.source <> e.S.model.Edit_model.source then begin
+            S.history_input_before := Some (S.history_editing e);
+            Editor_sink.invalidate uuid
+          end;
           { st with S.editing = Some (S.with_model e nm) }
-      | _ -> st)
+      | _ -> st);
+  if !moved then !(S.caret_changed) uuid
 
 let caret_of uuid =
   match edit_model uuid with
@@ -258,7 +264,9 @@ let rec apply_focus () =
              since this focus was requested, the stored caret is
              stale — keep where the model put it *)
           if !S.last_edit_input_ms <= armed_ms then
-            apply_click_offset uuid caret armed_ms 30;
+            (match S.editing () with
+             | Some e when e.S.model.Edit_model.anchor <> None -> ()
+             | _ -> apply_click_offset uuid caret armed_ms 30);
           (* the sink's runs prop and first layout can lag the landing —
              a split/merge's remount by far more than a patch or two —
              and the immediate measure then yields no caret rect, so the
@@ -376,16 +384,23 @@ let model_title uuid =
 
 let display_title uuid = S.title_for uuid (model_title uuid)
 
-let commit uuid buf =
+let commit_result uuid buf =
+  let opts =
+    match !Ops.pending_save with
+    | Some (u, _) when u = uuid -> !Ops.pending_save_opts
+    | _ -> Ops.current_history_opts (Wire.Map [])
+  in
+  (match !Ops.pending_save with
+   | Some (u, _) when u = uuid -> Ops.cancel_pending_save ()
+   | _ -> ());
   (* compare against the persisted title, not display_title — the
      override may already hold buf (exit_edit sets it first) and
      normalization (heading strip, ref rewrite) can make the saved
      title differ from the buffer *)
   if buf <> model_title uuid then (
     S.override_title uuid (Ops.normalized_title uuid buf);
-    ignore
-      (let* sop = Ops.save_block_parsed uuid buf in
-      let* _ = Ops.apply_and_refresh [ sop ] in
+      let* sop = Ops.save_block_parsed uuid buf in
+      let* _ = Ops.apply_and_refresh ~opts [ sop ] in
       (* the buffer is now persisted — advance base so the undo
                 resync gate treats it as clean and can restore reverted
                 titles instead of masking them with the pre-undo text *)
@@ -395,7 +410,10 @@ let commit uuid buf =
               { st with
                 S.editing = Some { e with S.base = buf } }
           | _ -> st);
-      Js.Promise.resolve ()))
+      Js.Promise.resolve ())
+  else Js.Promise.resolve ()
+
+let commit uuid buf = ignore (commit_result uuid buf)
 
 let save_if_dirty uuid = commit uuid (live_buffer uuid)
 
@@ -476,18 +494,18 @@ let cancel_pending_focus () =
   S.pending_focus := None;
   S.pending_focus_actions := []
 
-let exit_edit ~select =
-  if S.ready () then
+let rec exit_edit ~select =
+  if !S.structure_pending then
+    Queue.add (fun () -> exit_edit ~select) S.pending_edit_actions
+  else if S.ready () then
     match S.editing () with
     | None -> ()
     | Some e ->
         last_edit_uuid := Some e.uuid;
         cancel_pending_focus ();
       let buf = live_buffer e.uuid in
-      (* set the override before the state change so the post-edit render
-         already paints the committed text *)
-      if buf <> model_title e.uuid then
-        S.override_title e.uuid (Ops.normalized_title e.uuid buf);
+      run_structure ~restore:(Some e) (commit_result e.uuid buf) (fun () ->
+      S.notify_edit_exit e.uuid;
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
       Editor_sink.invalidate e.uuid;
@@ -500,24 +518,10 @@ let exit_edit ~select =
             (* cljs: Escape selects the block but does not raise the
                selection action bar — only a pointerup / shift-arrow does *)
           ; action_bar = false
-          });
-      commit e.uuid buf
+          }))
 
 (* click outside the editor commits without selecting *)
-let blur_commit () =
-  match S.editing () with
-  | None -> ()
-  | Some e ->
-      last_edit_uuid := Some e.uuid;
-      cancel_pending_focus ();
-      let buf = live_buffer e.uuid in
-      if buf <> model_title e.uuid then
-        S.override_title e.uuid (Ops.normalized_title e.uuid buf);
-      (if Lazy.force perf_keys then
-         Printf.eprintf "PERF editing-clear src=blur uuid=%s\n%!" e.uuid);
-      Editor_sink.invalidate e.uuid;
-      S.set (fun st -> { st with S.editing = None });
-      commit e.uuid buf
+let blur_commit () = exit_edit ~select:false
 
 (* route change: persist the live buffer without refreshing — the
    navigation itself reloads whatever route is current *)
@@ -690,13 +694,17 @@ let split_at_cursor uuid =
               || b.Model.block_children = [])
         in
         mark "prelude";
+        let opts = Ops.history_opts ~opts:(Ops.op_opts "insert-blocks")
+            ~before:(S.history_editing e)
+            ~after:(S.history_editing
+              (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope ~base:after ())) () in
         let p =
           (let* a =
             Js.Promise.all
               [| Ops.block_map_parsed uuid before
                ; Ops.block_map_parsed ~page:library new_uuid after |]
           in
-          Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+          Ops.apply_and_refresh ~opts
             ([ Ops.op "save-block" [ a.(0); Wire.Map [] ]
             ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ]
             @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else []))
@@ -848,7 +856,9 @@ let merge_prev uuid =
                       (S.with_model e (Edit_model.set_source e.S.model buf))
                 });
             with_focus_after ~restore:(Some e) uuid 0
-              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
+              (Ops.apply_and_refresh
+                 ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
+                   ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops))
           else (
             (* title_for (override ?? model): prev's commit may still be
                in flight — the debounced save's delta only lands with
@@ -876,7 +886,9 @@ let merge_prev uuid =
                         (S.mk_editing ~caret ~uuid:prev_uuid ~buffer:merged
                            ~scope:e.scope ~base:merged ()) });
               request_focus prev_uuid caret;
-              Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)) in
+              Ops.apply_and_refresh
+                ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
+                  ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops)) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some prev_uuid then
                 request_focus prev_uuid (caret_of prev_uuid))))
@@ -939,7 +951,9 @@ let merge_next_now uuid =
                         (S.mk_editing ~uuid:next_uuid ~buffer:nbuf
                            ~scope:e.scope ~base:nbuf ()) });
               request_focus next_uuid 0;
-              Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)) in
+              Ops.apply_and_refresh
+                ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
+                  ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops)) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some next_uuid then request_focus next_uuid 0))
           else (
@@ -965,8 +979,9 @@ let merge_next_now uuid =
                   });
               request_focus uuid caret;
               Ops.apply_parsed_and_refresh
-                   ~opts:(Ops.op_opts "delete-blocks") ~rest:ops
-                   [ (uuid, merged) ])) in
+                   ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
+                     ~before:(S.history_editing e) ~after:(S.history_cursor ()) ())
+                   ~rest:ops [ (uuid, merged) ])) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some uuid then request_focus uuid (caret_of uuid))))
   | _ -> ()
@@ -1902,6 +1917,42 @@ let toggle_open_blocks () =
       ; S.expanded = S.String_set.empty
       });
   if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand pairs ])
+
+let restore_history result =
+  let cursors = match Wire.map_get result "editor-cursors" with
+    | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
+    | _ -> [] in
+  let undo = Wire.map_get result "undo?" = Some (Wire.Bool true) in
+  match (if undo then cursors else List.rev cursors) with
+  | [] -> Ops.resync_open_editor ~force:true ()
+  | cursor :: _ ->
+      S.history_input_before := None;
+      S.click_point := None;
+      (match Wire.map_get_uuid cursor "block-uuid" with
+       | Some uuid ->
+           let caret = Option.get (Wire.map_get_int cursor "caret") in
+           let scope = Option.get (Wire.map_get_string cursor "scope") in
+           let* title = Ops.title_for_edit (model_title uuid) in
+           let e = S.mk_editing ~caret ~uuid ~buffer:title ~scope ~base:title () in
+           let e = match Wire.map_get cursor "anchor" with
+             | Some (Wire.Int anchor) ->
+                 S.with_model e (Edit_model.select e.S.model ~anchor ~focus:caret)
+             | _ -> e in
+           S.set (fun st -> { st with S.editing = Some e;
+             S.selected = S.String_set.empty; anchor = None; action_bar = false });
+           request_focus uuid caret;
+           Js.Promise.resolve ()
+       | None ->
+           let selected = match Wire.map_get cursor "selected-blocks" with
+             | Some (Wire.List xs) ->
+                 List.fold_left (fun acc -> function
+                   | Wire.Uuid u -> S.String_set.add u acc
+                   | _ -> invalid_arg "history selection must contain UUIDs") S.String_set.empty xs
+             | _ -> invalid_arg "history cursor must contain editing or selection state" in
+           S.set (fun st -> { st with S.editing = None; selected; anchor = None });
+           Js.Promise.resolve ())
+
+let () = S.restore_history := restore_history
 
 let undo () = ignore (Ops.undo ())
 let redo () = ignore (Ops.redo ())

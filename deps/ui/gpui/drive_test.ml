@@ -1931,6 +1931,7 @@ let run ~finish =
   Shared_ui_regression_test.run_views ~registry ~profile:Logseq_el.gpui_profile
     ~finish:(fun () ->
   Shared_ui_regression_test.dates ();
+  Shared_ui_regression_test.dialogs ();
   (* portable editor suites — the same scenario sources compiled under
      Melange (test/ui_test) run here under native byte semantics *)
   Edit_model_test.run ();

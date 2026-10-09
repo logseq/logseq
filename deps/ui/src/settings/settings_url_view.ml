@@ -60,7 +60,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
     on_saved ();
     Runtime.signal_set url "";
     Toast.success cleared_msg;
-    Dialogs_state.close_top ()
+    Dialogs_state.close_named key
   in
   let save () =
     let trimmed = String.trim (read_input ()) in
@@ -70,7 +70,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
       Ui_services.storage_set storage_key trimmed;
       on_saved ();
       Toast.success saved_msg;
-      Dialogs_state.close_top ())
+      Dialogs_state.close_named key)
   in
   let node =
     column ~key ~style_class:("cp__settings-" ^ key ^ "-cnt")
@@ -84,7 +84,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
               ; input ~key:(key ^ "-in")
                   ~accessibility_identifier:(key ^ "-input")
                   ~style_class:"form-input is-small"
-                  ~text:(Runtime.signal_get url) ~placeholder
+                  ~text_signal:(Signal.value url) ~placeholder
                   ~on_input:(fun ev ->
                     match ev with
                     | Lui_protocol.TextChanged (_, q) ->
@@ -103,10 +103,8 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                    ~text:T.save
                    ~on_press:(fun _ -> save ())
                    [] ]
-              @
-              if Runtime.signal_get url = "" then []
-              else
-                [ button ~key:(key ^ "-reset")
+              @ [ if_ ~test:(reactive (fun value -> String.trim value <> "") (Signal.value url))
+                  (button ~key:(key ^ "-reset")
                     ~variant:(Settings_controls.btn_variant `Outline)
                     ~size:`sm
                     ~style_class:
@@ -114,8 +112,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                          ~size:`Sm ())
                     ~text:T.reset_default
                     ~on_press:(fun _ -> reset ())
-                    []
-                ])
+                    []) ])
           ]
       ]
   in

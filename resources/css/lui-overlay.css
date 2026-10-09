@@ -74,6 +74,16 @@
   transform: scale(0.96);
 }
 
+/* Dialog chrome supplies its own card zoom and scrim entrance. */
+.lui-popover.ls-dialog-layer[data-starting-style] {
+  opacity: 1;
+  transform: none;
+}
+
+.lui-popover.ls-dialog-layer[data-ending-style] {
+  transform: none;
+}
+
 .lui-popup-positioner[data-cover] {
   inset: 0;
   width: auto;
@@ -245,6 +255,7 @@
 .ui__dropdown-menu-sub-trigger[data-open],
 .ui__select-item[data-highlighted] {
   background: hsl(var(--muted));
+  color: inherit;
 }
 
 .ui__dropdown-menu-item[data-disabled],
@@ -1859,7 +1870,6 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ui__dialog-content[label="app-settings"] .settings-modal,
 .ui__dialog-content.ls-dialog-settings .settings-modal {
-  margin: -1.5rem;
   border-radius: 0.75rem;
 }
 
@@ -2092,7 +2102,7 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- toasts ------------------------------------------------------------ */
 
-.ui__toaster-viewport {
+.lui-toast-viewport:has(> .ui__toast) {
   position: fixed;
   margin: 0;
   overflow: visible;
@@ -2106,7 +2116,7 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 @media (min-width: 500px) {
-  .ui__toaster-viewport {
+  .lui-toast-viewport:has(> .ui__toast) {
     width: 22.5rem;
     right: 2rem;
   }
@@ -2205,32 +2215,27 @@ div[data-keep-selection].menu-links-wrapper {
   outline-offset: -1px;
 }
 
-.ui__toaster-viewport:has(.ui__toast ~ .ui__toast) .ui__toast {
+.lui-toast-viewport:has(.ui__toast ~ .ui__toast) .ui__toast {
   max-height: calc((100dvh - 5rem - 0.75rem) / 2);
 }
 
-.ui__toaster-viewport:has(.ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
+.lui-toast-viewport:has(.ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
   max-height: calc((100dvh - 5rem - 1.5rem) / 3);
 }
 
-.ui__toaster-viewport:has(
+.lui-toast-viewport:has(
     .ui__toast ~ .ui__toast ~ .ui__toast ~ .ui__toast) .ui__toast {
   max-height: calc((100dvh - 5rem - 2.25rem) / 4);
 }
 
 .ui__toast-content {
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  height: 100%;
   overflow: hidden;
-  padding: 0.75rem;
-  position: relative;
   transition: opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.ui__toast-content[data-behind] {
+.lui-toast-viewport:not(:hover):not(:focus-within)
+  > .ui__toast:not(:last-child) > .ui__toast-content {
   opacity: 0;
 }
 
@@ -2306,15 +2311,6 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .ui__toast-close {
-  position: absolute;
-  top: -1rem;
-  right: 0;
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
   border-radius: 0.375rem;
   min-height: auto;
   background: none;
@@ -2328,10 +2324,7 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .ui__toast-status-icon {
-  flex-shrink: 0;
   font-size: 16px;
-  width: 1.25rem;
-  height: 1.25rem;
 }
 
 .ui__toast-status-icon.info {
@@ -2348,6 +2341,19 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ui__toast-status-icon.error {
   color: var(--rx-red-10-alpha, var(--lx-red-10, hsl(359 82% 48%)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-dialog-layer,
+  .ui__dialog-overlay,
+  .ui__alert-dialog-overlay,
+  .ui__dialog-content,
+  .ui__alert-dialog-content,
+  .ui__toast,
+  .ui__toast-content {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* ---- calendar / date picker -------------------------------------------- */
@@ -3057,12 +3063,20 @@ div[data-keep-selection].menu-links-wrapper {
 /* the item is the button itself in the LUI tree (cljs wraps a
    .settings-menu-link button in li.settings-menu-item): same padding
    and horizontal layout as the cljs link, no list-item default slots */
-.settings-menu-item.lui-list-item {
-  padding: 0.25rem 0.5rem;
+.cp__settings-inner .settings-menu-item.lui-list-item {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
   min-height: 0;
   justify-content: flex-start;
   gap: 0.25rem;
   text-align: left;
+}
+
+@media (min-width: 640px) {
+  .settings-menu-item.lui-list-item[data-id="keymap"] {
+    display: flex;
+  }
 }
 
 /* list-item's data-selected accent background is unused here — .active
@@ -4539,12 +4553,25 @@ select.form-select {
   z-index: 40;
 }
 
-/* switch + checkbox (shui Switch/Checkbox, size sm) */
+/* LUI wraps the actual switch input in a label. Style the input so the
+   wrapper does not paint a second track or constrain the control label. */
 .ui__switch {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  cursor: pointer;
+  gap: 0;
+  width: 2rem;
+  height: 1.125rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ui__switch > .lui-control-label:empty {
+  display: none;
+}
+
+.ui__switch > .lui-switch-control {
   width: 2rem;
   height: 1.125rem;
   border-radius: 9999px;
@@ -4554,23 +4581,20 @@ select.form-select {
   transition: background-color 150ms;
 }
 
-.ui__switch[data-checked] {
+.ui__switch > .lui-switch-control:checked {
   background: hsl(var(--primary));
 }
 
-.ui__switch-thumb {
-  pointer-events: none;
-  display: block;
+.ui__switch > .lui-switch-control::after {
   width: 0.75rem;
   height: 0.75rem;
-  border-radius: 9999px;
-  background: var(--lui-c-background);
   background: var(--ls-primary-background-color, var(--lui-c-background));
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  transform: translateX(0);
   transition: transform 150ms;
 }
 
-.ui__switch-thumb[data-checked] {
+.ui__switch > .lui-switch-control:checked::after {
   transform: translateX(0.875rem);
 }
 
@@ -4660,12 +4684,13 @@ select.form-select {
   align-items: center;
 }
 
-.ls-font > strong {
+.ls-font-sample {
   font-size: 0.875rem;
   line-height: 20px;
+  font-weight: 600;
 }
 
-.ls-font > small {
+.ls-font-name {
   font-size: 0.7rem;
   line-height: 16px;
 }

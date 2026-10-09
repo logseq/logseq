@@ -594,7 +594,7 @@ let keymap m ev : edit_action =
         else Delete D_forward
     | "Enter" -> if ev.shift || cmd then Pass else SplitBlock
     | "Tab" -> if ev.shift then Outdent else Indent
-    | "Escape" -> if has_selection m then Clear_selection else Cancel
+    | "Escape" -> Cancel
     | "a" | "A" when cmd -> Select_all
     | _ -> Pass
 

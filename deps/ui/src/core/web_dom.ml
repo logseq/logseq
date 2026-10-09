@@ -151,11 +151,14 @@ let el_dataset_del : el -> string -> unit =
 
 
 let doc_set_lang s = js_set_str document_element "lang" s
-let doc_set_data name value = js_set_str (dataset_of document_element) name value
-let body_set_data name value = js_set_str (dataset_of document_body) name value
+external set_data_attr : el -> string -> string -> unit = "setAttribute"
+  [@@mel.send]
+
+let doc_set_data name value = set_data_attr document_element ("data-" ^ name) value
+let body_set_data name value = set_data_attr document_body ("data-" ^ name) value
 
 let body_rm_data : string -> unit =
-  [%mel.raw "function (k) { delete document.body.dataset[k] }"]
+  [%mel.raw "function (k) { document.body.removeAttribute('data-' + k) }"]
 
 let doc_add_class : string -> unit =
   [%mel.raw "function (c) { document.documentElement.classList.add(c) }"]

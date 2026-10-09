@@ -16,25 +16,6 @@ let success msg = show ~kind:"success" msg
 let error msg = show ~kind:"error" msg
 let warning msg = show ~kind:"warning" msg
 
-(* live toast ids in mount order, tracked for auto-dismiss + ls:toast-close *)
-let live_ids : int list ref = ref []
-let timers : (int, int) Hashtbl.t = Hashtbl.create 8
-
 let dismiss id =
-  live_ids := List.filter (fun i -> i <> id) !live_ids;
-  (match Hashtbl.find_opt timers id with
-   | Some t ->
-       Ui_services.timers_clear_timeout t;
-       Hashtbl.remove timers id
-   | None -> ());
   Runtime.send (Action.Toast_dismiss id);
   Runtime.flush ()
-
-(* called from Toasts_view.toast_item on mount — idempotent per toast id *)
-let schedule_dismiss ~ms id =
-  if not (Hashtbl.mem timers id) then (
-    let timer = Ui_services.timers_timeout (fun () -> dismiss id) ms in
-    Hashtbl.replace timers id timer;
-    live_ids := !live_ids @ [ id ])
-
-

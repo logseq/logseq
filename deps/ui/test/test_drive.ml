@@ -1843,6 +1843,7 @@ let run ~finish =
   Shared_ui_regression_test.run_views ~registry:(Views_drive.registry ())
     ~profile:Logseq_el.web_profile ~finish:(fun () ->
   Shared_ui_regression_test.dates ();
+  Shared_ui_regression_test.dialogs ();
   test_shell ();
   test_left_menu_dispatch ();
   test_block_tree ();

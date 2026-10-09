@@ -1906,6 +1906,7 @@
  :ui/loading "加载中..."
  :ui/login "登录"
  :ui/logout "退出登录"
+ :ui/more-actions "更多操作"
  :ui/off "关闭"
  :ui/on "开启"
  :ui/open "打开"

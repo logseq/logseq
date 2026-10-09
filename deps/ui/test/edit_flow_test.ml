@@ -663,6 +663,33 @@ let test_indent_outdent (h : host) =
 
 (* ---------- run ---------- *)
 
+let test_exit_waits_for_save (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b1" "old" ];
+  set_editing ~uuid:"b1" ~buffer:"saved before exit" ~caret:17 ~base:"old";
+  let complete = ref (fun () -> ()) in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name args ->
+        if name = "thread-api/apply-outliner-ops" then
+          Js.Promise.make (fun ~resolve ~reject:_ ->
+              complete := (fun () ->
+                  (match args with
+                   | [ _; W.Array os; _ ] -> apply_ops h os
+                   | _ -> ());
+                  resolve (W.Map [ W.Keyword "result", W.Nil ]) [@u]))
+        else Js.Promise.resolve (worker_handler h name args))
+    ; on_message = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  A.exit_edit ~select:true;
+  let* () = h.wait_ms 25 in
+  check "editing remains mounted until the save succeeds" (S.editing_uuid () = Some "b1");
+  !complete ();
+  let* () = settle h 40 in
+  check "successful save exits editing" (S.editing () = None);
+  check "saved text survives exit" (current_titles () = [ "saved before exit" ]);
+  reset_editor ();
+  Js.Promise.resolve ()
+
 (* synchronous stage: pure-model checks that need no app drain *)
 let run (_h : host) =
   test_measure_deferred ();
@@ -683,5 +710,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_continuous_delete_xfail h in
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
+  let* () = test_exit_waits_for_save h in
   h.restore saved;
   Js.Promise.resolve ()

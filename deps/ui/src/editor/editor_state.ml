@@ -150,6 +150,12 @@ let clipboard_text : string ref = ref ""
 let close_block_editor : (unit -> unit) ref = ref (fun () -> ())
 let close_property_editor : (unit -> unit) ref = ref (fun () -> ())
 
+(* Owners release block-attached popups after the live buffer is saved. *)
+let edit_exit_handlers : (string -> unit) list ref = ref []
+let on_edit_exit f = edit_exit_handlers := f :: !edit_exit_handlers
+let notify_edit_exit uuid = List.iter (fun f -> f uuid) !edit_exit_handlers
+let caret_changed : (string -> unit) ref = ref (fun _ -> ())
+
 (* Virt_list binds this to its item-key scroller — editor_actions pulls
    the editing row back into the virtual window when its editor can't
    mount (the row scrolled out or an insert landed below the edge) *)
@@ -361,6 +367,29 @@ let effective_collapsed ?(scope = "main") (b : Model.block) =
         (read ())
 let anchor () = (read ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
+
+(* History cursors travel with their transaction, including the editing scope
+   and selection. The worker keeps the before/after pair opaque. *)
+let history_editing (e : editing) =
+  Wire.Map
+    [ Wire.Keyword "block-uuid", Wire.Uuid e.uuid
+    ; Wire.Keyword "scope", Wire.String e.scope
+    ; Wire.Keyword "caret", Wire.Int e.model.Edit_model.caret
+    ; Wire.Keyword "anchor",
+        (match e.model.Edit_model.anchor with Some a -> Wire.Int a | None -> Wire.Nil)
+    ]
+
+let history_cursor () =
+  match editing () with
+  | Some e -> history_editing e
+  | None -> Wire.Map
+      [ Wire.Keyword "selected-blocks", Wire.List
+          (List.map (fun u -> Wire.Uuid u) (String_set.elements (selected ()))) ]
+
+(* Captured before a source mutation and consumed by its scheduled save. *)
+let history_input_before : Wire.t option ref = ref None
+let restore_history : (Wire.t -> unit Js.Promise.t) ref =
+  ref (fun _ -> Js.Promise.resolve ())
 
 (* -- model helpers over (Runtime.model ()).Model.route_page -- *)
 

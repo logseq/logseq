@@ -711,6 +711,32 @@ let test_undo_redo_selection_editor_info_roundtrip () =
           check "redo block-content absent" (wire_get "block-content" kvs = None)
       | _ -> Alcotest.fail "redo result not a map")
 
+let test_editor_cursor_pair_roundtrip () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _, _, uuid = seed_page_parent_child () in
+      let info pos = edn_wire
+          (Printf.sprintf "{:block-uuid %s :caret %d}" (uuid_lit uuid) pos) in
+      let before, after = info 2, info 3 in
+      ignore (transact_conn_string conn
+          ~tx_meta:(local_tx_meta ~extra:
+            [ "outliner-op", Keyword "save-block"
+            ; "undo-redo/editor-info", Ds_wire.value_of_transit before
+            ; "undo-redo/editor-info-after", Ds_wire.value_of_transit after
+            ; "outliner-ops", edn_value (Printf.sprintf
+                "[[:save-block [{:block/uuid %s :block/title \"cursor-pair\"} {}]]]"
+                (uuid_lit uuid)) ] ())
+          (Printf.sprintf "[[:db/add [:block/uuid %s] :block/title \"cursor-pair\"]]" (uuid_lit uuid)));
+      let undo_result = Undo_redo.undo test_repo in
+      let redo_result = Undo_redo.redo test_repo in
+      List.iter (fun result ->
+          match result with
+          | Wire.Map kvs -> check "atomic cursor pair survives replay"
+              (wire_get "editor-cursors" kvs = Some (Wire.List [ before; after ]))
+          | _ -> Alcotest.fail "history result not a map")
+        [ undo_result; redo_result ])
+
 let test_undo_missing_history_action_row_replays_from_inline_ops () =
   with_worker_conns (fun () ->
       Undo_redo.clear_history test_repo;
@@ -2617,6 +2643,7 @@ let cases =
       test_worker_ui_state_roundtrip
   ; Alcotest.test_case "undo-redo-selection-editor-info-roundtrip-test" `Quick
       test_undo_redo_selection_editor_info_roundtrip
+  ; Alcotest.test_case "editor-cursor-pair-roundtrip" `Quick test_editor_cursor_pair_roundtrip
   ; Alcotest.test_case
       "undo-missing-history-action-row-replays-from-inline-ops-test" `Quick
       test_undo_missing_history_action_row_replays_from_inline_ops

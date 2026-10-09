@@ -75,16 +75,6 @@ let lang_label_for code =
 
 (* language dropdown — LUI select + anchored dropdown_menu (mounted =
    presented on every host; on_dismiss covers outside-tap and Escape) *)
-let lang_menu_st : bool Signal.state option ref = ref None
-
-let lang_menu_state ctx =
-  match !lang_menu_st with
-  | Some s -> s
-  | None ->
-      let s = Signal.state ctx.Lui_ui.ui_scheduler false in
-      lang_menu_st := Some s;
-      s
-
 let lang_menu_close mst =
   Signal.set mst false;
   Runtime.flush ()
@@ -146,7 +136,7 @@ let theme_modes_ul ~st =
 (* shui select trigger + chevron; the popover mounts as a sibling so
    position:fixed anchors it under the trigger on both platforms *)
 let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
-  let mst = lang_menu_state ctx in
+  let mst = Signal.state ctx.Lui_ui.ui_scheduler false in
   fun uctx parent ->
     (* box (stack kind) so the host anchors the dropdown_menu to the
        select trigger — the cljs combobox markup maps onto select +

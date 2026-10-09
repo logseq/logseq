@@ -818,7 +818,9 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
     | _ -> no
 
 let handle_click st (ev : Svs.click_ev) =
-  if ev.Svs.search_button then S.open_palette st
+  (* The retained search button owns its press. Opening here as well
+     would make the button's toggle close the same click again. *)
+  if ev.Svs.search_button then ()
   else (
     (* outside click closes: the (unstyled) LUI backdrop does not
        cover the page, so dismiss here too *)

@@ -480,6 +480,9 @@ let gen_undo_ops repo ~(tx_data : datom list) ~(tx_meta : (string * Wire.t) list
        | Some info -> [ Record_editor_info info ]
        | None -> [])
       @ [ Db_transact data ]
+      @ (match List.assoc_opt "undo-redo/editor-info-after" tx_meta with
+         | Some info when info <> Wire.Nil -> [ Record_editor_info info ]
+         | _ -> [])
     in
     Hashtbl.replace redo_ops repo [];
     push_undo_op repo op

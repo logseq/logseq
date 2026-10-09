@@ -190,6 +190,11 @@ let close_popup ?focus_caret p =
       A.set_caret p.uuid c
   | None -> ()
 
+let () = S.on_edit_exit (fun uuid ->
+    match !active with
+    | Some p when p.uuid = uuid -> close_popup p
+    | _ -> ())
+
 (* cljs Enter handler: "date picker" closes the popup and inserts
    [[journal]]; scheduled/deadline set the datetime property and keep
    the calendar open (still editing) *)
@@ -537,8 +542,9 @@ let commit_time v =
 
 (* select widget: a ghost button whose label is the current choice;
    pressing it anchors a [role=menu] under the button *)
-let repeat_select ps ~sel ~label_of ~options_of ~on_pick : t =
+let repeat_select ps ~sel ~label ~label_of ~options_of ~on_pick : t =
   button ~style_class:"ls-repeat-select"
+    ~label
     ~data_attrs:[ ("data-sel", sel) ]
     ~on_press:(fun _ ->
       open_choice_menu
@@ -646,8 +652,8 @@ let repeat_panel ps : t =
   let opt3 f po =
     match rpt_of po with Some r -> f r | None -> ""
   in
-  let repeat_sel label_of options_of on_pick sel =
-    repeat_select ps ~sel ~label_of ~options_of ~on_pick
+  let repeat_sel label_of options_of on_pick sel label_key =
+    repeat_select ps ~sel ~label:(I18n.t label_key) ~label_of ~options_of ~on_pick
   in
   let on_unit id _label =
     match cur_rpt () with
@@ -716,7 +722,7 @@ let repeat_panel ps : t =
               | Some r ->
                   List.map (fun (id, _i, l) -> (id, l)) r.unit_choices
               | None -> [])
-            on_unit "unit" ]
+            on_unit "unit" "property.built-in/repeat-recur-unit" ]
     ; box ~key:"next" ~style_class:"ls-repeat-next"
         [ text ~key:"nl" ~style_class:"ls-repeat-label"
             ~value:(I18n.t "property.repeat/next-date") []
@@ -726,7 +732,7 @@ let repeat_panel ps : t =
               | Some r ->
                   List.map (fun (id, _i, l) -> (id, l)) r.rtype_choices
               | None -> [])
-            on_rtype "rtype" ]
+            on_rtype "rtype" "property.built-in/repeat-repeat-type" ]
     ; box ~key:"when" ~style_class:"ls-repeat-when"
         [ text ~key:"wl" ~style_class:"ls-repeat-label"
             ~value:(I18n.t "property.repeat/when") []
@@ -744,7 +750,7 @@ let repeat_panel ps : t =
               | Some r ->
                   List.map (fun (id, l, _d) -> (id, l)) r.when_choices
               | None -> [])
-            on_when "when"
+            on_when "when" "property.repeat/when"
         ; box ~key:"is" ~style_class:"ls-repeat-is"
             [ text ~key:"il" ~style_class:"ls-repeat-label"
                 ~value:(I18n.t "property.repeat/is-label") []
@@ -822,7 +828,6 @@ let cal_body ps (p : popup) : t =
             ; input ~key:"nlp" ~style_class:"ls-date-nlp"
                 ~placeholder:(I18n.t "ui/date-natural-language-placeholder")
                 ~data_attrs:[ ("tabindex", "-1") ]
-                ~submit_on_enter:true
                 ~on_submit:(fun _ -> nlp_commit ())
                 [] ]
         ; if_ ~test:(reactive rpt_open ps) (repeat_panel ps) ]
@@ -1161,7 +1166,9 @@ let popup_key ~key ~inside ~prevent_default =
           true
       | _, "Escape" ->
           prevent_default ();
-          close_popup p ~focus_caret:p.from;
+          (match S.editing () with
+           | Some _ -> A.exit_edit ~select:true
+           | None -> close_popup p);
           true
       | Link_form _, _ -> false (* inputs handle their own keys *)
       | (Cal_insert | Cal_prop _), _ ->

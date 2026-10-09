@@ -93,7 +93,7 @@ let btn_size = function
    switch state is gone: the switch kind embeds a real checkbox input on
    web, so no mirror is needed *)
 let switch_el ~key ~on ~on_toggle =
-  switch_ ~key ~style_class:"ui__switch" ~checked:on
+  switch_ ~key ~style_class:"ui__switch" ~width:32 ~height:18 ~checked:on
     ~on_toggle:(fun _ -> on_toggle ()) []
 
 (* switch (+ optional detail children) — the switch-wrap cell contents

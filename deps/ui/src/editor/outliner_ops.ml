@@ -795,6 +795,20 @@ let refresh_page () : unit Js.Promise.t =
    while the editor stays open *)
 let save_timer = ref 0
 let pending_save : (string * string) option ref = ref None
+let pending_save_opts = ref (Wire.Map [])
+
+let history_opts ?(opts = Wire.Map []) ~before ~after () =
+  match opts with
+  | Wire.Map kvs -> Wire.Map
+      (kvs @ [ kw "undo-redo/editor-info" before
+             ; kw "undo-redo/editor-info-after" after ])
+  | _ -> invalid_arg "outliner transaction options must be a map"
+
+let current_history_opts opts =
+  match opts with
+  | Wire.Map kvs when List.mem_assoc (Wire.Keyword "undo-redo/editor-info") kvs -> opts
+  | _ -> let cursor = S.history_cursor () in
+         history_opts ~opts ~before:cursor ~after:cursor ()
 
 let cancel_pending_save () =
   Ui_services.timers_clear_timeout !save_timer;
@@ -820,9 +834,11 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
     =
   match !pending_save with
   | Some (uuid, title) ->
-      pending_save := None;
+      let save_opts = !pending_save_opts in
+      let opts = current_history_opts opts in
+      cancel_pending_save ();
       let* sop = save_block_parsed uuid title in
-      let* _ = apply_result [ sop ] in
+      let* _ = apply_result ~opts:save_opts [ sop ] in
       apply_result ~opts ops
   | None -> (
       Ui_services.timers_clear_timeout !save_timer;
@@ -832,7 +848,7 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
           let opts =
             match opts with
             | Wire.Map kvs ->
-                Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
+                current_history_opts (Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ]))
             | _ -> opts
           in
           let p = (let* r =
@@ -1245,14 +1261,23 @@ let last_inserted_uuid (resp : Wire.t option) : string option =
 
 
 let schedule_save uuid title =
+  let before =
+    match !pending_save with
+    | Some (u, _) when u = uuid ->
+        Option.get (Wire.map_get !pending_save_opts "undo-redo/editor-info")
+    | _ -> Option.value !S.history_input_before ~default:(S.history_cursor ())
+  in
+  S.history_input_before := None;
+  let opts = history_opts ~before ~after:(S.history_cursor ()) () in
   cancel_pending_save ();
   pending_save := Some (uuid, title);
+  pending_save_opts := opts;
   save_timer :=
     Ui_services.timers_timeout
       (fun () ->
         pending_save := None;
         ignore
-          (let* _ = apply_parsed ~rest:[] [ (uuid, title) ] in
+          (let* _ = apply_parsed ~opts ~rest:[] [ (uuid, title) ] in
           (* committed — display override mirrors what commit does so
              resync_open_editor compares against the committed title
              while the store catches up, and base advances so the undo
@@ -1391,17 +1416,19 @@ let flush_pending_save () =
   match !pending_save with
   | None -> Js.Promise.resolve ()
   | Some (uuid, title) ->
+      let opts = !pending_save_opts in
       cancel_pending_save ();
       let* sop = save_block_parsed uuid title in
-      apply [ sop ]
+      apply ~opts [ sop ]
 
 let undo () =
   match (Runtime.model ()).Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
-      let* _ = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
+      let* result = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
+      S.clear_overrides ();
       let* () = refresh_page () in
-      resync_open_editor ~force:true ())
+      !(S.restore_history) result)
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("undo failed", e);
              Toast.error (I18n.t "editor/undo-error");
@@ -1412,9 +1439,10 @@ let redo () =
   match (Runtime.model ()).Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
-      let* _ = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
+      let* result = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
+      S.clear_overrides ();
       let* () = refresh_page () in
-      resync_open_editor ~force:true ())
+      !(S.restore_history) result)
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("redo failed", e);
              Toast.error (I18n.t "editor/redo-error");

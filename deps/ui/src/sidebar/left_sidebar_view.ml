@@ -218,7 +218,6 @@ let lp_menu st =
    when >1 repo), the switch list minus the current graph, then the
    quick-actions footer. Remote rows render only for a logged-in user. *)
 let repos_menu st =
-  let x, y = !Sidebar_state.repos_xy in
   let m = Runtime.model () in
   let cur = Option.value m.Model.repo ~default:"" in
   let by_seen a b =
@@ -269,7 +268,8 @@ let repos_menu st =
          ~data_attrs:[ ("role", "menuitem") ]
          [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])
   in
-  popover ~key:"repos-menu" ~at:(x, y) ~role:`menu ~min_width:300
+  popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
+    ~anchor_offset:0. ~role:`menu ~min_width:300
     ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
     ~style_class:"ui__dropdown-menu-content repos-list"
     [ column ~key:"wrap"
@@ -312,7 +312,6 @@ let menu_host st =
       match menu with
       | "nav-edit" -> nav_edit_menu st
       | "plugins" -> plugins_menu st
-      | "repos" -> repos_menu st
       | m when String.length m > 3 && String.sub m 0 3 = "lp-" ->
           lp_menu st
       | _ -> Logseq_el.nothing)
@@ -675,38 +674,25 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
   box ~key:"gsel"
     [ row ~key:"gsel-box" ~cross:`center ~main:`space_between
         ~style_class:"cp__graphs-selector"
-        [ Ui_parts.pressable
+        [ button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~cross:`center
+            ~label:(t "graph.switch/select-prompt")
+            ~style_class:"item"
+            ~data_attrs:(reactive (fun menu model ->
+                [ ("aria-label", name_of model); ("aria-haspopup", "menu")
+                ; ("aria-expanded", string_of_bool (menu = "repos")) ])
+                (Signal.value st.Sidebar_state.open_menu) ms)
             ~on_press:(fun _ ->
-              (* cljs repo.cljs graphs-selector: repos dropdown flush
-                 under the trigger, 4px left of its left edge (measured
-                 on the cljs popover) *)
-              (* native bounding_rect fires a measure-node dom-op whose
-                 node-rect reply lands a tick later — retry while the
-                 rect is still empty instead of opening at (0,0);
-                 falls back to the raw rect if it never resolves *)
-              let rec open_at_rect tries =
-                match
-                  Ui_services.dom_query ".cp__graphs-selector .item"
-                with
-                | Some el -> (
-                    let x, y, w, h = el.Ui_services.rect () in
-                    if w > 0. || tries <= 0 then
-                      Sidebar_state.open_repos_menu st
-                        ~x:(x -. 4.)
-                        ~y:(y +. h)
-                    else
-                      Ui_services.timers_later ~ms:32 (fun () ->
-                          open_at_rect (tries - 1)))
-                | None -> ()
-              in
-              open_at_rect 4)
-            (row ~key:"gsel-a" ~cross:`center ~grow:1. ~style_class:"item"
+              Runtime.signal_set st.Sidebar_state.open_menu
+                (if Runtime.signal_get st.open_menu = "repos" then "" else "repos"))
                [ row ~key:"gsel-l" ~cross:`center ~gap:4 ~grow:1.
                    [ box ~key:"gsel-th" ~style_class:"thumb"
                        [ icon_ "topology-star" ]
                    ; text ~key:"gsel-n"
                        ~value_signal:(Signal.map name_of ms) [] ]
-               ; icon_ ~size:18 "selector" ]) ] ]
+               ; icon_ ~size:18 "selector" ]
+        ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
+            (repos_menu st)
+        ] ]
 ;;
 
 let header (ms : Model.t Signal.signal) : t =

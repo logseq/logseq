@@ -1056,11 +1056,6 @@ let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
 
 (* anchor for the graphs-selector dropdown — the trigger row's
    bottom-left corner (cljs popup-show! align :start) *)
-let repos_xy : (float * float) ref = ref (0., 0.)
-
-let open_repos_menu st ~x ~y =
-  repos_xy := (x, y);
-  Runtime.signal_set st.open_menu "repos"
 (* anchor for the right-sidebar item actions menu — (cx, top, bottom)
    of the event target, matching cljs popup-show! *)
 let im_xy : (float * float * float) ref = ref (0., 0., 0.)

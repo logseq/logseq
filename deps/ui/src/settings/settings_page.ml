@@ -114,8 +114,8 @@ let font_button ~key ~label ~active ~on_click =
     [ column ~key:(key ^ "-s")
         ~style_class:
           ("ls-font ls-font-" ^ String.lowercase_ascii label)
-        [ text ~key:(key ^ "-ag") ~value:"Ag" []
-        ; text ~key:(key ^ "-sm") ~value:label []
+        [ text ~key:(key ^ "-ag") ~style_class:"ls-font-sample" ~value:"Ag" []
+        ; text ~key:(key ^ "-sm") ~style_class:"ls-font-name" ~value:label []
         ]
     ]
 
@@ -633,9 +633,10 @@ let nav_item ~key (id, label, icn) =
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
     (list_item ~key ~style_class:"settings-menu-item"
+       ~corner_radius:0
        ~accessibility_identifier:id
        ~data_attrs:[ ("data-id", id) ]
-       ~icon:(`app icn) ~text:label
+       ~icon:(Icons.name_ref icn) ~text:label
        ~selected:(reactive (fun (s : S.t) -> s.tab = id) (S.signal ()))
        ~on_press:(fun _ -> S.set_tab id) [])
 

@@ -13,7 +13,7 @@ let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 (* cljs dropdown-menu-item renders its :icon before the title *)
 let icon_item ?(data_attrs = []) key label icon_name on_click =
   Menu_item.el ~key ~label ~data_attrs
-    ~before:[ Icons.icon ~size:18. ~cls:"ls-menu-item-icon" icon_name ]
+    ~icon:(Icons.name_ref icon_name)
     ~on_click ()
 
 let separator key = Menu_item.separator ~key
@@ -397,5 +397,8 @@ let dialog_view (m : Model.t) =
       view (ax, atop, abot, with_app) (resolve_menu_page m uuid)
   | None -> (
       match m.confirm with
-      | Some c -> confirm_view c
+      | Some c ->
+          popover ~key:"page-confirm-layer" ~style_class:"ls-dialog-layer"
+            ~on_dismiss:(fun _ -> Runtime.send (Action.Confirm_set None); Runtime.flush ())
+            [ confirm_view c ]
       | None -> Logseq_el.nothing)

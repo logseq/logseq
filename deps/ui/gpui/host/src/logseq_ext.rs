@@ -420,10 +420,11 @@ fn register_class_styles() {
     );
     class(
         "ui__toast",
-        "position:absolute;top:0;right:0;width:100%;border-width:1px;\
-         border-radius:6px;background:background",
+        "border-width:1px;border-radius:6px;background:background",
         "pointer-events-auto",
     );
+    class("ls-font-sample", "font-size:14px;line-height:20px;font-weight:600", "");
+    class("ls-font-name", "font-size:11.2px;line-height:16px", "");
     // ---- body-mounted popup chrome (resources/css/lui-overlay.css
     // .ui__popover-content et al. base rule): on web the stylesheet
     // paints the card — without it these surfaces render as bare text.

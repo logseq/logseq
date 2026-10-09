@@ -16,22 +16,16 @@ let content_cls = "ui__dialog-content"
 
 let btn_style = "ui__button ls-btn"
 
-(* The deepest tapped element's own class identifies the backdrop: on
-   native, .ui__dialog-content fills the window (fillsOverlay), so taps
-   outside the card report the content class rather than the overlay's.
-   Deeper card children emit their own classes, so a direct
-   ui__dialog-content hit is still a backdrop click. *)
+(* Only the scrim itself is an outside press. Card padding and empty
+   content remain inside the dialog on every host. *)
 let is_overlay_class tc =
-  tc <> ""
-  && List.exists
-       (fun needle -> Str_util.contains tc needle)
-       [ "ui__dialog-overlay"; "ui__dialog-content" ]
+  List.mem overlay_cls (String.split_on_char ' ' tc)
 
-let close_btn =
+let close_btn close =
   button ~key:"dlg-close" ~variant:`ghost ~size:`icon
     ~style_class:"ui__dialog-close" ~icon:`x
     ~label:I18n.close
-    ~on_press:(fun _ -> Dialogs_state.close_top ())
+    ~on_press:(fun _ -> close ())
     []
 
 let body_of name (ms : Model.t Signal.signal) : t =
@@ -73,9 +67,10 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
       match ev with
       | Lui_protocol.PressDetail (_, d) ->
           if is_overlay_class d.Lui_protocol.target_class then
-            Dialogs_state.close_top ()
+            Dialogs_state.close_named name
       | _ -> ())
     [ column ~key:("dlg-c-" ^ name)
+        ?padding:(if name = "settings" then Some 0 else None)
         ~style_class:(content_cls ^ " ls-dialog-" ^ name)
         (* base-ui DialogContent carries role=dialog + aria-modal and is
            named by its DialogTitle (aria-labelledby); the title element
@@ -103,7 +98,7 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
             ~style_class:"ui__dialog-main-content" ~orientation:`vertical
             ~grow:1.
             [ body_of name ms ]
-        ; close_btn ]
+        ; close_btn (fun () -> Dialogs_state.close_named name) ]
     ]
 
 (* typed variant over ls-btn-* classes — the multi-token style_class
@@ -176,7 +171,7 @@ let prompt_view (p : Dialogs_state.prompt) : t =
         match ev with
         | Lui_protocol.PressDetail (_, d) ->
             if is_overlay_class d.Lui_protocol.target_class then
-              Dialogs_state.close_top ()
+              Dialogs_state.close_prompt ()
         | _ -> ())
       [ column ~key:"prmt-c" ~style_class:content_cls
           ~data_attrs:
@@ -209,7 +204,7 @@ let prompt_view (p : Dialogs_state.prompt) : t =
                 ; btn "prmt-ok" I18n.submit `primary
                     (fun () -> submit ())
                 ] )
-          ; close_btn
+          ; close_btn Dialogs_state.close_prompt
           ]
       ]
   in
@@ -220,53 +215,45 @@ let render (ms : Model.t Signal.signal) : t =
   Dialogs_state.ensure ctx;
   Dialogs_state.init ();
   let ds = Dialogs_state.signal () in
-  let dialogs_sig = Signal.map (fun (d : Dialogs_state.t) -> d.dialogs) ds in
-  let confirm_sig =
-    Signal.map (fun (d : Dialogs_state.t) -> d.confirm) ds
-  in
-  let prompt_sig =
-    Signal.map (fun (d : Dialogs_state.t) -> d.prompt) ds
-  in
-  let ureq_sig =
-    Signal.map (fun (d : Dialogs_state.t) -> d.ui_request) ds
-  in
-  Logseq_el.fragment
-    [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
-        ~mount:(fun name_sig ->
-          (* name is stable per key — sample once *)
-          let v = dialog_view (Signal.get name_sig) ms in
-          (* radix Dialog focuses the dialog's [autofocus] element on open
-             when it has one, else the content container itself (the
-             close button never gets a focus ring) *)
-          (try
-             ignore
-               (Ui_services.timers_later ~ms:16 (fun () ->
-                    match
-                      Ui_services.dom_query ".ui__dialog-content [autofocus]"
-                    with
-                    | Some el -> el.Ui_services.focus ()
-                    | None -> (
-                        match Ui_services.dom_query ".ui__dialog-content" with
-                        | Some el ->
-                            el.Ui_services.set_attr "tabindex" "-1";
-                            el.Ui_services.focus ()
-                        | None -> ())))
-           with _ -> ());
-          v)
-    ; reactive ~equal:( == ) (fun c ->
-          match c with
-          | Some c -> confirm_view c
-          | None -> spacer ~key:"cfrm-none" [])
-        confirm_sig
-    ; reactive ~equal:( == ) (fun p ->
-          match p with
-          | Some p -> prompt_view p
-          | None -> spacer ~key:"prmt-none" [])
-        prompt_sig
-    ; reactive ~equal:( == ) (fun r ->
-          match r with
-          | Some r -> Ui_requests.view r
-          | None -> spacer ~key:"ureq-none" [])
-        ureq_sig
-    ]
+  keyed ~source:(reactive (fun (d : Dialogs_state.t) -> d.order) ds)
+    ~key:Fun.id ~cmp:Stdlib.compare
+    ~mount:(fun layer_signal ->
+      let layer = Signal.get layer_signal in
+      let close () = match layer with
+        | Dialogs_state.Named name -> Dialogs_state.close_named name
+        | Dialogs_state.Confirm -> Dialogs_state.close_confirm ()
+        | Dialogs_state.Prompt -> Dialogs_state.close_prompt ()
+        | Dialogs_state.Ui_request -> Dialogs_state.close_top ()
+      in
+      let view = match layer with
+      | Dialogs_state.Named name ->
+          let view = dialog_view name ms in
+          Ui_services.timers_later ~ms:16 (fun () ->
+              match List.rev (Dialogs_state.value ()).order with
+              | Dialogs_state.Named top :: _ when top = name -> (
+              match Ui_services.dom_query (".ls-dialog-" ^ name) with
+              | Some content ->
+                  (match content.Ui_services.query "[autofocus]" with
+                   | Some target -> target.Ui_services.focus ()
+                   | None -> content.Ui_services.set_attr "tabindex" "-1";
+                       content.Ui_services.focus ())
+              | None -> ())
+              | _ -> ());
+          view
+      | Dialogs_state.Confirm ->
+          reactive ~equal:(fun a b -> a.Dialogs_state.confirm == b.Dialogs_state.confirm)
+            (fun d -> match d.Dialogs_state.confirm with
+              | Some c -> confirm_view c | None -> Logseq_el.nothing) ds
+      | Dialogs_state.Prompt ->
+          reactive ~equal:(fun a b -> a.Dialogs_state.prompt == b.Dialogs_state.prompt)
+            (fun d -> match d.Dialogs_state.prompt with
+              | Some p -> prompt_view p | None -> Logseq_el.nothing) ds
+      | Dialogs_state.Ui_request ->
+          reactive ~equal:(fun a b -> a.Dialogs_state.ui_request == b.Dialogs_state.ui_request)
+            (fun d -> match d.Dialogs_state.ui_request with
+              | Some r -> Ui_requests.view r | None -> Logseq_el.nothing) ds
+      in
+      (* Cover popovers give custom dialog chrome the same layer owner
+         and Escape dispatch as dropdowns and nested popup portals. *)
+      popover ~style_class:"ls-dialog-layer" ~on_dismiss:(fun _ -> close ()) [ view ])
     ctx parent

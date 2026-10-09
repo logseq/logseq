@@ -1,9 +1,5 @@
-(* Toast stack — worker :notification broadcasts land in model.toasts.
-   Component contract: edge-anchored column > toast cards (status icon,
-   close button, message). style_class retained for web parity; native
-   hosts render kind defaults. Stacking order comes from
-   --toast-index, assigned per child position in ui.css
-   (:nth-last-child), newest toast = index 0. *)
+(* The standard toast owns its timer, hover/focus pause, swipe and portal.
+   Keep older notifications first so the renderer stacks the newest last. *)
 
 open Lui_elements
 
@@ -29,45 +25,35 @@ let toast_icon_class (k : string) : string =
 let toast_item (t : Model.toast) : t =
   let kind = toast_kind_class t.toast_kind in
   fun ctx parent ->
-    (* cljs notification.cljs: error toasts persist (duration 0);
-       internal show! calls auto-dismiss at 1500ms, sdk show_msg
-       (keyed) at 2000ms *)
-    if t.toast_kind <> "error" then
-      Toast.schedule_dismiss
-        ~ms:(if t.toast_key = None then 1500 else 2000)
-        t.toast_id;
-    (column ~key:("toast-" ^ string_of_int t.toast_id)
-       (* radix restores pointer events per toast — the viewport is
-          pointer-events:none so toasts must re-enable *)
-       ~style_class:("ui__toast pointer-events-auto " ^ kind)
+    (toast ~key:("toast-" ^ string_of_int t.toast_id)
+       ~padding:12
+       ~duration:(if kind = "error" then 0 else if t.toast_key = None then 1500 else 2000)
+       ~label:t.toast_text
+       ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
+       ~style_class:("ui__toast " ^ kind)
        ~accessibility_identifier:("toast-" ^ string_of_int t.toast_id)
-       [ column ~key:"ti-content" ~style_class:"ui__toast-content"
-           ~corner_radius:6 ~padding:12
-           [ row ~key:"ti-header" ~style_class:"ui__toast-header"
-               ~main:`space_between ~cross:`center
+       [ overlay ~key:"ti-content" ~grow:1. ~style_class:"ui__toast-content"
+           [ row ~key:"ti-body" ~gap:8 ~padding_vertical:8 ~cross:`start
                [ icon ~key:"ti-icon" ~name:(toast_icon kind)
+                   ~width:20 ~height:20
                    ~style_class:(toast_icon_class kind) []
-               ; button ~key:"ti-close" ~variant:`ghost ~size:`icon
+               ; text ~key:"ti-desc" ~grow:1.
+                   ~style_class:"ui__toast-description"
+                   ~value:t.toast_text []
+               ; spacer ~width:20 []
+               ]
+           ; align `top_trailing
+               (button ~key:"ti-close" ~variant:`ghost ~size:`icon
+                   ~width:32 ~height:32
                    ~style_class:"ui__toast-close"
                    ~label:(I18n.t "ui/close")
                    ~on_press:(fun _ -> Toast.dismiss t.toast_id)
-                   ~icon:`x []
-               ]
-           ; column ~key:"ti-body" ~style_class:"ui__toast-body"
-               [ text ~key:"ti-desc"
-                   ~style_class:"ui__toast-text ui__toast-description"
-                   ~value:t.toast_text []
-               ]
+                   ~icon:`x [])
            ]
        ])
       ctx parent
 
 let render (ms : Model.t Signal.signal) : t =
-  reactive
-    ~equal:(fun (a : Model.t) (b : Model.t) -> a.toasts = b.toasts)
-    (fun (m : Model.t) ->
-      match m.toasts with
-      | [] -> spacer ~key:"toaster-empty" []
-      | ts -> column ~key:"toaster" ~style_class:"ui__toaster-viewport"
-                (List.map toast_item ts))
-    ms
+  keyed ~source:(reactive (fun m -> List.rev m.Model.toasts) ms)
+    ~key:(fun t -> t.Model.toast_id) ~cmp:Int.compare
+    ~mount:(fun toast_signal -> toast_item (Signal.get toast_signal))

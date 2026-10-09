@@ -213,7 +213,7 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
       items
   in
   let nfocus = !counter in
-  let upd f = Signal.set mst (f (Signal.get_state mst)) in
+  let upd f = Signal.update mst f in
   let focus_row i =
     upd (fun st -> { st with mf = i });
     match U.dom_by_id (item_rid pid i) with
@@ -233,11 +233,17 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
     match ev.U.key with
     | Some
         (( "Home" | "End" | "ArrowDown" | "ArrowUp" | "ArrowRight" | "Enter"
-         | " " ) as k) -> (
+         | " " | "ArrowLeft" ) as k) -> (
         let st = Signal.get_state mst in
         match st.msub >= 0 && Hashtbl.mem sub_keys st.msub, ev.U.target with
+        | true, _ when k = "ArrowLeft" ->
+            ev.U.prevent_default ();
+            let trigger = st.msub in
+            upd (fun st -> { st with msub = -1 });
+            focus_row trigger
         | true, _ -> (Hashtbl.find sub_keys st.msub) ev
         | _, Some t when t.U.editable () -> ()
+        | _ when nfocus = 0 -> ()
         | _ -> (
             ev.U.prevent_default ();
             match k with
@@ -247,6 +253,7 @@ let rec menu_level ~pid ~cls ~register (items : menu_item list) : t =
                 focus_row (if st.mf < 0 then 0 else (st.mf + 1) mod nfocus)
             | "ArrowUp" ->
                 focus_row (if st.mf <= 0 then nfocus - 1 else st.mf - 1)
+            | "ArrowLeft" -> ()
             | "ArrowRight" ->
                 if
                   List.exists (fun (it, i) -> i = st.mf && is_sub it) entries

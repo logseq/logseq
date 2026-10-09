@@ -267,6 +267,11 @@ let close_ac t = set_ac t None
 let close_cm t = set_cm t None
 let close_pv t = set_pv t None
 
+let () = Editor_state.on_edit_exit (fun _uuid ->
+    match !active with
+    | Some t -> update t (fun _ -> { ac = None; cm = None; pv = None })
+    | None -> ())
+
 (* title + blocks of the page a .preview-ref-link points at — same bare
    uuid/name ref as sidebar_state.fetch_blocks *)
 
@@ -1026,13 +1031,13 @@ let load_templates t =
 
 (* ---- open / update ---- *)
 
-let open_ac t kind =
+let open_ac ?tpos ?(autopair = true) t kind =
   let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
   let x, y, cy =
     Option.value (Editor_sink.popup_pos auuid) ~default:(0., 0., 0.)
   in
   let tlen = trigger_len_of_kind kind in
-  let tpos = fst (Editor_actions.sel_span auuid) - tlen in
+  let tpos = Option.value tpos ~default:(fst (Editor_actions.sel_span auuid) - tlen) in
   let ac =
     { kind; x; y; cy; flip = None; flipx = None; query = ""
     ; tpos; tlen
@@ -1119,7 +1124,7 @@ let open_ac t kind =
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
-   | Page_ref ->
+   | Page_ref when autopair ->
        (match Editor_actions.edit_model auuid with
         | Some m ->
             let v = m.Edit_model.source in
@@ -1268,6 +1273,30 @@ let on_model_input ~deleted uuid =
   | Some t -> on_buffer_change t ~deleted uuid
   | None -> ()
 
+let page_reference_at (m : Edit_model.t) pos =
+  List.find_opt (fun (r : Edit_runs.run) ->
+      r.kind = Edit_runs.Atomic && Str_util.contains r.cls "ed-page-ref"
+      && r.start_off + 2 <= pos && pos <= r.end_off - 2) m.runs
+
+let on_caret_move uuid =
+  match !active, Editor_actions.edit_model uuid with
+  | Some t, Some m when not (Edit_model.has_selection m) ->
+      (match page_reference_at m m.caret with
+       | Some r ->
+           (match (get t).ac with
+            | Some ac when ac.auuid = uuid && ac.kind = Page_ref && ac.tpos = r.start_off -> ()
+            | _ -> open_ac ~tpos:r.start_off ~autopair:false t Page_ref);
+           (match (get t).ac with
+            | Some ac -> ac_update t ac (S.sub m.source (r.start_off + 2) (m.caret - r.start_off - 2))
+            | None -> ())
+       | None ->
+           (match (get t).ac with
+            | Some { kind = Page_ref; _ } -> close_ac t
+            | _ -> ()))
+  | _ -> ()
+
+let () = Editor_state.caret_changed := on_caret_move
+
 (* ---- events ---- *)
 
 let detail_obj pairs = Json.Object pairs;;
@@ -1283,7 +1312,11 @@ let insert_text (ac : ac) text back =
       let pos = max tpos (min (fst (Editor_actions.sel_span_of m)) n) in
       (* consume the autopaired ]] sitting right after the caret *)
       let pos =
-        if (ac.kind = Page_ref || ac.kind = Embed_ref)
+        if ac.kind = Page_ref then
+          match page_reference_at m pos with
+          | Some r when r.start_off = tpos -> r.end_off
+          | _ -> pos
+        else if ac.kind = Embed_ref
            && pos + 1 < n && S.sub v pos 2 = "]]"
         then pos + 2
         else pos
@@ -1703,7 +1736,10 @@ let ac_keydown t ev =
              | Some it -> apply_item t ac ~meta:ev.Ui_services.meta it
              | None -> ac_on_enter t ac);
             true)
-        | Some "Escape" -> close_ac t; true
+        | Some "Escape" ->
+            if Editor_state.editing () <> None then Editor_actions.exit_edit ~select:true
+            else close_ac t;
+            true
         | _ ->
             (if ac_position_closed ac then close_ac t);
             false)

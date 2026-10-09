@@ -5,7 +5,7 @@ external enqueue : (unit -> unit) -> unit = "queueMicrotask" [@@mel.scope "globa
    implementations in src/core/web_dom.ml; kept local because this
    library is the platform boundary and must not depend on shared src. *)
 let doc_set_data : string -> string -> unit =
-  [%mel.raw "function (k, v) { document.documentElement.dataset[k] = v }"]
+  [%mel.raw "function (k, v) { document.documentElement.setAttribute('data-' + k, v) }"]
 
 let doc_add_class : string -> unit =
   [%mel.raw "function (c) { document.documentElement.classList.add(c) }"]
@@ -23,7 +23,7 @@ let doc_set_lang : string -> unit =
   [%mel.raw "function (l) { document.documentElement.lang = l }"]
 
 let body_rm_data : string -> unit =
-  [%mel.raw "function (k) { delete document.body.dataset[k] }"]
+  [%mel.raw "function (k) { document.body.removeAttribute('data-' + k) }"]
 
 let prefers_dark : unit -> bool =
   [%mel.raw

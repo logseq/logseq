@@ -238,7 +238,7 @@ let item_header st idx (it : Sidebar_state.item) =
   let collapsed = it.Sidebar_state.collapsed in
   row ~key:("hd-" ^ it.key) ~main:`space_between
     ~style_class:"sidebar-item-header color-level"
-    [ button ~key:("hdr-" ^ it.key) ~grow:1. ~padding_horizontal:8
+    [ button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~padding_horizontal:8
         (* page/block sidebar items can carry an empty title — a button
            with neither text nor accessibility label is rejected and
            kills the whole mount batch *)

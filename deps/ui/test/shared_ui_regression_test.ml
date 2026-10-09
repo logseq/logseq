@@ -64,6 +64,115 @@ let run_views ~registry ~profile ~finish =
   ignore (Lui_app.dispose picker.S.app);
   restore_storage "ls-icon-color-preset" previous_preset;
   restore_storage "ls-icons-used" previous_used;
+  let actions = ref 0 in
+  let menu = mount (fun _ -> Menu_item.dots_menu ~key:"parity-actions"
+      [ "", "Enabled", false, (fun () -> incr actions)
+      ; "", "Disabled", true, (fun () -> incr actions) ]) in
+  let trigger = List.find (fun n -> class_has n "graph-action-btn") (nodes menu) in
+  check "graph and member action triggers have an accessible label"
+    (P.node_properties_supported P.Button (button_properties trigger));
+  let menu_nodes () = List.filter (fun n -> n.M.kind = "popover") (nodes menu) in
+  S.press menu trigger.M.id;
+  eqi "action trigger opens one menu" 1 (List.length (menu_nodes ()));
+  check "open action trigger announces expanded state"
+    (match M.string_prop trigger "data-attrs" with
+     | Some raw -> Str_util.contains raw "aria-expanded" && Str_util.contains raw "true"
+     | None -> false);
+  S.press menu trigger.M.id;
+  check "action trigger toggles the menu closed" (menu_nodes () = []);
+  S.press menu trigger.M.id;
+  let disabled = List.find (fun n -> M.string_prop n "text" = Some "Disabled") (nodes menu) in
+  check "disabled menu actions are disabled at the host boundary"
+    (Hashtbl.find_opt disabled.M.props "enabled" = Some (P.BoolValue false));
+  eqi "no action fires when the menu opens" 0 !actions;
+  check "disabled menu action keeps the menu open" (menu_nodes () <> []);
+  let enabled = List.find (fun n -> M.string_prop n "text" = Some "Enabled") (nodes menu) in
+  S.press menu enabled.M.id;
+  eqi "enabled menu action is invoked once" 1 !actions;
+  check "enabled menu action closes its menu" (menu_nodes () = []);
+  ignore (Lui_app.dispose menu.S.app);
+  let language_view _ ctx parent =
+    let label = Signal.state ctx.Lui_ui.ui_scheduler "English" in
+    Settings_view.lang_trigger ~ctx ~key:"parity-language" ~h_cls:""
+      ~st:label ctx parent
+  in
+  let language = mount language_view in
+  let trigger = List.find (fun n -> n.M.kind = "select") (nodes language) in
+  S.press language trigger.M.id;
+  check "settings language picker opens"
+    (List.exists (fun n -> n.M.kind = "dropdown-menu") (nodes language));
+  ignore (Lui_app.dispose language.S.app);
+  let reopened = mount language_view in
+  check "reopening settings starts with its language picker closed"
+    (not (List.exists (fun n -> n.M.kind = "dropdown-menu") (nodes reopened)));
+  ignore (Lui_app.dispose reopened.S.app);
+  let storage_key = "parity-server-url" in
+  let previous_url = Ui_services.storage_get storage_key in
+  Ui_services.storage_remove storage_key;
+  let editor = mount (fun ms -> Settings_url_view.url_editor_body
+      ~key:"parity-url" ~storage_key ~title:"Server" ~desc:"Address"
+      ~placeholder:"https://example.com" ~saved_msg:"Saved" ~cleared_msg:"Cleared"
+      ~on_saved:(fun () -> ()) ms) in
+  let reset_buttons () = List.filter (fun n -> M.string_prop n "text" = Some I18n.reset_default) (nodes editor) in
+  check "empty URL editor hides Reset" (reset_buttons () = []);
+  let input = List.find (fun n -> n.M.kind = "input") (nodes editor) in
+  S.text_changed editor input.M.id "https://example.com";
+  eqi "typing a URL reveals Reset" 1 (List.length (reset_buttons ()));
+  check "URL input text follows the edit state"
+    (M.string_prop input "text" = Some "https://example.com");
+  S.text_changed editor input.M.id "";
+  check "clearing a URL hides Reset" (reset_buttons () = []);
+  check "URL input retains its mounted identity while editing"
+    (List.exists (fun n -> n.M.id = input.M.id) (nodes editor));
+  ignore (Lui_app.dispose editor.S.app);
+  restore_storage storage_key previous_url;
+  let notifications = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:Update.update ~view:(fun _ctx ms _send -> Toasts_view.render ms) () in
+  let push kind text =
+    ignore (Lui_app.send notifications.S.app
+        (Action.Toast_push { Model.toast_id = 0; toast_text = text;
+          toast_kind = kind; toast_key = None }));
+    S.flush notifications
+  in
+  push "success" "First";
+  let first = List.find (fun n -> class_has n "ui__toast") (nodes notifications) in
+  check "notifications use the platform toast lifecycle" (first.M.kind = "toast");
+  push "error" "Persistent";
+  check "adding a notification preserves previous toast identity"
+    (List.exists (fun n -> n.M.id = first.M.id) (nodes notifications));
+  let persistent = List.find (fun n -> class_has n "error") (nodes notifications) in
+  check "error notifications have no auto-dismiss duration"
+    (Hashtbl.find_opt persistent.M.props "duration" = Some (P.IntValue 0));
+  ignore (Lui_app.dispose notifications.S.app);
+  let key_handler = ref (fun (_ : Ui_services.ev) -> ()) in
+  let key_event key =
+    { Ui_services.x = 0.; y = 0.; shift = false; meta = false; ctrl = false;
+      alt = false; composing = false; key = Some key; buttons = 0; button = 0;
+      repeat = false; movement_x = 0.; movement_y = 0.; default_prevented = false;
+      target = None; touches = []; detail = (fun _ -> None);
+      detail_json = (fun _ -> None); clipboard_get = (fun _ -> "");
+      clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
+      files = []; has_files = false; prevent_default = (fun () -> ());
+      stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) }
+  in
+  let empty_menu = mount (fun _ -> Views_popup.menu_level ~pid:9001 ~cls:""
+      ~register:(fun h -> key_handler := h) [ Views_popup.MSep ]) in
+  check "empty view-action menu safely ignores navigation"
+    (try !key_handler (key_event "ArrowDown"); true with Division_by_zero -> false);
+  ignore (Lui_app.dispose empty_menu.S.app);
+  let submenu = mount (fun _ -> Views_popup.menu_level ~pid:9002 ~cls:""
+      ~register:(fun h -> key_handler := h)
+      [ Views_popup.MSub ("Nested", [ Views_popup.MItem ("Child", (fun () -> ())) ]) ]) in
+  let trigger = List.find (fun n -> M.string_prop n "text" = Some "Nested") (nodes submenu) in
+  S.press submenu trigger.M.id;
+  let submenus () = List.filter (fun n -> n.M.kind = "popover") (nodes submenu) in
+  eqi "view-action submenu opens" 1 (List.length (submenus ()));
+  !key_handler (key_event "ArrowLeft");
+  S.flush submenu;
+  check "ArrowLeft closes only the view-action submenu" (submenus () = []);
+  check "closing a submenu preserves its parent trigger"
+    (List.exists (fun n -> n.M.id = trigger.M.id) (nodes submenu));
+  ignore (Lui_app.dispose submenu.S.app);
   let remote_before = !Graphs_view.remote_st_ref in
   let members_before = !Collaborators.members_sig_ref in
   let repos_changed_before = !Graphs_ops.on_repos_changed in
@@ -147,3 +256,34 @@ let dates () =
           (f.year = 2026 && f.month = month && f.day = 15
            && f.hours = 12 && f.minutes = 34 && f.seconds = 56)
   done
+
+let dialogs () =
+  let previous = Dialogs_state.value () in
+  Dialogs_state.close_all ();
+  check "close-all clears named dialogs without a pending request"
+    ((Dialogs_state.value ()).dialogs = []);
+  Dialogs_state.open_ "layer-parent";
+  Dialogs_state.ask ~title:"Confirm" ~desc:"Question" ~on_confirm:(fun () -> ()) ();
+  Dialogs_state.open_ "layer-child";
+  Dialogs_state.close_top ();
+  check "closing the newest named dialog preserves its older confirmation"
+    ((Dialogs_state.value ()).dialogs = [ "layer-parent" ]
+     && Option.is_some (Dialogs_state.value ()).confirm);
+  Dialogs_state.close_top ();
+  check "the next dismissal closes the confirmation only"
+    ((Dialogs_state.value ()).dialogs = [ "layer-parent" ]
+     && (Dialogs_state.value ()).confirm = None);
+  Dialogs_state.open_ "layer-child";
+  Dialogs_state.close_all ();
+  check "close-all clears every named layer"
+    ((Dialogs_state.value ()).dialogs = []);
+  let rejected = ref 0 in
+  Dialogs_state.open_ui_request
+    { ur_id = "parity-request"; ur_reason = "test";
+      ur_reject = (fun () -> incr rejected) };
+  Dialogs_state.close_all ();
+  eqi "close-all rejects the blocking request once" 1 !rejected;
+  check "close-all clears the blocking request" ((Dialogs_state.value ()).ui_request = None);
+  List.iter (fun name -> check ("dialog event recognizes " ^ name) (Dialogs_state.known name))
+    [ "sync-server"; "publish-server"; "rtc-collaborators"; "quick-add" ];
+  Dialogs_state.set (fun _ -> previous)

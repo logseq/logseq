@@ -126,6 +126,42 @@ fn request_pump() {
     let _ = pump_tx().send(());
 }
 
+unsafe extern "C" fn patch_sink_cb(json: *const c_char) {
+    unsafe { bridge::patch_sink(json) };
+    request_ui_update();
+}
+
+fn install_ui_updates(
+    shared: Shared,
+    handle: gpui_kit::gpui::AnyWindowHandle,
+    cx: &mut gpui_kit::gpui::App,
+) {
+    let updates = UI_UPDATES.get_or_init(|| flume::bounded(1)).1.clone();
+    let initial = shared.clone();
+    let _ = handle.update(cx, |_, window, cx| tick_frame(initial, window, cx));
+    cx.spawn(async move |cx| {
+        while updates.recv_async().await.is_ok() {
+            if handle
+                .update(cx, |_, window, app| {
+                    pump_tick(&shared, window, app);
+                    window.refresh();
+                })
+                .is_err()
+            {
+                break;
+            }
+        }
+    })
+    .detach();
+}
+
+// Queue data before waking the UI, so an idle frame always sees the work.
+static UI_UPDATES: std::sync::OnceLock<(flume::Sender<()>, flume::Receiver<()>)> = std::sync::OnceLock::new();
+
+fn request_ui_update() {
+    let _ = UI_UPDATES.get_or_init(|| flume::bounded(1)).0.try_send(());
+}
+
 unsafe extern "C" fn wakeup_cb() {
     request_pump();
 }
@@ -146,6 +182,7 @@ unsafe extern "C" fn platform_request_cb(data: *const c_char, length: c_int) {
         }
         // requests can arrive from OCaml worker threads — wake the pump
         request_pump();
+        request_ui_update();
     }
 }
 
@@ -342,9 +379,8 @@ fn pump_tick(shared: &Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui
     lui_gpui::dom::fire_viewport_events(shared, window, cx);
 }
 
-/// vsync-driven tick scheduled from the window: `cx.spawn` +
-/// `background_executor().timer` futures never resolve in this gpui-kit
-/// version, so the UI tick rides the window's frame callbacks instead.
+/// Reconcile painted geometry each frame. Queued model work also wakes an
+/// idle window through `install_ui_updates`.
 fn tick_frame(shared: Shared, window: &mut gpui_kit::gpui::Window, cx: &mut gpui_kit::gpui::App) {
     pump_tick(&shared, window, cx);
     window.on_next_frame(move |window, cx| {
@@ -434,7 +470,7 @@ fn main() {
     // all event entry points must stay on it, so this must be main.
     let accepted = unsafe {
         lui_ocaml_start(
-            Some(bridge::patch_sink),
+            Some(patch_sink_cb),
             Some(wakeup_cb),
             Some(platform_request_cb),
             platform,
@@ -559,17 +595,11 @@ fn main() {
                 shared.borrow_mut().store.root = Some(root_id);
             }
             let view = cx.new(|_| LuiRootView::new(shared.clone()));
-            // vsync-driven tick: drain queued patches + platform
-            // requests on the UI thread (cx.spawn + timer never
-            // resolves in this gpui-kit — see tick_frame)
-            window.on_next_frame({
-                let shared = shared.clone();
-                move |window, cx| tick_frame(shared, window, cx)
-            });
             cx.new(|cx| Root::new(view, window, cx))
         })
         .expect("Failed to open window");
         eprintln!("logseq-gpui: open_window returned t={:.1}ms", boot_ms());
+        install_ui_updates(shared.clone(), window_handle.into(), cx);
         // Native menubar — menu-* platform events + OS actions; lives in
         // menu.rs (Electron set_app_menu counterpart).
         menu::install(cx);
@@ -612,6 +642,7 @@ mod tests {
 
     extern "C" {
         fn lui_ocaml_stop() -> i32;
+        fn lui_ocaml_platform_event(data: *const std::os::raw::c_char, length: i32) -> i32;
     }
 
     /// Headless boot smoke: start the linked OCaml `native_embed` object,
@@ -635,7 +666,7 @@ mod tests {
             .unwrap_or(bridge::HOST_GPUI);
         let accepted = unsafe {
             lui_ocaml_start(
-                Some(bridge::patch_sink),
+                Some(super::patch_sink_cb),
                 Some(wakeup_cb),
                 Some(platform_request_cb),
                 platform,
@@ -681,11 +712,32 @@ mod tests {
             shared.borrow().last_errors
         );
 
+        cx.update(|window, app| super::install_ui_updates(shared.clone(), window.window_handle(), app));
+        cx.run_until_parked();
+        let settings = "menu-open-settings\n{}";
+        cx.update(|_, _| {
+            assert_ne!(unsafe {
+                lui_ocaml_platform_event(settings.as_ptr().cast(), settings.len() as i32)
+            }, 0);
+            assert_ne!(unsafe { lui_ocaml_pump() }, 0);
+        });
+        cx.run_until_parked();
+        let settings_layer = shared.borrow().store.nodes.values().find(|node|
+            node.string_prop(Property::StyleClass).is_some_and(|classes|
+                classes.split_whitespace().any(|class| class == "ls-dialog-layer"))
+        ).expect("the native menu must mount the settings layer").id;
+        cx.update(|window, app| {
+            assert_ne!(unsafe { bridge::lui_ocaml_dismiss(settings_layer) }, 0);
+            pump_tick(&shared, window, app);
+        });
+
         let search = shared.borrow().store.nodes.values().find(|node|
             node.string_prop(Property::AccessibilityIdentifier) == Some("search-button")
         ).expect("search button must mount").id;
         cx.update(|window, app| {
-            assert_ne!(unsafe { bridge::lui_ocaml_press_ex(search, 0) }, 0);
+            assert_ne!(lui_gpui::fire(&shared, search, lui_core::EventKind::Press, app, || unsafe {
+                bridge::lui_ocaml_press_ex(search, 0)
+            }), 0);
             pump_tick(&shared, window, app);
         });
         let input = shared.borrow().store.nodes.values().find(|node|

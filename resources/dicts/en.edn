@@ -1911,6 +1911,7 @@
  :ui/loading "Loading..."
  :ui/login "Login"
  :ui/logout "Logout"
+ :ui/more-actions "More actions"
  :ui/off "OFF"
  :ui/on "ON"
  :ui/open "Open"

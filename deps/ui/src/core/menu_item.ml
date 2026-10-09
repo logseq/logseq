@@ -48,6 +48,7 @@ let dots_menu ~key ?(menu_cls = "") items : t =
   let item i (cls, label, disabled, on_click) =
     menu_item ~key:(Printf.sprintf "%s-mi-%d" key i)
       ~style_class:(base_cls ^ if cls = "" then "" else " " ^ cls)
+      ~data_attrs:[ ("role", "menuitem") ]
       ~text:label ~disabled
       ~on_press:(fun _ ->
         close ();
@@ -58,8 +59,11 @@ let dots_menu ~key ?(menu_cls = "") items : t =
     [ button ~key:(key ^ "-btn") ~variant:`ghost ~size:`icon
         ~icon:(Icons.name_ref "dots")
         ~style_class:"graph-action-btn"
-        ~data_attrs:[ ("aria-haspopup", "menu") ]
-        ~on_press:(fun _ -> Runtime.signal_set open_ true)
+        ~label:(I18n.t "ui/more-actions")
+        ~data_attrs:(reactive (fun expanded ->
+            [ ("aria-haspopup", "menu")
+            ; ("aria-expanded", string_of_bool expanded) ]) (Signal.value open_))
+        ~on_press:(fun _ -> Runtime.signal_set open_ (not (Runtime.signal_get open_)))
         []
     ; if_ ~test:(Signal.value open_)
         (popover ~anchor:`below ~anchor_alignment:`end_ ~role:`menu
