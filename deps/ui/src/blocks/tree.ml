@@ -548,12 +548,10 @@ let tags_el uuid (b : Model.block) : t =
 
 (* -- row -- *)
 
-(* module init runs at app load (page.ml references block_row): install
-   the document listeners even for pages with zero blocks, where
-   block_row is never mounted *)
-let () =
-  Editor_keys.install_once ();
-  Asset_dom.install ()
+(* the document listeners live in Editor_keys.install_once, which the
+   entry points call after Ui_services install — Ui_services.* is
+   unavailable at module-init time *)
+let () = Asset_dom.install ()
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
