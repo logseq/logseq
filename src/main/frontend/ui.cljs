@@ -342,9 +342,15 @@
                  (assoc :on-click
                         (fn [^js e]
                           (some-> on-click' (apply [e]))
-                          (let [checked? (= (.-state (.-dataset (.-target e))) "checked")]
-                            (set! (. (.-target e) -checked) (not checked?))
-                            (some-> on-change' (apply [e]))))))]
+                          ;; Clicks often land on the inner indicator/SVG, which
+                          ;; has no data-state. Read/write the checkbox root.
+                          (when-let [el (.-currentTarget e)]
+                            (let [checked? (= (.-state (.-dataset el)) "checked")
+                                  next-checked? (not checked?)]
+                              (set! (.-checked el) next-checked?)
+                              (when-let [target (.-target e)]
+                                (set! (.-checked target) next-checked?))
+                              (some-> on-change' (apply [e])))))))]
     (shui/checkbox
      (merge option
             {:disabled (or (:disabled option) config/publishing?)}))))
