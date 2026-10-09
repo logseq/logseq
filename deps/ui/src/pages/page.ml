@@ -137,7 +137,7 @@ let open_menu (page : Model.page) name payload =
        not the raw pointer — elementFromPoint resolves that target *)
     let ax, atop, abot =
       match
-        Web_dom.element_at
+        Ui_services.dom_element_at
           (Json_payload.num payload "clientX")
           (Json_payload.num payload "clientY")
       with

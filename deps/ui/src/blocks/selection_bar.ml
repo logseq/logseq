@@ -186,7 +186,7 @@ and node () : t =
                              anchored to the trigger button *)
                           match
                             ( !(Popups_state.active)
-                            , Web_dom.get_element_by_id "sab-dots" )
+                            , Ui_services.dom_by_id "sab-dots" )
                           with
                           | Some st, Some btn ->
                               let ax, atop, abot =
