@@ -40,7 +40,7 @@ let mount ?(cls = "") uuid scope : t =
      answer; retries cover the runs-prop lag *)
   List.iter
     (fun ms ->
-      Web_dom.set_timeout
+      Ui_services.timers_later ~ms
         (fun () ->
           match (S.editing (), Editor_sink.conduit uuid) with
           | Some e, Some conduit
@@ -48,8 +48,7 @@ let mount ?(cls = "") uuid scope : t =
               Signal.update frame (fun _ ->
                   Edit_input.measure conduit e.S.model);
               Runtime.flush ()
-          | _ -> ())
-        ms)
+          | _ -> ()))
     [ 0; 40; 120; 300 ];
   let model_sig =
     Edit_view.own ctx (Signal.map
