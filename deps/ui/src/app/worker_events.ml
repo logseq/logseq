@@ -47,11 +47,12 @@ let on_index_progress repo (payload : Wire.t) =
   Runtime.flush ();
   match status, build_id with
   | "completed", Some bid ->
-      Web_dom.set_timeout
-        (fun () ->
-          Runtime.send (Action.Search_index_hide (repo, bid));
-          Runtime.flush ())
-        1500
+      ignore
+        (Ui_services.timers_timeout
+           (fun () ->
+             Runtime.send (Action.Search_index_hide (repo, bid));
+             Runtime.flush ())
+           1500)
   | _ -> ()
 
 let dispatch kind payload =
@@ -123,9 +124,6 @@ let dispatch kind payload =
       | None -> ())
   | _ -> Runtime.send (Action.Worker_event (kind, payload))
 
-(* sdk show_msg/close_msg dispatch `ls:toast`/`ls:toast-close`
-   CustomEvents on document — same toast path as worker notifications. *)
-let detail_json ev = Web_dom.js_get ev "detail"
 
 (* UI-side deferral for the debounced reload — see Subs.fire_reload:
    typing, menus/popups, recent pointer input, and the editing-session
@@ -154,7 +152,7 @@ let ui_busy ~now ~last_fire =
   in
   let popup_open =
     (* same overlay surfaces as editor_keys' outside-click routing *)
-    Web_dom.query_selector
+    Ui_services.dom_query
       "#ui__ac, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form, .ls-property-dialog"
     <> None
   in
@@ -182,7 +180,8 @@ let init () =
     ; fire_db_hooks = Plugin_host.fire_db_hooks
     ; helpers_of = Outliner_ops.delta_helpers
     ; ui_busy
-    ; schedule = (fun f -> Web_dom.set_timeout f 150)
+    ; schedule =
+        (fun f -> ignore (Ui_services.timers_timeout f 150))
     ; publish_page =
         (fun p -> (let _ = Ui_services.perf_mark "worker_events:page-loaded" in Runtime.send (Action.Page_loaded p)))
     ; publish_journals =
@@ -230,38 +229,16 @@ let init () =
          on the freshly loaded page *)
       Editor_actions.cancel_pending_focus ();
       if Editor_state.ready () then Editor_actions.clear_selection ());
-  Web_dom.add_document_listener "pointerdown"
-    (fun _ -> last_ui_input_ms := Ui_services.time_now ())
-    true;
-  Web_dom.add_document_listener "keydown"
-    (fun _ -> last_ui_input_ms := Ui_services.time_now ())
-    true;
-  Web_dom.on_document_event "ls:toast" (fun ev ->
-      let d = detail_json ev in
+  Ui_services.dom_on_document_event ~capture:true "pointerdown"
+    (fun _ -> last_ui_input_ms := Ui_services.time_now ());
+  Ui_services.dom_on_document_event ~capture:true "keydown"
+    (fun _ -> last_ui_input_ms := Ui_services.time_now ());
+  Ui_services.dom_on_document_event "ls:toast" (fun ev ->
       let text =
-        match Js.Json.decodeObject d with
-        | Some o -> (
-            match Js.Dict.get o "msg" with
-            | Some v -> Option.value (Js.Json.decodeString v) ~default:""
-            | None -> "")
-        | None -> ""
-      in
-      let kind =
-        match Js.Json.decodeObject d with
-        | Some o -> (
-            match Js.Dict.get o "cls" with
-            | Some v -> Option.value (Js.Json.decodeString v) ~default:"info"
-            | None -> "info")
-        | None -> "info"
-      in
-      let key =
-        match Js.Json.decodeObject d with
-        | Some o -> (
-            match Js.Dict.get o "key" with
-            | Some v -> Js.Json.decodeString v
-            | None -> None)
-        | None -> None
-      in
+        Option.value (ev.Ui_services.detail "msg") ~default:""
+      and kind =
+        Option.value (ev.Ui_services.detail "cls") ~default:"info"
+      and key = ev.Ui_services.detail "key" in
       Runtime.send
         (Action.Toast_push
            { Model.toast_id = 0
@@ -270,17 +247,11 @@ let init () =
            ; toast_key = key
            });
       Runtime.flush ());
-  Web_dom.on_document_event "ls:toast-close" (fun ev ->
+  Ui_services.dom_on_document_event "ls:toast-close" (fun ev ->
       (* sdk close_msg targets one notification by its show_msg key;
          a missing key clears nothing — Toasts_clear stays internal *)
-      match Js.Json.decodeObject (detail_json ev) with
-      | Some o -> (
-          match Js.Dict.get o "key" with
-          | Some v -> (
-              match Js.Json.decodeString v with
-              | Some key ->
-                  Runtime.send (Action.Toast_dismiss_key key);
-                  Runtime.flush ()
-              | None -> ())
-          | None -> ())
+      match ev.Ui_services.detail "key" with
+      | Some key ->
+          Runtime.send (Action.Toast_dismiss_key key);
+          Runtime.flush ()
       | None -> ())
