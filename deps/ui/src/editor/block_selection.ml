@@ -124,7 +124,7 @@ let pointermove ev =
           closest ".ls-block" (ev.Ui_services.target)
         with
         | Some block_el -> (
-            match block_el.Ui_services.attr "blockid" with
+            match block_el.Ui_services.attr "data-blockid" with
             | Some uuid when uuid <> anchor || !dragged ->
                 let range = Editor_actions.range_between anchor uuid in
                 if range <> [] then (

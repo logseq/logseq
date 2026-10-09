@@ -1233,7 +1233,7 @@ let drag_reset () =
 let arm_drag (ev : Ui_services.ev) =
   match closest ".bullet-container" ev.Ui_services.target with
   | Some el -> (
-      match el.Ui_services.attr "blockid" with
+      match el.Ui_services.attr "data-blockid" with
       | Some u ->
           drag_phase :=
             Some (Drag_armed (u, ev.Ui_services.x, ev.Ui_services.y))
@@ -1249,7 +1249,7 @@ let update_drag_target ev src =
   let tgt =
     match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
-        match el.Ui_services.attr "blockid" with
+        match el.Ui_services.attr "data-blockid" with
         | Some t when t <> src && not (A.is_descendant t src) ->
             let left, top, w, _h = el.Ui_services.rect () in
             let move_to =

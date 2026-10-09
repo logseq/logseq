@@ -518,8 +518,15 @@ let rec exit_edit ~select =
         let buf = live_buffer e.uuid in
         let finish_exit () =
           match S.editing () with
+          (* same session + same buffer text: safe to exit. Physical
+             model identity is too strict — arrow-key dispatch swaps the
+             session model for a refresh_lines-derived twin (same
+             source, new lines table), which used to leave finish_exit
+             dead. Input typed mid-commit changes source and still
+             aborts the exit *)
           | Some current when current.S.uuid = e.uuid && current.S.scope = e.scope
-                              && current.S.model == e.model ->
+                              && String.equal current.S.model.Edit_model.source
+                                   e.S.model.Edit_model.source ->
               S.notify_edit_exit e.uuid;
               (if Lazy.force perf_keys then
                  Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
