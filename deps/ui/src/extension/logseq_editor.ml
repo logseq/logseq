@@ -895,4 +895,7 @@ let () =
     ; can_focus
     ; popup_pos
     ; container_rect
+    ; (* the DOM answers synchronously — a reply can never arrive after
+         its text changed *)
+      invalidate = (fun _ -> ())
     }

@@ -68,7 +68,9 @@ type host =
 let rec settle (h : host) n : unit Js.Promise.t =
   if
     n <= 0
-    || ((not !S.structure_pending) && Queue.is_empty S.pending_edit_actions)
+    || ((not !S.structure_pending)
+        && Queue.is_empty S.pending_edit_actions
+        && Option.is_none !S.merge_plan_seq)
   then Js.Promise.resolve ()
   else
     let* () = h.wait_ms 25 in
@@ -581,14 +583,7 @@ let test_delete_merge_next (h : host) =
   Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "Delete", false));
   let* () = settle h 40 in
   let e = editing_now () in
-  (if h.native then
-     (* mounted-input pushback: the widget's stale source syncs back
-        over the committed merge — observed (buffer="ab", base="abcd").
-        Task 5 candidate defect; the merge ops + canonical title
-        (checked next) are the worker-truth half of the contract *)
-     xfail "delete merges next buffer (native pushback observed ab)"
-   else check "delete merges next buffer")
-    (e.S.buffer = "abcd");
+  check "delete merges next buffer" (e.S.buffer = "abcd");
   check "delete keeps editing block" (e.S.uuid = "b1");
   check "delete merge caret" (e.S.model.EM.caret = 2);
   let* () = settle h 40 in
@@ -600,10 +595,10 @@ let test_delete_merge_next (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
-(* known Task 5 defect on the Web surface: continuous Delete across
-   block boundaries produces ["firstC","D"] where the expected result
-   preserves ["first","C","D"]. Encoded as an expected failure — the
-   buggy merge result is never asserted as correct output. *)
+(* continuous Delete across block boundaries: the merge is deferred
+   until the surface is input-quiet, so a second Delete still in
+   flight supersedes it — expected ["first","C","D"], and the
+   buggy ["firstC","D"] merge is never emitted. *)
 let test_continuous_delete_xfail (h : host) =
   let* () = settle h 40 in
   stage_page h
@@ -614,14 +609,10 @@ let test_continuous_delete_xfail (h : host) =
   Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "Delete", false));
   Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "Delete", false));
   let* () = settle h 40 in
-  (* Task 5 defect on the Web surface: continuous Delete emitted a
-     boundary merge — expected ["first","C","D"], observed
-     ["firstC","D"].  The fake worker never mutates the stored tree,
-     so the merge surfaces as a delete-blocks op + a merged editing
-     buffer; a correct surface emits neither. *)
-  xfail
-    "continuous Delete preserves block boundaries (Task 5 defect: \
-     observed [\"firstC\",\"D\"])"
+  (* the fake worker never mutates the stored tree, so a merge would
+     surface as a delete-blocks op + a merged editing buffer; the
+     superseded plan emits neither — the tree stays ["first","C","D"] *)
+  check "continuous Delete preserves block boundaries"
     ((not (List.mem "delete-blocks" (op_names ())))
      && (editing_now ()).S.buffer = "first");
   h.sync_page ();

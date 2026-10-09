@@ -900,7 +900,12 @@ and apply_input ?frame uuid ev =
            if Option.is_some measured.Edit_input.caret then
              Signal.update fr (fun _ -> measured)
        | _ -> ());
-      A.update_model uuid (fun _ -> m');
+      (* publish only while the model is still the one this event read:
+         a structural op that settled mid-dispatch (e.g. merge_next on a
+         synchronously-drained native promise) already wrote a newer
+         model — republishing m' here would push the stale buffer back
+         over the committed merge *)
+      A.update_model uuid (fun m_cur -> if m_cur == m0 then m' else m_cur);
       (match ev with
        | Edit_input.Key
            ({ Edit_model.key = "ArrowUp" | "ArrowDown"; meta = false

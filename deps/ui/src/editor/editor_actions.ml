@@ -39,6 +39,8 @@ let update_model uuid f =
       match st.S.editing with
       | Some e when e.S.uuid = uuid ->
           let nm = f e.S.model in
+          if nm.Edit_model.source <> e.S.model.Edit_model.source then
+            Editor_sink.invalidate uuid;
           { st with S.editing = Some (S.with_model e nm) }
       | _ -> st)
 
@@ -488,6 +490,7 @@ let exit_edit ~select =
         S.override_title e.uuid (Ops.normalized_title e.uuid buf);
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
+      Editor_sink.invalidate e.uuid;
       S.set (fun st ->
           { st with
             S.editing = None
@@ -512,6 +515,7 @@ let blur_commit () =
         S.override_title e.uuid (Ops.normalized_title e.uuid buf);
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-clear src=blur uuid=%s\n%!" e.uuid);
+      Editor_sink.invalidate e.uuid;
       S.set (fun st -> { st with S.editing = None });
       commit e.uuid buf
 
@@ -526,6 +530,7 @@ let flush_edit () =
       let buf = live_buffer e.uuid in
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-clear src=flush uuid=%s\n%!" e.uuid);
+      Editor_sink.invalidate e.uuid;
       S.set (fun st -> { st with S.editing = None });
       if buf <> model_title e.uuid then
         ignore
@@ -889,8 +894,8 @@ let move_children_except_ops (b : Model.block) except_uuid target_uuid =
   | [] -> []
   | uuids -> [ Ops.move_blocks uuids target_uuid ~sibling:false ]
 
-(* Delete at end: merge next visible block into current *)
-let merge_next uuid =
+(* the merge itself, once the surface has gone quiet *)
+let merge_next_now uuid =
   match
     ( S.editing ()
     , S.find uuid
@@ -965,6 +970,32 @@ let merge_next uuid =
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some uuid then request_focus uuid (caret_of uuid))))
   | _ -> ()
+
+(* Delete at end: merge next visible block into current. The merge only
+   commits once the surface is input-quiet: a keystroke still in flight
+   (queued behind a structure op, or dispatched between the arming key
+   and the deferred commit) supersedes the plan — a continuous second
+   Delete must not produce a merge at all. A merge_next arriving while
+   a plan is armed is part of the same burst: the armed plan already
+   supersedes it. *)
+let merge_next uuid =
+  match !S.merge_plan_seq with
+  | Some _ -> ()
+  | None ->
+      let plan = !S.edit_input_seq in
+      S.merge_plan_seq := Some plan;
+      let context = Runtime.repo (), Runtime.route () in
+      ignore
+        (Ui_services.timers_timeout
+           (fun () ->
+             match !S.merge_plan_seq with
+             | Some s when s = plan ->
+                 S.merge_plan_seq := None;
+                 if !S.edit_input_seq = plan
+                    && context = (Runtime.repo (), Runtime.route ())
+                 then merge_next_now uuid
+             | _ -> ())
+           0)
 
 (* ---- selection ---- *)
 
