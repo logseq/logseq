@@ -528,7 +528,7 @@ let view : t =
                 popover ~key:"prop-pop" ~at:(x, y)
                   ~style_class:"ui__popover-content"
                   ~available_height:
-                    (Web_dom.win_inner_height -. y -. 8.)
+                    (Ui_services.dom_viewport_height () -. y -. 8.)
                   ~data_attrs:[ ("role", "dialog") ]
                   ~on_dismiss:(fun _ -> close ())
                   [ box ~key:"prop-body"
@@ -563,17 +563,15 @@ let open_dialog ?(remove = false) ?(phase = Prop_select) ?anchor target =
    open the popover at its bottom-left (base-ui align=start). On
    backends with async measurement (gpui) the first rect is still
    pending, so retry a few ticks rather than anchoring at 0,0. *)
-let open_for_anchor_el ?(remove = false) ?(phase = Prop_select) anchor
-    target =
+let open_for_anchor_el ?(remove = false) ?(phase = Prop_select)
+    (anchor : Ui_services.el) target =
   let rec open_measured tries_left =
-    let left, top, _right, bottom, w =
-      Web_dom.bounding_rect_fields anchor
-    in
-    if
-      tries_left > 0 && left = 0. && top = 0. && bottom = 0. && w = 0.
-    then
-      Web_dom.set_timeout (fun () -> open_measured (tries_left - 1)) 32
-    else open_dialog ~remove ~phase ~anchor:(left, bottom) target
+    let x, y, w, h = anchor.Ui_services.rect () in
+    if tries_left > 0 && x = 0. && y = 0. && w = 0. && h = 0. then
+      ignore
+        (Ui_services.timers_timeout
+           (fun () -> open_measured (tries_left - 1)) 32)
+    else open_dialog ~remove ~phase ~anchor:(x, y +. h) target
   in
   open_measured 4
 
