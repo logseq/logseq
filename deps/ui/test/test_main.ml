@@ -3,7 +3,7 @@
 
 open Test_check
 
-let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops
+let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~timers:Ui_dom_web.timers ~files:Ui_dom_web.files
 
 (* tests exercising model-derived readers stub the live model through
    Runtime.read_model *)

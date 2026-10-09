@@ -153,12 +153,77 @@ type env = {
   (* Open an external URL in the system browser. *)
 }
 
+(* Host timers — the same setTimeout/clearTimeout contract the DOM API
+   exposes, so shared code never reaches for window.*)
+type timers = {
+  timeout : (unit -> unit) -> int -> int;
+  clear_timeout : int -> unit;
+  interval : (unit -> unit) -> int -> int;
+  clear_interval : int -> unit;
+  debounce : int -> (unit -> unit) -> unit;
+  (* Returns a scheduler that restarts the delay on every call. *)
+  later : ms:int -> (unit -> unit) -> unit;
+}
+
+(* A picked/dropped/host file as an opaque handle — impls keep the
+   underlying host file inside the closures. *)
+type file = {
+  file_name : string;
+  file_size : float;
+  file_text : unit -> string Ui_task.t;
+  (* Raw bytes as a binary string — the Wire.Binary payload shape. *)
+  file_binary : unit -> string Ui_task.t;
+}
+
+(* File System Access handles as op-records (web only —
+   [dir_picker_supported] gates every use; native impls fail fast). *)
+type fs_dir = {
+  dir_id : int;
+  (* Host-assigned handle — relates the dir record to the impl's own
+     host handle table (fh_move needs the destination's raw handle). *)
+  dir_name : string;
+  get_dir : string -> fs_dir Ui_task.t;
+  get_file : string -> fs_file Ui_task.t;
+  truncate_old_versions : unit -> unit Ui_task.t;
+}
+
+and fs_file = {
+  fh_file : unit -> file Ui_task.t;
+  fh_move : fs_dir -> string -> unit Ui_task.t;
+  fh_writable : unit -> fs_writable Ui_task.t;
+}
+
+and fs_writable = {
+  w_write : string -> unit Ui_task.t;
+  w_close : unit -> unit Ui_task.t;
+}
+
+(* File-system access — the picker/download surface plus the
+   File System Access directory-backup handle flow. *)
+type files = {
+  pick_files :
+       ?accept:string
+    -> ?multiple:bool
+    -> ?directory:bool
+    -> (file list -> unit)
+    -> unit;
+  download_text : filename:string -> mime:string -> string -> unit;
+  download_binary : filename:string -> mime:string -> string -> unit;
+  inflate_raw : string -> string Ui_task.t;
+  dir_picker_supported : unit -> bool;
+  show_dir_picker : unit -> fs_dir Ui_task.t;
+}
+
 (* Typed host-DOM boundary (folded from the temporary Ui_dom contract):
    event targets as opaque elements with a few accessors, host metrics,
    and the cross-area dispatch channel. Element handles never expose Js
    values — each runtime renders an event/target snapshot into these
    accessors. *)
 type el = {
+  token : int;
+  (* Host-assigned element handle — lets an impl relate two els it built
+     (contains, scroll_row_into_view) without exposing host payloads.
+     Values are unique within the impl's bounded handle table. *)
   closest : string -> el option;
   attr : string -> string option;
   rect : unit -> float * float * float * float; (* x, y, width, height *)
@@ -166,6 +231,37 @@ type el = {
   add_class : string -> unit;
   remove_class : string -> unit;
   offset_width : unit -> float;
+  focus : unit -> unit;
+  (* Focus the element and move a text caret to the end (best effort). *)
+  select_text : unit -> unit;
+  set_selection_range : int -> int -> unit;
+  set_attr : string -> string -> unit;
+  rm_attr : string -> unit;
+  value : unit -> string;
+  set_value : string -> unit;
+  set_text : string -> unit;
+  (* Replace the element's text content. *)
+  checked : unit -> bool;
+  set_checked : bool -> unit;
+  contains : el -> bool;
+  connected : unit -> bool;
+  click : unit -> unit;
+  scroll_into_view : unit -> unit;
+  scroll_into_view_nearest : unit -> unit;
+  scroll_top : unit -> float;
+  set_scroll_top : float -> unit;
+  scroll_height : unit -> float;
+  client_height : unit -> float;
+  id : unit -> string;
+  tag : unit -> string;
+  editable : unit -> bool;
+  (* Text-entry element: textarea/input/select or contenteditable. *)
+  query : string -> el option;
+  query_all : string -> el list;
+  files : unit -> file list;
+  (* <input type=file> selections. *)
+  style_prop : string -> string;
+  (* Computed style property — "" where the host has no stylesheets. *)
 }
 
 type ev = {
@@ -174,23 +270,47 @@ type ev = {
   shift : bool;
   meta : bool;
   ctrl : bool;
+  alt : bool;
   composing : bool;
   key : string option;
+  buttons : int;
+  default_prevented : bool;
   target : el option;
   touches : (float * float) list;
   detail : string -> string option;
+  clipboard_get : string -> string;
+  (* clipboardData.getData <mime> — "" without data. *)
+  clipboard_set : string -> string -> unit;
+  data_transfer_get : string -> string;
+  files : file list;
+  (* Files carried by paste/drop events (clipboardData.files,
+     dataTransfer.files). *)
   prevent_default : unit -> unit;
+  stop_propagation : unit -> unit;
+  stop_immediate : unit -> unit;
 }
 
 type dom = {
   on_document_event : string -> (ev -> unit) -> unit;
   (* Document-level event subscription (custom "ls:*" events and input
      events) — the typed [ev] snapshot replaces raw event access. *)
+  on_window_event : string -> (ev -> unit) -> unit;
+  (* Window-level subscription (resize, visibilitychange relays). *)
   query : string -> el option;
+  query_all : string -> el list;
+  by_id : string -> el option;
+  active_element : unit -> el option;
+  element_at : float -> float -> el option;
   doc_root : unit -> el;
+  body : unit -> el;
   viewport_width : unit -> float;
+  viewport_height : unit -> float;
+  document_visible : unit -> bool;
   dispatch : string -> unit;
   (* Cross-area custom event, payload-less (detail = null). *)
+  dispatch_json : string -> Json.t -> unit;
+  (* Cross-area custom event with a JSON detail payload — the
+     CustomEvent contract. *)
   emit_json : string -> string -> unit;
   (* Re-dispatch a host-emitted synthetic event with a raw JSON payload
      (the payload IS the event's json object, not wrapped in detail).
@@ -198,6 +318,13 @@ type dom = {
      synthesize dom-events there — so the web impl is a no-op. *)
   open_dialog : string -> unit;
   (* Publish "ls:open-dialog" with the dialog name. *)
+  confirm : string -> bool;
+  (* Synchronous confirm dialog; false on hosts without one. *)
+  scroll_row_into_view : scroller:el -> row:el -> unit;
+  (* Keep [row] visible inside [scroller] (autocomplete menus). *)
+  ensure_fixups : unit -> unit;
+  (* Register DOM content fixups (hidden delimiters, internal attrs) —
+     a no-op on hosts that render source directly. *)
   apply_left_sidebar_width : int -> unit;
   (* Live left-sidebar width write (CSS var on web, dock model on
      native). *)
@@ -222,6 +349,8 @@ type t = {
   session : session;
   env : env;
   dom : dom;
+  timers : timers;
+  files : files;
 }
 
 let installed : t option ref = ref None
@@ -311,11 +440,41 @@ let env_random_uuid () = (get ()).env.random_uuid ()
 let env_open_url u = (get ()).env.open_url u
 
 let dom_on_document_event name f = (get ()).dom.on_document_event name f
+let dom_on_window_event name f = (get ()).dom.on_window_event name f
 let dom_query sel = (get ()).dom.query sel
+let dom_query_all sel = (get ()).dom.query_all sel
+let dom_by_id id = (get ()).dom.by_id id
+let dom_active_element () = (get ()).dom.active_element ()
+let dom_element_at x y = (get ()).dom.element_at x y
 let dom_root () = (get ()).dom.doc_root ()
+let dom_body () = (get ()).dom.body ()
 let dom_viewport_width () = (get ()).dom.viewport_width ()
+let dom_viewport_height () = (get ()).dom.viewport_height ()
+let dom_document_visible () = (get ()).dom.document_visible ()
 let dom_dispatch name = (get ()).dom.dispatch name
+let dom_dispatch_json name detail = (get ()).dom.dispatch_json name detail
 let dom_emit_json name payload = (get ()).dom.emit_json name payload
 let dom_open_dialog name = (get ()).dom.open_dialog name
+let dom_confirm msg = (get ()).dom.confirm msg
+let dom_scroll_row_into_view ~scroller ~row =
+  (get ()).dom.scroll_row_into_view ~scroller ~row
+let dom_ensure_fixups () = (get ()).dom.ensure_fixups ()
 let dom_apply_left_sidebar_width px = (get ()).dom.apply_left_sidebar_width px
 let dom_selected_block_uuids () = (get ()).dom.selected_block_uuids ()
+
+let timers_timeout f ms = (get ()).timers.timeout f ms
+let timers_clear_timeout id = (get ()).timers.clear_timeout id
+let timers_interval f ms = (get ()).timers.interval f ms
+let timers_clear_interval id = (get ()).timers.clear_interval id
+let timers_debounce ms = (get ()).timers.debounce ms
+let timers_later ~ms f = (get ()).timers.later ~ms f
+
+let files_pick_files ?accept ?multiple ?directory on_files =
+  (get ()).files.pick_files ?accept ?multiple ?directory on_files
+let files_download_text ~filename ~mime text =
+  (get ()).files.download_text ~filename ~mime text
+let files_download_binary ~filename ~mime data =
+  (get ()).files.download_binary ~filename ~mime data
+let files_inflate_raw s = (get ()).files.inflate_raw s
+let files_dir_picker_supported () = (get ()).files.dir_picker_supported ()
+let files_show_dir_picker () = (get ()).files.show_dir_picker ()

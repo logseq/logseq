@@ -1925,7 +1925,7 @@ let () =
     ~assert_owner:(fun () ->
       if Thread.id (Thread.self ()) <> owner then invalid_arg "UI scenario requires its application thread")
     ~request_flush:Runtime.flush
-    ~dom:Ui_dom_native.ops;
+    ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   run ~finish:(fun () ->
       Js.log
         (Printf.sprintf

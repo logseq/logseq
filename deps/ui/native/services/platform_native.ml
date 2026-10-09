@@ -427,7 +427,7 @@ let fmt_date ms =
     (List.nth month_of_abbr (f.month - 1))
     f.day f.year
 
-let install_ui_services ~assert_owner ~request_flush ~dom =
+let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
   Ui_services.install
     { storage =
         { get = local_storage_get
@@ -514,6 +514,8 @@ let install_ui_services ~assert_owner ~request_flush ~dom =
         ; open_url = Host.open_url
         }
     ; dom
+    ; timers
+    ; files
     };
   Ui_task.install { enqueue = Host.enqueue; assert_owner };
   Properties_services.install

@@ -377,7 +377,7 @@ let perf_mark name t0 =
 
 let initialize_unlocked platform_code host_code (_payload : string) : string =
   Printexc.record_backtrace true;
-  Platform.install_ui_services ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops;
+  Platform.install_ui_services ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   Queue.clear pending_batches;
   let os =
     match platform_code with

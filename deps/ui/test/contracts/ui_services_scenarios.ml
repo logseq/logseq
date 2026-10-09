@@ -181,19 +181,54 @@ let run () =
         (let listeners : (string, Ui_services.ev -> unit) Hashtbl.t =
            Hashtbl.create 8 in
          let fake_el () : Ui_services.el =
-           { Ui_services.closest = (fun _ -> None)
+           { Ui_services.token = 0
+           ; closest = (fun _ -> None)
            ; attr = (fun _ -> None)
            ; rect = (fun () -> (0., 0., 0., 0.))
            ; set_style = (fun _ _ -> ())
            ; add_class = (fun _ -> ())
            ; remove_class = (fun _ -> ())
            ; offset_width = (fun () -> 0.)
+           ; focus = (fun () -> ())
+           ; select_text = (fun () -> ())
+           ; set_selection_range = (fun _ _ -> ())
+           ; set_attr = (fun _ _ -> ())
+           ; rm_attr = (fun _ -> ())
+           ; value = (fun () -> "")
+           ; set_value = (fun _ -> ())
+           ; set_text = (fun _ -> ())
+           ; checked = (fun () -> false)
+           ; set_checked = (fun _ -> ())
+           ; contains = (fun _ -> false)
+           ; connected = (fun () -> true)
+           ; click = (fun () -> ())
+           ; scroll_into_view = (fun () -> ())
+           ; scroll_into_view_nearest = (fun () -> ())
+           ; scroll_top = (fun () -> 0.)
+           ; set_scroll_top = (fun _ -> ())
+           ; scroll_height = (fun () -> 0.)
+           ; client_height = (fun () -> 0.)
+           ; id = (fun () -> "")
+           ; tag = (fun () -> "")
+           ; editable = (fun () -> false)
+           ; query = (fun _ -> None)
+           ; query_all = (fun _ -> [])
+           ; files = (fun () -> [])
+           ; style_prop = (fun _ -> "")
            }
          in
          { on_document_event = (fun name f -> Hashtbl.replace listeners name f)
+         ; on_window_event = (fun _ _ -> ())
          ; query = (fun _ -> None)
+         ; query_all = (fun _ -> [])
+         ; by_id = (fun _ -> None)
+         ; active_element = (fun () -> None)
+         ; element_at = (fun _ _ -> None)
          ; doc_root = fake_el
+         ; body = fake_el
          ; viewport_width = (fun () -> 1024.)
+         ; viewport_height = (fun () -> 768.)
+         ; document_visible = (fun () -> true)
          ; dispatch =
              (fun name ->
                match Hashtbl.find_opt listeners name with
@@ -204,12 +239,21 @@ let run () =
                      ; shift = false
                      ; meta = false
                      ; ctrl = false
+                     ; alt = false
                      ; composing = false
                      ; key = None
+                     ; buttons = 0
+                     ; default_prevented = false
                      ; target = None
                      ; touches = []
                      ; detail = (fun _ -> None)
+                     ; clipboard_get = (fun _ -> "")
+                     ; clipboard_set = (fun _ _ -> ())
+                     ; data_transfer_get = (fun _ -> "")
+                     ; files = []
                      ; prevent_default = (fun () -> incr prevented)
+                     ; stop_propagation = (fun () -> ())
+                     ; stop_immediate = (fun () -> ())
                      }
                | None -> ())
          ; emit_json = (fun n p -> emitted := (n, p) :: !emitted)
@@ -223,18 +267,47 @@ let run () =
                      ; shift = false
                      ; meta = false
                      ; ctrl = false
+                     ; alt = false
                      ; composing = false
                      ; key = None
+                     ; buttons = 0
+                     ; default_prevented = false
                      ; target = None
                      ; touches = []
                      ; detail =
                          (fun k -> if k = "dialog" then Some name else None)
+                     ; clipboard_get = (fun _ -> "")
+                     ; clipboard_set = (fun _ _ -> ())
+                     ; data_transfer_get = (fun _ -> "")
+                     ; files = []
                      ; prevent_default = (fun () -> ())
+                     ; stop_propagation = (fun () -> ())
+                     ; stop_immediate = (fun () -> ())
                      }
                | None -> ())
+         ; dispatch_json = (fun _ _ -> ())
+         ; confirm = (fun _ -> false)
+         ; scroll_row_into_view = (fun ~scroller:_ ~row:_ -> ())
+         ; ensure_fixups = (fun () -> ())
          ; apply_left_sidebar_width = (fun px -> sidebar_w := px)
          ; selected_block_uuids = (fun () -> !uuids)
          })
+    ; timers =
+        { Ui_services.timeout = (fun _ _ -> 0)
+        ; clear_timeout = (fun _ -> ())
+        ; interval = (fun _ _ -> 0)
+        ; clear_interval = (fun _ -> ())
+        ; debounce = (fun _ -> (fun _ -> ()))
+        ; later = (fun ~ms:_ _ -> ())
+        }
+    ; files =
+        { Ui_services.pick_files = (fun ?accept:_ ?multiple:_ ?directory:_ _ -> ())
+        ; download_text = (fun ~filename:_ ~mime:_ _ -> ())
+        ; download_binary = (fun ~filename:_ ~mime:_ _ -> ())
+        ; inflate_raw = (fun _ -> Ui_task.resolve "")
+        ; dir_picker_supported = (fun () -> false)
+        ; show_dir_picker = (fun () -> failwith "web-only")
+        }
     }
   in
   Ui_services.install services;

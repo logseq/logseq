@@ -775,3 +775,135 @@ let movement_y (e : Js.Json.t) : float =
 
 let button (e : Js.Json.t) : int =
   Option.value (Option.map int_of_float (num_prop "button" e)) ~default:0
+
+(* ---------- typed-boundary element ops ---------- *)
+
+(* The dom-op payload contract of the removed imperative path: {ref,
+   name, value} / {ref, class} / {ref}. Overlays keep subsequent
+   snapshot reads (get_attribute/closest/class_list) converged. *)
+let el_set_attr (el : element) (name : string) (v : string) : unit =
+  (match node_id_of el with
+   | Some node -> overlay_set_attr node name v
+   | None -> ());
+  Host.dom_op "set-attr"
+    (Js.Json.stringify
+       (Js.Json.JObject
+          [ ("ref", el); ("name", Js.Json.JString name)
+          ; ("value", Js.Json.JString v) ]))
+
+let el_class_add (el : element) (c : string) : unit =
+  (match node_id_of el with
+   | Some node ->
+       let cur = String.concat " " (class_list el) in
+       overlay_set_attr node "class" (String.trim (cur ^ " " ^ c))
+   | None -> ());
+  Host.dom_op "class-add"
+    (Js.Json.stringify
+       (Js.Json.JObject [ ("ref", el); ("class", Js.Json.JString c) ]))
+
+let el_class_remove (el : element) (c : string) : unit =
+  (match node_id_of el with
+   | Some node ->
+       class_list el
+       |> List.filter (fun k -> k <> c)
+       |> String.concat " "
+       |> overlay_set_attr node "class"
+   | None -> ());
+  Host.dom_op "class-remove"
+    (Js.Json.stringify
+       (Js.Json.JObject [ ("ref", el); ("class", Js.Json.JString c) ]))
+
+let el_set_class (el : element) (c : string) : unit =
+  (match node_id_of el with
+   | Some node -> overlay_set_attr node "class" c
+   | None -> ());
+  Host.dom_op "set-class"
+    (Js.Json.stringify
+       (Js.Json.JObject [ ("ref", el); ("class", Js.Json.JString c) ]))
+
+let el_scroll_into_view (el : element) : unit =
+  Host.dom_op "scroll-into-view"
+    (Js.Json.stringify (Js.Json.JObject [ ("ref", el) ]))
+
+let el_set_scroll_top (el : element) (v : float) : unit =
+  Host.dom_op "set-scroll-top"
+    (Js.Json.stringify
+       (Js.Json.JObject
+          [ ("ref", el); ("top", Js.Json.JNumber v) ]))
+
+let el_click (el : element) : unit =
+  Host.dom_op "click"
+    (Js.Json.stringify (Js.Json.JObject [ ("ref", el) ]))
+
+let el_select_text (el : element) : unit =
+  Host.dom_op "select"
+    (Js.Json.stringify (Js.Json.JObject [ ("ref", el) ]))
+
+let el_set_checked (el : element) (v : bool) : unit =
+  Host.dom_op "set-checked"
+    (Js.Json.stringify
+       (Js.Json.JObject [ ("ref", el); ("checked", Js.Json.JBoolean v) ]))
+
+(* b inside a: the snapshot ancestors chain carries a when nested *)
+let el_contains (a : element) (b : element) : bool =
+  let ka = el_key a in
+  ka <> ""
+  && List.exists (fun anc -> el_key anc = ka) (ancestors_of b)
+
+let el_id (el : element) : string =
+  Option.value (dom_id_of el) ~default:""
+
+let el_editable (el : element) : bool =
+  let t = tag_name el in
+  t = "textarea" || t = "input" || t = "select"
+  || get_attribute el "contenteditable" = Some "true"
+
+let el_checked (el : element) : bool =
+  Option.value (bool_prop "checked" el) ~default:false
+
+(* Snapshot props — present when the host measured; 0 otherwise *)
+let el_scroll_top (el : element) : float =
+  Option.value (num_prop "scrollTop" el) ~default:0.
+
+let el_scroll_height (el : element) : float =
+  Option.value (num_prop "scrollHeight" el) ~default:0.
+
+let el_client_height (el : element) : float =
+  Option.value (num_prop "clientHeight" el) ~default:0.
+
+let el_offset_width (el : element) : float =
+  let r = bounding_rect el in
+  rect_width r
+
+(* get_element_by_id keeps the ref-handle element shape live_ids used:
+   {#ref, ref-id} resolves through the same dom-op/measure paths. *)
+let by_id (id : string) : element option =
+  let in_docs =
+    List.exists (fun el -> dom_id_of el = Some id)
+      (!doc_elements_provider ())
+  in
+  if in_docs || id <> "" then
+    Some
+      (Js.Json.JObject
+         [ ("#ref", Js.Json.JString id); ("ref-id", Js.Json.JString id) ])
+  else
+    None
+
+(* document.activeElement — focus/blur document events carry the
+   target's ref-id *)
+let last_active_id : string option ref = ref None
+
+let () =
+  add_document_listener "focus"
+    (fun ev ->
+      last_active_id :=
+        (match prop "target" ev with
+         | Js.Json.JObject _ as t -> str_prop "ref-id" t
+         | _ -> None))
+    true;
+  add_document_listener "blur" (fun _ -> last_active_id := None) true
+
+let active_element () : element option =
+  match !last_active_id with
+  | Some id -> by_id id
+  | None -> None
