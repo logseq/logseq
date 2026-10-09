@@ -75,6 +75,49 @@ let scan m =
   sweep draggables K.destroy_draggable;
   sweep droppables K.destroy_droppable
 
+(* ---------- drop indicator ---------- *)
+(* cljs dnd-separator: absolute line inside the drag-to block, left 20
+   (48 when :nested), full width, 3px bottom border. Ours is a fixed
+   overlay positioned from the target row's rect; "top" draws above the
+   row, sibling/nested below it (nested shifts right 48px like cljs). *)
+
+let indicator : element option ref = ref None
+
+let indicator_el () =
+  match !indicator with
+  | Some el -> el
+  | None ->
+      let el = Web_dom.create_element "div" in
+      Web_dom.el_set_class el "dnd-separator ls-dnd-drop-indicator";
+      Web_dom.el_append_child Web_dom.document_body el;
+      indicator := Some el;
+      el
+
+let show_indicator tgt_el move_to =
+  let el = indicator_el () in
+  let row =
+    match Web_dom.el_query tgt_el ".block-main-container" with
+    | Some r -> r
+    | None -> tgt_el
+  in
+  let r = Web_dom.el_bounding_rect row in
+  let off = if move_to = "nested" then 48.0 else 20.0 in
+  let y =
+    if move_to = "top" then Web_dom.rect_top r
+    else Web_dom.rect_bottom r -. 3.0
+  in
+  Web_dom.el_style_set_property el "left"
+    (Printf.sprintf "%gpx" (Web_dom.rect_left r +. off));
+  Web_dom.el_style_set_property el "top" (Printf.sprintf "%gpx" y);
+  Web_dom.el_style_set_property el "width"
+    (Printf.sprintf "%gpx" (Float.max 0.0 (Web_dom.rect_width r -. off)));
+  Web_dom.el_style_set_property el "display" "block"
+
+let hide_indicator () =
+  match !indicator with
+  | Some el -> Web_dom.el_style_set_property el "display" "none"
+  | None -> ()
+
 (* ---------- drag lifecycle ---------- *)
 
 let dragging_uuid : string option ref = ref None
@@ -84,7 +127,8 @@ let on_drag_start ev _m =
   (match K.op_source (K.ev_operation ev) with
    | Some d -> dragging_uuid := Some (K.entity_uuid (K.entity_data d))
    | None -> ());
-  drop_target := None
+  drop_target := None;
+  hide_indicator ()
 
 (* pointer coordinates for a monitor event: the native pointer event
    when present (dragstart/dragmove/dragend), else the operation
@@ -117,8 +161,11 @@ let update_drop_target src tgt_el page_x client_y =
         else if x_off > 50.0 then "nested"
         else "sibling"
       in
-      drop_target := Some (tgt, move_to)
-  | _ -> drop_target := None
+      drop_target := Some (tgt, move_to);
+      show_indicator tgt_el move_to
+  | _ ->
+      drop_target := None;
+      hide_indicator ()
 
 (* dragmove (per pointer move) and dragover (per target change) share
    this: over a valid block -> Some(tgt, move_to); over an invalid one
@@ -147,7 +194,8 @@ let on_drag_end ev _m =
          A.drop_dragged_block src tgt move_to
      | _ -> ());
   dragging_uuid := None;
-  drop_target := None
+  drop_target := None;
+  hide_indicator ()
 
 (* ---------- install ---------- *)
 
