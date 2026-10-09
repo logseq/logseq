@@ -553,14 +553,14 @@ let () = Asset_dom.install ()
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    ?(virtualize = false) (b : Model.block) : t =
+    ?(virtualize = false) ?(virt_nested = true) (b : Model.block) : t =
 
  fun ctx parent ->
   S.ensure ctx;
   (* host fixups (stripped lui-node ids) — registered at first mount;
      module init runs before Ui_services.install so it can't live there *)
   Ui_services.dom_ensure_fixups ();
-  (row_el ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope b) ctx parent
+  (row_el ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize ~virt_nested scope b) ctx parent
 
 
 (* the .block-main-container subtree — everything inside .ls-block
@@ -631,7 +631,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
             ]
         ]
 
-and row_el ~depth ~editable ~virtualize scope ~(library : bool)
+and row_el ~depth ~editable ~virtualize ~virt_nested scope ~(library : bool)
     (b : Model.block) : t =
 
   let uuid = Option.value b.block_uuid ~default:"" in
@@ -660,18 +660,19 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
          Render.query_below_el uuid
        else Logseq_el.nothing)
     ; (if has_children && not (Comments.is_comments_area b) then
-         children_el ~depth ~editable ~library ~virtualize uuid scope b
+         children_el ~depth ~editable ~library ~virtualize ~virt_nested uuid scope b
        else Logseq_el.nothing)
     ])
 
 (* keyed-row variant of row_el: the .ls-block shell is a stable node
    (keyed reconcile needs a node per item) and the content inside it is
    rebuilt only when the row's own block record changes *)
-and row_sig ~depth ~editable ~library ~virtualize scope
+and row_sig ~depth ~editable ~library ~virtualize ~virt_nested scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   let b0 = Signal.get bs in
   let key = block_key b0 in
+  let uuid0 = Option.value b0.Model.block_uuid ~default:"" in
   (* the record isn't the only input to row_main: Render resolves
      [[uuid]]/((uuid))/#[[uuid]] refs through Render_inline's pull cache
      at mount, and an untouched record keeps its mount on every
@@ -695,10 +696,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
             || contains_sub title ("((" ^ u ^ "))"))
       ib
   in
-  (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
-    (column ~key:("ls-" ^ scope ^ "-" ^ key)
-       ~accessibility_identifier:("ls-block-" ^ key)
-       ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth bs)
+  let content =
     [ reactive
         ~equal:
           (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
@@ -711,8 +709,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
                 let g, i = Render_inline.invalidation () in
                 (b, g, i))
               bs (S.invalidation_sig ())))
-    ; Properties_area.block_area
-        ~uuid:(Option.value b0.Model.block_uuid ~default:"")
+    ; Properties_area.block_area ~uuid:uuid0
     ; (* the query/cards shell keys off the live block record — a block
          that becomes a query/cards block after mount (title or property
          edit) republishes bs and mounts the section instead of keeping
@@ -724,13 +721,51 @@ and row_sig ~depth ~editable ~library ~virtualize scope
                 (fun (b : Model.block) ->
                   Render.is_query_block b || Render.is_cards_block b)
                 bs))
-        (Render.query_below_el
-           (Option.value b0.Model.block_uuid ~default:""))
-    ; row_children ~depth ~editable ~library ~virtualize scope bs
-    ]))
+        (Render.query_below_el uuid0)
+    ; row_children ~depth ~editable ~library ~virtualize ~virt_nested
+        scope bs ]
+  in
+  let children =
+    if virtualize then (
+      (* cljs lazy-block: inside a windowed page the .ls-block shell
+         mounts eagerly (the keyed list needs a node and the page
+         virtualizer measures it) while the row's content latches on
+         viewport proximity — offscreen rows stay a min-height spacer
+         until scrolled near. The editing row mounts immediately so a
+         programmatic enter_edit can't land on a placeholder *)
+      let near0, far =
+        Lazy_children.gate_sigs ~el_id:("ls-block-" ^ key) ~uuid:uuid0
+          ctx
+      in
+      let near =
+        Logseq_el.own ctx
+          (Signal.map2
+             (fun n (e : S.editing option) ->
+               n
+               ||
+               (match e with
+                | Some e -> e.S.uuid = uuid0
+                | None -> false))
+             near0 (S.editing_sig ()))
+      in
+      [ Lui_elements.if_ ~test:far
+          (spacer ~key:"row-ph"
+             ~min_height:
+               (int_of_float
+                  (Float.round (32. +. estimate_children_height b0)))
+             [])
+      ; Lui_elements.if_ ~test:near
+          (column ~key:"row-content" ~grow:1. content) ])
+    else content
+  in
+  (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
+    (column ~key:("ls-" ^ scope ^ "-" ^ key)
+       ~accessibility_identifier:("ls-block-" ^ key)
+       ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth bs)
+       children))
     ctx parent
 
-and row_children ~depth ~editable ~library ~virtualize scope
+and row_children ~depth ~editable ~library ~virtualize ~virt_nested scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   (* gate only on show/hide: children membership changes go through the
@@ -752,17 +787,17 @@ and row_children ~depth ~editable ~library ~virtualize scope
   let b = Signal.get bs in
   let uuid = Option.value b.block_uuid ~default:"" in
   if_ ~test:show_sig
-    (children_dom ~depth ~editable ~library ~virtualize uuid scope bs)
+    (children_dom ~depth ~editable ~library ~virtualize ~virt_nested uuid scope bs)
     ctx parent
 
 and block_row_sig
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    ?(virtualize = false) (bs : Model.block Signal.signal) : t =
+    ?(virtualize = false) ?(virt_nested = true) (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   S.ensure ctx;
   let b0 = Signal.get bs in
   (if b0.Model.block_is_comments_area then Comments_view.area_el bs
-   else row_sig ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope bs)
+   else row_sig ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize ~virt_nested scope bs)
     ctx parent
 
 (* rough rendered height of an unmounted subtree — cljs
@@ -781,7 +816,7 @@ and estimate_children_height (b : Model.block) : float =
 (* the content of .block-children: cljs virtualizable-block-list is the
    render-children at every nesting level — a sibling list of >=64 gets
    its own windowed list inside .blocks-list-wrap *)
-and child_list ~depth ~editable ~library ~virtualize uuid scope
+and child_list ~depth ~editable ~library ~virtualize ~virt_nested uuid scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   let kids = S.children_of (Signal.get bs) in
@@ -791,11 +826,11 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
        :: (if List.length kids >= 64 then
              [ ("data-virtuoso-scroller", "true") ]
            else []))
-    (if virtualize && List.length kids >= 64 then
+    (if virtualize && virt_nested && List.length kids >= 64 then
        [ Virt_list.list ~key_of:block_key ~estimate_size:(fun _ -> 32.)
            ~initial_rows:48
            ~render:(block_row ~scope ~editable ~depth:(depth + 1) ~library
-                      ~virtualize)
+                      ~virtualize ~virt_nested)
            (Array.of_list kids) ]
      else
        (* keyed like the top-level list: indent/outdent/move splices a
@@ -805,10 +840,10 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
            ~source:(Logseq_el.own ctx (Signal.map S.children_of bs))
            ~key:block_key ~cmp:String.compare
            ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
-                     ~library ~virtualize) ]))
+                     ~library ~virtualize ~virt_nested) ]))
     ctx parent
 
-and children_dom ~depth ~editable ~library ~virtualize uuid scope
+and children_dom ~depth ~editable ~library ~virtualize ~virt_nested uuid scope
     (bs : Model.block Signal.signal) : t =
   let b = Signal.get bs in
   row ~key:("children-" ^ uuid)
@@ -837,7 +872,7 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
          Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
            ~min_height:(estimate_children_height b)
            ~render:(fun () ->
-             child_list ~depth ~editable ~library ~virtualize uuid scope
+             child_list ~depth ~editable ~library ~virtualize ~virt_nested uuid scope
                bs)
        else
          column ~key:("clist-" ^ uuid) ~style_class:"block-children"
@@ -849,12 +884,12 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
                )
              ]
            ~grow:1.
-           [ child_list ~depth ~editable ~library ~virtualize uuid scope
+           [ child_list ~depth ~editable ~library ~virtualize ~virt_nested uuid scope
                bs
            ])
     ]
 
-and children_el ~depth ~editable ~library ~virtualize uuid scope
+and children_el ~depth ~editable ~library ~virtualize ~virt_nested uuid scope
     (b : Model.block) : t =
  fun ctx parent ->
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
@@ -867,7 +902,7 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
                 (effective_collapsed_cv ~scope uuid
                    b.block_default_collapsed v))
             (S.collapse_sig ())))
-    (children_dom ~depth ~editable ~library ~virtualize uuid scope bs)
+    (children_dom ~depth ~editable ~library ~virtualize ~virt_nested uuid scope bs)
     ctx parent
 
 (* Read-only row for linked-reference lists: same shell as row_el but the

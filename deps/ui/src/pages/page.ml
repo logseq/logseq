@@ -1016,7 +1016,14 @@ let journal_item_sig (ms : Model.t Signal.signal)
                                ~key:Tree.block_key ~cmp:String.compare
                                ~estimate_height:(fun b ->
                                  32. +. Tree.estimate_children_height b)
-                               ~mount:(Tree.block_row_sig ~scope:"main")
+                               (* virtualize:true switches journal rows
+                                  to cljs lazy-block semantics (IO gate
+                                  per row); virt_nested:false keeps a
+                                  >=64 sibling list from nesting a
+                                  second Virt_list inside the day item *)
+                               ~mount:
+                                 (Tree.block_row_sig ~scope:"main"
+                                    ~virtualize:true ~virt_nested:false)
                            ])
                     ; (* cljs journal-page mounts add-button inside
                          .page-blocks-inner per day *)

@@ -1086,16 +1086,11 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                     in
                     S.open_cm_edit st ~ax ~atop ~abot ~block_id:id)
                   else
-                    (* web: mirror the model selection into a live DOM
-                       selection so the browser's own menu offers real
-                       text items (Copy, Look Up…), then let it open *)
-                    match Editor_actions.edit_model id with
-                    | Some m -> (
-                        match Edit_model.selection_range m with
-                        | Some (lo, hi) ->
-                            Editor_sink.select_range id lo hi
-                        | None -> ())
-                    | None -> ())
+                    (* web: let the browser's own context menu open —
+                       the model selection is already mirrored into a
+                       live DOM range by editor_surface, so the menu
+                       offers real text items (Copy, Look Up…) *)
+                    ())
               | Some id, (first :: _ as sel)
                 when List.exists (fun u -> u = id) sel ->
                   ev.Ui_services.prevent_default ();

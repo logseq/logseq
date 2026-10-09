@@ -41,6 +41,16 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
      [ Lui_elements.if_ ~test:near_sig (render ()) ])
     ctx parent
 
+(* Shared-API twin of virt/lazy_children.gate_sigs — the per-row gate
+   inside row_sig. Always eager here: the gpui host already gates
+   whole rows at the lazy_rows level (near_states + batched
+   lazy-mount), and rows outside that container have no proximity
+   source to lift an inner latch — they would stay placeholders
+   forever. *)
+let gate_sigs ~el_id:_ ~uuid:_ ctx : bool Signal.signal * bool Signal.signal =
+  ( Signal.constant ctx.Lui_ui.ui_scheduler true
+  , Signal.constant ctx.Lui_ui.ui_scheduler false )
+
 (* Parse the uuids array out of a batched lazy-mount payload. *)
 let uuids_of_payload payload =
   match payload with
