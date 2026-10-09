@@ -340,13 +340,10 @@ let practice_el ~eid =
     ~label:(I18n.t "block/practice-cards")
     ~text:(I18n.t "block/practice")
     ~on_press:(fun _ ->
-      Web_dom.dispatch_custom "ls:open-cards"
+      Ui_services.dom_dispatch_json "ls:open-cards"
         (match eid with
-         | Some id ->
-             let o = Js.Dict.empty () in
-             Js.Dict.set o "eid" (Js.Json.number (Float.of_int id));
-             Js.Json.object_ o
-         | None -> Js.Json.null))
+         | Some id -> Json.Object [ ("eid", Json.Number (Float.of_int id)) ]
+         | None -> Json.Null))
     []
 
 let is_query_block (b : Model.block) =

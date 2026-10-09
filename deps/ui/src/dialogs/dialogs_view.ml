@@ -241,19 +241,17 @@ let render (ms : Model.t Signal.signal) : t =
              close button never gets a focus ring) *)
           (try
              ignore
-               (Web_dom.set_timeout
-                  (fun () ->
+               (Ui_services.timers_later ~ms:16 (fun () ->
                     match
-                      Web_dom.query_selector ".ui__dialog-content [autofocus]"
+                      Ui_services.dom_query ".ui__dialog-content [autofocus]"
                     with
-                    | Some el -> Web_dom.el_focus el
+                    | Some el -> el.Ui_services.focus ()
                     | None -> (
-                        match Web_dom.query_selector ".ui__dialog-content" with
+                        match Ui_services.dom_query ".ui__dialog-content" with
                         | Some el ->
-                            Web_dom.el_set_attr el "tabindex" "-1";
-                            Web_dom.el_focus el
-                        | None -> ()))
-                  16)
+                            el.Ui_services.set_attr "tabindex" "-1";
+                            el.Ui_services.focus ()
+                        | None -> ())))
            with _ -> ());
           v)
     ; reactive ~equal:( == ) (fun c ->

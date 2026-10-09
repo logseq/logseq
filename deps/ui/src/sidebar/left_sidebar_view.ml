@@ -15,6 +15,13 @@ module D = Logseq_el
 
 let t = Sidebar_state.t
 
+(* Ui_services-el twin of Popups_state.anchor_of_el (which is still
+   typed on the old dom element — collapse back once popups_state
+   migrates) *)
+let anchor_of_ui_el (el : Ui_services.el) =
+  let x, y, w, h = el.Ui_services.rect () in
+  (x +. (w /. 2.), y, y +. h)
+
 (* component icon: tabler names go through the `app:` registry (the only
    cljs name matching a builtin is chevron-right). The `ui__icon` class
    carries over from the cljs span wrapper; `ti`/`ls-icon-*` font classes
@@ -146,7 +153,7 @@ let plugins_menu st =
         (* cljs anchors right:16px; ~at is left-edge so place it at
            viewport-right - 16 - min-width (the positioner clamps wider
            content against the right edge the same way right:16 did) *)
-        ~at:(Web_dom.win_inner_width -. 216., 64.)
+        ~at:(Ui_services.dom_viewport_width () -. 216., 64.)
         (reactive
            (fun _dirty ->
              column ~key:"pm-body"
@@ -200,7 +207,7 @@ let lp_menu st =
       let x =
         Float.max ((w /. 2.) +. 5.)
           (Float.min ax
-             (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
+             (Ui_services.dom_viewport_width () -. (w /. 2.) -. 5.))
       in
       popover ~key:"lp-menu" ~at:(x, if flip then atop else abot)
         ~role:`menu
@@ -352,7 +359,7 @@ let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
   nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name ?shortcut
     ~on_click:(fun () ->
       Ui_services.nav_set_hash (Runtime.nav_hash hash);
-      Web_dom.dispatch_custom "ls:navigate" Js.Json.null)
+      Ui_services.dom_dispatch "ls:navigate")
     ()
 
 let tag_nav ~active_route class_ label titles =
@@ -460,8 +467,7 @@ let nav_group ms st =
                               (fun (h, _) ->
                                 Ui_services.nav_set_hash
                                   (Runtime.nav_hash h);
-                                Web_dom.dispatch_custom "ls:navigate"
-                                  Js.Json.null;
+                                Ui_services.dom_dispatch "ls:navigate";
                                 Router.scroll_to_top ();
                                 Js.Promise.resolve ())
                               (Router.go_to_journals_target ())))
@@ -503,14 +509,15 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                not the press point *)
             let ax, atop, abot =
               match
-                Option.bind (Web_dom.element_at d.x d.y) (fun hit ->
+                Option.bind (Ui_services.dom_element_at d.x d.y)
+                  (fun hit ->
                     match
-                      Web_dom.el_closest hit ".sidebar-page-actions"
+                      hit.Ui_services.closest ".sidebar-page-actions"
                     with
                     | Some btn -> Some btn
                     | None -> Some hit)
               with
-              | Some btn -> Popups_state.anchor_of_el btn
+              | Some btn -> anchor_of_ui_el btn
               | None -> Popups_state.anchor_at_point ~x:d.x ~y:d.y
             in
             Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~ax
@@ -685,18 +692,17 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                  falls back to the raw rect if it never resolves *)
               let rec open_at_rect tries =
                 match
-                  Web_dom.query_selector ".cp__graphs-selector .item"
+                  Ui_services.dom_query ".cp__graphs-selector .item"
                 with
-                | Some el ->
-                    let r = Web_dom.el_bounding_rect el in
-                    if Web_dom.rect_width r > 0. || tries <= 0 then
+                | Some el -> (
+                    let x, y, w, h = el.Ui_services.rect () in
+                    if w > 0. || tries <= 0 then
                       Sidebar_state.open_repos_menu st
-                        ~x:(Web_dom.rect_left r -. 4.)
-                        ~y:(Web_dom.rect_bottom r)
+                        ~x:(x -. 4.)
+                        ~y:(y +. h)
                     else
-                      Web_dom.set_timeout
-                        (fun () -> open_at_rect (tries - 1))
-                        32
+                      Ui_services.timers_later ~ms:32 (fun () ->
+                          open_at_rect (tries - 1)))
                 | None -> ()
               in
               open_at_rect 4)

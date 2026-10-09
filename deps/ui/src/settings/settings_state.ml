@@ -36,7 +36,7 @@ let poke () =
 let repo = Runtime.repo
 
 let set_tab tab =
-  Web_dom.body_set_data "settingsTab" tab;
+  (Ui_services.dom_body ()).Ui_services.set_attr "data-settings-tab" tab;
   set (fun s -> { s with tab })
 
 (* cljs open-settings! <tab> — the tab the next activate applies.
@@ -117,7 +117,7 @@ let activate () =
     | Some t -> pending_tab := None; t
     | None -> "general"
   in
-  Web_dom.body_set_data "settingsTab" tab;
+  (Ui_services.dom_body ()).Ui_services.set_attr "data-settings-tab" tab;
   if ready () then (Signal.set (state ()) { (value ()) with tab }; load ())
 
 let deactivate () = Ui_services.doc_rm_data "settingsTab"
@@ -213,8 +213,10 @@ let toggle_wide_mode () =
   let v = not (storage_bool "wide-mode" ~default:false) in
   storage_set_bool "wide-mode" v;
   poke ();
-  match Web_dom.query_selector "#app-container-wrapper" with
-  | Some el -> (if v then Web_dom.el_class_add else Web_dom.el_class_remove) el "ls-wide-mode"
+  match Ui_services.dom_query "#app-container-wrapper" with
+  | Some el ->
+      (if v then el.Ui_services.add_class else el.Ui_services.remove_class)
+        "ls-wide-mode"
   | None -> ()
 
 let toggle_shortcut_tooltip () =

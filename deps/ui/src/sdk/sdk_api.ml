@@ -22,11 +22,7 @@ let invoke_external_command a _b _c _d =
    category (plugins_view reads + clears the pending tab) *)
 let show_themes _a _b _c _d =
   Plugin_host.pending_dialog_tab := Some "themes";
-  ignore
-    (Web_dom.dispatch_custom "ls:open-dialog"
-       (Js.Json.object_
-          (Js.Dict.fromList
-             [ ("name", Js.Json.string "plugins") ])));
+  Ui_services.dom_open_dialog "plugins";
   Sdk_util.resolved_nil
 
 let api_methods : (string * api_fn) list =

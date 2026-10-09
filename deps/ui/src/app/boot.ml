@@ -49,8 +49,8 @@ let apply_storage_env () =
     | None -> false
   in
   if wide then
-    match Web_dom.query_selector "#app-container-wrapper" with
-    | Some el -> Web_dom.el_class_add el "ls-wide-mode"
+    match Ui_services.dom_query "#app-container-wrapper" with
+    | Some el -> el.Ui_services.add_class "ls-wide-mode"
     | None -> ()
 
 (* pick the graph to open (cljs graph/resolve-startup-repo): the repo a
