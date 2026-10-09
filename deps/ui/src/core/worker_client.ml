@@ -169,8 +169,9 @@ let create () =
     t)
   else
     let worker =
-      Comlink.new_worker
+      Comlink.new_module_worker
         "js/db-worker.js?electron=false&capacitor=false&publishing=false"
+        (Comlink.module_worker_opts ())
     in
     set_worker_fs worker;
     let proxy = Comlink.wrap worker in

@@ -26,13 +26,9 @@ let set_post_fn f = Broadcast.set_post_fn f
 
 (* ==== standalone browser worker ==== *)
 
-(* Dedicated-worker globals: importScripts exists in a worker scope
-   but not on the window main thread; Comlink.expose installs the
-   remote-call endpoint on self; Comlink.transfer marks a value's
-   buffer as transferable so export payloads cross without copying. *)
-external import_scripts : string -> unit = "importScripts"
-  [@@mel.scope "globalThis"]
-
+(* Comlink.expose installs the remote-call endpoint on self;
+   Comlink.transfer marks a value's buffer as transferable so export
+   payloads cross without copying. *)
 external comlink_expose : 'a -> unit = "expose" [@@mel.module "comlink"]
 external comlink_transfer : 'a -> 'b array -> 'a = "transfer"
   [@@mel.module "comlink"]
@@ -135,13 +131,15 @@ let exposed_object =
     ; remoteInvokeBinary = remote_invoke_binary_js
     }]
 
-(* cljs db-worker init + ensure-worker-bootstrap!. *)
+(* cljs db-worker init + ensure-worker-bootstrap!. The lightning-fs
+   bootstrap importScripts("worker.js") performed in the classic-worker
+   build is replaced by the ES-module entry (entry_browser.mjs), which
+   imports those globals directly — module workers have no
+   importScripts. *)
 let start_browser_worker () =
   (match Js.Undefined.toOption (global_get global_this bootstrap_flag) with
    | Some _ -> ()
-   | None ->
-       global_set global_this bootstrap_flag true;
-       import_scripts "worker.js");
+   | None -> global_set global_this bootstrap_flag true);
   Worker_core.init ();
   Db_worker_effect.async (fun () -> Idb.init ());
   comlink_expose exposed_object;
@@ -153,10 +151,10 @@ let start_browser_worker () =
 
 (* Module-init side effect: inside a dedicated worker scope the
    bundle installs the worker surface immediately — matching the
-   cljs db-worker.js, which ran init at load. In a window or Node
-   context this is inert. *)
+   cljs db-worker.js, which ran init at load. The module-worker build
+   has no importScripts global, so detection is just the absence of
+   Node's process global (Runtime_env.kind); a window context never
+   loads this bundle. *)
 let () =
   if Runtime_env.kind () = Runtime_env.Browser_worker
-     && Js.Undefined.toOption (global_get global_this "importScripts")
-        <> None
   then start_browser_worker ()

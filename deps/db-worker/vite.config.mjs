@@ -19,7 +19,7 @@ import { browserVectorBackend } from "./browser-platform.mjs";
 
 const browserEntry = resolve(
   import.meta.dirname,
-  "_build/default/js_api/js_api/js_api/entry_worker.js",
+  "js_api/entry_browser.mjs",
 );
 
 const nodeEntry = resolve(
@@ -152,16 +152,18 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    // Relative base: sqlite-wasm resolves its vfs worker URL off
-    // self.location.href, so assets land next to db-worker.js and the
+    // Relative base: sqlite-wasm resolves its vfs worker + wasm URLs
+    // off import.meta.url, so assets land next to db-worker.js and the
     // same URLs work under the app's origin and under Capacitor's
-    // scheme on mobile.
+    // scheme on mobile. ES format + code splitting: mobile Safari
+    // workers overflow their small stack compiling a single multi-MB
+    // classic script (RangeError before the first statement runs);
+    // module workers parse chunk files independently.
     base: "./",
     build: {
       lib: {
         entry: browserEntry,
-        formats: ["iife"],
-        name: "LogseqDbWorker",
+        formats: ["es"],
         fileName: () => "db-worker.js",
       },
       outDir: resolve(import.meta.dirname, "../../static/js"),
@@ -169,35 +171,19 @@ export default defineConfig(({ mode }) => {
       minify: true,
       sourcemap: false,
       rollupOptions: {
-        // Classic-worker IIFE has no import.meta; sqlite-wasm resolves
-        // its vfs worker + wasm URLs relative to it. Polyfill per
-        // rolldown's non-ESM output format docs: define rewrites the
-        // references, intro binds the worker script URL.
-        transform: {
-          define: {
-            "import.meta.url": "__db_worker_import_meta_url__",
-          },
-        },
         output: {
-          codeSplitting: false,
-          intro: `var __db_worker_import_meta_url__ = self.location.href;${metadataIntro}`,
+          intro: metadataIntro,
+          chunkFileNames: "chunks/[name]-[hash].js",
+          // Force ~256KB chunks regardless of import shape: mobile
+          // Safari workers overflow their small stack compiling one
+          // multi-MB file (RangeError before the first statement).
+          advancedChunks: {
+            groups: [{ name: "w", test: /[\s\S]*/, maxSize: 262144 }],
+          },
         },
       },
     },
-    plugins: [
-      browserVectorBackend(),
-      {
-        name: "worker-url-base",
-        // With base './' the URL rewriter emits
-        // `document.currentScript || document.baseURI` as the base;
-        // neither exists in a worker scope — substitute the worker
-        // script URL bound by the intro.
-        renderChunk: (code) =>
-          code
-            .replaceAll("document.currentScript", "undefined")
-            .replaceAll("document.baseURI", "__db_worker_import_meta_url__"),
-      },
-    ],
+    plugins: [browserVectorBackend()],
     resolve: {
       alias: [
         // Node-only modules are only reached under Node runtime

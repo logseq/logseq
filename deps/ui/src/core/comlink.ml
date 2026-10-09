@@ -12,6 +12,18 @@ type proxy
 
 external new_worker : string -> worker = "Worker" [@@mel.new]
 
+(* The db-worker bundle ships as an ES module: mobile Safari workers
+   overflow their small call stack compiling a single multi-MB classic
+   script, so the worker must be created with {type: "module"} to match
+   the chunked module output. *)
+external new_module_worker :
+  string -> string Js.Dict.t -> worker = "Worker" [@@mel.new]
+
+let module_worker_opts () =
+  let opts = Js.Dict.empty () in
+  Js.Dict.set opts "type" "module";
+  opts
+
 external worker_post_message : worker -> string -> unit = "postMessage"
   [@@mel.send]
 
