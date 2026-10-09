@@ -566,3 +566,42 @@ let move_selected_top_blocks (page : page) (uuids : string list) (up : bool)
             Array.blit arr first arr (first + 1) n;
             arr.(first) <- pivot);
           { page with page_blocks = Array.to_list arr }
+
+(* Preserve record identity across refresh decodes: a re-fetched block
+   that is structurally unchanged keeps its previous record (and
+   unchanged descendants theirs), so keyed reconcile's `==` fast path
+   and row_sig's ~equal see the same object — fresh records for
+   untouched rows would otherwise republish every mounted row on each
+   refresh. Children pair by uuid, not position, so splices still match
+   correctly. *)
+let rec merge_blocks (prev : block list) (next : block list) : block list =
+  match prev with
+  | [] -> next
+  | _ ->
+      let table =
+        List.fold_left
+          (fun t (b : block) ->
+            match b.block_uuid with
+            | Some u -> (u, b) :: t
+            | None -> t)
+          [] prev
+      in
+      List.map
+        (fun (b : block) ->
+          match b.block_uuid with
+          | Some u -> (
+              match List.assoc_opt u table with
+              | Some old -> merge_block old b
+              | None -> b)
+          | None -> b)
+        next
+
+and merge_block (old : block) (b : block) : block =
+  if old = b then old
+  else if old.block_uuid <> b.block_uuid then b
+  else
+    { b with
+      block_children = merge_blocks old.block_children b.block_children
+    ; block_embed_children =
+        merge_blocks old.block_embed_children b.block_embed_children
+    }

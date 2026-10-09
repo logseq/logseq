@@ -763,7 +763,12 @@ let refresh_page () : unit Js.Promise.t =
                 would tear the open editor (stale model resyncs) *)
       if !refresh_gen <> gen then Js.Promise.resolve ()
       else
-        let page = { page with Model.page_blocks = blocks } in
+        let page =
+          { page with
+            Model.page_blocks =
+              Model.merge_blocks page.Model.page_blocks blocks
+          }
+        in
         let* page =
           (match Runtime.route () with
            | Model.Block_zoom uuid ->
@@ -1052,7 +1057,11 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
                             (fetch_page_blocks repo p)
                         in
                         refetch
-                          ({ p with Model.page_blocks = blocks } :: acc)
+                          ({ p with
+                             Model.page_blocks =
+                               Model.merge_blocks p.Model.page_blocks blocks
+                           }
+                          :: acc)
                           rest
                 in
                 let* js' = refetch [] start_js in

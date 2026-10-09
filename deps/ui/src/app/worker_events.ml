@@ -207,7 +207,10 @@ let init () =
                  in
                  let* p' =
                    Outliner_ops.resolve_page_tags repo
-                     { p with Model.page_blocks = blocks }
+                     { p with
+                       Model.page_blocks =
+                         Model.merge_blocks p.Model.page_blocks blocks
+                     }
                  in
                  Js.Promise.resolve (Some p'))))
     };
