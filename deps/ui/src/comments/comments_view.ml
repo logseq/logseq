@@ -61,12 +61,12 @@ let submit_comment area_uuid (text : string) =
     (* the keyed textarea node is reused across re-renders, so its DOM
        value has to be cleared explicitly or the submitted text sticks *)
     (match
-       Web_dom.query_selector
+       Ui_services.dom_query
          ("#area-" ^ area_uuid ^ " .ls-comment-add textarea")
      with
      | Some ta ->
-         D.el_set_value ta "";
-         D.el_set_text_content ta ""
+         ta.Ui_services.set_value "";
+         ta.set_text ""
      | None -> ());
     ignore
       (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")

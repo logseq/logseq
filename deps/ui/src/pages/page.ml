@@ -482,9 +482,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     page.Model.page_db_collapsable || page.Model.page_is_tag
     || title_collapsed
     ||
-    (match Web_dom.query_selector ".ls-page-title .ls-block" with
+    (match Ui_services.dom_query ".ls-page-title .ls-block" with
      | Some tb ->
-         Web_dom.el_get_attr tb "data-db-collapsable" = Some "true"
+         tb.Ui_services.attr "data-db-collapsable" = Some "true"
      | None -> false)
   in
   (* cljs *control-show? atom: the fold caret appears only while the
@@ -1237,7 +1237,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
     and schedule_grow () =
       if not !grow_pending then begin
         grow_pending := true;
-        Web_dom.set_timeout grow 0
+        ignore (Ui_services.timers_timeout grow 0)
       end
     in
     ignore

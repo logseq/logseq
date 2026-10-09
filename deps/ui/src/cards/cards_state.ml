@@ -406,7 +406,9 @@ let open_modal st eid_opt =
         let rec wait_sel tries =
           let decks = Runtime.signal_get st.decks in
           if decks = [] && tries > 0 then
-            Web_dom.set_timeout (fun () -> wait_sel (tries - 1)) 20
+            ignore
+              (Ui_services.timers_timeout
+                 (fun () -> wait_sel (tries - 1)) 20)
           else (
             let idx =
               match
@@ -472,10 +474,10 @@ let advance_phase st =
    rating buttons (visible when next-phase = :init) *)
 let on_keydown ev st =
   if Runtime.signal_get st.open_ then
-    match Web_dom.event_str ev "key" with
-    | "Escape" -> close st
-    | "s" -> advance_phase st
-    | k ->
+    match ev.Ui_services.key with
+    | Some "Escape" -> close st
+    | Some "s" -> advance_phase st
+    | Some k ->
         let np =
           next_phase (cur_has_cloze st) (Runtime.signal_get st.phase)
         in
@@ -487,6 +489,7 @@ let on_keydown ev st =
           | "4" -> rate st "easy"
           | _ -> ()
         else ()
+    | None -> ()
 
 let init (ms : Model.t Signal.signal) : t =
   match !st_ref with
@@ -509,21 +512,15 @@ let init (ms : Model.t Signal.signal) : t =
         }
       in
       st_ref := Some st;
-      Web_dom.on_document_event "ls:open-cards" (fun ev ->
+      Ui_services.dom_on_document_event "ls:open-cards" (fun ev ->
           let eid_opt =
-            match Web_dom.ev_detail ev with
-            | Some d -> (
-                match Worker_client.json_field "eid" d with
-                | Some j -> (
-                    match Js.Json.classify j with
-                    | Js.Json.JSONNumber f -> Some (int_of_float f)
-                    | Js.Json.JSONString s -> int_of_string_opt s
-                    | _ -> None)
-                | None -> None)
+            match ev.Ui_services.detail "eid" with
+            | Some s -> int_of_string_opt s
             | None -> None
           in
           open_modal st eid_opt);
-      Web_dom.on_document_event "keydown" (fun ev -> on_keydown ev st);
+      Ui_services.dom_on_document_event "keydown" (fun ev ->
+          on_keydown ev st);
       st
 
 let ensure ms = ignore (init ms)
