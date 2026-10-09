@@ -26,8 +26,6 @@
 (rule
  (copy ../native/daemon_client.ml daemon_client.ml))
 (rule
- (copy ../native/dnd_kit.ml dnd_kit.ml))
-(rule
  (copy ../native/dom_ext.ml dom_ext.ml))
 (rule
  (copy ../src/editor/editor_cmds.ml editor_cmds.ml))
@@ -62,8 +60,6 @@
 (rule
  (copy ../native/logseq_katex.ml logseq_katex.ml))
 (rule
- (copy ../native/logseq_virt.ml logseq_virt.ml))
-(rule
  (copy ../native/menu_bar.ml menu_bar.ml))
 (rule
  (copy ../native/native_embed.ml native_embed.ml))
@@ -75,12 +71,6 @@
  (copy ../native/pdf_annotation.ml pdf_annotation.ml))
 (rule
  (copy ../native/pdf_assets.ml pdf_assets.ml))
-(rule
- (copy ../native/pdf_hls.ml pdf_hls.ml))
-(rule
- (copy ../native/pdf_toolbar.ml pdf_toolbar.ml))
-(rule
- (copy ../native/pdf_utils.ml pdf_utils.ml))
 (rule
  (copy ../native/platform.ml platform.ml))
 (rule
@@ -114,13 +104,7 @@
 (rule
  (copy ../native/views_popup.ml views_popup.ml))
 (rule
- (copy ../native/views_virt.ml views_virt.ml))
-(rule
  (copy ../native/virt_list.ml virt_list.ml))
-(rule
- (copy ../native/virtual_scroll.ml virtual_scroll.ml))
-(rule
- (copy ../native/virtualizer.ml virtualizer.ml))
 (rule
  (copy ../native/web_dom.ml web_dom.ml))
 (rule
@@ -299,8 +283,6 @@
  (copy ../src/popups/popups_view.ml popups_view.ml))
 (rule
  (copy ../src/properties/properties_area.ml properties_area.ml))
-(rule
- (copy ../src/properties/properties_calendar.ml properties_calendar.ml))
 (rule
  (copy ../src/properties/properties_dialog.ml properties_dialog.ml))
 (rule

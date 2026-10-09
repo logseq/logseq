@@ -180,11 +180,17 @@ let upload_paths (paths : string list) =
    Browser_ui.open_file_picker (host NSOpenPanel) and feeds the picked
    file snapshots through upload_paths. No hidden input node. *)
 let pick_files () =
+  let file_path (f : Js.Json.t) : string option =
+    match f with
+    | Js.Json.JObject kvs -> (
+        match List.assoc_opt "path" kvs with
+        | Some v -> Js.Json.decodeString v
+        | None -> None)
+    | _ -> None
+  in
   Browser_ui.open_file_picker (fun files ->
       upload_paths
-        (List.filter_map
-           (fun f -> Dom_ext.str_prop "path" f)
-           (Array.to_list files)))
+        (List.filter_map file_path (Array.to_list files)))
 
 let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()

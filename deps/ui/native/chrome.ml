@@ -58,7 +58,7 @@ let search_btn =
 let dots_btn =
   icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon:`ellipsis
     ~label:(I18n.t "header/more") (fun () ->
-      let x = Dom_ext.window_inner_width () -. 48. in
+      let x = Host.inner_width () -. 48. in
       Dom_ext.toolbar_dots_pos := Some (x, 48.);
       Runtime.send
         (Action.Page_menu_set (Some (x, 48., 48., true, None))))
@@ -398,7 +398,7 @@ let help_menu_popup () : t =
     Runtime.flush ()
   in
   popover ~key:"help-menu"
-    ~at:(Dom_ext.window_inner_width (), Dom_ext.window_inner_height () -. 52.)
+    ~at:(Host.inner_width (), Host.inner_height () -. 52.)
     ~anchor:`above ~anchor_alignment:`end_
     ~on_dismiss:(fun _ -> close ())
     [ column ~key:"help-menu-inner" ~style_class:"cp__sidebar-help-menu-popup"

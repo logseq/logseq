@@ -1,21 +1,24 @@
 (* Native port of export/export_page.ml — canvas/blob externals are
    stubbed; clipboard goes through the host; download_blob via dom-op. *)
 
-module B = Browser_ui
 open Promise_ext
 module W = Wire
 module S = Export_state
 module F = Export_formats
 
-(* html2canvas has no native port — png export resolves empty *)
+(* html2canvas has no native port — png export resolves empty; the
+   container probes below always miss on this host *)
 type canvas = unit
-let html2canvas_ (_ : B.E.t) (_ : Js.Json.t) : canvas Js.Promise.t =
+let qs (_ : string) : canvas option = None
+let html2canvas_ (_ : canvas) (_ : Js.Json.t) : canvas Js.Promise.t =
   Js.Promise.resolve ()
 let canvas_to_blob (_ : canvas) (_ : 'a -> unit) (_ : string) : unit = ()
-let computed_style (_ : B.E.t) : Js.Json.t = Js.Json.JObject []
+let computed_style (_ : canvas) : Js.Json.t = Js.Json.JObject []
 let css_prop (_ : Js.Json.t) (_ : string) : string = ""
-let el_scroll_height (_ : B.E.t) : float = 0.
-let body_el : B.E.t = 0
+let el_scroll_height (_ : canvas) : float = 0.
+let body_el : canvas = ()
+let set_attr (_ : canvas) (_ : string) (_ : string) : unit = ()
+let fmt_time (_ : float) : string = ""
 let blob_as_file (b : Webapi.Blob.t) : Webapi.File.t = b
 let clipboard_write_png (_ : Webapi.Blob.t) : unit Js.Promise.t =
   Js.Promise.resolve ()
@@ -145,7 +148,7 @@ let export_png (st : S.t Signal.state) =
     | u :: _ -> "[data-blockid='" ^ u ^ "']"
     | [] -> "#main-content-container"
   in
-  match B.qs selector with
+  match qs selector with
   | None -> ()
   | Some container ->
       let background =
@@ -160,10 +163,10 @@ let export_png (st : S.t Signal.state) =
           | v -> v
       in
       let options =
-        B.json_props
+        Js.Json.object_list
           ([ "allowTaint", Js.Json.boolean true
            ; "useCORS", Js.Json.boolean true
-           ; "backgroundColor", B.str_to_json background
+           ; "backgroundColor", Js.Json.JString background
            ; "x", Js.Json.number 0.
            ; "y", Js.Json.number 0.
            ; "width", Js.Json.null
@@ -192,8 +195,8 @@ let export_png (st : S.t Signal.state) =
                    { s with png = Some blob; png_url = Some url });
                Runtime.flush ();
                (* cljs sets img#export-preview .src imperatively *)
-               (match B.qs "#export-preview" with
-                | Some img -> B.set_attr img "src" url
+               (match qs "#export-preview" with
+                | Some img -> set_attr img "src" url
                 | None -> ())
            | None -> ())
          "image/png";
@@ -250,9 +253,9 @@ let copied_flash (st : S.t Signal.state) p =
   (let* _ = p in
   Signal.update st (fun s -> { s with copied = true });
   Runtime.flush ();
-  B.later ~ms:2000 (fun () ->
+  ignore (Host.set_timeout (fun () ->
       Signal.update st (fun s -> { s with copied = false });
-      Runtime.flush ());
+      Runtime.flush ()) 2000);
   Js.Promise.resolve ())
   |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
   |> ignore
@@ -279,7 +282,7 @@ let save_to_file (st : S.t Signal.state) =
   | S.Png, _, Some blob ->
       download_blob
         ~filename:
-          (Printf.sprintf "logseq_%s.png" (B.fmt_time (B.now_ms ())))
+          (Printf.sprintf "logseq_%s.png" (fmt_time (Js.Date.now ())))
         blob
   | S.Png, _, None -> ()
   | _, Some content, _ ->
@@ -299,8 +302,8 @@ let save_to_file (st : S.t Signal.state) =
         | S.Edn -> "text/plain"
         | S.Png -> "image/png"
       in
-      B.download_text
+      Browser_ui.download_text
         ~filename:
-          (Printf.sprintf "logseq_%s.%s" (B.fmt_time (B.now_ms ())) ext)
+          (Printf.sprintf "logseq_%s.%s" (fmt_time (Js.Date.now ())) ext)
         ~mime content
   | _, None, _ -> ()

@@ -171,8 +171,6 @@
 (rule
  (copy ../src/properties/properties_area.ml properties_area.ml))
 (rule
- (copy ../src/properties/properties_calendar.ml properties_calendar.ml))
-(rule
  (copy ../src/properties/properties_data.ml properties_data.ml))
 (rule
  (copy ../src/properties/properties_dialog.ml properties_dialog.ml))
