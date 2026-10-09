@@ -8,6 +8,27 @@
 module D = Views_dom
 module I = I18n
 
+(* event payloads are Json snapshots the host pushes — decode them
+   locally rather than routing through the DOM facade *)
+let jprop (name : string) (j : Js.Json.t) : Js.Json.t =
+  match j with
+  | Js.Json.JObject kvs -> (
+      match List.assoc_opt name kvs with
+      | Some v -> v
+      | None -> Js.Json.JNull)
+  | _ -> Js.Json.JNull
+
+let jstr (name : string) (j : Js.Json.t) : string option =
+  Js.Json.decodeString (jprop name j)
+
+let ev_key (ev : Js.Json.t) : string =
+  Option.value (jstr "key" ev) ~default:""
+
+let ev_target (ev : Js.Json.t) : Js.Json.t option =
+  match jprop "target" ev with
+  | Js.Json.JObject _ as el -> Some el
+  | _ -> None
+
 (* document.body — popup roots mount under the top-level app element so
    position:fixed lifts them into the window-level overlay layer (see
    Views_dom.document_body) *)
@@ -50,7 +71,7 @@ let same_el (a : D.el) (b : D.el) : bool =
   | _ -> false
 
 let row_classes r =
-  Option.value (Dom_ext.str_prop "class" r) ~default:""
+  Option.value (jstr "class" r) ~default:""
 
 let close_top () =
   match !open_popups with
@@ -68,7 +89,7 @@ let close_all () =
   publish_open ()
 
 let on_doc_keydown ev =
-  if Editor_dom.ev_key ev = "Escape" && !open_popups <> [] then begin
+  if ev_key ev = "Escape" && !open_popups <> [] then begin
     Editor_dom.stop_propagation ev;
     Editor_dom.prevent_default ev;
     close_top ()
@@ -76,12 +97,12 @@ let on_doc_keydown ev =
 
 let listeners_installed = ref false
 
-let on_doc_mousemove (ev : Dom_ext.event) =
+let on_doc_mousemove (ev : Js.Json.t) =
   (* hover only matters while a menu surface is up; closest() walks the
      event-target snapshot chain, so any ui__dropdown-menu surface
      (views menus, the dots/context menus) joins the same treatment *)
   let row =
-    match Editor_dom.ev_target ev with
+    match ev_target ev with
     | Some el -> (
         match
           Editor_dom.el_closest el
@@ -125,8 +146,8 @@ let install_listeners () =
       ~on_hit:(function
         | None -> close_all ()
         | Some _ -> ());
-    Editor_dom.document_add_listener "keydown" on_doc_keydown true;
-    Dom_ext.add_document_listener "mousemove" on_doc_mousemove false
+    Platform.add_event_listener ~capture:true "keydown" on_doc_keydown;
+    Platform.add_event_listener "mousemove" on_doc_mousemove
   end
 
 let push_popup el =
@@ -212,7 +233,7 @@ let position_content ~anchor ~content ~align_end ~submenu =
       tries_left > 0 && D.rect_left r = 0. && D.rect_top r = 0.
       && D.rect_width r = 0. && D.rect_height r = 0.
     then
-      Editor_dom.set_timeout (fun () -> place (tries_left - 1)) 32
+      ignore (Host.set_timeout (fun () -> place (tries_left - 1)) 32)
   in
   place 4
 
@@ -363,12 +384,12 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
           D.el_append_child content el)
     items;
   D.el_add_listener content "keydown" (fun ev ->
-      let k = Editor_dom.ev_key ev in
+      let k = ev_key ev in
       let items = focusable_items content in
       let idx = focused_idx items in
       (* inputs inside MCustom panes (view rename box) type freely — menu
          keys must not preventDefault their characters *)
-      if Editor_dom.is_editable_target (Editor_dom.ev_target ev) then ()
+      if Editor_dom.is_editable_target (ev_target ev) then ()
       else
       match k with
       | "Home" ->
@@ -539,7 +560,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
       chosen_idx := 0;
       rerender ());
   D.el_add_listener input "keydown" (fun ev ->
-      match Editor_dom.ev_key ev with
+      match ev_key ev with
       | "ArrowDown" ->
           Editor_dom.prevent_default ev;
           let its = filtered () in
@@ -565,7 +586,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   D.el_append_child document_body wrap;
   position_content ~anchor ~content:wrap ~align_end:false ~submenu:false;
   push_popup wrap;
-  Editor_dom.set_timeout (fun () -> Editor_dom.el_focus input) 0
+  ignore (Host.set_timeout (fun () -> Editor_dom.el_focus input) 0)
 
 (* -- confirm dialog -- *)
 

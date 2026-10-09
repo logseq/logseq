@@ -181,8 +181,21 @@ let parse_ranges (s : string) : (int * int) list =
       | [ a; b ] -> Some (int_of_string a, int_of_string b)
       | _ -> None)
 
-let jstr = Dom_ext.str_prop
-let jnum = Dom_ext.num_prop
+(* event payloads are Json snapshots the host pushes — decode them
+   locally rather than routing through the DOM facade *)
+let jprop (name : string) (j : Js.Json.t) : Js.Json.t =
+  match j with
+  | Js.Json.JObject kvs -> (
+      match List.assoc_opt name kvs with
+      | Some v -> v
+      | None -> Js.Json.JNull)
+  | _ -> Js.Json.JNull
+
+let jstr (name : string) (j : Js.Json.t) : string option =
+  Js.Json.decodeString (jprop name j)
+
+let jnum (name : string) (j : Js.Json.t) : float option =
+  Js.Json.decodeNumber (jprop name j)
 
 let note_measurement name (j : Js.Json.t) : unit =
   match jstr "block-id" j with

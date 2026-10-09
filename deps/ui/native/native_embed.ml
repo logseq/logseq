@@ -477,7 +477,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
       changed);
   Runtime.read_model := (fun () -> Lui_app.model app);
   Runtime.app_flush := flush_app;
-  Runtime.schedule_flush := (fun cb -> Editor_dom.set_timeout cb 0);
+  Runtime.schedule_flush := (fun cb -> ignore (Host.set_timeout cb 0));
   (* OCaml-internal async completions (HTTP, timers, daemon spawn) hop
      through Host onto this thread via the host wakeup *)
   Host.set_wakeup (fun () -> wakeup ());
