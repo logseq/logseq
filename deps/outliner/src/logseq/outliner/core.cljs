@@ -1187,12 +1187,49 @@
                                                        (:block/uuid target-block)
                                                        (assoc insert-opts :keep-uuid? true)]]]}})))))))
 
+(defn- outline-order-path
+  "The :block/order keys from a root ancestor down to `block`, root-first.
+   Anchored at the root rather than a :block/page, so entities without
+   :block/page (e.g. nested pages) sort alongside ordinary blocks in outline
+   position. Returns nil for property-created blocks."
+  [block]
+  (loop [block block
+         path ()]
+    (cond
+      (or (:logseq.property/created-from-property block)
+          (:block/closed-value-property block))
+      nil
+
+      (nil? block)
+      (vec path)
+
+      :else
+      (recur (:block/parent block)
+             (cons (:block/order block) path)))))
+
+(defn- compare-order-paths
+  [path-1 path-2]
+  (loop [path-1 (seq path-1)
+         path-2 (seq path-2)]
+    (cond
+      (and (nil? path-1) (nil? path-2)) 0
+      (nil? path-1) -1
+      (nil? path-2) 1
+      :else (let [c (compare (first path-1) (first path-2))]
+              (if (zero? c)
+                (recur (next path-1) (next path-2))
+                c)))))
+
 (defn- sort-non-consecutive-blocks
-  [db blocks]
-  (let [page-blocks (group-by :block/page blocks)]
-    (mapcat (fn [[_page blocks]]
-              (ldb/sort-page-random-blocks db blocks))
-            page-blocks)))
+  [_db blocks]
+  (->> blocks
+       (keep (fn [block]
+               (when-let [path (outline-order-path block)]
+                 [path block])))
+       (sort (fn [[path-1 _] [path-2 _]]
+               (compare-order-paths path-1 path-2)))
+       (map second)
+       (distinct)))
 
 (defn- get-top-level-blocks
   [top-level-blocks non-consecutive?]
@@ -1465,12 +1502,39 @@
                 (transact-move-blocks! conn blocks target-block sibling? opts outliner-op top-level-blocks)
                 nil))))))))
 
+(defn- page-order-top-level-blocks
+  "The selection's top-level blocks in page order, whatever order they were
+  clicked in (Ctrl+click c, then b: the selection reads c, b): a move up or
+  down takes its target from the first block (up) or the last (down)."
+  [db blocks]
+  (let [top-level-blocks (filter-top-level-blocks db blocks)]
+    (cond
+      (<= (count top-level-blocks) 1)
+      top-level-blocks
+
+      ;; blocks of 1 page, none a property value: page order (the sort
+      ;; leaves out blocks it cannot place, so only blocks it can place go in)
+      (and (every? #(:block/page %) top-level-blocks)
+           (apply = (map #(:db/id (:block/page %)) top-level-blocks))
+           (not-any? #(or (:logseq.property/created-from-property %)
+                          (:block/closed-value-property %))
+                     top-level-blocks))
+      (ldb/sort-page-random-blocks db top-level-blocks)
+
+      ;; siblings, e.g. nested pages (no :block/page) or a nested page and
+      ;; a block beside it
+      (apply = (map #(:db/id (:block/parent %)) top-level-blocks))
+      (sort-by :block/order top-level-blocks)
+
+      :else
+      top-level-blocks)))
+
 (defn- move-blocks-up-down
   "Move blocks up/down."
   [conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
-        top-level-blocks (filter-top-level-blocks db blocks)
+        top-level-blocks (page-order-top-level-blocks db blocks)
         opts {:outliner-op :move-blocks-up-down}]
     (if up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
@@ -1500,8 +1564,8 @@
         (when (and right
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
-          (move-blocks conn blocks right (merge opts {:sibling? sibling?
-                                                      :up? up?})))))))
+          (move-blocks conn top-level-blocks right (merge opts {:sibling? sibling?
+                                                                :up? up?})))))))
 
 (defn- ^:large-vars/cleanup-todo indent-outdent-blocks
   "Indent or outdent `blocks`."
