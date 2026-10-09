@@ -408,3 +408,32 @@ Branch devin/SHAREDUI-task6c. Files changed so far (uncommitted):
 - Still queued/mine: views cluster (builder/head/table/view rename box)
   decision after m6; code_mirror lang picker; native_embed wiring;
   module deletion + trims; final verify + report.
+
+## STATE UPDATE 7
+- m4 merged: graphs cluster full LUI (graphs_view/recycle/collaborators/
+  new_graph LUI rewrite, exporter/importer via files_*+fs_* ops,
+  graphs_mount deleted + copy rules removed). One regression found:
+  graphs_view.ml used data_attrs ("title",...) which violates LUI's
+  data_attr whitelist — fixed to ("aria-label",...) + pushed. The
+  "duplicate reload key" failures were cascade aborts, gone after fix.
+- m7 merged (9ad8e2f9da): editor_keys (14 capture listeners), editor_
+  actions, block_selection, selection_bar, test_drive — all services.
+  Conflict in tree.ml resolved: Add_button.install() stays deleted
+  (m9), Editor_keys.install_once moved out of module-init (entry
+  points call it post-install; module-init trap avoided).
+- My merges done: cards_state (5 sites), comments_view textarea clear,
+  page.ml collapsable attr + schedule_grow timer.
+- Remaining dual callers (16): query_builder(1, waits m10 signature),
+  selection_bar(1, waits overlay flip), overlay(3, mine post-m10/m6),
+  editor_commands(m8), editor_keys(24 residual=raw-ev bridge for
+  popup/overlay registries — waits m6/m10/m11), page(3 residual:
+  element_at→anchor_of_el waits m11, query_selector→open_picker waits
+  m5), popups×2(m11), properties×5(m10), views×3(cluster post-m6),
+  views_popup(m6).
+- doc-scan registrations on native: ZERO in copied files now
+  (add_button removed, render_libs/code_mirror are web-only).
+  native_embed wiring stays until last emulation caller dies.
+- Asked m10 to port native/code_mirror open_lang_picker to its new
+  open_anchored if it takes LUI content, else report signature.
+- Children running: m5 icon_picker, m6 views_popup, m8 editor_commands,
+  m10 properties, m11 popups.
