@@ -384,7 +384,10 @@ let history_cursor () =
   | Some e -> history_editing e
   | None -> Wire.Map
       [ Wire.Keyword "selected-blocks", Wire.List
-          (List.map (fun u -> Wire.Uuid u) (String_set.elements (selected ()))) ]
+          (List.map (fun u -> Wire.Uuid u) (String_set.elements (selected ())))
+      ; Wire.Keyword "selection-anchor",
+          (match (read ()).anchor with Some u -> Wire.Uuid u | None -> Wire.Nil)
+      ]
 
 (* Captured before a source mutation and consumed by its scheduled save. *)
 let history_input_before : Wire.t option ref = ref None

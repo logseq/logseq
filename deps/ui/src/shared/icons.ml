@@ -237,6 +237,49 @@ let custom_icons : (string * string) list =
        14.72)\" rx=\"7.78547\" ry=\"6.13006\"/></svg>" ) ]
 ;;
 
+(* Task glyphs are shared with native hosts; cutouts stay transparent when
+   the web renderer uses the SVG as an alpha mask. *)
+let status_icons =
+  let svg body =
+    {|<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">|}
+    ^ body ^ "</svg>"
+  in
+  let ring = {|<circle cx="10" cy="10" r="8" stroke-width="2"/>|} in
+  let filled_cutout path =
+    svg ({|<defs><mask id="cutout"><circle cx="10" cy="10" r="9" fill="white" stroke="none"/><path d="|}
+         ^ path ^ {|" stroke="black" stroke-width="1.333"/></mask></defs><circle cx="10" cy="10" r="9" fill="currentColor" stroke="none" mask="url(#cutout)"/>|})
+  in
+  [ "todo", svg ring
+  ; "backlog", svg {|<circle cx="10" cy="10" r="8" stroke-width="2" stroke-dasharray="4 4"/>|}
+  ; "cancelled", svg (ring ^ {|<path d="M13 7L7 13M7 7L13 13" stroke-width="1.333"/>|})
+  ; "in-progress25", svg (ring ^ {|<path d="M10 5A5 5 0 0 1 15 10H10Z" fill="currentColor" stroke="none"/>|})
+  ; "in-progress50", svg (ring ^ {|<path d="M10 5A5 5 0 0 1 10 15Z" fill="currentColor" stroke="none"/>|})
+  ; "in-progress75", svg (ring ^ {|<path d="M10 5A5 5 0 1 1 5 10H10Z" fill="currentColor" stroke="none"/>|})
+  ; "done", filled_cutout "M6.5 10L9 12.5L14 7.5"
+  ; "in-review", filled_cutout "M14 9.5V11C14 11.3978 13.842 11.7794 13.5607 12.0607C13.2794 12.342 12.8978 12.5 12.5 12.5H8L6 14.5V8C6 7.60218 6.15804 7.22064 6.43934 6.93934C6.72064 6.65804 7.10218 6.5 7.5 6.5H11M12.5 6H14.5M14.5 6V8M14.5 6L12 8.5"
+  ]
+;;
+
+let priority_icons =
+  let svg body =
+    {|<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none">|}
+    ^ body ^ "</svg>"
+  in
+  let bars level =
+    List.mapi (fun i (x, y, height) ->
+        Printf.sprintf {|<rect x="%d" y="%d" width="4" height="%d" rx="1" opacity="%s"/>|}
+          x y height (if i < level then "1" else "0.3"))
+      [ 4, 12, 8; 10, 8, 12; 16, 4, 16 ]
+    |> String.concat "" |> svg
+  in
+  [ "priority-lvl-low", bars 1
+  ; "priority-lvl-medium", bars 2
+  ; "priority-lvl-high", bars 3
+  ; "priority-lvl-none", svg {|<path d="M5 12H7M19 12H17M11 12H13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>|}
+  ; "priority-lvl-urgent", svg {|<path fill-rule="evenodd" clip-rule="evenodd" d="M6 3C4.34315 3 3 4.34315 3 6V18C3 19.6569 4.34315 21 6 21H18C19.6569 21 21 19.6569 21 18V6C21 4.34315 19.6569 3 18 3H6ZM13 8C13 7.44772 12.5523 7 12 7C11.4477 7 11 7.44772 11 8V12C11 12.5523 11.4477 13 12 13C12.5523 13 13 12.5523 13 12V8ZM13 15.99C13 15.4377 12.5523 14.99 12 14.99C11.4477 14.99 11 15.4377 11 15.99V16C11 16.5523 11.4477 17 12 17C12.5523 17 13 16.5523 13 16V15.99Z"/>|}
+  ]
+;;
+
 (* `app:` icon registry — name -> data URI of the svg markup. The base
    is the tabler-children table; `~ext` merges the runtime's extension
    pack (the web's window.tablerIcons walked by js_app/icons_ext.ml);
@@ -252,11 +295,22 @@ let app_icons ?(ext = []) () : string Lui_protocol.String_map.t =
                Some (name, data_uri_of_svg (svg_of_children ~size:24. name kids)))
   in
   let custom =
-    List.map (fun (k, svg) -> (k, data_uri_of_svg svg)) custom_icons
+    List.map (fun (k, svg) -> (k, data_uri_of_svg svg)) (custom_icons @ status_icons @ priority_icons)
   in
   List.fold_left
     (fun m (k, v) -> Lui_protocol.String_map.add k v m)
     Lui_protocol.String_map.empty (base @ ext @ custom)
+;;
+
+let status_color name =
+  match kebab name with
+  | "backlog" -> Some "#c7c7c7"
+  | "todo" -> Some "#858585"
+  | "in-progress25" | "in-progress50" | "in-progress75" -> Some "#ebbc00"
+  | "in-review" -> Some "#0091ff"
+  | "done" -> Some "#5bb98c"
+  | "cancelled" -> Some "#eb9091"
+  | _ -> None
 ;;
 
 (* equivalent of (shui/tabler-icon name) *)
@@ -264,7 +318,7 @@ let icon ?(size = 18.) ?(cls = "") name : Lui_elements.t =
   let cls = if cls = "" then "" else " " ^ cls in
   let n = kebab name in
   Lui_elements.icon ~name:(name_ref name) ~point_size:(int_of_float size)
-    ~style_class:("ui__icon ls-icon-" ^ n ^ cls) []
+    ?foreground:(status_color name) ~style_class:("ui__icon ls-icon-" ^ n ^ cls) []
 ;;
 
 (* raw icon without the ui__icon span wrapper — cljs renders the

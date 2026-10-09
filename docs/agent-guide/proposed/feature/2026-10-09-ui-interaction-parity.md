@@ -48,7 +48,7 @@ The existing semantic stylesheet already contains most production chrome. Behavi
 
 The reference is app.logseq.com. Anonymous Demo graphs are used for repeatable browser comparisons. Current local preview is http://localhost:3001. The initial pull advanced the application branch to a2fa7964bf.
 
-Shared interaction fixes currently cover chronological dialog ownership, nested Escape handling, URL editor reactivity, action-menu state, view submenu navigation, and primitive-owned toast lifetime. Browser evidence exposed renderer defects in cover-popover ownership, overlay alignment, retained toast exits, and trigger outside-press handling. Corresponding LUI changes are in the sibling worktree at /Users/tiensonqin/Codes/projects/lui; its local opam pin and the native Cargo path dependency use that worktree. Remote dependency publication and the application pin update are still pending.
+Shared interaction fixes currently cover chronological dialog ownership, nested Escape handling, URL editor reactivity, action-menu state, view submenu navigation, and primitive-owned toast lifetime. Browser evidence exposed renderer defects in cover-popover ownership, overlay alignment, retained toast exits, and trigger outside-press handling. Corresponding LUI changes are in the sibling worktree at /Users/tiensonqin/Codes/projects/lui; its local opam pin and the native Cargo path dependency use that worktree. The renderer changes were published as a4d83c44a30d62396fe8a0366fef451481ae40f6; the application install script now pins that revision.
 
 Initial passing checks: 1,958 Web recording-host checks, 667 native recording-host checks, 87 LUI Rust tests, 51 Web overlay tests, protocol/schema checks, and translation validation. Subsequent changes require rerunning affected checks. The native boot test reproduced and repaired missing idle-window wakeups after OCaml patches.
 
@@ -65,3 +65,53 @@ GPUI currently has retained fade entrances/exits, with headless lifecycle covera
 ## Questions
 
 None. The default scope includes Web and GPUI; optional prioritization does not block shared interaction work.
+
+
+## Partial delivery on October 9
+
+The user requested committing and pushing the current batch before completing the remaining parity work. This is an intermediate delivery, not a pixel parity completion claim.
+
+Implemented and checked: save before Escape/outside exit, calendar command mounting and date persistence, caret entry into an existing page reference, search activation, graph trigger toggling, menu icon placement, sidebar disclosure styling, font persistence, and atomic before/after cursor history for typing, splitting, and merging. The latest targeted six browser history cases passed. Web recording-host tests passed 1,961 checks; native recording-host tests passed 670 checks; the worker undo-redo group passed 50 cases. Translation validation and hardcoded-string lint passed.
+
+The full browser batch passed 16 of 18 cases. One history case timed out entering its initial fixture after earlier cases; its isolated equivalent passed. The settings-switch dimensions match, but the switch click/persistence case still fails. Keep this failure visible for the next work batch.
+
+Review identified additional cases to finish: empty page-reference completion can leave duplicate closing brackets; asynchronous history restoration needs stale-session guards; navigation can skip asynchronous exit cleanup; selected-block deletion needs a pre-delete history snapshot. Full screenshot difference evidence, heading/task geometry, all settings actions, native pixel and motion checks, and authenticated RTC workflows remain incomplete.
+
+The LUI renderer changes were committed separately. The application dependency pin must reference that published revision so the new Toast padding properties are supported on a clean checkout.
+
+
+## Continuation after the user commit
+
+The user committed the preceding application batch as b6a8746e09. The ongoing batch fixes native checkbox default-event cancellation, switch translation composition and settings row geometry, empty reference closing brackets, stale asynchronous history restoration, exit cleanup after navigation, selection anchors before deletion, and heading read/edit metrics for all six levels.
+
+Multi-block paste history now resolves the after-cursor from the worker's actual last inserted block before committing transaction metadata. Undo returns to the source block and caret; redo returns to the last pasted block at the end. A worker regression failed before the change and passed afterward. All 51 worker undo-redo cases passed.
+
+Task status now precedes the title, uses shared colored vector glyphs on both hosts, and has an opaque compact picker with configured option icons, a current-value check, and Clear. Both ordinary second presses and cancellation during an asynchronous option load close the picker. Browser coverage exercises selection, reload persistence, clearing, and rapid trigger cancellation.
+
+Latest completed recording checks: 1,966 Web checks and 675 native checks, with two native process tests. A full 29-case browser run passed 28 cases; its remaining status test exposed an asynchronous fixture timing issue. After awaiting the loaded option list and adding the rapid cancellation regression, the expanded status case passed. A complete rerun remains required before claiming the batch green.
+
+The paired Settings / Editor screenshots at 1280 × 900 are in tmp/ui-parity/index.html. The measured modal crop is [129,135,1022,630], threshold 0.05 with antialiasing excluded. Its last comparison differs by 3,705 pixels (0.575%). This measurement applies only to that captured state, not the entire application. Remaining Keymap editing/dispatch, priority and other menu states, native visual/motion evidence, and authenticated RTC workflows keep this document proposed.
+
+## Latest interaction and visual checks
+
+Indentation history now snapshots the caret before asynchronous configuration loading and clears the previous pointer position when restoring keyboard focus. The browser reproductions first inserted the marker at the end after undo and redo; both now restore the original middle-of-text caret.
+
+Keymap search, All/Unset/Disabled filtering, category disclosure, and global folding now update reactively. Category-qualified row identity prevents duplicate commands from breaking reconciliation. Custom binding editing, Search by keys, and Refresh all remain incomplete and are not counted as repaired.
+
+Priority glyphs now belong to the shared vector registry. Its browser regression checks selection and reload persistence. A first test incorrectly assumed that priority always appears in the positioned right-side property region; it now targets the value control within the owning block. Both task status and priority cases passed together. The full 33-case run initially passed 31 cases; status reopening after reload also timed out in that full run, although its isolated rerun passed. A complete repeat is still required to establish stability.
+
+The task status screenshot comparison is in tmp/ui-parity/task.html. At 1280 × 900, the reference popup rectangle is [194,209,226,265.875] and the local rectangle is [198,209,226,266]. The normalized 226 × 266 crop differs by 305 pixels (0.507%), threshold 0.05 with antialiasing excluded. Input caret blinking is suppressed for this captured paint state. Normalizing the crop does not erase the recorded 4-pixel horizontal placement error or prove whole-application parity.
+
+The actual GPUI window exposed a startup panic: initial OCaml theme patches accessed ThemeRegistry before deferred component initialization. Component initialization now runs before opening the window, after registering the embedded fonts. Reopening the same isolated native fixture renders the shell without that panic. Cargo build and the linked OCaml boot smoke test pass. This adds actual native startup evidence; native popup rendering and pixel/motion parity still require further investigation.
+
+Latest affected recording tests passed again: 1,966 Web checks, 675 native checks, and two native process tests. The repeated full browser run passed 32 of 33 cases. Investigation established that the status-reopening failure clicked an offscreen block after earlier fixtures had lengthened the page. The test now scrolls the target into view and includes a 40-block paste fixture; this expanded status case passed. This was a test-fixture correction, not an additional status-control fix.
+
+## Commit checkpoint
+
+The user requested committing the current work before further fixes. Search now uses the shared Dialog primitive for modal ownership. Real Web and GPUI validation previously rejected dialogs without a title; LUI now accepts a title or content children and continues to reject a completely empty dialog. These renderer changes are committed as bf13c01564d13cf70093d0cb1a0ba030d4957ac7, and the application install script pins that revision. The new dependency commit must be pushed alongside the application before another checkout can install it from GitHub.
+
+Affected verification passed: all 33 application browser cases, 1,970 Web recording-host checks, 679 native recording-host checks and two native process tests, 101 LUI OCaml tests, 28 Rust core tests, 15 GPUI rendering regressions, and 55 Web overlay cases. The untitled-dialog tests also passed after adding an explicit initial-focus assertion. The application search lifecycle case passed for input focus, typing, query clearing on the first Escape, dismissal on the second Escape, outside press, and reopening. The reference application confirms this two-step Escape behavior when the query is nonempty.
+
+Actual native window verification still exposes a search rendering problem: the retained input appears in accessibility state, but the popup is absent from the screenshot. Search modal geometry and backdrop styling on Web also remain different from the reference. Do not treat the shared lifecycle change or headless rendering test as proof of actual native search visibility or pixel parity. Custom keymap editing, Search by keys, Refresh all, the recorded task-popup horizontal offset, native motion, and authenticated RTC workflows remain unfinished.
+
+The scoped LUI tests pass, but its broad `dune build @all` encounters an existing native-example build rule referencing a missing lui_caml_dispatch.h. No Dune rules were changed. The local opam pin used a temporary source snapshot for validation; the committed install script uses the dependency revision above.

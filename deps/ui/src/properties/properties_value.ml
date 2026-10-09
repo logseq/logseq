@@ -736,7 +736,7 @@ let extends_view ctx row : t =
      ])
     context parent
 
-let closed_value_view ctx row : t =
+let closed_value_view ~positioned ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let open_ = Signal.state sched false in
@@ -750,10 +750,19 @@ let closed_value_view ctx row : t =
     let txt = D.value_display value in
     if txt = "logseq.property/empty-placeholder" then "" else txt
   in
+  let icon_id = closed_value_icon_id value in
+  let label = if display = "" then I18n.t "ui/empty" else display in
+  let show_text = not (positioned && ident = "logseq.property/status" && Option.is_some icon_id) in
   (column ~gap:0 ~grow:1.0
-     [ value_button ~text:display
+     [ button ~variant:`ghost ~label ~height:24 ~min_height:24
+         ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
+         ~style_class:"pv-closed-value"
          ~on_press:(fun _ ->
-           block_tag_ids ctx (fun tag_ids ->
+           if Runtime.signal_get open_ then close ()
+           else (
+             Runtime.signal_set items_st None;
+             Runtime.signal_set open_ true;
+             block_tag_ids ctx (fun tag_ids ->
                gather_exclusions tag_ids (fun exclusions ->
                    let items =
                      List.filter_map
@@ -765,18 +774,28 @@ let closed_value_view ctx row : t =
                              match D.entity_id_of c with
                              | Some id ->
                                  Some
-                                   (Sel.item title (fun () ->
+                                   (Sel.item ?icon:(closed_value_icon_id c) ~checked:(D.entity_id_of value = Some id) title (fun () ->
                                         set_scalar ctx ~ident
                                           ~value:(W.Int id);
                                         close ()))
                              | None -> None))
                        (D.row_closed_values row)
                    in
-                   Runtime.signal_set items_st (Some items);
-                   Runtime.signal_set open_ true)))
+                   let items = items @ [ Sel.item ~icon:"x" (I18n.t "property/clear-value")
+                       (fun () ->
+                          ignore (let* _ = D.remove_block_property ~block_uuid:ctx.block_uuid ~ident in
+                                  S.refresh_all ();
+                                  Js.Promise.resolve ());
+                          close ()) ] in
+                   if Runtime.signal_get open_ then
+                     Runtime.signal_set items_st (Some items)))))
+         [ Lui_elements.row ~gap:4 ~cross:`center
+             ((match icon_id with None -> [] | Some id -> [ Icons.icon id ])
+              @ if show_text then [ text ~value:label [] ] else []) ]
      ; if_ ~test:(Signal.value open_)
-         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`stretch
-            ~anchor_offset:4.0 ~min_width:220
+         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
+            ~style_class:"ui__popover-content ls-property-select-popup"
+            ~anchor_offset:(-3.0) ~width:226
             ~on_dismiss:(fun _ -> close ())
             [ reactive
                 ~equal:(fun a b -> Option.is_some a = Option.is_some b)
@@ -784,7 +803,7 @@ let closed_value_view ctx row : t =
                    match m with
                | None -> column ~gap:2 []
                    | Some items ->
-                       Sel.view
+                       Sel.view ~compact:true
                          ~placeholder:
                            (I18n.t1 "property/set-placeholder"
                               (D.row_title row))
@@ -845,7 +864,7 @@ let node_view ctx row : t =
 
 (* [view ctx row] renders the cell's value control inside the row's
    value column. *)
-let rec view ctx row : t =
+let rec view ?(positioned = false) ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
   let ident = D.row_ident row' |> Option.value ~default:"" in
@@ -861,7 +880,7 @@ let rec view ctx row : t =
       | _ -> Logseq_el.fragment (Render_inline.parse (D.value_display value))
     in
     display (D.row_effective_value row')
-  else if D.row_closed_values row' <> [] then closed_value_view ctx row'
+  else if D.row_closed_values row' <> [] then closed_value_view ~positioned ctx row'
   else
     match ty with
     | "checkbox" -> checkbox_view ctx row'

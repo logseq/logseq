@@ -1315,6 +1315,7 @@ let insert_text (ac : ac) text back =
         if ac.kind = Page_ref then
           match page_reference_at m pos with
           | Some r when r.start_off = tpos -> r.end_off
+          | _ when pos + 1 < n && S.sub v pos 2 = "]]" -> pos + 2
           | _ -> pos
         else if ac.kind = Embed_ref
            && pos + 1 < n && S.sub v pos 2 = "]]"

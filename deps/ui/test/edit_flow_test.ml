@@ -690,6 +690,74 @@ let test_exit_waits_for_save (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_exit_after_navigation (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b1" "saved" ];
+  set_editing ~uuid:"b1" ~buffer:"saved" ~caret:5 ~base:"saved";
+  install_worker ~repo:h.repo h;
+  A.exit_edit ~select:false;
+  h.restore { (h.snapshot ()) with Model.route = Model.Page "other-page" };
+  let* () = settle h 40 in
+  check "navigation does not skip completed edit exit" (S.editing () = None);
+  reset_editor ();
+  Js.Promise.resolve ()
+
+let test_history_after_navigation (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b1" "first"; Test_check.block "b2" "second" ];
+  set_editing ~uuid:"b1" ~buffer:"first" ~caret:2 ~base:"first";
+  let cursor = S.history_cursor () in
+  let complete = ref (fun () -> ()) in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name args ->
+        if name = "thread-api/undo-redo-undo" then
+          Js.Promise.make (fun ~resolve ~reject:_ ->
+            complete := (fun () -> resolve
+              (W.Map [ W.Keyword "undo?", W.Bool true;
+                       W.Keyword "editor-cursors", W.List [cursor] ]) [@u]))
+        else Js.Promise.resolve (worker_handler h name args))
+    ; on_message = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  h.restore { (h.snapshot ()) with Model.route = Model.Page "other-page" };
+  set_editing ~uuid:"b2" ~buffer:"second" ~caret:6 ~base:"second";
+  !complete ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "delayed history leaves the destination editor intact" (S.editing_uuid () = Some "b2");
+  reset_editor ();
+  Js.Promise.resolve ()
+
+let test_delete_selection_history (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b0" "previous";
+                 Test_check.block "b1" "first"; Test_check.block "b2" "second" ];
+  S.set (fun st -> { st with S.editing = None;
+      selected = S.String_set.of_list ["b1"; "b2"]; anchor = Some "b2" });
+  let expected = S.history_cursor () in
+  check "selection history records the range anchor"
+    (W.map_get_uuid expected "selection-anchor" = Some "b2");
+  let options = ref W.Nil in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name args ->
+        if name = "thread-api/apply-outliner-ops" then
+          (match args with [_; _; opts] -> options := opts | _ -> ());
+        Js.Promise.resolve (worker_handler h name args))
+    ; on_message = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  A.delete_selection ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "delete history keeps the selection before entering the previous block"
+    (W.map_get !options "undo-redo/editor-info" = Some expected);
+  let* () = A.restore_history
+      (W.Map [ W.Keyword "undo?", W.Bool true;
+               W.Keyword "editor-cursors", W.List [expected] ]) in
+  check "undo restores the selected range anchor" ((S.read ()).anchor = Some "b2");
+  reset_editor ();
+  Js.Promise.resolve ()
+
 (* synchronous stage: pure-model checks that need no app drain *)
 let run (_h : host) =
   test_measure_deferred ();
@@ -711,5 +779,8 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
   let* () = test_exit_waits_for_save h in
+  let* () = test_exit_after_navigation h in
+  let* () = test_history_after_navigation h in
+  let* () = test_delete_selection_history h in
   h.restore saved;
   Js.Promise.resolve ()

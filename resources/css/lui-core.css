@@ -2591,8 +2591,7 @@ a.page-title {
   font-weight: 600;
 }
 
-.editor-inner textarea.uniline-block:is(.h3, .h4, .h5, .h6),
-.block-editor.uniline-block:is(.h3, .h4, .h5, .h6) {
+.editor-inner textarea.uniline-block:is(.h3, .h4, .h5, .h6) {
   line-height: 24px;
   min-height: 24px;
 }

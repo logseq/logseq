@@ -370,6 +370,7 @@ let run_structure ~restore p finish =
 
 (* Arm the optimistic editor now and again after canonical rows land. *)
 let with_focus_after ~restore uuid caret p =
+  S.click_point := None;
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   last_focus_emitted := None;
   focus_attempts := 0;
@@ -503,22 +504,34 @@ let rec exit_edit ~select =
     | Some e ->
         last_edit_uuid := Some e.uuid;
         cancel_pending_focus ();
-      let buf = live_buffer e.uuid in
-      run_structure ~restore:(Some e) (commit_result e.uuid buf) (fun () ->
-      S.notify_edit_exit e.uuid;
-      (if Lazy.force perf_keys then
-         Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
-      Editor_sink.invalidate e.uuid;
-      S.set (fun st ->
-          { st with
-            S.editing = None
-          ; selected =
-              (if select then S.String_set.singleton e.uuid else st.selected)
-          ; anchor = (if select then Some e.uuid else st.anchor)
-            (* cljs: Escape selects the block but does not raise the
-               selection action bar — only a pointerup / shift-arrow does *)
-          ; action_bar = false
-          }))
+        let buf = live_buffer e.uuid in
+        let finish_exit () =
+          match S.editing () with
+          | Some current when current.S.uuid = e.uuid && current.S.scope = e.scope
+                              && current.S.model == e.model ->
+              S.notify_edit_exit e.uuid;
+              (if Lazy.force perf_keys then
+                 Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
+              Editor_sink.invalidate e.uuid;
+              S.set (fun st ->
+                  { st with
+                    S.editing = None
+                  ; selected =
+                      (if select then S.String_set.singleton e.uuid else st.selected)
+                  ; anchor = (if select then Some e.uuid else st.anchor)
+                    (* Escape selects the block without raising the action bar. *)
+                  ; action_bar = false
+                  })
+          | _ -> ()
+        in
+        (* Exit belongs to the editing session, even when its route changes
+           while the save is pending. A newer session must remain intact. *)
+        let p =
+          let* () = commit_result e.uuid buf in
+          finish_exit ();
+          Js.Promise.resolve ()
+        in
+        run_structure ~restore:(Some e) p (fun () -> ())
 
 (* click outside the editor commits without selecting *)
 let blur_commit () = exit_edit ~select:false
@@ -605,6 +618,7 @@ let optimistic_edit (f : Model.page -> Model.page option) =
       loop [] !Runtime.current_journals)
 
 let apply_indent_outdent ?parent_original uuids indent =
+  let opts = Ops.current_history_opts (Wire.Map []) in
   let* cfg = Sdk_config.read_config (Runtime.repo ()) in
   let logical =
     match Wire.get cfg "editor/logical-outdenting?" with
@@ -616,7 +630,7 @@ let apply_indent_outdent ?parent_original uuids indent =
     optimistic_edit (fun p ->
         if indent then Model.indent_blocks p uuids
         else Model.outdent_blocks ~logical p uuids);
-  Ops.apply_and_refresh
+  Ops.apply_and_refresh ~opts
     [ Ops.indent_outdent ?parent_original ~logical uuids indent ]
 
 (* cljs keydown-new-block: Enter on an empty last child outdents it
@@ -1258,6 +1272,8 @@ let move_blocks_up_down up =
       ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])
 
 let delete_selection () =
+  let before = S.history_cursor () in
+  let opts () = Ops.history_opts ~before ~after:(S.history_cursor ()) () in
   let uuids = selected_uuids () in
   match uuids with
   | [] -> ()
@@ -1298,11 +1314,11 @@ let delete_selection () =
                      });
                  with_focus_after ~restore:None pu
                    (String.length buffer)
-                   (Ops.apply_and_refresh
+                   (Ops.apply_and_refresh ~opts:(opts ())
                       [ Ops.delete_blocks uuids ]);
                  Js.Promise.resolve ())
            | None ->
-               ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ]))
+               ignore (Ops.apply_and_refresh ~opts:(opts ()) [ Ops.delete_blocks uuids ]))
        | None ->
            S.set_silent (fun st ->
                { st with
@@ -1310,7 +1326,7 @@ let delete_selection () =
                ; anchor = None
                ; action_bar = false
                });
-           ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ]))
+           ignore (Ops.apply_and_refresh ~opts:(opts ()) [ Ops.delete_blocks uuids ]))
 
 (* ---- drag & drop ---- *)
 
@@ -1559,8 +1575,18 @@ let edit_last_inserted resp =
   | Some u -> enter_edit u (String.length (model_title u))
   | None -> ()
 
+let paste_history_opts target_uuid =
+  let scope = match S.editing () with
+    | Some e -> e.S.scope
+    | None -> scope_of_uuid target_uuid in
+  let after = Wire.Map
+      [ Wire.Keyword "block-uuid", Wire.Keyword "last-inserted-block"
+      ; Wire.Keyword "scope", Wire.String scope
+      ; Wire.Keyword "caret", Wire.Keyword "end" ] in
+  Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
+
 let paste_trees trees target_uuid ~replace_empty =
-  Ops.apply_and_refresh_result ~opts:(Ops.op_opts "paste")
+  Ops.apply_and_refresh_result ~opts:(paste_history_opts target_uuid)
     [ Ops.paste_trees trees target_uuid ~replace_empty ]
 
 (* thread-api/paste-extract-blocks + insert-blocks — the worker turns
@@ -1568,6 +1594,7 @@ let paste_trees trees target_uuid ~replace_empty =
    places after [uuid] (cljs keep-uuid? + :outliner-real-op
    :paste-text under :outliner-op :paste) *)
 let paste_markdown_blocks uuid text ~replace_empty ~sibling =
+  let opts = paste_history_opts uuid in
   let* w =
     Runtime.invoke3 "thread-api/paste-extract-blocks"
       (Wire.String (Runtime.repo ()))
@@ -1577,7 +1604,7 @@ let paste_markdown_blocks uuid text ~replace_empty ~sibling =
   match w with
   | Wire.Array (_ :: _ as maps) -> (
       let* resp =
-        Ops.apply_and_refresh_result ~opts:(Ops.op_opts "paste")
+        Ops.apply_and_refresh_result ~opts
           [ Ops.op "insert-blocks"
               [ Wire.Array maps
               ; Wire.Uuid uuid
@@ -1919,6 +1946,14 @@ let toggle_open_blocks () =
   if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand pairs ])
 
 let restore_history result =
+  let context = Runtime.repo (), Runtime.route () in
+  let editing = S.editing () in
+  let current () = context = (Runtime.repo (), Runtime.route ())
+      && (match editing, S.editing () with
+          | None, None -> true
+          | Some before, Some now -> before.S.uuid = now.S.uuid
+              && before.S.scope = now.S.scope && before.S.model == now.S.model
+          | _ -> false) in
   let cursors = match Wire.map_get result "editor-cursors" with
     | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
     | _ -> [] in
@@ -1930,9 +1965,13 @@ let restore_history result =
       S.click_point := None;
       (match Wire.map_get_uuid cursor "block-uuid" with
        | Some uuid ->
-           let caret = Option.get (Wire.map_get_int cursor "caret") in
            let scope = Option.get (Wire.map_get_string cursor "scope") in
            let* title = Ops.title_for_edit (model_title uuid) in
+           if not (current ()) then Js.Promise.resolve () else
+           let caret = match Wire.map_get cursor "caret" with
+             | Some (Wire.Int caret) -> caret
+             | Some (Wire.Keyword "end") -> String.length title
+             | _ -> invalid_arg "history caret must be an offset or end" in
            let e = S.mk_editing ~caret ~uuid ~buffer:title ~scope ~base:title () in
            let e = match Wire.map_get cursor "anchor" with
              | Some (Wire.Int anchor) ->
@@ -1949,13 +1988,21 @@ let restore_history result =
                    | Wire.Uuid u -> S.String_set.add u acc
                    | _ -> invalid_arg "history selection must contain UUIDs") S.String_set.empty xs
              | _ -> invalid_arg "history cursor must contain editing or selection state" in
-           S.set (fun st -> { st with S.editing = None; selected; anchor = None });
+           let anchor = Wire.map_get_uuid cursor "selection-anchor" in
+           S.set (fun st -> { st with S.editing = None; selected; anchor;
+             action_bar = false });
            Js.Promise.resolve ())
 
 let () = S.restore_history := restore_history
 
-let undo () = ignore (Ops.undo ())
-let redo () = ignore (Ops.redo ())
+let rec run_history operation =
+  if !S.structure_pending then
+    Queue.add (fun () -> run_history operation) S.pending_edit_actions
+  else
+    run_structure ~restore:(S.editing ()) (operation ()) (fun () -> ())
+
+let undo () = run_history Ops.undo
+let redo () = run_history Ops.redo
 
 (* the Edit_input route for the open editor — structural intents go to
    the outliner ops; focused/menu have no surface effect yet *)

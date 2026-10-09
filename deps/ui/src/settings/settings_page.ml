@@ -283,16 +283,16 @@ let date_format_row ctx =
     List.sort_uniq String.compare (current :: journal_formatters)
   in
   let mst = dfmt_menu_state ctx in
-  (* cljs date-format-row carries a duplicated hiccup class shorthand;
-     reproduced verbatim for DOM parity *)
-  row ~key:"dfmt" ~gap:16
-    ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
+  row ~key:"dfmt" ~gap:24 ~cross:`center ~style_class:"it"
     [ C.label_el ~key:"dfmt-l" ~for_:"custom_date_format"
         ~text:T.custom_date_format []
     ; column ~key:"dfmt-r" ~style_class:"ls-it-value"
-        [ box ~key:"dfmt-w" ~style_class:"ls-select-wrap"
+        [ column ~key:"dfmt-w" ~style_class:"ls-select-wrap"
             [ select ~key:"dfmt-s"
-                ~style_class:"ui__select-trigger form-select is-small"
+                ~width:200 ~height:29 ~corner_radius:4
+                ~padding_horizontal:8
+                ~background:"var(--lx-gray-03)"
+                ~style_class:"ui__select-trigger form-select is-small ls-date-format"
                 ~text:(date_option_text current)
                 ~on_press:(fun _ ->
                   Signal.set mst (not (Runtime.signal_get mst));
@@ -341,18 +341,23 @@ let editor_pane ctx =
 
 (* ---- keymap pane (components/shortcut.cljs page) ---- *)
 
-let keymap_pill ~key ~title ~count ~active =
-  button ~key ~selected:active ~label:title
-    ~style_class:
-      (if active then "shortcut-filter-pill--active shortcut-filter-pill"
-       else "shortcut-filter-pill")
-    [ text ~key:(key ^ "t") 
-        ~value:title []
-    ; text ~key:(key ^ "c") 
-        ~value:(Ui_services.literal_text "\xc2\xb7 " ^ count) []
-    ]
+type keymap_model =
+  { km_query : string
+  ; km_filter : Keymap_data.filter
+  ; km_collapsed : string list
+  }
 
-let keymap_controls () =
+let keymap_pill st ~key ~title filter =
+  let active s = s.km_filter = filter in
+  toggle_button ~key ~variant:`ghost ~checked:(reactive active (Signal.value st))
+    ~label:title ~style_class:"shortcut-filter-pill"
+    ~text:(title ^ Ui_services.literal_text " \xc2\xb7 " ^ string_of_int (Keymap_data.count filter))
+    ~on_toggle:(fun _ ->
+        Runtime.signal_set st { (Runtime.signal_get st) with km_filter = filter }) []
+
+let keymap_controls st =
+  let categories = List.filter_map (function
+      | Keymap_data.Category title -> Some title | _ -> None) Keymap_data.items in
   column ~key:"km-ctl"
     ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
     [ row ~key:"km-tb" ~style_class:"shortcut-toolbar-row"
@@ -362,7 +367,11 @@ let keymap_controls () =
             ; search_field ~key:"km-in"
                 ~style_class:"form-input is-small"
                 ~placeholder:T.keymap_search_placeholder ~autofocus:true
-                []
+                ~text:(reactive (fun s -> s.km_query) (Signal.value st))
+                ~on_input:(function
+                    | Lui_protocol.TextChanged (_, query) ->
+                        Runtime.signal_set st { (Runtime.signal_get st) with km_query = query }
+                    | _ -> ()) []
             ]
         ; button ~key:"km-kb"
             ~style_class:"shortcut-keystroke-inactive"
@@ -370,18 +379,18 @@ let keymap_controls () =
         ]
     ; row ~key:"km-pills" ~style_class:"shortcut-pills-row"
         [ row ~key:"km-fp" ~style_class:"shortcut-filter-pills"
-            [ keymap_pill ~key:"km-pa" ~title:T.keymap_all ~count:"116"
-                ~active:true
-            ; keymap_pill ~key:"km-pc" ~title:T.keymap_custom ~count:"0"
-                ~active:false
-            ; keymap_pill ~key:"km-pu" ~title:T.keymap_unset ~count:"9"
-                ~active:false
-            ; keymap_pill ~key:"km-pd" ~title:T.keymap_disabled
-                ~count:"4" ~active:false
+            [ keymap_pill st ~key:"km-pa" ~title:T.keymap_all Keymap_data.All
+            ; keymap_pill st ~key:"km-pc" ~title:T.keymap_custom Keymap_data.Custom
+            ; keymap_pill st ~key:"km-pu" ~title:T.keymap_unset Keymap_data.Unset
+            ; keymap_pill st ~key:"km-pd" ~title:T.keymap_disabled Keymap_data.Disabled
             ]
         ; row ~key:"km-sec" ~style_class:"ls-toolbar-gap"
             [ button ~key:"km-fold" ~style_class:"icon-link"
-                ~label:T.keymap_toggle_categories ~icon:(`app "fold") []
+                ~label:T.keymap_toggle_categories ~icon:(`app "fold")
+                ~on_press:(fun _ ->
+                    let model = Runtime.signal_get st in
+                    let collapsed = if model.km_collapsed = [] then categories else [] in
+                    Runtime.signal_set st { model with km_collapsed = collapsed }) []
             ; button ~key:"km-rf" ~style_class:"icon-link"
                 ~label:T.keymap_refresh_all ~icon:(`app "refresh") []
             ]
@@ -445,11 +454,11 @@ let command_key_of (title : string) : string =
   in
   "command." ^ s
 
-let keymap_th ~key label =
-  list_item ~key ~style_class:"th"
+let keymap_th ~key ~collapsed ~on_press label =
+  list_item ~key ~style_class:"th" ~on_press
     [ text ~key:(key ^ "s") ~style_class:"ls-th-strong"
         ~value:(I18n.t (keymap_category label)) []
-    ; icon ~key:(key ^ "i") ~style_class:"ls-row" ~name:`chevron_down []
+    ; icon ~key:(key ^ "i") ~style_class:"ls-row" ~name:(if collapsed then `chevron_right else `chevron_down) []
     ]
 
 let keymap_row ~key (r : Keymap_data.row) =
@@ -466,6 +475,8 @@ let keymap_row ~key (r : Keymap_data.row) =
                 ~value:T.keymap_unset
                []
            ]
+         else if Keymap_data.disabled r then
+           [ text ~value:T.keymap_disabled [] ]
          else
            List.mapi
              (fun i b ->
@@ -473,23 +484,36 @@ let keymap_row ~key (r : Keymap_data.row) =
              r.bindings)
     ]
 
-let keymap_pane () =
-  (* the cljs :auto-focus DOM effect is covered by ~autofocus on the
-     search field; --shortcut-header-h was an inline CSS var no rule
-     reads — dropped *)
-  column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x"
-    [ keymap_controls ()
-    ; scroll ~key:"km-art" ~orientation:`vertical ~grow:1.
-        [ list ~key:"km-ul" ~style_class:"ls-plain-list"
-            (List.mapi
-               (fun i it ->
-                 let k = "km-i" ^ string_of_int i in
-                 match (it : Keymap_data.item) with
-                 | Keymap_data.Category label -> keymap_th ~key:k label
-                 | Keymap_data.Shortcut r -> keymap_row ~key:k r)
-               Keymap_data.items)
-        ]
-    ]
+let keymap_pane () : t =
+ fun context parent ->
+  let st = Signal.state context.Lui_ui.ui_scheduler
+      { km_query = ""; km_filter = Keymap_data.All; km_collapsed = [] } in
+  let rows model =
+    let items = Keymap_data.visible_items ~query:model.km_query ~filter:model.km_filter
+        ~label:(fun row -> I18n.t (command_key_of row.Keymap_data.title)) in
+    let _, _, elements = List.fold_left (fun (category, visible, elements) item ->
+        match item with
+        | Keymap_data.Category label ->
+            let collapsed = List.mem label model.km_collapsed in
+            let header = keymap_th ~key:("km-category-" ^ label) ~collapsed label
+                ~on_press:(fun _ ->
+                    let current = Runtime.signal_get st in
+                    let collapsed = if List.mem label current.km_collapsed then
+                        List.filter ((<>) label) current.km_collapsed
+                      else label :: current.km_collapsed in
+                    Runtime.signal_set st { current with km_collapsed = collapsed }) in
+            label, not collapsed, header :: elements
+        | Keymap_data.Shortcut row when visible ->
+            category, visible,
+            keymap_row ~key:("km-command-" ^ category ^ "-" ^ row.title) row :: elements
+        | _ -> category, visible, elements) ("", true, []) items in
+    list ~key:"km-ul" ~style_class:"ls-plain-list" (List.rev elements)
+  in
+  (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x"
+     [ keymap_controls st
+     ; scroll ~key:"km-art" ~orientation:`vertical ~grow:1.
+         [ reactive rows (Signal.value st) ]
+     ]) context parent
 
 (* ---- advanced pane ---- *)
 
@@ -633,7 +657,7 @@ let nav_item ~key (id, label, icn) =
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
     (list_item ~key ~style_class:"settings-menu-item"
-       ~corner_radius:0
+       ~corner_radius:4
        ~accessibility_identifier:id
        ~data_attrs:[ ("data-id", id) ]
        ~icon:(Icons.name_ref icn) ~text:label

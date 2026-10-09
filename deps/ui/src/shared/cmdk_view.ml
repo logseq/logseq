@@ -845,41 +845,14 @@ let handle_mousemove st (ev : Svs.move_ev) =
     | Some _ -> S.set_hl st v.S.hl true
     | None -> ()
 
-(* modal shell mirrors shui dialog markup: overlay + centered
-   .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
+(* The host owns modal placement, focus trapping, and dismissal. *)
 let modal_shell svs st =
-  (* cp__overlay-layer/cp__dialog-shell are inert on web (no rule targets
-     them); on gpui the registered class dictionary makes each link a
-     window-sized layer and centers the abspos content by flex
-     alignment, the expressible form of `translate(-50%,-50%)`. *)
-  box ~key:"cmdk-shell" ~style_class:"cp__overlay-layer cp__dialog-shell"
-    [ column ~key:"dismiss"
-        ~style_class:"cp__cmdk-dismiss"
-        ~grow:1.
-        ~on_press_detail:(fun _ -> S.close st)
-        []
-    ; box ~key:"ov"
-        ~style_class:"ui__dialog-overlay"
-        []
-    ; (* --nested-dialogs lives in the .ls-dialog-cmdk CSS rule now *)
-      box ~key:"content"
-        ~style_class:"ui__dialog-content ls-dialog-cmdk"
-        ~grow:1. ~main:`center ~cross:`center
-        ~data_attrs:
-          [ ("role", "dialog")
-          ; ("aria-modal", "true")
-          ; ("aria-labelledby", "ls-cmdk-title")
-          ; ("data-state", "open") ]
-        [ heading ~key:"title" ~level:2
-            ~style_class:"ui__dialog-title hidden" ~value:""
-            ~accessibility_identifier:"ls-cmdk-title" []
-        ; box ~key:"main" ~style_class:"ui__dialog-main-content"
-            [ column ~key:"modal"
-                ~style_class:"cp__cmdk__modal"
-                [ palette svs st ]
-            ]
-        ]
-    ]
+  let width = int_of_float (Float.min 896. (Ui_services.dom_viewport_width () *. 0.9)) in
+  let max_height = int_of_float (Ui_services.dom_viewport_height () *. 0.8) in
+  dialog ~key:"cmdk-shell" ~width ~padding:0 ~style_class:"ls-dialog-cmdk"
+    ~on_dismiss:(fun _ -> S.close st)
+    [ column ~key:"modal" ~gap:0 ~max_height ~style_class:"cp__cmdk__modal"
+        [ palette svs st ] ]
 
 let render ~(services : Svs.t) (_ms : 'a Signal.signal) : t =
  fun context parent ->
@@ -894,6 +867,6 @@ let render ~(services : Svs.t) (_ms : 'a Signal.signal) : t =
   (* The keyed box gives the conditional its own reconcile-stable parent:
      spliced directly under #app-container its dynamic segment goes stale
      after navigation and later mounts emit an inconsistent op batch *)
-  box ~key:"cmdk_view" ~style_class:"cp__overlay-layer"
+  box ~key:"cmdk_view"
     [ if_ ~test:open_sig (modal_shell services st) ]
     context parent

@@ -731,30 +731,11 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- cmdk palette ----------------------------------------------------- */
 
-/* two classes: the bare .ui__dialog-content max-width media query below
-   must not cap the palette (cljs mounts it as w-[90dvw] sm:max-w-4xl;
-   like every cljs dialog it stays vertically centered — top:50% +
-   translate(-50%,-50%) from the base rule) */
-.ui__dialog-content.ls-dialog-cmdk {
-  padding: 0;
-  width: 90dvw;
-  max-width: 56rem;
+.lui-dialog.ls-dialog-cmdk {
   overflow: hidden;
-  /* inline style attr in the old dom() — pins the nested-dialog
-     scale factor used by the dialog-content transform rules */
-  --nested-dialogs: 0;
-}
-
-.cp__cmdk-dismiss {
-  position: fixed;
-  inset: 0;
-  user-select: none;
 }
 
 .cp__cmdk__modal {
-  position: relative;
-  width: 90dvw;
-  max-width: 56rem;
   border-radius: 0.5rem;
 }
 
@@ -1722,6 +1703,11 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ui__dialog-close:hover {
   opacity: 1;
+}
+
+.ui__dialog-close .lui-button-label:empty,
+.ls-info-icon .lui-button-label:empty {
+  display: none;
 }
 
 /* cljs shui dialog-close: focus:ring-2 ring-offset-2 — autofocused on
@@ -3170,7 +3156,7 @@ div[data-keep-selection].menu-links-wrapper {
   padding-top: 14px;
 }
 
-.panel-wrap .it label,
+.panel-wrap .it .ls-label,
 .panel-wrap .it .it-label {
   min-height: 28px;
   line-height: 28px;
@@ -3205,6 +3191,13 @@ div[data-keep-selection].menu-links-wrapper {
 .panel-wrap .form-select:hover,
 .panel-wrap .form-input:hover {
   opacity: 0.8;
+}
+
+.panel-wrap .ls-date-format {
+  font-size: 0.75rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%236b7280' stroke-width='1.5'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
 }
 
 .panel-wrap [role="checkbox"]:hover {
@@ -3544,7 +3537,8 @@ div[data-keep-selection].menu-links-wrapper {
 
 .shortcut-filter-pill[data-active],
 .shortcut-filter-pill.active,
-.shortcut-filter-pill--active {
+.shortcut-filter-pill--active,
+.shortcut-filter-pill[aria-pressed="true"] {
   background: var(--lx-gray-04, var(--ls-tertiary-background-color, hsl(var(--muted))));
 }
 
@@ -4589,7 +4583,9 @@ select.form-select {
   width: 0.75rem;
   height: 0.75rem;
   background: var(--ls-primary-background-color, var(--lui-c-background));
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
+  translate: none;
   transform: translateX(0);
   transition: transform 150ms;
 }
@@ -6440,4 +6436,34 @@ html[data-theme=light] {
 
 .ls-page-icon .lui-button.ui__button:hover {
   color: hsl(var(--foreground));
+}
+
+/* Icon-only property controls retain their accessible labels. */
+.pv-closed-value .lui-button-label:empty { display: none; }
+
+.ls-property-select-compact { font-size: 14px; line-height: 20px; }
+.ls-property-select-input,
+.ls-property-select-input:focus {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ls-secondary-text-color);
+  box-shadow: none;
+  outline: none;
+  font-size: 14px;
+}
+.ls-property-select-compact .lui-list-item { font-size: 14px; line-height: 20px; }
+
+.pv-closed-value:hover { background: var(--lx-gray-03); color: inherit; }
+.ls-property-select-popup { color: hsl(var(--popover-foreground) / 0.75); }
+
+.ls-property-select-compact .lui-list-item[data-selected],
+.ls-property-select-compact .lui-list-item:hover {
+  background: var(--lx-gray-04);
+  color: inherit;
+}
+
+.ls-property-select-input::placeholder {
+  color: hsl(var(--muted-foreground));
+  opacity: 1;
 }

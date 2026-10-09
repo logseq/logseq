@@ -66,3 +66,44 @@ let decode_item j =
 let items : item list =
   Array.to_list
     (Array.map decode_item (jarr (Js.Json.parseExn items_json)))
+
+
+type filter = All | Custom | Unset | Disabled
+
+let disabled row =
+  not row.unset && row.bindings = []
+
+let accepts filter row =
+  match filter with
+  | All -> true
+  | Custom -> false
+  | Unset -> row.unset
+  | Disabled -> disabled row
+
+module Command_set = Set.Make (String)
+
+let count filter =
+  List.fold_left (fun commands -> function
+      | Shortcut row when accepts filter row -> Command_set.add row.title commands
+      | _ -> commands) Command_set.empty items
+  |> Command_set.cardinal
+
+let visible_items ~query ~filter ~label =
+  let needle = String.lowercase_ascii (String.trim query) in
+  let matches row =
+    accepts filter row
+    && (needle = "" || Str_util.contains
+          (String.lowercase_ascii (label row)) needle)
+  in
+  let flush category rows result =
+    match category, rows with
+    | Some category, _ :: _ -> List.rev_append (Category category :: List.rev rows) result
+    | _ -> result
+  in
+  let category, rows, result =
+    List.fold_left (fun (category, rows, result) -> function
+        | Category next -> Some next, [], flush category rows result
+        | Shortcut row when matches row -> category, Shortcut row :: rows, result
+        | _ -> category, rows, result) (None, [], []) items
+  in
+  List.rev (flush category rows result)

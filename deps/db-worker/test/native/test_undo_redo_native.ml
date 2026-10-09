@@ -737,6 +737,34 @@ let test_editor_cursor_pair_roundtrip () =
           | _ -> Alcotest.fail "history result not a map")
         [ undo_result; redo_result ])
 
+let test_paste_cursor_resolves_inserted_uuid () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _, _, uuid = seed_page_parent_child () in
+      let before = edn_wire (Printf.sprintf
+          "{:block-uuid %s :caret 2 :scope \"main\"}" (uuid_lit uuid)) in
+      let after = edn_wire
+          "{:block-uuid :last-inserted-block :caret :end :scope \"main\"}" in
+      let ops = edn_wire (Printf.sprintf
+          "[[:insert-blocks [[{:block/uuid %s :block/title \"pasted\"}] %s {:sibling? true :keep-uuid? true}]]]"
+          (uuid_lit (Uuid_gen.uuid ())) (uuid_lit uuid)) in
+      let opts = Cljs_map.assoc
+          (Cljs_map.assoc (edn_wire "{:outliner-op :paste}")
+             "undo-redo/editor-info" before)
+          "undo-redo/editor-info-after" after in
+      let result = Outliner_op.apply_ops conn (normalize_ops (db_of conn) ops) opts in
+      let inserted = match Cljs_map.get result "blocks" with
+        | Some (Wire.Array [block]) | Some (Wire.List [block]) ->
+            Option.get (Cljs_map.get block "block/uuid")
+        | _ -> Alcotest.fail "inserted block missing" in
+      let expected = Cljs_map.assoc after "block-uuid" inserted in
+      let result = Undo_redo.undo test_repo in
+      match result with
+      | Wire.Map kvs -> check "paste history resolves the actual inserted UUID"
+          (wire_get "editor-cursors" kvs = Some (Wire.List [before; expected]))
+      | _ -> Alcotest.fail "history result not a map")
+
 let test_undo_missing_history_action_row_replays_from_inline_ops () =
   with_worker_conns (fun () ->
       Undo_redo.clear_history test_repo;
@@ -2644,6 +2672,7 @@ let cases =
   ; Alcotest.test_case "undo-redo-selection-editor-info-roundtrip-test" `Quick
       test_undo_redo_selection_editor_info_roundtrip
   ; Alcotest.test_case "editor-cursor-pair-roundtrip" `Quick test_editor_cursor_pair_roundtrip
+  ; Alcotest.test_case "paste-cursor-resolves-inserted-uuid" `Quick test_paste_cursor_resolves_inserted_uuid
   ; Alcotest.test_case
       "undo-missing-history-action-row-replays-from-inline-ops-test" `Quick
       test_undo_missing_history_action_row_replays_from_inline_ops

@@ -429,10 +429,8 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
                    carry the heading level so the edit surface keeps the
                    read-mode geometry instead of collapsing to 16/24 *)
                 let cls =
-                  match
-                    Render.heading_level (S.title_for uuid b.block_title)
-                  with
-                  | Some (lvl, _) ->
+                  match block_heading_lvl b with
+                  | Some lvl ->
                       " uniline-block h" ^ string_of_int lvl
                   | None -> ""
                 in
@@ -594,7 +592,8 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                 [ row ~key:("row-" ^ key)
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
-                                    [ (if Comments.is_comments_area b then
+                                    [ Properties_area.block_left_chips ~uuid
+                                    ; (if Comments.is_comments_area b then
                                          Comments.area_view uuid b
                                        else
                                          content_or_editor ~editable uuid
@@ -626,9 +625,6 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                              properties area *)
                           Properties_area.block_below_pills ~uuid
                         ]
-                    ; (* .positioned-properties.block-left chips render
-                         inline at the end of .block-main-content *)
-                      Properties_area.block_left_chips ~uuid
                     ]
                 ]
             ; Comments_view.reactions_el uuid b.Model.block_reactions
@@ -912,7 +908,8 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                 [ row ~key:("row-" ^ key)
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
-                                    [ content_wrapper uuid b
+                                    [ Properties_area.block_left_chips ~uuid
+                                    ; content_wrapper uuid b
                                     ; row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right self-start"
                                         ~gap:4 ~cross:`center
@@ -932,7 +929,6 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                              these (Rating/Published/Finished) *)
                           Properties_area.block_below_pills ~uuid
                         ]
-                    ; Properties_area.block_left_chips ~uuid
                     ]
                 ]
             ; Comments_view.reactions_el uuid b.Model.block_reactions

@@ -522,16 +522,6 @@ fn main() {
     eprintln!("logseq-gpui: app() done t={:.1}ms", boot_ms());
     app.run(move |cx| {
         eprintln!("logseq-gpui: run entry t={:.1}ms", boot_ms());
-        // Frame-1 theme installed ahead of gpui_kit::init so Root::new
-        // and cx.theme() consumers can render the first draw without
-        // waiting on component init (~60ms, mostly the theme font
-        // probe's installed-font enumeration). ThemeColor::light() is
-        // the same JSON-baked palette Theme::change applies; init is
-        // deferred to run right after open_window's synchronous first
-        // draw, keeping everything on the UI thread.
-        cx.set_global(gpui_kit::component::theme::Theme::from(
-            &*gpui_kit::component::theme::ThemeColor::light(),
-        ));
         // Web renders everything in Inter (static/css/web/Inter-*.woff2 →
         // vendored here as TTF). Register the family before Theme::change
         // runs so `.font_family("Inter")` resolves to the embedded fonts
@@ -548,6 +538,10 @@ fn main() {
                 include_bytes!("../fonts/Inter-BoldItalic.ttf").into(),
             ])
             .ok();
+        // Initial OCaml patches can change the theme during the first
+        // window draw, so the registry and widgets must already exist.
+        gpui_kit::init(cx);
+        eprintln!("logseq-gpui: kit init done t={:.1}ms", boot_ms());
         gpui_kit::component::theme::Theme::update(cx, |theme| {
             theme.font_family = "Inter".into();
         });
@@ -615,14 +609,6 @@ fn main() {
             let _ = window_handle.update(cx, |_view, window, _cx| {
                 window.activate_window();
             });
-        });
-        // Component init (theme registry, widget setup, the ~40ms
-        // font-probe enumeration) is deferred past open_window's
-        // synchronous first draw so it no longer gates first paint;
-        // it still runs on the UI thread before the next frame.
-        cx.defer(|cx| {
-            gpui_kit::init(cx);
-            eprintln!("logseq-gpui: kit init done t={:.1}ms", boot_ms());
         });
     });
 }

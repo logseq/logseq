@@ -352,13 +352,13 @@ let block_left_chips ~uuid : t =
             Logseq_el.nothing
           else
             let ctx = block_ctx uuid key in
-            row ~gap:8 ~cross:`center
+            row ~gap:4 ~cross:`center
               ~style_class:"positioned-properties block-left"
               (List.map
                  (fun r ->
                    row ~gap:2 ~cross:`center
                      ~style_class:"property-value-inner"
-                     [ V.view ctx r ])
+                     [ V.view ~positioned:true ctx r ])
                  d.left))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.left = b.left))
@@ -387,7 +387,7 @@ let block_right_chips ~uuid : t =
                  (fun r ->
                    row ~gap:2 ~cross:`center
                      ~style_class:"property-value-inner"
-                     [ V.view ctx r ])
+                     [ V.view ~positioned:true ctx r ])
                  d.right))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.right = b.right))

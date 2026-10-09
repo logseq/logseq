@@ -173,6 +173,44 @@ let run_views ~registry ~profile ~finish =
   check "closing a submenu preserves its parent trigger"
     (List.exists (fun n -> n.M.id = trigger.M.id) (nodes submenu));
   ignore (Lui_app.dispose submenu.S.app);
+  let previous_cmdk =
+    (!Cmdk_state.latest_vs, !Cmdk_state.latest_t, !Cmdk_state.latest_st,
+     !Cmdk_state.services_ref)
+  in
+  let handlers : Cmdk_services.handlers option ref = ref None in
+  let services =
+    { (Cmdk_host.services ()) with
+      repo = (fun () -> None)
+    ; focus_input_init = (fun _ -> ())
+    ; install_listeners = (fun h -> handlers := Some h)
+    }
+  in
+  let search = mount (fun ms -> Cmdk_view.render ~services ms) in
+  let toggle_search () =
+    ignore ((Option.get !handlers).Cmdk_services.key
+      { key = "k"; meta = true; ctrl = false; shift = false; alt = false });
+    S.flush search
+  in
+  let search_inputs () =
+    List.filter (fun n -> class_has n "cp__cmdk-search-input") (nodes search)
+  in
+  toggle_search ();
+  check "search shortcut mounts its input" (search_inputs () <> []);
+  (match List.find_opt (fun n -> n.M.kind = "dialog") (nodes search) with
+   | None -> check "search exposes a host-owned dismissible modal" false
+   | Some modal ->
+       S.dismiss search modal.M.id;
+       check "host dismissal closes the search input" (search_inputs () = []);
+       toggle_search ();
+       check "search reopens after host dismissal" (search_inputs () <> []);
+       toggle_search ();
+       check "search shortcut closes the reopened input" (search_inputs () = []));
+  ignore (Lui_app.dispose search.S.app);
+  let vs, current, shortcuts, services = previous_cmdk in
+  Cmdk_state.latest_vs := vs;
+  Cmdk_state.latest_t := current;
+  Cmdk_state.latest_st := shortcuts;
+  Cmdk_state.services_ref := services;
   let remote_before = !Graphs_view.remote_st_ref in
   let members_before = !Collaborators.members_sig_ref in
   let repos_changed_before = !Graphs_ops.on_repos_changed in

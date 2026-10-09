@@ -9,13 +9,12 @@ open Lui_elements
 
 let class_signal = Ui_parts.class_signal
 
-(* svg/info — cljs ui/icon resolves via shui.icon.v2; `info is a builtin
-   icon name. The title/data-base-ui-tooltip-trigger attrs were DOM-only
-   (base-ui tooltip lookup) — dropped; a tooltip affordance on kinds is
-   tracked by the migration *)
-let info_icon ~key ~title:_ =
-  box ~key ~style_class:"ls-info-icon"
-    [ icon ~key:(key ^ "i") ~name:`info ~point_size:16 [] ]
+let info_icon ~key ~title =
+  box ~key ~opacity:0.56
+    [ button ~key:(key ^ "-button") ~variant:`ghost ~size:`icon
+        ~style_class:"ls-info-icon" ~width:32 ~height:16 ~min_height:16
+        ~padding_horizontal:8 ~padding_vertical:0 ~background:"transparent"
+        ~icon:(`app "info-circle-filled") ~label:title ~tooltip:title [] ]
 
 (* cljs print-shortcut-key (macOS): single letters uppercase, named keys
    map to their glyphs *)
@@ -118,7 +117,7 @@ let label_el ~key ~for_ ~text ?text_signal children =
   in
   match children with
   | [] -> l
-  | _ -> row ~key:(key ^ "-row") ~cross:`center ~gap:4 (l :: children)
+  | _ -> row ~key:(key ^ "-row") ~cross:`center ~gap:0 (l :: children)
 
 (* ---- rows ---- *)
 
@@ -129,18 +128,19 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
     ?binding ~on ~on_toggle () =
   match binding with
   | None ->
-      row ~key ~style_class:"it"
+      row ~key ~style_class:"it" ~gap:24 ~cross:`center
         [ label_el ~key:(key ^ "-l") ~for_ ~text:label label_extra
-        ; row ~key:(key ^ "-c") ~style_class:"ls-it-value"
+        ; row ~key:(key ^ "-c") ~style_class:"ls-it-value" ~cross:`start
+            ~min_height:24
             [ row ~key:(key ^ "-i") ~style_class:"ls-switch-wrap"
                 ~gap:16 ~cross:`center
                 (switch_controls ~key ~on ~on_toggle ~extra:detail ())
             ]
         ]
   | Some b ->
-      row ~key ~style_class:"it"
+      row ~key ~style_class:"it" ~gap:24 ~cross:`center
         [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
-        ; box ~key:(key ^ "-c")
+        ; row ~key:(key ^ "-c") ~cross:`center ~min_height:24
             [ row ~key:(key ^ "-i") ~gap:16 ~cross:`center
                 ~style_class:"ls-switch-wrap ls-switch-narrow"
                 (switch_controls ~key ~on ~on_toggle ())
@@ -171,7 +171,7 @@ let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
 
 (* bare .it shell: label | value cell — font/date-format/home rows *)
 let it_row ~key ~for_ ~label ?(value_cls = "ls-it-value") children =
-  row ~key ~style_class:"it"
+  row ~key ~style_class:"it" ~gap:24 ~cross:`center
     [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
     ; column ~key:(key ^ "-r") ~style_class:value_cls children
     ]

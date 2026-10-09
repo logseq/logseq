@@ -11,9 +11,18 @@ const open = () => {
   browser('wait', '--fn', "document.querySelector('.cp__graphs-selector .item')?.textContent.includes('Demo') === true");
 };
 const button = name => browser('find', 'role', 'button', 'click', '--name', name, '--exact');
+const clickInView = selector => {
+  evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center',behavior:'instant'})`);
+  browser('click', selector);
+};
+const openSettings = () => {
+  evaluate("document.dispatchEvent(new CustomEvent('ls:open-dialog',{detail:{name:'settings'}}))");
+  browser('wait', '200');
+};
 after(() => browser('close'));
 
 const appendBlock = text => {
+  evaluate("document.querySelector('.block-add-button').scrollIntoView({block:'center'})");
   browser('click', '.block-add-button');
   browser('wait', '--fn', "document.querySelector('.ed-input') !== null");
   const uuid = evaluate("document.querySelector('.ed-input').getAttribute('data-block-id')");
@@ -141,15 +150,64 @@ for (const redo of [false, true]) {
     browser('keyboard', 'type', '!');
     assert.equal(editedText(), redo ? 'ab!cd' : '!cd');
   });
+  test(`${redo ? 'redo' : 'undo'} restores the caret after indentation`, () => {
+    open();
+    appendBlock('Indent parent');
+    browser('press', 'Enter');
+    browser('wait', '300');
+    browser('keyboard', 'type', 'abcd');
+    const uuid = evaluate("document.querySelector('.ed-input').getAttribute('data-block-id')");
+    browser('press', 'Escape');
+    assertExited();
+    editBlock(uuid);
+    browser('press', 'ArrowLeft');
+    browser('press', 'ArrowLeft');
+    browser('press', 'Tab');
+    browser('wait', '300');
+    history(false);
+    if (redo) history(true);
+    assert.equal(evaluate("document.querySelector('.ed-input')?.getAttribute('data-block-id')"), uuid);
+    browser('keyboard', 'type', '!');
+    assert.equal(editedText(), 'ab!cd');
+  });
+  test(`${redo ? 'redo' : 'undo'} restores the editing target after a block paste`, () => {
+    open();
+    const uuid = appendBlock('abcd');
+    browser('press', 'Escape');
+    assertExited();
+    editBlock(uuid);
+    browser('press', 'ArrowLeft');
+    browser('press', 'ArrowLeft');
+    evaluate("(() => {const data=new DataTransfer();data.setData('text/plain','- first\\n- second');document.querySelector('.ed-input').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));return true;})()");
+    browser('wait', '500');
+    assert.equal(editedText(), 'second');
+    history(false);
+    if (redo) history(true);
+    browser('keyboard', 'type', '!');
+    assert.equal(editedText(), redo ? 'second!' : 'ab!cd');
+  });
 }
 
-test('one search-button click opens the palette and Escape closes it', () => {
+test('search focuses its input and closes on Escape or outside press, then reopens', () => {
   open();
+  browser('errors', '--clear');
   browser('click', '#search-button');
-  assert.equal(evaluate("document.querySelectorAll('.cp__cmdk-search-input').length"), 1);
+  browser('wait', '--fn', "document.activeElement === document.querySelector('.cp__cmdk-search-input')");
+  browser('keyboard', 'type', 'Search fixture');
+  assert.equal(evaluate("document.querySelector('.cp__cmdk-search-input').value"), 'Search fixture');
   browser('press', 'Escape');
+  browser('wait', '--fn', "document.querySelector('.cp__cmdk-search-input')?.value === ''");
   browser('press', 'Escape');
-  assert.equal(evaluate("document.querySelectorAll('.cp__cmdk-search-input').length"), 0);
+  browser('wait', '--fn', "document.querySelector('.cp__cmdk-search-input') === null");
+  browser('click', '#search-button');
+  browser('wait', '--fn', "document.activeElement === document.querySelector('.cp__cmdk-search-input')");
+  browser('click', '#head');
+  browser('wait', '--fn', "document.querySelector('.cp__cmdk-search-input') === null");
+  browser('click', '#search-button');
+  browser('wait', '--fn', "document.activeElement === document.querySelector('.cp__cmdk-search-input')");
+  browser('press', 'Escape');
+  browser('wait', '--fn', "document.querySelector('.cp__cmdk-search-input') === null");
+  assert.equal(browser('errors'), '', 'search lifecycle must not reject the retained dialog');
 });
 
 test('graph-switch trigger toggles without an outside-press reopen', () => {
@@ -178,27 +236,108 @@ test('right-sidebar panel headings use neutral disclosure chrome', () => {
   assert.equal(evaluate("(()=>{const heading=document.querySelector('[id^=sidebar-panel-header-]');return getComputedStyle(heading).backgroundColor})()"), 'rgba(0, 0, 0, 0)');
 });
 
+test('task status stays before the block text', () => {
+  open();
+  appendBlock('Task scrolling fixture');
+  const lines = Array.from({length: 40}, (_, index) => `- Task fixture ${index}`).join('\n');
+  evaluate(`(() => {const data=new DataTransfer();data.setData('text/plain',${JSON.stringify(lines)});document.querySelector('.ed-input').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));return true;})()`);
+  browser('wait', '--fn', "document.querySelector('.editor-wrapper')?.textContent.replaceAll('\\u200b', '') === 'Task fixture 39'");
+  browser('press', 'Escape');
+  assertExited();
+  const uuid = appendBlock('Task placement parity');
+  browser('press', 'Control+Enter');
+  browser('wait', '300');
+  browser('press', 'Escape');
+  assertExited();
+  const metrics = evaluate(`(() => {const block=document.querySelector('#ls-block-${uuid}');const status=block.querySelector('.positioned-properties.block-left').getBoundingClientRect();const title=block.querySelector('.block-content').getBoundingClientRect();return {statusRight:status.right,titleLeft:title.left};})()`);
+  assert.ok(metrics.statusRight<=metrics.titleLeft, 'task status must precede the title instead of following the full-width content');
+  assert.equal(evaluate(`document.querySelector('#ls-block-${uuid} .positioned-properties.block-left [data-name="app:todo"]') !== null`), true, 'the task status uses its configured icon');
+  evaluate(`(()=>{const trigger=document.querySelector('#ls-block-${uuid} .pv-closed-value');trigger.click();trigger.click();})()`);
+  browser('wait', '300');
+  assert.equal(evaluate("document.querySelectorAll('.ls-property-select-popup').length"), 0, 'an asynchronous option load must not reopen a canceled picker');
+  browser('click', `#ls-block-${uuid} .pv-closed-value`);
+  assert.equal(evaluate("document.querySelectorAll('input[placeholder=\"Set Status\"]').length > 0"), true);
+  browser('wait', '--fn', "document.querySelector('.ls-property-select-popup')?.textContent.includes('Todo') === true");
+  const picker = evaluate("(()=>{const popup=document.querySelector('.ls-property-select-popup');return {color:getComputedStyle(popup).backgroundColor,rowHeight:popup.querySelector('.lui-list-item').getBoundingClientRect().height,chosen:popup.querySelectorAll('.ls-property-select-check').length};})()");
+  assert.notEqual(picker.color, 'rgba(0, 0, 0, 0)', 'the status picker has an opaque card background');
+  assert.equal(picker.rowHeight, 32);
+  assert.equal(picker.chosen, 1, 'the current value has a check mark');
+  browser('click', `#ls-block-${uuid} .pv-closed-value`);
+  assert.equal(evaluate("document.querySelectorAll('input[placeholder=\"Set Status\"]').length"), 0, 'a second trigger press closes the status picker');
+  browser('click', `#ls-block-${uuid} .pv-closed-value`);
+  browser('wait', '--fn', "document.querySelector('.ls-property-select-popup')?.textContent.includes('Done') === true");
+  browser('find', 'text', 'Done', 'click', '--exact');
+  browser('wait', '--fn', `document.querySelector('#ls-block-${uuid} .positioned-properties.block-left [data-name="app:done"]') !== null`);
+  browser('reload');
+  browser('wait', '--fn', `document.querySelector('#ls-block-${uuid} .positioned-properties.block-left [data-name="app:done"]') !== null`);
+  clickInView(`#ls-block-${uuid} .pv-closed-value`);
+  browser('wait', '--fn', "document.querySelector('.ls-property-select-popup')?.textContent.includes('Clear') === true");
+  browser('find', 'text', 'Clear', 'click', '--exact');
+  browser('wait', '--fn', `document.querySelector('#ls-block-${uuid} .positioned-properties.block-left') === null`);
+});
+
+test('task priority has its icon and persists picker changes', () => {
+  open();
+  const uuid = appendBlock('Priority parity /priority high');
+  browser('press', 'Enter');
+  browser('wait', '--fn', `document.querySelector('#ls-block-${uuid} .pv-closed-value[aria-label="High"]') !== null`);
+  browser('press', 'Escape');
+  assertExited();
+  assert.equal(evaluate(`document.querySelector('#ls-block-${uuid} [data-name="app:priority-lvl-high"]') !== null`), true);
+  browser('click', `#ls-block-${uuid} .pv-closed-value[aria-label="High"]`);
+  browser('wait', '--fn', "document.querySelector('.ls-property-select-popup')?.textContent.includes('Urgent') === true");
+  browser('find', 'text', 'Urgent', 'click', '--exact');
+  browser('reload');
+  browser('wait', '--fn', `document.querySelector('#ls-block-${uuid} [data-name="app:priority-lvl-urgent"]') !== null`);
+});
+
+test('keymap search, filters and category disclosure respond to input', () => {
+  open();
+  openSettings();
+  button('Keymap');
+  browser('wait', '--fn', "document.querySelector('.cp__shortcut-page-x input') !== null");
+  const allCount = evaluate("document.querySelectorAll('.shortcut-row').length");
+  browser('fill', '.cp__shortcut-page-x input', 'Undo');
+  browser('wait', '--fn', "document.querySelectorAll('.shortcut-row').length === 1");
+  assert.equal(evaluate("document.querySelectorAll('.shortcut-row').length"), 1, 'search narrows the command list');
+  assert.ok(evaluate("document.querySelector('.shortcut-row').textContent").includes('Undo'));
+  browser('fill', '.cp__shortcut-page-x input', '');
+  button('Unset');
+  const unsetCount = evaluate("document.querySelectorAll('.shortcut-row').length");
+  assert.ok(unsetCount > 0 && unsetCount < allCount);
+  assert.equal(evaluate("Array.from(document.querySelectorAll('.shortcut-row')).every(e=>e.textContent.includes('Unset'))"), true);
+  button('Disabled');
+  assert.equal(evaluate("Array.from(document.querySelectorAll('.shortcut-row')).every(e=>e.textContent.includes('Disabled'))"), true);
+  button('All');
+  const count = evaluate("document.querySelectorAll('.shortcut-row').length");
+  button('Toggle categories pane');
+  assert.equal(evaluate("document.querySelectorAll('.shortcut-row').length"), 0);
+  button('Toggle categories pane');
+  assert.equal(evaluate("document.querySelectorAll('.shortcut-row').length"), count);
+});
+
 test('font settings update live and survive a full reload', () => {
   open();
-  evaluate("document.dispatchEvent(new CustomEvent('ls:open-dialog',{detail:{name:'settings'}}))");
+  openSettings();
   button('Serif');
   assert.equal(evaluate("document.documentElement.getAttribute('data-font')"), 'serif');
   browser('reload');
   browser('wait', '--fn', "document.querySelector('#head') !== null || document.body.textContent.includes('SyntaxError')");
   assert.equal(evaluate("document.querySelectorAll('#head').length"), 1, 'persisted settings must not break startup');
   assert.equal(evaluate("document.documentElement.getAttribute('data-font')"), 'serif');
-  evaluate("document.dispatchEvent(new CustomEvent('ls:open-dialog',{detail:{name:'settings'}}))");
+  openSettings();
   button('Default');
 });
 
 
 test('settings switches match the reference dimensions and persist clicks', () => {
   open();
-  evaluate("document.dispatchEvent(new CustomEvent('ls:open-dialog',{detail:{name:'settings'}}))");
+  openSettings();
   button('Editor');
   const selector = '.ui__switch input[role=switch]';
   const metrics = evaluate(`(() => {const s=document.querySelector('${selector}');const r=s.getBoundingClientRect();const t=getComputedStyle(s,'::after');return [r.width,r.height,t.width,t.height];})()`);
   assert.deepEqual(metrics, [32,18,'12px','12px']);
+  assert.equal(evaluate(`getComputedStyle(document.querySelector('${selector}'),'::after').translate`), 'none', 'the thumb must not combine Tailwind translate with its switch transform');
   const before = evaluate(`document.querySelector('${selector}').checked`);
   browser('click', selector + ':first-of-type');
   browser('wait', '250');
@@ -206,7 +345,43 @@ test('settings switches match the reference dimensions and persist clicks', () =
   button('Close');
   browser('reload');
   browser('wait', '--fn', "document.querySelector('#head') !== null");
-  evaluate("document.dispatchEvent(new CustomEvent('ls:open-dialog',{detail:{name:'settings'}}))");
+  openSettings();
   button('Editor');
   assert.equal(evaluate(`document.querySelector('${selector}').checked`), !before);
 });
+
+
+test('selecting an empty page reference consumes its autopaired closing brackets', () => {
+  open();
+  appendBlock('[[Completion target]]');
+  browser('press', 'Escape');
+  assertExited();
+  appendBlock('[[');
+  browser('press', 'Enter');
+  assert.equal(editedText().endsWith(']]]]'), false);
+});
+
+test('settings editor aligns its switches with multiline labels', () => {
+  open();
+  openSettings();
+  button('Editor');
+  const metrics = evaluate("(() => {const rows=[...document.querySelectorAll('.panel-wrap > .it')];const r=rows.find(e=>e.textContent.includes('Show all lines of a block reference'));const s=r.querySelector('[role=switch]').getBoundingClientRect();const label=r.firstElementChild.getBoundingClientRect();const panel=document.querySelector('.panel-wrap').getBoundingClientRect();return {x:s.x-panel.x,center:s.y+s.height/2-label.y-label.height/2};})()");
+  assert.ok(Math.abs(metrics.center+3)<0.5, `switch is ${metrics.center}px away from the label center instead of the reference -3px`);
+  assert.ok(Math.abs(metrics.x-209.328125)<0.5, `switch starts at ${metrics.x}px instead of the reference column`);
+});
+
+
+for (const level of [1,2,3,4,5,6]) {
+  test(`heading ${level} keeps its font size and text origin while editing`, () => {
+    open();
+    const uuid = appendBlock('#'.repeat(level) + ' Heading parity');
+    browser('press', 'Escape');
+    assertExited();
+    const read = evaluate(`(() => {const h=document.querySelector('#ls-block-${uuid} h${level}');const style=getComputedStyle(h);const walker=document.createTreeWalker(h,NodeFilter.SHOW_TEXT);const range=document.createRange();range.selectNode(walker.nextNode());const rect=range.getBoundingClientRect();return {font:style.fontSize,x:rect.x,y:rect.y};})()`);
+    editBlock(uuid);
+    const editing = evaluate(`(() => {const h=document.querySelector('#ls-block-${uuid} .ed-line');const style=getComputedStyle(h);const walker=document.createTreeWalker(h,NodeFilter.SHOW_TEXT);const range=document.createRange();range.selectNode(walker.nextNode());const rect=range.getBoundingClientRect();return {font:style.fontSize,x:rect.x,y:rect.y};})()`);
+    assert.equal(editing.font, read.font);
+    assert.ok(Math.abs(editing.x-read.x)<0.5, `text x moved from ${read.x} to ${editing.x}`);
+    assert.ok(Math.abs(editing.y-read.y)<0.5, `text y moved from ${read.y} to ${editing.y}`);
+  });
+}

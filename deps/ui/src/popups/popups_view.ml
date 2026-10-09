@@ -1089,14 +1089,12 @@ let handle_contextmenu st (ev : Ui_services.ev) =
 ;;
 
 let handle_click st (ev : Ui_services.ev) =
-  (* item activations run through each node's ~on_press; this listener
-     only closes the popups on outside clicks and keeps clicks inside
-     from stealing editor focus *)
+  (* Item activations belong to the typed control. Canceling their click
+     would suppress checkbox changes and other browser default actions. *)
   match ev.Ui_services.target with
   | None -> ()
   | Some el ->
       if not (in_popups el) then (S.close_ac st; close_cm st; S.close_pv st)
-      else ev.Ui_services.prevent_default ()
 ;;
 
 (* `ls:block-picker` {block, kind:"icon"|"emoji"} — the `p i`/`p r`
@@ -1224,7 +1222,9 @@ let handle_mousemove st (ev : Ui_services.ev) =
    editor keeps focus while the autocomplete/page-ref popup is open) *)
 let handle_mousedown _st (ev : Ui_services.ev) =
   match ev.Ui_services.target with
-  | Some el when in_popups el -> ev.Ui_services.prevent_default ()
+  | Some el when el.Ui_services.closest "#ui__ac" <> None
+                 && el.Ui_services.closest "input, textarea, select, button" = None ->
+      ev.Ui_services.prevent_default ()
   | _ -> ()
 
 let install_listeners context st =

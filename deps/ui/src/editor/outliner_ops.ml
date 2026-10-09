@@ -1422,13 +1422,17 @@ let flush_pending_save () =
       apply ~opts [ sop ]
 
 let undo () =
+  let context = Runtime.repo (), Runtime.route () in
+  let current () = context = (Runtime.repo (), Runtime.route ()) in
   match (Runtime.model ()).Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
+      if not (current ()) then Js.Promise.resolve () else
       let* result = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
+      if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
       let* () = refresh_page () in
-      !(S.restore_history) result)
+      if current () then !(S.restore_history) result else Js.Promise.resolve ()))
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("undo failed", e);
              Toast.error (I18n.t "editor/undo-error");
@@ -1436,13 +1440,17 @@ let undo () =
   | None -> Js.Promise.resolve ()
 
 let redo () =
+  let context = Runtime.repo (), Runtime.route () in
+  let current () = context = (Runtime.repo (), Runtime.route ()) in
   match (Runtime.model ()).Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
+      if not (current ()) then Js.Promise.resolve () else
       let* result = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
+      if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
       let* () = refresh_page () in
-      !(S.restore_history) result)
+      if current () then !(S.restore_history) result else Js.Promise.resolve ()))
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("redo failed", e);
              Toast.error (I18n.t "editor/redo-error");

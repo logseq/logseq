@@ -859,6 +859,21 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
          | _ -> ());
         List.concat (List.rev !collected))
   in
+  let tx_meta =
+    match Cljs_map.get opts' "undo-redo/editor-info-after" with
+    | Some cursor when Cljs_map.get cursor "block-uuid"
+        = Some (Wire.Keyword "last-inserted-block") ->
+        let blocks = match Cljs_map.get !result_ref "blocks" with
+          | Some (Wire.Array blocks) | Some (Wire.List blocks) -> blocks
+          | _ -> raise (Invalid_outliner_op "paste history requires inserted blocks") in
+        let last = List.fold_left (fun _ block -> Some block) None blocks in
+        let uuid = match Option.bind last (fun block -> Cljs_map.get block "block/uuid") with
+          | Some (Wire.Uuid _ as uuid) -> uuid
+          | _ -> raise (Invalid_outliner_op "paste history requires an inserted UUID") in
+        Outliner_tx_meta.tx_meta_put tx_meta "undo-redo/editor-info-after"
+          (Ds_wire.value_of_transit (Cljs_map.assoc cursor "block-uuid" uuid))
+    | _ -> tx_meta
+  in
   if tx_data <> [] then
     ignore
       (Db_tx.transact
