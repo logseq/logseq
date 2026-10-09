@@ -308,23 +308,23 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
           props
       in
       let head () =
-        let cb = E.h ~tag:"input" ~attrs:[ ("id", "built-in"); ("type", "checkbox") ] () in
-        let lab =
-          E.h ~tag:"label"
-            ~cls:"opacity-50 cursor-pointer select-none text-sm"
-            ~attrs:[ ("for", "built-in") ]
-            ~text:I.builder_show_builtin ()
-        in
-        let row =
-          E.h
-            ~cls:"flex flex-row justify-between gap-1 items-center px-1 pb-1 border-b"
-            ~children:[ lab; cb ] ()
-        in
-        E.el_on cb "change" (fun _ ->
-            property_picker inst ~tree ~loc ~anchor
-              ~include_builtin:(E.el_checked cb));
-        if include_builtin then E.el_set_checked cb true;
-        Some row
+        Some
+          (Logseq_el.el
+             ~style_class:
+               "flex flex-row justify-between gap-1 items-center px-1 pb-1 border-b"
+             [ Logseq_el.el ~tag:"label"
+                 ~style_class:"opacity-50 cursor-pointer select-none text-sm"
+                 ~attrs:[ ("for", "built-in") ]
+                 ~text:I.builder_show_builtin []
+             ; Logseq_el.el ~tag:"input"
+                 ~attrs:
+                   (([ ("id", "built-in"); ("type", "checkbox") ]
+                    @ (if include_builtin then [ ("checked", "") ] else [])))
+                 ~events:"change"
+                 ~on_dom_event:(fun _ payload ->
+                   property_picker inst ~tree ~loc ~anchor
+                     ~include_builtin:(Json_payload.bool payload "checked"))
+                 [] ])
       in
       ignore
         (P.show_select ~anchor ~placeholder:I.select_prompt ~items
@@ -440,32 +440,26 @@ let between_picker inst ~tree ~loc ~anchor =
                        ] ));
               commit inst ~tree ())))
 
-let full_text_picker inst ~tree ~loc ~anchor:_ =
-  let input =
-    E.h ~tag:"input"
-      ~cls:"form-input block sm:text-sm sm:leading-5"
-      ~attrs:
-        [ ("id", "query-builder-search")
-        ; ("placeholder", I.type_to_search)
-        ; ("aria-label", I.type_to_search)
-        ]
-      ()
-  in
-  let wrap = E.h ~cls:"query-builder-picker" ~children:[ input ] () in
-  E.el_append_child P.document_body wrap;
-  P.push_popup wrap;
-  E.el_on input "keydown" (fun ev ->
-      match E.ev_key ev with
-      | "Enter" ->
-          let v = String.trim (E.el_value input) in
-          if v <> "" then begin
-            P.close_all ();
-            tree := append_at !tree loc (CText v);
-            commit inst ~tree ()
-          end
-      | "Escape" -> P.close_all ()
-      | _ -> ());
-  E.set_timeout (fun () -> E.el_focus input) 0
+let full_text_picker inst ~tree ~loc ~anchor =
+  let value = ref "" in
+  ignore
+    (P.show_custom ~anchor ~cls:"query-builder-picker"
+       (input ~style_class:"form-input block sm:text-sm sm:leading-5"
+          ~accessibility_identifier:"query-builder-search"
+          ~placeholder:I.type_to_search
+          ~data_attrs:[ ("aria-label", I.type_to_search) ]
+          ~autofocus:true ~submit_on_enter:true
+          ~on_input:(function
+            | Lui_protocol.TextChanged (_, s) -> value := s
+            | _ -> ())
+          ~on_submit:(fun _ ->
+            let v = String.trim !value in
+            if v <> "" then begin
+              P.close_all ();
+              tree := append_at !tree loc (CText v);
+              commit inst ~tree ()
+            end)
+          []))
 
 let sample_picker inst ~tree ~loc ~anchor =
   ignore
@@ -592,7 +586,7 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
             [ text ~key:"a" ~accessibility_identifier:id
                 ~style_class:"query-clause" ~value:(clause_label inst c)
                 ~on_press:(fun _ ->
-                  match E.get_element_by_id id with
+                  match Ui_services.dom_by_id id with
                   | Some anchor ->
                       clause_popup inst ~tree ~loc ~anchor ~is_op_clause:false
                   | None -> ())
@@ -606,7 +600,7 @@ and op_label_el inst ~tree ~loc kind : t =
     ~style_class:"query-clause"
     ~value:(String.uppercase_ascii kind)
     ~on_press:(fun _ ->
-      match E.get_element_by_id id with
+      match Ui_services.dom_by_id id with
       | Some anchor -> clause_popup inst ~tree ~loc ~anchor ~is_op_clause:true
       | None -> ())
     []
@@ -619,7 +613,7 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
     ?text:(if with_label then Some I.filter else None)
     ~style_class:"jtrigger add-filter"
     ~on_press:(fun _ ->
-      match E.get_element_by_id id with
+      match Ui_services.dom_by_id id with
       | Some anchor -> picker inst ~tree ~loc ~anchor
       | None -> ())
     []

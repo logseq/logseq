@@ -239,6 +239,8 @@
 (rule
  (copy ../src/views/views_table.ml views_table.ml))
 (rule
+ (copy ../src/views/views_popup.ml views_popup.ml))
+(rule
  (copy ../src/views/views_state.ml views_state.ml))
 (rule
  (copy ../src/views/views_view.ml views_view.ml))

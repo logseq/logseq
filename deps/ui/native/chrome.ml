@@ -343,6 +343,7 @@ let overlays (ms : Model.t Signal.signal) =
     ; Cards_view.render ms
     ; Toasts_view.render ms
     ; Properties_view.overlays
+    ; Views_popup.layer
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
           (* the menu reads only page scalars — comparing them skips the
              per-publish deep [=] on the whole route page record *)
