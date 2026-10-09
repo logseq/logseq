@@ -85,34 +85,27 @@ let attach ctx el_id near =
         Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> io_disconnect io)
       end
 
-(* The raw gate behind lazy_children and row-level gating: returns
-   (near, far) signals; [el_id] is the DOM id of the host element the
-   observer watches — for rows that's the always-mounted .ls-block
-   shell. One-way latch: near stays true once lifted. *)
-let gate_sigs ~el_id ~uuid ctx : bool Signal.signal * bool Signal.signal =
+let lazy_children ~key ~uuid ~min_height ~render : t =
+ fun ctx parent ->
   let near =
     Signal.state ctx.Lui_ui.ui_scheduler
       (Hashtbl.mem forced uuid || not lazy_feasible)
   in
   let near_sig = near.Signal.state_signal in
+  let el_id = "lazy-" ^ key in
   if lazy_feasible && not (Hashtbl.mem forced uuid) then
     set_timeout (fun () -> attach ctx el_id near) 0;
-  (near_sig, Logseq_el.own ctx (Signal.map (fun n -> not n) near_sig))
-
-let lazy_children ~key ~uuid ~min_height ~render : t =
- fun ctx parent ->
-  let el_id = "lazy-" ^ key in
-  let near_sig, far_sig = gate_sigs ~el_id ~uuid ctx in
   (column ~key ~accessibility_identifier:el_id ~style_class:"block-children"
      ~grow:1.
-     [ Lui_elements.if_ ~test:far_sig
+     [ Lui_elements.if_
+         ~test:(Logseq_el.own ctx (Signal.map (fun n -> not n) near_sig))
          (spacer ~key:"lazy-ph"
             ~min_height:(int_of_float (Float.round min_height)) [])
      ; Lui_elements.if_ ~test:near_sig (render ()) ])
     ctx parent
 
-(* Top-level block lists (journals inner, page-blocks) go through the
-   keyed eager path — the per-row IO gate lives inside row_sig when
-   ~virtualize is set, so the keyed list itself needs no windowing. *)
+(* Web journal rows stay eager — the page-level virtualizer owns the
+   windowing and nested per-row IO gates would fight its measurements.
+   Only the native twin gates rows (gpui first-frame cost). *)
 let lazy_rows ~key ~cmp ~mount ~estimate_height:_ ~source : t =
   Lui_elements.keyed ~source ~key ~cmp ~mount
