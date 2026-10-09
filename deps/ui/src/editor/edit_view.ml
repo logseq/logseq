@@ -603,7 +603,7 @@ let view ~model ~frame ~block_id ~on_input ~cls : t =
   in
   let caret_s = own context (Signal.map caret_prop model) in
   let comp_s = own context (Signal.map composition_prop model) in
-  (column ~style_class:("block-editor" ^ cls)
+  (column ~style_class:("block-editor" ^ cls) ~grow:1.
      [ keyed ~source:lines_s ~key:(fun l -> l.lidx) ~cmp:Int.compare
          ~mount:(line_view ~on_input)
      ; overlay frame

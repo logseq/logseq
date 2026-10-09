@@ -26,14 +26,14 @@ let toast_item (t : Model.toast) : t =
   let kind = toast_kind_class t.toast_kind in
   fun ctx parent ->
     (toast ~key:("toast-" ^ string_of_int t.toast_id)
-       ~padding:12
        ~duration:(if kind = "error" then 0 else if t.toast_key = None then 1500 else 2000)
        ~label:t.toast_text
        ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
        ~style_class:("ui__toast " ^ kind)
        ~accessibility_identifier:("toast-" ^ string_of_int t.toast_id)
        [ overlay ~key:"ti-content" ~grow:1. ~style_class:"ui__toast-content"
-           [ row ~key:"ti-body" ~gap:8 ~padding_vertical:8 ~cross:`start
+           [ row ~key:"ti-body" ~gap:8 ~padding_horizontal:12
+               ~padding_vertical:20 ~cross:`start
                [ icon ~key:"ti-icon" ~name:(toast_icon kind)
                    ~width:20 ~height:20
                    ~style_class:(toast_icon_class kind) []
