@@ -16,6 +16,10 @@
 - Keep one clear code path whenever possible.
 - Internal code may assume well-formed inputs from controlled callers.
 
+## Language Requirements
+- All documentation, source code, and code comments must be written in English.
+- This includes plans, research reports, and other agent decision documents, regardless of the conversation language.
+
 ## Coding Style & Naming Conventions
 - ClojureScript keywords are defined via `logseq.common.defkeywords/defkeyword`; use existing keywords and add new ones in the shared definitions.
 - Follow existing namespace and file layout; keep related workers and RTC code in their dedicated directories.
