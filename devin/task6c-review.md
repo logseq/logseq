@@ -392,3 +392,19 @@ Branch devin/SHAREDUI-task6c. Files changed so far (uncommitted):
   port, decide after m6 views_popup outcome).
 - Remaining mine: native_embed wiring, code_mirror lang picker (needs
   m10's open_anchored Ui_services.el signature), merge + delete + verify.
+
+## STATE UPDATE 6
+- m1 merged (14 files) + slept; I migrated worker_events+router myself
+  (capture now in contract; fb7c1c5c64). overlay.ml deferred — its
+  `el list` signature is consumed by m10/m6 files; flip at their merge.
+- m9 merged (5fb760c3ab): add_button → pure LUI emitter rendered from
+  block rows (page/journal/sidebar/preview/quick-add); register_doc_scan
+  usage deleted; tree.ml install() call removed. Verified full suite
+  green + boundaries + pushed.
+- m11 (f33cb1a8) popups cluster dispatched: popups_state API flip +
+  popups_view ~100 sites + tooltip port.
+- Running children: m4 graphs LUI, m5 icon_picker, m6 views_popup,
+  m7 editor cluster, m8 editor_commands LUI, m10 properties, m11 popups.
+- Still queued/mine: views cluster (builder/head/table/view rename box)
+  decision after m6; code_mirror lang picker; native_embed wiring;
+  module deletion + trims; final verify + report.
