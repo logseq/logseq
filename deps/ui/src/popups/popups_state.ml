@@ -1816,6 +1816,17 @@ let multi_entries () =
   ]
 ;;
 
+(* text-edit context menu — right-click inside .block-editor with a live
+   model selection. One menu on every host: web drops the inconsistent
+   per-browser native menus, gpui gets the same edit commands *)
+let edit_entries () =
+  [ Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "edit-cut")
+  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ "\u{2318}"; "C" ]), "edit-copy")
+  ; Ci_item (U.t "editor/paste", Some ("meta+v", [ "\u{2318}"; "V" ]), "edit-paste")
+  ; Ci_sep
+  ; Ci_item (U.t "editor/select-all", Some ("meta+a", [ "\u{2318}"; "A" ]), "edit-select-all") ]
+;;
+
 (* cljs state/developer-mode? — storage holds raw "true" (ours) or a
    JSON-quoted "\"true\"" (cljs storage) *)
 let dev_mode () =
@@ -1883,6 +1894,16 @@ let open_cm t ~ax ~atop ~abot ~block_id ~multi =
        { cx = ax; cy = (if flip then atop else abot); atop; flip
        ; block_id; multi; entries; sub_open = -1; sub_xy = (0., 0.)
        ; tag = None })
+;;
+
+let open_cm_edit t ~ax ~atop ~abot ~block_id =
+  close_ac t;
+  let flip = anchor_above atop abot in
+  set_cm t
+    (Some
+       { cx = ax; cy = (if flip then atop else abot); atop; flip
+       ; block_id; multi = false; entries = edit_entries ()
+       ; sub_open = -1; sub_xy = (0., 0.); tag = None })
 ;;
 
 (* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in

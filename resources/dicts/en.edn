@@ -509,6 +509,7 @@
  :editor/search-for-node "Search for a node"
  :editor/search-for-tag "Search for a tag"
  :editor/search-template-placeholder "Search for a template"
+ :editor/select-all "Select all"
  :editor/template-insert-error "Template insert error: {1}"
  :editor/undo-error "Undo failed."
 

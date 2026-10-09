@@ -151,6 +151,56 @@ let run ~command ~block ~value : outcome =
           | "delete" ->
               apply [ Outliner_ops.delete_blocks [ uuid ] ];
               Handled
+          (* text-level editing commands — act on the edit model's
+             selection inside .block-editor, not on block entities. The
+             edit context menu emits these; neither web nor native shows
+             a native edit menu over our overlay selection *)
+          | "edit-copy" -> (
+              match Editor_actions.edit_model uuid with
+              | Some m -> (
+                  match Edit_model.selection_range m with
+                  | Some (lo, hi) ->
+                      h.clipboard_write
+                        (String.sub m.Edit_model.source lo (hi - lo));
+                      Handled
+                  | None -> Handled)
+              | None -> No_target)
+          | "edit-cut" -> (
+              match Editor_actions.edit_model uuid with
+              | Some m -> (
+                  match Edit_model.selection_range m with
+                  | Some (lo, hi) ->
+                      h.clipboard_write
+                        (String.sub m.Edit_model.source lo (hi - lo));
+                      Editor_actions.splice_range uuid lo hi "";
+                      Outliner_ops.schedule_save uuid
+                        (Editor_actions.live_buffer uuid);
+                      Handled
+                  | None -> Handled)
+              | None -> No_target)
+          | "edit-paste" -> (
+              match Editor_actions.edit_model uuid with
+              | Some _ ->
+                  ignore
+                    (Ui_task.bind (Ui_services.clipboard_read_text ())
+                       (fun text ->
+                         (match Editor_actions.edit_model uuid with
+                          | Some m ->
+                              let lo, hi = Editor_actions.sel_span_of m in
+                              Editor_actions.splice_range uuid lo hi text;
+                              Outliner_ops.schedule_save uuid
+                                (Editor_actions.live_buffer uuid)
+                          | None -> ());
+                         Ui_task.resolve ()));
+                  Handled
+              | None -> No_target)
+          | "edit-select-all" -> (
+              match Editor_actions.edit_model uuid with
+              | Some _ ->
+                  Editor_actions.update_model uuid Edit_model.select_all;
+                  ignore (Editor_actions.refresh_overlay uuid);
+                  Handled
+              | None -> No_target)
           | "expand-children" ->
               apply [ Outliner_ops.collapse_expand [ (uuid, false) ] ];
               Handled

@@ -509,6 +509,7 @@
  :editor/search-for-node "搜索节点"
  :editor/search-for-tag "搜索标签"
  :editor/search-template-placeholder "搜索模板"
+ :editor/select-all "全选"
  :editor/template-insert-error "模板插入错误：{1}"
  :editor/undo-error "撤销失败。"
 

@@ -1067,6 +1067,20 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                 (blk.Ui_services.attr "data-blockid"
                 , Ui_services.dom_selected_block_uuids ())
               with
+              | Some id, _
+                when el.Ui_services.closest ".block-editor" <> None
+                     && (match Editor_actions.edit_model id with
+                         | Some m -> Edit_model.has_selection m
+                         | None -> false) ->
+                  (* right-click on selected text inside the editing
+                     surface: one LUI edit menu on every host — the
+                     browser's native menu differs per engine and would
+                     not target our model selection anyway *)
+                  ev.Ui_services.prevent_default ();
+                  ev.Ui_services.stop_propagation ();
+                  close_cm_picker ();
+                  let ax, atop, abot = S.anchor_at_point ~x:ev.Ui_services.x ~y:ev.Ui_services.y in
+                  S.open_cm_edit st ~ax ~atop ~abot ~block_id:id
               | Some id, (first :: _ as sel)
                 when List.exists (fun u -> u = id) sel ->
                   ev.Ui_services.prevent_default ();
