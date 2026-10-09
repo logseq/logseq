@@ -58,6 +58,50 @@ let kill_line_before (m : Edit_model.t) =
   let lo, _ = Edit_model.line_bounds m in
   Edit_model.splice m lo m.Edit_model.caret ""
 
+(* kill from caret to the end of the visual line (readline ctrl+k);
+   at the line end the kill swallows the line break itself *)
+let kill_line_after (m : Edit_model.t) =
+  if Edit_model.has_selection m then Edit_model.delete_forward m
+  else
+    let _, hi = Edit_model.line_bounds m in
+    if m.Edit_model.caret < hi then
+      Edit_model.splice m m.Edit_model.caret hi ""
+    else Edit_model.delete_forward m
+
+(* readline ctrl+t: swap the unit before the caret with the unit
+   after; at end of buffer swap the last two *)
+let transpose_chars (m : Edit_model.t) =
+  if Edit_model.has_selection m then m
+  else
+    let src = m.Edit_model.source in
+    let n = String.length src in
+    if n < 2 then m
+    else
+      let caret = m.Edit_model.caret in
+      if caret >= n then
+        let p1 = Edit_model.prev_off m.units src n in
+        let p0 = Edit_model.prev_off m.units src p1 in
+        if p0 = p1 then m
+        else
+          Edit_model.splice m p0 n
+            (String.sub src p1 (n - p1) ^ String.sub src p0 (p1 - p0))
+      else if caret > 0 then
+        let a = Edit_model.prev_off m.units src caret in
+        let b = Edit_model.next_off m.units src caret in
+        if b <= caret then m
+        else
+          Edit_model.splice m a b
+            (String.sub src caret (b - caret)
+             ^ String.sub src a (caret - a))
+      else
+        (* buffer start: readline transposes the first pair *)
+        let b = Edit_model.next_off m.units src 0 in
+        let c = Edit_model.next_off m.units src b in
+        if c <= b then m
+        else
+          Edit_model.splice m 0 c
+            (String.sub src b (c - b) ^ String.sub src 0 b)
+
 (* cljs editor/clear-block *)
 let clear_block (m : Edit_model.t) =
   Edit_model.splice m 0 (String.length m.Edit_model.source) ""
@@ -398,6 +442,25 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
         (* cljs shortcut tables key on the unshifted key plus modifier
            flags — same normalization the DOM path used *)
         match shortcut_key_str key with
+        (* macOS readline keys — native textarea parity; ctrl+shift
+           extends the selection. These shadow the mod-key cases
+           below, so they must match first *)
+        | "a" when ctrl && not meta && Ui_services.env_is_mac () ->
+            Edit_model.move m Edit_model.Home ~extend:shift
+        | "e" when ctrl && not meta && Ui_services.env_is_mac () ->
+            Edit_model.move m Edit_model.End ~extend:shift
+        | "k" when ctrl && not meta && Ui_services.env_is_mac () ->
+            kill_line_after m
+        | "d" when ctrl && not meta && Ui_services.env_is_mac () ->
+            Edit_model.delete_forward m
+        | "h" when ctrl && not meta && Ui_services.env_is_mac () ->
+            Edit_model.delete_backward m
+        | "t" when ctrl && not meta && Ui_services.env_is_mac () ->
+            transpose_chars m
+        | "b" when ctrl && not meta && Ui_services.env_is_mac () ->
+            Edit_model.move m Edit_model.Left ~extend:shift
+        | "f" when ctrl && not meta && Ui_services.env_is_mac () ->
+            Edit_model.move m Edit_model.Right ~extend:shift
         (* ctrl edit keys — before the mod cases: mods ⊃ ctrl *)
         | "l" when ctrl && not meta -> clear_block m
         | "u" when ctrl && not meta -> kill_line_before m
