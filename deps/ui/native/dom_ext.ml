@@ -32,12 +32,6 @@ let key_ (ev : event) : string option = str_prop "key" ev
 let input_type (ev : event) : string =
   Option.value (str_prop "inputType" ev) ~default:""
 
-let client_x (ev : event) : float =
-  Option.value (num_prop "clientX" ev) ~default:0.
-
-let client_y (ev : event) : float =
-  Option.value (num_prop "clientY" ev) ~default:0.
-
 let target (ev : event) : element option =
   match prop "target" ev with
   | Js.Json.JObject _ as el -> Some el
@@ -45,16 +39,6 @@ let target (ev : event) : element option =
 
 let prevent_default (_ : event) : unit = ()
 let stop_propagation (_ : event) : unit = Platform.request_stop ()
-let stop_immediate_propagation (_ : event) : unit = Platform.request_stop ()
-
-(* ---------- element queries ---------- *)
-
-(* Event-target snapshots the native host attaches as "target":
-   {tag, class, id, attrs: {...}, ancestors: [same shape, nearest first]}.
-   closest() walks that chain — a mini selector engine covering what the
-   editor/sidebar handlers use: tag, .cls, #id, [attr], [attr=v],
-   compound (.a.b, tag.cls), :not(inner), descendant, and comma groups. *)
-
 let ancestors_of (el : element) : element list =
   match el with
   | Js.Json.JObject kvs -> (
@@ -329,22 +313,9 @@ let overlay_get (node : int) : overlay =
       Hashtbl.replace overlays node o;
       o
 
-let overlay_drop (node : int) : unit = Hashtbl.remove overlays node
-
 let overlay_set_attr (node : int) (k : string) (v : string) : unit =
   Hashtbl.replace (overlay_get node).o_attrs k (Some v)
 
-let overlay_remove_attr (node : int) (k : string) : unit =
-  Hashtbl.replace (overlay_get node).o_attrs k None
-
-let overlay_set_class (node : int) (v : string) : unit =
-  (overlay_get node).o_class <- Some v
-
-let overlay_set_text (node : int) (v : string) : unit =
-  (overlay_get node).o_text <- Some v
-
-(* verdict: outer Some = overlay decides (Some v present / None removed);
-   outer None = untouched, fall through to the snapshot *)
 let overlay_attr_node (node : int) (name : string)
     : string option option =
   match overlay_find node with
@@ -360,12 +331,6 @@ let overlay_class_of (el : element) : string option =
   match node_id_of el with
   | Some n -> (
       match overlay_find n with Some o -> o.o_class | None -> None)
-  | None -> None
-
-let overlay_text_of (el : element) : string option =
-  match node_id_of el with
-  | Some n -> (
-      match overlay_find n with Some o -> o.o_text | None -> None)
   | None -> None
 
 let () =
@@ -520,22 +485,6 @@ let set_value (el : element) (v : string) : unit =
    | None -> ());
   Host.dom_op "set-value" (Js.Json.stringify (Js.Json.JObject [("ref", el); ("value", Js.Json.JString v)]))
 
-let selection_start (el : element) : int =
-  match live_field el with
-  | Some (_, s, _) -> s
-  | None ->
-      Option.value
-        (Option.map int_of_float (num_prop "selectionStart" el))
-        ~default:0
-
-let selection_end (el : element) : int =
-  match live_field el with
-  | Some (_, _, e) -> e
-  | None ->
-      Option.value
-        (Option.map int_of_float (num_prop "selectionEnd" el))
-        ~default:0
-
 let set_selection_range (el : element) (s : int) (e : int) : unit =
   (match dom_id_of el with
    | Some id -> (
@@ -558,15 +507,6 @@ let focus (el : element) : unit =
 
 type segmenter = int
 
-let new_segmenter (_ : string) (_ : string) : segmenter = 0
-let segment _ (_ : segmenter) : string array = [||]
-
-(* ---------- rects ---------- *)
-
-(* Document-tree snapshots carry no "rect" — the host measures on demand:
-   bounding_rect fires a "measure-node" dom-op; the native host replies
-   with a "node-rect" event whose rect lands here. Retry loops (popup
-   flip measurement) see the fresh value on their next tick. *)
 let rect_store : (int, Js.Json.t) Hashtbl.t = Hashtbl.create 32
 
 (* measured rects keyed by the "#ref"/"ref-id" handle a measure-node
@@ -647,12 +587,6 @@ let natural_size_fetch (el : element) (name : string) : float =
   in
   Option.value cached ~default:0.
 
-let el_nat_width (el : element) : float =
-  natural_size_fetch el "width"
-
-let el_nat_height (el : element) : float =
-  natural_size_fetch el "height"
-
 let rect_left (r : rect) : float =
   Option.value (num_prop "left" r) ~default:0.
 
@@ -668,21 +602,12 @@ let rect_bottom (r : rect) : float =
 let rect_height (r : rect) : float =
   Option.value (num_prop "height" r) ~default:0.
 
-let window_inner_height () = Host.inner_height ()
-let window_inner_width () = Host.inner_width ()
-
-(* The semantic topbar's dots button records its resolved anchor here on
-   each press (button right edge, bottom + 4) so popups that re-anchor
-   to the same trigger (appearance) can read it without a DOM query. *)
 let toolbar_dots_pos : (float * float) option ref = ref None
 
 (* ---------- timers ---------- *)
 
 let set_timeout (f : unit -> unit) (ms : int) : unit =
   ignore (Host.set_timeout f ms)
-
-let set_timeout_id (f : unit -> unit) (ms : int) : int =
-  Host.set_timeout f ms
 
 let clear_timeout (id : int) : unit = Host.clear_timeout id
 
@@ -721,14 +646,6 @@ let caret_popup_pos el =
       let r = bounding_rect el in
       (rect_left r -. 20., rect_bottom r +. 4., 0.)
 
-(* ---------- imperative el ops used by popups/views (D alias) ---------- *)
-
-let el_query_all (_ : element) (_ : string) : Js.Json.t =
-  Js.Json.JArray [||]
-
-let el_remove (el : element) : unit =
-  Host.dom_op "remove" (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
-
 let el_remove_attr (el : element) (name : string) : unit =
   Host.dom_op "remove-attr"
     (Js.Json.stringify
@@ -755,18 +672,6 @@ let payload_num (p : string) (name : string) : float option =
       Option.bind (List.assoc_opt name kvs) Js.Json.decodeNumber
   | _ -> None
 
-let meta_key (e : Js.Json.t) : bool =
-  Option.value (bool_prop "metaKey" e) ~default:false
-
-let ctrl_key (e : Js.Json.t) : bool =
-  Option.value (bool_prop "ctrlKey" e) ~default:false
-
-let shift_key (e : Js.Json.t) : bool =
-  Option.value (bool_prop "shiftKey" e) ~default:false
-
-let alt_key (e : Js.Json.t) : bool =
-  Option.value (bool_prop "altKey" e) ~default:false
-
 let movement_x (e : Js.Json.t) : float =
   Option.value (num_prop "movementX" e) ~default:0.
 
@@ -775,3 +680,127 @@ let movement_y (e : Js.Json.t) : float =
 
 let button (e : Js.Json.t) : int =
   Option.value (Option.map int_of_float (num_prop "button" e)) ~default:0
+
+(* ---------- typed-boundary element ops ---------- *)
+
+(* The dom-op payload contract of the removed imperative path: {ref,
+   name, value} / {ref, class} / {ref}. Overlays keep subsequent
+   snapshot reads (get_attribute/closest/class_list) converged. *)
+let el_set_attr (el : element) (name : string) (v : string) : unit =
+  (match node_id_of el with
+   | Some node -> overlay_set_attr node name v
+   | None -> ());
+  Host.dom_op "set-attr"
+    (Js.Json.stringify
+       (Js.Json.JObject
+          [ ("ref", el); ("name", Js.Json.JString name)
+          ; ("value", Js.Json.JString v) ]))
+
+let el_class_add (el : element) (c : string) : unit =
+  (match node_id_of el with
+   | Some node ->
+       let cur = String.concat " " (class_list el) in
+       overlay_set_attr node "class" (String.trim (cur ^ " " ^ c))
+   | None -> ());
+  Host.dom_op "class-add"
+    (Js.Json.stringify
+       (Js.Json.JObject [ ("ref", el); ("class", Js.Json.JString c) ]))
+
+let el_class_remove (el : element) (c : string) : unit =
+  (match node_id_of el with
+   | Some node ->
+       class_list el
+       |> List.filter (fun k -> k <> c)
+       |> String.concat " "
+       |> overlay_set_attr node "class"
+   | None -> ());
+  Host.dom_op "class-remove"
+    (Js.Json.stringify
+       (Js.Json.JObject [ ("ref", el); ("class", Js.Json.JString c) ]))
+
+let el_scroll_into_view (el : element) : unit =
+  Host.dom_op "scroll-into-view"
+    (Js.Json.stringify (Js.Json.JObject [ ("ref", el) ]))
+
+let el_set_scroll_top (el : element) (v : float) : unit =
+  Host.dom_op "set-scroll-top"
+    (Js.Json.stringify
+       (Js.Json.JObject
+          [ ("ref", el); ("top", Js.Json.JNumber v) ]))
+
+let el_click (el : element) : unit =
+  Host.dom_op "click"
+    (Js.Json.stringify (Js.Json.JObject [ ("ref", el) ]))
+
+let el_select_text (el : element) : unit =
+  Host.dom_op "select"
+    (Js.Json.stringify (Js.Json.JObject [ ("ref", el) ]))
+
+let el_set_checked (el : element) (v : bool) : unit =
+  Host.dom_op "set-checked"
+    (Js.Json.stringify
+       (Js.Json.JObject [ ("ref", el); ("checked", Js.Json.JBoolean v) ]))
+
+(* b inside a: the snapshot ancestors chain carries a when nested *)
+let el_contains (a : element) (b : element) : bool =
+  let ka = el_key a in
+  ka <> ""
+  && List.exists (fun anc -> el_key anc = ka) (ancestors_of b)
+
+let el_id (el : element) : string =
+  Option.value (dom_id_of el) ~default:""
+
+let el_editable (el : element) : bool =
+  let t = tag_name el in
+  t = "textarea" || t = "input" || t = "select"
+  || get_attribute el "contenteditable" = Some "true"
+
+let el_checked (el : element) : bool =
+  Option.value (bool_prop "checked" el) ~default:false
+
+(* Snapshot props — present when the host measured; 0 otherwise *)
+let el_scroll_top (el : element) : float =
+  Option.value (num_prop "scrollTop" el) ~default:0.
+
+let el_scroll_height (el : element) : float =
+  Option.value (num_prop "scrollHeight" el) ~default:0.
+
+let el_client_height (el : element) : float =
+  Option.value (num_prop "clientHeight" el) ~default:0.
+
+let el_offset_width (el : element) : float =
+  let r = bounding_rect el in
+  rect_width r
+
+(* get_element_by_id keeps the ref-handle element shape live_ids used:
+   {#ref, ref-id} resolves through the same dom-op/measure paths. *)
+let by_id (id : string) : element option =
+  let in_docs =
+    List.exists (fun el -> dom_id_of el = Some id)
+      (!doc_elements_provider ())
+  in
+  if in_docs || id <> "" then
+    Some
+      (Js.Json.JObject
+         [ ("#ref", Js.Json.JString id); ("ref-id", Js.Json.JString id) ])
+  else
+    None
+
+(* document.activeElement — focus/blur document events carry the
+   target's ref-id *)
+let last_active_id : string option ref = ref None
+
+let () =
+  add_document_listener "focus"
+    (fun ev ->
+      last_active_id :=
+        (match prop "target" ev with
+         | Js.Json.JObject _ as t -> str_prop "ref-id" t
+         | _ -> None))
+    true;
+  add_document_listener "blur" (fun _ -> last_active_id := None) true
+
+let active_element () : element option =
+  match !last_active_id with
+  | Some id -> by_id id
+  | None -> None

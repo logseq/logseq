@@ -402,7 +402,7 @@ let action_bar uuid b : t =
         ~accessibility_identifier:("asset-menu-btn-" ^ uuid)
         ~icon:(`app "dots-vertical")
         ~on_press:(fun _ ->
-          match B.query_selector ("#asset-menu-btn-" ^ uuid) with
+          match Ui_services.dom_query ("#asset-menu-btn-" ^ uuid) with
           | Some el ->
               Views_popup.show_menu ~anchor:el
                 (menu_items uuid b)

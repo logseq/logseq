@@ -298,7 +298,8 @@ let test_key_leaks () =
   (* the stub document replaces the real one after module init, so the
      listeners install_once attached at load are inert — register the
      global-key layer directly *)
-  Web_dom.add_document_listener "keydown" Editor_keys.on_global_key true;
+  Ui_services.dom_on_document_event ~capture:true "keydown"
+    Editor_keys.on_global_key;
   Stub_dom.keydown ~meta:true "P";
   flush ();
   check "folded-shift mod+p does not open add-property"

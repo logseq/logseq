@@ -14,7 +14,7 @@ open Promise_ext
 open Lui_elements
 
 module S = Editor_state
-module D = Web_dom
+module D = Ui_services
 module W = Wire
 module U = I18n
 
@@ -26,21 +26,22 @@ let comment_ident = "logseq.class/Comment"
 let is_comments_area (b : Model.block) =
   List.mem comments_area_ident b.Model.block_tag_idents
 
-let el_scroll_into_view (_ : D.el) : unit = ()
+let el_scroll_into_view (el : Ui_services.el) : unit =
+  el.Ui_services.scroll_into_view ()
 
 (* ---- write paths ---- *)
 
 (* cljs reveal-comments-area!: scroll the area into view and focus its
    reply box *)
 let reveal uuid =
-  match D.get_element_by_id ("ls-block-" ^ uuid) with
+  match Ui_services.dom_by_id ("ls-block-" ^ uuid) with
   | Some blk -> (
       el_scroll_into_view blk;
       match
-        Web_dom.query_selector
+        Ui_services.dom_query
           ("#ls-block-" ^ uuid ^ " .ls-comment-add textarea")
       with
-      | Some el -> D.el_focus el
+      | Some el -> el.Ui_services.focus ()
       | None -> ())
   | None -> ()
 
@@ -103,16 +104,16 @@ let insert_comment_op area_uuid text =
   Outliner_ops.insert_blocks [ blk ] area_uuid ~sibling:false
 
 let add_box_of area_uuid =
-  Web_dom.query_selector
+  Ui_services.dom_query
     ("#ls-block-" ^ area_uuid ^ " .ls-comment-add textarea")
 
 let submit area_uuid =
   match add_box_of area_uuid with
   | Some ta ->
-      let text = String.trim (D.el_value ta) in
+      let text = String.trim (ta.Ui_services.value ()) in
       if text <> "" then (
-        D.el_set_value ta "";
-        D.el_set_text_content ta "";
+        ta.Ui_services.set_value "";
+        ta.Ui_services.set_text "";
         ignore
           (Outliner_ops.apply_and_refresh
              [ insert_comment_op area_uuid text ]))

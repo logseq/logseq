@@ -6,31 +6,34 @@
    display-type/order-list), the inline calendar (#date-time-picker,
    cljs components/date-picker), the link/image-link form
    (.ls-editor-link-form, cljs components/link), and the popup key
-   router consulted by editor_keys while a popup is open. *)
+   router consulted by editor_keys while a popup is open.
+
+   The popup view is LUI: [popup_view] mounts a [popover] in the
+   overlay layer (Popups_view.render) and renders from the imperative
+   [active] record republished through one shared [popup option]
+   signal. The public entries ([install], [popup_key], [click_guard],
+   [run_editor_cmd], [on_command]) keep their imperative signatures —
+   callers open the popup exactly as before; only the view layer is
+   declarative. The pre-LUI DOM contract is kept verbatim:
+   .ls-editor-date-picker / .ui__calendar-cell / .ui__calendar-day /
+   .ls-cal-outside classes, role=grid/gridcell/menu/menuitem
+   attributes, and the [role=checkbox] repeat panel. *)
 
 open Promise_ext
+open Lui_elements
 module S = Editor_state
-module D = Web_dom
 module A = Editor_actions
 module Ops = Outliner_ops
 module W = Wire
 
 (* ---------- event detail ---------- *)
 
-let detail_json ev name =
-  match D.ev_detail ev with
-  | Some j -> (
-      match Js.Json.decodeObject j with
-      | Some o -> Js.Dict.get o name
-      | None -> None)
-  | None -> None
+let detail_str (ev : Ui_services.ev) name = ev.Ui_services.detail name
 
-let detail_str ev name =
-  Option.bind (detail_json ev name) Js.Json.decodeString
-
-let detail_int ev name =
-  Option.map int_of_float
-    (Option.bind (detail_json ev name) Js.Json.decodeNumber)
+let detail_int (ev : Ui_services.ev) name =
+  match ev.Ui_services.detail_json name with
+  | Some (Json.Number n) -> Some (int_of_float n)
+  | _ -> None
 
 (* ---------- buffer splice ---------- *)
 
@@ -92,33 +95,74 @@ type popup_kind =
    properties (scheduled/deadline) *)
 type repeat =
   { prop_id : int (* db/id of the Cal_prop property entity *)
-  ; mutable repeated : bool
-  ; mutable freq : int
-  ; mutable unit_id : int (* selected recur-unit choice db/id *)
+  ; repeated : bool
+  ; freq : int
+  ; unit_id : int (* selected recur-unit choice db/id *)
   ; unit_choices : (int * string * string) list (* db/id, ident, label *)
-  ; mutable rtype_id : int
+  ; rtype_id : int
   ; rtype_choices : (int * string * string) list
-  ; mutable when_id : int (* selected checked-property entity db/id *)
+  ; when_id : int (* selected checked-property entity db/id *)
   ; when_choices : (int * string * string) list (* db/id, label, done label *)
+  }
+
+(* an anchored [role=menu] overlay inside the popup — mx/my are offsets
+   from the popup's own top-left, the same frame the pre-LUI absolute
+   positioning used *)
+type popup_menu =
+  { mx : float
+  ; my : float
+  ; mclass : string
+  ; mitems : (string * (unit -> unit)) list
   }
 
 type popup =
   { kind : popup_kind
   ; uuid : string
   ; from : int (* caret position the cleared slash range ended at *)
-  ; root : D.el
-  ; mutable cy : int
-  ; mutable cm : int
-  ; mutable cd : int
-  ; mutable hour : int (* time-of-day for datetime commits, local time *)
-  ; mutable tmin : int
-  ; mutable menu : D.el option
-  ; mutable rpt : repeat option
-  ; link_url : D.el option
-  ; link_label : D.el option
+  ; cy : int
+  ; cm : int
+  ; cd : int
+  ; hour : int (* time-of-day for datetime commits, local time *)
+  ; tmin : int
+  ; x : float (* viewport position of the popover's top-left *)
+  ; y : float
+  ; menu : popup_menu option
+  ; rpt : repeat option
   }
 
+(* imperative truth the imperative entries own; the signal is created
+   lazily at overlay mount so [open_cal] never needs a ui_context.
+   [update_p] publishes a fresh record — the previous published value
+   then stays a real snapshot for the reactive ~equal comparators *)
 let active : popup option ref = ref None
+
+let popup_vs : popup option Signal.state option ref = ref None
+
+let popup_vs_of context =
+  match !popup_vs with
+  | Some vs -> vs
+  | None ->
+      let vs = Signal.state context.Lui_ui.ui_scheduler !active in
+      popup_vs := Some vs;
+      vs
+
+let publish () =
+  match !popup_vs with
+  | Some vs -> Runtime.signal_set vs !active
+  | None -> ()
+
+let update_p f =
+  (match !active with
+   | Some p -> active := Some (f p)
+   | None -> ());
+  publish ()
+
+let update_rpt f =
+  update_p (fun p -> { p with rpt = Option.map f p.rpt })
+
+let with_p f = match !active with Some p -> f p | None -> ()
+
+let cur_rpt () = match !active with Some p -> p.rpt | None -> None
 
 let days_in_month y m = Dates.days_in_month ~y ~m
 
@@ -129,15 +173,17 @@ let day_date p =
   Dates.make ~year:p.cy ~month:p.cm ~day:p.cd ~hours:p.hour
     ~minutes:p.tmin ()
 
-let focus_day p =
-  match D.el_query p.root "td[data-focused='true'] button" with
-  | Some b -> D.el_focus b
+let focus_day () =
+  match
+    Ui_services.dom_query "#date-time-picker td[data-focused='true'] button"
+  with
+  | Some b -> b.Ui_services.focus ()
   | None -> ()
 
 let close_popup ?focus_caret p =
-  D.el_remove p.root;
   active := None;
-  Runtime.editor_popup_root := None;
+  Runtime.editor_popup_open := false;
+  publish ();
   match focus_caret with
   | Some c ->
       Editor_sink.focus_input p.uuid;
@@ -178,213 +224,214 @@ let commit_cal p =
   | Link_form _ -> ()
 
 (* one td[role=gridcell] > button.ui__calendar-day; the focused day
-   carries tabindex=0/data-selected, today carries data-today *)
-let rec cal_cell p d =
+   carries tabindex=0/data-selected/data-focused, today carries
+   data-today. The table kind emits table/tr/td plus role=grid/row/
+   gridcell itself — the attrs here are the app contract on top *)
+let rec cal_cell today p d =
   let focused = d = p.cd in
   let is_today =
-    p.cy * 10000 + p.cm * 100 + d = Dates.today_journal_day ()
+    p.cy * 10000 + p.cm * 100 + d = today
   in
-  let btn =
-    D.h ~tag:"button" ~cls:"ui__calendar-day"
-      ~attrs:
-        ([ ("type", "button")
-         ; ("aria-label", string_of_int d)
-         ; ("tabindex", if focused then "0" else "-1") ]
-         @ (if focused then [ ("data-selected", "true") ] else [])
-         @ if is_today then [ ("data-today", "true") ] else [])
-      ~text:(string_of_int d) ()
-  in
-  D.el_on btn "click" (fun _ -> pick_day p p.cy p.cm d);
-  D.h ~tag:"td" ~cls:"ui__calendar-cell"
-    ~attrs:
-      ([ ("role", "gridcell") ]
-       @ (if focused
-          then [ ("data-focused", "true"); ("aria-selected", "true") ]
-          else [])
+  table_cell ~key:(Printf.sprintf "%04d-%02d-%02d" p.cy p.cm d)
+    ~style_class:"ui__calendar-cell"
+    ~data_attrs:
+      ((if focused
+        then [ ("data-focused", "true"); ("aria-selected", "true") ]
+        else [])
        @ if is_today then [ ("data-today", "true") ] else [])
-    ~children:[ btn ] ()
+    [ button ~style_class:"ui__calendar-day"
+        ~text:(string_of_int d)
+        ~label:(string_of_int d)
+        ~autofocus:focused
+        ~data_attrs:
+          ([ ("tabindex", if focused then "0" else "-1") ]
+           @ (if focused then [ ("data-selected", "true") ] else [])
+           @ if is_today then [ ("data-today", "true") ] else [])
+        ~on_press:(fun _ -> pick_day p.cy p.cm d)
+        [] ]
 
 (* dimmed prev/next-month day (cljs DayPicker showOutsideDays); y/m is
    the neighboring month it belongs to *)
-and out_cell p y m d =
-  let btn =
-    D.h ~tag:"button" ~cls:"ui__calendar-day ls-cal-outside"
-      ~attrs:
-        [ ("type", "button"); ("aria-label", string_of_int d)
-        ; ("tabindex", "-1") ]
-      ~text:(string_of_int d) ()
+and out_cell y m d =
+  table_cell ~key:(Printf.sprintf "%04d-%02d-%02d" y m d)
+    ~style_class:"ui__calendar-cell"
+    [ button ~style_class:"ui__calendar-day ls-cal-outside"
+        ~text:(string_of_int d)
+        ~label:(string_of_int d)
+        ~data_attrs:[ ("tabindex", "-1") ]
+        ~on_press:(fun _ -> pick_day y m d)
+        [] ]
+
+(* the day grid — remounts whole on a cy/cm/cd change, which is what
+   re-fires the focused day's autofocus *)
+and cal_table (p : popup) : t =
+  let today = Dates.today_journal_day () in
+  let days = days_in_month p.cy p.cm in
+  let lead =
+    (let f = Dates.fields (Dates.make ~year:p.cy ~month:p.cm ~day:1 ()) in
+     f.Dates.wday)
   in
-  D.el_on btn "click" (fun _ -> pick_day p y m d);
-  D.h ~tag:"td" ~cls:"ui__calendar-cell" ~attrs:[ ("role", "gridcell") ]
-    ~children:[ btn ] ()
+  let py, pm =
+    if p.cm = 1 then (p.cy - 1, 12) else (p.cy, p.cm - 1)
+  in
+  let pdays = days_in_month py pm in
+  let ny, nm =
+    if p.cm = 12 then (p.cy + 1, 1) else (p.cy, p.cm + 1)
+  in
+  let rows = (lead + days + 6) / 7 in
+  table ~key:"grid"
+    (List.init rows (fun r ->
+       table_row ~key:(string_of_int r)
+         (List.init 7 (fun c ->
+            let d = (r * 7) + c + 1 - lead in
+            if d < 1 then out_cell py pm (pdays + d)
+            else if d > days then out_cell ny nm (d - days)
+            else cal_cell today p d))))
 
-and rebuild_grid p =
-  match D.el_query p.root ".ui__calendar tbody" with
-  | None -> ()
-  | Some tbody ->
-      D.el_replace_children tbody;
-      let days = days_in_month p.cy p.cm in
-      let lead =
-        (let f = Dates.fields (Dates.make ~year:p.cy ~month:p.cm ~day:1 ()) in
-         f.wday)
-      in
-      let py, pm =
-        if p.cm = 1 then (p.cy - 1, 12) else (p.cy, p.cm - 1)
-      in
-      let pdays = days_in_month py pm in
-      let ny, nm =
-        if p.cm = 12 then (p.cy + 1, 1) else (p.cy, p.cm + 1)
-      in
-      let rows = (lead + days + 6) / 7 in
-      for r = 0 to rows - 1 do
-        let tr = Web_dom.create_element "tr" in
-        for c = 0 to 6 do
-          let d = (r * 7) + c + 1 - lead in
-          D.el_append_child tr
-            (if d < 1 then out_cell p py pm (pdays + d)
-             else if d > days then out_cell p ny nm (d - days)
-             else cal_cell p d)
-        done;
-        D.el_append_child tbody tr
-      done
-
-and rebuild_cal p =
-  (match D.el_query p.root ".ls-date-month-select" with
-   | Some sel ->
-       D.el_set_text_content sel month_names.(p.cm - 1)
-   | None -> ());
-  (match D.el_query p.root ".ls-date-year-input" with
-   | Some inp -> D.el_set_value inp (string_of_int p.cy)
-   | None -> ());
-  rebuild_grid p;
-  focus_day p
-
-and nav_month p delta =
-  let m = p.cm + delta in
-  if m < 1 then (p.cm <- 12; p.cy <- p.cy - 1)
-  else if m > 12 then (p.cm <- 1; p.cy <- p.cy + 1)
-  else p.cm <- m;
-  rebuild_cal p
+and nav_month delta =
+  update_p (fun p ->
+      let m = p.cm + delta in
+      if m < 1 then { p with cm = 12; cy = p.cy - 1 }
+      else if m > 12 then { p with cm = 1; cy = p.cy + 1 }
+      else { p with cm = m })
 
 (* click a calendar day: Cal_insert commits; scheduled/deadline keep the
    popup open with the new day focused *)
-and pick_day p y m d =
-  p.cy <- y;
-  p.cm <- m;
-  p.cd <- d;
-  commit_cal p;
-  match p.kind with
-  | Cal_prop _ -> rebuild_cal p
-  | _ -> ()
+and pick_day y m d =
+  update_p (fun p -> { p with cy = y; cm = m; cd = d });
+  with_p commit_cal
 
-let close_menu p =
-  match p.menu with
-  | Some m -> D.el_remove m; p.menu <- None
-  | None -> ()
+let close_menu () =
+  with_p (fun p ->
+      if p.menu <> None then
+        update_p (fun q -> { q with menu = None }))
+
+(* (mx, my) the menu anchors at — anchor's bottom-left corner in the
+   popup's own coordinate frame *)
+let menu_offsets sel =
+  match Ui_services.dom_by_id "date-time-picker" with
+  | None -> None
+  | Some root -> (
+      match Ui_services.dom_query ("#date-time-picker " ^ sel) with
+      | Some anchor ->
+          let ax, ay, _aw, ah = anchor.Ui_services.rect () in
+          let rx, ry, _rw, _rh = root.Ui_services.rect () in
+          Some (ax -. rx, ay +. ah -. ry)
+      | None -> None)
 
 (* cljs ui.cljs month select: label + [role=menu] of long month names *)
-let toggle_month_menu p =
-  match p.menu with
-  | Some _ -> close_menu p
-  | None ->
-      let menu =
-        D.h ~cls:"ls-date-month-menu" ~attrs:[ ("role", "menu") ]
-          ~children:
-            (List.mapi
-               (fun i name ->
-                 D.h ~cls:"ls-date-month-option" ~text:name
-                   ~attrs:[ ("role", "menuitem") ]
-                   ~on_click:(fun _ ->
-                     p.cm <- i + 1;
-                     close_menu p;
-                     rebuild_cal p)
-                   ())
-               (Array.to_list month_names))
-          ()
-      in
-      p.menu <- Some menu;
-      D.el_append_child p.root menu
+let toggle_month_menu () =
+  with_p (fun p ->
+      match p.menu with
+      | Some _ -> update_p (fun q -> { q with menu = None })
+      | None -> (
+          match menu_offsets ".ls-date-month-select" with
+          | Some (mx, my) ->
+              update_p (fun q ->
+                  { q with
+                    menu =
+                      Some
+                        { mx; my; mclass = "ls-date-month-menu"
+                        ; mitems =
+                            List.mapi
+                              (fun i name ->
+                                ( name
+                                , fun () ->
+                                    update_p (fun r ->
+                                        { r with cm = i + 1
+                                               ; menu = None }) ))
+                              (Array.to_list month_names)
+                        } })
+          | None -> ()))
 
-let cal_move p delta =
-  p.cd <- p.cd + delta;
-  if p.cd < 1 then (
-    p.cm <- p.cm - 1;
-    if p.cm < 1 then (p.cm <- 12; p.cy <- p.cy - 1);
-    p.cd <- p.cd + days_in_month p.cy p.cm)
-  else if p.cd > days_in_month p.cy p.cm then (
-    p.cd <- p.cd - days_in_month p.cy p.cm;
-    p.cm <- p.cm + 1;
-    if p.cm > 12 then (p.cm <- 1; p.cy <- p.cy + 1));
-  rebuild_cal p
+(* a button + anchored [role=menu] like the month select, reused for the
+   repeat selects (unit / repeat-type / when) *)
+let open_choice_menu sel items =
+  match menu_offsets sel with
+  | Some (mx, my) ->
+      update_p (fun p ->
+          { p with
+            menu =
+              Some
+                { mx; my
+                ; mclass = "ls-date-month-menu ls-repeat-choice-menu"
+                ; mitems =
+                    List.map
+                      (fun (label, pick) ->
+                        ( label
+                        , fun () ->
+                            update_p (fun r -> { r with menu = None });
+                            pick () ))
+                      items
+                } })
+  | None -> ()
+
+let cal_move delta =
+  update_p (fun p ->
+      let cd = p.cd + delta in
+      let cy, cm, cd =
+        if cd < 1 then (
+          let cm, cy =
+            if p.cm - 1 < 1 then (12, p.cy - 1) else (p.cm - 1, p.cy)
+          in
+          (cy, cm, cd + days_in_month cy cm))
+        else if cd > days_in_month p.cy p.cm then (
+          let cm, cy =
+            if p.cm + 1 > 12 then (1, p.cy + 1) else (p.cm + 1, p.cy)
+          in
+          (cy, cm, cd - days_in_month p.cy p.cm))
+        else (p.cy, p.cm, cd)
+      in
+      { p with cy; cm; cd })
 
 (* cljs nld-parse covers natural language; here a plain JS Date parse
    handles ISO / "Sep 30, 2026" style input, else the warning toast *)
 let parse_nlp_date s = Dates.parse s
 
-let nlp_commit p input =
-  let v = String.trim (D.el_value input) in
-  if v <> "" then
-    match parse_nlp_date v with
-    | Some d ->
-        let f = Dates.fields d in
-        p.cy <- f.year;
-        p.cm <- f.month;
-        p.cd <- f.day;
-        commit_cal p
-    | None ->
-        Toast.warning (I18n.tf "date/invalid-date-warning" [ v ])
+let nlp_commit () =
+  match Ui_services.dom_query "#date-time-picker .ls-date-nlp" with
+  | Some input -> (
+      let v = String.trim (input.Ui_services.value ()) in
+      if v <> "" then
+        match parse_nlp_date v with
+        | Some d ->
+            let f = Dates.fields d in
+            update_p (fun p ->
+                { p with cy = f.Dates.year; cm = f.Dates.month
+                       ; cd = f.Dates.day });
+            with_p commit_cal
+        | None ->
+            Toast.warning (I18n.tf "date/invalid-date-warning" [ v ]))
+  | None -> ()
 
 (* cljs open-editor-popup! anchors at the caret mirror span; a popup
    opened on a selected (non-editing) block — the `p d` chord — anchors
-   under the block row instead *)
-let cal_pos_style ?top uuid =
+   under the block row instead. The popover's own viewport clamp and
+   anchor flip replace the old cal_clamp_in_view *)
+let cal_pos uuid =
   match Editor_sink.popup_pos uuid with
-  | Some (x, y, _) ->
-      Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
-        x (Option.value top ~default:y)
+  | Some (x, y, _) -> (x, y)
   | None -> (
-      match D.query_selector (".ls-block[blockid='" ^ uuid ^ "']") with
+      match Ui_services.dom_query (".ls-block[blockid='" ^ uuid ^ "']")
+      with
       | Some blk ->
-          let r = D.el_bounding_rect blk in
-          Printf.sprintf
-            "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
-            (D.rect_left r +. 24.)
-            (Option.value top ~default:(D.rect_bottom r +. 4.))
-      | None -> "position:fixed;top:96px;left:240px;z-index:900")
+          let rx, ry, _rw, rh = blk.Ui_services.rect () in
+          (rx +. 24., ry +. rh +. 4.)
+      | None -> (240., 96.))
 
-(* (left, top, right, bottom) viewport rect the picker anchors against —
-   the editing container while mounted, else the block row *)
-let cal_anchor_rect uuid =
-  match Editor_sink.container_rect uuid with
-  | Some r -> Some r
-  | None -> (
-      match D.query_selector (".ls-block[blockid='" ^ uuid ^ "']") with
-      | Some blk ->
-          let r = D.el_bounding_rect blk in
-          Some
-            ( D.rect_left r
-            , D.rect_top r
-            , D.rect_right r
-            , D.rect_bottom r )
-      | None -> None)
-
-(* base-ui avoidCollisions: once mounted, flip the picker above the
-   anchor when it overflows the viewport bottom and there is more room
-   above; otherwise clamp its top inside the viewport *)
-let cal_clamp_in_view uuid root =
-  match cal_anchor_rect uuid with
-  | Some (_, tr_top, _, tr_bottom) ->
-      let h = D.rect_height (D.el_bounding_rect root) in
-      let vh = D.win_inner_height in
-      let below = vh -. tr_bottom -. 4. in
-      let above = tr_top -. 4. in
-      if h > below then (
-        let top =
-          if above > below then tr_top -. 4. -. h
-          else Float.max 4.0 (vh -. 4. -. h)
-        in
-        D.el_set_attr root "style" (cal_pos_style ~top uuid))
+(* cljs base-ui avoidCollisions for the horizontal axis too: the
+   two-column picker can overflow the right edge — shift it left
+   inside the viewport *)
+let clamp_x () =
+  match Ui_services.dom_by_id "date-time-picker" with
+  | Some root -> (
+      let rx, _ry, rw, _rh = root.Ui_services.rect () in
+      let vw = Ui_services.dom_viewport_width () in
+      if rx +. rw > vw -. 8. then
+        update_p (fun q ->
+            { q with x = Float.max 8. (vw -. 8. -. rw) }))
   | None -> ()
+
 (* ---------- repeat panel (cljs property/value.cljs repeat-setting) -- *)
 
 (* property writes for a popup-targeted block — same editing/non-editing
@@ -419,53 +466,6 @@ let ms_of_wire = function
   | W.Date_ms n -> Some (Int64.to_float n)
   | _ -> None
 
-(* a button + anchored [role=menu] like the month select, reused for the
-   repeat selects (unit / repeat-type / when) *)
-let open_choice_menu p anchor items =
-  close_menu p;
-  let ar = D.el_bounding_rect anchor and rr = D.el_bounding_rect p.root in
-  let menu =
-    D.h ~cls:"ls-date-month-menu ls-repeat-choice-menu"
-      ~attrs:[ ("role", "menu") ]
-      ~children:
-        (List.map
-           (fun (label, pick) ->
-             D.h ~cls:"ls-date-month-option" ~text:label
-               ~attrs:[ ("role", "menuitem") ]
-               ~on_click:(fun _ ->
-                 close_menu p;
-                 pick ())
-               ())
-           items)
-      ()
-  in
-  D.el_set_attr menu "style"
-    (Printf.sprintf "position:absolute;left:%.0fpx;top:%.0fpx"
-       (D.rect_left ar -. D.rect_left rr)
-       (D.rect_bottom ar -. D.rect_top rr));
-  p.menu <- Some menu;
-  D.el_append_child p.root menu
-
-(* select widget: a ghost button whose label is the current choice;
-   picking a menu item updates the label and runs on_pick *)
-let repeat_select p ~current ~options ~on_pick =
-  let lbl = D.h ~tag:"span" ~text:current () in
-  let btn =
-    D.h ~tag:"button" ~cls:"ls-repeat-select"
-      ~attrs:[ ("type", "button") ]
-      ~children:[ lbl; D.icon "chevron-down" ] ()
-  in
-  D.el_on btn "click" (fun _ ->
-      open_choice_menu p btn
-        (List.map
-           (fun (id, label) ->
-             ( label
-             , fun () ->
-                 D.el_set_text_content lbl label;
-                 on_pick id label ))
-           options));
-  btn
-
 let done_label_of (r : repeat) =
   match
     List.find_map
@@ -476,156 +476,405 @@ let done_label_of (r : repeat) =
   | Some l -> l
   | None -> ""
 
-let rec render_repeat p (r : repeat) =
-  let mark =
-    D.h ~tag:"span" 
-      ~text:(if r.repeated then "✓" else "")
-      ()
-  in
-  let box =
-    D.h ~tag:"button" ~cls:"jtrigger ls-repeat-checkbox"
-      ~attrs:
-        [ ("type", "button"); ("role", "checkbox")
-        ; ("aria-checked", string_of_bool r.repeated)
-        ; ("aria-label", I18n.t "property.built-in/repeat-repeated") ]
-      ~children:[ mark ] ()
-  in
-  if r.repeated then D.el_set_attr box "data-checked" "true";
-  D.el_on box "click" (fun _ ->
+let choice_label_of choices id =
+  match
+    List.find_map
+      (fun (cid, _i, l) -> if cid = id then Some l else None)
+      choices
+  with
+  | Some l -> l
+  | None -> ""
+
+let rpt_of po = match po with Some { rpt; _ } -> rpt | None -> None
+
+let toggle_repeated () =
+  match cur_rpt () with
+  | Some r ->
       let on = not r.repeated in
-      r.repeated <- on;
-      D.el_set_attr box "aria-checked" (string_of_bool on);
-      D.el_set_text_content mark (if on then "✓" else "");
-      if on then D.el_set_attr box "data-checked" "true"
-      else D.el_remove_attr box "data-checked";
-      apply_props p
-        ([ Ops.set_block_property p.uuid
-             "logseq.property.repeat/repeated?" (W.Bool on) ]
-         @
-         if on then
-           [ Ops.set_block_property p.uuid
-               "logseq.property.repeat/temporal-property"
-               (W.Int r.prop_id) ]
-         else
-           [ Ops.remove_block_property p.uuid
-               "logseq.property.repeat/temporal-property" ]));
-  let freq_inp =
-    D.h ~tag:"input" ~cls:"ls-repeat-frequency-input"
-      ~attrs:
-        [ ("type", "number"); ("min", "1"); ("step", "1")
-        ; ("value", string_of_int r.freq) ]
-      ()
-  in
-  let commit_freq () =
-    match int_of_string_opt (D.el_value freq_inp) with
-    | Some n when n > 0 ->
-        if n <> r.freq then (
-          r.freq <- n;
+      update_rpt (fun r -> { r with repeated = on });
+      with_p (fun p ->
           apply_props p
-            [ Ops.set_block_property p.uuid
-                "logseq.property.repeat/recur-frequency" (W.Int n) ])
-    | _ -> D.el_set_value freq_inp (string_of_int r.freq)
-  in
-  D.el_on freq_inp "blur" (fun _ -> commit_freq ());
-  D.el_on freq_inp "keydown" (fun ev ->
-      if D.ev_key ev = "Enter" then (
-        D.ev_prevent_default ev;
-        D.el_blur freq_inp));
-  let label_of choices id =
-    match
-      List.find_map
-        (fun (cid, _i, l) -> if cid = id then Some l else None)
-        choices
-    with
-    | Some l -> l
-    | None -> ""
-  in
-  let unit_btn =
-    repeat_select p ~current:(label_of r.unit_choices r.unit_id)
-      ~options:(List.map (fun (id, _i, l) -> (id, l)) r.unit_choices)
-      ~on_pick:(fun id _label ->
-        if id <> r.unit_id then (
-          r.unit_id <- id;
-          apply_props p
-            [ Ops.set_block_property p.uuid
-                "logseq.property.repeat/recur-unit" (W.Int id) ]))
-  in
-  let rtype_btn =
-    repeat_select p ~current:(label_of r.rtype_choices r.rtype_id)
-      ~options:(List.map (fun (id, _i, l) -> (id, l)) r.rtype_choices)
-      ~on_pick:(fun id _label ->
-        if id <> r.rtype_id then (
-          r.rtype_id <- id;
-          apply_props p
-            [ Ops.set_block_property p.uuid
-                "logseq.property.repeat/repeat-type" (W.Int id) ]))
-  in
-  let done_lbl = D.h ~tag:"span" ~text:(done_label_of r) () in
-  let when_btn =
-    repeat_select p
-      ~current:
-        (match
-           List.find_map
-             (fun (id, l, _d) -> if id = r.when_id then Some l else None)
-             r.when_choices
-         with
-         | Some l -> l
-         | None -> "")
-      ~options:(List.map (fun (id, l, _d) -> (id, l)) r.when_choices)
-      ~on_pick:(fun id _label ->
-        if id <> r.when_id then (
-          r.when_id <- id;
-          D.el_set_text_content done_lbl (done_label_of r);
-          apply_props p
-            [ Ops.set_block_property p.uuid
-                "logseq.property.repeat/checked-property" (W.Int id) ]))
-  in
-  let panel =
-    D.h ~cls:"ls-repeat-panel"
-      ~children:
-        [ D.h ~cls:"ls-repeat-head"
-            ~children:
-              [ box
-              ; D.h ~tag:"span"
-                  ~text:(I18n.t "property.repeat/task")
-                  () ]
-            ()
-        ; D.h ~cls:"ls-repeat-frequency"
-            ~children:
-              [ D.h ~tag:"label" ~cls:"ls-repeat-label"
-                  ~text:(I18n.t "property.repeat/every") ()
-              ; freq_inp; unit_btn ]
-            ()
-        ; D.h ~cls:"ls-repeat-next"
-            ~children:
-              [ D.h ~tag:"div" ~cls:"ls-repeat-label"
-                  ~text:(I18n.t "property.repeat/next-date") ()
-              ; rtype_btn ]
-            ()
-        ; D.h ~cls:"ls-repeat-when"
-            ~children:
-              [ D.h ~tag:"div" ~cls:"ls-repeat-label"
-                  ~text:(I18n.t "property.repeat/when") ()
-              ; when_btn
-              ; D.h ~cls:"ls-repeat-is"
-                  ~children:
-                    [ D.h ~tag:"span" ~cls:"ls-repeat-label"
-                        ~text:(I18n.t "property.repeat/is-label") ()
-                    ; done_lbl ]
-                  () ]
-            () ]
-      ()
-  in
-  match D.el_query p.root ".ls-property-date-picker" with
-  | Some wrap ->
-      D.el_append_child wrap panel;
-      cal_clamp_in_view p.uuid p.root;
-      cal_clamp_x p
+            ([ Ops.set_block_property p.uuid
+                 "logseq.property.repeat/repeated?" (W.Bool on) ]
+             @ if on then
+                 [ Ops.set_block_property p.uuid
+                     "logseq.property.repeat/temporal-property"
+                     (W.Int r.prop_id) ]
+               else
+                 [ Ops.remove_block_property p.uuid
+                     "logseq.property.repeat/temporal-property" ]))
   | None -> ()
 
-(* resolve the block's repeat props + choice lists, then append the
+let commit_freq v =
+  match cur_rpt () with
+  | None -> ()
+  | Some r -> (
+      match int_of_string_opt v with
+      | Some n when n > 0 ->
+          if n <> r.freq then (
+            update_rpt (fun r -> { r with freq = n });
+            with_p (fun p ->
+                apply_props p
+                  [ Ops.set_block_property p.uuid
+                      "logseq.property.repeat/recur-frequency" (W.Int n) ]))
+      | _ -> (
+          match
+            Ui_services.dom_query
+              "#date-time-picker .ls-repeat-frequency-input"
+          with
+          | Some inp -> inp.Ui_services.set_value (string_of_int r.freq)
+          | None -> ()))
+
+let commit_time v =
+  match String.split_on_char ':' v with
+  | [ h; m ] -> (
+      match (int_of_string_opt h, int_of_string_opt m) with
+      | Some h, Some m when h >= 0 && h < 24 && m >= 0 && m < 60 ->
+          update_p (fun q -> { q with hour = h; tmin = m });
+          with_p commit_cal
+      | _ -> ())
+  | _ -> ()
+
+(* select widget: a ghost button whose label is the current choice;
+   pressing it anchors a [role=menu] under the button *)
+let repeat_select ps ~sel ~label_of ~options_of ~on_pick : t =
+  button ~style_class:"ls-repeat-select"
+    ~data_attrs:[ ("data-sel", sel) ]
+    ~on_press:(fun _ ->
+      open_choice_menu
+        (Printf.sprintf "[data-sel='%s']" sel)
+        (List.map
+           (fun (id, label) -> (label, fun () -> on_pick id label))
+           (options_of ())))
+    [ text
+        ~value:(reactive
+                  (fun po ->
+                    match rpt_of po with
+                    | Some r -> label_of r
+                    | None -> "")
+                  ps)
+        []
+    ; Icons.icon "chevron-down" ]
+
+(* the raw-input bridge — LUI input only emits text/color kinds and
+   carries no blur/value-attr plumbing, so number/time inputs ride
+   Logseq_el with real attrs + dom events *)
+let freq_input ps : t =
+  Logseq_el.el ~key:"finp" ~tag:"input"
+    ~style_class:"ls-repeat-frequency-input" ~events:"blur keydown"
+    ~attrs_signal_v:
+      (Logseq_el.attrs_signal ps (fun po ->
+           [ ("type", "number"); ("min", "1"); ("step", "1")
+           ; ( "value"
+             , match rpt_of po with
+               | Some r -> string_of_int r.freq
+               | None -> "1" ) ]))
+    ~on_dom_event:(fun name payload ->
+      match name with
+      | "keydown" ->
+          if Json_payload.str payload "key" = "Enter" then (
+            commit_freq (Json_payload.str payload "value");
+            (* blur commits in the original; focusing the grid day
+               blurs this input the same way *)
+            focus_day ())
+      | "blur" -> commit_freq (Json_payload.str payload "value")
+      | _ -> ())
+    []
+
+let year_input ps : t =
+  Logseq_el.el ~key:"yin" ~tag:"input" ~style_class:"ls-date-year-input"
+    ~events:"input"
+    ~attrs_signal_v:
+      (Logseq_el.attrs_signal ps (fun po ->
+           [ ("type", "number"); ("min", "1"); ("max", "9999")
+           ; ( "value"
+             , match po with Some q -> string_of_int q.cy | None -> "" )
+           ]))
+    ~on_dom_event:(fun name payload ->
+      if name = "input" then
+        match int_of_string_opt (Json_payload.str payload "value") with
+        | Some y when y >= 1000 && y <= 9999 ->
+            update_p (fun q -> { q with cy = y })
+        | _ -> ())
+    []
+
+let time_input ps : t =
+  Logseq_el.el ~key:"tinp" ~tag:"input" ~id:"time-picker"
+    ~style_class:"ls-time-input" ~events:"change blur"
+    ~attrs_signal_v:
+      (Logseq_el.attrs_signal ps (fun po ->
+           [ ("type", "time")
+           ; ( "value"
+             , match po with
+               | Some q -> Printf.sprintf "%02d:%02d" q.hour q.tmin
+               | None -> "00:00" ) ]))
+    ~on_dom_event:(fun name payload ->
+      match name with
+      | "change" | "blur" ->
+          commit_time (Json_payload.str payload "value")
+      | _ -> ())
+    []
+
+let time_row ps : t =
+  box ~key:"time" ~style_class:"ls-time-picker"
+    [ time_input ps
+    ; button ~key:"now" ~style_class:"ls-time-now"
+        ~text:(I18n.t "ui/use-current-time")
+        ~on_press:(fun _ ->
+          let now = Dates.fields (Dates.date_now ()) in
+          update_p (fun q ->
+              { q with hour = now.Dates.hours; tmin = now.Dates.minutes });
+          with_p commit_cal)
+        [] ]
+
+let menu_view (m : popup_menu) : t =
+  box ~key:"menu" ~style_class:m.mclass
+    ~data_attrs:
+      [ ("role", "menu")
+      ; ( "style"
+        , Printf.sprintf "position:absolute;left:%.0fpx;top:%.0fpx"
+            m.mx m.my ) ]
+    (List.mapi
+       (fun i (label, pick) ->
+         menu_item ~key:(string_of_int i)
+           ~style_class:"ls-date-month-option"
+           ~data_attrs:[ ("role", "menuitem") ]
+           ~text:label ~on_press:(fun _ -> pick ()) [])
+       m.mitems)
+
+let repeat_panel ps : t =
+  let opt3 f po =
+    match rpt_of po with Some r -> f r | None -> ""
+  in
+  let repeat_sel label_of options_of on_pick sel =
+    repeat_select ps ~sel ~label_of ~options_of ~on_pick
+  in
+  let on_unit id _label =
+    match cur_rpt () with
+    | Some r when id <> r.unit_id ->
+        update_rpt (fun r -> { r with unit_id = id });
+        with_p (fun p ->
+            apply_props p
+              [ Ops.set_block_property p.uuid
+                  "logseq.property.repeat/recur-unit" (W.Int id) ])
+    | _ -> ()
+  in
+  let on_rtype id _label =
+    match cur_rpt () with
+    | Some r when id <> r.rtype_id ->
+        update_rpt (fun r -> { r with rtype_id = id });
+        with_p (fun p ->
+            apply_props p
+              [ Ops.set_block_property p.uuid
+                  "logseq.property.repeat/repeat-type" (W.Int id) ])
+    | _ -> ()
+  in
+  let on_when id _label =
+    match cur_rpt () with
+    | Some r when id <> r.when_id ->
+        update_rpt (fun r -> { r with when_id = id });
+        with_p (fun p ->
+            apply_props p
+              [ Ops.set_block_property p.uuid
+                  "logseq.property.repeat/checked-property" (W.Int id) ])
+    | _ -> ()
+  in
+  box ~key:"rpt" ~style_class:"ls-repeat-panel"
+    [ box ~key:"head" ~style_class:"ls-repeat-head"
+        [ button ~key:"cb" ~style_class:"jtrigger ls-repeat-checkbox"
+            ~label:(I18n.t "property.built-in/repeat-repeated")
+            ~data_attrs:(reactive
+                           (fun po ->
+                             [ ("role", "checkbox")
+                             ; ( "aria-checked"
+                               , string_of_bool
+                                   (match rpt_of po with
+                                    | Some r -> r.repeated
+                                    | None -> false) ) ]
+                             @ (match rpt_of po with
+                                | Some { repeated = true; _ } ->
+                                    [ ("data-checked", "true") ]
+                                | _ -> []))
+                           ps)
+            ~on_press:(fun _ -> toggle_repeated ())
+            [ text
+                ~value:(reactive
+                          (fun po ->
+                            match rpt_of po with
+                            | Some { repeated = true; _ } -> "✓"
+                            | _ -> "")
+                          ps)
+                [] ]
+        ; text ~key:"rt" ~value:(I18n.t "property.repeat/task") [] ]
+    ; box ~key:"freq" ~style_class:"ls-repeat-frequency"
+        [ label ~key:"fl" ~style_class:"ls-repeat-label"
+            ~value:(I18n.t "property.repeat/every") []
+        ; freq_input ps
+        ; repeat_sel (fun r -> choice_label_of r.unit_choices r.unit_id)
+            (fun () ->
+              match cur_rpt () with
+              | Some r ->
+                  List.map (fun (id, _i, l) -> (id, l)) r.unit_choices
+              | None -> [])
+            on_unit "unit" ]
+    ; box ~key:"next" ~style_class:"ls-repeat-next"
+        [ text ~key:"nl" ~style_class:"ls-repeat-label"
+            ~value:(I18n.t "property.repeat/next-date") []
+        ; repeat_sel (fun r -> choice_label_of r.rtype_choices r.rtype_id)
+            (fun () ->
+              match cur_rpt () with
+              | Some r ->
+                  List.map (fun (id, _i, l) -> (id, l)) r.rtype_choices
+              | None -> [])
+            on_rtype "rtype" ]
+    ; box ~key:"when" ~style_class:"ls-repeat-when"
+        [ text ~key:"wl" ~style_class:"ls-repeat-label"
+            ~value:(I18n.t "property.repeat/when") []
+        ; repeat_sel
+            (fun r ->
+              match
+                List.find_map
+                  (fun (id, l, _d) -> if id = r.when_id then Some l else None)
+                  r.when_choices
+              with
+              | Some l -> l
+              | None -> "")
+            (fun () ->
+              match cur_rpt () with
+              | Some r ->
+                  List.map (fun (id, l, _d) -> (id, l)) r.when_choices
+              | None -> [])
+            on_when "when"
+        ; box ~key:"is" ~style_class:"ls-repeat-is"
+            [ text ~key:"il" ~style_class:"ls-repeat-label"
+                ~value:(I18n.t "property.repeat/is-label") []
+            ; text ~key:"dl"
+                ~value:(reactive (opt3 done_label_of) ps) [] ] ] ]
+
+let cal_head ps : t =
+  box ~key:"head" ~style_class:"ls-cal-head"
+    [ box ~key:"selects" ~style_class:"ls-cal-selects"
+        [ button ~key:"msel" ~style_class:"ls-date-month-select"
+            ~text:(reactive
+                     (fun po ->
+                       match po with
+                       | Some q -> month_names.(q.cm - 1)
+                       | None -> "")
+                     ps)
+            ~on_press:(fun _ -> toggle_month_menu ())
+            []
+        ; year_input ps ]
+    ; box ~key:"nav" ~style_class:"ls-cal-nav"
+        [ button ~key:"prev" ~style_class:"ls-cal-nav-btn"
+            ~label:"Previous month"
+            ~on_press:(fun _ -> nav_month (-1))
+            [ Icons.icon "chevron-left" ]
+        ; button ~key:"next" ~style_class:"ls-cal-nav-btn"
+            ~label:"Next month"
+            ~on_press:(fun _ -> nav_month 1)
+            [ Icons.icon "chevron-right" ] ] ]
+
+(* comparators: never structural — the record carries closures
+   (menu.mitems), so [equal] spells out the fields that drive each
+   remount *)
+let opt_eq f a b =
+  match a, b with
+  | Some a, Some b -> f a b
+  | None, None -> true
+  | _ -> false
+
+let kind_eq = opt_eq (fun a b -> a.kind = b.kind)
+
+let cal_eq =
+  opt_eq (fun a b -> a.cy = b.cy && a.cm = b.cm && a.cd = b.cd)
+
+let menu_eq =
+  opt_eq (fun a b ->
+      match a.menu, b.menu with
+      | None, None -> true
+      | Some m, Some n ->
+          m.mx = n.mx && m.my = n.my && m.mclass = n.mclass
+          && List.map fst m.mitems = List.map fst n.mitems
+      | _ -> false)
+
+let rpt_open po =
+  match po with Some { rpt = Some _; _ } -> true | _ -> false
+
+let cal_body ps (p : popup) : t =
+  box ~key:"cal"
+    ~style_class:
+      ("ls-editor-date-picker"
+       ^ (match p.kind with Cal_prop _ -> " ls-cal-prop" | _ -> ""))
+    ~accessibility_identifier:"date-time-picker"
+    [ box ~key:"wrap" ~style_class:"ls-property-date-picker"
+        [ box ~key:"left"
+            [ box ~key:"cal-box" ~style_class:"ui__calendar"
+                [ cal_head ps
+                ; reactive ~equal:cal_eq
+                    (fun po ->
+                      match po with
+                      | Some q -> cal_table q
+                      | None -> Logseq_el.nothing)
+                    ps ]
+            ; (match p.kind with
+               | Cal_prop _ -> time_row ps
+               | _ -> Logseq_el.nothing)
+            ; input ~key:"nlp" ~style_class:"ls-date-nlp"
+                ~placeholder:(I18n.t "ui/date-natural-language-placeholder")
+                ~data_attrs:[ ("tabindex", "-1") ]
+                ~submit_on_enter:true
+                ~on_submit:(fun _ -> nlp_commit ())
+                [] ]
+        ; if_ ~test:(reactive rpt_open ps) (repeat_panel ps) ]
+    ; reactive ~equal:menu_eq
+        (fun po ->
+          match po with
+          | Some { menu = Some m; _ } -> menu_view m
+          | _ -> Logseq_el.nothing)
+        ps ]
+
+let link_form_body : t =
+  column ~key:"link" ~style_class:"ls-editor-link-form" ~gap:4
+    ~padding:8 ~background:"var(--lx-popover-bg,#fff)"
+    [ input ~key:"url" ~placeholder:(I18n.t "ui/link") ~autofocus:true
+        []
+    ; input ~key:"label" ~placeholder:(I18n.t "ui/label") [] ]
+
+let popup_body ps (p : popup) : t =
+  match p.kind with
+  | Link_form _ -> link_form_body
+  | Cal_insert | Cal_prop _ -> cal_body ps p
+
+let popup_popover context ps : t =
+  popover ~key:"editor-popup"
+    ~at_signal:
+      (Logseq_el.own context
+         (Signal.map
+            (fun po -> match po with Some p -> (p.x, p.y) | None -> (0., 0.))
+            ps))
+    ~on_dismiss:(fun _ -> with_p (fun p -> close_popup p))
+    [ reactive ~equal:kind_eq
+        (fun po ->
+          match po with
+          | Some p -> popup_body ps p
+          | None -> Logseq_el.nothing)
+        ps ]
+
+(* mounted once in Popups_view's overlay fragment; lazily creates the
+   popup signal the imperative entries publish into *)
+let popup_view context parent =
+  let vs = popup_vs_of context in
+  let ps = vs.Signal.state_signal in
+  let open_s =
+    Logseq_el.own context (Signal.map (fun po -> po <> None) ps)
+  in
+  (if_ ~test:open_s (popup_popover context ps)) context parent
+
+(* ---------- repeat panel data ---------- *)
+
+(* resolve the block's repeat props + choice lists, then mount the
    repeat panel. Writes happen lazily on toggle, mirroring cljs *)
-and load_repeat p ident =
+let load_repeat p ident =
   ignore
     (let* wires =
        Js.Promise.all
@@ -643,7 +892,7 @@ and load_repeat p ident =
      in
      (* the popup may have closed while fetching *)
      (match !active with
-      | Some ap when ap == p && ap.rpt = None ->
+      | Some ap when ap.uuid = p.uuid && ap.rpt = None ->
           let block = Properties_data.untag wires.(0)
           and prop_w = Properties_data.untag wires.(1)
           and units = W.elems wires.(2)
@@ -658,14 +907,9 @@ and load_repeat p ident =
                match ms_of_wire (unwrap_value v) with
                | Some ms ->
                    let f = Dates.fields (Dates.of_ms ms) in
-                   p.hour <- f.hours;
-                   p.tmin <- f.minutes;
-                   (match D.el_query p.root "input[type='time']"
-                    with
-                    | Some inp ->
-                        D.el_set_value inp
-                          (Printf.sprintf "%02d:%02d" p.hour p.tmin)
-                    | None -> ())
+                   update_p (fun q ->
+                       { q with hour = f.Dates.hours
+                              ; tmin = f.Dates.minutes })
                | None -> ())
            | None -> ());
           let prop_type =
@@ -839,236 +1083,51 @@ and load_repeat p ident =
             ; when_choices
             }
           in
-          p.rpt <- Some r;
-          render_repeat p r;
+          update_p (fun q -> { q with rpt = Some r });
+          (* the panel widened the picker — keep it inside the viewport *)
+          clamp_x ();
           Js.Promise.resolve ()
       | _ -> Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Ui_services.log_error ("load_repeat failed", e);
             Js.Promise.resolve ()))
 
-(* cljs base-ui avoidCollisions for the horizontal axis too: the
-   two-column picker can overflow the right edge — shift it left
-   inside the viewport *)
-and cal_clamp_x p =
-  let r = D.el_bounding_rect p.root in
-  let vw = D.win_inner_width in
-  if D.rect_left r +. D.rect_width r > vw -. 8. then (
-    let left = Float.max 8. (vw -. 8. -. D.rect_width r) in
-    let top = D.rect_top r in
-    let styled = cal_pos_style ~top p.uuid in
-    let parts = String.split_on_char ';' styled in
-    let parts =
-      List.map
-        (fun kv ->
-          if String.starts_with ~prefix:"left:" kv then
-            Printf.sprintf "left:%.0fpx" left
-          else kv)
-        parts
-    in
-    D.el_set_attr p.root "style" (String.concat ";" parts))
+(* ---------- popup entries ---------- *)
 
 let open_cal kind uuid from =
   let today = Dates.fields (Dates.date_now ()) in
-  let cy = today.year and cm = today.month and cd = today.day in
-  let tbody = D.h ~tag:"tbody" () in
-  let sel =
-    D.h ~tag:"button" ~cls:"ls-date-month-select"
-      ~attrs:[ ("type", "button") ]
-      ~text:month_names.(cm - 1) ()
-  in
-  let year_inp =
-    D.h ~tag:"input" ~cls:"ls-date-year-input"
-      ~attrs:
-        [ ("type", "number"); ("min", "1"); ("max", "9999")
-        ; ("value", string_of_int cy) ]
-      ()
-  in
-  let nlp_inp =
-    D.h ~tag:"input" ~cls:"ls-date-nlp"
-      ~attrs:
-        [ ("type", "text")
-        ; ("placeholder", I18n.t "ui/date-natural-language-placeholder")
-        ; ("tabindex", "-1") ]
-      ()
-  in
-  (* cljs nlp-calendar datetime? branch: time-picker input + ghost
-     "Use current time" button between the calendar and the NLP input *)
-  let time_inp, time_row =
-    match kind with
-    | Cal_prop _ ->
-        let inp =
-          D.h ~tag:"input" ~cls:"ls-time-input"
-            ~attrs:
-              [ ("type", "time"); ("id", "time-picker")
-              ; ("value", "00:00") ]
-            ()
-        in
-        let now_btn =
-          D.h ~tag:"button" ~cls:"ls-time-now"
-            ~attrs:[ ("type", "button") ]
-            ~text:(I18n.t "ui/use-current-time") ()
-        in
-        ( Some inp
-        , Some
-            (D.h ~cls:"ls-time-picker" ~children:[ inp; now_btn ] ()) )
-    | _ -> (None, None)
-  in
-  let root =
-    D.h
-      ~cls:
-        ("ls-editor-date-picker"
-         ^ (match kind with
-            | Cal_prop _ -> " ls-cal-prop"
-            | _ -> ""))
-      ~attrs:
-        [ ("id", "date-time-picker"); ("style", cal_pos_style uuid) ]
-      ~children:
-        [ D.h ~cls:"ls-property-date-picker"
-            ~children:
-              [ D.h 
-                  ~children:
-                    ([ D.h ~cls:"ui__calendar"
-                        ~children:
-                          [ D.h ~cls:"ls-cal-head"
-                              ~children:
-                                [ D.h ~cls:"ls-cal-selects"
-                                    ~children:[ sel; year_inp ] ()
-                                ; D.h ~cls:"ls-cal-nav"
-                                    ~children:
-                                      [ D.h ~tag:"button"
-                                          ~cls:"ls-cal-nav-btn"
-                                          ~attrs:
-                                            [ ("type", "button")
-                                            ; ( "aria-label"
-                                              , "Previous month" ) ]
-                                          ~children:
-                                            [ D.icon "chevron-left" ]
-                                          ()
-                                      ; D.h ~tag:"button"
-                                          ~cls:"ls-cal-nav-btn"
-                                          ~attrs:
-                                            [ ("type", "button")
-                                            ; ( "aria-label"
-                                              , "Next month" ) ]
-                                          ~children:
-                                            [ D.icon "chevron-right" ]
-                                          () ]
-                                    () ]
-                              ()
-                          ; D.h ~tag:"table" ~attrs:[ ("role", "grid") ]
-                              ~children:[ tbody ] () ]
-                        ()
-                     ]
-                     @ (match time_row with
-                        | Some t -> [ t ]
-                        | None -> [])
-                     @ [ nlp_inp ])
-                  () ]
-            () ]
-      ()
-  in
+  let x, y = cal_pos uuid in
   let p =
-    { kind; uuid; from; root; cy; cm; cd; hour = 0; tmin = 0
-    ; menu = None; rpt = None; link_url = None; link_label = None }
+    { kind; uuid; from
+    ; cy = today.Dates.year; cm = today.Dates.month; cd = today.Dates.day
+    ; hour = 0; tmin = 0; x; y; menu = None; rpt = None }
   in
-  (match time_inp with
-   | Some inp ->
-       let commit_time () =
-         match String.split_on_char ':' (D.el_value inp) with
-         | [ h; m ] -> (
-             match (int_of_string_opt h, int_of_string_opt m) with
-             | Some h, Some m when h >= 0 && h < 24 && m >= 0 && m < 60 ->
-                 p.hour <- h;
-                 p.tmin <- m;
-                 commit_cal p
-             | _ -> ())
-         | _ -> ()
-       in
-       D.el_on inp "change" (fun _ -> commit_time ());
-       D.el_on inp "blur" (fun _ -> commit_time ());
-       let now_btn =
-         D.el_query root ".ls-time-now"
-       in
-       (match now_btn with
-        | Some b ->
-            D.el_on b "click" (fun _ ->
-                let now = Dates.fields (Dates.date_now ()) in
-                p.hour <- now.hours;
-                p.tmin <- now.minutes;
-                D.el_set_value inp
-                  (Printf.sprintf "%02d:%02d" p.hour p.tmin);
-                commit_cal p)
-        | None -> ())
-   | None -> ());
-  D.el_on sel "click" (fun _ -> toggle_month_menu p);
-  D.el_on year_inp "input" (fun _ ->
-      match int_of_string_opt (D.el_value year_inp) with
-      | Some y when y >= 1000 && y <= 9999 -> p.cy <- y; rebuild_cal p
-      | _ -> ());
-  D.el_on nlp_inp "keydown" (fun ev ->
-      if D.ev_key ev = "Enter" then (
-        D.ev_prevent_default ev;
-        nlp_commit p nlp_inp));
-  (match D.el_query root "button[aria-label='Previous month']" with
-   | Some b -> D.el_on b "click" (fun _ -> nav_month p (-1))
-   | None -> ());
-  (match D.el_query root "button[aria-label='Next month']" with
-   | Some b -> D.el_on b "click" (fun _ -> nav_month p 1)
-   | None -> ());
-  D.el_append_child D.document_body root;
   active := Some p;
-  Runtime.editor_popup_root := Some p.root;
-  rebuild_grid p;
-  cal_clamp_in_view uuid root;
+  Runtime.editor_popup_open := true;
+  publish ();
   (match kind with
    | Cal_prop ident -> load_repeat p ident
-   | _ -> ());
-  focus_day p
+   | _ -> ())
 
 (* ---------- link / image-link form ---------- *)
 
 let open_link_form image uuid from =
-  let url_inp =
-    D.h ~tag:"input" 
-      ~attrs:
-        [ ("type", "text")
-        ; ("placeholder", I18n.t "ui/link") ]
-      ()
-  in
-  let label_inp =
-    D.h ~tag:"input" 
-      ~attrs:[ ("type", "text"); ("placeholder", I18n.t "ui/label") ] ()
-  in
-  let root =
-    D.h ~cls:"ls-editor-link-form"
-      ~attrs:
-        [ ("style"
-          , cal_pos_style uuid
-            ^ ";display:flex;flex-direction:column;gap:4px;padding:8px;\
-               background:var(--lx-popover-bg,#fff)") ]
-      ~children:[ url_inp; label_inp ] ()
-  in
+  let x, y = cal_pos uuid in
   let p =
-    { kind = Link_form image; uuid; from; root; cy = 0; cm = 0; cd = 0
-    ; hour = 0; tmin = 0; menu = None; rpt = None
-    ; link_url = Some url_inp; link_label = Some label_inp }
+    { kind = Link_form image; uuid; from; cy = 0; cm = 0; cd = 0
+    ; hour = 0; tmin = 0; x; y; menu = None; rpt = None }
   in
-  D.el_append_child D.document_body root;
   active := Some p;
-  Runtime.editor_popup_root := Some p.root;
-  D.el_focus url_inp
+  Runtime.editor_popup_open := true;
+  publish ()
 
 let submit_link p =
-  let url =
-    match p.link_url with
-    | Some i -> String.trim (D.el_value i)
-    | None -> ""
-  in
-  let label =
-    match p.link_label with
-    | Some i -> String.trim (D.el_value i)
-    | None -> ""
+  let url, label =
+    match Ui_services.dom_query_all ".ls-editor-link-form input" with
+    | [ u; l ] ->
+        ( String.trim (u.Ui_services.value ())
+        , String.trim (l.Ui_services.value ()) )
+    | _ -> ("", "")
   in
   let label = if label = "" then url else label in
   let bang = (match p.kind with Link_form true -> "!" | _ -> "") in
@@ -1081,45 +1140,43 @@ let submit_link p =
 
 (* ---------- popup key router (runs before editor_keys) ---------- *)
 
-let popup_key ev =
+(* editor_keys hands over the decoded fields — Web_dom ev values cannot
+   cross this module boundary now that the module is portable *)
+let popup_key ~key ~inside ~prevent_default =
   match !active with
   | None -> false
   | Some p -> (
-      match (p.kind, D.ev_key ev) with
-      | (Cal_insert | Cal_prop _), "ArrowRight" -> cal_move p 1; true
-      | (Cal_insert | Cal_prop _), "ArrowLeft" -> cal_move p (-1); true
-      | (Cal_insert | Cal_prop _), "ArrowDown" -> cal_move p 7; true
-      | (Cal_insert | Cal_prop _), "ArrowUp" -> cal_move p (-7); true
+      match (p.kind, key) with
+      | (Cal_insert | Cal_prop _), "ArrowRight" -> cal_move 1; true
+      | (Cal_insert | Cal_prop _), "ArrowLeft" -> cal_move (-1); true
+      | (Cal_insert | Cal_prop _), "ArrowDown" -> cal_move 7; true
+      | (Cal_insert | Cal_prop _), "ArrowUp" -> cal_move (-7); true
       | (Cal_insert | Cal_prop _), "Enter" ->
-          D.ev_prevent_default ev;
-          commit_cal p; true
+          prevent_default ();
+          commit_cal p;
+          true
       | Link_form _, "Enter" ->
-          D.ev_prevent_default ev;
-          submit_link p; true
+          prevent_default ();
+          submit_link p;
+          true
       | _, "Escape" ->
-          D.ev_prevent_default ev;
-          close_popup p ~focus_caret:p.from; true
+          prevent_default ();
+          close_popup p ~focus_caret:p.from;
+          true
       | Link_form _, _ -> false (* inputs handle their own keys *)
-      | (Cal_insert | Cal_prop _), _ -> (
+      | (Cal_insert | Cal_prop _), _ ->
           (* swallow keys aimed at the calendar so e.g. typing does not
              reach the textarea while a day button is focused *)
-          match D.closest_sel "#date-time-picker" (D.ev_target ev) with
-          | Some _ -> D.ev_prevent_default ev; true
-          | None -> false))
+          if inside () then (prevent_default (); true) else false)
 
-(* click_guard: true -> mousedown inside a popup, suppress blur-commit.
-   A click outside closes the popup; the normal blur-commit still runs *)
-let click_guard target =
+(* click_guard: the popup is a LUI popover layer, so clicks inside it
+   never reach this point — editor_keys' Popups_state.inside hit-test
+   runs first. A click outside closes the popup; the normal blur-commit
+   still runs *)
+let click_guard () =
   match !active with
   | None -> false
-  | Some p -> (
-      match
-        D.closest_sel "#date-time-picker, .ls-editor-link-form" target
-      with
-      | Some _ -> true
-      | None -> close_popup p; false)
-
-
+  | Some p -> close_popup p; false
 
 (* ---------- command dispatch ---------- *)
 
@@ -1377,7 +1434,7 @@ let run_editor_cmd uuid command from to_ =
           set_closed_prop ~caret uuid "logseq.property/priority" s)
       else ignore (Editor_cmds.run ~command ~block:None ~value:None)
 
-let on_command ev =
+let on_command (ev : Ui_services.ev) =
   if S.ready () then
     match detail_str ev "command" with
     | None -> ()
@@ -1411,14 +1468,13 @@ let on_command ev =
             | "set-icon" | "add-reaction" ->
                 (* the pickers live in the popups layer — editor modules
                    cannot reach icon_picker without a module cycle *)
-                Web_dom.dispatch_custom "ls:block-picker"
-                  (Js.Json.object_
-                     (Js.Dict.fromList
-                        [ "block", Js.Json.string uuid
-                        ; ( "kind"
-                          , Js.Json.string
-                              (if command = "add-reaction" then "emoji"
-                               else "icon") ) ]))
+                Ui_services.dom_dispatch_json "ls:block-picker"
+                  (Json.Object
+                     [ "block", Json.String uuid
+                     ; ( "kind"
+                       , Json.String
+                           (if command = "add-reaction" then "emoji"
+                            else "icon") ) ])
             | _ ->
                 ignore
                   (Editor_cmds.run ~command ~block:(Some uuid)
@@ -1444,6 +1500,7 @@ let install () =
     (* the host adapter supplies clipboard, dispatch, file-pick and
        plugin capabilities — installed once with the dispatcher *)
     Editor_cmds.install_host (Editor_cmds_host.host ());
-    D.add_document_listener "ls:editor-command" on_command true;
+    Ui_services.dom_on_document_event ~capture:true "ls:editor-command"
+      on_command;
     Code_mirror.install ()
   end

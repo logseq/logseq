@@ -133,8 +133,6 @@
 (rule
  (copy ../src/graphs/graphs_meta.ml graphs_meta.ml))
 (rule
- (copy ../src/graphs/graphs_mount.ml graphs_mount.ml))
-(rule
  (copy ../src/graphs/graphs_ops.ml graphs_ops.ml))
 (rule
  (copy ../src/graphs/graphs_view.ml graphs_view.ml))
@@ -158,6 +156,8 @@
  (copy ../src/graphs/zip.ml zip.ml))
 (rule
  (copy ../src/graphs/exporter.ml exporter.ml))
+(rule
+ (copy ../src/icon/icon_picker.ml icon_picker.ml))
 (rule
  (copy ../src/popups/tooltip.ml tooltip.ml))
 (rule
@@ -240,6 +240,8 @@
 
 (rule
  (copy ../src/views/views_table.ml views_table.ml))
+(rule
+ (copy ../src/views/views_popup.ml views_popup.ml))
 (rule
  (copy ../src/views/views_state.ml views_state.ml))
 (rule

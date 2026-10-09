@@ -38,21 +38,19 @@ let open_prop_dlg ~remove =
    (cljs show-action-bar!). Without the fixed bar's pointer-events:none
    it overlays drag targets and intercepts pointer events (e2e drag
    tests). *)
-module D = Web_dom
-
 let listeners_installed = State_cell.Once.make ()
 
 let install_listeners () =
   State_cell.Once.run listeners_installed (fun () ->
-    D.add_document_listener "mousedown"
+    Ui_services.dom_on_document_event ~capture:true "mousedown"
       (fun e ->
-        match D.ev_target e with
+        match e.Ui_services.target with
         | Some el -> (
-            match D.el_closest el ".selection-action-bar" with
+            match el.Ui_services.closest ".selection-action-bar" with
             | Some _ -> ()
             | None ->
                 let inside sel =
-                  match D.el_closest el sel with Some _ -> true | None -> false
+                  match el.Ui_services.closest sel with Some _ -> true | None -> false
                 in
                 (* cljs container.cljs window pointerdown →
                    hide-context-menu-and-clear-selection: a plain click
@@ -63,34 +61,34 @@ let install_listeners () =
                   && (not (inside ".ls-block"))
                   && (not (inside "[data-keep-selection]"))
                   && (not (inside "input,textarea,select,[contenteditable]"))
-                  && (not (D.ev_shift e))
-                  && (not (D.ev_meta e))
-                  && (not (D.ev_ctrl e))
+                  && (not (e.Ui_services.shift))
+                  && (not (e.Ui_services.meta))
+                  && (not (e.Ui_services.ctrl))
                   && Editor_state.editing_uuid () = None
                 then Editor_actions.clear_selection ()
                 else if Editor_actions.selected_uuids () <> [] then
                   Editor_actions.hide_action_bar ())
-        | None -> ())
-      true;
-    D.add_document_listener "mouseup"
+        | None -> ());
+    Ui_services.dom_on_document_event ~capture:true "mouseup"
       (fun e ->
         (* cljs show-selection-action-bar-for-pointer!: only a primary-
            button release can raise the bar *)
-        let tgt = if D.ev_button e = 0 then D.ev_target e else None in
-        D.set_timeout
-          (fun () ->
-            match tgt with
-            | Some el -> (
-                match
-                  D.el_closest el ".block-control-wrap,button,input,textarea,a"
-                with
-                | Some _ -> ()
-                | None ->
-                    if Editor_actions.selected_uuids () <> [] then
-                      Editor_actions.show_action_bar ())
-            | None -> ())
-          0)
-      true)
+        let tgt = if e.Ui_services.button = 0 then e.Ui_services.target else None in
+        ignore
+          (Ui_services.timers_timeout
+             (fun () ->
+               match tgt with
+               | Some el -> (
+                   match
+                     el.Ui_services.closest
+                       ".block-control-wrap,button,input,textarea,a"
+                   with
+                   | Some _ -> ()
+                   | None ->
+                       if Editor_actions.selected_uuids () <> [] then
+                         Editor_actions.show_action_bar ())
+               | None -> ())
+             0)))
 
 (* cljs hides the action-bar while another popup is up — fold the
    popup/cmdk flags into the same reactive source (nested reactive has no parent
@@ -145,10 +143,10 @@ and node () : t =
           match sel with
       | [] -> Logseq_el.nothing
       | first :: _ -> (
-          match Web_dom.get_element_by_id ("ls-block-" ^ first) with
+          match Ui_services.dom_by_id ("ls-block-" ^ first) with
           | None -> Logseq_el.nothing
           | Some blk ->
-              let l, t, _r, _b, _w = Web_dom.bounding_rect_fields blk in
+              let l, t, _w, _h = blk.Ui_services.rect () in
               (* cljs radix popover anchors the bar 48px above the first
                  selected block — popover ~at is the same point placement;
                  no ~on_dismiss: the bar's own mousedown listener decides
@@ -188,7 +186,7 @@ and node () : t =
                              anchored to the trigger button *)
                           match
                             ( !(Popups_state.active)
-                            , D.get_element_by_id "sab-dots" )
+                            , Ui_services.dom_by_id "sab-dots" )
                           with
                           | Some st, Some btn ->
                               let ax, atop, abot =

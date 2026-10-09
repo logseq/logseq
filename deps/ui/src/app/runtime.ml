@@ -52,9 +52,10 @@ type hooks = Subs_state.app_hooks
 
 let hooks = Subs_state.app_hooks
 
-(* imperative popup root for dialogs mounted outside the declarative
-   tree (views / property dialogs) *)
-let editor_popup_root : Js.Json.t option ref = ref None
+(* whether an editor popup (date picker / link form) is currently open —
+   the popup itself is a LUI popover in the overlay layer, so no element
+   handle is kept, only the open flag Popups_state.any_open consults *)
+let editor_popup_open = ref false
 
 let on_sync = Subs_state.on_sync
 let run_sync_subs = Subs_state.run_sync_subs
@@ -108,8 +109,8 @@ let on_page_loaded = Subs_state.on_page_loaded
    (whose tail-flush stays synchronous) — measured outliner ops put
    ~20ms of this deferred work off the event path.
    [schedule_flush] is host-wired (setTimeout on web, Host.set_timeout
-   on native) to keep this module free of the dom layer — imperative_dom
-   already depends on Runtime, so a direct Web_dom call would cycle.
+   on native) to keep this module free of the dom layer — the dom impl
+   already depends on Runtime, so a direct dom call would cycle.
    The default runs the callback inline: an unwired scheduler would
    leave [flush_pending] stuck true and silence every later flush. *)
 let schedule_flush : ((unit -> unit) -> unit) ref =

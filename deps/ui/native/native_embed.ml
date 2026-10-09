@@ -328,42 +328,15 @@ let take_patches_dbg where =
    | None -> ());
   out
 
-(* The web runtime feeds registered doc scans from a MutationObserver;
-   natively we re-run them after every flush that produced a new tree
-   generation, so views mounts (query shells, object views) see fresh
-   elements. Running every scan on every generation is O(scans x tree)
-   per keystroke — the Runtime.scan_gate policy coalesces prop-only
-   generations (see runtime.ml). *)
-let scan_gate = Runtime.scan_gate ()
-
 let app_flush_checked app =
   try ignore (Lui_app.flush app)
   with e ->
     Printf.eprintf "[flush] FAILED: %s\n%s\n%!" (Printexc.to_string e)
       (Printexc.get_backtrace ())
 
-let run_doc_scans_after_flush () =
-  match !current_app with
-  | Some app ->
-      let gen =
-        !((Lui_app.runtime app).Lui_runtime.runtime_generation)
-      in
-      let now = Unix.gettimeofday () in
-      if Runtime.scan_gate_should scan_gate ~gen ~now
-      then begin
-        Runtime.scan_gate_mark scan_gate ~gen ~now;
-        Editor_dom.run_doc_scans ();
-        (* scans can materialize nodes — flush again so they ship in the
-           same take_patches drain *)
-        app_flush_checked app
-      end
-  | None -> ()
-
 let flush () =
   match !current_app with
-  | Some app ->
-      app_flush_checked app;
-      run_doc_scans_after_flush ()
+  | Some app -> app_flush_checked app
   | None -> ()
 
 let perf_log =
@@ -377,7 +350,7 @@ let perf_mark name t0 =
 
 let initialize_unlocked platform_code host_code (_payload : string) : string =
   Printexc.record_backtrace true;
-  Platform.install_ui_services ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops;
+  Platform.install_ui_services ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   Queue.clear pending_batches;
   let os =
     match platform_code with
@@ -399,17 +372,6 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
     { Lui_protocol.backend_profile = Lui_protocol.profile os host_kind
     ; apply_batch =
         (fun batch ->
-          if
-            List.exists
-              (function
-                | Lui_protocol.CreateNode _ | CreateExtension _
-                | DropNode _ | DetachSubtree _
-                | InsertChild _ | RemoveChild _
-                | MoveChild _ -> true
-                | SetProp _ | RemoveProp _ | SetExtensionProp _
-                | RemoveExtensionProp _ -> false)
-              batch.Lui_protocol.ops
-          then Runtime.scan_gate_note_structural scan_gate;
           let json = Lui_wire.encode_batch batch in
           Queue.add json pending_batches;
           true)
@@ -424,12 +386,8 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
       Update.apply View.view
   in
   current_app := Some app;
-  Imperative_dom.install app;
   Dom_ext.doc_elements_provider := collect_elements;
   Dom_ext.subtree_elements_provider := collect_subtree;
-  Vdom.init app;
-  Vdom.snapshot_of_node :=
-    (fun node -> ext_snapshot (Lui_app.runtime app) node);
   Platform.dom_parent_of :=
     (fun id ->
       match !current_app with
@@ -439,14 +397,11 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
       | None -> None);
   (* host dom-events carry only nodeId; inject "target" like the Swift
      host's snapshot attachment so document listeners (ev_target/
-     el_closest) work. Imperative nodes keep their registry snapshot *)
+     el_closest) work *)
   Platform.event_target_of :=
     (fun id ->
       match !current_app with
-      | Some app -> (
-          match Hashtbl.find_opt Imperative_dom.lui_index id with
-          | Some sid -> Imperative_dom.snapshot_of_id sid
-          | None -> Some (ext_snapshot (Lui_app.runtime app) id))
+      | Some app -> Some (ext_snapshot (Lui_app.runtime app) id)
       | None -> None);
   (match Sys.getenv_opt "LOGSEQ_DUMP" with
    | Some _ ->
@@ -465,10 +420,7 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
              close_out oc
            with _ -> ())
    | _ -> ());
-  let flush_app () =
-    app_flush_checked app;
-    run_doc_scans_after_flush ()
-  in
+  let flush_app () = app_flush_checked app in
   Runtime.app_send :=
     (fun action ->
       let changed = Lui_app.send app action in
@@ -488,12 +440,12 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   let t0 = perf_ms () in
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
-  run_doc_scans_after_flush ();
   perf_mark "init.app" t0;
   let t1 = perf_ms () in
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
+  Editor_keys.install_once ();
   Menu_bar.install ();
   Asset_dom.install ();
   Router.init ();
@@ -502,9 +454,6 @@ let initialize_unlocked platform_code host_code (_payload : string) : string =
   let t2 = perf_ms () in
   ignore (Boot.run ());
   perf_mark "init.boot" t2;
-  let t3 = perf_ms () in
-  run_doc_scans_after_flush ();
-  perf_mark "init.scans" t3;
   take_patches ()
 
 let initialize platform_code host_code payload =
@@ -524,9 +473,6 @@ let dispatch_lui (event : Lui_protocol.event) : string =
            let t1 = perf_ms () in
            ignore (Lui_app.flush app);
            perf_mark "flush" t1;
-           let t2 = perf_ms () in
-           run_doc_scans_after_flush ();
-           perf_mark "scans" t2
        | None -> ());
       let t3 = perf_ms () in
       let out = take_patches_dbg "lui" in
@@ -626,13 +572,7 @@ let extension_event node identifier name values : string =
                perf_mark "ext.dispatch" t0;
                let t1 = perf_ms () in
                ignore (Lui_app.flush app);
-               perf_mark "ext.flush" t1;
-               let t2 = perf_ms () in
-               (* Route through the scan gate: extension events are often
-                  prop-only bursts (visible-range, scroll) and must not pay
-                  a full-doc scan per event *)
-               run_doc_scans_after_flush ();
-               perf_mark "ext.scans" t2
+               perf_mark "ext.flush" t1
            | Some _ -> invalid_arg "Extension identifier does not match the mounted node"
            | None -> ())
        | None -> ());
@@ -654,9 +594,6 @@ let pump () : string =
        | Some app -> ignore (Lui_app.flush app)
        | None -> ());
       perf_mark "pump.flush" t1;
-      let t2 = perf_ms () in
-      run_doc_scans_after_flush ();
-      perf_mark "pump.scans" t2;
       let t3 = perf_ms () in
       let out = take_patches_dbg "pump" in
       perf_mark "pump.take" t3;

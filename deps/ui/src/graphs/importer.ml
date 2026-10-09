@@ -6,12 +6,16 @@
 open Promise_ext
 open Lui_elements
 
-let dom = Logseq_el.el
 module T = I18n
+
+(* Ui_services file reads return Ui_task; the import flows stay
+   promise-chained — bridge at the call site *)
+let promise_of = Subs_state.promise_of_task
+
 let finish_import repo label =
   let short = Graphs_ops.short_name repo in
   Toast.success (T.import_finished label short);
-  Web_dom.later ~ms:4000 (fun () ->
+  Ui_services.timers_later ~ms:4000 (fun () ->
       ignore (Graphs_ops.refresh ());
       ignore (Graphs_ops.navigate_journal repo))
 
@@ -40,17 +44,17 @@ let ask_name_and_run label run =
           Js.Promise.resolve ())))
   ()
 
-let import_sqlite_db repo file =
-  let* buf = file |> Web_dom.file_buffer in
+let import_sqlite_db repo (file : Ui_services.file) =
+  let* buf = promise_of (file.Ui_services.file_binary ()) in
   let* _ =
     (Runtime.invoke2 "thread-api/import-db-binary"
        (Wire.String repo)
-       (Wire.Binary (Web_dom.u8_of_buffer buf)))
+       (Wire.Binary buf))
   in
   Js.Promise.resolve true
 
-let import_edn repo file =
-  let* text = file |> Web_dom.file_text in
+let import_edn repo (file : Ui_services.file) =
+  let* text = promise_of (file.Ui_services.file_text ()) in
   match (try Some (Edn.parse text) with _ -> None) with
   | None ->
       Toast.warning T.import_invalid_edn;
@@ -62,11 +66,11 @@ let import_edn repo file =
       in
       Js.Promise.resolve true
 
-let file_item f =
-  let* text = f |> Web_dom.file_text in
+let file_item (f : Ui_services.file) =
+  let* text = promise_of (f.Ui_services.file_text ()) in
   Js.Promise.resolve
     (Wire.Map
-       [ (Wire.kw "path", Wire.String (Web_dom.file_name f))
+       [ (Wire.kw "path", Wire.String f.Ui_services.file_name)
        ; (Wire.kw "content", Wire.String text)
        ])
 
@@ -74,7 +78,7 @@ let import_file_graph repo files =
   match files with
   | config :: rest ->
       let* files_w = Js.Promise.all (Array.of_list (List.map file_item rest)) in
-      let* cfg = (Web_dom.file_text config) in
+      let* cfg = promise_of (config.Ui_services.file_text ()) in
         let* _ =
         Runtime.invoke "thread-api/import-file-graph"
           [ Wire.String repo
@@ -131,7 +135,8 @@ let asset_zip_file_name name =
 let zip_entry_data buf (e : Zip.zip_entry) : string Js.Promise.t =
   let raw = Zip.raw_data buf e in
   if e.Zip.e_method = 0 then Js.Promise.resolve raw
-  else if e.Zip.e_method = 8 then Web_dom.inflate_raw raw
+  else if e.Zip.e_method = 8 then
+    promise_of (Ui_services.files_inflate_raw raw)
   else
     Js.Promise.reject
       (Failure ("unsupported zip method " ^ string_of_int e.Zip.e_method))
@@ -151,15 +156,14 @@ let rec copy_zip_assets repo buf assets copied failed =
           copy_zip_assets repo buf rest copied (name :: failed)
         else
           let* () =
-            Asset_store.write_asset ~repo ~name ~u8:(Web_dom.binary_to_u8 data)
+            Asset_store.write_asset ~repo ~name ~u8:(Str_util.binary_to_u8 data)
           in
           copy_zip_assets repo buf rest (copied + 1) failed)
 
 (* cljs <import-from-sqlite-zip!: unzip, import the db.sqlite entry via
    import-db-binary, then copy every assets/ file into the repo *)
-let import_sqlite_zip repo file =
-  let* buf = file |> Web_dom.file_buffer in
-  let buf = Web_dom.u8_of_buffer buf in
+let import_sqlite_zip repo (file : Ui_services.file) =
+  let* buf = promise_of (file.Ui_services.file_binary ()) in
   let es = Zip.entries buf in
   match sqlite_zip_entry es with
   | None ->
@@ -184,8 +188,8 @@ let import_sqlite_zip repo file =
 (* cljs <import-from-debug-transit!: create the graph with the raw
    transit payload as an open opt — the worker bootstrap-transacts the
    decoded datoms instead of seed data *)
-let import_debug_transit repo file =
-  let* raw = file |> Web_dom.file_text in
+let import_debug_transit repo (file : Ui_services.file) =
+  let* raw = promise_of (file.Ui_services.file_text ()) in
   let* _ =
     Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
       (Wire.Map
@@ -212,9 +216,9 @@ let run_files kind files =
   | _ -> ()
 
 let on_change id () =
-  match Web_dom.query_selector ("#" ^ id) with
+  match Ui_services.dom_query ("#" ^ id) with
   | Some el -> (
-      match Array.to_list (Web_dom.el_files el) with
+      match el.Ui_services.files () with
       | [] -> ()
       | files -> run_files id files)
   | None -> ()

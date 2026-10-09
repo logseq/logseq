@@ -16,6 +16,7 @@ module D = Logseq_el
 
 let t = Sidebar_state.t
 
+
 (* component icon: tabler names go through the `app:` registry (only `x`
    matches a builtin here). `ui__icon` carries over from the cljs span
    wrapper; `ti` font classes are dropped — the kind renders its own svg *)
@@ -99,7 +100,7 @@ let item_menu st (it : Sidebar_state.item) =
   let w = 160. in
   let x =
     Float.max ((w /. 2.) +. 5.)
-      (Float.min ax (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
+      (Float.min ax (Ui_services.dom_viewport_width () -. (w /. 2.) -. 5.))
   in
   popover ~key:("imenu-" ^ it.key)
     ~at:(x, if flip then atop else abot)
@@ -264,7 +265,7 @@ let item_header st idx (it : Sidebar_state.item) =
             ~on_press:(fun _ ->
               let ax, atop, abot =
                 match
-                  Web_dom.get_element_by_id ("sbi-more-" ^ it.key)
+                  Ui_services.dom_by_id ("sbi-more-" ^ it.key)
                 with
                 | Some el -> Popups_state.anchor_of_el el
                 | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
@@ -410,6 +411,23 @@ let object_tabs_host (it : Sidebar_state.item) =
 
 let item_body st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
+  (* add-button indent/children flags — same rule the imperative
+     doc-scan read off the DOM: the owner row is the item's own block
+     (a block-kind item, blocks = [owner]) -> indented + children
+     counted inside .block-children; otherwise the top-level rows
+     count *)
+  let indented =
+    match it.Sidebar_state.uuid, it.Sidebar_state.blocks with
+    | Some u, [ b ] -> b.Model.block_uuid = Some u
+    | _ -> false
+  in
+  let has_children =
+    if indented then
+      match it.Sidebar_state.blocks with
+      | [ b ] -> b.Model.block_children <> []
+      | _ -> false
+    else it.Sidebar_state.blocks <> []
+  in
   (* cljs right_sidebar page items render the full page-inner body:
      .cp__page-inner-wrap > .page-inner > (props + tabs + blocks + refs).
      The cljs data-page-tags / data-sb-inner marker attrs have no readers
@@ -479,7 +497,12 @@ let item_body st idx (it : Sidebar_state.item) =
                      ~data_attrs:[ ("data-cid", "sidebar") ]
                      (List.map
                         (Tree.block_row ~scope:"sidebar")
-                        it.blocks)
+                        it.blocks
+                      @ [ Add_button.el ?puuid:it.Sidebar_state.uuid
+                            ~flags:(fun ctx ->
+                              Signal.constant ctx.Lui_ui.ui_scheduler
+                                (has_children, indented))
+                        ])
                  ]
              ]
             (* linked references sit inside .page-inner in cljs *)

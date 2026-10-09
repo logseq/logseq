@@ -102,8 +102,63 @@ type env = {
   open_url : string -> unit;
 }
 
+type timers = {
+  timeout : (unit -> unit) -> int -> int;
+  clear_timeout : int -> unit;
+  interval : (unit -> unit) -> int -> int;
+  clear_interval : int -> unit;
+  debounce : int -> (unit -> unit) -> unit;
+  later : ms:int -> (unit -> unit) -> unit;
+}
+
+type file = {
+  file_name : string;
+  file_size : float;
+  file_text : unit -> string Ui_task.t;
+  file_binary : unit -> string Ui_task.t;
+}
+
+type fs_dir = {
+  dir_id : int;
+  (* Host-assigned handle — relates the dir record to the impl's own
+     host handle table (fh_move needs the destination's raw handle). *)
+  dir_name : string;
+  get_dir : string -> fs_dir Ui_task.t;
+  get_file : string -> fs_file Ui_task.t;
+  truncate_old_versions : unit -> unit Ui_task.t;
+}
+
+and fs_file = {
+  fh_file : unit -> file Ui_task.t;
+  fh_move : fs_dir -> string -> unit Ui_task.t;
+  fh_writable : unit -> fs_writable Ui_task.t;
+}
+
+and fs_writable = {
+  w_write : string -> unit Ui_task.t;
+  w_close : unit -> unit Ui_task.t;
+}
+
+type files = {
+  pick_files :
+       ?accept:string
+    -> ?multiple:bool
+    -> ?directory:bool
+    -> (file list -> unit)
+    -> unit;
+  download_text : filename:string -> mime:string -> string -> unit;
+  download_binary : filename:string -> mime:string -> string -> unit;
+  inflate_raw : string -> string Ui_task.t;
+  dir_picker_supported : unit -> bool;
+  show_dir_picker : unit -> fs_dir Ui_task.t;
+}
+
 (* Typed host-DOM boundary (folded from the temporary Ui_dom contract). *)
 type el = {
+  token : int;
+  (* The host's own element payload — opaque to shared code; only the
+     impl that constructed the el may read it (contains, data_transfer
+     plumbing). *)
   closest : string -> el option;
   attr : string -> string option;
   rect : unit -> float * float * float * float;
@@ -111,6 +166,32 @@ type el = {
   add_class : string -> unit;
   remove_class : string -> unit;
   offset_width : unit -> float;
+  focus : unit -> unit;
+  select_text : unit -> unit;
+  set_selection_range : int -> int -> unit;
+  set_attr : string -> string -> unit;
+  rm_attr : string -> unit;
+  value : unit -> string;
+  set_value : string -> unit;
+  set_text : string -> unit;
+  checked : unit -> bool;
+  set_checked : bool -> unit;
+  contains : el -> bool;
+  connected : unit -> bool;
+  click : unit -> unit;
+  scroll_into_view : unit -> unit;
+  scroll_into_view_nearest : unit -> unit;
+  scroll_top : unit -> float;
+  set_scroll_top : float -> unit;
+  scroll_height : unit -> float;
+  client_height : unit -> float;
+  id : unit -> string;
+  tag : unit -> string;
+  editable : unit -> bool;
+  query : string -> el option;
+  query_all : string -> el list;
+  files : unit -> file list;
+  style_prop : string -> string;
 }
 
 type ev = {
@@ -119,22 +200,50 @@ type ev = {
   shift : bool;
   meta : bool;
   ctrl : bool;
+  alt : bool;
   composing : bool;
   key : string option;
+  buttons : int;
+  button : int;
+  repeat : bool;
+  movement_x : float;
+  movement_y : float;
+  default_prevented : bool;
   target : el option;
   touches : (float * float) list;
   detail : string -> string option;
+  (* raw CustomEvent detail field as portable Json — [detail] only
+     covers string fields; numbers/bools/objects need this *)
+  detail_json : string -> Json.t option;
+  clipboard_get : string -> string;
+  clipboard_set : string -> string -> unit;
+  data_transfer_get : string -> string;
+  files : file list;
   prevent_default : unit -> unit;
+  stop_propagation : unit -> unit;
+  stop_immediate : unit -> unit;
 }
 
 type dom = {
-  on_document_event : string -> (ev -> unit) -> unit;
+  on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit;
+  on_window_event : string -> (ev -> unit) -> unit;
   query : string -> el option;
+  query_all : string -> el list;
+  by_id : string -> el option;
+  active_element : unit -> el option;
+  element_at : float -> float -> el option;
   doc_root : unit -> el;
+  body : unit -> el;
   viewport_width : unit -> float;
+  viewport_height : unit -> float;
+  document_visible : unit -> bool;
   dispatch : string -> unit;
+  dispatch_json : string -> Json.t -> unit;
   emit_json : string -> string -> unit;
   open_dialog : string -> unit;
+  confirm : string -> bool;
+  scroll_row_into_view : scroller:el -> row:el -> unit;
+  ensure_fixups : unit -> unit;
   apply_left_sidebar_width : int -> unit;
   selected_block_uuids : unit -> string list;
 }
@@ -155,6 +264,8 @@ type t = {
   session : session;
   env : env;
   dom : dom;
+  timers : timers;
+  files : files;
 }
 
 val install : t -> unit
@@ -228,12 +339,44 @@ val env_edit_units : unit -> edit_units
 val env_random_uuid : unit -> string
 val env_open_url : string -> unit
 
-val dom_on_document_event : string -> (ev -> unit) -> unit
+val dom_on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit
+val dom_on_window_event : string -> (ev -> unit) -> unit
 val dom_query : string -> el option
+val dom_query_all : string -> el list
+val dom_by_id : string -> el option
+val dom_active_element : unit -> el option
+val dom_element_at : float -> float -> el option
 val dom_root : unit -> el
+val dom_body : unit -> el
 val dom_viewport_width : unit -> float
+val dom_viewport_height : unit -> float
+val dom_document_visible : unit -> bool
 val dom_dispatch : string -> unit
+val dom_dispatch_json : string -> Json.t -> unit
 val dom_emit_json : string -> string -> unit
 val dom_open_dialog : string -> unit
+val dom_confirm : string -> bool
+val dom_scroll_row_into_view : scroller:el -> row:el -> unit
+val dom_ensure_fixups : unit -> unit
 val dom_apply_left_sidebar_width : int -> unit
 val dom_selected_block_uuids : unit -> string list
+
+val timers_timeout : (unit -> unit) -> int -> int
+val timers_clear_timeout : int -> unit
+val timers_interval : (unit -> unit) -> int -> int
+val timers_clear_interval : int -> unit
+val timers_debounce : int -> (unit -> unit) -> unit
+val timers_later : ms:int -> (unit -> unit) -> unit
+
+val files_pick_files :
+     ?accept:string
+  -> ?multiple:bool
+  -> ?directory:bool
+  -> (file list -> unit)
+  -> unit
+val files_download_text : filename:string -> mime:string -> string -> unit
+val files_download_binary :
+  filename:string -> mime:string -> string -> unit
+val files_inflate_raw : string -> string Ui_task.t
+val files_dir_picker_supported : unit -> bool
+val files_show_dir_picker : unit -> fs_dir Ui_task.t

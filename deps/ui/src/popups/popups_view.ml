@@ -14,8 +14,6 @@ open Lui_elements
 module S = Popups_state
 module U = I18n
 
-let dom = Logseq_el.el
-
 (* -- autocomplete item ----------------------------------------------- *)
 
 (* cljs svg/help-circle used inside the Query item's doc tooltip *)
@@ -387,7 +385,8 @@ let ac_popover (st : S.t) : t =
                | Some a -> (
                    match a.S.flip with
                    | Some (_, avail') -> avail'
-                   | None -> Web_dom.win_inner_height -. a.S.y -. 5.)
+                   | None ->
+                       Ui_services.dom_viewport_height () -. a.S.y -. 5.)
                | None -> 0.)
              vs))
      ~on_dismiss:(fun _ -> S.close_ac st)
@@ -459,15 +458,15 @@ let ac_popover (st : S.t) : t =
    handlers can call them *)
 
 (* the icon/emoji picker mounts as an overlay outside the menu DOM —
-   track it so closing the sub or the whole menu removes it like the
-   base-ui sub-content *)
-let cm_picker_el : Web_dom.el option ref = ref None
+   track its view-overlay key so closing the sub or the whole menu
+   removes it like the base-ui sub-content *)
+let cm_picker_key : string option ref = ref None
 
 let close_cm_picker () =
-  match !cm_picker_el with
-  | Some el ->
-      cm_picker_el := None;
-      Properties_state.remove_overlay_el el
+  match !cm_picker_key with
+  | Some key ->
+      cm_picker_key := None;
+      Properties_state.remove_view_overlay key
   | None -> ()
 
 let run_cm_item st l = close_cm_picker (); S.run_cm_item st l
@@ -476,7 +475,7 @@ let run_cm_heading st l = close_cm_picker (); S.run_cm_heading st l
 ;;
 
 (* base-ui sets data-highlighted on the hovered item (bg-muted) *)
-let cm_hi_el : Web_dom.el option ref = ref None
+let cm_hi_el : Ui_services.el option ref = ref None
 
 let close_cm st =
   cm_hi_el := None;
@@ -629,7 +628,7 @@ let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
 let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
     : t =
   popover ~key:"cm-sub" ~at:(x, y) ~role:`menu
-    ~available_height:(Web_dom.win_inner_height -. y -. 5.)
+    ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
     ~style_class:"ui__dropdown-menu-sub-content"
     ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
     ~on_dismiss:(fun _ -> close_cm st)
@@ -692,7 +691,8 @@ let cm_popover (st : S.t) : t =
                       let w = if m.S.tag <> None then 240. else 280. in
                       ( Float.max ((w /. 2.) +. 5.)
                           (Float.min m.S.cx
-                             (Web_dom.win_inner_width -. (w /. 2.) -. 5.))
+                             (Ui_services.dom_viewport_width ()
+                              -. (w /. 2.) -. 5.))
                       , m.S.cy )
                   | None -> (0., 0.))
                 vs))
@@ -706,7 +706,8 @@ let cm_popover (st : S.t) : t =
                          top edge; a below menu fills down to the
                          viewport edge *)
                       if m.S.flip then m.S.atop -. 5.
-                      else Web_dom.win_inner_height -. m.S.cy -. 5.
+                      else
+                        Ui_services.dom_viewport_height () -. m.S.cy -. 5.
                   | None -> 0.)
                 vs))
         ~data_attrs:[ ("data-keep-selection", "") ]
@@ -733,22 +734,21 @@ let cm_popover (st : S.t) : t =
 
 let in_popups el = S.inside el;;
 
-let cm_highlight (el : Web_dom.el) =
+let cm_highlight (el : Ui_services.el) =
   (match !cm_hi_el with
-   | Some e -> Web_dom.el_remove_attr e "data-highlighted"
+   | Some e -> e.Ui_services.rm_attr "data-highlighted"
    | None -> ());
   cm_hi_el :=
     (match
-       Web_dom.el_closest el
+       el.Ui_services.closest
          ".ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger"
      with
      | Some it when
-         Web_dom.el_closest it
+         it.Ui_services.closest
            ".ls-context-menu-content, .ui__dropdown-menu-sub-content"
          <> None ->
-         let e = it in
-         Web_dom.el_set_attr e "data-highlighted" "";
-         Some e
+         it.Ui_services.set_attr "data-highlighted" "";
+         Some it
      | _ -> None)
 
 (* ---- page-ref hover preview ----
@@ -757,11 +757,11 @@ let cm_highlight (el : Web_dom.el) =
 
 let pv_show_id : int option ref = ref None
 let pv_hide_id : int option ref = ref None
-let pv_pending : Web_dom.el option ref = ref None
+let pv_pending : Ui_services.el option ref = ref None
 
 let pv_cancel_show () =
   (match !pv_show_id with
-   | Some id -> Web_dom.clear_timeout id
+   | Some id -> Ui_services.timers_clear_timeout id
    | None -> ());
   pv_show_id := None;
   pv_pending := None
@@ -769,33 +769,34 @@ let pv_cancel_show () =
 let pv_cancel_hide () =
   match !pv_hide_id with
   | Some id ->
-      Web_dom.clear_timeout id;
+      Ui_services.timers_clear_timeout id;
       pv_hide_id := None
   | None -> ()
 
-let pv_open st (wrap : Web_dom.el) =
+let pv_open st (wrap : Ui_services.el) =
   pv_pending := Some wrap;
   match
     Option.bind
-      (if Web_dom.el_is_connected wrap then
-         Web_dom.el_query wrap "a[data-ref]"
+      (if wrap.Ui_services.connected () then
+         wrap.Ui_services.query "a[data-ref]"
        else None)
-      (fun a -> Web_dom.el_get_attr a "data-ref")
+      (fun a -> a.Ui_services.attr "data-ref")
   with
   | None -> ()
   | Some name ->
-      let r = Web_dom.el_bounding_rect wrap in
+      let rx, ry, rw, rh = wrap.Ui_services.rect () in
       (* cljs popover anchors align=center at the trigger: the 610px card
          centers under the ref link, opening at its bottom edge *)
-      let x =
-        Web_dom.rect_left r +. (Web_dom.rect_width r /. 2.0) -. 305.0
-      and y = Web_dom.rect_bottom r in
+      let x = rx +. (rw /. 2.0) -. 305.0
+      and y = ry +. rh in
       ignore
         (let* (title, page, blocks) =
             S.fetch_preview (Router.repo ()) name
         in
         (match !pv_pending with
-         | Some el when el == wrap && Web_dom.el_is_connected wrap ->
+         | Some el
+           when Properties_state.same_el el wrap
+                && wrap.Ui_services.connected () ->
              S.set_pv st
                (Some
                   { S.pv_x = x
@@ -807,29 +808,31 @@ let pv_open st (wrap : Web_dom.el) =
          | _ -> ());
         Js.Promise.resolve ())
 
-let pv_track st el =
-  if Web_dom.el_closest el ".ls-preview-popup" <> None then (
+let pv_track st (el : Ui_services.el) =
+  if el.Ui_services.closest ".ls-preview-popup" <> None then (
     pv_cancel_show ();
     pv_cancel_hide ())
   else
-    match Web_dom.el_closest el ".preview-ref-link" with
+    match el.Ui_services.closest ".preview-ref-link" with
     | Some wrap -> (
         pv_cancel_hide ();
         match !pv_pending with
-        | Some p when p == wrap -> ()
+        | Some p when Properties_state.same_el p wrap -> ()
         | _ ->
             pv_cancel_show ();
             pv_pending := Some wrap;
             pv_show_id :=
               Some
-                (Web_dom.set_timeout_id (fun () -> pv_open st wrap) 1000))
+                (Ui_services.timers_timeout
+                   (fun () -> pv_open st wrap) 1000))
     | None -> (
         pv_cancel_show ();
         match (S.get st).S.pv, !pv_hide_id with
         | Some _, None ->
             pv_hide_id :=
               Some
-                (Web_dom.set_timeout_id (fun () -> S.close_pv st) 400)
+                (Ui_services.timers_timeout
+                   (fun () -> S.close_pv st) 400)
         | _ -> ())
 
 (* cljs popup-show! content = PopoverContent card classes +
@@ -841,7 +844,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
      while the pointer is over the title's content wrapper *)
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
   (popover ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y)
-    ~available_height:(Web_dom.win_inner_height -. p.S.pv_y -. 5.)
+    ~available_height:(Ui_services.dom_viewport_height () -. p.S.pv_y -. 5.)
     ~style_class:"ui__popover-content ls-preview-popup"
     ~on_dismiss:(fun _ -> S.close_pv st)
     [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
@@ -875,7 +878,18 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                     ~style_class:"page-blocks-inner"
                     (List.map
                        (Tree.block_row ~scope:"preview" ~editable:false)
-                       p.S.pv_blocks)
+                       p.S.pv_blocks
+                     @ [ (* cljs page-preview-content mounts the real
+                            page-cp, which carries add-button *)
+                         Add_button.el
+                           ?puuid:
+                             (match p.S.pv_page with
+                              | Some pg -> pg.Model.page_uuid
+                              | None -> None)
+                           ~flags:(fun ctx ->
+                             Signal.constant ctx.Lui_ui.ui_scheduler
+                               (p.S.pv_blocks <> [], false))
+                       ])
                 ]
             ]
         ]
@@ -900,15 +914,13 @@ let pv_dyn (st : S.t) : t =
    data-highlighted + DOM focus across the enabled menuitems of the
    topmost visible menu, looping; Enter selects the highlighted item.
    Hover shares the same data-highlighted marker via cm_highlight. *)
-let menu_keydown (ev : Web_dom.ev) =
-  let menus =
-    Array.to_list
-      (Web_dom.query_selector_all_arr ".ui__dropdown-menu-content")
-  in
+let menu_keydown (ev : Ui_services.ev) =
+  let menus = Ui_services.dom_query_all ".ui__dropdown-menu-content" in
   let menu =
     menus
     |> List.filter (fun m ->
-           Web_dom.rect_width (Web_dom.el_bounding_rect m) > 0.)
+           let _, _, w, _ = m.Ui_services.rect () in
+           w > 0.)
     |> List.rev
     |> (fun l -> List.nth_opt l 0)
   in
@@ -916,17 +928,16 @@ let menu_keydown (ev : Web_dom.ev) =
   | None -> false
   | Some m -> (
       let items =
-        Array.to_list
-          (Web_dom.el_query_all_arr m
-             ".ui__dropdown-menu-item:not([data-disabled]):not([aria-disabled='true']), .ui__dropdown-menu-sub-trigger:not([data-disabled])")
+        m.Ui_services.query_all
+          ".ui__dropdown-menu-item:not([data-disabled]):not([aria-disabled='true']), .ui__dropdown-menu-sub-trigger:not([data-disabled])"
       in
-      match (Web_dom.ev_key ev, items) with
-      | (("ArrowDown" | "ArrowUp" | "Home" | "End") as k), _ :: _ ->
+      match (ev.Ui_services.key, items) with
+      | Some (("ArrowDown" | "ArrowUp" | "Home" | "End") as k), _ :: _ ->
           let cur =
             match
               List.find_index
                 (fun it ->
-                  Web_dom.el_get_attr it "data-highlighted" <> None)
+                  it.Ui_services.attr "data-highlighted" <> None)
                 items
             with
             | Some i -> i
@@ -943,65 +954,63 @@ let menu_keydown (ev : Web_dom.ev) =
           let it = List.nth items i in
           List.iter
             (fun e ->
-              Web_dom.el_remove_attr e "data-highlighted";
+              e.Ui_services.rm_attr "data-highlighted";
               (* base-ui roving tabindex: only the active item is 0 *)
-              Web_dom.el_set_attr e "tabindex" "-1")
+              e.Ui_services.set_attr "tabindex" "-1")
             items;
-          Web_dom.el_set_attr it "data-highlighted" "";
-          Web_dom.el_set_attr it "tabindex" "0";
+          it.Ui_services.set_attr "data-highlighted" "";
+          it.Ui_services.set_attr "tabindex" "0";
           cm_hi_el := Some it;
-          Web_dom.el_focus it;
-          let o = Js.Dict.empty () in
-          Js.Dict.set o "block" (Js.Json.string "nearest");
-          Web_dom.el_scroll_into_view_opts it (Js.Json.object_ o);
+          it.Ui_services.focus ();
+          it.Ui_services.scroll_into_view_nearest ();
           true
-      | "Enter", _ :: _ -> (
+      | Some "Enter", _ :: _ -> (
           match !cm_hi_el with
-          | Some e -> Web_dom.el_click e; true
+          | Some e -> e.Ui_services.click (); true
           | None -> true)
       | _ -> false)
 ;;
 
-let handle_keydown st (ev : Web_dom.ev) =
+let handle_keydown st (ev : Ui_services.ev) =
   if S.ac_keydown st ev then (
-    Web_dom.ev_prevent_default ev;
+    ev.Ui_services.prevent_default ();
     (* stopImmediate: same-target listeners registered later (the editor's
        own keydown) must not also react to the key the popup consumed *)
-    Web_dom.ev_stop_immediate ev)
+    ev.Ui_services.stop_immediate ())
   else if menu_keydown ev then (
-    Web_dom.ev_prevent_default ev;
-    Web_dom.ev_stop_immediate ev)
+    ev.Ui_services.prevent_default ();
+    ev.Ui_services.stop_immediate ())
   else
-    match Web_dom.ev_key ev with
-    | "Escape" when (S.get st).S.cm <> None -> close_cm st
+    match ev.Ui_services.key with
+    | Some "Escape" when (S.get st).S.cm <> None -> close_cm st
     | _ -> ()
 ;;
 
-let handle_contextmenu st (ev : Web_dom.ev) =
-  match Web_dom.ev_target ev with
+let handle_contextmenu st (ev : Ui_services.ev) =
+  match ev.Ui_services.target with
   | None -> ()
   | Some el -> (
-      match Web_dom.el_closest el ".block-tag[data-tag-uuid]" with
+      match el.Ui_services.closest ".block-tag[data-tag-uuid]" with
       | Some chip -> (
           (* cljs block-tag popup: its own menu, not the block/page menu *)
           match
-            ( Web_dom.el_get_attr chip "data-tag-uuid"
+            ( chip.Ui_services.attr "data-tag-uuid"
             , Option.bind
-                (Web_dom.el_get_attr chip "data-tag-id")
+                (chip.Ui_services.attr "data-tag-id")
                 int_of_string_opt
-            , Web_dom.el_get_attr chip "data-tag-priv"
-            , Web_dom.el_closest el
+            , chip.Ui_services.attr "data-tag-priv"
+            , el.Ui_services.closest
                 ".bullet-container[data-blockid], .ls-block[data-blockid]" )
           with
           | Some tuuid, Some tid, priv, Some blk
             when tuuid <> "" -> (
-              match Web_dom.el_get_attr blk "data-blockid" with
+              match blk.Ui_services.attr "data-blockid" with
               | Some bid ->
-                  Web_dom.ev_prevent_default ev;
-                  Web_dom.ev_stop_propagation ev;
+                  ev.Ui_services.prevent_default ();
+                  ev.Ui_services.stop_propagation ();
                   close_cm_picker ();
                   let title =
-                    match Web_dom.el_get_attr chip "data-tag-title" with
+                    match chip.Ui_services.attr "data-tag-title" with
                     | Some r -> r
                     | None -> tuuid
                   in
@@ -1012,26 +1021,26 @@ let handle_contextmenu st (ev : Web_dom.ev) =
               | None -> ())
           | _ -> ())
       | None ->
-      if Web_dom.el_closest el ".ls-page-title" <> None then ()
+      if el.Ui_services.closest ".ls-page-title" <> None then ()
       else
       (* cljs app-context-menu-observer: the block menu only opens from
          .bullet-container[data-blockid] (or a :block/link row's
          .ls-block[data-originalblockid]); right-click on block text is left to
          the native menu unless it lands inside an existing selection *)
       match
-        Web_dom.el_closest el
+        el.Ui_services.closest
           ".bullet-container[data-blockid], .ls-block[data-originalblockid]"
       with
       | Some blk -> (
           let id =
-            match Web_dom.el_get_attr blk "data-originalblockid" with
+            match blk.Ui_services.attr "data-originalblockid" with
             | Some oid -> Some oid
-            | None -> Web_dom.el_get_attr blk "data-blockid"
+            | None -> blk.Ui_services.attr "data-blockid"
           in
           match id with
           | Some id ->
-              Web_dom.ev_prevent_default ev;
-              Web_dom.ev_stop_propagation ev;
+              ev.Ui_services.prevent_default ();
+              ev.Ui_services.stop_propagation ();
               (* cljs block-content contextmenu selects the block it
                  opened on, unless it is already in a multi-selection *)
               if not (Editor_state.is_selected id) then
@@ -1042,7 +1051,9 @@ let handle_contextmenu st (ev : Web_dom.ev) =
                  edge), not the raw pointer *)
               let ax, atop, abot = S.anchor_of_el el in
               S.open_cm st ~ax ~atop ~abot ~block_id:id
-                ~multi:(List.length (Web_dom.selected_block_uuids ()) >= 2)
+                ~multi:
+                  (List.length (Ui_services.dom_selected_block_uuids ())
+                   >= 2)
           | None -> ())
       | None -> (
           (* cljs: right-click inside a selection shows the selection menu;
@@ -1050,24 +1061,24 @@ let handle_contextmenu st (ev : Web_dom.ev) =
              no native context menu (gpui), any right-click inside a block
              row that isn't on an editable target opens the block menu —
              .bullet-container's hit area is too small to be the only entry *)
-          match Web_dom.el_closest el ".ls-block[data-blockid]" with
+          match el.Ui_services.closest ".ls-block[data-blockid]" with
           | Some blk -> (
               match
-                (Web_dom.el_get_attr blk "data-blockid"
-                , Web_dom.selected_block_uuids ())
+                (blk.Ui_services.attr "data-blockid"
+                , Ui_services.dom_selected_block_uuids ())
               with
               | Some id, (first :: _ as sel)
                 when List.exists (fun u -> u = id) sel ->
-                  Web_dom.ev_prevent_default ev;
-                  Web_dom.ev_stop_propagation ev;
+                  ev.Ui_services.prevent_default ();
+                  ev.Ui_services.stop_propagation ();
                   close_cm_picker ();
                   let ax, atop, abot = S.anchor_of_el el in
                   S.open_cm st ~ax ~atop ~abot ~block_id:first
                     ~multi:(List.length sel >= 2)
               | Some id, _
-                when not (Web_dom.is_editable_target (Some el)) ->
-                  Web_dom.ev_prevent_default ev;
-                  Web_dom.ev_stop_propagation ev;
+                when not (el.Ui_services.editable ()) ->
+                  ev.Ui_services.prevent_default ();
+                  ev.Ui_services.stop_propagation ();
                   if not (Editor_state.is_selected id) then
                     Editor_actions.select_single id;
                   close_cm_picker ();
@@ -1077,15 +1088,15 @@ let handle_contextmenu st (ev : Web_dom.ev) =
           | None -> ()))
 ;;
 
-let handle_click st (ev : Web_dom.ev) =
+let handle_click st (ev : Ui_services.ev) =
   (* item activations run through each node's ~on_press; this listener
      only closes the popups on outside clicks and keeps clicks inside
      from stealing editor focus *)
-  match Web_dom.ev_target ev with
+  match ev.Ui_services.target with
   | None -> ()
   | Some el ->
       if not (in_popups el) then (S.close_ac st; close_cm st; S.close_pv st)
-      else Web_dom.ev_prevent_default ev
+      else ev.Ui_services.prevent_default ()
 ;;
 
 (* `ls:block-picker` {block, kind:"icon"|"emoji"} — the `p i`/`p r`
@@ -1095,11 +1106,11 @@ let handle_click st (ev : Web_dom.ev) =
    into editor_keys) *)
 let open_block_picker uuid emoji_only =
   match
-    Web_dom.query_selector (".ls-block[data-blockid='" ^ uuid ^ "']")
+    Ui_services.dom_query (".ls-block[data-blockid='" ^ uuid ^ "']")
   with
   | Some anchor ->
       let uuids =
-        match Web_dom.selected_block_uuids () with
+        match Ui_services.dom_selected_block_uuids () with
         | [] -> [ uuid ]
         | sel -> sel
       in
@@ -1122,36 +1133,26 @@ let open_block_picker uuid emoji_only =
                List.iter (fun u -> Page.set_icon u c) uuids))
   | None -> ()
 
-let block_picker_detail name ev =
-  match Worker_client.json_field "detail" ev with
-  | Some d -> (
-      match Worker_client.json_field name d with
-      | Some v -> Worker_client.json_string v
-      | None -> None)
-  | None -> None
-
-let handle_block_picker _st ev =
-  match block_picker_detail "block" ev with
+let handle_block_picker _st (ev : Ui_services.ev) =
+  match ev.Ui_services.detail "block" with
   | Some uuid ->
-      open_block_picker uuid
-        (block_picker_detail "kind" ev = Some "emoji")
+      open_block_picker uuid (ev.Ui_services.detail "kind" = Some "emoji")
   | None -> ()
 
 (* Set icon / Add reaction sub-triggers open the icon picker to the
    right of the menu (base-ui inline-end placement); the choice applies
    to every selected block for the multi-select menu *)
 let open_cm_picker (st : S.t) (pk : S.cm_picker)
-    (anchor : Web_dom.el) (cm : S.cm) =
+    (anchor : Ui_services.el) (cm : S.cm) =
   let uuids =
-    if cm.S.multi && Web_dom.selected_block_uuids () <> [] then
-      Web_dom.selected_block_uuids ()
+    if cm.S.multi && Ui_services.dom_selected_block_uuids () <> [] then
+      Ui_services.dom_selected_block_uuids ()
     else [ cm.S.block_id ]
   in
-  (* el = Js.Json.t — no cast *)
   close_cm_picker ();
   match pk with
   | S.Picker_icon ->
-      cm_picker_el :=
+      cm_picker_key :=
         Some
           (Icon_picker.open_picker_with_opts ~anchor ~del:false
              ~opts:{ Icon_picker.emoji_only = false; sub = true }
@@ -1159,7 +1160,7 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
                List.iter (fun u -> Page.set_icon u c) uuids;
                close_cm st))
   | S.Picker_emoji ->
-      cm_picker_el :=
+      cm_picker_key :=
         Some
           (Icon_picker.open_picker_with_opts ~anchor ~del:false
              ~opts:{ Icon_picker.emoji_only = true; sub = true }
@@ -1173,10 +1174,10 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
                close_cm st))
 ;;
 
-let cm_hover st el =
-  (match Web_dom.el_closest el "[id^='cm-sub-']" with
+let cm_hover st (el : Ui_services.el) =
+  (match el.Ui_services.closest "[id^='cm-sub-']" with
   | Some trg -> (
-      match Web_dom.el_get_attr trg "id" with
+      match trg.Ui_services.attr "id" with
       | Some s -> (
           let s = String.sub s 7 (String.length s - 7) in
           match int_of_string_opt s, (S.get st).S.cm with
@@ -1184,10 +1185,10 @@ let cm_hover st el =
               close_cm_picker ();
               match S.cm_sub_at st idx with
               | Some (S.Sub_menu _) ->
-                  let r = Web_dom.el_bounding_rect trg in
+                  let tx, ty, tw, _th = trg.Ui_services.rect () in
                   S.open_cm_sub st ~index:idx
-                    ~x:(Web_dom.rect_right r -. 4.)
-                    ~y:(Web_dom.rect_top r -. 4.)
+                    ~x:(tx +. tw -. 4.)
+                    ~y:(ty -. 4.)
               | Some (S.Sub_picker pk) ->
                   S.open_cm_sub st ~index:idx ~x:0. ~y:0.;
                   open_cm_picker st pk trg cm
@@ -1197,20 +1198,20 @@ let cm_hover st el =
   | None ->
       (* hovering a regular item inside the menu closes the open submenu *)
       if (S.get st).S.cm <> None
-         && Web_dom.el_closest el ".ls-context-menu-content" <> None
-         && Web_dom.el_closest el ".ui__dropdown-menu-sub-content" = None then (
+         && el.Ui_services.closest ".ls-context-menu-content" <> None
+         && el.Ui_services.closest ".ui__dropdown-menu-sub-content" = None then (
         S.close_cm_sub st;
         close_cm_picker ()))
 ;;
 
-let handle_mousemove st (ev : Web_dom.ev) =
-  match Web_dom.ev_target ev with
+let handle_mousemove st (ev : Ui_services.ev) =
+  match ev.Ui_services.target with
   | Some el -> (
       cm_hover st el;
       cm_highlight el;
-      (match Web_dom.el_closest el ".menu-link-wrap" with
+      (match el.Ui_services.closest ".menu-link-wrap" with
        | Some wrap -> (
-           match Web_dom.el_query wrap ".menu-link" with
+           match wrap.Ui_services.query ".menu-link" with
            | Some lnk -> S.ac_mousemove st lnk
            | None -> ())
        | None -> ());
@@ -1221,30 +1222,34 @@ let handle_mousemove st (ev : Web_dom.ev) =
 (* preventDefault on popup mousedown so clicking a menu item never
    steals focus from the editor textarea (cljs behaves this way — the
    editor keeps focus while the autocomplete/page-ref popup is open) *)
-let handle_mousedown _st (ev : Web_dom.ev) =
-  match Web_dom.ev_target ev with
-  | Some el when in_popups el -> Web_dom.ev_prevent_default ev
+let handle_mousedown _st (ev : Ui_services.ev) =
+  match ev.Ui_services.target with
+  | Some el when in_popups el -> ev.Ui_services.prevent_default ()
   | _ -> ()
 
-let install_listeners st =
-  Web_dom.add_document_listener "keydown" (handle_keydown st) true;
-  Web_dom.add_document_listener "contextmenu" (handle_contextmenu st) true;
-  Web_dom.add_document_listener "click" (handle_click st) true;
-  Web_dom.add_document_listener "mousedown" (handle_mousedown st) true;
-  Web_dom.add_document_listener "mousemove" (handle_mousemove st) false;
-  Web_dom.add_document_listener "ls:block-picker"
-    (handle_block_picker st) true;
+let install_listeners context st =
+  Ui_services.dom_on_document_event ~capture:true "keydown"
+    (handle_keydown st);
+  Ui_services.dom_on_document_event ~capture:true "contextmenu"
+    (handle_contextmenu st);
+  Ui_services.dom_on_document_event ~capture:true "click"
+    (handle_click st);
+  Ui_services.dom_on_document_event ~capture:true "mousedown"
+    (handle_mousedown st);
+  Ui_services.dom_on_document_event "mousemove" (handle_mousemove st);
+  Ui_services.dom_on_document_event ~capture:true "ls:block-picker"
+    (handle_block_picker st);
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)
   Ui_services.nav_on_change (fun () -> S.close_pv st);
-  Tooltip.install ()
+  Tooltip.install ~scheduler:context.Lui_ui.ui_scheduler
 ;;
 
 let render (_ms : Model.t Signal.signal) : t =
  fun context parent ->
   let st = S.make context.Lui_ui.ui_scheduler in
-  install_listeners st;
+  install_listeners context st;
   let ac_open =
     Logseq_el.own context
       (Signal.map (fun (v : S.view) -> v.S.ac <> None)
@@ -1259,6 +1264,8 @@ let render (_ms : Model.t Signal.signal) : t =
     Logseq_el.fragment
       [ if_ ~test:ac_open (ac_popover st)
       ; if_ ~test:cm_open (cm_popover st)
-      ; pv_dyn st ]
+      ; pv_dyn st
+      ; Tooltip.el
+      ; Editor_commands.popup_view ]
   in
   body context parent

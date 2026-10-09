@@ -4,12 +4,21 @@
    inside .editor-wrapper -> editing mode, else normal (block-select) mode. *)
 
 module S = Editor_state
-module D = Web_dom
 module A = Editor_actions
+
+(* Ui_services.ev exposes key as an option; the handlers below compare
+   against literal keys, so "" is the honest absence value *)
+let ev_key ev = Option.value ~default:"" ev.Ui_services.key
+
+let closest sel t =
+  match t with Some el -> el.Ui_services.closest sel | None -> None
+
+let is_editable_target t =
+  match t with Some el -> el.Ui_services.editable () | None -> false
 
 let ( let* ) p f = Js.Promise.then_ f p
 
-let mods ev = D.ev_ctrl ev || D.ev_meta ev
+let mods ev = ev.Ui_services.ctrl || ev.Ui_services.meta
 
 let uuid_of_prefixed prefix id =
   let n = String.length prefix in
@@ -148,7 +157,7 @@ let shortcut_key_str key =
   | "%" -> "5" | "^" -> "6" | "&" -> "7" | "*" -> "8" | "(" -> "9"
   | ")" -> "0" | k -> k
 
-let shortcut_key ev = shortcut_key_str (D.ev_key ev)
+let shortcut_key ev = shortcut_key_str (ev_key ev)
 
 (* gpui folds a held shift into the key name for platform shortcuts —
    cmd+shift+p arrives as {key="P", shift=false} and cmd+shift+/ as
@@ -156,10 +165,10 @@ let shortcut_key ev = shortcut_key_str (D.ev_key ev)
    (uppercase letter or shifted symbol) means the flag was folded away;
    reconstruct it so mod+p and mod+shift+p stay distinct *)
 let shift_held ev =
-  if D.ev_shift ev then true
-  else if not (D.ev_meta ev || D.ev_ctrl ev) then false
+  if ev.Ui_services.shift then true
+  else if not (ev.Ui_services.meta || ev.Ui_services.ctrl) then false
   else
-    match D.ev_key ev with
+    match ev_key ev with
     | k when String.length k = 1 ->
         k <> String.lowercase_ascii k || shortcut_key_str k <> k
     | _ -> false
@@ -189,7 +198,7 @@ let nav r =
     Ui_services.nav_set_hash (Runtime.nav_hash h);
     (* an identical hash fires no hashchange — still let resolve run so
        the same-route refresh path loads data *)
-    Web_dom.dispatch_custom "ls:navigate" Js.Json.null);
+    Ui_services.dom_dispatch "ls:navigate");
   true
 
 (* cljs shortcut dispatch for chords already bound in commands_data
@@ -438,7 +447,7 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
             (* cljs :editor/add-property mod+p — the new-property dialog
                on the editing block *)
             Popups_state.emit_cmd "add-property"
-              [ "block", Js.Json.string uuid ];
+              [ "block", Json.String uuid ];
             m
         | "." when meta ->
             (* editor/zoom-in: meta+. and meta+shift+. both zoom *)
@@ -548,7 +557,7 @@ let rec is_prefix xs ys =
 (* a keydown's canonical stroke token, matching the binding-table format
    ("mod+k", "shift+/", "g", "ctrl+space", ...) *)
 let stroke_of ev =
-  match D.ev_key ev with
+  match ev_key ev with
   | "Control" | "Meta" | "Alt" | "Shift" | "CapsLock" | "Dead" -> None
   | _ ->
       let key =
@@ -564,9 +573,9 @@ let stroke_of ev =
       in
       let ms =
         (if shift_held ev then [ "shift" ] else [])
-        @ (if D.ev_alt ev then [ "alt" ] else [])
-        @ (if D.ev_ctrl ev then [ "ctrl" ] else [])
-        @ (if D.ev_meta ev then [ "mod" ] else [])
+        @ (if ev.Ui_services.alt then [ "alt" ] else [])
+        @ (if ev.Ui_services.ctrl then [ "ctrl" ] else [])
+        @ (if ev.Ui_services.meta then [ "mod" ] else [])
       in
       Some (String.concat "+" (List.sort compare ms @ [ key ]))
 
@@ -591,7 +600,7 @@ let on_global_key ev =
     | Some st -> (Cmdk_state.get st).Cmdk_state.open_
     | None -> false
   in
-  if (not palette_open) && not (D.ev_composing ev) then
+  if (not palette_open) && not (ev.Ui_services.composing) then
     match stroke_of ev with
     | None -> ()
     | Some stroke ->
@@ -603,12 +612,12 @@ let on_global_key ev =
           let cand = seq @ [ stroke ] in
           let tbl = Lazy.force chord_table in
           let editing =
-            D.is_editable_target (D.ev_target ev)
+            is_editable_target (ev.Ui_services.target)
             || S.editing () <> None
           in
           let dispatch cid =
             if chord_may_run editing cid then begin
-              D.ev_prevent_default ev;
+              ev.Ui_services.prevent_default ();
               Cmdk_state.dispatch_id cid
             end
           in
@@ -654,89 +663,88 @@ let on_global_key ev =
 (* -- normal-mode keys (block selection) -- *)
 
 let on_normal_key ev =
-  let key = D.ev_key ev in
+  let key = ev_key ev in
   let shift = shift_held ev
-  and alt = D.ev_alt ev
-  and meta = D.ev_meta ev in
+  and alt = ev.Ui_services.alt
+  and meta = ev.Ui_services.meta in
   let selected () = S.selection_active () in
   match key with
   | "p" when meta && not shift && selected () ->
       (* cljs :editor/add-property mod+p — the new-property dialog on the
          first selected block *)
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       (match A.selected_uuids () with
        | u :: _ ->
            Popups_state.emit_cmd "add-property"
-             [ "block", Js.Json.string u ]
+             [ "block", Json.String u ]
        | [] -> ())
   | "Backspace" | "Delete" when selected () ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.delete_selection ()
-  | " " when D.ev_ctrl ev && selected () ->
+  | " " when ev.Ui_services.ctrl && selected () ->
       (* cljs ctrl+space = add-comment on the selection *)
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       List.iter
         (fun u ->
           Popups_state.emit_cmd "add-comment"
-            [ "block", Js.Json.string u ])
+            [ "block", Json.String u ])
         (A.selected_uuids ())
   | "ArrowUp" when alt && not shift ->
       (* editor/select-block-up *)
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.move_selection_focus true
   | "ArrowDown" when alt && not shift ->
       (* editor/select-block-down *)
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.move_selection_focus false  | "ArrowUp" when (meta || alt) && shift ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.move_blocks_up_down true
   | "ArrowDown" when (meta || alt) && shift ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.move_blocks_up_down false
   | "ArrowUp" when mods ev && not shift ->
       (* cljs mod+up collapses one level / the selection *)
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.collapse_expand ~collapse:true ()
   | "ArrowDown" when mods ev && not shift ->
       (* cljs mod+down expands one level / the selection *)
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.collapse_expand ~collapse:false ()
   | "ArrowUp" when shift ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.extend_selection true
   | "ArrowDown" when shift ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.extend_selection false
   | "ArrowUp" when selected () ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.move_selection_focus true
   | "ArrowDown" when selected () ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.move_selection_focus false
   | "Tab" when selected () ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       A.indent_or_outdent ~indent:(not shift)
   | "Enter" when mods ev ->
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       List.iter Editor_commands.cycle_todo (A.selected_uuids ())
   | "Enter" when shift && selected () ->
       (* cljs shift+enter = open-selected-blocks-in-sidebar *)
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       List.iter
         (fun u ->
-          Web_dom.dispatch_custom "ls:open-right-sidebar"
-            (Js.Json.object_
-               (Js.Dict.fromList [ "uuid", Js.Json.string u ])))
+          Ui_services.dom_dispatch_json "ls:open-right-sidebar"
+            (Json.Object [ "uuid", Json.String u ]))
         (A.selected_uuids ())
   | "Enter" when not shift -> (
-      match D.closest_sel ".block-add-button" (D.ev_target ev) with
+      match closest ".block-add-button" (ev.Ui_services.target) with
       | Some btn ->
-          D.ev_prevent_default ev;
-          A.append_block ?for_page:(D.el_get_attr btn "data-parentblockid") ()
+          ev.Ui_services.prevent_default ();
+          A.append_block ?for_page:(btn.Ui_services.attr "data-parentblockid") ()
       | None -> (
           match S.anchor () with
           | Some u when selected () ->
-              D.ev_prevent_default ev;
+              ev.Ui_services.prevent_default ();
               A.enter_edit u 0
           | _ -> ()))
   | "Escape" ->
@@ -747,45 +755,45 @@ let on_normal_key ev =
   | "?" ->
       (* cljs shift+/ (:ui/toggle-help, global-non-editing-only) toggles
          the help menu popup *)
-      D.ev_prevent_default ev;
+      ev.Ui_services.prevent_default ();
       Runtime.send Action.Help_toggle
   | _ -> (
       match shortcut_key ev with
       | "a" when mods ev && shift ->
           (* cljs mod+shift+a = select-all-blocks *)
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           A.select_all ()
       | "a" when mods ev ->
           (* cljs mod+a = select-parent *)
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           A.select_parent ()
       | ";" when mods ev && not shift ->
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           A.toggle_children_collapse ()
       | "," when mods ev && not shift ->
           (* the keymap gives mod+, to ui/toggle-settings outside editing
              (editor/zoom-out's mod+, is block-editing-only) — toggles the
              settings dialog like the cmdk dispatch *)
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           if Dialogs_state.is_open "settings" then
             Dialogs_state.close_named "settings"
           else Dialogs_state.open_ "settings"
       | "z" when mods ev ->
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           if shift then A.redo () else A.undo ()
       | "y" when mods ev ->
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           A.redo ()
       | "e" when mods ev ->
           (* cljs mod+e quick-add also fires outside edit mode *)
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           A.quick_add ()
-      | "c" when D.ev_meta ev ->
+      | "c" when ev.Ui_services.meta ->
           (* editor/copy and copy-text share the text-copy path *)
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           run_cid "editor/copy"
-      | "x" when D.ev_meta ev && not shift ->
-          D.ev_prevent_default ev;
+      | "x" when ev.Ui_services.meta && not shift ->
+          ev.Ui_services.prevent_default ();
           run_cid "editor/cut"
       | _ -> ())
 
@@ -795,8 +803,8 @@ let on_normal_key ev =
 let targets_block_editor uuid target =
   match target with
   | Some el -> (
-      match D.closest_sel ".ed-input" (Some el) with
-      | Some inp -> D.el_get_attr inp "data-block-id" = Some uuid
+      match closest ".ed-input" (Some el) with
+      | Some inp -> inp.Ui_services.attr "data-block-id" = Some uuid
       | None -> false)
   | None -> false
 
@@ -806,9 +814,9 @@ let targets_block_editor uuid target =
 let is_other_block_editor uuid target =
   match target with
   | Some el -> (
-      match D.closest_sel ".ed-input" (Some el) with
+      match closest ".ed-input" (Some el) with
       | Some inp -> (
-          match D.el_get_attr inp "data-block-id" with
+          match inp.Ui_services.attr "data-block-id" with
           | Some u -> u <> uuid
           | None -> false)
       | None -> false)
@@ -823,10 +831,11 @@ let is_other_block_editor uuid target =
    this retry chain's own note_input stamps so a real keystroke wins *)
 let rec retry_vertical uuid ev armed_caret mine_ms attempts =
   if attempts > 0 then
-    D.set_timeout
-      (fun () ->
-        match S.editing () with
-        | Some e2
+    ignore
+      (Ui_services.timers_timeout
+         (fun () ->
+           match S.editing () with
+           | Some e2
           when e2.S.uuid = uuid
                && !S.last_edit_input_ms <= mine_ms
                && e2.S.model.Edit_model.caret = armed_caret ->
@@ -834,7 +843,7 @@ let rec retry_vertical uuid ev armed_caret mine_ms attempts =
             retry_vertical uuid ev armed_caret !S.last_edit_input_ms
               (attempts - 1)
         | _ -> ())
-      16
+         16)
 
 (* every Edit_input event for the open block editor lands here: the
    Logseq keymap owns the commands first, Edit_input handles the rest,
@@ -943,14 +952,15 @@ and apply_input ?frame uuid ev =
           if Option.is_none f.Edit_input.caret then begin
             let rec retry_caret n =
               if n > 0 then
-                D.set_timeout
-                  (fun () ->
-                    match S.editing () with
+                ignore
+                  (Ui_services.timers_timeout
+                     (fun () ->
+                       match S.editing () with
                     | Some e when e.S.uuid = uuid ->
                         if not (A.refresh_overlay uuid) then
                           retry_caret (n - 1)
                     | _ -> ())
-                  40
+                     40)
             in
             retry_caret 12
           end)
@@ -961,20 +971,20 @@ and apply_input ?frame uuid ev =
    have emitted for it *)
 let pending_event ev : Edit_input.event option =
   let kev =
-    { Edit_model.key = D.ev_key ev
+    { Edit_model.key = ev_key ev
     ; shift = shift_held ev
-    ; alt = D.ev_alt ev
-    ; meta = D.ev_meta ev
-    ; ctrl = D.ev_ctrl ev
+    ; alt = ev.Ui_services.alt
+    ; meta = ev.Ui_services.meta
+    ; ctrl = ev.Ui_services.ctrl
     }
   in
   match kev.key with
   | key
     when String.length key = 1
-         && (not (D.ev_composing ev))
-         && not (mods ev || D.ev_alt ev) ->
+         && (not (ev.Ui_services.composing))
+         && not (mods ev || ev.Ui_services.alt) ->
       Some (Edit_input.Insert key)
-  | _ -> Some (Edit_input.Key (kev, D.ev_repeat ev))
+  | _ -> Some (Edit_input.Key (kev, ev.Ui_services.repeat))
 
 (* a structure op (split/merge/…) remounts the editing sink only after
    its apply+refresh resolves; keystrokes arriving in that window still
@@ -983,8 +993,8 @@ let pending_event ev : Edit_input.event option =
    synchronously so it never sees this window — run the key through the
    model directly; the surface repaints when the sink remounts *)
 let on_pending_focus_key ev e =
-  D.ev_prevent_default ev;
-  D.ev_stop_propagation ev;
+  ev.Ui_services.prevent_default ();
+  ev.Ui_services.stop_propagation ();
   (match pending_event ev with
    | Some ev' -> apply_input e.S.uuid ev'
    | None -> ());
@@ -1018,7 +1028,7 @@ let racing_edit_uuid () =
    never enters edit lets the window expire and the key is dropped
    like a normal-mode shortcut miss. *)
 let queue_racing_key ev uuid =
-  D.ev_stop_propagation ev;
+  ev.Ui_services.stop_propagation ();
   let (_, _, stale) = !last_block_mousedown in
   let replay e =
     if
@@ -1060,13 +1070,13 @@ let drag_reset () =
   drag_phase := None;
   drag_tgt := None
 
-let arm_drag ev =
-  match D.closest_sel ".bullet-container" (D.ev_target ev) with
+let arm_drag (ev : Ui_services.ev) =
+  match closest ".bullet-container" ev.Ui_services.target with
   | Some el -> (
-      match D.el_get_attr el "blockid" with
+      match el.Ui_services.attr "blockid" with
       | Some u ->
           drag_phase :=
-            Some (Drag_armed (u, D.ev_client_x ev, D.ev_client_y ev))
+            Some (Drag_armed (u, ev.Ui_services.x, ev.Ui_services.y))
       | None -> ())
   | None -> ()
 
@@ -1077,13 +1087,13 @@ let arm_drag ev =
    lands a frame later *)
 let update_drag_target ev src =
   let tgt =
-    match D.closest_sel ".ls-block" (D.ev_target ev) with
+    match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
-        match D.el_get_attr el "blockid" with
+        match el.Ui_services.attr "blockid" with
         | Some t when t <> src && not (A.is_descendant t src) ->
-            let rect = D.el_bounding_rect el in
+            let left, top, w, _h = el.Ui_services.rect () in
             let move_to =
-              if D.rect_width rect <= 0.0 then "sibling"
+              if w <= 0.0 then "sibling"
               else
                 let first =
                   match S.find_parent t with
@@ -1091,9 +1101,9 @@ let update_drag_target ev src =
                   | None -> false
                 in
                 let near_top =
-                  Float.abs (D.ev_client_y ev -. D.rect_top rect) <= 16.0
+                  Float.abs (ev.Ui_services.y -. top) <= 16.0
                 in
-                let x_off = D.ev_client_x ev -. D.rect_left rect in
+                let x_off = ev.Ui_services.x -. left in
                 if first && near_top then "top"
                 else if x_off > 50.0 then "nested"
                 else "sibling"
@@ -1116,8 +1126,8 @@ let on_native_mousemove ev =
   if S.ready () then
     match !drag_phase with
     | Some (Drag_armed (u, x0, y0)) ->
-        let dx = Float.abs (D.ev_client_x ev -. x0) in
-        let dy = Float.abs (D.ev_client_y ev -. y0) in
+        let dx = Float.abs (ev.Ui_services.x -. x0) in
+        let dy = Float.abs (ev.Ui_services.y -. y0) in
         if dx +. dy >= 4.0 then begin
           drag_phase := Some (Drag_active u);
           update_drag_target ev u
@@ -1142,66 +1152,70 @@ let on_keydown ev =
   if Ui_services.env_publishing () then ()
   else begin
   (if Lazy.force perf_keys then
-     Printf.eprintf "PERF kdown key=%s editing=%s ac=%b\n%!" (D.ev_key ev)
+     Printf.eprintf "PERF kdown key=%s editing=%s ac=%b\n%!" (ev_key ev)
        (match S.editing () with Some e -> e.S.uuid | None -> "-")
        (ac_popup_open ()));
   if S.ready () then begin
     (match !drag_phase with
      | Some (Drag_active _)
-       when String.lowercase_ascii (D.ev_key ev) = "escape" ->
+       when String.lowercase_ascii (ev_key ev) = "escape" ->
          drag_reset ()
      | _ -> ());
-    if Editor_commands.popup_key ev then
+    if Editor_commands.popup_key ~key:(ev_key ev)
+         ~inside:(fun () ->
+           closest "#date-time-picker" ev.Ui_services.target <> None)
+         ~prevent_default:ev.Ui_services.prevent_default
+    then
       (if Lazy.force perf_keys then
-         Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (D.ev_key ev))
+         Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (ev_key ev))
     else
-      let target = D.ev_target ev in
+      let target = ev.Ui_services.target in
       (* CodeMirror surfaces (fenced-code editor, query source editor)
          own their keys — Esc/arrows/Tab go through the editor's own
          listeners, never the block-editor dispatch. On the native host
          no inner .CodeMirror div exists, so the emitted .code-editor
          wrap around the mount is the guard ancestor instead. *)
-      match D.closest_sel ".CodeMirror, .code-editor" target with
+      match closest ".CodeMirror, .code-editor" target with
       | Some _ -> ()
       | None -> (
           (* property value textareas own their key handling
              (properties_value.ml) — the block-editor dispatch below must
              leave their keys alone *)
-          match D.closest_sel ".property-value-container" target with
+          match closest ".property-value-container" target with
           | Some _ -> ()
           | None -> (
           match (S.editing (), !S.pending_focus) with
           | Some e, Some (uuid, _, _)
             when e.S.uuid = uuid
                  && not (targets_block_editor uuid target) -> (
-              match (D.ev_key ev, racing_edit_uuid ()) with
+              match (ev_key ev, racing_edit_uuid ()) with
               | key, Some u
                 when u <> e.S.uuid
                      && (String.length key = 1 || key = "Enter"
                          || key = "Backspace" || key = "Tab")
-                     && (not (D.ev_composing ev))
-                     && not (mods ev || D.ev_alt ev) ->
+                     && (not (ev.Ui_services.composing))
+                     && not (mods ev || ev.Ui_services.alt) ->
                   (* a click on a different block is mid-dispatch: the
                      press belongs to the block being entered, not the
                      one still marked editing *)
-                  D.ev_prevent_default ev;
+                  ev.Ui_services.prevent_default ();
                   queue_racing_key ev u
               | _ -> on_pending_focus_key ev e)
           | Some e, _
             when (not (targets_block_editor e.S.uuid target))
                  && (is_other_block_editor e.S.uuid target
-                    || not (D.is_editable_target target)) -> (
-              match (D.ev_key ev, racing_edit_uuid ()) with
+                    || not (is_editable_target target)) -> (
+              match (ev_key ev, racing_edit_uuid ()) with
               | key, Some u
                 when u <> e.S.uuid
                      && (String.length key = 1 || key = "Enter"
                          || key = "Backspace" || key = "Tab")
-                     && (not (D.ev_composing ev))
-                     && not (mods ev || D.ev_alt ev) ->
+                     && (not (ev.Ui_services.composing))
+                     && not (mods ev || ev.Ui_services.alt) ->
                   (* a click on a different block is mid-dispatch: the
                      press belongs to the block being entered, not the
                      one still marked editing *)
-                  D.ev_prevent_default ev;
+                  ev.Ui_services.prevent_default ();
                   queue_racing_key ev u
               | _ ->
                   (* pending_focus was consumed on a node the following
@@ -1213,7 +1227,7 @@ let on_keydown ev =
                   S.pending_focus :=
                     Some (e.S.uuid, A.caret_of e.S.uuid,
                       !S.last_edit_input_ms);
-                  D.set_timeout A.apply_focus 0;
+                  ignore (Ui_services.timers_timeout A.apply_focus 0);
                   on_pending_focus_key ev e)
           | _ -> (
           match S.editing_uuid () with
@@ -1221,7 +1235,7 @@ let on_keydown ev =
               (* the sink's own listener emits the conduit event for
                  this key — nothing to do at document level *)
               ()
-          | Some uuid when mods ev || D.ev_alt ev -> (
+          | Some uuid when mods ev || ev.Ui_services.alt -> (
               (* the window-level keyMonitor forwards editing-mode chords
                  with no target (AppKit never maps mod+. etc. to a
                  doCommandBy selector, so the sink's own emit path never
@@ -1246,22 +1260,22 @@ let on_keydown ev =
                 match target with
                 | Some el ->
                     Option.is_some
-                      (D.closest_sel ".ed-input" (Some el))
+                      (closest ".ed-input" (Some el))
                     && Option.is_some
-                         (D.closest_sel ".ls-block" target)
-                    && D.closest_sel ".ls-page-title" target = None
+                         (closest ".ls-block" target)
+                    && closest ".ls-page-title" target = None
                 | _ -> false
               in
               if stale_block_editor then on_normal_key ev
-              else if D.is_editable_target target then ()
+              else if is_editable_target target then ()
               else
-                (match (D.ev_key ev, racing_edit_uuid ()) with
+                (match (ev_key ev, racing_edit_uuid ()) with
                 | key, Some u
                   when (String.length key = 1 || key = "Enter"
                           || key = "Backspace" || key = "Tab")
-                       && (not (D.ev_composing ev))
-                       && not (mods ev || D.ev_alt ev) ->
-                    D.ev_prevent_default ev;
+                       && (not (ev.Ui_services.composing))
+                       && not (mods ev || ev.Ui_services.alt) ->
+                    ev.Ui_services.prevent_default ();
                     queue_racing_key ev u
                 | _ -> on_normal_key ev))))
   end
@@ -1280,8 +1294,8 @@ let on_paste ev =
 let editing_clipboard_target uuid target =
   match target with
   | Some el -> (
-      match D.closest_sel ".ed-input" (Some el) with
-      | Some inp -> D.el_get_attr inp "data-block-id" = Some uuid
+      match closest ".ed-input" (Some el) with
+      | Some inp -> inp.Ui_services.attr "data-block-id" = Some uuid
       | None -> false)
   | None -> false
 
@@ -1289,18 +1303,15 @@ let on_copy ev =
   if S.ready () then
     match S.editing () with
     | Some e
-      when editing_clipboard_target e.S.uuid (D.ev_target ev) -> (
+      when editing_clipboard_target e.S.uuid (ev.Ui_services.target) -> (
         (* cljs copy-current-block-ref: a collapsed selection inside an
            editing block copies [[uuid]]; a non-collapsed selection
            copies the selected buffer text *)
-        match D.ev_clipboard ev with
-        | Some clip ->
-            let lo, hi = A.sel_span e.S.uuid in
-            D.cd_set_data clip "text/plain"
-              (if lo = hi then "[[" ^ e.S.uuid ^ "]]"
-               else String.sub e.S.buffer lo (hi - lo));
-            D.ev_prevent_default ev
-        | None -> ())
+        let lo, hi = A.sel_span e.S.uuid in
+        ev.Ui_services.clipboard_set "text/plain"
+          (if lo = hi then "[[" ^ e.S.uuid ^ "]]"
+           else String.sub e.S.buffer lo (hi - lo));
+        ev.Ui_services.prevent_default ())
     | Some _ -> ()
     | None -> A.copy_selection ev
 
@@ -1309,18 +1320,15 @@ let on_cut ev =
   if S.ready () then
     match S.editing () with
     | Some e
-      when editing_clipboard_target e.S.uuid (D.ev_target ev) -> (
-        match D.ev_clipboard ev with
-        | Some clip ->
-            let lo, hi = A.sel_span e.S.uuid in
-            if lo <> hi then (
-              D.cd_set_data clip "text/plain"
-                (String.sub e.S.buffer lo (hi - lo));
-              A.splice_range e.S.uuid lo hi "";
-              Outliner_ops.schedule_save e.S.uuid
-                (A.live_buffer e.S.uuid));
-            D.ev_prevent_default ev
-        | None -> ())
+      when editing_clipboard_target e.S.uuid (ev.Ui_services.target) -> (
+        let lo, hi = A.sel_span e.S.uuid in
+        if lo <> hi then (
+          ev.Ui_services.clipboard_set "text/plain"
+            (String.sub e.S.buffer lo (hi - lo));
+          A.splice_range e.S.uuid lo hi "";
+          Outliner_ops.schedule_save e.S.uuid
+            (A.live_buffer e.S.uuid));
+        ev.Ui_services.prevent_default ())
     | Some _ -> ()
     | None -> A.cut_selection ev
 
@@ -1330,7 +1338,7 @@ let on_click ev =
   if drop_active_drag () then
     (* the release click is the drop — keep it from other document
        listeners (page-ref navigation, outside-edit commit) *)
-    D.ev_stop_immediate ev
+    ev.Ui_services.stop_immediate ()
   else begin
     drag_reset ();
     (* armed-but-unmoved pointer down = a plain click *)
@@ -1339,48 +1347,46 @@ let on_click ev =
        the anchor's editor *)
     if Block_selection.consume_suppress () then ()
     else begin
-      let target = D.ev_target ev in
+      let target = ev.Ui_services.target in
       (* the add-button path defers through S.defer_init, so it works
          even on an empty page where no block_row has mounted the
          state yet *)
-      match D.closest_sel ".block-add-button" target with
+      match closest ".block-add-button" target with
   | Some btn ->
-      A.append_block ?for_page:(D.el_get_attr btn "data-parentblockid")
+      A.append_block ?for_page:(btn.Ui_services.attr "data-parentblockid")
         ~scope:(A.scope_of_el btn) ()
   | None ->
       if S.ready () then
         (
-        match D.closest_sel ".block-control" target with
+        match closest ".block-control" target with
         | Some el -> (
-            D.ev_prevent_default ev;
-            match uuid_of_prefixed "control-" (D.el_id el) with
+            ev.Ui_services.prevent_default ();
+            match uuid_of_prefixed "control-" (el.Ui_services.id ()) with
             | Some u ->
                 A.toggle_collapse ~scope:(A.scope_of_el el) u
             | None -> ())
         | None -> (
-            match D.closest_sel ".block-children-left-border" target with
+            match closest ".block-children-left-border" target with
             | Some el -> (
-                match D.el_get_attr el "data-blockid" with
+                match el.Ui_services.attr "data-blockid" with
                 | Some u ->
                     A.toggle_collapse ~scope:(A.scope_of_el el) u
                 | None -> ())
             | None -> (
-                match D.closest_sel ".bullet-container" target with
+                match closest ".bullet-container" target with
                 | Some el -> (
-                    match uuid_of_prefixed "dot-" (D.el_id el) with
+                    match uuid_of_prefixed "dot-" (el.Ui_services.id ()) with
                     | Some u ->
                         (* the wrapping a.bullet-link-wrap's default
                            hash navigation would push a second history
                            entry, leaving history.back() stuck on the
                            zoom route *)
-                        D.ev_prevent_default ev;
-                        if D.ev_shift ev then
+                        ev.Ui_services.prevent_default ();
+                        if ev.Ui_services.shift then
                           (* cljs bullet-on-click shiftKey: opens the
                              block in the right sidebar *)
-                          Web_dom.dispatch_custom "ls:open-right-sidebar"
-                            (Js.Json.object_
-                               (Js.Dict.fromList
-                                  [ "uuid", Js.Json.string u ]))
+                          Ui_services.dom_dispatch_json "ls:open-right-sidebar"
+                            (Json.Object [ "uuid", Json.String u ])
                         else A.zoom_to u
                     | None -> ())
                 | None -> (
@@ -1393,7 +1399,7 @@ let on_click ev =
                        elsewhere in .block-content the click opens the
                        title editor like cljs *)
                     match
-                      D.closest_sel
+                      closest
                         "button, a, input, audio, video, details, summary, \
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
@@ -1403,33 +1409,33 @@ let on_click ev =
                     with
                     | Some _ -> ()
                     | None -> (
-                        match D.closest_sel ".ls-comments-label" target with
+                        match closest ".ls-comments-label" target with
                         | Some el -> (
-                            match D.el_get_attr el "data-area-uuid" with
+                            match el.Ui_services.attr "data-area-uuid" with
                             | Some u ->
                                 (* edit-comments-area-title! *)
                                 A.enter_edit u
                                   (String.length (A.model_title u))
                             | None -> ())
                         | None -> (
-                            match D.closest_sel ".ls-comment-submit" target with
+                            match closest ".ls-comment-submit" target with
                             | Some el -> (
-                                match D.el_get_attr el "data-area-uuid" with
+                                match el.Ui_services.attr "data-area-uuid" with
                                 | Some u -> Comments_ops.submit u
                                 | None -> ())
                             | None -> (
                                 match
-                                  D.closest_sel ".ls-comment-delete" target
+                                  closest ".ls-comment-delete" target
                                 with
                                 | Some el -> (
                                     match
-                                      D.el_get_attr el "data-comment-uuid"
+                                      el.Ui_services.attr "data-comment-uuid"
                                     with
                                     | Some u -> Comments_ops.delete u
                                     | None -> ())
                                 | None -> (
                                     match
-                                      D.closest_sel "a.page-ref" target
+                                      closest "a.page-ref" target
                                     with
                                     | Some _ ->
                                         (* page-ref navigation happens in the
@@ -1438,11 +1444,11 @@ let on_click ev =
                                         ()
                                     | None -> (
                                         match
-                                          D.closest_sel ".block-content"
+                                          closest ".block-content"
                                             target
                                         with
                                         | Some _
-                                          when D.closest_sel
+                                          when closest
                                                  ".ls-page-title" target
                                                <> None ->
                                             (* the page title's own click
@@ -1450,7 +1456,7 @@ let on_click ev =
                                             ()
                                         | Some el -> (
                                             match
-                                              D.el_get_attr el "data-blockid"
+                                              el.Ui_services.attr "data-blockid"
                                             with
                                             | Some u ->
                                                 (* scope by container: the
@@ -1478,20 +1484,20 @@ let on_click ev =
                                                to the enclosing .ls-block's
                                                blockid *)
                                             match
-                                              D.closest_sel
+                                              closest
                                                 ".block-main-container"
                                                 target
                                             with
                                             | None -> ()
                                             | Some _ -> (
                                                 match
-                                                  D.closest_sel ".ls-block"
+                                                  closest ".ls-block"
                                                     target
                                                 with
                                                 | None -> ()
                                                 | Some el -> (
                                                     match
-                                                      D.el_get_attr el
+                                                      el.Ui_services.attr
                                                         "data-blockid"
                                                     with
                                                     | Some u ->
@@ -1509,22 +1515,17 @@ let on_click ev =
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)
 
-let detail_field ev name =
-  match D.ev_detail ev with
-  | Some j -> (
-      match Js.Json.decodeObject j with
-      | Some d -> Js.Dict.get d name
-      | None -> None)
-  | None -> None
+let detail_num ev name =
+  Option.bind (ev.Ui_services.detail name) float_of_string_opt
 
 let on_editor_insert ev =
   if S.ready () then
     match S.editing () with
     | Some e -> (
         match
-          ( Option.bind (detail_field ev "text") Js.Json.decodeString
-          , Option.bind (detail_field ev "from") Js.Json.decodeNumber
-          , Option.bind (detail_field ev "to") Js.Json.decodeNumber )
+          ( ev.Ui_services.detail "text"
+          , detail_num ev "from"
+          , detail_num ev "to" )
         with
         | Some text, Some from, Some to_ ->
             let n = String.length e.S.buffer in
@@ -1532,9 +1533,7 @@ let on_editor_insert ev =
             let t = Int.max f (Int.min (int_of_float to_) n) in
             let back =
               Option.value
-                (Option.map int_of_float
-                   (Option.bind (detail_field ev "back")
-                      Js.Json.decodeNumber))
+                (Option.map int_of_float (detail_num ev "back"))
                 ~default:0
             in
             let caret = f + String.length text - back in
@@ -1546,9 +1545,9 @@ let on_editor_insert ev =
               (A.live_buffer e.S.uuid);
             (* cljs node-embed pick: insert then clear-edit! *)
             (match
-               Option.bind (detail_field ev "exit") Js.Json.decodeBoolean
+               ev.Ui_services.detail "exit"
              with
-             | Some true -> A.exit_edit ~select:false
+             | Some "true" -> A.exit_edit ~select:false
              | _ -> ())
         | _ -> ())
     | None -> ()
@@ -1557,7 +1556,7 @@ let on_editor_insert ev =
 (* clicking outside the editor commits the buffer; clicks inside the
    autocomplete/context-menu popups keep editing — the apply action
    refocuses the sink input (cljs keeps the block in edit mode) *)
-let on_mousedown ev =
+let on_mousedown (ev : Ui_services.ev) =
   if Ui_services.env_publishing () then () else begin
   (* a pointer going down ends any stale drag that missed its release
      click (released outside the document) *)
@@ -1575,53 +1574,58 @@ let on_mousedown ev =
     let now = Ui_services.time_now () in
     last_block_mousedown :=
       (match
-         D.closest_sel
+         closest
            "button, a, input, audio, video, details, summary, \
             sup.fn, [contenteditable=true], .cloze, \
             .cloze-revealed, .query-table, .image-resize, \
             .view-action-type, .ui-fenced-code-editor"
-           (D.ev_target ev)
+           ev.Ui_services.target
        with
        | Some _ -> ("", now, stale)
        | None -> (
-           match D.closest_sel ".block-content" (D.ev_target ev) with
+           match closest ".block-content" ev.Ui_services.target with
            | Some el ->
-               ( Option.value (D.el_get_attr el "data-blockid") ~default:""
+               ( Option.value (el.Ui_services.attr "data-blockid")
+                   ~default:""
                , now, stale )
            | None -> (
                (* the add-block row appends a block then enters edit —
                   its uuid doesn't exist yet, so record a wildcard that
                   replays into the next edit landing *)
-               match D.closest_sel ".block-add-button" (D.ev_target ev)
+               match
+                   closest ".block-add-button" ev.Ui_services.target
                with
                | Some _ -> ("*", now, stale)
                | None -> (
                    (* row padding lands inside .ls-block but outside
                       .block-content — the block it belongs to is still
                       the edit the click is about to start *)
-                   match D.closest_sel ".ls-block" (D.ev_target ev) with
+                   match closest ".ls-block" ev.Ui_services.target with
                    | Some el ->
                        ( Option.value
-                           (uuid_of_prefixed "ls-block-" (D.el_id el))
+                           (uuid_of_prefixed "ls-block-"
+                              (el.Ui_services.id ()))
                            ~default:""
                        , now, stale )
                    | None -> ("", now, stale)))));
     (match !last_block_mousedown with
      | u, _, _ when u <> "" && u <> "*" ->
          S.click_point :=
-           Some (u, now, D.ev_client_x ev, D.ev_client_y ev)
+           Some (u, now, ev.Ui_services.x, ev.Ui_services.y)
      | _ -> S.click_point := None);
     if S.editing () <> None then
     match
-      D.closest_sel ".editor-wrapper, .ui-fenced-code-editor"
-        (D.ev_target ev)
+      closest ".editor-wrapper, .ui-fenced-code-editor"
+        ev.Ui_services.target
     with
     | Some _ -> ()
     | None -> (
-        match D.ev_target ev with
+        match
+          Ui_services.dom_element_at ev.Ui_services.x ev.Ui_services.y
+        with
         | Some el when Popups_state.inside el -> ()
         | _ ->
-            if Editor_commands.click_guard (D.ev_target ev) then ()
+            if Editor_commands.click_guard () then ()
             else A.schedule_blur_commit ())
   end
 
@@ -1643,65 +1647,52 @@ let on_mousedown ev =
 
 let on_dragstart ev =
   if Ui_services.env_publishing () then () else begin
-  match D.closest_sel ".bullet-container" (D.ev_target ev) with
+  match closest ".bullet-container" (ev.Ui_services.target) with
   | Some _ ->
-      D.ev_prevent_default ev;
-      D.ev_stop_immediate ev
+      ev.Ui_services.prevent_default ();
+      ev.Ui_services.stop_immediate ()
   | None -> ()
 
   end
 
-let files_of ev =
-  match D.ev_data_transfer ev with
-  | Some dt -> D.cd_files dt
-  | None -> [||]
-
-let on_file_dragover ev =
-  if Array.length (files_of ev) > 0 then D.ev_prevent_default ev
-
-let on_file_drop ev =
-  if Ui_services.env_publishing () then () else begin
-  let files = files_of ev in
-  if Array.length files > 0 then begin
-    D.ev_prevent_default ev;
-    Asset_dom.upload_files files
-  end
-
-  end
+let on_file_dragover (ev : Ui_services.ev) =
+  if ev.Ui_services.files <> [] then ev.Ui_services.prevent_default ()
 
 let installed = State_cell.Once.make ()
 
 let install_once () =
   State_cell.Once.run installed (fun () ->
-    D.add_document_listener "keydown" on_keydown true;
-    D.add_document_listener "keydown" on_global_key true;
-    D.add_document_listener "paste" on_paste true;
-    D.add_document_listener "copy" on_copy true;
-    D.add_document_listener "cut" on_cut true;
-    D.add_document_listener "click" on_click true;
-    D.add_document_listener "mousedown" on_mousedown true;
-    if Platform.native_drag () then
-      D.add_document_listener "mousemove" on_native_mousemove true;
-    D.add_document_listener "ls:editor-insert" on_editor_insert true;
-    D.add_document_listener "dragstart" on_dragstart true;
-    D.add_document_listener "dragover" on_file_dragover true;
-    D.add_document_listener "drop" on_file_drop true;
+    Ui_services.dom_on_document_event ~capture:true "keydown" on_keydown;
+    Ui_services.dom_on_document_event ~capture:true "keydown" on_global_key;
+    Ui_services.dom_on_document_event ~capture:true "paste" on_paste;
+    Ui_services.dom_on_document_event ~capture:true "copy" on_copy;
+    Ui_services.dom_on_document_event ~capture:true "cut" on_cut;
+    Ui_services.dom_on_document_event ~capture:true "click" on_click;
+    Ui_services.dom_on_document_event ~capture:true "mousedown"
+      on_mousedown;
+    if Ui_services.env_native_drag () then
+      Ui_services.dom_on_document_event ~capture:true "mousemove"
+        on_native_mousemove;
+    Ui_services.dom_on_document_event ~capture:true "ls:editor-insert"
+      on_editor_insert;
+    Ui_services.dom_on_document_event ~capture:true "dragstart" on_dragstart;
+    Ui_services.dom_on_document_event ~capture:true "dragover"
+      on_file_dragover;
+    (* the file-drop listener is web-only (native drops arrive through
+       platform_event "file-drop") — js_app installs it *)
     Block_dnd.install ();
     (* pointer-driven range selection (cljs block/selection.cljs) *)
-    D.add_document_listener "pointerdown"
+    Ui_services.dom_on_document_event ~capture:true "pointerdown"
       (fun ev ->
         if
           not (Ui_services.env_publishing ()) && S.ready ()
           (* capture-phase listener fires before the CM wrapper's
              stopPropagation — fenced-code clicks must not start a
              block range selection (cljs clears selection instead) *)
-          && D.closest_sel ".ui-fenced-code-editor" (D.ev_target ev)
+          && closest ".ui-fenced-code-editor" (ev.Ui_services.target)
              = None
-        then Block_selection.pointerdown ev)
-      true;
-    D.add_document_listener "pointermove"
-      (fun ev -> if not (Ui_services.env_publishing ()) && S.ready () then Block_selection.pointermove ev)
-      true;
-    D.add_document_listener "pointerup"
-      (fun _ev -> Block_selection.pointerup ())
-      true)
+        then Block_selection.pointerdown ev);
+    Ui_services.dom_on_document_event ~capture:true "pointermove"
+      (fun ev -> if not (Ui_services.env_publishing ()) && S.ready () then Block_selection.pointermove ev);
+    Ui_services.dom_on_document_event ~capture:true "pointerup"
+      (fun _ev -> Block_selection.pointerup ()))

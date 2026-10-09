@@ -64,7 +64,7 @@ let sync_layers (d : t) =
 
 (* radix FocusScope restores focus to the element that held it before
    the modal opened when the last layer unmounts *)
-let return_focus : Web_dom.el option ref = ref None
+let return_focus : Ui_services.el option ref = ref None
 
 let has_layer (d : t) =
   d.dialogs <> [] || Option.is_some d.confirm
@@ -87,13 +87,12 @@ let set f =
       sync_layers d';
       d');
   if !removed then Settings_state.deactivate ();
-  if !opened then return_focus := Web_dom.active_element ();
+  if !opened then return_focus := Ui_services.dom_active_element ();
   Runtime.flush ();
   if !emptied then (
     (match !return_focus with
-     | Some el when Web_dom.el_is_connected el ->
-         ignore
-           (Web_dom.set_timeout (fun () -> Web_dom.el_focus el) 0)
+     | Some el when el.Ui_services.connected () ->
+         Ui_services.timers_later ~ms:0 (fun () -> el.Ui_services.focus ())
      | _ -> ());
     return_focus := None)
 
@@ -165,10 +164,8 @@ let submit_prompt v =
 
 let close_prompt () = set (fun d -> { d with prompt = None })
 
-let detail_field ev key =
-  Js.Json.decodeString
-    (Web_dom.js_get (Web_dom.js_get ev "detail") key)
-  |> Option.value ~default:""
+let detail_field (ev : Ui_services.ev) key =
+  Option.value (ev.Ui_services.detail key) ~default:""
 
 let init_done = ref false
 
@@ -181,53 +178,56 @@ let focusable_sel =
    ,[tabindex]:not([tabindex='-1'])"
 
 let top_content () =
-  let els =
-    Web_dom.query_selector_all_arr
+  match
+    Ui_services.dom_query_all
       ".ui__dialog-content,.ui__alert-dialog-content"
-  in
-  if Array.length els = 0 then None
-  else Some els.(Array.length els - 1)
+  with
+  | [] -> None
+  | els -> Some (List.nth els (List.length els - 1))
+
+(* the services layer offers no element-identity op: two els bound to
+   the same host element contain each other, and nothing else does.
+   (On the native host contains never self-matches, so these checks
+   conservatively stay off there.) *)
+let same_el (a : Ui_services.el) (b : Ui_services.el) =
+  a.Ui_services.contains b && b.Ui_services.contains a
 
 let trap_tab ev =
   match top_content () with
   | None -> ()
   | Some content -> (
-      let fs =
-        Array.to_list (Web_dom.el_query_all_arr content focusable_sel)
-      in
+      let fs = content.Ui_services.query_all focusable_sel in
       match fs with
       | [] ->
-          Web_dom.ev_prevent_default ev;
-          Web_dom.el_focus content
+          ev.Ui_services.prevent_default ();
+          content.Ui_services.focus ()
       | first :: _ ->
           let last = List.nth fs (List.length fs - 1) in
-          (match Web_dom.active_element () with
-           | Some a when Web_dom.el_contains content a ->
+          (match Ui_services.dom_active_element () with
+           | Some a when content.Ui_services.contains a ->
                (* inside the dialog: wrap at both ends; the container
                   itself (tabindex -1) counts as before-first *)
-               if a == content then (
-                 Web_dom.ev_prevent_default ev;
-                 Web_dom.el_focus
-                   (if Web_dom.ev_shift ev then last else first))
-               else if a == last && not (Web_dom.ev_shift ev) then (
-                 Web_dom.ev_prevent_default ev;
-                 Web_dom.el_focus first)
-               else if a == first && Web_dom.ev_shift ev then (
-                 Web_dom.ev_prevent_default ev;
-                 Web_dom.el_focus last)
+               if same_el a content then (
+                 ev.Ui_services.prevent_default ();
+                 (if ev.Ui_services.shift then last else first)
+                   .Ui_services.focus ())
+               else if same_el a last && not ev.Ui_services.shift then (
+                 ev.Ui_services.prevent_default ();
+                 first.Ui_services.focus ())
+               else if same_el a first && ev.Ui_services.shift then (
+                 ev.Ui_services.prevent_default ();
+                 last.Ui_services.focus ())
            | Some a -> (
                (* focus outside the dialog but inside a higher layer
                   (open menu/popup) belongs to that layer's own trap —
                   only pull focus in when the page body holds it *)
-               match Web_dom.query_selector "body" with
-               | Some body when a == body ->
-                   Web_dom.ev_prevent_default ev;
-                   Web_dom.el_focus
-                     (if Web_dom.ev_shift ev then last else first)
-               | _ -> ())
+               if same_el a (Ui_services.dom_body ()) then (
+                 ev.Ui_services.prevent_default ();
+                 (if ev.Ui_services.shift then last else first)
+                   .Ui_services.focus ()))
            | None ->
-               Web_dom.ev_prevent_default ev;
-               Web_dom.el_focus first))
+               ev.Ui_services.prevent_default ();
+               first.Ui_services.focus ()))
 
 (* names this host renders — other components own the rest (e.g. "cards") *)
 let known name =
@@ -240,37 +240,39 @@ let init () =
   if !init_done then ()
   else (
     init_done := true;
-    Web_dom.on_document_event "ls:open-dialog" (fun ev ->
+    Ui_services.dom_on_document_event "ls:open-dialog" (fun ev ->
         match detail_field ev "name" with
         | "" -> ()
         | name -> if known name then open_ name);
-    Web_dom.on_document_event "ls:close-dialog" (fun _ -> close_top ());
-    Web_dom.on_document_event "keydown" (fun ev ->
+    Ui_services.dom_on_document_event "ls:close-dialog" (fun _ ->
+        close_top ());
+    Ui_services.dom_on_document_event "keydown" (fun ev ->
         if
-          Web_dom.event_str ev "key" = "Tab" && ready ()
-          && not (Web_dom.ev_composing ev)
+          ev.Ui_services.key = Some "Tab" && ready ()
+          && not ev.Ui_services.composing
         then trap_tab ev;
-        if Web_dom.event_str ev "key" = "Escape" && ready () then
+        if ev.Ui_services.key = Some "Escape" && ready () then
           (* defer past every same-event listener: a popup layer or
              overlay stacked ABOVE the top dialog consumes the Escape
              itself (preventDefault) — only close our top layer when the
              key was left unclaimed. Without the defer this listener
              fires before the layer listeners (it registered first) and
-             tears down the whole dialog under an open menu *)
-          ignore
-            (Web_dom.set_timeout
-               (fun () ->
-                 if not (Web_dom.ev_default_prevented ev) then
-                   (* the Model.confirm alert (page delete etc.) lives
-                      outside this stack; Confirm_set None is a no-op
-                      when nothing is open, so it is safe to always send *)
-                   if
-                     (value ()).dialogs = []
-                     && (value ()).confirm = None
-                     && (value ()).prompt = None
-                     && (value ()).ui_request = None
-                   then (
-                     Runtime.send (Action.Confirm_set None);
-                     Runtime.flush ())
-                   else close_top ())
-               0)))
+             tears down the whole dialog under an open menu.
+             ev.default_prevented is snapshotted at handler time, which
+             suffices here: every other keydown consumer listens on
+             capture or on the target element, so its preventDefault
+             lands before this bubble handler runs *)
+          Ui_services.timers_later ~ms:0 (fun () ->
+              if not ev.Ui_services.default_prevented then
+                (* the Model.confirm alert (page delete etc.) lives
+                   outside this stack; Confirm_set None is a no-op
+                   when nothing is open, so it is safe to always send *)
+                if
+                  (value ()).dialogs = []
+                  && (value ()).confirm = None
+                  && (value ()).prompt = None
+                  && (value ()).ui_request = None
+                then (
+                  Runtime.send (Action.Confirm_set None);
+                  Runtime.flush ())
+                else close_top ())))

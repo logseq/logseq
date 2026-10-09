@@ -46,7 +46,7 @@ let unescape_published s =
     ; "logseq____&quot;", "\""; "logseq____&apos;", "\'" ]
 
 let main root =
-  Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops;
+  Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~timers:Ui_dom_web.timers ~files:Ui_dom_web.files;
   install_error_reporting ();
   let registry = Lui_extension.registry () in
   Logseq_emoji.register registry;
@@ -209,6 +209,24 @@ let main root =
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
+  Editor_keys.install_once ();
+  (* OS file drops produce raw DataTransfer File objects that
+     Asset_dom.upload_files consumes — web-only (native drops arrive
+     through platform_event "file-drop" -> Asset_dom.upload_paths) *)
+  Web_dom.add_document_listener "drop"
+    (fun ev ->
+      if Ui_services.env_publishing () then ()
+      else
+        match Web_dom.ev_data_transfer ev with
+        | Some dt -> (
+            let files = Web_dom.cd_files dt in
+            match Array.length files with
+            | 0 -> ()
+            | _ ->
+                Web_dom.ev_prevent_default ev;
+                Asset_dom.upload_files files)
+        | None -> ())
+    true;
   (* views mount declaratively at their host sites — no
      Views_mount observer *)
   Router.init ();

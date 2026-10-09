@@ -7,7 +7,6 @@
    imperatively via Views_popup with an id-addressable node as anchor. *)
 
 module D = Logseq_el
-module E = Web_dom
 module I = I18n
 module V = Views_state
 module Wr = Views_wire
@@ -94,7 +93,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
        ~on_press:(fun _ ->
          let v = Signal.get v_sig in
          if (V.get inst).V.view_uuid = v.Wr.vu then
-           match E.get_element_by_id (view_tab_anchor_id inst v) with
+           match Ui_services.dom_by_id (view_tab_anchor_id inst v) with
            | Some b ->
                ignore
                  (P.show_menu ~anchor:b
@@ -232,46 +231,34 @@ let sorting_popup inst anchor =
         match List.find_opt (fun c -> c.V.c_id = so.V.s_id) s.V.columns with
         | None -> []
         | Some c ->
-            let order_btn =
-              (* cljs shui/select trigger: order-button !px-2 !py-0 !h-8 *)
-              E.h ~tag:"button" ~cls:"ls-sort-order"
-                ~children:
-                  [ E.h ~tag:"span"
-                      ~text:(if so.V.s_asc then I.ascending else I.descending)
-                      ()
-                  ; E.icon "chevron-down" ]
-                ()
-            in
-            (* one click flips asc/desc (same outcome as the cljs select,
-               minus a nested popup that would detach this menu) *)
-            E.el_on order_btn "click" (fun ev ->
-                E.ev_stop_propagation ev;
-                set_asc so (not so.V.s_asc));
-            let remove_btn =
-              (* icon-only buttons need aria-label or the store rejects
-                 the whole mount batch *)
-              E.h ~tag:"button" ~cls:"ls-sort-x"
-                ~attrs:[ ("aria-label", I.delete_sort) ]
-                ()
-            in
-            E.el_append_child remove_btn (E.icon "x");
-            E.el_on remove_btn "click" (fun ev ->
-                E.ev_stop_propagation ev;
-                remove_sort so);
+            (* verbatim rows — the sort controls are buttons inside the
+               menuitem slot, so they ride the Logseq_el escape channel *)
             [ P.MCustom
-                (E.h ~cls:"ls-view-order-setting"
-                   ~children:
-                     [ E.h ~cls:"ls-drag-row"
-                         ~children:
-                           [ E.h ~tag:"i" ~cls:"ti ti-grip-vertical" ()
-                           ; E.h ~cls:"ls-col-name" ~text:(c.V.c_name ^ ":")
-                               () ]
-                         ()
-                     ; E.h ~cls:"ls-sort-right"
-                         ~children:[ order_btn; remove_btn ]
-                         ()
-                     ]
-                   ()) ])
+                (D.el ~style_class:"ls-view-order-setting"
+                   [ D.el ~style_class:"ls-drag-row"
+                       [ D.el ~tag:"i"
+                           ~attrs:[ ("class", "ti ti-grip-vertical") ] []
+                       ; D.el ~style_class:"ls-col-name"
+                           ~text:(c.V.c_name ^ ":") [] ]
+                   ; D.el ~style_class:"ls-sort-right"
+                       [ (* cljs shui/select trigger: order-button
+                            !px-2 !py-0 !h-8 — one click flips asc/desc *)
+                         D.el ~tag:"button" ~style_class:"ls-sort-order"
+                           ~events:"click"
+                           ~on_dom_event:(fun _ _ ->
+                             set_asc so (not so.V.s_asc))
+                           [ D.el ~tag:"span"
+                               ~text:
+                                 (if so.V.s_asc then I.ascending
+                                  else I.descending)
+                               []
+                           ; icon_el "chevron-down" ]
+                       ; D.el ~tag:"button" ~style_class:"ls-sort-x"
+                           ~attrs:[ ("aria-label", I.delete_sort) ]
+                           ~events:"click"
+                           ~on_dom_event:(fun _ _ -> remove_sort so)
+                           [ icon_el "x" ] ]
+                   ]) ])
       s.V.sorting
   in
   ignore
@@ -279,21 +266,16 @@ let sorting_popup inst anchor =
        (items
         @ [ P.MCustom
               ((* cljs: ghost button, muted, pl-3, trash icon + label *)
-               let btn =
-                 E.h ~tag:"button" ~cls:"ls-sort-delete"
-                   ~children:
-                     [ E.icon "trash"
-                     ; E.h ~tag:"span" ~cls:"menu-item-label"
-                         ~text:I.delete_sort ()
-                     ]
-                   ()
-               in
-               E.el_on btn "click" (fun _ ->
+               D.el ~tag:"button" ~style_class:"ls-sort-delete"
+                 ~events:"click"
+                 ~on_dom_event:(fun _ _ ->
                    V.update inst (fun s -> { s with V.sorting = [] });
                    V.persist_sorting inst;
                    P.close_all ();
-                   refresh inst);
-               btn) ] ))
+                   refresh inst)
+                 [ icon_el "trash"
+                 ; D.el ~tag:"span" ~style_class:"menu-item-label"
+                     ~text:I.delete_sort [] ]) ] ))
 
 (* ---------- filter popup ---------- *)
 
@@ -343,77 +325,75 @@ let filter_value_phase inst ~anchor (c : V.column) =
               (Wr.W.elems
                  (Option.value (W.get data "values") ~default:W.Nil))
       in
-      let content = E.h ~cls:"ls-vf-col" () in
-      let inner = E.h ~cls:"cp__select cp__select-main" () in
-      let inp =
-        E.h ~tag:"input" ~cls:"cp__select-input"
-          ~attrs:[ ("type", "text"); ("placeholder", c.V.c_name) ] ()
+      let pick it =
+        P.close_all ();
+        set_filters inst
+          ((V.get inst).V.filters
+           @ [ { V.c_prop = ident; c_op = "is"
+               ; c_val =
+                   Some
+                     (Option.value it.P.si_extra
+                        ~default:(W.String it.P.si_value))
+               } ])
+          (V.get inst).V.filters_or
       in
-      E.el_append_child inner (E.h ~cls:"input-wrap" ~children:[ inp ] ());
-      let results = E.h ~cls:"cp__select-results" () in
-      E.el_append_child inner
-        (E.h ~cls:"item-results-wrap" ~children:[ results ] ());
-      let render_items q =
-        E.el_replace_children results;
-        List.iter
-          (fun it ->
-            if Fuzzy.score q it.P.si_label > 0. then begin
-              let a =
-                E.h ~tag:"a" ~cls:"menu-link"
-                  ~attrs:[ ("tabindex", "0") ]
-                  ~children:
-                    [ E.h ~tag:"span" ~cls:"menu-item-label"
-                        ~text:it.P.si_label () ]
-                  ()
-              in
-              E.el_on a "click" (fun _ ->
+      let row it =
+        D.el ~style_class:"menu-link-wrap"
+          [ D.el ~tag:"a" ~style_class:"menu-link"
+              ~attrs:[ ("tabindex", "0") ]
+              ~events:"click" ~on_dom_event:(fun _ _ -> pick it)
+              [ D.el ~tag:"span" ~style_class:"menu-item-label"
+                  ~text:it.P.si_label [] ]
+          ]
+      in
+      let ops =
+        if ident = "block/created-at" || ident = "block/updated-at" then []
+        else
+          List.map
+            (fun (label, op) ->
+              D.el ~tag:"button" ~style_class:"ls-op-btn" ~events:"click"
+                ~on_dom_event:(fun _ _ ->
                   P.close_all ();
                   set_filters inst
                     ((V.get inst).V.filters
-                     @ [ { V.c_prop = ident; c_op = "is"
-                         ; c_val =
-                             Some
-                               (Option.value it.P.si_extra
-                                  ~default:(W.String it.P.si_value)) } ])
-                    (V.get inst).V.filters_or);
-              E.el_append_child results
-                (E.h ~cls:"menu-link-wrap" ~children:[ a ] ())
-            end)
-          items
+                     @ [ { V.c_prop = ident; c_op = op
+                         ; c_val = Some (W.Keyword "empty") } ])
+                    (V.get inst).V.filters_or)
+                [ D.el ~tag:"span" ~style_class:"ls-op-label" ~text:label [] ])
+            [ (I.is_empty, "is"); (I.is_not_empty, "is-not") ]
       in
-      render_items "";
-      E.el_on inp "input" (fun _ ->
-          render_items (Web_dom.el_value inp));
-      E.el_append_child content inner;
-      (if ident <> "block/created-at" && ident <> "block/updated-at" then begin
-         let mk label op =
-           let b =
-             E.h ~tag:"button" ~cls:"ls-op-btn"
-               ~children:
-                 [ E.h ~tag:"span" ~cls:"ls-op-label" ~text:label () ]
-               ()
-           in
-           E.el_on b "click" (fun _ ->
-               P.close_all ();
-               set_filters inst
-                 ((V.get inst).V.filters
-                  @ [ { V.c_prop = ident; c_op = op
-                      ; c_val = Some (W.Keyword "empty") } ])
-                 (V.get inst).V.filters_or);
-           b
-         in
-         E.el_append_child content (mk I.is_empty "is");
-         E.el_append_child content (mk I.is_not_empty "is-not")
-       end);
-      let pop =
-        E.h
-          ~cls:"ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md" ()
-      in
-      E.el_append_child pop content;
-      E.el_append_child P.document_body pop;
-      P.position_content ~anchor ~content:pop ~align_end:true ~submenu:false;
-      P.push_popup pop;
-      E.set_timeout (fun () -> E.el_focus inp) 0)
+      P.show_custom ~anchor ~align_end:true
+        ~cls:
+          "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+        (fun context parent ->
+          let sched = context.Lui_ui.ui_scheduler in
+          let query = Signal.state sched "" in
+          let qsig = query.Signal.state_signal in
+          (D.el ~style_class:"ls-vf-col"
+             (column ~style_class:"cp__select cp__select-main"
+                [ D.el ~style_class:"input-wrap"
+                    [ input ~style_class:"cp__select-input"
+                        ~data_attrs:[ ("type", "text") ]
+                        ~placeholder:c.V.c_name ~autofocus:true
+                        ~on_input:(function
+                          | L.TextChanged (_, v) -> Signal.set query v
+                          | _ -> ())
+                        [] ]
+                ; D.el ~style_class:"item-results-wrap"
+                    [ D.el ~style_class:"cp__select-results"
+                        [ reactive
+                            (fun q ->
+                              D.fragment
+                                (List.map row
+                                   (List.filter
+                                      (fun it ->
+                                        Fuzzy.score q it.P.si_label > 0.)
+                                      items)))
+                            qsig ]
+                    ]
+                ]
+             :: ops))
+            context parent))
 
 let filter_popup inst anchor =
   let s = V.get inst in
@@ -484,7 +464,7 @@ let groupable_columns inst =
   else cols
 
 let rec show_more_menu inst =
-  match E.get_element_by_id ("vmore-" ^ string_of_int inst.V.id) with
+  match Ui_services.dom_by_id ("vmore-" ^ string_of_int inst.V.id) with
   | None -> ()
   | Some anchor ->
           let s = V.get inst in
@@ -576,7 +556,7 @@ let display_type_el inst : t =
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
   Ui_parts.pressable
     ~on_press:(fun _ ->
-      match E.get_element_by_id wrap_id with
+      match Ui_services.dom_by_id wrap_id with
       | Some anchor ->
           let set dt =
             V.update inst (fun s -> { s with V.display_type = dt });
@@ -614,7 +594,7 @@ let display_type_el inst : t =
    is open) — e2e clicks it twice, so the button must not disappear *)
 let search_el inst : t =
  fun ctx parent ->
-  let deb = E.debounce 300 in
+  let deb = Ui_services.timers_debounce 300 in
   let input_id = "vsearch-" ^ string_of_int inst.V.id in
   let open_sig =
     Logseq_el.own ctx
@@ -628,12 +608,13 @@ let search_el inst : t =
             ~on_click:(fun () ->
               if not (V.get inst).V.search_open then begin
                 V.update inst (fun s -> { s with V.search_open = true });
-                E.set_timeout
-                  (fun () ->
-                    match E.get_element_by_id input_id with
-                    | Some el -> E.el_focus el
-                    | None -> ())
-                  0
+                ignore
+                  (Ui_services.timers_timeout
+                     (fun () ->
+                       match Ui_services.dom_by_id input_id with
+                       | Some el -> el.Ui_services.focus ()
+                       | None -> ())
+                     0)
               end)
         ; if_ ~test:open_sig
             (row
@@ -698,7 +679,7 @@ let filter_chip inst idx (f : V.filter_clause) : t =
         ~accessibility_identifier:op_btn_id
         ~text:(I.operator_text f.V.c_op)
         ~on_press:(fun _ ->
-            match E.get_element_by_id op_btn_id with
+            match Ui_services.dom_by_id op_btn_id with
             | None -> ()
             | Some anchor ->
                 let prop =
@@ -844,127 +825,125 @@ let refs_cog_class (s : V.vstate) =
   | false, false -> ""
 
 let ref_filter_dialog inst anchor =
-  let deb = E.debounce 200 in
-  let query = ref "" in
   let input_id = "vrfsearch-" ^ string_of_int inst.V.id in
   let lc s = String.lowercase_ascii (Str_util.trim s) in
-  let pop = E.h ~cls:"ui__dropdown-menu-content p-4" () in
-  let chips_wrap = E.h ~cls:"cp__filters" () in
-  let refs_wrap = E.h ~cls:"ls-filters-refs" () in
-  let rec ref_button title count_opt =
-    E.h ~tag:"button" ~cls:"ls-ref-btn"
-      ~children:
-        ([ E.h ~tag:"span" ~text:title () ]
-         @ (match count_opt with
-            | Some n ->
-                [ E.h ~tag:"sup" ~text:(" " ^ string_of_int n) () ]
-            | None -> []))
-      ~on_click:(fun ev ->
-        (* cljs ref-button: add? = ref in neither filter; include? =
-           new click -> not shift, existing -> its current column so
-           delete-property-value targets the right property *)
-        let s = V.get inst in
-        let lcr = lc title in
-        let included =
-          List.exists (fun (n, _) -> n = lcr) s.V.ref_includes
-        in
-        let excluded =
-          List.exists (fun (n, _) -> n = lcr) s.V.ref_excludes
-        in
-        let not_in_filters = (not included) && not excluded in
-        save_ref_filter inst ~title
-          ~incl:(if not_in_filters then not (E.ev_shift ev) else included)
-          ~add:not_in_filters ~on_done:render_dynamic)
-      ()
-  and render_dynamic () =
-    let s = V.get inst in
-    E.el_replace_children chips_wrap;
-    E.el_replace_children refs_wrap;
-    let chip_row label xs =
-      E.h ~cls:"flex flex-row flex-wrap items-center"
-        ~children:
-          (E.h ~cls:"ls-filters-label" ~text:label ()
+  P.show_custom ~anchor ~align_end:true
+    ~cls:"ui__dropdown-menu-content p-4"
+    (fun context parent ->
+      let sched = context.Lui_ui.ui_scheduler in
+      let query = Signal.state sched "" in
+      (* bumped whenever include/exclude filters change so the chips
+         and ref rows re-render *)
+      let gen = Signal.state sched 0 in
+      let deb = Ui_services.timers_debounce 200 in
+      let combined =
+        Signal.map2 (fun q g -> (q, g)) query.Signal.state_signal
+          gen.Signal.state_signal
+      in
+      let ref_button title count_opt =
+        D.el ~tag:"button" ~style_class:"ls-ref-btn" ~events:"click"
+          ~on_dom_event:(fun _ payload ->
+            (* cljs ref-button: add? = ref in neither filter; include? =
+               new click -> not shift, existing -> its current column so
+               delete-property-value targets the right property *)
+            let s = V.get inst in
+            let lcr = lc title in
+            let included =
+              List.exists (fun (n, _) -> n = lcr) s.V.ref_includes
+            in
+            let excluded =
+              List.exists (fun (n, _) -> n = lcr) s.V.ref_excludes
+            in
+            let not_in_filters = (not included) && not excluded in
+            save_ref_filter inst ~title
+              ~incl:
+                (if not_in_filters then
+                   not (Json_payload.bool payload "shiftKey")
+                 else included)
+              ~add:not_in_filters
+              ~on_done:(fun () ->
+                Signal.set gen (Signal.get_state gen + 1)))
+          ([ D.el ~tag:"span" ~text:title [] ]
+           @
+           match count_opt with
+           | Some n -> [ D.el ~tag:"sup" ~text:(" " ^ string_of_int n) [] ]
+           | None -> [])
+      in
+      let chip_row label xs =
+        D.el ~style_class:"flex flex-row flex-wrap items-center"
+          (D.el ~style_class:"ls-filters-label" ~text:label []
            :: List.map (fun (_, title) -> ref_button title None) xs)
-        ()
-    in
-    if s.V.ref_includes <> [] then
-      E.el_append_child chips_wrap
-        (chip_row (I.t "reference.filter/includes") s.V.ref_includes);
-    if s.V.ref_excludes <> [] then
-      E.el_append_child chips_wrap
-        (chip_row (I.t "reference.filter/excludes") s.V.ref_excludes);
-    (* refs = ref-pages-count minus filtered names, fuzzy-narrowed by
-       the search input then re-sorted by count desc *)
-    let in_filters n =
-      List.exists (fun (x, _) -> x = lc n)
-        (s.V.ref_includes @ s.V.ref_excludes)
-    in
-    let refs =
-      s.V.ref_pages_count
-      |> List.filter (fun (t, _) -> not (in_filters t))
-      |> fun xs ->
-      if !query = "" then xs
-      else
-        Fuzzy.fuzzy_search ~extract:fst ~limit:100 xs !query
-        |> List.stable_sort (fun (_, a) (_, b) -> compare b a)
-    in
-    if refs <> [] then
-      E.el_append_child refs_wrap
-        (E.h ~cls:"flex gap-2 flex-wrap items-center"
-           ~attrs:[ ("style", "width:500px;max-width:500px") ]
-           ~children:(List.map (fun (t, n) -> ref_button t (Some n)) refs)
-           ())
-  in
-  E.el_append_child pop
-    (E.h ~cls:"ls-filters filters"
-       ~children:
-         [ E.h ~cls:"ls-filters-header"
-             ~children:
-               [ E.h ~cls:"ls-filters-icon"
-                   ~children:[ E.icon ~size:20. "filter" ] ()
-               ; E.h ~cls:"ls-filters-title-wrap"
-                   ~children:
-                     [ E.h ~tag:"h3" ~cls:"ls-filters-title"
-                         ~text:(I.t "reference.filter/title") ()
-                     ; E.h ~tag:"span" ~cls:"text-xs"
-                         ~text:(I.t "reference.filter/directions") () ]
-                   () ]
-             ()
-         ; chips_wrap
-         ; E.h ~cls:"cp__filters-input-panel"
-             ~children:
-               [ E.icon "search"
-               ; E.h ~tag:"input"
-                   ~cls:"cp__filters-input w-full bg-transparent"
-                   ~attrs:
-                     [ ("type", "text")
-                     ; ("id", input_id)
-                     ; ( "placeholder"
-                       , I.t "reference.filter/search-placeholder" ) ]
-                   ~on_input:(fun ev ->
-                     let v =
-                       match E.ev_target ev with
-                       | Some t -> E.el_value t
-                       | None -> ""
-                     in
-                     deb (fun () ->
-                         query := v;
-                         render_dynamic ()))
-                   () ]
-             ()
-         ; refs_wrap ]
-       ());
-  render_dynamic ();
-  E.el_append_child P.document_body pop;
-  P.position_content ~anchor ~content:pop ~align_end:true ~submenu:false;
-  P.push_popup pop;
-  (* cljs focuses the search input ~32ms after mount *)
-  E.set_timeout
-    (fun () ->
-      match E.get_element_by_id input_id with
-      | Some inp -> E.el_focus inp
-      | None -> ())
-    32
+      in
+      let chip_rows =
+        reactive
+          (fun (_q, _g) ->
+            let s = V.get inst in
+            D.fragment
+              ((if s.V.ref_includes <> [] then
+                  [ chip_row (I.t "reference.filter/includes")
+                      s.V.ref_includes ]
+                else [])
+               @
+               if s.V.ref_excludes <> [] then
+                 [ chip_row (I.t "reference.filter/excludes")
+                     s.V.ref_excludes ]
+                 else []))
+          combined
+      in
+      let ref_rows =
+        reactive
+          (fun (q, _g) ->
+            let s = V.get inst in
+            let in_filters n =
+              List.exists
+                (fun (x, _) -> x = lc n)
+                (s.V.ref_includes @ s.V.ref_excludes)
+            in
+            let refs =
+              s.V.ref_pages_count
+              |> List.filter (fun (t, _) -> not (in_filters t))
+              |> fun xs ->
+              if q = "" then xs
+              else
+                Fuzzy.fuzzy_search ~extract:fst ~limit:100 xs q
+                |> List.stable_sort (fun (_, a) (_, b) -> compare b a)
+            in
+            if refs = [] then D.nothing
+            else
+              D.el ~style_class:"flex gap-2 flex-wrap items-center"
+                ~attrs:[ ("style", "width:500px;max-width:500px") ]
+                (List.map (fun (t, n) -> ref_button t (Some n)) refs))
+          combined
+      in
+      (D.el ~style_class:"ls-filters filters"
+         [ D.el ~style_class:"ls-filters-header"
+             [ D.el ~style_class:"ls-filters-icon"
+                 [ icon ~name:(Views_table.icon_of "filter") ~point_size:20
+                     ~style_class:"ls-icon-filter" [] ]
+             ; D.el ~style_class:"ls-filters-title-wrap"
+                 [ D.el ~tag:"h3" ~style_class:"ls-filters-title"
+                     ~text:(I.t "reference.filter/title") []
+                 ; D.el ~tag:"span" ~style_class:"text-xs"
+                     ~text:(I.t "reference.filter/directions") [] ]
+             ]
+         ; D.el ~style_class:"cp__filters" [ chip_rows ]
+         ; D.el ~style_class:"cp__filters-input-panel"
+             [ icon ~name:(Views_table.icon_of "search")
+                 ~style_class:"ls-icon-search" []
+             ; input ~style_class:"cp__filters-input w-full bg-transparent"
+                 ~data_attrs:
+                   [ ("type", "text")
+                   ; ("id", input_id)
+                   ; ( "placeholder"
+                     , I.t "reference.filter/search-placeholder" ) ]
+                 ~autofocus:true
+                 ~on_input:(function
+                   | L.TextChanged (_, v) ->
+                       deb (fun () -> Signal.set query v)
+                   | _ -> ())
+                 [] ]
+         ; D.el ~style_class:"ls-filters-refs" [ ref_rows ] ])
+        context parent)
 
 let refs_filter_btn inst : t =
  fun ctx parent ->
@@ -977,7 +956,7 @@ let refs_filter_btn inst : t =
        ~accessibility_identifier:("vrefcog-" ^ string_of_int inst.V.id)
        ~on_press:(fun _ ->
          match
-           E.get_element_by_id ("vrefcog-" ^ string_of_int inst.V.id)
+           Ui_services.dom_by_id ("vrefcog-" ^ string_of_int inst.V.id)
          with
          | Some a -> ref_filter_dialog inst a
          | None -> ())
@@ -1054,7 +1033,7 @@ let render_head inst : t =
                     ("vsort-" ^ string_of_int inst.V.id)
                   ~on_press:(fun _ ->
                     match
-                      E.get_element_by_id
+                      Ui_services.dom_by_id
                         ("vsort-" ^ string_of_int inst.V.id)
                     with
                     | Some a -> sorting_popup inst a
@@ -1067,7 +1046,7 @@ let render_head inst : t =
                  ("vfilter-" ^ string_of_int inst.V.id)
                ~on_press:(fun _ ->
                  match
-                   E.get_element_by_id
+                   Ui_services.dom_by_id
                      ("vfilter-" ^ string_of_int inst.V.id)
                  with
                  | Some a -> filter_popup inst a

@@ -3,8 +3,10 @@
    Outliner_ops (apply-outliner-ops) followed by a page refresh. *)
 
 module S = Editor_state
-module D = Web_dom
 module Ops = Outliner_ops
+
+let closest sel t =
+  match t with Some el -> el.Ui_services.closest sel | None -> None
 
 let ( let* ) p f = Js.Promise.then_ f p
 
@@ -65,16 +67,16 @@ let click_offset uuid =
     when u = uuid && Ui_services.time_now () -. ms < 1500. -> (
       match
         ( Editor_sink.conduit uuid
-        , D.get_element_by_id ("edit-block-" ^ uuid) )
+        , Ui_services.dom_by_id ("edit-block-" ^ uuid) )
       with
       | Some conduit, Some el -> (
-          match D.closest_sel ".block-editor" (Some el) with
+          match closest ".block-editor" (Some el) with
           | None -> None
           | Some c ->
-              let r = D.el_bounding_rect c in
+              let l, t, _w, _h = c.Ui_services.rect () in
               conduit.Edit_input.offset_at
-                ~x:(int_of_float x - int_of_float (D.rect_left r))
-                ~y:(int_of_float y - int_of_float (D.rect_top r)))
+                ~x:(int_of_float x - int_of_float l)
+                ~y:(int_of_float y - int_of_float t))
       | _ -> None)
   | _ -> None
 
@@ -198,10 +200,11 @@ let rec apply_click_offset uuid fallback armed_ms attempts =
       | None ->
           if attempts <= 0 then set_caret uuid fallback
           else
-            D.set_timeout
-              (fun () ->
-                apply_click_offset uuid fallback armed_ms (attempts - 1))
-              16)
+            ignore
+              (Ui_services.timers_timeout
+                 (fun () ->
+                   apply_click_offset uuid fallback armed_ms (attempts - 1))
+                 16))
   | _ -> ()
 
 let rec apply_focus () =
@@ -264,14 +267,15 @@ let rec apply_focus () =
              directly would read a STALE frame while the new overlay is
              still mounting *)
           let rec retry_measure attempt =
-            D.set_timeout
-              (fun () ->
-                match S.editing () with
-                | Some e when e.S.uuid = uuid ->
-                    if (not (refresh_overlay uuid)) && attempt < 25 then
-                      retry_measure (attempt + 1)
-                | _ -> ())
-              (if attempt = 0 then 0 else 40)
+            ignore
+              (Ui_services.timers_timeout
+                 (fun () ->
+                   match S.editing () with
+                   | Some e when e.S.uuid = uuid ->
+                       if (not (refresh_overlay uuid)) && attempt < 25 then
+                         retry_measure (attempt + 1)
+                   | _ -> ())
+                 (if attempt = 0 then 0 else 40))
           in
           retry_measure 0;
           drain_pending_focus_actions ())
@@ -299,11 +303,12 @@ and retry_focus () =
        | None -> ());
     if not !retry_timer_armed then begin
       retry_timer_armed := true;
-      D.set_timeout
-        (fun () ->
-          retry_timer_armed := false;
-          apply_focus ())
-        (retry_delay_ms !focus_attempts)
+      ignore
+        (Ui_services.timers_timeout
+           (fun () ->
+             retry_timer_armed := false;
+             apply_focus ())
+           (retry_delay_ms !focus_attempts))
     end
   end
   else (
@@ -328,7 +333,7 @@ let request_focus uuid caret =
   focus_attempts := 0;
   (* usually the input already exists — land right away; otherwise
      the arm rides the next flush pass *)
-  D.set_timeout apply_focus 0
+  ignore (Ui_services.timers_timeout apply_focus 0)
 
 let run_structure ~restore p finish =
   let context = Runtime.repo (), Runtime.route () in
@@ -358,7 +363,7 @@ let with_focus_after ~restore uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   last_focus_emitted := None;
   focus_attempts := 0;
-  D.set_timeout apply_focus 0;
+  ignore (Ui_services.timers_timeout apply_focus 0);
   run_structure ~restore p (fun () ->
     if S.editing_uuid () = Some uuid then request_focus uuid caret)
 
@@ -405,15 +410,15 @@ let clear_pending_blur () = pending_blur_uuid := None
    "main" when the target isn't inside one (page blocks are the default
    surface); scope keys the per-container editing entry *)
 let scope_of_el el =
-  match D.closest_sel "[data-cid]" (Some el) with
+  match closest "[data-cid]" (Some el) with
   | Some host -> (
-      match D.el_get_attr host "data-cid" with
+      match host.Ui_services.attr "data-cid" with
       | Some c -> c
       | None -> "main")
   | None -> "main"
 
 let scope_of_uuid uuid =
-  match D.get_element_by_id ("ls-block-" ^ uuid) with
+  match Ui_services.dom_by_id ("ls-block-" ^ uuid) with
   | Some el -> scope_of_el el
   | None -> "main"
 
@@ -537,7 +542,7 @@ let schedule_blur_commit () =
   | Some e ->
       pending_blur_uuid := Some e.uuid;
       ignore
-        (Web_dom.set_timeout_id
+        (Ui_services.timers_timeout
           (fun () ->
             match !pending_blur_uuid with
             | Some u ->
@@ -987,7 +992,7 @@ let index_of lst u =
    it extends down into the blocks *)
 let anchor_is_page_title anchor =
   match
-    D.query_selector (".ls-page-title .ls-block[data-blockid='" ^ anchor ^ "']")
+    Ui_services.dom_query (".ls-page-title .ls-block[data-blockid='" ^ anchor ^ "']")
   with
   | Some _ -> true
   | None -> false
@@ -1047,9 +1052,9 @@ let extend_selection up =
                  block, so shift+up past it conj's the title row into
                  the selection *)
               if up then
-                (match D.query_selector ".ls-page-title .ls-block" with
+                (match Ui_services.dom_query ".ls-page-title .ls-block" with
                  | Some tb -> (
-                     match D.el_get_attr tb "data-blockid" with
+                     match tb.Ui_services.attr "data-blockid" with
                      | Some t when not (S.String_set.mem t sel) ->
                          S.set (fun st ->
                              { st with
@@ -1344,23 +1349,20 @@ let copy_selection ev =
   let sel = S.selected () in
   match selected_uuids () with
   | [] -> ()
-  | uuids -> (
-      match D.ev_clipboard ev with
-      | Some clip ->
-          (* keep only topmost selected roots — a parent tree already
-             carries its children; copying child rows too would emit
-             duplicate maps on paste *)
-          let roots =
-            List.filter
-              (fun u -> not (has_selected_ancestor sel u))
-              uuids
-          in
-          let blocks = List.filter_map S.find roots in
-          S.clipboard := blocks;
-          S.clipboard_text := export_titles blocks;
-          D.cd_set_data clip "text/plain" !(S.clipboard_text);
-          D.ev_prevent_default ev
-      | None -> ())
+  | uuids ->
+      (* keep only topmost selected roots — a parent tree already
+         carries its children; copying child rows too would emit
+         duplicate maps on paste *)
+      let roots =
+        List.filter
+          (fun u -> not (has_selected_ancestor sel u))
+          uuids
+      in
+      let blocks = List.filter_map S.find roots in
+      S.clipboard := blocks;
+      S.clipboard_text := export_titles blocks;
+      ev.Ui_services.clipboard_set "text/plain" !(S.clipboard_text);
+      ev.Ui_services.prevent_default ()
 
 let cut_selection ev =
   copy_selection ev;
@@ -1604,21 +1606,16 @@ let splice_clipboard_text uuid text =
    extracts into blocks, blank-line text into one block per paragraph,
    and anything else splices at the cursor *)
 let paste_into_editor ev =
-  let clip_text, clip_html =
-    match D.ev_clipboard ev with
-    | Some clip ->
-        ( D.cd_get_data clip "text/plain"
-        , D.cd_get_data clip "text/html" )
-    | None -> ("", "")
-  in
+  let clip_text = ev.Ui_services.clipboard_get "text/plain" in
+  let clip_html = ev.Ui_services.clipboard_get "text/html" in
   match (S.editing (), !(S.clipboard)) with
   | Some e, (_ :: _ as trees) when clip_text = !(S.clipboard_text) -> (
       match S.find e.uuid with
       | Some b ->
-          D.ev_prevent_default ev;
+          ev.Ui_services.prevent_default ();
           (* keep the conduit's own paste listener from splicing the
              text a second time *)
-          D.ev_stop_immediate ev;
+          ev.Ui_services.stop_immediate ();
           let replace_empty =
             String.trim b.Model.block_title = ""
             && String.trim e.S.buffer = ""
@@ -1642,8 +1639,8 @@ let paste_into_editor ev =
          text differs from what our copy wrote) *)
       let text = paste_source_text ~text:clip_text ~html:clip_html in
       if String.trim text <> "" then (
-        D.ev_prevent_default ev;
-        D.ev_stop_immediate ev;
+        ev.Ui_services.prevent_default ();
+        ev.Ui_services.stop_immediate ();
         let text =
           if markdown_blocks text then text
           else if has_paragraph_break text then
@@ -1672,7 +1669,7 @@ let paste_external ev ~text ~html =
     let text =
       if markdown_blocks text then text else segmented_markdown text
     in
-    D.ev_prevent_default ev;
+    ev.Ui_services.prevent_default ();
     match selected_uuids () with
     | _ :: _ as sel ->
         ignore
@@ -1707,7 +1704,7 @@ let paste_external ev ~text ~html =
     match lines with
     | [] -> ()
     | _ ->
-        D.ev_prevent_default ev;
+        ev.Ui_services.prevent_default ();
         paste_lines lines
 
 let paste_blocks ev =
@@ -1727,13 +1724,10 @@ let paste_blocks ev =
                 edit_last_inserted resp;
                 Js.Promise.resolve ())
           | [] -> ())
-      | [] -> (
-          match D.ev_clipboard ev with
-          | Some clip ->
-              paste_external ev
-                ~text:(D.cd_get_data clip "text/plain")
-                ~html:(D.cd_get_data clip "text/html")
-          | None -> ()))
+      | [] ->
+          paste_external ev
+            ~text:(ev.Ui_services.clipboard_get "text/plain")
+            ~html:(ev.Ui_services.clipboard_get "text/html"))
 
 (* ---- misc ---- *)
 
@@ -1954,7 +1948,7 @@ let focus_page_title () =
         | Some p -> p.Model.page_journal_day <> None
         | None -> false)
   in
-  match journal_title, D.query_selector ".ls-page-title" with
+  match journal_title, Ui_services.dom_query ".ls-page-title" with
   | true, _ | _, None -> ()
   | false, Some _ -> (
       Runtime.send Action.Title_edit_start;
@@ -2309,9 +2303,8 @@ let run_query_command ~advanced =
    listens) — dispatching it keeps the same trigger contract the slash
    command uses without an editor_actions -> asset_dom module edge. *)
 let trigger_asset_upload () =
-  Web_dom.dispatch_custom "ls:editor-command"
-    (Js.Json.object_
-       (Js.Dict.fromList [ ("command", Js.Json.string "upload") ]))
+  Ui_services.dom_dispatch_json "ls:editor-command"
+    (Json.Object [ "command", Json.String "upload" ])
 
 let file_ext name =
   match String.rindex_opt name '.' with
@@ -2336,20 +2329,28 @@ let asset_block_map ~uuid ~title ~ext ~size ~checksum =
       , Wire.Set [ Wire.Keyword "logseq.class/Asset" ] )
     ]
 
+let u8_of_binary s =
+  let u8 = Js.Typed_array.Uint8Array.fromLength (String.length s) in
+  String.iteri
+    (fun i c -> Js.Typed_array.Uint8Array.unsafe_set u8 i (Char.code c))
+    s;
+  u8
+
 let save_one_asset repo pfs target_uuid ~empty_target ~first
-    (f : Js.Json.t) =
-  let name = Web_dom.file_name f in
+    (f : Ui_services.file) =
+  let name = f.Ui_services.file_name in
   let ext = file_ext name in
-  let size = int_of_float (Web_dom.file_size f) in
+  let size = int_of_float f.Ui_services.file_size in
   let uuid =
     match (first, empty_target) with
     | true, true -> target_uuid
     | _ -> Ui_services.env_random_uuid ()
   in
   ignore
-    (let* buf = Web_dom.file_buffer f in
-    let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
-    let* checksum = Platform.sha256_hex u8 in
+    (Ui_task.bind (f.Ui_services.file_binary ()) (fun bin ->
+         let u8 = u8_of_binary bin in
+         ignore
+           (let* checksum = Platform.sha256_hex u8 in
     let dir =
       "/" ^ Platform.strip_db_prefix repo ^ "/assets"
     in
@@ -2367,10 +2368,11 @@ let save_one_asset repo pfs target_uuid ~empty_target ~first
                 ~title:(file_title name) ~ext
                 ~size ~checksum ]
             target_uuid ~sibling:true ]
-    in
-    Js.Promise.resolve ())
+            in
+            Js.Promise.resolve ());
+         Ui_task.resolve ()))
 
-let save_uploaded_files (input : Web_dom.el) =
+let save_uploaded_files (input : Ui_services.el) =
   match ((Runtime.model ()).Model.repo, S.editing ()) with
   | Some repo, Some e -> (
       match Platform.pfs_handle () with
@@ -2389,11 +2391,11 @@ let save_uploaded_files (input : Web_dom.el) =
           in
           ignore
             (let* () = pre in
-            Array.iteri
+            List.iteri
               (fun i f ->
                 save_one_asset repo pfs e.uuid ~empty_target
                   ~first:(i = 0) f)
-              (Web_dom.el_files input);
+              (input.Ui_services.files ());
             Js.Promise.resolve ())
       | None -> ())
   | _ -> ()

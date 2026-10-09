@@ -3,7 +3,18 @@
 
 open Test_check
 
-let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops
+(* pin the suite to a macOS platform string — decorate_binding renders
+   mod as ⌘ on mac and ctrl elsewhere; node's real navigator.platform
+   reports the host OS, making the check host-dependent *)
+let () =
+  [%mel.raw
+    "Object.defineProperty(globalThis.navigator,'platform',{value:'MacIntel'})"]
+
+let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~timers:Ui_dom_web.timers ~files:Ui_dom_web.files
+
+(* document listeners attach through the services dom channel, so they
+   can only go up after Platform_web.install *)
+let () = Editor_keys.install_once ()
 
 (* tests exercising model-derived readers stub the live model through
    Runtime.read_model *)
@@ -2736,8 +2747,11 @@ let test_popups_state () =
   check "class_titles no title"
     (Popups_state.class_titles_of [ wmap [ "x", Wire.Int 1 ] ] = []);
   (* detail_obj *)
-  let d = Popups_state.detail_obj [ "a", Js.Json.string "v" ] in
-  check "detail_obj" (json_str d "a" = Some "v")
+  let d = Popups_state.detail_obj [ "a", Json.String "v" ] in
+  check "detail_obj"
+    (match d with
+     | Json.Object ps -> List.assoc_opt "a" ps = Some (Json.String "v")
+     | _ -> false)
 
 (* ---- editor_actions pure helpers ---- *)
 

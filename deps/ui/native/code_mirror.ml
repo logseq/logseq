@@ -1,14 +1,10 @@
 (* Native impl of editor/code_mirror.ml — code blocks render as plain
    text until a native code editor exists. The actions bar still works:
    copy goes to the pasteboard via Platform, and the language picker is
-   an imperative popup (same stack as the icon picker) that writes the
-   block's logseq.property.code/lang property. *)
+   an anchored popover that writes the block's
+   logseq.property.code/lang property. *)
 
-module D = struct
-  include Editor_dom
-  include Properties_dom
-end
-
+open Lui_elements
 module W = Wire
 
 let update_calc (_ : 'a) = ()
@@ -47,22 +43,22 @@ let pick_lang uuid lang =
 
 let open_lang_picker uuid =
   match
-    D.doc_query ("#ls-block-" ^ uuid ^ " .select-language")
+    Ui_services.dom_query ("#ls-block-" ^ uuid ^ " .select-language")
   with
   | Some anchor ->
-      let menu = D.mk ~cls:"ls-code-lang-picker" "div" in
-      List.iter
-        (fun name ->
-          let item =
-            D.mk ~cls:Menu_item.base_cls
-              ~attrs:Menu_item.item_attrs "div"
-          in
-          D.el_set_attr item "data-lang" name;
-          D.el_set_text_content item name;
-          D.on_click item (fun _ ->
-              pick_lang uuid name;
-              Properties_state.close_overlays ());
-          D.el_append_child menu item)
-        languages;
-      ignore (Properties_popup.open_anchored anchor menu)
+      let menu =
+        column ~gap:0
+          (List.map
+             (fun name ->
+               menu_item ~text:name
+                 ~data_attrs:[ ("data-lang", name) ]
+                 ~on_press:(fun _ ->
+                   pick_lang uuid name;
+                   Properties_state.close_overlays ())
+                 [])
+             languages)
+      in
+      ignore
+        (Properties_popup.open_anchored ~cls:"ls-code-lang-picker"
+           anchor menu)
   | None -> ()

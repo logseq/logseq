@@ -548,15 +548,10 @@ let tags_el uuid (b : Model.block) : t =
 
 (* -- row -- *)
 
-(* module init runs at app load (page.ml references block_row): install
-   the document listeners and the add-button observer even for pages with
-   zero blocks, where block_row is never mounted *)
-let () =
-  Editor_keys.install_once ();
-  (* module init — before services install; raw host facts *)
-  if not (Platform.publishing ()) then Add_button.install ();
-  Asset_dom.install ();
-  Web_dom.ensure_dom_fixups ()
+(* the document listeners live in Editor_keys.install_once, which the
+   entry points call after Ui_services install — Ui_services.* is
+   unavailable at module-init time *)
+let () = Asset_dom.install ()
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
@@ -564,6 +559,9 @@ let rec block_row
 
  fun ctx parent ->
   S.ensure ctx;
+  (* host fixups (stripped lui-node ids) — registered at first mount;
+     module init runs before Ui_services.install so it can't live there *)
+  Ui_services.dom_ensure_fixups ();
   (row_el ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope b) ctx parent
 
 
@@ -985,7 +983,17 @@ let embed_chained = ref false
 
 (* a broadcast can arrive per applied op — coalesce embed refetches into
    one fan-out per burst so N embeds issue N fetches, not N x ops *)
-let debounced_embed_refresh = Web_dom.debounce 150
+(* created at first use (post-install) — a top-level timers_debounce
+   call would hit Ui_services.get during module init, before install *)
+let embed_refresh_debouncer = ref None
+
+let debounced_embed_refresh f =
+  match !embed_refresh_debouncer with
+  | Some d -> d f
+  | None ->
+      let d = Ui_services.timers_debounce 150 in
+      embed_refresh_debouncer := Some d;
+      d f
 
 let chain_embed_worker () =
   if not !embed_chained then begin

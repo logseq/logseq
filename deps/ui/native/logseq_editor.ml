@@ -306,7 +306,7 @@ let popup_pos block_id : (float * float * float) option =
   match live with
   | Some _ -> live
   | None -> (
-      match Editor_dom.textarea_of block_id with
+      match Dom_ext.by_id ("edit-block-" ^ block_id) with
       | Some el -> Some (Dom_ext.caret_popup_pos el)
       | None -> None)
 
@@ -315,9 +315,9 @@ let popup_pos block_id : (float * float * float) option =
    measure-node reply lands in Dom_ext.rect_store, so early calls can
    still answer zeros until the host replies *)
 let container_rect block_id : (float * float * float * float) option =
-  match Editor_dom.textarea_of block_id with
+  match Dom_ext.by_id ("edit-block-" ^ block_id) with
   | Some el -> (
-      match Editor_dom.el_closest el ".block-editor" with
+      match Dom_ext.closest el ".block-editor" with
       | Some c ->
           let r = Dom_ext.bounding_rect c in
           Some

@@ -142,7 +142,7 @@ let task_of (p : 'a Js.Promise.t) : 'a Ui_task.t =
              Js.Promise.resolve ())
            (Js.Promise.then_ (fun v -> resolve v; Js.Promise.resolve ()) p)))
 
-let install ~request_flush ~dom =
+let install ~request_flush ~dom ~timers ~files =
   if Platform.local_storage_obj = None then
     invalid_arg "Browser local storage is unavailable";
   Ui_services.install
@@ -221,6 +221,8 @@ let install ~request_flush ~dom =
         ; open_url = Platform.open_url
         }
     ; dom
+    ; timers
+    ; files
     };
   Version.set_revision
     (match Js.Undefined.toOption global##logseq_revision with

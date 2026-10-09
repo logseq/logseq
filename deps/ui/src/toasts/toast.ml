@@ -24,7 +24,7 @@ let dismiss id =
   live_ids := List.filter (fun i -> i <> id) !live_ids;
   (match Hashtbl.find_opt timers id with
    | Some t ->
-       Web_dom.clear_timeout t;
+       Ui_services.timers_clear_timeout t;
        Hashtbl.remove timers id
    | None -> ());
   Runtime.send (Action.Toast_dismiss id);
@@ -33,7 +33,7 @@ let dismiss id =
 (* called from Toasts_view.toast_item on mount — idempotent per toast id *)
 let schedule_dismiss ~ms id =
   if not (Hashtbl.mem timers id) then (
-    let timer = Web_dom.set_timeout_id (fun () -> dismiss id) ms in
+    let timer = Ui_services.timers_timeout (fun () -> dismiss id) ms in
     Hashtbl.replace timers id timer;
     live_ids := !live_ids @ [ id ])
 

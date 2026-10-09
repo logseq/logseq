@@ -8,7 +8,6 @@
    dialogs) mount imperatively through Views_popup. *)
 
 module D = Logseq_el
-module E = Web_dom
 module I = I18n
 module V = Views_state
 module Wr = Views_wire
@@ -380,9 +379,8 @@ let select_cell inst ~row_uuid ~blk : t =
     ]
 
 let open_row_sidebar row_uuid =
-  Web_dom.dispatch_custom "ls:open-right-sidebar"
-    (Js.Json.object_
-       (Js.Dict.fromList [ ("uuid", Js.Json.string row_uuid) ]))
+  Ui_services.dom_dispatch_json "ls:open-right-sidebar"
+    (Json.Object [ ("uuid", Json.String row_uuid) ])
 
 let title_cell inst ~row_uuid ~blk (c : V.column) : t =
   let title = Wr.prop_text (cell_value blk c) in
@@ -699,17 +697,20 @@ let header_cell inst (c : V.column) : t =
         [ header_select_cell inst ]
   | _ ->
       let menu () =
-        match E.get_element_by_id (header_cell_id inst c) with
-        | Some anchor -> (
-            match c.V.c_prop with
-            | Some p -> open_property_menu inst ~anchor c p
-            | None ->
-                if sortable c then
+        match c.V.c_prop with
+        | Some p -> (
+            match Ui_services.dom_by_id (header_cell_id inst c) with
+            | Some anchor -> open_property_menu inst ~anchor c p
+            | None -> ())
+        | None ->
+            if sortable c then
+              match Ui_services.dom_by_id (header_cell_id inst c) with
+              | Some anchor ->
                   ignore
                     (P.show_menu ~anchor
                        ~cls_prefix:"ls-property-dropdown "
-                       (sort_menu_items inst c)))
-        | None -> ()
+                       (sort_menu_items inst c))
+              | None -> ()
       in
       Ui_parts.pressable ~on_press:(fun _ -> menu ())
         (box ~style_class:cls ~accessibility_identifier:(header_cell_id inst c)
@@ -759,13 +760,10 @@ let delete_selected inst () =
         (P.show_dialog
            ~headline:I.batch_delete_title
            ~body:
-             [ E.h ~tag:"ol" ~cls:"p-2 pt-4"
-                 ~children:(List.map (fun n -> E.h ~tag:"li" ~text:n ()) names)
-                 ()
-             ; E.h ~tag:"p" ~cls:"px-2 opacity-50"
-                 ~children:
-                   [ E.h ~tag:"small" ~text:(I.total (List.length names)) () ]
-                 ()
+             [ D.el ~tag:"ol" ~style_class:"p-2 pt-4"
+                 (List.map (fun n -> D.el ~tag:"li" ~text:n []) names)
+             ; D.el ~tag:"p" ~style_class:"px-2 opacity-50"
+                 [ D.el ~tag:"small" ~text:(I.total (List.length names)) [] ]
              ]
            ~confirm_label:I.yes ~on_confirm:do_delete ())
     else do_delete ()
@@ -910,13 +908,12 @@ let table_row_keydown inst ~row_uuid name payload =
         open_row_sidebar row_uuid;
         V.update inst (fun s -> { s with V.selected = V.Sset.empty })
     | "ArrowLeft" | "ArrowRight" as arrow ->
-        (match E.get_element_by_id ("ls-block-" ^ row_uuid) with
+        (match Ui_services.dom_by_id ("ls-block-" ^ row_uuid) with
          | Some row_dom -> (
              let cells =
-               E.el_query_all_arr row_dom ".ls-table-cell"
-               |> Array.to_list
-               |> List.filter (fun cell ->
-                      E.el_query cell ".ui__checkbox" = None)
+               row_dom.Ui_services.query_all ".ls-table-cell"
+               |> List.filter (fun (cell : Ui_services.el) ->
+                      cell.Ui_services.query ".ui__checkbox" = None)
              in
              let pick =
                if arrow = "ArrowLeft" then List.nth_opt cells 0
@@ -928,11 +925,11 @@ let table_row_keydown inst ~row_uuid name payload =
              V.update inst
                (fun s -> { s with V.selected = V.Sset.empty });
              if arrow = "ArrowRight" then
-               E.el_class_remove row_dom "selected";
+               row_dom.Ui_services.remove_class "selected";
              match pick with
              | Some cell ->
-                 E.el_class_add cell "selected";
-                 E.el_focus cell
+                 cell.Ui_services.add_class "selected";
+                 cell.focus ()
              | None -> ())
          | None -> ())
     | "Escape" ->

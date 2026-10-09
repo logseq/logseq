@@ -18,7 +18,6 @@
 
 open Promise_ext
 open Lui_elements
-module D = Web_dom
 module I = I18n
 module Ops = Outliner_ops
 
@@ -61,12 +60,12 @@ let submit_comment area_uuid (text : string) =
     (* the keyed textarea node is reused across re-renders, so its DOM
        value has to be cleared explicitly or the submitted text sticks *)
     (match
-       Web_dom.query_selector
+       Ui_services.dom_query
          ("#area-" ^ area_uuid ^ " .ls-comment-add textarea")
      with
      | Some ta ->
-         D.el_set_value ta "";
-         D.el_set_text_content ta ""
+         ta.Ui_services.set_value "";
+         ta.set_text ""
      | None -> ());
     ignore
       (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
@@ -150,7 +149,7 @@ let reactions_el uuid (rs : (string * int) list) : t =
            rs)
 
 let open_reaction_picker uuid (btn_id : string) =
-  match D.query_selector ("[id='" ^ btn_id ^ "']") with
+  match Ui_services.dom_query ("[id='" ^ btn_id ^ "']") with
   | None -> ()
   | Some anchor ->
       Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->

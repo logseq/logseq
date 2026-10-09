@@ -80,9 +80,9 @@ let route_anchor () = Ui_services.nav_hash_query_param "anchor"
 let anchor_timer = ref 0
 
 let rec poll_anchor anchor n =
-  match Web_dom.get_element_by_id anchor with
+  match Ui_services.dom_by_id anchor with
   | Some el ->
-      Web_dom.el_scroll_into_view el;
+      el.Ui_services.scroll_into_view ();
       if String.length anchor > 36 then
         let tail =
           String.sub anchor (String.length anchor - 36) 36
@@ -90,20 +90,20 @@ let rec poll_anchor anchor n =
         if Wire.is_uuid_string tail then
           Editor_actions.select_single tail
         else (
-          Web_dom.el_class_add el "block-highlight";
+          el.Ui_services.add_class "block-highlight";
           anchor_timer :=
-            Web_dom.set_timeout_id
+            Ui_services.timers_timeout
               (fun () ->
-                Web_dom.el_class_remove el "block-highlight")
+                el.Ui_services.remove_class "block-highlight")
               4000)
   | None ->
       if n < 120 then
         anchor_timer :=
-          Web_dom.set_timeout_id (fun () -> poll_anchor anchor (n + 1))
+          Ui_services.timers_timeout (fun () -> poll_anchor anchor (n + 1))
             50
 
 let jump_to_anchor anchor =
-  Web_dom.clear_timeout !anchor_timer;
+  Ui_services.timers_clear_timeout !anchor_timer;
   poll_anchor anchor 0
 
 let fetch_blocks (p : Model.page) =
@@ -234,16 +234,16 @@ let journal_summaries w =
    so it works for whichever loader the route installed *)
 let maybe_fill_journals () =
   ignore
-    (Web_dom.set_timeout_id
+    (Ui_services.timers_timeout
        (fun () ->
-         match Web_dom.get_element_by_id "main-content-container" with
+         match Ui_services.dom_by_id "main-content-container" with
          | Some el
            when !journals_has_more
              (* native DOM stubs report 0 metrics — 0<=0+1 would pump
                 every journal day eagerly *)
-             && Web_dom.el_client_height el > 0.
-             && Web_dom.el_scroll_height el
-                <= Web_dom.el_client_height el +. 1. ->
+             && el.Ui_services.client_height () > 0.
+             && el.Ui_services.scroll_height ()
+                <= el.Ui_services.client_height () +. 1. ->
              ignore (!Runtime.journals_load_more ())
          | _ -> ())
        150)
@@ -345,8 +345,8 @@ let go_to_journals_target () : (string * Model.route) Js.Promise.t =
 
 (* cljs util/scroll-to-top on the app scroller *)
 let scroll_to_top () =
-  match Web_dom.get_element_by_id "main-content-container" with
-  | Some el -> Web_dom.el_set_scroll_top el 0.
+  match Ui_services.dom_by_id "main-content-container" with
+  | Some el -> el.Ui_services.set_scroll_top 0.
   | None -> ()
 
 (* fetches for the same route can resolve out of order — only the
@@ -433,7 +433,8 @@ let rec load_page_ref for_route ref_v =
         loaded_route := Some for_route;
         (* cljs update-page-label!: body[data-page] carries the route
            page title (pdf overlay CSS keys off the attribute) *)
-        Web_dom.body_set_data "page" p''.Model.page_title;
+        (Ui_services.dom_body ()).Ui_services.set_attr "data-page"
+          p''.Model.page_title;
         (Ui_services.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
         fetch_page_extras ~stale:is_stale p'';
         (* zoom-out to a page parent keeps the zoomed
@@ -741,9 +742,9 @@ let reload_timer = ref 0
 
 let reload () =
   Ui_services.perf_mark "router:reload";
-  Web_dom.clear_timeout !reload_timer;
+  Ui_services.timers_clear_timeout !reload_timer;
   reload_timer :=
-    Web_dom.set_timeout_id
+    Ui_services.timers_timeout
       (fun () ->
         load_route (Runtime.route ()))
       30
@@ -782,22 +783,22 @@ let init () =
   (* cljs all-journals' Virtuoso endReached — scroll doesn't bubble, so a
      capture listener on the document sees the app scroller's events;
      nearing the bottom pulls the next chunk of journal days *)
-  Web_dom.add_document_listener "scroll" (fun ev ->
+  Ui_services.dom_on_document_event ~capture:true "scroll" (fun ev ->
       match Runtime.route () with
       | Model.Journals | Model.Home -> (
-          match Web_dom.ev_target ev with
+          match ev.Ui_services.target with
           | Some el
-            when Web_dom.el_id el = "main-content-container"
-              && Web_dom.el_client_height el > 0.
-              && Web_dom.el_scroll_height el -. Web_dom.el_scroll_top el
-                 -. Web_dom.el_client_height el
-                 <= Web_dom.el_client_height el ->
+            when el.Ui_services.id () = "main-content-container"
+              && el.Ui_services.client_height () > 0.
+              && el.Ui_services.scroll_height ()
+                 -. el.Ui_services.scroll_top ()
+                 -. el.Ui_services.client_height ()
+                 <= el.Ui_services.client_height () ->
               ignore (!Runtime.journals_load_more ())
           | _ -> ())
-      | _ -> ())
-    true;
+      | _ -> ());
   Ui_services.nav_on_navigate resolve;
-  Web_dom.on_document_event "keydown" (fun ev ->
-      if Web_dom.event_str ev "key" = "Escape" then (
+  Ui_services.dom_on_document_event "keydown" (fun ev ->
+      if ev.Ui_services.key = Some "Escape" then (
         Runtime.send Action.Dismiss_all;
         Runtime.flush ()))
