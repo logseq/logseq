@@ -333,9 +333,6 @@ let set_lang_pref code =
    same way reload_page() is a no-op today *)
 let doc_reload () = ()
 
-let local_ymd tm =
-  (tm.Unix.tm_year + 1900, tm.Unix.tm_mon + 1, tm.Unix.tm_mday)
-
 (* wall-clock via Unix — mktime normalizes overflow the way the JS Date
    constructor does (month 13 -> January, day 0 -> previous month) *)
 let local_fields ms : Ui_services.date_fields =
@@ -481,7 +478,8 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; parse = date_parse
         ; fmt_date
         }
-    ; log = { error = (fun _ -> ()); info = (fun _ -> ()) }
+    ; log = { error = (fun _ -> ()); info = (fun _ -> ())
+            ; error_message = prerr_endline }
     ; perf = { mark = perf_mark }
     ; uri =
         { encode_component =
@@ -519,37 +517,6 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
     ; files
     };
   Ui_task.install { enqueue = Host.enqueue; assert_owner };
-  Properties_services.install
-    { schedule = (fun f ms -> ignore (Host.set_timeout f ms))
-    ; report_error =
-        (fun msg -> prerr_endline ("[properties] " ^ msg))
-    ; publishing = (fun () -> false)
-    ; random_uuid = Host.random_uuid
-    ; encode_uri_component =
-        (fun s -> Uri.pct_encode ~component:`Query_value s)
-    ; now_ms = (fun () -> Unix.gettimeofday () *. 1000.)
-    ; local_ymd_now =
-        (fun () -> local_ymd (Unix.localtime (Unix.gettimeofday ())))
-    ; local_ymd_of_ms =
-        (fun ms -> local_ymd (Unix.localtime (ms /. 1000.)))
-    ; local_ms_of_fields =
-        (fun ~year ~month ~date ~hours ~minutes ~seconds ->
-          (* the contract needs LOCAL-time construction like real
-             Js.Date.make — mktime honors the host timezone *)
-          fst
-            (Unix.mktime
-               { Unix.tm_sec = seconds
-               ; tm_min = minutes
-               ; tm_hour = hours
-               ; tm_mday = date
-               ; tm_mon = month
-               ; tm_year = year - 1900
-               ; tm_wday = 0
-               ; tm_yday = 0
-               ; tm_isdst = false
-               })
-          *. 1000.)
-    };
   (* platform-owned singletons: bundled icon table, app icon aliases and
      the build revision (LOGSEQ_REVISION baked by the app launcher) *)
   Icon_data.install ();

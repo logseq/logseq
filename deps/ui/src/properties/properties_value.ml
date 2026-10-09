@@ -125,7 +125,7 @@ let save_text_value ctx row new_title =
         D.save_block ~uuid ~title |> ignore
     | None ->
         D.create_property_text_block ~block_uuid:ctx.block_uuid ~ident
-          ~title ~new_block_id:(Properties_services.random_uuid ()) ()
+          ~title ~new_block_id:(Ui_services.env_random_uuid ()) ()
         |> ignore;
         S.refresh_all ()
 
@@ -151,8 +151,8 @@ let parse_date s =
   | _ -> None
 
 let today_day () =
-  let y, m, d = Properties_services.local_ymd_now () in
-  (y * 10000) + (m * 100) + d
+  let f = Ui_services.time_local_fields (Ui_services.time_now ()) in
+  (f.year * 10000) + (f.month * 100) + f.day
 
 let set_date ctx ident day =
   (let* w = D.journal_page_by_day day in
@@ -194,14 +194,15 @@ let parse_ms (s : string) : float option =
         else (0, 0, 0)
       in
       Some
-        (Properties_services.local_ms_of_fields ~year:y ~month:(m - 1)
-           ~date:d ~hours:hh ~minutes:mm ~seconds:ss)
+        (Ui_services.time_of_fields
+           { year = y; month = m; day = d; wday = 0
+           ; hours = hh; minutes = mm; seconds = ss; ms = 0 })
   | _ -> None
 
 let commit_date_text ctx ident ~is_datetime v =
   let v = String.trim v in
   if is_datetime then
-    match if v = "" then Some (Properties_services.now_ms ()) else parse_ms v with
+    match if v = "" then Some (Ui_services.time_now ()) else parse_ms v with
     | Some ms -> set_scalar ctx ~ident ~value:(W.Float ms)
     | None -> ()
   else
@@ -212,7 +213,9 @@ let commit_date_text ctx ident ~is_datetime v =
     if day > 0 then set_date ctx ident day
 
 (* ms epoch -> (y, m, d) *)
-let ymd_of_ms ms = Properties_services.local_ymd_of_ms ms
+let ymd_of_ms ms =
+  let f = Ui_services.time_local_fields ms in
+  f.year, f.month, f.day
 
 let ms_of_value = function
   | W.Float f -> Some f
@@ -551,7 +554,7 @@ let date_view ctx row : t =
                link ~style_class:"page-ref"
                  ~url:
                    ("#/page/"
-                   ^ Properties_services.encode_uri_component
+                   ^ Ui_services.uri_encode_component
                        (Dates.journal_title_ymd ~y ~m ~d))
                  ~target:`self_
                  ~text:(date_display (D.row_type row) value) []
@@ -846,7 +849,7 @@ let rec view ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
   let ident = D.row_ident row' |> Option.value ~default:"" in
-  if Properties_services.publishing () then
+  if Ui_services.env_publishing () then
     let rec display value =
       match value with
       | W.Set values | W.List values | W.Array values ->

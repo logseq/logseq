@@ -215,9 +215,6 @@ let members_st ctx =
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let members_st = members_st ctx in
-  let members_sig =
-    Signal.map fst (Signal.value members_st)
-  in
   let email_st = Signal.state ctx.Lui_ui.ui_scheduler "" in
   let graph () =
     (Runtime.model ()).Model.repo, !Rtc_flows.db_rtc_uuid
@@ -264,7 +261,7 @@ let body (_ms : Model.t Signal.signal) : t =
             [ column ~key:"collab-users" ~gap:4
                 ~style_class:"ls-collab-users"
                 [ keyed
-                    ~source:members_sig
+                    ~source:(reactive fst (Signal.value members_st))
                     ~key:(fun (m : member) -> m.m_uuid)
                     ~cmp:Stdlib.compare
                     ~mount:(fun msig ->

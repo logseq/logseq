@@ -1926,6 +1926,11 @@ let edit_flow_host () : Edit_flow_test.host =
 let run ~finish =
   ignore (Fake_worker.install worker_handler);
   ignore (mount ());
+  let registry = Lui_extension.registry () in
+  native_env.register_extensions registry;
+  Shared_ui_regression_test.run_views ~registry ~profile:Logseq_el.gpui_profile
+    ~finish:(fun () ->
+  Shared_ui_regression_test.dates ();
   (* portable editor suites — the same scenario sources compiled under
      Melange (test/ui_test) run here under native byte semantics *)
   Edit_model_test.run ();
@@ -1935,6 +1940,13 @@ let run ~finish =
   test_left_menu_dispatch ();
   test_block_tree ();
   test_block_edit ();
+  Shared_ui_regression_test.popup_press
+    (Ui_dom_native.ev_of (Js.Json.JObject
+       [ "target", Js.Json.JObject
+           [ "tag", Js.Json.JString "input"
+           ; "ancestors", Js.Json.JArray
+               [| Js.Json.JObject [ "tag", Js.Json.JString "div"
+                                 ; "class", Js.Json.JString "ls-editor-link-form" ] |] ] ]));
   test_clipboard_paste ();
   test_cmdk ();
   test_left_sidebar ();
@@ -1984,7 +1996,7 @@ let run ~finish =
                                   (edit_flow_host ())))))));
           (* the task-fenced callbacks post to the host mailbox like
              every Ui_task continuation — one drain cascades the chain *)
-          Host.drain ()))
+          Host.drain ())))
 
 let () =
   let owner = Thread.id (Thread.self ()) in

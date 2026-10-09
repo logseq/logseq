@@ -1837,10 +1837,22 @@ let edit_flow_host () : Edit_flow_test.host =
 let run ~finish =
   ignore (Fake_worker.install worker_handler);
   ignore (mount ());
+  let install_emoji_fixture : unit -> unit = [%mel.raw
+    "function () {document.elementFromPoint = () => null; window.__emojiData = {categories: [], aliases: {}, sheet: {}, emojis: {grinning: {name: 'Grinning Face'}}}}"] in
+  install_emoji_fixture ();
+  Shared_ui_regression_test.run_views ~registry:(Views_drive.registry ())
+    ~profile:Logseq_el.web_profile ~finish:(fun () ->
+  Shared_ui_regression_test.dates ();
   test_shell ();
   test_left_menu_dispatch ();
   test_block_tree ();
   test_block_edit ();
+  let popup = Web_dom.create_element "div" in
+  Web_dom.el_set_class popup "lui-popup-portal ls-editor-link-form";
+  let target = Web_dom.create_element "input" in
+  Web_dom.el_append_child popup target;
+  Shared_ui_regression_test.popup_press
+    (Ui_dom_web.ev_of (Js.Json.object_ (Js.Dict.fromList [ "target", target ])));
   test_cmdk ();
   test_key_leaks ();
   test_left_sidebar ();
@@ -1887,5 +1899,4 @@ let run ~finish =
                         (Js.Promise.then_
                            (fun () -> finish (); Js.Promise.resolve ())
                            (Edit_flow_test.async_stage
-                              (edit_flow_host ()))))))))
-
+                              (edit_flow_host ())))))))))

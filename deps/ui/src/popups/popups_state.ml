@@ -219,16 +219,13 @@ let ac_open () =
   | Some t -> (get t).ac <> None
   | None -> false
 
-(* THE "is the pointer over popup UI" check — hit-tests mounted roots
-   rather than enumerating selector lists: every popup mounts either
-   inside the .cp__overlays chrome container (cmdk, dialogs, toasts) or
-   the renderer's body-level .lui-popup-portal (popover kind: ac/cm/pv,
-   context menus, page menu) or registers a tracked overlay root
-   (Properties_state). The editor popup (date picker / link form)
-   mounts as a LUI popover, hit-tested by .lui-popup-portal above *)
+(* Resolve popup ownership from the event target's ancestors. Web
+   popovers use a portal; native editor popovers retain their own roots
+   without a DOM portal or coordinate hit-test. *)
 let inside (el : Ui_services.el) =
   el.Ui_services.closest ".cp__overlays" <> None
   || el.Ui_services.closest ".lui-popup-portal" <> None
+  || el.Ui_services.closest "#date-time-picker, .ls-editor-link-form" <> None
   || Properties_state.overlay_contains el
 
 (* whether any popup layer is up, for code paths that only need the

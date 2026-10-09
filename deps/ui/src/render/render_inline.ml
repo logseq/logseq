@@ -1384,14 +1384,14 @@ and resolved_tag_ref ~refs ~self uuid : t =
   ignore (refs, self);
   let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
   let title_sig = Signal.value st in
-  link ~url:"#" ~target:`self_ ~style_class:"relative tag"
+  (link ~url:"#" ~target:`self_ ~style_class:"relative tag"
     ~data_attrs:
       (reactive
          (fun (n, _, _) ->
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ text ~value:(reactive (fun (n, _, _) -> "#" ^ n) title_sig) [] ]
+    [ text ~value:(reactive (fun (n, _, _) -> "#" ^ n) title_sig) [] ])
     context parent
 
 and macro_el ~refs ~self body =

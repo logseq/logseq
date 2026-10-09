@@ -84,14 +84,6 @@ let preferred_lang () =
 let set_lang_pref code =
   Platform.local_storage_set "preferred-language" (Platform.storage_quote code)
 
-external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
-  [@@mel.scope "globalThis"]
-
-let local_ymd d =
-  ( int_of_float (Js.Date.getFullYear d)
-  , int_of_float (Js.Date.getMonth d) + 1
-  , int_of_float (Js.Date.getDate d) )
-
 (* JS Date wall-clock — local_fields/of_fields mirror the host's Date
    getters/constructor (month is 1-12 at this boundary, JS-side 0-11) *)
 let local_fields ms : Ui_services.date_fields =
@@ -195,7 +187,8 @@ let install ~request_flush ~dom ~timers ~files =
         ; parse = date_parse
         ; fmt_date = Platform.fmt_time
         }
-    ; log = { error = Platform.console_error; info = Platform.console_log }
+    ; log = { error = Platform.console_error; info = Platform.console_log
+            ; error_message = Platform.console_error }
     ; perf = { mark = Platform.perf_mark }
     ; uri = { encode_component = Platform.encode_uri_component }
     ; clipboard =
@@ -243,20 +236,4 @@ let install ~request_flush ~dom ~timers ~files =
   Ui_task.install
     { enqueue
     ; assert_owner = (fun () -> ())
-    };
-  Properties_services.install
-    { schedule = (fun f ms -> ignore (set_timeout f ms))
-    ; report_error = Platform.console_error
-    ; publishing = Platform.publishing
-    ; random_uuid = Platform.random_uuid
-    ; encode_uri_component = Platform.encode_uri_component
-    ; now_ms = Js.Date.now
-    ; local_ymd_now = (fun () -> local_ymd (Js.Date.make ()))
-    ; local_ymd_of_ms = (fun ms -> local_ymd (Js.Date.fromFloat ms))
-    ; local_ms_of_fields =
-        (fun ~year ~month ~date ~hours ~minutes ~seconds ->
-          Js.Date.valueOf
-            (Js.Date.make ~year:(float year) ~month:(float month)
-               ~date:(float date) ~hours:(float hours)
-               ~minutes:(float minutes) ~seconds:(float seconds) ()))
     }

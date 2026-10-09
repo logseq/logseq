@@ -1620,9 +1620,7 @@ let on_mousedown (ev : Ui_services.ev) =
     with
     | Some _ -> ()
     | None -> (
-        match
-          Ui_services.dom_element_at ev.Ui_services.x ev.Ui_services.y
-        with
+        match ev.Ui_services.target with
         | Some el when Popups_state.inside el -> ()
         | _ ->
             if Editor_commands.click_guard () then ()
@@ -1656,7 +1654,7 @@ let on_dragstart ev =
   end
 
 let on_file_dragover (ev : Ui_services.ev) =
-  if ev.Ui_services.files <> [] then ev.Ui_services.prevent_default ()
+  if ev.Ui_services.has_files then ev.Ui_services.prevent_default ()
 
 let installed = State_cell.Once.make ()
 

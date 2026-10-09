@@ -101,6 +101,9 @@ type time = {
 type log = {
   error : 'a. 'a -> unit;
   info : 'a. 'a -> unit;
+  error_message : string -> unit;
+  (* Plain error messages must remain observable on hosts without an
+     object-console formatter. *)
 }
 
 (* Timing instrumentation for perf marks — a debug sink, never parsed. *)
@@ -290,6 +293,9 @@ type ev = {
   files : file list;
   (* Files carried by paste/drop events (clipboardData.files,
      dataTransfer.files). *)
+  has_files : bool;
+  (* File drag/paste intent, including protected dragover events whose
+     file list is hidden while dataTransfer.types still contains Files. *)
   prevent_default : unit -> unit;
   stop_propagation : unit -> unit;
   stop_immediate : unit -> unit;
@@ -423,6 +429,7 @@ let time_parse s = (get ()).time.parse s
 let time_fmt_date ms = (get ()).time.fmt_date ms
 
 let log_error v = (get ()).log.error v
+let log_error_message message = (get ()).log.error_message message
 let log_info v = (get ()).log.info v
 let perf_mark name = (get ()).perf.mark name
 let uri_encode_component s = (get ()).uri.encode_component s

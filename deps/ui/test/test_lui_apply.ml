@@ -87,26 +87,28 @@ let ext_fp registry ident =
 
 (* -- retained <-> DOM invariants -- *)
 
+let platform node = Lazy.force node.T.platform_node
+
 let container_of node =
   match Store.standard_kind node with
   | Some kind ->
       of_json
-        (Lui_web_util.content_container kind node.T.platform_node)
-  | None -> of_json node.T.platform_node
+        (Lui_web_util.content_container kind (platform node))
+  | None -> of_json (platform node)
 
 let id_of_platform store p =
   Hashtbl.fold
     (fun id n acc ->
       match acc with
       | Some _ -> acc
-      | None -> if of_json n.T.platform_node == p then Some id else None)
+      | None -> if of_json (platform n) == p then Some id else None)
     store.T.retained_nodes None
 
 let check_dom_invariants renderer tag =
   let store = renderer.T.web_store in
   let all_platforms =
     Hashtbl.fold
-      (fun _ n acc -> of_json n.T.platform_node :: acc)
+      (fun _ n acc -> of_json (platform n) :: acc)
       store.T.retained_nodes []
   in
   Hashtbl.iter
@@ -119,12 +121,12 @@ let check_dom_invariants renderer tag =
           (fun cid ->
             match Store.node store cid with
             | Some c -> (
-                match parent_element (of_json c.T.platform_node) with
+                match parent_element (of_json (platform c)) with
                 | Some p when p == container ->
-                    Some (cid, of_json c.T.platform_node)
+                    Some (cid, of_json (platform c))
                 | _ -> None)
             | None -> None)
-          node.T.retained_children
+          (Lui_sequence.to_list node.T.retained_children)
       in
       List.iter
         (fun (cid, platform) ->
@@ -223,7 +225,7 @@ let test_deterministic () =
     (* MutationObserver swap: the placeholder's platform element leaves
        the DOM while the node stays retained *)
     (match Store.node store ext with
-     | Some e -> detach (of_json e.T.platform_node)
+     | Some e -> detach (of_json (platform e))
      | None -> ());
     run [ Wv.CreateNode (c, Wv.Box); Wv.InsertChild (root, c, 3) ];
     check_dom_invariants renderer "det:detached-child")
@@ -277,7 +279,7 @@ let gen_ops renderer fresh n =
         | Some n ->
             let s =
               { s_parent = n.T.retained_parent
-              ; s_children = n.T.retained_children
+              ; s_children = Lui_sequence.to_list n.T.retained_children
               ; s_ext = Store.standard_kind n = None
               ; s_kind = Store.standard_kind n
               ; s_dead = false }
@@ -398,7 +400,7 @@ let gen_ops renderer fresh n =
             (fun id ->
               match Store.node store id with
               | Some n ->
-                  parent_element (of_json n.T.platform_node) <> None
+                  parent_element (of_json (platform n)) <> None
               | None -> false)
             ids
         in
@@ -407,7 +409,7 @@ let gen_ops renderer fresh n =
         | _ ->
             let id = pick attached_platforms in
             (match Store.node store id with
-             | Some n -> detach (of_json n.T.platform_node)
+             | Some n -> detach (of_json (platform n))
              | None -> ());
             None)
     | x when x < 62 && unattached <> [] && parents <> [] -> (
@@ -530,7 +532,7 @@ let test_property ?(verbose = false) seed =
                     | Some _ -> "std"
                     | None -> "ext")
                    (String.concat ";"
-                      (List.map string_of_int n.T.retained_children))
+                      (List.map string_of_int (Lui_sequence.to_list n.T.retained_children)))
                    (String.concat ";" kids)))
             renderer.T.web_store.T.retained_nodes)))
   done

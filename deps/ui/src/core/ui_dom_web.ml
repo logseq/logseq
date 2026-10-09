@@ -373,7 +373,28 @@ let detail_json_field name ev =
   | Some d -> Option.map json_of_js (j_field d name)
   | None -> None
 
+external array_from : Js.Json.t -> Js.Json.t array = "from"
+  [@@mel.scope "Array"]
+
+let transfer_files transfer =
+  match Option.bind transfer (fun j -> j_field j "files") with
+  | Some files -> List.map file_of_json (Array.to_list (array_from files))
+  | None -> []
+
+let transfer_has_files transfer =
+  match Option.bind transfer (fun j -> j_field j "types") with
+  | Some types ->
+      Array.exists (fun t -> Js.Json.decodeString t = Some "Files")
+        (array_from types)
+  | None -> false
+
 let ev_of (e : Js.Json.t) : Ui_services.ev =
+  let clipboard = clipboard_data_js e in
+  let transfer = data_transfer_js e in
+  let files = match clipboard with
+    | Some _ -> transfer_files clipboard
+    | None -> transfer_files transfer
+  in
   let touches =
     match j_field e "touches" with
     | Some _ ->
@@ -418,24 +439,8 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
         match data_transfer_js e with
         | Some dt -> cd_get dt mime
         | None -> "")
-  ; files =
-      (let files_of = function
-         | Some j -> j_field j "files"
-         | None -> None
-       in
-       let from cd = match cd with
-         | Some j -> files_of (Some j)
-         | None -> None
-       in
-       match
-         ( from (clipboard_data_js e), from (data_transfer_js e) )
-       with
-       | Some j, _ | _, Some j -> (
-           match Js.Json.classify j with
-           | Js.Json.JSONArray a ->
-               List.map file_of_json (Array.to_list a)
-           | _ -> [])
-       | _ -> [])
+  ; files
+  ; has_files = files <> [] || transfer_has_files transfer || transfer_has_files clipboard
   ; prevent_default = (fun () -> prevent_default e)
   ; stop_propagation = (fun () -> stop_propagation_js e)
   ; stop_immediate = (fun () -> stop_immediate_js e)

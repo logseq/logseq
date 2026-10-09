@@ -146,6 +146,21 @@ let rec el_of (e : Js.Json.t) : Ui_services.el =
   }
 
 let ev_of (e : Js.Json.t) : Ui_services.ev =
+  let files =
+    match
+      ( Option.bind (clipboard_data e) (fun cd -> jfield "files" cd)
+      , Option.bind (jfield "dataTransfer" e) (fun dt -> jfield "files" dt) )
+    with
+    | Some (Js.Json.JArray a), _ | _, Some (Js.Json.JArray a) ->
+        List.map file_of_json (Array.to_list a)
+    | _ -> []
+  in
+  let has_file_type transfer =
+    match Option.bind transfer (fun t -> jfield "types" t) with
+    | Some (Js.Json.JArray a) ->
+        Array.exists (fun t -> Js.Json.decodeString t = Some "Files") a
+    | _ -> false
+  in
   { Ui_services.x = jnum "clientX" e
   ; y = jnum "clientY" e
   ; shift = jbool "shiftKey" e
@@ -208,14 +223,9 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
             (match clipboard_data e with
              | Some cd -> Option.value (jstr mime cd) ~default:""
              | None -> ""))
-  ; files =
-      (match
-         ( Option.bind (clipboard_data e) (fun cd -> jfield "files" cd)
-         , Option.bind (jfield "dataTransfer" e) (fun dt -> jfield "files" dt) )
-       with
-       | Some (Js.Json.JArray a), _ | _, Some (Js.Json.JArray a) ->
-           List.map file_of_json (Array.to_list a)
-       | _ -> [])
+  ; files
+  ; has_files = files <> [] || has_file_type (jfield "dataTransfer" e)
+      || has_file_type (clipboard_data e)
   ; prevent_default = (fun () -> ())
   ; stop_propagation = Platform.request_stop
   ; stop_immediate = Platform.request_stop

@@ -202,10 +202,11 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
     match it with
     | Emoji_item (id, name) ->
         button ~key:("e-" ^ id) ~style_class:"ls-emoji-preview"
-          ~tooltip:name ~on_press:(fun _ -> choose (Emoji id))
+          ~label:name ~tooltip:name ~on_press:(fun _ -> choose (Emoji id))
           [ Logseq_emoji.el ~name:id () ]
     | Tabler_item (display, kebab) ->
         button ~key:("t-" ^ icon_id display) ~style_class:"ls-emoji-cell"
+          ~label:display
           ~tooltip:(icon_id display)
           ~on_press:(fun _ ->
             choose (Tabler (icon_id display, (get ()).preset)))
@@ -268,7 +269,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let set_tab t =
     gen := !gen + 1;
     update (fun s ->
-        { s with tab = t; q = ""; emoji_results = []; reset = s.reset + 1 })
+        { s with tab = t; q = ""; emoji_results = []; reset = s.reset + 1
+        ; pal_open = false })
   in
 
   let on_input v =
@@ -293,6 +295,9 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
 
   let preset_btn c =
     button ~style_class:(btn_outline_sm ^ " it")
+      ~label:(match c with
+        | Some color -> I.tf "icon/color-value" [ color ]
+        | None -> I.t "icon/reset-color")
       ?background:(match c with Some c -> Some c | None -> None)
       ~on_press:(fun _ -> set_preset c)
       (match c with
@@ -397,7 +402,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                       [])
                  sv
              ; if_
-                 ~test:(Signal.map (fun s -> s.q <> "") sv)
+                 ~test:(reactive (fun s -> s.q <> "") sv)
                  (Logseq_el.el ~key:"x" ~tag:"a" ~style_class:"x"
                     ~events:"click"
                     ~on_dom_event:(fun name _ ->
@@ -425,38 +430,28 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
           (* cljs hides the color picker on the emoji tab *)
           @
           [ if_
-              ~test:(Signal.map (fun s -> s.tab <> Tab_emoji) sv)
+              ~test:(reactive (fun s -> s.tab <> Tab_emoji) sv)
               (box ~key:"pal"
-                 [ (* cljs shui/popover-trigger renders a bare button
-                      wrapper with aria-expanded around the
-                      color-picker button *)
-                   Logseq_el.el ~tag:"button"
-                     ~attrs:[ ("type", "button"); ("aria-expanded", "false") ]
-                     [ button ~style_class:(btn_outline_sm ^ " color-picker")
-                         ~on_press:(fun _ ->
-                           update (fun s -> { s with pal_open = not s.pal_open }))
-                         [ reactive
-                             ~equal:(fun (a : pstate) b -> a.preset = b.preset)
-                             (fun s ->
-                                Logseq_el.el ~tag:"strong"
-                                  ~attrs:
-                                    (match s.preset with
-                                     | Some c -> [ ("style", "color:" ^ c) ]
-                                     | None -> [])
-                                  [ icon_el ("tabler-icon", "palette") ])
-                             sv ] ]
-                 ; popover ~key:"pal-pop" ~anchor:`below
-                     ~anchor_alignment:`start ~anchor_offset:4.
-                     ~on_dismiss:(fun _ ->
-                       update (fun s -> { s with pal_open = false }))
-                     [ row ~style_class:"color-picker-presets" ~gap:2
-                         (List.map preset_btn preset_colors) ]
+                 [ button ~style_class:(btn_outline_sm ^ " color-picker")
+                     ~label:(I.t "icon/select-color") ~icon:(`app "palette")
+                     ~foreground:(reactive (fun s ->
+                       Option.value s.preset ~default:"inherit") sv)
+                     ~on_press:(fun _ ->
+                       update (fun s -> { s with pal_open = not s.pal_open })) []
+                 ; if_ ~test:(reactive (fun s -> s.pal_open) sv)
+                     (popover ~key:"pal-pop" ~anchor:`below
+                        ~anchor_alignment:`start ~anchor_offset:4.
+                        ~on_dismiss:(fun _ ->
+                          update (fun s -> { s with pal_open = false }))
+                        [ row ~style_class:"color-picker-presets" ~gap:2
+                            (List.map preset_btn preset_colors) ])
                  ]) ]
           @
           (if del then
              [ button ~key:"del" ~style_class:btn_outline_sm
                  ~data_attrs:[ ("data-action", "del") ]
                  ~tooltip:(I.t "ui/delete")
+                 ~label:(I.t "ui/delete")
                  ~on_press:(fun _ -> choose Remove)
                  [ icon_el ~size:17. ("tabler-icon", "trash") ] ]
            else [])) ])

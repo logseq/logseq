@@ -1170,7 +1170,7 @@ let popup_key ~key ~inside ~prevent_default =
           if inside () then (prevent_default (); true) else false)
 
 (* click_guard: the popup is a LUI popover layer, so clicks inside it
-   never reach this point — editor_keys' Popups_state.inside hit-test
+   never reach this point — editor_keys' Popups_state.inside target check
    runs first. A click outside closes the popup; the normal blur-commit
    still runs *)
 let click_guard () =

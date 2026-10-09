@@ -211,19 +211,11 @@ let view (ms : Model.t Signal.signal) : t =
   (* local repos minus the graphs the sync server also hosts — cljs
      combine-local-&-remote-graphs merges by :url so a downloaded
      remote renders once, under Remote graphs *)
-  let local_sig =
-    Signal.map2
-      (fun (m : Model.t) remote ->
-        let remote_names =
-          List.map (fun (n, _, _, _) -> n) remote
-        in
-        List.filter
-          (fun r -> not (List.mem (short_name r) remote_names))
-          m.Model.repos)
-      ms remote_sig
-  in
-  let remote_nonempty =
-    Signal.map (fun (r : remote_graph list) -> r <> []) remote_sig
+  let local_repos (m : Model.t) remote =
+    let remote_names = List.map (fun (n, _, _, _) -> n) remote in
+    List.filter
+      (fun r -> not (List.mem (short_name r) remote_names))
+      m.Model.repos
   in
   (* mount effects: repos usually arrive via Action.Repos_loaded at
      boot; a cold open of #/all-graphs refreshes once, and the remote
@@ -247,11 +239,11 @@ let view (ms : Model.t Signal.signal) : t =
         ; column ~key:"local"
             [ heading ~key:"lh" ~level:2 ~style_class:"graphs-h2"
                 ~value:T.local_graphs []
-            ; keyed ~source:local_sig ~key:(fun r -> r)
+            ; keyed ~source:(reactive local_repos ms remote_sig) ~key:(fun r -> r)
                 ~cmp:String.compare
                 ~mount:(fun rs -> graph_row (Signal.get rs))
             ]
-        ; if_ ~test:remote_nonempty (remote_section remote_sig)
+        ; if_ ~test:(reactive (fun r -> r <> []) remote_sig) (remote_section remote_sig)
         ]
     ]
     ctx parent

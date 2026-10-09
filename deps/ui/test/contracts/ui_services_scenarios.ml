@@ -138,7 +138,8 @@ let run () =
         ; reload = (fun () -> incr reloads)
         }
     ; time = Helper_scenarios.fake_time
-    ; log = { error = (fun _ -> incr errors); info = (fun _ -> incr infos) }
+    ; log = { error = (fun _ -> incr errors); info = (fun _ -> incr infos)
+            ; error_message = (fun _ -> incr errors) }
     ; perf = { mark = (fun name -> marks := name :: !marks) }
     ; uri =
         { encode_component =
@@ -255,7 +256,7 @@ let run () =
                      ; clipboard_get = (fun _ -> "")
                      ; clipboard_set = (fun _ _ -> ())
                      ; data_transfer_get = (fun _ -> "")
-                     ; files = []
+                     ; files = []; has_files = false
                      ; prevent_default = (fun () -> incr prevented)
                      ; stop_propagation = (fun () -> ())
                      ; stop_immediate = (fun () -> ())
@@ -292,7 +293,7 @@ let run () =
                      ; clipboard_get = (fun _ -> "")
                      ; clipboard_set = (fun _ _ -> ())
                      ; data_transfer_get = (fun _ -> "")
-                     ; files = []
+                     ; files = []; has_files = false
                      ; prevent_default = (fun () -> ())
                      ; stop_propagation = (fun () -> ())
                      ; stop_immediate = (fun () -> ())

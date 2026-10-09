@@ -344,7 +344,8 @@
  (name logseq_ui_gpui)
  (wrapped false)
  (modules (:standard \ native_embed drive_test test_check fake_worker
-           edit_model_test edit_view_test edit_flow_test edit_geom_test))
+           edit_model_test edit_view_test edit_flow_test edit_geom_test
+           shared_ui_regression_test))
  (modes native)
  (libraries
    lui
@@ -389,6 +390,8 @@
  (copy ../test/edit_view_test.ml edit_view_test.ml))
 (rule
  (copy ../test/edit_flow_test.ml edit_flow_test.ml))
+(rule
+ (copy ../test/shared_ui_regression_test.ml shared_ui_regression_test.ml))
 
 ; the bridge's js-name C stubs (atob, require, loadDictFile, …) under a
 ; distinct object name — a dir can't hold two foreign_stubs groups that
@@ -399,7 +402,7 @@
 (test
  (name drive_test)
  (modules drive_test test_check fake_worker edit_model_test
-          edit_view_test edit_flow_test edit_geom_test)
+          edit_view_test edit_flow_test edit_geom_test shared_ui_regression_test)
  (libraries logseq_ui_gpui logseq_ui_scenarios)
  (foreign_stubs
   (language c)

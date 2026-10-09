@@ -120,7 +120,7 @@ lines untouched. Full inventory: `docs/e2e-contract.md`.
 
 | Layer | Path | Runs on | Owns |
 | --- | --- | --- | --- |
-| contracts | `src/contracts/` | all | `Ui_services` (storage/theme/nav/doc/time/log/perf/uri/clipboard/session/env/dom), `Ui_task`, `Wire`, `Json`, `State_cell`, `Cmdk_services`, `Properties_services` — installable op records, no host types |
+| contracts | `src/contracts/` | all | `Ui_services` (storage/theme/nav/doc/time/log/perf/uri/clipboard/session/env/dom), `Ui_task`, `Wire`, `Json`, `State_cell`, `Cmdk_services` — installable op records, no host types; properties use `Ui_services` |
 | shared | `src/shared/` | all | portable single-owner modules (helpers, settings/sidebar/cmdk/properties/views/edit-flow state+views, json_payload) — no `Js.*`/`Platform`/`Webapi` refs |
 | subs | `subs/` | all | subscription/model layer on `Ui_task`; Js.Promise↔Ui_task bridge (`task_of_promise`) stays at transport edge while worker/sdk emit Js.Promise |
 | web src | `src/` | Melange | web-only view/app code still migrating feature-by-feature; real browser boundary `src/core/web_dom.ml` |

@@ -69,6 +69,7 @@ type time = {
 type log = {
   error : 'a. 'a -> unit;
   info : 'a. 'a -> unit;
+  error_message : string -> unit;
 }
 
 type perf = { mark : string -> unit }
@@ -219,6 +220,9 @@ type ev = {
   clipboard_set : string -> string -> unit;
   data_transfer_get : string -> string;
   files : file list;
+  has_files : bool;
+  (* File intent remains visible during protected dragover, even when
+     the host exposes an empty file list. *)
   prevent_default : unit -> unit;
   stop_propagation : unit -> unit;
   stop_immediate : unit -> unit;
@@ -318,6 +322,7 @@ val time_parse : string -> float option
 val time_fmt_date : float -> string
 
 val log_error : 'a -> unit
+val log_error_message : string -> unit
 val log_info : 'a -> unit
 val perf_mark : string -> unit
 val uri_encode_component : string -> string
