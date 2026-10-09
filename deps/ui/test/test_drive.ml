@@ -416,6 +416,63 @@ let test_dialogs () =
 
 (* ---------------- page menu / confirm / toasts / help ---------------- *)
 
+let test_property_dialog_target () =
+  let editor = Editor_state.read () in
+  let current_page = !Runtime.current_page in
+  let root = Web_dom.create_element "div" in
+  Web_dom.el_append_child Web_dom.document_body root;
+  let add_row ?uuid cls =
+    let row = Web_dom.create_element "div" in
+    Web_dom.el_set_class row cls;
+    Option.iter (Web_dom.el_set_attr row "data-blockid") uuid;
+    Web_dom.el_append_child root row
+  in
+  let open_target label expected =
+    Properties_dialog.close ();
+    (try
+       Properties_dialog.open_for_current ();
+       check (label ^ ": opens without throwing") true
+     with _ -> check (label ^ ": opens without throwing") false);
+    flush ();
+    check (label ^ ": property dialog targets the expected blocks")
+      (Option.map (fun d -> d.Properties_dialog.d_target)
+         !Properties_dialog.current = expected);
+    check (label ^ ": property dialog visibility")
+      ((find_where (fun n -> has_tok n "ls-property-dialog") <> [])
+       = Option.is_some expected)
+  in
+  let target ?(uuids = []) ?db_id ?(is_tag = false) ?(title = "") uuid =
+    Some { Properties_dialog.uuid; uuids; db_id; is_tag; title }
+  in
+  Fun.protect
+    ~finally:(fun () ->
+      Properties_dialog.close ();
+      Web_dom.el_remove root;
+      Runtime.current_page := current_page;
+      Editor_state.set (fun _ -> editor);
+      flush ())
+    (fun () ->
+      Editor_state.set (fun st -> { st with Editor_state.editing = None });
+      Runtime.current_page := Some
+        { (page []) with Model.page_uuid = Some "page-target"
+        ; page_db_id = Some 42; page_is_tag = true; page_title = "Page target" };
+      add_row ~uuid:"unselected" "ls-block";
+      add_row ~uuid:"selected-z" "ls-block selected";
+      add_row "ls-block selected";
+      add_row ~uuid:"selected-a" "ls-block selected";
+      open_target "selected blocks in DOM order"
+        (target ~uuids:["selected-z"; "selected-a"] "selected-z");
+      Web_dom.el_replace_children root;
+      open_target "current page fallback"
+        (target ~db_id:42 ~is_tag:true ~title:"Page target" "page-target");
+      Runtime.current_page := None;
+      open_target "no editing, selection, or page" None;
+      add_row ~uuid:"selected-z" "ls-block selected";
+      let editing = Editor_state.mk_editing ~uuid:"editing-target"
+        ~buffer:"Editing" ~scope:"main" ~base:"Editing" () in
+      Editor_state.set (fun st -> { st with Editor_state.editing = Some editing });
+      open_target "editing block takes precedence" (target "editing-target"))
+
 let test_page_menu () =
   send (Action.Page_menu_set (Some (100., 40., 50., true, None)));
   let menus =
@@ -1789,6 +1846,7 @@ let run ~finish =
   test_right_sidebar ();
   test_context_menu ();
   test_dialogs ();
+  test_property_dialog_target ();
   test_page_menu ();
   test_confirm ();
   test_toasts ();
