@@ -700,9 +700,7 @@ let header_cell inst (c : V.column) : t =
       let menu () =
         match c.V.c_prop with
         | Some p -> (
-            (* Properties_popup is still DOM-based — its anchor is a
-               Web_dom element *)
-            match E.get_element_by_id (header_cell_id inst c) with
+            match Ui_services.dom_by_id (header_cell_id inst c) with
             | Some anchor -> open_property_menu inst ~anchor c p
             | None -> ())
         | None ->
