@@ -106,3 +106,12 @@ let strip_trailing_slashes s =
     decr j
   done;
   String.sub s 0 !j
+
+(* binary string -> Uint8Array — the Js.Typed_array stub makes this
+   identical source compile on both platforms (Bytes.t on native) *)
+let binary_to_u8 (s : string) : Js.Typed_array.Uint8Array.t =
+  let u8 = Js.Typed_array.Uint8Array.fromLength (String.length s) in
+  String.iteri
+    (fun i c -> Js.Typed_array.Uint8Array.unsafe_set u8 i (Char.code c))
+    s;
+  u8
