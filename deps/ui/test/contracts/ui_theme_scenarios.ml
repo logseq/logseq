@@ -29,7 +29,6 @@ let required_ls_literals =
   ; "--ls-border-radius-medium"
   ; "--ls-headbar-height"
   ; "--ls-headbar-inner-top-padding"
-  ; "--ls-left-sidebar-width"
   ; "--ls-left-sidebar-sm-width"
   ; "--ls-left-sidebar-nav-btn-size"
   ; "--ls-native-kb-height"

@@ -270,7 +270,7 @@ let item_header st idx (it : Sidebar_state.item) =
                 | Some el -> Popups_state.anchor_of_el el
                 | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
               in
-              Sidebar_state.open_item_menu st it.key ~ax ~atop ~abot)
+              Sidebar_state.toggle_item_menu st it.key ~ax ~atop ~abot)
             []
         ; button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~icon:`x ~label:(t "ui/close") ~width:32 ~height:32
@@ -530,10 +530,19 @@ let sidebar_item st idx (it : Sidebar_state.item) =
 
 (* ---------- inner ---------- *)
 
+(* reactive MinWidth = the dock's expanded width in px — while the
+   docked track animates to/from ~0 the inner column keeps its
+   expanded layout and is clipped by the pane's overflow:hidden
+   (slide-out) instead of reflowing/shrinking its text *)
 let inner st =
-  column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
-    ~grow:1.
-    ~style_class:"cp__right-sidebar-inner"
+  Ui_parts.int_prop_signal Lui_protocol.MinWidth
+    (Signal.map2 (fun a b -> (a, b))
+       (Signal.value st.Sidebar_state.right_fraction)
+       (Signal.value st.Sidebar_state.viewport_w))
+    (fun (rf, vw) -> int_of_float (rf *. vw) - 12)
+    (column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
+       ~grow:1.
+       ~style_class:"cp__right-sidebar-inner"
     [ scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1.
         ~style_class:"cp__right-sidebar-scrollable"
         [ column ~key:"rs-col" ~grow:1.
@@ -546,17 +555,15 @@ let inner st =
                        []
                      :: List.mapi (sidebar_item st) items))
                 (Signal.value st.Sidebar_state.items) ] ]
-    ]
+    ])
 
 let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let st = Sidebar_state.ensure ms in
   (Logseq_el.fragment
-     [ (* aria-value*/orientation attrs on the resizer were inert DOM
-          markup — the separator kind carries the role *)
-       separator ~key:"rs-resizer" ~orientation:`vertical
-         ~style_class:"resizer" []
-     ; if_
+     [ (* the hand-rolled .resizer separator is gone — the docked
+          split's divider owns the drag affordance *)
+       if_
          ~test:
            (Logseq_el.own ctx
               (Signal.map

@@ -508,10 +508,6 @@ let ops : Ui_services.dom =
         let o = Js.Dict.empty () in
         Js.Dict.set o "name" (Js.Json.string name);
         Web_dom.dispatch_custom "ls:open-dialog" (Js.Json.object_ o))
-  ; apply_left_sidebar_width =
-      (fun px ->
-        set_style_prop doc_root_js "--ls-left-sidebar-width"
-          (Printf.sprintf "%dpx" px))
   ; selected_block_uuids = Platform.selected_block_uuids
   }
 

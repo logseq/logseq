@@ -353,9 +353,6 @@ type dom = {
   ensure_fixups : unit -> unit;
   (* Register DOM content fixups (hidden delimiters, internal attrs) —
      a no-op on hosts that render source directly. *)
-  apply_left_sidebar_width : int -> unit;
-  (* Live left-sidebar width write (CSS var on web, dock model on
-     native). *)
   selected_block_uuids : unit -> string list;
   (* Block selection as uuid list — empty where the host has no block
      selection concept. *)
@@ -489,7 +486,6 @@ let dom_confirm msg = (get ()).dom.confirm msg
 let dom_scroll_row_into_view ~scroller ~row =
   (get ()).dom.scroll_row_into_view ~scroller ~row
 let dom_ensure_fixups () = (get ()).dom.ensure_fixups ()
-let dom_apply_left_sidebar_width px = (get ()).dom.apply_left_sidebar_width px
 let dom_selected_block_uuids () = (get ()).dom.selected_block_uuids ()
 
 let timers_timeout f ms = (get ()).timers.timeout f ms

@@ -274,9 +274,6 @@ let ops : Ui_services.dom =
           ~row:(token_el row))
   ; ensure_fixups = (fun () -> ())
       (* the host renders source nodes directly — nothing to strip *)
-  ; apply_left_sidebar_width =
-      (fun px -> Runtime.send (Action.Set_left_sidebar_width px))
-      (* dock column width is model-bound on native (no CSS var) *)
   ; selected_block_uuids = Platform.selected_block_uuids
   }
 

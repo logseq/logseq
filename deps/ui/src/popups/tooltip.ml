@@ -50,10 +50,15 @@ let hide () =
    when the bubble wouldn't fit below, and re-centre the arrow on the
    trigger — identical math to the imperative version *)
 let show_for (trig : Ui_services.el) =
+  (* a present data-tooltip owns the tip decision — an empty value is
+     an explicit suppression (its trigger still needs aria-label for
+     a11y); only when data-tooltip is absent does aria-label feed the
+     tip text *)
   let tip_text =
     match trig.Ui_services.attr "data-tooltip" with
-    | Some t when t <> "" -> Some t
-    | _ -> trig.Ui_services.attr "aria-label"
+    | Some t when t = "" -> None
+    | Some t -> Some t
+    | None -> trig.Ui_services.attr "aria-label"
   in
   match tip_text with
   | None | Some "" -> ()

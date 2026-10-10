@@ -440,7 +440,8 @@ let nav_group ms st =
                     [ text ~value:(t "sidebar.left/navigations") [] ] ]
             ; box ~key:"nav-more" ~style_class:"b"
                 [ Ui_parts.pressable
-                    ~on_press:(fun _ -> Sidebar_state.open_nav_menu st)
+                    ~on_press:(fun _ ->
+                      Sidebar_state.toggle_menu st "nav-edit")
                     (row ~style_class:"as-edit"
                        [ icon_ ~size:14 "filter-edit" ]) ] ]
         ; box ~key:"nav-bd" ~style_class:"bd"
@@ -513,7 +514,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
               | Some btn -> Popups_state.anchor_of_el btn
               | None -> Popups_state.anchor_at_point ~x:d.x ~y:d.y
             in
-            Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~ax
+            Sidebar_state.toggle_lp_menu st ~target:lp_ref ~recent ~ax
               ~atop ~abot)
           else
             let shift = d.Lui_protocol.modifiers land 2 <> 0 in
@@ -674,16 +675,23 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
   box ~key:"gsel"
     [ row ~key:"gsel-box" ~cross:`center ~main:`space_between
         ~style_class:"cp__graphs-selector"
+        (* data-tooltip="" suppresses the hover tooltip: the service
+           otherwise falls back to this button's required aria-label,
+           and master shows no tooltip on the selector *)
         [ button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~cross:`center
             ~label:(t "graph.switch/select-prompt")
             ~style_class:"item"
-            ~data_attrs:(reactive (fun menu model ->
-                [ ("aria-label", name_of model); ("aria-haspopup", "menu")
+            ~data_attrs:(reactive (fun menu _model ->
+                [ ("data-tooltip", ""); ("aria-haspopup", "menu")
                 ; ("aria-expanded", string_of_bool (menu = "repos")) ])
                 (Signal.value st.Sidebar_state.open_menu) ms)
             ~on_press:(fun _ ->
+              (* the trigger is inside the popover layer's owned set,
+                 so its presses never hit outside-dismiss — a plain
+                 toggle is the whole open/close contract *)
               Runtime.signal_set st.Sidebar_state.open_menu
-                (if Runtime.signal_get st.open_menu = "repos" then "" else "repos"))
+                (if Runtime.signal_get st.open_menu = "repos" then ""
+                 else "repos"))
                [ row ~key:"gsel-l" ~cross:`center ~gap:4 ~grow:1.
                    [ box ~key:"gsel-th" ~style_class:"thumb"
                        [ icon_ "topology-star" ]
