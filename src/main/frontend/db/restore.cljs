@@ -2,6 +2,7 @@
   "Fns for DB restore(from text or sqlite)"
   (:require [cljs-time.core :as t]
             [frontend.config :as config]
+            [frontend.db.async :as db-async]
             [frontend.db.subs :as db-subs]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
@@ -23,6 +24,9 @@
                                 (state/<invoke-db-worker
                                  :thread-api/db-sync-get-all-block-conflicts
                                  repo))
+           ;; Cache the journal title format before the graph becomes current
+           date-formatter (db-async/<get-date-formatter repo)
+           _ (state/set-date-formatter! repo date-formatter)
            _ (state/set-current-repo! repo)
            _ (db-subs/reset-graph! repo)
            _ (state/set-sync-block-conflicts! repo conflicts-by-block)

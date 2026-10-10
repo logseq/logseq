@@ -18,7 +18,9 @@
           calls (atom [])
           events (atom [])
           current-repos (atom [])
-          reset-graphs (atom [])]
+          reset-graphs (atom [])
+          date-formatter "yyyy-MM-dd"
+          date-formatter-when-current (atom nil)]
       (reset! db-conn/conns {})
       (p/with-redefs [persist-db/<open-and-fetch-schema
                       (fn [repo' _opts]
@@ -34,12 +36,19 @@
                       (fn [repo']
                         (swap! current-repos conj repo')
                         (swap! calls conj [:current-repo repo'])
+                        (reset! date-formatter-when-current
+                                (state/get-state :ui/date-formatter :nested-path repo'))
                         (state/swap-state! assoc :git/current-repo repo')
                         nil)
                       state/<invoke-db-worker
-                      (fn [api repo']
+                      (fn [api repo' & _args]
                         (swap! calls conj [:worker api repo'])
-                        (p/resolved conflicts-by-block))
+                        (p/resolved
+                         (case api
+                           :thread-api/db-sync-get-all-block-conflicts
+                           conflicts-by-block
+                           :thread-api/pull
+                           {:logseq.property.journal/title-format date-formatter})))
                       state/set-sync-block-conflicts!
                       (fn [& args]
                         (swap! calls conj (into [:hydrate] args)))
@@ -55,8 +64,13 @@
                    "A restored worker graph must reset renderer subscriptions before rendering it.")
                (is (= [[:graph/restored repo] [:ui/re-render-root]]
                       @events))
+               (is (= date-formatter (state/get-date-formatter))
+                   "Every restore loads the graph's journal title format into renderer state.")
+               (is (= date-formatter @date-formatter-when-current)
+                   "The format is loaded before the graph becomes current.")
                (is (= [[:open repo]
                        [:worker :thread-api/db-sync-get-all-block-conflicts repo]
+                       [:worker :thread-api/pull repo]
                        [:current-repo repo]
                        [:reset repo]
                        [:hydrate repo conflicts-by-block]

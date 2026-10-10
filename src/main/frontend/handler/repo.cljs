@@ -5,7 +5,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
-            [frontend.db.async :as db-async]
             [frontend.db.persist :as db-persist]
             [frontend.db.restore :as db-restore]
             [frontend.db.subs :as db-subs]
@@ -80,8 +79,6 @@
    (when-not (true? (:file-graph-import? opts))
      (state/set-db-restoring! true))
    (db-restore/restore-graph! repo opts)
-   (p/let [date-formatter (db-async/<get-date-formatter repo)]
-     (state/set-date-formatter! repo date-formatter))
    (repo-config-handler/restore-repo-config! repo)
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
