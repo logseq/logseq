@@ -17,13 +17,18 @@ let body (_ms : Model.t Signal.signal) : t =
   let node =
     column ~key:"qa-root"
       ~style_class:"ls-quick-add"
-      ~gap:16
+      ~gap:16 ~grow:1. ~min_width:384
       [ row ~key:"qa-head"
           ~style_class:"ls-qa-head"
           ~main:`space_between ~cross:`center ~gap:16
-          [ text ~key:"qa-t" ~style_class:"ls-qa-title"
+          ~data_attrs:
+            [ ( "style"
+              , "border-bottom:1px solid var(--lui-c-border);\
+                 padding-bottom:1rem" ) ]
+          [ text ~key:"qa-t" ~style_class:"ls-qa-title" ~font_weight:500
               ~value:(U.t "editor.quick-add/title") [] ]
       ; box ~key:"qa-c" ~style_class:"ls-qa-content"
+          ~data_attrs:[ ("style", "margin-left:-1.5rem") ]
           (* cljs .page-blocks-inner[data-cid] marks the editable
              container region — carried as the a11y id until the
              imperative [data-cid] lookup migrates *)
@@ -45,12 +50,10 @@ let body (_ms : Model.t Signal.signal) : t =
               blocks_sig ]
       ; row ~key:"qa-btns" ~style_class:"ls-qa-btns"
           ~main:`end_
-          [ button ~key:"qa-add" ~variant:`primary
-              ~style_class:"ui__button ls-btn-primary"
+          [ Ui_components.dialog_btn_primary ~key:"qa-add" ~variant:`primary
               ~text:(U.t "editor.quick-add/add-to-today")
               ~on_press:(fun _ ->
-                Editor_actions.quick_add_blocks_to_today ())
-              [] ]
+                Editor_actions.quick_add_blocks_to_today ()) ]
       ]
   in
   node ctx parent

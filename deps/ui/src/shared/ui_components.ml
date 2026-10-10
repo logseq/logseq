@@ -863,3 +863,94 @@ let flat_toolbar ~key ?(cls = "") ?opacity_signal ~label children : t =
           [ ("style", "background: transparent; border: none; \
                       padding: 0") ]
         children ]
+
+(* -- dialog chrome ------------------------------------------------------
+
+   Typed-prop carriers for the deleted .ui__button.ls-btn /
+   .ls-btn-primary dialog paints and the .ui__alert-dialog-* chrome.
+   The semantic classes stay on the elements as e2e/imperative hooks;
+   the residual stylesheet rules keep only what props can't express
+   (backdrop-filter, entry animations, runtime state attrs). *)
+
+(* cljs .ui__button.ls-btn — the neutral card button used in dialog
+   footers/bodies. ~variant stays: the kit data-variant paint loses to
+   the inline declarations either way, so it only remains a semantic
+   attr + gpui fallback. *)
+let dialog_btn_neutral ~key ?size ~variant ~text ?(autofocus = false)
+    ~on_press =
+  with_props
+    [ P.FontSize, sv "0.875rem"; P.FontWeight, iv 500
+    ; P.Cursor, sv "pointer"; P.HoverBackground, sv "hsl(var(--muted))" ]
+    (button ~key ?size ~variant ~text ~autofocus
+       ~style_class:"ui__button ls-btn"
+       ~corner_radius:6 ~border_width:1
+       ~border_color:"var(--lui-c-border)"
+       ~background:"var(--ls-primary-background-color, var(--lui-c-background))"
+       ~padding_vertical:8 ~padding_horizontal:16
+       ~on_press:(fun _ -> on_press ()) [])
+
+(* cljs .ui__button.ls-btn-primary — lx-accent-09 fill + opacity hover.
+   (The .ui__dialog-content / .ui__alert-dialog-content scoped override
+   that switched this to bg-primary/90 only matches the pdf imperative
+   modal — it stays in the stylesheet.) *)
+let dialog_btn_primary ~key ?size ~variant ~text ?(autofocus = false)
+    ~on_press =
+  with_props
+    [ P.FontSize, sv "0.875rem"; P.FontWeight, iv 500
+    ; P.Cursor, sv "pointer"; P.HoverOpacity, fv 0.9 ]
+    (button ~key ?size ~variant ~text ~autofocus
+       ~style_class:"ui__button ls-btn-primary"
+       ~corner_radius:6 ~border_width:0
+       ~background:
+         "var(--lx-accent-09, hsl(var(--primary, var(--ls-link-text-color, \
+           #0f7b6c))))"
+       ~foreground:"#fff" ~height:40 ~padding_horizontal:16
+       ~on_press:(fun _ -> on_press ()) [])
+
+(* cljs AlertDialog chrome (shui dialog-confirm!) — shared by
+   dialogs_view.confirm_view and the page_menu confirm layers. The card
+   is hand-rolled (not the dialog kind) because outside presses must
+   NOT dismiss; it rides a cover popover for the scrim + Escape.
+
+   Web keeps position:fixed + left/top/translate centering through the
+   documented data-attrs style pair (left:%/transform have no prop);
+   gpui anchors absolute children through the parent's flex centering —
+   the same mechanism .cp__dialog-shell uses. *)
+let alert_dialog_overlay ~key children =
+  with_props
+    [ P.Position, sv "fixed"; P.Inset, fv 0.; P.ZIndex, iv 999 ]
+    (column ~key ~grow:1. ~main:`center ~cross:`center
+       ~style_class:"ui__alert-dialog-overlay"
+       ~background:
+         "color-mix(in oklab, var(--lui-c-background) 80%, transparent)"
+       children)
+
+let alert_dialog_content ~key ~data_attrs children =
+  with_props
+    [ P.Position, sv "fixed"; P.ZIndex, iv 999
+    ; ( P.Shadow
+      , sv "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px \
+            rgb(0 0 0 / 0.1)" ) ]
+    (column ~key ~gap:16 ~padding:24 ~max_width:512 ~corner_radius:8
+       ~border_width:1 ~border_color:"var(--lui-c-border)"
+       ~background:"var(--ls-primary-background-color, var(--lui-c-background))"
+       ~style_class:"ui__alert-dialog-content"
+       ~data_attrs:
+         ( ( "style"
+           , "left:50%;top:50%;width:100%;transform:translate(-50%,-50%)" )
+         :: data_attrs )
+       children)
+
+(* gap-2 column (the deleted rule's text-align:left is the inherited
+   default — no ancestor centers) *)
+let alert_dialog_header ~key children =
+  column ~key ~gap:8 ~style_class:"ui__alert-dialog-header" children
+
+(* grid sibling of the header, not an AlertDialogDescription *)
+let alert_dialog_main_content ~key children =
+  box ~key ~padding_vertical:8
+    ~style_class:"ui__alert-dialog-main-content" children
+
+let alert_dialog_footer ~key children =
+  row ~key ~main:`end_ ~gap:8 ~style_class:"ui__alert-dialog-footer"
+    children

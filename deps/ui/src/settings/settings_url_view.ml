@@ -73,12 +73,16 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
       Dialogs_state.close_named key)
   in
   let node =
-    column ~key ~style_class:("cp__settings-" ^ key ^ "-cnt")
+    column ~key ~style_class:("cp__settings-" ^ key ^ "-cnt") ~gap:8
       [ heading ~key:(key ^ "-h") ~level:1
-          ~style_class:"ls-dialog-title-lg" ~value:title []
-      ; column ~key:(key ^ "-b") ~style_class:"ls-pad"
+          ~style_class:"ls-dialog-title-lg"
+          ~font_size:"1.5rem" ~font_weight:700 ~value:title []
+      ; column ~key:(key ^ "-b") ~style_class:"ls-pad" ~padding:8
           [ paragraph ~key:(key ^ "-d")
-              ~style_class:"ls-desc ls-mb-sm" ~value:desc []
+              ~style_class:"ls-desc ls-mb-sm"
+              ~font_size:"0.875rem"
+              ~data_attrs:[ ("style", "opacity:0.7;margin-bottom:1rem") ]
+              ~value:desc []
           ; box ~key:(key ^ "-i")
               [ label ~key:(key ^ "-il") ~value:"URL" []
               ; input ~key:(key ^ "-in")
@@ -92,7 +96,10 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                     | _ -> ())
                   []
               ]
-          ; row ~key:(key ^ "-btns") ~gap:8
+          ; (* cljs [:p.pt-2.flex.gap-2] — left-aligned buttons;
+               the base .ls-form-actions rule stays for the
+               plugins_view emitter until its batch lands *)
+            row ~key:(key ^ "-btns") ~gap:8 ~main:`start
               ~style_class:"ls-form-actions"
               ([ button ~key:(key ^ "-save")
                    ~variant:(Settings_controls.btn_variant `Solid)

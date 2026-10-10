@@ -87,7 +87,14 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
         ~test:
           (Logseq_el.own ctx
              (Signal.map (fun v -> v <> "") (Signal.value value)))
-        (button ~key:(key ^ "-eye") ~variant:`ghost
+        (Ui_components.with_props
+           [ Lui_protocol.Position, Ui_components.sv "absolute"
+           ; Lui_protocol.InsetRight, Ui_components.fv 4.
+           ; Lui_protocol.InsetTop, Ui_components.fv 6.
+           ; Lui_protocol.Opacity, Ui_components.fv 0.6
+           ; Lui_protocol.HoverOpacity, Ui_components.fv 1.
+           ; Lui_protocol.Cursor, Ui_components.sv "pointer" ]
+           (button ~key:(key ^ "-eye") ~variant:`ghost
            ~style_class:"ls-eye-btn"
            ~label:I18n.e2ee_show_password
            ~icon:(reactive
@@ -95,7 +102,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
                     (Signal.value visible))
            ~on_press:(fun _ ->
              Runtime.signal_set visible (not (Runtime.signal_get visible)))
-           [])
+           []))
     ]
 
 let view (r : Dialogs_state.ui_request) : t =
@@ -113,11 +120,16 @@ let view (r : Dialogs_state.ui_request) : t =
   in
   (* dialog kind supplies the card chrome; the ls-dialog-layer cover
      popover supplies the scrim and Escape dispatch *)
-  dialog ~key:"e2ee-dlg"
+  (* .e2ee-password-modal-content declarations migrated: grid gap
+     covers the deleted flex-column gap; px max-width rides the
+     data-attrs style pair (no prop on the modal kind) *)
+  dialog ~key:"e2ee-dlg" ~padding:16
     ~style_class:("e2ee-password-modal-content" ^ extra)
     ~data_attrs:
-      [ ("aria-modal", "true"); ("aria-labelledby", "ls-e2ee-title") ]
+      [ ("aria-modal", "true"); ("aria-labelledby", "ls-e2ee-title")
+      ; ("style", "gap:2rem;max-width:42rem") ]
     [ text ~key:"t" ~style_class:"ls-e2ee-title" ~value:title
+        ~font_size:"1.5rem" ~font_weight:500
         ~accessibility_identifier:"ls-e2ee-title" []
     ; column ~key:"f" ~style_class:"ls-e2ee-form" ~gap:16
         ( [ pw_input ctx ~key:"p1" ~value:pw1 ~autofocus:true
@@ -132,15 +144,15 @@ let view (r : Dialogs_state.ui_request) : t =
               ; if_ ~test:(Signal.value (warn))
                   (text ~key:"mm"
                      ~style_class:"ls-warn-text"
+                     ~font_size:"0.875rem"
+                     ~foreground:"var(--lx-yellow-10, hsl(45 93% 40%))"
                      ~value:I18n.e2ee_password_not_matched
                      [])
               ]
             else [] )
-        @ [ button ~key:"s" ~variant:`primary
-              ~style_class:"ui__button ls-btn-primary"
+        @ [ Ui_components.dialog_btn_primary ~key:"s" ~variant:`primary
               ~text:I18n.submit
-              ~on_press:(fun _ -> submit_now ())
-              []
-          ] )
+              ~on_press:(fun _ -> submit_now ()) ]
+          )
     ]
     ctx parent

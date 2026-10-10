@@ -205,12 +205,16 @@ let body (_ms : Model.t Signal.signal) : t =
                  link kind keeps the same open-in-new-window behavior *)
               box ~key:"rd-repo"
                 ~style_class:"ls-readme-repo"
+                ~padding:16 ~corner_radius:6
+                ~background:"var(--lx-gray-03, hsl(var(--muted)))"
                 [ link ~key:"rd-repo-a" ~url:t.repository
-                    ~style_class:"ls-readme-repo-link" ~gap:4
+                    ~style_class:"ls-readme-repo-link" ~gap:4 ~cross:`center
                     ~icon:(`app "brand-github")
                     ~text:t.repository [] ])
          ; box ~key:"rd-body"
              ~style_class:"ls-readme-body ls-block"
+             ~padding:4 ~max_width:900
+             ~data_attrs:[ ("style", "min-height:60vw") ]
              (Render_html.els_of_string t.html) ]
    | None -> spacer ~key:"rd-empty" [])
     ctx parent

@@ -849,10 +849,6 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .ui__alert-dialog-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: color-mix(in oklab, var(--lui-c-background) 80%, transparent);
   backdrop-filter: blur(4px);
   animation: lui-fade-in 150ms ease-out;
 }
@@ -895,71 +891,11 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .ui__alert-dialog-content {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  z-index: 999;
-  display: grid;
-  gap: 1rem;
-  width: 100%;
-  max-width: 32rem;
-  padding: 1.5rem;
-  border: 1px solid var(--lui-c-border);
-  border-radius: 0.5rem;
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  /* cljs surfaces inherit the body color (rgb(23,23,23) light);
-     --ls-primary-text-color here would warm every label */
-  color: inherit;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-  transform: translate(-50%, -50%);
   animation: ui-dialog-zoom-in 200ms ease-out;
-}
-
-.ui__alert-dialog-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  text-align: left;
-}
-
-.ui__alert-dialog-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  line-height: 1.75rem;
 }
 
 /* cljs dialog-confirm :content wrapper — div.ui__alert-dialog-main-content
    around p.opacity-60 (16px text, ~8px breathing room each side) */
-.ui__alert-dialog-main-content {
-  padding-block: 8px;
-}
-
-.ui__alert-dialog-main-content .ls-confirm-desc {
-  font-size: 1rem;
-  line-height: 1.5rem;
-  opacity: 0.6;
-}
-
-.ui__alert-dialog-description {
-  font-size: 0.875rem;
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-}
-
-.ui__alert-dialog-footer {
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.ls-alert-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 /* footer buttons (confirm/cancel) used inside dialogs + menus */
 .ui__button.ls-btn-outline {
   display: inline-flex;
@@ -978,25 +914,6 @@ div[data-keep-selection].menu-links-wrapper {
 
 .ui__button.ls-btn-outline:hover {
   background: hsl(var(--muted));
-}
-
-.ui__button.ls-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.375rem;
-  border-style: none;
-  background: var(--lx-accent-09, hsl(var(--primary, var(--ls-link-text-color, #0f7b6c))));
-  color: #fff;
-  font-size: 0.875rem;
-  font-weight: 500;
-  height: 2.5rem;
-  padding: 0 1rem;
-  cursor: pointer;
-}
-
-.ui__button.ls-btn-primary:hover {
-  opacity: 0.9;
 }
 
 /* cljs shui/button default variant is bg-primary/90 (-> /100 hover),
@@ -1030,11 +947,7 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* cljs items are flex rows with normal (0) gap; spacing between icon and
    label comes from the icon's own margin (gap-1 = 4px) */
-.ui__dropdown-menu-content .lui-menu-item,
-
-/* cljs shui dialog title: text-lg font-semibold leading-none tracking-tight
-   (+ tailwind preflight margin reset) */
-.ui__dialog-title {
+.ui__dropdown-menu-content .lui-menu-item {
   font-size: 1.125rem;
   font-weight: 600;
   line-height: 1;
@@ -1048,11 +961,6 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* cljs shui dialog-close: focus:ring-2 ring-offset-2 — autofocused on
    dialog open */
-
-.ui__dialog-main-content {
-  min-height: 0;
-  overflow-y: auto;
-}
 
 /* dialog kind chrome: the kit .lui-dialog centers the card but owns no
    padding/gap/width — cljs ui__dialog-content was gap 1rem, padding
@@ -1083,10 +991,6 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* settings mounts its own padded shell */
-.lui-dialog.ls-dialog-settings {
-  padding: 0;
-}
-
 /* cljs ui.css: flashcards dialog sizing */
 .lui-dialog.ls-dialog-flashcards {
   padding: 1.5rem 1.25rem 1rem;
@@ -1140,43 +1044,12 @@ div[data-keep-selection].menu-links-wrapper {
 /* LUI dialog bodies stack their content in one column */
 
 /* per-name dialog sizing (was inline utilities on the content node) */
-.ls-dialog-export-page {
-  /* cljs export dialog keeps the default 42/48rem cap */
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
 /* cljs export dialog gaps: 6px between the preview textarea and the
    options block (margin-collapsed select my-2), mt-4 before the
    copy/save row — the export-inner column's uniform gap-3 overshoots
    both */
-.ls-dialog-export-page .export-opts { margin-top: -6px; }
-.ls-dialog-export-page .export-btns { margin-top: 4px; }
-
 /* cljs shui/dialog-open! on publish-page-dialog uses the default
    .ui__dialog-content sizing (w-full max-w-2xl, lg:max-w-3xl) */
-
-.ls-dialog-sync-server,
-.ls-dialog-publish-server {
-  max-width: 42rem;
-}
-
-.ls-dialog-plugin-readme {
-  max-height: 86vh;
-  overflow: auto;
-}
-
-.lui-dialog.ls-dialog-settings {
-  max-width: 64rem;
-  overflow: hidden;
-}
-
-.lui-dialog.ls-dialog-plugins {
-  width: 90vw;
-  max-width: 1246px;
-  max-height: calc(100vh - 50px);
-  overflow-y: hidden;
-}
 
 /* cljs plugins.css .cp__plugins-page.web-platform .cp__plugins-item-lists */
 .cp__plugins-page.web-platform .cp__plugins-item-lists {
@@ -1186,11 +1059,6 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* cljs :graph/new-db-graph dialog-open! {:style {:max-width "500px"}} */
-.lui-dialog.ls-dialog-new-graph,
-.lui-dialog.ls-dialog-add-graph {
-  max-width: 500px;
-}
-
 /* cljs marks the settings overlay data-align="top", but its dialog-content
    still resolves to top:50% + translate(-50%,-50%): the tailwind top-[50%]
    utility on cljs's dialog-content element beats shui.css's
@@ -1198,13 +1066,6 @@ div[data-keep-selection].menu-links-wrapper {
    class, so restore the same effective centering here. */
 .ui__dialog-overlay[data-align="top"] .ui__dialog-content {
   top: 50%;
-}
-
-.lui-dialog.ls-dialog-settings {
-  /* cljs sizes the settings dialog border-box: 1024px incl padding */
-  box-sizing: border-box;
-  width: min(1024px, calc(100vw - 2rem));
-  max-width: calc(100vw - 2rem);
 }
 
 .lui-dialog.ls-dialog-settings .settings-modal {
@@ -1231,65 +1092,13 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* base button inside dialogs (neutral variant) */
-.ui__button.ls-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.375rem;
-  border: 1px solid var(--lui-c-border);
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 0.5rem 1rem;
-  cursor: pointer;
-  color: inherit;
-}
-
-.ui__button.ls-btn:hover {
-  background: hsl(var(--muted));
-}
-
-.ui__button.ls-btn.ls-btn-primary {
-  border-style: none;
-}
-
 /* prompt dialog (import password/text prompt) */
-.ls-prompt-headline {
-  line-height: 1.5rem;
-  font-weight: 500;
-  padding-bottom: 0.5rem;
-  margin: 0;
-}
-
-.ls-prompt-input,
-.ls-login-input {
-  display: block;
-  width: 100%;
-  margin: 0.5rem 0 1rem;
-}
-
 /* cljs login.css: login form controls span the card width */
-.lui-dialog.ls-dialog-login .form-input,
-.lui-dialog.ls-dialog-login .ui__button.as-solid {
-  width: 100%;
-}
-
 /* cljs login.css: .ui__dialog-content[label=user-login] centers a
    ~440px authenticator column */
-.lui-dialog.ls-dialog-login {
-  display: flex;
-  align-items: center;
-  width: auto;
-  max-width: none;
-  padding: 0 1.5rem 1.5rem;
-}
-
 .lui-dialog.ls-dialog-login .ui__dialog-main-content {
-  padding: 0;
   width: 70vw;
   max-width: 500px;
-  position: relative;
 }
 
 @media (min-width: 640px) {
@@ -1299,107 +1108,14 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 /* e2ee password modal */
-.e2ee-password-modal-content {
-  max-width: 42rem;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.ls-e2ee-title {
-  font-size: 1.5rem;
-  font-weight: 500;
-  margin: 0;
-}
-
-.ls-e2ee-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
 .ls-toggle-password-input {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.ls-eye-btn {
-  position: absolute;
-  right: 0.25rem;
-  top: 6px;
-  border-style: none;
-  background: none;
-  cursor: pointer;
-  color: inherit;
-  opacity: 0.6;
-}
-
-.ls-eye-btn:hover {
-  opacity: 1;
-}
-
-.ls-warn-text {
-  font-size: 0.875rem;
-  color: var(--lx-yellow-10, hsl(45 93% 40%));
-}
-
 /* quick add */
-.ls-quick-add {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  width: 100%;
-  gap: 1rem;
-  min-width: 24rem;
-}
-
-.ls-qa-head {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  border-bottom: 1px solid var(--lui-c-border);
-  padding-bottom: 1rem;
-}
-
-.ls-qa-title {
-  font-weight: 500;
-}
-
-.ls-qa-content {
-  display: block;
-  margin-left: -1.5rem;
-}
-
-.ls-qa-btns {
-  display: flex;
-  flex-direction: row;
-  justify-content: flex-end;
-}
-
 /* plugin readme */
-.ls-readme-repo {
-  padding: 1rem;
-  border-radius: 0.375rem;
-  background: var(--lx-gray-03, hsl(var(--muted)));
-}
-
-.ls-readme-repo-link {
-  display: flex;
-  align-items: center;
-}
-
-.ls-readme-body {
-  padding: 0.25rem;
-  background: transparent;
-  border-style: none;
-  min-height: 60vw;
-  max-width: 900px;
-}
-
 /* ---- toasts ------------------------------------------------------------ */
 
 /* kit viewport is bottom-right; Logseq toasts stack top-right */
@@ -2604,71 +2320,14 @@ select.form-select {
 }
 
 /* login dialog body — cljs login.css: mx-auto w-full max-w-[440px] px-1 */
-.cp__user-login {
-  margin-left: auto;
-  margin-right: auto;
-  width: 100%;
-  max-width: 440px;
-  padding-left: 0.25rem;
-  padding-right: 0.25rem;
-}
-
-.cp__user-login .desc {
-  font-size: 0.875rem;
-  opacity: 0.8;
-}
-
 /* cljs login.css bumps the muted text/links up to 80% */
-.cp__user-login span.opacity-50 {
-  opacity: 0.8;
-}
-
 /* component-kind twins of the login footer utilities:
    span.opacity-50 + a.opacity-60.underline.text-sm and p.pt-4.text-center */
-.cp__user-login .ls-auth-muted {
-  font-size: 0.875rem;
-  opacity: 0.8;
-}
-
-.cp__user-login .ls-auth-link {
-  font-size: 0.875rem;
-  opacity: 0.8;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.cp__user-login .ls-auth-link:hover {
-  opacity: 1;
-}
-
 /* cljs card-header (p-6 + pb-7) + card-title (text-2xl) */
-.cp__user-login .ls-auth-title {
-  font-size: 1.5rem;
-  line-height: 1;
-  padding-top: 1.5rem;
-  padding-bottom: 1.75rem;
-}
-
 /* cljs login.css field rows: label text-sm lh-5 + flex-col gap-3 pb-1
    wrapper — LUI's label sits at lh-14 with no bottom pad */
-.cp__user-login .ls-auth-field .lui-label {
-  line-height: 20px;
-}
-
-.cp__user-login .ls-auth-field {
-  padding-bottom: 4px;
-}
-
 /* cljs footer is one p.pt-4.text-center with two lh-6 lines; LUI
    splits it into two rows — pt-4 + two 24px rows */
-.cp__user-login .ls-auth-foot {
-  padding-top: 16px;
-}
-
-.cp__user-login .ls-auth-foot > .lui-row {
-  min-height: 24px;
-}
-
 /* cljs shui input is h-10 px-3 py-2 everywhere it appears in dialogs */
 .ui__dialog-content .ui__input {
   height: 2.5rem;
@@ -2676,19 +2335,9 @@ select.form-select {
 }
 
 /* cljs shui button default size is h-10 */
-.cp__user-login .ui__button {
-  height: 2.5rem;
-}
-
 /* cljs login.css: destructive auth alert — bg-red-300 light,
    red-800/90 + red-200 text dark; the Alert base classes
    (rounded-lg border p-4) land via tailwind */
-
-.dark .cp__user-login .ui__alert {
-  border-color: oklch(44.4% 0.177 26.899);
-  background: color-mix(in oklab, oklch(44.4% 0.177 26.899) 90%, transparent);
-  color: oklch(88.5% 0.062 18.334);
-}
 
 /* cljs file_sync.css .cp__rtc-sync-indicator — state dot on the cloud
    button: pending yellow for on/syncing/queuing, green when idle */
@@ -2719,10 +2368,6 @@ select.form-select {
 }
 
 /* quick-add + plugin readme + cards modal bodies */
-.ls-quick-add {
-  min-width: 24rem;
-}
-
 .lsp-frame-readme {
   min-width: 28rem;
   max-height: 60vh;
@@ -3177,11 +2822,6 @@ select.form-select {
 
 /* cljs settings.cljs sync/publish server editors: [:p.pt-2.flex.gap-2]
    — left-aligned buttons */
-.cp__settings-sync-server-cnt .ls-form-actions,
-.cp__settings-publish-server-cnt .ls-form-actions {
-  justify-content: flex-start;
-}
-
 .ls-pl-warn {
   font-weight: 700;
   font-size: 1.125rem;
@@ -3297,36 +2937,7 @@ select.form-select {
   padding: 0.5rem 0.25rem 0.25rem;
 }
 
-.ls-dialog-title-lg {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0 0 0.5rem;
-}
-
-.ls-pad {
-  padding: 0.5rem;
-}
-
-.ls-mb-sm {
-  margin-bottom: 1rem;
-}
-
-.ls-strong {
-  font-weight: 500;
-}
-
-.ls-ex-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-left: 0.25rem;
-}
-
 /* cljs components/export.cljs: h1.title.mb-8 */
-.export h1.title.ls-mb {
-  margin: 0 0 2rem;
-}
-
 /* cljs tailwind preflight + export.cljs [:hr]: my-8 */
 .export hr {
   margin: 2rem 0;

@@ -262,3 +262,80 @@ Also deleted:
 Gates after the purge: `dune build js_app test gpui/drive_test.exe`
 clean, `test_main.js` 2009 checks 0 failures, `dune runtest` green,
 `npm run css:build` succeeds.
+
+## CSS purge — B1 dialogs (2026-10-10, branch `devin/004-b1-dialogs`)
+
+Batch B1 of `2026-10-11-004-css-to-lui-api.md` — the dialog-body
+selectors in `resources/css/lui-overlay.css` moved to typed props on
+their emitters (`dialogs_view`, `login_view`, `ui_requests`,
+`quick_add_view`, `plugin_readme`, `settings_url_view`, `exporter`,
+`export_view`, plus the `page_menu`/`native/page_menu` alert-dialog
+twins and a shared `ui_components` recipe: `dialog_btn_neutral`,
+`dialog_btn_primary`, `alert_dialog_overlay`, `alert_dialog_content`,
+`alert_dialog_header`, `alert_dialog_main_content`,
+`alert_dialog_footer`). `ls-dialog-<name>` chrome rides a per-name
+spec on the `dialog` element (`~padding` + data-attrs `style` for the
+unexpressible viewport/calc declarations); gpui parity comes from the
+same props.
+
+Deleted rules (`resources/css/lui-overlay.css`, ~390 lines):
+
+- AlertDialog chrome: `.ui__alert-dialog-header`, `-title`,
+  `-main-content`, `.ui__alert-dialog-description`, `-footer`,
+  `.ui__alert-dialog-main-content .ls-confirm-desc`, `.ls-alert-title`.
+  `.ui__alert-dialog-overlay` keeps `backdrop-filter` + entry
+  animation; `.ui__alert-dialog-content` keeps the zoom-in animation.
+- Dialog chrome: `.ui__dialog-title` (moved to the heading;
+  the comma-merged menu-item selectors keep their shared body),
+  `.ui__dialog-main-content` (top-level), `.lui-dialog.ls-dialog-settings`
+  (3 rules), `.ls-dialog-export-page` + `.export-opts`/`.export-btns`,
+  `.ls-dialog-sync-server`/`.ls-dialog-publish-server`,
+  `.ls-dialog-plugin-readme`, `.lui-dialog.ls-dialog-plugins`,
+  `.lui-dialog.ls-dialog-new-graph`/`-add-graph`,
+  `.lui-dialog.ls-dialog-login` + its dead `.form-input`/`.as-solid`
+  width rules.
+- Buttons: `.ui__button.ls-btn` + `:hover`, `.ui__button.ls-btn
+  .ls-btn-primary`, `.ui__button.ls-btn-primary` + `:hover` — all
+  emitters were B1 files; paint now rides the `dialog_btn_*` recipes.
+  The `.ui__dialog-content`/`.ui__alert-dialog-content` scoped
+  `ls-btn-primary` overrides (pdf imperative modal) stay.
+- Prompt/e2ee: `.ls-prompt-headline`, `.ls-prompt-input`/
+  `.ls-login-input`, `.e2ee-password-modal-content`, `.ls-e2ee-title`,
+  `.ls-e2ee-form`, `.ls-eye-btn` + `:hover`, `.ls-warn-text`.
+- Login: `.cp__user-login` + scoped `.ui__button`/`.desc`/
+  `span.opacity-50`/`.ui__alert` (dead) and the whole `.ls-auth-*`
+  cluster (title, field + `.lui-label`, foot + `.lui-row`, muted, link
+  + hover).
+- Misc bodies: `.ls-quick-add` (2 rules), `.ls-qa-head`/`-title`/
+  `-content`/`-btns`, `.ls-readme-repo`/`-link`/`-body`,
+  `.ls-dialog-title-lg`, `.ls-pad`, `.ls-mb-sm`, `.ls-strong`,
+  `.ls-ex-list`, `.export h1.title.ls-mb`, the scoped
+  `.cp__settings-{sync,publish}-server-cnt .ls-form-actions`.
+
+Kept per batch scope:
+
+- `.lui-dialog` base `gap/padding/width/height` + its `min-width:
+  1024px` media variant — shared with `cards_view`, `views_popup`,
+  `properties_menu`, `cmdk_view` emitters (unassigned batches); the
+  `.ui__dialog-*` imperative overlay/content family (pdf_toolbar),
+  runtime `[data-base-ui-inert]` state, `[data-align=top]`, and the
+  reduced-motion block.
+- `.lui-dialog.ls-dialog-login .ui__dialog-main-content{width:70vw;
+  max-width:500px}` + 640px media — media-coupled width stays in CSS;
+  the same element carries `padding:0;position:relative` as props.
+- Shared button/input families: `.ui__button.ls-btn-*`
+  (`ls-btn-outline`, `ls-btn-sm/xs/md/lg/icon/default`), `.as-*`,
+  `.ui__input`, `.form-input`, `.ls-toggle-password-input`, `.ls-desc`,
+  `.ls-form-actions` — emitters outside B1 (publish_view, new_graph,
+  collaborators, settings_controls, cards_view, plugins_view,
+  views_popup).
+- `.lsp-frame-readme` (raw `Logseq_el` iframe), `.export hr`
+  (margin + border decoration), `.lui-dialog.ls-dialog-flashcards` +
+  media, `.lui-dialog.ls-dialog-cmdk`, `.lui-modal-decoration:empty`,
+  the `.ui__dialog-title:has(...)` and dialog-close hooks.
+
+gpui `register_class_style` removals (`logseq_ext.rs`): the whole
+`ui__alert-dialog-{overlay,content,header,title,main-content,footer}`
+set (both registries) and `ui__dialog-main-content` (`min-height:0`,
+`width:100%`). `ls-dialog-settings` stays — the settings max-width is
+carried by the data-attrs style pair, which is web-only.

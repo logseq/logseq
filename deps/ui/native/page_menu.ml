@@ -219,10 +219,9 @@ let confirm_view (c : Model.confirm) =
   in
   (* cljs dialog-confirm! mounts a Radix AlertDialog — outside presses
      do NOT dismiss; only Escape and the footer buttons close it *)
-  Lui_elements.column ~key:"alertdlg-overlay"
-    ~style_class:"ui__alert-dialog-overlay"
-    [ Lui_elements.column ~key:"alertdlg"
-        ~style_class:"ui__alert-dialog-content"
+  Ui_components.alert_dialog_overlay ~key:"alertdlg-overlay"
+    [ Ui_components.alert_dialog_content ~key:"alertdlg"
+        ~data_attrs:[ ("role", "alertdialog") ]
         [ (* cljs dialog-confirm title: flex gap-2 items-center >
              icon + text (heading is a leaf — the row carries the pair) *)
           (match icon_opt with
@@ -235,14 +234,19 @@ let confirm_view (c : Model.confirm) =
                       dialog's overflow:hidden edge (taffy does not
                       model text min-content shrink) *)
                    Lui_elements.heading ~key:"adlg-t" ~grow:1.
-                     ~min_width:0 ~value:title [] ]
+                     ~min_width:0 ~font_size:"1.125rem" ~font_weight:600
+                     ~line_height:"1.75rem" ~value:title [] ]
            | None ->
                Lui_elements.heading ~key:"adlg-t"
+                 ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1.75rem"
                  ~style_class:"ui__alert-dialog-title" ~value:title [])
-        ; Lui_elements.text ~key:"adlg-d"
-            ~style_class:desc_cls ~value:desc []
-        ; Lui_elements.row ~key:"adlg-f"
-            ~style_class:"ui__alert-dialog-footer"
+        ; Ui_components.alert_dialog_main_content ~key:"adlg-dw"
+            [ Lui_elements.text ~key:"adlg-d"
+                ~style_class:desc_cls ~value:desc
+                ~font_size:"0.875rem"
+                ~foreground:"var(--ls-secondary-text-color, \
+                   var(--muted-foreground))" [] ]
+        ; Ui_components.alert_dialog_footer ~key:"adlg-f"
             [ btn "adlg-cancel" I18n.cancel `outline close
             ; btn "adlg-confirm" I18n.confirm `primary (fun () ->
                   close ();

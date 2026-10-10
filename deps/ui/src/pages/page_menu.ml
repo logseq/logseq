@@ -326,13 +326,10 @@ let confirm_view (c : Model.confirm) =
      do NOT dismiss; only Escape and the footer buttons close it.
      ~grow/~main/~cross fill + center inside the native cover layer
      (web places the same scrim with position:fixed) *)
-  column ~key:"alertdlg-overlay"
-    ~style_class:"ui__alert-dialog-overlay"
-    ~grow:1. ~main:`center ~cross:`center
+  Ui_components.alert_dialog_overlay ~key:"alertdlg-overlay"
     [ (* e2e requires div[role='alertdialog'] *)
-      box ~key:"alertdlg"
+      Ui_components.alert_dialog_content ~key:"alertdlg"
         ~data_attrs:[ ("role", "alertdialog") ]
-        ~style_class:"ui__alert-dialog-content"
         [ (* cljs dialog-confirm title: flex gap-2 items-center > icon +
              text; the heading kind is a leaf, so the row carries the
              pair and ~as_ keeps the h2 tag *)
@@ -346,21 +343,25 @@ let confirm_view (c : Model.confirm) =
                       dialog's overflow:hidden edge (taffy does not
                       model text min-content shrink) *)
                    heading ~key:"adlg-t" ~level:2 ~as_:`H2 ~grow:1.
-                     ~min_width:0
+                     ~min_width:0 ~font_size:"1.125rem" ~font_weight:600
+                     ~line_height:"1.75rem"
                      ~style_class:"ui__alert-dialog-title" ~value:title []
                  ]
            | None ->
                heading ~key:"adlg-t" ~level:2 ~as_:`H2
+                 ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1.75rem"
                  ~style_class:"ui__alert-dialog-title" ~value:title [])
         ; (* cljs dialog-confirm! sends the description as :content —
              it lands in div.ui__alert-dialog-main-content (a grid sibling
              of the header), not as ui__alert-dialog-description *)
           (if desc = "" then Logseq_el.nothing
            else
-             box ~key:"adlg-dw"
-               ~style_class:"ui__alert-dialog-main-content"
-               [ text ~key:"adlg-d" ~style_class:desc_cls ~value:desc [] ])
-        ; row ~key:"adlg-f" ~style_class:"ui__alert-dialog-footer"
+             Ui_components.alert_dialog_main_content ~key:"adlg-dw"
+               [ text ~key:"adlg-d" ~style_class:desc_cls ~value:desc
+                   ~font_size:"0.875rem"
+                   ~foreground:"var(--ls-secondary-text-color, \
+                      var(--muted-foreground))" [] ])
+        ; Ui_components.alert_dialog_footer ~key:"adlg-f"
             [ (* cljs dialog-confirm footer buttons are :size :sm *)
               button ~key:"adlg-cancel" ~variant:`outline ~size:`sm
                 ~text:I18n.cancel ~style_class:"ui__button"

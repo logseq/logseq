@@ -370,7 +370,8 @@ let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
   (* cljs .cp__user-login rows stretch to the form width;
      ls-auth-field carries the cljs label lh-5 + wrapper pb-1 *)
   column ~key ~gap:12 ~cross:`stretch ~style_class:"ls-auth-field"
-    [ label ~key:"l" ~value:caption []
+    ~data_attrs:[ ("style", "padding-bottom:4px") ]
+    [ label ~key:"l" ~line_height:"20px" ~value:caption []
     ; (if secure then secure_field else input ~kind:`text)
         ~key:"i" ~style_class:"ui__input"
         ~autofocus
@@ -380,20 +381,25 @@ let input_row ~key ~caption ?(autofocus = false) ~secure ~value ~on_submit =
         []
     ]
 
+(* cljs login.css h-10 controls: ls-btn-primary at the default kit
+   size (h-10) — the deleted .cp__user-login .ui__button rule *)
 let submit_btn ~key label on_submit =
-  button ~key ~variant:`primary ~text:label
-    ~style_class:"ui__button ls-btn-primary"
+  Ui_components.dialog_btn_primary ~key ~variant:`primary ~text:label
     ~on_press:(fun _ -> on_submit ())
-    []
 
 (* cljs "Back to login"/"Sign up"/"Forgot password" are <a> action
    links — component-wise they're pressable text (the ls-auth-link
    class keeps the underline/muted styling the cljs utility classes
    carried) *)
 let action_link ~key ctx text_ tab =
-  text ~key ~style_class:"ls-auth-link" ~value:text_
-    ~on_press:(fun _ -> set_tab ctx tab)
-    []
+  Ui_components.with_props
+    [ Lui_protocol.Cursor, Ui_components.sv "pointer"
+    ; Lui_protocol.HoverOpacity, Ui_components.fv 1. ]
+    (text ~key ~style_class:"ls-auth-link" ~value:text_
+       ~font_size:"0.875rem"
+       ~data_attrs:[ ("style", "opacity:0.8;text-decoration:underline") ]
+       ~on_press:(fun _ -> set_tab ctx tab)
+       [])
 
 let back_link ctx =
   (* stays centered inside the stretch-aligned form columns *)
@@ -410,14 +416,19 @@ let login_panel ctx fields =
     ; submit_btn ~key:"lg-btn" (I18n.t "account/sign-in") on_submit
     ; column ~key:"lg-foot" ~cross:`center ~gap:0
         ~style_class:"ls-auth-foot"
-        [ row ~key:"f1" ~gap:4
+        ~data_attrs:[ ("style", "padding-top:16px") ]
+        [ row ~key:"f1" ~gap:4 ~min_height:24
             [ text ~key:"f1a" ~style_class:"ls-auth-muted"
+                ~font_size:"0.875rem"
+                ~data_attrs:[ ("style", "opacity:0.8") ]
                 ~value:(I18n.t "account/dont-have-account-question" ^ " ")
                 []
             ; action_link ~key:"f1b" ctx (I18n.t "account/sign-up")
                 Signup ]
-        ; row ~key:"f2" ~gap:4
+        ; row ~key:"f2" ~gap:4 ~min_height:24
             [ text ~key:"f1d" ~style_class:"ls-auth-muted"
+                ~font_size:"0.875rem"
+                ~data_attrs:[ ("style", "opacity:0.8") ]
                 ~value:(I18n.t "account/or" ^ " ") []
             ; action_link ~key:"f2a" ctx
                 (I18n.t "encryption/forgot-password-question") Reset_pw ]
@@ -465,6 +476,8 @@ let confirm_panel ctx fields user next_step =
   let on_submit () = confirm_submit ctx fields user next_step in
   column ~key:"f-confirm" ~gap:16 ~cross:`center
     [ paragraph ~key:"cc-hint" ~style_class:"ls-auth-muted"
+        ~font_size:"0.875rem"
+        ~data_attrs:[ ("style", "opacity:0.8") ]
         ~value:(I18n.t "account/code-on-the-way-tip") []
     ; input_row ~key:"r-code" ~caption:(I18n.t "account/enter-code")
         ~autofocus:true ~secure:false ~value:fields.code ~on_submit
@@ -480,11 +493,10 @@ let panel ctx fields (a : auth_ui) : t =
         , [ column ~key:"lg-in" ~cross:`center ~gap:16
               [ paragraph ~key:"p"
                   ~value:(I18n.t1 "account/already-logged-in-as" u) []
-              ; button ~key:"so" ~variant:`outline
+              ; Ui_components.dialog_btn_neutral ~key:"so"
+                  ~variant:`outline ~size:`default
                   ~text:(I18n.t "account/sign-out")
-                  ~style_class:"ui__button ls-btn"
-                  ~on_press:(fun _ -> sign_out ctx)
-                  [] ] ] )
+                  ~on_press:(fun _ -> sign_out ctx) ] ] )
     | None -> (
         match a.tab with
         | Login -> (I18n.t "ui/login", [ login_panel ctx fields ])
@@ -499,8 +511,12 @@ let panel ctx fields (a : auth_ui) : t =
             , [ confirm_panel ctx fields user next_step ] ))
   in
   Logseq_el.fragment
-    (heading ~key:"lg-t" ~level:2
-       ~style_class:"ui__dialog-title ls-auth-title" ~value:title []
+    ((* cljs card-header (p-6 + pb-7) + card-title (text-2xl) *)
+     heading ~key:"lg-t" ~level:2
+       ~font_size:"1.5rem" ~line_height:"1"
+       ~style_class:"ui__dialog-title ls-auth-title"
+       ~data_attrs:[ ("style", "padding-top:1.5rem;padding-bottom:1.75rem") ]
+       ~value:title []
      :: (if a.err = "" then []
          else
            (* cljs shui/alert {:variant :destructive} + alert-description —
@@ -523,6 +539,8 @@ let body (_ms : Model.t Signal.signal) : t =
   let fields = fields_of ctx in
   (reactive ~equal:( == ) (fun a ->
        box ~key:"login" ~style_class:"cp__user-login"
+         ~max_width:440 ~padding_horizontal:4
+         ~data_attrs:[ ("style", "width:100%;margin-inline:auto") ]
          [ panel ctx fields a ])
      (Signal.value ((auth_st ctx))))
     ctx parent

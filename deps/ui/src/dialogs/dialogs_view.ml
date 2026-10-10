@@ -11,8 +11,6 @@ open Lui_elements
 
 let keyed = Lui_elements.keyed
 
-let btn_style = "ui__button ls-btn"
-
 let dialog_close ~key close =
   Ui_components.dialog_close ~key ~label:I18n.close
     ~on_press:(fun _ -> close ())
@@ -37,12 +35,37 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | _ -> box ~key:("empty-" ^ name) []
 
 (* cljs shui/dialog-open! :label opts became the ls-dialog-<name> class on
-   the dialog element — lui-overlay.css carries class-selector twins of
+   the dialog element — lui-overlay.css carried class-selector twins of
    its .ui__dialog-content[label=…] rules (settings -> app-settings,
    plugins -> plugins-dashboard, login -> user-login,
-   new-graph/add-graph -> new-db-graph) *)
+   new-graph/add-graph -> new-db-graph). The declarations migrated onto
+   the element: the .lui-dialog base rule keeps only gap/pad/width/
+   height for the dialog kinds emitted elsewhere (cards, views_popup,
+   properties_menu, cmdk); padding repeats here so every named dialog
+   carries its own spec (gpui reads the same prop). Viewport/calc
+   widths, px max-widths and the login centering have no prop on the
+   modal kind — they ride the documented data-attrs style pair. *)
+let dialog_spec name =
+  match name with
+  | "settings" ->
+      ( 0
+      , "box-sizing:border-box;width:min(1024px, calc(100vw - 2rem));\
+         max-width:min(64rem, calc(100vw - 2rem));overflow:hidden" )
+  | "plugins" ->
+      ( 24
+      , "width:90vw;max-width:1246px;max-height:calc(100vh - 50px);\
+         overflow-y:hidden" )
+  | "sync-server" | "publish-server" -> (24, "max-width:42rem")
+  | "plugin-readme" -> (24, "max-height:86vh;overflow:auto")
+  | "export-page" -> (24, "max-height:80vh;overflow-y:auto")
+  | "new-graph" | "add-graph" -> (24, "max-width:500px")
+  | "login" ->
+      ( 24
+      , "padding-top:0;width:auto;max-width:none;align-items:center" )
+  | _ -> (24, "")
+
+(* cljs shui/dialog-open! :title — h2.ui__dialog-title (omitted when none) *)
 let title_of = function
-  (* cljs dialog-open! :title — h2.ui__dialog-title (omitted when none) *)
   | "new-graph" | "add-graph" -> I18n.create_new_graph
   | _ -> ""
 
@@ -52,47 +75,47 @@ let title_of = function
    button overlays the content column. *)
 let dialog_view name (ms : Model.t Signal.signal) : t =
   let title = title_of name in
-  dialog ~key:("dlg-" ^ name)
+  let padding, chrome = dialog_spec name in
+  dialog ~key:("dlg-" ^ name) ~padding
     ~style_class:("ls-dialog-" ^ name)
-    ~data_attrs:(if title = "" then []
-        else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ])
+    ~data_attrs:
+      ((if chrome = "" then [] else [ ("style", chrome) ])
+       @ (if title = "" then []
+          else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ]))
     ~on_dismiss:(fun _ -> Dialogs_state.close_named name)
     [ column ~key:("dlg-m-" ^ name) ~grow:1.
         ~gap:(if title = "" then 0 else 16) ~cross:`stretch
         ( (if title = "" then []
           else
-            [ heading ~key:("dlg-t-" ^ name) ~level:2
+            [ (* cljs shui dialog title: text-lg font-semibold
+                 leading-none tracking-tight (+ tailwind preflight
+                 margin reset) *)
+              heading ~key:("dlg-t-" ^ name) ~level:2
+                ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1"
+                ~data_attrs:[ ("style", "letter-spacing:-0.01em") ]
                 ~style_class:"ui__dialog-title" ~value:title
                 ~accessibility_identifier:("ls-dialog-title-" ^ name) [] ])
         @ [ (* scroll kind so native backends map it to their scroll
-               view; ui__dialog-main-content keeps the min-height:0 +
-               overflow-y:auto hooks the per-dialog rules scope onto *)
+               view; ui__dialog-main-content stays as the e2e/imperative
+               hook the per-dialog rules scope onto (overflow is native
+               on the scroll kind) *)
             scroll ~key:("dlg-s-" ^ name)
               ~style_class:"ui__dialog-main-content" ~orientation:`vertical
-              ~grow:1.
+              ~grow:1. ~min_height:0
+              ~data_attrs:
+                (if name = "login"
+                 then [ ("style", "padding:0;position:relative") ]
+                 else [])
               [ body_of name ms ]
           ] )
     ; dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name)
     ]
 
-(* typed variant over ls-btn-* classes — the multi-token style_class
-   route left the primary styling unapplied on web (confirm button
-   rendered white-on-transparent); data-variant is the typed path.
-   cljs alert-dialog footer buttons are :size :sm *)
-let btn key label variant act =
-  button ~key ~variant ~size:`sm
-    ~style_class:btn_style
-    ~text:label
-    ~on_press:(fun _ -> act ())
-    []
-
+(* cljs AlertDialog (shui dialog-confirm!): outside presses do NOT
+   dismiss — Escape and the footer buttons are the only way out *)
 let confirm_view (c : Dialogs_state.confirm) =
-  (* cljs AlertDialog (shui dialog-confirm!): outside presses do NOT
-     dismiss — Escape and the footer buttons are the only way out *)
-  column ~key:"cfrm-ov"
-    ~style_class:"ui__alert-dialog-overlay"
-    [ column ~key:"cfrm"
-        ~style_class:"ui__alert-dialog-content"
+  Ui_components.alert_dialog_overlay ~key:"cfrm-ov"
+    [ Ui_components.alert_dialog_content ~key:"cfrm"
         (* cljs ui__alert-dialog-content renders
            div[role='alertdialog'][aria-modal] — e2e confirms via
            `div[role='alertdialog'] button:text('Confirm')` *)
@@ -106,9 +129,10 @@ let confirm_view (c : Dialogs_state.confirm) =
              [ column ~key:"cfrm-m"
                  [ paragraph ~key:"cfrm-mc" ~value:c.desc [] ] ]
            else
-             [ column ~key:"cfrm-h"
-                 ~style_class:"ui__alert-dialog-header"
+             [ Ui_components.alert_dialog_header ~key:"cfrm-h"
                  [ heading ~key:"cfrm-t" ~level:2
+                     ~font_size:"1.125rem" ~font_weight:600
+                     ~line_height:"1.75rem"
                      ~style_class:"ui__alert-dialog-title"
                      ~value:c.title
                      ~accessibility_identifier:"ls-confirm-title" [] ] ] )
@@ -117,22 +141,21 @@ let confirm_view (c : Dialogs_state.confirm) =
            header, not AlertDialogDescription inside it *)
         @ (if c.desc = "" then []
              else
-               [ box ~key:"cfrm-d" ~style_class:"ui__alert-dialog-main-content"
+               [ Ui_components.alert_dialog_main_content ~key:"cfrm-d"
                    [ paragraph ~key:"cfrm-dp"
-                       ~style_class:"ls-confirm-desc" ~value:c.desc [] ] ])
-        @ [ row ~key:"cfrm-f" ~style_class:"ui__alert-dialog-footer"
-              [ btn "cfrm-cancel" I18n.cancel `outline
-                  Dialogs_state.close_confirm
+                       ~font_size:"1rem" ~line_height:"1.5rem"
+                       ~style_class:"ls-confirm-desc"
+                       ~data_attrs:[ ("style", "opacity:0.6") ]
+                       ~value:c.desc [] ] ])
+        @ [ (* cljs dialog-confirm footer buttons are :size :sm *)
+            Ui_components.alert_dialog_footer ~key:"cfrm-f"
+              [ Ui_components.dialog_btn_neutral ~key:"cfrm-cancel"
+                  ~size:`sm ~variant:`outline ~text:I18n.cancel
+                  ~on_press:(fun _ -> Dialogs_state.close_confirm ())
               ; (* cljs alert dialog focuses the confirm action on open *)
-                button ~key:"cfrm-ok" ~variant:`primary ~size:`sm
-                  ~style_class:btn_style ~text:I18n.confirm
-                  ~autofocus:true
-                  ~on_press:(fun _ -> Dialogs_state.confirm ())
-                  []
-              ]
-          ] )
-    ]
-
+                Ui_components.dialog_btn_neutral ~key:"cfrm-ok" ~size:`sm
+                  ~variant:`primary ~text:I18n.confirm ~autofocus:true
+                  ~on_press:(fun _ -> Dialogs_state.confirm ()) ] ] ) ]
 (* Prompt body — mounted inside a dialog kind in [render]; outside
    presses and Escape dismiss through ~on_dismiss. *)
 let prompt_body (p : Dialogs_state.prompt) : t =
@@ -145,18 +168,23 @@ let prompt_body (p : Dialogs_state.prompt) : t =
     column ~key:"prmt-box"
       ( (if p.desc = "" then
            [ heading ~key:"prmt-h" ~level:3
+               ~line_height:"1.5rem" ~font_weight:500
                ~style_class:"ls-prompt-headline" ~value:p.title
+               ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
                ~accessibility_identifier:"ls-prompt-title" []
            ]
          else
            (* cljs pdf-password-input: title + desc headline *)
            [ text ~key:"prmt-t" ~value:p.title []
            ; heading ~key:"prmt-h" ~level:3
+               ~line_height:"1.5rem" ~font_weight:500
                ~style_class:"ls-prompt-headline" ~value:p.desc
+               ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
                ~accessibility_identifier:"ls-prompt-title" []
            ])
       @ [ input ~key:"prmt-in"
             ~style_class:"form-input ls-prompt-input"
+            ~data_attrs:[ ("style", "display:block;width:100%;margin:0.5rem 0 1rem") ]
             ~autofocus:true
             ~on_input:(fun ev ->
               match ev with
@@ -165,9 +193,9 @@ let prompt_body (p : Dialogs_state.prompt) : t =
               | _ -> ())
             ~on_submit:(fun _ -> submit ())
             []
-        ; btn "prmt-ok" I18n.submit `primary
-            (fun () -> submit ())
-        ] )
+        ; Ui_components.dialog_btn_primary ~key:"prmt-ok" ~size:`sm
+            ~variant:`primary ~text:I18n.submit
+            ~on_press:(fun _ -> submit ()) ] )
   in
   node ctx parent
 
@@ -192,7 +220,8 @@ let render (ms : Model.t Signal.signal) : t =
           reactive ~equal:(fun a b -> a.Dialogs_state.prompt == b.Dialogs_state.prompt)
             (fun d -> match d.Dialogs_state.prompt with
               | Some p ->
-                  dialog ~key:"dlg-prompt" ~style_class:"ls-dialog-prompt"
+                  dialog ~key:"dlg-prompt" ~padding:24
+                    ~style_class:"ls-dialog-prompt"
                     ~data_attrs:[ ("aria-labelledby", "ls-prompt-title") ]
                     ~on_dismiss:(fun _ -> Dialogs_state.close_prompt ())
                     [ prompt_body p

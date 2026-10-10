@@ -173,24 +173,10 @@ pub fn register(shared: &Shared) {
         "",
     );
     lui_gpui::style::register_class_style(
-        "ui__alert-dialog-overlay",
-        "background:var(--ls-primary-background-color)/80",
-        "",
-    );
-    lui_gpui::style::register_class_style(
         "ui__dialog-content",
         "background:var(--ls-primary-background-color); \
          border:1px solid var(--ls-border-color); border-radius:8px; \
          padding:24px; width:100%; max-width:672px; \
-         max-height:80dvh; overflow:hidden; \
-         position:relative",
-        "",
-    );
-    lui_gpui::style::register_class_style(
-        "ui__alert-dialog-content",
-        "background:var(--ls-primary-background-color); \
-         border:1px solid var(--ls-border-color); border-radius:8px; \
-         padding:24px; width:100%; max-width:512px; \
          max-height:80dvh; overflow:hidden; \
          position:relative",
         "",
@@ -200,12 +186,6 @@ pub fn register(shared: &Shared) {
         "ls-dialog-settings",
         "max-width:1024px",
         "",
-    );
-    // .ui__dialog-main-content { min-height:0; overflow-y:auto }
-    lui_gpui::style::register_class_style(
-        "ui__dialog-main-content",
-        "min-height:0",
-        "w-full overflow-y-auto",
     );
     // .cp__theme-modes-options { display:flex; gap:12px } — the theme
     // mode tiles lay out horizontally, not as a stacked list.
@@ -304,51 +284,15 @@ fn register_class_styles() {
         "pointer-events-auto",
     );
     class(
-        "ui__alert-dialog-overlay",
-        "position:absolute;inset:0;display:flex;flex-direction:column;\
-         justify-content:center;align-items:center",
-        "pointer-events-auto",
-    );
-    class(
         "ui__dialog-content",
         "position:absolute;width:100%;max-width:42rem;padding:24px;\
          border:1px solid border;border-radius:8px;\
          background:background;color:foreground",
         "pointer-events-auto",
     );
-    class(
-        "ui__alert-dialog-content",
-        "position:absolute;width:100%;max-width:32rem",
-        "pointer-events-auto",
-    );
-    // cljs dialog-confirm chrome (lui-overlay.css ~:1550): header/title/
-    // main-content/footer rules the web twin carries. The gpui title is
-    // an icon+heading row, so it joins flex here instead of block.
-    class(
-        "ui__alert-dialog-header",
-        "display:flex;flex-direction:column;gap:8px;text-align:left",
-        "",
-    );
-    class(
-        "ui__alert-dialog-title",
-        "display:flex;flex-direction:row;align-items:center;gap:8px;\
-         font-size:18px;font-weight:600;line-height:28px",
-        "",
-    );
-    class(
-        "ui__alert-dialog-main-content",
-        "padding-top:8px;padding-bottom:8px",
-        "",
-    );
-    class(
-        "ui__alert-dialog-footer",
-        "display:flex;flex-direction:row;justify-content:flex-end;gap:8px",
-        "",
-    );
     // the inline style sets position:fixed + left/top + z-index (el attrs
     // win over class declarations, so only the paint rules live here).
     class("ls-dialog-cmdk", "width:90dvw;max-width:56rem;padding:0", "");
-    class("ui__dialog-main-content", "width:100%", "");
     class("ls-font-sample", "font-size:14px;line-height:20px;font-weight:600", "");
     class("ls-font-name", "font-size:11.2px;line-height:16px", "");
     // ---- body-mounted popup chrome (resources/css/lui-overlay.css

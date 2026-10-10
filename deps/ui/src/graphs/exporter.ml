@@ -151,12 +151,14 @@ let export_html () =
    not a navigation link, so it maps to pressable text, not `link` *)
 let link ~key label_ desc on_click =
   column ~key
-    (text ~key:(key ^ "-a") ~style_class:"ls-strong" ~value:label_
+    (text ~key:(key ^ "-a") ~style_class:"ls-strong" ~font_weight:500 ~value:label_
        ~on_press:(fun _ -> ignore (on_click ()))
        []
      :: (if desc = "" then []
          else
            [ paragraph ~key:(key ^ "-d") ~style_class:"ls-desc"
+               ~font_size:"0.875rem"
+               ~data_attrs:[ ("style", "opacity:0.7") ]
                ~value:desc [] ]))
 
 (* cljs components/export.cljs auto-backup — File System Access folder
@@ -320,33 +322,31 @@ let auto_backup ctx =
                             | Some name -> name | None -> "")
                             folder_sig)
                           []
-                      ; button ~key:"ab-x" ~size:`icon ~icon:`x
+                      ; button ~key:"ab-x" ~size:`icon ~icon:`x ~variant:`ghost
                           ~style_class:"ui__button as-ghost"
                           ~label:(T.t "export.backup/cancel")
                           ~on_press:(fun _ -> clear_folder ctx)
                           [] ]
                   ; text ~key:"ab-note" ~style_class:"opacity-50 text-sm"
                       ~value:(T.t "export.backup/hourly-note") []
-                  ; button ~key:"ab-go"
-                      ~style_class:"ui__button ls-btn-primary"
+                  ; Ui_components.dialog_btn_primary ~key:"ab-go"
+                      ~variant:`primary
                       ~text:(T.t "export.backup/backup-now")
                       ~on_press:(fun _ ->
                         ignore
                           (Ui_task.bind (backup_now ()) (fun r ->
                                backup_notify r;
                                Ui_task.resolve ()));
-                        auto_backup_interval ())
-                      [] ])
+                        auto_backup_interval ()) ])
            ; Lui_elements.if_
                ~test:
                  (Logseq_el.own ctx
                     (Signal.map (fun f -> f = None) folder_sig))
                (column ~key:"ab-in" ~gap:16
-                  [ button ~key:"ab-set"
-                      ~style_class:"ui__button ls-btn-primary"
+                  [ Ui_components.dialog_btn_primary ~key:"ab-set"
+                      ~variant:`primary
                       ~text:(T.t "export.backup/set-folder-first")
                       ~on_press:(fun _ -> choose_folder ctx)
-                      []
                   ; text ~key:"ab-note"
                       ~style_class:"opacity-50 text-sm"
                       ~value:(T.t "export.backup/hourly-note") [] ])
@@ -361,7 +361,8 @@ let body (_ms : Model.t Signal.signal) : t =
          heading element *)
       heading ~key:"ex-h" ~level:1 ~as_:`H1 ~style_class:"title ls-mb"
         ~value:T.export_title []
-    ; column ~key:"ex-list" ~style_class:"ls-ex-list"
+    ; column ~key:"ex-list" ~style_class:"ls-ex-list" ~gap:16
+        ~data_attrs:[ ("style", "margin-left:0.25rem") ]
         ([ link ~key:"ex-db" T.export_sqlite_db T.export_sqlite_desc
              export_binary
          ; link ~key:"ex-zip" T.export_sqlite_zip T.export_zip_desc
