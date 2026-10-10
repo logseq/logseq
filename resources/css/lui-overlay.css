@@ -655,14 +655,26 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- cmdk palette ----------------------------------------------------- */
 
-/* cljs cmdk dialog: :align :top → items-start + content top-20, so the
-   box hugs the modal instead of stretching to the viewport. */
+/* prod ui__dialog-content: fixed inset-0 m-auto centers the card
+   (vertical center, not the old cljs :align :top); bg-background
+   rounded-lg 8px, text --ls-primary-text-color; the a11y title row is
+   0-height so the grid gap must not push the body down */
 .lui-dialog.ls-dialog-cmdk {
   overflow: hidden;
-  top: 5rem;
-  bottom: auto;
-  height: auto;
+  gap: 0;
+  /* inset:0 + height:auto stretches to the max-height cap — fit-content
+     keeps the card content-sized so m-auto centers it like prod */
+  height: fit-content;
   max-height: calc(100dvh - 6rem);
+  border-radius: 8px;
+  background: hsl(var(--background));
+  color: var(--ls-primary-text-color);
+}
+
+/* prod radix overlay is bg-background/90 in every theme — the kit's
+   flat bg-black/50 reads too dark in light mode */
+.lui-modal-backdrop {
+  background: hsl(var(--background) / 0.9);
 }
 
 /* cmdk migrated to shared recipes (deps/ui/src/shared/ui_components.ml +

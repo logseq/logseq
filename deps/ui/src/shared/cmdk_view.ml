@@ -68,7 +68,7 @@ let print_shortcut_key (svs : Svs.t) key =
     else if lower = "tab" then "Tab"
     else if lower = "esc" || lower = "escape" then "Esc"
     else if String.length lower = 1 then String.uppercase_ascii lower
-    else lower
+    else key
   in
   result
 
@@ -183,9 +183,9 @@ let shui_shortcut svs (binding : string) =
                 body ])
           bindings))
 
-(* hints render every binding as boxed separate keycaps (cljs styles the
-   hints combo identically — separate is the same visual) *)
-let hint_shortcut svs keys = separate_el svs "hs" keys
+(* cljs hints render each binding as one combo — a single boxed keycap
+   group with separators between keys *)
+let hint_shortcut svs keys = combo_el svs "hs" keys
 
 (* cljs group-header link: (shui/shortcut "mod down" {:style :compact}) *)
 let compact_shortcut svs s =
@@ -274,6 +274,21 @@ let hl_segments ~query ~text : (bool * string) list =
       in
       emit 0 ranges
 
+(* Each hl segment is its own text element, and edge whitespace is
+   trimmed by text shaping — mid-flow spaces must be nbsp to keep
+   their advance like the inline cljs spans do. *)
+let display_spaces s =
+  if not (String.contains s ' ') then s
+  else
+    let b = Buffer.create (String.length s + 8) in
+    String.iter
+      (fun c ->
+        (* melange text lands Latin-1: \xA0 alone is U+00A0 nbsp *)
+        if c = ' ' then Buffer.add_string b "\xA0"
+        else Buffer.add_char b c)
+      s;
+    Buffer.contents b
+
 (* cljs [:span {:data-testid text} seg/span ... seg/mark] — mark gets
    padding 0 border-radius 0; data-testid is the original (unmarked)
    title. The runs live inside a gap-0 row, NOT inside a text/span
@@ -307,6 +322,7 @@ let hl_span key (item_sig : S.item Signal.signal)
         ~mount:(fun seg ->
           reactive
             (fun (_, hl, txt) ->
+              let txt = display_spaces txt in
               if hl then
                 text ~key:"hl" ~as_:`Mark ~padding:0 ~corner_radius:0
                   ~value:txt []
@@ -316,7 +332,7 @@ let hl_span key (item_sig : S.item Signal.signal)
 
 let badge_el svs key =
   Ui_components.cmdk_badge ~key
-    ~value:(svs.Svs.i18n "cmdk.group/current-page")
+    ~value:(svs.Svs.i18n "cmdk.groups/current-page")
 
 (* -- item row -------------------------------------------------------- *)
 
@@ -326,11 +342,9 @@ let wrapper_attrs (it : S.item) =
 
 let row_data_attrs (it : S.item) =
   [ ("data-cmdk-item", "true")
-  ; (* [data-cmdk-item]{margin-inline:2px} — no typed margin prop, so it
-       lands through the documented data-attrs style pair. The baseline
-       renders the bg at x196-1083 (asymmetric insets 3/4), so left/right
-       are spelled out instead of margin-inline. *)
-    ("style", "margin-left: 3px; margin-right: 4px")
+  ; (* cljs [data-cmdk-item]{margin-inline:2px} — no typed margin prop,
+       so it lands through the documented data-attrs style pair *)
+    ("style", "margin-left: 2px; margin-right: 2px")
   ; ("data-item-index", string_of_int it.S.idx)
   ; ("data-item-key", it.S.ikey)
   ; ( "data-highlighted"
@@ -492,15 +506,15 @@ let gid_name = function
   | S.G_themes -> "themes"
 
 let gid_label svs = function
-  | S.G_create -> svs.Svs.i18n "cmdk.group/create"
-  | S.G_current_page -> svs.Svs.i18n "cmdk.group/current-page"
-  | S.G_nodes -> svs.Svs.i18n "cmdk.group/nodes"
-  | S.G_recently_updated -> svs.Svs.i18n "cmdk.group/recents"
-  | S.G_commands -> svs.Svs.i18n "cmdk.group/commands"
-  | S.G_files -> svs.Svs.i18n "cmdk.group/files"
-  | S.G_filters -> svs.Svs.i18n "cmdk.group/filters"
-  | S.G_codes -> svs.Svs.i18n "cmdk.group/codes"
-  | S.G_themes -> svs.Svs.i18n "cmdk.group/themes"
+  | S.G_create -> svs.Svs.i18n "cmdk.groups/create"
+  | S.G_current_page -> svs.Svs.i18n "cmdk.groups/current-page"
+  | S.G_nodes -> svs.Svs.i18n "cmdk.groups/nodes"
+  | S.G_recently_updated -> svs.Svs.i18n "cmdk.groups/recently-updated"
+  | S.G_commands -> svs.Svs.i18n "cmdk.groups/commands"
+  | S.G_files -> svs.Svs.i18n "cmdk.groups/files"
+  | S.G_filters -> svs.Svs.i18n "cmdk.groups/filters"
+  | S.G_codes -> svs.Svs.i18n "cmdk.groups/codes"
+  | S.G_themes -> svs.Svs.i18n "cmdk.groups/themes"
 
 (* cljs group header: title click toggles more/less; the trailing link
    (hidden while a filter is active) shows a compact mod+down/up hint *)
@@ -640,11 +654,10 @@ let input_row svs st : t =
       st.S.vs.Signal.state_signal
   in
   Ui_components.cmdk_input_row ~key:"input-row"
-    [ (* cljs .cp__cmdk-input-row prepends a dimmed search glyph; the
-         kept CSS rule `.cp__cmdk-input-row .ui__icon` carries the
-         flex-shrink/opacity *)
-      Icons.icon ~size:16. "search"
-    ; (* move_mode can flip while the palette stays open (move-blocks
+    [ (* prod's .cp__cmdk-input-row has no leading glyph — the input is
+         flush-left; older cljs baselines that showed a dimmed magnifier
+         are stale *)
+      (* move_mode can flip while the palette stays open (move-blocks
          command); no placeholder_signal exists, so a keyed remount
          swaps the placeholder — the caller re-focuses the input right
          after the state publish *)
@@ -721,29 +734,31 @@ let hint_variant (it : S.item option) : int =
       | `trigger, _ -> 5)
 
 let action_hints svs (it : S.item option) =
-  match it with
-  | None -> spacer ~key:"actions" []
-  | Some it ->
-      let btns =
+  let btns =
+    match it with
+    | None ->
+        (* no selection: return runs the filter-search action *)
+        [ hint_button svs (svs.Svs.i18n "cmdk.action/filter") [ "return" ] ]
+    | Some it -> (
         match hint_action_of it with
-        | `open_, has_block ->
+        | `open_, _has_block ->
+            (* cljs shows copy-ref for pages too — [[page]] refs copy *)
             [ hint_button svs (svs.Svs.i18n "cmdk.action/open") [ "return" ]
             ; hint_button svs
                 (svs.Svs.i18n "cmdk.action/open-in-sidebar")
                 [ "shift"; "return" ]
+            ; hint_button svs (svs.Svs.i18n "cmdk.action/copy-ref")
+                [ "cmd"; "c" ]
             ]
-            @ (if has_block then
-                 [ hint_button svs (svs.Svs.i18n "cmdk.action/copy-ref")
-                     [ "cmd"; "c" ] ]
-               else [])
         | `create, _ ->
             [ hint_button svs (svs.Svs.i18n "cmdk.action/create") [ "return" ] ]
         | `filter, _ ->
             [ hint_button svs (svs.Svs.i18n "cmdk.action/filter") [ "return" ] ]
         | `trigger, _ ->
             [ hint_button svs (svs.Svs.i18n "cmdk.action/trigger") [ "return" ] ]
-      in
-      Ui_components.cmdk_hints_group ~key:"actions" btns
+        )
+  in
+  Ui_components.cmdk_hints_group ~key:"actions" btns
 
 let hints svs st : t =
  fun ctx parent ->
@@ -867,7 +882,8 @@ let handle_mousemove st (ev : Svs.move_ev) =
 
 (* The host owns modal placement, focus trapping, and dismissal. *)
 let modal_shell svs st =
-  let width = int_of_float (Float.min 896. (Ui_services.dom_viewport_width () *. 0.9)) in
+  (* prod .ui__dialog-content measures 898 border-box at 1280 *)
+  let width = int_of_float (Float.min 898. (Ui_services.dom_viewport_width () *. 0.9)) in
   dialog ~key:"cmdk-shell" ~width ~padding:0 ~style_class:"ls-dialog-cmdk"
     ~on_dismiss:(fun _ -> S.close st)
     [ Ui_components.cmdk_modal ~key:"modal" [ palette svs st ] ]

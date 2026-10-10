@@ -596,7 +596,6 @@ let en_overrides = function
   | "ui/true" -> "true"
   | "ui/false" -> "false"
   | "graph.switch/select-prompt" -> "Select a Graph"
-  | "cmdk.group/current-page" -> "Current Page"
   | "publish/publish-error" -> "Publish failed. Please try again."
   | "graph/delete-server-action" -> "Delete remote graph"
   | "import/invalid-edn-file" -> "Invalid EDN file."

@@ -65,7 +65,7 @@ let cmdk_palette ~key ~sidebar children =
     [ P.Position, sv "relative"; P.UserSelect, sv "none" ]
     (column ~key ~style_class:"cp__cmdk" ~cross:`stretch ~grow:1.
        ~corner_radius:(if sidebar then 0 else 8)
-       ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
+       ~foreground:"var(--ls-primary-text-color, var(--rx-gray-12))"
        ~data_attrs:[ "data-keep-selection", "true" ]
        children)
 
@@ -75,8 +75,8 @@ let cmdk_input_row ~key children =
   with_props
     [ ( P.Shadow
       , sv
-          "inset 0 -1px 0 0 var(--lx-gray-05, var(--ls-border-color, \
-           hsl(var(--border))))" )
+          "inset 0 -1px 0 0 var(--ls-border-color, \
+           hsl(var(--border)))" )
     ]
     (row ~key ~style_class:"cp__cmdk-input-row" ~cross:`center ~gap:8
        ~height:54 ~background:"var(--lx-gray-02, #f8f8f8)" children)
@@ -95,8 +95,9 @@ let cmdk_search_input ~key ?placeholder ~text ~on_input () =
         per declaration, so it composes with the emitted style attr. *)
      input ~key ~style_class:"cp__cmdk-search-input" ~grow:1.
        ~data_attrs:
-         [ ("style", "box-shadow: none; outline: none; height: auto; \
-                      min-height: 0") ]
+         [ (* prod input sits 1px inset inside the 54px row *)
+           ("style", "box-shadow: none; outline: none; height: auto; \
+                      min-height: 0; margin: 1px") ]
        ~min_width:256 ~padding:12 ~background:"transparent"
        ~foreground:
          "var(--lx-gray-12, var(--ls-primary-text-color, \
@@ -109,7 +110,10 @@ let cmdk_search_input ~key ?placeholder ~text ~on_input () =
 let cmdk_scroller ~key children =
   with_props
     [ P.MinHeightViewport, fv 0.65; P.MaxHeightViewport, fv 0.65 ]
-    (scroll ~key ~orientation:`vertical ~style_class:"cp__cmdk-scroller"
+    ((* prod scroller sits on gray-02 (#f8f8f8 / #023643 dark), measured
+        off the .search-results parent *)
+     scroll ~key ~orientation:`vertical ~style_class:"cp__cmdk-scroller"
+       ~background:"var(--lx-gray-02, var(--rx-gray-02, #f8f8f8))"
        (children @ [ spacer ~key:"scrollpad" ~height:56 ~width:1 [] ]))
 
 (* -- cmdk groups ----------------------------------------------------- *)
@@ -228,11 +232,11 @@ let cmdk_item_header ~key children =
 let cmdk_item_main ~key children =
   row ~key ~style_class:"cmdk-item-main" ~cross:`start ~gap:12 children
 
-(* 16x20 rounded icon chip; the glyph color is a mode token (white in
-   dark like the deleted .dark rule). *)
+(* 20x20 rounded icon chip (prod [cmdk-item] measures 20px); the glyph
+   color is a mode token (white in dark like the deleted .dark rule). *)
 let cmdk_icon_chip ~key children =
   row ~key ~style_class:"cmdk-item-icon" ~main:`center ~cross:`center
-    ~width:16 ~height:20 ~corner_radius:4
+    ~width:20 ~height:20 ~corner_radius:4
     ~background:
       "var(--lx-gray-05, var(--ls-tertiary-background-color, \
        hsl(var(--muted))))"
@@ -418,10 +422,12 @@ let cmdk_hints_bar ~key children =
           hsl(var(--muted))))"
        children)
 
+(* prod .text-sm.leading-6 tip container: no extra horizontal pad,
+   4px of vertical pad around the 24px line *)
 let cmdk_hints_inner ~key children =
   with_props
     [ P.FontSize, sv "var(--lx-text-row)"; P.LineHeight, sv "1.5rem" ]
-    (box ~key ~style_class:"cp__cmdk-hints-inner" ~padding_horizontal:6
+    (box ~key ~style_class:"cp__cmdk-hints-inner" ~padding_vertical:2
        children)
 
 let cmdk_hints_row ~key children =
