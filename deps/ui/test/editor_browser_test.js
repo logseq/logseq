@@ -75,6 +75,59 @@ globalThis.runEditorBrowserTests = async function (filter = '') {
       && selection.isCollapsed, {phase, active: document.activeElement?.id,
         ranges: selection.rangeCount, collapsed: selection.isCollapsed});
   };
+  const prepareNativeMenu = () => {
+    const selected = surface().querySelector('.ed-sel').getBoundingClientRect();
+    const target = document.elementFromPoint(selected.x + 2, selected.y + selected.height / 2);
+    const coordinates = {clientX: selected.x + 2, clientY: selected.y + selected.height / 2};
+    target.dispatchEvent(new MouseEvent('mousedown', {
+      ...coordinates, button: 2, buttons: 2, bubbles: true, cancelable: true,
+    }));
+    return {target, coordinates};
+  };
+  for (const [title, lo, hi, expected] of [
+    ['hello world', 6, 11, 'world'],
+    ['hello **bold** world', 6, 14, '**bold**'],
+    ['a😀中z', 1, 4, '😀中'],
+    ['first\nsecond', 0, 12, 'first\nsecond'],
+  ]) {
+    await test('Regression: native context menu exposes selected text ' + JSON.stringify(title), async () => {
+      await fixture([title]); key('Home', {metaKey: true});
+      for (const character of title.slice(0, lo)) key('ArrowRight');
+      for (const character of title.slice(lo, hi)) key('ArrowRight', {shiftKey: true});
+      await pause(20);
+      const {target, coordinates} = prepareNativeMenu();
+      const selected = window.getSelection().toString().replaceAll('\u200b', '');
+      assert(selected.replaceAll('\n', '') === expected.replaceAll('\n', ''), {selected, expected});
+      const copied = new DataTransfer();
+      target.dispatchEvent(new ClipboardEvent('copy', {clipboardData: copied, bubbles: true, cancelable: true}));
+      assert(copied.getData('text/plain') === expected, {copied: copied.getData('text/plain'), expected});
+      target.dispatchEvent(new MouseEvent('contextmenu', {...coordinates, button: 2, bubbles: true, cancelable: true}));
+      await pause(30);
+      assert(document.activeElement === input(), {active: document.activeElement?.id});
+      insert('x'); await pause(20); assertNativeInsertion('typing after native menu');
+      assert(text() === title.slice(0, lo) + 'x' + title.slice(hi), {value: text()});
+    });
+  }
+  await test('Regression: native context menu preserves a dragged selection', async () => {
+    await fixture(['hello world']); key('Home');
+    const node = [...surface().querySelectorAll('.ed-r')].find(run => run.textContent === 'hello world').firstChild;
+    const point = offset => {
+      const range = document.createRange(); range.setStart(node, offset); range.setEnd(node, offset);
+      const rect = range.getBoundingClientRect(); return {clientX: rect.x, clientY: rect.y + rect.height / 2};
+    };
+    const target = node.parentElement;
+    target.dispatchEvent(new MouseEvent('mousedown', {...point(6), button: 0, buttons: 1, bubbles: true, cancelable: true}));
+    target.dispatchEvent(new MouseEvent('mousemove', {...point(11), buttons: 1, bubbles: true}));
+    target.dispatchEvent(new MouseEvent('mouseup', {...point(11), button: 0, bubbles: true}));
+    await pause(20);
+    const menu = prepareNativeMenu();
+    assert(window.getSelection().toString() === 'world', {selected: window.getSelection().toString()});
+    menu.target.dispatchEvent(new MouseEvent('contextmenu', {...menu.coordinates, button: 2, bubbles: true, cancelable: true}));
+    await pause(30); key('ArrowRight'); await pause(20);
+    assertNativeInsertion('dismissing native menu and collapsing selection');
+    insert('x'); await pause(20);
+    assert(text() === 'hello worldx', {value: text()});
+  });
   await test('Regression: consecutive input retains the native insertion selection', async () => {
     await fixture(['base']); key('End');
     for (const character of 'abcdef') {
