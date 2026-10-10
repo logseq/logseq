@@ -99,8 +99,13 @@
           (http/bad-request "invalid expiration")
 
           :else
-          (p/let [graph (index/<semantic-graph-get (aget env "DB") user-id graph-id)]
-            (if-not graph
+          ;; A token may be created for any accessible non-E2EE graph, even one
+          ;; whose initial sync is still in progress (graph_ready_for_use = 0);
+          ;; the semantic API itself gates reads on readiness.
+          (p/let [db (aget env "DB")
+                  accessible? (index/<user-has-access-to-graph? db user-id graph-id)
+                  graph-e2ee? (index/<graph-e2ee? db graph-id)]
+            (if-not (and accessible? (false? graph-e2ee?))
               (http/forbidden)
               (let [id (str (random-uuid))
                     token (generate-token)

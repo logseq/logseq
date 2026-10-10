@@ -1456,9 +1456,8 @@
         [pending? set-pending!] (hooks/use-state false)
         [load-error? set-load-error!] (hooks/use-state false)
         graph-items (->> graphs
-                         (filter (fn [{:keys [graph-e2ee? graph-ready-for-use?]}]
-                                   (and (false? graph-e2ee?)
-                                        (not= false graph-ready-for-use?))))
+                         (filter (fn [{:keys [graph-e2ee?]}]
+                                   (false? graph-e2ee?)))
                          (mapv (fn [{:keys [GraphName GraphUUID]}]
                                  {:value (str GraphUUID) :label GraphName})))
         load-tokens! (fn []

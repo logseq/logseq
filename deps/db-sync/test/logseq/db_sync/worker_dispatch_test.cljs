@@ -451,9 +451,8 @@
                         {:graph-id "graph-1" :permission "both"})]
            (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
                                common/now-ms (fn [] now)
-                               index/<semantic-graph-get
-                               (fn [_ _ graph-id]
-                                 (p/resolved {:graph-id graph-id}))
+                               index/<user-has-access-to-graph? (fn [_ _ _] (p/resolved true))
+                               index/<graph-e2ee? (fn [_ _ _] (p/resolved false))
                                common/<d1-run
                                (fn [_ sql & args]
                                  (reset! insert-call {:sql sql :args args})
@@ -494,10 +493,9 @@
                                        :body "{"})]
            (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
                                common/now-ms (fn [] now)
-                               index/<semantic-graph-get
-                               (fn [_ _ graph-id]
-                                 (p/resolved (when (= "graph-1" graph-id)
-                                               {:graph-id graph-id})))]
+                               index/<user-has-access-to-graph?
+                               (fn [_ _ graph-id] (p/resolved (= "graph-1" graph-id)))
+                               index/<graph-e2ee? (fn [_ _ _] (p/resolved false))]
                  (p/let [invalid-permission (dispatch/handle-worker-fetch
                                              (request {:graph-id "graph-1" :permission "admin"}) env)
                          expired (dispatch/handle-worker-fetch
@@ -531,7 +529,7 @@
                         {:graph-id "encrypted-graph" :permission "read"})]
            (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
                                index/<user-has-access-to-graph? (fn [_ _ _] (p/resolved true))
-                               index/<semantic-graph-get (fn [_ _ _] (p/resolved nil))
+                               index/<graph-e2ee? (fn [_ _ _] (p/resolved true))
                                common/<d1-run (fn [& _] (p/resolved #js {:success true}))]
                  (p/let [response (dispatch/handle-worker-fetch request #js {"DB" #js {}})]
                    (is (= 403 (.-status response)))))
