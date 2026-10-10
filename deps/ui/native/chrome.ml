@@ -29,6 +29,8 @@ open Lui_elements
    two stacked placement toolbars produced doubled bars/borders — so
    one plain row is the parity form. rtc/plugin toolbar items keep
    hidden DOM mounts below so their emitters stay live. *)
+let menu_dismiss_installed = ref false
+
 let icon_btn ~key ?(acc = "") ~icon ~label ?disabled_signal
     ?foreground_signal on_press =
   button ~key ~icon ~label ~variant:`ghost ~size:`icon
@@ -58,10 +60,17 @@ let search_btn =
 let dots_btn =
   icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon:`ellipsis
     ~label:(I18n.t "header/more") (fun () ->
-      let x = Host.inner_width () -. 48. in
-      Dom_ext.toolbar_dots_pos := Some (x, 48.);
-      Runtime.send
-        (Action.Page_menu_set (Some (x, 48., 48., true, None))))
+      (* re-pressing the trigger toggles the menu closed (the document
+         click-catcher installed in [shell] dismisses on outside press
+         only — the button itself is outside the menu surface) *)
+      if (Runtime.model ()).Model.page_menu <> None then (
+        Runtime.send (Action.Page_menu_set None);
+        Runtime.flush ())
+      else (
+          let x = Host.inner_width () -. 48. in
+          Dom_ext.toolbar_dots_pos := Some (x, 48.);
+          Runtime.send
+            (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
 
 (* cljs header.cljs hides home on the :home route — press no-ops there *)
 let home_btn ms =
@@ -91,23 +100,23 @@ let right_toggle_btn ms =
 let rtc_item (ms : Model.t Signal.signal) : t =
   icon_btn ~key:"rtc-tb" ~icon:(`app "cloud")
     ~label:"Sync Status" ~acc:"rtc-sync"
-    ~disabled_signal:
-      (Signal.map
-         (fun (m : Model.t) ->
-           match m.Model.rtc with
-           | Some r when Platform.online () && r.rtc_lock -> false
-           | _ -> true)
-         ms)
     ~foreground_signal:
       (Signal.map
          (fun (m : Model.t) ->
            match m.Model.rtc with
-           | Some r when
-               Platform.online () && r.rtc_lock
-               && (r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
-                  || r.rtc_pending_server > 0) ->
+           | Some r
+             when Platform.online () && r.rtc_lock
+                  && (r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
+                     || r.rtc_pending_server > 0) ->
                "accent"
-           | _ -> "secondary")
+           | Some r when Platform.online () && r.rtc_lock ->
+               "secondary"
+           | _ ->
+               (* sync off — muted but still legible in dark mode;
+                  disabled_opacity stacked on "secondary" crushed it to
+                  near-invisible, so this stays a foreground signal on
+                  an enabled ghost button (the press is a no-op anyway) *)
+               "muted-foreground")
          ms)
     (fun () -> ())
 
@@ -219,7 +228,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
       ^ if m.left_sidebar_open then " is-open" else "")
     (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
        ~min_height:0
-       ~style_class:"cp__sidebar-left-layout"
+       ~style_class:"cp__sidebar-left-layout h-full"
        [ row ~key:"ls-dock" ~grow:1. ~min_height:0
           
            [ column ~key:"ls-inner" ~grow:1. ~min_height:0
@@ -507,8 +516,33 @@ let not_found_page : t =
         ~on_press:(fun _ -> Platform.set_location_hash "#/") []
     ]
 
+(* page menu dismiss contract (cljs document handlers): Escape or a
+   press outside .ui__dropdown-menu-content closes it. Installed once
+   per session — the handler reads the live model via [Runtime.model]. *)
+let install_menu_dismiss () =
+  if not !menu_dismiss_installed then (
+    menu_dismiss_installed := true;
+    Ui_services.dom_on_document_event "keydown" (fun ev ->
+        match ev.Ui_services.key with
+        | Some "Escape"
+          when (Runtime.model ()).Model.page_menu <> None ->
+            Runtime.send (Action.Page_menu_set None);
+            Runtime.flush ()
+        | _ -> ());
+    Ui_services.dom_on_document_event "click" (fun ev ->
+        match ev.Ui_services.target with
+        | Some el
+          when (Runtime.model ()).Model.page_menu <> None
+               && el.Ui_services.closest ".ui__dropdown-menu-content"
+                  = None
+               && el.Ui_services.closest ".toolbar-dots-btn" = None ->
+            Runtime.send (Action.Page_menu_set None);
+            Runtime.flush ()
+        | _ -> ()))
+
 let shell (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
+  install_menu_dismiss ();
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       (* h-full: the root view stretches children horizontally but sizes
@@ -519,6 +553,7 @@ let shell (ms : Model.t Signal.signal) : t =
       ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
      )
     (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
+       ~style_class:"h-full"
     [ (* invisible logseq-dom carrier: gives the gpui host a stable
          extension ancestor to forward document events through *)
       Logseq_el.carrier

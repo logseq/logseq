@@ -22,9 +22,8 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
     (* the doc-level click/Enter listener matches closest
        ".block-add-button" and reads data-parentblockid *)
     (Ui_parts.class_signal fs
-       (fun (has, indented) ->
+       (fun (_has, indented) ->
          "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
-         ^ (if has then "opacity-0" else "opacity-50")
          ^ (if indented then " ls-block-content-indent" else ""))
        (column ~key:"bab"
           ~data_attrs:
@@ -32,6 +31,9 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
              :: (match puuid with
                  | Some u -> [ ("data-parentblockid", u) ]
                  | None -> []))
+          ~opacity:
+            (reactive
+               (fun (has, _) -> if has then 0. else 0.5) fs)
           [ row ~key:"bab-row"
               [ (* margin-left lives in lui-core.css (.bab-inner): 22px
                    on page routes, 6px under .ls-block-content-indent *)

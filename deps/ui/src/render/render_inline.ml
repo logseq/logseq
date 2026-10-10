@@ -435,8 +435,28 @@ let timestamp_el seconds : t =
 (* emphasis is a logseq-<tag> host, not text ~as_: its children are the
    parsed run and may carry logseq-* nodes (emoji/katex/link labels),
    which a standard text node rejects on native (and whose children some
-   backends never draw). try_html_tag pre-maps ins->u, s->del *)
-let emph tag children = D.el ~tag children
+   backends never draw). try_html_tag pre-maps ins->u, s->del.
+
+   The tag only styles on the DOM backend (UA rules). Emit the same
+   styling through the attrs `style` channel — the gpui declaration
+   decoder maps font-weight/font-style/text-decoration/background/
+   color/padding/border-radius to native equivalents, so emphasis reads
+   identically on native. *)
+let emph tag children =
+  let style =
+    match tag with
+    | "b" | "strong" -> "font-weight:bolder"
+    | "i" | "em" -> "font-style:italic"
+    | "del" | "s" -> "text-decoration:line-through"
+    | "u" | "ins" -> "text-decoration:underline"
+    | "mark" ->
+        "background-color:var(--ls-page-mark-bg-color,#fef3ac);\
+         color:var(--ls-page-mark-color,#262626);padding:0 4px;\
+         border-radius:4px"
+    | _ -> ""
+  in
+  D.el ~tag ~attrs:(if style = "" then [] else [ ("style", style) ])
+    children
 
 let emoji_el name = Logseq_emoji.el ~name ()
 
