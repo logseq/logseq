@@ -493,6 +493,38 @@ let level_vars mode =
        (fun i v -> "--color-level-" ^ string_of_int (i + 1), v)
        (levels mode))
 
+(* cmdk mode-conditional tokens: values that differ per theme mode
+   (state rings, keycap glow, the dark icon override, the chosen-row
+   paint) can't ride a shared var chain — the chain resolves once.
+   On web each --ls/- --lx var reference still resolves accent-aware
+   through colors.css; the literal fallbacks give gpui the classic
+   values through its existing css-var table. *)
+let cmdk_vars = function
+  | Light ->
+    [ "--lx-cmdk-chosen-bg", "var(--ls-a-chosen-bg, #dcdcdc)"
+    ; "--lx-cmdk-icon-fg", "var(--lx-gray-12, var(--rx-gray-12))"
+    ; ( "--lx-cmdk-kb-shadow"
+      , "inset 0 0 0 9999px rgb(0 0 0 / 0.07), inset 0 0 0 1px \
+         var(--lx-accent-03, #3b82f6)" )
+    ; ( "--lx-cmdk-hover-ring"
+      , "inset 0 0 0 1px var(--ls-border-color, var(--lx-gray-03, rgb(0 \
+         0 0 / 0.24)))" )
+    ; ( "--lx-cmdk-hover-ring-hl"
+      , "inset 0 0 0 1px var(--ls-border-color, var(--lx-gray-09, rgb(0 \
+         0 0 / 0.32)))" )
+    ; "--kbd-glow-top", "transparent"
+    ; "--kbd-glow-bottom", "rgba(0, 0, 0, 0.10)"
+    ]
+  | Dark ->
+    [ "--lx-cmdk-chosen-bg", "var(--ls-a-chosen-bg, #094b5a)"
+    ; "--lx-cmdk-icon-fg", "#ffffff"
+    ; "--lx-cmdk-kb-shadow", "none"
+    ; "--lx-cmdk-hover-ring", "none"
+    ; "--lx-cmdk-hover-ring-hl", "none"
+    ; "--kbd-glow-top", "rgba(255, 255, 255, 0.15)"
+    ; "--kbd-glow-bottom", "rgba(0, 0, 0, 0.25)"
+    ]
+
 let snapshot mode =
   let c = colors mode in
   let cs = components c in
@@ -504,6 +536,7 @@ let snapshot mode =
   ; vars =
       ls_vars mode @ level_vars mode @ lui_vars c @ canonical_vars c cs
         typography
+      @ cmdk_vars mode
   ; kit = kit c mode
   }
 

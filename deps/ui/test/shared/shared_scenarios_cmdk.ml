@@ -67,6 +67,56 @@ let close_palette (h : ('m, 'a) Shared_scenarios.host) =
   h.H.check "mod+k closes the open palette"
     (not (H.exists_class h "cp__cmdk__modal"))
 
+
+(* ---- shared visual spec: emitted structure + typed props -------------
+   The cmdk look is expressed through shared recipes + typed props +
+   Ui_theme tokens (one source for web and gpui). These assertions pin
+   the emitted contract: recipe kinds, prop values bound to theme
+   tokens, and the DOM hooks tests/commands depend on. *)
+
+let str_prop_eq n name expected =
+  match M.string_prop n name with
+  | Some s -> s = expected
+  | None -> false
+
+let prop_contains n name needle =
+  match M.string_prop n name with
+  | Some s -> contains needle s
+  | None -> false
+
+let int_prop_eq n name expected =
+  match Hashtbl.find_opt n.M.props name with
+  | Some (Lui_protocol.IntValue i) -> i = expected
+  | _ -> false
+
+let float_prop_eq n name expected =
+  match Hashtbl.find_opt n.M.props name with
+  | Some (Lui_protocol.FloatValue f) -> Float.abs (f -. expected) < 0.001
+  | _ -> false
+
+let by_class h cls =
+  List.find_opt (fun n -> H.has_class n cls) (H.nodes h)
+
+let by_kind h kind =
+  List.find_opt (fun n -> n.M.kind = kind) (H.nodes h)
+
+(* kbds exist outside the palette too (the global shortcut hints in the
+   chrome) — scope lookups to the cmdk subtree *)
+let in_palette h n =
+  let rec climb id =
+    match List.find_opt (fun p -> p.M.id = id) (H.nodes h) with
+    | None -> false
+    | Some p ->
+        H.has_class p "cp__cmdk"
+        || (match p.M.parent with Some pid -> climb pid | None -> false)
+  in
+  match n.M.parent with Some pid -> climb pid | None -> false
+
+let cmdk_kbd h =
+  List.find_opt
+    (fun n -> n.M.kind = "kbd" && in_palette h n)
+    (H.nodes h)
+
 (* Query entry produces ordered results: contiguous flat indexes, first
    item highlighted, groups in the cljs order (create/current-page ->
    nodes -> recents -> commands -> files -> filters). *)
@@ -217,9 +267,189 @@ let close_persists (h : ('m, 'a) Shared_scenarios.host) =
      | Some s -> contains "\"seeded\"" s
      | None -> false)
 
+let structure_props (h : ('m, 'a) Shared_scenarios.host) =
+  open_palette h;
+  let input = input_node h in
+  S.text_changed (h.session ()) input.M.id "e";
+  h.flush ();
+  h.H.keydown ~meta:true "ArrowDown";
+  h.flush ();
+  (* -- modal + palette frame -- *)
+  h.H.check "modal shell is a clipped, rounded column"
+    (match by_class h "cp__cmdk__modal" with
+     | Some n ->
+         n.M.kind = "column"
+         && int_prop_eq n "corner-radius" 8
+         && str_prop_eq n "overflow" "hidden"
+     | None -> false);
+  h.H.check "dialog carries the host geometry class"
+    (match by_kind h "dialog" with
+     | Some n -> H.has_class n "ls-dialog-cmdk"
+     | None -> false);
+  h.H.check "palette frame is a rounded token-colored column"
+    (match by_class h "cp__cmdk" with
+     | Some n ->
+         n.M.kind = "column"
+         && int_prop_eq n "corner-radius" 8
+         && prop_contains n "foreground" "--lx-gray-12"
+         && prop_contains n "data-attrs" "data-keep-selection"
+     | None -> false);
+  (* -- input row -- *)
+  h.H.check "input row is a 54px bordered row"
+    (match by_class h "cp__cmdk-input-row" with
+     | Some n ->
+         n.M.kind = "row"
+         && int_prop_eq n "height" 54
+         && prop_contains n "background" "--lx-gray-02"
+         && prop_contains n "shadow" "inset 0 -1px"
+     | None -> false);
+  h.H.check "search input uses the input typography token"
+    (input.M.kind = "input"
+     && float_prop_eq input "grow" 1.0
+     && str_prop_eq input "font-size" "var(--lx-text-input)"
+     && str_prop_eq input "line-height" "1.75rem"
+     && int_prop_eq input "min-width" 256
+     && prop_contains input "foreground" "--lx-gray-12");
+  (* -- scroller -- *)
+  h.H.check "scroller is a viewport-height scroll kind"
+    (match by_class h "cp__cmdk-scroller" with
+     | Some n ->
+         n.M.kind = "scroll"
+         && float_prop_eq n "min-height-viewport" 0.65
+         && float_prop_eq n "max-height-viewport" 0.65
+     | None -> false);
+  (* -- group header -- *)
+  h.H.check "group header is a 32px token-colored row"
+    (match by_class h "cp__cmdk-group-header" with
+     | Some n ->
+         n.M.kind = "row"
+         && int_prop_eq n "height" 32
+         && int_prop_eq n "padding-horizontal" 12
+         && str_prop_eq n "font-size" "var(--lx-text-header)"
+         && str_prop_eq n "line-height" "16px"
+         && str_prop_eq n "main" "space_between"
+         && prop_contains n "foreground" "--lx-gray-11"
+         && prop_contains n "background" "--lx-gray-02"
+     | None -> false);
+  h.H.check "group title is bold non-selectable text"
+    (match by_class h "cp__cmdk-group-title" with
+     | Some n ->
+         n.M.kind = "text"
+         && int_prop_eq n "font-weight" 700
+         && str_prop_eq n "user-select" "none"
+         && str_prop_eq n "cursor" "pointer"
+     | None -> false);
+  (* -- item rows -- *)
+  let items = cmdk_items h in
+  h.H.check "items render as rounded token-typed columns"
+    (match items with
+     | it :: _ ->
+         it.M.kind = "column"
+         && int_prop_eq it "gap" 2
+         && int_prop_eq it "padding-vertical" 6
+         && int_prop_eq it "padding-horizontal" 12
+         && int_prop_eq it "corner-radius" 8
+         && str_prop_eq it "font-size" "var(--lx-text-row)"
+         && str_prop_eq it "line-height" "1.25rem"
+     | [] -> false);
+  h.H.check "item hook attrs survive"
+    (match items with
+     | it :: _ ->
+         H.has_attr it "data-cmdk-item" "true"
+         && (match M.string_prop it "data-attrs" with
+            | Some data ->
+                List.mem "data-item-index"
+                  (List.map fst (Lui_protocol.data_attrs_decode data))
+                && List.mem "data-item-key"
+                     (List.map fst (Lui_protocol.data_attrs_decode data))
+            | None -> false)
+     | [] -> false);
+  h.H.check "keyboard-highlighted row paints the chosen-row state"
+    (match
+       List.find_opt
+         (fun n -> H.has_attr n "data-kb-highlighted" "true")
+         (H.nodes h)
+     with
+     | Some n ->
+         prop_contains n "background" "--lx-gray-03"
+         && prop_contains n "shadow" "--lx-cmdk-kb-shadow"
+     | None -> false);
+  h.H.check "item icon is a 16x20 chip"
+    (match by_class h "cmdk-item-icon" with
+     | Some n ->
+         int_prop_eq n "width" 16
+         && int_prop_eq n "height" 20
+         && int_prop_eq n "corner-radius" 4
+         && prop_contains n "background" "--lx-gray-05"
+     | None -> false);
+  h.H.check "main text row is a medium-weight inline run"
+    (match by_class h "cp__cmdk-item-main-text" with
+     | Some n ->
+         n.M.kind = "row"
+         && int_prop_eq n "gap" 4
+         && int_prop_eq n "font-weight" 500
+         && str_prop_eq n "overflow" "hidden"
+     | None -> false);
+  h.H.check "info suffix is an inline span in header type"
+    (match by_class h "cp__cmdk-item-info" with
+     | Some n ->
+         n.M.kind = "text"
+         && str_prop_eq n "as" "span"
+         && str_prop_eq n "font-size" "var(--lx-text-header)"
+         && prop_contains n "foreground" "--lx-gray-11"
+     | None -> false);
+  (* -- shortcut keycaps -- *)
+  h.H.check "kbd cells carry shortcut typography"
+    (match cmdk_kbd h with
+     | Some n ->
+         str_prop_eq n "font-size" "var(--lx-text-header)"
+         && float_prop_eq n "letter-spacing" (-0.5)
+         && str_prop_eq n "white-space" "nowrap"
+     | None -> false);
+  h.H.check "keycap wrappers size the 20px slot"
+    (match cmdk_kbd h with
+     | Some n -> (
+         match
+           Option.bind n.M.parent (fun pid ->
+               List.find_opt (fun p -> p.M.id = pid) (H.nodes h))
+         with
+         | Some p ->
+             int_prop_eq p "height" 20 && int_prop_eq p "min-width" 20
+         | None -> false)
+     | None -> false);
+  (* -- group bottom hairline (skipped on the last group) -- *)
+  let hairlines =
+    List.filter
+      (fun n ->
+        n.M.kind = "box"
+        && int_prop_eq n "height" 1
+        && prop_contains n "background" "--lx-gray-06")
+      (H.nodes h)
+  in
+  h.H.check "group hairlines separate stacked groups" (hairlines <> []);
+  (* -- hints bar -- *)
+  h.H.check "hints bar is a 45px bordered footer"
+    (match by_class h "hints" with
+     | Some n ->
+         n.M.kind = "row"
+         && int_prop_eq n "min-height" 45
+         && int_prop_eq n "padding-vertical" 8
+         && prop_contains n "background" "--lx-gray-03"
+         && prop_contains n "shadow" "inset 0 1px"
+     | None -> false);
+  h.H.check "hint buttons are flat 28px rows"
+    (match by_class h "cp__cmdk-hint" with
+     | Some n ->
+         int_prop_eq n "height" 28
+         && float_prop_eq n "opacity" 0.4
+         && str_prop_eq n "font-size" "var(--lx-text-header)"
+     | None -> false);
+  close_palette h
+
 let run h =
   results_order h;
   selection_moves h;
   enter_navigates h;
   escape_close h;
-  close_persists h
+  close_persists h;
+  structure_props h
