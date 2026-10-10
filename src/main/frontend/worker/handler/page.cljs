@@ -8,6 +8,7 @@
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.outliner.page :as outliner-page]
@@ -226,56 +227,49 @@
                    worker-plain/with-explicit-ref-fields-recursive))))))
 
 (defn- block-index-entry
-  [block parent-ids level]
+  [block has-children? level]
   {:db/id (:db/id block)
    :block/uuid (:block/uuid block)
    :block/parent {:db/id (:db/id (:block/parent block))}
    :block/order (:block/order block)
    :block/collapsed? (boolean (:block/collapsed? block))
    :block/level level
-   :block.temp/has-children? (contains? parent-ids (:db/id block))})
+   :block.temp/has-children? has-children?})
 
 (defn- visible-index-entries
-  [index]
-  (loop [entries index
-         collapsed-level nil
-         result []]
-    (if-let [entry (first entries)]
-      (let [level (:block/level entry)
-            hidden? (and collapsed-level (> level collapsed-level))
-            collapsed-level (cond
-                              hidden? collapsed-level
-                              (:block/collapsed? entry) level
-                              :else nil)]
-        (recur (next entries)
-               collapsed-level
-               (cond-> result (not hidden?) (conj entry))))
-      result)))
+  "Bounded depth-first traversal of `root`'s descendants, in :block/order
+   pre-order. Descends into a block only when it isn't collapsed and stops
+   after `limit` visible blocks, so the work scales with `limit` and the
+   visited frontier instead of the whole page tree."
+  [root limit]
+  (loop [stack (map #(vector % 1)
+                    (ldb/sort-by-order
+                     (entity-plus/lookup-kv-then-entity root :block/_parent)))
+         entries (transient [])]
+    (if-let [[block level] (first stack)]
+      (if (>= (count entries) limit)
+        (persistent! entries)
+        (let [children (entity-plus/lookup-kv-then-entity block :block/_parent)
+              entries (conj! entries (block-index-entry block (boolean (seq children)) level))]
+          (recur (if (:block/collapsed? block)
+                   (next stack)
+                   (concat (map #(vector % (inc level))
+                                (ldb/sort-by-order children))
+                           (next stack)))
+                 entries)))
+      (persistent! entries))))
 
 (defn- get-page-block-index
   [db page-id-name-or-uuid initial-limit]
   (assert (pos-int? initial-limit))
   (when-let [root (or (block-ref-entity db page-id-name-or-uuid)
                       (ldb/get-page db page-id-name-or-uuid))]
-    (let [tree-entities (vec (ldb/get-block-and-children db (:block/uuid root)))
-          children (subvec tree-entities 1)
-          parent-ids (into #{} (keep #(some-> % :block/parent :db/id)) children)
-          levels (volatile! {(:db/id root) 0})
-          index (mapv (fn [block]
-                        (let [parent-id (:db/id (:block/parent block))
-                              level (inc (get @levels parent-id 0))]
-                          (vswap! levels assoc (:db/id block) level)
-                          (block-index-entry block parent-ids level)))
-                      children)
-          initial-ids (->> index
-                           visible-index-entries
-                           (take initial-limit)
-                           (map :db/id))
-          blocks (mapv (fn [block-id]
+    (let [index (visible-index-entries root initial-limit)
+          blocks (mapv (fn [entry]
                          (:block (block-handler/get-block-and-children
-                                  db block-id {:children? false
-                                               :render-data? true})))
-                       initial-ids)
+                                  db (:db/id entry) {:children? false
+                                                    :render-data? true})))
+                       index)
           block (:block (block-handler/get-block-and-children
                          db (:db/id root) {:children? false
                                            :render-data? true}))]
