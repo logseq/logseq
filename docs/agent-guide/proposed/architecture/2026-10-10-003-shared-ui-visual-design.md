@@ -359,3 +359,112 @@ Do not write tests that only repeat recipe definitions or check mock return valu
    The recommended choice is the current Web design, and the implementation sequence above is drafted around that choice.
 
 ---
+## Appendix — Task 1 cmdk visual inventory
+
+Working inventory for `2026-10-10-003-shared-ui-visual-design.md`. Source
+files audited:
+
+- `resources/css/lui-overlay.css` — cmdk block lines ~732–1310 (71 rules)
+- `deps/ui/gpui/host/src/logseq_ext.rs` — cmdk registrations lines ~306–780
+  (~40 entries; web keys `[data-cmdk-item]` attrs, gpui registers
+  `cp__cmdk-item`/`cp__cmdk-item-hl` classes — dual hook tracks)
+- `deps/ui/src/shared/cmdk_view.ml` — view structure emitted for both ends
+- Prior gpui audit: ~800 class tokens emitted by views, ~135 (17%) resolve
+  on the gpui host.
+
+Reference captures (web, 1280×900, deployed refactor/lui build):
+`003-assets/cmdk-web-light.png`, `003-assets/cmdk-web-dark.png`.
+GPUI baseline: gpui child report screenshots (cmdk/dialog/toast already
+verified renderable).
+
+## Classification
+
+Every rule is classified as: **layout** (shared, typed-prop owned),
+**appearance** (shared, token/recipe owned), **state** (typed state
+refinements), **hook** (structure-only, keep for tests/commands), or
+**deco** (web-only decoration, stays in per-platform CSS).
+
+| Selector / registration | Class | Owner after migration |
+|---|---|---|
+| `.lui-dialog.ls-dialog-cmdk` overflow hidden | layout | dialog recipe (clip) |
+| `.cp__cmdk-dismiss` position:absolute inset:0 | layout | overlay/dismiss recipe — needs position+inset props |
+| `.ls-dialog-cmdk` width 90dvw max-w 56rem | layout | dialog recipe |
+| `.cp__cmdk__modal` border-radius .5rem | appearance | token `radius.modal` |
+| `.cp__cmdk` flex-col h-full radius color | layout+appearance | palette recipe |
+| `.cp__cmdk__block` variants (sidebar mode) | layout | palette recipe variant |
+| `.cp__cmdk .ui__icon` font-size 1rem | appearance | icon slot recipe |
+| `.cp__cmdk > .hints` flex row min-h 45px padding gap bg border-t | layout+appearance | hints-bar recipe + tokens |
+| `.cp__cmdk-input-row` flex h 54px gap bg border-b | layout+appearance | input-row recipe |
+| `.cp__cmdk-input-row .ui__icon` opacity .6 | appearance | muted icon slot |
+| `.cp__cmdk-search-input` flex1 min-w font-size 1.25rem lh 1.75rem pad color | layout+appearance | search-input recipe + text tokens |
+| input focus ring removal (`:focus-within`, `:focus` outline none) | state | typed focus state (suppress ring) |
+| `::selection` colors | deco | web adapter only |
+| `.cp__cmdk-scroller` overflow-y auto min/max-h 65dvh pb 3.5rem | layout | scroller recipe |
+| `.cp__cmdk-group` pb border-b / `[data-cmdk-group-kind="create"]` / `:last-child` | layout+appearance | group recipe + kind variant |
+| `.cp__cmdk-group-header` flex h-2rem pad font .75rem color bg | layout+appearance | group-header recipe |
+| `.cp__cmdk-group-title` weight 700 user-select cursor | appearance+state | text token + selectable prop |
+| `.cp__cmdk-group-count` radius 9999 font .7rem color | appearance | count pill recipe |
+| `.cp__cmdk-group-more` opacity .5 → .9 hover | state | typed hover opacity |
+| `.cp__cmdk-group-more-inner` flex gap .25 | layout | recipe |
+| `.cp__cmdk-group-spacer` flex-grow 1 | layout | spacer kind |
+| `[data-cmdk-item]` col gap pad radius margin font .875 lh 1.25 | layout+appearance | item-row recipe |
+| `[data-hoverable]` cursor pointer | state | typed hoverable/cursor |
+| `.cmdk-item-header` flex gap pl-2rem font .75/300 ellipsis color | layout+appearance | item-header recipe (needs nowrap+ellipsis props) |
+| `.cmdk-item-main` flex gap .75 align-start | layout | recipe |
+| `.cmdk-item-icon` 1rem×1.25rem chip radius bg (+dark #fff) | appearance | icon-chip recipe |
+| `.cmdk-item-body` flex-col flex1 min-w-0 | layout | recipe |
+| `.cp__cmdk-item-main-text` flex gap weight 500 color overflow | layout+appearance | item-title recipe |
+| `.lui-stack` display:inline inside main-text / `.cp__cmdk-item-info` descendants inline | deco | web quirk — LUI stack is block-ish; recipe should emit inline text runs instead of forcing display:inline |
+| `.cp__cmdk-item-info` inline font .75 muted color | appearance | info suffix slot |
+| `.breadcrumb.block-parents` nowrap ellipsis | layout | breadcrumb recipe (needs ellipsis) |
+| `.cp__cmdk-current-page-badge` inline-flex pill border font colors | appearance | badge recipe |
+| `[data-kb-highlighted]` bg + inset ring shadow | state | typed selected state + shadow token |
+| `[data-hoverable]:not([data-highlighted]):hover` bg + ring | state | typed hover state |
+| `[data-hoverable][data-highlighted]:hover` stronger ring | state | typed hover+selected |
+| `.dark` variants clearing box-shadow on highlighted rows | state | dark-aware state recipe |
+| `.shui-shortcut-combo/-separate/-chord` inline-flex gap | layout | keycap recipe |
+| `.shui-shortcut-chord-sep` font 10px opacity .45 | appearance | keycap separator slot |
+| `.shui-shortcut-key` Inter 12px ls -.5px min-w pad | appearance | keycap text recipe (needs letter-spacing prop) |
+| `.shui-shortcut-combo.shui-shortcut-glow` inset shadows | appearance | glow variant + shadow tokens |
+| `.shui-shortcut-separate .shui-shortcut-key` boxed bg/border | appearance | boxed variant |
+| `.shui-shortcut-separator` 1px self-stretch | layout | recipe |
+| `.ui__tooltip-content` flex gap max-w pad font border radius bg shadow | layout+appearance | tooltip recipe + tokens |
+| `.ui__tooltip-content` fade-zoom animation | deco | web transition attr |
+| `.ui__tooltip-arrow` absolute .5rem rotate45 border bg | layout+appearance | arrow recipe (needs position+transform or host primitive) |
+| `.ls-tooltip-col` / `.ls-tooltip-keys` flex gap opacity | layout+appearance | recipe |
+| `.cp__cmdk-hints/-inner/-row/-label` flex gap font colors | layout+appearance | hints recipe |
+| `.cp__cmdk-tip` / `:hover` underline-ish color | state | typed hover |
+| `.cp__cmdk-hint` padding radius bg + hover | appearance+state | hint chip recipe |
+| `.cp__cmdk-hints` keycap overrides (boxed separate) | appearance | keycap recipe variant, not selector override |
+| `.cp__cmdk-search-only-name/-clear` | appearance | recipe slots |
+| `.cp__cmdk-empty` padding muted text | appearance | empty-state recipe |
+| `[data-cmdk-item] mark` highlight color | appearance | highlight slot token |
+| `.cp__cmdk-group-spacer` | layout | recipe |
+
+## Hooks that MUST survive migration
+
+Structure-only attributes/classes consumed by tests and command logic:
+`data-cmdk-item`, `data-cmdk-group-kind`, `data-hoverable`,
+`data-highlighted`, `data-kb-highlighted`, `.cp__cmdk-scroller` (scroll
+anchoring), block/page id attributes. These stay as emitted attrs — the
+visual spec moves to typed props; the hooks do not carry styling.
+
+## LUI capability gaps (input to Task 2)
+
+Required before cmdk can express its spec through typed props:
+
+1. position absolute/fixed + inset offsets + z-index (dismiss overlay,
+   tooltip arrow)
+2. font-size / font-weight / line-height / letter-spacing on text
+3. state refinements: hover / pressed / focus-visible / disabled /
+   selected (per-prop state variants — bg, ring/shadow, opacity, cursor)
+4. white-space nowrap + text-overflow ellipsis + overflow hidden on text
+5. min-height / max-height (65dvh scroller), min-width
+6. user-select none
+7. box-shadow inset (highlight rings)
+
+## Decoration that stays per-platform (adapter CSS, not tokens)
+
+`::selection` colors, fade-zoom/transition keyframes, font-family stacks,
+cursor details beyond pointer/default, `.lui-stack` display:inline quirks
+(eliminated by emitting inline runs instead).
