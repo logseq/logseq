@@ -1,0 +1,4 @@
+services:
+  sync:
+    ports:
+      - "${DB_SYNC_BIND_ADDRESS:-127.0.0.1}:${DB_SYNC_PUBLIC_PORT:-8080}:8080"
