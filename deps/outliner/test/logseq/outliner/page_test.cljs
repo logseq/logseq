@@ -26,6 +26,19 @@
     (is (ldb/class? Movie-class) "Creates another class with a different case sensitive name")
     (is (not= movie-class Movie-class) "The two classes are not the same")))
 
+(deftest create-tag-does-not-return-a-namespaced-tag-of-that-name
+  ;; db-test #1345: after "#Foo/Baz", creating the tag "Baz" returned Foo's Baz
+  (let [conn (db-test/create-conn)
+        [_ child-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true :class? true})
+        [_ baz-uuid] (outliner-page/create! conn "Baz" {:class? true})
+        baz (d/entity @conn [:block/uuid baz-uuid])
+        [_ again-uuid] (outliner-page/create! conn "Baz" {:class? true})]
+    (is (not= child-uuid baz-uuid) "a new top-level tag Baz")
+    (is (ldb/class? baz))
+    (is (= [:logseq.class/Root] (map :db/ident (:logseq.property.class/extends baz))))
+    (is (= baz-uuid again-uuid) "creating Baz again returns the top-level tag")
+    (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn))))))
+
 (deftest create-namespace-pages
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/property1 {:logseq.property/type :default}}

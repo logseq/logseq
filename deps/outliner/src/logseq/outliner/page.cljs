@@ -403,7 +403,17 @@
                     (set (keep #(resolved-tag-ident db %) resolved-tags))
                     :else
                     #{:logseq.class/Page})
-        existing-names-page (ldb/page-exists? db title types)
+        ;; A tag inside a namespace (extending a tag other than Root Tag) is
+        ;; not the tag asked for by a create without a namespace: after
+        ;; "#Foo/Baz", creating "#Baz" returned Foo's Baz (db-test #1345)
+        namespaced-tag? (fn [id]
+                          (let [e (d/entity db id)]
+                            (and (ldb/class? e)
+                                 (some #(not= :logseq.class/Root (:db/ident %))
+                                       (:logseq.property.class/extends e)))))
+        existing-names-page (cond->> (ldb/page-exists? db title types)
+                              (and class? (not (ns-util/namespace-page? title)))
+                              (remove namespaced-tag?))
         journal-page-uuid (some-> (gp-block/page-name->map title db false date-formatter
                                                            {:class? class?
                                                             :skip-existing-page-check? true})
