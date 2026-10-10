@@ -1,5 +1,6 @@
 (ns frontend.handler.repo-test
   (:require [cljs.test :refer [async deftest is]]
+            [frontend.db.async :as db-async]
             [frontend.db.persist :as db-persist]
             [frontend.db.subs :as db-subs]
             [frontend.handler.graph :as graph-handler]
@@ -12,6 +13,22 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [promesa.core :as p]))
+
+(deftest restore-date-formatter-loads-persisted-format-into-ui-state-test
+  (async done
+    (let [repo "logseq_db_restore_date_fmt"]
+      (-> (p/with-redefs [state/get-current-repo (constantly repo)
+                          db-async/<get-date-formatter
+                          (fn [graph]
+                            (is (= repo graph))
+                            (p/resolved "yyyy-MM-dd"))]
+            (p/let [formatter (repo-handler/<restore-date-formatter! repo)]
+              (is (= "yyyy-MM-dd" formatter))
+              (is (= "yyyy-MM-dd" (state/get-date-formatter)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
 
 (deftest create-db-does-not-start-renderer-db-conn-test
   (async done
