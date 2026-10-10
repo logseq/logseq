@@ -31,46 +31,31 @@ let category_ok cat pkg =
   | _ -> not (Plugin_host.jbool pkg "theme")
 
 let search_input ~key st =
-  box ~key ~style_class:"search-ctls"
-    [ box ~key:(key ^ "-ic") ~style_class:"ls-search-ico"
-        [ icon ~name:`search ~size:`sm [] ]
-    ; input ~key:(key ^ "-in")
-        ~style_class:"form-input is-small"
-        ~placeholder:(t "plugin/search-plugin")
-        ~text_signal:(Signal.value st)
-        ~on_input:(fun ev -> Runtime.signal_set st (text_of ev))
-        []
-    ]
+  Ui_components.search_row ~key ~height:28 ~pad_left:28
+    ~placeholder:(t "plugin/search-plugin")
+    ~text_signal:(Signal.value st)
+    ~on_input:(fun ev -> Runtime.signal_set st (text_of ev)) ()
 
 (* cljs plugins.cljs category-tabs: "Plugins (n)" / "Themes (n)" —
-   counts render only on the installed tab (marketplace passes nil) —
-   the .active class rides a class_signal on the category state *)
-let category_tab ~key cat_st id caption (ic : icon) n =
-  let cls c =
-    "ui__button ls-tab-btn" ^ if c = id then " active" else ""
-  in
+   counts render only on the installed tab (marketplace passes nil).
+   chip_toggle carries the .secondary-tabs button visual. *)
+let category_tab ~key cat_st id caption n =
   let text =
     match n with
     | Some n -> Printf.sprintf "%s (%d)" caption n
     | None -> caption
   in
-  Ui_parts.class_signal (Signal.value cat_st) cls
-    (button ~key:(key ^ "-" ^ id)
-       ~style_class:(cls (Runtime.signal_get cat_st))
-       ~icon:ic
-       ~text
-       ~on_press:(fun _ -> Runtime.signal_set cat_st id)
-       [])
+  Ui_components.chip_toggle ~key:(key ^ "-" ^ id) ~radius:6 ~pad_v:4
+    ~pad_h:12 ~font_size:"0.8125rem" ~text
+    ~checked_signal:(Signal.map (fun c -> c = id) (Signal.value cat_st))
+    ~on_toggle:(fun _ -> Runtime.signal_set cat_st id) ()
 
 let category_tabs ~key ~nums cat_st =
   let np = Option.map fst nums in
   let nt = Option.map snd nums in
-  row ~key:(key ^ "-cats")
-    ~style_class:"secondary-tabs"
-    [ category_tab ~key cat_st "plugins" (t "nav/plugins")
-        (`app "puzzle") np
-    ; category_tab ~key cat_st "themes" (t "nav/themes")
-        (`app "palette") nt
+  toggle_group ~key:(key ^ "-cats") ~gap:4 ~style_class:"secondary-tabs"
+    [ category_tab ~key cat_st "plugins" (t "nav/plugins") np
+    ; category_tab ~key cat_st "themes" (t "nav/themes") nt
     ]
 
 external open_url_ : string -> unit = "open" [@@mel.scope "window"]
@@ -128,8 +113,7 @@ let market_card ~stats ~search_st pkg =
   let installed_ = Js.Dict.get installed id <> None in
   let title = jstr pkg "title" in
   let cls =
-    "cp__plugins-item-card market"
-    ^ if installed_ then " installed" else ""
+    " market" ^ if installed_ then " installed" else ""
   in
   (* cljs get-open-plugin-readme-handler: icon .l and h3 .l both open
      the readme dialog *)
@@ -141,7 +125,8 @@ let market_card ~stats ~search_st pkg =
     else image ~key:"ic-img" ~url:src ~style_class:"icon" ~alt:title []
   in
   let repo = jstr pkg "repo" in
-  row ~key:("mkt-" ^ id) ~style_class:cls ~gap:12
+  Ui_components.plugin_card ~key:("mkt-" ^ id) ~classes:cls
+    (row ~key:"r" ~gap:12 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
         (box ~key:"l" ~style_class:"l link-block"
            [ box ~key:"ic" ~style_class:"plugin-icon" [ thumb ] ])
@@ -209,7 +194,7 @@ let market_card ~stats ~search_st pkg =
                  ]
              ]
          ])
-    ]
+    ])
 
 (* ---------- installed card ---------- *)
 
@@ -276,8 +261,8 @@ let installed_card (pl : Js.Json.t) =
   in
   let disabled = jbool pl "disabled" in
   let open_readme _ = Plugin_readme.open_readme plj in
-  row ~key:("inst-" ^ pid)
-    ~style_class:"cp__plugins-item-card" ~gap:12
+  Ui_components.plugin_card ~key:("inst-" ^ pid) ~classes:""
+    (row ~key:"r" ~gap:12 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
         (box ~key:"l" ~style_class:"l link-block"
            [ box ~key:"ic" ~style_class:"plugin-icon"
@@ -333,7 +318,7 @@ let installed_card (pl : Js.Json.t) =
                 ]
             ]
         ]
-    ]
+    ])
 
 (* ---------- panels ---------- *)
 
@@ -436,16 +421,11 @@ let body (_ms : Model.t Signal.signal) : t =
      Signal.set stats j;
      Runtime.flush ();
      Js.Promise.resolve ());
-  let tab_btn id label (ic : icon) =
-    let cls tb =
-      "ls-tab-btn" ^ if tb = id then " active" else ""
-    in
-    Ui_parts.class_signal (Signal.value tab) cls
-      (button ~key:("tab-" ^ id)
-         ~style_class:(cls (Runtime.signal_get tab))
-         ~icon:ic ~text:(t label)
-         ~on_press:(fun _ -> Runtime.signal_set tab id)
-         [])
+  let tab_btn id label =
+    Ui_components.chip_toggle ~key:("tab-" ^ id) ~radius:6 ~pad_v:4
+      ~pad_h:12 ~font_size:"0.8125rem" ~text:(t label)
+      ~checked_signal:(Signal.map (fun tb -> tb = id) (Signal.value tab))
+      ~on_toggle:(fun _ -> Runtime.signal_set tab id) ()
   in
   let pair a b = (a, b) in
   (* every derivation is owned into the mount's scope — unowned map2s
@@ -471,9 +451,8 @@ let body (_ms : Model.t Signal.signal) : t =
           ; box ~key:"pl-tabs" ~style_class:"tabs"
               [ row ~key:"pl-tabs-in" ~style_class:"tabs-inner"
                   ~cross:`center
-                  [ tab_btn "installed" "plugin/installed" (`app "cube")
+                  [ tab_btn "installed" "plugin/installed"
                   ; tab_btn "marketplace" "plugin/marketplace"
-                      (`app "apps")
                   ]
               ]
           ; box ~key:"pl-panels" 
@@ -523,6 +502,16 @@ let desc_h2 key title =
     ; icon ~key:"c" ~name:(`app "caret-right") ~size:`sm []
     ; heading ~key:"t" ~level:2  ~value:title []
     ]
+
+(* `.desc-item` — label row + `.form-control` control: flex, center,
+   gap 8, pad 6/0, 14px. Classes stay for hooks and the inner
+   html-content styling; visuals ride typed props. *)
+let desc_item ~key ~label ~control =
+  Ui_components.with_props
+    [ Lui_protocol.FontSize
+    , Lui_protocol.StringValue "0.875rem" ]
+    (row ~key ~style_class:"desc-item" ~cross:`center ~gap:8
+       ~padding_vertical:6 [ label; control ])
 
 (* cljs html-content — sanitized markdown rendered raw (DOMPurify) *)
 let html_desc key desc : t list =
@@ -581,26 +570,26 @@ let item_input pid key s cur =
           ~on_input:(fun ev -> on_change (text_of ev))
           []
     | "range" ->
-        (* TODO(component): input type=range has no component kind —
-           needs a slider kind or ~kind:`range on `input` *)
-        Logseq_el.el ~key:"in" ~tag:"input"
-          ~attrs:[ ("type", input_as); ("value", v) ]
-          ~events:"change"
-          ~on_dom_event:(fun n p ->
-            if n = "change" then
-              on_change (Json_payload.str p "value"))
+        slider ~key:"in" ~width:120
+          ~value:
+            (match float_of_string_opt v with
+             | Some f -> f
+             | None -> 0.)
+          ~on_change:(fun ev ->
+            match ev with
+            | Lui_protocol.ValueChanged (_, n) ->
+                on_change (Printf.sprintf "%g" n)
+            | _ -> ())
           []
     | _ ->
         input ~key:"in" ~style_class:"form-input" ~text:v
           ~on_input:(fun ev -> on_change (text_of ev))
           []
   in
-  row ~key:("i-" ^ key) ~style_class:"desc-item"
-    ~cross:`center
-    [ desc_h2 key title
-    ; box ~key:"fc" ~style_class:"form-control" ~cross:`center
-        (html_desc key desc @ [ field ])
-    ]
+  desc_item ~key:("i-" ^ key) ~label:(desc_h2 key title)
+    ~control:
+      (box ~key:"fc" ~style_class:"form-control" ~cross:`center
+         (html_desc key desc @ [ field ]))
 
 let item_toggle pid key s cur =
   let title = Plugin_host.jstr s "title" in
@@ -610,19 +599,17 @@ let item_toggle pid key s cur =
     | Some b -> b
     | None -> Plugin_host.jbool s "default"
   in
-  row ~key:("t-" ^ key) ~style_class:"desc-item"
-    ~cross:`center
-    [ desc_h2 key title
-    ; row ~key:"fc" ~style_class:"form-control" ~cross:`center ~gap:6
-        (checkbox ~key:"cb" ~checked
-           ~on_toggle:(fun ev ->
-             match ev with
-             | Lui_protocol.ToggleChanged (_, on) ->
-                 set_v pid key (Js.Json.boolean on)
-             | _ -> ())
-           []
-         :: html_desc key desc)
-    ]
+  desc_item ~key:("t-" ^ key) ~label:(desc_h2 key title)
+    ~control:
+      (row ~key:"fc" ~style_class:"form-control" ~cross:`center ~gap:6
+         (checkbox ~key:"cb" ~checked
+            ~on_toggle:(fun ev ->
+              match ev with
+              | Lui_protocol.ToggleChanged (_, on) ->
+                  set_v pid key (Js.Json.boolean on)
+              | _ -> ())
+            []
+          :: html_desc key desc))
 
 let item_enum pid key s cur' =
   let title = Plugin_host.jstr s "title" in
@@ -635,42 +622,38 @@ let item_enum pid key s cur' =
     | None -> []
   in
   let cur = json_text_of cur' in
-  row ~key:("e-" ^ key) ~style_class:"desc-item" ~cross:`center
-    [ desc_h2 key title
-    ; box ~key:"fc" ~style_class:"form-control"
-        [ box ~key:"w" ~style_class:"wrap"
-            ( html_desc key desc
-            @ [ select ~key:"s" ~text:cur
-                  (List.map
-                     (fun c ->
-                       menu_item ~key:c ~text:c ~selected:(c = cur)
-                         ~on_press:(fun _ -> set_v pid key (jstr_ c))
-                         [])
-                     choices) ]
-            )
-        ]
-    ]
+  desc_item ~key:("e-" ^ key) ~label:(desc_h2 key title)
+    ~control:
+      (box ~key:"fc" ~style_class:"form-control"
+         [ box ~key:"w" ~style_class:"wrap" ~grow:1. ~min_width:0
+             ( html_desc key desc
+             @ [ select ~key:"s" ~text:cur
+                   (List.map
+                      (fun c ->
+                        menu_item ~key:c ~text:c ~selected:(c = cur)
+                          ~on_press:(fun _ -> set_v pid key (jstr_ c))
+                          [])
+                      choices) ]) ])
 
 let item_object key s =
-  row ~key:("o-" ^ key) ~style_class:"desc-item" ~cross:`center
-    [ desc_h2 key (Plugin_host.jstr s "title")
-    ; box ~key:"fc" ~style_class:"form-control"
-        (html_desc key (Plugin_host.jstr s "description"))
-    ]
+  desc_item ~key:("o-" ^ key)
+    ~label:(desc_h2 key (Plugin_host.jstr s "title"))
+    ~control:
+      (box ~key:"fc" ~style_class:"form-control"
+         (html_desc key (Plugin_host.jstr s "description")))
 
 let item_button pid key s =
   let action = Plugin_host.jstr s "buttonAction" in
-  row ~key:("b-" ^ key) ~style_class:"desc-item" ~cross:`center
-    [ desc_h2 key (Plugin_host.jstr s "title")
-    ; box ~key:"fc" ~style_class:"form-control"
-        ( html_desc key (Plugin_host.jstr s "description")
-        @ [ button ~key:"btn" ~style_class:"ui__button is-small"
-              ~text:(Plugin_host.jstr s "buttonText")
-              ~on_press:(fun _ ->
-                Plugin_host.call_button_action pid action key)
-              [] ]
-        )
-    ]
+  desc_item ~key:("b-" ^ key)
+    ~label:(desc_h2 key (Plugin_host.jstr s "title"))
+    ~control:
+      (box ~key:"fc" ~style_class:"form-control"
+         ( html_desc key (Plugin_host.jstr s "description")
+         @ [ button ~key:"btn" ~style_class:"ui__button is-small"
+               ~text:(Plugin_host.jstr s "buttonText")
+               ~on_press:(fun _ ->
+                 Plugin_host.call_button_action pid action key)
+               [] ]))
 
 (* code mode: cljs lazy-editor renders CodeMirror — a plain textarea
    plus reset/save keeps the same settings round-trip on web *)

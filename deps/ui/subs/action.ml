@@ -18,7 +18,6 @@ type t =
   | Worker_event of string * Wire.t
   | Refresh_page
   | Toggle_left_sidebar
-  | Set_left_sidebar_width of int
   | Toggle_right_sidebar
   | Toggle_search
   | Block_content_changed of string * string
@@ -70,7 +69,6 @@ let tag (a : t) : string =
   | Worker_event (n, _) -> "worker-event:" ^ n
   | Refresh_page -> "refresh-page"
   | Toggle_left_sidebar -> "toggle-left-sidebar"
-  | Set_left_sidebar_width _ -> "set-left-sidebar-width"
   | Toggle_right_sidebar -> "toggle-right-sidebar"
   | Toggle_search -> "toggle-search"
   | Block_content_changed _ -> "block-content-changed"

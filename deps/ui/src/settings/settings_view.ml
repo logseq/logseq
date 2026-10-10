@@ -83,9 +83,9 @@ let lang_menu_close mst =
   Runtime.flush ()
 
 let lang_menu ~key st mst =
-  Lui_elements.dropdown_menu ~key:("lm-" ^ key)
+  Ui_components.menu_card ~key:("lm-" ^ key)
+    ~cls:"ls-select-content"
     ~anchor:`below ~anchor_alignment:`start
-    ~style_class:"ui__dropdown-menu-content ui__select-content"
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
     (List.mapi
        (fun i (code, label) ->
@@ -94,7 +94,6 @@ let lang_menu ~key st mst =
            ~key:(Printf.sprintf "lmi-%s-%d" key i)
            ~text:label
            ~selected:(code = current_lang ())
-           ~style_class:"ui__dropdown-menu-item"
            ~on_press:(fun _ev ->
              set_language code;
              Signal.set st label;
@@ -105,31 +104,24 @@ let lang_menu ~key st mst =
 (* li > i(mode swatch) + strong — list_item ~on_press; the .active
    ring class and the mode-* swatch classes stay reactive via
    class_signal since kinds take only a static ~style_class *)
+(* cljs: .radix only when an accent color is stored — no CSS rules
+   target it; dropped as dead. option_card carries the .mode-* thumbnail
+   (as an <img> now, not a CSS background) + the active ring. *)
 let theme_item ~st mode label =
   C.class_signal (Signal.value st)
     (fun active -> if active = mode then "active" else "")
-    (list_item ~key:("tm-" ^ mode)
-       ~selected:(reactive (fun active -> active = mode) (Signal.value st))
+    (Ui_components.option_card ~key:("tm-" ^ mode) ~mode
+       ~image_url:("../img/" ^ mode ^ "-theme.png") ~label
+       ~selected_signal:
+         (Signal.map (fun active -> active = mode) (Signal.value st))
        ~on_press:(fun _ ->
          use_mode mode;
          Signal.set st mode;
-         Runtime.flush ())
-       [ (* cljs: .radix only when an accent color is stored
-            (:ui/radix-color); mode-active draws the .active>i ring *)
-         C.class_signal (Signal.value st)
-           (fun active ->
-             "mode-" ^ mode
-             ^ (if active = mode then " mode-active" else "")
-             ^ (if Ui_services.storage_get "radix-color" <> None
-                then " radix"
-                else ""))
-           (box ~key:("tmi-" ^ mode) ~width:92 [])
-       ; text ~key:("tms-" ^ mode) ~value:label []
-       ])
+         Runtime.flush ()) ())
 
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
 let theme_modes_ul ~st =
-  list ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
+  row ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
     ~cross:`center
     [ theme_item ~st "light" T.theme_light
     ; theme_item ~st "dark" T.theme_dark
@@ -148,7 +140,8 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
       ~style_class:("ls-select-wrap " ^ h_cls)
       [ Lui_elements.select ~key:(key ^ "-s")
           ~text_signal:(Signal.value st)
-          ~style_class:("ui__select-trigger " ^ h_cls)
+          ~container_relative_frame:`horizontal
+          ~style_class:("ls-select-trigger " ^ h_cls)
           ~on_press:(fun _ev ->
             Signal.set mst (not (Runtime.signal_get mst));
             Runtime.flush ())

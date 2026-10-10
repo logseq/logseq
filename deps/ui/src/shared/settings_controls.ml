@@ -37,23 +37,17 @@ let print_key k =
   | s when String.length s = 1 -> String.uppercase_ascii s
   | s -> s
 
-(* ui/render-keyboard-shortcut -> .keyboard-shortcut > .shui-shortcut-wrap
-   > .shui-shortcut-separate.shui-shortcut-glow > kbd.shui-shortcut-key;
-   the data-shortcut-binding/aria-hidden attrs were inert DOM markup —
-   dropped *)
+(* ui/render-keyboard-shortcut -> boxed+glowing separate keycaps — the
+   shared keycap recipes carry the chrome the .keyboard-shortcut/
+   .shui-shortcut-wrap CSS used to paint *)
 let kbd_seq ~key ~binding:_ keys =
-  row ~key ~style_class:"keyboard-shortcut" ~cross:`center
-    [ box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
-        [ row ~key:(key ^ "b") ~cross:`center
-            ~style_class:"shui-shortcut-glow shui-shortcut-separate"
-            (List.mapi
-               (fun i k ->
-                 kbd ~key:(key ^ "-" ^ string_of_int i)
-                   ~style_class:"shui-shortcut-key shui-key-boxed"
-                   ~value:(Ui_services.literal_text (print_key k)) [])
-               keys)
-        ]
-    ]
+  Ui_components.shortcut_separate ~key ~glow:true
+    (List.mapi
+       (fun i k ->
+         Ui_components.keycap ~key:(key ^ "-" ^ string_of_int i)
+           ~boxed:true ~glow:true ~min_slot:20
+           ~value:(Ui_services.literal_text (print_key k)))
+       keys)
 
 (* ---- buttons ---- *)
 
@@ -106,14 +100,12 @@ let checkbox_el ~key ~on ~on_change =
   checkbox ~key ~style_class:"ui__checkbox" ~checked:on
     ~on_toggle:(fun _ -> on_change (not on)) []
 
-(* <label> takes no children in the kind schema, so label extras (info
-   icons) become siblings in a row — .it label keeps its own element *)
+(* <label> takes no children in the kind schema — info icons etc. join
+   the label cell through form_row's label_extra slot instead *)
 let label_el ~key ~for_ ~text ?text_signal children =
   ignore for_;
   let l =
-    match text_signal with
-    | Some s -> label ~key ~style_class:"ls-label" ~value_signal:s []
-    | None -> label ~key ~style_class:"ls-label" ~value:text []
+    Ui_components.form_label ~key ?text_signal ~text ()
   in
   match children with
   | [] -> l
@@ -123,58 +115,60 @@ let label_el ~key ~for_ ~text ?text_signal children =
 
 (* cljs `toggle` row: label | switch (+detail); info icons are extra
    label children in cljs. ~binding adds the show-brackets/wide-mode
-   shortcut column (narrow switch wrap + ls-kbd-cell). *)
+   shortcut column (narrow switch wrap + right-aligned kbd cell). *)
 let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = [])
     ?binding ~on ~on_toggle () =
-  match binding with
-  | None ->
-      row ~key ~style_class:"it" ~gap:24 ~cross:`center
-        [ label_el ~key:(key ^ "-l") ~for_ ~text:label label_extra
-        ; row ~key:(key ^ "-c") ~style_class:"ls-it-value" ~cross:`start
-            ~min_height:24
-            [ row ~key:(key ^ "-i") ~style_class:"ls-switch-wrap"
-                ~gap:16 ~cross:`center
-                (switch_controls ~key ~on ~on_toggle ~extra:detail ())
-            ]
-        ]
-  | Some b ->
-      row ~key ~style_class:"it" ~gap:24 ~cross:`center
-        [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
-        ; row ~key:(key ^ "-c") ~cross:`center ~min_height:24
-            [ row ~key:(key ^ "-i") ~gap:16 ~cross:`center
-                ~style_class:"ls-switch-wrap ls-switch-narrow"
-                (switch_controls ~key ~on ~on_toggle ())
-            ]
-        ; box ~key:(key ^ "-k") ~style_class:"ls-kbd-cell"
+  ignore for_;
+  let control =
+    row ~key:(key ^ "-i") ~gap:16 ~cross:`center ~min_height:24
+      ?max_width:(match binding with Some _ -> Some 320 | None -> None)
+      (switch_controls ~key ~on ~on_toggle
+         ~extra:(match binding with Some _ -> [] | None -> detail)
+         ())
+  in
+  let side =
+    match binding with
+    | Some b ->
+        [ row ~key:(key ^ "-k") ~grow:1. ~main:`end_ ~cross:`center
             [ kbd_seq ~key:(key ^ "-ks") ~binding:b
                 (String.split_on_char ' ' b) ]
         ]
+    | None -> []
+  in
+  Ui_components.form_row ~key
+    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
+    ~label_extra ~control ~side ()
 
 (* cljs row-with-button-action *)
 let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
     ?(stretch = false) () =
-  row ~key ~style_class:"it ls-it-top"
-    [ column ~key:(key ^ "-lc") ~style_class:"ls-it-label-col"
-        ([ label_el ~key:(key ^ "-l") ~for_ ~text:label [] ]
-        @
-        match description with
-        | Some d ->
-            [ text ~key:(key ^ "-d") ~style_class:"ls-it-desc" ~value:d [] ]
-        | None -> [])
-    ; row ~key:(key ^ "-rc") ~style_class:"ls-it-actions"
-        ([ box ~key:(key ^ "-a")
+  ignore for_;
+  Ui_components.form_row ~key
+    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
+    ?desc:
+      (Option.map
+         (fun d -> Ui_components.form_desc ~key:(key ^ "-d") ~value:d)
+         description)
+    ~control:
+      (row ~key:(key ^ "-rc") ~cross:`center ~gap:8 ~min_width:0
+         [ box ~key:(key ^ "-a")
              ?grow:(if stretch then Some 1. else None)
-             actions ]
-        (* cljs renders the desc cell unconditionally *)
-        @ [ row ~key:(key ^ "-desc") ~style_class:"ls-it-side" desc ])
-    ]
+             actions
+         (* cljs renders the desc cell unconditionally *)
+         ; Ui_components.with_props
+             [ Lui_protocol.FontSize, Lui_protocol.StringValue "0.875rem" ]
+             (row ~key:(key ^ "-desc") ~cross:`center desc)
+         ])
+    ()
 
 (* bare .it shell: label | value cell — font/date-format/home rows *)
 let it_row ~key ~for_ ~label ?(value_cls = "ls-it-value") children =
-  row ~key ~style_class:"it" ~gap:24 ~cross:`center
-    [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
-    ; column ~key:(key ^ "-r") ~style_class:value_cls children
-    ]
+  ignore for_;
+  ignore value_cls;
+  Ui_components.form_row ~key
+    ~label:(Ui_components.form_label ~key:(key ^ "-l") ~text:label ())
+    ~control:(column ~key:(key ^ "-r") ~cross:`stretch children)
+    ()
 
 (* row: label | <a> solid button *)
 let edit_link_row ~key ~label ~button ~href ~for_ () =

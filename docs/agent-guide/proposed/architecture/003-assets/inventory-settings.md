@@ -226,3 +226,59 @@ Transitions/opacity fades, `transition=fill` on icons, gradient/photo
 thumbnails (theme png assets), `resize`, `color-scheme`,
 `outline`/`box-shadow` ring micro-styles where the shared recipe already
 declares a focus variant, `.dark` color tweaks resolved by tokens.
+
+## Task 5 deletion pass (devin/003-t5-settings)
+
+Recipes added in `deps/ui/src/shared/ui_components.ml`: `form_row`
+(label|control|desc|kbd, grow-ratio replaces the 3-col `.it` grid),
+`form_label`, `form_desc`, `search_row` (icon+search_field+trailing;
+`search-ctls`/`search-input-wrap` killer), `nav_item` (settings nav,
+`--lx-nav-active` light/dark token added in `ui_theme.ml`),
+`chip_toggle` (pills/tabs/segmented filters), `color_swatch` (18/30px
+round swatches), `property_pill` (bottom-properties chip),
+`plugin_card`, `option_card` (theme-mode thumb card). Kind adoptions:
+`slider` (plugin settings range), `search_field` (keymap filter,
+plugins search, icon picker), `toggle_group` (plugins secondary tabs,
+keymap pills, icon-picker tabs), `card` (plugin cards), `keycap` +
+`shortcut_separate` (kbd_seq), `list_item` (nav + theme cards).
+
+CSS deleted in `resources/css/lui-overlay.css` (~600 lines): the `.it`
+grid row rules + `.it .ls-label`/`.it-label`/`:nth-child(2):last-child`
+span-2/`.it-desc`; `.settings-menu-item` visual set (base, lui-list-item
+override, hover/data-selected/active/.dark) — `data-id="keymap"` hide
+kept as a standalone hook rule (breakpoint channel is still a gap);
+`.shortcut-toolbar-row .search-input-wrap*` + `.search-icon*`
+(toolbar row collapses to `flex-wrap:wrap` only);
+`.shortcut-filter-pill*` (container keeps `flex-wrap` only);
+`.search-ctls*`; `.secondary-tabs*` (container + `> a/button` +
+`.active`); `.desc-item*` (+ `.form-control`, `.wrap` — wrap grow now a
+prop); `.cp__plugins-item-card` base rule (width/border/radius/pad are
+props; inner `.l`/`.r`/`.head`/`.desc`/`.ctl`/`.menu-list` hooks kept);
+`.cp__theme-modes-options` complete block (~15 rules, li/i/strong/
+.mode-*/.mode-active/.lui-list-item); `.ls-cm-swatch` + `.heading-bg`
++ `.remove` (dot/remove bound as props; joint swatch+heading-btn rules
+rewritten heading-only); `.ls-cm-colors(-row)` (padding/margin → props;
+`margin-top:.5rem` kept as one deco leftover);
+`.cp__emoji-icon-picker .ft .tab-item*` + `.search-input*` (10 rules);
+`.color-picker-presets` + scoped `.it` swatch rules; `.ls-swatch*`
+(cell/dot/none — sizes+bg now props); `.ls-search-ico`; `.ls-tab-btn*`;
+`.ls-ep-input`; helpers `.ls-label`, `.ls-it-*` (value/top/label-col/
+desc/actions/side), `.ls-switch-wrap`, `.ls-switch-narrow`,
+`.ls-kbd-cell`. Dead bindings dropped in `icon_picker.ml`
+(`ui_input_cls`, `tab_item_cls`, `btn_ghost_sm`).
+
+Not migrated (documented blockers, per plan): `.property-panel-row`
+`fit-content(260px) minmax(0,1fr)` grid track; `repeat(8,...)` accent
+grid → `grid ~columns:8` already used; date-picker/calendar (44 rules);
+`width:calc(50% - .5rem)` plugin card (carried via `style` data_attr);
+`min-height:55dvh` modal sizing; `@media` 640/768 breakpoint channels;
+`::first-letter` capitalize; `-webkit-line-clamp`; `:focus-within`
+channel; `color-scheme`; `resize`; `aspect-ratio`; parent-hover reveal
+(`.prop-edit-ico`); `text-align`; `transform` scale/translate (switch
+knob, icon-mini); `.select-item` chips (live inside property-value
+rendering — stay-custom zone); importer/onboarding/new-graph/cards
+text recipes; `.ui__select-*`/`.ls-font-*` leftovers still emitted.
+
+gpui: `settings-menu-item`/`property-k`/`select-item`/`jtrigger`
+registrations must be repointed at recipe output when gpui adopts this
+family — no Rust changes made in this batch.

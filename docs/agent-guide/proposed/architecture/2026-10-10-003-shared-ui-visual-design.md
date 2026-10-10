@@ -493,3 +493,63 @@ for gpui:
 
 Also unchanged by design: `.lui-dialog.ls-dialog-cmdk` host geometry
 block on both renderers, scrollbars, font stacks.
+
+## Task 5 leftovers (settings & properties)
+
+Blocked items with no typed-prop channel, kept as CSS or deferred:
+
+- Date-picker/calendar family (44 rules: `.ui__calendar`,
+  `.ls-editor-date-picker`, `.ls-date-month-menu`, `.ls-repeat-panel`,
+  `.ls-time-picker`) — needs a calendar recipe + `color-scheme` and
+  `table[role=grid]` support first.
+- Grid track templates: `.property-panel-row`
+  `fit-content(260px) minmax(0,1fr)` stays (no `grid-template-columns`
+  prop). The `.it` 3-col grid was replaced by grow ratios instead.
+- Web `file_picker` backend, blur event channel, parent-hover channel
+  (`.prop-edit-ico` reveal, `:has(...:hover)` operands) — capability
+  gaps; CSS/hook rules kept.
+- Fractional sizing: plugin card `width:calc(50% - .5rem)` rides a
+  `style` data_attr; `dvh` modal heights unchanged.
+- Breakpoint channels: `.settings-menu-item[data-id="keymap"]`
+  hide/show at 640px and `.panel-wrap`/`cp__settings-inner` 640/768
+  breakpoints kept as media-query rules.
+- `.shortcut-toolbar-row`/`.shortcut-filter-pills` keep `flex-wrap:wrap`
+  only (no wrap prop); `.ls-cm-colors-row` keeps `margin-top`.
+- `.select-item` value chips, importer/onboarding/new-graph/cards text
+  recipes, `.ui__select-*`/`.ls-font-*` select & font pickers,
+  `.ui__switch`/`.ui__checkbox` internals — un-migrated (either stay-
+  custom emitters or pending sibling recipes).
+- `::first-letter` capitalize, `-webkit-line-clamp`, `text-align`,
+  `resize`, `transform` (switch knob, `.ls-icon-mini` scale) — no prop
+  channel, CSS kept or handled by existing rules.
+
+## Task 5 leftovers (menus & overlays batch)
+
+**Programmatic menu anchor — verdict: NOT AVAILABLE in LUI
+`2662e3c`.** `dropdown_menu` anchors to its DOM parent (trigger
+pattern); `context_menu` binds right-click; neither accepts a
+computed rect. `popover` is the only point-anchored kind
+(`~at:(x, y)`, plus `~anchor`/`~anchor_alignment`), but its child
+contract is free-form and rejects `menu_item` children
+(`child_kind_supported` restricts `menu_item` to menu kinds), so it
+cannot carry a menu surface. `views_popup.menu_level` (~20 call
+sites) and the left-sidebar anchored menus stay on
+`ui__dropdown-menu-*` classes this batch.
+
+Required prop shape (LUI capability task, not a logseq-side hack):
+
+- Preferred: `dropdown_menu ~at:(x, y)` or
+  `~anchor_rect:{x,y,w,h}` — open the menu surface at a computed
+  point/rect instead of its DOM parent, with existing
+  `~anchor_alignment`/`~on_dismiss` semantics.
+- Alternative: widen `popover`'s child contract to accept
+  `menu_item`/`menu_section` children (a menu-surface role), so
+  `popover ~at` can host menus.
+- Either way the mounted surface must keep `menu_item` state
+  channels (`selected`, `disabled`, `on_press`) and Escape /
+  outside-tap dismiss parity with `dropdown_menu`.
+
+**pdf docinfo modal** (`extension/pdf_toolbar.ml:887+`) stays
+custom: it is imperative `Web_dom.create_element` DOM outside the
+LUI element tree — needs a view-tree entry point before the `dialog`
+kind can adopt it.

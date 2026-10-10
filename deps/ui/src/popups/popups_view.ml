@@ -484,23 +484,28 @@ let close_cm st =
 
 let cm_color_row (st : S.t) : t =
   let swatch c =
-    button ~key:("color-" ^ c) ~variant:`ghost
-      ~style_class:"ls-cm-swatch"
+    Ui_components.color_swatch ~key:("color-" ^ c) ~size:30
+      ~style_class:"ls-cm-swatch" ~background:"transparent"
       ~label:(U.t ("color/" ^ c))
       ~on_press:(fun _ -> run_cm_color st c)
-      [ box ~key:"bg" ~style_class:"heading-bg"
+      [ box ~key:"bg" ~style_class:"heading-bg" ~width:18 ~height:18
+          ~corner_radius:9999
           ~background:("var(--color-" ^ c ^ "-500)") [] ]
   in
   let remove =
-    button ~key:"color-rm" ~variant:`ghost
-      ~style_class:"ls-cm-swatch"
+    Ui_components.color_swatch ~key:"color-rm" ~size:30
+      ~style_class:"ls-cm-swatch" ~background:"transparent"
       ~label:(U.t "ui/remove-background")
       ~on_press:(fun _ -> run_cm_color st "")
-      [ box ~key:"bg" ~style_class:"heading-bg remove"
-          [ text ~key:"t" ~value:"-" [] ] ]
+      [ box ~key:"bg" ~style_class:"heading-bg remove" ~width:20
+          ~height:20 ~corner_radius:9999 ~main:`center ~cross:`center
+          ~border_width:1
+          ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
+          [ text ~key:"t" ~value:"-" ~font_size:"10px" ~line_height:"1"
+              [] ] ]
   in
-  box ~key:"colors" ~style_class:"ls-cm-colors"
-    [ row ~key:"colors-row" ~style_class:"ls-cm-colors-row"
+  box ~key:"colors" ~style_class:"ls-cm-colors" ~padding_vertical:4
+    [ row ~key:"colors-row" ~style_class:"ls-cm-colors-row" ~gap:4
         (List.map swatch S.colors @ [ remove ]) ]
 ;;
 

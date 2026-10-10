@@ -147,7 +147,6 @@ let common_ls =
   ; "border-radius-medium", "8px"
   ; "headbar-height", "3rem"
   ; "headbar-inner-top-padding", "0px"
-  ; "left-sidebar-width", "246px"
   ; "left-sidebar-sm-width", "74vw"
   ; "left-sidebar-nav-btn-size", "38px"
   ; "native-kb-height", "0px"
@@ -514,6 +513,8 @@ let cmdk_vars = function
          0 0 / 0.32)))" )
     ; "--kbd-glow-top", "transparent"
     ; "--kbd-glow-bottom", "rgba(0, 0, 0, 0.10)"
+    ; (* settings nav item: the .active/.dark .active paint pair *)
+      "--lx-nav-active", "rgb(0 0 0 / 0.1)"
     ]
   | Dark ->
     [ "--lx-cmdk-chosen-bg", "var(--ls-a-chosen-bg, #094b5a)"
@@ -523,6 +524,7 @@ let cmdk_vars = function
     ; "--lx-cmdk-hover-ring-hl", "none"
     ; "--kbd-glow-top", "rgba(255, 255, 255, 0.15)"
     ; "--kbd-glow-bottom", "rgba(0, 0, 0, 0.25)"
+    ; "--lx-nav-active", "rgb(255 255 255 / 0.08)"
     ]
 
 let snapshot mode =

@@ -32,14 +32,7 @@ let icon_el ?(size = 18.) ?(cls = "") (ty, id) : t =
 (* cljs ui__button base + variant/size classes (shui/button) *)
 let btn_base = "ui__button"
 
-let btn_ghost_sm = btn_base ^ " as-ghost ls-ep-btn"
-
 let btn_outline_sm = btn_base ^ " as-outline ls-ep-btn"
-
-let tab_item_cls active =
-  btn_ghost_sm ^ " tab-item" ^ if active then " active" else ""
-
-let ui_input_cls = "ui__input ls-ep-input"
 
 (* ---------- tabler icon names ---------- *)
 
@@ -294,11 +287,16 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   in
 
   let preset_btn c =
-    button ~style_class:(btn_outline_sm ^ " it")
+    Ui_components.color_swatch ~key:(match c with
+                                     | Some c -> "p-" ^ c
+                                     | None -> "p-none")
+      ~size:18 ~style_class:"as-outline ls-ep-btn it"
+      ~background:(match c with Some c -> c | None -> "transparent")
       ~label:(match c with
         | Some color -> I.tf "icon/color-value" [ color ]
         | None -> I.t "icon/reset-color")
-      ?background:(match c with Some c -> Some c | None -> None)
+      ~border_color:
+        "var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))"
       ~on_press:(fun _ -> set_preset c)
       (match c with
        | Some _ -> []
@@ -383,32 +381,35 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   (column ~style_class:"cp__emoji-icon-picker"
      ~data_attrs:[ ("data-keep-selection", "true") ]
      [ box ~key:"hd" ~style_class:"hd"
-         [ box ~style_class:"search-input"
-             [ Icons.icon ~size:16. "search"
-             ; reactive
-                 ~equal:(fun (a : pstate) b ->
-                    a.tab = b.tab && a.reset = b.reset)
-                 (fun s ->
-                    input
-                      ~key:
-                        ("ls-ep-input-" ^ tab_name s.tab ^ "-"
-                         ^ string_of_int s.reset)
-                      ~style_class:ui_input_cls ~placeholder:(placeholder_of s.tab)
-                      ~autofocus:true
-                      ~on_input:(fun ev ->
-                        match ev with
-                        | Lui_protocol.TextChanged (_, v) -> on_input v
-                        | _ -> ())
-                      [])
-                 sv
-             ; if_
-                 ~test:(reactive (fun s -> s.q <> "") sv)
-                 (Logseq_el.el ~key:"x" ~tag:"a" ~style_class:"x"
-                    ~events:"click"
-                    ~on_dom_event:(fun name _ ->
-                      if name = "click" then reset_q ())
-                    [ Icons.icon ~size:14. "x" ])
-             ] ]
+         [ reactive
+             ~equal:(fun (a : pstate) b ->
+                a.tab = b.tab && a.reset = b.reset)
+             (fun s ->
+                Ui_components.search_row
+                  ~key:
+                    ("sr-" ^ tab_name s.tab ^ "-" ^ string_of_int s.reset)
+                  ~height:32 ~pad_left:32 ~borderless:true ~autofocus:true
+                  ~background:
+                    "var(--lx-gray-03, var(--ls-tertiary-background-color, \
+                     hsl(var(--muted))))"
+                  ~placeholder:(placeholder_of s.tab)
+                  ~text_signal:(Signal.map (fun s -> s.q) sv)
+                  ~on_input:(fun ev ->
+                    match ev with
+                    | Lui_protocol.TextChanged (_, v) -> on_input v
+                    | _ -> ())
+                  ~trailing:
+                    [ if_
+                        ~test:(reactive (fun s -> s.q <> "") sv)
+                        (Ui_components.with_props
+                           [ Lui_protocol.Opacity
+                           , Lui_protocol.FloatValue 0.5 ]
+                           (button ~key:"x" ~variant:`ghost ~padding:8
+                              ~on_press:(fun _ -> reset_q ())
+                              [ Icons.icon ~size:14. "x" ]))
+                    ]
+                  ())
+             sv ]
      ; Ui_parts.class_signal sv
          (fun s -> "bd bd-scroll " ^ tab_name s.tab)
          (scroll ~key:"bd" ~orientation:`vertical
@@ -419,13 +420,14 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                        && a.emoji_results = b.emoji_results)
                     content_view sv ] ])
      ; row ~key:"ft" ~style_class:"ft"
-         ([ row ~style_class:"ls-ep-tabs" ~gap:0
+         ([ toggle_group ~key:"tabs" ~gap:0 ~style_class:"ls-ep-tabs"
               (List.map
                  (fun (t, label) ->
-                   Ui_parts.class_signal sv
-                     (fun s -> tab_item_cls (s.tab = t))
-                     (button ~key:("tab-" ^ tab_name t) ~text:label
-                        ~on_press:(fun _ -> set_tab t) []))
+                   Ui_components.chip_toggle ~key:("tab-" ^ tab_name t)
+                     ~radius:4 ~pad_v:4 ~pad_h:8 ~font_size:"0.8125rem"
+                     ~off_opacity:0.5 ~text:label
+                     ~checked_signal:(Signal.map (fun s -> s.tab = t) sv)
+                     ~on_toggle:(fun _ -> set_tab t) ())
                  tabs) ]
           (* cljs hides the color picker on the emoji tab *)
           @

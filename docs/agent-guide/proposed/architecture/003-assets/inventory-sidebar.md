@@ -33,7 +33,7 @@ refinements), **hook** (structure-only, keep for tests/commands), or
 |---|---|---|
 | `#app-container` flex basis-100% | layout | app-shell recipe |
 | `#left-container` flex col h-100vh relative | layout | app-shell recipe |
-| `#main-container` overflow-y hidden relative + `.is-left-sidebar-open` padding-left var(--ls-left-sidebar-width) ≥sm | layout+state | shell recipe + sidebar-open variant (typed prop, not attr selector) |
+| `#main-container` overflow-y hidden relative + ~~`.is-left-sidebar-open` padding-left var(--ls-left-sidebar-width) ≥sm~~ **deleted (003) — split track owns docked width** | layout+state | shell recipe + sidebar-open variant (typed prop, not attr selector) |
 | `#main-content` relative h calc(100vh − headbar) | layout | shell recipe (needs calc/viewport-unit height) |
 | `.scrollbar-spacing` overflow-y auto | layout | scroll kind |
 | `#main-content-container` container-type inline-size, sm padding ramp, flex row justify-center, scrollbar-color, `::-webkit-scrollbar` | layout+deco | content-scroll recipe; scrollbar colors + container queries deco |
@@ -50,8 +50,8 @@ refinements), **hook** (structure-only, keep for tests/commands), or
 | `.button` h-2rem pad radius opacity .9 block + hover/active opacity + ≥md hover bg | appearance+state | toolbar-button recipe (opacity states; responsive hover = gap) |
 | `.button.icon` 2rem square centered | appearance | icon-button recipe |
 | `.cp__header` flex shrink-0 items-center justify-between sticky top-0 z-10 nowrap + box-shadow + `-webkit-app-region: drag` + headbar vars height | layout+appearance | header recipe (sticky, 48px, shadow mobile-only); app-region deco |
-| `.cp__header > .l` flex h-100% min-width var(--ls-left-sidebar-width), child flex | layout | header-left slot recipe |
-| `.theme-container-inner:not(.ls-left-sidebar-open) .cp__header > .l` min-width auto | state | sidebar-open variant (parent-state styling → gap) |
+| `.cp__header > .l` flex h-100% ~~min-width var(--ls-left-sidebar-width)~~ **deleted (003) — header sits inside the split's second pane; toggle/search moved to `.left-sidebar-top`, `.l` keeps them only while the sidebar is closed** | layout | header-left slot recipe |
+| ~~`.theme-container-inner:not(.ls-left-sidebar-open) .cp__header > .l` min-width auto~~ **deleted (003)** | state | sidebar-open variant (parent-state styling → gap) |
 | `.cp__header > .r` flex-1 justify-end pr | layout | header-right slot; gpui `cp__header-r` twin |
 | `.cp__header a/svg/button` `-webkit-app-region: no-drag` | deco | stays in adapter CSS |
 | `.cp__header .r a/button` opacity .7→1 hover | state | typed hover opacity |
@@ -72,10 +72,10 @@ refinements), **hook** (structure-only, keep for tests/commands), or
 | `.cp__sidebar-left-layout:before` 3rem grab strip fixed <sm | deco | web touch affordance, stays adapter CSS |
 | `.left-sidebar-inner.as-container` relative h-100% overflow y/x width var(--ls-left-sidebar-sm-width) bg border-r translateX(-100%)→0 open | layout+appearance+state | sidebar-panel recipe + open state (transform motion deco) |
 | `.left-sidebar-inner > .wrap` flex col w-100% mt + h calc | layout | sidebar-content recipe |
-| ≥sm `.cp__sidebar-left-layout` w-0 z-1 / `.is-open` w var / `:before` w0 / shade-mask none | layout | docked variant (breakpoint) |
+| ~~≥sm `.cp__sidebar-left-layout` w-0 z-1 / `.is-open` w var / `:before` w0 / shade-mask none~~ **deleted (003) — base rule is now the docked pane (relative + overflow clip); overlay positioning moved into the <sm media block** | layout | docked variant (breakpoint) |
 | `.left-sidebar-inner .item` flex h-2rem fs-14 fw-500 op-.8 user-select + `.ui__icon` slot + `.active`/`.thumb` gray-04 bg | layout+appearance+state | nav-row recipe + active variant; gpui `item`/`active` twins |
 | `.left-sidebar-inner .page-icon` flex baseline | layout | icon slot |
-| `.left-sidebar-resizer` absolute 3px right-2 col-resize z-10 + is-active/hover/focus/active accent bg | layout+state | resize-handle recipe (new: col-resize cursor, grab state) |
+| ~~`.left-sidebar-resizer` absolute 3px right-2 col-resize z-10 + is-active/hover/focus/active accent bg~~ **deleted (003) — split divider owns the handle** | layout+state | resize-handle recipe (new: col-resize cursor, grab state) |
 | `.cp__graphs-selector > .item` flex relative overflow pad op-.9 radius + `.thumb` 1.5rem chip + `.lui-text` nowrap ellipsis + `.ui__icon` absolute op-.4 + `> span` button op-.4/.7/1 | layout+appearance+state | graph-selector row recipe (abs icon → position props) |
 | `.sidebar-header-container` / `.sidebar-contents-container` flex col gap pad (+ `.is-scrolled` border-t — dead variant, no emitter) | layout | section-container recipes; gpui regs identical |
 | `.sidebar-content-group:not(:hover)` webkit-scrollbar transparent | deco | stays adapter CSS |
@@ -100,8 +100,8 @@ refinements), **hook** (structure-only, keep for tests/commands), or
 
 | Selector / registration | Class | Owner after migration |
 |---|---|---|
-| `.cp__right-sidebar` z-1 relative user-select container-type + `.closed` w-0!important + `.open` max-w-60vw | layout+state | right-sidebar recipe + open/closed variants |
-| `.cp__right-sidebar .resizer` absolute 3px left-1 col-resize z-1000 touch-action none + hover/focus/active primary bg | layout+state | resize-handle recipe (cursor variant) |
+| `.cp__right-sidebar` z-1 relative user-select container-type + ~~`.closed` w-0!important + `transition: width`~~ **deleted (003) — pane clips via overflow/min-width:0 while the track animates** + `.open` max-w-60vw | layout+state | right-sidebar recipe + open/closed variants |
+| ~~`.cp__right-sidebar .resizer` absolute 3px left-1 col-resize z-1000 touch-action none + hover/focus/active primary bg~~ **deleted (003) — split divider owns the handle** | layout+state | resize-handle recipe (cursor variant) |
 | `.cp__right-sidebar .page` margin + `.page-inner` pb-4rem + `.page-inner > div:empty` none | layout | page-in-sidebar recipe (`:empty` → emit nothing instead) |
 | `.sidebar-item-list` ml mt-8 pb-150 h calc display block | layout | item-list recipe |
 | `.sidebar-panel-content` pt-8 | layout | recipe |
@@ -124,7 +124,11 @@ Structure/state attributes consumed by gestures, tests, and view logic:
 - `#main-container.is-left-sidebar-open`, `.theme-container-inner` with
   `.ls-left-sidebar-open` / `.ls-wide-mode`, `data-is-margin-less-pages`,
   `data-is-full-width`
-- `.left-sidebar-resizer` (+ `.is-active`), `.cp__right-sidebar .resizer`
+- ~~`.left-sidebar-resizer` (+ `.is-active`), `.cp__right-sidebar .resizer`~~ — deleted (003): `Lui_elements.split`'s `.lui-split-divider` is the handle; new (003): `> .lui-split-divider` `cursor: col-resize`, `:hover/:active ::after` widens to 3px accent for discoverability, `.is-collapsed > .lui-split-divider` display:none
+- new (003): `.left-sidebar-top` row inside `.left-sidebar-inner` — hosts the toggle/search buttons moved out of `.cp__header > .l` while the sidebar is open; its icon buttons reuse the `.cp__header` 32px/20px geometry
+- new (003): `.cp__header > .l .head-l-btns` — permanently mounted copy of the toggle/search pair for the closed state; `is-hidden` (driven by `left_sidebar_open`) removes it instantly on open, and a 0.28s `visibility`/`opacity` transition-delay fades it in only after the sidebar's own top row has clipped out, so a toggle never shows both copies
+- new (003): `.cp__header .as-ghost` / `.left-sidebar-top .as-ghost` — neutralizes the kit `ghost`/`data-selected` accent-state leak (`--color-accent` blue bg + white fg) on shell buttons: hover/focus/selected keep the surface's own colors, focus keeps its ring
+- new (003): `.cp__graphs-selector > .item` — same neutralization for the selector row (kit ghost hover/focus accent colors suppressed to match master)
 - `.sidebar-content-group` with `.is-expand` / `.has-children`,
   `.hd`/`.bd`/`.more`/`.as-edit` structure, `.non-collapsable`
 - `.item` + `.active`, `a.link-item` + `[data-popup-active]`,

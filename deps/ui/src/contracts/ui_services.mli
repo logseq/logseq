@@ -264,7 +264,6 @@ type dom = {
   confirm : string -> bool;
   scroll_row_into_view : scroller:el -> row:el -> unit;
   ensure_fixups : unit -> unit;
-  apply_left_sidebar_width : int -> unit;
   selected_block_uuids : unit -> string list;
 }
 
@@ -380,7 +379,6 @@ val dom_open_dialog : string -> unit
 val dom_confirm : string -> bool
 val dom_scroll_row_into_view : scroller:el -> row:el -> unit
 val dom_ensure_fixups : unit -> unit
-val dom_apply_left_sidebar_width : int -> unit
 val dom_selected_block_uuids : unit -> string list
 
 val timers_timeout : (unit -> unit) -> int -> int

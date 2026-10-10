@@ -174,8 +174,6 @@ let update (model : t) (action : Action.t) : t =
       Subs_state.app_hooks.plugin_event "sidebar-visible-changed"
         (Json.Object [ ("visible", Json.Bool open_) ]);
       { model with left_sidebar_open = open_ }
-  | Set_left_sidebar_width w ->
-      { model with left_sidebar_width = w }
   | Toggle_right_sidebar ->
       let open_ = not model.right_sidebar_open in
       Subs_state.app_hooks.plugin_event "sidebar-visible-changed"
