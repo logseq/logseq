@@ -155,8 +155,8 @@ let new_tag_map name uuid =
       , Wire.Array [ Wire.Keyword "logseq.class/Tag" ] )
     ; ( Wire.String "logseq.property.class/extends"
       , Wire.Keyword "logseq.class/Root" )
-    ; (Wire.String "block/created-at", Wire.Float now)
-    ; (Wire.String "block/updated-at", Wire.Float now)
+    ; (Wire.String "block/created-at", Wire.Int64 (Int64.of_float now))
+    ; (Wire.String "block/updated-at", Wire.Int64 (Int64.of_float now))
     ]
 
 type resolved =
