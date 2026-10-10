@@ -1820,11 +1820,46 @@
        (not (comments-model/protected-comment-block? block))
        (not (focused-root-block? block root-block))))
 
+(defn- row-container-id
+  [node]
+  (some-> (util/rec-get-node node "blocks-container") get-node-container-id))
+
+(defn- row-container-ids
+  "block id -> the container its selected row is drawn in (a block can also
+  be drawn in an embed or the sidebar)."
+  [rows]
+  (into {} (keep (fn [node]
+                   (when-let [id (dom/attr node "blockid")]
+                     [id (row-container-id node)])))
+        rows))
+
+(defn- row-in-container
+  "Of `rows` (the rows drawn for block `id`), the one in the container the
+  block was selected in, else the first."
+  [id rows container-ids]
+  (let [container-id (get container-ids id)]
+    (or (when container-id
+          (some #(when (= container-id (row-container-id %)) %) rows))
+        (first rows))))
+
+(defn- reselect-moved-rows?
+  "Select the moved rows only when each was found and the selection is still
+  the one that was moved: a click or Escape during the move wins."
+  [ids nodes selected-before selected-now]
+  (and (= (count nodes) (count ids))
+       (identical? selected-before selected-now)))
+
+(defonce ^:private *pending-move-reselect
+  ;; Resolves when the last move of selected blocks has selected their new
+  ;; rows; a move pressed before that would read the old selection
+  (atom nil))
+
 (defn move-up-down
   [up?]
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
+    (p/let [_ (or @*pending-move-reselect (p/resolved nil))]
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
@@ -1850,13 +1885,38 @@
                    (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
                      (.focus input)
                      (util/scroll-editor-cursor input)))))))
-          (let [ids (state/get-selection-block-ids)]
+          (let [ids (state/get-selection-block-ids)
+                direction (state/get-selection-direction)
+                selected-before (state/get-unsorted-selection-blocks)
+                container-ids (row-container-ids selected-before)
+                new-row #(row-in-container (str %) (util/get-blocks-by-id (str %)) container-ids)]
             (when (seq ids)
               (p/let [results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})
                       loaded-blocks (unwrap-block-results results)
                       blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
                 (when (seq blocks)
-                  (move-nodes blocks))))))))))
+                  (let [done (p/deferred)]
+                    (reset! *pending-move-reselect done)
+                    (-> (p/do!
+                         (move-nodes blocks)
+                         ;; a moved block is drawn as a new row; the selection
+                         ;; held the old rows, no longer in the page. Select
+                         ;; the new rows once they are drawn (the move's delta
+                         ;; is flushed when move-nodes settles); the next move
+                         ;; waits for this
+                         ;; in the order the selection is kept (`ids` is read
+                         ;; through the direction, reversed for :up)
+                         (let [nodes (keep new-row ids)
+                               nodes (if (= direction :up) (reverse nodes) nodes)]
+                           ;; only when the selection is still the one moved:
+                           ;; a click or Escape meanwhile wins
+                           (when (reselect-moved-rows? ids nodes selected-before
+                                                       (state/get-unsorted-selection-blocks))
+                             (state/set-selection-blocks! nodes direction))))
+                        (p/finally (fn []
+                                     (p/resolve! done nil)
+                                     (when (identical? @*pending-move-reselect done)
+                                       (reset! *pending-move-reselect nil))))))))))))))))
 
 (defn get-selected-ordered-blocks
   []
