@@ -514,7 +514,7 @@ let cm_color_row (st : S.t) : t =
    literal-comma class quirk is dropped — it is unreachable CSS *)
 let cm_heading_btn (st : S.t) key title value icn : t =
   button ~key ~variant:`ghost ~size:`icon
-    ~style_class:"to-heading-button ls-cm-heading-btn"
+    ~style_class:"ls-cm-heading-btn"
     ~label:title
     ~on_press:(fun _ -> run_cm_heading st value)
     [ icn ]

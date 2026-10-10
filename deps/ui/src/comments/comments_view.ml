@@ -341,11 +341,11 @@ let area_el (bs : Model.block Signal.signal) : t =
                && b.Model.block_comment_targets > 1
             then
               box ~key:("cts-" ^ area_uuid)
-                ~style_class:"ls-comments-targets"
+               
                 (List.map
                    (fun (tuuid, title) ->
                      box ~key:("ct-" ^ tuuid)
-                       ~style_class:"ls-comments-target"
+                      
                        [ text ~key:("ctt-" ^ tuuid) ~value:title [] ])
                    (Runtime.signal_get st).target_titles)
             else box ~key:("cts0-" ^ area_uuid) [])

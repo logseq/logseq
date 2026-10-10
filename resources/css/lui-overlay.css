@@ -23,8 +23,6 @@
 :root {
   --lui-c-background: hsl(var(--background));
   --lui-c-foreground: hsl(var(--foreground));
-  --lui-c-card: hsl(var(--card));
-  --lui-c-card-foreground: hsl(var(--card-foreground));
   --lui-c-border: hsl(var(--border));
 }
 
@@ -374,8 +372,7 @@
 
 /* ---- menu links (cljs common.css) ------------------------------------ */
 
-.menu-links-wrapper,
-.menu-links-outer {
+.menu-links-wrapper {
   padding: 0.5rem 0;
   border-radius: 0.375rem;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1),
@@ -415,10 +412,6 @@ div[data-keep-selection].menu-links-wrapper {
   color: hsl(var(--popover-foreground));
   border-radius: 0.25rem;
   background: var(--lx-gray-05, var(--ls-menu-hover-color, var(--rx-gray-05)));
-}
-
-.menu-link.no-padding {
-  padding: 0;
 }
 
 .menu-separator {
@@ -637,7 +630,6 @@ div[data-keep-selection].menu-links-wrapper {
   margin-right: 0.5rem;
 }
 
-
 .ls-cm-colors-row {
   margin-top: 0.5rem;
 }
@@ -651,7 +643,6 @@ div[data-keep-selection].menu-links-wrapper {
   height: 30px;
   cursor: pointer;
 }
-
 
 /* ---- cmdk palette ----------------------------------------------------- */
 
@@ -750,10 +741,6 @@ div[data-keep-selection].menu-links-wrapper {
   box-shadow: none;
 }
 
-.cp__select-input.ls-compact {
-  padding: 0.375rem;
-}
-
 /* cljs dropdown selects (view filter/sort pickers) use a compact input —
    4px 8px, 32px row — not the command-palette's 16px padding */
 .ui__dropdown-menu-content .cp__select-input {
@@ -776,21 +763,6 @@ div[data-keep-selection].menu-links-wrapper {
 .cp__select-results .menu-link > span:first-child {
   flex: 1;
   min-width: 0;
-}
-
-.cp__select-main .menu-link .type-icon {
-  color: var(--ls-search-icon-color);
-}
-
-.cp__select-main .menu-link .type-icon.highlight {
-  color: var(--ls-selection-text-color);
-  border-color: var(--ls-selection-background-color);
-}
-
-.cp__select-main .menu-link.chosen .type-icon,
-.cp__select-main .menu-link[data-selected] .type-icon,
-.cp__select-main .menu-link:hover .type-icon {
-  color: var(--ls-search-icon-hover-color);
 }
 
 .cp__select-main .menu-link.chosen,
@@ -1391,39 +1363,12 @@ div[data-keep-selection].menu-links-wrapper {
   align-items: center;
 }
 
-.ls-readme-repo-icon {
-  margin-right: 0.25rem;
-  display: inline-flex;
-}
-
 .ls-readme-body {
   padding: 0.25rem;
   background: transparent;
   border-style: none;
   min-height: 60vw;
   max-width: 900px;
-}
-
-/* narrow util buttons used inside dialogs/menus (cljs ui__button
-   as-outline sm) */
-.ui__button.ls-btn-outline-sm {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  height: 1.75rem;
-  padding: 0 0.625rem;
-  border-radius: 0.375rem;
-  border: 1px solid var(--lui-c-border);
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  font-size: 0.8125rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.ui__button.ls-btn-outline-sm:hover {
-  background: hsl(var(--muted));
 }
 
 /* ---- toasts ------------------------------------------------------------ */
@@ -1822,58 +1767,6 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0.5rem 0;
 }
 
-.ls-property-dropdown .inner-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.25rem;
-  flex-wrap: nowrap;
-  width: 100%;
-}
-
-.ls-property-dropdown .inner-wrap > .property-setting-title {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-weight: 400;
-  opacity: 0.9;
-  overflow: hidden;
-}
-
-.ls-property-dropdown .inner-wrap > .property-setting-title > span {
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-
-.ls-property-dropdown .inner-wrap > label {
-  font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  opacity: 0.5;
-}
-
-.ls-property-dropdown .inner-wrap.disabled {
-  opacity: 0.7;
-  user-select: none;
-  cursor: not-allowed;
-}
-
-.ls-property-name-edit-pane,
-.ls-base-edit-form {
-  padding: 0.5rem 0.5rem 0.25rem;
-}
-
-.ls-property-name-edit-pane > .input-wrap,
-.ls-base-edit-form > .input-wrap {
-  display: flex;
-  flex-direction: row;
-  gap: 0.375rem;
-  align-items: center;
-}
-
-.ls-property-name-edit-pane .ui__input,
-.ls-base-edit-form .ui__input,
 .ui__input {
   height: 29px;
   padding: 0 0.5rem;
@@ -1887,23 +1780,7 @@ div[data-keep-selection].menu-links-wrapper {
   color: inherit;
 }
 
-.ui__textarea {
-  width: 100%;
-  min-height: 4rem;
-  padding: 0.375rem 0.5rem;
-  border-radius: 0.375rem;
-  border: 1px solid hsl(var(--input, var(--border)));
-  background: var(--lui-c-background);
-  background: var(--ls-primary-background-color, var(--lui-c-background));
-  font-size: 0.875rem;
-  font-family: inherit;
-  box-sizing: border-box;
-  resize: vertical;
-  color: inherit;
-}
-
-.ui__input:focus,
-.ui__textarea:focus {
+.ui__input:focus {
   outline: none;
   box-shadow: 0 0 0 2px hsl(var(--ring));
 }
@@ -1948,34 +1825,8 @@ div[data-keep-selection].menu-links-wrapper {
   gap: 0.25rem;
 }
 
-.ls-property-add {
-  display: flex;
-  flex: 1;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.ls-property-add .cp__select-input {
-  padding: 0.25em 0.75em;
-}
-
-.ls-property-key {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
 /* cljs value.css: the set/add-property picker caps the key column and
    scrolls the result list inside it */
-.ls-property-dialog .ls-property-key {
-  height: 286px;
-  overflow-y: hidden;
-}
-
-.ls-property-dialog .ls-property-key .cp__select-main .item-results-wrap {
-  max-height: 250px;
-}
 
 .ls-property-date-picker {
   display: flex;
@@ -2138,7 +1989,6 @@ div[data-keep-selection].menu-links-wrapper {
   display: none;
 }
 
-
 /* the item is the button itself in the LUI tree (cljs wraps a
    .settings-menu-link button in li.settings-menu-item): same padding
    and horizontal layout as the cljs link, no list-item default slots */
@@ -2150,19 +2000,6 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* list-item's data-selected accent background is unused here — .active
    carries the highlight, matching cljs li.active */
-.settings-menu-link {
-  padding: 0.375rem 0.5rem;
-  user-select: none;
-  text-align: left;
-  justify-content: flex-start;
-  display: flex;
-  width: 100%;
-  color: var(--lx-gray-12, var(--ls-primary-text-color, var(--lui-c-foreground)));
-  background: none;
-  border-style: none;
-  cursor: pointer;
-  font-size: 0.875rem;
-}
 
 .cp__settings-inner.no-aside > article {
   padding-left: 0;
@@ -2183,7 +2020,6 @@ div[data-keep-selection].menu-links-wrapper {
     max-width: calc(100vw - 20rem);
   }
 }
-
 
 /* direct child like cljs .panel-wrap>.it:first-of-type — the accent
    row's .it is nested in a wrapper div and must not get this padding */
@@ -2232,18 +2068,6 @@ div[data-keep-selection].menu-links-wrapper {
   align-items: center;
 }
 
-.cp__settings-app-updater .update-state {
-  padding: 6px 10px;
-  background: var(--ls-quaternary-background-color, hsl(var(--muted)));
-  border-radius: 4px;
-  margin-top: 10px;
-  width: fit-content;
-}
-
-.cp__settings-app-updater .update-state > p {
-  margin: 0;
-}
-
 .cp__settings-appearance-dialog-inner {
   margin: -0.5rem -0.5rem -0.75rem;
   display: flex;
@@ -2270,7 +2094,6 @@ div[data-keep-selection].menu-links-wrapper {
   display: none;
 }
 
-
 /* cljs common.css .heading-bg: 18px round swatch inside a 30px hit
    area; .remove is a bordered hollow circle holding a "-" glyph */
 /* shortcuts pane */
@@ -2288,7 +2111,6 @@ div[data-keep-selection].menu-links-wrapper {
 .shortcut-toolbar-row {
   flex-wrap: wrap;
 }
-
 
 /* cljs form-input focus ring: 2px surface halo + 2px accent band
    (ring-2 ring-offset-2, hsl(200 97% 37%)) */
@@ -2344,7 +2166,6 @@ div[data-keep-selection].menu-links-wrapper {
 .shortcut-filter-pills {
   flex-wrap: wrap;
 }
-
 
 /* cljs shortcut.css li.th — grey category band rows (Basics,
    Navigation, ...) with the fold chevron at the right edge */
@@ -2614,24 +2435,6 @@ select.form-select {
   opacity: 0.8;
 }
 
-.cp__emoji-icon-picker .hover-preview {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-between;
-  line-height: 1;
-}
-
-.cp__emoji-icon-picker .hover-preview > strong {
-  opacity: 0.6;
-  font-size: 1rem;
-  white-space: nowrap;
-  font-weight: 400;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  margin-right: 0.5rem;
-}
-
 .ui__dropdown-menu-content .cp__emoji-icon-picker {
   margin: -0.25rem;
 }
@@ -2678,36 +2481,6 @@ select.form-select {
   font-size: inherit;
   cursor: pointer;
   padding: 0.125rem 0.25rem;
-}
-
-
-.ls-view-filter {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  border: 1px solid
-    var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))));
-  border-radius: 0.25rem;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.ls-view-filter button {
-  padding: 0 0.5rem;
-  border-style: none;
-  border-right: 1px solid
-    var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))));
-  background: none;
-  font-size: 0.875rem;
-  color: inherit;
-  cursor: pointer;
-  opacity: 0.8;
-}
-
-.ls-view-filter button:last-child {
-  border-right: none;
-  padding: 0 0.25rem;
-  opacity: 1;
 }
 
 .ls-view-filter-value-item {
@@ -2791,10 +2564,6 @@ select.form-select {
   background: var(--lx-gray-03, var(--ls-tertiary-background-color, hsl(var(--muted))));
 }
 
-.ls-page-menu {
-  width: 280px;
-}
-
 /* graphs page + misc menu lists */
 .menu-list .ui__dropdown-menu-item {
   width: 100%;
@@ -2821,8 +2590,7 @@ select.form-select {
 }
 
 /* cljs login.css bumps the muted text/links up to 80% */
-.cp__user-login span.opacity-50,
-.cp__user-login a.opacity-60 {
+.cp__user-login span.opacity-50 {
   opacity: 0.8;
 }
 
@@ -2896,7 +2664,6 @@ select.form-select {
 /* cljs file_sync.css .cp__rtc-sync-indicator — state dot on the cloud
    button: pending yellow for on/syncing/queuing, green when idle */
 :root {
-  --ls-color-file-sync-error: var(--color-red-600);
   --ls-color-file-sync-pending: var(--color-yellow-600);
   --ls-color-file-sync-idle: var(--color-green-600);
 }
@@ -2952,11 +2719,6 @@ select.form-select {
 }
 
 /* generic muted/secondary text inside overlays */
-.ui__popover-content .text-muted,
-.ui__dropdown-menu-content .text-muted,
-.ui__dialog-content .text-muted {
-  color: var(--ls-secondary-text-color, var(--muted-foreground));
-}
 
 /* skeleton/loading blocks inside popup bodies */
 .ui__dialog-content .flex.flex-col,
@@ -3055,10 +2817,6 @@ select.form-select {
 .ls-row-gap {
   display: flex;
   gap: 0.5rem;
-}
-
-.ls-btn-label {
-  padding-right: 0.25rem;
 }
 
 .ls-kbd-label {
@@ -3272,17 +3030,6 @@ select.form-select {
 .ui__switch.ls-switch-lg {
   width: 2.25rem;
   height: 1.25rem;
-}
-
-.ui__switch-thumb.ls-thumb-lg {
-  width: 1rem;
-  height: 1rem;
-  background: #fff;
-}
-
-.ui__switch-thumb.ls-thumb-lg[data-checked],
-.ui__switch[data-checked] .ui__switch-thumb.ls-thumb-lg {
-  transform: translateX(1rem);
 }
 
 .ui__button.ls-icon-btn-md {
@@ -3631,10 +3378,6 @@ select.form-select {
   flex-shrink: 0;
 }
 
-.ls-btn-pad {
-  padding: 0.25rem 0.5rem;
-}
-
 .ls-ml {
   margin-left: 0.5rem;
 }
@@ -3655,19 +3398,6 @@ select.form-select {
 }
 
 /* property menu/dialog helpers */
-.menu-item-icon-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.ls-prop-input-wrap {
-  display: flex;
-  flex-direction: row;
-  gap: 0.5rem;
-  align-items: center;
-}
 
 .ls-menu-h3 {
   font-weight: 500;
@@ -3683,54 +3413,8 @@ select.form-select {
   gap: 0.25rem;
 }
 
-.ls-pa-row {
-  gap: 0.25rem;
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.ls-pd-row,
-.ls-ep-row {
-  display: flex;
-  flex-direction: row;
-}
-
-.ls-check-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-}
-
-.ls-p1 {
-  padding: 0.25rem;
-}
-
-.ls-pt {
-  padding-top: 0.25rem;
-}
-
-.ls-py {
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-}
-
-.ls-normal {
-  font-weight: 400;
-}
-
 .ls-icon-dim {
   opacity: 0.4;
-}
-
-.ls-span3 {
-  display: flex;
-  flex: 1;
-  grid-column: span 3;
 }
 
 .property-select {
@@ -4339,7 +4023,6 @@ select.form-select {
   font-size: 0.875rem;
 }
 
-
 /* cljs foldable-title: the fold caret span is .control-hide until the
    title is hovered (or the group is collapsed, which emits
    .control-show); cljs toggles the class on mouse-over — the :hover
@@ -4660,13 +4343,6 @@ select.form-select {
 }
 
 /* property value-cell helpers */
-.ls-hover-lit {
-  opacity: 0.7;
-}
-
-.ls-hover-lit:hover {
-  opacity: 1;
-}
 
 .property-value-inner {
   width: 100%;
@@ -4704,18 +4380,8 @@ select.form-select {
   gap: 0.25rem;
 }
 
-.ls-number {
-  flex: 1;
-  min-width: 0;
-}
-
 .property-block-container {
   width: 100%;
-}
-
-.property-value-panel-inner {
-  flex: 1;
-  min-width: 0;
 }
 
 .all-pane {
@@ -4727,7 +4393,6 @@ select.form-select {
   padding: 0.25rem 0.75rem;
   border-radius: 0.25rem;
 }
-
 
 /* The vendored LUI platform stylesheet (lui.css) ships a shadcn oklch
    :root theme in @layer theme; where it redefines these tokens it

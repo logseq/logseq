@@ -129,7 +129,7 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
            ((if vis = [] && String.trim s.q <> "" then
                [ text ~key:"select-empty"
                    ~value:(I18n.t "search/no-result")
-                   ~style_class:"ls-select-empty" [] ]
+                   [] ]
              else [])
             @ [ list ~height:(if vis = [] then 0 else if compact then min 280 (32 * List.length vis) else 280)
                (List.mapi
@@ -143,7 +143,7 @@ let view ~placeholder ?(compact = false) ?new_option ?(on_enter_text = None)
                      [ row ~gap:4 ~cross:`center ~grow:1.0
                          ((if it.it_icon = "" then [] else [ Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon ])
                           @ [ text ~value:title ~grow:1.0 [] ]
-                          @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 ~style_class:"ls-property-select-check" [] ] else []) ]
+                          @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ]
                  else
                    list_item
                      ~key:(if it.it_new then "__new__" else it.it_title)

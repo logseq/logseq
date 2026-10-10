@@ -182,7 +182,7 @@ let remote_section (remote_sig : remote_graph list Signal.signal) : t =
   column ~key:"remote-sec"
     [ divider ~key:"remote-hr" ~style_class:"mt-8" []
     ; row ~key:"remote-head" ~main:`space_between ~cross:`center
-        [ heading ~key:"rh" ~level:2 ~style_class:"graphs-h2"
+        [ heading ~key:"rh" ~level:2
             ~value:T.remote_graphs []
         ; button ~key:"refresh" ~text:T.refresh
             ~disabled_signal:(Signal.value refreshing)
@@ -234,7 +234,7 @@ let view (ms : Model.t Signal.signal) : t =
   let remote_non_empty =
     Logseq_el.own ctx (Signal.map (fun r -> r <> []) remote_sig)
   in
-  column ~key:"graphs-root" ~style_class:"graphs-host"
+  column ~key:"graphs-root"
     [ heading ~key:"title" ~level:1 ~style_class:"title"
         ~value:T.all_graphs []
     ; column ~key:"content" ~style_class:"content" ~padding_horizontal:4
@@ -245,7 +245,7 @@ let view (ms : Model.t Signal.signal) : t =
                 []
             ]
         ; column ~key:"local"
-            [ heading ~key:"lh" ~level:2 ~style_class:"graphs-h2"
+            [ heading ~key:"lh" ~level:2
                 ~value:T.local_graphs []
             ; keyed ~source:merged_src ~key:(fun r -> r)
                 ~cmp:String.compare

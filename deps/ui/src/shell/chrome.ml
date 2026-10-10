@@ -825,8 +825,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
 let main_content (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "cp__sidebar-main-layout"
-      ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
+      if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
        ~grow:1.
        [ scroll ~key:"main-content"
@@ -983,7 +982,7 @@ let help_menu_popup : t =
     ~cls:"cp__sidebar-help-menu-popup"
     ~anchor:`above ~anchor_alignment:`end_
     ~on_dismiss:(fun _ -> close ())
-    [ column ~key:"hm-wrap" ~style_class:"list-wrap"
+    [ column ~key:"hm-wrap"
         [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
         ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
         ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
@@ -1073,7 +1072,6 @@ let shell (ms : Model.t Signal.signal) : t =
       in
       "theme-container-inner"
       ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
-      ^ (if m.right_sidebar_open then " ls-right-sidebar-open" else "")
       ^ (if wide_mode then " ls-wide-mode" else "")
       ^ (if Pdf_state.hl_colored () then " ls-hl-colored" else ""))
     (box ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"

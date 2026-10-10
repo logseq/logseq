@@ -205,3 +205,60 @@ Notes:
   cmdk/settings semantic hooks kept during T4–T5 recipe migrations
   (`cp__cmdk-*`, `ls-swatch-*`, `ls-tooltip-*`, `shui-shortcut-*`) —
   removing them is safe to batch in a follow-up, not done here.
+
+## CSS purge (2026-10-10, branch `devin/css-purge`)
+
+Reverse pass over the same audit: for every rule in
+`resources/css/lui-overlay.css`, `resources/css/lui-core.css`, and
+`resources/css/theme/*.css` (vendored `lui.css` excluded), the selector
+was checked against every class emitter (`deps/ui/{src,native,subs,web}`
+`.ml` `style_class`/`("class", ..)`/`data_attrs` sites including
+dynamic families `"ls-dialog-" ^ name`, `"mode-" ^`, `"ls-icon-" ^`,
+`"cp__settings-" ^`, `"block-drag-over-" ^`, `"ed-" ^ t`, plus
+`deps/ui/{shims,js_app,web,gpui}` and the LUI runtime). 939 rules were
+classified: 871 live, 5 kept as e2e/imperative hooks, 63 dead.
+
+Rules deleted per file:
+
+- `resources/css/lui-overlay.css`: **49 rules** (271 lines). Notables:
+  `.menu-link.no-padding`, `.cp__select-input.ls-compact`, the whole
+  `.cp__select-main .type-icon` cluster, `.ls-readme-repo-icon`,
+  `.ui__button.ls-btn-outline-sm`, the `.ls-property-dropdown
+  .inner-wrap` group, `.ls-property-name-edit-pane`/`.ls-base-edit-form`
+  inputs, `.cp__user-login a.opacity-60`, `html.is-mobile`-era leftovers,
+  `.ui__toaster` (toasts are LUI `lui-toast` now).
+- `resources/css/lui-core.css`: **12 rules** (72 lines): `.cp__header-logo`
+  + its 640px media block, `.is-electron.is-mac[.is-fullscreen]
+  .cp__header > .l` (is-electron/is-mac/is-fullscreen are never emitted),
+  `.as-scalar-value-wrap .ui__checkbox`, `.hidden-block .block-children`,
+  `.non-block-editor textarea`, the `html.is-mobile` block,
+  `html.custom-scrollbar` scrollbar variant. `.cm-s-solarized.CodeMirror`
+  kept — `cm-s-solarized` is emitted by CodeMirror 5 at runtime.
+- `resources/css/theme/index.css`: **1 rule** (160 lines): the
+  `.ui__toaster` toast stack (superseded by `lui-toast-viewport`).
+
+Also deleted:
+
+- 7 dead comma-part alternatives pruned from otherwise-live rules
+  (`.menu-links-outer`, `.ls-property-name-edit-pane .ui__input` +
+  `.ls-base-edit-form .ui__input`, `.ui__textarea:focus`,
+  `.cp__user-login a.opacity-60`, `.editor-inner .multiline-block:hN`,
+  `html.custom-scrollbar`, `.video-inline-text`).
+- 1 emptied `@media (min-width: 640px)` block; 0 dead `@keyframes`.
+- **524 unreferenced custom properties**: the whole
+  `theme/radix-hsl.css` file (672 `--rx-*-hsl` triplets, removed along
+  with its `tailwind.all.css` import), 350 unused `--rx-*` ramps in
+  `theme/radix.css` (color families with no `[data-color]` block and
+  the `--rx-{black,white}-alpha` overlays), 47 dead `--ls-wb-*`/accent
+  twins in `theme/colors.css`, and 11 dead vars in the two lui sheets.
+- All **75 dead-candidate emitted tokens** were removed from their
+  emitters (all sites found — several tokens had extra emission sites
+  beyond the table, e.g. `asset-ref` in `render_inline.ml`,
+  `list-wrap`/`cp__sidebar-main-layout` in `src/shell/chrome.ml`,
+  `cp__query-builder-filter` in `views_builder.ml`). The 65 e2e/test
+  hooks, 12 imperative hooks, and 5 dynamic-prefix-family tokens were
+  kept.
+
+Gates after the purge: `dune build js_app test gpui/drive_test.exe`
+clean, `test_main.js` 2009 checks 0 failures, `dune runtest` green,
+`npm run css:build` succeeds.

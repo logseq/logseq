@@ -932,7 +932,7 @@ let ref_filter_dialog inst anchor =
              [ D.el ~style_class:"ls-filters-icon"
                  [ icon ~name:(Views_table.icon_of "filter") ~point_size:20
                      ~style_class:"ls-icon-filter" [] ]
-             ; D.el ~style_class:"ls-filters-title-wrap"
+             ; D.el
                  [ D.el ~tag:"h3" ~style_class:"ls-filters-title"
                      ~text:(I.t "reference.filter/title") []
                  ; D.el ~tag:"span" ~style_class:"text-xs"
@@ -1035,7 +1035,7 @@ let render_head inst : t =
       Signal.set hover false;
       Runtime.flush ())
     ~style_class:
-      ("ls-view-head" ^ if is_refs then " ls-refs" else "")
+      "ls-view-head"
     [ row ~style_class:"ls-view-head-left"
         [ (match inst.V.kind with
            | V.KQuery _ ->

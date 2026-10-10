@@ -438,7 +438,7 @@ let table_el ~self lines : t =
        rules gpui cannot see *)
     D.el ~tag
       ~attrs:
-        [ ("scope", "col"); ("class", "org-left")
+        [ ("scope", "col")
         ; ( "data-style"
           , "border:1px solid var(--ls-border-color);padding:6px;\
              min-width:0;flex:1"
@@ -625,7 +625,7 @@ let table_el ~self (header, rows) : t =
   let cell tag c =
     (* data-style: gpui inline-style channel — cell border/padding +
        header fill live in lui-core.css rules gpui cannot see *)
-    D.el ~tag ~style_class:"org-left"
+    D.el ~tag
       ~attrs:
         [ ("scope", "col")
         ; ( "data-style"
@@ -650,7 +650,7 @@ let table_el ~self (header, rows) : t =
               ; ("data-style", "width:98%") ]
             [ D.el ~tag:"colgroup"
                 (List.map
-                   (fun _ -> D.el ~tag:"col" ~style_class:"org-left" [])
+                   (fun _ -> D.el ~tag:"col" [])
                    header)
             ; D.el ~tag:"thead"
                 [ D.el ~tag:"tr"

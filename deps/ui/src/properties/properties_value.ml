@@ -915,7 +915,7 @@ and block_value_wrap (inner : t) : t =
                 ; box ~style_class:"bullet-container"
                     [ box ~style_class:"bullet" [] ] ]
             ; Lui_elements.box ~grow:1.0
-                ~style_class:"block-content-wrap" [ inner ] ] ] ]
+                [ inner ] ] ] ]
 
 (* cljs url values embed a .property-block-container .ls-block row —
    external-link title (inline inside the non-flex content wrap);

@@ -27,9 +27,7 @@ html:not(.is-native-android) {
   scrollbar-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color))
     var(--lx-gray-02, var(--ls-scrollbar-background-color));
 
-  --ls-z-index-level-0: 0;
   --ls-z-index-level-1: 9;
-  --ls-z-index-level-2: 99;
   --ls-z-index-level-3: 999;
   --ls-z-index-level-4: 9999;
   --ls-z-index-level-5: 99999;
@@ -44,10 +42,8 @@ html:not(.is-native-android) {
   --color-primary: hsl(var(--primary));
   --color-secondary: hsl(var(--secondary));
   --color-accent: hsl(var(--accent));
-  --color-muted: hsl(var(--muted));
   --color-destructive: hsl(var(--destructive));
   --color-card: hsl(var(--card));
-  --color-popover: hsl(var(--popover));
 }
 
 html {
@@ -528,25 +524,6 @@ blockquote {
   .search-index-progress__bar::before {
     background-color: var(--ls-link-text-color);
   }
-}
-
-.cp__header-logo {
-  display: none;
-}
-
-/* cljs header.css @media (min-width: 640px) */
-@media (min-width: 640px) {
-  .cp__header-logo {
-    display: block;
-  }
-}
-
-.is-electron.is-mac .cp__header > .l {
-  padding-left: 78px;
-}
-
-.is-electron.is-mac.is-fullscreen .cp__header > .l {
-  padding-left: 1rem;
 }
 
 /* ========================= Left sidebar ================================== */
@@ -2017,13 +1994,6 @@ a.page-title {
   opacity: 1;
 }
 
-/* the blanket .jtrigger{flex:1} must not grow the shui checkbox inside
-   its label — applies in the page properties panel AND in positioned
-   property rows embedded inside reference blocks (cljs keeps it 16px) */
-.as-scalar-value-wrap .ui__checkbox {
-  flex: 0 0 auto;
-}
-
 .ls-block.property-value-container {
   flex: 1;
   flex-shrink: 0;
@@ -2364,10 +2334,6 @@ a.page-title {
     var(--lx-gray-04-alpha, var(--ls-guideline-color)) !important;
 }
 
-.hidden-block .block-children {
-  border-left: 0;
-}
-
 /* Bullet + controls */
 /* heading levels shrink the bullet/icon box — was an inline
    --ls-block-icon-size style attr computed in tree.ml (applied to both
@@ -2576,8 +2542,7 @@ a.page-title {
 
 .ls-block :is(h1, h2, h3, h4, h5, h6),
 .editor-inner .uniline-block:is(.h1, .h2, .h3, .h4, .h5, .h6),
-.block-editor.uniline-block:is(.h1, .h2, .h3, .h4, .h5, .h6),
-.editor-inner .multiline-block:is(.h1, .h2, .h3, .h4, .h5, .h6)::first-line {
+.block-editor.uniline-block:is(.h1, .h2, .h3, .h4, .h5, .h6) {
   font-weight: 600;
 }
 
@@ -2691,10 +2656,6 @@ a.page-title {
     letter-spacing: inherit;
     color: inherit;
   }
-}
-
-.non-block-editor textarea {
-  background: var(--ls-secondary-background-color);
 }
 
 /* shared-OCaml rich-text editor — rendered by edit_view.ml; the overlay
@@ -3025,33 +2986,6 @@ a.page-title {
   height: inherit;
 }
 
-html.is-mobile {
-  .block-title-wrap.as-heading {
-    display: inline;
-    font-size: inherit;
-  }
-
-  .katex-display {
-    display: inline;
-    margin: 0;
-  }
-
-  .katex-display > .katex {
-    display: inline-block;
-    text-align: initial;
-  }
-
-  .katex-display > .katex > .katex-html > .tag {
-    position: static;
-    margin-left: 0.5em;
-  }
-
-  .katex svg {
-    width: 100%;
-    height: inherit;
-  }
-}
-
 .math-block,
 .math-block .latex {
   width: 100%;
@@ -3133,12 +3067,6 @@ a.tag {
   }
 }
 
-.open-block-ref-link {
-  background-color: var(--ls-page-properties-background-color);
-  padding: 1px 4px;
-  border-radius: 2px;
-}
-
 .embed-page {
   padding: 0.5rem;
   margin: 0.5rem 0;
@@ -3159,11 +3087,6 @@ a.tag {
   margin: 0 2px 0 0;
   font-weight: 650;
   border: 0;
-}
-
-.marker-switch:hover {
-  color: var(--ls-link-text-hover-color);
-  opacity: 1;
 }
 
 .done,
@@ -3377,8 +3300,7 @@ button[role='checkbox'][data-state='unchecked'] {
   cursor: text;
 }
 
-.visible-scrollbar,
-html.custom-scrollbar {
+.visible-scrollbar {
   ::-webkit-scrollbar-thumb {
     background-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color, var(--rx-gray-05)));
 
@@ -3411,12 +3333,6 @@ html.custom-scrollbar {
   min-height: 1px;
 }
 
-.text-ellipsis-wrapper {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 a.close svg,
 .rotating-arrow svg,
 .rotating-arrow .lui-icon {
@@ -3435,7 +3351,6 @@ a.close {
 /* cljs block.css — video embed shell geometry (embed macros render
    .video-embed-block > .video-embed-shell > .video-embed-frame) */
 .block-title-wrap.has-video-embed,
-.video-inline-text,
 .video-embed-block {
   display: block;
   width: 100%;
@@ -3487,14 +3402,6 @@ a.close {
 }
 
 /* grouped list view wrapper (cljs .flex.flex-col.border-t.pt-2.gap-2) */
-.ls-view-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  border-top: 1px solid hsl(var(--border));
-  margin-top: 0.5rem;
-  padding-top: 0.75rem;
-}
 
 /* master tag-page title icon: bordered rounded box around a small glyph */
 .ls-page-title .ls-page-icon-btn {

@@ -124,7 +124,7 @@ let cmdk_group_hairline ~key : t =
     []
 
 let cmdk_group ~key ~kind ~last ~pad children =
-  column ~key ~style_class:"cp__cmdk-group" ~cross:`stretch ~gap:0
+  column ~key ~cross:`stretch ~gap:0
     ~data_attrs:[ "data-cmdk-group-kind", kind ]
     (children
     @ [ spacer ~key:"gpad" ~height:pad []
@@ -161,7 +161,7 @@ let cmdk_group_title ~key ~value ~on_press : t =
 let cmdk_group_count ~key ~value : t =
   row ~key ~gap:0
     [ spacer ~key:"i" ~width:6 ~height:1 []
-    ; text ~key:"t" ~style_class:"cp__cmdk-group-count"
+    ; text ~key:"t"
         ~font_size:"0.7rem" ~corner_radius:9999 ~value []
     ]
 
@@ -173,8 +173,8 @@ let cmdk_group_more ~key ~on_press children : t =
        ; P.UserSelect, sv "none"
        ; P.Cursor, sv "pointer"
        ]
-       (row ~key ~style_class:"cp__cmdk-group-more"
-          [ row ~key:"i" ~style_class:"cp__cmdk-group-more-inner"
+       (row ~key
+          [ row ~key:"i"
               ~cross:`center ~gap:4 children ]))
 
 (* -- cmdk items ------------------------------------------------------ *)
@@ -214,7 +214,7 @@ let cmdk_item_header ~key children =
     ; P.Position, sv "relative"
     ; P.InsetTop, fv (-4.)
     ]
-    (row ~key ~style_class:"breadcrumb cmdk-item-header" ~cross:`center
+    (row ~key ~style_class:"breadcrumb" ~cross:`center
        ~gap:8 ~min_width:0
        ~data_attrs:
          [ (* WhiteSpace/TextOverflow are text-kind props — on a row the
@@ -226,7 +226,7 @@ let cmdk_item_header ~key children =
        (spacer ~key:"i" ~width:32 ~height:1 [] :: children))
 
 let cmdk_item_main ~key children =
-  row ~key ~style_class:"cmdk-item-main" ~cross:`start ~gap:12 children
+  row ~key ~cross:`start ~gap:12 children
 
 (* 16x20 rounded icon chip; the glyph color is a mode token (white in
    dark like the deleted .dark rule). *)
@@ -239,7 +239,7 @@ let cmdk_icon_chip ~key children =
     ~foreground:"var(--lx-cmdk-icon-fg)" children
 
 let cmdk_item_body ~key children =
-  column ~key ~style_class:"cmdk-item-body" ~grow:1. ~min_width:0
+  column ~key ~grow:1. ~min_width:0
     ~cross:`stretch children
 
 let cmdk_main_text ~key children =
@@ -265,7 +265,7 @@ let cmdk_info_text ~key children =
        children)
 
 let cmdk_badge ~key ~value : t =
-  text ~key ~as_:`Span ~style_class:"cp__cmdk-current-page-badge"
+  text ~key ~as_:`Span
     ~font_size:"var(--lx-text-header)" ~font_weight:500 ~line_height:"1"
     ~padding_vertical:2 ~padding_horizontal:8 ~corner_radius:9999
     ~border_width:1
@@ -371,14 +371,14 @@ let shortcut_separate ~key ~glow:_ children : t =
     children
 
 let shortcut_chord ~key children : t =
-  row ~key ~style_class:"shui-shortcut-chord" ~cross:`center ~gap:8
+  row ~key ~cross:`center ~gap:8
     children
 
 (* "then" separator between chord groups — 10px at 45% opacity like
    cljs shui-shortcut-chord-sep. *)
 let chord_separator ~key : t =
   with_props [ P.Opacity, fv 0.45 ]
-    (text ~key ~style_class:"shui-shortcut-chord-sep" ~font_size:"0.625rem"
+    (text ~key ~font_size:"0.625rem"
        ~value:"then" [])
 
 (* Text-only spans for the compact header link — same typography as a
@@ -421,15 +421,15 @@ let cmdk_hints_bar ~key children =
 let cmdk_hints_inner ~key children =
   with_props
     [ P.FontSize, sv "var(--lx-text-row)"; P.LineHeight, sv "1.5rem" ]
-    (box ~key ~style_class:"cp__cmdk-hints-inner" ~padding_horizontal:6
+    (box ~key ~padding_horizontal:6
        children)
 
 let cmdk_hints_row ~key children =
-  row ~key ~style_class:"cp__cmdk-hints-row" ~cross:`center ~gap:4
+  row ~key ~cross:`center ~gap:4
     children
 
 let cmdk_hints_label ~key ~value : t =
-  text ~key ~style_class:"cp__cmdk-hints-label" ~font_weight:500 ~value
+  text ~key ~font_weight:500 ~value
     ~foreground:
       "var(--lx-gray-12, var(--ls-primary-text-color, \
        var(--lui-c-foreground)))"
@@ -438,13 +438,13 @@ let cmdk_hints_label ~key ~value : t =
 (* The tip line brightens on hover (own hover channel). *)
 let cmdk_tip ~key children : t =
   with_props [ P.Opacity, fv 0.5; P.HoverOpacity, fv 1.0 ]
-    (row ~key ~style_class:"cp__cmdk-tip" ~cross:`center ~gap:4 children)
+    (row ~key ~cross:`center ~gap:4 children)
 
 (* Right-aligned action hints group — the -6px bleed-out under the bar's
    6px pad becomes a relative inset like the item header's. *)
 let cmdk_hints_group ~key children : t =
   with_props [ P.Position, sv "relative"; P.InsetRight, fv (-6.) ]
-    (row ~key ~style_class:"cp__cmdk-hints" ~cross:`center ~gap:8
+    (row ~key ~cross:`center ~gap:8
        children)
 
 (* Flat 28px hint button — dims to 0.8 on hover via its own channel. *)
@@ -472,29 +472,29 @@ let cmdk_search_only ~key children : t =
     ; P.FontWeight, iv 500
     ; P.LineHeight, sv "1rem"
     ]
-    (column ~key ~style_class:"cp__cmdk-search-only" ~opacity:0.7
+    (column ~key ~opacity:0.7
        ~padding_vertical:4 ~padding_horizontal:12 children)
 
 let cmdk_search_only_row ~key children : t =
-  row ~key ~style_class:"cp__cmdk-search-only-row" ~cross:`center ~gap:4
+  row ~key ~cross:`center ~gap:4
     children
 
 (* 4px left inset via leading spacer (see group_title). *)
 let cmdk_search_only_name ~key ~value : t =
   row ~key ~gap:0
     [ spacer ~key:"i" ~width:4 ~height:1 []
-    ; text ~key:"t" ~style_class:"cp__cmdk-search-only-name"
+    ; text ~key:"t"
         ~font_weight:500 ~value []
     ]
 
 let cmdk_search_only_clear ~key ~label ~on_press : t =
   with_props [ P.Cursor, sv "pointer" ]
     (button ~key ~icon:`x ~size:`icon ~label ~on_press
-       ~style_class:"cp__cmdk-search-only-clear" ~background:"transparent"
+       ~background:"transparent"
        ~border_width:0 ~padding:4 [])
 
 let cmdk_empty ~key children : t =
-  box ~key ~style_class:"cp__cmdk-empty" ~padding:16 ~opacity:0.5
+  box ~key ~padding:16 ~opacity:0.5
     children
 
 (* -- tooltip ---------------------------------------------------------- *)
@@ -515,7 +515,7 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
            0.1)" )
     ]
     (popover ~key ~accessibility_identifier:"lui-tooltip" ~at
-       ~style_class:"ui__tooltip-content ls-tooltip" ~gap:6 ~cross:`center
+       ~style_class:"ui__tooltip-content" ~gap:6 ~cross:`center
        ~data_attrs:[ "role", "tooltip" ]
        ~padding_horizontal:12 ~padding_vertical:6 ~max_width:320
        ~corner_radius:6 ~border_width:1
@@ -536,11 +536,11 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
          ]))
 
 let ls_tooltip_col ~key children : t =
-  column ~key ~style_class:"ls-tooltip-col" ~cross:`start ~gap:4 children
+  column ~key ~cross:`start ~gap:4 children
 
 let ls_tooltip_keys ~key children : t =
   with_props [ P.Opacity, fv 0.8 ]
-    (row ~key ~style_class:"ls-tooltip-keys" ~cross:`center ~gap:1
+    (row ~key ~cross:`center ~gap:1
        children)
 
 (* -- settings & properties recipes (task 5) ----------------------------- *)
@@ -601,7 +601,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem")
     ?(pad_left = 28) ?background ?(borderless = false) ?(trailing = [])
     ?autofocus ~placeholder ~text_signal:text ~on_input () : t =
   with_props [ P.Position, sv "relative" ]
-    (row ~key ~style_class:"ls-search-row" ~cross:`center ~gap:0
+    (row ~key ~cross:`center ~gap:0
        ~min_width:0
        ([ with_props
             [ P.Position, sv "absolute"
@@ -709,7 +709,7 @@ let property_pill ~key children : t =
     ; P.LineHeight, sv "20px"
     ; P.Overflow, sv "hidden"
     ]
-    (row ~key ~style_class:"bottom-property-pill bottom-property-pill-focusable"
+    (row ~key ~style_class:"bottom-property-pill"
        ~cross:`center ~gap:4 ~height:24 ~padding_vertical:2
        ~padding_horizontal:8 ~corner_radius:9999 ~min_width:0
        ~background:

@@ -133,9 +133,6 @@ html {
       --ls-block-properties-background-color: var(--rx-mauve-03);
       --ls-page-inline-code-bg-color: var(--rx-mauve-03);
       --ls-cloze-text-color: var(--rx-tomato-08);
-      --ls-wb-stroke-color-default: var(--rx-tomato-07);
-      --ls-wb-background-color-default: var(--rx-tomato-04);
-      --ls-wb-text-color-default: var(--rx-mauve-12);
       --ls-a-chosen-bg: var(--rx-mauve-01);
     }
   }
@@ -147,7 +144,6 @@ html {
       --primary-foreground: 190 43% 97%;
       --ring: 359 69.5% 74.3%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-red-01);
       --lx-accent-02: var(--rx-red-02);
@@ -219,9 +215,6 @@ html {
       --ls-block-properties-background-color: var(--rx-mauve-03);
       --ls-page-inline-code-bg-color: var(--rx-mauve-03);
       --ls-cloze-text-color: var(--rx-red-08);
-      --ls-wb-stroke-color-default: var(--rx-red-07);
-      --ls-wb-background-color-default: var(--rx-red-04);
-      --ls-wb-text-color-default: var(--rx-mauve-12);
       --ls-a-chosen-bg: var(--rx-mauve-01);
     }
   }
@@ -304,9 +297,6 @@ html {
       --ls-block-properties-background-color: var(--rx-slate-03);
       --ls-page-inline-code-bg-color: var(--rx-slate-03);
       --ls-cloze-text-color: var(--rx-blue-08);
-      --ls-wb-stroke-color-default: var(--rx-blue-07);
-      --ls-wb-background-color-default: var(--rx-blue-04);
-      --ls-wb-text-color-default: var(--rx-slate-12);
       --ls-a-chosen-bg: var(--rx-slate-01);
     }
   }
@@ -318,7 +308,6 @@ html {
       --primary-foreground: 190 43% 97%;
       --ring: 336 62.3% 72.9%;
       --accent-foreground: 190 43% 97%;
-      --primary-accent-foreground: 190 43% 97%;
 
       --lx-accent-01: var(--rx-crimson-01);
       --lx-accent-02: var(--rx-crimson-02);
@@ -390,9 +379,6 @@ html {
       --ls-block-properties-background-color: var(--rx-mauve-03);
       --ls-page-inline-code-bg-color: var(--rx-mauve-03);
       --ls-cloze-text-color: var(--rx-crimson-08);
-      --ls-wb-stroke-color-default: var(--rx-crimson-07);
-      --ls-wb-background-color-default: var(--rx-crimson-04);
-      --ls-wb-text-color-default: var(--rx-mauve-12);
       --ls-a-chosen-bg: var(--rx-mauve-01);
     }
   }
@@ -474,9 +460,6 @@ html {
       --ls-block-properties-background-color: var(--rx-mauve-03);
       --ls-page-inline-code-bg-color: var(--rx-mauve-03);
       --ls-cloze-text-color: var(--rx-pink-08);
-      --ls-wb-stroke-color-default: var(--rx-pink-07);
-      --ls-wb-background-color-default: var(--rx-pink-04);
-      --ls-wb-text-color-default: var(--rx-mauve-12);
       --ls-a-chosen-bg: var(--rx-mauve-01);
     }
   }
@@ -558,9 +541,6 @@ html {
       --ls-block-properties-background-color: var(--rx-mauve-03);
       --ls-page-inline-code-bg-color: var(--rx-mauve-03);
       --ls-cloze-text-color: var(--rx-plum-08);
-      --ls-wb-stroke-color-default: var(--rx-plum-07);
-      --ls-wb-background-color-default: var(--rx-plum-04);
-      --ls-wb-text-color-default: var(--rx-mauve-12);
       --ls-a-chosen-bg: var(--rx-mauve-01);
     }
   }
@@ -642,9 +622,6 @@ html {
       --ls-block-properties-background-color: var(--rx-mauve-03);
       --ls-page-inline-code-bg-color: var(--rx-mauve-03);
       --ls-cloze-text-color: var(--rx-purple-08);
-      --ls-wb-stroke-color-default: var(--rx-purple-07);
-      --ls-wb-background-color-default: var(--rx-purple-04);
-      --ls-wb-text-color-default: var(--rx-mauve-12);
       --ls-a-chosen-bg: var(--rx-mauve-01);
     }
   }
@@ -726,9 +703,6 @@ html {
       --ls-block-properties-background-color: var(--rx-mauve-03);
       --ls-page-inline-code-bg-color: var(--rx-mauve-03);
       --ls-cloze-text-color: var(--rx-violet-08);
-      --ls-wb-stroke-color-default: var(--rx-violet-07);
-      --ls-wb-background-color-default: var(--rx-violet-04);
-      --ls-wb-text-color-default: var(--rx-mauve-12);
       --ls-a-chosen-bg: var(--rx-mauve-01);
     }
   }
@@ -810,9 +784,6 @@ html {
       --ls-block-properties-background-color: var(--rx-slate-03);
       --ls-page-inline-code-bg-color: var(--rx-slate-03);
       --ls-cloze-text-color: var(--rx-indigo-08);
-      --ls-wb-stroke-color-default: var(--rx-indigo-07);
-      --ls-wb-background-color-default: var(--rx-indigo-04);
-      --ls-wb-text-color-default: var(--rx-slate-12);
       --ls-a-chosen-bg: var(--rx-slate-01);
     }
   }
@@ -896,9 +867,6 @@ html {
       --ls-block-properties-background-color: var(--rx-slate-03);
       --ls-page-inline-code-bg-color: var(--rx-slate-03);
       --ls-cloze-text-color: var(--rx-cyan-08);
-      --ls-wb-stroke-color-default: var(--rx-cyan-07);
-      --ls-wb-background-color-default: var(--rx-cyan-04);
-      --ls-wb-text-color-default: var(--rx-slate-12);
       --ls-a-chosen-bg: var(--rx-slate-01);
     }
   }
@@ -980,9 +948,6 @@ html {
       --ls-block-properties-background-color: var(--rx-sage-03);
       --ls-page-inline-code-bg-color: var(--rx-sage-03);
       --ls-cloze-text-color: var(--rx-teal-08);
-      --ls-wb-stroke-color-default: var(--rx-teal-07);
-      --ls-wb-background-color-default: var(--rx-teal-04);
-      --ls-wb-text-color-default: var(--rx-sage-12);
       --ls-a-chosen-bg: var(--rx-sage-01);
     }
   }
@@ -1065,9 +1030,6 @@ html {
       --ls-block-properties-background-color: var(--rx-sage-03);
       --ls-page-inline-code-bg-color: var(--rx-sage-03);
       --ls-cloze-text-color: var(--rx-green-08);
-      --ls-wb-stroke-color-default: var(--rx-green-07);
-      --ls-wb-background-color-default: var(--rx-green-04);
-      --ls-wb-text-color-default: var(--rx-sage-12);
       --ls-a-chosen-bg: var(--rx-sage-01);
     }
   }
@@ -1149,9 +1111,6 @@ html {
       --ls-block-properties-background-color: var(--rx-olive-03);
       --ls-page-inline-code-bg-color: var(--rx-olive-03);
       --ls-cloze-text-color: var(--rx-grass-08);
-      --ls-wb-stroke-color-default: var(--rx-grass-07);
-      --ls-wb-background-color-default: var(--rx-grass-04);
-      --ls-wb-text-color-default: var(--rx-olive-12);
       --ls-a-chosen-bg: var(--rx-olive-01);
     }
   }
@@ -1233,9 +1192,6 @@ html {
       --ls-block-properties-background-color: var(--rx-sand-03);
       --ls-page-inline-code-bg-color: var(--rx-sand-03);
       --ls-cloze-text-color: var(--rx-orange-08);
-      --ls-wb-stroke-color-default: var(--rx-orange-07);
-      --ls-wb-background-color-default: var(--rx-orange-04);
-      --ls-wb-text-color-default: var(--rx-sand-12);
       --ls-a-chosen-bg: var(--rx-sand-01);
     }
   }
@@ -1318,9 +1274,6 @@ html {
       --ls-block-properties-background-color: var(--rx-sand-03);
       --ls-page-inline-code-bg-color: var(--rx-sand-03);
       --ls-cloze-text-color: var(--rx-brown-08);
-      --ls-wb-stroke-color-default: var(--rx-brown-07);
-      --ls-wb-background-color-default: var(--rx-brown-04);
-      --ls-wb-text-color-default: var(--rx-sand-12);
       --ls-a-chosen-bg: var(--rx-sand-01);
     }
   }

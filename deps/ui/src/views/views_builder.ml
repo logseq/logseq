@@ -569,19 +569,19 @@ let add_id inst loc = "qba-" ^ string_of_int inst.V.id ^ "-" ^ loc_key loc
 let rec clause_el inst ~tree ~loc (c : clause) : t =
   match c with
   | COp (op, xs) ->
-      box ~key:("qc-" ^ loc_key loc) ~style_class:"query-builder-clause"
-        [ row ~key:"oc" ~cross:`center ~style_class:"operator-clause"
-            [ text ~key:"bl" ~style_class:"clause-bracket" ~value:"(" []
+      box ~key:("qc-" ^ loc_key loc)
+        [ row ~key:"oc" ~cross:`center
+            [ text ~key:"bl" ~value:"(" []
             ; clauses_group inst ~tree ~loc:(loc @ [ 0 ]) ~kind:op ~clauses:xs
-            ; text ~key:"br" ~style_class:"clause-bracket" ~value:")" []
+            ; text ~key:"br" ~value:")" []
             ]
         ]
   | _ ->
       let id = clause_id inst loc in
-      box ~key:("qc-" ^ loc_key loc) ~style_class:"query-builder-clause"
+      box ~key:("qc-" ^ loc_key loc)
         [ row ~key:"btn" ~gap:8 ~padding_horizontal:4 ~cross:`center
             ~border_width:1 ~corner_radius:4
-            ~style_class:"query-builder-clause-btn"
+           
             [ text ~key:"a" ~accessibility_identifier:id
                 ~style_class:"query-clause" ~value:(clause_label inst c)
                 ~on_press:(fun _ ->
@@ -610,7 +610,7 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
     ~icon:`plus ~size:`sm ~height:24 ~foreground:"muted-foreground"
     ~label:I.filter
     ?text:(if with_label then Some I.filter else None)
-    ~style_class:"jtrigger add-filter"
+    ~style_class:"jtrigger"
     ~on_press:(fun _ ->
       match Ui_services.dom_by_id id with
       | Some anchor -> picker inst ~tree ~loc ~anchor
@@ -619,18 +619,18 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
 
 and clauses_group inst ~tree ~loc ~kind ~clauses : t =
   let parens = loc = [ 0 ] && (kind <> "and" || List.length clauses > 1) in
-  box ~key:("qg-" ^ loc_key loc) ~style_class:"clauses-group"
+  box ~key:("qg-" ^ loc_key loc)
     ( (if parens then
-         [ text ~key:"pl" ~style_class:"clause-bracket" ~value:"(" [] ]
+         [ text ~key:"pl" ~value:"(" [] ]
        else [])
     @ (if not (loc = [ 0 ] && kind = "and" && List.length clauses <= 1) then
-         [ box ~key:"opl" ~style_class:"query-builder-clause"
+         [ box ~key:"opl"
              [ op_label_el inst ~tree ~loc kind ]
          ]
        else [])
     @ List.mapi (fun i c -> clause_el inst ~tree ~loc:(loc @ [ i + 1 ]) c) clauses
     @ (if parens then
-         [ text ~key:"pr" ~style_class:"clause-bracket" ~value:")" [] ]
+         [ text ~key:"pr" ~value:")" [] ]
        else [])
     @ (if loc <> [ 0 ] then
          [ add_filter_btn inst ~tree ~loc ~with_label:false ]
@@ -639,7 +639,7 @@ and clauses_group inst ~tree ~loc ~kind ~clauses : t =
 (* the builder panel rendered inside .custom-query-results for dsl queries *)
 let builder_el inst ~tree : t =
   box ~style_class:"cp__query-builder"
-    [ box ~key:"f" ~style_class:"cp__query-builder-filter"
+    [ box ~key:"f"
         ( (match !tree with
            | COp ("and", []) -> []
            | t ->

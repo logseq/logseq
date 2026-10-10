@@ -159,7 +159,7 @@ let shui_shortcut svs (binding : string) =
     |> List.map String.trim
     |> List.filter (fun b -> b <> "")
   in
-  column ~key:"sc" ~style_class:"shui-shortcut"
+  column ~key:"sc"
     (List.concat
        (List.mapi
           (fun bi b ->
@@ -179,7 +179,7 @@ let shui_shortcut svs (binding : string) =
                  | _ -> [ separate_el svs "sep" keys ])
             in
             [ row ~key:(Printf.sprintf "b%d" bi)
-                ~style_class:"shui-shortcut-b"
+               
                 body ])
           bindings))
 
@@ -515,7 +515,7 @@ let group_header svs (st : S.t) (g : S.group) : t =
         ~value:
           (if g.S.gtotal >= 99 then "99+"
            else string_of_int g.S.gtotal)
-    ; spacer ~key:"gsp" ~grow:1. ~style_class:"cp__cmdk-group-spacer" []
+    ; spacer ~key:"gsp" ~grow:1. []
     ; (if (g.S.gtotal > g.S.glimit || g.S.gexpanded)
           && not g.S.gfilter_active
           && not (S.get st).S.sidebar

@@ -133,7 +133,7 @@ let plugins_menu st =
                   (Plugin_host.inject_toolbar_ui → get_element_by_id) *)
                box ~key:("slot-" ^ pkey)
                  ~accessibility_identifier:(Plugin_host.slot_id it)
-                 ~style_class:"pl-injected-ui-item-toolbar" []
+                 []
              ; text ~key:("lbl-" ^ pkey) ~value:key
                  ~padding_horizontal:2 []
              ; row ~key:("pin-" ^ pkey) ~cross:`center
@@ -645,7 +645,7 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
       | false, false -> spacer ~key:"pm-none" []
       | _ ->
           box ~key:"ui-items" ~style_class:"ui-items-container"
-            [ box ~key:"ui-items-wrap" ~style_class:"list-wrap"
+            [ box ~key:"ui-items-wrap"
                 [ Ui_parts.pressable
                     ~on_press:(fun _ ->
                       Runtime.signal_set st.Sidebar_state.open_menu

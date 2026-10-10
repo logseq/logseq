@@ -141,7 +141,7 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~h_cls ~st =
       [ Lui_elements.select ~key:(key ^ "-s")
           ~text_signal:(Signal.value st)
           ~container_relative_frame:`horizontal
-          ~style_class:("ls-select-trigger " ^ h_cls)
+          ~style_class:h_cls
           ~on_press:(fun _ev ->
             Signal.set mst (not (Runtime.signal_get mst));
             Runtime.flush ())

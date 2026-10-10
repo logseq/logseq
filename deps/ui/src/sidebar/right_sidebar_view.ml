@@ -285,11 +285,11 @@ let item_header st idx (it : Sidebar_state.item) =
 let help_pane st =
   let ext_item ~key label url =
     box ~key ~style_class:"ls-hp-item"
-      [ link ~url ~target:`blank ~style_class:"ls-hp-link" ~text:label [] ]
+      [ link ~url ~target:`blank ~text:label [] ]
   in
   let icon_item ~key label ic =
     box ~key ~style_class:"ls-hp-item"
-      [ text ~style_class:"ls-hp-link ls-hp-iconrow"
+      [ text ~style_class:"ls-hp-iconrow"
           ~on_press:(fun _ ->
             Sidebar_state.open_sticky_item st "shortcut-settings")
           [ row ~cross:`center ~gap:4
@@ -299,7 +299,7 @@ let help_pane st =
   in
   let icon_ext_item ~key label ic url =
     box ~key ~style_class:"ls-hp-item"
-      [ link ~url ~target:`blank ~style_class:"ls-hp-link"
+      [ link ~url ~target:`blank
           [ row ~cross:`center ~gap:4
               [ text ~value:label []
               ; icon_ ~size:18 ic ] ] ]

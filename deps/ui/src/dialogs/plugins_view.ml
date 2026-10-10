@@ -164,14 +164,14 @@ let market_card ~stats ~search_st pkg =
                   match package_stat stats id with
                   | None -> []
                   | Some st ->
-                      row ~key:"stars" ~style_class:"stars" ~cross:`center
+                      row ~key:"stars" ~cross:`center
                         ~gap:2
                         [ icon ~name:(`app "star") ~size:`sm []
                         ; text ~key:"n" ~value:(string_of_int st.stars)
                             [] ]
                       ::
                       (if st.downloads > 0 then
-                         [ row ~key:"dls" ~style_class:"downloads"
+                         [ row ~key:"dls"
                              ~cross:`center ~gap:2
                              [ icon ~name:(`app "cloud-down") ~size:`sm []
                              ; text ~key:"n"
@@ -510,7 +510,7 @@ let desc_item ~key ~label ~control =
   Ui_components.with_props
     [ Lui_protocol.FontSize
     , Lui_protocol.StringValue "0.875rem" ]
-    (row ~key ~style_class:"desc-item" ~cross:`center ~gap:8
+    (row ~key ~cross:`center ~gap:8
        ~padding_vertical:6 [ label; control ])
 
 (* cljs html-content — sanitized markdown rendered raw (DOMPurify) *)
@@ -588,7 +588,7 @@ let item_input pid key s cur =
   in
   desc_item ~key:("i-" ^ key) ~label:(desc_h2 key title)
     ~control:
-      (box ~key:"fc" ~style_class:"form-control" ~cross:`center
+      (box ~key:"fc" ~cross:`center
          (html_desc key desc @ [ field ]))
 
 let item_toggle pid key s cur =
@@ -601,7 +601,7 @@ let item_toggle pid key s cur =
   in
   desc_item ~key:("t-" ^ key) ~label:(desc_h2 key title)
     ~control:
-      (row ~key:"fc" ~style_class:"form-control" ~cross:`center ~gap:6
+      (row ~key:"fc" ~cross:`center ~gap:6
          (checkbox ~key:"cb" ~checked
             ~on_toggle:(fun ev ->
               match ev with
@@ -624,7 +624,7 @@ let item_enum pid key s cur' =
   let cur = json_text_of cur' in
   desc_item ~key:("e-" ^ key) ~label:(desc_h2 key title)
     ~control:
-      (box ~key:"fc" ~style_class:"form-control"
+      (box ~key:"fc"
          [ box ~key:"w" ~style_class:"wrap" ~grow:1. ~min_width:0
              ( html_desc key desc
              @ [ select ~key:"s" ~text:cur
@@ -639,7 +639,7 @@ let item_object key s =
   desc_item ~key:("o-" ^ key)
     ~label:(desc_h2 key (Plugin_host.jstr s "title"))
     ~control:
-      (box ~key:"fc" ~style_class:"form-control"
+      (box ~key:"fc"
          (html_desc key (Plugin_host.jstr s "description")))
 
 let item_button pid key s =
@@ -647,7 +647,7 @@ let item_button pid key s =
   desc_item ~key:("b-" ^ key)
     ~label:(desc_h2 key (Plugin_host.jstr s "title"))
     ~control:
-      (box ~key:"fc" ~style_class:"form-control"
+      (box ~key:"fc"
          ( html_desc key (Plugin_host.jstr s "description")
          @ [ button ~key:"btn" ~style_class:"ui__button is-small"
                ~text:(Plugin_host.jstr s "buttonText")

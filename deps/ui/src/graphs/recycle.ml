@@ -126,7 +126,7 @@ let root_title root : t =
 let render_roots ~restore ~delete_forever roots : t =
   column ~key:"roots" ~gap:32
     (text ~key:"desc"
-       ~style_class:"ls-recycle-page-description"
+      
        ~as_:`Small
        ~foreground:"var(--ls-secondary-text-color)"
        ~value:T.recycle_retention []
