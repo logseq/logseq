@@ -46,16 +46,31 @@ let title_of = function
   | "new-graph" | "add-graph" -> I18n.create_new_graph
   | _ -> ""
 
+(* per-dialog frame geometry migrated out of the
+   .lui-dialog.ls-dialog-<name> overlay rules — vw/min()/calc() clamps
+   have no typed-prop form so they ride the data_attrs style channel *)
+let dialog_frame = function
+  | "plugins" ->
+      "width: 90vw; max-width: 1246px; max-height: calc(100vh - 50px); \
+       overflow-y: hidden"
+  | "settings" ->
+      "box-sizing: border-box; width: min(1024px, calc(100vw - 2rem)); \
+       max-width: calc(100vw - 2rem)"
+  | _ -> ""
+
 (* dialog kind: scrim + centered card + focus trap + outside/Escape
    dismiss all come from the platform; children mount in
    .lui-dialog-body which stacks them (grid-area 1/1) so the close
    button overlays the content column. *)
 let dialog_view name (ms : Model.t Signal.signal) : t =
   let title = title_of name in
+  let frame = dialog_frame name in
   dialog ~key:("dlg-" ^ name)
     ~style_class:("ls-dialog-" ^ name)
-    ~data_attrs:(if title = "" then []
+    ~data_attrs:
+      ((if title = "" then []
         else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ])
+       @ if frame = "" then [] else [ ("style", frame) ])
     ~on_dismiss:(fun _ -> Dialogs_state.close_named name)
     [ column ~key:("dlg-m-" ^ name) ~grow:1.
         ~gap:(if title = "" then 0 else 16) ~cross:`stretch

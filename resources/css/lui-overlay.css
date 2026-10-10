@@ -1171,20 +1171,6 @@ div[data-keep-selection].menu-links-wrapper {
   overflow: hidden;
 }
 
-.lui-dialog.ls-dialog-plugins {
-  width: 90vw;
-  max-width: 1246px;
-  max-height: calc(100vh - 50px);
-  overflow-y: hidden;
-}
-
-/* cljs plugins.css .cp__plugins-page.web-platform .cp__plugins-item-lists */
-.cp__plugins-page.web-platform .cp__plugins-item-lists {
-  max-height: 80vh;
-  height: calc(100vh - 320px);
-  overflow-y: auto;
-}
-
 /* cljs :graph/new-db-graph dialog-open! {:style {:max-width "500px"}} */
 .lui-dialog.ls-dialog-new-graph,
 .lui-dialog.ls-dialog-add-graph {
@@ -1198,17 +1184,6 @@ div[data-keep-selection].menu-links-wrapper {
    class, so restore the same effective centering here. */
 .ui__dialog-overlay[data-align="top"] .ui__dialog-content {
   top: 50%;
-}
-
-.lui-dialog.ls-dialog-settings {
-  /* cljs sizes the settings dialog border-box: 1024px incl padding */
-  box-sizing: border-box;
-  width: min(1024px, calc(100vw - 2rem));
-  max-width: calc(100vw - 2rem);
-}
-
-.lui-dialog.ls-dialog-settings .settings-modal {
-  border-radius: 0.75rem;
 }
 
 .ls-icon-sm {
@@ -1887,44 +1862,10 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- settings modal ----------------------------------------------------- */
 
-/* cljs settings.css: flex-col below md — the nav aside stacks over the
-   article on narrow widths instead of crushing it into a ~96px column */
-.cp__settings-inner {
-  display: flex;
-  flex-direction: column;
-  min-height: 55dvh;
-  max-height: 75dvh;
-}
-
 @media (min-width: 768px) {
   .cp__settings-inner {
     flex-direction: row;
   }
-}
-
-/* the cljs selectors below targeted real <header>/<aside>/<ul>/<li>
-   elements; the LUI tree emits div/button nodes with the same class
-   names, so every selector here uses the class twins */
-.cp__settings-inner > .cp__settings-header,
-.cp__settings-inner > header {
-  padding: 0 10px 10px;
-  border-bottom: 1px solid
-    var(--lx-gray-06, var(--ls-quaternary-background-color, hsl(var(--border))));
-}
-
-.cp__settings-inner > header h1 {
-  font-size: 1.25rem;
-  margin: 0;
-}
-
-/* cljs settings.css aside: @apply bg-gray-03-alpha p-4 + md:w-64
-   {:style {:min-width "10rem"}} — the column is 256px wide at >=md,
-   shrinking to min 160px */
-.cp__settings-inner > .settings-aside,
-.cp__settings-inner aside {
-  background: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha));
-  padding: 1rem;
-  min-width: 10rem;
 }
 
 @media (min-width: 768px) {
@@ -1932,17 +1873,6 @@ div[data-keep-selection].menu-links-wrapper {
   .cp__settings-inner > aside {
     width: 16rem;
   }
-}
-
-/* cljs settings.css article: w-screen + min-h-[12rem] below md;
-   fixed h-[70vh] w-[44rem] >=md */
-.cp__settings-inner > .settings-article,
-.cp__settings-inner > article {
-  padding: 1rem;
-  flex: 1;
-  min-height: 12rem;
-  width: 100vw;
-  overflow-y: auto;
 }
 
 @media (min-width: 768px) {
@@ -1954,64 +1884,9 @@ div[data-keep-selection].menu-links-wrapper {
   }
 }
 
-.cp__settings-inner > .settings-aside > .cp__settings-header,
-.cp__settings-inner > .settings-article > .cp__settings-header,
-.cp__settings-inner > aside > .cp__settings-header,
-.cp__settings-inner > article > .cp__settings-header {
-  height: 2.5rem;
-  padding: 0.5rem 0;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.5rem;
-}
-
-.cp__settings-inner .settings-aside > .cp__settings-header {
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
-}
-
-.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.25rem;
-  background: rgb(55 65 81 / 0.1);
-  display: grid;
-  place-items: center;
-}
-
-.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon > svg,
-.cp__settings-inner .settings-aside > .cp__settings-header > .ui__icon.lui-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.cp__settings-modal-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  text-transform: lowercase;
-}
-
-.cp__settings-category-title {
-  font-size: 1.25rem;
-}
-
 .cp__settings-modal-title::first-letter,
 .cp__settings-category-title::first-letter {
   text-transform: uppercase;
-}
-
-/* qualified so it wins over the `.cp__settings-inner aside > ul` reset —
-   cljs .settings-menu keeps its mt-4 */
-.cp__settings-inner aside > ul.settings-menu,
-.cp__settings-inner .settings-aside > .settings-menu,
-.settings-menu {
-  padding: 0;
-  margin: 1rem 0 0;
-  /* LUI renders the menu as a flex column — master's block <ul> gets
-     its 8px inter-item spacing from collapsed li margins + link box */
-  row-gap: 0.5rem;
 }
 
 .settings-menu-item[data-id="keymap"] {
@@ -2029,19 +1904,6 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* list-item's data-selected accent background is unused here — .active
    carries the highlight, matching cljs li.active */
-
-.cp__settings-inner.no-aside > article {
-  padding-left: 0;
-}
-
-/* cljs settings.css .panel-wrap: no width below sm (stretches inside
-   the column-stacked .cp__settings-inner); fixed 600px >=sm */
-.panel-wrap {
-  padding: 0.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
 
 @media (min-width: 640px) {
   .panel-wrap {
@@ -2083,32 +1945,6 @@ div[data-keep-selection].menu-links-wrapper {
 
 .panel-wrap [role="checkbox"]:hover {
   opacity: 0.8;
-}
-
-.cp__settings-app-updater {
-  min-height: 20px;
-  position: relative;
-  margin-bottom: -5px;
-}
-
-.cp__settings-app-updater .ctls {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.cp__settings-appearance-dialog-inner {
-  margin: -0.5rem -0.5rem -0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-#appearance_settings.cp__settings-appearance-dialog-inner {
-  width: auto;
-  padding: 1.25rem;
-  box-shadow: none;
-  margin: 0;
 }
 
 /* LUI twin: list > button.lui-list-item > .mode-* box + .lui-text label
@@ -2254,122 +2090,6 @@ select.form-select {
 }
 
 /* ---- plugins dashboard -------------------------------------------------- */
-
-.cp__plugins-settings-inner {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-height: 30vh;
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-.cp__plugins-installed {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.cp__plugins-marketplace-cnt {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.cp__plugins-item-lists {
-  display: flex;
-  flex-direction: column;
-}
-
-.cp__plugins-item-lists-inner {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.cp__plugins-item-card .l .plugin-icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 0.375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lx-gray-03, hsl(var(--muted)));
-}
-
-.cp__plugins-item-card .r {
-  flex: 1;
-  min-width: 0;
-}
-
-.cp__plugins-item-card .head {
-  font-size: 1rem;
-  font-weight: 700;
-  padding-top: 0.375rem;
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-.cp__plugins-item-card .desc {
-  font-size: 0.75rem;
-  opacity: 0.7;
-}
-
-.cp__plugins-item-card .ctl {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.375rem;
-}
-
-.cp__plugins-item-card .ctl .l,
-.cp__plugins-item-card .ctl .r {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.cp__plugins-item-card .menu-list {
-  margin: 0;
-  padding: 0.25rem 0;
-  list-style: none;
-  position: absolute;
-  right: 0;
-  top: 100%;
-  z-index: 20;
-  min-width: 9rem;
-  border-radius: 0.375rem;
-  border: 1px solid var(--lui-c-border);
-  background: hsl(var(--popover));
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-}
-
-.control-tabs {
-  padding-bottom: 0.75rem;
-  display: flex;
-  justify-content: space-between;
-  position: relative;
-}
-
-.control-tabs .l,
-.control-tabs .r {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.cp__plugins-page .tabs {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cp__plugins-page .tabs-inner {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
 
 /* plugin settings desc items */
 /* ---- icon / emoji picker -------------------------------------------------- */
@@ -2593,16 +2313,6 @@ select.form-select {
   background: var(--lx-gray-03, var(--ls-tertiary-background-color, hsl(var(--muted))));
 }
 
-/* graphs page + misc menu lists */
-.menu-list .ui__dropdown-menu-item {
-  width: 100%;
-}
-
-/* appearance popup (toolbar dots → Appearance) */
-.appearance-popup {
-  min-width: 12rem;
-}
-
 /* login dialog body — cljs login.css: mx-auto w-full max-w-[440px] px-1 */
 .cp__user-login {
   margin-left: auto;
@@ -2802,16 +2512,6 @@ select.form-select {
   opacity: 1;
 }
 
-.ls-select-md {
-  width: 16rem;
-  height: 2rem;
-}
-
-.ls-select-wrap {
-  max-width: 20rem;
-  border-radius: 0.375rem;
-}
-
 .ls-toolbar-gap {
   display: flex;
   align-items: center;
@@ -2868,12 +2568,6 @@ select.form-select {
 
 .ls-mb {
   margin-bottom: 2rem;
-}
-
-.ls-popup-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
 }
 
 /* LUI wraps the actual switch input in a label. Style the input so the
@@ -3074,94 +2768,10 @@ select.form-select {
   border-radius: 0.375rem;
 }
 
-.control-tabs {
-  display: flex;
-  justify-content: space-between;
-  position: relative;
-  padding-bottom: 0.75rem;
-}
-
-.control-tabs .l,
-.control-tabs .r {
-  display: flex;
-  align-items: center;
-}
-
-.ls-pl-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 7rem 0;
-  opacity: 0.3;
-}
-
-.ls-pl-empty-text {
-  font-size: 0.875rem;
-}
-
-.cp__plugins-item-card .l.link-block {
-  cursor: pointer;
-}
-
-.cp__plugins-item-card .head {
-  font-size: 1.25rem;
-  font-weight: 700;
-  padding-top: 0.375rem;
-}
-
-.cp__plugins-item-card .desc {
-  font-size: 0.75rem;
-  opacity: 0.7;
-}
-
-.ls-pl-meta {
-  font-size: 0.75rem;
-  padding-right: 0.5rem;
-  display: flex;
-  justify-content: space-between;
-}
-
-.cp__plugins-item-card .ctl .l,
-.cp__plugins-item-card .ctl .r {
-  display: flex;
-  align-items: center;
-}
-
-.ls-pl-status {
-  display: inline-block;
-  padding: 0 0.25rem;
-  font-size: 0.75rem;
-  opacity: 0.5;
-}
-
-.ls-pl-loading {
-  display: flex;
-  justify-content: center;
-  padding: 5rem 0;
-}
-
-.cp__plugins-page .tabs {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cp__plugins-page .tabs-inner {
-  display: flex;
-  align-items: center;
-}
-
 .html-content.ls-pl-html {
   padding-left: 0.25rem;
   flex: 1;
   font-size: 0.875rem;
-}
-
-.code-mode-wrap {
-  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
-  margin: 0 0 2rem -0.25rem;
 }
 
 .ls-mono {
@@ -3173,29 +2783,6 @@ select.form-select {
   justify-content: flex-end;
   gap: 0.5rem;
   padding-top: 0.5rem;
-}
-
-/* cljs settings.cljs sync/publish server editors: [:p.pt-2.flex.gap-2]
-   — left-aligned buttons */
-.cp__settings-sync-server-cnt .ls-form-actions,
-.cp__settings-publish-server-cnt .ls-form-actions {
-  justify-content: flex-start;
-}
-
-.ls-pl-warn {
-  font-weight: 700;
-  font-size: 1.125rem;
-  padding: 1rem 0;
-}
-
-.ls-pl-id {
-  font-size: 1.25rem;
-  padding: 0.25rem 0.5rem 0;
-  opacity: 0.9;
-}
-
-.ls-pl-link {
-  font-size: 0.875rem;
 }
 
 .ls-pl-link:hover {
@@ -4255,25 +3842,6 @@ select.form-select {
 .ls-hm-meta {
   font-size: 0.75rem;
   opacity: 0.3;
-}
-
-/* settings select trigger + cols */
-
-.ls-select-lg {
-  height: 2.5rem;
-  width: 16rem;
-}
-
-.ls-settings-col {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.cp__settings {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
 }
 
 /* importer internals */

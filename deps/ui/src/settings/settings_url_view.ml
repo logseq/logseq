@@ -92,7 +92,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                     | _ -> ())
                   []
               ]
-          ; row ~key:(key ^ "-btns") ~gap:8
+          ; row ~key:(key ^ "-btns") ~gap:8 ~main:`start
               ~style_class:"ls-form-actions"
               ([ button ~key:(key ^ "-save")
                    ~variant:(Settings_controls.btn_variant `Solid)

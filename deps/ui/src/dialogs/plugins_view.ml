@@ -69,36 +69,49 @@ let control_tabs ~key ~search_st ~cat_st ~nums =
       ~style_class:("ui__button ls-icon-btn-md " ^ cls)
       ~icon:ic ~label:caption []
   in
-  row ~key:(key ^ "-ctls") ~style_class:"control-tabs"
-    ~main:`space_between ~cross:`center
-    [ box ~key:(key ^ "-l") ~style_class:"l"
-        [ category_tabs ~key ~nums cat_st ]
-    ; row ~key:(key ^ "-r") ~style_class:"r" ~cross:`center ~gap:8
-        [ search_input ~key:(key ^ "-search") search_st
-        ; ghost_btn "filter" "sort-or-filter-by" (`app "filter")
-            (t "cmdk.action/filter")
-        ; ghost_btn "more" "more-do" (`app "dots-vertical")
-            (t "header/more")
-        ; text ~key:(key ^ "-contrib") 
-            ~value:(t "plugin/contribute")
-            ~on_press:(fun _ ->
-              open_url_ "https://github.com/logseq/marketplace")
-            []
-        ]
-    ]
+  Ui_components.with_props
+    [ Lui_protocol.Position, Lui_protocol.StringValue "relative" ]
+    (row ~key:(key ^ "-ctls") ~style_class:"control-tabs"
+       ~main:`space_between ~cross:`center
+       ~data_attrs:[ "style", "padding-bottom: 12px" ]
+       [ row ~key:(key ^ "-l") ~style_class:"l" ~cross:`center ~gap:8
+           [ category_tabs ~key ~nums cat_st ]
+       ; row ~key:(key ^ "-r") ~style_class:"r" ~cross:`center ~gap:8
+           [ search_input ~key:(key ^ "-search") search_st
+           ; ghost_btn "filter" "sort-or-filter-by" (`app "filter")
+               (t "cmdk.action/filter")
+           ; ghost_btn "more" "more-do" (`app "dots-vertical")
+               (t "header/more")
+           ; text ~key:(key ^ "-contrib")
+               ~value:(t "plugin/contribute")
+               ~on_press:(fun _ ->
+                 open_url_ "https://github.com/logseq/marketplace")
+               []
+           ]
+       ])
 
 let empty_item key =
-  column ~key ~style_class:"ls-pl-empty" ~cross:`center
+  column ~key ~style_class:"ls-pl-empty" ~cross:`center ~gap:8
+    ~padding_vertical:112 ~opacity:0.3
     [ icon ~name:(`app "list-search") ~width:40 ~height:40 []
     ; text ~key:(key ^ "-t") ~style_class:"ls-pl-empty-text"
-        ~value:(t "plugin/empty") []
+        ~font_size:"0.875rem" ~value:(t "plugin/empty") []
     ]
 
+(* height/overflow stay on the data_attrs style channel — calc() clamps
+   and overflow-y have no typed-prop form; max-height rides
+   MaxHeightViewport *)
 let list_wrap ~key children =
-  column ~key ~style_class:"cp__plugins-item-lists"
-    (box ~key:(key ^ "-in")
-       ~style_class:"cp__plugins-item-lists-inner" children
-     :: (if children = [] then [ empty_item (key ^ "-empty") ] else []))
+  Ui_components.with_props
+    [ Lui_protocol.MaxHeightViewport, Lui_protocol.FloatValue 0.8 ]
+    (column ~key ~style_class:"cp__plugins-item-lists"
+       ~data_attrs:
+         [ "style", "height: calc(100vh - 320px); overflow-y: auto" ]
+       (row ~key:(key ^ "-in")
+          ~style_class:"cp__plugins-item-lists-inner" ~gap:12
+          ~data_attrs:[ "style", "flex-wrap: wrap" ]
+          children
+        :: (if children = [] then [ empty_item (key ^ "-empty") ] else [])))
 
 (* ---------- marketplace card ---------- *)
 
@@ -128,24 +141,40 @@ let market_card ~stats ~search_st pkg =
   Ui_components.plugin_card ~key:("mkt-" ^ id) ~classes:cls
     (row ~key:"r" ~gap:12 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
-        (box ~key:"l" ~style_class:"l link-block"
-           [ box ~key:"ic" ~style_class:"plugin-icon" [ thumb ] ])
-    ; column ~key:"r" ~style_class:"r" ~grow:1.
-        ([ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
-             [ text ~key:"t" ~style_class:"l link-block" ~value:title
-                 ~on_press:open_readme [] ]
-         ; paragraph ~key:"desc" ~style_class:"desc"
-             ~value:(jstr pkg "description") []
-         ; box ~key:"flag" 
-             [ row ~style_class:"ls-pl-meta"
-                 ~main:`space_between
-                 [ (* cljs: clicking the author searches "@author" *)
-                   text ~key:"a" ~value:(jstr pkg "author")
-                     ~on_press:(fun _ ->
-                       Runtime.signal_set search_st
-                         ("@" ^ jstr pkg "author"))
-                     []
-                 ; text ~key:"i" ~value:("ID: " ^ id) [] ] ]
+        (Ui_components.with_props
+           [ Lui_protocol.Cursor, Lui_protocol.StringValue "pointer" ]
+           (box ~key:"l" ~style_class:"l link-block"
+              [ row ~key:"ic" ~style_class:"plugin-icon" ~width:40
+                  ~height:40 ~corner_radius:6 ~main:`center ~cross:`center
+                  ~background:"var(--lx-gray-03, hsl(var(--muted)))"
+                  [ thumb ] ]))
+    ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0
+        ([ Ui_components.with_props
+             [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.25rem"
+             ; Lui_protocol.FontWeight, Lui_protocol.IntValue 700 ]
+             (row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
+                ~data_attrs:[ "style", "padding-top: 6px" ]
+                [ text ~key:"t" ~style_class:"l link-block" ~value:title
+                    ~on_press:open_readme [] ])
+         ; Ui_components.with_props
+             [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.7 ]
+             (paragraph ~key:"desc" ~style_class:"desc"
+                ~font_size:"0.75rem"
+                ~value:(jstr pkg "description") [])
+         ; box ~key:"flag"
+             [ Ui_components.with_props
+                 [ Lui_protocol.FontSize
+                 , Lui_protocol.StringValue "0.75rem" ]
+                 (row ~style_class:"ls-pl-meta"
+                    ~main:`space_between
+                    ~data_attrs:[ "style", "padding-right: 8px" ]
+                    [ (* cljs: clicking the author searches "@author" *)
+                      text ~key:"a" ~value:(jstr pkg "author")
+                        ~on_press:(fun _ ->
+                          Runtime.signal_set search_st
+                            ("@" ^ jstr pkg "author"))
+                        []
+                    ; text ~key:"i" ~value:("ID: " ^ id) [] ]) ]
          ]
          (* cljs .flag.is-top: GitHub repo link pinned top-right *)
          @
@@ -158,6 +187,7 @@ let market_card ~stats ~search_st pkg =
          @
          [ row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
              ~cross:`center
+             ~data_attrs:[ "style", "margin-top: 6px" ]
              [ row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:8
                  ((* cljs card-ctls-of-market .l: stars + total downloads
                      from stats.json *)
@@ -178,7 +208,7 @@ let market_card ~stats ~search_st pkg =
                                  ~value:(format_number st.downloads) [] ]
                          ]
                        else []))
-             ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center
+             ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center ~gap:4
                  [ button ~key:"btn"
                      ~style_class:
                        ("btn" ^ if installed_ then " disabled" else "")
@@ -264,27 +294,59 @@ let installed_card (pl : Js.Json.t) =
   Ui_components.plugin_card ~key:("inst-" ^ pid) ~classes:""
     (row ~key:"r" ~gap:12 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
-        (box ~key:"l" ~style_class:"l link-block"
-           [ box ~key:"ic" ~style_class:"plugin-icon"
-               [ icon ~name:(`app "puzzle") [] ] ])
-    ; column ~key:"r" ~style_class:"r" ~grow:1.
-        [ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
-            [ text ~key:"t" ~style_class:"l link-block" ~value:name
-                ~on_press:open_readme []
-            ; text ~key:"v" ~style_class:"ls-pl-status" ~value:version
-                [] ]
-        ; paragraph ~key:"desc" ~style_class:"desc" ~value:desc []
-        ; box ~key:"flag" 
-            [ row ~style_class:"ls-pl-meta" ~main:`space_between
-                [ text ~key:"a" ~value:(jstr web_pkg "author") []
-                ; text ~key:"i" ~value:("ID: " ^ pid) [] ] ]
+        (Ui_components.with_props
+           [ Lui_protocol.Cursor, Lui_protocol.StringValue "pointer" ]
+           (box ~key:"l" ~style_class:"l link-block"
+              [ row ~key:"ic" ~style_class:"plugin-icon" ~width:40
+                  ~height:40 ~corner_radius:6 ~main:`center ~cross:`center
+                  ~background:"var(--lx-gray-03, hsl(var(--muted)))"
+                  [ icon ~name:(`app "puzzle") [] ] ]))
+    ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0
+        [ Ui_components.with_props
+            [ Lui_protocol.FontSize, Lui_protocol.StringValue "1.25rem"
+            ; Lui_protocol.FontWeight, Lui_protocol.IntValue 700 ]
+            (row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
+               ~data_attrs:[ "style", "padding-top: 6px" ]
+               [ text ~key:"t" ~style_class:"l link-block" ~value:name
+                   ~on_press:open_readme []
+               ; Ui_components.with_props
+                   [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.5 ]
+                   (text ~key:"v" ~style_class:"ls-pl-status"
+                      ~font_size:"0.75rem" ~padding_horizontal:4
+                      ~value:version []) ])
+        ; Ui_components.with_props
+            [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.7 ]
+            (paragraph ~key:"desc" ~style_class:"desc"
+               ~font_size:"0.75rem" ~value:desc [])
+        ; box ~key:"flag"
+            [ Ui_components.with_props
+                [ Lui_protocol.FontSize
+                , Lui_protocol.StringValue "0.75rem" ]
+                (row ~style_class:"ls-pl-meta" ~main:`space_between
+                   ~data_attrs:[ "style", "padding-right: 8px" ]
+                   [ text ~key:"a" ~value:(jstr web_pkg "author") []
+                   ; text ~key:"i" ~value:("ID: " ^ pid) [] ]) ]
         ; row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
             ~cross:`center
-            [ box ~key:"ctl-l" ~style_class:"l"
-                [ box ~key:"de" 
+            ~data_attrs:[ "style", "margin-top: 6px" ]
+            [ row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:4
+                [ box ~key:"de"
                     [ icon ~key:"g" ~name:`settings []
-                    ; list ~key:"m" ~style:`plain
-                        ~style_class:"menu-list"
+                    ; Ui_components.with_props
+                        [ Lui_protocol.Position
+                        , Lui_protocol.StringValue "absolute"
+                        ; Lui_protocol.ZIndex, Lui_protocol.IntValue 20
+                        ; ( Lui_protocol.Shadow
+                          , Lui_protocol.StringValue
+                              "0 4px 6px -1px rgb(0 0 0 / 0.1)" ) ]
+                        (list ~key:"m" ~style:`plain
+                           ~style_class:"menu-list"
+                           ~min_width:144 ~padding_vertical:4
+                           ~corner_radius:6 ~border_width:1
+                           ~border_color:"var(--lui-c-border)"
+                           ~background:"hsl(var(--popover))"
+                           ~data_attrs:
+                             [ "style", "top: 100%; right: 0; margin: 0" ]
                         [ menu_li ~key:"open-settings"
                             (t "plugin/open-settings") (fun () ->
                               open_settings_pid := Some pid;
@@ -307,10 +369,10 @@ let installed_card (pl : Js.Json.t) =
                                 ~on_confirm:(fun () ->
                                   unregister_plugin pid)
                                 ())
-                        ]
+                        ])
                     ]
                 ]
-            ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center
+            ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center ~gap:4
                 [ updates_btn ~pid ~plj ~web_pkg
                 ; switch_btn ~checked:(not disabled)
                     ~on_toggle:(fun on ->
@@ -375,11 +437,12 @@ let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~stats
     ([ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st ~nums:None ]
     @
     if loading && pkgs = [] then
-      [ box ~key:"pl-loading" ~style_class:"ls-pl-loading"
+      [ row ~key:"pl-loading" ~style_class:"ls-pl-loading"
+          ~main:`center ~padding_vertical:80
           [ icon ~name:(`app "loader-2") [] ] ]
     else
       [ column ~key:(key ^ "-cnt")
-          ~style_class:"cp__plugins-marketplace-cnt"
+          ~style_class:"cp__plugins-marketplace-cnt" ~gap:8
           [ list_wrap ~key:(key ^ "-list")
               (List.map (market_card ~stats ~search_st) filtered) ] ])
 
@@ -448,9 +511,10 @@ let body (_ms : Model.t Signal.signal) : t =
         column ~key:"plugins-page"
           ~style_class:"cp__plugins-page web-platform"
           [ heading ~key:"pl-h" ~level:1 ~value:(t "nav/plugins") []
-          ; box ~key:"pl-tabs" ~style_class:"tabs"
+          ; row ~key:"pl-tabs" ~style_class:"tabs"
+              ~main:`center ~cross:`center
               [ row ~key:"pl-tabs-in" ~style_class:"tabs-inner"
-                  ~cross:`center
+                  ~cross:`center ~gap:8
                   [ tab_btn "installed" "plugin/installed"
                   ; tab_btn "marketplace" "plugin/marketplace"
                   ]
@@ -661,6 +725,9 @@ let code_mode_wrap owner pid code_mode =
   let content = json_pretty (Plugin_host.plugin_settings_json pid) in
   let code_txt = Signal.state owner content in
   column ~key:"cmw" ~style_class:"code-mode-wrap" ~gap:4
+    ~data_attrs:
+      [ ( "style"
+        , "padding: 4px 4px 4px 12px; margin: 0 0 32px -4px" ) ]
     [ textarea ~key:"ta" ~style_class:"form-input ls-mono"
         ~text_signal:(Signal.value code_txt)
         ~on_input:(fun ev -> Signal.set code_txt (text_of ev))
@@ -712,6 +779,7 @@ let settings_item pid s =
   | "button" -> item_button pid key s
   | _ ->
       paragraph ~key:("nh-" ^ key) ~style_class:"ls-pl-warn"
+        ~font_size:"1.125rem" ~font_weight:700 ~padding_vertical:16
         ~value:(I18n.tf "plugin/setting-not-handled" [ key ]) []
 
 let settings_body (_ms : Model.t Signal.signal) : t =
@@ -731,34 +799,52 @@ let settings_body (_ms : Model.t Signal.signal) : t =
               if schema = [] then
                 [ heading ~key:"none" ~level:2
                     ~style_class:"warning ls-pl-warn"
+                    ~font_size:"1.125rem" ~font_weight:700
+                    ~padding_vertical:16
                     ~value:(t "plugin/no-settings-schema") [] ]
               else
-                [ heading ~key:"id" ~level:2 ~style_class:"ls-pl-id"
-                    ~value:("ID: " ^ pid) []
-                ; column ~key:"in"
-                    ~style_class:"cp__plugins-settings-inner" ~gap:8
-                    ( box ~key:"ef" 
-                        [ text ~key:"a" ~style_class:"ls-pl-link"
-                            ~on_press:(fun _ ->
-                              Runtime.signal_set code_mode (not code))
-                            ~value:
+                [ Ui_components.with_props
+                    [ Lui_protocol.Opacity, Lui_protocol.FloatValue 0.9 ]
+                    (heading ~key:"id" ~level:2 ~style_class:"ls-pl-id"
+                       ~font_size:"1.25rem"
+                       ~data_attrs:
+                         [ "style", "padding: 4px 8px 0" ]
+                       ~value:("ID: " ^ pid) [])
+                ; Ui_components.with_props
+                    [ ( Lui_protocol.MinHeightViewport
+                      , Lui_protocol.FloatValue 0.3 )
+                    ; ( Lui_protocol.MaxHeightViewport
+                      , Lui_protocol.FloatValue 0.7 ) ]
+                    (column ~key:"in"
+                       ~style_class:"cp__plugins-settings-inner" ~gap:8
+                       ~data_attrs:[ "style", "overflow-y: auto" ]
+                       ( box ~key:"ef"
+                           [ text ~key:"a" ~style_class:"ls-pl-link"
+                               ~font_size:"0.875rem"
+                               ~on_press:(fun _ ->
+                                 Runtime.signal_set code_mode (not code))
+                               ~value:
                               (if code then
                                  t "plugin.settings/exit-code-mode"
                                else t "plugin.settings/edit-settings-json")
                             [] ]
-                    ::
-                    if code then
-                      [ code_mode_wrap owner pid code_mode ]
-                    else
-                      List.map (settings_item pid) schema )
+                       ::
+                       if code then
+                         [ code_mode_wrap owner pid code_mode ]
+                       else
+                         List.map (settings_item pid) schema ))
                 ]
             in
             column ~key:"ps"
-              [ box ~key:"si"
-                  ~style_class:"cp__settings-inner no-aside"
-                  [ column ~key:"pw" ~style_class:"panel-wrap" ~gap:16
-                      body ]
-              ])
+              [ Ui_components.with_props
+                  [ ( Lui_protocol.MinHeightViewport
+                    , Lui_protocol.FloatValue 0.55 )
+                  ; ( Lui_protocol.MaxHeightViewport
+                    , Lui_protocol.FloatValue 0.75 ) ]
+                  (column ~key:"si"
+                     ~style_class:"cp__settings-inner no-aside"
+                     [ column ~key:"pw" ~style_class:"panel-wrap" ~gap:16
+                         body ]) ])
       (Signal.map2 pair
          (Plugin_host.dirty_value owner)
          (Signal.value code_mode))
