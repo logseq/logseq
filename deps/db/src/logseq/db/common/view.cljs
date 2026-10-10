@@ -63,11 +63,31 @@
           (when (valid-type-for-sort? v)
             v))))))
 
+(defn- compare-nil-last
+  "compare in the direction `asc?`, a nil value last in both directions,
+  as sort-eids-by-sorting does for tag tables (compare alone puts nil
+  first)"
+  [va vb asc?]
+  (cond
+    (and (nil? va) (nil? vb)) 0
+    (nil? va) 1
+    (nil? vb) -1
+    asc? (compare va vb)
+    :else (compare vb va)))
+
 (defn- by-one-sorting
   [{:keys [asc? get-value]}]
-  (let [cmp (if asc? compare #(compare %2 %1))]
-    (fn [a b]
-      (cmp (get-value a) (get-value b)))))
+  (fn [a b]
+    (compare-nil-last (get-value a) (get-value b) asc?)))
+
+(defn- by-sorting-nil-last
+  [sorting]
+  (fn [a b]
+    (reduce (fn [order {:keys [get-value asc?]}]
+              (if (zero? order)
+                (compare-nil-last (get-value a) (get-value b) asc?)
+                (reduced order)))
+            0 sorting)))
 
 (defn- sort-ref-entities-by-single-property
   "get all entities sorted by `major-sorting`"
@@ -126,7 +146,7 @@
                  {:asc? asc?
                   :get-value (memoize (get-value-for-sort property))}))
              minor-sorting)
-        sort-cmp (common-util/by-sorting sorting)]
+        sort-cmp (by-sorting-nil-last sorting)]
     (mapcat (fn [entities] (sort sort-cmp entities)) partitioned-entities-by-major-sorting)))
 
 (defn sort-entities
@@ -238,7 +258,12 @@
                          value')
 
                    :text-not-contains
-                   (not-any? #(string/includes? (str (get-property-value-content db %)) match) value')
+                   ;; the negation of :text-contains: case ignored the same way
+                   (not-any? (fn [v]
+                               (if-let [property-value (get-property-value-content db v)]
+                                 (string/includes? (string/lower-case (str property-value)) (string/lower-case (str match)))
+                                 false))
+                             value')
 
                    :number-gt
                    (when value
@@ -870,8 +895,11 @@
           contents)
 
     :text-not-contains
+    ;; the negation of :text-contains: case ignored the same way
     (not-any? (fn [c]
-                (string/includes? (str c) (str match)))
+                (and (some? c)
+                     (string/includes? (string/lower-case (str c))
+                                       (string/lower-case (str match)))))
               contents)
 
     :number-gt (number-compare-match contents match >)
