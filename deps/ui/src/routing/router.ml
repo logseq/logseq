@@ -36,7 +36,7 @@ let parse_path (p : string) : Model.route =
           let rest = String.sub p (i + 1) (String.length p - i - 1) in
           match seg with
           | "page" -> Model.Page (decode rest)
-          | "block" -> Model.Block_zoom (decode rest)
+          | "file" -> Model.File (decode rest)
           | "all-journals" | "journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
@@ -52,7 +52,7 @@ let parse_path (p : string) : Model.route =
           | "graph" -> Model.Graph_view
           | "import" -> Model.Import
           | "settings" -> Model.Settings
-          | "page" | "block" -> Model.Not_found p
+          | "page" | "block" | "file" -> Model.Not_found p
           | _ -> Model.Not_found p))
 
 let parse_hash () : Model.route =
@@ -688,19 +688,36 @@ let load_route (route : Model.route) =
          (fun () -> load_page_ref route (Wire.String "Library"));
        Runtime.journals_load_more := (fun () -> Js.Promise.resolve ())
    | Model.All_pages | Model.All_graphs | Model.Graph_view | Model.Import
-   | Model.Not_found _ | Model.Settings ->
+   | Model.File _ | Model.Not_found _ | Model.Settings ->
        Runtime.reload_current_view := (fun () -> Js.Promise.resolve ());
        Runtime.journals_load_more := (fun () -> Js.Promise.resolve ()));
   match route with
   | Model.Home -> ignore (load_home ())
-  | Model.Page s ->
-      ignore (load_page_ref route (Wire.page_ref s))
+  | Model.Page s -> (
+      (* cljs: the page route accepts a block uuid in :name and renders
+         route-block (zoom) for it. get-block-page-info returns the
+         CONTAINING page — a different uuid means the ref is a block *)
+      match Wire.page_ref s with
+      | Wire.Uuid u ->
+          ignore
+            (let* bp =
+               Runtime.invoke2 "thread-api/get-block-page-info"
+                 (Wire.String (repo ())) (Wire.Uuid u)
+             in
+             (match Wire.map_get_uuid bp "block/uuid" with
+              | Some pu when pu <> u ->
+                  if not (stale route) then (
+                    Runtime.send (Action.Navigate_to (Model.Block_zoom u));
+                    ignore (load_block_zoom u))
+              | _ -> ignore (load_page_ref route (Wire.Uuid u)));
+             Js.Promise.resolve ())
+      | ref_v -> ignore (load_page_ref route ref_v))
   | Model.Block_zoom uuid -> ignore (load_block_zoom uuid)
   | Model.Journals -> ignore (load_journals ())
   | Model.Library ->
       ignore (load_page_ref route (Wire.String "Library"))
   | Model.All_pages | Model.All_graphs | Model.Graph_view | Model.Import
-  | Model.Not_found _ | Model.Settings ->
+  | Model.File _ | Model.Not_found _ | Model.Settings ->
       ()
 
 let resolve () =

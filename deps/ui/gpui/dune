@@ -259,6 +259,8 @@
 (rule
  (copy ../src/popups/tooltip.ml tooltip.ml))
 (rule
+ (copy ../src/pages/file_view.ml file_view.ml))
+(rule
  (copy ../src/pages/page.ml page.ml))
 (rule
  (copy ../src/pages/page_ops.ml page_ops.ml))

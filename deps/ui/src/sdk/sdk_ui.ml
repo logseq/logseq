@@ -214,6 +214,13 @@ let get_current_route _a _b _c _d =
            ; ( "queryParams"
              , detail_obj [ ("block-id", Js.Json.string uuid) ] )
            ])
+  | Some (Model.File path) ->
+      resolved
+        (detail_obj
+           [ ("to", Js.Json.string "file")
+           ; ( "pathParams"
+             , detail_obj [ ("path", Js.Json.string path) ] )
+           ])
   | Some (Model.Not_found _) ->
       resolved (detail_obj [ ("to", Js.Json.string "404") ])
   | None -> resolved_nil

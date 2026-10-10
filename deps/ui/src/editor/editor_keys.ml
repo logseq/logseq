@@ -233,7 +233,8 @@ let nav r =
     | Model.Settings -> "#/settings"
     | Model.Import -> "#/import"
     | Model.Page t -> "#/page/" ^ encode_uri_component t
-    | Model.Block_zoom u -> "#/block/" ^ u
+    | Model.Block_zoom u -> "#/page/" ^ u
+    | Model.File p -> "#/file/" ^ encode_uri_component p
     | Model.Library -> "#/page/Library"
     | Model.Not_found _ -> ""
   in

@@ -65,7 +65,7 @@ let cmdk_palette ~key ~sidebar children =
     [ P.Position, sv "relative"; P.UserSelect, sv "none" ]
     (column ~key ~style_class:"cp__cmdk" ~cross:`stretch ~grow:1.
        ~corner_radius:(if sidebar then 0 else 8)
-       ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
+       ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, var(--rx-gray-12)))"
        ~data_attrs:[ "data-keep-selection", "true" ]
        children)
 
@@ -75,8 +75,8 @@ let cmdk_input_row ~key children =
   with_props
     [ ( P.Shadow
       , sv
-          "inset 0 -1px 0 0 var(--lx-gray-05, var(--ls-border-color, \
-           hsl(var(--border))))" )
+          "inset 0 -1px 0 0 var(--ls-border-color, \
+           hsl(var(--border)))" )
     ]
     (row ~key ~style_class:"cp__cmdk-input-row" ~cross:`center ~gap:8
        ~height:54 ~background:"var(--lx-gray-02, #f8f8f8)" children)
@@ -95,8 +95,9 @@ let cmdk_search_input ~key ?placeholder ~text ~on_input () =
         per declaration, so it composes with the emitted style attr. *)
      input ~key ~style_class:"cp__cmdk-search-input" ~grow:1.
        ~data_attrs:
-         [ ("style", "box-shadow: none; outline: none; height: auto; \
-                      min-height: 0") ]
+         [ (* prod input sits 1px inset inside the 54px row *)
+           ("style", "box-shadow: none; outline: none; height: auto; \
+                      min-height: 0; margin: 1px") ]
        ~min_width:256 ~padding:12 ~background:"transparent"
        ~foreground:
          "var(--lx-gray-12, var(--ls-primary-text-color, \
@@ -109,7 +110,10 @@ let cmdk_search_input ~key ?placeholder ~text ~on_input () =
 let cmdk_scroller ~key children =
   with_props
     [ P.MinHeightViewport, fv 0.65; P.MaxHeightViewport, fv 0.65 ]
-    (scroll ~key ~orientation:`vertical ~style_class:"cp__cmdk-scroller"
+    ((* prod scroller sits on gray-02 (#f8f8f8 / #023643 dark), measured
+        off the .search-results parent *)
+     scroll ~key ~orientation:`vertical ~style_class:"cp__cmdk-scroller"
+       ~background:"var(--lx-gray-02, var(--rx-gray-02, #f8f8f8))"
        (children @ [ spacer ~key:"scrollpad" ~height:56 ~width:1 [] ]))
 
 (* -- cmdk groups ----------------------------------------------------- *)
@@ -228,8 +232,8 @@ let cmdk_item_header ~key children =
 let cmdk_item_main ~key children =
   row ~key ~cross:`start ~gap:12 children
 
-(* 16x20 rounded icon chip; the glyph color is a mode token (white in
-   dark like the deleted .dark rule). *)
+(* 16x20 rounded icon chip; the glyph
+   color is a mode token (white in dark like the deleted .dark rule). *)
 let cmdk_icon_chip ~key children =
   row ~key ~style_class:"cmdk-item-icon" ~main:`center ~cross:`center
     ~width:16 ~height:20 ~corner_radius:4
@@ -418,10 +422,12 @@ let cmdk_hints_bar ~key children =
           hsl(var(--muted))))"
        children)
 
+(* prod .text-sm.leading-6 tip container: no extra horizontal pad,
+   4px of vertical pad around the 24px line *)
 let cmdk_hints_inner ~key children =
   with_props
     [ P.FontSize, sv "var(--lx-text-row)"; P.LineHeight, sv "1.5rem" ]
-    (box ~key ~padding_horizontal:6
+    (box ~key ~padding_vertical:2
        children)
 
 let cmdk_hints_row ~key children =
@@ -553,20 +559,27 @@ let ls_tooltip_keys ~key children : t =
    channel). *)
 let form_row ~key ~label ?(label_extra = []) ?desc ?(side = [])
     ?(top = false) ~control () : t =
+  (* cljs .it is sm:grid sm:grid-cols-3 sm:gap-4: exact 1/3 + 2/3
+     columns — flex-grow with auto bases drifts with content width, so
+     the cells carry explicit zero-basis flex ratios *)
   row ~key ~style_class:"it" ~gap:16 ~min_width:0
     ~cross:(if top || desc <> None then `start else `center)
-    ([ column ~key:(key ^ "-lc") ~grow:1. ~min_width:0 ~cross:`stretch
+    ([ column ~key:(key ^ "-lc") ~min_width:0 ~cross:`stretch
          ~gap:0
+         ~data_attrs:[ "style", "flex: 1 1 0; min-width: 0" ]
          ([ row ~key:(key ^ "-l") ~cross:`center ~gap:0 ~min_height:28
               (label :: label_extra) ]
           @ match desc with Some d -> [ d ] | None -> [])
      ; row ~key:(key ^ "-rc") ~min_width:0 ~cross:`center ~gap:16
-         ~grow:(if side = [] then 2. else 1.)
+         ~data_attrs:
+           [ "style"
+           , Printf.sprintf "flex: %d 1 0; min-width: 0"
+               (if side = [] then 2 else 1) ]
          [ control ] ]
     @ List.mapi
         (fun i s ->
-          box ~key:(key ^ "-s" ^ string_of_int i) ~grow:1. ~min_width:0
-            [ s ])
+          box ~key:(key ^ "-s" ^ string_of_int i) ~min_width:0
+            ~data_attrs:[ "style", "flex: 1 1 0; min-width: 0" ] [ s ])
         side)
 
 (* `.ls-label`/`.it-label` — 14px medium, 20px line, 70% opacity. *)
@@ -739,28 +752,32 @@ let option_card ~key ~mode ~image_url ~label ~selected_signal:selected
     ~on_press () : t =
   with_props
     [ P.HoverOpacity, fv 1.; P.Cursor, sv "pointer"; P.Opacity, fv 0.9 ]
-    (list_item ~key ~selected_signal:selected ~on_press
+    (list_item ~key ~on_press ~selected_signal:selected
        ~min_height:0 ~padding_vertical:0 ~padding_horizontal:0
-       ~data_attrs:[ "style", "padding-right:8px" ]
-       [ Ui_parts.class_signal selected
-           (fun s -> "mode-" ^ mode ^ if s then " mode-active" else "")
-           (with_signal_props
-              [ ( P.Shadow
-                , Signal.map
-                    (fun s ->
-                      if s then
-                        "inset 0 0 0 2px var(--ls-link-text-color, \
-                         hsl(var(--primary)))"
-                      else "none")
-                    selected )
-              ]
-              (image ~key:"i" ~url:image_url ~alt:label ~width:92
-                 ~height:63 ~corner_radius:4
-                 ~background:"var(--lx-gray-04, hsl(var(--muted)))" []))
-       ; text ~key:"t" ~font_size:"0.75rem" ~font_weight:500
-           ~line_height:"1rem" ~value:label
-           ~data_attrs:[ "style", "padding-top:6px;padding-right:8px" ]
-           []
+       (* cljs li: <i> thumbnail 87x60 on top, <strong> label centered
+          below — column keeps the label under the image instead of
+          beside it *)
+       [ column ~key:"c" ~cross:`center ~gap:0
+           [ Ui_parts.class_signal selected
+               (fun s -> "mode-" ^ mode ^ if s then " mode-active" else "")
+               (with_signal_props
+                  [ ( P.Shadow
+                    , Signal.map
+                        (fun s ->
+                          if s then
+                            "inset 0 0 0 2px var(--ls-link-text-color, \
+                             hsl(var(--primary)))"
+                          else "none")
+                        selected )
+                  ]
+                  (image ~key:"i" ~url:image_url ~alt:label ~width:87
+                     ~height:60 ~corner_radius:4
+                     ~background:"var(--lx-gray-04, hsl(var(--muted)))" []))
+           ; text ~key:"t" ~font_size:"0.75rem" ~font_weight:500
+               ~line_height:"1rem" ~value:label ~text_alignment:`center
+               ~data_attrs:[ "style", "width:87px;height:20px;line-height:20px" ]
+               []
+           ]
        ])
 
 (* -- menus & overlays -------------------------------------------------- *)
@@ -818,13 +835,14 @@ let dialog_close ~key ~label ~on_press : t =
    (e.g. the selected-count text). The kit composite's own
    `surface`/`corner_radius:20` are transparent on web, so the capsule
    is what paints the floating surface there. *)
-let action_bar_capsule ~key ?(cls = "") child : t =
+let action_bar_capsule ~key ?(cls = "") ?border_color ?border_width
+    child : t =
   with_props
     [ ( P.Shadow
       , sv "0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, \
            0.08)" ) ]
     (box ~key ~style_class:cls ~background:"hsl(var(--popover))"
-       ~corner_radius:6 [ child ])
+       ?border_color ?border_width ~corner_radius:6 [ child ])
 
 (* Inline action toolbar — the `toolbar` kind's role=toolbar semantics
    with the .lui-toolbar card chrome flattened, so it reads as the

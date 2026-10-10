@@ -2466,7 +2466,9 @@ let zoom_to uuid =
   (* the zoomed block is the zoom container's root — it expands there
      while its page-level collapse stays *)
   S.expand_root ~scope:(zoom_container uuid) uuid;
-  Ui_services.nav_set_hash (Runtime.nav_hash ("#/block/" ^ uuid))
+  (* cljs zoom-in! routes to /page/<block-uuid> — the page route renders
+     route-block for block entities *)
+  Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ uuid))
 
 let consume_pending_zoom () =
   let z = !pending_zoom in
@@ -2491,13 +2493,10 @@ let zoom_out () =
             in
             (match Wire.map_get_uuid p "block/uuid" with
              | Some pu ->
-                 let seg =
-                   match Wire.map_get_string p "block/name" with
-                   | Some _ -> "page"
-                   | None -> "block"
-                 in
+                 (* cljs zoom-out! redirects to-page! — /page/<uuid>
+                    whether the parent is a page or another block *)
                  Ui_services.nav_set_hash
-                   (Runtime.nav_hash ("#/" ^ seg ^ "/" ^ pu))
+                   (Runtime.nav_hash ("#/page/" ^ pu))
              | None -> ());
             Js.Promise.resolve ())
       | _ -> ())

@@ -660,12 +660,24 @@ let create_page a b c _d =
         | None -> Wire.Map []
       in
       (let* existing = get_entity name in
-      match existing with
-      | Wire.Nil ->
-          create_page_with_flags name (opt_bool "journal" opts)
-            (opt_bool "class" opts) uuid
-            (opt_string "customUUID" opts) props schema
-      | _ -> resolved_result existing)
+      let* res =
+        match existing with
+        | Wire.Nil ->
+            create_page_with_flags name (opt_bool "journal" opts)
+              (opt_bool "class" opts) uuid
+              (opt_string "customUUID" opts) props schema
+        | _ -> resolved_result existing
+      in
+      (* cljs create-page ends in redirect-to-page! — navigating to the
+         created/existing page, which is also what pushes it into
+         recent-pages *)
+      let* e = get_entity name in
+      (match block_uuid_of e with
+       | Some u ->
+           Runtime.mark_nav ();
+           Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ u))
+       | None -> ());
+      Js.Promise.resolve res)
 
 (* cljs create_journal_page: new Date(arg) — accepts epoch ms or an
    ISO date string; NaN → no page. journal pages get a day-derived

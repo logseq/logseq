@@ -62,3 +62,7 @@ let open_lang_picker uuid =
         (Properties_popup.open_anchored ~cls:"ls-code-lang-picker"
            anchor menu)
   | None -> ()
+
+(* file route: no native CodeMirror — the plain textarea stays the editor
+   (its on_input already persists via file_view's debounced save) *)
+let attach_file_editor ~on_change:_ () = ()

@@ -343,8 +343,13 @@ let test_router () =
     (Router.parse_path "page/my%20page" = Page "my page");
   check "route page nested name"
     (Router.parse_path "page/ns%2Fchild" = Page "ns/child");
-  check "route block"
-    (Router.parse_path "block/abc-123" = Block_zoom "abc-123");
+  (* master parity: only /page/* routes exist; a block uuid inside the
+     page segment resolves to the zoom view at load time, while /block/*
+     itself is an unknown route *)
+  check "route block is Not_found"
+    (match Router.parse_path "block/abc-123" with
+     | Not_found _ -> true
+     | _ -> false);
   check "route journals"
     (Router.parse_path "all-journals" = Journals);
   check "route all-pages"

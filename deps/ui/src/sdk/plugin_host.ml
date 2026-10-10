@@ -810,6 +810,7 @@ let fire_route_changed (route : Model.route) =
     | Model.Graph_view -> "graph"
     | Model.Import -> "import"
     | Model.Settings -> "settings"
+    | Model.File _ -> "file"
     | Model.Not_found _ -> "not-found"
   in
   let p = Js.Dict.empty () in

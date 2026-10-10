@@ -1056,18 +1056,22 @@ let open_ac ?tpos ?(autopair = true) t kind =
   let rec measure tries =
     match (get t).ac with
     | Some a when a.flip = None && a.kind = kind -> (
-        (* native measurement replies land on the async event channel —
-           the first popup_pos call can still see the fallback anchor
-           while the caret-rect reply is in flight; re-read on every
-           retry so the popup snaps to the caret once the host answers *)
+        (* cljs pins the popup at the caret position captured when it
+           opened — typing further must not re-anchor it. Only the
+           open-time fallback (0,0,0) keeps re-reading popup_pos: on
+           hosts whose caret-rect reply lands on the async channel the
+           first call can still see the fallback, so retries upgrade it
+           once — then the anchor freezes for the popup's session *)
         let a =
-          match Editor_sink.popup_pos a.auuid with
-          | Some (x', y', cy') when x' <> a.x || y' <> a.y || cy' <> a.cy
-            ->
-              let a' = { a with x = x'; y = y'; cy = cy' } in
-              set_ac t (Some a');
-              a'
-          | _ -> a
+          if a.x = 0. && a.y = 0. && a.cy = 0. then
+            match Editor_sink.popup_pos a.auuid with
+            | Some (x', y', cy')
+              when x' <> a.x || y' <> a.y || cy' <> a.cy ->
+                let a' = { a with x = x'; y = y'; cy = cy' } in
+                set_ac t (Some a');
+                a'
+            | _ -> a
+          else a
         in
         match Ui_services.dom_query "#ui__ac-inner" with
         | Some inner -> (
@@ -1745,8 +1749,10 @@ let ac_keydown t ev =
              | None -> ac_on_enter t ac);
             true)
         | Some "Escape" ->
-            if Editor_state.editing () <> None then Editor_actions.exit_edit ~select:true
-            else close_ac t;
+            (* cljs: Escape only dismisses the popup — the block stays
+               in edit mode (the editor's own Escape exits editing on
+               the next press) *)
+            close_ac t;
             true
         | _ ->
             (if ac_position_closed ac then close_ac t);
@@ -1919,7 +1925,10 @@ let open_cm_edit t ~ax ~atop ~abot ~block_id =
 let tag_entries ~title ~priv =
   [ Ci_item
       ( "Go to #" ^ title
-      , Some ("mod+click", [ "\u{2318}"; "Click" ])
+      , Some
+          ( "mod+click"
+          , [ (if Ui_services.env_is_mac () then "\u{2318}" else "Ctrl")
+            ; "Click" ] )
       , "go-to-tag" )
   ; Ci_item
       ( U.t "sidebar.right/open"

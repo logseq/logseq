@@ -57,20 +57,21 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
     ~data_attrs:(if title = "" then []
         else [ ("aria-labelledby", "ls-dialog-title-" ^ name) ])
     ~on_dismiss:(fun _ -> Dialogs_state.close_named name)
-    [ column ~key:("dlg-m-" ^ name) ~grow:1. ~gap:16 ~cross:`stretch
-        [ (if title = "" then box ~key:("dlg-t-" ^ name) []
+    [ column ~key:("dlg-m-" ^ name) ~grow:1.
+        ~gap:(if title = "" then 0 else 16) ~cross:`stretch
+        ( (if title = "" then []
           else
-            heading ~key:("dlg-t-" ^ name) ~level:2
-              ~style_class:"ui__dialog-title" ~value:title
-              ~accessibility_identifier:("ls-dialog-title-" ^ name) [])
-        ; (* scroll kind so native backends map it to their scroll
-             view; ui__dialog-main-content keeps the min-height:0 +
-             overflow-y:auto hooks the per-dialog rules scope onto *)
-          scroll ~key:("dlg-s-" ^ name)
-            ~style_class:"ui__dialog-main-content" ~orientation:`vertical
-            ~grow:1.
-            [ body_of name ms ]
-        ]
+            [ heading ~key:("dlg-t-" ^ name) ~level:2
+                ~style_class:"ui__dialog-title" ~value:title
+                ~accessibility_identifier:("ls-dialog-title-" ^ name) [] ])
+        @ [ (* scroll kind so native backends map it to their scroll
+               view; ui__dialog-main-content keeps the min-height:0 +
+               overflow-y:auto hooks the per-dialog rules scope onto *)
+            scroll ~key:("dlg-s-" ^ name)
+              ~style_class:"ui__dialog-main-content" ~orientation:`vertical
+              ~grow:1.
+              [ body_of name ms ]
+          ] )
     ; dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name)
     ]
 
