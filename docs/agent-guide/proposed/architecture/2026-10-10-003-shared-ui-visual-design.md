@@ -468,3 +468,28 @@ Required before cmdk can express its spec through typed props:
 `::selection` colors, fade-zoom/transition keyframes, font-family stacks,
 cursor details beyond pointer/default, `.lui-stack` display:inline quirks
 (eliminated by emitting inline runs instead).
+
+## Task 4 leftovers (accepted, per Tienson clarification)
+
+The following bits of the old spec have no typed-prop channel and stay
+as small CSS rules in `resources/css/lui-overlay.css`, or are dropped
+for gpui:
+
+- `.cp__cmdk-search-input::selection` — selection colors (no prop).
+- `.cp__cmdk .ui__icon` + `.cp__cmdk-input-row .ui__icon` — `font-size`
+  is not admitted on the Icon kind; the icon's point-size prop only
+  sizes the glyph.
+- `.ui__tooltip-content` fade-zoom animation (keyframes have no prop)
+  and `.ui__tooltip-arrow` `transform: rotate(45deg)` (no transform
+  prop).
+- `.cp__cmdk-hint-label` + `:hover .cp__cmdk-hint-label` — child
+  brightens on parent hover; a descendant relationship props cannot
+  express (kept as a gpui class registration too).
+- gpui-unsupported values emitted in props but unresolved on gpui:
+  `hsl(var(--popover))` tooltip surface, `var(--ls-*)` twin fallbacks,
+  letter-spacing, white-space/user-select hints, `dvh` viewport sizing.
+  The gpui renderer uses what it natively supports and ignores the rest
+  (documented leftover — no CSS machinery added to the host).
+
+Also unchanged by design: `.lui-dialog.ls-dialog-cmdk` host geometry
+block on both renderers, scrollbars, font stacks.

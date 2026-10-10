@@ -303,7 +303,6 @@ fn register_class_styles() {
          justify-content:center;align-items:center",
         "pointer-events-none",
     );
-    class("cp__cmdk-dismiss", "position:absolute;inset:0", "pointer-events-auto");
     class(
         "ui__dialog-overlay",
         "position:absolute;inset:0;display:flex;flex-direction:column;\
@@ -352,50 +351,10 @@ fn register_class_styles() {
         "display:flex;flex-direction:row;justify-content:flex-end;gap:8px",
         "",
     );
-    // cljs ui/tooltip: dark floating bubble anchored under the trigger;
     // the inline style sets position:fixed + left/top + z-index (el attrs
     // win over class declarations, so only the paint rules live here).
-    class(
-        "ui__tooltip-content",
-        "background:#0f172a;color:#ffffff;font-size:12px;\
-         padding:4px 8px;border-radius:6px",
-        "pointer-events-none whitespace-nowrap",
-    );
-    class(
-        "ui__tooltip-arrow",
-        "position:absolute;width:8px;height:8px;background:#0f172a",
-        "",
-    );
-    class(
-        "ls-tooltip-keys",
-        "display:inline-flex;gap:2px;margin-left:6px;opacity:0.7",
-        "",
-    );
     class("ls-dialog-cmdk", "width:90dvw;max-width:56rem;padding:0", "");
-    class(
-        "cp__cmdk__modal",
-        "position:relative;width:100%;border-radius:8px;overflow:hidden",
-        "",
-    );
-    class(
-        "cp__cmdk",
-        "position:relative;display:flex;flex-direction:column;\
-         justify-content:flex-start;width:100%;height:100%;\
-         border-radius:8px;background:background;color:foreground",
-        "",
-    );
     class("ui__dialog-main-content", "width:100%", "");
-    class(
-        "cp__cmdk-scroller",
-        "width:100%;flex-grow:1;min-height:65dvh;max-height:65dvh;\
-         padding-bottom:56px",
-        "overflow-y-auto",
-    );
-    class(
-        "cp__cmdk-search-input",
-        "min-width:16rem;width:100%;font-size:20px;padding:12px",
-        "",
-    );
     class(
         "ui__dialog-close",
         "position:absolute;top:0.75rem;right:0.75rem",
@@ -620,192 +579,10 @@ fn register_class_styles() {
         "",
     );
 
-    // ---- cmdk palette (web resources/css/lui-overlay.css) ----
-    class(
-        "cp__cmdk-input-row",
-        "display:flex;flex-direction:row;align-items:center;gap:8px;\
-         height:54px;padding:0 12px;background:muted;\
-         border-bottom:1px solid border",
-        "",
-    );
-    class(
-        "cp__cmdk-group",
-        "display:flex;flex-direction:column;padding-bottom:4px;\
-         border-bottom:1px solid border",
-        "",
-    );
-    class(
-        "cp__cmdk-group-header",
-        "display:flex;flex-direction:row;align-items:center;\
-         justify-content:space-between;gap:8px;height:32px;\
-         padding:6px 12px;font-size:12px;background:muted",
-        "",
-    );
-    class("cp__cmdk-group-title", "font-weight:700;padding-left:2px", "");
-    class(
-        "cp__cmdk-group-count",
-        "padding-left:6px;font-size:11px",
-        "",
-    );
-    class("cp__cmdk-group-spacer", "flex-grow:1", "");
-    class("cp__cmdk-group-more", "opacity:0.5", "");
-    class(
-        "cp__cmdk-group-more-inner",
-        "display:flex;flex-direction:row;align-items:center;gap:4px",
-        "",
-    );
-    // web styles the row via [data-cmdk-item]; gpui keys classes, so
-    // native/cmdk_view carries cp__cmdk-item (+ -hl while highlighted)
-    class(
-        "cp__cmdk-item",
-        "display:flex;flex-direction:column;gap:2px;padding:6px 12px;\
-         margin-left:2px;margin-right:2px;border-radius:8px;\
-         font-size:14px",
-        "",
-    );
-    class(
-        "cp__cmdk-item-hl",
-        "background:secondary;border-radius:8px",
-        "",
-    );
-    class(
-        "cmdk-item-header",
-        "display:flex;flex-direction:row;align-items:center;gap:8px;\
-         padding-left:32px;font-size:12px;white-space:nowrap;\
-         color:muted-foreground",
-        "",
-    );
-    class(
-        "cmdk-item-main",
-        "display:flex;flex-direction:row;align-items:flex-start;gap:12px",
-        "",
-    );
-    class(
-        "cmdk-item-icon",
-        "display:flex;align-items:center;justify-content:center;\
-         width:20px;height:20px;border-radius:4px;background:muted",
-        "",
-    );
-    class(
-        "cmdk-item-body",
-        "display:flex;flex-direction:column;flex-grow:1",
-        "",
-    );
-    class(
-        "cp__cmdk-item-main-text",
-        "display:flex;flex-direction:row;align-items:center;gap:4px;\
-         font-weight:500;white-space:nowrap",
-        "",
-    );
-    class(
-        "cp__cmdk-item-info",
-        "font-size:12px;color:muted-foreground",
-        "",
-    );
-    class(
-        "cp__cmdk-current-page-badge",
-        "border-radius:9999px;border:1px solid border;font-size:12px;\
-         font-weight:500;padding:2px 8px;color:muted-foreground;\
-         background:secondary",
-        "",
-    );
-    // web resources/css/shui.css: the box lives on the combo container or
-    // on each key inside `separate`; the base key is unboxed.
-    class(
-        "shui-shortcut-key",
-        "display:flex;align-items:center;justify-content:center;\
-         height:20px;min-width:20px;padding:2px 4px;font-size:12px;\
-         white-space:nowrap;color:var(--lx-gray-12, var(--rx-gray-12))",
-        "",
-    );
-    class(
-        "shui-key-boxed",
-        "background:var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));\
-         border:1px solid var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));border-radius:4px",
-        "",
-    );
-    class(
-        "shui-shortcut-combo",
-        "display:flex;flex-direction:row;align-items:center;\
-         background:var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));\
-         border:1px solid var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));border-radius:4px",
-        "",
-    );
-    class(
-        "shui-shortcut-separate",
-        "display:flex;flex-direction:row;align-items:center;gap:4px",
-        "",
-    );
-    class(
-        "shui-shortcut-separator",
-        "width:1px;background:var(--lx-gray-07-alpha, var(--rx-gray-07-alpha))",
-        "self-stretch",
-    );
-    class(
-        "shui-shortcut-row",
-        "display:flex;flex-direction:row;align-items:center;gap:4px;\
-         height:20px;min-height:20px;max-height:20px",
-        "",
-    );
-    class(
-        "shui-shortcut-compact",
-        "display:flex;flex-direction:row;align-items:center;gap:2px;\
-         font-size:12px;color:muted-foreground",
-        "",
-    );
-    class(
-        "hints",
-        "display:flex;flex-direction:row;align-items:center;\
-         justify-content:space-between;width:100%;min-height:45px;\
-         padding:8px 12px;gap:8px;background:muted;\
-         border-top:1px solid border",
-        "",
-    );
-    class(
-        "cp__cmdk-hints",
-        "display:flex;flex-direction:row;align-items:center;gap:8px",
-        "",
-    );
-    class(
-        "cp__cmdk-hints-inner",
-        "display:flex;flex-direction:row;align-items:center;gap:4px;\
-         font-size:14px",
-        "",
-    );
-    class(
-        "cp__cmdk-hints-row",
-        "display:flex;flex-direction:row;align-items:center;gap:4px",
-        "",
-    );
-    class("cp__cmdk-hints-label", "font-weight:500", "");
-    class(
-        "cp__cmdk-tip",
-        "display:flex;flex-direction:row;align-items:center;gap:4px;\
-         opacity:0.5",
-        "",
-    );
-    class(
-        "cp__cmdk-hint",
-        "display:flex;flex-direction:row;align-items:center;gap:6px;\
-         font-size:12px;color:muted-foreground;opacity:0.4;\
-         height:28px;padding:0 4px",
-        "",
-    );
+    // cmdk migrated to shared recipes (ui_components.ml) — gpui reads the
+    // emitted typed props directly; descendant-hover dimming stays a
+    // class rule
     class("cp__cmdk-hint-label", "opacity:0.6", "");
-    class(
-        "cp__cmdk-search-only",
-        "display:flex;flex-direction:column;padding:4px 12px;\
-         opacity:0.7;font-size:12px;font-weight:500",
-        "",
-    );
-    class(
-        "cp__cmdk-search-only-row",
-        "display:flex;flex-direction:row;align-items:center;gap:4px",
-        "",
-    );
-    class("cp__cmdk-search-only-name", "font-weight:500;padding-left:4px", "");
-    class("cp__cmdk-search-only-clear", "padding:4px", "");
-    class("cp__cmdk-empty", "padding:16px;opacity:0.5", "");
     class(
         "icon-cp-container",
         "display:flex;align-items:center;justify-content:center",

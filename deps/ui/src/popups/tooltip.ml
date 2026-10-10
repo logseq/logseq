@@ -117,32 +117,19 @@ let tip_view (tip : tip) : t =
     |> String.split_on_char ' '
     |> List.filter (fun k -> k <> "")
     |> List.mapi (fun i k ->
-        kbd ~key:("k" ^ string_of_int i)
-          ~style_class:"shui-shortcut-key" ~value:k [])
+        Ui_components.keycap ~key:("k" ^ string_of_int i) ~boxed:false
+          ~glow:false ~min_slot:20 ~value:k)
   in
   let body =
     match keys_cells with
     | [] -> text ~key:"lbl" ~value:tip.tip_label []
     | cells ->
-        column ~key:"col" ~style_class:"ls-tooltip-col" ~gap:4
+        Ui_components.ls_tooltip_col ~key:"col"
           [ text ~key:"lbl" ~value:tip.tip_label []
-          ; text ~key:"keys" ~style_class:"ls-tooltip-keys" cells ]
+          ; Ui_components.ls_tooltip_keys ~key:"keys" cells ]
   in
-  popover ~key:"lui-tip" ~accessibility_identifier:"lui-tooltip"
-    ~at:(tip.tip_x, tip.tip_y)
-    ~style_class:"ui__tooltip-content ls-tooltip"
-    ~data_attrs:
-      [ ("role", "tooltip")
-      ; (* the bubble must never steal hover from its own trigger *)
-        ("style", "pointer-events:none") ]
-    [ body
-    ; box ~key:"arrow" ~style_class:"ui__tooltip-arrow"
-        ~data_attrs:
-          [ ( "style"
-            , Printf.sprintf "left:%.0fpx;%s" tip.tip_arrow_x
-                (if tip.tip_above then "bottom:-4px" else "top:-4px") )
-          ]
-        [] ]
+  Ui_components.tooltip_content ~key:"lui-tip" ~at:(tip.tip_x, tip.tip_y)
+    ~arrow_x:tip.tip_arrow_x ~above:tip.tip_above [ body ]
 
 (* singleton bubble — one tip at a time, so the reactive can emit the
    popover directly under popups_view's fragment *)
